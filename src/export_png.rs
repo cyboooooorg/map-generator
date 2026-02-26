@@ -77,9 +77,22 @@ fn biome_color(b: Biome) -> [u8; 3] {
         // High elevation
         Biome::Mountain => [130, 120, 110],
         Biome::Snow => [245, 245, 250],
-        // Volcanic
+        // Volcanic (Terran + Volcanic world)
         Biome::Volcano => [255, 50, 0],    // glowing magma vent
         Biome::LavaField => [200, 80, 10], // cooling lava flows
         Biome::AshLand => [95, 80, 70],    // ash-grey barren wasteland
+        // Volcanic world exclusives
+        Biome::MagmaSea => [180, 20, 0], // dark glowing sea of molten rock
+        Biome::ScorchedWaste => [70, 35, 15], // vitrified scorched bedrock
+        // Frozen world exclusives
+        Biome::FrozenOcean => [140, 195, 235], // ice-locked pale-blue ocean
+        Biome::GlacialPlain => [200, 220, 240], // windswept permafrost plains
+        // Caustic world exclusives
+        Biome::CausticLake => [60, 170, 40], // sickly acid-green sea
+        Biome::ToxicSwamp => [45, 100, 20],  // dark toxic murk
+        Biome::AcidFlatland => [165, 185, 60], // mineral-encrusted caustic flat
+        // Barren world exclusives
+        Biome::RockyWaste => [110, 103, 90], // shattered grey bedrock
+        Biome::DustPlain => [195, 168, 110], // pale ochre regolith
     }
 }

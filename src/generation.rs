@@ -40,6 +40,7 @@ pub fn generate_world(
     seed: u32,
     sea_level: f32,
     volcanic_intensity: f32,
+    planet_type: PlanetType,
 ) -> World {
     let elevation_noise = Perlin::new(seed);
     let moisture_noise = Perlin::new(seed + 1);
@@ -100,7 +101,20 @@ pub fn generate_world(
 
             let temperature = temp_gradient - biome_elevation * 0.3;
 
-            let biome = choose_biome(biome_elevation, moisture, temperature, volcanic_zone);
+            // Planet-type global offsets applied to temperature, moisture and volcanic zone.
+            // These shift the entire planet climate before biome selection.
+            let (dt, dm, dvz) = planet_offsets(planet_type);
+            let eff_temperature = (temperature + dt).clamp(0.0, 1.0);
+            let eff_moisture = (moisture + dm).clamp(-1.0, 1.0);
+            let eff_volcanic_zone = (volcanic_zone + dvz).clamp(0.0, 1.0);
+
+            let biome = choose_biome(
+                biome_elevation,
+                eff_moisture,
+                eff_temperature,
+                eff_volcanic_zone,
+                planet_type,
+            );
 
             tiles.push(Tile {
                 q,
@@ -117,9 +131,28 @@ pub fn generate_world(
         width,
         height,
         seed,
+        planet_type,
         sea_level,
         volcanic_intensity,
         tiles,
+    }
+}
+
+// ── Planet offsets ───────────────────────────────────────────────────────────
+
+/// Returns (Δtemperature, Δmoisture, Δvolcanic_zone) for the given planet type.
+/// All offsets are clamped to valid ranges by the caller.
+fn planet_offsets(pt: PlanetType) -> (f32, f32, f32) {
+    match pt {
+        PlanetType::Terran => (0.00, 0.00, 0.00),
+        // Scorching hot, bone-dry, heavily volcanic
+        PlanetType::Volcanic => (0.45, -0.55, 0.50),
+        // Perpetually cold, slightly more frozen precipitation
+        PlanetType::Frozen => (-0.55, 0.15, -0.30),
+        // Mildly warm, saturated with caustic moisture
+        PlanetType::Caustic => (0.10, 0.55, 0.00),
+        // Arid lifeless rock, no volcanic activity
+        PlanetType::Barren => (0.00, -0.65, -0.40),
     }
 }
 
@@ -127,13 +160,14 @@ pub fn generate_world(
 ///
 /// Dispatches to one of four altitude bands:
 /// ocean → shore → highland → land (further split by temperature zone).
-/// The volcanic modifier is applied last and can override any land/highland biome.
+/// The volcanic modifier is applied second, then planet-specific remapping last.
 ///
-/// - `e`  elevation    in [-1, 1]
-/// - `m`  moisture     in [-1, 1]  (values above ~0 are wet)
-/// - `t`  temperature  in [ 0, 1] (0 = polar, 1 = equatorial)
-/// - `vz` volcanic_zone in [0, 1] (0 = inert, 1 = fully volcanic)
-fn choose_biome(e: f32, m: f32, t: f32, vz: f32) -> Biome {
+/// - `e`   elevation     in [-1, 1]
+/// - `m`   moisture      in [-1, 1]  (values above ~0 are wet)
+/// - `t`   temperature   in [ 0, 1]  (0 = polar, 1 = equatorial)
+/// - `vz`  volcanic_zone in [ 0, 1]  (0 = inert, 1 = fully volcanic)
+/// - `pt`  planet type   — applies final biome remapping
+fn choose_biome(e: f32, m: f32, t: f32, vz: f32, pt: PlanetType) -> Biome {
     let base = if e < -0.15 {
         ocean_biome(e)
     } else if e < 0.0 {
@@ -143,7 +177,8 @@ fn choose_biome(e: f32, m: f32, t: f32, vz: f32) -> Biome {
     } else {
         land_biome(t, m)
     };
-    apply_volcanic(base, e, vz)
+    let after_volcano = apply_volcanic(base, e, vz);
+    apply_planet_type(after_volcano, pt)
 }
 
 // ── Altitude bands ────────────────────────────────────────────────────────────
@@ -244,5 +279,80 @@ fn apply_volcanic(biome: Biome, e: f32, vz: f32) -> Biome {
             Biome::AshLand
         }
         other => other,
+    }
+}
+
+// ── Planet-type biome remapping ───────────────────────────────────────────────
+
+/// Final remapping pass that converts standard biomes into planet-exclusive ones.
+///
+/// Called after `apply_volcanic` so volcanic modifiers are visible here.
+/// Terran is a no-op — all other archetypes remap some or all biome slots.
+fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
+    match pt {
+        PlanetType::Terran => biome,
+
+        // ── Volcanic world ────────────────────────────────────────────────────
+        // Ocean basins fill with magma; lowlands are scoured to bare rock.
+        PlanetType::Volcanic => match biome {
+            Biome::DeepOcean | Biome::Ocean => Biome::MagmaSea,
+            Biome::Beach | Biome::Wetland => Biome::AshLand,
+            Biome::Plain | Biome::Shrubland | Biome::Savanna | Biome::Desert => {
+                Biome::ScorchedWaste
+            }
+            Biome::Forest | Biome::Jungle | Biome::Taiga => Biome::AshLand,
+            Biome::IceCap | Biome::Tundra | Biome::Snow | Biome::GlacialPlain => {
+                Biome::ScorchedWaste
+            }
+            other => other, // Mountain, LavaField, AshLand, Volcano — keep as-is
+        },
+
+        // ── Frozen world ──────────────────────────────────────────────────────
+        // Oceans are sealed under ice; temperate zones become permafrost plains.
+        PlanetType::Frozen => match biome {
+            Biome::DeepOcean | Biome::Ocean | Biome::MagmaSea => Biome::FrozenOcean,
+            Biome::Beach | Biome::Wetland => Biome::IceCap,
+            Biome::Plain | Biome::Shrubland => Biome::GlacialPlain,
+            Biome::Forest | Biome::Jungle => Biome::Taiga,
+            Biome::Savanna | Biome::Desert => Biome::GlacialPlain,
+            Biome::LavaField | Biome::AshLand | Biome::ScorchedWaste => Biome::GlacialPlain,
+            other => other, // Tundra, IceCap, Taiga, Snow, Mountain — keep as-is
+        },
+
+        // ── Caustic world ─────────────────────────────────────────────────────
+        // Oceans become acid seas; vegetation zones drown in toxic runoff.
+        PlanetType::Caustic => match biome {
+            Biome::DeepOcean | Biome::Ocean => Biome::CausticLake,
+            Biome::Beach | Biome::Wetland | Biome::Forest | Biome::Jungle | Biome::Taiga => {
+                Biome::ToxicSwamp
+            }
+            Biome::Plain | Biome::Shrubland | Biome::Savanna | Biome::Tundra | Biome::Desert => {
+                Biome::AcidFlatland
+            }
+            Biome::IceCap | Biome::Snow | Biome::GlacialPlain => Biome::AcidFlatland,
+            other => other, // Mountain, LavaField, AshLand, Volcano — keep as-is
+        },
+
+        // ── Barren world ──────────────────────────────────────────────────────
+        // No liquid water; all life extinct; only rock and dust remain.
+        PlanetType::Barren => match biome {
+            Biome::DeepOcean | Biome::Ocean | Biome::CausticLake | Biome::FrozenOcean => {
+                Biome::RockyWaste
+            }
+            Biome::Beach | Biome::Wetland | Biome::ToxicSwamp => Biome::RockyWaste,
+            Biome::Plain
+            | Biome::Shrubland
+            | Biome::Savanna
+            | Biome::Desert
+            | Biome::Tundra
+            | Biome::IceCap
+            | Biome::GlacialPlain
+            | Biome::AcidFlatland => Biome::DustPlain,
+            Biome::Forest | Biome::Jungle | Biome::Taiga => Biome::DustPlain,
+            Biome::LavaField | Biome::AshLand | Biome::ScorchedWaste | Biome::Snow => {
+                Biome::RockyWaste
+            }
+            other => other, // Mountain, Volcano — keep as-is
+        },
     }
 }
