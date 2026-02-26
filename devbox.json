@@ -11,6 +11,9 @@
       "test": [
         "echo \"Error: no test specified\" && exit 1"
       ],
+      "build": [
+        "cargo build --release"
+      ],
       "prod": [
         "target/release/map-generator \"$@\""
       ],
