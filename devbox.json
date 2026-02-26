@@ -11,10 +11,11 @@
       "test": [
         "echo \"Error: no test specified\" && exit 1"
       ],
-      "run-prod": [
+      "prod": [
         "target/release/map-generator"
       ],
-      "clean-worlds": [
+      "cw": [
+        "echo \"Launching Exterminatus on the worlds directory...\"",
         "find ./worlds -mindepth 1 -not -name '.gitignore' -delete"
       ]
     }
