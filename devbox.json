@@ -12,7 +12,7 @@
         "echo \"Error: no test specified\" && exit 1"
       ],
       "prod": [
-        "target/release/map-generator"
+        "target/release/map-generator \"$@\""
       ],
       "cw": [
         "echo \"Launching Exterminatus on the worlds directory...\"",
