@@ -2,7 +2,7 @@ use serde::Serialize;
 
 /// Master planet archetype.  Controls global temperature/moisture offsets and
 /// unlocks planet-specific biomes during biome selection.
-#[derive(Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug)]
 pub enum PlanetType {
     /// Earth-like — full biome spectrum, no global modifier.
     Terran,
