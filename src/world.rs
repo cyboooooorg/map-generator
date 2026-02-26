@@ -23,6 +23,13 @@ pub enum Biome {
     // High elevation
     Mountain,
     Snow,
+    // Volcanic
+    /// Active caldera / summit vent — molten rock at the peak.
+    Volcano,
+    /// Cooling lava flows spreading down volcanic flanks.
+    LavaField,
+    /// Barren ash-covered terrain surrounding a volcanic chain.
+    AshLand,
 }
 
 #[derive(Clone, Serialize)]
@@ -43,5 +50,8 @@ pub struct World {
     /// Elevation bias applied before biome selection.
     /// 0.0 = default. Positive → more ocean, negative → more land. Range [-1, 1].
     pub sea_level: f32,
+    /// Fraction of mountain chains that become volcanic.
+    /// 0.0 = no volcanoes, 1.0 = most mountain chains are volcanic.
+    pub volcanic_intensity: f32,
     pub tiles: Vec<Tile>,
 }

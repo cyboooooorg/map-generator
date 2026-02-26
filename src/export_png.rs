@@ -77,5 +77,9 @@ fn biome_color(b: Biome) -> [u8; 3] {
         // High elevation
         Biome::Mountain => [130, 120, 110],
         Biome::Snow => [245, 245, 250],
+        // Volcanic
+        Biome::Volcano => [255, 50, 0],    // glowing magma vent
+        Biome::LavaField => [200, 80, 10], // cooling lava flows
+        Biome::AshLand => [95, 80, 70],    // ash-grey barren wasteland
     }
 }

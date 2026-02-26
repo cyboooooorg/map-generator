@@ -34,12 +34,20 @@ fn ridged(noise: &Perlin, x: f64, y: f64, z: f64) -> f32 {
     1.0 - v.abs()
 }
 
-pub fn generate_world(width: i32, height: i32, seed: u32, sea_level: f32) -> World {
+pub fn generate_world(
+    width: i32,
+    height: i32,
+    seed: u32,
+    sea_level: f32,
+    volcanic_intensity: f32,
+) -> World {
     let elevation_noise = Perlin::new(seed);
     let moisture_noise = Perlin::new(seed + 1);
     let continent_noise = Perlin::new(seed + 100);
     let warp_noise_a = Perlin::new(seed + 200);
     let warp_noise_b = Perlin::new(seed + 201);
+    // Low-frequency noise that selects which mountain chains turn volcanic.
+    let volcano_noise = Perlin::new(seed + 300);
 
     let mut tiles = Vec::new();
 
@@ -78,13 +86,21 @@ pub fn generate_world(width: i32, height: i32, seed: u32, sea_level: f32) -> Wor
             // Moisture uses 3D sphere coords so it also wraps seamlessly
             let moisture = fbm(&moisture_noise, nx * 1.5, ny * 1.5, nz * 1.5, 4);
 
+            // Volcanic zone: low-frequency noise determines which mountain chains are volcanic.
+            // volcanic_intensity 0.0 → no volcanoes; 1.0 → most high mountain chains volcanic.
+            // The threshold slides so that higher intensity makes more terrain volcanic.
+            let volcanic_raw = fbm(&volcano_noise, nx * 1.0, ny * 1.0, nz * 1.0, 3);
+            let volcanic_threshold = 1.0 - volcanic_intensity.clamp(0.0, 1.0);
+            // volcanic_zone: 0 = cold/neutral, >0 = inside a volcanic chain
+            let volcanic_zone = ((volcanic_raw - volcanic_threshold) * 4.0).clamp(0.0, 1.0);
+
             // Temperature: equator warm, poles cold, high elevation colder
             let latitude_norm = r as f32 / height as f32; // 0 = south pole, 1 = north pole
             let temp_gradient = 1.0 - (latitude_norm - 0.5).abs() * 2.0;
 
             let temperature = temp_gradient - biome_elevation * 0.3;
 
-            let biome = choose_biome(biome_elevation, moisture, temperature);
+            let biome = choose_biome(biome_elevation, moisture, temperature, volcanic_zone);
 
             tiles.push(Tile {
                 q,
@@ -102,75 +118,131 @@ pub fn generate_world(width: i32, height: i32, seed: u32, sea_level: f32) -> Wor
         height,
         seed,
         sea_level,
+        volcanic_intensity,
         tiles,
     }
 }
 
 /// Biome selection using a Whittaker-style multi-factor diagram.
 ///
-/// - `e` elevation  in [-1, 1]
-/// - `m` moisture   in [-1, 1]  (normalised: values above ~0 are wet)
-/// - `t` temperature in [0, 1]  (0 = polar, 1 = equatorial)
-fn choose_biome(e: f32, m: f32, t: f32) -> Biome {
-    // ── Water bodies ─────────────────────────────────────────────────────────
+/// Dispatches to one of four altitude bands:
+/// ocean → shore → highland → land (further split by temperature zone).
+/// The volcanic modifier is applied last and can override any land/highland biome.
+///
+/// - `e`  elevation    in [-1, 1]
+/// - `m`  moisture     in [-1, 1]  (values above ~0 are wet)
+/// - `t`  temperature  in [ 0, 1] (0 = polar, 1 = equatorial)
+/// - `vz` volcanic_zone in [0, 1] (0 = inert, 1 = fully volcanic)
+fn choose_biome(e: f32, m: f32, t: f32, vz: f32) -> Biome {
+    let base = if e < -0.15 {
+        ocean_biome(e)
+    } else if e < 0.0 {
+        shore_biome(t, m)
+    } else if e > 0.7 {
+        highland_biome(e, t)
+    } else {
+        land_biome(t, m)
+    };
+    apply_volcanic(base, e, vz)
+}
+
+// ── Altitude bands ────────────────────────────────────────────────────────────
+
+fn ocean_biome(e: f32) -> Biome {
     if e < -0.45 {
-        return Biome::DeepOcean;
+        Biome::DeepOcean
+    } else {
+        Biome::Ocean
     }
-    if e < -0.15 {
-        return Biome::Ocean;
+}
+
+fn shore_biome(t: f32, m: f32) -> Biome {
+    if t < 0.15 {
+        Biome::IceCap
     }
-
-    // ── Shoreline ─────────────────────────────────────────────────────────────
-    if e < 0.0 {
-        if t < 0.15 {
-            return Biome::IceCap; // frozen shore / pack ice
-        }
-        if m > 0.3 {
-            return Biome::Wetland; // mangroves / marshes
-        }
-        return Biome::Beach;
+    // frozen shore / pack ice
+    else if m > 0.3 {
+        Biome::Wetland
     }
-
-    // ── High elevation (mountains & snowfields) ───────────────────────────────
-    if e > 0.7 {
-        if t < 0.35 || e > 0.88 {
-            return Biome::Snow;
-        }
-        return Biome::Mountain;
+    // mangroves / marshes
+    else {
+        Biome::Beach
     }
+}
 
-    // ── Land — branch first on temperature then on moisture ───────────────────
+fn highland_biome(e: f32, t: f32) -> Biome {
+    if t < 0.35 || e > 0.88 {
+        Biome::Snow
+    } else {
+        Biome::Mountain
+    }
+}
 
-    // Polar / sub-polar
+// ── Land: temperature zones, each resolved by moisture ───────────────────────
+
+fn land_biome(t: f32, m: f32) -> Biome {
     if t < 0.15 {
         return Biome::IceCap;
-    }
-
+    } // polar
     if t < 0.30 {
-        // Boreal zone
-        if m > 0.2 {
-            return Biome::Taiga;
-        }
-        return Biome::Tundra;
+        return boreal_biome(m);
     }
-
     if t < 0.55 {
-        // Temperate zone
-        if m < -0.1 {
-            return Biome::Shrubland;
-        }
-        if m > 0.35 {
-            return Biome::Forest;
-        }
-        return Biome::Plain;
+        return temperate_biome(m);
     }
+    tropical_biome(m)
+}
 
-    // Tropical zone
+fn boreal_biome(m: f32) -> Biome {
+    if m > 0.2 { Biome::Taiga } else { Biome::Tundra }
+}
+
+fn temperate_biome(m: f32) -> Biome {
+    if m < -0.1 {
+        Biome::Shrubland
+    } else if m > 0.35 {
+        Biome::Forest
+    } else {
+        Biome::Plain
+    }
+}
+
+fn tropical_biome(m: f32) -> Biome {
     if m < -0.05 {
-        return Biome::Desert;
+        Biome::Desert
+    } else if m < 0.30 {
+        Biome::Savanna
+    } else {
+        Biome::Jungle
     }
-    if m < 0.30 {
-        return Biome::Savanna;
+}
+
+// ── Volcanic modifier ─────────────────────────────────────────────────────────
+
+/// Optionally overrides a biome when it sits inside an active volcanic zone.
+///
+/// - `vz` volcanic_zone in [0, 1]: 0 = inert, higher = stronger volcanic activity.
+/// - `e`  biome elevation, used to distinguish caldera from flank from foothill.
+///
+/// Override ladder (strongest condition wins):
+///   Volcano  — summit/caldera : Mountain|Snow, e > 0.80, vz > 0.55
+///   LavaField — flanks        : Mountain|Snow,           vz > 0.30
+///   AshLand  — lower slopes   : Mountain|Snow|Shrubland|Plain|Tundra, e > 0.30, vz > 0.15
+fn apply_volcanic(biome: Biome, e: f32, vz: f32) -> Biome {
+    if vz <= 0.0 {
+        return biome;
     }
-    Biome::Jungle
+    match biome {
+        // Summit / caldera → active vent
+        Biome::Mountain | Biome::Snow if e > 0.80 && vz > 0.55 => Biome::Volcano,
+        // Volcanic flanks → cooling lava flows
+        Biome::Mountain | Biome::Snow if vz > 0.30 => Biome::LavaField,
+        // Lower slopes and surrounding terrain → ash wasteland
+        Biome::Mountain | Biome::Snow | Biome::Shrubland | Biome::Plain | Biome::Tundra
+            if e > 0.30 && vz > 0.15 =>
+        {
+            Biome::AshLand
+        }
+        other => other,
+    }
 }
