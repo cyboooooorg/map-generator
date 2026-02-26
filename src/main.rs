@@ -72,7 +72,7 @@ fn main() {
         planet_type,
     );
 
-    let dir = format!("worlds/{}", world.seed);
+    let dir = format!("worlds/{}-{}", planet_type, world.seed);
     std::fs::create_dir_all(&dir).expect("failed to create output directory");
 
     export_png(&world, &format!("{}/world.png", dir));

@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::fmt;
 
 /// Master planet archetype.  Controls global temperature/moisture offsets and
 /// unlocks planet-specific biomes during biome selection.
@@ -14,6 +15,19 @@ pub enum PlanetType {
     Caustic,
     /// Dead rock — arid and lifeless, dust and stone as far as the eye can see.
     Barren,
+}
+
+impl fmt::Display for PlanetType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            PlanetType::Terran => "terran",
+            PlanetType::Volcanic => "volcanic",
+            PlanetType::Frozen => "frozen",
+            PlanetType::Caustic => "caustic",
+            PlanetType::Barren => "barren",
+        };
+        f.write_str(s)
+    }
 }
 
 #[derive(Clone, Copy, Serialize)]
