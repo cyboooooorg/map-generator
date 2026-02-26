@@ -10,6 +10,12 @@
     "scripts": {
       "test": [
         "echo \"Error: no test specified\" && exit 1"
+      ],
+      "run-prod": [
+        "target/release/map-generator"
+      ],
+      "clean-worlds": [
+        "find ./worlds -mindepth 1 -not -name '.gitignore' -delete"
       ]
     }
   }
