@@ -7,20 +7,20 @@ This project is a map generator that creates random maps using Perlin noise. The
 ### Build
 
 ```bash
-cargo build --release
+devbox run build
 ```
 
 ### Run
 
 ```bash
-cargo run [-- [OPTIONS]]
+devbox run prod [-- [OPTIONS]]
 ```
 
 All parameters are optional. Any omitted value is chosen **randomly** at startup, and the chosen values are printed so every world is reproducible.
 
 ```text
 Parameters → planet=Frozen  sea_level=0.12  volcanic_intensity=0.61
-World generated → worlds/2590618090/
+World generated → worlds/frozen-2590618090/
 ```
 
 ### Options
@@ -39,19 +39,19 @@ World generated → worlds/2590618090/
 
 ```bash
 # Fully random world
-cargo run
+devbox run prod
 
 # Frozen planet, everything else random
-cargo run -- --planet frozen
+devbox run prod -- --planet frozen
 
 # Earth-like ocean world, moderate volcanic activity
-cargo run -- --planet terran --sea-level 0.3 --volcanic 0.4
+devbox run prod -- --planet terran --sea-level 0.3 --volcanic 0.4
 
 # Barren dry rock, no volcanoes
-cargo run -- --planet barren --sea-level -0.5 --volcanic 0.0
+devbox run prod -- --planet barren --sea-level -0.5 --volcanic 0.0
 
 # Volcanic hell
-cargo run -- --planet volcanic --sea-level -0.2 --volcanic 1.0
+devbox run prod -- --planet volcanic --sea-level -0.2 --volcanic 1.0
 ```
 
 ### Planet types
