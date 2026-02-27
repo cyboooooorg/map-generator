@@ -59,6 +59,15 @@ pub fn generate_world(
     // Earth (40 075 km) ≡ scale 1.0, preserving the original noise frequencies.
     let noise_scale = (EARTH_CIRCUMFERENCE_KM / circumference_km.max(1.0)) as f64;
 
+    // Gravity modifier: assuming constant density, surface gravity scales linearly
+    // with radius (and thus circumference).  Earth ≡ 1.0.
+    // Clamped to a physically plausible range (≈ Moon-mass to super-Jupiter rocky).
+    // Stronger gravity suppresses mountain relief; weaker gravity amplifies it.
+    let gravity_modifier = (circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0);
+    // Mountain blend coefficient: baseline 0.35 at Earth gravity, compressed or
+    // stretched proportionally.  sqrt dampens the effect for extreme values.
+    let mountain_blend = 0.35 / gravity_modifier.sqrt();
+
     let mut tiles = Vec::new();
 
     for q in 0..width {
@@ -105,7 +114,8 @@ pub fn generate_world(
                 nz * 5.0 * noise_scale,
             );
             let mountain_weight = ((continent - 0.2) * 2.5).clamp(0.0, 1.0);
-            let elevation = (continent + mountain * mountain_weight * 0.35).clamp(-1.0, 1.0);
+            let elevation =
+                (continent + mountain * mountain_weight * mountain_blend).clamp(-1.0, 1.0);
 
             // Shift elevation by sea_level before biome selection.
             // Positive sea_level raises the waterline (more ocean);
@@ -175,6 +185,7 @@ pub fn generate_world(
         sea_level,
         volcanic_intensity,
         circumference_km,
+        gravity_modifier,
         tiles,
     }
 }

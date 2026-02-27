@@ -68,8 +68,11 @@ fn main() {
     let circumference_km =
         circumference_arg.unwrap_or_else(|| rng.random_range(20_000.0_f32..80_000.0));
 
+    // Gravity mirrors the formula in generate_world — printed before generation
+    // so the user sees it even without inspecting the JSON output.
+    let gravity_preview = circumference_km / 40_075.0_f32;
     println!(
-        "Parameters → planet={planet_type:?}  sea_level={sea_level:.2}  volcanic_intensity={volcanic_intensity:.2}  circumference={circumference_km:.0} km"
+        "Parameters → planet={planet_type:?}  sea_level={sea_level:.2}  volcanic_intensity={volcanic_intensity:.2}  circumference={circumference_km:.0} km  gravity≈{gravity_preview:.2}g"
     );
 
     let world = generate_world(

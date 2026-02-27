@@ -113,5 +113,11 @@ pub struct World {
     /// broader continents and ocean basins relative to the planet's surface.
     /// Earth ≈ 40 075 km.
     pub circumference_km: f32,
+    /// Approximate surface gravity relative to Earth (1.0 = Earth gravity).
+    /// Derived from circumference assuming constant planetary density:
+    /// g ∝ r ∝ C, so gravity_modifier = circumference_km / 40_075.
+    /// Higher values flatten the landscape (mountains can't stand as tall);
+    /// lower values produce more rugged, dramatic terrain.
+    pub gravity_modifier: f32,
     pub tiles: Vec<Tile>,
 }
