@@ -1,4 +1,4 @@
-use crate::world::*;
+use crate::world::World;
 use std::fs::File;
 use std::io::Write;
 

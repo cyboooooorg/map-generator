@@ -1,14 +1,10 @@
-mod export_json;
-mod export_noise;
-mod export_png;
-mod export_svg;
+mod biome;
+mod export;
 mod generation;
+mod noise;
 mod world;
 
-use export_json::export_json;
-use export_noise::export_noise_maps;
-use export_png::export_png;
-use export_svg::export_svg;
+use export::{export_json, export_noise_maps, export_png, export_svg};
 use generation::generate_world;
 use rand::RngExt;
 use world::PlanetType;

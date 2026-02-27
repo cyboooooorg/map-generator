@@ -2,19 +2,19 @@
 ///
 /// The maps produced are:
 ///
-/// | File                   | Range    | Description                                              |
-/// |------------------------|----------|----------------------------------------------------------|
-/// | noise_warp_x.png       | [-1, 1]  | Domain-warp field, X axis                                |
-/// | noise_warp_y.png       | [-1, 1]  | Domain-warp field, Y axis                                |
-/// | noise_continent.png    | [-1, 1]  | Low-freq FBM continent shape                             |
-/// | noise_mountain.png     | [ 0, 1]  | Ridged noise (mountain peaks)                            |
-/// | noise_mountain_wt.png  | [ 0, 1]  | Mountain blend weight (based on continent height)        |
-/// | noise_elevation.png    | [-1, 1]  | Final elevation = continent + mountain×weight×blend      |
-/// | noise_biome_elev.png   | [-1, 1]  | Elevation shifted by sea_level (what biomes see)         |
-/// | noise_moisture.png     | [-1, 1]  | Moisture FBM                                             |
-/// | noise_temperature.png  | [ 0, 1]  | Temperature (latitude gradient + elevation cooling)      |
-/// | noise_volcanic_raw.png | [-1, 1]  | Raw volcanic-zone FBM                                    |
-/// | noise_volcanic_zone.png| [ 0, 1]  | Processed volcanic zone (threshold applied)              |
+/// | File                    | Range    | Description                                         |
+/// |-------------------------|----------|-----------------------------------------------------|
+/// | noise_warp_x.png        | [-1, 1]  | Domain-warp field, X axis                           |
+/// | noise_warp_y.png        | [-1, 1]  | Domain-warp field, Y axis                           |
+/// | noise_continent.png     | [-1, 1]  | Low-freq FBM continent shape                        |
+/// | noise_mountain.png      | [ 0, 1]  | Ridged noise (mountain peaks)                       |
+/// | noise_mountain_wt.png   | [ 0, 1]  | Mountain blend weight (based on continent height)   |
+/// | noise_elevation.png     | [-1, 1]  | Final elevation = continent + mountain×weight×blend |
+/// | noise_biome_elev.png    | [-1, 1]  | Elevation shifted by sea_level (what biomes see)    |
+/// | noise_moisture.png      | [-1, 1]  | Moisture FBM                                        |
+/// | noise_temperature.png   | [ 0, 1]  | Temperature (latitude gradient + elevation cooling) |
+/// | noise_volcanic_raw.png  | [-1, 1]  | Raw volcanic-zone FBM                               |
+/// | noise_volcanic_zone.png | [ 0, 1]  | Processed volcanic zone (threshold applied)         |
 ///
 /// Colour encoding
 /// ───────────────
@@ -23,10 +23,9 @@
 ///
 /// Signed maps are linearly rescaled so that 0.0 → green, -1.0 → blue, +1.0 → red.
 /// Unsigned maps are rescaled so that 0.0 → blue and 1.0 → red.
+use crate::noise::{fbm, ridged, EARTH_CIRCUMFERENCE_KM};
 use image::{Rgb, RgbImage};
-use noise::{NoiseFn, Perlin};
-
-const EARTH_CIRCUMFERENCE_KM: f32 = 40_075.0;
+use noise::Perlin;
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
@@ -51,27 +50,6 @@ fn diverge(v: f32) -> [u8; 3] {
 #[inline]
 fn sequential(v: f32) -> [u8; 3] {
     jet(v.clamp(0.0, 1.0))
-}
-
-// ── Noise helpers (mirrors generation.rs) ─────────────────────────────────────
-
-fn fbm(noise: &Perlin, x: f64, y: f64, z: f64, octaves: u32) -> f32 {
-    let mut value = 0.0f64;
-    let mut amplitude = 1.0f64;
-    let mut frequency = 1.0f64;
-    let mut max_value = 0.0f64;
-    for _ in 0..octaves {
-        value += noise.get([x * frequency, y * frequency, z * frequency]) * amplitude;
-        max_value += amplitude;
-        amplitude *= 0.5;
-        frequency *= 2.0;
-    }
-    (value / max_value) as f32
-}
-
-fn ridged(noise: &Perlin, x: f64, y: f64, z: f64) -> f32 {
-    let v = noise.get([x, y, z]) as f32;
-    1.0 - v.abs()
 }
 
 // ── PNG writer ────────────────────────────────────────────────────────────────
@@ -149,6 +127,7 @@ pub fn export_noise_maps(
             let nz = lat.sin();
 
             // Domain warp
+            use noise::NoiseFn;
             let wx = warp_noise_a.get([
                 nx * 2.0 * noise_scale,
                 ny * 2.0 * noise_scale,
@@ -224,81 +203,15 @@ pub fn export_noise_maps(
     }
 
     // Persist each map
-    save_map(
-        &warp_x_buf,
-        w,
-        h,
-        &format!("{dir}/noise_warp_x.png"),
-        diverge,
-    );
-    save_map(
-        &warp_y_buf,
-        w,
-        h,
-        &format!("{dir}/noise_warp_y.png"),
-        diverge,
-    );
-    save_map(
-        &continent_buf,
-        w,
-        h,
-        &format!("{dir}/noise_continent.png"),
-        diverge,
-    );
-    save_map(
-        &mountain_buf,
-        w,
-        h,
-        &format!("{dir}/noise_mountain.png"),
-        sequential,
-    );
-    save_map(
-        &mountain_wt_buf,
-        w,
-        h,
-        &format!("{dir}/noise_mountain_wt.png"),
-        sequential,
-    );
-    save_map(
-        &elevation_buf,
-        w,
-        h,
-        &format!("{dir}/noise_elevation.png"),
-        diverge,
-    );
-    save_map(
-        &biome_elev_buf,
-        w,
-        h,
-        &format!("{dir}/noise_biome_elev.png"),
-        diverge,
-    );
-    save_map(
-        &moisture_buf,
-        w,
-        h,
-        &format!("{dir}/noise_moisture.png"),
-        diverge,
-    );
-    save_map(
-        &temperature_buf,
-        w,
-        h,
-        &format!("{dir}/noise_temperature.png"),
-        sequential,
-    );
-    save_map(
-        &volcanic_raw_buf,
-        w,
-        h,
-        &format!("{dir}/noise_volcanic_raw.png"),
-        diverge,
-    );
-    save_map(
-        &volcanic_zone_buf,
-        w,
-        h,
-        &format!("{dir}/noise_volcanic_zone.png"),
-        sequential,
-    );
+    save_map(&warp_x_buf, w, h, &format!("{dir}/noise_warp_x.png"), diverge);
+    save_map(&warp_y_buf, w, h, &format!("{dir}/noise_warp_y.png"), diverge);
+    save_map(&continent_buf, w, h, &format!("{dir}/noise_continent.png"), diverge);
+    save_map(&mountain_buf, w, h, &format!("{dir}/noise_mountain.png"), sequential);
+    save_map(&mountain_wt_buf, w, h, &format!("{dir}/noise_mountain_wt.png"), sequential);
+    save_map(&elevation_buf, w, h, &format!("{dir}/noise_elevation.png"), diverge);
+    save_map(&biome_elev_buf, w, h, &format!("{dir}/noise_biome_elev.png"), diverge);
+    save_map(&moisture_buf, w, h, &format!("{dir}/noise_moisture.png"), diverge);
+    save_map(&temperature_buf, w, h, &format!("{dir}/noise_temperature.png"), sequential);
+    save_map(&volcanic_raw_buf, w, h, &format!("{dir}/noise_volcanic_raw.png"), diverge);
+    save_map(&volcanic_zone_buf, w, h, &format!("{dir}/noise_volcanic_zone.png"), sequential);
 }
