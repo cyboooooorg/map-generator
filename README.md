@@ -69,12 +69,13 @@ devbox run prod -- --planet volcanic --sea-level -0.2 --volcanic 1.0
 
 ### Output
 
-Each run writes two files inside `worlds/<seed>/`:
+Each run writes three files inside `worlds/<planet>-<seed>/`:
 
-| File         | Description                                                                         |
-| ------------ | ----------------------------------------------------------------------------------- |
-| `world.png`  | 1920 × 1080 PNG with biome colours and contour lines                                |
-| `world.json` | Full tile data (elevation, moisture, temperature, biome, circumference, gravity, …) |
+| File         | Description                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| `world.png`  | 1920 × 1080 PNG with biome colours and contour lines                                               |
+| `world.svg`  | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling |
+| `world.json` | Full tile data (elevation, moisture, temperature, biome, circumference, gravity, …)                |
 
 ## Calculations
 

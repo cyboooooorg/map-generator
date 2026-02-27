@@ -1,10 +1,12 @@
 mod export_json;
 mod export_png;
+mod export_svg;
 mod generation;
 mod world;
 
 use export_json::export_json;
 use export_png::export_png;
+use export_svg::export_svg;
 use generation::generate_world;
 use rand::RngExt;
 use world::PlanetType;
@@ -90,6 +92,7 @@ fn main() {
 
     export_png(&world, &format!("{}/world.png", dir));
     export_json(&world, &format!("{}/world.json", dir));
+    export_svg(&world, &format!("{}/world.svg", dir));
 
     println!("World generated → {}/", dir);
 }
