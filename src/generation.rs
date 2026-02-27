@@ -34,6 +34,9 @@ fn ridged(noise: &Perlin, x: f64, y: f64, z: f64) -> f32 {
     1.0 - v.abs()
 }
 
+/// Earth's equatorial circumference used as the noise-scale baseline.
+const EARTH_CIRCUMFERENCE_KM: f32 = 40_075.0;
+
 pub fn generate_world(
     width: i32,
     height: i32,
@@ -41,6 +44,7 @@ pub fn generate_world(
     sea_level: f32,
     volcanic_intensity: f32,
     planet_type: PlanetType,
+    circumference_km: f32,
 ) -> World {
     let elevation_noise = Perlin::new(seed);
     let moisture_noise = Perlin::new(seed + 1);
@@ -49,6 +53,11 @@ pub fn generate_world(
     let warp_noise_b = Perlin::new(seed + 201);
     // Low-frequency noise that selects which mountain chains turn volcanic.
     let volcano_noise = Perlin::new(seed + 300);
+
+    // Scale noise frequencies by planet size: a larger circumference stretches
+    // the unit-sphere coordinates, producing broader continents and ocean basins.
+    // Earth (40 075 km) ≡ scale 1.0, preserving the original noise frequencies.
+    let noise_scale = (EARTH_CIRCUMFERENCE_KM / circumference_km.max(1.0)) as f64;
 
     let mut tiles = Vec::new();
 
@@ -66,16 +75,35 @@ pub fn generate_world(
             let nz = lat.sin();
 
             // Domain warping: twist coordinates before sampling for organic coastlines
-            let warp_x = warp_noise_a.get([nx * 2.0, ny * 2.0, nz * 2.0]);
-            let warp_y = warp_noise_b.get([nx * 2.0 + 5.2, ny * 2.0 + 1.3, nz * 2.0 + 3.7]);
+            let warp_x = warp_noise_a.get([
+                nx * 2.0 * noise_scale,
+                ny * 2.0 * noise_scale,
+                nz * 2.0 * noise_scale,
+            ]);
+            let warp_y = warp_noise_b.get([
+                nx * 2.0 * noise_scale + 5.2,
+                ny * 2.0 * noise_scale + 1.3,
+                nz * 2.0 * noise_scale + 3.7,
+            ]);
             let wnx = nx + warp_x * 0.25;
             let wny = ny + warp_y * 0.25;
 
             // Continent shape: low-frequency 3D FBM — all three axes used, no symmetry
-            let continent = fbm(&continent_noise, nx * 0.8, ny * 0.8, nz * 0.8, 5);
+            let continent = fbm(
+                &continent_noise,
+                nx * 0.8 * noise_scale,
+                ny * 0.8 * noise_scale,
+                nz * 0.8 * noise_scale,
+                5,
+            );
 
             // Ridged mountains blended only onto elevated terrain
-            let mountain = ridged(&elevation_noise, wnx * 5.0, wny * 5.0, nz * 5.0);
+            let mountain = ridged(
+                &elevation_noise,
+                wnx * 5.0 * noise_scale,
+                wny * 5.0 * noise_scale,
+                nz * 5.0 * noise_scale,
+            );
             let mountain_weight = ((continent - 0.2) * 2.5).clamp(0.0, 1.0);
             let elevation = (continent + mountain * mountain_weight * 0.35).clamp(-1.0, 1.0);
 
@@ -85,12 +113,24 @@ pub fn generate_world(
             let biome_elevation = (elevation - sea_level).clamp(-1.0, 1.0);
 
             // Moisture uses 3D sphere coords so it also wraps seamlessly
-            let moisture = fbm(&moisture_noise, nx * 1.5, ny * 1.5, nz * 1.5, 4);
+            let moisture = fbm(
+                &moisture_noise,
+                nx * 1.5 * noise_scale,
+                ny * 1.5 * noise_scale,
+                nz * 1.5 * noise_scale,
+                4,
+            );
 
             // Volcanic zone: low-frequency noise determines which mountain chains are volcanic.
             // volcanic_intensity 0.0 → no volcanoes; 1.0 → most high mountain chains volcanic.
             // The threshold slides so that higher intensity makes more terrain volcanic.
-            let volcanic_raw = fbm(&volcano_noise, nx * 1.0, ny * 1.0, nz * 1.0, 3);
+            let volcanic_raw = fbm(
+                &volcano_noise,
+                nx * 1.0 * noise_scale,
+                ny * 1.0 * noise_scale,
+                nz * 1.0 * noise_scale,
+                3,
+            );
             let volcanic_threshold = 1.0 - volcanic_intensity.clamp(0.0, 1.0);
             // volcanic_zone: 0 = cold/neutral, >0 = inside a volcanic chain
             let volcanic_zone = ((volcanic_raw - volcanic_threshold) * 4.0).clamp(0.0, 1.0);
@@ -134,6 +174,7 @@ pub fn generate_world(
         planet_type,
         sea_level,
         volcanic_intensity,
+        circumference_km,
         tiles,
     }
 }

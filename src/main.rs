@@ -21,6 +21,7 @@ fn main() {
     let mut planet_arg: Option<String> = None;
     let mut sea_level_arg: Option<f32> = None;
     let mut volcanic_arg: Option<f32> = None;
+    let mut circumference_arg: Option<f32> = None;
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut idx = 0;
@@ -37,6 +38,10 @@ fn main() {
             "--volcanic" => {
                 idx += 1;
                 volcanic_arg = args.get(idx).and_then(|v| v.parse().ok());
+            }
+            "--circumference" => {
+                idx += 1;
+                circumference_arg = args.get(idx).and_then(|v| v.parse().ok());
             }
             other => eprintln!("warning: unknown argument '{other}' — ignored"),
         }
@@ -58,9 +63,13 @@ fn main() {
 
     let sea_level = sea_level_arg.unwrap_or_else(|| rng.random_range(-0.30_f32..0.50));
     let volcanic_intensity = volcanic_arg.unwrap_or_else(|| rng.random_range(0.00_f32..1.00));
+    // Default: random planet in the range of small rocky worlds to super-Earths.
+    // Earth ≈ 40 075 km.  Range 20 000–80 000 km covers sub-Earth to ~2× Earth.
+    let circumference_km =
+        circumference_arg.unwrap_or_else(|| rng.random_range(20_000.0_f32..80_000.0));
 
     println!(
-        "Parameters → planet={planet_type:?}  sea_level={sea_level:.2}  volcanic_intensity={volcanic_intensity:.2}"
+        "Parameters → planet={planet_type:?}  sea_level={sea_level:.2}  volcanic_intensity={volcanic_intensity:.2}  circumference={circumference_km:.0} km"
     );
 
     let world = generate_world(
@@ -70,6 +79,7 @@ fn main() {
         sea_level,
         volcanic_intensity,
         planet_type,
+        circumference_km,
     );
 
     let dir = format!("worlds/{}-{}", planet_type, world.seed);

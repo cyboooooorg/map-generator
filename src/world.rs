@@ -108,5 +108,10 @@ pub struct World {
     /// Fraction of mountain chains that become volcanic.
     /// 0.0 = no volcanoes, 1.0 = most mountain chains are volcanic.
     pub volcanic_intensity: f32,
+    /// Equatorial circumference of the planet in kilometres.
+    /// Controls the physical scale of the world: a larger value produces
+    /// broader continents and ocean basins relative to the planet's surface.
+    /// Earth ≈ 40 075 km.
+    pub circumference_km: f32,
     pub tiles: Vec<Tile>,
 }
