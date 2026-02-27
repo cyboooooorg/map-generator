@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+font8x8 = "0.3"
 image = "0.25.9"
 noise = "0.9.0"
 rand = "0.10.0"

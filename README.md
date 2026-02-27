@@ -75,6 +75,7 @@ Each run creates a `worlds/<planet>-<seed>/` directory with the following layout
 worlds/<planet>-<seed>/
 ├── world.png          ← biome map with contour lines and reference lines
 ├── world.svg          ← equivalent vector image
+├── legend.png         ← biome legend with planet metadata
 ├── raw_data/
 │   └── world.json     ← full tile data (elevation, moisture, temperature, biome, …)
 └── noise_maps/
@@ -91,12 +92,13 @@ worlds/<planet>-<seed>/
     └── noise_volcanic_zone.png
 ```
 
-| File / folder | Description                                                                                        |
-| ------------- | -------------------------------------------------------------------------------------------------- |
-| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                  |
-| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling |
-| `raw_data/`   | Raw world data                                                                                     |
-| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                     |
+| File / folder | Description                                                                                                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                     |
+| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                    |
+| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity) |
+| `raw_data/`   | Raw world data                                                                                                                                                        |
+| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                        |
 
 #### Noise maps (false colour)
 

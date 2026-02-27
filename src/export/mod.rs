@@ -6,5 +6,5 @@ pub mod svg;
 
 pub use json::export_json;
 pub use noise_maps::export_noise_maps;
-pub use png::export_png;
+pub use png::{export_legend_png, export_png};
 pub use svg::export_svg;

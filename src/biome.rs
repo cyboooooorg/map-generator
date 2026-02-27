@@ -1,11 +1,179 @@
-/// Biome selection: Whittaker-style multi-factor diagram plus planet remapping.
+/// Biome definition, selection and metadata.
 ///
-/// The pipeline for each tile is:
-///  1. [`planet_offsets`]    — climate deltas driven by planet archetype.
-///  2. [`choose_biome`]      — altitude/temperature/moisture → base biome.
-///  3. [`apply_volcanic`]    — optionally overrides biome with volcanic terrain.
-///  4. [`apply_planet_type`] — final remap to planet-exclusive biomes.
-use crate::world::{Biome, PlanetType};
+/// This module owns the [`Biome`] type and all biome-related logic:
+///  - [`Biome`]             — the enum itself (colour, name, sort order).
+///  - [`planet_offsets`]    — climate deltas driven by planet archetype.
+///  - [`choose_biome`]      — altitude/temperature/moisture → base biome.
+///  - [`apply_volcanic`]    — optionally overrides biome with volcanic terrain.
+///  - [`apply_planet_type`] — final remap to planet-exclusive biomes.
+use crate::world::PlanetType;
+use serde::Serialize;
+
+// ── Biome type ────────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+pub enum Biome {
+    // ── Standard water ────────────────────────────────────────────────────────
+    DeepOcean,
+    Ocean,
+    // ── Shore ─────────────────────────────────────────────────────────────────
+    Beach,
+    Wetland,
+    // ── Cold ──────────────────────────────────────────────────────────────────
+    IceCap,
+    Tundra,
+    Taiga,
+    // ── Temperate ─────────────────────────────────────────────────────────────
+    Shrubland,
+    Plain,
+    Forest,
+    // ── Tropical ──────────────────────────────────────────────────────────────
+    Savanna,
+    Desert,
+    Jungle,
+    // ── High elevation ────────────────────────────────────────────────────────
+    Mountain,
+    Snow,
+    // ── Volcanic (Terran + Volcanic world) ────────────────────────────────────
+    /// Active caldera / summit vent — molten rock at the peak.
+    Volcano,
+    /// Cooling lava flows spreading down volcanic flanks.
+    LavaField,
+    /// Barren ash-covered terrain surrounding a volcanic chain.
+    AshLand,
+    // ── Volcanic world exclusives ─────────────────────────────────────────────
+    /// Seas of liquid rock; replaces ocean basins on volcanic worlds.
+    MagmaSea,
+    /// Vitrified rock scoured by superheated winds; replaces temperate land.
+    ScorchedWaste,
+    // ── Frozen world exclusives ───────────────────────────────────────────────
+    /// Permanently ice-covered ocean; replaces open water on frozen worlds.
+    FrozenOcean,
+    /// Flat permafrost plains swept by blizzards; replaces temperate lowlands.
+    GlacialPlain,
+    // ── Caustic world exclusives ──────────────────────────────────────────────
+    /// Pools and seas of corrosive liquid; replaces ocean basins.
+    CausticLake,
+    /// Rain-drenched wetlands saturated with toxic runoff.
+    ToxicSwamp,
+    /// Bleached flatlands encrusted with acid-precipitate minerals.
+    AcidFlatland,
+    // ── Barren world exclusives ───────────────────────────────────────────────
+    /// Shattered boulder fields and exposed bedrock; replaces ocean (no water).
+    RockyWaste,
+    /// Fine regolith plains scoured by dry winds.
+    DustPlain,
+}
+
+/// Canonical biome → RGB colour mapping, shared by all export backends.
+pub fn biome_color(b: Biome) -> [u8; 3] {
+    match b {
+        // Water
+        Biome::DeepOcean => [10, 20, 140],
+        Biome::Ocean => [30, 70, 200],
+        // Shore
+        Biome::Beach => [220, 210, 120],
+        Biome::Wetland => [90, 140, 80],
+        // Cold
+        Biome::IceCap => [210, 235, 255],
+        Biome::Tundra => [160, 185, 155],
+        Biome::Taiga => [30, 90, 60],
+        // Temperate
+        Biome::Shrubland => [170, 180, 80],
+        Biome::Plain => [100, 200, 80],
+        Biome::Forest => [20, 110, 20],
+        // Tropical
+        Biome::Savanna => [210, 190, 60],
+        Biome::Desert => [240, 200, 100],
+        Biome::Jungle => [0, 90, 20],
+        // High elevation
+        Biome::Mountain => [130, 120, 110],
+        Biome::Snow => [245, 245, 250],
+        // Volcanic (Terran + Volcanic world)
+        Biome::Volcano => [255, 50, 0],
+        Biome::LavaField => [200, 80, 10],
+        Biome::AshLand => [95, 80, 70],
+        // Volcanic world exclusives
+        Biome::MagmaSea => [180, 20, 0],
+        Biome::ScorchedWaste => [70, 35, 15],
+        // Frozen world exclusives
+        Biome::FrozenOcean => [140, 195, 235],
+        Biome::GlacialPlain => [200, 220, 240],
+        // Caustic world exclusives
+        Biome::CausticLake => [60, 170, 40],
+        Biome::ToxicSwamp => [45, 100, 20],
+        Biome::AcidFlatland => [165, 185, 60],
+        // Barren world exclusives
+        Biome::RockyWaste => [110, 103, 90],
+        Biome::DustPlain => [195, 168, 110],
+    }
+}
+
+/// Human-readable name for a biome, used in the legend.
+pub fn biome_name(b: Biome) -> &'static str {
+    match b {
+        Biome::DeepOcean => "Deep Ocean",
+        Biome::Ocean => "Ocean",
+        Biome::Beach => "Beach",
+        Biome::Wetland => "Wetland",
+        Biome::IceCap => "Ice Cap",
+        Biome::Tundra => "Tundra",
+        Biome::Taiga => "Taiga",
+        Biome::Shrubland => "Shrubland",
+        Biome::Plain => "Plain",
+        Biome::Forest => "Forest",
+        Biome::Savanna => "Savanna",
+        Biome::Desert => "Desert",
+        Biome::Jungle => "Jungle",
+        Biome::Mountain => "Mountain",
+        Biome::Snow => "Snow",
+        Biome::Volcano => "Volcano",
+        Biome::LavaField => "Lava Field",
+        Biome::AshLand => "Ash Land",
+        Biome::MagmaSea => "Magma Sea",
+        Biome::ScorchedWaste => "Scorched Waste",
+        Biome::FrozenOcean => "Frozen Ocean",
+        Biome::GlacialPlain => "Glacial Plain",
+        Biome::CausticLake => "Caustic Lake",
+        Biome::ToxicSwamp => "Toxic Swamp",
+        Biome::AcidFlatland => "Acid Flatland",
+        Biome::RockyWaste => "Rocky Waste",
+        Biome::DustPlain => "Dust Plain",
+    }
+}
+
+/// Canonical sort order for legend display (mirrors the enum declaration order).
+pub fn biome_order(b: Biome) -> u8 {
+    match b {
+        Biome::DeepOcean => 0,
+        Biome::Ocean => 1,
+        Biome::Beach => 2,
+        Biome::Wetland => 3,
+        Biome::IceCap => 4,
+        Biome::Tundra => 5,
+        Biome::Taiga => 6,
+        Biome::Shrubland => 7,
+        Biome::Plain => 8,
+        Biome::Forest => 9,
+        Biome::Savanna => 10,
+        Biome::Desert => 11,
+        Biome::Jungle => 12,
+        Biome::Mountain => 13,
+        Biome::Snow => 14,
+        Biome::Volcano => 15,
+        Biome::LavaField => 16,
+        Biome::AshLand => 17,
+        Biome::MagmaSea => 18,
+        Biome::ScorchedWaste => 19,
+        Biome::FrozenOcean => 20,
+        Biome::GlacialPlain => 21,
+        Biome::CausticLake => 22,
+        Biome::ToxicSwamp => 23,
+        Biome::AcidFlatland => 24,
+        Biome::RockyWaste => 25,
+        Biome::DustPlain => 26,
+    }
+}
 
 // ── Planet climate offsets ────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@ mod generation;
 mod noise;
 mod world;
 
-use export::{export_json, export_noise_maps, export_png, export_svg};
+use export::{export_json, export_legend_png, export_noise_maps, export_png, export_svg};
 use generation::generate_world;
 use rand::RngExt;
 use world::PlanetType;
@@ -92,6 +92,7 @@ fn main() {
     std::fs::create_dir_all(&raw_dir).expect("failed to create raw_data directory");
 
     export_png(&world, &format!("{}/world.png", dir));
+    export_legend_png(&world, &format!("{}/legend.png", dir));
     export_json(&world, &format!("{}/world.json", raw_dir));
     export_svg(&world, &format!("{}/world.svg", dir));
     export_noise_maps(
