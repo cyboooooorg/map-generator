@@ -90,6 +90,41 @@ pub fn export_svg(world: &World, path: &str) {
         }
     }
 
+    // ── 4. Overlay equator and tropic reference lines ─────────────────────────
+    // Latitude → row mapping: lat = (r / height) * π − π/2
+    // So r = height * (0.5 + lat_deg / 180)
+    let equator_y = h as f64 * 0.5;
+    let cancer_y = h as f64 * (0.5 + 23.5_f64 / 180.0); // Tropic of Cancer   +23.5°
+    let capricorn_y = h as f64 * (0.5 - 23.5_f64 / 180.0); // Tropic of Capricorn −23.5°
+    let arctic_y = h as f64 * (0.5 + 66.5_f64 / 180.0); // Arctic Circle       +66.5°
+    let antarctic_y = h as f64 * (0.5 - 66.5_f64 / 180.0); // Antarctic Circle    −66.5°
+
+    // Equator — red dotted line
+    writeln!(
+        out,
+        r##"<line x1="0" y1="{equator_y:.1}" x2="{w}" y2="{equator_y:.1}" stroke="#FF3333" stroke-width="1" stroke-dasharray="6,4" opacity="0.75"/>"##
+    ).unwrap();
+    // Tropic of Cancer — amber dotted line
+    writeln!(
+        out,
+        r##"<line x1="0" y1="{cancer_y:.1}" x2="{w}" y2="{cancer_y:.1}" stroke="#FFA500" stroke-width="1" stroke-dasharray="6,4" opacity="0.75"/>"##
+    ).unwrap();
+    // Tropic of Capricorn — amber dotted line
+    writeln!(
+        out,
+        r##"<line x1="0" y1="{capricorn_y:.1}" x2="{w}" y2="{capricorn_y:.1}" stroke="#FFA500" stroke-width="1" stroke-dasharray="6,4" opacity="0.75"/>"##
+    ).unwrap();
+    // Arctic Circle — cyan dotted line
+    writeln!(
+        out,
+        r##"<line x1="0" y1="{arctic_y:.1}" x2="{w}" y2="{arctic_y:.1}" stroke="#00CFFF" stroke-width="1" stroke-dasharray="6,4" opacity="0.75"/>"##
+    ).unwrap();
+    // Antarctic Circle — cyan dotted line
+    writeln!(
+        out,
+        r##"<line x1="0" y1="{antarctic_y:.1}" x2="{w}" y2="{antarctic_y:.1}" stroke="#00CFFF" stroke-width="1" stroke-dasharray="6,4" opacity="0.75"/>"##
+    ).unwrap();
+
     writeln!(out, "</svg>").unwrap();
 
     std::fs::write(path, &out).expect("failed to write SVG");

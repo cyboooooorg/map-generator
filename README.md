@@ -73,9 +73,23 @@ Each run writes three files inside `worlds/<planet>-<seed>/`:
 
 | File         | Description                                                                                        |
 | ------------ | -------------------------------------------------------------------------------------------------- |
-| `world.png`  | 1920 × 1080 PNG with biome colours and contour lines                                               |
+| `world.png`  | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                  |
 | `world.svg`  | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling |
 | `world.json` | Full tile data (elevation, moisture, temperature, biome, circumference, gravity, …)                |
+
+#### Geographic reference lines
+
+Both `world.png` and `world.svg` overlay five dotted latitude lines for orientation:
+
+| Line                | Latitude | Colour |
+| ------------------- | -------- | ------ |
+| Equator             | 0°       | Red    |
+| Tropic of Cancer    | +23.5°   | Amber  |
+| Tropic of Capricorn | −23.5°   | Amber  |
+| Arctic Circle       | +66.5°   | Cyan   |
+| Antarctic Circle    | −66.5°   | Cyan   |
+
+The row position for each line is derived from the equirectangular projection used by the map: `row = height × (0.5 + latitude_deg / 180)`.
 
 ## Calculations
 

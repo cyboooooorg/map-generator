@@ -51,5 +51,31 @@ pub fn export_png(world: &World, path: &str) {
         img.put_pixel(tile.q as u32, tile.r as u32, Rgb(color));
     }
 
+    // ── Overlay equator and tropic reference lines (dotted) ───────────────────
+    // Latitude → row: r = height * (0.5 + lat_deg / 180)
+    let line_rows: &[(f64, [u8; 3])] = &[
+        (h as f64 * 0.5, [220, 50, 50]),                  // equator — red
+        (h as f64 * (0.5 + 23.5 / 180.0), [220, 150, 0]), // Tropic of Cancer — amber
+        (h as f64 * (0.5 - 23.5 / 180.0), [220, 150, 0]), // Tropic of Capricorn — amber
+        (h as f64 * (0.5 + 66.5 / 180.0), [0, 200, 240]), // Arctic Circle — cyan
+        (h as f64 * (0.5 - 66.5 / 180.0), [0, 200, 240]), // Antarctic Circle — cyan
+    ];
+    // Dash pattern: 6 px on, 4 px off
+    const DASH_ON: u32 = 6;
+    const DASH_OFF: u32 = 4;
+    const PERIOD: u32 = DASH_ON + DASH_OFF;
+
+    for &(row_f, color) in line_rows {
+        let row = row_f.round() as u32;
+        if row >= h {
+            continue;
+        }
+        for x in 0..w {
+            if x % PERIOD < DASH_ON {
+                img.put_pixel(x, row, Rgb(color));
+            }
+        }
+    }
+
     img.save(path).unwrap();
 }
