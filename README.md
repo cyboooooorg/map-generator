@@ -69,13 +69,56 @@ devbox run prod -- --planet volcanic --sea-level -0.2 --volcanic 1.0
 
 ### Output
 
-Each run writes three files inside `worlds/<planet>-<seed>/`:
+Each run creates a `worlds/<planet>-<seed>/` directory with the following layout:
 
-| File         | Description                                                                                        |
-| ------------ | -------------------------------------------------------------------------------------------------- |
-| `world.png`  | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                  |
-| `world.svg`  | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling |
-| `world.json` | Full tile data (elevation, moisture, temperature, biome, circumference, gravity, …)                |
+```text
+worlds/<planet>-<seed>/
+├── world.png          ← biome map with contour lines and reference lines
+├── world.svg          ← equivalent vector image
+├── raw_data/
+│   └── world.json     ← full tile data (elevation, moisture, temperature, biome, …)
+└── noise_maps/
+    ├── noise_warp_x.png
+    ├── noise_warp_y.png
+    ├── noise_continent.png
+    ├── noise_mountain.png
+    ├── noise_mountain_wt.png
+    ├── noise_elevation.png
+    ├── noise_biome_elev.png
+    ├── noise_moisture.png
+    ├── noise_temperature.png
+    ├── noise_volcanic_raw.png
+    └── noise_volcanic_zone.png
+```
+
+| File / folder | Description                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------------- |
+| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                  |
+| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling |
+| `raw_data/`   | Raw world data                                                                                     |
+| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                     |
+
+#### Noise maps (false colour)
+
+11 intermediate noise maps are exported into `noise_maps/` for study and debugging. They share a **jet colour ramp**:
+
+> blue (low) → cyan → green → yellow → red (high)
+
+Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative values to blue/cyan, and positive values to yellow/red. Unsigned maps (range `[0, 1]`) run the full blue-to-red range.
+
+| File                      | Range     | Description                                                  |
+| ------------------------- | --------- | ------------------------------------------------------------ |
+| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                    |
+| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                    |
+| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                            |
+| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                |
+| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)        |
+| `noise_elevation.png`     | `[-1, 1]` | Final elevation = continent + mountain × weight × blend      |
+| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees |
+| `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                 |
+| `noise_temperature.png`   | `[0, 1]`  | Temperature (latitude gradient + elevation cooling)          |
+| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                       |
+| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                  |
 
 #### Geographic reference lines
 

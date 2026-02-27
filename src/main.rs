@@ -1,10 +1,12 @@
 mod export_json;
+mod export_noise;
 mod export_png;
 mod export_svg;
 mod generation;
 mod world;
 
 use export_json::export_json;
+use export_noise::export_noise_maps;
 use export_png::export_png;
 use export_svg::export_svg;
 use generation::generate_world;
@@ -88,11 +90,24 @@ fn main() {
     );
 
     let dir = format!("worlds/{}-{}", planet_type, world.seed);
-    std::fs::create_dir_all(&dir).expect("failed to create output directory");
+    let noise_dir = format!("{}/noise_maps", dir);
+    let raw_dir = format!("{}/raw_data", dir);
+    std::fs::create_dir_all(&noise_dir).expect("failed to create noise_maps directory");
+    std::fs::create_dir_all(&raw_dir).expect("failed to create raw_data directory");
 
     export_png(&world, &format!("{}/world.png", dir));
-    export_json(&world, &format!("{}/world.json", dir));
+    export_json(&world, &format!("{}/world.json", raw_dir));
     export_svg(&world, &format!("{}/world.svg", dir));
+    export_noise_maps(
+        world.width,
+        world.height,
+        world.seed,
+        world.sea_level,
+        world.volcanic_intensity,
+        world.circumference_km,
+        world.gravity_modifier,
+        &noise_dir,
+    );
 
     println!("World generated → {}/", dir);
 }
