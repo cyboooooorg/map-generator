@@ -68,11 +68,14 @@ pub enum Biome {
     RockyWaste,
     /// Fine regolith plains scoured by dry winds.
     DustPlain,
+    // ── Appended after id 26: keep new variants at the end ────────────────────
+    /// Pack ice floating on polar seas.
+    SeaIce,
 }
 
 impl Biome {
     /// Every biome, in id order.
-    pub const ALL: [Biome; 27] = [
+    pub const ALL: [Biome; 28] = [
         Biome::DeepOcean,
         Biome::Ocean,
         Biome::Beach,
@@ -100,6 +103,7 @@ impl Biome {
         Biome::AcidFlatland,
         Biome::RockyWaste,
         Biome::DustPlain,
+        Biome::SeaIce,
     ];
 
     /// Stable numeric id, used as the pixel value in `raw_data/biomes.png`.
@@ -149,6 +153,7 @@ pub fn biome_color(b: Biome) -> [u8; 3] {
         // Barren world exclusives
         Biome::RockyWaste => [110, 103, 90],
         Biome::DustPlain => [195, 168, 110],
+        Biome::SeaIce => [160, 196, 224],
     }
 }
 
@@ -182,6 +187,7 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::AcidFlatland => "Acid Flatland",
         Biome::RockyWaste => "Rocky Waste",
         Biome::DustPlain => "Dust Plain",
+        Biome::SeaIce => "Sea Ice",
     }
 }
 
@@ -217,6 +223,8 @@ pub struct BiomeRules {
     pub waterline: f32,
     /// Below this elevation, open water is deep ocean.
     pub deep_ocean: f32,
+    /// Below this temperature, the sea surface freezes into pack ice.
+    pub sea_ice_temperature: f32,
     /// Between the waterline and this elevation, land is shore.
     pub shore_top: f32,
     /// Above this elevation, land is highland (mountain or snow).
@@ -266,6 +274,7 @@ impl Default for BiomeRules {
         Self {
             waterline: -0.15,
             deep_ocean: -0.45,
+            sea_ice_temperature: 0.10,
             shore_top: 0.0,
             highland: 0.70,
             snow_line: 0.88,
@@ -314,7 +323,7 @@ impl BiomeRules {
             ..
         } = input;
         let base = if e < self.waterline {
-            self.ocean(e)
+            self.ocean(e, t)
         } else if e < self.shore_top {
             self.shore(t, m)
         } else if e > self.highland {
@@ -328,8 +337,10 @@ impl BiomeRules {
 
     // ── Altitude bands ────────────────────────────────────────────────────────
 
-    fn ocean(&self, e: f32) -> Biome {
-        if e < self.deep_ocean {
+    fn ocean(&self, e: f32, t: f32) -> Biome {
+        if t < self.sea_ice_temperature {
+            Biome::SeaIce
+        } else if e < self.deep_ocean {
             Biome::DeepOcean
         } else {
             Biome::Ocean
@@ -424,7 +435,7 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
         // ── Volcanic world ────────────────────────────────────────────────────
         // Ocean basins fill with magma; lowlands are scoured to bare rock.
         PlanetType::Volcanic => match biome {
-            Biome::DeepOcean | Biome::Ocean => Biome::MagmaSea,
+            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce => Biome::MagmaSea,
             Biome::Beach | Biome::Wetland => Biome::AshLand,
             Biome::Plain | Biome::Shrubland | Biome::Savanna | Biome::Desert => {
                 Biome::ScorchedWaste
@@ -439,7 +450,7 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
         // ── Frozen world ──────────────────────────────────────────────────────
         // Oceans are sealed under ice; temperate zones become permafrost plains.
         PlanetType::Frozen => match biome {
-            Biome::DeepOcean | Biome::Ocean | Biome::MagmaSea => Biome::FrozenOcean,
+            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce | Biome::MagmaSea => Biome::FrozenOcean,
             Biome::Beach | Biome::Wetland => Biome::IceCap,
             Biome::Plain | Biome::Shrubland => Biome::GlacialPlain,
             Biome::Forest | Biome::Jungle => Biome::Taiga,
@@ -451,7 +462,7 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
         // ── Caustic world ─────────────────────────────────────────────────────
         // Oceans become acid seas; vegetation zones drown in toxic runoff.
         PlanetType::Caustic => match biome {
-            Biome::DeepOcean | Biome::Ocean => Biome::CausticLake,
+            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce => Biome::CausticLake,
             Biome::Beach | Biome::Wetland | Biome::Forest | Biome::Jungle | Biome::Taiga => {
                 Biome::ToxicSwamp
             }
@@ -465,9 +476,11 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
         // ── Barren world ──────────────────────────────────────────────────────
         // No liquid water; all life extinct; only rock and dust remain.
         PlanetType::Barren => match biome {
-            Biome::DeepOcean | Biome::Ocean | Biome::CausticLake | Biome::FrozenOcean => {
-                Biome::RockyWaste
-            }
+            Biome::DeepOcean
+            | Biome::Ocean
+            | Biome::SeaIce
+            | Biome::CausticLake
+            | Biome::FrozenOcean => Biome::RockyWaste,
             Biome::Beach | Biome::Wetland | Biome::ToxicSwamp => Biome::RockyWaste,
             Biome::Plain
             | Biome::Shrubland
@@ -527,6 +540,20 @@ mod tests {
         for (i, b) in Biome::ALL.iter().enumerate() {
             assert_eq!(b.id() as usize, i, "{b:?}");
         }
+    }
+
+    #[test]
+    fn polar_seas_freeze_on_terran() {
+        let input = BiomeInput {
+            elevation: -0.5,
+            moisture: 0.0,
+            temperature: 0.05,
+            volcanic_zone: 0.0,
+        };
+        assert_eq!(
+            BiomeRules::default().choose(input, PlanetType::Terran),
+            Biome::SeaIce
+        );
     }
 
     #[test]
