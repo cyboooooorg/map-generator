@@ -262,7 +262,7 @@ The planet type then shifts the whole temperature field (for example `−0.55` o
 
 Rain droplets are dropped at random on land. Each one rolls downhill with a little inertia, picks up sediment while it speeds up on steep ground, and drops it when it slows down, climbs, evaporates, or reaches the sea (Beyer, 2015). Thousands of droplets carve valleys into the ridges and leave fans and deltas at their feet.
 
-The simulation runs on a fixed 512 × 256 grid whatever the output size (smaller maps use their own size), so a world keeps the same valleys at every resolution and erosion costs a few tens of milliseconds. The height change is then interpolated back onto the full-resolution map. `--erosion 1` drops one droplet per grid pixel (about 130 000); erosion never digs land below the waterline.
+The simulation runs on a fixed 512 × 256 grid whatever the output size (smaller maps use their own size), so a world keeps the same valleys at every resolution and erosion costs a few tens of milliseconds. The height change is then interpolated back onto the full-resolution map. `--erosion 1` drops one droplet per grid pixel (about 130 000); erosion never digs land below the waterline. Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
 
 The two parameters derived from `--circumference` are computed as follows.
 

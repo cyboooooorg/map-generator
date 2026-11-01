@@ -182,6 +182,14 @@ fn simulate(map: &mut HeightMap, waterline: f32, droplets: usize, seed: u64) {
     }
 }
 
+/// Weight of erosion on row `y` of `h`: 1 up to 60° of latitude, fading to 0
+/// at 75°. Droplets move in pixel steps, and the projection stretches pixels
+/// east-west towards the poles, which would carve artificial north-south grooves.
+fn polar_fade(y: usize, h: usize) -> f32 {
+    let cos_latitude = (std::f32::consts::PI * (y as f32 + 0.5) / h as f32).sin();
+    ((cos_latitude - 0.25) / 0.25).clamp(0.0, 1.0)
+}
+
 /// Erodes a full-resolution, row-major `elevation` map in place and returns
 /// the height change of each pixel.
 ///
@@ -236,9 +244,10 @@ pub fn erode(
     for y in 0..h {
         // Pixel centre in erosion-grid coordinates (cell centres at +0.5).
         let ey = (y as f32 + 0.5) * eh as f32 / h as f32 - 0.5;
+        let fade = polar_fade(y, h);
         for x in 0..w {
             let ex = (x as f32 + 0.5) * ew as f32 / w as f32 - 0.5;
-            let (d, _, _) = delta.sample(ex, ey);
+            let d = delta.sample(ex, ey).0 * fade;
             change[y * w + x] = d;
             elevation[y * w + x] = (elevation[y * w + x] + d).clamp(-1.0, 1.0);
         }
