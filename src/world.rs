@@ -57,6 +57,8 @@ pub struct WorldParams {
     /// Tilt of the rotation axis in degrees, in `[0, 90]`. Earth ≈ 23.44°.
     /// Sets the latitude temperature profile and the tropics / polar circles.
     pub axial_tilt_deg: f32,
+    /// Hydraulic erosion strength: droplets per erosion-grid pixel. 0 disables it.
+    pub erosion: f32,
 }
 
 impl WorldParams {
@@ -91,8 +93,8 @@ pub struct World {
     pub params: WorldParams,
     pub width: u32,
     pub height: u32,
-    /// Terrain height in `[-1, 1]`, before the sea-level shift. Biome
-    /// selection uses `elevation - sea_level`.
+    /// Terrain height in `[-1, 1]` after erosion, before the sea-level shift.
+    /// Biome selection uses `elevation - sea_level`.
     pub elevation: Vec<f32>,
     /// Moisture in `[-1, 1]` (`> 0` is wet), planet offset included.
     pub moisture: Vec<f32>,

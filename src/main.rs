@@ -1,5 +1,6 @@
 mod biome;
 mod climate;
+mod erosion;
 mod export;
 mod generation;
 mod geo;
@@ -41,6 +42,10 @@ struct Args {
     /// Axial tilt in degrees, in [0, 90] [default: random in 5..40]
     #[arg(long, value_parser = parse_in_range(0.0, 90.0))]
     axial_tilt: Option<f32>,
+
+    /// Hydraulic erosion strength in [0, 5]; 0 disables erosion
+    #[arg(long, default_value_t = 1.0, value_parser = parse_in_range(0.0, 5.0))]
+    erosion: f32,
 
     /// Noise seed [default: random]
     #[arg(long)]
@@ -109,6 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         volcanic_intensity,
         circumference_km,
         axial_tilt_deg,
+        erosion: args.erosion,
     };
     println!(
         "Parameters → planet={planet_type} seed={seed} sea_level={sea_level:.2} \
@@ -161,7 +167,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "Reproduce with: --planet {planet_type} --seed {seed} --sea-level {sea_level} \
          --volcanic {volcanic_intensity} --circumference {circumference_km} \
-         --axial-tilt {axial_tilt_deg}"
+         --axial-tilt {axial_tilt_deg} --erosion {}",
+        args.erosion
     );
     Ok(())
 }

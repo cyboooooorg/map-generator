@@ -31,7 +31,7 @@ All parameters are optional. Any omitted value is chosen **randomly** at startup
 ```text
 Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g
 World generated → worlds/frozen-2590618090/
-Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1
 ```
 
 ### Options
@@ -44,6 +44,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`       |
 | `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)          | random in `[20 000, 80 000)` |
 | `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                        | random in `[5, 40)`          |
+| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it   | `1.0`                        |
 | `--width <px>`          | map width, `2`–`16384`                                  | `1920`                       |
 | `--height <px>`         | map height, `2`–`16384`                                 | `1080`                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                     |
@@ -59,6 +60,8 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 **volcanic** — controls how much of the mountain chains become volcanic. `0.0` = no volcanoes, `1.0` = most mountain chains erupt.
 
 **axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt).
+
+**erosion** — how much rain carves the terrain: droplets per pixel of the erosion grid, see [Erosion](#hydraulic-erosion).
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -130,6 +133,8 @@ worlds/<planet>-<seed>/
     ├── noise_moisture.png
     ├── noise_volcanic_raw.png
     ├── noise_volcanic_zone.png
+    ├── erosion.png
+    ├── elevation.png
     ├── temperature.png
     └── coast_distance.png
 ```
@@ -204,11 +209,13 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                                                       |
 | `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                                           |
 | `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)                                   |
-| `noise_elevation.png`     | `[-1, 1]` | Final elevation = continent + mountain × weight × blend                                 |
+| `noise_elevation.png`     | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                        |
 | `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                            |
 | `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                                            |
 | `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                  |
 | `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                                             |
+| `erosion.png`             | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                        |
+| `elevation.png`           | `[-1, 1]` | Final elevation, after erosion                                                          |
 | `temperature.png`         | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt)) |
 | `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                            |
 
@@ -250,6 +257,12 @@ S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
 | 70°+       | Poles receive more sunlight over a year than the equator |
 
 The planet type then shifts the whole temperature field (for example `−0.55` on frozen worlds).
+
+### Hydraulic erosion
+
+Rain droplets are dropped at random on land. Each one rolls downhill with a little inertia, picks up sediment while it speeds up on steep ground, and drops it when it slows down, climbs, evaporates, or reaches the sea (Beyer, 2015). Thousands of droplets carve valleys into the ridges and leave fans and deltas at their feet.
+
+The simulation runs on a fixed 512 × 256 grid whatever the output size (smaller maps use their own size), so a world keeps the same valleys at every resolution and erosion costs a few tens of milliseconds. The height change is then interpolated back onto the full-resolution map. `--erosion 1` drops one droplet per grid pixel (about 130 000); erosion never digs land below the waterline.
 
 The two parameters derived from `--circumference` are computed as follows.
 

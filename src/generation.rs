@@ -1,5 +1,6 @@
 use crate::biome::{BiomeInput, BiomeRules, planet_offsets};
 use crate::climate::{row_temperatures, temperature};
+use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
 use crate::world::*;
@@ -201,16 +202,44 @@ pub fn generate(params: &WorldParams) -> Generated {
 
     let rules = BiomeRules::default();
     let grid = params.grid();
+    let n = params.pixel_count();
 
-    // ── Pass 2: temperature ───────────────────────────────────────────────────
+    // ── Pass 2: hydraulic erosion ─────────────────────────────────────────────
+    let mut elevation: Vec<f32> = samples.iter().map(|s| s.elevation).collect();
+    let erosion = erode(
+        &mut elevation,
+        width,
+        height,
+        params.sea_level + rules.waterline,
+        params.erosion,
+        params.seed,
+    );
+    debug.push(DebugLayer {
+        name: "erosion",
+        ramp: Ramp::Signed,
+        // ×10: height changes are small next to the [-1, 1] elevation range.
+        values: erosion
+            .iter()
+            .map(|d| (d * 10.0).clamp(-1.0, 1.0))
+            .collect(),
+    });
+    debug.push(DebugLayer {
+        name: "elevation",
+        ramp: Ramp::Signed,
+        values: elevation.clone(),
+    });
+    // Elevation relative to the shifted sea level: what biome selection sees.
+    let relief: Vec<f32> = elevation
+        .iter()
+        .map(|e| (e - params.sea_level).clamp(-1.0, 1.0))
+        .collect();
+
+    // ── Pass 3: temperature ───────────────────────────────────────────────────
     let row_temperature = row_temperatures(&grid, params.axial_tilt_deg);
-    let raw_temperature: Vec<f32> = samples
+    let raw_temperature: Vec<f32> = relief
         .par_iter()
         .enumerate()
-        .map(|(i, s)| {
-            let y = i / width as usize;
-            temperature(row_temperature[y], s.biome_elevation - rules.waterline)
-        })
+        .map(|(i, &r)| temperature(row_temperature[i / width as usize], r - rules.waterline))
         .collect();
     debug.push(DebugLayer {
         name: "temperature",
@@ -218,12 +247,9 @@ pub fn generate(params: &WorldParams) -> Generated {
         values: raw_temperature.clone(),
     });
 
-    // ── Pass 3: distance to the coast ─────────────────────────────────────────
+    // ── Pass 4: distance to the coast ─────────────────────────────────────────
     // Shores are the land pixels close to open water.
-    let water: Vec<bool> = samples
-        .iter()
-        .map(|s| s.biome_elevation < rules.waterline)
-        .collect();
+    let water: Vec<bool> = relief.iter().map(|&r| r < rules.waterline).collect();
     let coast_distance_km = grid.distance_to(&water, COAST_DISTANCE_CAP_KM);
     debug.push(DebugLayer {
         name: "coast_distance",
@@ -234,32 +260,32 @@ pub fn generate(params: &WorldParams) -> Generated {
             .collect(),
     });
 
-    // ── Pass 4: biomes ────────────────────────────────────────────────────────
+    // ── Pass 5: biomes ────────────────────────────────────────────────────────
     // Planet-type global offsets shift the whole climate before biome selection.
+    // Store the climate exactly as biome selection sees it, so the exported
+    // data explains the biome of every pixel.
     let (dt, dm, dvz) = planet_offsets(planet_type);
-    let n = params.pixel_count();
-    let mut elevation = Vec::with_capacity(n);
-    let mut moisture = Vec::with_capacity(n);
-    let mut temperature = Vec::with_capacity(n);
-    let mut biomes = Vec::with_capacity(n);
-    for ((s, &coast_km), &raw_t) in samples.iter().zip(&coast_distance_km).zip(&raw_temperature) {
-        // Store the climate exactly as biome selection sees it, so the
-        // exported data explains the biome of every pixel.
-        let m = (s.moisture + dm).clamp(-1.0, 1.0);
-        let t = (raw_t + dt).clamp(0.0, 1.0);
-        let vz = (s.volcanic_zone + dvz).clamp(0.0, 1.0);
-        elevation.push(s.elevation);
-        moisture.push(m);
-        temperature.push(t);
-        let input = BiomeInput {
-            elevation: s.biome_elevation,
-            moisture: m,
-            temperature: t,
-            volcanic_zone: vz,
-            coast_distance_km: coast_km,
-        };
-        biomes.push(rules.choose(input, planet_type));
-    }
+    let moisture: Vec<f32> = samples
+        .iter()
+        .map(|s| (s.moisture + dm).clamp(-1.0, 1.0))
+        .collect();
+    let temperature: Vec<f32> = raw_temperature
+        .iter()
+        .map(|t| (t + dt).clamp(0.0, 1.0))
+        .collect();
+    let biomes: Vec<Biome> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let input = BiomeInput {
+                elevation: relief[i],
+                moisture: moisture[i],
+                temperature: temperature[i],
+                volcanic_zone: (samples[i].volcanic_zone + dvz).clamp(0.0, 1.0),
+                coast_distance_km: coast_distance_km[i],
+            };
+            rules.choose(input, planet_type)
+        })
+        .collect();
 
     Generated {
         world: World {
@@ -290,6 +316,7 @@ mod tests {
             volcanic_intensity: 0.5,
             circumference_km: EARTH_CIRCUMFERENCE_KM,
             axial_tilt_deg: EARTH_AXIAL_TILT_DEG,
+            erosion: 1.0,
         }
     }
 
@@ -348,11 +375,7 @@ mod tests {
     #[test]
     fn debug_layers_match_the_world() {
         let g = generate(&params(11, PlanetType::Terran));
-        let elevation = g
-            .debug
-            .iter()
-            .find(|l| l.name == "noise_elevation")
-            .unwrap();
+        let elevation = g.debug.iter().find(|l| l.name == "elevation").unwrap();
         assert_eq!(elevation.values, g.world.elevation);
     }
 }
