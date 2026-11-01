@@ -1,3 +1,4 @@
+use crate::geo::Grid;
 use crate::noise::EARTH_CIRCUMFERENCE_KM;
 use serde::Serialize;
 use std::fmt;
@@ -62,6 +63,15 @@ impl WorldParams {
     /// thus circumference). Clamped to a plausible range for rocky planets.
     pub fn gravity_modifier(&self) -> f32 {
         (self.circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0)
+    }
+
+    /// The pixel grid with its physical dimensions.
+    pub fn grid(&self) -> Grid {
+        Grid {
+            width: self.width,
+            height: self.height,
+            circumference_km: self.circumference_km,
+        }
     }
 
     /// Number of pixels in each layer.

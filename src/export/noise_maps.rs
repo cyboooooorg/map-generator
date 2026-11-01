@@ -1,28 +1,9 @@
-//! Export every intermediate noise map as a false-colour PNG.
+//! Export of the diagnostic maps: one false-colour PNG per intermediate
+//! generation layer (see the README for the list).
 //!
-//! The maps produced are:
-//!
-//! | File                    | Range    | Description                                         |
-//! |-------------------------|----------|-----------------------------------------------------|
-//! | noise_warp_x.png        | [-1, 1]  | Domain-warp field, X axis                           |
-//! | noise_warp_y.png        | [-1, 1]  | Domain-warp field, Y axis                           |
-//! | noise_continent.png     | [-1, 1]  | Low-freq FBM continent shape                        |
-//! | noise_mountain.png      | [ 0, 1]  | Ridged noise (mountain peaks)                       |
-//! | noise_mountain_wt.png   | [ 0, 1]  | Mountain blend weight (based on continent height)   |
-//! | noise_elevation.png     | [-1, 1]  | Final elevation = continent + mountain×weight×blend |
-//! | noise_biome_elev.png    | [-1, 1]  | Elevation shifted by sea_level (what biomes see)    |
-//! | noise_moisture.png      | [-1, 1]  | Moisture FBM                                        |
-//! | noise_temperature.png   | [ 0, 1]  | Temperature (latitude gradient + land altitude cooling) |
-//! | noise_volcanic_raw.png  | [-1, 1]  | Raw volcanic-zone FBM                               |
-//! | noise_volcanic_zone.png | [ 0, 1]  | Processed volcanic zone (threshold applied)         |
-//!
-//! Colour encoding
-//! ───────────────
-//! All maps share the same "jet" ramp:
-//!   blue (low) → cyan → green → yellow → red (high)
-//!
-//! Signed maps are linearly rescaled so that 0.0 → green, -1.0 → blue, +1.0 → red.
-//! Unsigned maps are rescaled so that 0.0 → blue and 1.0 → red.
+//! All maps share the same "jet" ramp: blue (low) → cyan → green → yellow →
+//! red (high). Signed layers are rescaled so that -1.0 → blue, 0.0 → green and
+//! +1.0 → red; unsigned layers so that 0.0 → blue and 1.0 → red.
 use crate::generation::{DebugLayer, Ramp};
 use image::{ImageResult, Rgb, RgbImage};
 use rayon::prelude::*;

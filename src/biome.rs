@@ -225,8 +225,10 @@ pub struct BiomeRules {
     pub deep_ocean: f32,
     /// Below this temperature, the sea surface freezes into pack ice.
     pub sea_ice_temperature: f32,
-    /// Between the waterline and this elevation, land is shore.
+    /// Shore only forms on land lower than this elevation.
     pub shore_top: f32,
+    /// Shore only forms on land closer to open water than this, in km.
+    pub shore_width_km: f32,
     /// Above this elevation, land is highland (mountain or snow).
     pub highland: f32,
     /// Above this elevation, highland is always snow.
@@ -276,6 +278,7 @@ impl Default for BiomeRules {
             deep_ocean: -0.45,
             sea_ice_temperature: 0.10,
             shore_top: 0.0,
+            shore_width_km: 40.0,
             highland: 0.70,
             snow_line: 0.88,
             highland_snow_temperature: 0.35,
@@ -308,6 +311,8 @@ pub struct BiomeInput {
     pub temperature: f32,
     /// Volcanic zone in `[0, 1]` (`0` = inert, `1` = fully volcanic).
     pub volcanic_zone: f32,
+    /// Distance to the nearest open water in km (`0` on water).
+    pub coast_distance_km: f32,
 }
 
 // ── Top-level biome selector ──────────────────────────────────────────────────
@@ -324,7 +329,7 @@ impl BiomeRules {
         } = input;
         let base = if e < self.waterline {
             self.ocean(e, t)
-        } else if e < self.shore_top {
+        } else if e < self.shore_top && input.coast_distance_km <= self.shore_width_km {
             self.shore(t, m)
         } else if e > self.highland {
             self.highland(e, t)
@@ -525,6 +530,7 @@ mod tests {
                                 moisture: m,
                                 temperature: t,
                                 volcanic_zone: vz,
+                                coast_distance_km: 0.0,
                             },
                             pt,
                         ));
@@ -543,12 +549,33 @@ mod tests {
     }
 
     #[test]
+    fn shore_needs_nearby_water() {
+        let rules = BiomeRules::default();
+        let lowland = |coast_distance_km| BiomeInput {
+            elevation: -0.05,
+            moisture: 0.0,
+            temperature: 0.6,
+            volcanic_zone: 0.0,
+            coast_distance_km,
+        };
+        assert_eq!(
+            rules.choose(lowland(10.0), PlanetType::Terran),
+            Biome::Beach
+        );
+        assert_ne!(
+            rules.choose(lowland(500.0), PlanetType::Terran),
+            Biome::Beach
+        );
+    }
+
+    #[test]
     fn polar_seas_freeze_on_terran() {
         let input = BiomeInput {
             elevation: -0.5,
             moisture: 0.0,
             temperature: 0.05,
             volcanic_zone: 0.0,
+            coast_distance_km: 0.0,
         };
         assert_eq!(
             BiomeRules::default().choose(input, PlanetType::Terran),
@@ -563,6 +590,7 @@ mod tests {
             moisture: 0.0,
             temperature: 0.5,
             volcanic_zone: 0.0,
+            coast_distance_km: 0.0,
         };
         assert_eq!(
             BiomeRules::default().choose(input, PlanetType::Terran),

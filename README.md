@@ -127,7 +127,8 @@ worlds/<planet>-<seed>/
     ├── noise_moisture.png
     ├── noise_temperature.png
     ├── noise_volcanic_raw.png
-    └── noise_volcanic_zone.png
+    ├── noise_volcanic_zone.png
+    └── coast_distance.png
 ```
 
 | File / folder | Description                                                                                                                                                           |
@@ -187,7 +188,7 @@ elevation = [lo + p / 65535 * (hi - lo) for p in pixels.getdata()]
 
 #### Noise maps (false colour)
 
-11 intermediate noise maps are exported into `noise_maps/` for study and debugging. They share a **jet colour ramp**:
+Every intermediate layer of the generation is exported into `noise_maps/` for study and debugging. They share a **jet colour ramp**:
 
 > blue (low) → cyan → green → yellow → red (high)
 
@@ -206,6 +207,7 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `noise_temperature.png`   | `[0, 1]`  | Temperature (latitude gradient + cooling of land with altitude) |
 | `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                          |
 | `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                     |
+| `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more    |
 
 #### Geographic reference lines
 

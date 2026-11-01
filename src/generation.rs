@@ -182,6 +182,10 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
     ("noise_volcanic_zone", Ramp::Unsigned, |s| s.volcanic_zone),
 ];
 
+/// Coast distances are computed up to this value; further pixels get the cap.
+/// Also the full scale of the `coast_distance` debug map.
+const COAST_DISTANCE_CAP_KM: f32 = 2_000.0;
+
 /// Generates a world, running every pass in order.
 pub fn generate(params: &WorldParams) -> Generated {
     let (width, height) = (params.width, params.height);
@@ -196,7 +200,7 @@ pub fn generate(params: &WorldParams) -> Generated {
         .flat_map_iter(|y| (0..width).map(move |x| (x, y)))
         .map(|(x, y)| sampler.sample(x, y))
         .collect();
-    let debug: Vec<DebugLayer> = NOISE_LAYERS
+    let mut debug: Vec<DebugLayer> = NOISE_LAYERS
         .par_iter()
         .map(|&(name, ramp, value)| DebugLayer {
             name,
@@ -205,16 +209,34 @@ pub fn generate(params: &WorldParams) -> Generated {
         })
         .collect();
 
-    // ── Pass 2: biomes ────────────────────────────────────────────────────────
+    let rules = BiomeRules::default();
+    let grid = params.grid();
+
+    // ── Pass 2: distance to the coast ─────────────────────────────────────────
+    // Shores are the land pixels close to open water.
+    let water: Vec<bool> = samples
+        .iter()
+        .map(|s| s.biome_elevation < rules.waterline)
+        .collect();
+    let coast_distance_km = grid.distance_to(&water, COAST_DISTANCE_CAP_KM);
+    debug.push(DebugLayer {
+        name: "coast_distance",
+        ramp: Ramp::Unsigned,
+        values: coast_distance_km
+            .iter()
+            .map(|d| d / COAST_DISTANCE_CAP_KM)
+            .collect(),
+    });
+
+    // ── Pass 3: biomes ────────────────────────────────────────────────────────
     // Planet-type global offsets shift the whole climate before biome selection.
     let (dt, dm, dvz) = planet_offsets(planet_type);
-    let rules = BiomeRules::default();
     let n = params.pixel_count();
     let mut elevation = Vec::with_capacity(n);
     let mut moisture = Vec::with_capacity(n);
     let mut temperature = Vec::with_capacity(n);
     let mut biomes = Vec::with_capacity(n);
-    for s in &samples {
+    for (s, &coast_km) in samples.iter().zip(&coast_distance_km) {
         // Store the climate exactly as biome selection sees it, so the
         // exported data explains the biome of every pixel.
         let m = (s.moisture + dm).clamp(-1.0, 1.0);
@@ -228,6 +250,7 @@ pub fn generate(params: &WorldParams) -> Generated {
             moisture: m,
             temperature: t,
             volcanic_zone: vz,
+            coast_distance_km: coast_km,
         };
         biomes.push(rules.choose(input, planet_type));
     }

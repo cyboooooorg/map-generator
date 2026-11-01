@@ -1,6 +1,7 @@
 mod biome;
 mod export;
 mod generation;
+mod geo;
 mod noise;
 mod world;
 
