@@ -108,6 +108,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
                 "key": format!("{b:?}"),
                 "name": biome_name(b),
                 "color": format!("#{r:02X}{g:02X}{bl:02X}"),
+                "water": b.is_water(),
             })
         })
         .collect();

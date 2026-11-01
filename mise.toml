@@ -13,6 +13,11 @@ description = "Generate a world (pass options after --, e.g. mise run gen -- --p
 depends = ["build"]
 run = "target/release/map-generator"
 
+[tasks.hex]
+description = "Resample a generated world onto a hex grid (e.g. mise run hex -- worlds/terran-42 --columns 96)"
+depends = ["build"]
+run = "target/release/hexgrid"
+
 [tasks.test]
 description = "Run the test suite"
 run = "cargo test"

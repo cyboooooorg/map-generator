@@ -84,16 +84,39 @@ mise run gen -- --planet barren --sea-level -0.5 --volcanic 0.0
 mise run gen -- --width 480 --height 270 --no-raw-data --no-noise-maps
 ```
 
+### Hex grid export
+
+For games and other tile-based uses, an existing world can be resampled onto a hexagonal grid. It is a separate, on-demand step that reads `raw_data/`, so generate the world with raw data first:
+
+```bash
+mise run gen -- --seed 42 --planet terran
+mise run hex -- worlds/terran-42 --columns 96
+```
+
+| Option               | Description                                                                | Default  |
+| -------------------- | -------------------------------------------------------------------------- | -------- |
+| `<world>`            | world directory produced by `mise run gen`                                 | required |
+| `--columns <n>`      | hex columns around the planet, `4`–`4096`; rows follow from the map height | `96`     |
+| `--river-flow <km²>` | land hexes whose largest river drains at least this area get a river flag  | `500000` |
+
+It writes `<world>/hex/`:
+
+- `hex.png`: the map painted with one colour per hex, outlined, with a blue dot on river hexes.
+- `hex.json`: the grid layout and one entry per hex (row-major, `index = row × columns + col`): majority `biome` id (rivers never win a hex; they set `river` instead), mean `elevation`, `moisture` and `temperature`, `max_flow_km2` and `river`. The biome table is copied from `world.json`.
+
+The grid is pointy-top in "odd-r" offset coordinates: odd rows are shifted half a hex east, and columns wrap east-west like the planet. Hexes are regular on the flat map, not on the sphere, so polar hexes cover less real ground than equatorial ones; a true spherical hex grid (geodesic) would be a different, much larger project.
+
 ### Development tasks
 
-| Task                    | Description                                     |
-| ----------------------- | ----------------------------------------------- |
-| `mise run build`        | Build the optimized binary                      |
-| `mise run gen`          | Build, then generate a world                    |
-| `mise run test`         | Run the test suite                              |
-| `mise run lint`         | Check formatting and run clippy (`-D warnings`) |
-| `mise run fmt`          | Format the code                                 |
-| `mise run clean-worlds` | Delete every generated world under `worlds/`    |
+| Task                    | Description                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| `mise run build`        | Build the optimized binary                                                          |
+| `mise run gen`          | Build, then generate a world                                                        |
+| `mise run hex`          | Resample a generated world onto a hex grid, see [Hex grid export](#hex-grid-export) |
+| `mise run test`         | Run the test suite                                                                  |
+| `mise run lint`         | Check formatting and run clippy (`-D warnings`)                                     |
+| `mise run fmt`          | Format the code                                                                     |
+| `mise run clean-worlds` | Delete every generated world under `worlds/`                                        |
 
 The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint` and `mise run test` on every push to `main` and on pull requests.
 
@@ -165,7 +188,7 @@ worlds/<planet>-<seed>/
 
 A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵`.
 
-`world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name and colour:
+`world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name, colour and whether it is a water surface:
 
 ```json
 {
@@ -179,7 +202,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
     "biomes": { "file": "biomes.png", "encoding": "gray8-biome-id" }
   },
   "biomes": [
-    { "id": 0, "key": "DeepOcean", "name": "Deep Ocean", "color": "#0A148C" }
+    { "id": 0, "key": "DeepOcean", "name": "Deep Ocean", "color": "#0A148C", "water": true }
   ]
 }
 ```
