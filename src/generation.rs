@@ -83,10 +83,11 @@ impl Sampler {
     pub fn sample(&self, q: i32, r: i32) -> Sample {
         let s = self.noise_scale;
 
-        // Spherical mapping: longitude 0..2π, latitude -π/2..π/2.
-        // Projects the flat map onto a unit sphere → no seams, no mirror symmetry.
+        // Spherical mapping: longitude 0..2π, latitude +π/2 (row 0, north) to
+        // -π/2 (last row, south). Projects the flat map onto a unit sphere →
+        // no seams, no mirror symmetry.
         let lon = (q as f64 / self.width as f64) * 2.0 * PI;
-        let lat = (r as f64 / self.height as f64) * PI - PI / 2.0;
+        let lat = PI / 2.0 - (r as f64 / self.height as f64) * PI;
         let nx = lat.cos() * lon.cos();
         let ny = lat.cos() * lon.sin();
         let nz = lat.sin();

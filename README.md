@@ -166,7 +166,7 @@ Both `world.png` and `world.svg` overlay five dotted latitude lines for orientat
 | Arctic Circle       | +66.5°   | Cyan   |
 | Antarctic Circle    | −66.5°   | Cyan   |
 
-The row position for each line is derived from the equirectangular projection used by the map: `row = height × (0.5 + latitude_deg / 180)`.
+The row position for each line is derived from the equirectangular projection used by the map: `row = height × (0.5 − latitude_deg / 180)`, so north is at the top of the image.
 
 ## Calculations
 

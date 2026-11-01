@@ -28,9 +28,10 @@ pub const REFERENCE_LINES: &[(f64, [u8; 3])] = &[
 pub const DASH_ON: u32 = 6;
 pub const DASH_OFF: u32 = 4;
 
-/// Row of a latitude in the equirectangular projection used by the map.
+/// Row of a latitude in the equirectangular projection used by the map:
+/// north pole (+90°) at row 0, south pole (-90°) at the last row.
 pub fn latitude_row(height: u32, latitude_deg: f64) -> f64 {
-    height as f64 * (0.5 + latitude_deg / 180.0)
+    height as f64 * (0.5 - latitude_deg / 180.0)
 }
 
 /// Computes the final colour of every pixel (biome colour darkened on contour
@@ -67,4 +68,18 @@ pub fn render_pixels(world: &World) -> Vec<[u8; 3]> {
         pixels[r * w + q] = color;
     }
     pixels
+}
+
+#[cfg(test)]
+mod tests {
+    use super::latitude_row;
+
+    #[test]
+    fn north_is_at_the_top() {
+        assert_eq!(latitude_row(1080, 90.0), 0.0);
+        assert_eq!(latitude_row(1080, 0.0), 540.0);
+        assert_eq!(latitude_row(1080, -90.0), 1080.0);
+        // Tropic of Cancer (northern hemisphere) sits above the equator.
+        assert!(latitude_row(1080, 23.5) < latitude_row(1080, 0.0));
+    }
 }
