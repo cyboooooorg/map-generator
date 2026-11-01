@@ -25,6 +25,7 @@
 //! Unsigned maps are rescaled so that 0.0 → blue and 1.0 → red.
 use crate::generation::{DebugLayer, Ramp};
 use image::{ImageResult, Rgb, RgbImage};
+use rayon::prelude::*;
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
@@ -56,11 +57,10 @@ pub fn export_noise_maps(
     height: u32,
     dir: &str,
 ) -> ImageResult<()> {
-    for layer in layers {
+    layers.par_iter().try_for_each(|layer| {
         let img = RgbImage::from_fn(width, height, |x, y| {
             Rgb(colorize(layer.ramp, layer.values[(y * width + x) as usize]))
         });
-        img.save(format!("{dir}/{}.png", layer.name))?;
-    }
-    Ok(())
+        img.save(format!("{dir}/{}.png", layer.name))
+    })
 }

@@ -2,6 +2,7 @@ use crate::biome::{choose_biome, planet_offsets};
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
+use rayon::prelude::*;
 use std::f64::consts::PI;
 
 /// Every intermediate noise value computed for one pixel.
@@ -187,19 +188,20 @@ pub fn generate(params: &WorldParams) -> Generated {
     let planet_type = params.planet_type;
 
     // ── Pass 1: noise ─────────────────────────────────────────────────────────
+    // Every pixel is independent: sample rows in parallel. The result stays
+    // deterministic because each pixel only depends on its coordinates.
     let sampler = Sampler::new(params);
-    let mut samples = Vec::with_capacity(params.pixel_count());
-    for y in 0..height {
-        for x in 0..width {
-            samples.push(sampler.sample(x, y));
-        }
-    }
+    let samples: Vec<Sample> = (0..height)
+        .into_par_iter()
+        .flat_map_iter(|y| (0..width).map(move |x| (x, y)))
+        .map(|(x, y)| sampler.sample(x, y))
+        .collect();
     let debug: Vec<DebugLayer> = NOISE_LAYERS
-        .iter()
+        .par_iter()
         .map(|&(name, ramp, value)| DebugLayer {
             name,
             ramp,
-            values: samples.iter().map(value).collect(),
+            values: samples.par_iter().map(value).collect(),
         })
         .collect();
 

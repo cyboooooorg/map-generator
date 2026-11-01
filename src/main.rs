@@ -8,6 +8,7 @@ use clap::{Parser, ValueEnum};
 use export::{export_legend_png, export_noise_maps, export_png, export_raw_data, export_svg};
 use generation::generate;
 use rand::RngExt;
+use rayon::prelude::*;
 use std::error::Error;
 use std::path::PathBuf;
 use world::{PlanetType, WorldParams};
@@ -113,22 +114,37 @@ fn main() -> Result<(), Box<dyn Error>> {
     let dir_str = |sub: &str| dir.join(sub).to_string_lossy().into_owned();
     std::fs::create_dir_all(&dir)?;
 
-    export_png(world, &dir_str("world.png"))?;
-    export_svg(world, &dir_str("world.svg"))?;
-    export_legend_png(world, &dir_str("legend.png"))?;
     if !args.no_raw_data {
         std::fs::create_dir_all(dir.join("raw_data"))?;
-        export_raw_data(world, &dir.join("raw_data"))?;
     }
     if !args.no_noise_maps {
         std::fs::create_dir_all(dir.join("noise_maps"))?;
-        export_noise_maps(
-            &generated.debug,
-            world.width,
-            world.height,
-            &dir_str("noise_maps"),
-        )?;
     }
+
+    // Exports are independent and dominated by PNG encoding: run them in parallel.
+    type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
+    let mut exports: Vec<Export> = vec![
+        Box::new(|| export_png(world, &dir_str("world.png")).map_err(|e| e.to_string())),
+        Box::new(|| export_svg(world, &dir_str("world.svg")).map_err(|e| e.to_string())),
+        Box::new(|| export_legend_png(world, &dir_str("legend.png")).map_err(|e| e.to_string())),
+    ];
+    if !args.no_raw_data {
+        exports.push(Box::new(|| {
+            export_raw_data(world, &dir.join("raw_data")).map_err(|e| e.to_string())
+        }));
+    }
+    if !args.no_noise_maps {
+        exports.push(Box::new(|| {
+            export_noise_maps(
+                &generated.debug,
+                world.width,
+                world.height,
+                &dir_str("noise_maps"),
+            )
+            .map_err(|e| e.to_string())
+        }));
+    }
+    exports.par_iter().try_for_each(|export| export())?;
 
     println!("World generated → {}/", dir.display());
     // Exact values (the summary above is rounded) so the world can be regenerated.
