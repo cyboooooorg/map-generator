@@ -136,7 +136,9 @@ worlds/<planet>-<seed>/
     ├── erosion.png
     ├── elevation.png
     ├── temperature.png
-    └── coast_distance.png
+    ├── coast_distance.png
+    ├── precipitation.png
+    └── moisture.png
 ```
 
 | File / folder | Description                                                                                                                                                           |
@@ -202,22 +204,24 @@ Every intermediate layer of the generation is exported into `noise_maps/` for st
 
 Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative values to blue/cyan, and positive values to yellow/red. Unsigned maps (range `[0, 1]`) run the full blue-to-red range.
 
-| File                      | Range     | Description                                                                             |
-| ------------------------- | --------- | --------------------------------------------------------------------------------------- |
-| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                                               |
-| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                                               |
-| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                                                       |
-| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                                           |
-| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)                                   |
-| `noise_elevation.png`     | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                        |
-| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                            |
-| `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                                            |
-| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                  |
-| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                                             |
-| `erosion.png`             | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                        |
-| `elevation.png`           | `[-1, 1]` | Final elevation, after erosion                                                          |
-| `temperature.png`         | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt)) |
-| `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                            |
+| File                      | Range     | Description                                                                                      |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
+| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                                                        |
+| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                                                        |
+| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                                                                |
+| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                                                    |
+| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)                                            |
+| `noise_elevation.png`     | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                                 |
+| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                     |
+| `noise_moisture.png`      | `[-1, 1]` | Moisture noise (local variation added to the climate model)                                      |
+| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                           |
+| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                                                      |
+| `erosion.png`             | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                 |
+| `elevation.png`           | `[-1, 1]` | Final elevation, after erosion                                                                   |
+| `temperature.png`         | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt))          |
+| `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                     |
+| `precipitation.png`       | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                    |
+| `moisture.png`            | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows)) |
 
 #### Geographic reference lines
 
@@ -257,6 +261,17 @@ S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
 | 70°+       | Poles receive more sunlight over a year than the equator |
 
 The planet type then shifts the whole temperature field (for example `−0.55` on frozen worlds).
+
+### Moisture — winds and rain shadows
+
+Moisture comes from winds carrying ocean evaporation over land:
+
+- **Wind belts.** The zonal wind at each latitude is `u = −cos(4 · latitude)`: easterly trade winds near the equator, westerlies at mid-latitudes, polar easterlies. Each row is simulated with the wind blowing east and blowing west, and both results are blended by how much the wind blows each way, so moisture stays continuous across the belts.
+- **Transport.** Along a row, air over the sea picks up humidity towards what it can hold (warm air holds more). Over land it rains out steadily, much more where it climbs a slope, and immediately where it cools below what it holds. 60 % of the rain over land evaporates again (soil and plants), so continental interiors are not starved. Mountains therefore get wet windward slopes and dry rain shadows behind them.
+- **North-south supply.** Rows with little ocean of their own still receive background humidity, set by the ocean fraction within ±20° of latitude and of the whole planet.
+- **Circulation bands.** A `cos(6 · latitude)` term adds the wet equator and 60° belts and the dry 30° desert belts and poles.
+
+The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.30 × noise`, then clamped. The planet type then shifts the whole field (for example `−0.55` on volcanic worlds).
 
 ### Hydraulic erosion
 

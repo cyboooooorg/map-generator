@@ -1,5 +1,5 @@
 use crate::biome::{BiomeInput, BiomeRules, planet_offsets};
-use crate::climate::{row_temperatures, temperature};
+use crate::climate::{MoistureInput, moisture, row_temperatures, temperature};
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
@@ -260,14 +260,36 @@ pub fn generate(params: &WorldParams) -> Generated {
             .collect(),
     });
 
-    // ── Pass 5: biomes ────────────────────────────────────────────────────────
+    // ── Pass 5: moisture ──────────────────────────────────────────────────────
+    // Winds carry ocean evaporation inland; it rains out with distance and on
+    // windward slopes, leaving rain shadows behind mountains.
+    let height_above_water: Vec<f32> = relief.iter().map(|r| r - rules.waterline).collect();
+    let moisture_noise: Vec<f32> = samples.iter().map(|s| s.moisture).collect();
+    let (raw_moisture, precipitation) = moisture(&MoistureInput {
+        grid,
+        height_above_water: &height_above_water,
+        temperature: &raw_temperature,
+        noise: &moisture_noise,
+    });
+    debug.push(DebugLayer {
+        name: "precipitation",
+        ramp: Ramp::Signed,
+        values: precipitation,
+    });
+    debug.push(DebugLayer {
+        name: "moisture",
+        ramp: Ramp::Signed,
+        values: raw_moisture.clone(),
+    });
+
+    // ── Pass 6: biomes ────────────────────────────────────────────────────────
     // Planet-type global offsets shift the whole climate before biome selection.
     // Store the climate exactly as biome selection sees it, so the exported
     // data explains the biome of every pixel.
     let (dt, dm, dvz) = planet_offsets(planet_type);
-    let moisture: Vec<f32> = samples
+    let moisture: Vec<f32> = raw_moisture
         .iter()
-        .map(|s| (s.moisture + dm).clamp(-1.0, 1.0))
+        .map(|m| (m + dm).clamp(-1.0, 1.0))
         .collect();
     let temperature: Vec<f32> = raw_temperature
         .iter()
