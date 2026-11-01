@@ -108,6 +108,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         "volcanic_intensity": world.params.volcanic_intensity,
         "circumference_km": world.params.circumference_km,
         "gravity_modifier": world.params.gravity_modifier(),
+        "axial_tilt_deg": world.params.axial_tilt_deg,
         "layers": layers,
         "biomes": biomes,
     });
@@ -141,6 +142,7 @@ mod tests {
             sea_level: 0.0,
             volcanic_intensity: 0.5,
             circumference_km: 40_075.0,
+            axial_tilt_deg: 23.44,
         })
         .world;
         let dir = std::env::temp_dir().join(format!("map-generator-test-{}", std::process::id()));

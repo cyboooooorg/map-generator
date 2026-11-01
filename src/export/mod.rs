@@ -18,14 +18,18 @@ const CONTOUR_LEVELS: &[f32] = &[-0.45, -0.15, 0.0, 0.15, 0.30, 0.45, 0.60, 0.75
 /// Fraction to darken a pixel by when it sits on a contour line (0.0 = no change, 1.0 = black).
 const CONTOUR_DARKNESS: f32 = 0.40;
 
-/// Dotted latitude reference lines: (latitude in degrees, RGB colour).
-pub const REFERENCE_LINES: &[(f64, [u8; 3])] = &[
-    (0.0, [220, 50, 50]),   // Equator — red
-    (23.5, [220, 150, 0]),  // Tropic of Cancer — amber
-    (-23.5, [220, 150, 0]), // Tropic of Capricorn — amber
-    (66.5, [0, 200, 240]),  // Arctic Circle — cyan
-    (-66.5, [0, 200, 240]), // Antarctic Circle — cyan
-];
+/// Dotted latitude reference lines as (latitude in degrees, RGB colour):
+/// the equator, the tropics at ±tilt and the polar circles at ±(90° − tilt).
+pub fn reference_lines(axial_tilt_deg: f32) -> [(f64, [u8; 3]); 5] {
+    let tilt = axial_tilt_deg as f64;
+    [
+        (0.0, [220, 50, 50]),            // Equator — red
+        (tilt, [220, 150, 0]),           // Tropic of Cancer — amber
+        (-tilt, [220, 150, 0]),          // Tropic of Capricorn — amber
+        (90.0 - tilt, [0, 200, 240]),    // Arctic Circle — cyan
+        (-(90.0 - tilt), [0, 200, 240]), // Antarctic Circle — cyan
+    ]
+}
 /// Dash pattern of the reference lines, in pixels.
 pub const DASH_ON: u32 = 6;
 pub const DASH_OFF: u32 = 4;

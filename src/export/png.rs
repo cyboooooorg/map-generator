@@ -1,4 +1,4 @@
-use super::{DASH_OFF, DASH_ON, REFERENCE_LINES, latitude_row, render_pixels};
+use super::{DASH_OFF, DASH_ON, latitude_row, reference_lines, render_pixels};
 use crate::world::*;
 use font8x8::UnicodeFonts;
 use image::{ImageResult, Rgb, RgbImage};
@@ -9,7 +9,7 @@ pub fn export_png(world: &World, path: &str) -> ImageResult<()> {
     let pixels = render_pixels(world, true);
     let mut img = RgbImage::from_fn(w, h, |x, y| Rgb(pixels[(y * w + x) as usize]));
 
-    for &(latitude, color) in REFERENCE_LINES {
+    for (latitude, color) in reference_lines(world.params.axial_tilt_deg) {
         let row = latitude_row(h, latitude).round() as u32;
         if row >= h {
             continue;
@@ -121,6 +121,10 @@ pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
         (
             "Gravity",
             format!("{:.2} g", world.params.gravity_modifier()),
+        ),
+        (
+            "Axial tilt",
+            format!("{:.1} deg", world.params.axial_tilt_deg),
         ),
     ];
 

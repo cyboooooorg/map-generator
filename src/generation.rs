@@ -1,4 +1,6 @@
 use crate::biome::{BiomeInput, BiomeRules, planet_offsets};
+use crate::climate::{row_temperatures, temperature};
+use crate::geo::Grid;
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
@@ -15,15 +17,13 @@ pub struct Sample {
     pub elevation: f32,
     pub biome_elevation: f32,
     pub moisture: f32,
-    pub temperature: f32,
     pub volcanic_raw: f32,
     pub volcanic_zone: f32,
 }
 
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
-    width: u32,
-    height: u32,
+    grid: Grid,
     sea_level: f32,
     noise_scale: f64,
     mountain_blend: f32,
@@ -40,8 +40,7 @@ impl Sampler {
     pub fn new(p: &WorldParams) -> Self {
         let seed = p.seed;
         Self {
-            width: p.width,
-            height: p.height,
+            grid: p.grid(),
             sea_level: p.sea_level,
             // Scale noise frequencies by planet size: a larger circumference
             // stretches the unit-sphere coordinates, producing broader continents.
@@ -67,11 +66,11 @@ impl Sampler {
     pub fn sample(&self, x: u32, y: u32) -> Sample {
         let s = self.noise_scale;
 
-        // Spherical mapping: longitude 0..2π, latitude +π/2 (row 0, north) to
-        // -π/2 (last row, south). Projects the flat map onto a unit sphere →
-        // no seams, no mirror symmetry.
-        let lon = (x as f64 / self.width as f64) * 2.0 * PI;
-        let lat = PI / 2.0 - (y as f64 / self.height as f64) * PI;
+        // Spherical mapping of the pixel centre: longitude 0..2π, latitude
+        // +π/2 (row 0, north) to -π/2 (last row, south). Projects the flat map
+        // onto a unit sphere → no seams, no mirror symmetry.
+        let lon = (x as f64 + 0.5) / self.grid.width as f64 * 2.0 * PI;
+        let lat = self.grid.latitude(y);
         let nx = lat.cos() * lon.cos();
         let ny = lat.cos() * lon.sin();
         let nz = lat.sin();
@@ -121,13 +120,6 @@ impl Sampler {
         let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
         let volcanic_zone = ((volcanic_raw - self.volcanic_threshold) * 4.0).clamp(0.0, 1.0);
 
-        // Temperature: equator warm, poles cold, land colder with altitude.
-        // Only terrain above the waterline cools: the sea surface follows the
-        // latitude gradient, whatever the depth underneath.
-        let latitude_norm = y as f32 / self.height as f32;
-        let temp_gradient = 1.0 - (latitude_norm - 0.5).abs() * 2.0;
-        let temperature = temp_gradient - biome_elevation.max(0.0) * 0.3;
-
         Sample {
             warp_x: warp_x as f32,
             warp_y: warp_y as f32,
@@ -137,7 +129,6 @@ impl Sampler {
             elevation,
             biome_elevation,
             moisture,
-            temperature,
             volcanic_raw,
             volcanic_zone,
         }
@@ -177,7 +168,6 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
     ("noise_elevation", Ramp::Signed, |s| s.elevation),
     ("noise_biome_elev", Ramp::Signed, |s| s.biome_elevation),
     ("noise_moisture", Ramp::Signed, |s| s.moisture),
-    ("noise_temperature", Ramp::Unsigned, |s| s.temperature),
     ("noise_volcanic_raw", Ramp::Signed, |s| s.volcanic_raw),
     ("noise_volcanic_zone", Ramp::Unsigned, |s| s.volcanic_zone),
 ];
@@ -212,7 +202,23 @@ pub fn generate(params: &WorldParams) -> Generated {
     let rules = BiomeRules::default();
     let grid = params.grid();
 
-    // ── Pass 2: distance to the coast ─────────────────────────────────────────
+    // ── Pass 2: temperature ───────────────────────────────────────────────────
+    let row_temperature = row_temperatures(&grid, params.axial_tilt_deg);
+    let raw_temperature: Vec<f32> = samples
+        .par_iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let y = i / width as usize;
+            temperature(row_temperature[y], s.biome_elevation - rules.waterline)
+        })
+        .collect();
+    debug.push(DebugLayer {
+        name: "temperature",
+        ramp: Ramp::Unsigned,
+        values: raw_temperature.clone(),
+    });
+
+    // ── Pass 3: distance to the coast ─────────────────────────────────────────
     // Shores are the land pixels close to open water.
     let water: Vec<bool> = samples
         .iter()
@@ -228,7 +234,7 @@ pub fn generate(params: &WorldParams) -> Generated {
             .collect(),
     });
 
-    // ── Pass 3: biomes ────────────────────────────────────────────────────────
+    // ── Pass 4: biomes ────────────────────────────────────────────────────────
     // Planet-type global offsets shift the whole climate before biome selection.
     let (dt, dm, dvz) = planet_offsets(planet_type);
     let n = params.pixel_count();
@@ -236,11 +242,11 @@ pub fn generate(params: &WorldParams) -> Generated {
     let mut moisture = Vec::with_capacity(n);
     let mut temperature = Vec::with_capacity(n);
     let mut biomes = Vec::with_capacity(n);
-    for (s, &coast_km) in samples.iter().zip(&coast_distance_km) {
+    for ((s, &coast_km), &raw_t) in samples.iter().zip(&coast_distance_km).zip(&raw_temperature) {
         // Store the climate exactly as biome selection sees it, so the
         // exported data explains the biome of every pixel.
         let m = (s.moisture + dm).clamp(-1.0, 1.0);
-        let t = (s.temperature + dt).clamp(0.0, 1.0);
+        let t = (raw_t + dt).clamp(0.0, 1.0);
         let vz = (s.volcanic_zone + dvz).clamp(0.0, 1.0);
         elevation.push(s.elevation);
         moisture.push(m);
@@ -272,6 +278,7 @@ pub fn generate(params: &WorldParams) -> Generated {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::climate::EARTH_AXIAL_TILT_DEG;
 
     pub fn params(seed: u32, planet_type: PlanetType) -> WorldParams {
         WorldParams {
@@ -282,6 +289,7 @@ mod tests {
             sea_level: 0.1,
             volcanic_intensity: 0.5,
             circumference_km: EARTH_CIRCUMFERENCE_KM,
+            axial_tilt_deg: EARTH_AXIAL_TILT_DEG,
         }
     }
 
@@ -312,25 +320,6 @@ mod tests {
             w.biomes.len(),
         ] {
             assert_eq!(len, 64 * 32);
-        }
-    }
-
-    #[test]
-    fn depth_never_warms_the_sea() {
-        let sampler = Sampler::new(&WorldParams {
-            sea_level: 0.3,
-            ..params(3, PlanetType::Terran)
-        });
-        for x in 0..64 {
-            for y in 0..32 {
-                let s = sampler.sample(x, y);
-                let gradient = 1.0 - (y as f32 / 32.0 - 0.5).abs() * 2.0;
-                if s.biome_elevation < 0.0 {
-                    assert_eq!(s.temperature, gradient, "ocean pixel ({x}, {y})");
-                } else {
-                    assert!(s.temperature <= gradient, "land pixel ({x}, {y})");
-                }
-            }
         }
     }
 

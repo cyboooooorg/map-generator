@@ -54,6 +54,9 @@ pub struct WorldParams {
     pub volcanic_intensity: f32,
     /// Equatorial circumference of the planet in kilometres. Earth ≈ 40 075 km.
     pub circumference_km: f32,
+    /// Tilt of the rotation axis in degrees, in `[0, 90]`. Earth ≈ 23.44°.
+    /// Sets the latitude temperature profile and the tropics / polar circles.
+    pub axial_tilt_deg: f32,
 }
 
 impl WorldParams {

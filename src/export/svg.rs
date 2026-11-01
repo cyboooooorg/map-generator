@@ -1,4 +1,4 @@
-use super::{DASH_OFF, DASH_ON, REFERENCE_LINES, latitude_row, render_pixels};
+use super::{DASH_OFF, DASH_ON, latitude_row, reference_lines, render_pixels};
 use crate::world::World;
 use std::fmt::Write;
 
@@ -34,7 +34,7 @@ pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
         }
     }
 
-    for &(latitude, [cr, cg, cb]) in REFERENCE_LINES {
+    for (latitude, [cr, cg, cb]) in reference_lines(world.params.axial_tilt_deg) {
         let y = latitude_row(h as u32, latitude);
         let _ = writeln!(
             out,

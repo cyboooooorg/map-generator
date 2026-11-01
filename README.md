@@ -29,9 +29,9 @@ mise run gen [-- [OPTIONS]]
 All parameters are optional. Any omitted value is chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
 
 ```text
-Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km gravity≈1.29g
+Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g
 World generated → worlds/frozen-2590618090/
-Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72
 ```
 
 ### Options
@@ -43,6 +43,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                  | random in `[-0.30, 0.50)`    |
 | `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`       |
 | `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)          | random in `[20 000, 80 000)` |
+| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                        | random in `[5, 40)`          |
 | `--width <px>`          | map width, `2`–`16384`                                  | `1920`                       |
 | `--height <px>`         | map height, `2`–`16384`                                 | `1080`                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                     |
@@ -56,6 +57,8 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 **sea-level** — shifts the waterline. `0.0` is the default; positive values raise it (more ocean), negative values lower it (more land).
 
 **volcanic** — controls how much of the mountain chains become volcanic. `0.0` = no volcanoes, `1.0` = most mountain chains erupt.
+
+**axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt).
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -125,9 +128,9 @@ worlds/<planet>-<seed>/
     ├── noise_elevation.png
     ├── noise_biome_elev.png
     ├── noise_moisture.png
-    ├── noise_temperature.png
     ├── noise_volcanic_raw.png
     ├── noise_volcanic_zone.png
+    ├── temperature.png
     └── coast_distance.png
 ```
 
@@ -194,36 +197,59 @@ Every intermediate layer of the generation is exported into `noise_maps/` for st
 
 Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative values to blue/cyan, and positive values to yellow/red. Unsigned maps (range `[0, 1]`) run the full blue-to-red range.
 
-| File                      | Range     | Description                                                     |
-| ------------------------- | --------- | --------------------------------------------------------------- |
-| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                       |
-| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                       |
-| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                               |
-| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                   |
-| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)           |
-| `noise_elevation.png`     | `[-1, 1]` | Final elevation = continent + mountain × weight × blend         |
-| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees    |
-| `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                    |
-| `noise_temperature.png`   | `[0, 1]`  | Temperature (latitude gradient + cooling of land with altitude) |
-| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                          |
-| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                     |
-| `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more    |
+| File                      | Range     | Description                                                                             |
+| ------------------------- | --------- | --------------------------------------------------------------------------------------- |
+| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                                               |
+| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                                               |
+| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                                                       |
+| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                                           |
+| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)                                   |
+| `noise_elevation.png`     | `[-1, 1]` | Final elevation = continent + mountain × weight × blend                                 |
+| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                            |
+| `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                                            |
+| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                  |
+| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                                             |
+| `temperature.png`         | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt)) |
+| `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                            |
 
 #### Geographic reference lines
 
 Both `world.png` and `world.svg` overlay five dotted latitude lines for orientation:
 
-| Line                | Latitude | Colour |
-| ------------------- | -------- | ------ |
-| Equator             | 0°       | Red    |
-| Tropic of Cancer    | +23.5°   | Amber  |
-| Tropic of Capricorn | −23.5°   | Amber  |
-| Arctic Circle       | +66.5°   | Cyan   |
-| Antarctic Circle    | −66.5°   | Cyan   |
+| Line                | Latitude      | Colour |
+| ------------------- | ------------- | ------ |
+| Equator             | 0°            | Red    |
+| Tropic of Cancer    | +tilt         | Amber  |
+| Tropic of Capricorn | −tilt         | Amber  |
+| Arctic Circle       | +(90° − tilt) | Cyan   |
+| Antarctic Circle    | −(90° − tilt) | Cyan   |
+
+`tilt` is the planet's axial tilt (`--axial-tilt`): 23.44° on Earth gives the familiar ±23.4° and ±66.6°.
 
 The row position for each line is derived from the equirectangular projection used by the map: `row = height × (0.5 − latitude_deg / 180)`, so north is at the top of the image.
 
 ## Calculations
+
+### Temperature — axial tilt
+
+The sea-level temperature of each latitude comes from the annual-mean sunlight it receives, using the classic two-term approximation (North, 1975):
+
+```text
+x  = sin(latitude)
+P2(x) = (3x² − 1) / 2
+S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
+```
+
+`S` is then rescaled so that an Earth-like tilt (23.44°) gives `0.0` at the poles and `1.0` at the equator, and clamped to `[0, 1]`. Land then cools by `0.3` per unit of elevation above the waterline; the sea surface does not.
+
+| Axial tilt | Effect                                                   |
+| ---------- | -------------------------------------------------------- |
+| 0°         | Strongest equator-to-pole contrast, large ice caps       |
+| 23.44°     | Earth baseline                                           |
+| ~54°       | Nearly uniform temperature across latitudes              |
+| 70°+       | Poles receive more sunlight over a year than the equator |
+
+The planet type then shifts the whole temperature field (for example `−0.55` on frozen worlds).
 
 The two parameters derived from `--circumference` are computed as follows.
 

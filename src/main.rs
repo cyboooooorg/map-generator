@@ -1,4 +1,5 @@
 mod biome;
+mod climate;
 mod export;
 mod generation;
 mod geo;
@@ -36,6 +37,10 @@ struct Args {
     /// Equatorial circumference in km [default: random in 20000..80000]
     #[arg(long, value_parser = parse_in_range(1.0, f32::MAX))]
     circumference: Option<f32>,
+
+    /// Axial tilt in degrees, in [0, 90] [default: random in 5..40]
+    #[arg(long, value_parser = parse_in_range(0.0, 90.0))]
+    axial_tilt: Option<f32>,
 
     /// Noise seed [default: random]
     #[arg(long)]
@@ -90,6 +95,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let circumference_km = args
         .circumference
         .unwrap_or_else(|| rng.random_range(20_000.0..80_000.0));
+    let axial_tilt_deg = args
+        .axial_tilt
+        .unwrap_or_else(|| rng.random_range(5.0..40.0));
     let seed = args.seed.unwrap_or_else(|| rng.random());
 
     let params = WorldParams {
@@ -100,11 +108,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         sea_level,
         volcanic_intensity,
         circumference_km,
+        axial_tilt_deg,
     };
     println!(
         "Parameters → planet={planet_type} seed={seed} sea_level={sea_level:.2} \
          volcanic={volcanic_intensity:.2} circumference={circumference_km:.0} km \
-         gravity≈{:.2}g",
+         tilt={axial_tilt_deg:.1}° gravity≈{:.2}g",
         params.gravity_modifier()
     );
 
@@ -151,7 +160,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Exact values (the summary above is rounded) so the world can be regenerated.
     println!(
         "Reproduce with: --planet {planet_type} --seed {seed} --sea-level {sea_level} \
-         --volcanic {volcanic_intensity} --circumference {circumference_km}"
+         --volcanic {volcanic_intensity} --circumference {circumference_km} \
+         --axial-tilt {axial_tilt_deg}"
     );
     Ok(())
 }
