@@ -89,6 +89,8 @@ mise run gen -- --width 480 --height 270 --no-raw-data --no-noise-maps
 | `mise run fmt`          | Format the code                                 |
 | `mise run clean-worlds` | Delete every generated world under `worlds/`    |
 
+The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint` and `mise run test` on every push to `main` and on pull requests.
+
 ### Planet types
 
 | Type       | Description                                       | Exclusive biomes                            |
