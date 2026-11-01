@@ -4,11 +4,14 @@ use std::fmt::Write;
 
 /// Writes the biome map as SVG, with the same contour and reference lines as the PNG.
 ///
+/// Without hillshading: shading gives nearly every pixel its own colour, which
+/// would defeat the run-length encoding below.
+///
 /// Each row is run-length encoded: consecutive pixels sharing a colour become a
 /// single wider `<rect>`, which keeps the file 10–40× smaller than one rect per pixel.
 pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
     let (w, h) = (world.width as usize, world.height as usize);
-    let pixels = render_pixels(world);
+    let pixels = render_pixels(world, false);
 
     let mut out = String::with_capacity(w * h * 8);
     // Writing into a String cannot fail, so the fmt::Result values are ignored.

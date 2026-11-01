@@ -107,7 +107,7 @@ Each run creates a `worlds/<planet>-<seed>/` directory with the following layout
 
 ```text
 worlds/<planet>-<seed>/
-├── world.png          ← biome map with contour lines and reference lines
+├── world.png          ← hillshaded biome map with contour lines and reference lines
 ├── world.svg          ← equivalent vector image
 ├── legend.png         ← biome legend with planet metadata
 ├── raw_data/
@@ -133,8 +133,8 @@ worlds/<planet>-<seed>/
 
 | File / folder | Description                                                                                                                                                           |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                     |
-| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                    |
+| `world.png`   | PNG (1920 × 1080 by default) with biome colours, hillshaded land (light from the north-west), contour lines and geographic reference lines                            |
+| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling              |
 | `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity) |
 | `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                |
 | `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                        |

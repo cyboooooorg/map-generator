@@ -6,7 +6,7 @@ use image::{ImageResult, Rgb, RgbImage};
 /// Writes the biome map with contour lines and dotted latitude reference lines.
 pub fn export_png(world: &World, path: &str) -> ImageResult<()> {
     let (w, h) = (world.width, world.height);
-    let pixels = render_pixels(world);
+    let pixels = render_pixels(world, true);
     let mut img = RgbImage::from_fn(w, h, |x, y| Rgb(pixels[(y * w + x) as usize]));
 
     for &(latitude, color) in REFERENCE_LINES {

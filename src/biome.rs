@@ -106,6 +106,19 @@ impl Biome {
         Biome::SeaIce,
     ];
 
+    /// Whether the biome is a liquid or frozen sea surface (flat, not hillshaded).
+    pub fn is_water(self) -> bool {
+        matches!(
+            self,
+            Biome::DeepOcean
+                | Biome::Ocean
+                | Biome::SeaIce
+                | Biome::MagmaSea
+                | Biome::FrozenOcean
+                | Biome::CausticLake
+        )
+    }
+
     /// Stable numeric id, used as the pixel value in `raw_data/biomes.png`.
     pub fn id(self) -> u8 {
         self as u8
