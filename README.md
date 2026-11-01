@@ -1,6 +1,6 @@
 # Map Generator
 
-This project is a map generator that creates random maps using Perlin noise. The generated maps can be used for various applications such as games, simulations, or any other project that requires a random terrain.
+This project is a map generator that creates random planet maps using Perlin noise. The generated maps can be used for various applications such as games, simulations, or any other project that requires a random terrain.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ This project is a map generator that creates random maps using Perlin noise. The
 mise install
 ```
 
-Run `mise tasks` to list the available tasks.
+Without mise, any Rust toolchain supporting edition 2024 (1.85+) works with plain `cargo` commands.
 
 ## Usage
 
@@ -26,11 +26,12 @@ mise run build
 mise run gen [-- [OPTIONS]]
 ```
 
-All parameters are optional. Any omitted value is chosen **randomly** at startup, and the chosen values are printed so every world is reproducible.
+All parameters are optional. Any omitted value is chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
 
 ```text
-Parameters → planet=Frozen  sea_level=0.12  volcanic_intensity=0.61  circumference=51823 km  gravity≈1.29g
+Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km gravity≈1.29g
 World generated → worlds/frozen-2590618090/
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4
 ```
 
 ### Options
@@ -38,9 +39,19 @@ World generated → worlds/frozen-2590618090/
 | Flag                    | Values                                                  | Default                      |
 | ----------------------- | ------------------------------------------------------- | ---------------------------- |
 | `--planet <type>`       | `terran` · `volcanic` · `frozen` · `caustic` · `barren` | random                       |
+| `--seed <u32>`          | any 32-bit unsigned integer                             | random                       |
 | `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                  | random in `[-0.30, 0.50)`    |
 | `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`       |
-| `--circumference <f32>` | planet equatorial circumference in km (`> 0`)           | random in `[20 000, 80 000)` |
+| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)          | random in `[20 000, 80 000)` |
+| `--width <px>`          | map width, `2`–`16384`                                  | `1920`                       |
+| `--height <px>`         | map height, `2`–`16384`                                 | `1080`                       |
+| `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                     |
+| `--no-json`             | skip `raw_data/world.json` (~230 MB at 1920 × 1080)     | off                          |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                | off                          |
+
+Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
+
+**seed** — drives every noise layer. The same seed with the same other options always produces the same world.
 
 **sea-level** — shifts the waterline. `0.0` is the default; positive values raise it (more ocean), negative values lower it (more land).
 
@@ -63,9 +74,20 @@ mise run gen -- --planet terran --sea-level 0.3 --volcanic 0.4
 # Barren dry rock, no volcanoes
 mise run gen -- --planet barren --sea-level -0.5 --volcanic 0.0
 
-# Volcanic hell
-mise run gen -- --planet volcanic --sea-level -0.2 --volcanic 1.0
+# Quick low-resolution preview, images only
+mise run gen -- --width 480 --height 270 --no-json --no-noise-maps
 ```
+
+### Development tasks
+
+| Task                    | Description                                     |
+| ----------------------- | ----------------------------------------------- |
+| `mise run build`        | Build the optimized binary                      |
+| `mise run gen`          | Build, then generate a world                    |
+| `mise run test`         | Run the test suite                              |
+| `mise run lint`         | Check formatting and run clippy (`-D warnings`) |
+| `mise run fmt`          | Format the code                                 |
+| `mise run clean-worlds` | Delete every generated world under `worlds/`    |
 
 ### Planet types
 
@@ -107,7 +129,7 @@ worlds/<planet>-<seed>/
 | `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                     |
 | `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                    |
 | `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity) |
-| `raw_data/`   | Raw world data                                                                                                                                                        |
+| `raw_data/`   | Raw world data (compact JSON, one entry per tile)                                                                                                                     |
 | `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                        |
 
 #### Noise maps (false colour)

@@ -1,17 +1,18 @@
-/// Biome definition, selection and metadata.
-///
-/// This module owns the [`Biome`] type and all biome-related logic:
-///  - [`Biome`]             — the enum itself (colour, name, sort order).
-///  - [`planet_offsets`]    — climate deltas driven by planet archetype.
-///  - [`choose_biome`]      — altitude/temperature/moisture → base biome.
-///  - [`apply_volcanic`]    — optionally overrides biome with volcanic terrain.
-///  - [`apply_planet_type`] — final remap to planet-exclusive biomes.
+//! Biome definition, selection and metadata.
+//!
+//! This module owns the [`Biome`] type and all biome-related logic:
+//!  - [`Biome`]             — the enum itself (colour, name, sort order).
+//!  - [`planet_offsets`]    — climate deltas driven by planet archetype.
+//!  - [`choose_biome`]      — altitude/temperature/moisture → base biome.
+//!  - [`apply_volcanic`]    — optionally overrides biome with volcanic terrain.
+//!  - [`apply_planet_type`] — final remap to planet-exclusive biomes.
 use crate::world::PlanetType;
 use serde::Serialize;
 
 // ── Biome type ────────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+/// Declaration order is the canonical display order (legend sorting relies on `Ord`).
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Biome {
     // ── Standard water ────────────────────────────────────────────────────────
     DeepOcean,
@@ -139,39 +140,6 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::AcidFlatland => "Acid Flatland",
         Biome::RockyWaste => "Rocky Waste",
         Biome::DustPlain => "Dust Plain",
-    }
-}
-
-/// Canonical sort order for legend display (mirrors the enum declaration order).
-pub fn biome_order(b: Biome) -> u8 {
-    match b {
-        Biome::DeepOcean => 0,
-        Biome::Ocean => 1,
-        Biome::Beach => 2,
-        Biome::Wetland => 3,
-        Biome::IceCap => 4,
-        Biome::Tundra => 5,
-        Biome::Taiga => 6,
-        Biome::Shrubland => 7,
-        Biome::Plain => 8,
-        Biome::Forest => 9,
-        Biome::Savanna => 10,
-        Biome::Desert => 11,
-        Biome::Jungle => 12,
-        Biome::Mountain => 13,
-        Biome::Snow => 14,
-        Biome::Volcano => 15,
-        Biome::LavaField => 16,
-        Biome::AshLand => 17,
-        Biome::MagmaSea => 18,
-        Biome::ScorchedWaste => 19,
-        Biome::FrozenOcean => 20,
-        Biome::GlacialPlain => 21,
-        Biome::CausticLake => 22,
-        Biome::ToxicSwamp => 23,
-        Biome::AcidFlatland => 24,
-        Biome::RockyWaste => 25,
-        Biome::DustPlain => 26,
     }
 }
 
@@ -386,5 +354,83 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
             }
             other => other, // Mountain, Volcano — keep as-is
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ALL_PLANETS: [PlanetType; 5] = [
+        PlanetType::Terran,
+        PlanetType::Volcanic,
+        PlanetType::Frozen,
+        PlanetType::Caustic,
+        PlanetType::Barren,
+    ];
+
+    /// Every biome `choose_biome` can return for a planet, over a coarse grid of inputs.
+    fn reachable(pt: PlanetType) -> std::collections::BTreeSet<Biome> {
+        let steps = |lo: f32, hi: f32| (0..=20).map(move |i| lo + (hi - lo) * i as f32 / 20.0);
+        let mut out = std::collections::BTreeSet::new();
+        for e in steps(-1.0, 1.0) {
+            for m in steps(-1.0, 1.0) {
+                for t in steps(0.0, 1.0) {
+                    for vz in steps(0.0, 1.0) {
+                        out.insert(choose_biome(e, m, t, vz, pt));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn deep_water_is_ocean_on_terran() {
+        assert_eq!(
+            choose_biome(-0.9, 0.0, 0.5, 0.0, PlanetType::Terran),
+            Biome::DeepOcean
+        );
+    }
+
+    #[test]
+    fn barren_worlds_have_no_water_or_life() {
+        let biomes = reachable(PlanetType::Barren);
+        for b in [
+            Biome::Ocean,
+            Biome::DeepOcean,
+            Biome::Forest,
+            Biome::Jungle,
+            Biome::Wetland,
+        ] {
+            assert!(!biomes.contains(&b), "{b:?} found on a barren world");
+        }
+    }
+
+    #[test]
+    fn exclusive_biomes_stay_on_their_planet() {
+        let exclusive = [
+            (
+                PlanetType::Volcanic,
+                [Biome::MagmaSea, Biome::ScorchedWaste].as_slice(),
+            ),
+            (
+                PlanetType::Frozen,
+                &[Biome::FrozenOcean, Biome::GlacialPlain],
+            ),
+            (
+                PlanetType::Caustic,
+                &[Biome::CausticLake, Biome::ToxicSwamp, Biome::AcidFlatland],
+            ),
+            (PlanetType::Barren, &[Biome::RockyWaste, Biome::DustPlain]),
+        ];
+        for pt in ALL_PLANETS {
+            let biomes = reachable(pt);
+            for (owner, list) in exclusive {
+                for b in list {
+                    assert_eq!(biomes.contains(b), owner == pt, "{b:?} on {pt:?}");
+                }
+            }
+        }
     }
 }

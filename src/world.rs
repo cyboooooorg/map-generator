@@ -2,11 +2,11 @@ use serde::Serialize;
 use std::fmt;
 
 // Re-export so existing `use crate::world::*;` in other modules keeps working.
-pub use crate::biome::{Biome, biome_color, biome_name, biome_order};
+pub use crate::biome::{Biome, biome_color, biome_name};
 
 /// Master planet archetype.  Controls global temperature/moisture offsets and
 /// unlocks planet-specific biomes during biome selection.
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug, clap::ValueEnum)]
 pub enum PlanetType {
     /// Earth-like — full biome spectrum, no global modifier.
     Terran,
