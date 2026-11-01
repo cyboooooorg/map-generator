@@ -121,6 +121,7 @@ worlds/<planet>-<seed>/
 │   ├── elevation.png  ← 16-bit greyscale layer
 │   ├── moisture.png   ← 16-bit greyscale layer
 │   ├── temperature.png ← 16-bit greyscale layer
+│   ├── flow.png       ← 16-bit greyscale layer, log scale
 │   └── biomes.png     ← 8-bit greyscale, pixel = biome id
 └── noise_maps/
     ├── noise_warp_x.png
@@ -138,7 +139,8 @@ worlds/<planet>-<seed>/
     ├── temperature.png
     ├── coast_distance.png
     ├── precipitation.png
-    └── moisture.png
+    ├── moisture.png
+    └── flow.png
 ```
 
 | File / folder | Description                                                                                                                                                           |
@@ -153,14 +155,15 @@ worlds/<planet>-<seed>/
 
 `raw_data/` holds one lossless PNG per layer, pixel-aligned with `world.png` (row 0 = north pole, column 0 = longitude 0), and a `world.json` describing how to decode them.
 
-| File              | Encoding    | Content                                                                                      |
-| ----------------- | ----------- | -------------------------------------------------------------------------------------------- |
-| `elevation.png`   | 16-bit grey | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`) |
-| `moisture.png`    | 16-bit grey | Moisture in `[-1, 1]`, planet-type offset included                                           |
-| `temperature.png` | 16-bit grey | Temperature in `[0, 1]`, planet-type offset included                                         |
-| `biomes.png`      | 8-bit grey  | Biome id of each pixel                                                                       |
+| File              | Encoding         | Content                                                                                      |
+| ----------------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `elevation.png`   | 16-bit grey      | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`) |
+| `moisture.png`    | 16-bit grey      | Moisture in `[-1, 1]`, planet-type offset included                                           |
+| `temperature.png` | 16-bit grey      | Temperature in `[0, 1]`, planet-type offset included                                         |
+| `flow.png`        | 16-bit grey, log | River flow: `log10(1 + km²)` in `[0, 8]`, the wet-equivalent area draining through the pixel |
+| `biomes.png`      | 8-bit grey       | Biome id of each pixel                                                                       |
 
-A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. The precision is about `3 × 10⁻⁵`.
+A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵`.
 
 `world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name and colour:
 
@@ -222,6 +225,7 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                     |
 | `precipitation.png`       | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                    |
 | `moisture.png`            | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows)) |
+| `flow.png`                | `[0, 1]`  | River flow: `log10(1 + drainage km²) / 7` (see [Rivers and lakes](#rivers-and-lakes))            |
 
 #### Geographic reference lines
 
@@ -272,6 +276,15 @@ Moisture comes from winds carrying ocean evaporation over land:
 - **Circulation bands.** A `cos(6 · latitude)` term adds the wet equator and 60° belts and the dry 30° desert belts and poles.
 
 The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.30 × noise`, then clamped. The planet type then shifts the whole field (for example `−0.55` on volcanic worlds).
+
+### Rivers and lakes
+
+1. **Depression filling.** Starting from the sea, the terrain is flooded upwards (priority-flood, Barnes et al. 2014) so every land pixel gets a path down to the sea; pits are filled to their spill level.
+2. **Routing.** Each land pixel drains to its steepest lower neighbour on the filled surface.
+3. **Accumulation.** Every pixel adds its runoff — its area in km² × `((moisture + 1) / 2)²` — and passes the total downstream. The flow of a pixel is the wet-equivalent area draining through it.
+4. **Lakes** are filled pits deeper than `0.004` that receive at least 40 000 km² of flow; **rivers** are pixels carrying at least 120 000 km². Under the polar temperature threshold, rivers stay ice and lakes freeze into ice cap.
+
+Thresholds are in km², so the river network does not depend on the map resolution. On non-terran planets, rivers and lakes are remapped like seas: lava and magma on volcanic worlds, ice on frozen worlds, acid on caustic worlds, dry rock on barren worlds.
 
 ### Hydraulic erosion
 

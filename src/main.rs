@@ -4,6 +4,7 @@ mod erosion;
 mod export;
 mod generation;
 mod geo;
+mod hydrology;
 mod noise;
 mod world;
 

@@ -10,6 +10,7 @@
 //! | `elevation.png`   | 16-bit grey, `value = min + pixel / 65535 * (max - min)`    |
 //! | `moisture.png`    | 16-bit grey, same formula                                   |
 //! | `temperature.png` | 16-bit grey, same formula                                   |
+//! | `flow.png`        | 16-bit grey, `log10(1 + km²)` with the same formula          |
 //! | `biomes.png`      | 8-bit grey, pixel = biome id (see the `biomes` table)       |
 use crate::biome::biome_color;
 use crate::world::{Biome, World, biome_name};
@@ -24,6 +25,8 @@ const FORMAT_VERSION: u32 = 1;
 /// A continuous layer quantised to 16 bits over a fixed range.
 struct ScalarLayer<'a> {
     name: &'static str,
+    /// Encoding name written to world.json.
+    encoding: &'static str,
     values: &'a [f32],
     min: f32,
     max: f32,
@@ -37,24 +40,36 @@ fn quantise(v: f32, min: f32, max: f32) -> u16 {
 /// Writes `world.json` and one PNG per layer into `dir`.
 pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> {
     let (w, h) = (world.width, world.height);
+    // Drainage areas span 0 to millions of km²: store them on a log scale.
+    let log_flow: Vec<f32> = world.flow_km2.iter().map(|f| (f + 1.0).log10()).collect();
     let scalars = [
         ScalarLayer {
             name: "elevation",
+            encoding: "gray16",
             values: &world.elevation,
             min: -1.0,
             max: 1.0,
         },
         ScalarLayer {
             name: "moisture",
+            encoding: "gray16",
             values: &world.moisture,
             min: -1.0,
             max: 1.0,
         },
         ScalarLayer {
             name: "temperature",
+            encoding: "gray16",
             values: &world.temperature,
             min: 0.0,
             max: 1.0,
+        },
+        ScalarLayer {
+            name: "flow",
+            encoding: "gray16-log10",
+            values: &log_flow,
+            min: 0.0,
+            max: 8.0,
         },
     ];
 
@@ -71,7 +86,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             .save(dir.join(&file))?;
         layers.insert(
             layer.name.into(),
-            json!({ "file": file, "encoding": "gray16", "min": layer.min, "max": layer.max }),
+            json!({ "file": file, "encoding": layer.encoding, "min": layer.min, "max": layer.max }),
         );
     }
 

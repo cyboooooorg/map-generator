@@ -100,6 +100,9 @@ pub struct World {
     pub moisture: Vec<f32>,
     /// Temperature in `[0, 1]` (`0` = polar, `1` = equatorial), planet offset included.
     pub temperature: Vec<f32>,
+    /// Wet-equivalent drainage area in km² flowing through each pixel
+    /// (0 on the sea): rivers are pixels above a threshold.
+    pub flow_km2: Vec<f32>,
     pub biomes: Vec<Biome>,
 }
 

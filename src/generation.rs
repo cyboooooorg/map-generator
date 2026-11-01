@@ -2,6 +2,7 @@ use crate::biome::{BiomeInput, BiomeRules, planet_offsets};
 use crate::climate::{MoistureInput, moisture, row_temperatures, temperature};
 use crate::erosion::erode;
 use crate::geo::Grid;
+use crate::hydrology::hydrology;
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
@@ -177,6 +178,9 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
 /// Also the full scale of the `coast_distance` debug map.
 const COAST_DISTANCE_CAP_KM: f32 = 2_000.0;
 
+/// Full scale of the `flow` debug map: log10 of the drainage area in km².
+const FLOW_LOG_MAX: f32 = 7.0;
+
 /// Generates a world, running every pass in order.
 pub fn generate(params: &WorldParams) -> Generated {
     let (width, height) = (params.width, params.height);
@@ -282,10 +286,9 @@ pub fn generate(params: &WorldParams) -> Generated {
         values: raw_moisture.clone(),
     });
 
-    // ── Pass 6: biomes ────────────────────────────────────────────────────────
-    // Planet-type global offsets shift the whole climate before biome selection.
-    // Store the climate exactly as biome selection sees it, so the exported
-    // data explains the biome of every pixel.
+    // Planet-type global offsets shift the whole climate before rivers and
+    // biomes. Store the climate exactly as biome selection sees it, so the
+    // exported data explains the biome of every pixel.
     let (dt, dm, dvz) = planet_offsets(planet_type);
     let moisture: Vec<f32> = raw_moisture
         .iter()
@@ -295,6 +298,20 @@ pub fn generate(params: &WorldParams) -> Generated {
         .iter()
         .map(|t| (t + dt).clamp(0.0, 1.0))
         .collect();
+
+    // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
+    let water = hydrology(&grid, &height_above_water, &moisture);
+    debug.push(DebugLayer {
+        name: "flow",
+        ramp: Ramp::Unsigned,
+        values: water
+            .flow_km2
+            .iter()
+            .map(|f| (f + 1.0).log10() / FLOW_LOG_MAX)
+            .collect(),
+    });
+
+    // ── Pass 7: biomes ────────────────────────────────────────────────────────
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
@@ -304,6 +321,8 @@ pub fn generate(params: &WorldParams) -> Generated {
                 temperature: temperature[i],
                 volcanic_zone: (samples[i].volcanic_zone + dvz).clamp(0.0, 1.0),
                 coast_distance_km: coast_distance_km[i],
+                lake: water.lake[i],
+                river: water.river[i],
             };
             rules.choose(input, planet_type)
         })
@@ -317,6 +336,7 @@ pub fn generate(params: &WorldParams) -> Generated {
             elevation,
             moisture,
             temperature,
+            flow_km2: water.flow_km2,
             biomes,
         },
         debug,

@@ -71,11 +71,15 @@ pub enum Biome {
     // ── Appended after id 26: keep new variants at the end ────────────────────
     /// Pack ice floating on polar seas.
     SeaIce,
+    /// Inland water filling a basin.
+    Lake,
+    /// A river channel carrying the runoff of a large basin.
+    River,
 }
 
 impl Biome {
     /// Every biome, in id order.
-    pub const ALL: [Biome; 28] = [
+    pub const ALL: [Biome; 30] = [
         Biome::DeepOcean,
         Biome::Ocean,
         Biome::Beach,
@@ -104,9 +108,11 @@ impl Biome {
         Biome::RockyWaste,
         Biome::DustPlain,
         Biome::SeaIce,
+        Biome::Lake,
+        Biome::River,
     ];
 
-    /// Whether the biome is a liquid or frozen sea surface (flat, not hillshaded).
+    /// Whether the biome is a water surface, liquid or frozen (flat, not hillshaded).
     pub fn is_water(self) -> bool {
         matches!(
             self,
@@ -116,6 +122,8 @@ impl Biome {
                 | Biome::MagmaSea
                 | Biome::FrozenOcean
                 | Biome::CausticLake
+                | Biome::Lake
+                | Biome::River
         )
     }
 
@@ -167,6 +175,8 @@ pub fn biome_color(b: Biome) -> [u8; 3] {
         Biome::RockyWaste => [110, 103, 90],
         Biome::DustPlain => [195, 168, 110],
         Biome::SeaIce => [160, 196, 224],
+        Biome::Lake => [55, 120, 210],
+        Biome::River => [40, 95, 215],
     }
 }
 
@@ -201,6 +211,8 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::RockyWaste => "Rocky Waste",
         Biome::DustPlain => "Dust Plain",
         Biome::SeaIce => "Sea Ice",
+        Biome::Lake => "Lake",
+        Biome::River => "River",
     }
 }
 
@@ -326,6 +338,10 @@ pub struct BiomeInput {
     pub volcanic_zone: f32,
     /// Distance to the nearest open water in km (`0` on water).
     pub coast_distance_km: f32,
+    /// Inside a lake.
+    pub lake: bool,
+    /// On a river.
+    pub river: bool,
 }
 
 // ── Top-level biome selector ──────────────────────────────────────────────────
@@ -342,6 +358,14 @@ impl BiomeRules {
         } = input;
         let base = if e < self.waterline {
             self.ocean(e, t)
+        } else if input.lake {
+            if t < self.sea_ice_temperature {
+                Biome::IceCap
+            } else {
+                Biome::Lake
+            }
+        } else if input.river && t >= self.polar {
+            Biome::River
         } else if e < self.shore_top && input.coast_distance_km <= self.shore_width_km {
             self.shore(t, m)
         } else if e > self.highland {
@@ -453,7 +477,8 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
         // ── Volcanic world ────────────────────────────────────────────────────
         // Ocean basins fill with magma; lowlands are scoured to bare rock.
         PlanetType::Volcanic => match biome {
-            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce => Biome::MagmaSea,
+            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce | Biome::Lake => Biome::MagmaSea,
+            Biome::River => Biome::LavaField,
             Biome::Beach | Biome::Wetland => Biome::AshLand,
             Biome::Plain | Biome::Shrubland | Biome::Savanna | Biome::Desert => {
                 Biome::ScorchedWaste
@@ -468,7 +493,12 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
         // ── Frozen world ──────────────────────────────────────────────────────
         // Oceans are sealed under ice; temperate zones become permafrost plains.
         PlanetType::Frozen => match biome {
-            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce | Biome::MagmaSea => Biome::FrozenOcean,
+            Biome::DeepOcean
+            | Biome::Ocean
+            | Biome::SeaIce
+            | Biome::MagmaSea
+            | Biome::Lake
+            | Biome::River => Biome::FrozenOcean,
             Biome::Beach | Biome::Wetland => Biome::IceCap,
             Biome::Plain | Biome::Shrubland => Biome::GlacialPlain,
             Biome::Forest | Biome::Jungle => Biome::Taiga,
@@ -480,7 +510,9 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
         // ── Caustic world ─────────────────────────────────────────────────────
         // Oceans become acid seas; vegetation zones drown in toxic runoff.
         PlanetType::Caustic => match biome {
-            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce => Biome::CausticLake,
+            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce | Biome::Lake | Biome::River => {
+                Biome::CausticLake
+            }
             Biome::Beach | Biome::Wetland | Biome::Forest | Biome::Jungle | Biome::Taiga => {
                 Biome::ToxicSwamp
             }
@@ -497,6 +529,8 @@ pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
             Biome::DeepOcean
             | Biome::Ocean
             | Biome::SeaIce
+            | Biome::Lake
+            | Biome::River
             | Biome::CausticLake
             | Biome::FrozenOcean => Biome::RockyWaste,
             Biome::Beach | Biome::Wetland | Biome::ToxicSwamp => Biome::RockyWaste,
@@ -544,6 +578,8 @@ mod tests {
                                 temperature: t,
                                 volcanic_zone: vz,
                                 coast_distance_km: 0.0,
+                                lake: false,
+                                river: false,
                             },
                             pt,
                         ));
@@ -570,6 +606,8 @@ mod tests {
             temperature: 0.6,
             volcanic_zone: 0.0,
             coast_distance_km,
+            lake: false,
+            river: false,
         };
         assert_eq!(
             rules.choose(lowland(10.0), PlanetType::Terran),
@@ -589,6 +627,8 @@ mod tests {
             temperature: 0.05,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
+            lake: false,
+            river: false,
         };
         assert_eq!(
             BiomeRules::default().choose(input, PlanetType::Terran),
@@ -604,6 +644,8 @@ mod tests {
             temperature: 0.5,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
+            lake: false,
+            river: false,
         };
         assert_eq!(
             BiomeRules::default().choose(input, PlanetType::Terran),
@@ -615,6 +657,8 @@ mod tests {
     fn barren_worlds_have_no_water_or_life() {
         let biomes = reachable(PlanetType::Barren);
         for b in [
+            Biome::Lake,
+            Biome::River,
             Biome::Ocean,
             Biome::DeepOcean,
             Biome::Forest,
