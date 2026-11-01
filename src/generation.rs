@@ -1,4 +1,4 @@
-use crate::biome::{choose_biome, planet_offsets};
+use crate::biome::{BiomeInput, BiomeRules, planet_offsets};
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
@@ -208,6 +208,7 @@ pub fn generate(params: &WorldParams) -> Generated {
     // ── Pass 2: biomes ────────────────────────────────────────────────────────
     // Planet-type global offsets shift the whole climate before biome selection.
     let (dt, dm, dvz) = planet_offsets(planet_type);
+    let rules = BiomeRules::default();
     let n = params.pixel_count();
     let mut elevation = Vec::with_capacity(n);
     let mut moisture = Vec::with_capacity(n);
@@ -222,7 +223,13 @@ pub fn generate(params: &WorldParams) -> Generated {
         elevation.push(s.elevation);
         moisture.push(m);
         temperature.push(t);
-        biomes.push(choose_biome(s.biome_elevation, m, t, vz, planet_type));
+        let input = BiomeInput {
+            elevation: s.biome_elevation,
+            moisture: m,
+            temperature: t,
+            volcanic_zone: vz,
+        };
+        biomes.push(rules.choose(input, planet_type));
     }
 
     Generated {

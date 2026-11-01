@@ -3,8 +3,8 @@
 //! This module owns the [`Biome`] type and all biome-related logic:
 //!  - [`Biome`]             — the enum itself (colour, name, sort order).
 //!  - [`planet_offsets`]    — climate deltas driven by planet archetype.
-//!  - [`choose_biome`]      — altitude/temperature/moisture → base biome.
-//!  - [`apply_volcanic`]    — optionally overrides biome with volcanic terrain.
+//!  - [`BiomeRules`]        — every selection threshold, and the selector itself:
+//!    altitude/temperature/moisture → base biome → volcanic override.
 //!  - [`apply_planet_type`] — final remap to planet-exclusive biomes.
 use crate::world::PlanetType;
 use serde::Serialize;
@@ -203,124 +203,211 @@ pub fn planet_offsets(pt: PlanetType) -> (f32, f32, f32) {
     }
 }
 
+// ── Thresholds ────────────────────────────────────────────────────────────────
+
+/// Every threshold used by biome selection, in one place.
+///
+/// Elevations are relative to the shifted sea level (`elevation - sea_level`)
+/// in `[-1, 1]`; temperatures in `[0, 1]`; moisture in `[-1, 1]`; volcanic
+/// zone in `[0, 1]`.
+#[derive(Clone, Debug)]
+pub struct BiomeRules {
+    // Altitude bands
+    /// Below this elevation, a pixel is open water.
+    pub waterline: f32,
+    /// Below this elevation, open water is deep ocean.
+    pub deep_ocean: f32,
+    /// Between the waterline and this elevation, land is shore.
+    pub shore_top: f32,
+    /// Above this elevation, land is highland (mountain or snow).
+    pub highland: f32,
+    /// Above this elevation, highland is always snow.
+    pub snow_line: f32,
+    /// Below this temperature, highland is snow whatever its elevation.
+    pub highland_snow_temperature: f32,
+
+    // Temperature zones
+    /// Below this temperature, land and shore are ice cap.
+    pub polar: f32,
+    /// Below this temperature, land is boreal (tundra, taiga).
+    pub boreal: f32,
+    /// Below this temperature, land is temperate; above, tropical.
+    pub temperate: f32,
+
+    // Moisture splits
+    /// Shore wetter than this is wetland, otherwise beach.
+    pub wetland_moisture: f32,
+    /// Boreal land wetter than this is taiga, otherwise tundra.
+    pub taiga_moisture: f32,
+    /// Temperate land drier than this is shrubland.
+    pub shrubland_moisture: f32,
+    /// Temperate land wetter than this is forest.
+    pub forest_moisture: f32,
+    /// Tropical land drier than this is desert.
+    pub desert_moisture: f32,
+    /// Tropical land wetter than this is jungle; between, savanna.
+    pub jungle_moisture: f32,
+
+    // Volcanic overrides
+    /// Highland above this elevation can become an active volcano.
+    pub volcano_elevation: f32,
+    /// Volcanic zone needed for an active volcano.
+    pub volcano_zone: f32,
+    /// Volcanic zone needed to turn highland into lava fields.
+    pub lava_zone: f32,
+    /// Land above this elevation can be covered in ash.
+    pub ash_elevation: f32,
+    /// Volcanic zone needed for ash land.
+    pub ash_zone: f32,
+}
+
+impl Default for BiomeRules {
+    fn default() -> Self {
+        Self {
+            waterline: -0.15,
+            deep_ocean: -0.45,
+            shore_top: 0.0,
+            highland: 0.70,
+            snow_line: 0.88,
+            highland_snow_temperature: 0.35,
+            polar: 0.15,
+            boreal: 0.30,
+            temperate: 0.55,
+            wetland_moisture: 0.30,
+            taiga_moisture: 0.20,
+            shrubland_moisture: -0.10,
+            forest_moisture: 0.35,
+            desert_moisture: -0.05,
+            jungle_moisture: 0.30,
+            volcano_elevation: 0.80,
+            volcano_zone: 0.55,
+            lava_zone: 0.30,
+            ash_elevation: 0.30,
+            ash_zone: 0.15,
+        }
+    }
+}
+
+/// Inputs of biome selection for one pixel.
+#[derive(Clone, Copy, Debug)]
+pub struct BiomeInput {
+    /// Elevation relative to the shifted sea level, in `[-1, 1]`.
+    pub elevation: f32,
+    /// Moisture in `[-1, 1]` (`> 0` is wet).
+    pub moisture: f32,
+    /// Temperature in `[0, 1]` (`0` = polar, `1` = equatorial).
+    pub temperature: f32,
+    /// Volcanic zone in `[0, 1]` (`0` = inert, `1` = fully volcanic).
+    pub volcanic_zone: f32,
+}
+
 // ── Top-level biome selector ──────────────────────────────────────────────────
 
-/// Selects the final biome for a tile by running the full pipeline:
-/// altitude band → volcanic override → planet remapping.
-///
-/// - `e`   elevation     in `[-1, 1]`
-/// - `m`   moisture      in `[-1, 1]`  (`> 0` is wet)
-/// - `t`   temperature   in `[ 0, 1]`  (`0` = polar, `1` = equatorial)
-/// - `vz`  volcanic_zone in `[ 0, 1]`  (`0` = inert, `1` = fully volcanic)
-/// - `pt`  planet archetype — governs the final biome remapping pass
-pub fn choose_biome(e: f32, m: f32, t: f32, vz: f32, pt: PlanetType) -> Biome {
-    let base = if e < -0.15 {
-        ocean_biome(e)
-    } else if e < 0.0 {
-        shore_biome(t, m)
-    } else if e > 0.7 {
-        highland_biome(e, t)
-    } else {
-        land_biome(t, m)
-    };
-    let after_volcano = apply_volcanic(base, e, vz);
-    apply_planet_type(after_volcano, pt)
-}
-
-// ── Altitude bands ────────────────────────────────────────────────────────────
-
-fn ocean_biome(e: f32) -> Biome {
-    if e < -0.45 {
-        Biome::DeepOcean
-    } else {
-        Biome::Ocean
+impl BiomeRules {
+    /// Selects the final biome for a pixel by running the full pipeline:
+    /// altitude band → volcanic override → planet remapping.
+    pub fn choose(&self, input: BiomeInput, pt: PlanetType) -> Biome {
+        let BiomeInput {
+            elevation: e,
+            moisture: m,
+            temperature: t,
+            ..
+        } = input;
+        let base = if e < self.waterline {
+            self.ocean(e)
+        } else if e < self.shore_top {
+            self.shore(t, m)
+        } else if e > self.highland {
+            self.highland(e, t)
+        } else {
+            self.land(t, m)
+        };
+        let after_volcano = self.apply_volcanic(base, e, input.volcanic_zone);
+        apply_planet_type(after_volcano, pt)
     }
-}
 
-fn shore_biome(t: f32, m: f32) -> Biome {
-    if t < 0.15 {
-        Biome::IceCap // frozen shore / pack ice
-    } else if m > 0.3 {
-        Biome::Wetland // mangroves / marshes
-    } else {
-        Biome::Beach
-    }
-}
+    // ── Altitude bands ────────────────────────────────────────────────────────
 
-fn highland_biome(e: f32, t: f32) -> Biome {
-    if t < 0.35 || e > 0.88 {
-        Biome::Snow
-    } else {
-        Biome::Mountain
-    }
-}
-
-// ── Land: temperature zones ───────────────────────────────────────────────────
-
-fn land_biome(t: f32, m: f32) -> Biome {
-    if t < 0.15 {
-        return Biome::IceCap; // polar
-    }
-    if t < 0.30 {
-        return boreal_biome(m);
-    }
-    if t < 0.55 {
-        return temperate_biome(m);
-    }
-    tropical_biome(m)
-}
-
-fn boreal_biome(m: f32) -> Biome {
-    if m > 0.2 { Biome::Taiga } else { Biome::Tundra }
-}
-
-fn temperate_biome(m: f32) -> Biome {
-    if m < -0.1 {
-        Biome::Shrubland
-    } else if m > 0.35 {
-        Biome::Forest
-    } else {
-        Biome::Plain
-    }
-}
-
-fn tropical_biome(m: f32) -> Biome {
-    if m < -0.05 {
-        Biome::Desert
-    } else if m < 0.30 {
-        Biome::Savanna
-    } else {
-        Biome::Jungle
-    }
-}
-
-// ── Volcanic modifier ─────────────────────────────────────────────────────────
-
-/// Optionally overrides a biome when it sits inside an active volcanic zone.
-///
-/// - `vz` volcanic_zone in `[0, 1]`: `0` = inert, higher = stronger activity.
-/// - `e`  biome elevation, distinguishes caldera from flank from foothill.
-///
-/// Override ladder (strongest condition wins):
-/// - **Volcano**   — summit/caldera : `Mountain|Snow`, `e > 0.80`, `vz > 0.55`
-/// - **LavaField** — flanks         : `Mountain|Snow`,             `vz > 0.30`
-/// - **AshLand**   — lower slopes   : `Mountain|Snow|Shrubland|Plain|Tundra`, `e > 0.30`, `vz > 0.15`
-pub fn apply_volcanic(biome: Biome, e: f32, vz: f32) -> Biome {
-    if vz <= 0.0 {
-        return biome;
-    }
-    match biome {
-        // Summit / caldera → active vent
-        Biome::Mountain | Biome::Snow if e > 0.80 && vz > 0.55 => Biome::Volcano,
-        // Volcanic flanks → cooling lava flows
-        Biome::Mountain | Biome::Snow if vz > 0.30 => Biome::LavaField,
-        // Lower slopes and surrounding terrain → ash wasteland
-        Biome::Mountain | Biome::Snow | Biome::Shrubland | Biome::Plain | Biome::Tundra
-            if e > 0.30 && vz > 0.15 =>
-        {
-            Biome::AshLand
+    fn ocean(&self, e: f32) -> Biome {
+        if e < self.deep_ocean {
+            Biome::DeepOcean
+        } else {
+            Biome::Ocean
         }
-        other => other,
+    }
+
+    fn shore(&self, t: f32, m: f32) -> Biome {
+        if t < self.polar {
+            Biome::IceCap // frozen shore / pack ice
+        } else if m > self.wetland_moisture {
+            Biome::Wetland // mangroves / marshes
+        } else {
+            Biome::Beach
+        }
+    }
+
+    fn highland(&self, e: f32, t: f32) -> Biome {
+        if t < self.highland_snow_temperature || e > self.snow_line {
+            Biome::Snow
+        } else {
+            Biome::Mountain
+        }
+    }
+
+    // ── Land: temperature zones ───────────────────────────────────────────────
+
+    fn land(&self, t: f32, m: f32) -> Biome {
+        if t < self.polar {
+            Biome::IceCap
+        } else if t < self.boreal {
+            if m > self.taiga_moisture {
+                Biome::Taiga
+            } else {
+                Biome::Tundra
+            }
+        } else if t < self.temperate {
+            if m < self.shrubland_moisture {
+                Biome::Shrubland
+            } else if m > self.forest_moisture {
+                Biome::Forest
+            } else {
+                Biome::Plain
+            }
+        } else if m < self.desert_moisture {
+            Biome::Desert
+        } else if m < self.jungle_moisture {
+            Biome::Savanna
+        } else {
+            Biome::Jungle
+        }
+    }
+
+    // ── Volcanic modifier ─────────────────────────────────────────────────────
+
+    /// Optionally overrides a biome when it sits inside an active volcanic zone.
+    ///
+    /// Override ladder (strongest condition wins):
+    /// - **Volcano**   — summit/caldera: highland above `volcano_elevation`
+    /// - **LavaField** — flanks: highland in a `lava_zone`
+    /// - **AshLand**   — lower slopes: open land above `ash_elevation`
+    fn apply_volcanic(&self, biome: Biome, e: f32, vz: f32) -> Biome {
+        if vz <= 0.0 {
+            return biome;
+        }
+        match biome {
+            Biome::Mountain | Biome::Snow
+                if e > self.volcano_elevation && vz > self.volcano_zone =>
+            {
+                Biome::Volcano
+            }
+            Biome::Mountain | Biome::Snow if vz > self.lava_zone => Biome::LavaField,
+            Biome::Mountain | Biome::Snow | Biome::Shrubland | Biome::Plain | Biome::Tundra
+                if e > self.ash_elevation && vz > self.ash_zone =>
+            {
+                Biome::AshLand
+            }
+            other => other,
+        }
     }
 }
 
@@ -328,7 +415,7 @@ pub fn apply_volcanic(biome: Biome, e: f32, vz: f32) -> Biome {
 
 /// Final pass that converts standard biomes into planet-exclusive ones.
 ///
-/// Called after [`apply_volcanic`] so volcanic modifiers are visible here.
+/// Called after the volcanic override so volcanic modifiers are visible here.
 /// [`PlanetType::Terran`] is a no-op; all other archetypes remap some or all biomes.
 pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
     match pt {
@@ -411,7 +498,7 @@ mod tests {
         PlanetType::Barren,
     ];
 
-    /// Every biome `choose_biome` can return for a planet, over a coarse grid of inputs.
+    /// Every biome `BiomeRules::choose` can return for a planet, over a coarse grid of inputs.
     fn reachable(pt: PlanetType) -> std::collections::BTreeSet<Biome> {
         let steps = |lo: f32, hi: f32| (0..=20).map(move |i| lo + (hi - lo) * i as f32 / 20.0);
         let mut out = std::collections::BTreeSet::new();
@@ -419,7 +506,15 @@ mod tests {
             for m in steps(-1.0, 1.0) {
                 for t in steps(0.0, 1.0) {
                     for vz in steps(0.0, 1.0) {
-                        out.insert(choose_biome(e, m, t, vz, pt));
+                        out.insert(BiomeRules::default().choose(
+                            BiomeInput {
+                                elevation: e,
+                                moisture: m,
+                                temperature: t,
+                                volcanic_zone: vz,
+                            },
+                            pt,
+                        ));
                     }
                 }
             }
@@ -436,8 +531,14 @@ mod tests {
 
     #[test]
     fn deep_water_is_ocean_on_terran() {
+        let input = BiomeInput {
+            elevation: -0.9,
+            moisture: 0.0,
+            temperature: 0.5,
+            volcanic_zone: 0.0,
+        };
         assert_eq!(
-            choose_biome(-0.9, 0.0, 0.5, 0.0, PlanetType::Terran),
+            BiomeRules::default().choose(input, PlanetType::Terran),
             Biome::DeepOcean
         );
     }
