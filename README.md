@@ -140,19 +140,19 @@ worlds/<planet>-<seed>/
 
 Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative values to blue/cyan, and positive values to yellow/red. Unsigned maps (range `[0, 1]`) run the full blue-to-red range.
 
-| File                      | Range     | Description                                                  |
-| ------------------------- | --------- | ------------------------------------------------------------ |
-| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                    |
-| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                    |
-| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                            |
-| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                |
-| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)        |
-| `noise_elevation.png`     | `[-1, 1]` | Final elevation = continent + mountain × weight × blend      |
-| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees |
-| `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                 |
-| `noise_temperature.png`   | `[0, 1]`  | Temperature (latitude gradient + elevation cooling)          |
-| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                       |
-| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                  |
+| File                      | Range     | Description                                                     |
+| ------------------------- | --------- | --------------------------------------------------------------- |
+| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                       |
+| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                       |
+| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                               |
+| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                   |
+| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)           |
+| `noise_elevation.png`     | `[-1, 1]` | Final elevation = continent + mountain × weight × blend         |
+| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees    |
+| `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                    |
+| `noise_temperature.png`   | `[0, 1]`  | Temperature (latitude gradient + cooling of land with altitude) |
+| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                          |
+| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                     |
 
 #### Geographic reference lines
 

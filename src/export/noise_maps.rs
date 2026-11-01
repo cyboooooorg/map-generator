@@ -12,7 +12,7 @@
 //! | noise_elevation.png     | [-1, 1]  | Final elevation = continent + mountain×weight×blend |
 //! | noise_biome_elev.png    | [-1, 1]  | Elevation shifted by sea_level (what biomes see)    |
 //! | noise_moisture.png      | [-1, 1]  | Moisture FBM                                        |
-//! | noise_temperature.png   | [ 0, 1]  | Temperature (latitude gradient + elevation cooling) |
+//! | noise_temperature.png   | [ 0, 1]  | Temperature (latitude gradient + land altitude cooling) |
 //! | noise_volcanic_raw.png  | [-1, 1]  | Raw volcanic-zone FBM                               |
 //! | noise_volcanic_zone.png | [ 0, 1]  | Processed volcanic zone (threshold applied)         |
 //!

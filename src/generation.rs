@@ -137,10 +137,12 @@ impl Sampler {
         let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
         let volcanic_zone = ((volcanic_raw - self.volcanic_threshold) * 4.0).clamp(0.0, 1.0);
 
-        // Temperature: equator warm, poles cold, high elevation colder.
+        // Temperature: equator warm, poles cold, land colder with altitude.
+        // Only terrain above the waterline cools: the sea surface follows the
+        // latitude gradient, whatever the depth underneath.
         let latitude_norm = r as f32 / self.height as f32;
         let temp_gradient = 1.0 - (latitude_norm - 0.5).abs() * 2.0;
-        let temperature = temp_gradient - biome_elevation * 0.3;
+        let temperature = temp_gradient - biome_elevation.max(0.0) * 0.3;
 
         Sample {
             warp_x: warp_x as f32,
@@ -238,6 +240,22 @@ mod tests {
     fn world_has_one_tile_per_pixel() {
         let w = small_world(7, PlanetType::Frozen);
         assert_eq!(w.tiles.len(), 64 * 32);
+    }
+
+    #[test]
+    fn depth_never_warms_the_sea() {
+        let sampler = Sampler::new(64, 32, 3, 0.3, 0.0, 40_075.0);
+        for q in 0..64 {
+            for r in 0..32 {
+                let s = sampler.sample(q, r);
+                let gradient = 1.0 - (r as f32 / 32.0 - 0.5).abs() * 2.0;
+                if s.biome_elevation < 0.0 {
+                    assert_eq!(s.temperature, gradient, "ocean tile ({q}, {r})");
+                } else {
+                    assert!(s.temperature <= gradient, "land tile ({q}, {r})");
+                }
+            }
+        }
     }
 
     #[test]
