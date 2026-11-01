@@ -1,0 +1,33 @@
+# Toolchain and tasks for map-generator.
+# Run `mise install` once, then `mise tasks` to list the available tasks.
+
+[tools]
+rust = { version = "1.99", components = "clippy,rustfmt" }
+
+[tasks.build]
+description = "Build the optimized binary"
+run = "cargo build --release"
+
+[tasks.gen]
+description = "Generate a world (pass options after --, e.g. mise run gen -- --planet frozen)"
+depends = ["build"]
+run = "target/release/map-generator"
+
+[tasks.test]
+description = "Run the test suite"
+run = "cargo test"
+
+[tasks.lint]
+description = "Check formatting and run clippy with warnings denied"
+run = [
+  "cargo fmt --check",
+  "cargo clippy --all-targets -- -D warnings",
+]
+
+[tasks.fmt]
+description = "Format the code"
+run = "cargo fmt"
+
+[tasks.clean-worlds]
+description = "Delete every generated world under worlds/"
+run = "find ./worlds -mindepth 1 -not -name '.gitignore' -delete"

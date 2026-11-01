@@ -2,18 +2,28 @@
 
 This project is a map generator that creates random maps using Perlin noise. The generated maps can be used for various applications such as games, simulations, or any other project that requires a random terrain.
 
+## Prerequisites
+
+[mise](https://mise.jdx.dev/) manages the Rust toolchain (pinned in `mise.toml`) and the project tasks.
+
+```bash
+mise install
+```
+
+Run `mise tasks` to list the available tasks.
+
 ## Usage
 
 ### Build
 
 ```bash
-devbox run build
+mise run build
 ```
 
 ### Run
 
 ```bash
-devbox run prod [-- [OPTIONS]]
+mise run gen [-- [OPTIONS]]
 ```
 
 All parameters are optional. Any omitted value is chosen **randomly** at startup, and the chosen values are printed so every world is reproducible.
@@ -42,19 +52,19 @@ World generated → worlds/frozen-2590618090/
 
 ```bash
 # Fully random world
-devbox run prod
+mise run gen
 
 # Frozen planet, everything else random
-devbox run prod -- --planet frozen
+mise run gen -- --planet frozen
 
 # Earth-like ocean world, moderate volcanic activity
-devbox run prod -- --planet terran --sea-level 0.3 --volcanic 0.4
+mise run gen -- --planet terran --sea-level 0.3 --volcanic 0.4
 
 # Barren dry rock, no volcanoes
-devbox run prod -- --planet barren --sea-level -0.5 --volcanic 0.0
+mise run gen -- --planet barren --sea-level -0.5 --volcanic 0.0
 
 # Volcanic hell
-devbox run prod -- --planet volcanic --sea-level -0.2 --volcanic 1.0
+mise run gen -- --planet volcanic --sea-level -0.2 --volcanic 1.0
 ```
 
 ### Planet types
