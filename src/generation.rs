@@ -184,10 +184,14 @@ pub fn generate_world(
     for q in 0..width {
         for r in 0..height {
             let s = sampler.sample(q, r);
+            // Store the climate exactly as biome selection sees it, so the
+            // exported data explains the biome of every tile.
+            let moisture = (s.moisture + dm).clamp(-1.0, 1.0);
+            let temperature = (s.temperature + dt).clamp(0.0, 1.0);
             let biome = choose_biome(
                 s.biome_elevation,
-                (s.moisture + dm).clamp(-1.0, 1.0),
-                (s.temperature + dt).clamp(0.0, 1.0),
+                moisture,
+                temperature,
                 (s.volcanic_zone + dvz).clamp(0.0, 1.0),
                 planet_type,
             );
@@ -195,8 +199,8 @@ pub fn generate_world(
                 q,
                 r,
                 elevation: s.elevation,
-                moisture: s.moisture,
-                temperature: s.temperature,
+                moisture,
+                temperature,
                 biome,
             });
         }
@@ -256,6 +260,18 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn stored_climate_includes_planet_offsets() {
+        let w = small_world(5, PlanetType::Frozen);
+        // Frozen offsets cool the planet by 0.55: nothing reaches tropical heat.
+        assert!(
+            w.tiles
+                .iter()
+                .all(|t| (0.0..=0.45).contains(&t.temperature))
+        );
+        assert!(w.tiles.iter().all(|t| (-1.0..=1.0).contains(&t.moisture)));
     }
 
     #[test]

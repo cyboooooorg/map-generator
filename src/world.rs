@@ -37,8 +37,12 @@ impl fmt::Display for PlanetType {
 pub struct Tile {
     pub q: i32,
     pub r: i32,
+    /// Terrain height in `[-1, 1]`, before the sea-level shift. Biome
+    /// selection uses `elevation - sea_level`.
     pub elevation: f32,
+    /// Moisture in `[-1, 1]` (`> 0` is wet), planet offset included.
     pub moisture: f32,
+    /// Temperature in `[0, 1]` (`0` = polar, `1` = equatorial), planet offset included.
     pub temperature: f32,
     pub biome: Biome,
 }

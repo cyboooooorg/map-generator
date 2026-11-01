@@ -124,13 +124,13 @@ worlds/<planet>-<seed>/
     └── noise_volcanic_zone.png
 ```
 
-| File / folder | Description                                                                                                                                                           |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                     |
-| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                    |
-| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity) |
-| `raw_data/`   | Raw world data (compact JSON, one entry per tile)                                                                                                                     |
-| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                        |
+| File / folder | Description                                                                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                                                         |
+| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                                                        |
+| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                                     |
+| `raw_data/`   | Raw world data (compact JSON, one entry per tile). `elevation` is the terrain height before the sea-level shift; `moisture` and `temperature` include the planet-type offsets, as seen by biome selection |
+| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                                                            |
 
 #### Noise maps (false colour)
 
