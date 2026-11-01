@@ -23,9 +23,8 @@
 //!
 //! Signed maps are linearly rescaled so that 0.0 → green, -1.0 → blue, +1.0 → red.
 //! Unsigned maps are rescaled so that 0.0 → blue and 1.0 → red.
-use crate::generation::{Sample, Sampler};
-use crate::world::World;
-use image::{Rgb, RgbImage};
+use crate::generation::{DebugLayer, Ramp};
+use image::{ImageResult, Rgb, RgbImage};
 
 // ── Colour map ────────────────────────────────────────────────────────────────
 
@@ -40,61 +39,28 @@ fn jet(t: f32) -> [u8; 3] {
     [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8]
 }
 
-/// Colourize a signed value v ∈ [-1.0, 1.0] → jet(0.0 … 1.0).
-fn diverge(v: f32) -> [u8; 3] {
-    jet((v.clamp(-1.0, 1.0) + 1.0) * 0.5)
+fn colorize(ramp: Ramp, v: f32) -> [u8; 3] {
+    match ramp {
+        // [-1, 1] → [0, 1]: 0.0 is green.
+        Ramp::Signed => jet((v.clamp(-1.0, 1.0) + 1.0) * 0.5),
+        Ramp::Unsigned => jet(v),
+    }
 }
-
-/// Colourize an unsigned value v ∈ [0.0, 1.0] → jet(0.0 … 1.0).
-fn sequential(v: f32) -> [u8; 3] {
-    jet(v.clamp(0.0, 1.0))
-}
-
-/// One exported layer: file stem, value extractor and colour ramp.
-type Layer = (&'static str, fn(&Sample) -> f32, fn(f32) -> [u8; 3]);
-
-const LAYERS: &[Layer] = &[
-    ("noise_warp_x", |s| s.warp_x, diverge),
-    ("noise_warp_y", |s| s.warp_y, diverge),
-    ("noise_continent", |s| s.continent, diverge),
-    ("noise_mountain", |s| s.mountain, sequential),
-    ("noise_mountain_wt", |s| s.mountain_weight, sequential),
-    ("noise_elevation", |s| s.elevation, diverge),
-    ("noise_biome_elev", |s| s.biome_elevation, diverge),
-    ("noise_moisture", |s| s.moisture, diverge),
-    ("noise_temperature", |s| s.temperature, sequential),
-    ("noise_volcanic_raw", |s| s.volcanic_raw, diverge),
-    ("noise_volcanic_zone", |s| s.volcanic_zone, sequential),
-];
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-/// Re-samples every intermediate noise layer of `world` with the same
-/// [`Sampler`] used during generation and writes one false-colour PNG per
-/// layer into `dir/`.
-pub fn export_noise_maps(world: &World, dir: &str) -> image::ImageResult<()> {
-    let sampler = Sampler::new(
-        world.width,
-        world.height,
-        world.seed,
-        world.sea_level,
-        world.volcanic_intensity,
-        world.circumference_km,
-    );
-    let (w, h) = (world.width, world.height);
-    let mut images: Vec<RgbImage> = LAYERS.iter().map(|_| RgbImage::new(w, h)).collect();
-
-    for y in 0..h {
-        for x in 0..w {
-            let sample = sampler.sample(x, y);
-            for (img, (_, value, colorize)) in images.iter_mut().zip(LAYERS) {
-                img.put_pixel(x, y, Rgb(colorize(value(&sample))));
-            }
-        }
-    }
-
-    for (img, (name, _, _)) in images.iter().zip(LAYERS) {
-        img.save(format!("{dir}/{name}.png"))?;
+/// Writes one false-colour PNG per debug layer into `dir/`.
+pub fn export_noise_maps(
+    layers: &[DebugLayer],
+    width: u32,
+    height: u32,
+    dir: &str,
+) -> ImageResult<()> {
+    for layer in layers {
+        let img = RgbImage::from_fn(width, height, |x, y| {
+            Rgb(colorize(layer.ramp, layer.values[(y * width + x) as usize]))
+        });
+        img.save(format!("{dir}/{}.png", layer.name))?;
     }
     Ok(())
 }

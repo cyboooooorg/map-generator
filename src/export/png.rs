@@ -99,7 +99,7 @@ pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
     // ── Planet metadata lines (key, value) ───────────────────────────────────
     // Capitalize the planet type name for display.
     let planet_str = {
-        let s = format!("{}", world.planet_type);
+        let s = format!("{}", world.params.planet_type);
         let mut chars = s.chars();
         match chars.next() {
             None => String::new(),
@@ -108,11 +108,20 @@ pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
     };
     let meta: &[(&str, String)] = &[
         ("Planet", planet_str),
-        ("Seed", format!("{}", world.seed)),
-        ("Sea level", format!("{:+.2}", world.sea_level)),
-        ("Volcanic", format!("{:.2}", world.volcanic_intensity)),
-        ("Circumference", format!("{:.0} km", world.circumference_km)),
-        ("Gravity", format!("{:.2} g", world.gravity_modifier)),
+        ("Seed", format!("{}", world.params.seed)),
+        ("Sea level", format!("{:+.2}", world.params.sea_level)),
+        (
+            "Volcanic",
+            format!("{:.2}", world.params.volcanic_intensity),
+        ),
+        (
+            "Circumference",
+            format!("{:.0} km", world.params.circumference_km),
+        ),
+        (
+            "Gravity",
+            format!("{:.2} g", world.params.gravity_modifier()),
+        ),
     ];
 
     // ── Layout constants ──────────────────────────────────────────────────────

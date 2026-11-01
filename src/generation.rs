@@ -4,18 +4,7 @@ use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use std::f64::consts::PI;
 
-/// Surface gravity relative to Earth for a planet of the given circumference.
-///
-/// Assumes constant density, so gravity scales linearly with radius (and thus
-/// circumference). Clamped to a physically plausible range for rocky planets.
-pub fn gravity_modifier(circumference_km: f32) -> f32 {
-    (circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0)
-}
-
-/// Every intermediate value computed for one tile.
-///
-/// Both [`generate_world`] and the noise-map exporter read from this struct,
-/// so the debug maps always match the generated world.
+/// Every intermediate noise value computed for one pixel.
 pub struct Sample {
     pub warp_x: f32,
     pub warp_y: f32,
@@ -47,27 +36,21 @@ pub struct Sampler {
 }
 
 impl Sampler {
-    pub fn new(
-        width: u32,
-        height: u32,
-        seed: u32,
-        sea_level: f32,
-        volcanic_intensity: f32,
-        circumference_km: f32,
-    ) -> Self {
+    pub fn new(p: &WorldParams) -> Self {
+        let seed = p.seed;
         Self {
-            width,
-            height,
-            sea_level,
+            width: p.width,
+            height: p.height,
+            sea_level: p.sea_level,
             // Scale noise frequencies by planet size: a larger circumference
             // stretches the unit-sphere coordinates, producing broader continents.
             // Earth (40 075 km) ≡ scale 1.0.
-            noise_scale: (EARTH_CIRCUMFERENCE_KM / circumference_km.max(1.0)) as f64,
+            noise_scale: (EARTH_CIRCUMFERENCE_KM / p.circumference_km.max(1.0)) as f64,
             // Stronger gravity suppresses mountain relief; sqrt dampens the effect
             // for extreme values. Baseline 0.35 at Earth gravity.
-            mountain_blend: 0.35 / gravity_modifier(circumference_km).sqrt(),
+            mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
             // Higher intensity lowers the threshold, making more terrain volcanic.
-            volcanic_threshold: 1.0 - volcanic_intensity.clamp(0.0, 1.0),
+            volcanic_threshold: 1.0 - p.volcanic_intensity.clamp(0.0, 1.0),
             // wrapping_add: a random seed close to u32::MAX must not overflow.
             elevation_noise: Perlin::new(seed),
             moisture_noise: Perlin::new(seed.wrapping_add(1)),
@@ -160,61 +143,97 @@ impl Sampler {
     }
 }
 
-pub fn generate_world(
-    width: u32,
-    height: u32,
-    seed: u32,
-    sea_level: f32,
-    volcanic_intensity: f32,
-    planet_type: PlanetType,
-    circumference_km: f32,
-) -> World {
-    let sampler = Sampler::new(
-        width,
-        height,
-        seed,
-        sea_level,
-        volcanic_intensity,
-        circumference_km,
-    );
+/// How a debug layer is coloured: signed values span `[-1, 1]`, unsigned `[0, 1]`.
+#[derive(Clone, Copy)]
+pub enum Ramp {
+    Signed,
+    Unsigned,
+}
+
+/// An intermediate layer kept for the diagnostic maps.
+pub struct DebugLayer {
+    pub name: &'static str,
+    pub ramp: Ramp,
+    pub values: Vec<f32>,
+}
+
+/// The output of [`generate`]: the world and the intermediate layers that
+/// produced it.
+pub struct Generated {
+    pub world: World,
+    pub debug: Vec<DebugLayer>,
+}
+
+/// A noise layer exported as a diagnostic map: name, colour ramp, extractor.
+type NoiseLayer = (&'static str, Ramp, fn(&Sample) -> f32);
+
+const NOISE_LAYERS: &[NoiseLayer] = &[
+    ("noise_warp_x", Ramp::Signed, |s| s.warp_x),
+    ("noise_warp_y", Ramp::Signed, |s| s.warp_y),
+    ("noise_continent", Ramp::Signed, |s| s.continent),
+    ("noise_mountain", Ramp::Unsigned, |s| s.mountain),
+    ("noise_mountain_wt", Ramp::Unsigned, |s| s.mountain_weight),
+    ("noise_elevation", Ramp::Signed, |s| s.elevation),
+    ("noise_biome_elev", Ramp::Signed, |s| s.biome_elevation),
+    ("noise_moisture", Ramp::Signed, |s| s.moisture),
+    ("noise_temperature", Ramp::Unsigned, |s| s.temperature),
+    ("noise_volcanic_raw", Ramp::Signed, |s| s.volcanic_raw),
+    ("noise_volcanic_zone", Ramp::Unsigned, |s| s.volcanic_zone),
+];
+
+/// Generates a world, running every pass in order.
+pub fn generate(params: &WorldParams) -> Generated {
+    let (width, height) = (params.width, params.height);
+    let planet_type = params.planet_type;
+
+    // ── Pass 1: noise ─────────────────────────────────────────────────────────
+    let sampler = Sampler::new(params);
+    let mut samples = Vec::with_capacity(params.pixel_count());
+    for y in 0..height {
+        for x in 0..width {
+            samples.push(sampler.sample(x, y));
+        }
+    }
+    let debug: Vec<DebugLayer> = NOISE_LAYERS
+        .iter()
+        .map(|&(name, ramp, value)| DebugLayer {
+            name,
+            ramp,
+            values: samples.iter().map(value).collect(),
+        })
+        .collect();
+
+    // ── Pass 2: biomes ────────────────────────────────────────────────────────
     // Planet-type global offsets shift the whole climate before biome selection.
     let (dt, dm, dvz) = planet_offsets(planet_type);
-
-    let n = (width * height) as usize;
+    let n = params.pixel_count();
     let mut elevation = Vec::with_capacity(n);
     let mut moisture = Vec::with_capacity(n);
     let mut temperature = Vec::with_capacity(n);
     let mut biomes = Vec::with_capacity(n);
-
-    // Row-major order, matching World::index.
-    for y in 0..height {
-        for x in 0..width {
-            let s = sampler.sample(x, y);
-            // Store the climate exactly as biome selection sees it, so the
-            // exported data explains the biome of every pixel.
-            let m = (s.moisture + dm).clamp(-1.0, 1.0);
-            let t = (s.temperature + dt).clamp(0.0, 1.0);
-            let vz = (s.volcanic_zone + dvz).clamp(0.0, 1.0);
-            elevation.push(s.elevation);
-            moisture.push(m);
-            temperature.push(t);
-            biomes.push(choose_biome(s.biome_elevation, m, t, vz, planet_type));
-        }
+    for s in &samples {
+        // Store the climate exactly as biome selection sees it, so the
+        // exported data explains the biome of every pixel.
+        let m = (s.moisture + dm).clamp(-1.0, 1.0);
+        let t = (s.temperature + dt).clamp(0.0, 1.0);
+        let vz = (s.volcanic_zone + dvz).clamp(0.0, 1.0);
+        elevation.push(s.elevation);
+        moisture.push(m);
+        temperature.push(t);
+        biomes.push(choose_biome(s.biome_elevation, m, t, vz, planet_type));
     }
 
-    World {
-        width,
-        height,
-        seed,
-        planet_type,
-        sea_level,
-        volcanic_intensity,
-        circumference_km,
-        gravity_modifier: gravity_modifier(circumference_km),
-        elevation,
-        moisture,
-        temperature,
-        biomes,
+    Generated {
+        world: World {
+            params: params.clone(),
+            width,
+            height,
+            elevation,
+            moisture,
+            temperature,
+            biomes,
+        },
+        debug,
     }
 }
 
@@ -222,8 +241,20 @@ pub fn generate_world(
 mod tests {
     use super::*;
 
+    pub fn params(seed: u32, planet_type: PlanetType) -> WorldParams {
+        WorldParams {
+            width: 64,
+            height: 32,
+            seed,
+            planet_type,
+            sea_level: 0.1,
+            volcanic_intensity: 0.5,
+            circumference_km: EARTH_CIRCUMFERENCE_KM,
+        }
+    }
+
     fn small_world(seed: u32, planet: PlanetType) -> World {
-        generate_world(64, 32, seed, 0.1, 0.5, planet, 40_075.0)
+        generate(&params(seed, planet)).world
     }
 
     #[test]
@@ -254,7 +285,10 @@ mod tests {
 
     #[test]
     fn depth_never_warms_the_sea() {
-        let sampler = Sampler::new(64, 32, 3, 0.3, 0.0, 40_075.0);
+        let sampler = Sampler::new(&WorldParams {
+            sea_level: 0.3,
+            ..params(3, PlanetType::Terran)
+        });
         for x in 0..64 {
             for y in 0..32 {
                 let s = sampler.sample(x, y);
@@ -278,8 +312,26 @@ mod tests {
 
     #[test]
     fn gravity_is_earth_baseline_and_clamped() {
-        assert!((gravity_modifier(EARTH_CIRCUMFERENCE_KM) - 1.0).abs() < 1e-6);
-        assert_eq!(gravity_modifier(1.0), 0.1);
-        assert_eq!(gravity_modifier(1e9), 5.0);
+        let g = |circumference_km| {
+            WorldParams {
+                circumference_km,
+                ..params(0, PlanetType::Terran)
+            }
+            .gravity_modifier()
+        };
+        assert!((g(EARTH_CIRCUMFERENCE_KM) - 1.0).abs() < 1e-6);
+        assert_eq!(g(1.0), 0.1);
+        assert_eq!(g(1e9), 5.0);
+    }
+
+    #[test]
+    fn debug_layers_match_the_world() {
+        let g = generate(&params(11, PlanetType::Terran));
+        let elevation = g
+            .debug
+            .iter()
+            .find(|l| l.name == "noise_elevation")
+            .unwrap();
+        assert_eq!(elevation.values, g.world.elevation);
     }
 }

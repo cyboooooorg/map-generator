@@ -6,11 +6,11 @@ mod world;
 
 use clap::{Parser, ValueEnum};
 use export::{export_legend_png, export_noise_maps, export_png, export_raw_data, export_svg};
-use generation::{generate_world, gravity_modifier};
+use generation::generate;
 use rand::RngExt;
 use std::error::Error;
 use std::path::PathBuf;
-use world::PlanetType;
+use world::{PlanetType, WorldParams};
 
 /// Procedural planet map generator.
 ///
@@ -90,37 +90,44 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or_else(|| rng.random_range(20_000.0..80_000.0));
     let seed = args.seed.unwrap_or_else(|| rng.random());
 
+    let params = WorldParams {
+        width: args.width,
+        height: args.height,
+        seed,
+        planet_type,
+        sea_level,
+        volcanic_intensity,
+        circumference_km,
+    };
     println!(
         "Parameters → planet={planet_type} seed={seed} sea_level={sea_level:.2} \
          volcanic={volcanic_intensity:.2} circumference={circumference_km:.0} km \
          gravity≈{:.2}g",
-        gravity_modifier(circumference_km)
+        params.gravity_modifier()
     );
 
-    let world = generate_world(
-        args.width,
-        args.height,
-        seed,
-        sea_level,
-        volcanic_intensity,
-        planet_type,
-        circumference_km,
-    );
+    let generated = generate(&params);
+    let world = &generated.world;
 
     let dir = args.out_dir.join(format!("{planet_type}-{seed}"));
     let dir_str = |sub: &str| dir.join(sub).to_string_lossy().into_owned();
     std::fs::create_dir_all(&dir)?;
 
-    export_png(&world, &dir_str("world.png"))?;
-    export_svg(&world, &dir_str("world.svg"))?;
-    export_legend_png(&world, &dir_str("legend.png"))?;
+    export_png(world, &dir_str("world.png"))?;
+    export_svg(world, &dir_str("world.svg"))?;
+    export_legend_png(world, &dir_str("legend.png"))?;
     if !args.no_raw_data {
         std::fs::create_dir_all(dir.join("raw_data"))?;
-        export_raw_data(&world, &dir.join("raw_data"))?;
+        export_raw_data(world, &dir.join("raw_data"))?;
     }
     if !args.no_noise_maps {
         std::fs::create_dir_all(dir.join("noise_maps"))?;
-        export_noise_maps(&world, &dir_str("noise_maps"))?;
+        export_noise_maps(
+            &generated.debug,
+            world.width,
+            world.height,
+            &dir_str("noise_maps"),
+        )?;
     }
 
     println!("World generated → {}/", dir.display());

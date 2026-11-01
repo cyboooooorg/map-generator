@@ -102,12 +102,12 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         "width": w,
         "height": h,
         "projection": "equirectangular, row 0 = north pole, column 0 = longitude 0",
-        "seed": world.seed,
-        "planet_type": world.planet_type,
-        "sea_level": world.sea_level,
-        "volcanic_intensity": world.volcanic_intensity,
-        "circumference_km": world.circumference_km,
-        "gravity_modifier": world.gravity_modifier,
+        "seed": world.params.seed,
+        "planet_type": world.params.planet_type,
+        "sea_level": world.params.sea_level,
+        "volcanic_intensity": world.params.volcanic_intensity,
+        "circumference_km": world.params.circumference_km,
+        "gravity_modifier": world.params.gravity_modifier(),
         "layers": layers,
         "biomes": biomes,
     });
@@ -121,8 +121,8 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generation::generate_world;
-    use crate::world::PlanetType;
+    use crate::generation::generate;
+    use crate::world::{PlanetType, WorldParams};
 
     #[test]
     fn quantise_covers_the_full_range() {
@@ -133,7 +133,16 @@ mod tests {
 
     #[test]
     fn layers_round_trip() {
-        let world = generate_world(32, 16, 9, 0.0, 0.5, PlanetType::Caustic, 40_075.0);
+        let world = generate(&WorldParams {
+            width: 32,
+            height: 16,
+            seed: 9,
+            planet_type: PlanetType::Caustic,
+            sea_level: 0.0,
+            volcanic_intensity: 0.5,
+            circumference_km: 40_075.0,
+        })
+        .world;
         let dir = std::env::temp_dir().join(format!("map-generator-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         export_raw_data(&world, &dir).unwrap();

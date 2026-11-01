@@ -1,3 +1,4 @@
+use crate::noise::EARTH_CIRCUMFERENCE_KM;
 use serde::Serialize;
 use std::fmt;
 
@@ -34,11 +35,10 @@ impl fmt::Display for PlanetType {
     }
 }
 
-/// A generated world: planet parameters plus one value per pixel for each layer.
-///
-/// Every layer is stored row-major (`index = y * width + x`), with row 0 at
-/// the north pole and column 0 at longitude 0.
-pub struct World {
+/// Everything needed to generate a world. The same parameters always produce
+/// the same world.
+#[derive(Clone, Debug)]
+pub struct WorldParams {
     pub width: u32,
     pub height: u32,
     pub seed: u32,
@@ -53,9 +53,31 @@ pub struct World {
     pub volcanic_intensity: f32,
     /// Equatorial circumference of the planet in kilometres. Earth ≈ 40 075 km.
     pub circumference_km: f32,
-    /// Approximate surface gravity relative to Earth (1.0 = Earth gravity),
-    /// derived from circumference assuming constant planetary density.
-    pub gravity_modifier: f32,
+}
+
+impl WorldParams {
+    /// Approximate surface gravity relative to Earth (1.0 = Earth gravity).
+    ///
+    /// Assumes constant density, so gravity scales linearly with radius (and
+    /// thus circumference). Clamped to a plausible range for rocky planets.
+    pub fn gravity_modifier(&self) -> f32 {
+        (self.circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0)
+    }
+
+    /// Number of pixels in each layer.
+    pub fn pixel_count(&self) -> usize {
+        (self.width * self.height) as usize
+    }
+}
+
+/// A generated world: its parameters plus one value per pixel for each layer.
+///
+/// Every layer is stored row-major (`index = y * width + x`), with row 0 at
+/// the north pole and column 0 at longitude 0.
+pub struct World {
+    pub params: WorldParams,
+    pub width: u32,
+    pub height: u32,
     /// Terrain height in `[-1, 1]`, before the sea-level shift. Biome
     /// selection uses `elevation - sea_level`.
     pub elevation: Vec<f32>,
