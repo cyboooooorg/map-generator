@@ -7,6 +7,7 @@ pub use crate::biome::{Biome, biome_color, biome_name};
 /// Master planet archetype.  Controls global temperature/moisture offsets and
 /// unlocks planet-specific biomes during biome selection.
 #[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
 pub enum PlanetType {
     /// Earth-like — full biome spectrum, no global modifier.
     Terran,
@@ -33,24 +34,13 @@ impl fmt::Display for PlanetType {
     }
 }
 
-#[derive(Clone, Serialize)]
-pub struct Tile {
-    pub q: i32,
-    pub r: i32,
-    /// Terrain height in `[-1, 1]`, before the sea-level shift. Biome
-    /// selection uses `elevation - sea_level`.
-    pub elevation: f32,
-    /// Moisture in `[-1, 1]` (`> 0` is wet), planet offset included.
-    pub moisture: f32,
-    /// Temperature in `[0, 1]` (`0` = polar, `1` = equatorial), planet offset included.
-    pub temperature: f32,
-    pub biome: Biome,
-}
-
-#[derive(Serialize)]
+/// A generated world: planet parameters plus one value per pixel for each layer.
+///
+/// Every layer is stored row-major (`index = y * width + x`), with row 0 at
+/// the north pole and column 0 at longitude 0.
 pub struct World {
-    pub width: i32,
-    pub height: i32,
+    pub width: u32,
+    pub height: u32,
     pub seed: u32,
     /// Master planet archetype driving global temperature/moisture offsets and
     /// unlocking planet-specific biomes.
@@ -61,16 +51,24 @@ pub struct World {
     /// Fraction of mountain chains that become volcanic.
     /// 0.0 = no volcanoes, 1.0 = most mountain chains are volcanic.
     pub volcanic_intensity: f32,
-    /// Equatorial circumference of the planet in kilometres.
-    /// Controls the physical scale of the world: a larger value produces
-    /// broader continents and ocean basins relative to the planet's surface.
-    /// Earth ≈ 40 075 km.
+    /// Equatorial circumference of the planet in kilometres. Earth ≈ 40 075 km.
     pub circumference_km: f32,
-    /// Approximate surface gravity relative to Earth (1.0 = Earth gravity).
-    /// Derived from circumference assuming constant planetary density:
-    /// g ∝ r ∝ C, so gravity_modifier = circumference_km / 40_075.
-    /// Higher values flatten the landscape (mountains can't stand as tall);
-    /// lower values produce more rugged, dramatic terrain.
+    /// Approximate surface gravity relative to Earth (1.0 = Earth gravity),
+    /// derived from circumference assuming constant planetary density.
     pub gravity_modifier: f32,
-    pub tiles: Vec<Tile>,
+    /// Terrain height in `[-1, 1]`, before the sea-level shift. Biome
+    /// selection uses `elevation - sea_level`.
+    pub elevation: Vec<f32>,
+    /// Moisture in `[-1, 1]` (`> 0` is wet), planet offset included.
+    pub moisture: Vec<f32>,
+    /// Temperature in `[0, 1]` (`0` = polar, `1` = equatorial), planet offset included.
+    pub temperature: Vec<f32>,
+    pub biomes: Vec<Biome>,
+}
+
+impl World {
+    /// Index of pixel `(x, y)` in the layer vectors.
+    pub fn index(&self, x: u32, y: u32) -> usize {
+        (y * self.width + x) as usize
+    }
 }

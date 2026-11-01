@@ -32,8 +32,8 @@ pub struct Sample {
 
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
-    width: i32,
-    height: i32,
+    width: u32,
+    height: u32,
     sea_level: f32,
     noise_scale: f64,
     mountain_blend: f32,
@@ -48,8 +48,8 @@ pub struct Sampler {
 
 impl Sampler {
     pub fn new(
-        width: i32,
-        height: i32,
+        width: u32,
+        height: u32,
         seed: u32,
         sea_level: f32,
         volcanic_intensity: f32,
@@ -79,15 +79,15 @@ impl Sampler {
         }
     }
 
-    /// Samples every noise layer for the tile at column `q`, row `r`.
-    pub fn sample(&self, q: i32, r: i32) -> Sample {
+    /// Samples every noise layer for the pixel at column `x`, row `y`.
+    pub fn sample(&self, x: u32, y: u32) -> Sample {
         let s = self.noise_scale;
 
         // Spherical mapping: longitude 0..2π, latitude +π/2 (row 0, north) to
         // -π/2 (last row, south). Projects the flat map onto a unit sphere →
         // no seams, no mirror symmetry.
-        let lon = (q as f64 / self.width as f64) * 2.0 * PI;
-        let lat = PI / 2.0 - (r as f64 / self.height as f64) * PI;
+        let lon = (x as f64 / self.width as f64) * 2.0 * PI;
+        let lat = PI / 2.0 - (y as f64 / self.height as f64) * PI;
         let nx = lat.cos() * lon.cos();
         let ny = lat.cos() * lon.sin();
         let nz = lat.sin();
@@ -140,7 +140,7 @@ impl Sampler {
         // Temperature: equator warm, poles cold, land colder with altitude.
         // Only terrain above the waterline cools: the sea surface follows the
         // latitude gradient, whatever the depth underneath.
-        let latitude_norm = r as f32 / self.height as f32;
+        let latitude_norm = y as f32 / self.height as f32;
         let temp_gradient = 1.0 - (latitude_norm - 0.5).abs() * 2.0;
         let temperature = temp_gradient - biome_elevation.max(0.0) * 0.3;
 
@@ -161,8 +161,8 @@ impl Sampler {
 }
 
 pub fn generate_world(
-    width: i32,
-    height: i32,
+    width: u32,
+    height: u32,
     seed: u32,
     sea_level: f32,
     volcanic_intensity: f32,
@@ -180,29 +180,25 @@ pub fn generate_world(
     // Planet-type global offsets shift the whole climate before biome selection.
     let (dt, dm, dvz) = planet_offsets(planet_type);
 
-    let mut tiles = Vec::with_capacity((width * height) as usize);
-    for q in 0..width {
-        for r in 0..height {
-            let s = sampler.sample(q, r);
+    let n = (width * height) as usize;
+    let mut elevation = Vec::with_capacity(n);
+    let mut moisture = Vec::with_capacity(n);
+    let mut temperature = Vec::with_capacity(n);
+    let mut biomes = Vec::with_capacity(n);
+
+    // Row-major order, matching World::index.
+    for y in 0..height {
+        for x in 0..width {
+            let s = sampler.sample(x, y);
             // Store the climate exactly as biome selection sees it, so the
-            // exported data explains the biome of every tile.
-            let moisture = (s.moisture + dm).clamp(-1.0, 1.0);
-            let temperature = (s.temperature + dt).clamp(0.0, 1.0);
-            let biome = choose_biome(
-                s.biome_elevation,
-                moisture,
-                temperature,
-                (s.volcanic_zone + dvz).clamp(0.0, 1.0),
-                planet_type,
-            );
-            tiles.push(Tile {
-                q,
-                r,
-                elevation: s.elevation,
-                moisture,
-                temperature,
-                biome,
-            });
+            // exported data explains the biome of every pixel.
+            let m = (s.moisture + dm).clamp(-1.0, 1.0);
+            let t = (s.temperature + dt).clamp(0.0, 1.0);
+            let vz = (s.volcanic_zone + dvz).clamp(0.0, 1.0);
+            elevation.push(s.elevation);
+            moisture.push(m);
+            temperature.push(t);
+            biomes.push(choose_biome(s.biome_elevation, m, t, vz, planet_type));
         }
     }
 
@@ -215,7 +211,10 @@ pub fn generate_world(
         volcanic_intensity,
         circumference_km,
         gravity_modifier: gravity_modifier(circumference_km),
-        tiles,
+        elevation,
+        moisture,
+        temperature,
+        biomes,
     }
 }
 
@@ -231,8 +230,8 @@ mod tests {
     fn same_seed_produces_same_world() {
         let a = small_world(42, PlanetType::Terran);
         let b = small_world(42, PlanetType::Terran);
-        let biomes = |w: &World| w.tiles.iter().map(|t| t.biome).collect::<Vec<_>>();
-        assert_eq!(biomes(&a), biomes(&b));
+        assert_eq!(a.biomes, b.biomes);
+        assert_eq!(a.elevation, b.elevation);
     }
 
     #[test]
@@ -241,22 +240,29 @@ mod tests {
     }
 
     #[test]
-    fn world_has_one_tile_per_pixel() {
+    fn every_layer_has_one_value_per_pixel() {
         let w = small_world(7, PlanetType::Frozen);
-        assert_eq!(w.tiles.len(), 64 * 32);
+        for len in [
+            w.elevation.len(),
+            w.moisture.len(),
+            w.temperature.len(),
+            w.biomes.len(),
+        ] {
+            assert_eq!(len, 64 * 32);
+        }
     }
 
     #[test]
     fn depth_never_warms_the_sea() {
         let sampler = Sampler::new(64, 32, 3, 0.3, 0.0, 40_075.0);
-        for q in 0..64 {
-            for r in 0..32 {
-                let s = sampler.sample(q, r);
-                let gradient = 1.0 - (r as f32 / 32.0 - 0.5).abs() * 2.0;
+        for x in 0..64 {
+            for y in 0..32 {
+                let s = sampler.sample(x, y);
+                let gradient = 1.0 - (y as f32 / 32.0 - 0.5).abs() * 2.0;
                 if s.biome_elevation < 0.0 {
-                    assert_eq!(s.temperature, gradient, "ocean tile ({q}, {r})");
+                    assert_eq!(s.temperature, gradient, "ocean pixel ({x}, {y})");
                 } else {
-                    assert!(s.temperature <= gradient, "land tile ({q}, {r})");
+                    assert!(s.temperature <= gradient, "land pixel ({x}, {y})");
                 }
             }
         }
@@ -266,12 +272,8 @@ mod tests {
     fn stored_climate_includes_planet_offsets() {
         let w = small_world(5, PlanetType::Frozen);
         // Frozen offsets cool the planet by 0.55: nothing reaches tropical heat.
-        assert!(
-            w.tiles
-                .iter()
-                .all(|t| (0.0..=0.45).contains(&t.temperature))
-        );
-        assert!(w.tiles.iter().all(|t| (-1.0..=1.0).contains(&t.moisture)));
+        assert!(w.temperature.iter().all(|t| (0.0..=0.45).contains(t)));
+        assert!(w.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
     }
 
     #[test]

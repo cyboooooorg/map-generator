@@ -81,14 +81,14 @@ pub fn export_noise_maps(world: &World, dir: &str) -> image::ImageResult<()> {
         world.volcanic_intensity,
         world.circumference_km,
     );
-    let (w, h) = (world.width as u32, world.height as u32);
+    let (w, h) = (world.width, world.height);
     let mut images: Vec<RgbImage> = LAYERS.iter().map(|_| RgbImage::new(w, h)).collect();
 
-    for q in 0..world.width {
-        for r in 0..world.height {
-            let sample = sampler.sample(q, r);
+    for y in 0..h {
+        for x in 0..w {
+            let sample = sampler.sample(x, y);
             for (img, (_, value, colorize)) in images.iter_mut().zip(LAYERS) {
-                img.put_pixel(q as u32, r as u32, Rgb(colorize(value(&sample))));
+                img.put_pixel(x, y, Rgb(colorize(value(&sample))));
             }
         }
     }

@@ -46,7 +46,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--width <px>`          | map width, `2`–`16384`                                  | `1920`                       |
 | `--height <px>`         | map height, `2`–`16384`                                 | `1080`                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                     |
-| `--no-json`             | skip `raw_data/world.json` (~230 MB at 1920 × 1080)     | off                          |
+| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)      | off                          |
 | `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                | off                          |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
@@ -75,7 +75,7 @@ mise run gen -- --planet terran --sea-level 0.3 --volcanic 0.4
 mise run gen -- --planet barren --sea-level -0.5 --volcanic 0.0
 
 # Quick low-resolution preview, images only
-mise run gen -- --width 480 --height 270 --no-json --no-noise-maps
+mise run gen -- --width 480 --height 270 --no-raw-data --no-noise-maps
 ```
 
 ### Development tasks
@@ -109,7 +109,11 @@ worlds/<planet>-<seed>/
 ├── world.svg          ← equivalent vector image
 ├── legend.png         ← biome legend with planet metadata
 ├── raw_data/
-│   └── world.json     ← full tile data (elevation, moisture, temperature, biome, …)
+│   ├── world.json     ← planet parameters, layer encodings, biome table
+│   ├── elevation.png  ← 16-bit greyscale layer
+│   ├── moisture.png   ← 16-bit greyscale layer
+│   ├── temperature.png ← 16-bit greyscale layer
+│   └── biomes.png     ← 8-bit greyscale, pixel = biome id
 └── noise_maps/
     ├── noise_warp_x.png
     ├── noise_warp_y.png
@@ -124,13 +128,60 @@ worlds/<planet>-<seed>/
     └── noise_volcanic_zone.png
 ```
 
-| File / folder | Description                                                                                                                                                                                               |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                                                         |
-| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                                                        |
-| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                                     |
-| `raw_data/`   | Raw world data (compact JSON, one entry per tile). `elevation` is the terrain height before the sea-level shift; `moisture` and `temperature` include the planet-type offsets, as seen by biome selection |
-| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                                                            |
+| File / folder | Description                                                                                                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                     |
+| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                    |
+| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity) |
+| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                |
+| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                        |
+
+#### Raw data
+
+`raw_data/` holds one lossless PNG per layer, pixel-aligned with `world.png` (row 0 = north pole, column 0 = longitude 0), and a `world.json` describing how to decode them.
+
+| File              | Encoding    | Content                                                                                      |
+| ----------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| `elevation.png`   | 16-bit grey | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`) |
+| `moisture.png`    | 16-bit grey | Moisture in `[-1, 1]`, planet-type offset included                                           |
+| `temperature.png` | 16-bit grey | Temperature in `[0, 1]`, planet-type offset included                                         |
+| `biomes.png`      | 8-bit grey  | Biome id of each pixel                                                                       |
+
+A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. The precision is about `3 × 10⁻⁵`.
+
+`world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name and colour:
+
+```json
+{
+  "format_version": 1,
+  "width": 1920,
+  "height": 1080,
+  "seed": 42,
+  "planet_type": "terran",
+  "layers": {
+    "elevation": { "file": "elevation.png", "encoding": "gray16", "min": -1.0, "max": 1.0 },
+    "biomes": { "file": "biomes.png", "encoding": "gray8-biome-id" }
+  },
+  "biomes": [
+    { "id": 0, "key": "DeepOcean", "name": "Deep Ocean", "color": "#0A148C" }
+  ]
+}
+```
+
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes incompatibly.
+
+Reading a layer in Python:
+
+```python
+import json
+from PIL import Image
+
+meta = json.load(open("raw_data/world.json"))
+layer = meta["layers"]["elevation"]
+pixels = Image.open("raw_data/elevation.png")
+lo, hi = layer["min"], layer["max"]
+elevation = [lo + p / 65535 * (hi - lo) for p in pixels.getdata()]
+```
 
 #### Noise maps (false colour)
 
@@ -218,4 +269,4 @@ The square-root softens the curve so extreme planets remain visually interesting
 | 40 075 km     | 1.00 g   | 0.35           | Earth baseline          |
 | 80 000 km     | ≈ 2.00 g | ≈ 0.25         | Flat, rounded landscape |
 
-Both values are written into `world.json` as `circumference_km` and `gravity_modifier` for downstream use.
+Both values are written into `raw_data/world.json` as `circumference_km` and `gravity_modifier` for downstream use.

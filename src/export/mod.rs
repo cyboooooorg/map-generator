@@ -1,12 +1,12 @@
 //! Export backends — PNG, SVG, JSON and diagnostic noise maps.
-pub mod json;
 pub mod noise_maps;
 pub mod png;
+pub mod raw_data;
 pub mod svg;
 
-pub use json::export_json;
 pub use noise_maps::export_noise_maps;
 pub use png::{export_legend_png, export_png};
+pub use raw_data::export_raw_data;
 pub use svg::export_svg;
 
 use crate::world::{World, biome_color};
@@ -35,37 +35,33 @@ pub fn latitude_row(height: u32, latitude_deg: f64) -> f64 {
 }
 
 /// Computes the final colour of every pixel (biome colour darkened on contour
-/// lines), in row-major order: index = r * width + q.
+/// lines), in the same row-major order as the world layers.
 pub fn render_pixels(world: &World) -> Vec<[u8; 3]> {
-    let (w, h) = (world.width as usize, world.height as usize);
-
-    // Tiles are stored column-major (q outer, r inner) by generate_world;
-    // index them explicitly so the renderer does not depend on that order.
-    let mut elevation = vec![0.0f32; w * h];
-    for t in &world.tiles {
-        elevation[t.r as usize * w + t.q as usize] = t.elevation;
-    }
+    let (w, h) = (world.width, world.height);
+    let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
 
-    let mut pixels = vec![[0u8; 3]; w * h];
-    for t in &world.tiles {
-        let (q, r) = (t.q as usize, t.r as usize);
-        // 4-connected neighbours that exist inside the map.
-        let neighbours = [
-            (q > 0).then(|| elevation[r * w + q - 1]),
-            (q + 1 < w).then(|| elevation[r * w + q + 1]),
-            (r > 0).then(|| elevation[(r - 1) * w + q]),
-            (r + 1 < h).then(|| elevation[(r + 1) * w + q]),
-        ];
-        let mut color = biome_color(t.biome);
-        if neighbours
-            .into_iter()
-            .flatten()
-            .any(|n| crosses_contour(t.elevation, n))
-        {
-            color = color.map(|c| (c as f32 * (1.0 - CONTOUR_DARKNESS)) as u8);
+    let mut pixels = Vec::with_capacity(world.biomes.len());
+    for y in 0..h {
+        for x in 0..w {
+            let e = elev(x, y);
+            // 4-connected neighbours that exist inside the map.
+            let neighbours = [
+                (x > 0).then(|| elev(x - 1, y)),
+                (x + 1 < w).then(|| elev(x + 1, y)),
+                (y > 0).then(|| elev(x, y - 1)),
+                (y + 1 < h).then(|| elev(x, y + 1)),
+            ];
+            let mut color = biome_color(world.biomes[world.index(x, y)]);
+            if neighbours
+                .into_iter()
+                .flatten()
+                .any(|n| crosses_contour(e, n))
+            {
+                color = color.map(|c| (c as f32 * (1.0 - CONTOUR_DARKNESS)) as u8);
+            }
+            pixels.push(color);
         }
-        pixels[r * w + q] = color;
     }
     pixels
 }

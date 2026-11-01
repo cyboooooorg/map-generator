@@ -12,7 +12,11 @@ use serde::Serialize;
 // ── Biome type ────────────────────────────────────────────────────────────────
 
 /// Declaration order is the canonical display order (legend sorting relies on `Ord`).
+///
+/// The discriminant is the biome id written to `raw_data/biomes.png`: never
+/// reorder or remove variants, only append new ones.
 #[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[repr(u8)]
 pub enum Biome {
     // ── Standard water ────────────────────────────────────────────────────────
     DeepOcean,
@@ -64,6 +68,44 @@ pub enum Biome {
     RockyWaste,
     /// Fine regolith plains scoured by dry winds.
     DustPlain,
+}
+
+impl Biome {
+    /// Every biome, in id order.
+    pub const ALL: [Biome; 27] = [
+        Biome::DeepOcean,
+        Biome::Ocean,
+        Biome::Beach,
+        Biome::Wetland,
+        Biome::IceCap,
+        Biome::Tundra,
+        Biome::Taiga,
+        Biome::Shrubland,
+        Biome::Plain,
+        Biome::Forest,
+        Biome::Savanna,
+        Biome::Desert,
+        Biome::Jungle,
+        Biome::Mountain,
+        Biome::Snow,
+        Biome::Volcano,
+        Biome::LavaField,
+        Biome::AshLand,
+        Biome::MagmaSea,
+        Biome::ScorchedWaste,
+        Biome::FrozenOcean,
+        Biome::GlacialPlain,
+        Biome::CausticLake,
+        Biome::ToxicSwamp,
+        Biome::AcidFlatland,
+        Biome::RockyWaste,
+        Biome::DustPlain,
+    ];
+
+    /// Stable numeric id, used as the pixel value in `raw_data/biomes.png`.
+    pub fn id(self) -> u8 {
+        self as u8
+    }
 }
 
 /// Canonical biome → RGB colour mapping, shared by all export backends.
@@ -383,6 +425,13 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn all_lists_every_biome_in_id_order() {
+        for (i, b) in Biome::ALL.iter().enumerate() {
+            assert_eq!(b.id() as usize, i, "{b:?}");
+        }
     }
 
     #[test]

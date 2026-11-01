@@ -5,7 +5,7 @@ use image::{ImageResult, Rgb, RgbImage};
 
 /// Writes the biome map with contour lines and dotted latitude reference lines.
 pub fn export_png(world: &World, path: &str) -> ImageResult<()> {
-    let (w, h) = (world.width as u32, world.height as u32);
+    let (w, h) = (world.width, world.height);
     let pixels = render_pixels(world);
     let mut img = RgbImage::from_fn(w, h, |x, y| Rgb(pixels[(y * w + x) as usize]));
 
@@ -89,9 +89,9 @@ fn outline_rect(img: &mut RgbImage, x: u32, y: u32, w: u32, h: u32, color: [u8; 
 pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
     // ── Collect biomes present on this map, in canonical order ────────────────
     let biomes: Vec<Biome> = world
-        .tiles
+        .biomes
         .iter()
-        .map(|t| t.biome)
+        .copied()
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();

@@ -5,7 +5,7 @@ mod noise;
 mod world;
 
 use clap::{Parser, ValueEnum};
-use export::{export_json, export_legend_png, export_noise_maps, export_png, export_svg};
+use export::{export_legend_png, export_noise_maps, export_png, export_raw_data, export_svg};
 use generation::{generate_world, gravity_modifier};
 use rand::RngExt;
 use std::error::Error;
@@ -40,20 +40,20 @@ struct Args {
     seed: Option<u32>,
 
     /// Map width in pixels
-    #[arg(long, default_value_t = 1920, value_parser = clap::value_parser!(i32).range(2..=16384))]
-    width: i32,
+    #[arg(long, default_value_t = 1920, value_parser = clap::value_parser!(u32).range(2..=16384))]
+    width: u32,
 
     /// Map height in pixels
-    #[arg(long, default_value_t = 1080, value_parser = clap::value_parser!(i32).range(2..=16384))]
-    height: i32,
+    #[arg(long, default_value_t = 1080, value_parser = clap::value_parser!(u32).range(2..=16384))]
+    height: u32,
 
     /// Directory that receives the generated worlds
     #[arg(long, default_value = "worlds")]
     out_dir: PathBuf,
 
-    /// Skip the raw JSON export (several hundred MB at full resolution)
+    /// Skip the raw_data/ export (world.json and the layer PNGs)
     #[arg(long)]
-    no_json: bool,
+    no_raw_data: bool,
 
     /// Skip the diagnostic noise maps
     #[arg(long)]
@@ -114,9 +114,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     export_png(&world, &dir_str("world.png"))?;
     export_svg(&world, &dir_str("world.svg"))?;
     export_legend_png(&world, &dir_str("legend.png"))?;
-    if !args.no_json {
+    if !args.no_raw_data {
         std::fs::create_dir_all(dir.join("raw_data"))?;
-        export_json(&world, &dir_str("raw_data/world.json"))?;
+        export_raw_data(&world, &dir.join("raw_data"))?;
     }
     if !args.no_noise_maps {
         std::fs::create_dir_all(dir.join("noise_maps"))?;

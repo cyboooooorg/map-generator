@@ -18,16 +18,16 @@ pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"#
     );
 
-    for (r, row) in pixels.chunks_exact(w).enumerate() {
-        let mut q = 0;
+    for (y, row) in pixels.chunks_exact(w).enumerate() {
+        let mut x = 0;
         for run in row.chunk_by(|a, b| a == b) {
             let [cr, cg, cb] = run[0];
             let len = run.len();
             let _ = writeln!(
                 out,
-                r##"<rect x="{q}" y="{r}" width="{len}" height="1" fill="#{cr:02X}{cg:02X}{cb:02X}"/>"##
+                r##"<rect x="{x}" y="{y}" width="{len}" height="1" fill="#{cr:02X}{cg:02X}{cb:02X}"/>"##
             );
-            q += len;
+            x += len;
         }
     }
 
