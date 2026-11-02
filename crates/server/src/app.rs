@@ -338,7 +338,7 @@ async fn hex_grid(
 
 async fn create_world(
     State(state): State<Shared>,
-    Json(mut request): Json<WorldRequest>,
+    Json(request): Json<WorldRequest>,
 ) -> Result<(StatusCode, Json<JobCreated>), Failure> {
     let original = request.clone();
     let bad = |msg: String| Failure(StatusCode::BAD_REQUEST, msg);
@@ -348,16 +348,28 @@ async fn create_world(
         }
     }
     // Only catalog presets: never a path chosen by the client.
-    if let Some(spec) = &request.planet {
-        let load = state
-            .catalog
-            .resolve(spec)
-            .ok_or_else(|| bad(format!("unknown planet preset {spec:?}")))?;
-        request.planet = Some(load);
-    }
-    let resolved = request
-        .resolve(&mut rand::rng())
-        .map_err(|e| bad(e.to_string()))?;
+    let preset = match &request.planet {
+        Some(spec) => Some((
+            state
+                .catalog
+                .resolve(spec)
+                .ok_or_else(|| bad(format!("unknown planet preset {spec:?}")))?,
+            spec.clone(),
+        )),
+        None => None,
+    };
+    // A land fraction samples the relief to find its sea level (50-100 ms
+    // of parallel work): off the async workers.
+    let resolved = tokio::task::spawn_blocking(move || {
+        let rng = &mut rand::rng();
+        match preset {
+            Some((preset, spec)) => request.resolve_with_preset(preset, spec, rng),
+            None => request.resolve(rng),
+        }
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| bad(e.to_string()))?;
     let params = resolved.params;
     let pixels = params.width as u64 * params.height as u64;
     if pixels > state.config.max_pixels {
