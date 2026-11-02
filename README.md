@@ -264,7 +264,7 @@ worlds/<planet>-<seed>/
 
 #### Soft biome borders
 
-`world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its climate selects when nudged by 16 small temperature and moisture offsets (Gaussian, σ 0.02 on temperature and 0.05 on moisture): far from any threshold the colour is flat, near one the colours mix. The width of a transition is set in climate units, not pixels. Coastlines, shores, rivers, lakes and volcanic biomes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
+`world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its inputs select when nudged by 128 small offsets (a 4D Gaussian, σ 0.02 on temperature, 0.05 on moisture, 0.003 on the highland line and 0.004 on the volcanic zone): far from any threshold the colour is flat (8 probes tell, so most pixels skip the sampling), near one the colours mix. The width of a transition is set in input units, not pixels, so it suits any zoom level; mountain, snow and volcanic borders soften too, volcanoes less than climate borders. The same offsets serve every pixel, so transitions show neither grain nor terraces. Coastlines, shores, rivers and lakes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
 
 Contour lines are drawn under water only, as bathymetry: on land the hillshade shows the relief, and contours drew rings that read as altitude bands. The hillshade follows a soft curve (`1 + 0.4 × tanh((lit − 1) / 0.4)`, relative to flat ground) rather than a hard clamp, so steep slopes stay distinct; detail tiles use the same curve.
 
