@@ -150,6 +150,7 @@ export class PlanetView {
     uMorph: { value: 1 } as IUniform<number>,
     uRelief: { value: 0 } as IUniform<number>,
     uCoast: { value: 0 } as IUniform<number>,
+    uLiquidSea: { value: 1 } as IUniform<number>,
     uHasData: { value: 0 } as IUniform<number>,
     uData: { value: emptyTexture() } as IUniform<Texture>,
   };
@@ -293,9 +294,11 @@ export class PlanetView {
 
   /**
    * Uploads the decoded layers, or clears them with null. `coast` is the
-   * elevation of the coastline: the world's sea level plus its preset waterline.
+   * elevation of the coastline: the world's sea level plus its preset
+   * waterline. `liquidSea` is false on worlds whose seas have dried up: their
+   * basins are then shaded and raised like land, without sun glint.
    */
-  setData(layers: WorldLayers | null, coast: number): void {
+  setData(layers: WorldLayers | null, coast: number, liquidSea = true): void {
     this.shared.uData.value.dispose();
     if (!layers) {
       this.shared.uData.value = emptyTexture();
@@ -312,6 +315,7 @@ export class PlanetView {
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
     this.shared.uCoast.value = coast;
+    this.shared.uLiquidSea.value = liquidSea ? 1 : 0;
     this.u.uTexel.value.set(1 / layers.width, 1 / layers.height);
     this.u.uMapSize.value.set(layers.width, layers.height);
   }

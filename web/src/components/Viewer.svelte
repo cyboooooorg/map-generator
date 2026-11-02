@@ -3,6 +3,7 @@
   import { ApiFailure, api, worldFile } from '../lib/api/client';
   import type { WorldMetadata } from '../lib/api/types/WorldMetadata';
   import type { LonLat } from '../lib/geo';
+  import { seaIsLiquid } from '../lib/sea';
   import type { WorldLayers } from '../lib/layers';
   import { cssGradient, RAMPS } from '../lib/viewer/colormaps';
   import { PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
@@ -79,7 +80,7 @@
   });
 
   $effect(() => {
-    view?.setData(layers, meta ? meta.sea_level + meta.preset.rules.waterline : 0);
+    view?.setData(layers, meta ? meta.sea_level + meta.preset.rules.waterline : 0, meta ? seaIsLiquid(meta) : true);
   });
   $effect(() => {
     view?.setDetail(
