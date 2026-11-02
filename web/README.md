@@ -24,7 +24,7 @@ mise run dev
 In the viewer:
 
 - **Globe / Map** switches between the globe and the flat map, with an animated morph.
-- Drag to rotate the globe or pan the map, scroll to zoom. Zooming goes from the whole planet down to about 300 m per pixel: on the biome layer, detail tiles rendered by the server stream in as you get closer (the coarser picture stays until they arrive). On the globe, rotation slows down near the surface.
+- Drag to rotate the globe or pan the map, scroll to zoom towards the point under the cursor. Zooming goes from the whole planet down to about 300 m per pixel: on the biome layer, detail tiles rendered by the server stream in as you get closer (the coarser picture stays until they arrive). On the globe, rotation slows down near the surface.
 - Click a point to see its coordinates, biome, elevation above the coastline, temperature, moisture and river flow.
 - **Display** (folded by default on narrow screens):
   - **Layer**: biomes (the generated map), or elevation, temperature, moisture and river flow coloured on the GPU, with a legend.

@@ -19,6 +19,7 @@ import {
   NearestFilter,
   PerspectiveCamera,
   PlaneGeometry,
+  Quaternion,
   Raycaster,
   RepeatWrapping,
   RGBAFormat,
@@ -394,8 +395,10 @@ export class PlanetView {
     const globe = this.mode === 'globe';
     this.controls.enableRotate = globe;
     this.controls.enablePan = !globe;
-    // On the globe the wheel is handled here, by altitude (see handleWheel).
+    // On the globe the wheel is handled here, by altitude (see handleWheel);
+    // on the map, OrbitControls zooms towards the cursor.
     this.controls.enableZoom = !globe;
+    this.controls.zoomToCursor = !globe;
     this.controls.screenSpacePanning = true;
     this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : 0.002;
     this.controls.maxDistance = globe ? 8 : 12;
@@ -458,13 +461,52 @@ export class PlanetView {
       return;
     }
     event.preventDefault();
+    // The point of the globe under the cursor stays under it while zooming.
+    const anchor = this.globePointAt(event.clientX, event.clientY);
     const relief = this.shared.uRelief.value * RELIEF_SCALE;
     const altitude = Math.min(
       GLOBE_DISTANCE * 2.5,
       Math.max(MIN_ALTITUDE + relief, this.altitude() * Math.exp(event.deltaY * 0.0015)),
     );
     this.camera.position.setLength(1 + altitude);
+    this.camera.updateMatrixWorld();
+    if (!anchor) {
+      return;
+    }
+    // Turn the camera around the centre until the anchor is back under the
+    // cursor (two passes absorb the change of view direction).
+    for (let pass = 0; pass < 2; pass += 1) {
+      const now = this.globePointAt(event.clientX, event.clientY);
+      if (!now) {
+        break;
+      }
+      this.camera.position.applyQuaternion(new Quaternion().setFromUnitVectors(now, anchor));
+      this.camera.lookAt(0, 0, 0);
+      this.camera.updateMatrixWorld();
+    }
   };
+
+  /** Ray from the camera through a point of the canvas, in world space. */
+  private rayAt(clientX: number, clientY: number): { origin: Vec3; direction: Vec3 } {
+    const rect = this.canvas.getBoundingClientRect();
+    const ndc = new Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(ndc, this.camera);
+    return { origin: raycaster.ray.origin.toArray(), direction: raycaster.ray.direction.toArray() };
+  }
+
+  /** Unit-sphere point under a point of the canvas, or null off the globe. */
+  private globePointAt(clientX: number, clientY: number): Vector3 | null {
+    const { origin, direction } = this.rayAt(clientX, clientY);
+    const t = raySphere(origin, direction, 1);
+    if (t === null) {
+      return null;
+    }
+    return new Vector3(...origin).addScaledVector(new Vector3(...direction), t).normalize();
+  }
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
     this.pointerDown = new Vector2(event.clientX, event.clientY);
@@ -480,15 +522,7 @@ export class PlanetView {
     if (this.animation) {
       return;
     }
-    const rect = this.canvas.getBoundingClientRect();
-    const ndc = new Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    const raycaster = new Raycaster();
-    raycaster.setFromCamera(ndc, this.camera);
-    const origin: Vec3 = raycaster.ray.origin.toArray();
-    const direction: Vec3 = raycaster.ray.direction.toArray();
+    const { origin, direction } = this.rayAt(event.clientX, event.clientY);
     this.onPick(this.mode === 'globe' ? this.pickGlobe(origin, direction) : this.pickMap(origin, direction));
   };
 

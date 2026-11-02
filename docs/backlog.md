@@ -68,8 +68,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   river drawing duplicated in GLSL. The viewer keeps its base surface and
   draws detail patches over it where tiles are loaded (closest loaded
   ancestor while a tile loads). Data layers and the 3D relief stay at the
-  base resolution; picking reads the base layers. Zoom to the cursor is not
-  done.
+  base resolution; picking reads the base layers. Zoom to the cursor came
+  later (globe and map).
 
 ## 2. Biomes form bands and have hard transitions
 
