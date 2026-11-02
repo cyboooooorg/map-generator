@@ -336,6 +336,8 @@ mod tests {
             flow_km2: vec![1e6; 600],
             parent: None,
             mouth: Mouth::Sea,
+            source: None,
+            estuary: false,
         };
         let fp = carve(&[river], &grid, &filled, &vec![false; w * h], &mut above);
         let at = |x: usize, y: usize| above[y * w + x];

@@ -7,6 +7,7 @@
 pub mod biome;
 pub mod carve;
 pub mod climate;
+pub mod delta;
 pub mod detail;
 pub mod erosion;
 pub mod export;

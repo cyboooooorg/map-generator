@@ -167,10 +167,10 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Decision (2026-11-02):** in this order, so that every seed changes once
   (steps 2 and 3 back to back) and the tiles are tuned on the final terrain:
 
-| Step | Change                                                                                                                                | Seeds  | Status      |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------- |
-| 1    | One river width law per raster resolution, shared by the base map and the tiles                                                       | Same   | done        |
-| 2    | Noise rework: warped, fractal continent outline with a plate step; plains smoothed inland; more ridged mountain octaves               | Change | done        |
-| 3    | Erosion on real slopes, tapered near the waterline, sediment carried offshore                                                         | Change | done        |
-| 4    | Tiles: coast warped sideways, calmer plains detail, soft shading, no double shading                                                   | Same   | done        |
-| 5    | River terrain: valleys and floodplains at generation, riparian moisture, calm floodplains and channels in tiles (done); deltas (todo) | Change | in progress |
+| Step | Change                                                                                                                                | Seeds  | Status |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------ |
+| 1    | One river width law per raster resolution, shared by the base map and the tiles                                                       | Same   | done   |
+| 2    | Noise rework: warped, fractal continent outline with a plate step; plains smoothed inland; more ridged mountain octaves               | Change | done   |
+| 3    | Erosion on real slopes, tapered near the waterline, sediment carried offshore                                                         | Change | done   |
+| 4    | Tiles: coast warped sideways, calmer plains detail, soft shading, no double shading                                                   | Same   | done   |
+| 5    | River terrain: valleys and floodplains at generation, riparian moisture, calm floodplains and channels in tiles, deltas and estuaries | Change | done   |

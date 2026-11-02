@@ -10,6 +10,14 @@ export type RiverEntry = { id: number,
  */
 parent: number | null, mouth: Mouth, 
 /**
+ * For a delta distributary, the river it branches from (version 3).
+ */
+source: number | null, 
+/**
+ * Whether the river ends in an estuary (version 3).
+ */
+estuary: boolean, 
+/**
  * `[longitude°, latitude°, flow km²]` from head to mouth. Longitudes are
  * continuous along a river, so they may leave `[0, 360)` at the seam.
  */

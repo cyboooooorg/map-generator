@@ -48,6 +48,11 @@ pub struct RiverLine {
     /// The line this one flows into, for `Mouth::River`.
     pub parent: Option<usize>,
     pub mouth: Mouth,
+    /// For a delta distributary: the river it branches from (its first point
+    /// lies on that river). See [`crate::delta`].
+    pub source: Option<usize>,
+    /// The river widens into a funnel-shaped estuary towards its mouth.
+    pub estuary: bool,
 }
 
 /// Nominal width of a river in reference pixels: hydraulic geometry
@@ -137,6 +142,12 @@ pub struct RiverEntry {
     /// The river this one flows into, when `mouth` is `river`.
     pub parent: Option<u32>,
     pub mouth: Mouth,
+    /// For a delta distributary, the river it branches from (version 3).
+    #[serde(default)]
+    pub source: Option<u32>,
+    /// Whether the river ends in an estuary (version 3).
+    #[serde(default)]
+    pub estuary: bool,
     /// `[longitude°, latitude°, flow km²]` from head to mouth. Longitudes are
     /// continuous along a river, so they may leave `[0, 360)` at the seam.
     pub points: Vec<[f32; 3]>,
@@ -147,7 +158,7 @@ impl RiversFile {
     pub fn from_lines(lines: &[RiverLine], width: u32, height: u32) -> Self {
         let (w, h) = (width as f64, height as f64);
         Self {
-            version: 2,
+            version: 3,
             width_law: WidthLaw {
                 w0_ref_px: 0.9,
                 q0_km2: RIVER_MIN_FLOW_KM2,
@@ -165,6 +176,8 @@ impl RiversFile {
                     id: id as u32,
                     parent: line.parent.map(|p| p as u32),
                     mouth: line.mouth,
+                    source: line.source.map(|p| p as u32),
+                    estuary: line.estuary,
                     points: line
                         .points
                         .iter()
@@ -196,6 +209,8 @@ impl RiversFile {
                 flow_km2: r.points.iter().map(|p| p[2]).collect(),
                 parent: r.parent.map(|p| p as usize),
                 mouth: r.mouth,
+                source: r.source.map(|p| p as usize),
+                estuary: r.estuary,
             })
             .collect()
     }
@@ -280,6 +295,8 @@ pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
             points,
             parent,
             mouth,
+            source: None,
+            estuary: false,
         });
     }
     lines
@@ -287,24 +304,40 @@ pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
 
-/// Thinning of a line at each point, from 0.55 at its head to 1 eight
-/// reference pixels downstream, so rivers do not start abruptly.
+/// Width factor of a line at each point: thinning from 0.55 at its head to 1
+/// eight reference pixels downstream, so rivers do not start abruptly, and
+/// for an estuary a funnel widening to [`ESTUARY_WIDENING`] at the mouth.
 pub fn tapers(line: &RiverLine, map_width: u32) -> Vec<f64> {
     let k = scale(map_width);
-    let mut from_head = 0.0;
-    line.points
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            if i > 0 {
-                let q = line.points[i - 1];
-                from_head += ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
-            }
-            let t = (from_head / (8.0 * k)).clamp(0.0, 1.0);
-            0.55 + 0.45 * t * t * (3.0 - 2.0 * t)
+    let n = line.points.len();
+    let mut arc = vec![0.0; n];
+    for i in 1..n {
+        let (p, q) = (line.points[i], line.points[i - 1]);
+        arc[i] = arc[i - 1] + ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
+    }
+    let total = arc.last().copied().unwrap_or(0.0);
+    let mouth_flow = crate::delta::mouth_flow(line) as f64;
+    let funnel = ESTUARY_REF_PX * k * (mouth_flow / 1e6).sqrt().clamp(0.5, 2.0);
+    (0..n)
+        .map(|i| {
+            let t = (arc[i] / (8.0 * k)).clamp(0.0, 1.0);
+            let head = 0.55 + 0.45 * t * t * (3.0 - 2.0 * t);
+            let mouth = if line.estuary {
+                let u = (1.0 - (total - arc[i]) / funnel).clamp(0.0, 1.0);
+                1.0 + (ESTUARY_WIDENING - 1.0) * u * u
+            } else {
+                1.0
+            };
+            head * mouth
         })
         .collect()
 }
+
+/// Width of an estuary at the mouth, in river widths.
+pub const ESTUARY_WIDENING: f64 = 3.0;
+/// Length of the estuary funnel for a 1 M km² river, in reference pixels
+/// (about 60 km on an Earth-sized planet); it grows with `√flow`.
+const ESTUARY_REF_PX: f64 = 3.0;
 
 /// Drawn width in map pixels at each point of a line, on a map `map_width`
 /// pixels around a planet of `circumference_km`.
@@ -433,7 +466,7 @@ fn sample(field: &[f32], width: u32, height: u32, p: [f64; 2]) -> f32 {
 }
 
 /// Do segments ab and cd cross (strictly)?
-fn crosses(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
+pub(crate) fn crosses(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
     let orient = |p: [f64; 2], q: [f64; 2], r: [f64; 2]| {
         (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
     };
@@ -441,15 +474,15 @@ fn crosses(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
 }
 
 /// Where two river segments cross: (line, segment index, crossing point).
-type Crossing = (usize, usize, [f64; 2]);
+pub(crate) type Crossing = (usize, usize, [f64; 2]);
 
 /// Spatial index of the segments of a set of lines, by integer cell.
-struct SegmentIndex {
+pub(crate) struct SegmentIndex {
     cells: std::collections::HashMap<(i64, i64), Vec<(usize, usize)>>,
 }
 
 impl SegmentIndex {
-    fn new(lines: &[RiverLine]) -> Self {
+    pub(crate) fn new(lines: &[RiverLine]) -> Self {
         let mut cells: std::collections::HashMap<(i64, i64), Vec<(usize, usize)>> =
             std::collections::HashMap::new();
         for (id, line) in lines.iter().enumerate() {
@@ -469,7 +502,7 @@ impl SegmentIndex {
     }
 
     /// Segments of other lines (or of the same line, not adjacent) crossing ab.
-    fn crossings(
+    pub(crate) fn crossings(
         &self,
         lines: &[RiverLine],
         id: usize,
@@ -750,6 +783,8 @@ pub fn shape(lines: &[RiverLine], grid: &Grid, filled: &[f32], seed: u32) -> Vec
             flow_km2: flow,
             parent: line.parent,
             mouth: line.mouth,
+            source: line.source,
+            estuary: line.estuary,
         });
     }
     end_at_first_crossing(&mut out);
@@ -791,6 +826,8 @@ mod tests {
             flow_km2: vec![flow; 40],
             parent: None,
             mouth: Mouth::Sea,
+            source: None,
+            estuary: false,
         };
         let covered = |l: RiverLine| {
             coverage(&[l], 1920, 20, 40_000.0)
@@ -805,6 +842,8 @@ mod tests {
             flow_km2: vec![5e6; 2],
             parent: None,
             mouth: Mouth::Sea,
+            source: None,
+            estuary: false,
         };
         assert!(coverage(&[west], 1920, 20, 40_000.0)[10 * 1920 + 1918] > 0.5);
     }

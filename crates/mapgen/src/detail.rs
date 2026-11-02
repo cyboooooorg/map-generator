@@ -449,7 +449,7 @@ impl DetailWorld {
                 let depth_at = |i: usize| {
                     let q = line.flow_km2[i].max(rivers::RIVER_MIN_FLOW_KM2)
                         / rivers::RIVER_MIN_FLOW_KM2;
-                    CHANNEL_DEPTH * q.powf(0.3) * tapers[i] as f32
+                    CHANNEL_DEPTH * q.powf(0.3) * tapers[i].min(1.0) as f32
                 };
                 let pts = &line.points;
                 for s in 0..pts.len().saturating_sub(1) {
