@@ -10,8 +10,12 @@ moisture = 0.55
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, LavaField, AshLand, Volcano).
 [remap]
-CausticLake = ["DeepOcean", "Ocean", "SeaIce", "Lake", "River"]
-ToxicSwamp = ["Beach", "Wetland", "Forest", "Jungle", "Taiga"]
+DeepAcidSea = ["DeepOcean"]
+AcidSea = ["Ocean", "SeaIce"]
+CausticLake = ["Lake"]
+AcidRiver = ["River"]
+AcidShore = ["Beach"]
+ToxicSwamp = ["Wetland", "Forest", "Jungle", "Taiga"]
 AcidFlatland = [
   "Plain", "Shrubland", "Savanna", "Tundra", "Desert",
   "IceCap", "Snow", "GlacialPlain",

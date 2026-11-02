@@ -464,7 +464,7 @@ mod tests {
                 .zip(&world.coast_distance_km)
                 .all(|(a, b)| (a - b).abs() < 0.05)
         );
-        assert_eq!(back.params.planet.remap(Biome::Ocean), Biome::CausticLake);
+        assert_eq!(back.params.planet.remap(Biome::Ocean), Biome::AcidSea);
         assert_eq!(back.rivers.len(), world.rivers.len());
         assert!(
             back.floodplain

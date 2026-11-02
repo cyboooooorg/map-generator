@@ -166,13 +166,13 @@ The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint`, `mise run tes
 
 A planet type is a TOML preset. The five built-in ones live in `presets/` and are embedded in the binary:
 
-| Preset     | Description                                       | Exclusive biomes                            |
-| ---------- | ------------------------------------------------- | ------------------------------------------- |
-| `terran`   | Earth-like — full biome spectrum                  | —                                           |
-| `volcanic` | Fire world — extreme heat, near-zero moisture     | `MagmaSea`, `ScorchedWaste`                 |
-| `frozen`   | Ice world — perpetually frozen                    | `FrozenOcean`, `GlacialPlain`               |
-| `caustic`  | Acid world — corrosive atmosphere, toxic wetlands | `CausticLake`, `ToxicSwamp`, `AcidFlatland` |
-| `barren`   | Dead rock — arid and lifeless, no water           | `RockyWaste`, `DustPlain`                   |
+| Preset     | Description                                       | Exclusive biomes                                                                                |
+| ---------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `terran`   | Earth-like — full biome spectrum                  | —                                                                                               |
+| `volcanic` | Fire world — extreme heat, near-zero moisture     | `MagmaSea`, `ScorchedWaste`                                                                     |
+| `frozen`   | Ice world — perpetually frozen                    | `FrozenOcean`, `GlacialPlain`                                                                   |
+| `caustic`  | Acid world — corrosive atmosphere, toxic wetlands | `AcidSea`, `DeepAcidSea`, `CausticLake`, `AcidRiver`, `AcidShore`, `ToxicSwamp`, `AcidFlatland` |
+| `barren`   | Dead rock — arid and lifeless, no water           | `RockyWaste`, `DustPlain`                                                                       |
 
 To create a new planet type, write a preset file and pass its path:
 
