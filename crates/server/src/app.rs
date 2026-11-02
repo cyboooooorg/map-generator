@@ -9,6 +9,7 @@
 //! | `POST /api/worlds`              | queue a generation (`WorldRequest` body)          |
 //! | `DELETE /api/worlds/{id}`       | delete a world                                    |
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
+//! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=` | deep-zoom detail tile (PNG) |
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
 //! | `GET /worlds/{id}/...`          | world files (maps, raw data, diagnostic maps)     |
 //! | anything else                   | the web front-end (single-page app)               |
@@ -16,13 +17,15 @@ use crate::api::{
     ApiError, FormSpec, HexRequest, JobCreated, JobStatus, ParamSpec, PresetInfo, WorldSummary,
 };
 use crate::catalog::Catalog;
+use crate::tiles::{self, TileCache};
 use crate::worlds;
-use axum::extract::{Path as UrlPath, State};
-use axum::http::StatusCode;
+use axum::extract::{Path as UrlPath, Query, State};
+use axum::http::{StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
+use mapgen::detail::TileId;
 use mapgen::export::{ExportOptions, export_world, world_dir_name};
 use mapgen::generation::{Stage, generate_with_progress};
 use mapgen::hex::{DEFAULT_RIVER_FLOW_KM2, HexMap};
@@ -59,6 +62,7 @@ pub struct AppState {
     queue: Semaphore,
     /// Worlds being generated, to refuse a second job writing the same directory.
     pending: Mutex<Vec<String>>,
+    tiles: TileCache,
 }
 
 type Shared = Arc<AppState>;
@@ -80,6 +84,7 @@ pub fn router(config: Config) -> Router {
         next_job: AtomicU64::new(1),
         queue: Semaphore::new(1),
         pending: Mutex::new(Vec::new()),
+        tiles: TileCache::default(),
         config: config.clone(),
     });
     let spa = ServeDir::new(&config.static_dir)
@@ -91,6 +96,7 @@ pub fn router(config: Config) -> Router {
         .route("/api/worlds", get(list_worlds).post(create_world))
         .route("/api/worlds/{id}", delete(delete_world))
         .route("/api/worlds/{id}/hex", post(hex_grid))
+        .route("/api/worlds/{id}/tiles/{z}/{x}/{y}", get(tile))
         .route("/api/jobs/{id}/events", get(job_events))
         .nest_service("/worlds", ServeDir::new(&config.worlds_dir))
         .fallback_service(spa)
@@ -135,10 +141,60 @@ async fn delete_world(
     if !dir.is_dir() {
         return Err(Failure(StatusCode::NOT_FOUND, format!("no world {id}")));
     }
+    state.tiles.forget(&id);
     tokio::fs::remove_dir_all(&dir)
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Query of a tile request: the world revision the client knows.
+#[derive(serde::Deserialize)]
+struct TileQuery {
+    rev: Option<u64>,
+}
+
+async fn tile(
+    State(state): State<Shared>,
+    UrlPath((id, z, x, y)): UrlPath<(String, u32, u32, u32)>,
+    Query(query): Query<TileQuery>,
+) -> Result<Response, Failure> {
+    let tile = TileId { z, x, y };
+    if !worlds::is_valid_id(&id) || !tile.is_valid() {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
+    }
+    let dir = state.config.worlds_dir.join(&id);
+    let summary = {
+        let worlds_dir = state.config.worlds_dir.clone();
+        let id = id.clone();
+        tokio::task::spawn_blocking(move || worlds::summary(&worlds_dir, &id))
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    }
+    .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no world {id}")))?;
+    let world = state
+        .tiles
+        .world(&dir, &id, summary.modified_ms)
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let png = tokio::task::spawn_blocking(move || tiles::render_png(&world, tile))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    // A URL naming the current revision never changes: cache it for good.
+    let cache = if query.rev == Some(summary.modified_ms) {
+        "public, max-age=31536000, immutable"
+    } else {
+        "no-cache"
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, cache),
+        ],
+        png,
+    )
+        .into_response())
 }
 
 async fn hex_grid(
@@ -386,6 +442,26 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        // Detail tiles: valid ones render as PNG, others are rejected.
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        let rev = list[0]["modified_ms"].as_u64().unwrap();
+        let (status, _) = call(
+            &app,
+            "GET",
+            &format!("/api/worlds/frozen-3/tiles/2/3/1?rev={rev}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        for bad in [
+            "/api/worlds/frozen-3/tiles/2/8/0",
+            "/api/worlds/frozen-3/tiles/9/0/0",
+            "/api/worlds/nope-1/tiles/0/0/0",
+        ] {
+            let (status, _) = call(&app, "GET", bad, None).await;
+            assert!(status.is_client_error(), "{bad} gave {status}");
+        }
 
         let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-3", None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);

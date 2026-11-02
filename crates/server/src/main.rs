@@ -12,6 +12,7 @@
 mod api;
 mod app;
 mod catalog;
+mod tiles;
 mod worlds;
 
 use std::path::PathBuf;

@@ -141,7 +141,7 @@ The container reads and writes `worlds/` of this checkout (worlds generated with
 | Front-end | Svelte 5, strict TypeScript, three.js    | `web/`           |
 | Container | Multi-stage `Dockerfile`, `compose.yaml` | repository root  |
 
-Generations run one at a time (each one already uses every core) and stream their progress to the page. The server refuses to overwrite an existing world: delete it first or pick another seed. Maps are limited to 8192 pixels per side.
+Generations run one at a time (each one already uses every core) and stream their progress to the page. Zooming in loads [detail tiles](#detail-tiles--deep-zoom) rendered on demand by the server (`GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=`), cached by the browser for good since the URL names the world revision; the server keeps the two most recently used worlds in memory. The server refuses to overwrite an existing world: delete it first or pick another seed. Maps are limited to 8192 pixels per side.
 
 For development with hot reload, see [web/README.md](web/README.md) (`mise run dev`).
 
