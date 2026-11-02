@@ -1,7 +1,8 @@
-use super::{DASH_OFF, DASH_ON, Style, latitude_row, reference_lines, render_pixels};
+use super::{DASH_OFF, DASH_ON, MapLayers, Style, latitude_row, reference_lines, render_pixels};
 use crate::rivers;
 use crate::world::{Biome, World, biome_color};
-use std::fmt::Write;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 
 /// Writes the biome map as SVG, with the same contour and reference lines as the PNG.
 ///
@@ -10,30 +11,31 @@ use std::fmt::Write;
 ///
 /// Each row is run-length encoded: consecutive pixels sharing a colour become a
 /// single wider `<rect>`, which keeps the file 10–40× smaller than one rect per pixel.
-pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
+/// The file is streamed to disk rather than built in memory.
+pub fn export_svg(world: &World, layers: &MapLayers, path: &str) -> std::io::Result<()> {
     let (w, h) = (world.width as usize, world.height as usize);
-    let pixels = render_pixels(world, Style::Flat);
+    let pixels = render_pixels(world, layers, Style::Flat);
 
-    let mut out = String::with_capacity(w * h * 8);
-    // Writing into a String cannot fail, so the fmt::Result values are ignored.
-    let _ = writeln!(out, r#"<?xml version="1.0" encoding="UTF-8"?>"#);
-    let _ = writeln!(
+    let mut out = BufWriter::new(File::create(path)?);
+    writeln!(out, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;
+    writeln!(
         out,
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"#
-    );
+    )?;
 
     for (y, row) in pixels.chunks_exact(w).enumerate() {
         let mut x = 0;
         for run in row.chunk_by(|a, b| a == b) {
             let [cr, cg, cb] = run[0];
             let len = run.len();
-            let _ = writeln!(
+            writeln!(
                 out,
                 r##"<rect x="{x}" y="{y}" width="{len}" height="1" fill="#{cr:02X}{cg:02X}{cb:02X}"/>"##
-            );
+            )?;
             x += len;
         }
     }
+    drop(pixels);
 
     // Rivers as stroked paths, in short chunks so the width follows the flow.
     let planet = &world.params.planet;
@@ -62,15 +64,15 @@ pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
                     if max_x + shift < -width || min_x + shift > w as f64 + width {
                         continue;
                     }
-                    let coords: Vec<String> = points
-                        .iter()
-                        .map(|p| format!("{:.2},{:.2}", p[0] + shift, p[1]))
-                        .collect();
-                    let _ = writeln!(
+                    write!(out, r#"<polyline points=""#)?;
+                    for (k, p) in points.iter().enumerate() {
+                        let sep = if k == 0 { "" } else { " " };
+                        write!(out, "{sep}{:.2},{:.2}", p[0] + shift, p[1])?;
+                    }
+                    writeln!(
                         out,
-                        r##"<polyline points="{}" fill="none" stroke="#{rr:02X}{rg:02X}{rb:02X}" stroke-width="{width:.2}" stroke-linecap="round" stroke-linejoin="round"/>"##,
-                        coords.join(" ")
-                    );
+                        r##"" fill="none" stroke="#{rr:02X}{rg:02X}{rb:02X}" stroke-width="{width:.2}" stroke-linecap="round" stroke-linejoin="round"/>"##
+                    )?;
                 }
             }
             start = stop;
@@ -79,12 +81,12 @@ pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
 
     for (latitude, [cr, cg, cb]) in reference_lines(world.params.axial_tilt_deg) {
         let y = latitude_row(h as u32, latitude);
-        let _ = writeln!(
+        writeln!(
             out,
             r##"<line x1="0" y1="{y:.1}" x2="{w}" y2="{y:.1}" stroke="#{cr:02X}{cg:02X}{cb:02X}" stroke-width="1" stroke-dasharray="{DASH_ON},{DASH_OFF}" opacity="0.75"/>"##
-        );
+        )?;
     }
 
-    out.push_str("</svg>\n");
-    std::fs::write(path, out)
+    writeln!(out, "</svg>")?;
+    out.flush()
 }

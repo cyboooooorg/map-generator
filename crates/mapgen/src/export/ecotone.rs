@@ -16,6 +16,7 @@
 use crate::biome::{BiomeInput, biome_color};
 use crate::preset::Preset;
 use crate::world::World;
+use std::sync::LazyLock;
 
 /// Standard deviation of the temperature offsets (`[0, 1]` scale).
 const SIGMA_T: f32 = 0.02;
@@ -30,6 +31,8 @@ const SIGMA_V: f32 = 0.004;
 const SAMPLES: usize = 128;
 /// Probes, in standard deviations, telling a pixel far from every border.
 const PROBE: f32 = 2.5;
+/// [`unit_offsets`], computed once: they cost two thirds of a border pixel.
+static OFFSETS: LazyLock<[[f32; 4]; SAMPLES]> = LazyLock::new(unit_offsets);
 
 /// 4D offsets (temperature, moisture, highland, volcanic) drawn from a unit
 /// Gaussian with a Halton sequence and Box-Muller; each point comes with its
@@ -90,7 +93,7 @@ pub fn ecotone_colour_for(planet: &Preset, input: BiomeInput) -> [f32; 3] {
         return biome_color(centre).map(f32::from);
     }
     let mut sum = [0.0f32; 3];
-    for o in unit_offsets() {
+    for &o in OFFSETS.iter() {
         for (s, c) in sum.iter_mut().zip(biome_color(choose(o))) {
             *s += c as f32;
         }

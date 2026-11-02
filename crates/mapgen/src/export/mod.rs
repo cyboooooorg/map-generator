@@ -61,10 +61,12 @@ pub fn export_world(
         std::fs::create_dir_all(dir.join("noise_maps")).map_err(io)?;
     }
 
+    let layers = MapLayers::new(world);
+    let layers = &layers;
     type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
     let mut exports: Vec<Export> = vec![
-        Box::new(|| export_png(world, &path("world.png")).map_err(|e| e.to_string())),
-        Box::new(|| export_svg(world, &path("world.svg")).map_err(|e| e.to_string())),
+        Box::new(|| export_png(world, layers, &path("world.png")).map_err(|e| e.to_string())),
+        Box::new(|| export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())),
         Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
     ];
     if options.raw_data {
@@ -171,17 +173,26 @@ pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
 /// land and rivers): below the waterline for seas; below the lake's level,
 /// its highest pixel, for lakes, which lie above the sea.
 pub fn water_depths(world: &World) -> Vec<f32> {
-    let (w, h) = (world.width as usize, world.height as usize);
-    let planet = &world.params.planet;
-    let waterline = world.params.sea_level + planet.rules.waterline;
+    water_depths_of(&world.params, |i| world.elevation[i], &world.biomes)
+}
+
+/// [`water_depths`] from the elevation of each pixel (`elevation(i)`,
+/// row-major) and the biomes.
+pub(crate) fn water_depths_of(
+    params: &WorldParams,
+    elevation: impl Fn(usize) -> f32 + Sync,
+    biomes: &[Biome],
+) -> Vec<f32> {
+    let (w, h) = (params.width as usize, params.height as usize);
+    let planet = &params.planet;
+    let waterline = params.sea_level + planet.rules.waterline;
     let river = planet.remap(Biome::River);
-    let lake = |i: usize| {
-        world.biomes[i].is_water() && world.biomes[i] != river && world.elevation[i] >= waterline
-    };
+    let lake = |i: usize| biomes[i].is_water() && biomes[i] != river && elevation(i) >= waterline;
     let mut depth: Vec<f32> = (0..w * h)
+        .into_par_iter()
         .map(|i| {
-            if world.biomes[i].is_water() && world.elevation[i] < waterline {
-                waterline - world.elevation[i]
+            if biomes[i].is_water() && elevation(i) < waterline {
+                waterline - elevation(i)
             } else {
                 0.0
             }
@@ -199,7 +210,7 @@ pub fn water_depths(world: &World) -> Vec<f32> {
         let mut surface = f32::MIN;
         while let Some(i) = stack.pop() {
             members.push(i);
-            surface = surface.max(world.elevation[i]);
+            surface = surface.max(elevation(i));
             let (x, y) = (i % w, i / w);
             let neighbours = [
                 Some(y * w + (x + 1) % w),
@@ -215,7 +226,7 @@ pub fn water_depths(world: &World) -> Vec<f32> {
             }
         }
         for &i in &members {
-            depth[i] = surface - world.elevation[i];
+            depth[i] = surface - elevation(i);
         }
     }
     depth
@@ -237,17 +248,42 @@ pub enum Style {
     Flat,
 }
 
+/// Map-sized layers both maps (PNG and SVG) are drawn from: computed once
+/// per export and shared, instead of once per map.
+pub struct MapLayers {
+    /// Anti-aliased river coverage (see [`rivers::coverage`]).
+    coverage: Vec<f32>,
+    /// See [`water_depths`].
+    depths: Vec<f32>,
+}
+
+impl MapLayers {
+    pub fn new(world: &World) -> Self {
+        let (coverage, depths) = rayon::join(
+            || {
+                rivers::coverage(
+                    &world.rivers,
+                    world.width,
+                    world.height,
+                    world.params.circumference_km as f64,
+                )
+            },
+            || water_depths(world),
+        );
+        Self { coverage, depths }
+    }
+}
+
 /// Computes the final colour of every pixel, in the same row-major order as
 /// the world layers. Contour lines are drawn under water only, as bathymetry:
 /// on land the hillshade shows the relief, and contours would draw rings.
-pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
+pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8; 3]> {
     let (w, h) = (world.width, world.height);
     let grid = world.params.grid();
     let planet = &world.params.planet;
     let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
-    let coverage = rivers::coverage(&world.rivers, w, h, world.params.circumference_km as f64);
-    let depths = water_depths(world);
+    let (coverage, depths) = (&layers.coverage, &layers.depths);
     let river_biome = planet.remap(Biome::River);
     let river_colour = biome_color(river_biome).map(f32::from);
 

@@ -5,7 +5,9 @@
 //! and `<world>/hex/hex.png`. The hexes are regular in map space (the
 //! equirectangular projection), not on the sphere: polar hexes cover less
 //! real ground than equatorial ones.
-use crate::export::raw_data::{BiomeInfo, read_biome_ids, read_metadata, read_scalar};
+use crate::biome::Biome;
+use crate::export::raw_data::{BiomeInfo, LoadedWorld, biome_table, load_layers};
+use crate::rivers;
 use image::{Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -126,30 +128,55 @@ pub struct HexCells {
     pub river: Vec<bool>,
 }
 
+/// Whether a pixel of biome `biome` (as stored, after the preset's remap)
+/// is a river. Rivers are thin lines that never win a hex; the flow flag
+/// shows them instead. A preset can remap rivers to another biome
+/// (`AcidRiver`, or `LavaField` on volcanic worlds, which also has pixels of
+/// its own), so those count only under a drawn river (`coverage`, see
+/// [`rivers::coverage`]).
+pub fn is_river(biome: Biome, remapped_river: Biome, coverage: f32) -> bool {
+    matches!(biome, Biome::River | Biome::AcidRiver)
+        || (biome == remapped_river && coverage >= rivers::RIVER_COVERAGE)
+}
+
 /// Resamples the world in `world_dir` onto a grid of `columns` hex columns,
 /// writes `hex/hex.json` and `hex/hex.png` next to its raw data, and returns
 /// the hex map.
 pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<HexMap, String> {
-    let raw = world_dir.join("raw_data");
-    let meta = read_metadata(&raw)?;
-    let (width, height) = (meta.width, meta.height);
-    let river_id = meta
-        .biomes
-        .iter()
-        .find(|b| b.key == crate::biome::Biome::River)
-        .map(|b| b.id);
-    let biomes = read_biome_ids(&raw, &meta)?;
-    let elevation = read_scalar(&raw, &meta.layers.elevation, &meta)?;
-    let moisture = read_scalar(&raw, &meta.layers.moisture, &meta)?;
-    let temperature = read_scalar(&raw, &meta.layers.temperature, &meta)?;
-    let flow = read_scalar(&raw, &meta.layers.flow, &meta)?;
+    let world = load_layers(world_dir)?;
+    let coverage = rivers::coverage(
+        &world.rivers,
+        world.width,
+        world.height,
+        world.params.circumference_km as f64,
+    );
+    let river = world.params.planet.remap(Biome::River);
+    let map = resample_world(
+        &world,
+        |i| is_river(world.biomes[i], river, coverage[i]),
+        columns,
+        river_flow_km2,
+    );
+    write_files(world_dir, &map)?;
+    Ok(map)
+}
 
+/// Resamples a loaded world onto a grid of `columns` hex columns.
+/// `is_river(i)` tells the river pixels (see [`is_river`]), which never
+/// win a hex.
+pub fn resample_world(
+    world: &LoadedWorld,
+    is_river: impl Fn(usize) -> bool,
+    columns: u32,
+    river_flow_km2: f32,
+) -> HexMap {
+    let (width, height) = (world.width, world.height);
     let grid = HexGrid::new(width, height, columns);
     let n = grid.cell_count();
 
     // ── Aggregate pixels per hex ──────────────────────────────────────────────
-    let mut owner = vec![0usize; (width * height) as usize];
-    let mut votes = vec![[0u32; 256]; n];
+    const BIOMES: usize = Biome::ALL.len();
+    let mut votes = vec![[0u32; BIOMES]; n];
     let mut sums = vec![[0.0f64; 3]; n];
     let mut count = vec![0u32; n];
     let mut max_flow = vec![0.0f32; n];
@@ -157,34 +184,31 @@ pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<H
         for x in 0..width {
             let (col, row) = grid.locate(x as f32 + 0.5, y as f32 + 0.5);
             let h = grid.index(col, row);
-            let i = (y * width + x) as usize;
-            owner[i] = h;
-            let biome = biomes.get_pixel(x, y)[0];
-            // A river is a thin line: it never wins a hex, the flow flag shows it.
-            if Some(biome) != river_id {
-                votes[h][biome as usize] += 1;
+            let i = world.index(x, y);
+            if !is_river(i) {
+                votes[h][world.biomes[i].id() as usize] += 1;
             }
-            max_flow[h] = max_flow[h].max(flow[i]);
-            sums[h][0] += elevation[i] as f64;
-            sums[h][1] += moisture[i] as f64;
-            sums[h][2] += temperature[i] as f64;
+            max_flow[h] = max_flow[h].max(world.flow_km2.get(i));
+            sums[h][0] += world.elevation.get(i) as f64;
+            sums[h][1] += world.moisture.get(i) as f64;
+            sums[h][2] += world.temperature.get(i) as f64;
             count[h] += 1;
         }
     }
     let majority: Vec<u8> = votes
         .iter()
-        .map(|v| (0..256).max_by_key(|&b| v[b]).unwrap_or(0) as u8)
+        .map(|v| (0..BIOMES).max_by_key(|&b| v[b]).unwrap_or(0) as u8)
         .collect();
     let mean = |h: usize, k: usize| {
         let v = (sums[h][k] / count[h].max(1) as f64) as f32;
         (v * 1000.0).round() / 1000.0
     };
-    let is_water = |id: u8| meta.biomes.get(id as usize).is_some_and(|b| b.water);
+    let is_water = |id: u8| Biome::ALL.get(id as usize).is_some_and(|b| b.is_water());
     let river: Vec<bool> = (0..n)
         .map(|h| !is_water(majority[h]) && max_flow[h] >= river_flow_km2)
         .collect();
 
-    let map = HexMap {
+    HexMap {
         format_version: 1,
         layout:
             "pointy-top, odd-r offset (odd rows shifted half a hex east), columns wrap east-west"
@@ -196,8 +220,8 @@ pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<H
         source: HexSource {
             width,
             height,
-            seed: meta.seed,
-            planet_type: meta.planet_type.clone(),
+            seed: world.params.seed,
+            planet_type: world.params.planet.name.clone(),
         },
         cells: HexCells {
             order: "row-major: index = row * columns + col".into(),
@@ -208,22 +232,25 @@ pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<H
             biome: majority,
             river,
         },
-        biomes: meta.biomes,
-    };
+        biomes: biome_table(),
+    }
+}
 
+/// Writes `hex/hex.json` and `hex/hex.png` into `world_dir`.
+pub fn write_files(world_dir: &Path, map: &HexMap) -> Result<(), String> {
     let out = world_dir.join("hex");
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
-    let json = serde_json::to_string(&map).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string(map).map_err(|e| e.to_string())?;
     std::fs::write(out.join("hex.json"), json).map_err(|e| e.to_string())?;
-    render(&map, &grid, &owner)
+    render(map)
         .save(out.join("hex.png"))
-        .map_err(|e| e.to_string())?;
-    Ok(map)
+        .map_err(|e| e.to_string())
 }
 
 /// hex.png: majority colours, darkened outlines, a blue dot on river hexes.
-fn render(map: &HexMap, grid: &HexGrid, owner: &[usize]) -> RgbImage {
+fn render(map: &HexMap) -> RgbImage {
     let (width, height) = (map.source.width, map.source.height);
+    let grid = HexGrid::new(width, height, map.columns);
     let colors: Vec<[u8; 3]> = map
         .biomes
         .iter()
@@ -234,31 +261,48 @@ fn render(map: &HexMap, grid: &HexGrid, owner: &[usize]) -> RgbImage {
         .collect();
     let outline_dark = 0.6;
     let dot_radius = grid.size * 0.3;
-    RgbImage::from_fn(width, height, |x, y| {
-        let i = (y * width + x) as usize;
-        let h = owner[i];
-        let mut c = colors
-            .get(map.cells.biome[h] as usize)
-            .copied()
-            .unwrap_or([0, 0, 0]);
-        let (col, row) = (h as u32 % grid.columns, h as u32 / grid.columns);
-        let (cx, cy) = grid.centre(col, row);
-        let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
-        // Wrap the horizontal distance for hexes straddling the seam.
-        let dx = (dx + width as f32 / 2.0).rem_euclid(width as f32) - width as f32 / 2.0;
-        let east = owner[(y * width + (x + 1) % width) as usize];
-        let south = if y + 1 < height {
-            owner[i + width as usize]
-        } else {
-            h
-        };
-        if east != h || south != h {
-            c = c.map(|v| (v as f32 * outline_dark) as u8);
-        } else if map.cells.river[h] && (dx * dx + dy * dy).sqrt() < dot_radius {
-            c = [40, 95, 215];
+    // The hex of every pixel of a row, computed a row at a time.
+    let owners = |y: u32| -> Vec<u32> {
+        (0..width)
+            .map(|x| {
+                let (col, row) = grid.locate(x as f32 + 0.5, y as f32 + 0.5);
+                grid.index(col, row) as u32
+            })
+            .collect()
+    };
+    let mut img = RgbImage::new(width, height);
+    let mut next = owners(0);
+    for y in 0..height {
+        let current = std::mem::replace(
+            &mut next,
+            if y + 1 < height {
+                owners(y + 1)
+            } else {
+                Vec::new()
+            },
+        );
+        for x in 0..width {
+            let h = current[x as usize];
+            let mut c = colors
+                .get(map.cells.biome[h as usize] as usize)
+                .copied()
+                .unwrap_or([0, 0, 0]);
+            let (col, row) = (h % grid.columns, h / grid.columns);
+            let (cx, cy) = grid.centre(col, row);
+            let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            // Wrap the horizontal distance for hexes straddling the seam.
+            let dx = (dx + width as f32 / 2.0).rem_euclid(width as f32) - width as f32 / 2.0;
+            let east = current[((x + 1) % width) as usize];
+            let south = next.get(x as usize).copied().unwrap_or(h);
+            if east != h || south != h {
+                c = c.map(|v| (v as f32 * outline_dark) as u8);
+            } else if map.cells.river[h as usize] && (dx * dx + dy * dy).sqrt() < dot_radius {
+                c = [40, 95, 215];
+            }
+            img.put_pixel(x, y, Rgb(c));
         }
-        Rgb(c)
-    })
+    }
+    img
 }
 
 #[cfg(test)]
@@ -328,5 +372,54 @@ mod tests {
                 .unwrap();
         assert_eq!(read.cells.biome, map.cells.biome);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn remapped_rivers_never_win_a_hex() {
+        use crate::generation::generate;
+        use crate::request::WorldRequest;
+        // Caustic worlds store their rivers as AcidRiver.
+        let request = WorldRequest {
+            planet: Some("caustic".into()),
+            seed: Some(4),
+            sea_level: Some(0.1),
+            width: Some(512),
+            height: Some(256),
+            ..Default::default()
+        };
+        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        assert!(world.biomes.contains(&Biome::AcidRiver), "no river to test");
+        let world = LoadedWorld::from_world(&world);
+        let coverage = rivers::coverage(
+            &world.rivers,
+            world.width,
+            world.height,
+            world.params.circumference_km as f64,
+        );
+        let river = world.params.planet.remap(Biome::River);
+        // Hexes a few pixels wide: some would be mostly river.
+        let map = resample_world(
+            &world,
+            |i| is_river(world.biomes[i], river, coverage[i]),
+            256,
+            DEFAULT_RIVER_FLOW_KM2,
+        );
+        assert!(!map.cells.biome.contains(&Biome::AcidRiver.id()));
+        assert!(!map.cells.biome.contains(&Biome::River.id()));
+        // Without the river mask, they do.
+        let naive = resample_world(&world, |_| false, 256, DEFAULT_RIVER_FLOW_KM2);
+        assert!(naive.cells.biome.contains(&Biome::AcidRiver.id()));
+    }
+
+    #[test]
+    fn river_pixels() {
+        let cov = rivers::RIVER_COVERAGE;
+        assert!(is_river(Biome::AcidRiver, Biome::AcidRiver, 0.0));
+        assert!(is_river(Biome::River, Biome::River, 0.0));
+        // Volcanic worlds remap rivers to lava fields, which also exist on
+        // their own: only those under a drawn river are rivers.
+        assert!(is_river(Biome::LavaField, Biome::LavaField, cov));
+        assert!(!is_river(Biome::LavaField, Biome::LavaField, 0.0));
+        assert!(!is_river(Biome::Forest, Biome::River, 1.0));
     }
 }

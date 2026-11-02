@@ -23,12 +23,18 @@
 //! Tiles form an equirectangular quadtree: level `z` has `2^(z+1)` × `2^z`
 //! tiles of [`TILE_SIZE`] pixels, column 0 at longitude 0 and row 0 at the
 //! north pole.
+//!
+//! A [`DetailWorld`] keeps the base layers as stored in `raw_data/` (16 bits
+//! per value, see [`Layer16`]), decoded as they are sampled, plus a byte of
+//! flags and the water depth per pixel: about 23 bytes per base pixel
+//! (0.75 GB at 8192 × 4096).
 use crate::biome::{Biome, BiomeInput, biome_color};
 use crate::climate::temperature;
 use crate::export::ecotone::ecotone_colour_for;
-use crate::export::{LIGHT, RELIEF_KM, shade, water_colour, water_depths};
-use crate::rivers::{self, RiverLine};
-use crate::world::World;
+use crate::export::raw_data::{Layer16, LoadedWorld};
+use crate::export::{LIGHT, RELIEF_KM, shade, water_colour, water_depths_of};
+use crate::hex;
+use crate::rivers;
 use image::{Rgb, RgbImage};
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -113,30 +119,73 @@ impl TileId {
 
 /// Everything a tile needs, prepared once per world.
 pub struct DetailWorld {
-    world: World,
+    world: LoadedWorld,
     noise: Perlin,
     warp_noise: Perlin,
-    /// River polylines with their bounding boxes in base pixels.
-    rivers: Vec<(RiverLine, [f64; 4])>,
-    /// 1 on base lake pixels (water above the waterline, not under a drawn
-    /// river), 0 elsewhere; sampled bilinearly for smooth shores.
-    lakes: Vec<f32>,
-    /// Share of the height detail each base pixel's surface gets, sampled
-    /// bilinearly so it changes smoothly across biome borders.
-    roughness: Vec<f32>,
+    /// Bounding box of each river polyline in base pixels.
+    river_bounds: Vec<[f64; 4]>,
+    /// Per base pixel: [`LAKE`] and [`RIVER`] bits.
+    flags: Vec<u8>,
     /// Depth of each base water pixel below its surface (see
-    /// [`water_depths`]), for the shallow tint of lakes.
+    /// [`water_depths_of`]), for the shallow tint of lakes.
     depths: Vec<f32>,
+}
+
+/// Flag of base lake pixels (water above the waterline, not under a drawn
+/// river); sampled bilinearly for smooth shores.
+const LAKE: u8 = 1;
+/// Flag of base river pixels (see [`hex::is_river`]).
+const RIVER: u8 = 2;
+
+/// A row-major base layer, read one value at a time.
+trait Samples {
+    fn value(&self, i: usize) -> f32;
+}
+
+impl Samples for Vec<f32> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        self[i]
+    }
+}
+
+impl Samples for Layer16 {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        self.get(i)
+    }
+}
+
+/// 1 on lake pixels, 0 elsewhere.
+struct Lakes<'a>(&'a [u8]);
+
+impl Samples for Lakes<'_> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        if self.0[i] & LAKE != 0 { 1.0 } else { 0.0 }
+    }
+}
+
+/// Share of the height detail each base pixel's surface gets (see
+/// [`roughness`]), sampled bilinearly so it changes smoothly across biome
+/// borders.
+struct Roughness<'a>(&'a [Biome]);
+
+impl Samples for Roughness<'_> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        roughness(self.0[i])
+    }
 }
 
 /// Bilinear sample of a row-major base layer at base pixel coordinates
 /// (pixel centres at +0.5), wrapping longitude and clamping latitude.
-fn bilinear(layer: &[f32], width: u32, height: u32, x: f64, y: f64) -> f32 {
+fn bilinear(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f32 {
     let (w, h) = (width as i64, height as i64);
     let (x, y) = (x - 0.5, (y - 0.5).clamp(0.0, (h - 1) as f64));
     let (x0, y0) = (x.floor(), y.floor());
     let (fx, fy) = ((x - x0) as f32, (y - y0) as f32);
-    let at = |xx: i64, yy: i64| layer[(yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize];
+    let at = |xx: i64, yy: i64| layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize);
     let (xi, yi) = (x0 as i64, y0 as i64);
     let top = at(xi, yi) * (1.0 - fx) + at(xi + 1, yi) * fx;
     let bottom = at(xi, yi + 1) * (1.0 - fx) + at(xi + 1, yi + 1) * fx;
@@ -145,12 +194,12 @@ fn bilinear(layer: &[f32], width: u32, height: u32, x: f64, y: f64) -> f32 {
 
 /// Bicubic (Catmull-Rom) sample of a base layer: unlike bilinear, its slope
 /// is continuous, so hillshading shows no seams along base pixel edges.
-fn bicubic(layer: &[f32], width: u32, height: u32, x: f64, y: f64) -> f32 {
+fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f32 {
     let (w, h) = (width as i64, height as i64);
     let (x, y) = (x - 0.5, (y - 0.5).clamp(0.0, (h - 1) as f64));
     let (x0, y0) = (x.floor() as i64, y.floor() as i64);
     let (fx, fy) = ((x - x0 as f64) as f32, (y - y0 as f64) as f32);
-    let at = |xx: i64, yy: i64| layer[(yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize];
+    let at = |xx: i64, yy: i64| layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize);
     let cubic = |p: [f32; 4], t: f32| {
         p[1] + 0.5
             * t
@@ -203,8 +252,8 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 }
 
 impl DetailWorld {
-    pub fn new(world: World) -> Self {
-        let rivers = world
+    pub fn new(world: LoadedWorld) -> Self {
+        let river_bounds = world
             .rivers
             .iter()
             .map(|line| {
@@ -217,7 +266,7 @@ impl DetailWorld {
                         b[3].max(p[1]),
                     ];
                 }
-                (line.clone(), b)
+                b
             })
             .collect();
         let seed = world.params.seed;
@@ -227,30 +276,51 @@ impl DetailWorld {
             world.height,
             world.params.circumference_km as f64,
         );
-        let waterline = world.params.sea_level + world.params.planet.rules.waterline;
-        let lakes = (0..world.biomes.len())
+        let planet = &world.params.planet;
+        let waterline = world.params.sea_level + planet.rules.waterline;
+        let river = planet.remap(Biome::River);
+        let flags = (0..world.biomes.len())
+            .into_par_iter()
             .map(|i| {
-                let lake = world.biomes[i].is_water()
-                    && world.elevation[i] >= waterline
+                let biome = world.biomes[i];
+                let lake = biome.is_water()
+                    && world.elevation.get(i) >= waterline
                     && coverage[i] < rivers::RIVER_COVERAGE;
-                if lake { 1.0 } else { 0.0 }
+                let mut flags = if lake { LAKE } else { 0 };
+                if hex::is_river(biome, river, coverage[i]) {
+                    flags |= RIVER;
+                }
+                flags
             })
             .collect();
-        let roughness = world.biomes.iter().map(|&b| roughness(b)).collect();
-        let depths = water_depths(&world);
+        drop(coverage);
+        let depths = water_depths_of(&world.params, |i| world.elevation.get(i), &world.biomes);
         Self {
-            lakes,
-            roughness,
+            flags,
             depths,
             noise: Perlin::new(seed.wrapping_add(1000)),
             warp_noise: Perlin::new(seed.wrapping_add(1001)),
-            rivers,
+            river_bounds,
             world,
         }
     }
 
-    pub fn world(&self) -> &World {
+    /// The base layers.
+    pub fn world(&self) -> &LoadedWorld {
         &self.world
+    }
+
+    /// Whether base pixel `i` is a river (see [`hex::is_river`]).
+    pub fn is_river(&self, i: usize) -> bool {
+        self.flags[i] & RIVER != 0
+    }
+
+    /// Bytes held, river polylines aside.
+    pub fn bytes(&self) -> usize {
+        self.world.bytes()
+            + self.flags.len()
+            + self.depths.len() * size_of::<f32>()
+            + self.river_bounds.len() * size_of::<[f64; 4]>()
     }
 
     /// Base pixel coordinates of a longitude and latitude.
@@ -314,7 +384,7 @@ impl DetailWorld {
         // Snow, ice, lava and sand are smooth surfaces (see `roughness`).
         let amplitude = DETAIL_AMPLITUDE
             * (1.0 + MOUNTAIN_BOOST * high)
-            * bilinear(&self.roughness, w.width, w.height, x, y);
+            * bilinear(&Roughness(&w.biomes), w.width, w.height, x, y);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
         let shore = smoothstep(0.0, SHORE_FADE, above.abs());
         // Floodplains stay flat valley floors.
@@ -371,13 +441,13 @@ impl DetailWorld {
                     .get([p[0] * f + 19.1, p[1] * f - 7.3, p[2] * f + 3.7]);
                 let (bx, by) = self.base_xy(lon, lat);
                 let (cx, cy) = (bx + wx * CLIMATE_WARP_PX, by + wy * CLIMATE_WARP_PX);
-                let sample = |layer: &[f32]| bilinear(layer, w.width, w.height, cx, cy);
+                let sample = |layer: &dyn Samples| bilinear(layer, w.width, w.height, cx, cy);
                 let base_above = sample(&w.elevation) - w.params.sea_level - planet.rules.waterline;
                 // Temperature follows the detailed elevation (lapse rate).
                 let t =
                     sample(&w.temperature) + temperature(0.0, above) - temperature(0.0, base_above);
                 // Lakes: smooth shores from the base lake mask.
-                let lake = sample(&self.lakes) > 0.5 && above >= 0.0;
+                let lake = sample(&Lakes(&self.flags)) > 0.5 && above >= 0.0;
                 let input = BiomeInput {
                     elevation: relief,
                     moisture: sample(&w.moisture),
@@ -469,7 +539,7 @@ impl DetailWorld {
         let (span_x, span_y) = (TILE_SIZE as f64 / sx, TILE_SIZE as f64 / sy);
         let margin = 8.0 / sx.min(sy) + 1.0;
         let raster = cols as f64 * TILE_SIZE as f64;
-        for (line, b) in &self.rivers {
+        for (line, b) in self.world.rivers.iter().zip(&self.river_bounds) {
             for shift in [-(w.width as f64), 0.0, w.width as f64] {
                 let visible = b[0] + shift < ox + span_x + margin
                     && b[2] + shift > ox - margin
@@ -585,7 +655,8 @@ mod tests {
             height: Some(256),
             ..Default::default()
         };
-        DetailWorld::new(generate(&request.resolve(&mut rand::rng()).unwrap().params).world)
+        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        DetailWorld::new(LoadedWorld::from_world(&world))
     }
 
     #[test]
@@ -637,7 +708,8 @@ mod tests {
                     let (lon, lat) = TileId { z: 0, x, y: 0 }.lon_lat(px as f64, py as f64);
                     let (bx, by) = d.base_xy(lon, lat);
                     let i = w.index(bx as u32 % w.width, (by as u32).min(w.height - 1));
-                    let base_water = w.elevation[i] - w.params.sea_level < planet.rules.waterline;
+                    let base_water =
+                        w.elevation.get(i) - w.params.sea_level < planet.rules.waterline;
                     let tile_water =
                         d.elevation(lon, lat, 1e9) - w.params.sea_level < planet.rules.waterline;
                     same_water += usize::from(base_water == tile_water);
