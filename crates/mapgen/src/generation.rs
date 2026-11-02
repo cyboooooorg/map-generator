@@ -9,7 +9,7 @@ use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
 use crate::noise::{
-    EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged, stream, stream_seed,
+    EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged, smoothstep, stream, stream_seed,
 };
 use crate::rivers;
 use crate::world::*;
@@ -90,11 +90,6 @@ fn coast_octaves(noise_scale: f64, grid: &Grid) -> u32 {
         octaves += 1;
     }
     octaves
-}
-
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// Moisture added on a floodplain (weight 1): rivers green their valleys.

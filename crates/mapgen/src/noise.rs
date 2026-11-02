@@ -95,6 +95,12 @@ pub fn nearest_point(seed: u32, x: f64, y: f64, z: f64, presence: f64) -> Option
     best
 }
 
+/// Hermite step from 0 at `edge0` to 1 at `edge1`, clamped outside.
+pub(crate) fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// Independent noise streams of a world: each gets its own seed from
 /// [`stream_seed`].
 pub mod stream {

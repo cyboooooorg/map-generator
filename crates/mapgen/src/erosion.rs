@@ -20,6 +20,7 @@
 //! wide swales; sediment that reaches the sea is carried offshore. Mountains
 //! get valleys while plains and deserts stay smooth, and coasts keep their
 //! profile instead of a flat shelf at sea level.
+use crate::noise::smoothstep;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use rayon::prelude::*;
@@ -60,11 +61,6 @@ const FLAT_BLUR: usize = 2;
 /// shore, in elevation units: coasts keep their profile instead of being
 /// planed into a flat shelf at sea level.
 const SHORE_BAND: f32 = 0.05;
-
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
 
 /// Erosion grid size for a `width` × `height` map.
 pub fn grid_size(width: u32, height: u32) -> (u32, u32) {
