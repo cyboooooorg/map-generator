@@ -5,10 +5,13 @@
 //! down, evaporates, or reaches the sea. Thousands of droplets carve valleys
 //! into the ridges and leave fans and deltas at their feet.
 //!
-//! The simulation runs on a coarser grid than the map: one cell per
-//! [`CELL_PX`] × [`CELL_PX`] map pixels, at least [`EROSION_WIDTH`] ×
-//! [`EROSION_HEIGHT`] (or the map size if smaller) and at most
-//! [`MAX_EROSION_WIDTH`] × [`MAX_EROSION_HEIGHT`], so the cost stays bounded.
+//! The simulation runs on grids coarser than the map, in two passes. The
+//! main pass uses [`COARSE_WIDTH`] × [`COARSE_HEIGHT`] cells (or the map
+//! size if smaller) at every resolution, so basins and lakes do not depend on
+//! it. Larger maps add a detail pass on one cell per [`CELL_PX`] ×
+//! [`CELL_PX`] map pixels (at most [`MAX_EROSION_WIDTH`] ×
+//! [`MAX_EROSION_HEIGHT`]), of which only the change finer than a main-grid
+//! cell is kept: gullies, not dams.
 //! The resulting height change is smoothed back onto the full-resolution
 //! elevation with a cubic B-spline, and never moves a pixel across the
 //! waterline: at 16 map pixels per cell, a linear interpolation drew a grid of
@@ -35,6 +38,13 @@ pub const MAX_EROSION_WIDTH: u32 = 2048;
 pub const MAX_EROSION_HEIGHT: u32 = 1024;
 /// Map pixels per erosion cell side, between the two grid bounds.
 pub const CELL_PX: u32 = 4;
+/// Width of the main erosion grid, in cells.
+pub const COARSE_WIDTH: u32 = 1024;
+/// Height of the main erosion grid, in cells.
+pub const COARSE_HEIGHT: u32 = 512;
+/// Radius, in cells of the detail grid, of the box blur whose removal keeps
+/// only the detail pass's fine change (3 passes, about a main-grid cell).
+const DETAIL_SCALE_CELLS: usize = 2;
 
 /// Share of a pixel's height above (or depth below) the waterline that
 /// erosion may remove (or deposition fill): below 1, so no pixel changes
@@ -62,7 +72,7 @@ const FLAT_BLUR: usize = 2;
 /// planed into a flat shelf at sea level.
 const SHORE_BAND: f32 = 0.05;
 
-/// Erosion grid size for a `width` × `height` map.
+/// Grid of the detail pass for a `width` × `height` map.
 pub fn grid_size(width: u32, height: u32) -> (u32, u32) {
     let side = |px: u32, min: u32, max: u32| (px / CELL_PX).clamp(min, max).min(px);
     (
@@ -367,8 +377,54 @@ pub fn erode(
     if strength <= 0.0 {
         return vec![0.0; w * h];
     }
-    let (ew, eh) = grid_size(width, height);
-    let (ew, eh) = (ew as usize, eh as usize);
+    let pass = |elevation: &mut [f32], grid: (u32, u32), stream: u32, detail_only| {
+        let pass = Pass {
+            grid: (grid.0 as usize, grid.1 as usize),
+            strength,
+            seed: crate::noise::stream_seed(seed, stream) as u64,
+            detail_only,
+        };
+        erode_pass(elevation, (w, h), waterline, &pass, thaw)
+    };
+    let coarse = coarse_grid_size(width, height);
+    let mut change = pass(elevation, coarse, crate::noise::stream::EROSION, false);
+    let fine = grid_size(width, height);
+    if fine.0 > coarse.0 {
+        let detail = pass(elevation, fine, crate::noise::stream::EROSION_FINE, true);
+        change.par_iter_mut().zip(detail).for_each(|(c, d)| *c += d);
+    }
+    change
+}
+
+/// Grid of the main erosion pass: the same number of cells whatever the
+/// map size (or the map size if smaller), so basins, and the lakes they
+/// hold, do not depend on the resolution.
+pub fn coarse_grid_size(width: u32, height: u32) -> (u32, u32) {
+    (width.min(COARSE_WIDTH), height.min(COARSE_HEIGHT))
+}
+
+/// One erosion pass: its grid, droplets per cell, random stream and mode.
+struct Pass {
+    grid: (usize, usize),
+    strength: f32,
+    seed: u64,
+    /// Keep only the change finer than [`DETAIL_SCALE_CELLS`]: the gullies,
+    /// not the dams and basins, which the main pass already shaped.
+    detail_only: bool,
+}
+
+/// Runs one erosion pass on `elevation` (`size` = map width and height)
+/// and returns the height change of each pixel.
+fn erode_pass(
+    elevation: &mut [f32],
+    size: (usize, usize),
+    waterline: f32,
+    pass: &Pass,
+    thaw: &[f32],
+) -> Vec<f32> {
+    let (w, h) = size;
+    let (ew, eh) = pass.grid;
+    let strength = pass.strength;
 
     // Box-average the full-resolution map down to the erosion grid.
     let mut sum = vec![0.0f32; ew * eh];
@@ -400,7 +456,7 @@ pub fn erode(
         waterline * gain,
         SHORE_BAND * gain,
         droplets,
-        crate::noise::stream_seed(seed, crate::noise::stream::EROSION) as u64,
+        pass.seed,
     );
     // Keep the change where the ground was steep enough to be carved: on
     // flat cells the deposits of droplets slowing down would only roughen
@@ -425,13 +481,18 @@ pub fn erode(
     // reach the plains), and the deposits of slowing droplets no longer
     // roughen plains and deserts.
     let soft = blur(&raw, ew, eh, FLAT_BLUR);
-    let delta: Vec<f32> = (0..ew * eh)
+    let mut delta: Vec<f32> = (0..ew * eh)
         .into_par_iter()
         .map(|i| {
             let steep = smoothstep(FLAT_SLOPE.0, FLAT_SLOPE.1, slope(i));
             soft[i] + (raw[i] - soft[i]) * steep
         })
         .collect();
+    if pass.detail_only {
+        // High-pass: minus its blur over the main grid's cell size.
+        let broad = blur(&delta, ew, eh, DETAIL_SCALE_CELLS);
+        delta.par_iter_mut().zip(broad).for_each(|(d, b)| *d -= b);
+    }
 
     // Spread the height change over every full-resolution pixel with a cubic
     // B-spline: smooth (C2) across cell borders, where a bilinear
