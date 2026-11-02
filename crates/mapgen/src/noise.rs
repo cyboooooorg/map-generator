@@ -95,6 +95,40 @@ pub fn nearest_point(seed: u32, x: f64, y: f64, z: f64, presence: f64) -> Option
     best
 }
 
+/// Independent noise streams of a world: each gets its own seed from
+/// [`stream_seed`].
+pub mod stream {
+    pub const ELEVATION: u32 = 1;
+    pub const MOISTURE: u32 = 2;
+    pub const CONTINENT: u32 = 3;
+    pub const WARP_A: u32 = 4;
+    pub const WARP_B: u32 = 5;
+    pub const VOLCANO: u32 = 6;
+    pub const ANOMALY: u32 = 7;
+    pub const VARIABILITY: u32 = 8;
+    pub const HIGHLAND: u32 = 9;
+    pub const COAST: u32 = 10;
+    pub const PLATES: u32 = 11;
+    pub const CONES: u32 = 12;
+    pub const FLATS: u32 = 13;
+    pub const ROUTING: u32 = 14;
+    pub const MEANDERS: u32 = 15;
+    pub const DELTAS: u32 = 16;
+    pub const EROSION: u32 = 17;
+}
+
+/// The seed of one noise stream (see [`stream`]) of the world `seed`.
+///
+/// Hashed rather than offset (`seed + 100`…): offsets let neighbouring
+/// worlds share fields (the moisture of one world being the elevation of
+/// the next) and two streams collide when their offsets do.
+pub fn stream_seed(seed: u32, stream: u32) -> u32 {
+    let mut z = ((seed as u64) << 32 | stream as u64).wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    (z ^ (z >> 31)) as u32
+}
+
 /// SplitMix64 hash of a lattice cell.
 fn hash(seed: u32, i: i64, j: i64, k: i64) -> u64 {
     let mut z = (seed as u64)
@@ -105,4 +139,19 @@ fn hash(seed: u32, i: i64, j: i64, k: i64) -> u64 {
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     z ^ (z >> 31)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_seeds_differ_between_streams_and_worlds() {
+        let mut seen = std::collections::HashSet::new();
+        for seed in [0, 1, 2, 100, u32::MAX] {
+            for s in stream::ELEVATION..=stream::EROSION {
+                assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
+            }
+        }
+    }
 }

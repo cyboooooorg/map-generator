@@ -20,6 +20,7 @@
 //! where a river crosses the longitude seam.
 use crate::geo::Grid;
 use crate::hydrology::Hydrology;
+use crate::noise::{stream, stream_seed};
 use noise::{NoiseFn, Perlin};
 use serde::{Deserialize, Serialize};
 
@@ -642,7 +643,7 @@ fn nearest_point(points: &[[f64; 2]], p: [f64; 2]) -> usize {
 pub fn shape(lines: &[RiverLine], grid: &Grid, filled: &[f32], seed: u32) -> Vec<RiverLine> {
     let (width, height) = (grid.width, grid.height);
     let k = scale(width);
-    let perlin = Perlin::new(seed.wrapping_add(900));
+    let perlin = Perlin::new(stream_seed(seed, stream::MEANDERS));
     let step = 0.4 * k;
     let half = 6usize;
     let valley_tolerance = 0.001;

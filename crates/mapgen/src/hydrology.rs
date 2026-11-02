@@ -17,6 +17,7 @@
 //! 4. **Lakes** are filled pits deep enough and fed by enough flow; **rivers**
 //!    are pixels whose flow exceeds a threshold.
 use crate::geo::Grid;
+use crate::noise::{stream, stream_seed};
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -75,7 +76,7 @@ impl Hydrology {
 /// Noise in `[0, 1]` per pixel that sets how costly each step across a
 /// filled flat is, so the flood (and the flow paths) meander.
 fn flat_noise(grid: &Grid, seed: u32) -> Vec<f32> {
-    let perlin = Perlin::new(seed.wrapping_add(800));
+    let perlin = Perlin::new(stream_seed(seed, stream::FLATS));
     let frequency = FLAT_NOISE_FREQUENCY * grid.width as f64 / 1920.0;
     (0..grid.pixel_count())
         .into_par_iter()
@@ -97,7 +98,7 @@ fn flat_noise(grid: &Grid, seed: u32) -> Vec<f32> {
 /// networks branch like trees instead of running parallel down even slopes.
 /// Its wavelength is set in km, so networks do not depend on the map size.
 fn routing_noise(grid: &Grid, seed: u32) -> Vec<f32> {
-    let perlin = Perlin::new(seed.wrapping_add(810));
+    let perlin = Perlin::new(stream_seed(seed, stream::ROUTING));
     let radius_km = grid.circumference_km as f64 / std::f64::consts::TAU;
     let frequency = radius_km / ROUTE_WAVELENGTH_KM;
     (0..grid.pixel_count())
@@ -331,7 +332,13 @@ mod tests {
         let h = hydrology(&g, &ramp(&g), &vec![1.0; g.pixel_count()], 1);
         let row = 16 * 64;
         assert_eq!(h.flow_km2[row + 5], 0.0, "sea has no flow");
-        assert!(h.flow_km2[row + 17] > h.flow_km2[row + 40]);
+        // Paths wander with the routing noise: compare whole columns.
+        let column_max = |x: usize| {
+            (0..32)
+                .map(|y| h.flow_km2[y * 64 + x])
+                .fold(0.0f32, f32::max)
+        };
+        assert!(column_max(17) > column_max(40));
     }
 
     #[test]

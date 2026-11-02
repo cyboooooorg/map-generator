@@ -8,7 +8,9 @@ use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
-use crate::noise::{EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged};
+use crate::noise::{
+    EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged, stream, stream_seed,
+};
 use crate::rivers;
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
@@ -152,25 +154,25 @@ impl Sampler {
             sea_level: p.sea_level,
             waterline: p.sea_level + p.planet.rules.waterline,
             noise_scale,
-            coast_noise: Perlin::new(seed.wrapping_add(900)),
-            plate_seed: seed.wrapping_add(950),
-            cone_seed: seed.wrapping_add(960),
+            coast_noise: Perlin::new(stream_seed(seed, stream::COAST)),
+            plate_seed: stream_seed(seed, stream::PLATES),
+            cone_seed: stream_seed(seed, stream::CONES),
             // Stronger gravity suppresses mountain relief; sqrt dampens the effect
             // for extreme values. Baseline 0.35 at Earth gravity.
             mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
             // Higher intensity lowers the threshold, making more terrain volcanic.
             volcanic_threshold: 1.0 - p.volcanic_intensity.clamp(0.0, 1.0),
             // wrapping_add: a random seed close to u32::MAX must not overflow.
-            elevation_noise: Perlin::new(seed),
-            moisture_noise: Perlin::new(seed.wrapping_add(1)),
-            continent_noise: Perlin::new(seed.wrapping_add(100)),
-            warp_noise_a: Perlin::new(seed.wrapping_add(200)),
-            warp_noise_b: Perlin::new(seed.wrapping_add(201)),
+            elevation_noise: Perlin::new(stream_seed(seed, stream::ELEVATION)),
+            moisture_noise: Perlin::new(stream_seed(seed, stream::MOISTURE)),
+            continent_noise: Perlin::new(stream_seed(seed, stream::CONTINENT)),
+            warp_noise_a: Perlin::new(stream_seed(seed, stream::WARP_A)),
+            warp_noise_b: Perlin::new(stream_seed(seed, stream::WARP_B)),
             // Low-frequency noise that selects which mountain chains turn volcanic.
-            volcano_noise: Perlin::new(seed.wrapping_add(300)),
-            anomaly_noise: Perlin::new(seed.wrapping_add(400)),
-            variability_noise: Perlin::new(seed.wrapping_add(500)),
-            highland_noise: Perlin::new(seed.wrapping_add(700)),
+            volcano_noise: Perlin::new(stream_seed(seed, stream::VOLCANO)),
+            anomaly_noise: Perlin::new(stream_seed(seed, stream::ANOMALY)),
+            variability_noise: Perlin::new(stream_seed(seed, stream::VARIABILITY)),
+            highland_noise: Perlin::new(stream_seed(seed, stream::HIGHLAND)),
         }
     }
 
