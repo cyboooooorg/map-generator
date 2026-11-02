@@ -41,7 +41,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--planet <preset>`     | built-in preset name (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or path to a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in              |
 | `--list-planets`        | list the built-in presets and exit                                                                                                                     | —                            |
 | `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                            | random                       |
-| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[-0.30, 0.50)`    |
+| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[0.10, 0.40)`     |
 | `--volcanic <f32>`      | float in `[0.0, 1.0]`                                                                                                                                  | random in `[0.0, 1.0)`       |
 | `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)                                                                                                         | random in `[20 000, 80 000)` |
 | `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`          |
@@ -56,7 +56,7 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 
 **seed** — drives every noise layer. The same seed with the same other options always produces the same world.
 
-**sea-level** — shifts the waterline. `0.0` is the default; positive values raise it (more ocean), negative values lower it (more land).
+**sea-level** — shifts the waterline: positive values raise it (more ocean), negative values lower it (more land). When it is not set (nor by the preset), it is drawn in `[0.10, 0.40)`, which gives about 10–70 % of land, mostly 20–55 % (Earth: 29 %). Mountains and snow are measured above the waterline, so a low sea level also turns much of the land into highland: at `0.0` about a third of the land is mountain, at `-0.3` almost three quarters.
 
 **volcanic** — controls how much of the planet is volcanic: the share of volcanic provinces, and so the number of volcanoes, not their size. `0.0` = no volcanoes, `1.0` = many volcanic provinces.
 

@@ -149,7 +149,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Picking on the globe ignores the relief displacement (error under a degree)                 | todo   |
 | Night side lighting is a fixed 7 % floor, not physically calibrated                         | todo   |
 | Volcanoes are rare on non-volcanic presets: the volcanic zone seldom exceeds its thresholds | todo   |
-| The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents  | todo   |
+| The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents  | done   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)   | todo   |
 
 ## 5. Terrain realism, second round

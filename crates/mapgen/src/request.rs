@@ -49,7 +49,8 @@ pub const MAP_SIZE: (u32, u32) = (2, 16_384);
 /// preset sets.
 pub mod fallback {
     use crate::preset::ParamDefault;
-    pub const SEA_LEVEL: ParamDefault = ParamDefault::Range([-0.30, 0.50]);
+    /// About 10–70 % land (mostly 20–55 %); Earth has 29 %.
+    pub const SEA_LEVEL: ParamDefault = ParamDefault::Range([0.10, 0.40]);
     pub const VOLCANIC: ParamDefault = ParamDefault::Range([0.0, 1.0]);
     /// Sub-Earth to ~2× Earth (Earth ≈ 40 075 km).
     pub const CIRCUMFERENCE_KM: ParamDefault = ParamDefault::Range([20_000.0, 80_000.0]);
