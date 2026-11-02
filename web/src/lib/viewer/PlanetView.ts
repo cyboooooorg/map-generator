@@ -53,6 +53,7 @@ import {
   type Vec3,
 } from '../geo';
 import type { WorldLayers } from '../layers';
+import { downsample, fitFactor } from './textures';
 import { DETAIL_STENCIL, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
@@ -171,6 +172,18 @@ function pathGeometry(points: readonly LonLat[]): BufferGeometry {
 
 function emptyTexture(): DataTexture {
   const texture = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** An RGBA half-float data layer, filtered, wrapping east-west. */
+function halfFloatTexture(data: Uint16Array, width: number, height: number): DataTexture {
+  const texture = new DataTexture(data, width, height, RGBAFormat, HalfFloatType);
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
 }
@@ -403,7 +416,19 @@ export class PlanetView {
     signal?.throwIfAborted();
     // ImageBitmaps ignore texture.flipY: flip while decoding instead, so
     // row 0 (north) ends at the top of the texture, as geo.ts expects.
-    const bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+    let bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+    const factor = fitFactor(bitmap.width, bitmap.height, this.renderer.capabilities.maxTextureSize);
+    if (factor > 1) {
+      // Too large for this GPU: decode again, scaled down.
+      const { width, height } = bitmap;
+      bitmap.close();
+      bitmap = await createImageBitmap(blob, {
+        imageOrientation: 'flipY',
+        resizeWidth: Math.ceil(width / factor),
+        resizeHeight: Math.ceil(height / factor),
+        resizeQuality: 'high',
+      });
+    }
     if (this.disposed || request !== this.textureRequest || signal?.aborted) {
       bitmap.close();
       signal?.throwIfAborted();
@@ -447,7 +472,13 @@ export class PlanetView {
       this.shared.uHasData.value = 0;
       return;
     }
-    const biomes = new DataTexture(layers.biomes, layers.width, layers.height, RedFormat, UnsignedByteType);
+    // Worlds wider than the GPU allows are shown at a lower resolution (the
+    // point readout still uses every pixel).
+    const factor = fitFactor(layers.width, layers.height, this.renderer.capabilities.maxTextureSize);
+    const fit = <T extends Uint8Array | Uint16Array>(data: T, channels: number) =>
+      downsample(data, layers.width, layers.height, channels, factor);
+    const ids = fit(layers.biomes, 1);
+    const biomes = new DataTexture(ids.data, ids.width, ids.height, RedFormat, UnsignedByteType);
     // Rows of an odd width are not 4-byte aligned.
     biomes.unpackAlignment = 1;
     biomes.magFilter = NearestFilter;
@@ -459,29 +490,18 @@ export class PlanetView {
     this.u.uBiomes.value = biomes;
     this.u.uHasBiomes.value = 1;
     if (layers.extra) {
-      const extra = new DataTexture(layers.extra.packed, layers.width, layers.height, RGBAFormat, HalfFloatType);
-      extra.magFilter = LinearFilter;
-      extra.minFilter = LinearFilter;
-      extra.wrapS = RepeatWrapping;
-      extra.wrapT = ClampToEdgeWrapping;
-      extra.generateMipmaps = false;
-      extra.needsUpdate = true;
-      this.u.uExtra.value = extra;
+      const packed = fit(layers.extra.packed, 4);
+      this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height);
       this.u.uHasExtra.value = 1;
       this.u.uCoastMax.value = layers.extra.coastMaxKm;
     }
-    const texture = new DataTexture(layers.surface, layers.width, layers.height, RGBAFormat, HalfFloatType);
-    texture.magFilter = LinearFilter;
-    texture.minFilter = LinearFilter;
-    texture.wrapS = RepeatWrapping;
-    texture.wrapT = ClampToEdgeWrapping;
-    texture.generateMipmaps = false;
-    texture.needsUpdate = true;
+    const surface = fit(layers.surface, 4);
+    const texture = halfFloatTexture(surface.data, surface.width, surface.height);
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
     this.shared.uCoast.value = coast;
     this.shared.uLiquidSea.value = liquidSea ? 1 : 0;
-    this.u.uTexel.value.set(1 / layers.width, 1 / layers.height);
+    this.u.uTexel.value.set(1 / surface.width, 1 / surface.height);
     this.u.uMapSize.value.set(layers.width, layers.height);
   }
 
