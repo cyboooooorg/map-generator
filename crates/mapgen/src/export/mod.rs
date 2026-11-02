@@ -158,7 +158,13 @@ pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
     }
     let shallow = 1.0 - (depth.max(0.0) / SHALLOW_DEPTH).clamp(0.0, 1.0);
     let t = SHALLOW_TINT * shallow * shallow;
-    colour.map(|c| c + (255.0 - c) * t)
+    // Magma cools into a dark crust along its shores; water lightens.
+    let target = if biome == Biome::MagmaSea {
+        MAGMA_CRUST
+    } else {
+        [255.0; 3]
+    };
+    std::array::from_fn(|k| colour[k] + (target[k] - colour[k]) * t)
 }
 
 /// Depth of every water pixel below its surface, in elevation units (0 on
@@ -217,6 +223,8 @@ pub fn water_depths(world: &World) -> Vec<f32> {
 
 /// Depth (elevation units) over which water lightens towards its shore.
 const SHALLOW_DEPTH: f32 = 0.05;
+/// Colour of the cooled crust towards which magma seas darken at the shore.
+const MAGMA_CRUST: [f32; 3] = [60.0, 20.0, 10.0];
 /// Lightening of water at the shore line (towards white).
 const SHALLOW_TINT: f32 = 0.25;
 

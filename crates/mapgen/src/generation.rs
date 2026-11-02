@@ -718,9 +718,11 @@ pub fn generate_with_progress(
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
     let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
-    // Planets without liquid water (rivers remapped to dry ground) have no
-    // rivers to draw, carve or end in deltas: only the drainage flow is kept.
-    let mut river_lines = if planet.remap(Biome::River).is_water() {
+    // Planets without anything liquid to flow (rivers remapped to dry
+    // ground) have no rivers to draw, carve or end in deltas: only the
+    // drainage flow is kept. Lava rivers of volcanic worlds still flow.
+    let flowing = planet.remap(Biome::River);
+    let mut river_lines = if flowing.is_water() || flowing.is_lava() {
         rivers::shape(
             &rivers::trace(&grid, &water),
             &grid,
@@ -939,6 +941,7 @@ mod tests {
         assert!(barren.rivers.is_empty());
         assert!(barren.floodplain.iter().all(|&f| f == 0.0));
         assert!(!generate(&params(3, "terran")).world.rivers.is_empty());
+        assert!(!generate(&params(3, "volcanic")).world.rivers.is_empty());
     }
 
     #[test]
