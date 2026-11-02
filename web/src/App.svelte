@@ -176,6 +176,9 @@
     position: relative;
     min-width: 0;
     min-height: 0;
+    /* The viewer overlays (InfoPanel) adapt to the viewer width, not the
+       window: the sidebar takes 340 px of it on wide layouts. */
+    container-type: inline-size;
   }
   .error {
     color: var(--danger);

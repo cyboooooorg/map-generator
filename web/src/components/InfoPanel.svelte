@@ -80,9 +80,11 @@
     max-height: calc(100% - 24px);
     overflow-y: auto;
   }
-  /* Narrow screens: 280 px plus the legend in the other bottom corner do not
-     fit side by side, so span the viewer (covering the legend while open). */
-  @media (max-width: 760px) {
+  /* Narrow viewer: 280 px plus the 240 px legend in the other bottom corner
+     do not fit side by side, so span the viewer (covering the legend while
+     open). Queried on the viewer width: just above the 760 px breakpoint the
+     sidebar leaves the viewer only ~420 px. */
+  @container (max-width: 580px) {
     .info {
       right: 12px;
       width: auto;
