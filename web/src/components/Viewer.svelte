@@ -226,7 +226,11 @@
     top: 12px;
     right: 12px;
     width: 240px;
+    /* Scroll inside the panel rather than overflow a short viewer. */
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
     display: grid;
+    align-content: start;
     gap: 8px;
     background: var(--panel);
     border: 1px solid var(--border);

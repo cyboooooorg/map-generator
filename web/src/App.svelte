@@ -21,6 +21,11 @@
   let picked = $state<LonLat | null>(null);
   let generating = $state(false);
   let error = $state<string | null>(null);
+  /**
+   * Which pane fills the screen on narrow layouts (the CSS ignores it on wide
+   * ones, where the sidebar and the viewer sit side by side).
+   */
+  let pane = $state<'sidebar' | 'viewer'>('sidebar');
 
   async function refresh(): Promise<void> {
     worlds = await api.worlds();
@@ -31,6 +36,9 @@
       [presets, spec] = await Promise.all([api.presets(), api.form()]);
       await refresh();
       selectedId = worlds[0]?.id ?? null;
+      if (selectedId) {
+        pane = 'viewer';
+      }
     } catch (e) {
       error = `Cannot reach the server: ${String(e)}`;
     }
@@ -77,27 +85,51 @@
     }
   }
 
+  function select(id: string): void {
+    selectedId = id;
+    pane = 'viewer';
+  }
+
+  function startGenerating(): void {
+    generating = true;
+    pane = 'sidebar';
+  }
+
   async function generated(worldId: string): Promise<void> {
     generating = false;
     await refresh();
     selectedId = worldId;
+    pane = 'viewer';
   }
 </script>
 
-<div class="layout">
+<div class="layout" class:show-viewer={pane === 'viewer'}>
   <aside class="sidebar">
     <header>
       <h1>Planets</h1>
-      <button class="primary" onclick={() => (generating = true)} disabled={!spec || generating}>New world</button>
+      <!-- Only shown on narrow screens, where one pane is visible at a time. -->
+      <div class="tabs">
+        <button class:active={pane === 'sidebar'} aria-pressed={pane === 'sidebar'} onclick={() => (pane = 'sidebar')}
+          >Worlds</button
+        >
+        <button class:active={pane === 'viewer'} aria-pressed={pane === 'viewer'} onclick={() => (pane = 'viewer')}
+          >Viewer</button
+        >
+      </div>
+      <button class="primary" onclick={startGenerating} disabled={!spec || generating}>New world</button>
     </header>
     {#if error}
       <p class="error">{error} <button onclick={() => (error = null)}>Dismiss</button></p>
     {/if}
-    {#if generating && spec}
-      <GenerateForm {presets} {spec} onDone={generated} onCancel={() => (generating = false)} />
-    {:else}
-      <WorldList {worlds} {selectedId} onSelect={(id) => (selectedId = id)} onDelete={remove} />
-    {/if}
+    <!-- Hidden with CSS, not unmounted, so that a running generation keeps
+         following its job while the viewer pane is shown. -->
+    <div class="content">
+      {#if generating && spec}
+        <GenerateForm {presets} {spec} onDone={generated} onCancel={() => (generating = false)} />
+      {:else}
+        <WorldList {worlds} {selectedId} onSelect={select} onDelete={remove} />
+      {/if}
+    </div>
   </aside>
 
   <main>
@@ -149,14 +181,67 @@
     color: var(--danger);
     margin: 0;
   }
+  .tabs {
+    display: none;
+  }
+  /* Narrow screens: one pane at a time, chosen with the tabs in the header,
+     instead of a short sidebar band above the viewer. The sidebar pane is the
+     only scroll area and fills the screen; the viewer pane gets all the height
+     below the header, so dragging the globe never fights a page scroll. */
   @media (max-width: 760px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto 60vh;
+      grid-template-rows: minmax(0, 1fr);
+    }
+    .layout.show-viewer {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .layout:not(.show-viewer) main,
+    .layout.show-viewer .content {
+      display: none;
     }
     .sidebar {
       border-right: none;
+      /* The header pads itself, so that it can stick to the very top. */
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    .layout.show-viewer .sidebar {
       border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      gap: 8px;
+      padding-top: 10px;
+      background: var(--bg);
+    }
+    .layout:not(.show-viewer) header {
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      margin: 0 -14px;
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+    .content {
+      padding-bottom: 14px;
+    }
+    .tabs {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-left: auto;
+    }
+    .tabs button {
+      border: none;
+      border-radius: 0;
+    }
+    .tabs button.active {
+      background: var(--accent);
+      color: var(--accent-text);
     }
   }
 </style>

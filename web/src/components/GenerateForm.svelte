@@ -234,21 +234,25 @@
     </select>
   </label>
 
-  {#if status?.status === 'queued'}
-    <p class="progress">Waiting for the generator…</p>
-  {:else if status?.status === 'running'}
-    <div class="progress">
-      <progress max={status.steps} value={status.step - 1}></progress>
-      <span>{STAGES[status.stage]} ({status.step}/{status.steps})</span>
-    </div>
-  {/if}
-  {#if error}
-    <p class="error">{error}</p>
-  {/if}
+  <!-- Sticks to the bottom of the screen on narrow layouts, so the progress
+       and the buttons stay in view while the parameters scroll. -->
+  <div class="footer">
+    {#if status?.status === 'queued'}
+      <p class="progress">Waiting for the generator…</p>
+    {:else if status?.status === 'running'}
+      <div class="progress">
+        <progress max={status.steps} value={status.step - 1}></progress>
+        <span>{STAGES[status.stage]} ({status.step}/{status.steps})</span>
+      </div>
+    {/if}
+    {#if error}
+      <p class="error">{error}</p>
+    {/if}
 
-  <div class="actions">
-    <button type="button" onclick={onCancel} disabled={running}>Close</button>
-    <button type="submit" class="primary" disabled={running || !seedValid}>Generate</button>
+    <div class="actions">
+      <button type="button" onclick={onCancel} disabled={running}>Close</button>
+      <button type="submit" class="primary" disabled={running || !seedValid}>Generate</button>
+    </div>
   </div>
 </form>
 
@@ -323,9 +327,25 @@
     color: var(--danger);
     margin: 0;
   }
+  .footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
   .actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+  @media (max-width: 760px) {
+    .footer {
+      position: sticky;
+      bottom: 0;
+      /* Bleed over the sidebar padding so the parameters do not show through. */
+      margin: 0 -14px;
+      padding: 10px 14px 14px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
   }
 </style>
