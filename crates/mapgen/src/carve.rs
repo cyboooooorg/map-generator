@@ -19,6 +19,7 @@
 //! All lengths are in km, so valleys do not depend on the map resolution.
 use crate::geo::Grid;
 use crate::rivers::{self, Mouth, RIVER_MIN_FLOW_KM2, RiverLine};
+use rayon::prelude::*;
 use std::collections::HashMap;
 
 /// Floodplain width at the smallest river flow (`RIVER_MIN_FLOW_KM2`), in km;
@@ -91,17 +92,45 @@ pub fn carve(
     lake: &[bool],
     above: &mut [f32],
 ) -> Vec<f32> {
+    let original = above.to_vec();
+    let mut floodplain = vec![0f32; above.len()];
+    // Lines are carved independently and merged with min / max, which do
+    // not depend on the order: the result is the same as carving them one
+    // after another.
+    let carved: Vec<Vec<(u32, f32, f32)>> = lines
+        .par_iter()
+        .map(|line| carve_line(line, grid, filled, lake, &original))
+        .collect();
+    for (i, height, weight) in carved.into_iter().flatten() {
+        let i = i as usize;
+        if height < above[i] {
+            above[i] = height;
+        }
+        if weight > floodplain[i] {
+            floodplain[i] = weight;
+        }
+    }
+    floodplain
+}
+
+/// The valley of one river: for each pixel it reaches, its carved height
+/// (never above the terrain) and its floodplain weight.
+fn carve_line(
+    line: &RiverLine,
+    grid: &Grid,
+    filled: &[f32],
+    lake: &[bool],
+    original: &[f32],
+) -> Vec<(u32, f32, f32)> {
     let (w, h) = (grid.width as i64, grid.height as i64);
     let index = |x: i64, y: i64| (y.clamp(0, h - 1) * w + x.rem_euclid(w)) as usize;
     let at = |p: [f64; 2]| index(p[0].floor() as i64, p[1].floor() as i64);
-    let original = above.to_vec();
-    let mut floodplain = vec![0f32; above.len()];
     let dy_km = grid.dy_km() as f64;
-
-    for line in lines {
+    let mut out = Vec::new();
+    {
         let n = line.points.len();
         if n < 2 {
-            continue;
+            return out;
         }
         let row = |p: [f64; 2]| (p[1].max(0.0) as u32).min(grid.height - 1);
         let km = |a: [f64; 2], b: [f64; 2]| {
@@ -280,16 +309,11 @@ pub fn carve(
             let keep = smoothstep(0.6 * v.radius, v.radius, v.distance)
                 .max(1.0 - smoothstep(0.0, v.radius, v.from_head));
             let carved = valley + (e0 - valley) * keep;
-            if (carved as f32) < above[i] {
-                above[i] = carved as f32;
-            }
             let weight = (1.0 - smoothstep(0.6 * v.half, 1.6 * v.half, v.distance)) as f32;
-            if weight > floodplain[i] {
-                floodplain[i] = weight;
-            }
+            out.push((i as u32, carved as f32, weight));
         }
     }
-    floodplain
+    out
 }
 
 #[cfg(test)]

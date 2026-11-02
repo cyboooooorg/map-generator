@@ -86,6 +86,9 @@ pub fn outlets(lines: &mut Vec<RiverLine>, grid: &Grid, above: &[f32], seed: u32
         })
         .collect();
 
+    // Points never change here, lines are only appended: one index, kept
+    // up to date, serves every branch.
+    let mut index = SegmentIndex::new(lines);
     for id in candidates {
         let (points, flow) = (lines[id].points.clone(), lines[id].flow_km2.clone());
         let n = points.len();
@@ -173,7 +176,6 @@ pub fn outlets(lines: &mut Vec<RiverLine>, grid: &Grid, above: &[f32], seed: u32
                 continue;
             }
             // Never cross another river (the apex lies on the main one).
-            let index = SegmentIndex::new(lines);
             let crossing = path.windows(2).enumerate().any(|(k, seg)| {
                 !index
                     .crossings(lines, usize::MAX, k, seg[0], seg[1])
@@ -183,14 +185,16 @@ pub fn outlets(lines: &mut Vec<RiverLine>, grid: &Grid, above: &[f32], seed: u32
                 continue;
             }
             let share = flow[apex] * BRANCH_SHARE;
-            lines.push(RiverLine {
+            let branch = RiverLine {
                 flow_km2: vec![share; path.len()],
                 points: path,
                 parent: None,
                 mouth: Mouth::Sea,
                 source: Some(id),
                 estuary: false,
-            });
+            };
+            index.add(lines.len(), &branch);
+            lines.push(branch);
             added += 1;
         }
         if added == 0 {

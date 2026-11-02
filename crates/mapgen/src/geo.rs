@@ -1,5 +1,6 @@
 //! Geometry of the equirectangular grid: pixel sizes in kilometres,
 //! neighbourhoods that wrap around in longitude, and distance fields.
+use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::f64::consts::PI;
@@ -43,6 +44,15 @@ impl Grid {
     pub fn neighbours(&self, x: u32, y: u32) -> impl Iterator<Item = (u32, u32, f32)> + '_ {
         let (w, h) = (self.width as i64, self.height as i64);
         let dy = self.dy_km();
+        // East-west sizes of the rows above, at and below `y` (0 off the map).
+        let row_dx = [-1i64, 0, 1].map(|oy| {
+            let ny = y as i64 + oy;
+            if ny < 0 || ny >= h {
+                0.0
+            } else {
+                self.dx_km(ny as u32)
+            }
+        });
         (-1i64..=1).flat_map(move |oy| {
             (-1i64..=1).filter_map(move |ox| {
                 if ox == 0 && oy == 0 {
@@ -54,7 +64,7 @@ impl Grid {
                 }
                 let nx = (x as i64 + ox).rem_euclid(w);
                 // Average the east-west size of both rows for diagonal steps.
-                let dx = (self.dx_km(y) + self.dx_km(ny as u32)) / 2.0;
+                let dx = (row_dx[1] + row_dx[(oy + 1) as usize]) / 2.0;
                 let dist = ((ox as f32 * dx).powi(2) + (oy as f32 * dy).powi(2)).sqrt();
                 Some((nx as u32, ny as u32, dist))
             })
@@ -80,12 +90,24 @@ impl Grid {
             }
         }
 
-        let mut dist = vec![max_km; self.pixel_count()];
-        let mut heap = BinaryHeap::new();
-        for (i, _) in source.iter().enumerate().filter(|(_, s)| **s) {
-            dist[i] = 0.0;
-            heap.push(Node(0.0, i));
-        }
+        let mut dist: Vec<f32> = source
+            .par_iter()
+            .map(|&s| if s { 0.0 } else { max_km })
+            .collect();
+        // Only sources next to a non-source seed the search: the others
+        // have nothing left to reach.
+        let mut heap: BinaryHeap<Node> = (0..self.pixel_count())
+            .into_par_iter()
+            .filter(|&i| {
+                source[i] && {
+                    let (x, y) = (i as u32 % self.width, i as u32 / self.width);
+                    self.neighbours(x, y)
+                        .any(|(nx, ny, _)| !source[self.index(nx, ny)])
+                }
+            })
+            .map(|i| Node(0.0, i))
+            .collect::<Vec<_>>()
+            .into();
         while let Some(Node(d, i)) = heap.pop() {
             if d > dist[i] {
                 continue;
