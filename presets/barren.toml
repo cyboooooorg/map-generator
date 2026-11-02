@@ -1,0 +1,20 @@
+# Dead rock: no liquid water, all life extinct; only rock and dust remain.
+name = "barren"
+description = "Dead rock: arid and lifeless, no water"
+
+[climate]
+moisture = -0.65
+volcanic = -0.40
+
+# target = [biomes replaced by it]; unlisted biomes stay as they are
+# (Mountain, Volcano).
+[remap]
+RockyWaste = [
+  "DeepOcean", "Ocean", "SeaIce", "Lake", "River", "CausticLake", "FrozenOcean",
+  "Beach", "Wetland", "ToxicSwamp",
+  "LavaField", "AshLand", "ScorchedWaste", "Snow",
+]
+DustPlain = [
+  "Plain", "Shrubland", "Savanna", "Desert", "Tundra", "IceCap", "GlacialPlain",
+  "AcidFlatland", "Forest", "Jungle", "Taiga",
+]

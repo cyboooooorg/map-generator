@@ -1,84 +1,25 @@
+use super::{DASH_OFF, DASH_ON, latitude_row, reference_lines, render_pixels};
 use crate::world::*;
 use font8x8::UnicodeFonts;
-use image::{Rgb, RgbImage};
+use image::{ImageResult, Rgb, RgbImage};
 
-// Contour lines are drawn whenever a tile and a neighbour straddle one of these levels.
-const CONTOUR_LEVELS: &[f32] = &[-0.45, -0.15, 0.0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90];
-// Fraction to darken a pixel by when it sits on a contour line (0.0 = no change, 1.0 = black).
-const CONTOUR_DARKNESS: f32 = 0.40;
+/// Writes the biome map with contour lines and dotted latitude reference lines.
+pub fn export_png(world: &World, path: &str) -> ImageResult<()> {
+    let (w, h) = (world.width, world.height);
+    let pixels = render_pixels(world, true);
+    let mut img = RgbImage::from_fn(w, h, |x, y| Rgb(pixels[(y * w + x) as usize]));
 
-pub fn export_png(world: &World, path: &str) {
-    let w = world.width as u32;
-    let h = world.height as u32;
-    let mut img = RgbImage::new(w, h);
-
-    // Build a fast elevation lookup indexed by [q * height + r].
-    let mut elevation: Vec<f32> = vec![0.0; (w * h) as usize];
-    for tile in &world.tiles {
-        elevation[(tile.q as u32 * h + tile.r as u32) as usize] = tile.elevation;
-    }
-
-    let elev_at = |q: i32, r: i32| -> Option<f32> {
-        if q < 0 || r < 0 || q >= world.width || r >= world.height {
-            return None;
-        }
-        Some(elevation[(q as u32 * h + r as u32) as usize])
-    };
-
-    // Returns true if the edge between elevations `a` and `b` crosses any contour level.
-    let crosses_contour =
-        |a: f32, b: f32| -> bool { CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl)) };
-
-    for tile in &world.tiles {
-        let mut color = biome_color(tile.biome);
-        let e = tile.elevation;
-
-        // Check the 4-connected neighbours.
-        let is_contour = [
-            elev_at(tile.q - 1, tile.r),
-            elev_at(tile.q + 1, tile.r),
-            elev_at(tile.q, tile.r - 1),
-            elev_at(tile.q, tile.r + 1),
-        ]
-        .iter()
-        .filter_map(|n| *n)
-        .any(|ne| crosses_contour(e, ne));
-
-        if is_contour {
-            // Darken the biome colour proportionally.
-            color = color.map(|c| (c as f32 * (1.0 - CONTOUR_DARKNESS)) as u8);
-        }
-
-        img.put_pixel(tile.q as u32, tile.r as u32, Rgb(color));
-    }
-
-    // ── Overlay equator and tropic reference lines (dotted) ───────────────────
-    // Latitude → row: r = height * (0.5 + lat_deg / 180)
-    let line_rows: &[(f64, [u8; 3])] = &[
-        (h as f64 * 0.5, [220, 50, 50]),                  // equator — red
-        (h as f64 * (0.5 + 23.5 / 180.0), [220, 150, 0]), // Tropic of Cancer — amber
-        (h as f64 * (0.5 - 23.5 / 180.0), [220, 150, 0]), // Tropic of Capricorn — amber
-        (h as f64 * (0.5 + 66.5 / 180.0), [0, 200, 240]), // Arctic Circle — cyan
-        (h as f64 * (0.5 - 66.5 / 180.0), [0, 200, 240]), // Antarctic Circle — cyan
-    ];
-    // Dash pattern: 6 px on, 4 px off
-    const DASH_ON: u32 = 6;
-    const DASH_OFF: u32 = 4;
-    const PERIOD: u32 = DASH_ON + DASH_OFF;
-
-    for &(row_f, color) in line_rows {
-        let row = row_f.round() as u32;
+    for (latitude, color) in reference_lines(world.params.axial_tilt_deg) {
+        let row = latitude_row(h, latitude).round() as u32;
         if row >= h {
             continue;
         }
-        for x in 0..w {
-            if x % PERIOD < DASH_ON {
-                img.put_pixel(x, row, Rgb(color));
-            }
+        for x in (0..w).filter(|x| x % (DASH_ON + DASH_OFF) < DASH_ON) {
+            img.put_pixel(x, row, Rgb(color));
         }
     }
 
-    img.save(path).unwrap();
+    img.save(path)
 }
 
 // ── Legend PNG ────────────────────────────────────────────────────────────────
@@ -145,21 +86,20 @@ fn outline_rect(img: &mut RgbImage, x: u32, y: u32, w: u32, h: u32, color: [u8; 
 }
 
 /// Generate a legend PNG listing every biome that actually appears on the map.
-pub fn export_legend_png(world: &World, path: &str) {
+pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
     // ── Collect biomes present on this map, in canonical order ────────────────
-    let mut seen = std::collections::HashSet::new();
-    let mut biomes: Vec<Biome> = Vec::new();
-    for tile in &world.tiles {
-        if seen.insert(tile.biome) {
-            biomes.push(tile.biome);
-        }
-    }
-    biomes.sort_by_key(|&b| biome_order(b));
+    let biomes: Vec<Biome> = world
+        .biomes
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
 
     // ── Planet metadata lines (key, value) ───────────────────────────────────
     // Capitalize the planet type name for display.
     let planet_str = {
-        let s = format!("{}", world.planet_type);
+        let s = world.params.planet.name.clone();
         let mut chars = s.chars();
         match chars.next() {
             None => String::new(),
@@ -168,11 +108,24 @@ pub fn export_legend_png(world: &World, path: &str) {
     };
     let meta: &[(&str, String)] = &[
         ("Planet", planet_str),
-        ("Seed", format!("{}", world.seed)),
-        ("Sea level", format!("{:+.2}", world.sea_level)),
-        ("Volcanic", format!("{:.2}", world.volcanic_intensity)),
-        ("Circumference", format!("{:.0} km", world.circumference_km)),
-        ("Gravity", format!("{:.2} g", world.gravity_modifier)),
+        ("Seed", format!("{}", world.params.seed)),
+        ("Sea level", format!("{:+.2}", world.params.sea_level)),
+        (
+            "Volcanic",
+            format!("{:.2}", world.params.volcanic_intensity),
+        ),
+        (
+            "Circumference",
+            format!("{:.0} km", world.params.circumference_km),
+        ),
+        (
+            "Gravity",
+            format!("{:.2} g", world.params.gravity_modifier()),
+        ),
+        (
+            "Axial tilt",
+            format!("{:.1} deg", world.params.axial_tilt_deg),
+        ),
     ];
 
     // ── Layout constants ──────────────────────────────────────────────────────
@@ -267,5 +220,5 @@ pub fn export_legend_png(world: &World, path: &str) {
         y += ROW_H;
     }
 
-    img.save(path).unwrap();
+    img.save(path)
 }

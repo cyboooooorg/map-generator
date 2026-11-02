@@ -1,0 +1,20 @@
+# Ice world: perpetually frozen. Oceans are sealed under ice and temperate
+# zones become permafrost plains.
+name = "frozen"
+description = "Ice world: perpetually frozen"
+
+[climate]
+temperature = -0.55
+moisture = 0.15
+volcanic = -0.30
+
+# target = [biomes replaced by it]; unlisted biomes stay as they are
+# (Tundra, IceCap, Taiga, Snow, Mountain).
+[remap]
+FrozenOcean = ["DeepOcean", "Ocean", "SeaIce", "MagmaSea", "Lake", "River"]
+IceCap = ["Beach", "Wetland"]
+GlacialPlain = [
+  "Plain", "Shrubland", "Savanna", "Desert",
+  "LavaField", "AshLand", "ScorchedWaste",
+]
+Taiga = ["Forest", "Jungle"]

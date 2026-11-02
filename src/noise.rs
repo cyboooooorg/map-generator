@@ -1,4 +1,4 @@
-/// Shared noise primitives used by both world generation and noise-map export.
+//! Shared noise primitives used by both world generation and noise-map export.
 use noise::{NoiseFn, Perlin};
 
 /// Earth's equatorial circumference used as the noise-scale baseline.

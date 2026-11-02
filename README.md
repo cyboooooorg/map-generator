@@ -1,40 +1,68 @@
 # Map Generator
 
-This project is a map generator that creates random maps using Perlin noise. The generated maps can be used for various applications such as games, simulations, or any other project that requires a random terrain.
+This project is a map generator that creates random planet maps using Perlin noise. The generated maps can be used for various applications such as games, simulations, or any other project that requires a random terrain.
+
+## Prerequisites
+
+[mise](https://mise.jdx.dev/) manages the Rust toolchain (pinned in `mise.toml`) and the project tasks.
+
+```bash
+mise install
+```
+
+Without mise, any Rust toolchain supporting edition 2024 (1.85+) works with plain `cargo` commands.
 
 ## Usage
 
 ### Build
 
 ```bash
-devbox run build
+mise run build
 ```
 
 ### Run
 
 ```bash
-devbox run prod [-- [OPTIONS]]
+mise run gen [-- [OPTIONS]]
 ```
 
-All parameters are optional. Any omitted value is chosen **randomly** at startup, and the chosen values are printed so every world is reproducible.
+All parameters are optional. Any omitted value comes from the planet preset when it sets one, and is otherwise chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
 
 ```text
-Parameters → planet=Frozen  sea_level=0.12  volcanic_intensity=0.61  circumference=51823 km  gravity≈1.29g
+Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g
 World generated → worlds/frozen-2590618090/
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1
 ```
 
 ### Options
 
-| Flag                    | Values                                                  | Default                      |
-| ----------------------- | ------------------------------------------------------- | ---------------------------- |
-| `--planet <type>`       | `terran` · `volcanic` · `frozen` · `caustic` · `barren` | random                       |
-| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                  | random in `[-0.30, 0.50)`    |
-| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`       |
-| `--circumference <f32>` | planet equatorial circumference in km (`> 0`)           | random in `[20 000, 80 000)` |
+| Flag                    | Values                                                  | Default                                                                                                                                   |                 |
+| ----------------------- | ------------------------------------------------------- | ----------------------------                                                                                                              |                 |
+| `--planet <name\        | file>`                                                  | built-in preset (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in |
+| `--list-planets`        | list the built-in presets and exit                      |                                                                                                                                           |                 |
+| `--seed <u32>`          | any 32-bit unsigned integer                             | random                                                                                                                                    |                 |
+| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                  | random in `[-0.30, 0.50)`                                                                                                                 |                 |
+| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`                                                                                                                    |                 |
+| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)          | random in `[20 000, 80 000)`                                                                                                              |                 |
+| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                        | random in `[5, 40)`                                                                                                                       |                 |
+| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it   | `1.0`                                                                                                                                     |                 |
+| `--width <px>`          | map width, `2`–`16384`                                  | `1920`                                                                                                                                    |                 |
+| `--height <px>`         | map height, `2`–`16384`                                 | `1080`                                                                                                                                    |                 |
+| `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                                                                                                                                  |                 |
+| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)      | off                                                                                                                                       |                 |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                | off                                                                                                                                       |                 |
+
+Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
+
+**seed** — drives every noise layer. The same seed with the same other options always produces the same world.
 
 **sea-level** — shifts the waterline. `0.0` is the default; positive values raise it (more ocean), negative values lower it (more land).
 
 **volcanic** — controls how much of the mountain chains become volcanic. `0.0` = no volcanoes, `1.0` = most mountain chains erupt.
+
+**axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt).
+
+**erosion** — how much rain carves the terrain: droplets per pixel of the erosion grid, see [Erosion](#hydraulic-erosion).
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -42,24 +70,62 @@ World generated → worlds/frozen-2590618090/
 
 ```bash
 # Fully random world
-devbox run prod
+mise run gen
 
 # Frozen planet, everything else random
-devbox run prod -- --planet frozen
+mise run gen -- --planet frozen
 
 # Earth-like ocean world, moderate volcanic activity
-devbox run prod -- --planet terran --sea-level 0.3 --volcanic 0.4
+mise run gen -- --planet terran --sea-level 0.3 --volcanic 0.4
 
 # Barren dry rock, no volcanoes
-devbox run prod -- --planet barren --sea-level -0.5 --volcanic 0.0
+mise run gen -- --planet barren --sea-level -0.5 --volcanic 0.0
 
-# Volcanic hell
-devbox run prod -- --planet volcanic --sea-level -0.2 --volcanic 1.0
+# Quick low-resolution preview, images only
+mise run gen -- --width 480 --height 270 --no-raw-data --no-noise-maps
 ```
 
-### Planet types
+### Hex grid export
 
-| Type       | Description                                       | Exclusive biomes                            |
+For games and other tile-based uses, an existing world can be resampled onto a hexagonal grid. It is a separate, on-demand step that reads `raw_data/`, so generate the world with raw data first:
+
+```bash
+mise run gen -- --seed 42 --planet terran
+mise run hex -- worlds/terran-42 --columns 96
+```
+
+| Option               | Description                                                                | Default  |
+| -------------------- | -------------------------------------------------------------------------- | -------- |
+| `<world>`            | world directory produced by `mise run gen`                                 | required |
+| `--columns <n>`      | hex columns around the planet, `4`–`4096`; rows follow from the map height | `96`     |
+| `--river-flow <km²>` | land hexes whose largest river drains at least this area get a river flag  | `500000` |
+
+It writes `<world>/hex/`:
+
+- `hex.png`: the map painted with one colour per hex, outlined, with a blue dot on river hexes.
+- `hex.json`: the grid layout and one entry per hex (row-major, `index = row × columns + col`): majority `biome` id (rivers never win a hex; they set `river` instead), mean `elevation`, `moisture` and `temperature`, `max_flow_km2` and `river`. The biome table is copied from `world.json`.
+
+The grid is pointy-top in "odd-r" offset coordinates: odd rows are shifted half a hex east, and columns wrap east-west like the planet. Hexes are regular on the flat map, not on the sphere, so polar hexes cover less real ground than equatorial ones; a true spherical hex grid (geodesic) would be a different, much larger project.
+
+### Development tasks
+
+| Task                    | Description                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| `mise run build`        | Build the optimized binary                                                          |
+| `mise run gen`          | Build, then generate a world                                                        |
+| `mise run hex`          | Resample a generated world onto a hex grid, see [Hex grid export](#hex-grid-export) |
+| `mise run test`         | Run the test suite                                                                  |
+| `mise run lint`         | Check formatting and run clippy (`-D warnings`)                                     |
+| `mise run fmt`          | Format the code                                                                     |
+| `mise run clean-worlds` | Delete every generated world under `worlds/`                                        |
+
+The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint` and `mise run test` on every push to `main` and on pull requests.
+
+### Planet presets
+
+A planet type is a TOML preset. The five built-in ones live in `presets/` and are embedded in the binary:
+
+| Preset     | Description                                       | Exclusive biomes                            |
 | ---------- | ------------------------------------------------- | ------------------------------------------- |
 | `terran`   | Earth-like — full biome spectrum                  | —                                           |
 | `volcanic` | Fire world — extreme heat, near-zero moisture     | `MagmaSea`, `ScorchedWaste`                 |
@@ -67,17 +133,57 @@ devbox run prod -- --planet volcanic --sea-level -0.2 --volcanic 1.0
 | `caustic`  | Acid world — corrosive atmosphere, toxic wetlands | `CausticLake`, `ToxicSwamp`, `AcidFlatland` |
 | `barren`   | Dead rock — arid and lifeless, no water           | `RockyWaste`, `DustPlain`                   |
 
+To create a new planet type, write a preset file and pass its path:
+
+```bash
+mise run gen -- --planet presets/examples/mars-like.toml
+```
+
+```toml
+name = "mars-like"                 # lowercase letters, digits and dashes; used in the output directory name
+description = "Small cold desert world with polar caps"
+
+[defaults]                         # a fixed value or a [min, max] range drawn at random
+sea_level = [-0.6, -0.4]           # sea_level, volcanic, circumference, axial_tilt, erosion
+circumference = 21300
+
+[climate]                          # added to every pixel before biome selection
+temperature = -0.08                # [0, 1] scale
+moisture = -0.7                    # [-1, 1] scale
+volcanic = 0.0                     # [0, 1] scale
+
+[rules]                            # override any biome selection threshold
+polar = 0.12
+
+[remap]                            # target = [biomes replaced by it]
+DustPlain = ["Ocean", "DeepOcean", "Lake", "River", "Plain", "Desert"]
+RockyWaste = ["Mountain"]
+```
+
+Every table is optional.
+
+- **`[defaults]`**: command-line options always win; parameters set neither on the command line nor here use the generator defaults listed under [Options](#options).
+- **`[rules]`**: accepts any field of `BiomeRules` in `src/biome.rs` (`waterline`, `polar`, `forest_moisture`, `shore_width_km`…), each documented there. Fields left out keep their default.
+- **`[remap]`**: runs after biome selection; biome names are the keys of the biome table (`DeepOcean`, `SeaIce`, `LavaField`…). A biome listed under two targets is an error, and so is an unknown field or biome name.
+
+`raw_data/world.json` stores the full resolved preset under `preset`, so a world can be regenerated even if its preset file changes.
+
 ### Output
 
 Each run creates a `worlds/<planet>-<seed>/` directory with the following layout:
 
 ```text
 worlds/<planet>-<seed>/
-├── world.png          ← biome map with contour lines and reference lines
+├── world.png          ← hillshaded biome map with contour lines and reference lines
 ├── world.svg          ← equivalent vector image
 ├── legend.png         ← biome legend with planet metadata
 ├── raw_data/
-│   └── world.json     ← full tile data (elevation, moisture, temperature, biome, …)
+│   ├── world.json     ← planet parameters, layer encodings, biome table
+│   ├── elevation.png  ← 16-bit greyscale layer
+│   ├── moisture.png   ← 16-bit greyscale layer
+│   ├── temperature.png ← 16-bit greyscale layer
+│   ├── flow.png       ← 16-bit greyscale layer, log scale
+│   └── biomes.png     ← 8-bit greyscale, pixel = biome id
 └── noise_maps/
     ├── noise_warp_x.png
     ├── noise_warp_y.png
@@ -87,56 +193,165 @@ worlds/<planet>-<seed>/
     ├── noise_elevation.png
     ├── noise_biome_elev.png
     ├── noise_moisture.png
-    ├── noise_temperature.png
     ├── noise_volcanic_raw.png
-    └── noise_volcanic_zone.png
+    ├── noise_volcanic_zone.png
+    ├── erosion.png
+    ├── elevation.png
+    ├── temperature.png
+    ├── coast_distance.png
+    ├── precipitation.png
+    ├── moisture.png
+    └── flow.png
 ```
 
 | File / folder | Description                                                                                                                                                           |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world.png`   | 1920 × 1080 PNG with biome colours, contour lines, and geographic reference lines                                                                                     |
-| `world.svg`   | Equivalent vector image (run-length encoded `<rect>` rows); suitable for web embedding and scaling                                                                    |
+| `world.png`   | PNG (1920 × 1080 by default) with biome colours, hillshaded land (light from the north-west), contour lines and geographic reference lines                            |
+| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling              |
 | `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity) |
-| `raw_data/`   | Raw world data                                                                                                                                                        |
+| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                |
 | `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                        |
+
+#### Raw data
+
+`raw_data/` holds one lossless PNG per layer, pixel-aligned with `world.png` (row 0 = north pole, column 0 = longitude 0), and a `world.json` describing how to decode them.
+
+| File              | Encoding         | Content                                                                                      |
+| ----------------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `elevation.png`   | 16-bit grey      | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`) |
+| `moisture.png`    | 16-bit grey      | Moisture in `[-1, 1]`, planet-type offset included                                           |
+| `temperature.png` | 16-bit grey      | Temperature in `[0, 1]`, planet-type offset included                                         |
+| `flow.png`        | 16-bit grey, log | River flow: `log10(1 + km²)` in `[0, 8]`, the wet-equivalent area draining through the pixel |
+| `biomes.png`      | 8-bit grey       | Biome id of each pixel                                                                       |
+
+A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵`.
+
+`world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name, colour and whether it is a water surface:
+
+```json
+{
+  "format_version": 1,
+  "width": 1920,
+  "height": 1080,
+  "seed": 42,
+  "planet_type": "terran",
+  "layers": {
+    "elevation": { "file": "elevation.png", "encoding": "gray16", "min": -1.0, "max": 1.0 },
+    "biomes": { "file": "biomes.png", "encoding": "gray8-biome-id" }
+  },
+  "biomes": [
+    { "id": 0, "key": "DeepOcean", "name": "Deep Ocean", "color": "#0A148C", "water": true }
+  ]
+}
+```
+
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes incompatibly.
+
+Reading a layer in Python:
+
+```python
+import json
+from PIL import Image
+
+meta = json.load(open("raw_data/world.json"))
+layer = meta["layers"]["elevation"]
+pixels = Image.open("raw_data/elevation.png")
+lo, hi = layer["min"], layer["max"]
+elevation = [lo + p / 65535 * (hi - lo) for p in pixels.getdata()]
+```
 
 #### Noise maps (false colour)
 
-11 intermediate noise maps are exported into `noise_maps/` for study and debugging. They share a **jet colour ramp**:
+Every intermediate layer of the generation is exported into `noise_maps/` for study and debugging. They share a **jet colour ramp**:
 
 > blue (low) → cyan → green → yellow → red (high)
 
 Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative values to blue/cyan, and positive values to yellow/red. Unsigned maps (range `[0, 1]`) run the full blue-to-red range.
 
-| File                      | Range     | Description                                                  |
-| ------------------------- | --------- | ------------------------------------------------------------ |
-| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                    |
-| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                    |
-| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                            |
-| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                |
-| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)        |
-| `noise_elevation.png`     | `[-1, 1]` | Final elevation = continent + mountain × weight × blend      |
-| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees |
-| `noise_moisture.png`      | `[-1, 1]` | Moisture FBM                                                 |
-| `noise_temperature.png`   | `[0, 1]`  | Temperature (latitude gradient + elevation cooling)          |
-| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                       |
-| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                  |
+| File                      | Range     | Description                                                                                      |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
+| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                                                        |
+| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                                                        |
+| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                                                                |
+| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                                                    |
+| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)                                            |
+| `noise_elevation.png`     | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                                 |
+| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                     |
+| `noise_moisture.png`      | `[-1, 1]` | Moisture noise (local variation added to the climate model)                                      |
+| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                           |
+| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                                                      |
+| `erosion.png`             | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                 |
+| `elevation.png`           | `[-1, 1]` | Final elevation, after erosion                                                                   |
+| `temperature.png`         | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt))          |
+| `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                     |
+| `precipitation.png`       | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                    |
+| `moisture.png`            | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows)) |
+| `flow.png`                | `[0, 1]`  | River flow: `log10(1 + drainage km²) / 7` (see [Rivers and lakes](#rivers-and-lakes))            |
 
 #### Geographic reference lines
 
 Both `world.png` and `world.svg` overlay five dotted latitude lines for orientation:
 
-| Line                | Latitude | Colour |
-| ------------------- | -------- | ------ |
-| Equator             | 0°       | Red    |
-| Tropic of Cancer    | +23.5°   | Amber  |
-| Tropic of Capricorn | −23.5°   | Amber  |
-| Arctic Circle       | +66.5°   | Cyan   |
-| Antarctic Circle    | −66.5°   | Cyan   |
+| Line                | Latitude      | Colour |
+| ------------------- | ------------- | ------ |
+| Equator             | 0°            | Red    |
+| Tropic of Cancer    | +tilt         | Amber  |
+| Tropic of Capricorn | −tilt         | Amber  |
+| Arctic Circle       | +(90° − tilt) | Cyan   |
+| Antarctic Circle    | −(90° − tilt) | Cyan   |
 
-The row position for each line is derived from the equirectangular projection used by the map: `row = height × (0.5 + latitude_deg / 180)`.
+`tilt` is the planet's axial tilt (`--axial-tilt`): 23.44° on Earth gives the familiar ±23.4° and ±66.6°.
+
+The row position for each line is derived from the equirectangular projection used by the map: `row = height × (0.5 − latitude_deg / 180)`, so north is at the top of the image.
 
 ## Calculations
+
+### Temperature — axial tilt
+
+The sea-level temperature of each latitude comes from the annual-mean sunlight it receives, using the classic two-term approximation (North, 1975):
+
+```text
+x  = sin(latitude)
+P2(x) = (3x² − 1) / 2
+S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
+```
+
+`S` is then rescaled so that an Earth-like tilt (23.44°) gives `0.0` at the poles and `1.0` at the equator, and clamped to `[0, 1]`. Land then cools by `0.3` per unit of elevation above the waterline; the sea surface does not.
+
+| Axial tilt | Effect                                                   |
+| ---------- | -------------------------------------------------------- |
+| 0°         | Strongest equator-to-pole contrast, large ice caps       |
+| 23.44°     | Earth baseline                                           |
+| ~54°       | Nearly uniform temperature across latitudes              |
+| 70°+       | Poles receive more sunlight over a year than the equator |
+
+The `[climate]` table of the planet preset then shifts the whole temperature field (for example `−0.55` on frozen worlds).
+
+### Moisture — winds and rain shadows
+
+Moisture comes from winds carrying ocean evaporation over land:
+
+- **Wind belts.** The zonal wind at each latitude is `u = −cos(4 · latitude)`: easterly trade winds near the equator, westerlies at mid-latitudes, polar easterlies. Each row is simulated with the wind blowing east and blowing west, and both results are blended by how much the wind blows each way, so moisture stays continuous across the belts.
+- **Transport.** Along a row, air over the sea picks up humidity towards what it can hold (warm air holds more). Over land it rains out steadily, much more where it climbs a slope, and immediately where it cools below what it holds. 60 % of the rain over land evaporates again (soil and plants), so continental interiors are not starved. Mountains therefore get wet windward slopes and dry rain shadows behind them.
+- **North-south supply.** Rows with little ocean of their own still receive background humidity, set by the ocean fraction within ±20° of latitude and of the whole planet.
+- **Circulation bands.** A `cos(6 · latitude)` term adds the wet equator and 60° belts and the dry 30° desert belts and poles.
+
+The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.30 × noise`, then clamped. The `[climate]` table of the planet preset then shifts the whole field (for example `−0.55` on volcanic worlds).
+
+### Rivers and lakes
+
+1. **Depression filling.** Starting from the sea, the terrain is flooded upwards (priority-flood, Barnes et al. 2014) so every land pixel gets a path down to the sea; pits are filled to their spill level.
+2. **Routing.** Each land pixel drains to its steepest lower neighbour on the filled surface.
+3. **Accumulation.** Every pixel adds its runoff — its area in km² × `((moisture + 1) / 2)²` — and passes the total downstream. The flow of a pixel is the wet-equivalent area draining through it.
+4. **Lakes** are filled pits deeper than `0.004` that receive at least 40 000 km² of flow; **rivers** are pixels carrying at least 120 000 km². Under the polar temperature threshold, rivers stay ice and lakes freeze into ice cap.
+
+Thresholds are in km², so the river network does not depend on the map resolution. On non-terran planets, rivers and lakes are remapped like seas: lava and magma on volcanic worlds, ice on frozen worlds, acid on caustic worlds, dry rock on barren worlds.
+
+### Hydraulic erosion
+
+Rain droplets are dropped at random on land. Each one rolls downhill with a little inertia, picks up sediment while it speeds up on steep ground, and drops it when it slows down, climbs, evaporates, or reaches the sea (Beyer, 2015). Thousands of droplets carve valleys into the ridges and leave fans and deltas at their feet.
+
+The simulation runs on a fixed 512 × 256 grid whatever the output size (smaller maps use their own size), so a world keeps the same valleys at every resolution and erosion costs a few tens of milliseconds. The height change is then interpolated back onto the full-resolution map. `--erosion 1` drops one droplet per grid pixel (about 130 000); erosion never digs land below the waterline. Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
 
 The two parameters derived from `--circumference` are computed as follows.
 
@@ -186,4 +401,4 @@ The square-root softens the curve so extreme planets remain visually interesting
 | 40 075 km     | 1.00 g   | 0.35           | Earth baseline          |
 | 80 000 km     | ≈ 2.00 g | ≈ 0.25         | Flat, rounded landscape |
 
-Both values are written into `world.json` as `circumference_km` and `gravity_modifier` for downstream use.
+Both values are written into `raw_data/world.json` as `circumference_km` and `gravity_modifier` for downstream use.
