@@ -121,6 +121,7 @@ pub mod stream {
     pub const MEANDERS: u32 = 15;
     pub const DELTAS: u32 = 16;
     pub const EROSION: u32 = 17;
+    pub const EROSION_FINE: u32 = 18;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.
@@ -155,7 +156,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in stream::ELEVATION..=stream::EROSION {
+            for s in stream::ELEVATION..=stream::EROSION_FINE {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }
