@@ -62,7 +62,7 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 
 **axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt).
 
-**erosion** — how much rain carves the terrain: droplets per pixel of the erosion grid, see [Erosion](#hydraulic-erosion).
+**erosion** — how much rain carves the terrain: droplets per cell of the erosion grid, see [Erosion](#hydraulic-erosion).
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -447,7 +447,7 @@ A tile takes about 4 ms on 10 cores. Coast-related biomes (beaches, wetlands) st
 
 Rain droplets are dropped at random on land. Each one rolls downhill with a little inertia, picks up sediment while it speeds up on steep ground, and drops it when it slows down, climbs, evaporates, or reaches the sea (Beyer, 2015). Thousands of droplets carve valleys into the ridges and leave fans and deltas at their feet.
 
-The simulation runs on a fixed 512 × 256 grid whatever the output size (smaller maps use their own size), so a world keeps the same valleys at every resolution and erosion costs a few tens of milliseconds. The height change is then interpolated back onto the full-resolution map. `--erosion 1` drops one droplet per grid pixel (about 130 000); erosion never digs land below the waterline. Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
+The simulation runs on a grid coarser than the map: one cell per 4 × 4 pixels, between 512 × 256 and 2048 × 1024 cells (smaller maps use their own size). A 1920 × 1080 map erodes on 512 × 270 cells in a fraction of a second; 8192 × 4096 uses 2048 × 1024 cells, which takes a few seconds but keeps the valleys fine. `--erosion 1` drops one droplet per grid cell. The height change is spread back onto the full-resolution map with a cubic B-spline, smooth across cell borders, and never moves a pixel across the waterline: erosion does not dig land below the sea, and sediment dumped at the coast does not raise new land, so the coastlines stay those of the noise. Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
 
 The two parameters derived from `--circumference` are computed as follows.
 
