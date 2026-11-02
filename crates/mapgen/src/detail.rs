@@ -366,7 +366,8 @@ impl DetailWorld {
                     river: false,
                     highland_offset: sample(&w.highland_offset),
                 };
-                let biome = planet.remap(planet.rules.choose(input));
+                let dry = planet.rules.choose(input);
+                let biome = planet.remap(dry);
                 let mut colour = if biome.is_water() {
                     biome_color(biome).map(f32::from)
                 } else {
@@ -374,7 +375,11 @@ impl DetailWorld {
                     ecotone_colour_for(planet, input).map(|c| c * shade)
                 };
                 let c = coverage[i];
-                if c > 0.0 && input.temperature >= planet.rules.polar && !biome.is_water() {
+                if c > 0.0
+                    && input.temperature >= planet.rules.polar
+                    && !biome.is_water()
+                    && !dry.is_lava()
+                {
                     for (channel, river) in colour.iter_mut().zip(river_colour) {
                         *channel = *channel * (1.0 - c) + river * c;
                     }
