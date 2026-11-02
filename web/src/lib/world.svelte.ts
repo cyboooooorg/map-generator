@@ -5,7 +5,7 @@ import { api } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { loadLayers, type WorldLayers } from './layers';
 import { RiverIndex } from './rivers';
-import { worldStats, type WorldStats } from './stats';
+import type { WorldStats } from './stats';
 
 export class LoadedWorld {
   id = $state<string | null>(null);
@@ -41,10 +41,10 @@ export class LoadedWorld {
       const meta = await api.metadata(id, signal);
       if (!current()) return;
       this.meta = meta;
-      const layers = await loadLayers(id, meta, signal);
+      const { layers, stats } = await loadLayers(id, meta, signal);
       if (!current()) return;
       this.layers = layers;
-      this.stats = worldStats(layers.biomes, layers.width, layers.height, meta.biomes, meta.circumference_km);
+      this.stats = stats;
       if (meta.rivers) {
         const file = await api.rivers(id, meta.rivers, signal);
         if (!current()) return;

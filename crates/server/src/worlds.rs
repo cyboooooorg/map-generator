@@ -1,7 +1,7 @@
 //! The world library: generated worlds on disk, one directory each.
 use crate::api::WorldSummary;
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 /// Whether `id` is a world directory name (`<planet>-<seed>`). Anything else
@@ -16,6 +16,64 @@ pub fn is_valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && !seed.is_empty()
         && seed.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Prefix of the temporary directories generations export into. A dot is
+/// never part of a world id, so the library never lists them.
+const TEMP_PREFIX: &str = ".tmp-";
+
+/// The directory a world is exported into before it is complete, deleted on
+/// drop unless [`commit`](Self::commit) renamed it into place: an export
+/// that fails, panics or is cancelled leaves nothing behind.
+pub struct TempDir {
+    path: PathBuf,
+}
+
+impl TempDir {
+    /// Creates `<dir>/.tmp-<id>`, emptied first if a previous attempt left it.
+    pub fn create(dir: &Path, id: &str) -> Result<Self, String> {
+        let path = dir.join(format!("{TEMP_PREFIX}{id}"));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        Ok(Self { path })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Renames the directory to `target`, which must not exist.
+    pub fn commit(self, target: &Path) -> Result<(), String> {
+        std::fs::rename(&self.path, target).map_err(|e| format!("{}: {e}", target.display()))
+        // On failure, drop removes the temporary directory.
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        // Already renamed after a successful commit: nothing to remove.
+        if self.path.exists()
+            && let Err(e) = std::fs::remove_dir_all(&self.path)
+        {
+            tracing::warn!("could not remove {}: {e}", self.path.display());
+        }
+    }
+}
+
+/// Removes the temporary directories a killed server left under `dir`.
+pub fn sweep_temp_dirs(dir: &Path) {
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in read.flatten() {
+        if entry.file_name().to_string_lossy().starts_with(TEMP_PREFIX) {
+            let path = entry.path();
+            match std::fs::remove_dir_all(&path) {
+                Ok(()) => tracing::info!("removed the unfinished export {}", path.display()),
+                Err(e) => tracing::warn!("could not remove {}: {e}", path.display()),
+            }
+        }
+    }
 }
 
 /// Every world under `dir` that has raw data, most recent first.
@@ -67,6 +125,33 @@ pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temp_dirs_are_renamed_or_removed() {
+        let root = std::env::temp_dir().join(format!("mapgen-tempdir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        // Dropped before its commit (error, cancel, panic): nothing is left.
+        let temp = TempDir::create(&root, "terran-1").unwrap();
+        std::fs::write(temp.path().join("world.png"), b"partial").unwrap();
+        drop(temp);
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+
+        // Committed: the complete directory appears under its final name.
+        let temp = TempDir::create(&root, "terran-2").unwrap();
+        std::fs::write(temp.path().join("world.png"), b"done").unwrap();
+        temp.commit(&root.join("terran-2")).unwrap();
+        assert!(root.join("terran-2/world.png").exists());
+        assert!(!root.join(".tmp-terran-2").exists());
+
+        // Hidden from the library, removed by the sweep.
+        std::fs::create_dir_all(root.join(".tmp-terran-3/raw_data")).unwrap();
+        sweep_temp_dirs(&root);
+        assert!(!root.join(".tmp-terran-3").exists());
+        assert!(root.join("terran-2").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn ids_follow_the_directory_pattern() {
