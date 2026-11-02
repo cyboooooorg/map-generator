@@ -208,7 +208,10 @@
             step={info.step}
             bind:value={fields[field].value}
           />
-          <input type="number" min={limits.min} max={limits.max} step={info.step} bind:value={fields[field].value} />
+          <!-- step="any": the slider step counts from the server minimum (1 km for
+               the circumference), so a stepped input would reject round values
+               such as 50000. -->
+          <input type="number" min={limits.min} max={limits.max} step="any" bind:value={fields[field].value} />
         </div>
       {/if}
       <p class="help">{info.help}</p>
