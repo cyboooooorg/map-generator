@@ -3,6 +3,8 @@
 
 [tools]
 rust = { version = "1.99", components = "clippy,rustfmt" }
+# Matches the Docker image (Dockerfile)
+node = "26"
 
 [tasks.build]
 description = "Build the optimized binary"
@@ -36,3 +38,42 @@ run = "cargo fmt"
 [tasks.clean-worlds]
 description = "Delete every generated world under worlds/"
 run = "find ./worlds -mindepth 1 -not -name '.gitignore' -delete"
+
+# ---------------------------------------------------------------------------------------------------- #
+# Web app (web/ front-end, crates/server back-end)
+# ---------------------------------------------------------------------------------------------------- #
+[tasks."web:install"]
+description = "Install the front-end dependencies (skipped when package-lock.json has not changed)"
+dir = "web"
+run = "npm ci"
+sources = ["web/package.json", "web/package-lock.json"]
+outputs = ["web/node_modules/.package-lock.json"]
+
+[tasks."web:check"]
+description = "Type-check the front-end (strict, warnings fail) and run its unit tests"
+depends = ["web:install"]
+dir = "web"
+run = ["npm run check", "npm test"]
+
+[tasks."web:build"]
+description = "Build the front-end into web/dist/"
+depends = ["web:install"]
+dir = "web"
+run = "npm run build"
+
+[tasks."server:dev"]
+description = "Run the web server on http://localhost:3000 (worlds/ and presets/ of this checkout)"
+run = "cargo run -p mapgen-server"
+
+[tasks.dev]
+description = "Run the server and the Vite dev server together: http://localhost:5173 (Ctrl+C stops both)"
+depends = ["web:install"]
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+cargo build -p mapgen-server
+target/debug/mapgen-server &
+server=$!
+trap 'kill $server 2>/dev/null' EXIT
+cd web && npm run dev
+"""
