@@ -3,7 +3,7 @@
 use mapgen::generation::Stage;
 use mapgen::preset::{Defaults, ParamDefault};
 use mapgen::request::Limits;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// A planet preset the generation form can offer.
@@ -105,4 +105,15 @@ impl JobStatus {
 #[ts(export)]
 pub struct ApiError {
     pub error: String,
+}
+
+/// Request to resample a world onto a hex grid.
+#[derive(Clone, Debug, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, optional_fields)]
+pub struct HexRequest {
+    /// Hex columns around the planet, 4 to 4096.
+    pub columns: u32,
+    /// River flag threshold in km² (default: `mapgen::hex::DEFAULT_RIVER_FLOW_KM2`).
+    pub river_flow_km2: Option<f32>,
 }

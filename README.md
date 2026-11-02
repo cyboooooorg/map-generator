@@ -105,6 +105,8 @@ It writes `<world>/hex/`:
 - `hex.png`: the map painted with one colour per hex, outlined, with a blue dot on river hexes.
 - `hex.json`: the grid layout and one entry per hex (row-major, `index = row × columns + col`): majority `biome` id (rivers never win a hex; they set `river` instead), mean `elevation`, `moisture` and `temperature`, `max_flow_km2` and `river`. The biome table is copied from `world.json`.
 
+The same resampling runs in the web app (hex overlay of the viewer), through the `mapgen::hex` library module.
+
 The grid is pointy-top in "odd-r" offset coordinates: odd rows are shifted half a hex east, and columns wrap east-west like the planet. Hexes are regular on the flat map, not on the sphere, so polar hexes cover less real ground than equatorial ones; a true spherical hex grid (geodesic) would be a different, much larger project.
 
 ### Project layout

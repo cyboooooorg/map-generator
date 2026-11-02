@@ -80,7 +80,7 @@ pub struct BiomeLayerInfo {
 }
 
 /// One entry of the biome table.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BiomeInfo {
     pub id: u8,
