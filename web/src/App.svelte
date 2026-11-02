@@ -101,7 +101,13 @@
   </aside>
 
   <main>
-    <Viewer worldId={selectedId} {meta} {layers} onPick={(point) => (picked = point)} />
+    <Viewer
+      worldId={selectedId}
+      revision={worlds.find((w) => w.id === selectedId)?.modified_ms ?? null}
+      {meta}
+      {layers}
+      onPick={(point) => (picked = point)}
+    />
     {#if picked && meta}
       <InfoPanel point={picked} {meta} {layers} onClose={() => (picked = null)} />
     {/if}

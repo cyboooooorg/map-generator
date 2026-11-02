@@ -36,7 +36,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 1. Deep zoom in the viewer
 
-- **Status:** decided, after items 2 and 3
+- **Status:** done
 - **Analysis:** [01-deep-zoom.md](analysis/01-deep-zoom.md)
 - **Problem:** worlds are generated at about 20 km per pixel; zooming in only
   magnifies those pixels.
@@ -61,6 +61,15 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Done when:** zoom from the whole planet to a few hundred metres per screen
   pixel on the globe and the map, consistent with the base world, loading
   progressively without freezing the page.
+- **Result:** the server renders colour tiles (about 4–5 ms each) with the
+  Rust renderer itself (biome rules, soft borders, hillshading, vector
+  rivers redrawn at the tile's scale, widening with the square root of the
+  zoom), instead of data tiles coloured in the shader: no biome rule or
+  river drawing duplicated in GLSL. The viewer keeps its base surface and
+  draws detail patches over it where tiles are loaded (closest loaded
+  ancestor while a tile loads). Data layers and the 3D relief stay at the
+  base resolution; picking reads the base layers. Zoom to the cursor is not
+  done.
 
 ## 2. Biomes form bands and have hard transitions
 
