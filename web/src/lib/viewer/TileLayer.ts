@@ -71,6 +71,12 @@ function surfacePoint(u: number, v: number, morph: number, out: Vector3): Vector
   return out.set(px + (sx - px) * morph, py + (sy - py) * morph, sz * morph);
 }
 
+/** Frees a tile texture and its decoded image. */
+function disposeTile(texture: Texture): void {
+  texture.dispose();
+  (texture.image as ImageBitmap).close();
+}
+
 export class TileLayer {
   private readonly geometry = new PlaneGeometry(1, 1, 16, 16);
   private readonly patches = new Map<string, Mesh<PlaneGeometry, ShaderMaterial>>();
@@ -318,7 +324,7 @@ export class TileLayer {
       if (tile.lastUsed === this.frame) {
         break;
       }
-      tile.texture.dispose();
+      disposeTile(tile.texture);
       this.cache.delete(key);
     }
   }
@@ -330,7 +336,7 @@ export class TileLayer {
     this.loading.clear();
     this.hidePatches(new Set());
     for (const tile of this.cache.values()) {
-      tile.texture.dispose();
+      disposeTile(tile.texture);
     }
     this.cache.clear();
     this.failed.clear();

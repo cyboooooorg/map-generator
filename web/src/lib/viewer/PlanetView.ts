@@ -689,6 +689,9 @@ export class PlanetView {
       object.material.dispose();
     }
     this.renderer.dispose();
+    // Free the WebGL context now: browsers cap live contexts (about 16), and
+    // compare panes come and go.
+    this.renderer.forceContextLoss();
   }
 
   private applyModeControls(): void {
