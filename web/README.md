@@ -35,6 +35,8 @@ In the viewer:
 
 **New world** opens the generation form. Each parameter is either random (left to the planet preset, then to the generator defaults) or fixed with its slider. Progress is streamed live from the server, and the new world opens when it is ready.
 
+On narrow screens (760 px wide or less), the world list and the viewer take the whole screen one at a time: **Worlds** and **Viewer** in the header switch between them. Picking a world opens the viewer, and **New world** opens the form, whose progress bar and **Close** / **Generate** buttons stay pinned to the bottom of the screen while the parameters scroll. A generation keeps running if you switch to the viewer meanwhile, and the new world opens when it is ready.
+
 For everyday use, run the whole app in Docker instead: see "Web app" in the repository README.
 
 ## Checks

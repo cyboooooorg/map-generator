@@ -77,6 +77,18 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px 14px;
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
+  }
+  /* Narrow screens: 280 px plus the legend in the other bottom corner do not
+     fit side by side, so span the viewer (covering the legend while open). */
+  @media (max-width: 760px) {
+    .info {
+      right: 12px;
+      width: auto;
+      /* Opaque: the legend underneath would show through var(--panel). */
+      background: #141924;
+    }
   }
   header {
     display: flex;
