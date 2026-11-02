@@ -7,6 +7,7 @@ use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
+use crate::rivers;
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -417,6 +418,12 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
     let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
+    let river_lines = rivers::shape(
+        &rivers::trace(&grid, &water),
+        &grid,
+        &water.filled,
+        params.seed,
+    );
     debug.push(DebugLayer {
         name: "flow",
         ramp: Ramp::Unsigned,
@@ -464,6 +471,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
             coast_distance_km,
             highland_offset,
             biomes,
+            rivers: river_lines,
         },
         debug,
     }

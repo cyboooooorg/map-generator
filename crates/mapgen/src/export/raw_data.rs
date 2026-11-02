@@ -350,6 +350,7 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         coast_distance_km,
         highland_offset,
         biomes,
+        rivers: Vec::new(),
     })
 }
 

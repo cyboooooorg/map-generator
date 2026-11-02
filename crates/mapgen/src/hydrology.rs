@@ -30,7 +30,7 @@ const LAKE_MIN_DEPTH: f32 = 0.004;
 /// A filled pit becomes a lake only if this much flow (km²) reaches it.
 const LAKE_MIN_FLOW_KM2: f32 = 40_000.0;
 /// A pixel is a river when this much flow (km²) passes through it.
-const RIVER_MIN_FLOW_KM2: f32 = 120_000.0;
+pub const RIVER_MIN_FLOW_KM2: f32 = 120_000.0;
 
 /// Rivers and lakes of a world, row-major on its grid.
 pub struct Hydrology {
