@@ -3,7 +3,10 @@
 //! 1. **Depression filling** (priority-flood, Barnes et al. 2014): starting
 //!    from the sea, the terrain is flooded upwards so every land pixel gets a
 //!    path down to the sea. Pits are filled to their spill level, plus a tiny
-//!    slope so water can cross the filled flats.
+//!    slope so water can cross the filled flats. That slope varies with a
+//!    noise, so paths across flats wander instead of running straight to the
+//!    spill point; it never changes heights above the flats, so divides and
+//!    lakes do not move.
 //! 2. **Flow routing**: each land pixel drains to its steepest lower
 //!    neighbour on the filled surface.
 //! 3. **Accumulation**: every pixel adds its runoff (area × rain) and passes
@@ -12,17 +15,22 @@
 //! 4. **Lakes** are filled pits deep enough and fed by enough flow; **rivers**
 //!    are pixels whose flow exceeds a threshold.
 use crate::geo::Grid;
+use noise::{NoiseFn, Perlin};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
-/// Slope added across filled flats so every pixel drains somewhere.
+/// Slope added across filled flats so every pixel drains somewhere. Each
+/// step costs between 1 and 3 times this, following the flat noise.
 const FLAT_EPSILON: f32 = 1e-5;
+/// Frequency of the flat noise on the unit sphere, at 1920 pixels of map
+/// width (scaled with the width so features stay a few pixels wide).
+const FLAT_NOISE_FREQUENCY: f64 = 200.0;
 /// Filled pits shallower than this (elevation units) stay dry land.
 const LAKE_MIN_DEPTH: f32 = 0.004;
 /// A filled pit becomes a lake only if this much flow (km²) reaches it.
 const LAKE_MIN_FLOW_KM2: f32 = 40_000.0;
 /// A pixel is a river when this much flow (km²) passes through it.
-const RIVER_MIN_FLOW_KM2: f32 = 120_000.0;
+pub const RIVER_MIN_FLOW_KM2: f32 = 120_000.0;
 
 /// Rivers and lakes of a world, row-major on its grid.
 pub struct Hydrology {
@@ -31,6 +39,30 @@ pub struct Hydrology {
     pub flow_km2: Vec<f32>,
     pub lake: Vec<bool>,
     pub river: Vec<bool>,
+    /// The pixel each land pixel drains to (None on the sea).
+    pub receiver: Vec<Option<usize>>,
+    /// The depression-filled surface the water flows on.
+    pub filled: Vec<f32>,
+}
+
+/// Noise in `[0, 1]` per pixel that sets how costly each step across a
+/// filled flat is, so the flood (and the flow paths) meander.
+fn flat_noise(grid: &Grid, seed: u32) -> Vec<f32> {
+    let perlin = Perlin::new(seed.wrapping_add(800));
+    let frequency = FLAT_NOISE_FREQUENCY * grid.width as f64 / 1920.0;
+    (0..grid.pixel_count())
+        .map(|i| {
+            let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
+            let lon = (x as f64 + 0.5) / grid.width as f64 * std::f64::consts::TAU;
+            let lat = grid.latitude(y);
+            let p = [
+                lat.cos() * lon.cos() * frequency,
+                lat.cos() * lon.sin() * frequency,
+                lat.sin() * frequency,
+            ];
+            ((perlin.get(p) as f32 + 1.0) / 2.0).clamp(0.0, 1.0)
+        })
+        .collect()
 }
 
 /// Share of the rain that runs off, from moisture in `[-1, 1]`: none in a
@@ -59,8 +91,9 @@ impl PartialOrd for Node {
 ///
 /// `height` is the elevation above the waterline (negative on the sea);
 /// `moisture` in `[-1, 1]` sets how much rain runs off.
-pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32]) -> Hydrology {
+pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hydrology {
     let n = grid.pixel_count();
+    let noise = flat_noise(grid, seed);
     let sea: Vec<bool> = height.iter().map(|&z| z < 0.0).collect();
 
     // ── 1. Priority-flood from the sea ────────────────────────────────────────
@@ -87,7 +120,9 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32]) -> Hydrology {
             let j = grid.index(nx, ny);
             if !done[j] {
                 done[j] = true;
-                filled[j] = filled[j].max(z + FLAT_EPSILON);
+                // Only raises pixels below the flood level (flats): real
+                // slopes keep their height.
+                filled[j] = filled[j].max(z + FLAT_EPSILON * (1.0 + 2.0 * noise[j]));
                 heap.push(Node(filled[j], j));
             }
         }
@@ -138,6 +173,8 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32]) -> Hydrology {
         flow_km2,
         lake,
         river,
+        receiver,
+        filled,
     }
 }
 
@@ -203,7 +240,7 @@ mod tests {
     #[test]
     fn flow_grows_downstream() {
         let g = grid();
-        let h = hydrology(&g, &ramp(&g), &vec![1.0; g.pixel_count()]);
+        let h = hydrology(&g, &ramp(&g), &vec![1.0; g.pixel_count()], 1);
         let row = 16 * 64;
         assert_eq!(h.flow_km2[row + 5], 0.0, "sea has no flow");
         assert!(h.flow_km2[row + 17] > h.flow_km2[row + 40]);
@@ -212,7 +249,7 @@ mod tests {
     #[test]
     fn deserts_have_no_runoff() {
         let g = grid();
-        let h = hydrology(&g, &ramp(&g), &vec![-1.0; g.pixel_count()]);
+        let h = hydrology(&g, &ramp(&g), &vec![-1.0; g.pixel_count()], 1);
         assert!(h.flow_km2.iter().all(|&f| f == 0.0));
         assert!(!h.river.iter().any(|&r| r));
     }
@@ -227,8 +264,48 @@ mod tests {
                 height[y * 64 + x] = 0.05;
             }
         }
-        let h = hydrology(&g, &height, &vec![1.0; g.pixel_count()]);
+        let h = hydrology(&g, &height, &vec![1.0; g.pixel_count()], 1);
         assert!(h.lake[16 * 64 + 40]);
         assert!(!h.lake[16 * 64 + 20]);
+    }
+
+    #[test]
+    fn every_land_pixel_drains_to_the_sea() {
+        let g = grid();
+        let mut height = ramp(&g);
+        // A closed basin and a long flat plateau.
+        for y in 4..28 {
+            for x in 30..60 {
+                height[y * 64 + x] = 0.2;
+            }
+        }
+        let h = hydrology(&g, &height, &vec![1.0; g.pixel_count()], 7);
+        for start in (0..g.pixel_count()).filter(|&i| height[i] >= 0.0) {
+            let mut i = start;
+            let mut steps = 0;
+            while let Some(j) = h.receiver[i] {
+                assert!(
+                    h.filled[j] < h.filled[i],
+                    "flow must go down the filled surface"
+                );
+                i = j;
+                steps += 1;
+                assert!(steps <= g.pixel_count(), "cycle from {start}");
+            }
+            assert!(height[i] < 0.0, "pixel {start} ends on land at {i}");
+        }
+    }
+
+    #[test]
+    fn flat_noise_only_raises_flats() {
+        let g = grid();
+        let height = ramp(&g);
+        let h = hydrology(&g, &height, &vec![1.0; g.pixel_count()], 3);
+        // On a clean slope nothing is filled: heights are kept exactly.
+        for (filled, height) in h.filled.iter().zip(&height) {
+            if *height >= 0.0 {
+                assert_eq!(filled, height);
+            }
+        }
     }
 }

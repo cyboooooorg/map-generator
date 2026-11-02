@@ -15,6 +15,7 @@
 use crate::biome::biome_color;
 use crate::generation::{COAST_DISTANCE_CAP_KM, Sample, Sampler};
 use crate::preset::Preset;
+use crate::rivers::RiversFile;
 use crate::world::WorldParams;
 use crate::world::{Biome, World, biome_name};
 use image::{GrayImage, ImageBuffer, Luma};
@@ -23,7 +24,11 @@ use std::error::Error;
 use std::path::Path;
 
 /// Bumped whenever the layout of `raw_data/` changes incompatibly.
-/// Version 2 adds the volcanic zone, coast distance and highland offset layers.
+/// Name of the river polylines file.
+pub const RIVERS_FILE: &str = "rivers.json";
+
+/// Version 2 adds the volcanic zone, coast distance and highland offset
+/// layers, and the river polylines.
 pub const FORMAT_VERSION: u32 = 2;
 
 /// Content of `raw_data/world.json`.
@@ -47,6 +52,9 @@ pub struct WorldMetadata {
     pub axial_tilt_deg: f32,
     pub erosion: f32,
     pub layers: Layers,
+    /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rivers: Option<String>,
     /// Every biome, in id order.
     pub biomes: Vec<BiomeInfo>,
 }
@@ -239,6 +247,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
                 encoding: "gray8-biome-id".into(),
             },
         },
+        rivers: Some(RIVERS_FILE.into()),
         biomes: Biome::ALL
             .iter()
             .map(|&b| {
@@ -253,6 +262,8 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             })
             .collect(),
     };
+    let rivers = RiversFile::from_lines(&world.rivers, w, h);
+    std::fs::write(dir.join(RIVERS_FILE), serde_json::to_string(&rivers)?)?;
     std::fs::write(
         dir.join("world.json"),
         serde_json::to_string_pretty(&metadata)?,
@@ -338,6 +349,17 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         }
     };
 
+    // Version 1 worlds have no river polylines.
+    let rivers = match &meta.rivers {
+        Some(file) => {
+            let text =
+                std::fs::read_to_string(raw.join(file)).map_err(|e| format!("{file}: {e}"))?;
+            let rivers: RiversFile =
+                serde_json::from_str(&text).map_err(|e| format!("{file}: {e}"))?;
+            rivers.to_lines(meta.width, meta.height)
+        }
+        None => Vec::new(),
+    };
     Ok(World {
         width: meta.width,
         height: meta.height,
@@ -350,6 +372,7 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         coast_distance_km,
         highland_offset,
         biomes,
+        rivers,
     })
 }
 
@@ -423,6 +446,7 @@ mod tests {
                 .all(|(a, b)| (a - b).abs() < 0.05)
         );
         assert_eq!(back.params.planet.remap(Biome::Ocean), Biome::CausticLake);
+        assert_eq!(back.rivers.len(), world.rivers.len());
 
         // A version 1 world (without the new layers) gets them recomputed.
         let mut v1 = meta;
@@ -430,8 +454,10 @@ mod tests {
         v1.layers.volcanic_zone = None;
         v1.layers.coast_distance = None;
         v1.layers.highland_offset = None;
+        v1.rivers = None;
         std::fs::write(dir.join("world.json"), serde_json::to_string(&v1).unwrap()).unwrap();
         let old = load_world(&world_dir).unwrap();
+        assert!(old.rivers.is_empty());
         assert!(
             old.volcanic_zone
                 .iter()

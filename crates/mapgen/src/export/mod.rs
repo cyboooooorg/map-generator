@@ -12,7 +12,8 @@ pub use svg::export_svg;
 
 use crate::generation::Generated;
 use crate::geo::Grid;
-use crate::world::{World, biome_color};
+use crate::rivers;
+use crate::world::{Biome, World, biome_color};
 use ecotone::ecotone_colour;
 use rayon::prelude::*;
 use std::path::Path;
@@ -154,6 +155,9 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
     let planet = &world.params.planet;
     let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
+    let coverage = rivers::coverage(&world.rivers, w, h);
+    let river_biome = planet.remap(Biome::River);
+    let river_colour = biome_color(river_biome).map(f32::from);
 
     (0..h)
         .into_par_iter()
@@ -162,7 +166,8 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
             let i = world.index(x, y);
             let e = elev(x, y);
             let biome = world.biomes[i];
-            if biome.is_water() {
+            let on_river = biome == river_biome && coverage[i] >= rivers::RIVER_COVERAGE;
+            if biome.is_water() && !on_river {
                 let mut color = biome_color(biome);
                 let neighbours = [
                     (x > 0).then(|| elev(x - 1, y)),
@@ -179,19 +184,30 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
                 }
                 return color;
             }
-            if style == Style::Flat {
-                return biome_color(biome);
-            }
-            // Lakes and rivers are not recomputed without their flags: a pixel
-            // whose biome differs from its recomputed one keeps a flat colour.
+            // The land under a river: the biome the pixel has without it.
             let input = world.biome_input(i);
-            let color = if planet.remap(planet.rules.choose(input)) == biome {
+            let land = planet.remap(planet.rules.choose(input));
+            if style == Style::Flat {
+                // Rivers are drawn as vector paths over the flat SVG map.
+                return biome_color(if on_river { land } else { biome });
+            }
+            // Lakes are not recomputed without their flag: a pixel whose
+            // biome differs from its recomputed one keeps a flat colour.
+            let mut color = if land == biome || on_river {
                 ecotone_colour(world, i, input)
             } else {
                 biome_color(biome).map(f32::from)
             };
             let f = hillshade(world, &grid, x, y);
-            color.map(|c| (c * f).clamp(0.0, 255.0) as u8)
+            color = color.map(|c| c * f);
+            // Anti-aliased river on top, except where it is frozen.
+            let c = coverage[i];
+            if c > 0.0 && world.temperature[i] >= planet.rules.polar {
+                for (channel, river) in color.iter_mut().zip(river_colour) {
+                    *channel = *channel * (1.0 - c) + river * c;
+                }
+            }
+            color.map(|c| c.clamp(0.0, 255.0) as u8)
         })
         .collect()
 }

@@ -2,6 +2,7 @@ use crate::biome::BiomeInput;
 use crate::geo::Grid;
 use crate::noise::EARTH_CIRCUMFERENCE_KM;
 use crate::preset::Preset;
+use crate::rivers::RiverLine;
 
 // Re-export so existing `use crate::world::*;` in other modules keeps working.
 pub use crate::biome::{Biome, biome_color, biome_name};
@@ -79,6 +80,8 @@ pub struct World {
     /// Local shift of the highland line used by biome selection.
     pub highland_offset: Vec<f32>,
     pub biomes: Vec<Biome>,
+    /// Smoothed, meandering river polylines (see `rivers`).
+    pub rivers: Vec<RiverLine>,
 }
 
 impl World {

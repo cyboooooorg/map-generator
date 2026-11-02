@@ -7,6 +7,7 @@ use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
 use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
+use crate::rivers;
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -416,7 +417,15 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
-    let water = hydrology(&grid, &height_above_water, &moisture);
+    let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
+    let river_lines = rivers::shape(
+        &rivers::trace(&grid, &water),
+        &grid,
+        &water.filled,
+        params.seed,
+    );
+    // The biome layer marks rivers where they are drawn, so it matches the map.
+    let river_coverage = rivers::coverage(&river_lines, width, height);
     debug.push(DebugLayer {
         name: "flow",
         ramp: Ramp::Unsigned,
@@ -444,7 +453,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
                 volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
                 lake: water.lake[i],
-                river: water.river[i],
+                river: !water.lake[i] && river_coverage[i] >= rivers::RIVER_COVERAGE,
                 highland_offset: highland_offset[i],
             };
             planet.remap(rules.choose(input))
@@ -464,6 +473,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
             coast_distance_km,
             highland_offset,
             biomes,
+            rivers: river_lines,
         },
         debug,
     }

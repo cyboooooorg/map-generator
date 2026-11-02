@@ -15,4 +15,5 @@ pub mod hydrology;
 pub mod noise;
 pub mod preset;
 pub mod request;
+pub mod rivers;
 pub mod world;
