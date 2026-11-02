@@ -41,6 +41,10 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return (text === '' ? undefined : JSON.parse(text)) as T;
 }
 
+function fileInit(signal?: AbortSignal): RequestInit {
+  return signal ? { cache: 'no-cache', signal } : { cache: 'no-cache' };
+}
+
 export const api = {
   presets: () => call<PresetInfo[]>('/api/presets'),
   form: () => call<FormSpec>('/api/form'),
@@ -52,8 +56,12 @@ export const api = {
       body: JSON.stringify(request),
     }),
   deleteWorld: (id: string) => call<void>(`/api/worlds/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  metadata: (id: string) => call<WorldMetadata>(worldFile(id, 'raw_data/world.json')),
-  rivers: (id: string, file: string) => call<RiversFile>(worldFile(id, `raw_data/${file}`)),
+  // World files keep their URL when a world is regenerated under the same
+  // id: revalidate them ('no-cache', a 304 when unchanged).
+  metadata: (id: string, signal?: AbortSignal) =>
+    call<WorldMetadata>(worldFile(id, 'raw_data/world.json'), fileInit(signal)),
+  rivers: (id: string, file: string, signal?: AbortSignal) =>
+    call<RiversFile>(worldFile(id, `raw_data/${file}`), fileInit(signal)),
   jobs: () => call<JobInfo[]>('/api/jobs'),
   cancelJob: (id: string) => call<void>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   hex: (id: string, request: HexRequest) =>
@@ -64,9 +72,14 @@ export const api = {
     }),
 };
 
-/** URL of a file of a generated world. */
-export function worldFile(id: string, path: string): string {
-  return `/worlds/${encodeURIComponent(id)}/${path}`;
+/**
+ * URL of a file of a generated world. `revision` (the world's modification
+ * time) makes the URL change when the world is regenerated under the same id,
+ * so the browser never shows a cached file of the replaced world.
+ */
+export function worldFile(id: string, path: string, revision?: number | null): string {
+  const url = `/worlds/${encodeURIComponent(id)}/${path}`;
+  return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
 }
 
 const STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'done', 'failed', 'cancelled']);

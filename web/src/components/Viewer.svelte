@@ -161,19 +161,34 @@
 
   onDestroy(() => view?.dispose());
 
+  /** The world whose base map is shown (or loading). */
+  let textureOf: string | null = null;
+
+  // The base map, reloaded when the world or its revision changes (a world
+  // regenerated under the same id).
   $effect(() => {
     const current = view;
     const id = worldId;
+    const rev = revision;
+    // No revision: the world left the list, typically while it is being
+    // regenerated in place. Keep its map until the new one is listed.
+    if (rev === null && id !== null && id === textureOf) {
+      loading = false;
+      return;
+    }
     pinned = null;
     hovered = null;
     if (!current || !id) {
+      textureOf = null;
+      loading = false;
       return;
     }
+    textureOf = id;
     loading = true;
     error = null;
     hexOn = false;
     current
-      .setTexture(worldFile(id, 'world.png'))
+      .setTexture(worldFile(id, 'world.png', rev))
       .catch((e: unknown) => (error = `Could not load the map: ${String(e)}`))
       .finally(() => (loading = false));
   });

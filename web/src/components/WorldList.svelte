@@ -130,7 +130,7 @@
           </label>
         {/if}
         <button class="pick" onclick={() => (selecting ? toggle(world.id) : onSelect(world.id))}>
-          <img src={worldFile(world.id, 'world.png')} alt="" loading="lazy" />
+          <img src={worldFile(world.id, 'world.png', world.modified_ms)} alt="" loading="lazy" />
           <span class="text">
             <strong>{world.planet}</strong>
             <small>seed {world.seed} · {world.width}×{world.height}</small>
