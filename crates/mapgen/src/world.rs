@@ -1,3 +1,4 @@
+use crate::biome::BiomeInput;
 use crate::geo::Grid;
 use crate::noise::EARTH_CIRCUMFERENCE_KM;
 use crate::preset::Preset;
@@ -81,6 +82,22 @@ pub struct World {
 }
 
 impl World {
+    /// The biome selection input of pixel `i`, without the lake and river
+    /// flags (not stored): for lake and river pixels it selects the biome
+    /// the pixel would have without them.
+    pub fn biome_input(&self, i: usize) -> BiomeInput {
+        BiomeInput {
+            elevation: (self.elevation[i] - self.params.sea_level).clamp(-1.0, 1.0),
+            moisture: self.moisture[i],
+            temperature: self.temperature[i],
+            volcanic_zone: self.volcanic_zone[i],
+            coast_distance_km: self.coast_distance_km[i],
+            lake: false,
+            river: false,
+            highland_offset: self.highland_offset[i],
+        }
+    }
+
     /// Index of pixel `(x, y)` in the layer vectors.
     pub fn index(&self, x: u32, y: u32) -> usize {
         (y * self.width + x) as usize

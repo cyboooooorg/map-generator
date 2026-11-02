@@ -1,4 +1,5 @@
 //! Export backends — PNG, SVG, JSON and diagnostic noise maps.
+pub mod ecotone;
 pub mod noise_maps;
 pub mod png;
 pub mod raw_data;
@@ -12,6 +13,7 @@ pub use svg::export_svg;
 use crate::generation::Generated;
 use crate::geo::Grid;
 use crate::world::{World, biome_color};
+use ecotone::ecotone_colour;
 use rayon::prelude::*;
 use std::path::Path;
 
@@ -134,12 +136,22 @@ fn hillshade(world: &World, grid: &Grid, x: u32, y: u32) -> f32 {
     (lit / LIGHT[2]).clamp(0.55, 1.3)
 }
 
-/// Computes the final colour of every pixel (biome colour darkened on contour
-/// lines), in the same row-major order as the world layers. With `relief`,
-/// land is also hillshaded.
-pub fn render_pixels(world: &World, relief: bool) -> Vec<[u8; 3]> {
+/// How a map is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Style {
+    /// Hillshaded land and soft biome borders (PNG).
+    Detailed,
+    /// Flat biome colours, which keep the SVG run-length encoding compact.
+    Flat,
+}
+
+/// Computes the final colour of every pixel, in the same row-major order as
+/// the world layers. Contour lines are drawn under water only, as bathymetry:
+/// on land the hillshade shows the relief, and contours would draw rings.
+pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
     let (w, h) = (world.width, world.height);
     let grid = world.params.grid();
+    let planet = &world.params.planet;
     let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
 
@@ -147,28 +159,39 @@ pub fn render_pixels(world: &World, relief: bool) -> Vec<[u8; 3]> {
         .into_par_iter()
         .flat_map_iter(|y| (0..w).map(move |x| (x, y)))
         .map(|(x, y)| {
+            let i = world.index(x, y);
             let e = elev(x, y);
-            let biome = world.biomes[world.index(x, y)];
-            let mut color = biome_color(biome);
-            if relief && !biome.is_water() {
-                let f = hillshade(world, &grid, x, y);
-                color = color.map(|c| (c as f32 * f).min(255.0) as u8);
+            let biome = world.biomes[i];
+            if biome.is_water() {
+                let mut color = biome_color(biome);
+                let neighbours = [
+                    (x > 0).then(|| elev(x - 1, y)),
+                    (x + 1 < w).then(|| elev(x + 1, y)),
+                    (y > 0).then(|| elev(x, y - 1)),
+                    (y + 1 < h).then(|| elev(x, y + 1)),
+                ];
+                if neighbours
+                    .into_iter()
+                    .flatten()
+                    .any(|n| crosses_contour(e, n))
+                {
+                    color = color.map(|c| (c as f32 * (1.0 - CONTOUR_DARKNESS)) as u8);
+                }
+                return color;
             }
-            // 4-connected neighbours that exist inside the map.
-            let neighbours = [
-                (x > 0).then(|| elev(x - 1, y)),
-                (x + 1 < w).then(|| elev(x + 1, y)),
-                (y > 0).then(|| elev(x, y - 1)),
-                (y + 1 < h).then(|| elev(x, y + 1)),
-            ];
-            if neighbours
-                .into_iter()
-                .flatten()
-                .any(|n| crosses_contour(e, n))
-            {
-                color = color.map(|c| (c as f32 * (1.0 - CONTOUR_DARKNESS)) as u8);
+            if style == Style::Flat {
+                return biome_color(biome);
             }
-            color
+            // Lakes and rivers are not recomputed without their flags: a pixel
+            // whose biome differs from its recomputed one keeps a flat colour.
+            let input = world.biome_input(i);
+            let color = if planet.remap(planet.rules.choose(input)) == biome {
+                ecotone_colour(world, i, input)
+            } else {
+                biome_color(biome).map(f32::from)
+            };
+            let f = hillshade(world, &grid, x, y);
+            color.map(|c| (c * f).clamp(0.0, 255.0) as u8)
         })
         .collect()
 }

@@ -215,7 +215,7 @@ Each run creates a `worlds/<planet>-<seed>/` directory with the following layout
 
 ```text
 worlds/<planet>-<seed>/
-├── world.png          ← hillshaded biome map with contour lines and reference lines
+├── world.png          ← hillshaded biome map with soft borders, bathymetry and reference lines
 ├── world.svg          ← equivalent vector image
 ├── legend.png         ← biome legend with planet metadata
 ├── raw_data/
@@ -252,13 +252,19 @@ worlds/<planet>-<seed>/
     └── flow.png
 ```
 
-| File / folder | Description                                                                                                                                                           |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world.png`   | PNG (1920 × 1080 by default) with biome colours, hillshaded land (light from the north-west), contour lines and geographic reference lines                            |
-| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling              |
-| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity) |
-| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                |
-| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                        |
+| File / folder | Description                                                                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world.png`   | PNG (1920 × 1080 by default) with biome colours, soft biome borders (ecotones), hillshaded land (light from the north-west), depth contours under water and geographic reference lines |
+| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling                               |
+| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                  |
+| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                                 |
+| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                                         |
+
+#### Soft biome borders
+
+`world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its climate selects when nudged by 16 small temperature and moisture offsets (Gaussian, σ 0.02 on temperature and 0.05 on moisture): far from any threshold the colour is flat, near one the colours mix. The width of a transition is set in climate units, not pixels. Coastlines, shores, rivers, lakes and volcanic biomes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
+
+Contour lines are drawn under water only, as bathymetry: on land the hillshade shows the relief, and contours drew rings that read as altitude bands.
 
 #### Raw data
 
