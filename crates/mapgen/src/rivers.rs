@@ -222,10 +222,12 @@ impl RiversFile {
 pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
     let n = grid.pixel_count();
     let w = grid.width as i64;
-    let mut donors: Vec<Vec<usize>> = vec![Vec::new(); n];
+    // Only river pixels have donors that matter: keyed by pixel rather
+    // than one (mostly empty) list per pixel of the map.
+    let mut donors: std::collections::HashMap<usize, Vec<usize>> = Default::default();
     for i in (0..n).filter(|&i| hydro.river[i]) {
         if let Some(j) = hydro.receiver(i) {
-            donors[j].push(i);
+            donors.entry(j).or_default().push(i);
         }
     }
     let centre = |i: usize| ((i as i64 % w) as f64 + 0.5, (i as i64 / w) as f64 + 0.5);
@@ -245,7 +247,7 @@ pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
         let mut chain = vec![start];
         let mut p = start;
         loop {
-            let mut up: Vec<usize> = donors[p].clone();
+            let mut up: Vec<usize> = donors.get(&p).cloned().unwrap_or_default();
             if up.is_empty() {
                 break;
             }
@@ -502,16 +504,22 @@ pub(crate) struct SegmentIndex {
 
 impl SegmentIndex {
     pub(crate) fn new(lines: &[RiverLine]) -> Self {
-        let mut cells: std::collections::HashMap<(i64, i64), Vec<(usize, usize)>> =
-            std::collections::HashMap::new();
+        let mut index = Self {
+            cells: std::collections::HashMap::new(),
+        };
         for (id, line) in lines.iter().enumerate() {
-            for (s, pair) in line.points.windows(2).enumerate() {
-                for cell in Self::cells_of(pair[0], pair[1]) {
-                    cells.entry(cell).or_default().push((id, s));
-                }
+            index.add(id, line);
+        }
+        index
+    }
+
+    /// Indexes the segments of `line`, numbered `id`.
+    pub(crate) fn add(&mut self, id: usize, line: &RiverLine) {
+        for (s, pair) in line.points.windows(2).enumerate() {
+            for cell in Self::cells_of(pair[0], pair[1]) {
+                self.cells.entry(cell).or_default().push((id, s));
             }
         }
-        Self { cells }
     }
 
     fn cells_of(a: [f64; 2], b: [f64; 2]) -> impl Iterator<Item = (i64, i64)> {
