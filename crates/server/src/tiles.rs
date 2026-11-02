@@ -65,6 +65,11 @@ impl TileCache {
         .cloned()
     }
 
+    /// Forgets every loaded world, to free memory.
+    pub fn clear(&self) {
+        self.entries.lock().expect("tile cache lock").clear();
+    }
+
     /// Forgets a world (deleted or regenerated).
     pub fn forget(&self, id: &str) {
         self.entries

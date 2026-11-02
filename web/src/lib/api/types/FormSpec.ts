@@ -8,4 +8,8 @@ export type FormSpec = { sea_level: ParamSpec, volcanic: ParamSpec, circumferenc
 /**
  * Largest width or height the server accepts.
  */
-max_size: number, };
+max_size: number, 
+/**
+ * Largest map the server accepts, in pixels (width × height).
+ */
+max_pixels: number, };

@@ -1,6 +1,6 @@
 use clap::Parser;
 use mapgen::export::{ExportOptions, export_world, world_dir_name};
-use mapgen::generation::generate;
+use mapgen::generation::{GenerateOptions, generate_with_progress};
 use mapgen::preset::Preset;
 use mapgen::request::{self, Limits, WorldRequest};
 use std::error::Error;
@@ -126,7 +126,15 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.gravity_modifier()
     );
 
-    let generated = generate(p);
+    // Debug layers only feed the noise maps: skip them (and their memory)
+    // when the maps are not exported.
+    let generated = generate_with_progress(
+        p,
+        GenerateOptions {
+            debug_layers: !args.no_noise_maps,
+        },
+        |_| {},
+    );
     let dir = args.out_dir.join(world_dir_name(&generated.world));
     let options = ExportOptions {
         raw_data: !args.no_raw_data,

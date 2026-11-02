@@ -39,10 +39,18 @@ pub struct Hydrology {
     pub flow_km2: Vec<f32>,
     pub lake: Vec<bool>,
     pub river: Vec<bool>,
-    /// The pixel each land pixel drains to (None on the sea).
-    pub receiver: Vec<Option<usize>>,
+    /// The pixel each land pixel drains to (None on the sea); see
+    /// [`Hydrology::receiver`]. 32-bit indices keep large maps in memory.
+    receivers: Vec<Option<u32>>,
     /// The depression-filled surface the water flows on.
     pub filled: Vec<f32>,
+}
+
+impl Hydrology {
+    /// The pixel `i` drains to, or None on the sea.
+    pub fn receiver(&self, i: usize) -> Option<usize> {
+        self.receivers[i].map(|j| j as usize)
+    }
 }
 
 /// Noise in `[0, 1]` per pixel that sets how costly each step across a
@@ -73,7 +81,7 @@ fn runoff(moisture: f32) -> f32 {
 }
 
 #[derive(PartialEq)]
-struct Node(f32, usize);
+struct Node(f32, u32);
 impl Eq for Node {}
 impl Ord for Node {
     // Reversed: BinaryHeap is a max-heap, we want the lowest first.
@@ -103,7 +111,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     let mut heap = BinaryHeap::new();
     for i in (0..n).filter(|&i| sea[i]) {
         done[i] = true;
-        heap.push(Node(filled[i], i));
+        heap.push(Node(filled[i], i as u32));
     }
     if heap.is_empty() {
         // No sea at all: drain everything towards the lowest pixel.
@@ -111,10 +119,11 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
             .min_by(|&a, &b| height[a].total_cmp(&height[b]))
             .unwrap_or(0);
         done[lowest] = true;
-        heap.push(Node(filled[lowest], lowest));
+        heap.push(Node(filled[lowest], lowest as u32));
     }
     while let Some(Node(z, i)) = heap.pop() {
         order.push(i);
+        let i = i as usize;
         let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
         for (nx, ny, _) in grid.neighbours(x, y) {
             let j = grid.index(nx, ny);
@@ -123,13 +132,13 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
                 // Only raises pixels below the flood level (flats): real
                 // slopes keep their height.
                 filled[j] = filled[j].max(z + FLAT_EPSILON * (1.0 + 2.0 * noise[j]));
-                heap.push(Node(filled[j], j));
+                heap.push(Node(filled[j], j as u32));
             }
         }
     }
 
     // ── 2. Steepest-descent receivers on the filled surface ───────────────────
-    let receiver: Vec<Option<usize>> = (0..n)
+    let receivers: Vec<Option<u32>> = (0..n)
         .map(|i| {
             if sea[i] {
                 return None;
@@ -142,7 +151,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
                 })
                 .filter(|&(_, slope)| slope > 0.0)
                 .max_by(|a, b| a.1.total_cmp(&b.1))
-                .map(|(j, _)| j)
+                .map(|(j, _)| j as u32)
         })
         .collect();
 
@@ -157,7 +166,8 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
         })
         .collect();
     for &i in order.iter().rev() {
-        if let Some(j) = receiver[i]
+        let i = i as usize;
+        if let Some(j) = receivers[i].map(|j| j as usize)
             && !sea[j]
         {
             flow_km2[j] += flow_km2[i];
@@ -173,7 +183,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
         flow_km2,
         lake,
         river,
-        receiver,
+        receivers,
         filled,
     }
 }
@@ -283,7 +293,7 @@ mod tests {
         for start in (0..g.pixel_count()).filter(|&i| height[i] >= 0.0) {
             let mut i = start;
             let mut steps = 0;
-            while let Some(j) = h.receiver[i] {
+            while let Some(j) = h.receiver(i) {
                 assert!(
                     h.filled[j] < h.filled[i],
                     "flow must go down the filled surface"
