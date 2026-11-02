@@ -8,7 +8,7 @@ use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
-use crate::noise::{EARTH_CIRCUMFERENCE_KM, cell_value, fbm, ridged};
+use crate::noise::{EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged};
 use crate::rivers;
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
@@ -98,6 +98,20 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 /// Moisture added on a floodplain (weight 1): rivers green their valleys.
 const RIPARIAN_MOISTURE: f32 = 0.15;
 
+/// Volcanic zone away from cones, as a share of the broad zone: below the
+/// ash threshold (0.15), so the zone is ordinary land dotted with volcanoes,
+/// each with its vent, lava flows and an ash halo.
+const VOLCANIC_BACKGROUND: f32 = 0.12;
+/// Cone lattice cell, km: at most one volcano per cell.
+const CONE_CELL_KM: f64 = 900.0;
+/// Share of the cells with a volcano.
+const CONE_PRESENCE: f64 = 0.5;
+/// Cone radius range, km. In a fully volcanic zone the vent biome reaches
+/// about 1.2 radii, lava flows 1.8 and ash 2.6.
+const CONE_KM: (f64, f64) = (50.0, 120.0);
+/// Height of a cone above the terrain at its vent, in a fully volcanic zone.
+const CONE_HEIGHT: f32 = 0.25;
+
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
     grid: Grid,
@@ -108,6 +122,7 @@ pub struct Sampler {
     coast_octaves: u32,
     coast_noise: Perlin,
     plate_seed: u32,
+    cone_seed: u32,
     mountain_blend: f32,
     volcanic_threshold: f32,
     elevation_noise: Perlin,
@@ -139,6 +154,7 @@ impl Sampler {
             noise_scale,
             coast_noise: Perlin::new(seed.wrapping_add(900)),
             plate_seed: seed.wrapping_add(950),
+            cone_seed: seed.wrapping_add(960),
             // Stronger gravity suppresses mountain relief; sqrt dampens the effect
             // for extreme values. Baseline 0.35 at Earth gravity.
             mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
@@ -156,6 +172,28 @@ impl Sampler {
             variability_noise: Perlin::new(seed.wrapping_add(500)),
             highland_noise: Perlin::new(seed.wrapping_add(700)),
         }
+    }
+
+    /// Volcanic cone profile at a point of the unit sphere: 1 at a cone's
+    /// vent, falling with distance over a few cone radii, with lobed lava
+    /// flows. Cones are one per [`CONE_CELL_KM`] cell at most, sized in km,
+    /// so their size does not depend on the planet's.
+    fn cone(&self, p: [f64; 3]) -> f32 {
+        let radius_km = self.grid.circumference_km as f64 / (2.0 * PI);
+        let f = radius_km / CONE_CELL_KM;
+        let Some((d, h)) =
+            nearest_point(self.cone_seed, p[0] * f, p[1] * f, p[2] * f, CONE_PRESENCE)
+        else {
+            return 0.0;
+        };
+        let size = CONE_KM.0 + (CONE_KM.1 - CONE_KM.0) * ((h >> 8) & 0xFF) as f64 / 255.0;
+        // Flows reach further in some directions than others.
+        let g = radius_km / (2.0 * size);
+        let lobe = self
+            .volcano_noise
+            .get([p[0] * g + 71.0, p[1] * g - 13.0, p[2] * g + 29.0]);
+        let r = d * CONE_CELL_KM / size * (1.0 + 0.4 * lobe);
+        (-0.5 * r * r).exp() as f32
     }
 
     /// Samples every noise layer for the pixel at column `x`, row `y`.
@@ -252,8 +290,23 @@ impl Sampler {
         let main = ridge(5.0 * s, 0.0);
         let detail = 0.6 * ridge(10.7 * s, 23.0) + 0.4 * ridge(22.1 * s, 41.0);
         let mountain = main * (1.0 - MOUNTAIN_DETAIL + MOUNTAIN_DETAIL * detail);
-        let elevation =
-            (continent + mountain * mountain_weight * self.mountain_blend).clamp(-1.0, 1.0);
+
+        // Volcanic zones are broad; volcanoes are cones within them, which
+        // rise above the terrain (islands at sea). Away from a cone the zone
+        // stays below the ash threshold.
+        let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
+        let broad = ((volcanic_raw - self.volcanic_threshold) * 4.0).clamp(0.0, 1.0);
+        let cone = if broad > 0.0 {
+            self.cone([nx, ny, nz])
+        } else {
+            0.0
+        };
+        let volcanic_zone = broad * (VOLCANIC_BACKGROUND + (1.0 - VOLCANIC_BACKGROUND) * cone);
+
+        let elevation = (continent
+            + mountain * mountain_weight * self.mountain_blend
+            + CONE_HEIGHT * broad * cone)
+            .clamp(-1.0, 1.0);
 
         // Positive sea_level raises the waterline (more ocean); negative lowers it.
         let biome_elevation = (elevation - self.sea_level).clamp(-1.0, 1.0);
@@ -265,10 +318,6 @@ impl Sampler {
             nz * 1.5 * s,
             4,
         );
-
-        // volcanic_zone: 0 = inert, > 0 = inside a volcanic chain.
-        let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
-        let volcanic_zone = ((volcanic_raw - self.volcanic_threshold) * 4.0).clamp(0.0, 1.0);
 
         // Features of ~3 000 km: whole zones shift between continents.
         let temperature_anomaly = fbm(
