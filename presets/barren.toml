@@ -11,7 +11,7 @@ volcanic = -0.40
 [remap]
 RockyWaste = [
   "DeepOcean", "Ocean", "SeaIce", "Lake", "River", "CausticLake", "FrozenOcean",
-  "AcidSea", "DeepAcidSea", "AcidRiver", "AcidShore",
+  "AcidSea", "DeepAcidSea", "AcidRiver", "AcidShore", "FrozenLake",
   "Beach", "Wetland", "ToxicSwamp",
   "LavaField", "AshLand", "ScorchedWaste", "Snow",
 ]

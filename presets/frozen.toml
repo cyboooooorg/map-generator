@@ -11,7 +11,9 @@ volcanic = -0.30
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Tundra, IceCap, Taiga, Snow, Mountain).
 [remap]
-FrozenOcean = ["DeepOcean", "Ocean", "SeaIce", "MagmaSea", "Lake", "River"]
+# Rivers stay rivers: they only flow (and are only drawn) where it thaws.
+FrozenOcean = ["DeepOcean", "Ocean", "SeaIce", "MagmaSea"]
+FrozenLake = ["Lake"]
 IceCap = ["Beach", "Wetland"]
 GlacialPlain = [
   "Plain", "Shrubland", "Savanna", "Desert",

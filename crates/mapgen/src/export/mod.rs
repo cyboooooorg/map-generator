@@ -149,14 +149,11 @@ const SHADE_RANGE: f32 = 0.4;
 
 /// Colour of a water pixel `depth` elevation units below the waterline:
 /// lighter towards the shore, so seas and lakes show the rim of their basin
-/// whatever their colour (see [`water_depths`]). Rivers and frozen surfaces
-/// stay flat.
+/// whatever their colour (see [`water_depths`]); on ice, the whiter fast ice
+/// along the shore. Rivers stay flat.
 pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
     let colour = biome_color(biome).map(f32::from);
-    if matches!(
-        biome,
-        Biome::River | Biome::AcidRiver | Biome::SeaIce | Biome::FrozenOcean
-    ) {
+    if matches!(biome, Biome::River | Biome::AcidRiver) {
         return colour;
     }
     let shallow = 1.0 - (depth.max(0.0) / SHALLOW_DEPTH).clamp(0.0, 1.0);

@@ -590,6 +590,11 @@ pub fn generate_with_progress(
         variability_m,
         highland_offset,
     } = fields;
+    let thaw = crate::erosion::thaw(
+        &row_temperatures(&grid, params.axial_tilt_deg),
+        planet.climate.temperature,
+        rules.polar,
+    );
     let erosion = erode(
         &mut elevation,
         width,
@@ -597,6 +602,7 @@ pub fn generate_with_progress(
         params.sea_level + rules.waterline,
         params.erosion,
         params.seed,
+        &thaw,
     );
     if keep {
         debug.push(DebugLayer {
@@ -853,8 +859,16 @@ mod tests {
 
     #[test]
     fn stored_climate_includes_planet_offsets() {
-        let frozen = small_world(5, "frozen");
-        let terran = small_world(5, "terran");
+        // Without erosion, which only runs where it thaws, so the relief
+        // (and its lapse rate) is the same on both.
+        let world = |planet: &str| {
+            generate(&WorldParams {
+                erosion: 0.0,
+                ..params(5, planet)
+            })
+            .world
+        };
+        let (frozen, terran) = (world("frozen"), world("terran"));
         // The frozen preset cools every pixel by 0.55; both are clamped to [0, 1].
         for (f, t) in frozen.temperature.iter().zip(&terran.temperature) {
             if *t < 1.0 {
