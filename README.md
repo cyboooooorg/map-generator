@@ -58,7 +58,7 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 
 **sea-level** — shifts the waterline. `0.0` is the default; positive values raise it (more ocean), negative values lower it (more land).
 
-**volcanic** — controls how much of the mountain chains become volcanic. `0.0` = no volcanoes, `1.0` = most mountain chains erupt.
+**volcanic** — controls how much of the planet is volcanic: the share of volcanic provinces, and so the number of volcanoes, not their size. `0.0` = no volcanoes, `1.0` = many volcanic provinces.
 
 **axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt).
 
@@ -355,7 +355,7 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `noise_biome_elev.png`          | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                     |
 | `noise_moisture.png`            | `[-1, 1]` | Moisture noise (local variation added to the climate model)                                      |
 | `noise_volcanic_raw.png`        | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                           |
-| `noise_volcanic_zone.png`       | `[0, 1]`  | Processed volcanic zone (threshold applied)                                                      |
+| `noise_volcanic_zone.png`       | `[0, 1]`  | Volcanic zone: threshold applied, peaking on the volcanic cones                                  |
 | `noise_temperature_anomaly.png` | `[-1, 1]` | Large-scale temperature anomaly noise (features of ~3 000 km)                                    |
 | `noise_variability_t.png`       | `[-1, 1]` | Regional variability noise added to temperature                                                  |
 | `noise_variability_m.png`       | `[-1, 1]` | Regional variability noise added to moisture                                                     |
@@ -457,6 +457,7 @@ Elevation before erosion is `continent + mountain × mountain_weight × mountain
 - **Continents.** A 5-octave FBM on the unit sphere. Its 2 coarse octaves shape continents and basins; its 3 fine ones add hills. On low ground inland (more than about 0.03–0.2 above the waterline) only 30 % of the fine octaves remain, so plains and deserts are smooth; coasts keep them all, and so does high ground, with the mountain weight.
 - **Coastlines.** Near the waterline the FBM is sampled at a position displaced sideways by every octave finer than its own, down to about two map pixels, each by half its wavelength and 0.8× less at each finer octave. A low "plate" step is added there too: a Voronoi cell noise (±0.06, borders softened over about 1/20 of a cell) that gives coasts straight stretches and angular corners. Both fade out between 0.02 and 0.08 from the waterline, where they would only wrinkle the relief. Coasts are fractal instead of smooth contours. The finest outline octaves follow the map resolution, so a larger map adds detail to the same continents.
 - **Mountains.** A ridged noise on a domain-warped position, with two finer ridged octaves concentrated on its ridges (35 % of its height), weighted from continent height 0.2 upwards.
+- **Volcanoes.** The volcanic noise, above the threshold set by `--volcanic`, outlines broad volcanic provinces. Volcanoes are cones within them: at most one per 900 km cell (half the cells), 50–120 km in radius whatever the planet's size, rising up to `0.25` above the terrain (volcanic islands at sea). The volcanic zone peaks on each cone and falls to 12 % of the province away from it, below the ash threshold, so a province is ordinary land dotted with volcanoes, each with its vent (about 1.2 radii), lava flows (1.8, lobed by a noise) and an ash halo (2.6). Presets that shift the volcanic zone (`volcanic` worlds, +0.5) still cover whole provinces with lava.
 
 ### Hydraulic erosion
 
