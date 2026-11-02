@@ -312,7 +312,7 @@ pub fn erode(
         waterline * gain,
         SHORE_BAND * gain,
         droplets,
-        seed as u64,
+        crate::noise::stream_seed(seed, crate::noise::stream::EROSION) as u64,
     );
     // Keep the change where the ground was steep enough to be carved: on
     // flat cells the deposits of droplets slowing down would only roughen

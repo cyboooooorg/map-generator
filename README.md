@@ -55,7 +55,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
-**seed** — drives every noise layer. The same seed with the same other options always produces the same world.
+**seed** — drives every noise layer. The same seed with the same other options always produces the same world. Each noise layer hashes the seed with its own stream number, so the layers of a world are independent and neighbouring seeds share nothing. A seed noted before that change (November 2026) gives a different world now; a world already generated keeps its files.
 
 **sea-level** — shifts the waterline: positive values raise it (more ocean), negative values lower it (more land). When it is not set (nor by the preset), it is drawn in `[0.10, 0.40)`, which gives about 10–70 % of land, mostly 20–55 % (Earth: 29 %). Mountains and snow are measured above the waterline, so a low sea level also turns much of the land into highland: at `0.0` about a third of the land is mountain, at `-0.3` almost three quarters.
 
