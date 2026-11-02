@@ -6,9 +6,10 @@
 // outside the view (frustum, or behind the horizon on the globe) are
 // skipped. Leaves at or below the first detail level get a patch: a small
 // mesh drawn by the surface shader over the tile's rectangle, showing the
-// tile, or a crop of its closest loaded ancestor while it loads. Where no
-// tile is loaded the base surface shows through.
+// tile, or a crop of its closest loaded ancestor while it loads. Patches
+// mark the stencil buffer and the base surface is drawn only around them.
 import {
+  AlwaysStencilFunc,
   Frustum,
   LinearFilter,
   LinearMipmapLinearFilter,
@@ -16,6 +17,7 @@ import {
   Mesh,
   type PerspectiveCamera,
   PlaneGeometry,
+  ReplaceStencilOp,
   type Scene,
   type ShaderMaterial,
   SRGBColorSpace,
@@ -41,8 +43,13 @@ import {
 const SPLIT_PX = 1.5;
 /** Concurrent tile downloads. */
 const MAX_IN_FLIGHT = 6;
+/** Delay before downloading a failed tile again. */
+const RETRY_MS = 5000;
 /** Tile textures kept on the GPU. */
 const MAX_TEXTURES = 300;
+
+/** Stencil value marking the pixels a detail patch covers. */
+export const DETAIL_STENCIL = 1;
 
 /** Creates the material of a patch; uniforms come from the base surface. */
 export type PatchMaterialFactory = () => ShaderMaterial;
@@ -69,7 +76,8 @@ export class TileLayer {
   private readonly patches = new Map<string, Mesh<PlaneGeometry, ShaderMaterial>>();
   private readonly cache = new Map<string, CachedTile>();
   private readonly loading = new Map<string, AbortController>();
-  private readonly failed = new Set<string>();
+  /** Tiles whose download failed, with the time to retry them. */
+  private readonly failed = new Map<string, number>();
   private world: { id: string; revision: number; firstLevel: number } | null = null;
   private enabled = true;
   private frame = 0;
@@ -177,7 +185,8 @@ export class TileLayer {
     }
     const missing = leaves.filter((t) => {
       const key = tileKey(t);
-      return !this.cache.has(key) && !this.loading.has(key) && !this.failed.has(key);
+      const retryAt = this.failed.get(key);
+      return !this.cache.has(key) && !this.loading.has(key) && (retryAt === undefined || retryAt <= performance.now());
     });
     // Coarse tiles first, then the closest to the camera.
     const centre = new Vector3();
@@ -221,9 +230,11 @@ export class TileLayer {
       texture.minFilter = LinearMipmapLinearFilter;
       texture.needsUpdate = true;
       this.cache.set(key, { texture, lastUsed: this.frame });
-    } catch (error) {
+      this.failed.delete(key);
+    } catch {
       if (!controller.signal.aborted) {
-        this.failed.add(key);
+        // Retry later: a tile left out shows a blurry ancestor for good.
+        this.failed.set(key, performance.now() + RETRY_MS);
       }
     } finally {
       if (this.loading.get(key) === controller) {
@@ -251,11 +262,14 @@ export class TileLayer {
     let patch = this.patches.get(key);
     if (!patch) {
       patch = new Mesh(this.geometry, this.makeMaterial());
-      // Deeper patches win over coarser ones and over the base surface.
-      patch.material.polygonOffset = true;
-      patch.material.polygonOffsetFactor = -1;
-      patch.material.polygonOffsetUnits = -4 * (tile.z + 1);
-      patch.renderOrder = tile.z + 1;
+      // Patches are drawn before the base surface and mark the stencil, so
+      // the base never covers them, even where the coarse geometry rises
+      // above them (relief). Leaves never overlap each other.
+      patch.renderOrder = -1;
+      patch.material.stencilWrite = true;
+      patch.material.stencilRef = DETAIL_STENCIL;
+      patch.material.stencilFunc = AlwaysStencilFunc;
+      patch.material.stencilZPass = ReplaceStencilOp;
       patch.frustumCulled = false;
       const [u0, v0, du, dv] = tileRect(tile);
       (patch.material.uniforms['uTileRect']!.value as Vector4).set(u0, v0, du, dv);

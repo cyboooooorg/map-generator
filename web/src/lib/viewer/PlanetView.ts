@@ -10,12 +10,14 @@ import {
   Color,
   DataTexture,
   DoubleSide,
+  FrontSide,
   Float32BufferAttribute,
   HalfFloatType,
   LinearFilter,
   LineSegments,
   Mesh,
   MOUSE,
+  NotEqualStencilFunc,
   NearestFilter,
   PerspectiveCamera,
   PlaneGeometry,
@@ -48,7 +50,7 @@ import {
   type Vec3,
 } from '../geo';
 import type { WorldLayers } from '../layers';
-import { TileLayer } from './TileLayer';
+import { DETAIL_STENCIL, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
   atmosphereVertex,
@@ -182,7 +184,8 @@ export class PlanetView {
   onPick: (point: LonLat | null) => void = () => {};
 
   constructor(private readonly canvas: HTMLCanvasElement) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: true });
+    // The stencil lets detail patches hide the base surface (see TileLayer).
+    this.renderer = new WebGLRenderer({ canvas, antialias: true, stencil: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.scene.background = new Color('#05070d');
 
@@ -198,6 +201,10 @@ export class PlanetView {
     );
     // Positions come from the shader: the geometry bounds are meaningless.
     this.surface.frustumCulled = false;
+    // Drawn only where no detail patch was drawn this frame.
+    this.surface.material.stencilWrite = true;
+    this.surface.material.stencilRef = DETAIL_STENCIL;
+    this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
 
     this.grid = new LineSegments(
@@ -254,7 +261,9 @@ export class PlanetView {
             uTile: { value: null },
             uTexRect: { value: new Vector4(0, 0, 1, 1) },
           },
-          side: DoubleSide,
+          // Front faces only: with DoubleSide, the far side of a patch
+          // would mark the stencil and punch a hole in the near globe.
+          side: FrontSide,
         }),
     );
 
