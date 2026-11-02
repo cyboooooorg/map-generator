@@ -1,30 +1,40 @@
-// Decodes the raw_data/ layer PNGs into typed arrays. Runs in a Web Worker
-// (see worker.ts) but has no browser dependency, so it is unit-tested directly.
+// Decodes the raw_data/ layer PNGs into compact typed arrays. Runs in a Web
+// Worker (see worker.ts) but has no browser dependency, so it is unit-tested
+// directly.
 //
 // Browsers decode PNGs to 8 bits per channel: the 16-bit layers need this
 // JavaScript decoder to keep their precision.
+//
+// Memory: the layers stay packed as the GPU textures need them (half
+// floats), and values are converted on read (see ../sample.ts). Only the
+// elevation keeps its exact 16-bit samples, for the readout of the height
+// above the coastline. That is 11 bytes per pixel on the main thread
+// (19 with the layers of format version 2), instead of 4-byte floats per
+// layer next to the GPU copies.
 import { decode } from 'fast-png';
 import { DataUtils } from 'three';
 import type { ScalarLayerInfo } from '../api/types/ScalarLayerInfo';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
 
+/** A 16-bit layer as stored: pixel `p` is `min + data[p] × scale`. */
+export interface Quantized {
+  data: Uint16Array;
+  min: number;
+  scale: number;
+}
+
 /** Every pixel value of a world, row-major, row 0 = north. */
 export interface WorldLayers {
   width: number;
   height: number;
-  /** Terrain height in [-1, 1], before the sea-level shift. */
-  elevation: Float32Array;
-  /** Moisture in [-1, 1], planet offset included. */
-  moisture: Float32Array;
-  /** Temperature in [0, 1], planet offset included. */
-  temperature: Float32Array;
-  /** Drainage area in km² flowing through the pixel. */
-  flowKm2: Float32Array;
+  /** Terrain height in [-1, 1], before the sea-level shift, exact. */
+  elevation: Quantized;
   /** Biome id of each pixel (index into WorldMetadata.biomes). */
   biomes: Uint8Array;
   /**
    * The four scalar layers packed for the GPU as RGBA half floats:
-   * elevation, temperature, moisture, log10(1 + flow km²).
+   * elevation, temperature in [0, 1], moisture in [-1, 1],
+   * log10(1 + drainage area in km²).
    */
   surface: Uint16Array;
   /**
@@ -36,18 +46,19 @@ export interface WorldLayers {
 
 /** The biome-selection layers exported since `raw_data` format version 2. */
 export interface ExtraLayers {
-  /** Volcanic zone in [0, 1], as biome selection sees it. */
-  volcanic: Float32Array;
-  /** Distance to open water in km, capped at `coastMaxKm`. */
-  coastKm: Float32Array;
-  coastMaxKm: number;
-  /** Local shift of the highland line, in [-1, 1]. */
-  highlandOffset: Float32Array;
-  /** Floodplain weight of the river valleys in [0, 1] (format version 3; zeros before). */
-  floodplain: Float32Array;
-  /** The four packed for the GPU as RGBA half floats, in the order above. */
+  /**
+   * RGBA half floats: volcanic zone in [0, 1], distance to open water in km
+   * (capped at `coastMaxKm`), floodplain weight in [0, 1] (format version 3;
+   * zeros before), local shift of the highland line in [-1, 1].
+   */
   packed: Uint16Array;
+  coastMaxKm: number;
 }
+
+/** Channels of WorldLayers.surface. */
+export const SURFACE = { elevation: 0, temperature: 1, moisture: 2, logFlow: 3 } as const;
+/** Channels of ExtraLayers.packed. */
+export const EXTRA = { volcanic: 0, coastKm: 1, floodplain: 2, highlandOffset: 3 } as const;
 
 /** The PNG files of a world, as fetched. */
 export interface LayerFiles {
@@ -76,44 +87,44 @@ function decodeGrey(file: ArrayBuffer, width: number, height: number, depth: 8 |
   return png.data;
 }
 
-function decodeScalar(file: ArrayBuffer, info: ScalarLayerInfo, width: number, height: number): Float32Array {
+function decode16(file: ArrayBuffer, width: number, height: number): Uint16Array {
   const pixels = decodeGrey(file, width, height, 16);
+  return pixels instanceof Uint16Array ? pixels : Uint16Array.from(pixels);
+}
+
+/**
+ * The array itself when it owns its whole buffer, a copy otherwise, so that
+ * transferring its buffer to the main thread moves nothing else.
+ */
+function owned<T extends Uint8Array | Uint16Array>(array: T, copy: (a: T) => T): T {
+  return array.byteOffset === 0 && array.buffer.byteLength === array.byteLength ? array : copy(array);
+}
+
+/**
+ * Writes a 16-bit layer into one channel of an RGBA half-float pack. `map`
+ * turns the decoded value into the packed one. A 16-bit layer has at most
+ * 65 536 values: they are converted once, through a lookup table.
+ */
+function packChannel(
+  packed: Uint16Array,
+  channel: number,
+  pixels: Uint16Array,
+  info: ScalarLayerInfo,
+  map: (value: number) => number = (v) => v,
+): void {
   const scale = (info.max - info.min) / 65535;
-  const values = new Float32Array(pixels.length);
-  const log = info.encoding === 'gray16-log10';
+  const table = new Uint16Array(65536);
+  for (let p = 0; p < 65536; p += 1) {
+    table[p] = DataUtils.toHalfFloat(map(info.min + p * scale));
+  }
   for (let i = 0; i < pixels.length; i += 1) {
-    const v = info.min + (pixels[i] ?? 0) * scale;
-    values[i] = log ? 10 ** v - 1 : v;
+    packed[i * 4 + channel] = table[pixels[i]!]!;
   }
-  return values;
 }
 
-/** Packs the scalar layers as RGBA half floats (see WorldLayers.surface). */
-export function packSurface(
-  elevation: Float32Array,
-  temperature: Float32Array,
-  moisture: Float32Array,
-  flowKm2: Float32Array,
-): Uint16Array {
-  const surface = new Uint16Array(elevation.length * 4);
-  for (let i = 0; i < elevation.length; i += 1) {
-    surface[i * 4] = DataUtils.toHalfFloat(elevation[i] ?? 0);
-    surface[i * 4 + 1] = DataUtils.toHalfFloat(temperature[i] ?? 0);
-    surface[i * 4 + 2] = DataUtils.toHalfFloat(moisture[i] ?? 0);
-    surface[i * 4 + 3] = DataUtils.toHalfFloat(Math.log10(1 + (flowKm2[i] ?? 0)));
-  }
-  return surface;
-}
-
-function packHalf(a: Float32Array, b: Float32Array, c: Float32Array, d: Float32Array): Uint16Array {
-  const packed = new Uint16Array(a.length * 4);
-  for (let i = 0; i < a.length; i += 1) {
-    packed[i * 4] = DataUtils.toHalfFloat(a[i] ?? 0);
-    packed[i * 4 + 1] = DataUtils.toHalfFloat(b[i] ?? 0);
-    packed[i * 4 + 2] = DataUtils.toHalfFloat(c[i] ?? 0);
-    packed[i * 4 + 3] = DataUtils.toHalfFloat(d[i] ?? 0);
-  }
-  return packed;
+/** log10(1 + flow) of a flow layer, whatever its encoding. */
+function logFlow(info: ScalarLayerInfo): (value: number) => number {
+  return info.encoding === 'gray16-log10' ? (v) => v : (v) => Math.log10(1 + v);
 }
 
 function decodeExtra(meta: WorldMetadata, files: LayerFiles): ExtraLayers | null {
@@ -124,39 +135,46 @@ function decodeExtra(meta: WorldMetadata, files: LayerFiles): ExtraLayers | null
   if (!volcanicInfo || !coastInfo || !highlandInfo || !files.volcanic_zone || !files.coast_distance || !files.highland_offset) {
     return null;
   }
-  const volcanic = decodeScalar(files.volcanic_zone, volcanicInfo, width, height);
-  const coastKm = decodeScalar(files.coast_distance, coastInfo, width, height);
-  const highlandOffset = decodeScalar(files.highland_offset, highlandInfo, width, height);
-  const floodplain =
-    layers.floodplain && files.floodplain
-      ? decodeScalar(files.floodplain, layers.floodplain, width, height)
-      : new Float32Array(width * height);
-  return {
-    volcanic,
-    coastKm,
-    coastMaxKm: coastInfo.max,
-    highlandOffset,
-    floodplain,
-    packed: packHalf(volcanic, coastKm, floodplain, highlandOffset),
-  };
+  // Zero-filled: half-float 0 is 0, the floodplain of version 2 worlds.
+  const packed = new Uint16Array(width * height * 4);
+  packChannel(packed, EXTRA.volcanic, decode16(files.volcanic_zone, width, height), volcanicInfo);
+  packChannel(packed, EXTRA.coastKm, decode16(files.coast_distance, width, height), coastInfo);
+  packChannel(packed, EXTRA.highlandOffset, decode16(files.highland_offset, width, height), highlandInfo);
+  if (layers.floodplain && files.floodplain) {
+    packChannel(packed, EXTRA.floodplain, decode16(files.floodplain, width, height), layers.floodplain);
+  }
+  return { packed, coastMaxKm: coastInfo.max };
 }
 
 export function decodeLayers(meta: WorldMetadata, files: LayerFiles): WorldLayers {
   const { width, height, layers } = meta;
   const biomes = decodeGrey(files.biomes, width, height, 8);
-  const elevation = decodeScalar(files.elevation, layers.elevation, width, height);
-  const moisture = decodeScalar(files.moisture, layers.moisture, width, height);
-  const temperature = decodeScalar(files.temperature, layers.temperature, width, height);
-  const flowKm2 = decodeScalar(files.flow, layers.flow, width, height);
+  const elevation = decode16(files.elevation, width, height);
+  const surface = new Uint16Array(width * height * 4);
+  packChannel(surface, SURFACE.elevation, elevation, layers.elevation);
+  packChannel(surface, SURFACE.temperature, decode16(files.temperature, width, height), layers.temperature);
+  packChannel(surface, SURFACE.moisture, decode16(files.moisture, width, height), layers.moisture);
+  packChannel(surface, SURFACE.logFlow, decode16(files.flow, width, height), layers.flow, logFlow(layers.flow));
   return {
     width,
     height,
-    elevation,
-    moisture,
-    temperature,
-    flowKm2,
-    biomes: Uint8Array.from(biomes),
-    surface: packSurface(elevation, temperature, moisture, flowKm2),
+    elevation: {
+      data: owned(elevation, (a) => a.slice()),
+      min: layers.elevation.min,
+      scale: (layers.elevation.max - layers.elevation.min) / 65535,
+    },
+    biomes: biomes instanceof Uint8Array ? owned(biomes, (a) => a.slice()) : Uint8Array.from(biomes),
+    surface,
     extra: decodeExtra(meta, files),
   };
+}
+
+/** The value of one channel of a half-float pack at pixel `i`. */
+export function halfAt(packed: Uint16Array, i: number, channel: number): number {
+  return DataUtils.fromHalfFloat(packed[i * 4 + channel] ?? 0);
+}
+
+/** The value of a quantized layer at pixel `i`. */
+export function quantizedAt(layer: Quantized, i: number): number {
+  return layer.min + (layer.data[i] ?? 0) * layer.scale;
 }

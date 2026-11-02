@@ -53,6 +53,7 @@ import {
   type Vec3,
 } from '../geo';
 import type { WorldLayers } from '../layers';
+import { downsample, fitFactor } from './textures';
 import { DETAIL_STENCIL, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
@@ -175,6 +176,18 @@ function emptyTexture(): DataTexture {
   return texture;
 }
 
+/** An RGBA half-float data layer, filtered, wrapping east-west. */
+function halfFloatTexture(data: Uint16Array, width: number, height: number): DataTexture {
+  const texture = new DataTexture(data, width, height, RGBAFormat, HalfFloatType);
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 /** Hex biome colours (rgb) and river flags (a) as a columns × rows texture. */
 function hexTexture(map: HexMap): DataTexture {
   const colours = map.biomes.map((b) => {
@@ -242,6 +255,15 @@ export class PlanetView {
   private readonly path: LineSegments<BufferGeometry, ShaderMaterial>;
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
+  /**
+   * Rendering on demand: a frame is requested when something changed (a
+   * setter, the camera, a loaded tile, a resize), and frames keep coming
+   * only while the camera's damping or the morph animation runs.
+   */
+  private frame: number | null = null;
+  private dirty = true;
+  private readonly lastPosition = new Vector3();
+  private readonly lastQuaternion = new Quaternion();
   /** Counts setTexture calls: only the latest one may set the map. */
   private textureRequest = 0;
   private disposed = false;
@@ -366,6 +388,7 @@ export class PlanetView {
           // would mark the stencil and punch a hole in the near globe.
           side: FrontSide,
         }),
+      () => this.requestRender(),
     );
 
     this.controls = new OrbitControls(this.camera, canvas);
@@ -383,7 +406,20 @@ export class PlanetView {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
-    this.renderer.setAnimationLoop(this.render);
+    this.requestRender();
+  }
+
+  /** Draws the scene on the next frame. */
+  private requestRender(): void {
+    this.dirty = true;
+    this.schedule();
+  }
+
+  /** Runs a frame soon (to render if dirty, or to process the hover). */
+  private schedule(): void {
+    if (this.frame === null && !this.disposed) {
+      this.frame = requestAnimationFrame(this.render);
+    }
   }
 
   /**
@@ -403,7 +439,19 @@ export class PlanetView {
     signal?.throwIfAborted();
     // ImageBitmaps ignore texture.flipY: flip while decoding instead, so
     // row 0 (north) ends at the top of the texture, as geo.ts expects.
-    const bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+    let bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+    const factor = fitFactor(bitmap.width, bitmap.height, this.renderer.capabilities.maxTextureSize);
+    if (factor > 1) {
+      // Too large for this GPU: decode again, scaled down.
+      const { width, height } = bitmap;
+      bitmap.close();
+      bitmap = await createImageBitmap(blob, {
+        imageOrientation: 'flipY',
+        resizeWidth: Math.ceil(width / factor),
+        resizeHeight: Math.ceil(height / factor),
+        resizeQuality: 'high',
+      });
+    }
     if (this.disposed || request !== this.textureRequest || signal?.aborted) {
       bitmap.close();
       signal?.throwIfAborted();
@@ -417,6 +465,7 @@ export class PlanetView {
     this.disposeTexture();
     this.texture = texture;
     this.u.uMap.value = texture;
+    this.requestRender();
   }
 
   /** Frees the GPU copy and the decoded image of the base map. */
@@ -435,6 +484,7 @@ export class PlanetView {
    * basins are then shaded and raised like land, without sun glint.
    */
   setData(layers: WorldLayers | null, coast: number, liquidSea = true): void {
+    this.requestRender();
     this.shared.uData.value.dispose();
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
@@ -447,7 +497,13 @@ export class PlanetView {
       this.shared.uHasData.value = 0;
       return;
     }
-    const biomes = new DataTexture(layers.biomes, layers.width, layers.height, RedFormat, UnsignedByteType);
+    // Worlds wider than the GPU allows are shown at a lower resolution (the
+    // point readout still uses every pixel).
+    const factor = fitFactor(layers.width, layers.height, this.renderer.capabilities.maxTextureSize);
+    const fit = <T extends Uint8Array | Uint16Array>(data: T, channels: number) =>
+      downsample(data, layers.width, layers.height, channels, factor);
+    const ids = fit(layers.biomes, 1);
+    const biomes = new DataTexture(ids.data, ids.width, ids.height, RedFormat, UnsignedByteType);
     // Rows of an odd width are not 4-byte aligned.
     biomes.unpackAlignment = 1;
     biomes.magFilter = NearestFilter;
@@ -459,33 +515,23 @@ export class PlanetView {
     this.u.uBiomes.value = biomes;
     this.u.uHasBiomes.value = 1;
     if (layers.extra) {
-      const extra = new DataTexture(layers.extra.packed, layers.width, layers.height, RGBAFormat, HalfFloatType);
-      extra.magFilter = LinearFilter;
-      extra.minFilter = LinearFilter;
-      extra.wrapS = RepeatWrapping;
-      extra.wrapT = ClampToEdgeWrapping;
-      extra.generateMipmaps = false;
-      extra.needsUpdate = true;
-      this.u.uExtra.value = extra;
+      const packed = fit(layers.extra.packed, 4);
+      this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height);
       this.u.uHasExtra.value = 1;
       this.u.uCoastMax.value = layers.extra.coastMaxKm;
     }
-    const texture = new DataTexture(layers.surface, layers.width, layers.height, RGBAFormat, HalfFloatType);
-    texture.magFilter = LinearFilter;
-    texture.minFilter = LinearFilter;
-    texture.wrapS = RepeatWrapping;
-    texture.wrapT = ClampToEdgeWrapping;
-    texture.generateMipmaps = false;
-    texture.needsUpdate = true;
+    const surface = fit(layers.surface, 4);
+    const texture = halfFloatTexture(surface.data, surface.width, surface.height);
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
     this.shared.uCoast.value = coast;
     this.shared.uLiquidSea.value = liquidSea ? 1 : 0;
-    this.u.uTexel.value.set(1 / layers.width, 1 / layers.height);
+    this.u.uTexel.value.set(1 / surface.width, 1 / surface.height);
     this.u.uMapSize.value.set(layers.width, layers.height);
   }
 
   setLayer(layer: Layer): void {
+    this.requestRender();
     this.u.uLayer.value = LAYER_IDS[layer];
     this.layer = layer;
     this.tiles.setEnabled(layer === 'biomes' && !this.hexOn);
@@ -496,15 +542,18 @@ export class PlanetView {
    * browser cache), or stops with null.
    */
   setDetail(world: { id: string; revision: number; baseWidth: number } | null): void {
+    this.requestRender();
     this.tiles.setWorld(world);
   }
 
   /** Relief exaggeration in [0, 1]: 0 is flat. */
   setRelief(relief: number): void {
+    this.requestRender();
     this.shared.uRelief.value = relief;
   }
 
   setLighting(lighting: Lighting): void {
+    this.requestRender();
     this.u.uLightMode.value = lighting.kind === 'sun' ? 1 : 0;
     if (lighting.kind === 'sun') {
       const declination = ((lighting.axialTiltDeg * Math.PI) / 180) * Math.sin(2 * Math.PI * lighting.season);
@@ -514,11 +563,13 @@ export class PlanetView {
   }
 
   setAtmosphere(visible: boolean): void {
+    this.requestRender();
     this.atmosphereOn = visible;
   }
 
   /** Shows a hex grid over the map (majority biome per hex), or hides it with null. */
   setHex(map: HexMap | null): void {
+    this.requestRender();
     this.u.uHex.value.dispose();
     if (!map) {
       this.u.uHex.value = emptyTexture();
@@ -536,6 +587,7 @@ export class PlanetView {
   }
 
   setMode(mode: ViewMode): void {
+    this.requestRender();
     if (mode === this.mode) {
       return;
     }
@@ -548,16 +600,19 @@ export class PlanetView {
   }
 
   setGraticule(visible: boolean): void {
+    this.requestRender();
     this.grid.visible = visible;
   }
 
   /** Highlights one biome (id), fading the others; null shows them all. */
   setHighlight(biome: number | null): void {
+    this.requestRender();
     this.u.uHighlight.value = biome ?? -1;
   }
 
   /** Draws a path of great-circle legs through the points (fewer than one hides it). */
   setPath(points: readonly LonLat[]): void {
+    this.requestRender();
     this.path.geometry.dispose();
     this.path.geometry = pathGeometry(points);
     this.path.visible = points.length > 0;
@@ -565,6 +620,7 @@ export class PlanetView {
 
   /** Back to the starting view of the current mode: whole planet, north up. */
   resetView(): void {
+    this.requestRender();
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, 0, this.mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
     this.camera.up.set(0, 1, 0);
@@ -583,6 +639,7 @@ export class PlanetView {
 
   /** Moves the camera to a state reported by another view (same mode expected). */
   setCamera(state: CameraState): void {
+    this.requestRender();
     this.applyingCamera = true;
     if (state.mode !== this.mode) {
       this.setMode(state.mode);
@@ -608,7 +665,10 @@ export class PlanetView {
 
   dispose(): void {
     this.disposed = true;
-    this.renderer.setAnimationLoop(null);
+    if (this.frame !== null) {
+      cancelAnimationFrame(this.frame);
+      this.frame = null;
+    }
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener('wheel', this.handleWheel);
     this.canvas.removeEventListener('pointerdown', this.handlePointerDown);
@@ -629,6 +689,9 @@ export class PlanetView {
       object.material.dispose();
     }
     this.renderer.dispose();
+    // Free the WebGL context now: browsers cap live contexts (about 16), and
+    // compare panes come and go.
+    this.renderer.forceContextLoss();
   }
 
   private applyModeControls(): void {
@@ -657,9 +720,11 @@ export class PlanetView {
     // In portrait views, zoom out so the planet fits the width as well.
     this.camera.zoom = Math.min(1, this.camera.aspect);
     this.camera.updateProjectionMatrix();
+    this.requestRender();
   }
 
   private readonly render = (now: number): void => {
+    this.frame = null;
     if (this.animation) {
       const t = Math.min(1, (now - this.animation.start) / MORPH_MS);
       const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
@@ -667,29 +732,53 @@ export class PlanetView {
       if (t === 1) {
         this.animation = null;
       }
+      this.dirty = true;
     }
-    this.shared.uMorph.value = this.morph;
-    // The atmosphere only makes sense around the globe: fade it with the morph.
-    this.atmosphere.visible = this.atmosphereOn && this.morph > 0.01;
-    this.atmosphereOpacity.value = this.morph ** 3;
     // Near the surface: slower rotation, and a near plane that follows the
     // altitude so depth precision holds down to a few hundred metres.
     const altitude = this.altitude();
     this.controls.rotateSpeed = Math.min(1, Math.max(0.002, altitude * 0.6));
+    // The damping keeps moving the camera after the pointer stops: frames
+    // continue until it has settled. OrbitControls' own change threshold is
+    // too coarse near the surface, where its residue would show as a jump at
+    // the next interaction: compare the camera itself.
+    this.controls.update();
+    const moving =
+      this.lastPosition.distanceToSquared(this.camera.position) > 1e-16 ||
+      1 - Math.abs(this.lastQuaternion.dot(this.camera.quaternion)) > 1e-14;
+    this.lastPosition.copy(this.camera.position);
+    this.lastQuaternion.copy(this.camera.quaternion);
+    if (moving) {
+      this.dirty = true;
+    }
+    if (this.dirty) {
+      this.dirty = false;
+      this.draw();
+    }
+    if (this.hoverPending) {
+      this.hoverPending = false;
+      this.onHover(this.hoverAt ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
+    }
+    if (moving || this.animation) {
+      this.schedule();
+    }
+  };
+
+  private draw(): void {
+    this.shared.uMorph.value = this.morph;
+    // The atmosphere only makes sense around the globe: fade it with the morph.
+    this.atmosphere.visible = this.atmosphereOn && this.morph > 0.01;
+    this.atmosphereOpacity.value = this.morph ** 3;
+    const altitude = this.altitude();
     this.camera.near = Math.max(altitude * 0.1, 1e-6);
     this.camera.far = altitude + 4;
     this.camera.updateProjectionMatrix();
-    this.controls.update();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
     if (!this.animation) {
       this.tiles.update(this.camera, this.morph, this.renderer.domElement.height);
     }
     this.renderer.render(this.scene, this.camera);
-    if (this.hoverPending) {
-      this.hoverPending = false;
-      this.onHover(this.hoverAt ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
-    }
-  };
+  }
 
   /** Height of the camera above the surface (globe) or the map plane. */
   private altitude(): number {
@@ -716,6 +805,7 @@ export class PlanetView {
     this.camera.updateMatrixWorld();
     if (!anchor) {
       this.reportCamera();
+      this.requestRender();
       return;
     }
     // Turn the camera around the centre until the anchor is back under the
@@ -731,6 +821,7 @@ export class PlanetView {
     }
     this.reportCamera();
     this.hoverPending = true;
+    this.requestRender();
   };
 
   private reportCamera(): void {
@@ -740,6 +831,7 @@ export class PlanetView {
   }
 
   private readonly handleControlsChange = (): void => {
+    this.requestRender();
     this.reportCamera();
   };
 
@@ -751,6 +843,7 @@ export class PlanetView {
     this.steering = false;
     this.hoverAt = null;
     this.hoverPending = true;
+    this.schedule();
   };
 
   private readonly handlePointerMove = (event: PointerEvent): void => {
@@ -758,6 +851,7 @@ export class PlanetView {
     // While dragging, the point under the pointer is meaningless.
     this.hoverAt = event.buttons === 0 ? new Vector2(event.clientX, event.clientY) : null;
     this.hoverPending = true;
+    this.schedule();
   };
 
   /** Point of the planet under a point of the canvas, or null. */
