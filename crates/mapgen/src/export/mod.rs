@@ -147,6 +147,82 @@ pub(crate) fn shade(relative: f32) -> f32 {
 /// Largest brightening or darkening of the hillshade.
 const SHADE_RANGE: f32 = 0.4;
 
+/// Colour of a water pixel `depth` elevation units below the waterline:
+/// lighter towards the shore, so seas and lakes show the rim of their basin
+/// whatever their colour (see [`water_depths`]). Rivers and frozen surfaces
+/// stay flat.
+pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
+    let colour = biome_color(biome).map(f32::from);
+    if matches!(
+        biome,
+        Biome::River | Biome::AcidRiver | Biome::SeaIce | Biome::FrozenOcean
+    ) {
+        return colour;
+    }
+    let shallow = 1.0 - (depth.max(0.0) / SHALLOW_DEPTH).clamp(0.0, 1.0);
+    let t = SHALLOW_TINT * shallow * shallow;
+    colour.map(|c| c + (255.0 - c) * t)
+}
+
+/// Depth of every water pixel below its surface, in elevation units (0 on
+/// land and rivers): below the waterline for seas; below the lake's level,
+/// its highest pixel, for lakes, which lie above the sea.
+pub fn water_depths(world: &World) -> Vec<f32> {
+    let (w, h) = (world.width as usize, world.height as usize);
+    let planet = &world.params.planet;
+    let waterline = world.params.sea_level + planet.rules.waterline;
+    let river = planet.remap(Biome::River);
+    let lake = |i: usize| {
+        world.biomes[i].is_water() && world.biomes[i] != river && world.elevation[i] >= waterline
+    };
+    let mut depth: Vec<f32> = (0..w * h)
+        .map(|i| {
+            if world.biomes[i].is_water() && world.elevation[i] < waterline {
+                waterline - world.elevation[i]
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let mut seen = vec![false; w * h];
+    let mut members = Vec::new();
+    for start in 0..w * h {
+        if seen[start] || !lake(start) {
+            continue;
+        }
+        members.clear();
+        let mut stack = vec![start];
+        seen[start] = true;
+        let mut surface = f32::MIN;
+        while let Some(i) = stack.pop() {
+            members.push(i);
+            surface = surface.max(world.elevation[i]);
+            let (x, y) = (i % w, i / w);
+            let neighbours = [
+                Some(y * w + (x + 1) % w),
+                Some(y * w + (x + w - 1) % w),
+                (y > 0).then(|| i - w),
+                (y + 1 < h).then(|| i + w),
+            ];
+            for j in neighbours.into_iter().flatten() {
+                if !seen[j] && lake(j) {
+                    seen[j] = true;
+                    stack.push(j);
+                }
+            }
+        }
+        for &i in &members {
+            depth[i] = surface - world.elevation[i];
+        }
+    }
+    depth
+}
+
+/// Depth (elevation units) over which water lightens towards its shore.
+const SHALLOW_DEPTH: f32 = 0.05;
+/// Lightening of water at the shore line (towards white).
+const SHALLOW_TINT: f32 = 0.25;
+
 /// How a map is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Style {
@@ -166,6 +242,7 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
     let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
     let coverage = rivers::coverage(&world.rivers, w, h, world.params.circumference_km as f64);
+    let depths = water_depths(world);
     let river_biome = planet.remap(Biome::River);
     let river_colour = biome_color(river_biome).map(f32::from);
 
@@ -178,7 +255,7 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
             let biome = world.biomes[i];
             let on_river = biome == river_biome && coverage[i] >= rivers::RIVER_COVERAGE;
             if biome.is_water() && !on_river {
-                let mut color = biome_color(biome);
+                let mut color = water_colour(biome, depths[i]).map(|c| c as u8);
                 let neighbours = [
                     (x > 0).then(|| elev(x - 1, y)),
                     (x + 1 < w).then(|| elev(x + 1, y)),
