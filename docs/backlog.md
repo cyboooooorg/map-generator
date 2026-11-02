@@ -151,3 +151,26 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Volcanoes are rare on non-volcanic presets: the volcanic zone seldom exceeds its thresholds | todo   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents  | todo   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)   | todo   |
+
+## 5. Terrain realism, second round
+
+- **Problems** (user report after PR #16):
+  - continent outlines are too round, with none of the angles, capes and
+    straight stretches of real coasts;
+  - zoomed coasts are full of tiny islands, and tiny ponds inland;
+  - relief looks eroded everywhere: no smooth plains, no fluid deserts;
+  - rivers are far too wide on the base render, and narrow suddenly when
+    detail tiles appear;
+  - rivers are drawn over the terrain instead of flowing in valleys.
+- **Analyses:** `docs/analysis/04-coastlines.md`, `05-relief.md`,
+  `06-river-width-and-valleys.md`.
+- **Decision (2026-11-02):** in this order, so that every seed changes once
+  (steps 2 and 3 back to back) and the tiles are tuned on the final terrain:
+
+| Step | Change                                                                                                                  | Seeds  | Status |
+| ---- | ----------------------------------------------------------------------------------------------------------------------- | ------ | ------ |
+| 1    | One river width law per raster resolution, shared by the base map and the tiles                                         | Same   | todo   |
+| 2    | Noise rework: warped, fractal continent outline with a plate step; plains smoothed inland; more ridged mountain octaves | Change | todo   |
+| 3    | Erosion on real slopes, tapered near the waterline, sediment spread offshore                                            | Change | todo   |
+| 4    | Tiles: coast warped sideways, calmer plains detail, soft shading, no double shading                                     | Same   | todo   |
+| 5    | River terrain: valleys and floodplains at generation, riparian moisture, channels in tiles, deltas last                 | Change | todo   |
