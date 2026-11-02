@@ -1,0 +1,20 @@
+[package]
+name = "mapgen"
+description = "Procedural planet generation: terrain, climate, hydrology, biomes and exports"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+font8x8.workspace = true
+image.workspace = true
+noise.workspace = true
+rand.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+ts-rs = { version = "12.0.1", optional = true }
+
+[features]
+# Derives TypeScript bindings (ts-rs) on the types the web server exposes.
+ts = ["dep:ts-rs"]

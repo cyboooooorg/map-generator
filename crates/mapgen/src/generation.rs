@@ -7,6 +7,7 @@ use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
+use serde::Serialize;
 use std::f64::consts::PI;
 
 /// Every intermediate noise value computed for one pixel.
@@ -181,12 +182,48 @@ const COAST_DISTANCE_CAP_KM: f32 = 2_000.0;
 /// Full scale of the `flow` debug map: log10 of the drainage area in km².
 const FLOW_LOG_MAX: f32 = 7.0;
 
+/// A generation step, reported to progress callbacks as it starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub enum Stage {
+    Noise,
+    Erosion,
+    Temperature,
+    Coast,
+    Moisture,
+    Rivers,
+    Biomes,
+    /// Writing the output files (reported by the caller of [`export_world`](crate::export::export_world)).
+    Export,
+}
+
+impl Stage {
+    /// Every stage, in the order they run.
+    pub const ALL: [Stage; 8] = [
+        Stage::Noise,
+        Stage::Erosion,
+        Stage::Temperature,
+        Stage::Coast,
+        Stage::Moisture,
+        Stage::Rivers,
+        Stage::Biomes,
+        Stage::Export,
+    ];
+}
+
 /// Generates a world, running every pass in order.
 pub fn generate(params: &WorldParams) -> Generated {
+    generate_with_progress(params, |_| {})
+}
+
+/// Like [`generate`], calling `progress` as each stage starts.
+pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) -> Generated {
     let (width, height) = (params.width, params.height);
     let planet = &params.planet;
 
     // ── Pass 1: noise ─────────────────────────────────────────────────────────
+    progress(Stage::Noise);
     // Every pixel is independent: sample rows in parallel. The result stays
     // deterministic because each pixel only depends on its coordinates.
     let sampler = Sampler::new(params);
@@ -209,6 +246,7 @@ pub fn generate(params: &WorldParams) -> Generated {
     let n = params.pixel_count();
 
     // ── Pass 2: hydraulic erosion ─────────────────────────────────────────────
+    progress(Stage::Erosion);
     let mut elevation: Vec<f32> = samples.iter().map(|s| s.elevation).collect();
     let erosion = erode(
         &mut elevation,
@@ -239,6 +277,7 @@ pub fn generate(params: &WorldParams) -> Generated {
         .collect();
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
+    progress(Stage::Temperature);
     let row_temperature = row_temperatures(&grid, params.axial_tilt_deg);
     let raw_temperature: Vec<f32> = relief
         .par_iter()
@@ -252,6 +291,7 @@ pub fn generate(params: &WorldParams) -> Generated {
     });
 
     // ── Pass 4: distance to the coast ─────────────────────────────────────────
+    progress(Stage::Coast);
     // Shores are the land pixels close to open water.
     let water: Vec<bool> = relief.iter().map(|&r| r < rules.waterline).collect();
     let coast_distance_km = grid.distance_to(&water, COAST_DISTANCE_CAP_KM);
@@ -265,6 +305,7 @@ pub fn generate(params: &WorldParams) -> Generated {
     });
 
     // ── Pass 5: moisture ──────────────────────────────────────────────────────
+    progress(Stage::Moisture);
     // Winds carry ocean evaporation inland; it rains out with distance and on
     // windward slopes, leaving rain shadows behind mountains.
     let height_above_water: Vec<f32> = relief.iter().map(|r| r - rules.waterline).collect();
@@ -301,6 +342,7 @@ pub fn generate(params: &WorldParams) -> Generated {
         .collect();
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
+    progress(Stage::Rivers);
     let water = hydrology(&grid, &height_above_water, &moisture);
     debug.push(DebugLayer {
         name: "flow",
@@ -313,6 +355,7 @@ pub fn generate(params: &WorldParams) -> Generated {
     });
 
     // ── Pass 7: biomes ────────────────────────────────────────────────────────
+    progress(Stage::Biomes);
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
@@ -414,6 +457,13 @@ mod tests {
         assert!((g(EARTH_CIRCUMFERENCE_KM) - 1.0).abs() < 1e-6);
         assert_eq!(g(1.0), 0.1);
         assert_eq!(g(1e9), 5.0);
+    }
+
+    #[test]
+    fn progress_reports_every_generation_stage_in_order() {
+        let seen = std::sync::Mutex::new(Vec::new());
+        generate_with_progress(&params(1, "terran"), |s| seen.lock().unwrap().push(s));
+        assert_eq!(seen.into_inner().unwrap(), Stage::ALL[..7]);
     }
 
     #[test]

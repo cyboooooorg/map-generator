@@ -107,6 +107,18 @@ It writes `<world>/hex/`:
 
 The grid is pointy-top in "odd-r" offset coordinates: odd rows are shifted half a hex east, and columns wrap east-west like the planet. Hexes are regular on the flat map, not on the sphere, so polar hexes cover less real ground than equatorial ones; a true spherical hex grid (geodesic) would be a different, much larger project.
 
+### Project layout
+
+The repository is a Cargo workspace:
+
+| Path             | Content                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `crates/mapgen/` | The `mapgen` library: generation passes, presets, exports, and `WorldRequest` (parameter limits and defaults) |
+| `crates/cli/`    | The `map-generator` and `hexgrid` command-line tools, thin wrappers around the library                        |
+| `presets/`       | Built-in planet presets (embedded in the binaries) and `examples/`                                            |
+
+The library also reports generation progress: `generate_with_progress` calls back as each stage starts (noise, erosion, temperature, coast, moisture, rivers, biomes). Its `ts` feature derives TypeScript bindings on the types a web front-end needs.
+
 ### Development tasks
 
 | Task                    | Description                                                                         |

@@ -20,13 +20,13 @@ run = "target/release/hexgrid"
 
 [tasks.test]
 description = "Run the test suite"
-run = "cargo test"
+run = "cargo test --workspace --all-features"
 
 [tasks.lint]
 description = "Check formatting and run clippy with warnings denied"
 run = [
   "cargo fmt --check",
-  "cargo clippy --all-targets -- -D warnings",
+  "cargo clippy --workspace --all-targets --all-features -- -D warnings",
 ]
 
 [tasks.fmt]

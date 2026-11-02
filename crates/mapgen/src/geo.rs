@@ -13,7 +13,7 @@ pub struct Grid {
 }
 
 impl Grid {
-    pub fn len(&self) -> usize {
+    pub fn pixel_count(&self) -> usize {
         (self.width * self.height) as usize
     }
 
@@ -80,7 +80,7 @@ impl Grid {
             }
         }
 
-        let mut dist = vec![max_km; self.len()];
+        let mut dist = vec![max_km; self.pixel_count()];
         let mut heap = BinaryHeap::new();
         for (i, _) in source.iter().enumerate().filter(|(_, s)| **s) {
             dist[i] = 0.0;
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn distance_grows_away_from_sources_and_wraps() {
         let g = grid();
-        let mut source = vec![false; g.len()];
+        let mut source = vec![false; g.pixel_count()];
         source[g.index(0, 10)] = true;
         let d = g.distance_to(&source, f32::MAX);
         assert_eq!(d[g.index(0, 10)], 0.0);

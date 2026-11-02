@@ -26,6 +26,7 @@
 //! DustPlain = ["Plain", "Desert"]
 //! ```
 use crate::biome::{Biome, BiomeRules};
+use crate::request;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -34,16 +35,17 @@ use std::path::Path;
 
 /// The built-in presets, in the order `--planet` lists them.
 const BUILT_IN: [(&str, &str); 5] = [
-    ("terran", include_str!("../presets/terran.toml")),
-    ("volcanic", include_str!("../presets/volcanic.toml")),
-    ("frozen", include_str!("../presets/frozen.toml")),
-    ("caustic", include_str!("../presets/caustic.toml")),
-    ("barren", include_str!("../presets/barren.toml")),
+    ("terran", include_str!("../../../presets/terran.toml")),
+    ("volcanic", include_str!("../../../presets/volcanic.toml")),
+    ("frozen", include_str!("../../../presets/frozen.toml")),
+    ("caustic", include_str!("../../../presets/caustic.toml")),
+    ("barren", include_str!("../../../presets/barren.toml")),
 ];
 
 /// A generation parameter given by a preset: a fixed value or a range to draw from.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum ParamDefault {
     Fixed(f32),
     Range([f32; 2]),
@@ -78,6 +80,7 @@ impl ParamDefault {
 /// parameters missing here fall back to the generator's own defaults.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Defaults {
     pub sea_level: Option<ParamDefault>,
     pub volcanic: Option<ParamDefault>,
@@ -151,15 +154,15 @@ impl Preset {
         }
 
         let d = &preset.defaults;
-        for (field, value, min, max) in [
-            ("sea_level", d.sea_level, -1.0, 1.0),
-            ("volcanic", d.volcanic, 0.0, 1.0),
-            ("circumference", d.circumference, 1.0, f32::MAX),
-            ("axial_tilt", d.axial_tilt, 0.0, 90.0),
-            ("erosion", d.erosion, 0.0, 5.0),
+        for (field, value, limits) in [
+            ("sea_level", d.sea_level, request::SEA_LEVEL),
+            ("volcanic", d.volcanic, request::VOLCANIC),
+            ("circumference", d.circumference, request::CIRCUMFERENCE_KM),
+            ("axial_tilt", d.axial_tilt, request::AXIAL_TILT_DEG),
+            ("erosion", d.erosion, request::EROSION),
         ] {
             if let Some(v) = value {
-                v.check(field, min, max).map_err(fail)?;
+                v.check(field, limits.min, limits.max).map_err(fail)?;
             }
         }
 
