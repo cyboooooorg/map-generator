@@ -24,9 +24,15 @@ struct Args {
     #[arg(long)]
     list_planets: bool,
 
-    /// Waterline shift in [-1, 1]; positive means more ocean [default: random in -0.30..0.50]
-    #[arg(long, allow_negative_numbers = true, value_parser = parse_in(request::SEA_LEVEL))]
+    /// Waterline shift in [-1, 1]; positive means more ocean [default: random in 0.10..0.40]
+    #[arg(long, allow_negative_numbers = true, value_parser = parse_in(request::SEA_LEVEL),
+          conflicts_with = "land_fraction")]
     sea_level: Option<f32>,
+
+    /// Share of the surface that is land, in [0, 1] (Earth: 0.29); the sea
+    /// level is computed to match it. Replaces --sea-level
+    #[arg(long, value_parser = parse_in(request::LAND_FRACTION))]
+    land_fraction: Option<f32>,
 
     /// Share of mountain chains that become volcanic, in [0, 1] [default: random]
     #[arg(long, value_parser = parse_in(request::VOLCANIC))]
@@ -105,6 +111,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         planet: args.planet,
         seed: args.seed,
         sea_level: args.sea_level,
+        land_fraction: args.land_fraction,
         volcanic: args.volcanic,
         circumference_km: args.circumference,
         axial_tilt_deg: args.axial_tilt,
