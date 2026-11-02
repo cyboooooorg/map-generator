@@ -5,7 +5,7 @@
  */
 export type HexRequest = { 
 /**
- * Hex columns around the planet, 4 to 4096.
+ * Hex columns around the planet, 4 to 1024 (`mapgen::hex::COLUMNS`).
  */
 columns: number, 
 /**

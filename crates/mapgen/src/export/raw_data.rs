@@ -12,6 +12,10 @@
 //! | `temperature.png` | 16-bit grey, same formula                                   |
 //! | `flow.png`        | 16-bit grey, `log10(1 + km²)` with the same formula          |
 //! | `biomes.png`      | 8-bit grey, pixel = biome id (see the `biomes` table)       |
+//!
+//! [`load_world`] (and the hex resampling) refuse a world whose
+//! `format_version` is newer than [`FORMAT_VERSION`], or whose layers do not
+//! have the size `world.json` announces.
 use crate::biome::biome_color;
 use crate::generation::{COAST_DISTANCE_CAP_KM, Sample, Sampler};
 use crate::preset::Preset;
@@ -23,10 +27,10 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
 
-/// Bumped whenever the layout of `raw_data/` changes incompatibly.
 /// Name of the river polylines file.
 pub const RIVERS_FILE: &str = "rivers.json";
 
+/// Bumped whenever the layout of `raw_data/` changes incompatibly.
 /// Version 2 adds the volcanic zone, coast distance and highland offset
 /// layers, and the river polylines; version 3 the floodplain layer.
 pub const FORMAT_VERSION: u32 = 3;
@@ -283,11 +287,61 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
     Ok(())
 }
 
+/// Reads and checks `world.json` of a `raw_data/` directory. Worlds written
+/// by a newer version of the generator are refused: their layers may not
+/// mean what this version expects.
+pub(crate) fn read_metadata(raw_dir: &Path) -> Result<WorldMetadata, String> {
+    let path = raw_dir.join("world.json");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let meta: WorldMetadata =
+        serde_json::from_str(&text).map_err(|e| format!("world.json: {e}"))?;
+    if meta.format_version > FORMAT_VERSION {
+        return Err(format!(
+            "world.json: format version {} is newer than the supported version {FORMAT_VERSION}: \
+             update the generator",
+            meta.format_version
+        ));
+    }
+    if meta.width == 0 || meta.height == 0 {
+        return Err(format!(
+            "world.json: invalid size {} × {}",
+            meta.width, meta.height
+        ));
+    }
+    Ok(meta)
+}
+
+/// Checks that a layer image has the size `world.json` announces.
+fn check_size(file: &str, (w, h): (u32, u32), meta: &WorldMetadata) -> Result<(), String> {
+    if (w, h) != (meta.width, meta.height) {
+        return Err(format!(
+            "{file}: {w} × {h} pixels, but world.json announces {} × {}",
+            meta.width, meta.height
+        ));
+    }
+    Ok(())
+}
+
+/// Decodes the 8-bit biome id layer of a `raw_data/` directory.
+pub(crate) fn read_biome_ids(raw_dir: &Path, meta: &WorldMetadata) -> Result<GrayImage, String> {
+    let file = &meta.layers.biomes.file;
+    let img = image::open(raw_dir.join(file))
+        .map_err(|e| format!("{file}: {e}"))?
+        .into_luma8();
+    check_size(file, img.dimensions(), meta)?;
+    Ok(img)
+}
+
 /// Decodes one 16-bit layer of a `raw_data/` directory.
-pub(crate) fn read_scalar(raw_dir: &Path, layer: &ScalarLayerInfo) -> Result<Vec<f32>, String> {
+pub(crate) fn read_scalar(
+    raw_dir: &Path,
+    layer: &ScalarLayerInfo,
+    meta: &WorldMetadata,
+) -> Result<Vec<f32>, String> {
     let img = image::open(raw_dir.join(&layer.file))
         .map_err(|e| format!("{}: {e}", layer.file))?
-        .to_luma16();
+        .into_luma16();
+    check_size(&layer.file, img.dimensions(), meta)?;
     let scale = (layer.max - layer.min) / 65535.0;
     let log = layer.encoding == "gray16-log10";
     Ok(img
@@ -306,26 +360,20 @@ pub(crate) fn read_scalar(raw_dir: &Path, layer: &ScalarLayerInfo) -> Result<Vec
 /// their parameters and elevation.
 pub fn load_world(world_dir: &Path) -> Result<World, String> {
     let raw = world_dir.join("raw_data");
-    let path = raw.join("world.json");
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let meta: WorldMetadata =
-        serde_json::from_str(&text).map_err(|e| format!("world.json: {e}"))?;
+    let meta = read_metadata(&raw)?;
     let params = WorldParams {
         width: meta.width,
         height: meta.height,
         seed: meta.seed,
-        planet: meta.preset,
+        planet: meta.preset.clone(),
         sea_level: meta.sea_level,
         volcanic_intensity: meta.volcanic_intensity,
         circumference_km: meta.circumference_km,
         axial_tilt_deg: meta.axial_tilt_deg,
         erosion: meta.erosion,
     };
-    let elevation = read_scalar(&raw, &meta.layers.elevation)?;
-    let biome_ids = image::open(raw.join(&meta.layers.biomes.file))
-        .map_err(|e| format!("{}: {e}", meta.layers.biomes.file))?
-        .to_luma8();
-    let biomes = biome_ids
+    let elevation = read_scalar(&raw, &meta.layers.elevation, &meta)?;
+    let biomes = read_biome_ids(&raw, &meta)?
         .pixels()
         .map(|p| {
             Biome::ALL
@@ -345,15 +393,15 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
     };
     let shift = params.planet.climate.volcanic;
     let volcanic_zone = match &meta.layers.volcanic_zone {
-        Some(info) => read_scalar(&raw, info)?,
+        Some(info) => read_scalar(&raw, info, &meta)?,
         None => resampled(&|s| (s.volcanic_zone + shift).clamp(0.0, 1.0)),
     };
     let highland_offset = match &meta.layers.highland_offset {
-        Some(info) => read_scalar(&raw, info)?,
+        Some(info) => read_scalar(&raw, info, &meta)?,
         None => resampled(&Sample::highland_offset),
     };
     let coast_distance_km = match &meta.layers.coast_distance {
-        Some(info) => read_scalar(&raw, info)?,
+        Some(info) => read_scalar(&raw, info, &meta)?,
         None => {
             let waterline = params.sea_level + params.planet.rules.waterline;
             let water: Vec<bool> = elevation.iter().map(|&e| e < waterline).collect();
@@ -363,7 +411,7 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
 
     // Worlds before version 3 have no floodplains.
     let floodplain = match &meta.layers.floodplain {
-        Some(info) => read_scalar(&raw, info)?,
+        Some(info) => read_scalar(&raw, info, &meta)?,
         None => vec![0.0; elevation.len()],
     };
 
@@ -381,9 +429,9 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
     Ok(World {
         width: meta.width,
         height: meta.height,
-        moisture: read_scalar(&raw, &meta.layers.moisture)?,
-        temperature: read_scalar(&raw, &meta.layers.temperature)?,
-        flow_km2: read_scalar(&raw, &meta.layers.flow)?,
+        moisture: read_scalar(&raw, &meta.layers.moisture, &meta)?,
+        temperature: read_scalar(&raw, &meta.layers.temperature, &meta)?,
+        flow_km2: read_scalar(&raw, &meta.layers.flow, &meta)?,
         params,
         elevation,
         volcanic_zone,
@@ -472,6 +520,23 @@ mod tests {
                 .zip(&world.floodplain)
                 .all(|(a, b)| (a - b).abs() < 1e-4)
         );
+
+        // A world from a newer generator, or whose layers do not have the
+        // announced size, is refused with a clear error.
+        let write_meta = |meta: &WorldMetadata| {
+            std::fs::write(dir.join("world.json"), serde_json::to_string(meta).unwrap()).unwrap();
+        };
+        let mut newer: WorldMetadata =
+            serde_json::from_str(&serde_json::to_string(&meta).unwrap()).unwrap();
+        newer.format_version = FORMAT_VERSION + 1;
+        write_meta(&newer);
+        let error = load_world(&world_dir).err().unwrap();
+        assert!(error.contains("newer"), "{error}");
+        newer.format_version = FORMAT_VERSION;
+        newer.width += 1;
+        write_meta(&newer);
+        let error = load_world(&world_dir).err().unwrap();
+        assert!(error.contains("announces"), "{error}");
 
         // A version 1 world (without the new layers) gets them recomputed.
         let mut v1 = meta;

@@ -142,7 +142,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         },
         |_| {},
     );
-    let dir = args.out_dir.join(world_dir_name(&generated.world));
+    let dir = args.out_dir.join(world_dir_name(&generated.world.params));
     let options = ExportOptions {
         raw_data: !args.no_raw_data,
         noise_maps: !args.no_noise_maps,
@@ -150,17 +150,20 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     export_world(&generated, &dir, options)?;
 
     println!("World generated → {}/", dir.display());
-    // Exact values (the summary above is rounded) so the world can be regenerated.
+    // Exact values (the summary above is rounded) so the world can be
+    // regenerated; the size too, since the relief depends on the resolution.
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
-         --circumference {} --axial-tilt {} --erosion {}",
+         --circumference {} --axial-tilt {} --erosion {} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
         p.volcanic_intensity,
         p.circumference_km,
         p.axial_tilt_deg,
-        p.erosion
+        p.erosion,
+        p.width,
+        p.height
     );
     Ok(())
 }

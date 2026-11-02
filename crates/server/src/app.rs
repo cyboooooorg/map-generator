@@ -7,7 +7,7 @@
 //! | `GET /api/form`                 | parameter limits and defaults                     |
 //! | `GET /api/worlds`               | generated worlds, most recent first               |
 //! | `POST /api/worlds`              | queue a generation (`WorldRequest` body)          |
-//! | `DELETE /api/worlds/{id}`       | delete a world                                    |
+//! | `DELETE /api/worlds/{id}`       | delete a world (409 while it is being generated)  |
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
 //! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=` | deep-zoom detail tile (PNG) |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
@@ -31,7 +31,7 @@ use axum::{Json, Router};
 use mapgen::detail::TileId;
 use mapgen::export::{ExportOptions, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, Stage, generate_with_progress};
-use mapgen::hex::{DEFAULT_RIVER_FLOW_KM2, HexMap};
+use mapgen::hex::{self, DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -120,6 +120,8 @@ impl IntoResponse for Failure {
 }
 
 pub fn router(config: Config) -> Router {
+    // Exports a killed server left unfinished.
+    worlds::sweep_temp_dirs(&config.worlds_dir);
     let catalog = Catalog::load(&config.presets_dir);
     let state = Arc::new(AppState {
         catalog,
@@ -183,6 +185,12 @@ async fn delete_world(
 ) -> Result<StatusCode, Failure> {
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
+    }
+    if state.pending.lock().expect("pending lock").contains(&id) {
+        return Err(Failure(
+            StatusCode::CONFLICT,
+            format!("world {id} is being generated: cancel its job first"),
+        ));
     }
     let dir = state.config.worlds_dir.join(&id);
     if !dir.is_dir() {
@@ -252,10 +260,14 @@ async fn hex_grid(
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
     }
-    if !(4..=4096).contains(&request.columns) {
+    if !hex::COLUMNS.contains(&request.columns) {
         return Err(Failure(
             StatusCode::BAD_REQUEST,
-            "columns must be between 4 and 4096".into(),
+            format!(
+                "columns must be between {} and {}",
+                hex::COLUMNS.start(),
+                hex::COLUMNS.end()
+            ),
         ));
     }
     let dir = state.config.worlds_dir.join(&id);
@@ -308,7 +320,7 @@ async fn create_world(
         )));
     }
 
-    let world_id = format!("{}-{}", params.planet.name, params.seed);
+    let world_id = world_dir_name(&params);
     {
         let mut pending = state.pending.lock().expect("pending lock");
         if pending.contains(&world_id) || state.config.worlds_dir.join(&world_id).exists() {
@@ -390,15 +402,24 @@ async fn create_world(
                 report,
             );
             report(Stage::Export);
-            let dir = worlds_dir.join(world_dir_name(&generated.world));
+            // Written into a temporary directory, renamed into place once
+            // complete: a cancelled, failed or crashed export leaves nothing.
+            let id = world_dir_name(&generated.world.params);
+            let temp = worlds::TempDir::create(&worlds_dir, &id)?;
             export_world(
                 &generated,
-                &dir,
+                temp.path(),
                 ExportOptions {
                     raw_data: true,
                     noise_maps: false,
                 },
-            )
+            )?;
+            // The export cannot be interrupted: a cancel that arrived
+            // meanwhile drops it here.
+            if thread_cancel.is_requested() {
+                std::panic::resume_unwind(Box::new(Cancelled));
+            }
+            temp.commit(&worlds_dir.join(&id))
         })
         .await;
         let status = match result {
@@ -568,7 +589,11 @@ mod tests {
     #[tokio::test]
     async fn generates_lists_and_deletes_a_world() {
         let config = temp_config("generate");
+        // An export a killed server left unfinished is swept at startup.
+        let leftover = config.worlds_dir.join(".tmp-frozen-3");
+        std::fs::create_dir_all(leftover.join("raw_data")).unwrap();
         let app = router(config.clone());
+        assert!(!leftover.exists());
         let request = r#"{"planet": "frozen", "seed": 3, "width": 64, "height": 32}"#;
         let (status, body) = call(&app, "POST", "/api/worlds", Some(request)).await;
         assert_eq!(status, StatusCode::ACCEPTED, "{body}");
@@ -598,14 +623,11 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK, "{hex}");
         assert!(hex.contains("\"columns\":8"));
-        let (status, _) = call(
-            &app,
-            "POST",
-            "/api/worlds/frozen-3/hex",
-            Some(r#"{"columns": 1}"#),
-        )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
+        for columns in [1, 1025] {
+            let body = format!(r#"{{"columns": {columns}}}"#);
+            let (status, _) = call(&app, "POST", "/api/worlds/frozen-3/hex", Some(&body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{columns} columns");
+        }
 
         // Detail tiles: valid ones render as PNG, others are rejected.
         let list: serde_json::Value = serde_json::from_str(&list).unwrap();
@@ -621,6 +643,7 @@ mod tests {
         for bad in [
             "/api/worlds/frozen-3/tiles/2/8/0",
             "/api/worlds/frozen-3/tiles/9/0/0",
+            "/api/worlds/frozen-3/tiles/40/0/0",
             "/api/worlds/nope-1/tiles/0/0/0",
         ] {
             let (status, _) = call(&app, "GET", bad, None).await;
@@ -644,6 +667,10 @@ mod tests {
         let (_, body) = call(&app, "POST", "/api/worlds", Some(small)).await;
         let second: serde_json::Value = serde_json::from_str(&body).unwrap();
         let second_id = second["job_id"].as_str().unwrap();
+
+        // A world being generated cannot be deleted.
+        let (status, _) = call(&app, "DELETE", "/api/worlds/barren-1", None).await;
+        assert_eq!(status, StatusCode::CONFLICT);
 
         let (status, list) = call(&app, "GET", "/api/jobs", None).await;
         assert_eq!(status, StatusCode::OK);

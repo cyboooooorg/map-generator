@@ -135,7 +135,7 @@ pub struct ApiError {
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 pub struct HexRequest {
-    /// Hex columns around the planet, 4 to 4096.
+    /// Hex columns around the planet, 4 to 1024 (`mapgen::hex::COLUMNS`).
     pub columns: u32,
     /// River flag threshold in km² (default: `mapgen::hex::DEFAULT_RIVER_FLOW_KM2`).
     pub river_flow_km2: Option<f32>,

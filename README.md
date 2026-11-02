@@ -31,7 +31,7 @@ All parameters are optional. Any omitted value comes from the planet preset when
 ```text
 Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g
 World generated → worlds/frozen-2590618090/
-Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --width 1920 --height 1080
 ```
 
 ### Options
@@ -100,7 +100,7 @@ mise run hex -- worlds/terran-42 --columns 96
 | Option               | Description                                                                | Default  |
 | -------------------- | -------------------------------------------------------------------------- | -------- |
 | `<world>`            | world directory produced by `mise run gen`                                 | required |
-| `--columns <n>`      | hex columns around the planet, `4`–`4096`; rows follow from the map height | `96`     |
+| `--columns <n>`      | hex columns around the planet, `4`–`1024`; rows follow from the map height | `96`     |
 | `--river-flow <km²>` | land hexes whose largest river drains at least this area get a river flag  | `500000` |
 
 It writes `<world>/hex/`:
@@ -144,7 +144,7 @@ The container reads and writes `worlds/` of this checkout (worlds generated with
 | Front-end | Svelte 5, strict TypeScript, three.js    | `web/`           |
 | Container | Multi-stage `Dockerfile`, `compose.yaml` | repository root  |
 
-Generations run one at a time (each one already uses every core): later ones wait in a queue. Their progress streams to the page (`GET /api/jobs/{id}/events`); `GET /api/jobs` lists the recent jobs, so a reloaded page picks up the ones still running, and `DELETE /api/jobs/{id}` cancels one: a queued job never starts, a running one stops when its next stage begins and writes nothing. Zooming in loads [detail tiles](#detail-tiles--deep-zoom) rendered on demand by the server (`GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=`), cached by the browser for good since the URL names the world revision; the server keeps the two most recently used worlds in memory. The server refuses to overwrite an existing world: delete it first or pick another seed. Maps are limited to `MAPGEN_MAX_PIXELS` pixels and 8192 pixels per side. The server defaults to 4096 × 2048; `compose.yaml` raises it to 8192 × 4096 for the 6 GB Colima VM of the workstation setup. A generation peaks at about 0.2 GB at 1920 × 1080, 0.8 GB at 4096 × 2048 and 2.0 GB at 8192 × 4096 (about 2 s, 8 s and 40 s on 6 cores): keep the limit under the memory the container can use, or the server is killed mid-job. With Colima's default 2 GB VM, lower it (`MAPGEN_MAX_PIXELS: "8388608"`) or give the VM more memory (`colima stop && colima start --cpu 6 --memory 6`). The web app skips the diagnostic maps, which would add about 90 bytes per pixel.
+Generations run one at a time (each one already uses every core): later ones wait in a queue. Their progress streams to the page (`GET /api/jobs/{id}/events`); `GET /api/jobs` lists the recent jobs, so a reloaded page picks up the ones still running, and `DELETE /api/jobs/{id}` cancels one: a queued job never starts, a running one stops when its next stage begins (or, during the export, once the files are written) and leaves nothing on disk: a world is exported into a hidden `worlds/.tmp-<id>/` directory renamed into place once complete, removed if the job is cancelled or fails, and swept at startup if the server was killed mid-export. A world cannot be deleted while its generation is queued or running (409). Zooming in loads [detail tiles](#detail-tiles--deep-zoom) rendered on demand by the server (`GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=`), cached by the browser for good since the URL names the world revision; the server keeps the two most recently used worlds in memory. The server refuses to overwrite an existing world: delete it first or pick another seed. Maps are limited to `MAPGEN_MAX_PIXELS` pixels and 8192 pixels per side. The server defaults to 4096 × 2048; `compose.yaml` raises it to 8192 × 4096 for the 6 GB Colima VM of the workstation setup. A generation peaks at about 0.2 GB at 1920 × 1080, 0.8 GB at 4096 × 2048 and 2.0 GB at 8192 × 4096 (about 2 s, 8 s and 40 s on 6 cores): keep the limit under the memory the container can use, or the server is killed mid-job. With Colima's default 2 GB VM, lower it (`MAPGEN_MAX_PIXELS: "8388608"`) or give the VM more memory (`colima stop && colima start --cpu 6 --memory 6`). The web app skips the diagnostic maps, which would add about 90 bytes per pixel.
 
 For development with hot reload, see [web/README.md](web/README.md) (`mise run dev`).
 
