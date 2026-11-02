@@ -43,8 +43,19 @@ import {
 const SPLIT_PX = 1.5;
 /** Concurrent tile downloads. */
 const MAX_IN_FLIGHT = 6;
-/** Delay before downloading a failed tile again. */
-const RETRY_MS = 5000;
+/** Delay before downloading a failed tile again, doubled at each failure up to RETRY_MAX_MS. */
+const RETRY_MS = 2000;
+const RETRY_MAX_MS = 60_000;
+/**
+ * Downloads younger than this are kept when the view no longer needs their
+ * tile: fast zooming would otherwise abort and restart them every frame.
+ */
+const KEEP_MS = 400;
+/**
+ * A tile with nothing loaded to show also requests its ancestor this many
+ * levels up: one coarse tile covers 4^n leaves and fills the gap quickly.
+ */
+const FALLBACK_LEVELS = 2;
 /** Tile textures kept on the GPU. */
 const MAX_TEXTURES = 300;
 
@@ -59,6 +70,34 @@ interface CachedTile {
   lastUsed: number;
 }
 
+interface Download {
+  controller: AbortController;
+  started: number;
+}
+
+interface Failure {
+  /** When to try again (Infinity: never, the server refused the tile). */
+  retryAt: number;
+  attempts: number;
+}
+
+/**
+ * Delay before retrying a tile after `attempts` failures, or Infinity when
+ * retrying cannot help (a client error such as 404: the tile does not exist).
+ */
+export function retryDelay(attempts: number, status: number | null): number {
+  if (status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+    return Infinity;
+  }
+  return Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** Math.max(0, attempts - 1));
+}
+
+/** Frees a tile texture and its decoded image. */
+function disposeTile(texture: Texture): void {
+  texture.dispose();
+  (texture.image as ImageBitmap).close();
+}
+
 /** Position of a texture coordinate on the morphed surface (see shaders.ts). */
 function surfacePoint(u: number, v: number, morph: number, out: Vector3): Vector3 {
   const lon = u * 2 * Math.PI;
@@ -71,19 +110,13 @@ function surfacePoint(u: number, v: number, morph: number, out: Vector3): Vector
   return out.set(px + (sx - px) * morph, py + (sy - py) * morph, sz * morph);
 }
 
-/** Frees a tile texture and its decoded image. */
-function disposeTile(texture: Texture): void {
-  texture.dispose();
-  (texture.image as ImageBitmap).close();
-}
-
 export class TileLayer {
   private readonly geometry = new PlaneGeometry(1, 1, 16, 16);
   private readonly patches = new Map<string, Mesh<PlaneGeometry, ShaderMaterial>>();
   private readonly cache = new Map<string, CachedTile>();
-  private readonly loading = new Map<string, AbortController>();
+  private readonly loading = new Map<string, Download>();
   /** Tiles whose download failed, with the time to retry them. */
-  private readonly failed = new Map<string, number>();
+  private readonly failed = new Map<string, Failure>();
   /** Timers that wake the view up when failed tiles can be retried. */
   private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>();
   private world: { id: string; revision: number; firstLevel: number } | null = null;
@@ -188,19 +221,37 @@ export class TileLayer {
   // ── Loading ────────────────────────────────────────────────────────────────
 
   private request(leaves: TileId[], camera: Vector3): void {
-    const wanted = new Set(leaves.map(tileKey));
-    // Abort downloads of tiles no longer needed.
-    for (const [key, controller] of this.loading) {
-      if (!wanted.has(key)) {
-        controller.abort();
+    const first = this.world!.firstLevel;
+    const now = performance.now();
+    // Leaves with nothing to show yet also want a coarser ancestor.
+    const wantedTiles = new Map<string, TileId>();
+    for (const leaf of leaves) {
+      wantedTiles.set(tileKey(leaf), leaf);
+      if (leaf.z - FALLBACK_LEVELS >= first && !this.bestLoaded(leaf)) {
+        const fallback = ancestor(leaf, leaf.z - FALLBACK_LEVELS);
+        wantedTiles.set(tileKey(fallback), fallback);
+      }
+    }
+    // Ancestors of the wanted tiles stay useful while they load.
+    const useful = new Set<string>();
+    for (const tile of wantedTiles.values()) {
+      for (let level = tile.z; level >= first; level -= 1) {
+        useful.add(tileKey(ancestor(tile, level)));
+      }
+    }
+    // Abort downloads of tiles no longer needed, unless just started.
+    for (const [key, download] of this.loading) {
+      if (!useful.has(key) && now - download.started > KEEP_MS) {
+        download.controller.abort();
         this.loading.delete(key);
       }
     }
-    const missing = leaves.filter((t) => {
-      const key = tileKey(t);
-      const retryAt = this.failed.get(key);
-      return !this.cache.has(key) && !this.loading.has(key) && (retryAt === undefined || retryAt <= performance.now());
-    });
+    const missing = [...wantedTiles.entries()]
+      .filter(([key]) => {
+        const failure = this.failed.get(key);
+        return !this.cache.has(key) && !this.loading.has(key) && (failure === undefined || failure.retryAt <= now);
+      })
+      .map(([, tile]) => tile);
     // Coarse tiles first, then the closest to the camera.
     const centre = new Vector3();
     missing.sort((a, b) => {
@@ -224,15 +275,17 @@ export class TileLayer {
     if (!world) return;
     const key = tileKey(tile);
     const controller = new AbortController();
-    this.loading.set(key, controller);
+    this.loading.set(key, { controller, started: performance.now() });
+    let status: number | null = null;
     try {
       const url = `/api/worlds/${encodeURIComponent(world.id)}/tiles/${key}?rev=${world.revision}`;
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
+        status = response.status;
         throw new Error(`${response.status}`);
       }
       const bitmap = await createImageBitmap(await response.blob());
-      if (this.world !== world) {
+      if (this.world !== world || controller.signal.aborted) {
         bitmap.close();
         return;
       }
@@ -246,17 +299,22 @@ export class TileLayer {
       this.failed.delete(key);
       this.onChange();
     } catch {
-      if (!controller.signal.aborted) {
-        // Retry later: a tile left out shows a blurry ancestor for good.
-        this.failed.set(key, performance.now() + RETRY_MS);
-        const timer = setTimeout(() => {
-          this.retryTimers.delete(timer);
-          this.onChange();
-        }, RETRY_MS);
-        this.retryTimers.add(timer);
+      if (!controller.signal.aborted && this.world === world) {
+        // Retry later, less and less often: a tile left out shows a blurry
+        // ancestor for good. A tile the server refuses is not retried.
+        const attempts = (this.failed.get(key)?.attempts ?? 0) + 1;
+        const delay = retryDelay(attempts, status);
+        this.failed.set(key, { retryAt: performance.now() + delay, attempts });
+        if (Number.isFinite(delay)) {
+          const timer = setTimeout(() => {
+            this.retryTimers.delete(timer);
+            this.onChange();
+          }, delay);
+          this.retryTimers.add(timer);
+        }
       }
     } finally {
-      if (this.loading.get(key) === controller) {
+      if (this.loading.get(key)?.controller === controller) {
         this.loading.delete(key);
       }
     }
@@ -330,8 +388,8 @@ export class TileLayer {
   }
 
   private clear(): void {
-    for (const controller of this.loading.values()) {
-      controller.abort();
+    for (const download of this.loading.values()) {
+      download.controller.abort();
     }
     this.loading.clear();
     this.hidePatches(new Set());
