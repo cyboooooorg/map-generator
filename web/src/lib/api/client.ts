@@ -108,7 +108,13 @@ export function followJob(
   const source = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);
   const done = new Promise<JobStatus>((resolve) => {
     source.onmessage = (event: MessageEvent<string>) => {
-      const parsed: unknown = JSON.parse(event.data);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        // A malformed event (a proxy's keep-alive, say): wait for the next one.
+        return;
+      }
       if (!isJobStatus(parsed)) {
         return;
       }
