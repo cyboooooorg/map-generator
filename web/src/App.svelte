@@ -117,14 +117,17 @@
 <style>
   .layout {
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: 340px minmax(0, 1fr);
     height: 100%;
   }
   .sidebar {
     border-right: 1px solid var(--border);
     padding: 14px;
     overflow-y: auto;
+    min-width: 0;
     display: grid;
+    /* Keep wide content (a form control's intrinsic width) inside the column. */
+    grid-template-columns: minmax(0, 1fr);
     align-content: start;
     gap: 12px;
   }
@@ -148,7 +151,7 @@
   }
   @media (max-width: 760px) {
     .layout {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: auto 60vh;
     }
     .sidebar {

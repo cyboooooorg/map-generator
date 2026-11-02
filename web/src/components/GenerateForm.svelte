@@ -253,8 +253,12 @@
 </form>
 
 <style>
+  /* Every track uses minmax(0, …) and every box min-width: 0 so that the
+     intrinsic width of a control (a <select> is as wide as its longest
+     option in Firefox and Safari) never widens the form past the sidebar. */
   form {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
   h2 {
@@ -263,9 +267,15 @@
   }
   .row {
     display: grid;
-    grid-template-columns: 90px 1fr;
+    grid-template-columns: 90px minmax(0, 1fr);
     align-items: center;
     gap: 8px;
+  }
+  .row > select,
+  .row > input,
+  .slider > input {
+    width: 100%;
+    min-width: 0;
   }
   .check {
     display: flex;
@@ -283,6 +293,8 @@
     border-radius: 8px;
     padding: 6px 10px 8px;
     margin: 0;
+    /* Fieldsets default to min-inline-size: min-content. */
+    min-inline-size: 0;
   }
   legend {
     padding: 0 4px;
@@ -290,7 +302,7 @@
   }
   .slider {
     display: grid;
-    grid-template-columns: 1fr 90px;
+    grid-template-columns: minmax(0, 1fr) 90px;
     gap: 8px;
     align-items: center;
   }
