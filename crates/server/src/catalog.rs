@@ -2,24 +2,25 @@
 //! file under the presets directory that is not a built-in.
 //!
 //! Requests name a preset by its catalog `spec`, never by a raw path, so a
-//! client cannot make the server read arbitrary files.
+//! client cannot make the server read arbitrary files. Presets are parsed
+//! once, at startup: a changed or added file is picked up on restart.
 use crate::api::PresetInfo;
 use mapgen::preset::{Preset, built_in_names};
 use std::path::{Path, PathBuf};
 
 pub struct Catalog {
-    entries: Vec<(PresetInfo, String)>,
+    entries: Vec<(PresetInfo, Preset)>,
 }
 
 impl Catalog {
     /// Loads the built-in presets and the preset files under `dir`. Invalid
     /// files are skipped with a warning.
     pub fn load(dir: &Path) -> Self {
-        let mut entries: Vec<(PresetInfo, String)> = Preset::built_in()
+        let mut entries: Vec<(PresetInfo, Preset)> = Preset::built_in()
             .into_iter()
             .map(|p| {
                 let spec = p.name.clone();
-                (info(&p, &spec, true), spec)
+                (info(&p, &spec, true), p)
             })
             .collect();
 
@@ -39,7 +40,7 @@ impl Catalog {
                 continue;
             }
             match Preset::load(&path.to_string_lossy()) {
-                Ok(p) => entries.push((info(&p, &spec, false), path.to_string_lossy().into())),
+                Ok(p) => entries.push((info(&p, &spec, false), p)),
                 Err(e) => tracing::warn!("skipping preset {spec}: {e}"),
             }
         }
@@ -50,12 +51,12 @@ impl Catalog {
         self.entries.iter().map(|(info, _)| info.clone()).collect()
     }
 
-    /// The `Preset::load` argument for a catalog spec.
-    pub fn resolve(&self, spec: &str) -> Option<String> {
+    /// The preset of a catalog spec.
+    pub fn resolve(&self, spec: &str) -> Option<Preset> {
         self.entries
             .iter()
             .find(|(info, _)| info.spec == spec)
-            .map(|(_, load)| load.clone())
+            .map(|(_, preset)| preset.clone())
     }
 }
 

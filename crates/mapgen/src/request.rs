@@ -181,6 +181,18 @@ impl WorldRequest {
             }
         };
         let planet = Preset::load(&planet_spec)?;
+        self.resolve_with_preset(planet, planet_spec, rng)
+    }
+
+    /// Like [`resolve`](Self::resolve) with an already loaded preset, whose
+    /// spec is `planet_spec`; `self.planet` is ignored.
+    pub fn resolve_with_preset(
+        &self,
+        planet: Preset,
+        planet_spec: String,
+        rng: &mut impl RngExt,
+    ) -> Result<Resolved, RequestError> {
+        self.validate()?;
         let d = planet.defaults.clone();
         // Draw order matters for reproducibility with a seeded RNG: keep it stable.
         // An explicit value wins over the preset, a sea level over a land
@@ -246,6 +258,16 @@ mod tests {
         assert_eq!(resolved.params.planet.name, "frozen");
         assert_eq!(resolved.params.erosion, 1.0);
         assert_eq!(resolved.planet_spec, "frozen");
+
+        // The same with the preset already loaded: its defaults apply, the
+        // request's planet is ignored.
+        let preset = Preset::load("caustic").unwrap();
+        let resolved = request
+            .resolve_with_preset(preset, "caustic".into(), &mut rand::rng())
+            .unwrap();
+        assert_eq!(resolved.params.planet.name, "caustic");
+        assert_eq!(resolved.planet_spec, "caustic");
+        assert_eq!(resolved.params.sea_level, 0.2);
     }
 
     #[test]

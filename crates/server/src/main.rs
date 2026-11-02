@@ -8,6 +8,7 @@
 //! | `MAPGEN_PRESETS_DIR`  | `presets`    | extra planet presets (`*.toml`)          |
 //! | `MAPGEN_STATIC_DIR`   | `web/dist`   | built web front-end                      |
 //! | `MAPGEN_MAX_PIXELS`   | `8388608`    | largest map accepted (width × height)    |
+//! | `MAPGEN_TILE_CACHE_MB`| `1024`       | memory for worlds loaded for tiles (MiB) |
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |
 mod api;
@@ -39,6 +40,10 @@ async fn main() -> std::io::Result<()> {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(app::DEFAULT_MAX_PIXELS),
+        tile_cache_bytes: std::env::var("MAPGEN_TILE_CACHE_MB")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map_or(tiles::DEFAULT_BUDGET_BYTES, |mb| mb << 20),
     };
     std::fs::create_dir_all(&config.worlds_dir)?;
     let address = format!("{}:{}", env_or("HOST", "0.0.0.0"), env_or("PORT", "3000"));
