@@ -185,7 +185,7 @@ name = "mars-like"                 # lowercase letters, digits and dashes; used 
 description = "Small cold desert world with polar caps"
 
 [defaults]                         # a fixed value or a [min, max] range drawn at random
-sea_level = [-0.6, -0.4]           # sea_level, volcanic, circumference, axial_tilt, erosion
+sea_level = [0.10, 0.30]           # sea_level, volcanic, circumference, axial_tilt, erosion
 circumference = 21300
 
 [climate]                          # added to every pixel before biome selection
@@ -194,14 +194,18 @@ moisture = -0.7                    # [-1, 1] scale
 volcanic = 0.0                     # [0, 1] scale
 
 [rules]                            # override any biome selection threshold
-polar = 0.12
+polar = 0.04
+highland_snow_temperature = 0.04
 
 [remap]                            # target = [biomes replaced by it]
 DustPlain = ["Ocean", "DeepOcean", "Lake", "River", "Plain", "Desert"]
+IceCap = ["SeaIce"]
 RockyWaste = ["Mountain"]
 ```
 
 Every table is optional.
+
+To make a dry world, remap its oceans rather than lowering `sea_level`: biome elevations are measured from the sea level, so a world with a sea level of −0.5 has nearly all its land above the snow line (0.3 above the sea) and turns white. The `mars-like` example keeps the usual sea level and turns its seas into dust basins.
 
 - **`[defaults]`**: command-line options always win; parameters set neither on the command line nor here use the generator defaults listed under [Options](#options).
 - **`[rules]`**: accepts any field of `BiomeRules` in `src/biome.rs` (`waterline`, `polar`, `forest_moisture`, `shore_width_km`…), each documented there. Fields left out keep their default.

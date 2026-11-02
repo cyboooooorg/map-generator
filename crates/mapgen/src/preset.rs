@@ -11,7 +11,7 @@
 //! description = "Cold desert world"
 //!
 //! [defaults]                         # a fixed value or a [min, max] range
-//! sea_level = [-0.6, -0.3]
+//! sea_level = [0.1, 0.3]
 //! axial_tilt = 25.2
 //!
 //! [climate]                          # added to every pixel before biome selection
