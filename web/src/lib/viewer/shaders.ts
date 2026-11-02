@@ -6,10 +6,22 @@
 //
 // `uData` packs the decoded layers, row 0 = north (sampled at 1 − v):
 //   r = elevation, g = temperature, b = moisture, a = log10(1 + flow km²).
+// `uExtra` packs the layers of raw_data format version 2 and later:
+//   r = volcanic zone, g = distance to the sea (km), b = floodplain, a = highland offset.
+// `uBiomes` holds the biome id of each pixel (r × 255), for highlighting one biome.
 import { glslRamp } from './colormaps';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
-export const LAYER_IDS = { biomes: 0, elevation: 1, temperature: 2, moisture: 3, flow: 4 } as const;
+export const LAYER_IDS = {
+  biomes: 0,
+  elevation: 1,
+  temperature: 2,
+  moisture: 3,
+  flow: 4,
+  volcanic: 5,
+  coast: 6,
+  floodplain: 7,
+} as const;
 export type Layer = keyof typeof LAYER_IDS;
 
 /** Largest displacement, as a fraction of the planet radius, at full relief. */
@@ -91,6 +103,12 @@ export const surfaceFragment = /* glsl */ `
   uniform float uTileOn;       // 1 on a detail patch with a tile texture
   uniform sampler2D uTile;     // detail tile, row 0 = north
   uniform vec4 uTexRect;       // part of uTile this patch shows (u0, v0, du, dv), v down
+  uniform float uHasExtra;
+  uniform sampler2D uExtra;
+  uniform float uCoastMax;     // cap of the distance to the sea, km
+  uniform float uHasBiomes;
+  uniform sampler2D uBiomes;
+  uniform float uHighlight;    // biome id to highlight, or -1
   varying vec2 vUv;
   varying vec2 vLocalUv;
   varying vec3 vNormal;
@@ -103,6 +121,9 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('temperature')}
   ${glslRamp('moisture')}
   ${glslRamp('flow')}
+  ${glslRamp('volcanic')}
+  ${glslRamp('coast')}
+  ${glslRamp('floodplain')}
 
   vec3 toLinear(vec3 srgb) {
     return pow(srgb, vec3(2.2));
@@ -166,11 +187,30 @@ export const surfaceFragment = /* glsl */ `
       colour = toLinear(ramp_temperature(data.g));
     } else if (uLayer == 3) {
       colour = toLinear(ramp_moisture((data.b + 1.0) * 0.5));
-    } else {
+    } else if (uLayer == 4) {
       colour = toLinear(ramp_flow(data.a / 7.0));
+    } else if (uHasExtra < 0.5) {
+      colour = texture2D(uMap, vUv).rgb;
+    } else {
+      vec4 extra = texture2D(uExtra, vec2(vUv.x, 1.0 - vUv.y));
+      if (uLayer == 5) {
+        colour = toLinear(ramp_volcanic(extra.r));
+      } else if (uLayer == 6) {
+        colour = toLinear(ramp_coast(sqrt(clamp(extra.g / uCoastMax, 0.0, 1.0))));
+      } else {
+        colour = toLinear(ramp_floodplain(extra.b));
+      }
     }
     if (uHexOn > 0.5) {
       colour = hexColour(colour);
+    }
+    // One biome highlighted (legend hover): the others fade to dim grey.
+    if (uHighlight >= 0.0 && uHasBiomes > 0.5) {
+      float id = floor(texture2D(uBiomes, vec2(vUv.x, 1.0 - vUv.y)).r * 255.0 + 0.5);
+      if (abs(id - uHighlight) > 0.5) {
+        float grey = dot(colour, vec3(0.2126, 0.7152, 0.0722));
+        colour = mix(vec3(grey), colour, 0.15) * 0.3;
+      }
     }
 
     // Relief shading: tilt the normal by the elevation slope (land only).

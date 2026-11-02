@@ -6,8 +6,10 @@ import type { FormSpec } from './types/FormSpec';
 import type { HexMap } from './types/HexMap';
 import type { HexRequest } from './types/HexRequest';
 import type { JobCreated } from './types/JobCreated';
+import type { JobInfo } from './types/JobInfo';
 import type { JobStatus } from './types/JobStatus';
 import type { PresetInfo } from './types/PresetInfo';
+import type { RiversFile } from './types/RiversFile';
 import type { WorldMetadata } from './types/WorldMetadata';
 import type { WorldRequest } from './types/WorldRequest';
 import type { WorldSummary } from './types/WorldSummary';
@@ -34,7 +36,9 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiFailure(response.status, isApiError(body) ? body.error : response.statusText);
   }
   // The server produces these bodies from the same types: trusted shape.
-  return (response.status === 204 ? undefined : await response.json()) as T;
+  // Some answers (204, 202 of a cancellation) have no body.
+  const text = await response.text();
+  return (text === '' ? undefined : JSON.parse(text)) as T;
 }
 
 export const api = {
@@ -49,6 +53,9 @@ export const api = {
     }),
   deleteWorld: (id: string) => call<void>(`/api/worlds/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   metadata: (id: string) => call<WorldMetadata>(worldFile(id, 'raw_data/world.json')),
+  rivers: (id: string, file: string) => call<RiversFile>(worldFile(id, `raw_data/${file}`)),
+  jobs: () => call<JobInfo[]>('/api/jobs'),
+  cancelJob: (id: string) => call<void>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   hex: (id: string, request: HexRequest) =>
     call<HexMap>(`/api/worlds/${encodeURIComponent(id)}/hex`, {
       method: 'POST',
@@ -62,7 +69,12 @@ export function worldFile(id: string, path: string): string {
   return `/worlds/${encodeURIComponent(id)}/${path}`;
 }
 
-const STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'done', 'failed']);
+const STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'done', 'failed', 'cancelled']);
+
+/** Whether a job status is final. */
+export function isFinished(status: JobStatus): boolean {
+  return status.status === 'done' || status.status === 'failed' || status.status === 'cancelled';
+}
 
 function isJobStatus(value: unknown): value is JobStatus {
   return (
@@ -88,7 +100,7 @@ export function followJob(
         return;
       }
       onStatus(parsed);
-      if (parsed.status === 'done' || parsed.status === 'failed') {
+      if (isFinished(parsed)) {
         source.close();
         resolve(parsed);
       }

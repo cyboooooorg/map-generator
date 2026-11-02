@@ -52,6 +52,45 @@ describe('decodeLayers', () => {
     expect(DataUtils.fromHalfFloat(layers.surface[7]!)).toBeCloseTo(3, 2);
   });
 
+  it('leaves the extra layers out on version 1 worlds', () => {
+    const layers = decodeLayers(meta, {
+      elevation: png16([0, 0]),
+      moisture: png16([0, 0]),
+      temperature: png16([0, 0]),
+      flow: png16([0, 0]),
+      biomes: png8([0, 0]),
+    });
+    expect(layers.extra).toBeNull();
+  });
+
+  it('decodes the extra layers of version 2 worlds, floodplain defaulting to zero', () => {
+    const v2 = {
+      ...meta,
+      layers: {
+        ...meta.layers,
+        volcanic_zone: { file: 'volcanic_zone.png', encoding: 'gray16', min: 0, max: 1 },
+        coast_distance: { file: 'coast_distance.png', encoding: 'gray16', min: 0, max: 2000 },
+        highland_offset: { file: 'highland_offset.png', encoding: 'gray16', min: -1, max: 1 },
+      },
+    } as unknown as WorldMetadata;
+    const layers = decodeLayers(v2, {
+      elevation: png16([0, 0]),
+      moisture: png16([0, 0]),
+      temperature: png16([0, 0]),
+      flow: png16([0, 0]),
+      biomes: png8([0, 0]),
+      volcanic_zone: png16([0, 65535]),
+      coast_distance: png16([65535, 0]),
+      highland_offset: png16([0, 65535]),
+    });
+    expect(layers.extra).not.toBeNull();
+    expect(Array.from(layers.extra!.volcanic)).toEqual([0, 1]);
+    expect(Array.from(layers.extra!.coastKm)).toEqual([2000, 0]);
+    expect(layers.extra!.coastMaxKm).toBe(2000);
+    expect(Array.from(layers.extra!.floodplain)).toEqual([0, 0]);
+    expect(DataUtils.fromHalfFloat(layers.extra!.packed[1]!)).toBe(2000);
+  });
+
   it('rejects a layer of the wrong size or depth', () => {
     const files = {
       elevation: png8([0, 0]),

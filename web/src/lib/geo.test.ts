@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  distanceKm,
   formatLonLat,
+  greatCircleArc,
+  lonLatDegrees,
+  lonLatToUv,
+  pathKm,
   lonLatToPixel,
   lonLatToSphere,
   planeToLonLat,
@@ -52,5 +57,40 @@ describe('geo', () => {
     expect(formatLonLat({ lon: (350 * Math.PI) / 180, lat: (-12.34 * Math.PI) / 180 })).toBe(
       '12.3° S, 10.0° W',
     );
+  });
+
+  it('measures great-circle distances on a planet of any size', () => {
+    const rad = Math.PI / 180;
+    // A quarter of the equator, and pole to equator, are a quarter of the circumference.
+    expect(distanceKm({ lon: 0, lat: 0 }, { lon: 90 * rad, lat: 0 }, 40_000)).toBeCloseTo(10_000, 6);
+    expect(distanceKm({ lon: 0, lat: Math.PI / 2 }, { lon: 1, lat: 0 }, 40_000)).toBeCloseTo(10_000, 6);
+    // Across the date line, the short way.
+    expect(distanceKm({ lon: 359 * rad, lat: 0 }, { lon: 1 * rad, lat: 0 }, 36_000)).toBeCloseTo(200, 6);
+    expect(
+      pathKm(
+        [
+          { lon: 0, lat: 0 },
+          { lon: 10 * rad, lat: 0 },
+          { lon: 10 * rad, lat: 10 * rad },
+        ],
+        36_000,
+      ),
+    ).toBeCloseTo(2000, 6);
+  });
+
+  it('samples great-circle arcs between their end points', () => {
+    const a = { lon: 0, lat: 0 };
+    const b = { lon: Math.PI / 2, lat: 0 };
+    const arc = greatCircleArc(a, b, 4);
+    expect(arc).toHaveLength(5);
+    expect(arc[2]!.lon).toBeCloseTo(Math.PI / 4);
+    expect(arc[2]!.lat).toBeCloseTo(0);
+  });
+
+  it('converts to texture coordinates and degrees', () => {
+    expect(lonLatToUv({ lon: Math.PI, lat: 0 })).toEqual([0.5, 0.5]);
+    const [lat, lon] = lonLatDegrees({ lon: (270 * Math.PI) / 180, lat: Math.PI / 4 });
+    expect(lat).toBeCloseTo(45);
+    expect(lon).toBeCloseTo(-90);
   });
 });
