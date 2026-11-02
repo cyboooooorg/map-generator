@@ -150,6 +150,10 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
 
     // ── 1. Priority-flood from the sea ────────────────────────────────────────
     let mut filled = height.to_vec();
+    // The water level of each pixel: `filled` without the slope added
+    // across flats, which grows with the number of pixels crossed. Lake
+    // depths are measured from it, so they do not depend on the resolution.
+    let mut spill = height.to_vec();
     // Every sea pixel is done from the start, but only those next to land
     // seed the flood: the others have no neighbour left to raise. Pops come
     // out in key order either way, so the result is the same.
@@ -187,6 +191,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
                 // Only raises pixels below the flood level (flats): real
                 // slopes keep their height.
                 filled[j] = filled[j].max(z + FLAT_EPSILON * (1.0 + 2.0 * noise[j]));
+                spill[j] = spill[j].max(spill[i]);
                 heap.push(Node(filled[j], j as u32));
             }
         }
@@ -252,7 +257,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     }
 
     // ── 4. Lakes and rivers ───────────────────────────────────────────────────
-    let lake = lakes(grid, height, &filled, &flow_km2, &sea);
+    let lake = lakes(grid, height, &spill, &flow_km2, &sea);
     let river = (0..n)
         .into_par_iter()
         .map(|i| !sea[i] && !lake[i] && flow_km2[i] >= RIVER_MIN_FLOW_KM2)
@@ -266,13 +271,14 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     }
 }
 
-/// Filled pits (connected pixels flooded deeper than [`LAKE_MIN_DEPTH`]) that
-/// receive at least [`LAKE_MIN_FLOW_KM2`] at their deepest inflow point.
-fn lakes(grid: &Grid, height: &[f32], filled: &[f32], flow: &[f32], sea: &[bool]) -> Vec<bool> {
+/// Filled pits (connected pixels whose water level `spill` is more than
+/// [`LAKE_MIN_DEPTH`] above the ground) that receive at least
+/// [`LAKE_MIN_FLOW_KM2`] at their deepest inflow point.
+fn lakes(grid: &Grid, height: &[f32], spill: &[f32], flow: &[f32], sea: &[bool]) -> Vec<bool> {
     let n = grid.pixel_count();
     let flooded: Vec<bool> = (0..n)
         .into_par_iter()
-        .map(|i| !sea[i] && filled[i] - height[i] > LAKE_MIN_DEPTH)
+        .map(|i| !sea[i] && spill[i] - height[i] > LAKE_MIN_DEPTH)
         .collect();
     let mut lake = vec![false; n];
     let mut seen = vec![false; n];
