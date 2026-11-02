@@ -103,8 +103,10 @@ pub struct ClimateShift {
 }
 
 /// A planet type. See the module documentation for the file format.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+///
+/// Deserialising validates the preset and builds its biome lookup, whether
+/// it comes from a preset file or from a world's `world.json`.
+#[derive(Clone, Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Preset {
     /// Short identifier, used in output directory names.
@@ -126,6 +128,83 @@ pub struct Preset {
     lookup: Vec<Biome>,
 }
 
+/// A preset as written, before validation.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PresetSpec {
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    defaults: Defaults,
+    #[serde(default)]
+    climate: ClimateShift,
+    #[serde(default)]
+    rules: BiomeRules,
+    #[serde(default)]
+    remap: BTreeMap<Biome, Vec<Biome>>,
+}
+
+impl<'de> Deserialize<'de> for Preset {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let spec = PresetSpec::deserialize(deserializer)?;
+        Preset::try_from(spec).map_err(serde::de::Error::custom)
+    }
+}
+
+impl TryFrom<PresetSpec> for Preset {
+    type Error = String;
+
+    fn try_from(spec: PresetSpec) -> Result<Self, String> {
+        let valid_name = !spec.name.is_empty()
+            && spec
+                .name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if !valid_name {
+            return Err(format!(
+                "name {:?} must use lowercase letters, digits and dashes only",
+                spec.name
+            ));
+        }
+
+        let d = &spec.defaults;
+        for (field, value, limits) in [
+            ("sea_level", d.sea_level, request::SEA_LEVEL),
+            ("volcanic", d.volcanic, request::VOLCANIC),
+            ("circumference", d.circumference, request::CIRCUMFERENCE_KM),
+            ("axial_tilt", d.axial_tilt, request::AXIAL_TILT_DEG),
+            ("erosion", d.erosion, request::EROSION),
+        ] {
+            if let Some(v) = value {
+                v.check(field, limits.min, limits.max)?;
+            }
+        }
+
+        let mut lookup = Biome::ALL.to_vec();
+        let mut seen = BTreeMap::new();
+        for (&target, sources) in &spec.remap {
+            for &source in sources {
+                if let Some(previous) = seen.insert(source, target) {
+                    return Err(format!(
+                        "remap: {source:?} is mapped to both {previous:?} and {target:?}"
+                    ));
+                }
+                lookup[source.id() as usize] = target;
+            }
+        }
+        Ok(Preset {
+            name: spec.name,
+            description: spec.description,
+            defaults: spec.defaults,
+            climate: spec.climate,
+            rules: spec.rules,
+            remap: spec.remap,
+            lookup,
+        })
+    }
+}
+
 /// Why a preset could not be loaded.
 #[derive(Debug)]
 pub struct PresetError(String);
@@ -141,48 +220,7 @@ impl std::error::Error for PresetError {}
 impl Preset {
     /// Parses and validates a preset. `origin` names the source in errors.
     pub fn from_toml(text: &str, origin: &str) -> Result<Self, PresetError> {
-        let fail = |msg: String| PresetError(format!("{origin}: {msg}"));
-        let mut preset: Preset = toml::from_str(text).map_err(|e| fail(e.to_string()))?;
-
-        let valid_name = !preset.name.is_empty()
-            && preset
-                .name
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
-        if !valid_name {
-            return Err(fail(format!(
-                "name {:?} must use lowercase letters, digits and dashes only",
-                preset.name
-            )));
-        }
-
-        let d = &preset.defaults;
-        for (field, value, limits) in [
-            ("sea_level", d.sea_level, request::SEA_LEVEL),
-            ("volcanic", d.volcanic, request::VOLCANIC),
-            ("circumference", d.circumference, request::CIRCUMFERENCE_KM),
-            ("axial_tilt", d.axial_tilt, request::AXIAL_TILT_DEG),
-            ("erosion", d.erosion, request::EROSION),
-        ] {
-            if let Some(v) = value {
-                v.check(field, limits.min, limits.max).map_err(fail)?;
-            }
-        }
-
-        let mut lookup = Biome::ALL.to_vec();
-        let mut seen = BTreeMap::new();
-        for (&target, sources) in &preset.remap {
-            for &source in sources {
-                if let Some(previous) = seen.insert(source, target) {
-                    return Err(fail(format!(
-                        "remap: {source:?} is mapped to both {previous:?} and {target:?}"
-                    )));
-                }
-                lookup[source.id() as usize] = target;
-            }
-        }
-        preset.lookup = lookup;
-        Ok(preset)
+        toml::from_str(text).map_err(|e| PresetError(format!("{origin}: {e}")))
     }
 
     /// Loads a built-in preset by name, or a preset file when `spec` ends
@@ -263,6 +301,15 @@ mod tests {
         assert_eq!(p.rules.polar, 0.3);
         // Fields that are not overridden keep their default.
         assert_eq!(p.rules.waterline, BiomeRules::default().waterline);
+    }
+
+    #[test]
+    fn a_preset_read_back_from_json_remaps() {
+        let volcanic = Preset::load("volcanic").unwrap();
+        let json = serde_json::to_string(&volcanic).unwrap();
+        let back: Preset = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.remap(Biome::Ocean), Biome::MagmaSea);
+        assert_eq!(back.remap(Biome::Mountain), Biome::Mountain);
     }
 
     #[test]

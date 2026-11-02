@@ -1,4 +1,4 @@
-use super::{DASH_OFF, DASH_ON, latitude_row, reference_lines, render_pixels};
+use super::{DASH_OFF, DASH_ON, Style, latitude_row, reference_lines, render_pixels};
 use crate::world::World;
 use std::fmt::Write;
 
@@ -11,7 +11,7 @@ use std::fmt::Write;
 /// single wider `<rect>`, which keeps the file 10–40× smaller than one rect per pixel.
 pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
     let (w, h) = (world.width as usize, world.height as usize);
-    let pixels = render_pixels(world, false);
+    let pixels = render_pixels(world, Style::Flat);
 
     let mut out = String::with_capacity(w * h * 8);
     // Writing into a String cannot fail, so the fmt::Result values are ignored.

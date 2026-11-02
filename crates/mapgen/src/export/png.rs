@@ -1,4 +1,4 @@
-use super::{DASH_OFF, DASH_ON, latitude_row, reference_lines, render_pixels};
+use super::{DASH_OFF, DASH_ON, Style, latitude_row, reference_lines, render_pixels};
 use crate::world::*;
 use font8x8::UnicodeFonts;
 use image::{ImageResult, Rgb, RgbImage};
@@ -6,7 +6,7 @@ use image::{ImageResult, Rgb, RgbImage};
 /// Writes the biome map with contour lines and dotted latitude reference lines.
 pub fn export_png(world: &World, path: &str) -> ImageResult<()> {
     let (w, h) = (world.width, world.height);
-    let pixels = render_pixels(world, true);
+    let pixels = render_pixels(world, Style::Detailed);
     let mut img = RgbImage::from_fn(w, h, |x, y| Rgb(pixels[(y * w + x) as usize]));
 
     for (latitude, color) in reference_lines(world.params.axial_tilt_deg) {

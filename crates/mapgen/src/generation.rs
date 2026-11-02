@@ -1,5 +1,8 @@
 use crate::biome::BiomeInput;
-use crate::climate::{MoistureInput, moisture, row_temperatures, temperature};
+use crate::climate::{
+    Field, MoistureInput, moisture, regional_variability, row_temperatures, temperature,
+    temperature_anomaly,
+};
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
@@ -22,7 +25,24 @@ pub struct Sample {
     pub moisture: f32,
     pub volcanic_raw: f32,
     pub volcanic_zone: f32,
+    /// Large-scale temperature anomaly noise, roughly in `[-1, 1]`.
+    pub temperature_anomaly: f32,
+    /// Regional climate variability noise for temperature and moisture.
+    pub variability_t: f32,
+    pub variability_m: f32,
+    /// Highland line jitter noise, roughly in `[-1, 1]`.
+    pub highland_jitter: f32,
 }
+
+impl Sample {
+    /// Local shift of the highland line used by biome selection.
+    pub fn highland_offset(&self) -> f32 {
+        HIGHLAND_JITTER * self.highland_jitter
+    }
+}
+
+/// Weight of the highland line jitter (about 0.09 of standard deviation).
+const HIGHLAND_JITTER: f32 = 0.50;
 
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
@@ -37,6 +57,11 @@ pub struct Sampler {
     warp_noise_a: Perlin,
     warp_noise_b: Perlin,
     volcano_noise: Perlin,
+    /// Continental-scale temperature anomalies (currents, monsoons, continentality).
+    anomaly_noise: Perlin,
+    /// Regional climate variability (soils, aspect, local circulation).
+    variability_noise: Perlin,
+    highland_noise: Perlin,
 }
 
 impl Sampler {
@@ -62,6 +87,9 @@ impl Sampler {
             warp_noise_b: Perlin::new(seed.wrapping_add(201)),
             // Low-frequency noise that selects which mountain chains turn volcanic.
             volcano_noise: Perlin::new(seed.wrapping_add(300)),
+            anomaly_noise: Perlin::new(seed.wrapping_add(400)),
+            variability_noise: Perlin::new(seed.wrapping_add(500)),
+            highland_noise: Perlin::new(seed.wrapping_add(700)),
         }
     }
 
@@ -123,6 +151,29 @@ impl Sampler {
         let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
         let volcanic_zone = ((volcanic_raw - self.volcanic_threshold) * 4.0).clamp(0.0, 1.0);
 
+        // Features of ~3 000 km: whole zones shift between continents.
+        let temperature_anomaly = fbm(
+            &self.anomaly_noise,
+            nx * 1.2 * s,
+            ny * 1.2 * s,
+            nz * 1.2 * s,
+            3,
+        );
+
+        // Features from ~1 000 km down to ~60 km; two independent samples.
+        let f = 6.0 * s;
+        let variability_t = fbm(&self.variability_noise, nx * f, ny * f, nz * f, 5);
+        let variability_m = fbm(
+            &self.variability_noise,
+            nx * f + 17.3,
+            ny * f - 4.1,
+            nz * f + 9.7,
+            5,
+        );
+
+        let h = 4.0 * s;
+        let highland_jitter = fbm(&self.highland_noise, nx * h, ny * h, nz * h, 4);
+
         Sample {
             warp_x: warp_x as f32,
             warp_y: warp_y as f32,
@@ -134,6 +185,10 @@ impl Sampler {
             moisture,
             volcanic_raw,
             volcanic_zone,
+            temperature_anomaly,
+            variability_t,
+            variability_m,
+            highland_jitter,
         }
     }
 }
@@ -173,11 +228,17 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
     ("noise_moisture", Ramp::Signed, |s| s.moisture),
     ("noise_volcanic_raw", Ramp::Signed, |s| s.volcanic_raw),
     ("noise_volcanic_zone", Ramp::Unsigned, |s| s.volcanic_zone),
+    ("noise_temperature_anomaly", Ramp::Signed, |s| {
+        s.temperature_anomaly
+    }),
+    ("noise_variability_t", Ramp::Signed, |s| s.variability_t),
+    ("noise_variability_m", Ramp::Signed, |s| s.variability_m),
+    ("noise_highland_jitter", Ramp::Signed, |s| s.highland_jitter),
 ];
 
 /// Coast distances are computed up to this value; further pixels get the cap.
 /// Also the full scale of the `coast_distance` debug map.
-const COAST_DISTANCE_CAP_KM: f32 = 2_000.0;
+pub const COAST_DISTANCE_CAP_KM: f32 = 2_000.0;
 
 /// Full scale of the `flow` debug map: log10 of the drainage area in km².
 const FLOW_LOG_MAX: f32 = 7.0;
@@ -282,7 +343,11 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
     let raw_temperature: Vec<f32> = relief
         .par_iter()
         .enumerate()
-        .map(|(i, &r)| temperature(row_temperature[i / width as usize], r - rules.waterline))
+        .map(|(i, &r)| {
+            let above_water = r - rules.waterline;
+            temperature(row_temperature[i / width as usize], above_water)
+                + temperature_anomaly(samples[i].temperature_anomaly, above_water >= 0.0)
+        })
         .collect();
     debug.push(DebugLayer {
         name: "temperature",
@@ -332,13 +397,21 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
     // exported data explains the biome of every pixel.
     let shift = planet.climate;
     let (dt, dm, dvz) = (shift.temperature, shift.moisture, shift.volcanic);
+    // Regional variability is part of the stored climate, so the exported
+    // layers still explain every biome.
     let moisture: Vec<f32> = raw_moisture
         .iter()
-        .map(|m| (m + dm).clamp(-1.0, 1.0))
+        .zip(&samples)
+        .map(|(m, s)| {
+            (m + dm + regional_variability(s.variability_m, Field::Moisture)).clamp(-1.0, 1.0)
+        })
         .collect();
     let temperature: Vec<f32> = raw_temperature
         .iter()
-        .map(|t| (t + dt).clamp(0.0, 1.0))
+        .zip(&samples)
+        .map(|(t, s)| {
+            (t + dt + regional_variability(s.variability_t, Field::Temperature)).clamp(0.0, 1.0)
+        })
         .collect();
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
@@ -356,6 +429,11 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
 
     // ── Pass 7: biomes ────────────────────────────────────────────────────────
     progress(Stage::Biomes);
+    let volcanic_zone: Vec<f32> = samples
+        .iter()
+        .map(|s| (s.volcanic_zone + dvz).clamp(0.0, 1.0))
+        .collect();
+    let highland_offset: Vec<f32> = samples.iter().map(Sample::highland_offset).collect();
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
@@ -363,10 +441,11 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
                 elevation: relief[i],
                 moisture: moisture[i],
                 temperature: temperature[i],
-                volcanic_zone: (samples[i].volcanic_zone + dvz).clamp(0.0, 1.0),
+                volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
                 lake: water.lake[i],
                 river: water.river[i],
+                highland_offset: highland_offset[i],
             };
             planet.remap(rules.choose(input))
         })
@@ -381,6 +460,9 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
             moisture,
             temperature,
             flow_km2: water.flow_km2,
+            volcanic_zone,
+            coast_distance_km,
+            highland_offset,
             biomes,
         },
         debug,
@@ -439,10 +521,17 @@ mod tests {
 
     #[test]
     fn stored_climate_includes_planet_offsets() {
-        let w = small_world(5, "frozen");
-        // Frozen offsets cool the planet by 0.55: nothing reaches tropical heat.
-        assert!(w.temperature.iter().all(|t| (0.0..=0.45).contains(t)));
-        assert!(w.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
+        let frozen = small_world(5, "frozen");
+        let terran = small_world(5, "terran");
+        // The frozen preset cools every pixel by 0.55; both are clamped to [0, 1].
+        for (f, t) in frozen.temperature.iter().zip(&terran.temperature) {
+            if *t < 1.0 {
+                assert!((f - (t - 0.55).max(0.0)).abs() < 1e-5, "{f} vs {t}");
+            } else {
+                assert!(*f >= 0.45 - 1e-5, "{f} vs {t}");
+            }
+        }
+        assert!(frozen.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
     }
 
     #[test]

@@ -6,6 +6,9 @@ import type { Defaults } from "./Defaults";
 
 /**
  * A planet type. See the module documentation for the file format.
+ *
+ * Deserialising validates the preset and builds its biome lookup, whether
+ * it comes from a preset file or from a world's `world.json`.
  */
 export type Preset = { 
 /**

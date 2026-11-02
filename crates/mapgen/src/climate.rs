@@ -40,6 +40,39 @@ pub fn row_temperatures(grid: &Grid, axial_tilt_deg: f32) -> Vec<f32> {
         .collect()
 }
 
+/// Weight of the large-scale temperature anomaly noise on land: about 0.08
+/// standard deviation, so climate zones move by up to ~15° of latitude
+/// between continents.
+const ANOMALY_LAND: f32 = 0.40;
+/// Weight on the sea, where water inertia damps the anomalies.
+const ANOMALY_SEA: f32 = 0.20;
+
+/// Temperature anomaly for a noise sample in `[-1, 1]`, standing for ocean
+/// currents, monsoons and continentality without modelling them. Zero-mean,
+/// so the overall share of cold and hot climates does not change.
+pub fn temperature_anomaly(noise: f32, land: bool) -> f32 {
+    noise * if land { ANOMALY_LAND } else { ANOMALY_SEA }
+}
+
+/// A climate field that regional variability applies to.
+#[derive(Clone, Copy, Debug)]
+pub enum Field {
+    Temperature,
+    Moisture,
+}
+
+/// Regional climate variability for a noise sample in `[-1, 1]`: local
+/// differences of soil, aspect and circulation (about 2 °C and 0.09 of
+/// moisture of standard deviation). It makes biome borders irregular and
+/// interleaved instead of following isotherms and isohyets.
+pub fn regional_variability(noise: f32, field: Field) -> f32 {
+    noise
+        * match field {
+            Field::Temperature => 0.25,
+            Field::Moisture => 0.50,
+        }
+}
+
 /// Temperature of a pixel: its row temperature, cooled on land with altitude.
 /// The sea surface follows latitude only, whatever the depth underneath.
 ///
@@ -74,7 +107,7 @@ const RAIN_SMOOTHING_KM: f32 = 100.0;
 /// Weights of the precipitation, circulation-band and noise terms.
 const RAIN_WEIGHT: f32 = 0.75;
 const BAND_WEIGHT: f32 = 0.25;
-const NOISE_WEIGHT: f32 = 0.30;
+const NOISE_WEIGHT: f32 = 0.50;
 
 /// Zonal wind at `latitude` in `[-1, 1]`: positive blows east. Easterly trade
 /// winds near the equator, westerlies at mid-latitudes, polar easterlies.
@@ -365,6 +398,13 @@ mod tests {
         let s = smooth(&grid, &spike, 2_000.0);
         // The spike spreads to its western neighbour across the seam.
         assert!(s[grid.index(39, 10)] > 0.0);
+    }
+
+    #[test]
+    fn anomalies_are_weaker_on_the_sea() {
+        assert_eq!(temperature_anomaly(0.0, true), 0.0);
+        assert!(temperature_anomaly(0.5, true) > temperature_anomaly(0.5, false));
+        assert!(temperature_anomaly(-0.5, true) < 0.0);
     }
 
     #[test]

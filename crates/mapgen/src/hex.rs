@@ -5,7 +5,7 @@
 //! and `<world>/hex/hex.png`. The hexes are regular in map space (the
 //! equirectangular projection), not on the sphere: polar hexes cover less
 //! real ground than equatorial ones.
-use crate::export::raw_data::{BiomeInfo, ScalarLayerInfo, WorldMetadata};
+use crate::export::raw_data::{BiomeInfo, WorldMetadata, read_scalar};
 use image::{Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -121,22 +121,6 @@ pub struct HexCells {
     pub max_flow_km2: Vec<f32>,
     /// Land hex crossed by a large river.
     pub river: Vec<bool>,
-}
-
-/// A decoded 16-bit layer of raw_data/.
-fn read_scalar(dir: &Path, layer: &ScalarLayerInfo) -> Result<Vec<f32>, String> {
-    let img = image::open(dir.join(&layer.file))
-        .map_err(|e| format!("{}: {e}", layer.file))?
-        .to_luma16();
-    let scale = (layer.max - layer.min) / 65535.0;
-    let log = layer.encoding == "gray16-log10";
-    Ok(img
-        .pixels()
-        .map(|p| {
-            let v = layer.min + p[0] as f32 * scale;
-            if log { 10f32.powf(v) - 1.0 } else { v }
-        })
-        .collect())
 }
 
 /// Resamples the world in `world_dir` onto a grid of `columns` hex columns,
