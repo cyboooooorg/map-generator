@@ -92,6 +92,7 @@ pub struct Defaults {
 /// Global shifts added to every pixel before biome selection.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ClimateShift {
     /// Added to temperature (`[0, 1]` scale).
     pub temperature: f32,
@@ -104,6 +105,7 @@ pub struct ClimateShift {
 /// A planet type. See the module documentation for the file format.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Preset {
     /// Short identifier, used in output directory names.
     pub name: String,
@@ -120,6 +122,7 @@ pub struct Preset {
     pub remap: BTreeMap<Biome, Vec<Biome>>,
     /// `remap` inverted: the final biome for each biome id.
     #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
     lookup: Vec<Biome>,
 }
 

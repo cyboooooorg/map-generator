@@ -13,14 +13,85 @@
 //! | `flow.png`        | 16-bit grey, `log10(1 + km²)` with the same formula          |
 //! | `biomes.png`      | 8-bit grey, pixel = biome id (see the `biomes` table)       |
 use crate::biome::biome_color;
+use crate::preset::Preset;
 use crate::world::{Biome, World, biome_name};
 use image::{GrayImage, ImageBuffer, Luma};
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
 
 /// Bumped whenever the layout of `raw_data/` changes incompatibly.
 const FORMAT_VERSION: u32 = 1;
+
+/// Content of `raw_data/world.json`.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct WorldMetadata {
+    pub format_version: u32,
+    pub width: u32,
+    pub height: u32,
+    pub projection: String,
+    pub seed: u32,
+    /// Name of the planet preset.
+    pub planet_type: String,
+    /// The full resolved preset, so the world can be regenerated even if the
+    /// preset file changes or disappears.
+    pub preset: Preset,
+    pub sea_level: f32,
+    pub volcanic_intensity: f32,
+    pub circumference_km: f32,
+    pub gravity_modifier: f32,
+    pub axial_tilt_deg: f32,
+    pub erosion: f32,
+    pub layers: Layers,
+    /// Every biome, in id order.
+    pub biomes: Vec<BiomeInfo>,
+}
+
+/// The layer files of `raw_data/`.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Layers {
+    pub elevation: ScalarLayerInfo,
+    pub moisture: ScalarLayerInfo,
+    pub temperature: ScalarLayerInfo,
+    /// `log10(1 + km²)` of the drainage area.
+    pub flow: ScalarLayerInfo,
+    pub biomes: BiomeLayerInfo,
+}
+
+/// A 16-bit layer: pixel `p` decodes to `min + p / 65535 × (max − min)`.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ScalarLayerInfo {
+    pub file: String,
+    /// `gray16`, or `gray16-log10` when the decoded value is a base-10 logarithm.
+    pub encoding: String,
+    pub min: f32,
+    pub max: f32,
+}
+
+/// The 8-bit biome layer: pixel = biome id.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct BiomeLayerInfo {
+    pub file: String,
+    pub encoding: String,
+}
+
+/// One entry of the biome table.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct BiomeInfo {
+    pub id: u8,
+    pub key: Biome,
+    /// Display name.
+    pub name: String,
+    /// `#RRGGBB`.
+    pub color: String,
+    /// Whether the biome is a water surface.
+    pub water: bool,
+}
 
 /// A continuous layer quantised to 16 bits over a fixed range.
 struct ScalarLayer<'a> {
@@ -73,7 +144,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         },
     ];
 
-    let mut layers = serde_json::Map::new();
+    let mut infos = Vec::with_capacity(scalars.len());
     for layer in &scalars {
         let pixels: Vec<u16> = layer
             .values
@@ -84,54 +155,60 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
             .ok_or("layer size does not match the world size")?
             .save(dir.join(&file))?;
-        layers.insert(
-            layer.name.into(),
-            json!({ "file": file, "encoding": layer.encoding, "min": layer.min, "max": layer.max }),
-        );
+        infos.push(ScalarLayerInfo {
+            file,
+            encoding: layer.encoding.to_string(),
+            min: layer.min,
+            max: layer.max,
+        });
     }
 
     let ids: Vec<u8> = world.biomes.iter().map(|b| b.id()).collect();
     GrayImage::from_raw(w, h, ids)
         .ok_or("layer size does not match the world size")?
         .save(dir.join("biomes.png"))?;
-    layers.insert(
-        "biomes".into(),
-        json!({ "file": "biomes.png", "encoding": "gray8-biome-id" }),
-    );
 
-    let biomes: Vec<Value> = Biome::ALL
-        .iter()
-        .map(|&b| {
-            let [r, g, bl] = biome_color(b);
-            json!({
-                "id": b.id(),
-                "key": format!("{b:?}"),
-                "name": biome_name(b),
-                "color": format!("#{r:02X}{g:02X}{bl:02X}"),
-                "water": b.is_water(),
+    let [elevation, moisture, temperature, flow]: [ScalarLayerInfo; 4] = infos
+        .try_into()
+        .map_err(|_| "unexpected number of scalar layers")?;
+    let metadata = WorldMetadata {
+        format_version: FORMAT_VERSION,
+        width: w,
+        height: h,
+        projection: "equirectangular, row 0 = north pole, column 0 = longitude 0".into(),
+        seed: world.params.seed,
+        planet_type: world.params.planet.name.clone(),
+        preset: world.params.planet.clone(),
+        sea_level: world.params.sea_level,
+        volcanic_intensity: world.params.volcanic_intensity,
+        circumference_km: world.params.circumference_km,
+        gravity_modifier: world.params.gravity_modifier(),
+        axial_tilt_deg: world.params.axial_tilt_deg,
+        erosion: world.params.erosion,
+        layers: Layers {
+            elevation,
+            moisture,
+            temperature,
+            flow,
+            biomes: BiomeLayerInfo {
+                file: "biomes.png".into(),
+                encoding: "gray8-biome-id".into(),
+            },
+        },
+        biomes: Biome::ALL
+            .iter()
+            .map(|&b| {
+                let [r, g, bl] = biome_color(b);
+                BiomeInfo {
+                    id: b.id(),
+                    key: b,
+                    name: biome_name(b).into(),
+                    color: format!("#{r:02X}{g:02X}{bl:02X}"),
+                    water: b.is_water(),
+                }
             })
-        })
-        .collect();
-
-    let metadata = json!({
-        "format_version": FORMAT_VERSION,
-        "width": w,
-        "height": h,
-        "projection": "equirectangular, row 0 = north pole, column 0 = longitude 0",
-        "seed": world.params.seed,
-        "planet_type": world.params.planet.name,
-        // The full resolved preset, so the world can be regenerated even if
-        // the preset file changes or disappears.
-        "preset": world.params.planet,
-        "sea_level": world.params.sea_level,
-        "volcanic_intensity": world.params.volcanic_intensity,
-        "circumference_km": world.params.circumference_km,
-        "gravity_modifier": world.params.gravity_modifier(),
-        "axial_tilt_deg": world.params.axial_tilt_deg,
-        "erosion": world.params.erosion,
-        "layers": layers,
-        "biomes": biomes,
-    });
+            .collect(),
+    };
     std::fs::write(
         dir.join("world.json"),
         serde_json::to_string_pretty(&metadata)?,
@@ -181,11 +258,14 @@ mod tests {
                 assert!((decoded - world.elevation[i]).abs() < 1e-4);
             }
         }
-        let meta: Value =
+        // world.json reads back into its typed form, preset included.
+        let meta: WorldMetadata =
             serde_json::from_str(&std::fs::read_to_string(dir.join("world.json")).unwrap())
                 .unwrap();
-        assert_eq!(meta["planet_type"], "caustic");
-        assert_eq!(meta["biomes"].as_array().unwrap().len(), Biome::ALL.len());
+        assert_eq!(meta.planet_type, "caustic");
+        assert_eq!(meta.preset.name, "caustic");
+        assert_eq!(meta.biomes.len(), Biome::ALL.len());
+        assert_eq!(meta.layers.flow.encoding, "gray16-log10");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
