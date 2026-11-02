@@ -424,6 +424,8 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
         &water.filled,
         params.seed,
     );
+    // The biome layer marks rivers where they are drawn, so it matches the map.
+    let river_coverage = rivers::coverage(&river_lines, width, height);
     debug.push(DebugLayer {
         name: "flow",
         ramp: Ramp::Unsigned,
@@ -451,7 +453,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
                 volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
                 lake: water.lake[i],
-                river: water.river[i],
+                river: !water.lake[i] && river_coverage[i] >= rivers::RIVER_COVERAGE,
                 highland_offset: highland_offset[i],
             };
             planet.remap(rules.choose(input))

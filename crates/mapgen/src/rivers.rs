@@ -146,6 +146,70 @@ pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
     lines
 }
 
+// ── Drawing ───────────────────────────────────────────────────────────────────
+
+/// Drawn width in map pixels at each point of a line, tapered at the head so
+/// rivers do not start abruptly.
+pub fn widths_px(line: &RiverLine, map_width: u32) -> Vec<f64> {
+    let k = scale(map_width);
+    let mut from_head = 0.0;
+    line.points
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if i > 0 {
+                let q = line.points[i - 1];
+                from_head += ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
+            }
+            let t = (from_head / (8.0 * k)).clamp(0.0, 1.0);
+            let taper = 0.55 + 0.45 * t * t * (3.0 - 2.0 * t);
+            width_ref_px(line.flow_km2[i]) * k * taper
+        })
+        .collect()
+}
+
+/// Anti-aliased coverage in `[0, 1]` of the rivers drawn on a `width` ×
+/// `height` map, row-major. Overlapping rivers take the maximum, so
+/// confluences do not darken. Lines crossing the longitude seam wrap.
+pub fn coverage(lines: &[RiverLine], width: u32, height: u32) -> Vec<f32> {
+    let mut cov = vec![0f32; (width * height) as usize];
+    let wrap = width as f64;
+    for line in lines {
+        let widths = widths_px(line, width);
+        for (k, s) in line.points.windows(2).enumerate() {
+            let (wa, wb) = (widths[k], widths[k + 1]);
+            for shift in [-wrap, 0.0, wrap] {
+                let a = [s[0][0] + shift, s[0][1]];
+                let b = [s[1][0] + shift, s[1][1]];
+                let r = wa.max(wb) / 2.0 + 1.0;
+                let (x0, x1) = ((a[0].min(b[0]) - r).floor(), (a[0].max(b[0]) + r).ceil());
+                let (y0, y1) = ((a[1].min(b[1]) - r).floor(), (a[1].max(b[1]) + r).ceil());
+                if x1 < 0.0 || y1 < 0.0 || x0 >= wrap || y0 >= height as f64 {
+                    continue;
+                }
+                let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+                let len2 = (dx * dx + dy * dy).max(1e-12);
+                for py in (y0.max(0.0) as u32)..(y1.min(height as f64) as u32) {
+                    for px in (x0.max(0.0) as u32)..(x1.min(wrap) as u32) {
+                        let c = [px as f64 + 0.5, py as f64 + 0.5];
+                        let t = (((c[0] - a[0]) * dx + (c[1] - a[1]) * dy) / len2).clamp(0.0, 1.0);
+                        let q = [a[0] + t * dx, a[1] + t * dy];
+                        let d = ((c[0] - q[0]).powi(2) + (c[1] - q[1]).powi(2)).sqrt();
+                        let half = (wa + (wb - wa) * t) / 2.0;
+                        let v = (half + 0.5 - d).clamp(0.0, 1.0) as f32;
+                        let i = (py * width + px) as usize;
+                        cov[i] = cov[i].max(v);
+                    }
+                }
+            }
+        }
+    }
+    cov
+}
+
+/// Coverage from which a pixel counts as a river in the biome layer.
+pub const RIVER_COVERAGE: f32 = 0.5;
+
 // ── Shaping ───────────────────────────────────────────────────────────────────
 
 /// Chaikin corner cutting, endpoints kept.
@@ -547,6 +611,31 @@ mod tests {
         assert!((width_ref_px(RIVER_MIN_FLOW_KM2) - 0.9).abs() < 1e-9);
         assert!(width_ref_px(1e6) > width_ref_px(5e5));
         assert_eq!(width_ref_px(1e9), 4.0);
+    }
+
+    #[test]
+    fn coverage_is_widest_on_large_rivers() {
+        let line = |flow: f32| RiverLine {
+            points: (0..40).map(|x| [x as f64 + 0.5, 10.5]).collect(),
+            flow_km2: vec![flow; 40],
+            parent: None,
+            mouth: Mouth::Sea,
+        };
+        let covered = |l: RiverLine| {
+            coverage(&[l], 1920, 20)
+                .iter()
+                .filter(|&&c| c >= RIVER_COVERAGE)
+                .count()
+        };
+        assert!(covered(line(5e6)) > covered(line(RIVER_MIN_FLOW_KM2)));
+        // The seam wraps: a line just west of x = 0 covers the east edge.
+        let west = RiverLine {
+            points: vec![[-3.0, 10.5], [0.5, 10.5]],
+            flow_km2: vec![1e6; 2],
+            parent: None,
+            mouth: Mouth::Sea,
+        };
+        assert!(coverage(&[west], 1920, 20)[10 * 1920 + 1918] > 0.5);
     }
 
     #[test]

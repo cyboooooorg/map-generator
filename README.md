@@ -252,13 +252,13 @@ worlds/<planet>-<seed>/
     └── flow.png
 ```
 
-| File / folder | Description                                                                                                                                                                            |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world.png`   | PNG (1920 × 1080 by default) with biome colours, soft biome borders (ecotones), hillshaded land (light from the north-west), depth contours under water and geographic reference lines |
-| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling                               |
-| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                  |
-| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                                 |
-| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                                         |
+| File / folder | Description                                                                                                                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world.png`   | PNG (1920 × 1080 by default) with biome colours, soft biome borders (ecotones), hillshaded land (light from the north-west), meandering rivers whose width grows with their flow, depth contours under water and geographic reference lines |
+| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling                                                                                    |
+| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                                                                       |
+| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                                                                                      |
+| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                                                                                              |
 
 #### Soft biome borders
 
@@ -414,6 +414,7 @@ Before biome selection, both climate fields get a regional variability term stan
 3. **Accumulation.** Every pixel adds its runoff — its area in km² × `((moisture + 1) / 2)²` — and passes the total downstream. The flow of a pixel is the wet-equivalent area draining through it.
 4. **Lakes** are filled pits deeper than `0.004` that receive at least 40 000 km² of flow; **rivers** are pixels carrying at least 120 000 km². Under the polar temperature threshold, rivers stay ice and lakes freeze into ice cap.
 5. **Vector rivers.** River pixels are chained along their receivers into polylines (the main stem follows the largest tributary), smoothed (Chaikin), resampled and displaced sideways by noise into meanders whose wavelength (`7 ×` width, 6–40 px) and amplitude (`2.5 ×` width, 1–3 px) grow with the river, plus a slower wander. Guards keep them sound: no offset climbing the valley side, no bend tighter than half its radius, a gap to other rivers, loops cut, and tributaries snapped onto their displaced parent (or ended on the first river they meet). Lengths are in reference pixels, 1/1920 of the circumference, so the shapes do not depend on the map size.
+6. **Drawing.** Rivers are drawn anti-aliased over the map, `0.9 × √(flow / 120 000 km²)` reference pixels wide (capped at 4, tapered at the head): about 10–20× their real width, so they read at map scale, and large rivers stand out. `world.svg` draws them as stroked paths. The biome layer marks a pixel `River` where the drawn river covers at least half of it, so `biomes.png` matches the picture; frozen rivers (below the polar temperature) are not drawn.
 
 Thresholds are in km², so the river network does not depend on the map resolution. On non-terran planets, rivers and lakes are remapped like seas: lava and magma on volcanic worlds, ice on frozen worlds, acid on caustic worlds, dry rock on barren worlds.
 
