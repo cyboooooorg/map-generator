@@ -13,6 +13,7 @@
 //! Distributaries never cross another river, and the delta plain never moves
 //! the coastline.
 use crate::geo::Grid;
+use crate::noise::{stream, stream_seed};
 use crate::rivers::{Mouth, RiverLine, SegmentIndex};
 use noise::{NoiseFn, Perlin};
 
@@ -74,7 +75,7 @@ pub fn outlets(lines: &mut Vec<RiverLine>, grid: &Grid, above: &[f32], seed: u32
         (y >= 0 && y < h).then(|| above[(y * w + x.rem_euclid(w)) as usize])
     };
     let dy_km = grid.dy_km() as f64;
-    let noise = Perlin::new(seed.wrapping_add(1200));
+    let noise = Perlin::new(stream_seed(seed, stream::DELTAS));
     let mut deltas = Vec::new();
     let candidates: Vec<usize> = (0..lines.len())
         .filter(|&i| {
