@@ -48,6 +48,12 @@ const MOUNTAIN_BOOST: f32 = 5.0;
 /// high ground.
 const PLAIN_GAIN: f64 = 0.35;
 const MOUNTAIN_GAIN: f64 = 0.5;
+/// Depth of a river's channel at the smallest river flow, in elevation units
+/// (about 30 m at the hillshade scale); it grows with `flow^0.3`.
+const CHANNEL_DEPTH: f32 = 5e-4;
+/// Half-width of the channel banks, in drawn river widths: the banks rise
+/// from the middle of the river to `CHANNEL_SPREAD / 2` widths away.
+const CHANNEL_SPREAD: f64 = 2.0;
 /// Share of the height detail removed on a floodplain (weight 1).
 const FLOODPLAIN_CALM: f32 = 0.8;
 /// Height detail fades out within this distance of the waterline, so it can
@@ -291,16 +297,23 @@ impl DetailWorld {
 
         // Elevation with a one-pixel border, for slopes.
         let side = n + 2;
+        let (coverage, channel) = self.river_coverage(tile, pixel_km);
+        let waterline = w.params.sea_level + planet.rules.waterline;
         let elevation: Vec<f32> = (0..side * side)
             .into_par_iter()
             .map(|i| {
                 let (px, py) = ((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
                 let (lon, lat) = tile.lon_lat(px, py);
-                self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km)
+                let e = self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km);
+                // The river's channel and banks, never below the sea.
+                if e >= waterline {
+                    (e - channel[i]).max(waterline + 1e-6)
+                } else {
+                    e
+                }
             })
             .collect();
 
-        let coverage = self.river_coverage(tile, pixel_km);
         let river_colour = biome_color(planet.remap(Biome::River)).map(f32::from);
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
@@ -385,11 +398,17 @@ impl DetailWorld {
 
     /// Anti-aliased coverage of the rivers on a tile, drawn with the base
     /// map's width law at the tile level's resolution (see
-    /// [`rivers::draw_width_px`]), so they do not jump when tiles appear.
-    fn river_coverage(&self, tile: TileId, pixel_km: f64) -> Vec<f32> {
+    /// [`rivers::draw_width_px`]), so they do not jump when tiles appear;
+    /// and the depth of their channels on the tile with a one-pixel border
+    /// (row-major, `TILE_SIZE + 2` wide), for the elevation.
+    fn river_coverage(&self, tile: TileId, pixel_km: f64) -> (Vec<f32>, Vec<f32>) {
         let w = &self.world;
         let n = TILE_SIZE as usize;
-        let mut cov = vec![0f32; n * n];
+        let mut stamp = Stamp {
+            n,
+            coverage: vec![0f32; n * n],
+            channel: vec![0f32; (n + 2) * (n + 2)],
+        };
         let (cols, rows) = tile.grid();
         // Tile pixels per base pixel, and the tile's window in base pixels.
         let sx = cols as f64 * TILE_SIZE as f64 / w.width as f64;
@@ -415,6 +434,11 @@ impl DetailWorld {
                 let tapers = rivers::tapers(line, w.width);
                 let width_at =
                     |i: usize| rivers::draw_width_px(line.flow_km2[i], raster, pixel_km, tapers[i]);
+                let depth_at = |i: usize| {
+                    let q = line.flow_km2[i].max(rivers::RIVER_MIN_FLOW_KM2)
+                        / rivers::RIVER_MIN_FLOW_KM2;
+                    CHANNEL_DEPTH * q.powf(0.3) * tapers[i] as f32
+                };
                 let pts = &line.points;
                 for s in 0..pts.len().saturating_sub(1) {
                     // Catmull-Rom between points, so zoomed rivers stay smooth.
@@ -425,19 +449,21 @@ impl DetailWorld {
                     let length = ((b2[0] - a[0]).powi(2) + (b2[1] - a[1]).powi(2)).sqrt();
                     let pieces = (length / 2.0).ceil().clamp(1.0, 64.0) as usize;
                     let (wa, wb) = (width_at(s), width_at(s + 1));
+                    let (da, db) = (depth_at(s), depth_at(s + 1));
                     let mut prev = a;
                     for j in 1..=pieces {
                         let t = j as f64 / pieces as f64;
                         let point = catmull_rom(p0, p1, p2, p3, t);
                         let next = to_tile(point);
                         let width = wa + (wb - wa) * t;
-                        stamp_segment(&mut cov, n, prev, next, width);
+                        let depth = da + (db - da) * t as f32;
+                        stamp.segment(prev, next, width, depth);
                         prev = next;
                     }
                 }
             }
         }
-        cov
+        (stamp.coverage, stamp.channel)
     }
 }
 
@@ -451,24 +477,43 @@ fn catmull_rom(p0: [f64; 2], p1: [f64; 2], p2: [f64; 2], p3: [f64; 2], t: f64) -
     })
 }
 
-/// Adds an anti-aliased segment of the given width to a coverage buffer (max).
-fn stamp_segment(cov: &mut [f32], n: usize, a: [f64; 2], b: [f64; 2], width: f64) {
-    let r = width / 2.0 + 1.0;
-    let (x0, x1) = ((a[0].min(b[0]) - r).floor(), (a[0].max(b[0]) + r).ceil());
-    let (y0, y1) = ((a[1].min(b[1]) - r).floor(), (a[1].max(b[1]) + r).ceil());
-    if x1 < 0.0 || y1 < 0.0 || x0 >= n as f64 || y0 >= n as f64 {
-        return;
-    }
-    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-    let len2 = (dx * dx + dy * dy).max(1e-12);
-    for py in (y0.max(0.0) as usize)..(y1.min(n as f64) as usize) {
-        for px in (x0.max(0.0) as usize)..(x1.min(n as f64) as usize) {
-            let c = [px as f64 + 0.5, py as f64 + 0.5];
-            let t = (((c[0] - a[0]) * dx + (c[1] - a[1]) * dy) / len2).clamp(0.0, 1.0);
-            let d = ((c[0] - a[0] - t * dx).powi(2) + (c[1] - a[1] - t * dy).powi(2)).sqrt();
-            let v = rivers::band_coverage(d, width);
-            let i = py * n + px;
-            cov[i] = cov[i].max(v);
+/// River coverage of a tile, and the depth of the channels on the tile with
+/// a one-pixel border.
+struct Stamp {
+    n: usize,
+    coverage: Vec<f32>,
+    channel: Vec<f32>,
+}
+
+impl Stamp {
+    /// Adds a river segment of the given drawn width and channel depth (max
+    /// with what is there): anti-aliased coverage, and a channel whose banks
+    /// rise from the middle of the river to `CHANNEL_SPREAD` times its width.
+    fn segment(&mut self, a: [f64; 2], b: [f64; 2], width: f64, depth: f32) {
+        let n = self.n as f64;
+        let bank = CHANNEL_SPREAD * width / 2.0;
+        let r = bank.max(width / 2.0) + 1.0;
+        let (x0, x1) = ((a[0].min(b[0]) - r).floor(), (a[0].max(b[0]) + r).ceil());
+        let (y0, y1) = ((a[1].min(b[1]) - r).floor(), (a[1].max(b[1]) + r).ceil());
+        if x1 < -1.0 || y1 < -1.0 || x0 > n || y0 > n {
+            return;
+        }
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let len2 = (dx * dx + dy * dy).max(1e-12);
+        let side = self.n + 2;
+        for py in (y0.max(-1.0) as i64)..(y1.min(n + 1.0) as i64) {
+            for px in (x0.max(-1.0) as i64)..(x1.min(n + 1.0) as i64) {
+                let c = [px as f64 + 0.5, py as f64 + 0.5];
+                let t = (((c[0] - a[0]) * dx + (c[1] - a[1]) * dy) / len2).clamp(0.0, 1.0);
+                let d = ((c[0] - a[0] - t * dx).powi(2) + (c[1] - a[1] - t * dy).powi(2)).sqrt();
+                let cut = depth * (1.0 - smoothstep(0.25 * width as f32, bank as f32, d as f32));
+                let j = (py + 1) as usize * side + (px + 1) as usize;
+                self.channel[j] = self.channel[j].max(cut);
+                if (0..self.n as i64).contains(&px) && (0..self.n as i64).contains(&py) {
+                    let i = py as usize * self.n + px as usize;
+                    self.coverage[i] = self.coverage[i].max(rivers::band_coverage(d, width));
+                }
+            }
         }
     }
 }
