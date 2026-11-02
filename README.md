@@ -453,9 +453,14 @@ Elevation before erosion is `continent + mountain × mountain_weight × mountain
 
 ### Hydraulic erosion
 
-Rain droplets are dropped at random on land. Each one rolls downhill with a little inertia, picks up sediment while it speeds up on steep ground, and drops it when it slows down, climbs, evaporates, or reaches the sea (Beyer, 2015). Thousands of droplets carve valleys into the ridges and leave fans and deltas at their feet.
+Rain droplets are dropped at random on land. Each one rolls downhill with a little inertia, picks up sediment while it speeds up on steep ground, and drops it when it slows down or climbs (Beyer, 2015); what it still carries when it reaches the sea is carried offshore. Thousands of droplets carve valleys into the mountains and leave fans at their feet.
 
-The simulation runs on a grid coarser than the map: one cell per 4 × 4 pixels, between 512 × 256 and 2048 × 1024 cells (smaller maps use their own size). A 1920 × 1080 map erodes on 512 × 270 cells in a fraction of a second; 8192 × 4096 uses 2048 × 1024 cells, which takes a few seconds but keeps the valleys fine. `--erosion 1` drops one droplet per grid cell. The height change is spread back onto the full-resolution map with a cubic B-spline, smooth across cell borders, and never moves a pixel across the waterline: erosion does not dig land below the sea, and sediment dumped at the coast does not raise new land, so the coastlines stay those of the noise. Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
+The simulation runs on a grid coarser than the map: one cell per 4 × 4 pixels, between 512 × 256 and 2048 × 1024 cells (smaller maps use their own size). A 1920 × 1080 map erodes on 512 × 270 cells in a fraction of a second; 8192 × 4096 uses 2048 × 1024 cells, which takes a few seconds but keeps the valleys fine. `--erosion 1` drops one droplet per grid cell.
+
+- **Real slopes.** Beyer's constants assume heights of about one per cell; this terrain is about 100 times flatter. Droplets run on heights exaggerated 10× (on a 1024-cell grid, scaled with the cell size), so their capacity follows the slope instead of its minimum everywhere.
+- **Plains stay smooth.** Droplets only carve where the slope (exaggerated, per cell) exceeds 0.04, fully from 0.1. On flatter cells the height change is blurred (three box passes of 2 cells): valleys continue as wide, shallow swales, so they still drain and leave no basin at the foot of the mountains, and fans no longer roughen plains and deserts. Fine-scale roughness on deserts is about 5× lower than with uniform erosion, and mountains are about 3.5× rougher than plains.
+- **Coasts keep their profile.** Erosion fades out within 0.05 of the waterline, and the change spread back onto the full-resolution map (cubic B-spline, smooth across cell borders) never moves a pixel across the waterline: land is never dug below the sea and no new land rises from it.
+- **Poles.** Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
 
 The two parameters derived from `--circumference` are computed as follows.
 

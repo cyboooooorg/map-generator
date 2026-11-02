@@ -13,6 +13,13 @@
 //! elevation with a cubic B-spline, and never moves a pixel across the
 //! waterline: at 16 map pixels per cell, a linear interpolation drew a grid of
 //! pits and bumps that flipped flat lowlands between land and sea.
+//!
+//! Droplets run on heights exaggerated to the slopes their constants expect
+//! ([`SLOPE_GAIN`]), only carve where the ground is steep enough, and carve
+//! less and less towards the shore; on flat ground the change is blurred into
+//! wide swales; sediment that reaches the sea is carried offshore. Mountains
+//! get valleys while plains and deserts stay smooth, and coasts keep their
+//! profile instead of a flat shelf at sea level.
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use rayon::prelude::*;
@@ -32,6 +39,32 @@ pub const CELL_PX: u32 = 4;
 /// erosion may remove (or deposition fill): below 1, so no pixel changes
 /// between land and sea.
 const WATERLINE_MARGIN: f32 = 0.9;
+
+/// Vertical exaggeration of the simulation on a 1024-cell-wide grid, scaled
+/// with the cell size so a slope means the same at every grid size. The
+/// droplet constants (Beyer's) assume heights of about one per cell; this
+/// terrain is about 100 times flatter per cell, so without it the minimum
+/// slope floored the sediment capacity everywhere, and droplets carved a
+/// desert as deeply as a ridge.
+const SLOPE_GAIN: f32 = 10.0;
+
+/// Slope (exaggerated height per cell, see [`SLOPE_GAIN`]) below which
+/// droplets stop carving and the change is blurred, fading in up to the
+/// second value: plains and deserts stay smooth while mountains get their
+/// valleys.
+const FLAT_SLOPE: (f32, f32) = (0.04, 0.1);
+/// Radius, in cells, of each box pass of the blur applied on flat ground.
+const FLAT_BLUR: usize = 2;
+
+/// Height above the waterline over which erosion fades out towards the
+/// shore, in elevation units: coasts keep their profile instead of being
+/// planed into a flat shelf at sea level.
+const SHORE_BAND: f32 = 0.05;
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
 
 /// Erosion grid size for a `width` × `height` map.
 pub fn grid_size(width: u32, height: u32) -> (u32, u32) {
@@ -135,8 +168,9 @@ fn brush(radius: i32) -> Vec<(i64, i64, f32)> {
 }
 
 /// Runs the droplets on `map`. Droplets only start on land (`z >= waterline`)
-/// and drop everything they carry when they reach water.
-fn simulate(map: &mut HeightMap, waterline: f32, droplets: usize, seed: u64) {
+/// and stop when they reach water, whose currents carry their sediment
+/// offshore. Erosion fades out within `shore_band` above the waterline.
+fn simulate(map: &mut HeightMap, waterline: f32, shore_band: f32, droplets: usize, seed: u64) {
     let p = &PHYSICS;
     let brush = brush(p.radius);
     let mut rng = StdRng::seed_from_u64(seed);
@@ -157,7 +191,6 @@ fn simulate(map: &mut HeightMap, waterline: f32, droplets: usize, seed: u64) {
         for _ in 0..p.max_steps {
             let (height, gx, gy) = map.sample(px, py);
             if height < waterline {
-                map.deposit(px, py, sediment);
                 break;
             }
             dx = dx * p.inertia - gx * (1.0 - p.inertia);
@@ -190,11 +223,13 @@ fn simulate(map: &mut HeightMap, waterline: f32, droplets: usize, seed: u64) {
                 map.deposit(old_x, old_y, amount);
             } else {
                 // Never dig deeper than the step down, to avoid spikes.
-                let amount = ((capacity - sediment) * p.erode).min(-dh);
+                let steep = smoothstep(FLAT_SLOPE.0, FLAT_SLOPE.1, (gx * gx + gy * gy).sqrt());
+                let amount = ((capacity - sediment) * p.erode).min(-dh) * steep;
                 let (cx, cy) = (old_x.floor() as i64, old_y.floor() as i64);
                 for &(ox, oy, wgt) in &brush {
                     let i = map.idx(cx + ox, cy + oy);
-                    let taken = (amount * wgt).min(map.z[i] - waterline).max(0.0);
+                    let shore = smoothstep(0.0, shore_band, map.z[i] - waterline);
+                    let taken = (amount * wgt * shore).min(map.z[i] - waterline).max(0.0);
                     map.z[i] -= taken;
                     sediment += taken;
                 }
@@ -228,6 +263,9 @@ pub fn erode(
     seed: u32,
 ) -> Vec<f32> {
     let (w, h) = (width as usize, height as usize);
+    if strength <= 0.0 {
+        return vec![0.0; w * h];
+    }
     let (ew, eh) = grid_size(width, height);
     let (ew, eh) = (ew as usize, eh as usize);
 
@@ -247,14 +285,52 @@ pub fn erode(
         .zip(&count)
         .map(|(s, &c)| if c > 0 { s / c as f32 } else { 0.0 })
         .collect();
+    // Simulate on exaggerated heights, so slopes are in the range the
+    // droplet constants expect, and scale the change back.
+    let gain = SLOPE_GAIN * ew as f32 / 1024.0;
     let mut map = HeightMap {
         w: ew,
         h: eh,
-        z: original.clone(),
+        z: original.iter().map(|z| z * gain).collect(),
     };
     let droplets = (strength.max(0.0) * (ew * eh) as f32) as usize;
-    simulate(&mut map, waterline, droplets, seed as u64);
-    let delta: Vec<f32> = map.z.iter().zip(&original).map(|(a, b)| a - b).collect();
+    simulate(
+        &mut map,
+        waterline * gain,
+        SHORE_BAND * gain,
+        droplets,
+        seed as u64,
+    );
+    // Keep the change where the ground was steep enough to be carved: on
+    // flat cells the deposits of droplets slowing down would only roughen
+    // plains and deserts.
+    let slope = |i: usize| {
+        let (x, y) = ((i % ew) as i64, (i / ew) as i64);
+        let at = |dx: i64, dy: i64| {
+            original[((y + dy).clamp(0, eh as i64 - 1) as usize) * ew
+                + (x + dx).rem_euclid(ew as i64) as usize]
+        };
+        let (gx, gy) = ((at(1, 0) - at(-1, 0)) / 2.0, (at(0, 1) - at(0, -1)) / 2.0);
+        (gx * gx + gy * gy).sqrt() * gain
+    };
+    let raw: Vec<f32> = map
+        .z
+        .iter()
+        .zip(&original)
+        .map(|(a, b)| a / gain - b)
+        .collect();
+    // On flat ground, blur the change instead: valleys continue as wide,
+    // shallow swales (so drainage is kept and no basin is left where they
+    // reach the plains), and the deposits of slowing droplets no longer
+    // roughen plains and deserts.
+    let soft = blur(&raw, ew, eh, FLAT_BLUR);
+    let delta: Vec<f32> = (0..ew * eh)
+        .into_par_iter()
+        .map(|i| {
+            let steep = smoothstep(FLAT_SLOPE.0, FLAT_SLOPE.1, slope(i));
+            soft[i] + (raw[i] - soft[i]) * steep
+        })
+        .collect();
 
     // Spread the height change over every full-resolution pixel with a cubic
     // B-spline: smooth (C2) across cell borders, where a bilinear
@@ -290,6 +366,10 @@ pub fn erode(
                         d += wgt * row[(x0 + k as i64).rem_euclid(ew as i64) as usize];
                     }
                     d *= fade;
+                    // Fade out towards the shore, pixel by pixel as on the grid.
+                    if d < 0.0 {
+                        d *= smoothstep(0.0, SHORE_BAND, *e - waterline);
+                    }
                     // Keep every pixel on its side of the waterline: the grid
                     // average can stay above the sea while some of its pixels
                     // dip below, and deposits must not raise shoals into islands.
@@ -304,6 +384,34 @@ pub fn erode(
             },
         );
     change
+}
+
+/// Approximately Gaussian blur of a grid wrapping in longitude: three box
+/// passes of `radius` cells in each direction.
+fn blur(field: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
+    let r = radius as i64;
+    let n = (2 * r + 1) as f32;
+    let mut a = field.to_vec();
+    let mut b = vec![0.0f32; field.len()];
+    for _ in 0..3 {
+        b.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            for (x, v) in row.iter_mut().enumerate() {
+                let sum: f32 = (-r..=r)
+                    .map(|d| a[y * w + (x as i64 + d).rem_euclid(w as i64) as usize])
+                    .sum();
+                *v = sum / n;
+            }
+        });
+        a.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            for (x, v) in row.iter_mut().enumerate() {
+                let sum: f32 = (-r..=r)
+                    .map(|d| b[(y as i64 + d).clamp(0, h as i64 - 1) as usize * w + x])
+                    .sum();
+                *v = sum / n;
+            }
+        });
+    }
+    a
 }
 
 /// First grid index and weights of the uniform cubic B-spline at `pos`, in
