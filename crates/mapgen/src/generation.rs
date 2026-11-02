@@ -62,10 +62,13 @@ const PLATE_SHARPNESS: f64 = 20.0;
 /// Share of the fine continent octaves kept on low ground inland, so plains
 /// and deserts are smooth; coasts and mountains keep them all.
 const PLAIN_ROUGHNESS: f32 = 0.3;
-/// Height above (or depth below) the waterline over which the coastal
-/// outline detail fades out, and inland ground turns from coastal to plain
-/// roughness.
+/// Height above the waterline over which inland ground turns from coastal to
+/// plain roughness.
 const COAST_BAND: (f32, f32) = (0.03, 0.2);
+/// Height above (or depth below) the waterline over which the outline detail
+/// fades out: wide enough for every point the displacement can bring to the
+/// coast, narrow enough not to wrinkle the lowlands.
+const OUTLINE_BAND: (f32, f32) = (0.02, 0.08);
 /// Weight of the second and third ridged octaves of the mountains.
 const MOUNTAIN_DETAIL: f32 = 0.35;
 
@@ -198,8 +201,8 @@ impl Sampler {
         // wrinkle the relief.
         let coastal = 1.0
             - smoothstep(
-                COAST_BAND.0,
-                COAST_BAND.1,
+                OUTLINE_BAND.0,
+                OUTLINE_BAND.1,
                 (coarse + fine - self.waterline).abs(),
             );
         let (coarse, fine) = if coastal > 0.0 {
