@@ -24,7 +24,7 @@ struct Args {
     #[arg(long)]
     list_planets: bool,
 
-    /// Waterline shift in [-1, 1]; positive means more ocean [default: random in -0.30..0.50]
+    /// Waterline shift in [-1, 1]; positive means more ocean [default: random in 0.10..0.40]
     #[arg(long, allow_negative_numbers = true, value_parser = parse_in(request::SEA_LEVEL))]
     sea_level: Option<f32>,
 
