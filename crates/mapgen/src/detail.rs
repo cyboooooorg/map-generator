@@ -90,10 +90,16 @@ impl TileId {
         (1 << (self.z + 1), 1 << self.z)
     }
 
-    /// Whether the tile exists.
+    /// Whether the tile exists. The level is checked first: [`grid`] would
+    /// overflow on any level from 31 up.
+    ///
+    /// [`grid`]: Self::grid
     pub fn is_valid(self) -> bool {
+        if self.z > MAX_LEVEL {
+            return false;
+        }
         let (cols, rows) = self.grid();
-        self.z <= MAX_LEVEL && self.x < cols && self.y < rows
+        self.x < cols && self.y < rows
     }
 
     /// Longitude and latitude (radians) of the centre of tile pixel `(px, py)`.
@@ -604,6 +610,10 @@ mod tests {
             }
             .is_valid()
         );
+        // Levels whose grid would not fit in 32 bits are refused, not a panic.
+        for z in [31, 32, 100, u32::MAX] {
+            assert!(!TileId { z, x: 0, y: 0 }.is_valid(), "level {z}");
+        }
     }
 
     #[test]
