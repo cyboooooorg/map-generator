@@ -77,6 +77,9 @@ pub struct World {
     pub volcanic_zone: Vec<f32>,
     /// Distance to the nearest open water in km, capped (0 on water).
     pub coast_distance_km: Vec<f32>,
+    /// Floodplain weight in `[0, 1]`: 1 on the flat valley floor of a river,
+    /// 0 away from rivers (see [`crate::carve`]).
+    pub floodplain: Vec<f32>,
     /// Local shift of the highland line used by biome selection.
     pub highland_offset: Vec<f32>,
     pub biomes: Vec<Biome>,

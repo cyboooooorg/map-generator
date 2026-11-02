@@ -28,8 +28,8 @@ use std::path::Path;
 pub const RIVERS_FILE: &str = "rivers.json";
 
 /// Version 2 adds the volcanic zone, coast distance and highland offset
-/// layers, and the river polylines.
-pub const FORMAT_VERSION: u32 = 2;
+/// layers, and the river polylines; version 3 the floodplain layer.
+pub const FORMAT_VERSION: u32 = 3;
 
 /// Content of `raw_data/world.json`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -77,6 +77,9 @@ pub struct Layers {
     /// Local shift of the highland line (format version 2 and later).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highland_offset: Option<ScalarLayerInfo>,
+    /// Floodplain weight of the river valleys (format version 3 and later).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floodplain: Option<ScalarLayerInfo>,
     pub biomes: BiomeLayerInfo,
 }
 
@@ -183,6 +186,13 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             min: -1.0,
             max: 1.0,
         },
+        ScalarLayer {
+            name: "floodplain",
+            encoding: "gray16",
+            values: &world.floodplain,
+            min: 0.0,
+            max: 1.0,
+        },
     ];
 
     let mut infos = Vec::with_capacity(scalars.len());
@@ -217,7 +227,8 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         volcanic_zone,
         coast_distance,
         highland_offset,
-    ]: [ScalarLayerInfo; 7] = infos
+        floodplain,
+    ]: [ScalarLayerInfo; 8] = infos
         .try_into()
         .map_err(|_| "unexpected number of scalar layers")?;
     let metadata = WorldMetadata {
@@ -242,6 +253,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             volcanic_zone: Some(volcanic_zone),
             coast_distance: Some(coast_distance),
             highland_offset: Some(highland_offset),
+            floodplain: Some(floodplain),
             biomes: BiomeLayerInfo {
                 file: "biomes.png".into(),
                 encoding: "gray8-biome-id".into(),
@@ -349,6 +361,12 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         }
     };
 
+    // Worlds before version 3 have no floodplains.
+    let floodplain = match &meta.layers.floodplain {
+        Some(info) => read_scalar(&raw, info)?,
+        None => vec![0.0; elevation.len()],
+    };
+
     // Version 1 worlds have no river polylines.
     let rivers = match &meta.rivers {
         Some(file) => {
@@ -370,6 +388,7 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         elevation,
         volcanic_zone,
         coast_distance_km,
+        floodplain,
         highland_offset,
         biomes,
         rivers,
@@ -447,6 +466,12 @@ mod tests {
         );
         assert_eq!(back.params.planet.remap(Biome::Ocean), Biome::CausticLake);
         assert_eq!(back.rivers.len(), world.rivers.len());
+        assert!(
+            back.floodplain
+                .iter()
+                .zip(&world.floodplain)
+                .all(|(a, b)| (a - b).abs() < 1e-4)
+        );
 
         // A version 1 world (without the new layers) gets them recomputed.
         let mut v1 = meta;
@@ -454,10 +479,12 @@ mod tests {
         v1.layers.volcanic_zone = None;
         v1.layers.coast_distance = None;
         v1.layers.highland_offset = None;
+        v1.layers.floodplain = None;
         v1.rivers = None;
         std::fs::write(dir.join("world.json"), serde_json::to_string(&v1).unwrap()).unwrap();
         let old = load_world(&world_dir).unwrap();
         assert!(old.rivers.is_empty());
+        assert!(old.floodplain.iter().all(|&f| f == 0.0));
         assert!(
             old.volcanic_zone
                 .iter()

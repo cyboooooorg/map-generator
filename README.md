@@ -227,6 +227,7 @@ worlds/<planet>-<seed>/
 │   ├── volcanic_zone.png  ← 16-bit greyscale layer
 │   ├── coast_distance.png ← 16-bit greyscale layer
 │   ├── highland_offset.png ← 16-bit greyscale layer
+│   ├── floodplain.png ← 16-bit greyscale layer
 │   ├── rivers.json    ← river polylines with their flow
 │   └── biomes.png     ← 8-bit greyscale, pixel = biome id
 └── noise_maps/
@@ -280,6 +281,7 @@ Contour lines are drawn under water only, as bathymetry: on land the hillshade s
 | `volcanic_zone.png`   | 16-bit grey      | Volcanic zone in `[0, 1]` as biome selection sees it (planet shift included)                                                             |
 | `coast_distance.png`  | 16-bit grey      | Distance to the nearest open water in `[0, 2000]` km (0 on water, capped)                                                                |
 | `highland_offset.png` | 16-bit grey      | Local shift of the mountain line in `[-1, 1]`: a pixel is highland when `elevation − sea_level + offset` exceeds the preset's `highland` |
+| `floodplain.png`      | 16-bit grey      | Floodplain weight in `[0, 1]`: 1 on the flat floor of a river valley, 0 away from rivers                                                 |
 | `biomes.png`          | 8-bit grey       | Biome id of each pixel                                                                                                                   |
 
 A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵`.
@@ -288,7 +290,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 
 ```json
 {
-  "format_version": 2,
+  "format_version": 3,
   "width": 1920,
   "height": 1080,
   "seed": 42,
@@ -303,7 +305,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 }
 ```
 
-The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`.
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`. Older worlds still load: missing layers are recomputed, or zero for `floodplain`.
 
 `rivers.json` holds the drawn river polylines (version 2 and later; its file name is in `world.json` under `rivers`):
 
@@ -430,6 +432,8 @@ Before biome selection, both climate fields get a regional variability term stan
 4. **Lakes** are filled pits deeper than `0.004` that receive at least 40 000 km² of flow; **rivers** are pixels carrying at least 120 000 km². Under the polar temperature threshold, rivers stay ice and lakes freeze into ice cap.
 5. **Vector rivers.** River pixels are chained along their receivers into polylines (the main stem follows the largest tributary), smoothed (Chaikin), resampled and displaced sideways by noise into meanders whose wavelength (`7 ×` width, 6–40 px) and amplitude (`2.5 ×` width, 1–3 px) grow with the river, plus a slower wander. Guards keep them sound: no offset climbing the valley side, no bend tighter than half its radius, a gap to other rivers, loops cut, tributaries snapped onto their displaced parent, and every river ended at the first other river it crosses, which it then joins (downstream of its own tributaries' mouths). Lengths are in reference pixels, 1/1920 of the circumference, so the shapes do not depend on the map size.
 6. **Drawing.** Rivers are drawn anti-aliased over the map. Their nominal width is `0.9 × √(flow / 120 000 km²)` reference pixels (capped at 4, tapered at the head); on a map `W` pixels wide they are drawn `0.5 × nominal × (W / 1920)^(2/3)` pixels wide, never thinner than their real width (`0.002 × √flow` km). The largest rivers are 2 px wide at 1920 × 1080, 3.3 px at 4096 and 5.3 px at 8192, about 8–14× their real width (instead of 21–27× before), so they read at map scale, and each doubling of resolution narrows it by 1.26× in km. Rivers thinner than a pixel are drawn with exact (box-filtered) coverage, so small ones fade instead of keeping a solid one-pixel line. `world.svg` draws them as stroked paths. The biome layer marks a pixel `River` where the drawn river covers at least half of it, so `biomes.png` matches the picture; frozen rivers (below the polar temperature) are not drawn.
+
+7. **Valleys.** The terrain around each river is lowered into a valley (`mapgen::carve`). Its axis is the river averaged over one meander wavelength, so walls follow the river's course, not each bend. Its bed is the lowest of the filled surface under the river and of the ground across the floodplain, never rising downstream, incised by `0.0006 × (flow / 120 000 km²)^0.25`, smoothed along the river, and kept `0.002` above the sea (or above the lake the river ends in). The cross-section is a flat floodplain as wide as the meander belt and at least `14 km × √(flow / 120 000 km²)` (about 80 km for the largest rivers), then walls rising `0.00005` per km, blended back into the terrain between 60 % and 100 % of the valley half-width (4 × the floodplain half-width + 60 km), and faded in from the river's head. Each pixel takes the profile of its nearest stretch of valley, blended over 5 km. The new elevation is the minimum of the terrain and the valleys, so carving never raises ground, never creates water and keeps the divides. Floodplains get `+0.15` moisture: rivers draw green strips across dry land. Their weight is exported as `floodplain.png`, and detail tiles keep floodplains flat (80 % less height detail). Carving takes about 2 s at 8192 × 4096.
 
 Thresholds are in km², so the river network does not depend on the map resolution. On non-terran planets, rivers and lakes are remapped like seas: lava and magma on volcanic worlds, ice on frozen worlds, acid on caustic worlds, dry rock on barren worlds.
 

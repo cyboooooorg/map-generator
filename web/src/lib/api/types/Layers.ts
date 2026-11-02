@@ -21,4 +21,8 @@ coast_distance?: ScalarLayerInfo | null,
 /**
  * Local shift of the highland line (format version 2 and later).
  */
-highland_offset?: ScalarLayerInfo | null, biomes: BiomeLayerInfo, };
+highland_offset?: ScalarLayerInfo | null, 
+/**
+ * Floodplain weight of the river valleys (format version 3 and later).
+ */
+floodplain?: ScalarLayerInfo | null, biomes: BiomeLayerInfo, };

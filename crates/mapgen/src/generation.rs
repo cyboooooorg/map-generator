@@ -1,4 +1,5 @@
 use crate::biome::BiomeInput;
+use crate::carve;
 use crate::climate::{
     Field, MoistureInput, moisture, regional_variability, row_temperatures, temperature,
     temperature_anomaly,
@@ -92,6 +93,9 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
+
+/// Moisture added on a floodplain (weight 1): rivers green their valleys.
+const RIPARIAN_MOISTURE: f32 = 0.15;
 
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
@@ -563,7 +567,7 @@ pub fn generate_with_progress(
         });
     }
     // Elevation relative to the shifted sea level: what biome selection sees.
-    let relief: Vec<f32> = elevation
+    let mut relief: Vec<f32> = elevation
         .iter()
         .map(|e| (e - params.sea_level).clamp(-1.0, 1.0))
         .collect();
@@ -637,7 +641,7 @@ pub fn generate_with_progress(
     let (dt, dm, dvz) = (shift.temperature, shift.moisture, shift.volcanic);
     // Regional variability is part of the stored climate, so the exported
     // layers still explain every biome.
-    let moisture: Vec<f32> = raw_moisture
+    let mut moisture: Vec<f32> = raw_moisture
         .iter()
         .zip(&variability_m)
         .map(|(m, v)| (m + dm + regional_variability(*v, Field::Moisture)).clamp(-1.0, 1.0))
@@ -658,6 +662,30 @@ pub fn generate_with_progress(
         &water.filled,
         params.seed,
     );
+    // Valleys and floodplains along the rivers. Carving never creates water,
+    // so the coast distance and the drainage stay valid.
+    let waterline = params.sea_level + rules.waterline;
+    let mut above: Vec<f32> = elevation.iter().map(|e| e - waterline).collect();
+    let floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
+    for ((e, a), r) in elevation.iter_mut().zip(&above).zip(relief.iter_mut()) {
+        *e = a + waterline;
+        *r = (*e - params.sea_level).clamp(-1.0, 1.0);
+    }
+    drop(above);
+    // Rivers water their floodplain: green strips across dry land.
+    for (m, f) in moisture.iter_mut().zip(&floodplain) {
+        *m = (*m + RIPARIAN_MOISTURE * f).clamp(-1.0, 1.0);
+    }
+    if keep {
+        if let Some(layer) = debug.iter_mut().find(|l| l.name == "elevation") {
+            layer.values.clone_from(&elevation);
+        }
+        debug.push(DebugLayer {
+            name: "floodplain",
+            ramp: Ramp::Unsigned,
+            values: floodplain.clone(),
+        });
+    }
     // The biome layer marks rivers where they are drawn, so it matches the map.
     let river_coverage =
         rivers::coverage(&river_lines, width, height, params.circumference_km as f64);
@@ -708,6 +736,7 @@ pub fn generate_with_progress(
             flow_km2: water.flow_km2,
             volcanic_zone,
             coast_distance_km,
+            floodplain,
             highland_offset,
             biomes,
             rivers: river_lines,
