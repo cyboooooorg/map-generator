@@ -46,8 +46,8 @@ const MOUNTAIN_BOOST: f32 = 3.0;
 /// Amplitude ratio between successive detail octaves: below 1/2 on plains,
 /// so they get calmer at every zoom level instead of rougher; 1/2 (1/f) on
 /// high ground.
-const PLAIN_GAIN: f64 = 0.35;
-const MOUNTAIN_GAIN: f64 = 0.5;
+const PLAIN_GAIN: f64 = 0.3;
+const MOUNTAIN_GAIN: f64 = 0.4;
 /// Depth of a river's channel at the smallest river flow, in elevation units
 /// (about 30 m at the hillshade scale); it grows with `flow^0.3`.
 const CHANNEL_DEPTH: f32 = 5e-4;
@@ -57,9 +57,8 @@ const CHANNEL_SPREAD: f64 = 2.0;
 /// Wavelength of the finest detail octave, in tile pixels: features of one
 /// or two pixels only read as grain.
 const FINEST_PX: f64 = 6.0;
-/// Share of the height detail kept on ice and snow (below the polar
-/// temperature), which stay smooth.
-const ICE_ROUGHNESS: f32 = 0.1;
+/// Share of the hillshade kept on lava: a fluid, glowing surface.
+pub(crate) const LAVA_SHADE: f32 = 0.4;
 /// Share of the height detail removed on a floodplain (weight 1).
 const FLOODPLAIN_CALM: f32 = 0.8;
 /// Height detail fades out within this distance of the waterline, so it can
@@ -116,6 +115,9 @@ pub struct DetailWorld {
     /// 1 on base lake pixels (water above the waterline, not under a drawn
     /// river), 0 elsewhere; sampled bilinearly for smooth shores.
     lakes: Vec<f32>,
+    /// Share of the height detail each base pixel's surface gets, sampled
+    /// bilinearly so it changes smoothly across biome borders.
+    roughness: Vec<f32>,
 }
 
 /// Bilinear sample of a row-major base layer at base pixel coordinates
@@ -175,6 +177,17 @@ fn band_limited(
     sum as f32
 }
 
+/// Share of the height detail a biome's surface gets: snow, ice and lava
+/// are smooth, sand and ash nearly so; rock and vegetation keep it all.
+fn roughness(biome: Biome) -> f32 {
+    match biome {
+        Biome::Snow | Biome::IceCap | Biome::GlacialPlain | Biome::SeaIce => 0.1,
+        Biome::Volcano | Biome::LavaField | Biome::MagmaSea => 0.05,
+        Biome::Desert | Biome::DustPlain | Biome::Beach | Biome::AshLand => 0.4,
+        _ => 1.0,
+    }
+}
+
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -214,8 +227,10 @@ impl DetailWorld {
                 if lake { 1.0 } else { 0.0 }
             })
             .collect();
+        let roughness = world.biomes.iter().map(|&b| roughness(b)).collect();
         Self {
             lakes,
+            roughness,
             noise: Perlin::new(seed.wrapping_add(1000)),
             warp_noise: Perlin::new(seed.wrapping_add(1001)),
             rivers,
@@ -285,14 +300,10 @@ impl DetailWorld {
         // 1/f on high ground, none at the waterline.
         let above = base - waterline;
         let high = (above / 0.3).clamp(0.0, 1.0);
-        // Ice and snow are smooth: detail fades out below the polar
-        // temperature.
-        let polar = w.params.planet.rules.polar;
-        let t = bilinear(&w.temperature, w.width, w.height, x, y);
-        let thaw = smoothstep(polar - 0.05, polar + 0.1, t);
+        // Snow, ice, lava and sand are smooth surfaces (see `roughness`).
         let amplitude = DETAIL_AMPLITUDE
             * (1.0 + MOUNTAIN_BOOST * high)
-            * (ICE_ROUGHNESS + (1.0 - ICE_ROUGHNESS) * thaw);
+            * bilinear(&self.roughness, w.width, w.height, x, y);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
         let shore = smoothstep(0.0, SHORE_FADE, above.abs());
         // Floodplains stay flat valley floors.
@@ -371,7 +382,10 @@ impl DetailWorld {
                 let mut colour = if biome.is_water() {
                     biome_color(biome).map(f32::from)
                 } else {
-                    let shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
+                    let mut shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
+                    if dry.is_lava() {
+                        shade = 1.0 + (shade - 1.0) * LAVA_SHADE;
+                    }
                     ecotone_colour_for(planet, input).map(|c| c * shade)
                 };
                 let c = coverage[i];

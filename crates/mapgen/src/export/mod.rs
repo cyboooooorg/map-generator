@@ -209,7 +209,11 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
             } else {
                 biome_color(biome).map(f32::from)
             };
-            let f = hillshade(world, &grid, x, y);
+            let mut f = hillshade(world, &grid, x, y);
+            // Lava is fluid: its relief barely shows.
+            if dry.is_lava() {
+                f = 1.0 + (f - 1.0) * crate::detail::LAVA_SHADE;
+            }
             color = color.map(|c| c * f);
             // Anti-aliased river on top, except where it is frozen or under
             // lava.
