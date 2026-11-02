@@ -1,4 +1,5 @@
 import { encode } from 'fast-png';
+import { DataUtils } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
 import { decodeLayers } from './decode';
@@ -45,6 +46,10 @@ describe('decodeLayers', () => {
     expect(layers.flowKm2[0]).toBe(0);
     expect(layers.flowKm2[1]).toBeCloseTo(999, -1);
     expect(Array.from(layers.biomes)).toEqual([1, 29]);
+    // Packed for the GPU: 4 half floats per pixel, flow as log10(1 + km²).
+    expect(layers.surface.length).toBe(8);
+    expect(DataUtils.fromHalfFloat(layers.surface[0]!)).toBe(-1);
+    expect(DataUtils.fromHalfFloat(layers.surface[7]!)).toBeCloseTo(3, 2);
   });
 
   it('rejects a layer of the wrong size or depth', () => {

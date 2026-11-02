@@ -3,6 +3,8 @@
 // front-end does not follow fails `npm run check`.
 import type { ApiError } from './types/ApiError';
 import type { FormSpec } from './types/FormSpec';
+import type { HexMap } from './types/HexMap';
+import type { HexRequest } from './types/HexRequest';
 import type { JobCreated } from './types/JobCreated';
 import type { JobStatus } from './types/JobStatus';
 import type { PresetInfo } from './types/PresetInfo';
@@ -47,6 +49,12 @@ export const api = {
     }),
   deleteWorld: (id: string) => call<void>(`/api/worlds/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   metadata: (id: string) => call<WorldMetadata>(worldFile(id, 'raw_data/world.json')),
+  hex: (id: string, request: HexRequest) =>
+    call<HexMap>(`/api/worlds/${encodeURIComponent(id)}/hex`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    }),
 };
 
 /** URL of a file of a generated world. */

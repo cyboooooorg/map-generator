@@ -45,6 +45,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         layers.temperature.buffer,
         layers.flowKm2.buffer,
         layers.biomes.buffer,
+        layers.surface.buffer,
       ],
     });
   } catch (error) {

@@ -105,6 +105,8 @@ It writes `<world>/hex/`:
 - `hex.png`: the map painted with one colour per hex, outlined, with a blue dot on river hexes.
 - `hex.json`: the grid layout and one entry per hex (row-major, `index = row × columns + col`): majority `biome` id (rivers never win a hex; they set `river` instead), mean `elevation`, `moisture` and `temperature`, `max_flow_km2` and `river`. The biome table is copied from `world.json`.
 
+The same resampling runs in the web app (hex overlay of the viewer), through the `mapgen::hex` library module.
+
 The grid is pointy-top in "odd-r" offset coordinates: odd rows are shifted half a hex east, and columns wrap east-west like the planet. Hexes are regular on the flat map, not on the sphere, so polar hexes cover less real ground than equatorial ones; a true spherical hex grid (geodesic) would be a different, much larger project.
 
 ### Project layout
@@ -123,7 +125,7 @@ The library also reports generation progress: `generate_with_progress` calls bac
 
 ## Web app
 
-A browser app to explore the generated worlds as a 3D globe or a flat map, inspect any point, and generate new worlds from a form. It is a personal tool served locally behind the machine-wide Traefik, like the other `*.localhost` apps.
+A browser app to explore the generated worlds as a 3D globe or a flat map, switch between biome, elevation, temperature, moisture and river layers, raise the relief, light the planet with a seasonal sun, overlay the hex grid, inspect any point, and generate new worlds from a form. It is a personal tool served locally behind the machine-wide Traefik, like the other `*.localhost` apps.
 
 ```bash
 mise run up      # build and start it on http://planets.localhost

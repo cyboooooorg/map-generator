@@ -8,20 +8,24 @@
 //! | `GET /api/worlds`               | generated worlds, most recent first               |
 //! | `POST /api/worlds`              | queue a generation (`WorldRequest` body)          |
 //! | `DELETE /api/worlds/{id}`       | delete a world                                    |
+//! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
 //! | `GET /worlds/{id}/...`          | world files (maps, raw data, diagnostic maps)     |
 //! | anything else                   | the web front-end (single-page app)               |
-use crate::api::{ApiError, FormSpec, JobCreated, JobStatus, ParamSpec, PresetInfo, WorldSummary};
+use crate::api::{
+    ApiError, FormSpec, HexRequest, JobCreated, JobStatus, ParamSpec, PresetInfo, WorldSummary,
+};
 use crate::catalog::Catalog;
 use crate::worlds;
 use axum::extract::{Path as UrlPath, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use mapgen::export::{ExportOptions, export_world, world_dir_name};
 use mapgen::generation::{Stage, generate_with_progress};
+use mapgen::hex::{DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -86,6 +90,7 @@ pub fn router(config: Config) -> Router {
         .route("/api/form", get(form))
         .route("/api/worlds", get(list_worlds).post(create_world))
         .route("/api/worlds/{id}", delete(delete_world))
+        .route("/api/worlds/{id}/hex", post(hex_grid))
         .route("/api/jobs/{id}/events", get(job_events))
         .nest_service("/worlds", ServeDir::new(&config.worlds_dir))
         .fallback_service(spa)
@@ -134,6 +139,35 @@ async fn delete_world(
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn hex_grid(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    Json(request): Json<HexRequest>,
+) -> Result<Json<HexMap>, Failure> {
+    if !worlds::is_valid_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
+    }
+    if !(4..=4096).contains(&request.columns) {
+        return Err(Failure(
+            StatusCode::BAD_REQUEST,
+            "columns must be between 4 and 4096".into(),
+        ));
+    }
+    let dir = state.config.worlds_dir.join(&id);
+    if !dir.join("raw_data").is_dir() {
+        return Err(Failure(
+            StatusCode::NOT_FOUND,
+            format!("no raw data for {id}"),
+        ));
+    }
+    let river_flow = request.river_flow_km2.unwrap_or(DEFAULT_RIVER_FLOW_KM2);
+    tokio::task::spawn_blocking(move || mapgen::hex::resample(&dir, request.columns, river_flow))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map(Json)
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))
 }
 
 async fn create_world(
@@ -334,6 +368,24 @@ mod tests {
         // Same planet and seed again: the directory exists.
         let (status, _) = call(&app, "POST", "/api/worlds", Some(request)).await;
         assert_eq!(status, StatusCode::CONFLICT);
+
+        let (status, hex) = call(
+            &app,
+            "POST",
+            "/api/worlds/frozen-3/hex",
+            Some(r#"{"columns": 8}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{hex}");
+        assert!(hex.contains("\"columns\":8"));
+        let (status, _) = call(
+            &app,
+            "POST",
+            "/api/worlds/frozen-3/hex",
+            Some(r#"{"columns": 1}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
 
         let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-3", None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);

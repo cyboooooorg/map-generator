@@ -4,6 +4,7 @@
 // Browsers decode PNGs to 8 bits per channel: the 16-bit layers need this
 // JavaScript decoder to keep their precision.
 import { decode } from 'fast-png';
+import { DataUtils } from 'three';
 import type { ScalarLayerInfo } from '../api/types/ScalarLayerInfo';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
 
@@ -21,6 +22,11 @@ export interface WorldLayers {
   flowKm2: Float32Array;
   /** Biome id of each pixel (index into WorldMetadata.biomes). */
   biomes: Uint8Array;
+  /**
+   * The four scalar layers packed for the GPU as RGBA half floats:
+   * elevation, temperature, moisture, log10(1 + flow km²).
+   */
+  surface: Uint16Array;
 }
 
 /** The PNG files of a world, as fetched. */
@@ -55,16 +61,38 @@ function decodeScalar(file: ArrayBuffer, info: ScalarLayerInfo, width: number, h
   return values;
 }
 
+/** Packs the scalar layers as RGBA half floats (see WorldLayers.surface). */
+export function packSurface(
+  elevation: Float32Array,
+  temperature: Float32Array,
+  moisture: Float32Array,
+  flowKm2: Float32Array,
+): Uint16Array {
+  const surface = new Uint16Array(elevation.length * 4);
+  for (let i = 0; i < elevation.length; i += 1) {
+    surface[i * 4] = DataUtils.toHalfFloat(elevation[i] ?? 0);
+    surface[i * 4 + 1] = DataUtils.toHalfFloat(temperature[i] ?? 0);
+    surface[i * 4 + 2] = DataUtils.toHalfFloat(moisture[i] ?? 0);
+    surface[i * 4 + 3] = DataUtils.toHalfFloat(Math.log10(1 + (flowKm2[i] ?? 0)));
+  }
+  return surface;
+}
+
 export function decodeLayers(meta: WorldMetadata, files: LayerFiles): WorldLayers {
   const { width, height, layers } = meta;
   const biomes = decodeGrey(files.biomes, width, height, 8);
+  const elevation = decodeScalar(files.elevation, layers.elevation, width, height);
+  const moisture = decodeScalar(files.moisture, layers.moisture, width, height);
+  const temperature = decodeScalar(files.temperature, layers.temperature, width, height);
+  const flowKm2 = decodeScalar(files.flow, layers.flow, width, height);
   return {
     width,
     height,
-    elevation: decodeScalar(files.elevation, layers.elevation, width, height),
-    moisture: decodeScalar(files.moisture, layers.moisture, width, height),
-    temperature: decodeScalar(files.temperature, layers.temperature, width, height),
-    flowKm2: decodeScalar(files.flow, layers.flow, width, height),
+    elevation,
+    moisture,
+    temperature,
+    flowKm2,
     biomes: Uint8Array.from(biomes),
+    surface: packSurface(elevation, temperature, moisture, flowKm2),
   };
 }

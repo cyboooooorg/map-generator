@@ -101,7 +101,7 @@
   </aside>
 
   <main>
-    <Viewer worldId={selectedId} onPick={(point) => (picked = point)} />
+    <Viewer worldId={selectedId} {meta} {layers} onPick={(point) => (picked = point)} />
     {#if picked && meta}
       <InfoPanel point={picked} {meta} {layers} onClose={() => (picked = null)} />
     {/if}
