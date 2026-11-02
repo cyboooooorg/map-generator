@@ -134,8 +134,18 @@ fn hillshade(world: &World, grid: &Grid, x: u32, y: u32) -> f32 {
     let normal = [-dz_east, -dz_north, 1.0];
     let len = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
     let lit: f32 = normal.iter().zip(LIGHT).map(|(n, l)| n * l).sum::<f32>() / len;
-    (lit / LIGHT[2]).clamp(0.55, 1.3)
+    shade(lit / LIGHT[2])
 }
+
+/// Brightness of a land pixel from its lighting relative to flat ground (1):
+/// a soft curve towards 0.6 and 1.4, so steep slopes stay distinct instead
+/// of all reaching a hard limit.
+pub(crate) fn shade(relative: f32) -> f32 {
+    1.0 + SHADE_RANGE * ((relative - 1.0) / SHADE_RANGE).tanh()
+}
+
+/// Largest brightening or darkening of the hillshade.
+const SHADE_RANGE: f32 = 0.4;
 
 /// How a map is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

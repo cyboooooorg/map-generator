@@ -172,5 +172,5 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 1    | One river width law per raster resolution, shared by the base map and the tiles                                         | Same   | done   |
 | 2    | Noise rework: warped, fractal continent outline with a plate step; plains smoothed inland; more ridged mountain octaves | Change | done   |
 | 3    | Erosion on real slopes, tapered near the waterline, sediment carried offshore                                           | Change | done   |
-| 4    | Tiles: coast warped sideways, calmer plains detail, soft shading, no double shading                                     | Same   | todo   |
+| 4    | Tiles: coast warped sideways, calmer plains detail, soft shading, no double shading                                     | Same   | done   |
 | 5    | River terrain: valleys and floodplains at generation, riparian moisture, channels in tiles, deltas last                 | Change | todo   |

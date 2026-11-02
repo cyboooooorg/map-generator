@@ -10,7 +10,10 @@
 //!   octaves limited to features smaller than two base pixels (so the base
 //!   coastlines move by less than a base pixel) and larger than two tile
 //!   pixels (so a tile is the low-pass of its children). Amplitudes follow
-//!   a 1/f law, stronger on high ground than on plains.
+//!   a 1/f law on high ground and fall faster on plains, which stay calm at
+//!   every zoom level. Height detail fades out at the waterline; near the
+//!   coast the base elevation is read at a sideways-displaced position
+//!   instead, so coastlines get a fractal outline without islets or ponds.
 //! - **Climate**: temperature, moisture and the other biome inputs are read
 //!   at a slightly warped position, so biome borders become irregular instead
 //!   of interpolated straight edges; temperature follows the new elevation.
@@ -23,7 +26,7 @@
 use crate::biome::{Biome, BiomeInput, biome_color};
 use crate::climate::temperature;
 use crate::export::ecotone::ecotone_colour_for;
-use crate::export::{LIGHT, RELIEF_KM};
+use crate::export::{LIGHT, RELIEF_KM, shade};
 use crate::rivers::{self, RiverLine};
 use crate::world::World;
 use image::{Rgb, RgbImage};
@@ -36,10 +39,27 @@ pub const TILE_SIZE: u32 = 256;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
-const DETAIL_AMPLITUDE: f32 = 0.004;
+const DETAIL_AMPLITUDE: f32 = 0.0015;
 /// Extra amplitude on high ground: detail grows to `1 + MOUNTAIN_BOOST` times
 /// the plain amplitude 0.3 elevation units above the coastline.
-const MOUNTAIN_BOOST: f32 = 2.0;
+const MOUNTAIN_BOOST: f32 = 5.0;
+/// Amplitude ratio between successive detail octaves: below 1/2 on plains,
+/// so they get calmer at every zoom level instead of rougher; 1/2 (1/f) on
+/// high ground.
+const PLAIN_GAIN: f64 = 0.35;
+const MOUNTAIN_GAIN: f64 = 0.5;
+/// Height detail fades out within this distance of the waterline, so it can
+/// never turn the shore into islets and ponds: coasts get their detail from
+/// the sideways displacement instead.
+const SHORE_FADE: f32 = 0.006;
+/// Sideways displacement of the base elevation near the coast, per detail
+/// octave, as a share of the octave's wavelength (thinning by
+/// [`COAST_WARP_DECAY`] per octave): a fractal outline at every zoom level.
+const COAST_WARP: f64 = 0.35;
+const COAST_WARP_DECAY: f64 = 0.8;
+/// Distance from the waterline (elevation units) over which the coastal
+/// displacement fades out, so inland relief and rivers stay in place.
+const COAST_BAND: (f32, f32) = (0.01, 0.04);
 /// Warp of the climate sampling position, in base pixels.
 const CLIMATE_WARP_PX: f64 = 1.0;
 
@@ -121,17 +141,29 @@ fn bicubic(layer: &[f32], width: u32, height: u32, x: f64, y: f64) -> f32 {
 }
 
 /// Fractal noise at a unit vector, octaves from `first` to `last` wavelength
-/// (km), amplitude halving with the wavelength (1/f).
-fn band_limited(noise: &Perlin, p: [f64; 3], radius_km: f64, first_km: f64, last_km: f64) -> f32 {
+/// (km), each `gain` times the amplitude of the previous one.
+fn band_limited(
+    noise: &Perlin,
+    p: [f64; 3],
+    radius_km: f64,
+    first_km: f64,
+    last_km: f64,
+    gain: f64,
+) -> f32 {
     let mut sum = 0.0;
     let (mut wavelength, mut amplitude) = (first_km, 1.0);
     while wavelength >= last_km {
         let f = radius_km / wavelength;
         sum += noise.get([p[0] * f, p[1] * f, p[2] * f]) * amplitude;
         wavelength /= 2.0;
-        amplitude /= 2.0;
+        amplitude *= gain;
     }
     sum as f32
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 impl DetailWorld {
@@ -205,9 +237,44 @@ impl DetailWorld {
         }
         let p = [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()];
         let radius = w.params.circumference_km as f64 / TAU;
-        let above = base - w.params.sea_level - w.params.planet.rules.waterline;
-        let relief = 1.0 + MOUNTAIN_BOOST * (above / 0.3).clamp(0.0, 1.0);
-        base + DETAIL_AMPLITUDE * relief * band_limited(&self.noise, p, radius, first, last)
+        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+
+        // Near the coast, read the base elevation at a position displaced
+        // sideways by every detail octave: the coastline gets capes and bays
+        // at each zoom level, and stays one connected line.
+        let coastal = 1.0 - smoothstep(COAST_BAND.0, COAST_BAND.1, (base - waterline).abs());
+        let base = if coastal > 0.0 {
+            let (mut dx, mut dy) = (0.0, 0.0);
+            let (mut wavelength, mut share) = (first, COAST_WARP);
+            let mut k = 0.0;
+            while wavelength >= last {
+                let f = radius / wavelength;
+                let shift = share * wavelength / self.base_px_km() * coastal as f64;
+                dx += shift
+                    * self
+                        .warp_noise
+                        .get([p[0] * f + 31.0 + k, p[1] * f, p[2] * f]);
+                dy += shift
+                    * self
+                        .warp_noise
+                        .get([p[0] * f, p[1] * f - 17.0 - k, p[2] * f]);
+                wavelength /= 2.0;
+                share *= COAST_WARP_DECAY;
+                k += 7.3;
+            }
+            bicubic(&w.elevation, w.width, w.height, x + dx, y + dy)
+        } else {
+            base
+        };
+
+        // Height detail: calmer on plains (and at every zoom), stronger and
+        // 1/f on high ground, none at the waterline.
+        let above = base - waterline;
+        let high = (above / 0.3).clamp(0.0, 1.0);
+        let amplitude = DETAIL_AMPLITUDE * (1.0 + MOUNTAIN_BOOST * high);
+        let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
+        let shore = smoothstep(0.0, SHORE_FADE, above.abs());
+        base + amplitude * shore * band_limited(&self.noise, p, radius, first, last, gain)
     }
 
     /// Renders one tile as an RGB image.
@@ -309,7 +376,7 @@ impl DetailWorld {
         let normal = [-dz_east, -dz_north, 1.0];
         let len = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
         let lit: f32 = normal.iter().zip(LIGHT).map(|(n, l)| n * l).sum::<f32>() / len;
-        (lit / LIGHT[2]).clamp(0.55, 1.3)
+        shade(lit / LIGHT[2])
     }
 
     /// Anti-aliased coverage of the rivers on a tile, drawn with the base
@@ -497,6 +564,28 @@ mod tests {
             worst = worst.max((d.elevation(lon, lat, 0.3) - base).abs());
         }
         assert!(worst < 0.05, "detail moved elevation by {worst}");
+    }
+
+    #[test]
+    fn detail_never_moves_the_coast_away_from_it() {
+        // Away from the coastal band, detail never turns land into water or
+        // water into land: no islets, no ponds.
+        let d = detail_world();
+        let w = d.world();
+        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+        for k in 0..5000 {
+            let lon = (k as f64 * 0.731) % TAU;
+            let lat = ((k as f64 * 0.377) % PI) - PI / 2.0;
+            let (x, y) = d.base_xy(lon, lat);
+            let base = bicubic(&w.elevation, w.width, w.height, x, y);
+            if (base - waterline).abs() < COAST_BAND.1 {
+                continue;
+            }
+            for pixel_km in [5.0, 1.0, 0.3] {
+                let e = d.elevation(lon, lat, pixel_km);
+                assert_eq!(e >= waterline, base >= waterline, "{lon} {lat} {pixel_km}");
+            }
+        }
     }
 
     #[test]
