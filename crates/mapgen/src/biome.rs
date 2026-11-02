@@ -85,11 +85,14 @@ pub enum Biome {
     AcidRiver,
     /// Shores crusted with acid-precipitate salts; replaces beaches.
     AcidShore,
+    // ── Appended after id 33 (frozen worlds) ──────────────────────────────────
+    /// A lake sealed under ice; replaces lakes on frozen worlds.
+    FrozenLake,
 }
 
 impl Biome {
     /// Every biome, in id order.
-    pub const ALL: [Biome; 34] = [
+    pub const ALL: [Biome; 35] = [
         Biome::DeepOcean,
         Biome::Ocean,
         Biome::Beach,
@@ -124,6 +127,7 @@ impl Biome {
         Biome::DeepAcidSea,
         Biome::AcidRiver,
         Biome::AcidShore,
+        Biome::FrozenLake,
     ];
 
     /// Whether the biome is a water surface, liquid or frozen (flat, not hillshaded).
@@ -144,6 +148,7 @@ impl Biome {
                 | Biome::AcidSea
                 | Biome::DeepAcidSea
                 | Biome::AcidRiver
+                | Biome::FrozenLake
                 | Biome::Lake
                 | Biome::River
         )
@@ -196,6 +201,7 @@ pub fn biome_color(b: Biome) -> [u8; 3] {
         Biome::DeepAcidSea => [16, 84, 66],
         Biome::AcidRiver => [64, 196, 136],
         Biome::AcidShore => [214, 220, 150],
+        Biome::FrozenLake => [185, 215, 240],
         Biome::ToxicSwamp => [45, 100, 20],
         Biome::AcidFlatland => [165, 185, 60],
         // Barren world exclusives
@@ -244,6 +250,7 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::DeepAcidSea => "Deep Acid Sea",
         Biome::AcidRiver => "Acid River",
         Biome::AcidShore => "Acid Shore",
+        Biome::FrozenLake => "Frozen Lake",
     }
 }
 
@@ -626,7 +633,10 @@ mod tests {
     fn exclusive_biomes_stay_on_their_planet() {
         let exclusive: [(&str, &[Biome]); 4] = [
             ("volcanic", &[Biome::MagmaSea, Biome::ScorchedWaste]),
-            ("frozen", &[Biome::FrozenOcean, Biome::GlacialPlain]),
+            (
+                "frozen",
+                &[Biome::FrozenOcean, Biome::GlacialPlain, Biome::FrozenLake],
+            ),
             (
                 "caustic",
                 &[

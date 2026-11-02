@@ -170,7 +170,7 @@ A planet type is a TOML preset. The five built-in ones live in `presets/` and ar
 | ---------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `terran`   | Earth-like — full biome spectrum                  | —                                                                                               |
 | `volcanic` | Fire world — extreme heat, near-zero moisture     | `MagmaSea`, `ScorchedWaste`                                                                     |
-| `frozen`   | Ice world — perpetually frozen                    | `FrozenOcean`, `GlacialPlain`                                                                   |
+| `frozen`   | Ice world — perpetually frozen                    | `FrozenOcean`, `FrozenLake`, `GlacialPlain`                                                     |
 | `caustic`  | Acid world — corrosive atmosphere, toxic wetlands | `AcidSea`, `DeepAcidSea`, `CausticLake`, `AcidRiver`, `AcidShore`, `ToxicSwamp`, `AcidFlatland` |
 | `barren`   | Dead rock — arid and lifeless, no water           | `RockyWaste`, `DustPlain`                                                                       |
 
@@ -266,7 +266,7 @@ worlds/<planet>-<seed>/
 
 `world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its inputs select when nudged by 128 small offsets (a 4D Gaussian, σ 0.02 on temperature, 0.05 on moisture, 0.003 on the highland line and 0.004 on the volcanic zone): far from any threshold the colour is flat (8 probes tell, so most pixels skip the sampling), near one the colours mix. The width of a transition is set in input units, not pixels, so it suits any zoom level; mountain, snow and volcanic borders soften too, volcanoes less than climate borders. The same offsets serve every pixel, so transitions show neither grain nor terraces. Coastlines, shores, rivers and lakes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
 
-Water lightens towards its shore, up to 25 % towards white over the last `0.05` elevation units of depth, so seas and lakes show the rim of their basin whatever their colour; a lake's depth is measured from its own level (its highest pixel), not from the sea. Rivers and frozen surfaces stay flat. Contour lines are drawn under water only, as bathymetry: on land the hillshade shows the relief, and contours drew rings that read as altitude bands. The hillshade follows a soft curve (`1 + 0.4 × tanh((lit − 1) / 0.4)`, relative to flat ground) rather than a hard clamp, so steep slopes stay distinct; detail tiles use the same curve.
+Water lightens towards its shore, up to 25 % towards white over the last `0.05` elevation units of depth, so seas and lakes show the rim of their basin whatever their colour; a lake's depth is measured from its own level (its highest pixel), not from the sea. Frozen seas and lakes lighten too, as whiter fast ice along the shore; rivers stay flat. Contour lines are drawn under water only, as bathymetry: on land the hillshade shows the relief, and contours drew rings that read as altitude bands. The hillshade follows a soft curve (`1 + 0.4 × tanh((lit − 1) / 0.4)`, relative to flat ground) rather than a hard clamp, so steep slopes stay distinct; detail tiles use the same curve.
 
 #### Raw data
 
@@ -469,6 +469,7 @@ The simulation runs on a grid coarser than the map: one cell per 4 × 4 pixels, 
 - **Plains stay smooth.** Droplets only carve where the slope (exaggerated, per cell) exceeds 0.04, fully from 0.1. On flatter cells the height change is blurred (three box passes of 2 cells): valleys continue as wide, shallow swales, so they still drain and leave no basin at the foot of the mountains, and fans no longer roughen plains and deserts. Fine-scale roughness on deserts is about 5× lower than with uniform erosion, and mountains are about 3.5× rougher than plains.
 - **Coasts keep their profile.** Erosion fades out within 0.05 of the waterline, and the change spread back onto the full-resolution map (cubic B-spline, smooth across cell borders) never moves a pixel across the waterline: land is never dug below the sea and no new land rises from it.
 - **Poles.** Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
+- **Frozen ground.** Ice carves no river valleys: erosion fades out on rows whose sea-level temperature (latitude and the preset's climate shift) stays below the preset's polar threshold, rising to full strength 0.1 above it. Frozen worlds keep smooth ice sheets, and only their thawed belts are eroded.
 
 The two parameters derived from `--circumference` are computed as follows.
 

@@ -241,6 +241,16 @@ fn simulate(map: &mut HeightMap, waterline: f32, shore_band: f32, droplets: usiz
     }
 }
 
+/// Weight of erosion on each row of a map: 0 where the sea-level temperature
+/// (`row_temperature` plus the planet's `shift`) stays below `polar`, where
+/// water is ice and carves no valleys, rising to 1 a little above it.
+pub fn thaw(row_temperature: &[f32], shift: f32, polar: f32) -> Vec<f32> {
+    row_temperature
+        .iter()
+        .map(|t| smoothstep(polar - 0.05, polar + 0.1, t + shift))
+        .collect()
+}
+
 /// Weight of erosion on row `y` of `h`: 1 up to 60° of latitude, fading to 0
 /// at 75°. Droplets move in pixel steps, and the projection stretches pixels
 /// east-west towards the poles, which would carve artificial north-south grooves.
@@ -254,6 +264,8 @@ fn polar_fade(y: usize, h: usize) -> f32 {
 ///
 /// `waterline` is the absolute elevation of the sea surface. `strength` scales
 /// the number of droplets (1.0 = one per erosion-grid pixel; 0 disables).
+/// `thaw` weighs the change on each map row, 0 where the ground is frozen
+/// all year (see [`thaw`]).
 pub fn erode(
     elevation: &mut [f32],
     width: u32,
@@ -261,6 +273,7 @@ pub fn erode(
     waterline: f32,
     strength: f32,
     seed: u32,
+    thaw: &[f32],
 ) -> Vec<f32> {
     let (w, h) = (width as usize, height as usize);
     if strength <= 0.0 {
@@ -346,7 +359,8 @@ pub fn erode(
         .for_each_init(
             || vec![0.0f32; ew],
             |row, (y, (elevation, change))| {
-                let fade = polar_fade(y, h);
+                // No rivers carve frozen ground: ice sheets stay smooth.
+                let fade = polar_fade(y, h) * thaw.get(y).copied().unwrap_or(1.0);
                 if fade == 0.0 {
                     return;
                 }
@@ -452,8 +466,8 @@ mod tests {
     fn erosion_is_deterministic() {
         let mut a = island(128, 64);
         let mut b = island(128, 64);
-        erode(&mut a, 128, 64, 0.0, 0.5, 1);
-        erode(&mut b, 128, 64, 0.0, 0.5, 1);
+        erode(&mut a, 128, 64, 0.0, 0.5, 1, &[]);
+        erode(&mut b, 128, 64, 0.0, 0.5, 1, &[]);
         assert_eq!(a, b);
     }
 
@@ -461,7 +475,7 @@ mod tests {
     fn erosion_lowers_peaks_and_never_digs_below_the_sea() {
         let mut map = island(128, 64);
         let before = map.clone();
-        let change = erode(&mut map, 128, 64, 0.0, 1.0, 2);
+        let change = erode(&mut map, 128, 64, 0.0, 1.0, 2, &[]);
         assert!(change.iter().any(|&d| d < 0.0), "nothing eroded");
         for (b, a) in before.iter().zip(&map) {
             if *b >= 0.0 {
@@ -483,7 +497,7 @@ mod tests {
             })
             .collect();
         let before = map.clone();
-        erode(&mut map, w, h, 0.0, 2.0, 4);
+        erode(&mut map, w, h, 0.0, 2.0, 4, &[]);
         for (b, a) in before.iter().zip(&map) {
             assert_eq!(
                 *b >= 0.0,
@@ -514,7 +528,7 @@ mod tests {
     fn zero_strength_changes_nothing() {
         let mut map = island(64, 32);
         let before = map.clone();
-        erode(&mut map, 64, 32, 0.0, 0.0, 3);
+        erode(&mut map, 64, 32, 0.0, 0.0, 3, &[]);
         assert_eq!(map, before);
     }
 }
