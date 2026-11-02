@@ -155,7 +155,7 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
     let planet = &world.params.planet;
     let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
-    let coverage = rivers::coverage(&world.rivers, w, h);
+    let coverage = rivers::coverage(&world.rivers, w, h, world.params.circumference_km as f64);
     let river_biome = planet.remap(Biome::River);
     let river_colour = biome_color(river_biome).map(f32::from);
 

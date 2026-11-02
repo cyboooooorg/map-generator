@@ -7,8 +7,6 @@ import type { WidthLaw } from "./WidthLaw";
  */
 export type RiversFile = { version: number, 
 /**
- * Drawn width: `w0_ref_px × (flow / q0_km2)^exponent`, capped at
- * `max_ref_px`, in reference pixels (1/`reference_width_px` of the
- * circumference).
+ * Width of the rivers, see [`WidthLaw`].
  */
 width_law: WidthLaw, rivers: Array<RiverEntry>, };

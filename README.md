@@ -309,15 +309,15 @@ The example is abridged. Biome ids are stable: new biomes only get appended. `fo
 
 ```json
 {
-  "version": 1,
-  "width_law": { "w0_ref_px": 0.9, "q0_km2": 120000, "exponent": 0.5, "max_ref_px": 4, "reference_width_px": 1920 },
+  "version": 2,
+  "width_law": { "w0_ref_px": 0.9, "q0_km2": 120000, "exponent": 0.5, "max_ref_px": 4, "reference_width_px": 1920, "ink": 0.5, "raster_exponent": 0.6666667, "real_km_per_sqrt_km2": 0.002 },
   "rivers": [
     { "id": 0, "parent": null, "mouth": "sea", "points": [[129.656, -62.275, 158147], [129.802, -62.306, 158175]] }
   ]
 }
 ```
 
-Each river lists `[longitude°, latitude°, flow km²]` from head to mouth; longitudes are continuous along a river, so they may leave `[0, 360)` where it crosses the seam. `mouth` is `sea`, `lake` or `river` (then `parent` is the river it joins). The drawn width is `w0_ref_px × (flow / q0_km2)^exponent`, capped at `max_ref_px`, in reference pixels (1/`reference_width_px` of the circumference). About 0.5 MB per world (250 KB gzipped).
+Each river lists `[longitude°, latitude°, flow km²]` from head to mouth; longitudes are continuous along a river, so they may leave `[0, 360)` where it crosses the seam. `mouth` is `sea`, `lake` or `river` (then `parent` is the river it joins). The nominal width is `w0_ref_px × (flow / q0_km2)^exponent`, capped at `max_ref_px`, in reference pixels (1/`reference_width_px` of the circumference); on a raster `W` pixels around the planet a river is drawn `ink × nominal × (W / reference_width_px)^raster_exponent` pixels wide, and never thinner than `real_km_per_sqrt_km2 × √flow` km. Version 1 files (before `ink`) drew the nominal width. About 0.5 MB per world (250 KB gzipped).
 
 The `mapgen` library reloads a world with `export::raw_data::load_world`; for version 1 worlds it recomputes the missing layers from the world parameters and elevation (and has no river polylines).
 
@@ -429,7 +429,7 @@ Before biome selection, both climate fields get a regional variability term stan
 3. **Accumulation.** Every pixel adds its runoff — its area in km² × `((moisture + 1) / 2)²` — and passes the total downstream. The flow of a pixel is the wet-equivalent area draining through it.
 4. **Lakes** are filled pits deeper than `0.004` that receive at least 40 000 km² of flow; **rivers** are pixels carrying at least 120 000 km². Under the polar temperature threshold, rivers stay ice and lakes freeze into ice cap.
 5. **Vector rivers.** River pixels are chained along their receivers into polylines (the main stem follows the largest tributary), smoothed (Chaikin), resampled and displaced sideways by noise into meanders whose wavelength (`7 ×` width, 6–40 px) and amplitude (`2.5 ×` width, 1–3 px) grow with the river, plus a slower wander. Guards keep them sound: no offset climbing the valley side, no bend tighter than half its radius, a gap to other rivers, loops cut, tributaries snapped onto their displaced parent, and every river ended at the first other river it crosses, which it then joins (downstream of its own tributaries' mouths). Lengths are in reference pixels, 1/1920 of the circumference, so the shapes do not depend on the map size.
-6. **Drawing.** Rivers are drawn anti-aliased over the map, `0.9 × √(flow / 120 000 km²)` reference pixels wide (capped at 4, tapered at the head): about 10–20× their real width, so they read at map scale, and large rivers stand out. `world.svg` draws them as stroked paths. The biome layer marks a pixel `River` where the drawn river covers at least half of it, so `biomes.png` matches the picture; frozen rivers (below the polar temperature) are not drawn.
+6. **Drawing.** Rivers are drawn anti-aliased over the map. Their nominal width is `0.9 × √(flow / 120 000 km²)` reference pixels (capped at 4, tapered at the head); on a map `W` pixels wide they are drawn `0.5 × nominal × (W / 1920)^(2/3)` pixels wide, never thinner than their real width (`0.002 × √flow` km). The largest rivers are 2 px wide at 1920 × 1080, 3.3 px at 4096 and 5.3 px at 8192, about 8–14× their real width (instead of 21–27× before), so they read at map scale, and each doubling of resolution narrows it by 1.26× in km. Rivers thinner than a pixel are drawn with exact (box-filtered) coverage, so small ones fade instead of keeping a solid one-pixel line. `world.svg` draws them as stroked paths. The biome layer marks a pixel `River` where the drawn river covers at least half of it, so `biomes.png` matches the picture; frozen rivers (below the polar temperature) are not drawn.
 
 Thresholds are in km², so the river network does not depend on the map resolution. On non-terran planets, rivers and lakes are remapped like seas: lava and magma on volcanic worlds, ice on frozen worlds, acid on caustic worlds, dry rock on barren worlds.
 
@@ -439,7 +439,7 @@ The generated layers stop at the base resolution (about 20 km per pixel at 1920 
 
 - **Elevation**: the base elevation, bicubic-interpolated, plus fractal octaves of features smaller than two base pixels and larger than two tile pixels. The first octave is `0.004` elevation units on plains, up to three times more on high ground, halving with each octave, so base coastlines move by less than a base pixel and each tile is the low-pass of its children.
 - **Climate**: temperature, moisture and the other biome inputs are read at a position warped by about one base pixel, so biome borders become irregular; temperature follows the detailed elevation through the lapse rate.
-- **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed), widening with the square root of the zoom from their base-map width, and as wide as their real width (`0.002 × √flow` km) once zoomed in far enough.
+- **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed) with the base map's width law at the level's resolution (`W` = columns × 256): no jump in width when tiles replace the base map, 1.26× thinner in km at each level, down to their real width (`0.002 × √flow` km).
 
 A tile takes about 4 ms on 10 cores. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
 
