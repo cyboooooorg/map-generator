@@ -308,7 +308,7 @@ async fn create_world(
         )));
     }
 
-    let world_id = format!("{}-{}", params.planet.name, params.seed);
+    let world_id = world_dir_name(&params);
     {
         let mut pending = state.pending.lock().expect("pending lock");
         if pending.contains(&world_id) || state.config.worlds_dir.join(&world_id).exists() {
@@ -390,7 +390,7 @@ async fn create_world(
                 report,
             );
             report(Stage::Export);
-            let dir = worlds_dir.join(world_dir_name(&generated.world));
+            let dir = worlds_dir.join(world_dir_name(&generated.world.params));
             export_world(
                 &generated,
                 &dir,
