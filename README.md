@@ -36,21 +36,21 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 
 ### Options
 
-| Flag                    | Values                                                  | Default                                                                                                                                   |                 |
-| ----------------------- | ------------------------------------------------------- | ----------------------------                                                                                                              |                 |
-| `--planet <name\        | file>`                                                  | built-in preset (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in |
-| `--list-planets`        | list the built-in presets and exit                      |                                                                                                                                           |                 |
-| `--seed <u32>`          | any 32-bit unsigned integer                             | random                                                                                                                                    |                 |
-| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                  | random in `[-0.30, 0.50)`                                                                                                                 |                 |
-| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`                                                                                                                    |                 |
-| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)          | random in `[20 000, 80 000)`                                                                                                              |                 |
-| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                        | random in `[5, 40)`                                                                                                                       |                 |
-| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it   | `1.0`                                                                                                                                     |                 |
-| `--width <px>`          | map width, `2`–`16384`                                  | `1920`                                                                                                                                    |                 |
-| `--height <px>`         | map height, `2`–`16384`                                 | `1080`                                                                                                                                    |                 |
-| `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                                                                                                                                  |                 |
-| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)      | off                                                                                                                                       |                 |
-| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                | off                                                                                                                                       |                 |
+| Flag                    | Values                                                                                                                                                 | Default                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| `--planet <preset>`     | built-in preset name (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or path to a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in              |
+| `--list-planets`        | list the built-in presets and exit                                                                                                                     | —                            |
+| `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                            | random                       |
+| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[-0.30, 0.50)`    |
+| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                                                                                                                  | random in `[0.0, 1.0)`       |
+| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)                                                                                                         | random in `[20 000, 80 000)` |
+| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`          |
+| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it                                                                                                  | `1.0`                        |
+| `--width <px>`          | map width, `2`–`16384`                                                                                                                                 | `1920`                       |
+| `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                       |
+| `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                     |
+| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)                                                                                                     | off                          |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                                                                                                               | off                          |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
