@@ -24,7 +24,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 0. Shared groundwork
 
-- **Status:** decided
+- **Status:** done
 - **Work:**
   - A deserialised `Preset` rebuilds its biome lookup (today `lookup` is
     `serde(skip)`, so a preset read back from `world.json` cannot remap).
@@ -64,7 +64,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 2. Biomes form bands and have hard transitions
 
-- **Status:** decided, first
+- **Status:** done
 - **Analysis:** [02-biome-banding.md](analysis/02-biome-banding.md)
 - **Findings:** latitude explains 99.3 % of land temperature and 76 % of land
   moisture, so every threshold draws an east-west line; the moisture noise is
@@ -87,6 +87,13 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Done when:** borders aligned with latitude drop from about 0.49 to 0.25
   or less (metric in the analysis), mountains appear on Earth-like worlds,
   borders show ecotones, and every preset still works.
+- **Result:** on the analysis' eight reference worlds, borders aligned with
+  parallels went from 0.487 to 0.235 (0.22 is isotropic), mountain borders
+  aligned with contours from 0.98 to 0.45, and the chance that a 500 km step
+  east keeps the same biome from 0.89 to 0.68. Mountains cover about 2–15 %
+  of land depending on the sea level. The ecotone width was halved from the
+  analysis (σ 0.02 / 0.05 instead of 0.04 / 0.10): the wider blend washed
+  out the new mosaic.
 
 ## 3. Rivers are too straight and too thin
 
@@ -119,9 +126,11 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 4. Smaller items
 
-| Item                                                                             | Status                       |
-| -------------------------------------------------------------------------------- | ---------------------------- |
-| Hydrology is sequential: the depression filling takes about 1 s of the 1.8 s run | todo                         |
-| Picking on the globe ignores the relief displacement (error under a degree)      | todo                         |
-| Night side lighting is a fixed 7 % floor, not physically calibrated              | todo                         |
-| Volcanoes are rare                                                               | covered by item 2 (highland) |
+| Item                                                                                        | Status |
+| ------------------------------------------------------------------------------------------- | ------ |
+| Hydrology is sequential: the depression filling takes about 1 s of the 1.8 s run            | todo   |
+| Picking on the globe ignores the relief displacement (error under a degree)                 | todo   |
+| Night side lighting is a fixed 7 % floor, not physically calibrated                         | todo   |
+| Volcanoes are rare on non-volcanic presets: the volcanic zone seldom exceeds its thresholds | todo   |
+| The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents  | todo   |
+| Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)   | todo   |
