@@ -416,7 +416,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
-    let water = hydrology(&grid, &height_above_water, &moisture);
+    let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
     debug.push(DebugLayer {
         name: "flow",
         ramp: Ramp::Unsigned,

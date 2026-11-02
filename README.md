@@ -409,7 +409,7 @@ Before biome selection, both climate fields get a regional variability term stan
 
 ### Rivers and lakes
 
-1. **Depression filling.** Starting from the sea, the terrain is flooded upwards (priority-flood, Barnes et al. 2014) so every land pixel gets a path down to the sea; pits are filled to their spill level.
+1. **Depression filling.** Starting from the sea, the terrain is flooded upwards (priority-flood, Barnes et al. 2014) so every land pixel gets a path down to the sea; pits are filled to their spill level. Water crosses the filled flats along a tiny slope whose cost per step varies with a noise, so paths across flats wander instead of running straight to the spill point; real slopes keep their height, so divides and lakes do not move.
 2. **Routing.** Each land pixel drains to its steepest lower neighbour on the filled surface.
 3. **Accumulation.** Every pixel adds its runoff — its area in km² × `((moisture + 1) / 2)²` — and passes the total downstream. The flow of a pixel is the wet-equivalent area draining through it.
 4. **Lakes** are filled pits deeper than `0.004` that receive at least 40 000 km² of flow; **rivers** are pixels carrying at least 120 000 km². Under the polar temperature threshold, rivers stay ice and lakes freeze into ice cap.
