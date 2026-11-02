@@ -6,7 +6,7 @@ use crate::climate::{
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
-use crate::noise::{EARTH_CIRCUMFERENCE_KM, fbm, ridged};
+use crate::noise::{EARTH_CIRCUMFERENCE_KM, cell_value, fbm, ridged};
 use crate::rivers;
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
@@ -46,11 +46,60 @@ impl Sample {
 /// Weight of the highland line jitter (about 0.09 of standard deviation).
 const HIGHLAND_JITTER: f32 = 0.50;
 
+/// Lateral displacement of the continent outline, per octave of the coast
+/// warp, in units of the octave's wavelength (on the unit sphere).
+const COAST_WARP: f64 = 0.5;
+/// Ratio of the displacement share from one coast-warp octave to the next:
+/// below 1, so the finest octaves fray the outline less than the coarse ones
+/// shape it.
+const COAST_WARP_DECAY: f64 = 0.8;
+/// Height of the "plate" step added to the continents: a piecewise-constant
+/// cell noise that gives coasts straight stretches and angular corners.
+const PLATE_STEP: f32 = 0.06;
+/// Inverse width of the plate borders, in plate cells: about 1/20 of a cell
+/// (100–150 km on an Earth-sized planet), a ramp rather than a cliff.
+const PLATE_SHARPNESS: f64 = 20.0;
+/// Share of the fine continent octaves kept on low ground inland, so plains
+/// and deserts are smooth; coasts and mountains keep them all.
+const PLAIN_ROUGHNESS: f32 = 0.3;
+/// Height above (or depth below) the waterline over which the coastal
+/// outline detail fades out, and inland ground turns from coastal to plain
+/// roughness.
+const COAST_BAND: (f32, f32) = (0.03, 0.2);
+/// Weight of the second and third ridged octaves of the mountains.
+const MOUNTAIN_DETAIL: f32 = 0.35;
+
+/// Octaves of the coast warp: from the finest continent octave down to about
+/// two pixels of the map, so the outline is fractal at the map's resolution
+/// without aliasing below it.
+fn coast_octaves(noise_scale: f64, grid: &Grid) -> u32 {
+    let radius_km = grid.circumference_km as f64 / (2.0 * PI);
+    let pixel_km = grid.circumference_km as f64 / grid.width as f64;
+    // The finest continent octave has frequency 0.8 × s × 16.
+    let mut wavelength = radius_km / (0.8 * noise_scale * 16.0);
+    let mut octaves = 0;
+    while wavelength > 2.0 * pixel_km && octaves < 10 {
+        wavelength /= 2.0;
+        octaves += 1;
+    }
+    octaves
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
     grid: Grid,
     sea_level: f32,
+    /// Absolute elevation of the sea surface.
+    waterline: f32,
     noise_scale: f64,
+    coast_octaves: u32,
+    coast_noise: Perlin,
+    plate_seed: u32,
     mountain_blend: f32,
     volcanic_threshold: f32,
     elevation_noise: Perlin,
@@ -69,13 +118,19 @@ pub struct Sampler {
 impl Sampler {
     pub fn new(p: &WorldParams) -> Self {
         let seed = p.seed;
+        // Scale noise frequencies by planet size: a larger circumference
+        // stretches the unit-sphere coordinates, producing broader continents.
+        // Earth (40 075 km) ≡ scale 1.0.
+        let noise_scale = (EARTH_CIRCUMFERENCE_KM / p.circumference_km.max(1.0)) as f64;
+        let grid = p.grid();
         Self {
-            grid: p.grid(),
+            coast_octaves: coast_octaves(noise_scale, &grid),
+            grid,
             sea_level: p.sea_level,
-            // Scale noise frequencies by planet size: a larger circumference
-            // stretches the unit-sphere coordinates, producing broader continents.
-            // Earth (40 075 km) ≡ scale 1.0.
-            noise_scale: (EARTH_CIRCUMFERENCE_KM / p.circumference_km.max(1.0)) as f64,
+            waterline: p.sea_level + p.planet.rules.waterline,
+            noise_scale,
+            coast_noise: Perlin::new(seed.wrapping_add(900)),
+            plate_seed: seed.wrapping_add(950),
             // Stronger gravity suppresses mountain relief; sqrt dampens the effect
             // for extreme values. Baseline 0.35 at Earth gravity.
             mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
@@ -118,23 +173,77 @@ impl Sampler {
         let wnx = nx + warp_x * 0.25;
         let wny = ny + warp_y * 0.25;
 
-        // Continent shape: low-frequency 3D FBM.
-        let continent = fbm(
-            &self.continent_noise,
-            nx * 0.8 * s,
-            ny * 0.8 * s,
-            nz * 0.8 * s,
-            5,
-        );
+        // Continent shape: 5 octaves, split into the 2 coarse ones (continents,
+        // basins) and the 3 fine ones (hills).
+        let c = 0.8 * s;
+        // Same normalisation as `fbm` with 5 octaves.
+        let norm = 1.0 + 0.5 + 0.25 + 0.125 + 0.0625;
+        let shape = |x: f64, y: f64, z: f64| {
+            let octave = |k: u32| {
+                let f = c * f64::from(1u32 << k);
+                self.continent_noise.get([x * f, y * f, z * f]) as f32 / (1u32 << k) as f32
+            };
+            (
+                (octave(0) + octave(1)) / norm,
+                (octave(2) + octave(3) + octave(4)) / norm,
+            )
+        };
+        let (coarse, fine) = shape(nx, ny, nz);
+        // Continent outline: near the coast the noise is sampled at a
+        // position displaced sideways by every octave finer than its own,
+        // each by a share of its wavelength (thinning at finer octaves), and
+        // a plate step is added, so coasts get capes, bays, islands, straight
+        // stretches and corners at every scale down to the pixel. The
+        // displacement fades out away from the coast, where it would only
+        // wrinkle the relief.
+        let coastal = 1.0
+            - smoothstep(
+                COAST_BAND.0,
+                COAST_BAND.1,
+                (coarse + fine - self.waterline).abs(),
+            );
+        let (coarse, fine) = if coastal > 0.0 {
+            let (mut qx, mut qy, mut qz) = (nx, ny, nz);
+            let mut f = 0.8 * s * 16.0;
+            let mut share = COAST_WARP * coastal as f64;
+            for k in 0..self.coast_octaves {
+                let a = share / f;
+                let o = 17.0 * k as f64;
+                qx += a * self.coast_noise.get([nx * f + o, ny * f, nz * f]);
+                qy += a * self.coast_noise.get([nx * f, ny * f + o, nz * f + 3.1]);
+                qz += a * self.coast_noise.get([nx * f + 5.7, ny * f, nz * f + o]);
+                f *= 2.0;
+                share *= COAST_WARP_DECAY;
+            }
+            let (coarse, fine) = shape(qx, qy, qz);
+            let pf = 2.5 * s;
+            let plate = PLATE_STEP
+                * cell_value(self.plate_seed, qx * pf, qy * pf, qz * pf, PLATE_SHARPNESS);
+            (coarse + coastal * plate, fine)
+        } else {
+            (coarse, fine)
+        };
+        let mountain_weight = ((coarse + fine - 0.2) * 2.5).clamp(0.0, 1.0);
+        // Low ground inland keeps a share of the fine octaves: plains and
+        // deserts are smooth, coasts keep their outline and mountains their
+        // foothills.
+        let inland = smoothstep(COAST_BAND.0, COAST_BAND.1, coarse + fine - self.waterline);
+        let roughness = (1.0 - (1.0 - PLAIN_ROUGHNESS) * inland).max(mountain_weight);
+        let continent = coarse + fine * roughness;
 
-        // Ridged mountains blended only onto elevated terrain.
-        let mountain = ridged(
-            &self.elevation_noise,
-            wnx * 5.0 * s,
-            wny * 5.0 * s,
-            nz * 5.0 * s,
-        );
-        let mountain_weight = ((continent - 0.2) * 2.5).clamp(0.0, 1.0);
+        // Ridged mountains blended only onto elevated terrain: a main ridge,
+        // with two finer ridged octaves concentrated on it.
+        let ridge = |f: f64, o: f64| {
+            ridged(
+                &self.elevation_noise,
+                wnx * f + o,
+                wny * f - o,
+                nz * f + 0.5 * o,
+            )
+        };
+        let main = ridge(5.0 * s, 0.0);
+        let detail = 0.6 * ridge(10.7 * s, 23.0) + 0.4 * ridge(22.1 * s, 41.0);
+        let mountain = main * (1.0 - MOUNTAIN_DETAIL + MOUNTAIN_DETAIL * detail);
         let elevation =
             (continent + mountain * mountain_weight * self.mountain_blend).clamp(-1.0, 1.0);
 
