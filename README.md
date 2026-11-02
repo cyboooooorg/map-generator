@@ -433,6 +433,16 @@ Before biome selection, both climate fields get a regional variability term stan
 
 Thresholds are in km², so the river network does not depend on the map resolution. On non-terran planets, rivers and lakes are remapped like seas: lava and magma on volcanic worlds, ice on frozen worlds, acid on caustic worlds, dry rock on barren worlds.
 
+### Detail tiles — deep zoom
+
+The generated layers stop at the base resolution (about 20 km per pixel at 1920 pixels on an Earth-sized planet), and the generation noise has no feature smaller than that: a larger map adds no detail. The `mapgen::detail` module synthesises detail on demand, consistently with the base world, as 256 × 256 tiles of an equirectangular quadtree (level `z` has `2^(z+1)` × `2^z` tiles; level 8 is about 300 m per pixel):
+
+- **Elevation**: the base elevation, bicubic-interpolated, plus fractal octaves of features smaller than two base pixels and larger than two tile pixels. The first octave is `0.004` elevation units on plains, up to three times more on high ground, halving with each octave, so base coastlines move by less than a base pixel and each tile is the low-pass of its children.
+- **Climate**: temperature, moisture and the other biome inputs are read at a position warped by about one base pixel, so biome borders become irregular; temperature follows the detailed elevation through the lapse rate.
+- **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed), at least as wide on screen as on the base map and as wide as their real width (`0.002 × √flow` km) once zoomed in far enough.
+
+A tile takes about 4 ms on 10 cores. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
+
 ### Hydraulic erosion
 
 Rain droplets are dropped at random on land. Each one rolls downhill with a little inertia, picks up sediment while it speeds up on steep ground, and drops it when it slows down, climbs, evaporates, or reaches the sea (Beyer, 2015). Thousands of droplets carve valleys into the ridges and leave fans and deltas at their feet.

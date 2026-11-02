@@ -6,6 +6,7 @@
 //! writes the maps, raw data and diagnostic maps.
 pub mod biome;
 pub mod climate;
+pub mod detail;
 pub mod erosion;
 pub mod export;
 pub mod generation;
