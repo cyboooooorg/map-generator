@@ -7,7 +7,7 @@
   import type { LonLat } from '../lib/geo';
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
-  import { loadSetting, saveSetting } from '../lib/settings';
+  import { debouncedSetting, loadSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient, RAMPS } from '../lib/viewer/colormaps';
   import { type CameraState, PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
@@ -131,8 +131,10 @@
   });
   const highlight = $derived(hovered ?? pinned);
 
+  // Debounced: the season animation and the sliders change these every frame.
+  const display = debouncedSetting<typeof saved>('display', 300);
   $effect(() => {
-    saveSetting('display', {
+    display.save({
       mode,
       layer,
       relief,
@@ -159,7 +161,10 @@
     }
   });
 
-  onDestroy(() => view?.dispose());
+  onDestroy(() => {
+    display.flush();
+    view?.dispose();
+  });
 
   /** The world whose base map is shown (or loading). */
   let textureOf: string | null = null;
