@@ -17,12 +17,13 @@
 //! `format_version` is newer than [`FORMAT_VERSION`], or whose layers do not
 //! have the size `world.json` announces.
 use crate::biome::biome_color;
-use crate::generation::{COAST_DISTANCE_CAP_KM, Sample, Sampler};
+use crate::generation::{COAST_DISTANCE_CAP_KM, Sampler};
 use crate::preset::Preset;
-use crate::rivers::RiversFile;
+use crate::rivers::{RiverLine, RiversFile};
 use crate::world::WorldParams;
 use crate::world::{Biome, World, biome_name};
 use image::{GrayImage, ImageBuffer, Luma};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
@@ -126,9 +127,21 @@ struct ScalarLayer<'a> {
     /// Encoding name written to world.json.
     encoding: &'static str,
     values: &'a [f32],
-    min: f32,
-    max: f32,
+    /// Stored as `log10(1 + value)` (encoding `gray16-log10`).
+    log: bool,
+    range: (f32, f32),
 }
+
+/// Ranges the 16-bit layers are quantised over.
+const ELEVATION: (f32, f32) = (-1.0, 1.0);
+const MOISTURE: (f32, f32) = (-1.0, 1.0);
+const TEMPERATURE: (f32, f32) = (0.0, 1.0);
+/// `log10(1 + km²)`: drainage areas span 0 to millions of km².
+const FLOW_LOG10: (f32, f32) = (0.0, 8.0);
+const VOLCANIC_ZONE: (f32, f32) = (0.0, 1.0);
+const COAST_DISTANCE: (f32, f32) = (0.0, COAST_DISTANCE_CAP_KM);
+const HIGHLAND_OFFSET: (f32, f32) = (-1.0, 1.0);
+const FLOODPLAIN: (f32, f32) = (0.0, 1.0);
 
 /// Maps `v` from `[min, max]` to the full `u16` range.
 fn quantise(v: f32, min: f32, max: f32) -> u16 {
@@ -138,73 +151,36 @@ fn quantise(v: f32, min: f32, max: f32) -> u16 {
 /// Writes `world.json` and one PNG per layer into `dir`.
 pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> {
     let (w, h) = (world.width, world.height);
-    // Drainage areas span 0 to millions of km²: store them on a log scale.
-    let log_flow: Vec<f32> = world.flow_km2.iter().map(|f| (f + 1.0).log10()).collect();
+    let layer = |name, values, range| ScalarLayer {
+        name,
+        encoding: "gray16",
+        values,
+        log: false,
+        range,
+    };
     let scalars = [
+        layer("elevation", &world.elevation, ELEVATION),
+        layer("moisture", &world.moisture, MOISTURE),
+        layer("temperature", &world.temperature, TEMPERATURE),
         ScalarLayer {
-            name: "elevation",
-            encoding: "gray16",
-            values: &world.elevation,
-            min: -1.0,
-            max: 1.0,
-        },
-        ScalarLayer {
-            name: "moisture",
-            encoding: "gray16",
-            values: &world.moisture,
-            min: -1.0,
-            max: 1.0,
-        },
-        ScalarLayer {
-            name: "temperature",
-            encoding: "gray16",
-            values: &world.temperature,
-            min: 0.0,
-            max: 1.0,
-        },
-        ScalarLayer {
-            name: "flow",
             encoding: "gray16-log10",
-            values: &log_flow,
-            min: 0.0,
-            max: 8.0,
+            log: true,
+            ..layer("flow", &world.flow_km2, FLOW_LOG10)
         },
-        ScalarLayer {
-            name: "volcanic_zone",
-            encoding: "gray16",
-            values: &world.volcanic_zone,
-            min: 0.0,
-            max: 1.0,
-        },
-        ScalarLayer {
-            name: "coast_distance",
-            encoding: "gray16",
-            values: &world.coast_distance_km,
-            min: 0.0,
-            max: COAST_DISTANCE_CAP_KM,
-        },
-        ScalarLayer {
-            name: "highland_offset",
-            encoding: "gray16",
-            values: &world.highland_offset,
-            min: -1.0,
-            max: 1.0,
-        },
-        ScalarLayer {
-            name: "floodplain",
-            encoding: "gray16",
-            values: &world.floodplain,
-            min: 0.0,
-            max: 1.0,
-        },
+        layer("volcanic_zone", &world.volcanic_zone, VOLCANIC_ZONE),
+        layer("coast_distance", &world.coast_distance_km, COAST_DISTANCE),
+        layer("highland_offset", &world.highland_offset, HIGHLAND_OFFSET),
+        layer("floodplain", &world.floodplain, FLOODPLAIN),
     ];
 
     let mut infos = Vec::with_capacity(scalars.len());
     for layer in &scalars {
+        let (min, max) = layer.range;
+        // Quantised on the fly: no full-size copy of the transformed values.
         let pixels: Vec<u16> = layer
             .values
             .iter()
-            .map(|&v| quantise(v, layer.min, layer.max))
+            .map(|&v| quantise(if layer.log { (v + 1.0).log10() } else { v }, min, max))
             .collect();
         let file = format!("{}.png", layer.name);
         ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
@@ -213,8 +189,8 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         infos.push(ScalarLayerInfo {
             file,
             encoding: layer.encoding.to_string(),
-            min: layer.min,
-            max: layer.max,
+            min,
+            max,
         });
     }
 
@@ -264,19 +240,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             },
         },
         rivers: Some(RIVERS_FILE.into()),
-        biomes: Biome::ALL
-            .iter()
-            .map(|&b| {
-                let [r, g, bl] = biome_color(b);
-                BiomeInfo {
-                    id: b.id(),
-                    key: b,
-                    name: biome_name(b).into(),
-                    color: format!("#{r:02X}{g:02X}{bl:02X}"),
-                    water: b.is_water(),
-                }
-            })
-            .collect(),
+        biomes: biome_table(),
     };
     let rivers = RiversFile::from_lines(&world.rivers, w, h);
     std::fs::write(dir.join(RIVERS_FILE), serde_json::to_string(&rivers)?)?;
@@ -285,6 +249,23 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         serde_json::to_string_pretty(&metadata)?,
     )?;
     Ok(())
+}
+
+/// Every biome, in id order: the `biomes` table of `world.json`.
+pub fn biome_table() -> Vec<BiomeInfo> {
+    Biome::ALL
+        .iter()
+        .map(|&b| {
+            let [r, g, bl] = biome_color(b);
+            BiomeInfo {
+                id: b.id(),
+                key: b,
+                name: biome_name(b).into(),
+                color: format!("#{r:02X}{g:02X}{bl:02X}"),
+                water: b.is_water(),
+            }
+        })
+        .collect()
 }
 
 /// Reads and checks `world.json` of a `raw_data/` directory. Worlds written
@@ -332,33 +313,204 @@ pub(crate) fn read_biome_ids(raw_dir: &Path, meta: &WorldMetadata) -> Result<Gra
     Ok(img)
 }
 
+/// A 16-bit layer as stored in `raw_data/`, decoded on access: about half
+/// the memory of `f32` values, for the same values.
+#[derive(Clone, Debug)]
+pub struct Layer16 {
+    raw: Vec<u16>,
+    min: f32,
+    /// `(max − min) / 65535`.
+    scale: f32,
+    /// The decoded value is a base-10 logarithm of `1 + value`.
+    log: bool,
+}
+
+impl Layer16 {
+    /// Quantises `values` over `[min, max]`, as the export does.
+    pub fn quantise(values: &[f32], (min, max): (f32, f32)) -> Self {
+        Self {
+            raw: values.iter().map(|&v| quantise(v, min, max)).collect(),
+            min,
+            scale: (max - min) / 65535.0,
+            log: false,
+        }
+    }
+
+    /// A layer of zeros (lower bound 0).
+    fn zeros(len: usize) -> Self {
+        Self {
+            raw: vec![0; len],
+            min: 0.0,
+            scale: 1.0 / 65535.0,
+            log: false,
+        }
+    }
+
+    /// Value of pixel `i` (row-major).
+    #[inline]
+    pub fn get(&self, i: usize) -> f32 {
+        let v = self.min + self.raw[i] as f32 * self.scale;
+        if self.log { 10f32.powf(v) - 1.0 } else { v }
+    }
+
+    pub fn len(&self) -> usize {
+        self.raw.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.raw.is_empty()
+    }
+
+    /// Every value, decoded.
+    pub fn decode(&self) -> Vec<f32> {
+        (0..self.raw.len())
+            .into_par_iter()
+            .map(|i| self.get(i))
+            .collect()
+    }
+
+    /// Bytes held.
+    pub fn bytes(&self) -> usize {
+        self.raw.len() * size_of::<u16>()
+    }
+}
+
 /// Decodes one 16-bit layer of a `raw_data/` directory.
-pub(crate) fn read_scalar(
+fn read_layer(
     raw_dir: &Path,
     layer: &ScalarLayerInfo,
     meta: &WorldMetadata,
-) -> Result<Vec<f32>, String> {
+) -> Result<Layer16, String> {
     let img = image::open(raw_dir.join(&layer.file))
         .map_err(|e| format!("{}: {e}", layer.file))?
         .into_luma16();
     check_size(&layer.file, img.dimensions(), meta)?;
-    let scale = (layer.max - layer.min) / 65535.0;
-    let log = layer.encoding == "gray16-log10";
-    Ok(img
-        .pixels()
-        .map(|p| {
-            let v = layer.min + p[0] as f32 * scale;
-            if log { 10f32.powf(v) - 1.0 } else { v }
-        })
-        .collect())
+    Ok(Layer16 {
+        raw: img.into_raw(),
+        min: layer.min,
+        scale: (layer.max - layer.min) / 65535.0,
+        log: layer.encoding == "gray16-log10",
+    })
 }
 
-/// Reloads a generated world from its directory (the one holding `raw_data/`).
+/// A world reloaded from `raw_data/`, its continuous layers kept as stored
+/// (16 bits per value, see [`Layer16`]). [`LoadedWorld::into_world`] decodes
+/// them into a [`World`].
+pub struct LoadedWorld {
+    pub params: WorldParams,
+    pub width: u32,
+    pub height: u32,
+    pub elevation: Layer16,
+    pub moisture: Layer16,
+    pub temperature: Layer16,
+    /// Drainage area in km² (stored on a log scale).
+    pub flow_km2: Layer16,
+    pub volcanic_zone: Layer16,
+    pub coast_distance_km: Layer16,
+    pub highland_offset: Layer16,
+    pub floodplain: Layer16,
+    pub biomes: Vec<Biome>,
+    pub rivers: Vec<RiverLine>,
+}
+
+impl LoadedWorld {
+    /// A generated world as it would be reloaded after its export: every
+    /// layer quantised to 16 bits.
+    pub fn from_world(world: &World) -> Self {
+        let log_flow: Vec<f32> = world.flow_km2.iter().map(|f| (f + 1.0).log10()).collect();
+        let mut flow_km2 = Layer16::quantise(&log_flow, FLOW_LOG10);
+        flow_km2.log = true;
+        Self {
+            params: world.params.clone(),
+            width: world.width,
+            height: world.height,
+            elevation: Layer16::quantise(&world.elevation, ELEVATION),
+            moisture: Layer16::quantise(&world.moisture, MOISTURE),
+            temperature: Layer16::quantise(&world.temperature, TEMPERATURE),
+            flow_km2,
+            volcanic_zone: Layer16::quantise(&world.volcanic_zone, VOLCANIC_ZONE),
+            coast_distance_km: Layer16::quantise(&world.coast_distance_km, COAST_DISTANCE),
+            highland_offset: Layer16::quantise(&world.highland_offset, HIGHLAND_OFFSET),
+            floodplain: Layer16::quantise(&world.floodplain, FLOODPLAIN),
+            biomes: world.biomes.clone(),
+            rivers: world.rivers.clone(),
+        }
+    }
+
+    /// Row-major index of pixel `(x, y)`.
+    #[inline]
+    pub fn index(&self, x: u32, y: u32) -> usize {
+        (y * self.width + x) as usize
+    }
+
+    /// Bytes held by the layers (river polylines excluded).
+    pub fn bytes(&self) -> usize {
+        [
+            &self.elevation,
+            &self.moisture,
+            &self.temperature,
+            &self.flow_km2,
+            &self.volcanic_zone,
+            &self.coast_distance_km,
+            &self.highland_offset,
+            &self.floodplain,
+        ]
+        .iter()
+        .map(|l| l.bytes())
+        .sum::<usize>()
+            + self.biomes.len() * size_of::<Biome>()
+    }
+
+    /// Decodes every layer into a [`World`].
+    pub fn into_world(self) -> World {
+        let layers = [
+            &self.elevation,
+            &self.moisture,
+            &self.temperature,
+            &self.flow_km2,
+            &self.volcanic_zone,
+            &self.coast_distance_km,
+            &self.highland_offset,
+            &self.floodplain,
+        ];
+        let decoded: Vec<Vec<f32>> = layers.par_iter().map(|l| l.decode()).collect();
+        let [
+            elevation,
+            moisture,
+            temperature,
+            flow_km2,
+            volcanic_zone,
+            coast_distance_km,
+            highland_offset,
+            floodplain,
+        ]: [Vec<f32>; 8] = decoded.try_into().expect("eight layers");
+        World {
+            params: self.params,
+            width: self.width,
+            height: self.height,
+            elevation,
+            moisture,
+            temperature,
+            flow_km2,
+            volcanic_zone,
+            coast_distance_km,
+            floodplain,
+            highland_offset,
+            biomes: self.biomes,
+            rivers: self.rivers,
+        }
+    }
+}
+
+/// Reloads a generated world from its directory (the one holding `raw_data/`),
+/// keeping its layers as stored (see [`LoadedWorld`]). The layer files are
+/// decoded in parallel.
 ///
-/// Values come back quantised to 16 bits. Worlds of format version 1, which
-/// lack the volcanic zone and coast distance layers, get them recomputed from
-/// their parameters and elevation.
-pub fn load_world(world_dir: &Path) -> Result<World, String> {
+/// Worlds of format version 1, which lack the volcanic zone, highland offset
+/// and coast distance layers, get them recomputed from their parameters and
+/// elevation (then quantised like the stored ones); worlds before version 3
+/// get no floodplains.
+pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
     let raw = world_dir.join("raw_data");
     let meta = read_metadata(&raw)?;
     let params = WorldParams {
@@ -372,75 +524,121 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         axial_tilt_deg: meta.axial_tilt_deg,
         erosion: meta.erosion,
     };
-    let elevation = read_scalar(&raw, &meta.layers.elevation, &meta)?;
-    let biomes = read_biome_ids(&raw, &meta)?
-        .pixels()
-        .map(|p| {
-            Biome::ALL
-                .get(p[0] as usize)
-                .copied()
-                .ok_or_else(|| format!("unknown biome id {}", p[0]))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    // Version 1 worlds: resample the noise-derived layers from the seed.
-    let resampled = |pick: &dyn Fn(&Sample) -> f32| -> Vec<f32> {
-        let sampler = Sampler::new(&params);
-        (0..params.height)
-            .flat_map(|y| (0..params.width).map(move |x| (x, y)))
-            .map(|(x, y)| pick(&sampler.sample(x, y)))
+    let l = &meta.layers;
+    let infos = [
+        Some(&l.elevation),
+        Some(&l.moisture),
+        Some(&l.temperature),
+        Some(&l.flow),
+        l.volcanic_zone.as_ref(),
+        l.coast_distance.as_ref(),
+        l.highland_offset.as_ref(),
+        l.floodplain.as_ref(),
+    ];
+    let read_biomes = || -> Result<Vec<Biome>, String> {
+        read_biome_ids(&raw, &meta)?
+            .into_raw()
+            .into_iter()
+            .map(|id| {
+                Biome::ALL
+                    .get(id as usize)
+                    .copied()
+                    .ok_or_else(|| format!("unknown biome id {id}"))
+            })
             .collect()
     };
-    let shift = params.planet.climate.volcanic;
-    let volcanic_zone = match &meta.layers.volcanic_zone {
-        Some(info) => read_scalar(&raw, info, &meta)?,
-        None => resampled(&|s| (s.volcanic_zone + shift).clamp(0.0, 1.0)),
-    };
-    let highland_offset = match &meta.layers.highland_offset {
-        Some(info) => read_scalar(&raw, info, &meta)?,
-        None => resampled(&Sample::highland_offset),
-    };
-    let coast_distance_km = match &meta.layers.coast_distance {
-        Some(info) => read_scalar(&raw, info, &meta)?,
-        None => {
-            let waterline = params.sea_level + params.planet.rules.waterline;
-            let water: Vec<bool> = elevation.iter().map(|&e| e < waterline).collect();
-            params.grid().distance_to(&water, COAST_DISTANCE_CAP_KM)
-        }
-    };
-
-    // Worlds before version 3 have no floodplains.
-    let floodplain = match &meta.layers.floodplain {
-        Some(info) => read_scalar(&raw, info, &meta)?,
-        None => vec![0.0; elevation.len()],
-    };
-
     // Version 1 worlds have no river polylines.
-    let rivers = match &meta.rivers {
-        Some(file) => {
-            let text =
-                std::fs::read_to_string(raw.join(file)).map_err(|e| format!("{file}: {e}"))?;
-            let rivers: RiversFile =
-                serde_json::from_str(&text).map_err(|e| format!("{file}: {e}"))?;
-            rivers.to_lines(meta.width, meta.height)
-        }
-        None => Vec::new(),
+    let read_rivers = || -> Result<Vec<RiverLine>, String> {
+        let Some(file) = &meta.rivers else {
+            return Ok(Vec::new());
+        };
+        let text = std::fs::read_to_string(raw.join(file)).map_err(|e| format!("{file}: {e}"))?;
+        let rivers: RiversFile = serde_json::from_str(&text).map_err(|e| format!("{file}: {e}"))?;
+        Ok(rivers.to_lines(meta.width, meta.height))
     };
-    Ok(World {
-        width: meta.width,
-        height: meta.height,
-        moisture: read_scalar(&raw, &meta.layers.moisture, &meta)?,
-        temperature: read_scalar(&raw, &meta.layers.temperature, &meta)?,
-        flow_km2: read_scalar(&raw, &meta.layers.flow, &meta)?,
-        params,
+    // PNG decoding is single-threaded: decode the files side by side.
+    let (layers, (biomes, rivers)) = rayon::join(
+        || {
+            infos
+                .par_iter()
+                .map(|info| info.map(|info| read_layer(&raw, info, &meta)).transpose())
+                .collect::<Result<Vec<_>, String>>()
+        },
+        || rayon::join(read_biomes, read_rivers),
+    );
+    let [
         elevation,
+        moisture,
+        temperature,
+        flow_km2,
         volcanic_zone,
         coast_distance_km,
-        floodplain,
         highland_offset,
-        biomes,
-        rivers,
+        floodplain,
+    ]: [Option<Layer16>; 8] = layers?.try_into().expect("eight layers");
+    let (elevation, moisture, temperature, flow_km2) = (
+        elevation.expect("required layer"),
+        moisture.expect("required layer"),
+        temperature.expect("required layer"),
+        flow_km2.expect("required layer"),
+    );
+    let n = elevation.len();
+
+    // Version 1 worlds: resample the noise-derived layers from the seed, in
+    // one parallel pass for both.
+    let (volcanic_zone, highland_offset) = match (volcanic_zone, highland_offset) {
+        (Some(v), Some(h)) => (v, h),
+        (v, h) => {
+            let sampler = Sampler::new(&params);
+            let shift = params.planet.climate.volcanic;
+            let width = params.width as usize;
+            let (volcanic, highland): (Vec<f32>, Vec<f32>) = (0..n)
+                .into_par_iter()
+                .map(|i| {
+                    let s = sampler.sample((i % width) as u32, (i / width) as u32);
+                    (
+                        (s.volcanic_zone + shift).clamp(0.0, 1.0),
+                        s.highland_offset(),
+                    )
+                })
+                .unzip();
+            (
+                v.unwrap_or_else(|| Layer16::quantise(&volcanic, VOLCANIC_ZONE)),
+                h.unwrap_or_else(|| Layer16::quantise(&highland, HIGHLAND_OFFSET)),
+            )
+        }
+    };
+    let coast_distance_km = coast_distance_km.unwrap_or_else(|| {
+        let waterline = params.sea_level + params.planet.rules.waterline;
+        let water: Vec<bool> = (0..n).map(|i| elevation.get(i) < waterline).collect();
+        let distance = params.grid().distance_to(&water, COAST_DISTANCE_CAP_KM);
+        Layer16::quantise(&distance, COAST_DISTANCE)
+    });
+    let floodplain = floodplain.unwrap_or_else(|| Layer16::zeros(n));
+
+    Ok(LoadedWorld {
+        width: meta.width,
+        height: meta.height,
+        params,
+        elevation,
+        moisture,
+        temperature,
+        flow_km2,
+        volcanic_zone,
+        coast_distance_km,
+        highland_offset,
+        floodplain,
+        biomes: biomes?,
+        rivers: rivers?,
     })
+}
+
+/// Reloads a generated world from its directory (the one holding `raw_data/`).
+///
+/// Values come back quantised to 16 bits; see [`load_layers`] for older
+/// formats.
+pub fn load_world(world_dir: &Path) -> Result<World, String> {
+    load_layers(world_dir).map(LoadedWorld::into_world)
 }
 
 #[cfg(test)]
@@ -497,6 +695,27 @@ mod tests {
         assert_eq!(meta.layers.flow.encoding, "gray16-log10");
 
         // The world reloads with every layer, and its preset can remap.
+        // The stored layers are exactly the quantised world, and decode to
+        // the same values as the full reload.
+        let layers = load_layers(&world_dir).unwrap();
+        let quantised = LoadedWorld::from_world(&world);
+        let decoded = load_world(&world_dir).unwrap();
+        for i in 0..world.elevation.len() {
+            for (a, b) in [
+                (&layers.elevation, &quantised.elevation),
+                (&layers.flow_km2, &quantised.flow_km2),
+                (&layers.coast_distance_km, &quantised.coast_distance_km),
+                (&layers.floodplain, &quantised.floodplain),
+            ] {
+                assert_eq!(a.get(i), b.get(i));
+            }
+            assert_eq!(layers.moisture.get(i), decoded.moisture[i]);
+            assert!(
+                (decoded.flow_km2[i] - world.flow_km2[i]).abs() <= world.flow_km2[i] * 1e-3 + 1e-2
+            );
+        }
+        assert!(layers.bytes() < world.elevation.len() * 18);
+
         let back = load_world(&world_dir).unwrap();
         assert_eq!(back.biomes, world.biomes);
         assert_eq!(back.params.planet.name, "caustic");

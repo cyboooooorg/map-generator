@@ -464,7 +464,7 @@ The generated layers stop at the base resolution (about 20 km per pixel at 1920 
 - **Channels**: each river is cut into the detailed elevation along the same curve as its drawing, `0.0005 × (flow / 120 000 km²)^0.3` elevation units deep (exaggerated like the rest of the relief), with banks rising from a quarter of the drawn width to the full width from its middle, so the hillshade shows them; never below the sea.
 - **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed) with the base map's width law at the level's resolution (`W` = columns × 256): no jump in width when tiles replace the base map, 1.26× thinner in km at each level, down to their real width (`0.002 × √flow` km).
 
-A tile takes about 4 ms on 10 cores. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
+A tile takes about 4 ms on 10 cores. A world prepared for tiles keeps its layers as stored in `raw_data/` (16 bits per value, decoded as they are sampled), a byte of lake and river flags and the water depth per pixel: about 23 bytes per base pixel (0.2 GB at 4096 × 2048, 0.75 GB at 8192 × 4096), loaded in about 0.1 s at 4096 × 2048 since the layer files are decoded in parallel. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
 
 ### Elevation — continents, coasts and mountains
 

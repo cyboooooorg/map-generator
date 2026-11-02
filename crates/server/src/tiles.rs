@@ -56,7 +56,7 @@ impl TileCache {
         let dir = dir.to_path_buf();
         cell.get_or_try_init(|| async move {
             tokio::task::spawn_blocking(move || {
-                mapgen::export::raw_data::load_world(&dir).map(|w| Arc::new(DetailWorld::new(w)))
+                mapgen::export::raw_data::load_layers(&dir).map(|w| Arc::new(DetailWorld::new(w)))
             })
             .await
             .map_err(|e| e.to_string())?
