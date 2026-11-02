@@ -56,6 +56,8 @@ const KEEP_MS = 400;
  * levels up: one coarse tile covers 4^n leaves and fills the gap quickly.
  */
 const FALLBACK_LEVELS = 2;
+/** Hidden patch meshes kept for reuse. */
+const MAX_SPARE = 128;
 /** Tile textures kept on the GPU. */
 const MAX_TEXTURES = 300;
 
@@ -113,6 +115,8 @@ function surfacePoint(u: number, v: number, morph: number, out: Vector3): Vector
 export class TileLayer {
   private readonly geometry = new PlaneGeometry(1, 1, 16, 16);
   private readonly patches = new Map<string, Mesh<PlaneGeometry, ShaderMaterial>>();
+  /** Hidden patches, reused by the next ones shown. */
+  private readonly spare: Mesh<PlaneGeometry, ShaderMaterial>[] = [];
   private readonly cache = new Map<string, CachedTile>();
   private readonly loading = new Map<string, Download>();
   /** Tiles whose download failed, with the time to retry them. */
@@ -215,6 +219,10 @@ export class TileLayer {
 
   dispose(): void {
     this.clear();
+    for (const patch of this.spare) {
+      patch.material.dispose();
+    }
+    this.spare.length = 0;
     this.geometry.dispose();
   }
 
@@ -338,19 +346,9 @@ export class TileLayer {
     const key = tileKey(tile);
     let patch = this.patches.get(key);
     if (!patch) {
-      patch = new Mesh(this.geometry, this.makeMaterial());
-      // Patches are drawn before the base surface and mark the stencil, so
-      // the base never covers them, even where the coarse geometry rises
-      // above them (relief). Leaves never overlap each other.
-      patch.renderOrder = -1;
-      patch.material.stencilWrite = true;
-      patch.material.stencilRef = DETAIL_STENCIL;
-      patch.material.stencilFunc = AlwaysStencilFunc;
-      patch.material.stencilZPass = ReplaceStencilOp;
-      patch.frustumCulled = false;
+      patch = this.spare.pop() ?? this.newPatch();
       const [u0, v0, du, dv] = tileRect(tile);
       (patch.material.uniforms['uTileRect']!.value as Vector4).set(u0, v0, du, dv);
-      patch.material.uniforms['uTileOn']!.value = 1;
       this.patches.set(key, patch);
       this.scene.add(patch);
     }
@@ -362,12 +360,38 @@ export class TileLayer {
     patch.visible = true;
   }
 
+  private newPatch(): Mesh<PlaneGeometry, ShaderMaterial> {
+    const patch = new Mesh(this.geometry, this.makeMaterial());
+    // Patches are drawn before the base surface and mark the stencil, so
+    // the base never covers them, even where the coarse geometry rises
+    // above them (relief). Leaves never overlap each other.
+    patch.renderOrder = -1;
+    patch.material.stencilWrite = true;
+    patch.material.stencilRef = DETAIL_STENCIL;
+    patch.material.stencilFunc = AlwaysStencilFunc;
+    patch.material.stencilZPass = ReplaceStencilOp;
+    patch.material.uniforms['uTileOn']!.value = 1;
+    patch.frustumCulled = false;
+    return patch;
+  }
+
+  /**
+   * Takes the patches not in `keep` out of the scene. Their meshes are kept
+   * for reuse (up to MAX_SPARE): panning hides and shows patches every
+   * frame, and creating and disposing a material per patch costs a shader
+   * program lookup and a uniform setup each time.
+   */
   private hidePatches(keep: Set<string>): void {
     for (const [key, patch] of this.patches) {
       if (!keep.has(key)) {
         this.scene.remove(patch);
-        patch.material.dispose();
+        patch.material.uniforms['uTile']!.value = null;
         this.patches.delete(key);
+        if (this.spare.length < MAX_SPARE) {
+          this.spare.push(patch);
+        } else {
+          patch.material.dispose();
+        }
       }
     }
   }
