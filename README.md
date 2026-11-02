@@ -439,7 +439,7 @@ The generated layers stop at the base resolution (about 20 km per pixel at 1920 
 
 - **Elevation**: the base elevation, bicubic-interpolated, plus fractal octaves of features smaller than two base pixels and larger than two tile pixels. The first octave is `0.004` elevation units on plains, up to three times more on high ground, halving with each octave, so base coastlines move by less than a base pixel and each tile is the low-pass of its children.
 - **Climate**: temperature, moisture and the other biome inputs are read at a position warped by about one base pixel, so biome borders become irregular; temperature follows the detailed elevation through the lapse rate.
-- **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed), at least as wide on screen as on the base map and as wide as their real width (`0.002 × √flow` km) once zoomed in far enough.
+- **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed), widening with the square root of the zoom from their base-map width, and as wide as their real width (`0.002 × √flow` km) once zoomed in far enough.
 
 A tile takes about 4 ms on 10 cores. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
 

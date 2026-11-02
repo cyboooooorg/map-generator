@@ -309,9 +309,9 @@ impl DetailWorld {
         (lit / LIGHT[2]).clamp(0.55, 1.3)
     }
 
-    /// Anti-aliased coverage of the rivers on a tile. Rivers keep at least
-    /// the width they have on the base map, in screen pixels, and grow to
-    /// their real width when zoomed in far enough.
+    /// Anti-aliased coverage of the rivers on a tile. Their base-map width
+    /// grows with the square root of the zoom, and their real width takes
+    /// over when zoomed in far enough.
     fn river_coverage(&self, tile: TileId, pixel_km: f64) -> Vec<f32> {
         let w = &self.world;
         let n = TILE_SIZE as usize;
@@ -338,9 +338,13 @@ impl DetailWorld {
                 }
                 let to_tile = |p: [f64; 2]| [(p[0] + shift - ox) * sx, (p[1] - oy) * sy];
                 let widths = rivers::widths_px(line, w.width);
+                // How much this tile magnifies the base map.
+                let zoom = (self.base_px_km() / pixel_km).max(1.0);
                 let width_at = |i: usize| {
-                    // Base-map width in screen pixels, or the real width.
-                    let base = widths[i] / k;
+                    // The base-map width grows with the square root of the
+                    // zoom, so rivers stay readable without turning into
+                    // 80 km ribbons; the real width takes over close up.
+                    let base = widths[i] / k * zoom.sqrt();
                     let real = REAL_WIDTH_KM * (line.flow_km2[i] as f64).sqrt() / pixel_km;
                     base.max(real)
                 };
