@@ -28,6 +28,8 @@ pub const SEA_LEVEL: Limits = Limits {
     min: -1.0,
     max: 1.0,
 };
+/// Share of the surface above the waterline, by area.
+pub const LAND_FRACTION: Limits = Limits { min: 0.0, max: 1.0 };
 /// Share of mountain chains that become volcanic.
 pub const VOLCANIC: Limits = Limits { min: 0.0, max: 1.0 };
 /// Equatorial circumference in km.
@@ -70,6 +72,9 @@ pub struct WorldRequest {
     pub planet: Option<String>,
     pub seed: Option<u32>,
     pub sea_level: Option<f32>,
+    /// Share of the surface that is land, by area, in `[0, 1]`: the sea
+    /// level is computed to match it. Exclusive with `sea_level`.
+    pub land_fraction: Option<f32>,
     pub volcanic: Option<f32>,
     pub circumference_km: Option<f32>,
     pub axial_tilt_deg: Option<f32>,
@@ -91,6 +96,8 @@ pub enum RequestError {
         field: &'static str,
         value: u32,
     },
+    /// Both `sea_level` and `land_fraction` are set.
+    SeaLevelAndLandFraction,
     Preset(PresetError),
 }
 
@@ -109,6 +116,9 @@ impl fmt::Display for RequestError {
                 "{field} is {value}, it must be between {} and {}",
                 MAP_SIZE.0, MAP_SIZE.1
             ),
+            RequestError::SeaLevelAndLandFraction => {
+                write!(f, "set sea_level or land_fraction, not both")
+            }
             RequestError::Preset(e) => e.fmt(f),
         }
     }
@@ -132,8 +142,12 @@ pub struct Resolved {
 impl WorldRequest {
     /// Checks every explicit value against its limits.
     pub fn validate(&self) -> Result<(), RequestError> {
+        if self.sea_level.is_some() && self.land_fraction.is_some() {
+            return Err(RequestError::SeaLevelAndLandFraction);
+        }
         for (field, value, limits) in [
             ("sea_level", self.sea_level, SEA_LEVEL),
+            ("land_fraction", self.land_fraction, LAND_FRACTION),
             ("volcanic", self.volcanic, VOLCANIC),
             ("circumference_km", self.circumference_km, CIRCUMFERENCE_KM),
             ("axial_tilt_deg", self.axial_tilt_deg, AXIAL_TILT_DEG),
@@ -168,11 +182,20 @@ impl WorldRequest {
         };
         let planet = Preset::load(&planet_spec)?;
         let d = planet.defaults.clone();
+        // Draw order matters for reproducibility with a seeded RNG: keep it stable.
+        // An explicit value wins over the preset, a sea level over a land
+        // fraction at the same level (a preset never sets both).
+        let (sea_level, land_fraction) = match (self.sea_level, self.land_fraction) {
+            (Some(level), _) => (level, None),
+            (None, Some(fraction)) => (0.0, Some(fraction)),
+            (None, None) => match (d.sea_level, d.land_fraction) {
+                (None, Some(fraction)) => (0.0, Some(fraction.pick(rng))),
+                (level, _) => (level.unwrap_or(fallback::SEA_LEVEL).pick(rng), None),
+            },
+        };
         let mut pick = |value: Option<f32>, preset: Option<ParamDefault>, fb: ParamDefault| {
             value.unwrap_or_else(|| preset.unwrap_or(fb).pick(rng))
         };
-        // Draw order matters for reproducibility with a seeded RNG: keep it stable.
-        let sea_level = pick(self.sea_level, d.sea_level, fallback::SEA_LEVEL);
         let volcanic_intensity = pick(self.volcanic, d.volcanic, fallback::VOLCANIC);
         let circumference_km = pick(
             self.circumference_km,
@@ -182,18 +205,22 @@ impl WorldRequest {
         let axial_tilt_deg = pick(self.axial_tilt_deg, d.axial_tilt, fallback::AXIAL_TILT_DEG);
         let erosion = pick(self.erosion, d.erosion, fallback::EROSION);
         let seed = self.seed.unwrap_or_else(|| rng.random());
+        let mut params = WorldParams {
+            width: self.width.unwrap_or(fallback::WIDTH),
+            height: self.height.unwrap_or(fallback::HEIGHT),
+            seed,
+            planet,
+            sea_level,
+            volcanic_intensity,
+            circumference_km,
+            axial_tilt_deg,
+            erosion,
+        };
+        if let Some(fraction) = land_fraction {
+            params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
+        }
         Ok(Resolved {
-            params: WorldParams {
-                width: self.width.unwrap_or(fallback::WIDTH),
-                height: self.height.unwrap_or(fallback::HEIGHT),
-                seed,
-                planet,
-                sea_level,
-                volcanic_intensity,
-                circumference_km,
-                axial_tilt_deg,
-                erosion,
-            },
+            params,
             planet_spec,
         })
     }
@@ -222,10 +249,45 @@ mod tests {
     }
 
     #[test]
+    fn land_fraction_sets_the_sea_level() {
+        let request = |fraction| WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(3),
+            land_fraction: Some(fraction),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        };
+        let level = |fraction| {
+            request(fraction)
+                .resolve(&mut rand::rng())
+                .unwrap()
+                .params
+                .sea_level
+        };
+        // More land needs a lower sea.
+        assert!(level(0.6) < level(0.3));
+        assert!(level(0.3) < level(0.1));
+    }
+
+    #[test]
+    fn sea_level_and_land_fraction_are_exclusive() {
+        let request = WorldRequest {
+            sea_level: Some(0.2),
+            land_fraction: Some(0.3),
+            ..Default::default()
+        };
+        assert!(matches!(
+            request.validate(),
+            Err(RequestError::SeaLevelAndLandFraction)
+        ));
+    }
+
+    #[test]
     fn missing_values_are_drawn_within_fallback_ranges() {
         let resolved = WorldRequest::default().resolve(&mut rand::rng()).unwrap();
         let p = resolved.params;
-        assert!((-0.30..0.50).contains(&p.sea_level));
+        assert!((0.10..0.40).contains(&p.sea_level));
         assert!((5.0..40.0).contains(&p.axial_tilt_deg));
         assert_eq!((p.width, p.height), (1920, 1080));
     }

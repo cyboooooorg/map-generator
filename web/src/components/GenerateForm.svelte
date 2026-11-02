@@ -74,6 +74,11 @@
     },
   };
   const FIELD_NAMES = Object.keys(FIELDS) as Field[];
+  /** Every field but the sea level, which has its own fieldset. */
+  const OTHER_FIELDS = FIELD_NAMES.filter((field) => field !== 'sea_level');
+
+  /** The sea is set either by its level or by the share of land it leaves. */
+  type SeaBy = 'level' | 'land';
 
   const SIZES: [number, number][] = [
     [960, 540],
@@ -89,7 +94,13 @@
 
   function initialState(preset: PresetInfo | undefined, from: WorldRequest | null): FieldState {
     const state = {} as FieldState;
+    const land = landDefault(preset, from);
     for (const field of FIELD_NAMES) {
+      if (field === 'sea_level' && land !== null) {
+        // Set by the land share: only its random flag matters here.
+        state[field] = { random: land.random, value: 0 };
+        continue;
+      }
       const given = from?.[field];
       if (given !== undefined) {
         state[field] = { random: false, value: given };
@@ -100,6 +111,29 @@
       state[field] = typeof d === 'number' ? { random: false, value: d } : { random: true, value: (d[0] + d[1]) / 2 };
     }
     return state;
+  }
+
+  /**
+   * The land share a request or preset sets instead of the sea level, in
+   * percent, or null when it sets the sea level (or neither).
+   */
+  function landDefault(
+    preset: PresetInfo | undefined,
+    from: WorldRequest | null,
+  ): { random: boolean; percent: number } | null {
+    if (from?.land_fraction !== undefined) {
+      return { random: false, percent: from.land_fraction * 100 };
+    }
+    if (from?.sea_level !== undefined) {
+      return null;
+    }
+    const d = preset?.defaults.land_fraction ?? null;
+    if (d === null) {
+      return null;
+    }
+    return typeof d === 'number'
+      ? { random: false, percent: d * 100 }
+      : { random: true, percent: ((d[0] + d[1]) / 2) * 100 };
   }
 
   /** The preset a request names: by spec (built-in name or file) or by preset name. */
@@ -122,6 +156,10 @@
     ),
   );
   let fields = $state<FieldState>(untrack(() => initialState(start.preset, start.initial)));
+  const startLand = untrack(() => landDefault(start.preset, start.initial));
+  let seaBy = $state<SeaBy>(startLand ? 'land' : 'level');
+  /** Land share in percent, used when `seaBy` is 'land'. */
+  let landPercent = $state(startLand?.percent ?? 29);
   let submitting = $state(false);
   let error = $state<string | null>(null);
   let replace = $state(false);
@@ -140,10 +178,11 @@
 
   function choosePreset(spec: string): void {
     planet = spec;
-    fields = initialState(
-      presets.find((p) => p.spec === spec),
-      null,
-    );
+    const preset = presets.find((p) => p.spec === spec);
+    fields = initialState(preset, null);
+    const land = landDefault(preset, null);
+    seaBy = land ? 'land' : 'level';
+    landPercent = land?.percent ?? 29;
   }
 
   function rollSeed(): void {
@@ -165,9 +204,16 @@
       request.width = width;
       request.height = height;
     }
-    for (const field of FIELD_NAMES) {
+    for (const field of OTHER_FIELDS) {
       if (!fields[field].random) {
         request[field] = fields[field].value;
+      }
+    }
+    if (!fields.sea_level.random) {
+      if (seaBy === 'level') {
+        request.sea_level = fields.sea_level.value;
+      } else {
+        request.land_fraction = landPercent / 100;
       }
     }
     return request;
@@ -225,7 +271,48 @@
     <p class="help">{selectedPreset.description}</p>
   {/if}
 
-  {#each FIELD_NAMES as field (field)}
+  <fieldset>
+    <legend>
+      <select class="mode" bind:value={seaBy} aria-label="Set the sea by">
+        <option value="level">Sea level</option>
+        <option value="land">Land share (%)</option>
+      </select>
+      <label class="check inline">
+        <input type="checkbox" bind:checked={fields.sea_level.random} />
+        random
+      </label>
+    </legend>
+    {#if !fields.sea_level.random}
+      <div class="slider">
+        {#if seaBy === 'level'}
+          <input type="range" min={-1} max={1} step={0.01} bind:value={fields.sea_level.value} />
+          <input
+            type="number"
+            min={spec.sea_level.limits.min}
+            max={spec.sea_level.limits.max}
+            step="any"
+            bind:value={fields.sea_level.value}
+          />
+        {:else}
+          <input type="range" min={0} max={100} step={1} bind:value={landPercent} />
+          <input
+            type="number"
+            min={spec.land_fraction.min * 100}
+            max={spec.land_fraction.max * 100}
+            step="any"
+            bind:value={landPercent}
+          />
+        {/if}
+      </div>
+    {/if}
+    <p class="help">
+      {seaBy === 'level'
+        ? 'Positive: more ocean'
+        : 'Share of the surface above the sea, which is set to match. Earth: 29 %'}
+    </p>
+  </fieldset>
+
+  {#each OTHER_FIELDS as field (field)}
     {@const info = FIELDS[field]}
     {@const limits = spec[field].limits}
     <fieldset>
@@ -363,6 +450,9 @@
   }
   legend {
     padding: 0 4px;
+    font-weight: 600;
+  }
+  legend .mode {
     font-weight: 600;
   }
   .slider {

@@ -33,6 +33,9 @@ pub struct ParamSpec {
 #[ts(export)]
 pub struct FormSpec {
     pub sea_level: ParamSpec,
+    /// Limits of `land_fraction`, the alternative to `sea_level`; without
+    /// it, the sea level falls back as usual.
+    pub land_fraction: Limits,
     pub volcanic: ParamSpec,
     pub circumference_km: ParamSpec,
     pub axial_tilt_deg: ParamSpec,

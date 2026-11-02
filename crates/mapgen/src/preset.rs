@@ -11,7 +11,7 @@
 //! description = "Cold desert world"
 //!
 //! [defaults]                         # a fixed value or a [min, max] range
-//! sea_level = [0.1, 0.3]
+//! sea_level = [0.1, 0.3]             # or land_fraction = 0.29, not both
 //! axial_tilt = 25.2
 //!
 //! [climate]                          # added to every pixel before biome selection
@@ -83,6 +83,9 @@ impl ParamDefault {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Defaults {
     pub sea_level: Option<ParamDefault>,
+    /// Share of the surface that is land; the sea level is computed to
+    /// match it. Exclusive with `sea_level`.
+    pub land_fraction: Option<ParamDefault>,
     pub volcanic: Option<ParamDefault>,
     pub circumference: Option<ParamDefault>,
     pub axial_tilt: Option<ParamDefault>,
@@ -169,8 +172,12 @@ impl TryFrom<PresetSpec> for Preset {
         }
 
         let d = &spec.defaults;
+        if d.sea_level.is_some() && d.land_fraction.is_some() {
+            return Err("defaults: set sea_level or land_fraction, not both".to_string());
+        }
         for (field, value, limits) in [
             ("sea_level", d.sea_level, request::SEA_LEVEL),
+            ("land_fraction", d.land_fraction, request::LAND_FRACTION),
             ("volcanic", d.volcanic, request::VOLCANIC),
             ("circumference", d.circumference, request::CIRCUMFERENCE_KM),
             ("axial_tilt", d.axial_tilt, request::AXIAL_TILT_DEG),
@@ -326,6 +333,11 @@ mod tests {
             ),
             ("name = \"x\"\n[rules]\npolarr = 0.1", "unknown field"),
             ("name = \"x\"\n[defaults]\nsea_level = [0.5, 2.0]", "within"),
+            (
+                "name = \"x\"\n[defaults]\nsea_level = 0.2\nland_fraction = 0.3",
+                "not both",
+            ),
+            ("name = \"x\"\n[defaults]\nland_fraction = 1.5", "within"),
         ];
         for (text, expected) in cases {
             let err = Preset::from_toml(text, "test").unwrap_err().to_string();

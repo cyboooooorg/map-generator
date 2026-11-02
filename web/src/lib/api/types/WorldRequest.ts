@@ -8,4 +8,9 @@ export type WorldRequest = {
 /**
  * Built-in preset name or preset file path; `None` picks a random built-in.
  */
-planet?: string, seed?: number, sea_level?: number, volcanic?: number, circumference_km?: number, axial_tilt_deg?: number, erosion?: number, width?: number, height?: number, };
+planet?: string, seed?: number, sea_level?: number, 
+/**
+ * Share of the surface that is land, by area, in `[0, 1]`: the sea
+ * level is computed to match it. Exclusive with `sea_level`.
+ */
+land_fraction?: number, volcanic?: number, circumference_km?: number, axial_tilt_deg?: number, erosion?: number, width?: number, height?: number, };

@@ -42,6 +42,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--list-planets`        | list the built-in presets and exit                                                                                                                     | —                            |
 | `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                            | random                       |
 | `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[0.10, 0.40)`     |
+| `--land-fraction <f32>` | share of the surface that is land, `[0.0, 1.0]`; sets the sea level to match, so it cannot be combined with `--sea-level`                              | —                            |
 | `--volcanic <f32>`      | float in `[0.0, 1.0]`                                                                                                                                  | random in `[0.0, 1.0)`       |
 | `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)                                                                                                         | random in `[20 000, 80 000)` |
 | `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`          |
@@ -57,6 +58,8 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 **seed** — drives every noise layer. The same seed with the same other options always produces the same world.
 
 **sea-level** — shifts the waterline: positive values raise it (more ocean), negative values lower it (more land). When it is not set (nor by the preset), it is drawn in `[0.10, 0.40)`, which gives about 10–70 % of land, mostly 20–55 % (Earth: 29 %). Mountains and snow are measured above the waterline, so a low sea level also turns much of the land into highland: at `0.0` about a third of the land is mountain, at `-0.3` almost three quarters.
+
+**land-fraction** — sets the share of land instead of the sea level: `--land-fraction 0.29` gives a world with 29 % of its surface (by area, not pixels) above the sea, whatever the relief of the seed, where a fixed sea level gives anywhere from 20 to 50 %. The generator samples the relief on a coarse grid (512 × 256, about 0.1 s) and picks the sea level that leaves that share above it; on test worlds the result is within 0.1 point of the target. The chosen sea level is printed and stored in `world.json` like any other, so `--sea-level` reproduces the world. In the web form, the sea level fieldset switches to it with its "Land share (%)" option. A preset can set `land_fraction` in `[defaults]` instead of `sea_level`, not both.
 
 **volcanic** — controls how much of the planet is volcanic: the share of volcanic provinces, and so the number of volcanoes, not their size. `0.0` = no volcanoes, `1.0` = many volcanic provinces.
 
@@ -180,7 +183,7 @@ To create a new planet type, write a preset file and pass its path. `presets/exa
 | -------------- | --------------------------------------------------------------------------------------------------------- |
 | `mercury-like` | Small and airless, no erosion: grey cratered highlands (`RockyWaste`), dark smooth basins (`AshLand`)     |
 | `venus-like`   | Earth-sized furnace, no erosion: basalt plains (`ScorchedWaste`) around highland plateaus with lava flows |
-| `earth-like`   | `terran` with Earth's size, tilt and about its share of land                                              |
+| `earth-like`   | `terran` with Earth's size, tilt and share of land (29 %)                                                 |
 | `mars-like`    | Small cold desert: dust basins where the seas were, polar ice caps                                        |
 
 The web app lists them with the built-in types.
@@ -194,7 +197,7 @@ name = "mars-like"                 # lowercase letters, digits and dashes; used 
 description = "Small cold desert world with polar caps"
 
 [defaults]                         # a fixed value or a [min, max] range drawn at random
-sea_level = [0.10, 0.30]           # sea_level, volcanic, circumference, axial_tilt, erosion
+sea_level = [0.10, 0.30]           # sea_level or land_fraction, volcanic, circumference, axial_tilt, erosion
 circumference = 21300
 
 [climate]                          # added to every pixel before biome selection

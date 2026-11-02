@@ -5,4 +5,9 @@ import type { ParamDefault } from "./ParamDefault";
  * Default values of the generation parameters. Command-line options win;
  * parameters missing here fall back to the generator's own defaults.
  */
-export type Defaults = { sea_level: ParamDefault | null, volcanic: ParamDefault | null, circumference: ParamDefault | null, axial_tilt: ParamDefault | null, erosion: ParamDefault | null, };
+export type Defaults = { sea_level: ParamDefault | null, 
+/**
+ * Share of the surface that is land; the sea level is computed to
+ * match it. Exclusive with `sea_level`.
+ */
+land_fraction: ParamDefault | null, volcanic: ParamDefault | null, circumference: ParamDefault | null, axial_tilt: ParamDefault | null, erosion: ParamDefault | null, };

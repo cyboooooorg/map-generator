@@ -303,6 +303,7 @@ mod tests {
             planet: Some("terran".into()),
             seed: Some(3),
             sea_level: Some(0.2),
+            land_fraction: None,
             volcanic: Some(0.3),
             circumference_km: Some(40_000.0),
             axial_tilt_deg: Some(23.44),

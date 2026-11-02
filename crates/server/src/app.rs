@@ -156,6 +156,7 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
     let spec = |limits, fallback| ParamSpec { limits, fallback };
     Json(FormSpec {
         sea_level: spec(request::SEA_LEVEL, fallback::SEA_LEVEL),
+        land_fraction: request::LAND_FRACTION,
         volcanic: spec(request::VOLCANIC, fallback::VOLCANIC),
         circumference_km: spec(request::CIRCUMFERENCE_KM, fallback::CIRCUMFERENCE_KM),
         axial_tilt_deg: spec(request::AXIAL_TILT_DEG, fallback::AXIAL_TILT_DEG),
