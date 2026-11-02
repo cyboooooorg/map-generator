@@ -42,8 +42,6 @@ const DETAIL_AMPLITUDE: f32 = 0.004;
 const MOUNTAIN_BOOST: f32 = 2.0;
 /// Warp of the climate sampling position, in base pixels.
 const CLIMATE_WARP_PX: f64 = 1.0;
-/// Real river width: `REAL_WIDTH_KM × √(flow km²)` (about 5 km at 6 M km²).
-const REAL_WIDTH_KM: f64 = 0.002;
 
 /// A tile of the quadtree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -155,7 +153,12 @@ impl DetailWorld {
             })
             .collect();
         let seed = world.params.seed;
-        let coverage = rivers::coverage(&world.rivers, world.width, world.height);
+        let coverage = rivers::coverage(
+            &world.rivers,
+            world.width,
+            world.height,
+            world.params.circumference_km as f64,
+        );
         let waterline = world.params.sea_level + world.params.planet.rules.waterline;
         let lakes = (0..world.biomes.len())
             .map(|i| {
@@ -309,9 +312,9 @@ impl DetailWorld {
         (lit / LIGHT[2]).clamp(0.55, 1.3)
     }
 
-    /// Anti-aliased coverage of the rivers on a tile. Their base-map width
-    /// grows with the square root of the zoom, and their real width takes
-    /// over when zoomed in far enough.
+    /// Anti-aliased coverage of the rivers on a tile, drawn with the base
+    /// map's width law at the tile level's resolution (see
+    /// [`rivers::draw_width_px`]), so they do not jump when tiles appear.
     fn river_coverage(&self, tile: TileId, pixel_km: f64) -> Vec<f32> {
         let w = &self.world;
         let n = TILE_SIZE as usize;
@@ -326,7 +329,7 @@ impl DetailWorld {
         );
         let (span_x, span_y) = (TILE_SIZE as f64 / sx, TILE_SIZE as f64 / sy);
         let margin = 8.0 / sx.min(sy) + 1.0;
-        let k = rivers::scale(w.width);
+        let raster = cols as f64 * TILE_SIZE as f64;
         for (line, b) in &self.rivers {
             for shift in [-(w.width as f64), 0.0, w.width as f64] {
                 let visible = b[0] + shift < ox + span_x + margin
@@ -337,17 +340,10 @@ impl DetailWorld {
                     continue;
                 }
                 let to_tile = |p: [f64; 2]| [(p[0] + shift - ox) * sx, (p[1] - oy) * sy];
-                let widths = rivers::widths_px(line, w.width);
-                // How much this tile magnifies the base map.
-                let zoom = (self.base_px_km() / pixel_km).max(1.0);
-                let width_at = |i: usize| {
-                    // The base-map width grows with the square root of the
-                    // zoom, so rivers stay readable without turning into
-                    // 80 km ribbons; the real width takes over close up.
-                    let base = widths[i] / k * zoom.sqrt();
-                    let real = REAL_WIDTH_KM * (line.flow_km2[i] as f64).sqrt() / pixel_km;
-                    base.max(real)
-                };
+                // The same law as the base map, at this level's resolution.
+                let tapers = rivers::tapers(line, w.width);
+                let width_at =
+                    |i: usize| rivers::draw_width_px(line.flow_km2[i], raster, pixel_km, tapers[i]);
                 let pts = &line.points;
                 for s in 0..pts.len().saturating_sub(1) {
                     // Catmull-Rom between points, so zoomed rivers stay smooth.
@@ -399,7 +395,7 @@ fn stamp_segment(cov: &mut [f32], n: usize, a: [f64; 2], b: [f64; 2], width: f64
             let c = [px as f64 + 0.5, py as f64 + 0.5];
             let t = (((c[0] - a[0]) * dx + (c[1] - a[1]) * dy) / len2).clamp(0.0, 1.0);
             let d = ((c[0] - a[0] - t * dx).powi(2) + (c[1] - a[1] - t * dy).powi(2)).sqrt();
-            let v = (width / 2.0 + 0.5 - d).clamp(0.0, 1.0) as f32;
+            let v = rivers::band_coverage(d, width);
             let i = py * n + px;
             cov[i] = cov[i].max(v);
         }

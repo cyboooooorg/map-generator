@@ -547,7 +547,8 @@ pub fn generate_with_progress(
         params.seed,
     );
     // The biome layer marks rivers where they are drawn, so it matches the map.
-    let river_coverage = rivers::coverage(&river_lines, width, height);
+    let river_coverage =
+        rivers::coverage(&river_lines, width, height, params.circumference_km as f64);
     if keep {
         debug.push(DebugLayer {
             name: "flow",

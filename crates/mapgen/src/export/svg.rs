@@ -40,7 +40,7 @@ pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
     let [rr, rg, rb] = biome_color(planet.remap(Biome::River));
     let chunk = 8;
     for line in &world.rivers {
-        let widths = rivers::widths_px(line, world.width);
+        let widths = rivers::widths_px(line, world.width, world.params.circumference_km as f64);
         let mut start = 0;
         while start + 1 < line.points.len() {
             let stop = (start + chunk).min(line.points.len() - 1);

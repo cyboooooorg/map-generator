@@ -50,11 +50,39 @@ pub struct RiverLine {
     pub mouth: Mouth,
 }
 
-/// Drawn width of a river in reference pixels: hydraulic geometry
-/// (width ∝ √flow), exaggerated about 10–20× so rivers read at map scale,
-/// capped for the largest ones.
+/// Nominal width of a river in reference pixels: hydraulic geometry
+/// (width ∝ √flow), capped for the largest ones. It sizes the meanders; the
+/// drawn width derives from it with [`draw_width_px`].
 pub fn width_ref_px(flow_km2: f32) -> f64 {
     (0.9 * (flow_km2.max(RIVER_MIN_FLOW_KM2) as f64 / RIVER_MIN_FLOW_KM2 as f64).sqrt()).min(4.0)
+}
+
+/// Share of the nominal width drawn on a raster as wide as the reference map.
+pub const INK: f64 = 0.5;
+/// How the drawn width follows the raster resolution: `(raster / 1920)^0.67`,
+/// so each doubling of resolution narrows a river by 1.26× in km, on the base
+/// map and from one detail tile level to the next alike.
+pub const RASTER_EXPONENT: f64 = 2.0 / 3.0;
+/// Real river width: `REAL_WIDTH_KM × √(flow km²)` (about 5 km at 6 M km²).
+pub const REAL_WIDTH_KM: f64 = 0.002;
+
+/// Drawn width in pixels of a raster `raster_width` pixels around the planet
+/// (the base map, or every tile of a detail level side by side), whose
+/// pixels are `pixel_km` wide. Readable at every scale, it never falls below
+/// the real width; `taper` thins the head of a river.
+pub fn draw_width_px(flow_km2: f32, raster_width: f64, pixel_km: f64, taper: f64) -> f64 {
+    let drawn =
+        INK * width_ref_px(flow_km2) * (raster_width / REFERENCE_WIDTH).powf(RASTER_EXPONENT);
+    let real = REAL_WIDTH_KM * (flow_km2.max(0.0) as f64).sqrt() / pixel_km;
+    (drawn * taper).max(real)
+}
+
+/// Exact (box-filtered) coverage of a pixel whose centre is `d` pixels from
+/// the axis of a band `width` pixels wide: a band thinner than a pixel fades
+/// out instead of keeping a solid one-pixel line.
+pub fn band_coverage(d: f64, width: f64) -> f32 {
+    let half = width / 2.0;
+    ((d + 0.5).min(half) - (d - 0.5).max(-half)).clamp(0.0, 1.0) as f32
 }
 
 /// Map pixels per reference pixel for a map `width` pixels wide.
@@ -69,14 +97,17 @@ pub fn scale(width: u32) -> f64 {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct RiversFile {
     pub version: u32,
-    /// Drawn width: `w0_ref_px × (flow / q0_km2)^exponent`, capped at
-    /// `max_ref_px`, in reference pixels (1/`reference_width_px` of the
-    /// circumference).
+    /// Width of the rivers, see [`WidthLaw`].
     pub width_law: WidthLaw,
     pub rivers: Vec<RiverEntry>,
 }
 
-/// Parameters of the drawn width of rivers.
+/// Parameters of the width of rivers. The nominal width is
+/// `w0_ref_px × (flow / q0_km2)^exponent`, capped at `max_ref_px`, in
+/// reference pixels (1/`reference_width_px` of the circumference). On a
+/// raster `W` pixels around the planet a river is drawn
+/// `ink × nominal × (W / reference_width_px)^raster_exponent` pixels wide,
+/// and never thinner than `real_km_per_sqrt_km2 × √flow` km.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct WidthLaw {
@@ -85,6 +116,17 @@ pub struct WidthLaw {
     pub exponent: f32,
     pub max_ref_px: f32,
     pub reference_width_px: u32,
+    /// Absent from version 1 files, whose rivers were drawn at the nominal width.
+    #[serde(default = "one")]
+    pub ink: f32,
+    #[serde(default = "one")]
+    pub raster_exponent: f32,
+    #[serde(default)]
+    pub real_km_per_sqrt_km2: f32,
+}
+
+fn one() -> f32 {
+    1.0
 }
 
 /// One river polyline of `rivers.json`.
@@ -105,13 +147,16 @@ impl RiversFile {
     pub fn from_lines(lines: &[RiverLine], width: u32, height: u32) -> Self {
         let (w, h) = (width as f64, height as f64);
         Self {
-            version: 1,
+            version: 2,
             width_law: WidthLaw {
                 w0_ref_px: 0.9,
                 q0_km2: RIVER_MIN_FLOW_KM2,
                 exponent: 0.5,
                 max_ref_px: 4.0,
                 reference_width_px: REFERENCE_WIDTH as u32,
+                ink: INK as f32,
+                raster_exponent: RASTER_EXPONENT as f32,
+                real_km_per_sqrt_km2: REAL_WIDTH_KM as f32,
             },
             rivers: lines
                 .iter()
@@ -242,9 +287,9 @@ pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
 
-/// Drawn width in map pixels at each point of a line, tapered at the head so
-/// rivers do not start abruptly.
-pub fn widths_px(line: &RiverLine, map_width: u32) -> Vec<f64> {
+/// Thinning of a line at each point, from 0.55 at its head to 1 eight
+/// reference pixels downstream, so rivers do not start abruptly.
+pub fn tapers(line: &RiverLine, map_width: u32) -> Vec<f64> {
     let k = scale(map_width);
     let mut from_head = 0.0;
     line.points
@@ -256,20 +301,31 @@ pub fn widths_px(line: &RiverLine, map_width: u32) -> Vec<f64> {
                 from_head += ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
             }
             let t = (from_head / (8.0 * k)).clamp(0.0, 1.0);
-            let taper = 0.55 + 0.45 * t * t * (3.0 - 2.0 * t);
-            width_ref_px(line.flow_km2[i]) * k * taper
+            0.55 + 0.45 * t * t * (3.0 - 2.0 * t)
         })
         .collect()
 }
 
+/// Drawn width in map pixels at each point of a line, on a map `map_width`
+/// pixels around a planet of `circumference_km`.
+pub fn widths_px(line: &RiverLine, map_width: u32, circumference_km: f64) -> Vec<f64> {
+    let pixel_km = circumference_km / map_width as f64;
+    tapers(line, map_width)
+        .into_iter()
+        .zip(&line.flow_km2)
+        .map(|(taper, &flow)| draw_width_px(flow, map_width as f64, pixel_km, taper))
+        .collect()
+}
+
 /// Anti-aliased coverage in `[0, 1]` of the rivers drawn on a `width` ×
-/// `height` map, row-major. Overlapping rivers take the maximum, so
-/// confluences do not darken. Lines crossing the longitude seam wrap.
-pub fn coverage(lines: &[RiverLine], width: u32, height: u32) -> Vec<f32> {
+/// `height` map of a planet of `circumference_km`, row-major. Overlapping
+/// rivers take the maximum, so confluences do not darken. Lines crossing the
+/// longitude seam wrap.
+pub fn coverage(lines: &[RiverLine], width: u32, height: u32, circumference_km: f64) -> Vec<f32> {
     let mut cov = vec![0f32; (width * height) as usize];
     let wrap = width as f64;
     for line in lines {
-        let widths = widths_px(line, width);
+        let widths = widths_px(line, width, circumference_km);
         for (k, s) in line.points.windows(2).enumerate() {
             let (wa, wb) = (widths[k], widths[k + 1]);
             for shift in [-wrap, 0.0, wrap] {
@@ -289,8 +345,7 @@ pub fn coverage(lines: &[RiverLine], width: u32, height: u32) -> Vec<f32> {
                         let t = (((c[0] - a[0]) * dx + (c[1] - a[1]) * dy) / len2).clamp(0.0, 1.0);
                         let q = [a[0] + t * dx, a[1] + t * dy];
                         let d = ((c[0] - q[0]).powi(2) + (c[1] - q[1]).powi(2)).sqrt();
-                        let half = (wa + (wb - wa) * t) / 2.0;
-                        let v = (half + 0.5 - d).clamp(0.0, 1.0) as f32;
+                        let v = band_coverage(d, wa + (wb - wa) * t);
                         let i = (py * width + px) as usize;
                         cov[i] = cov[i].max(v);
                     }
@@ -738,7 +793,7 @@ mod tests {
             mouth: Mouth::Sea,
         };
         let covered = |l: RiverLine| {
-            coverage(&[l], 1920, 20)
+            coverage(&[l], 1920, 20, 40_000.0)
                 .iter()
                 .filter(|&&c| c >= RIVER_COVERAGE)
                 .count()
@@ -747,11 +802,40 @@ mod tests {
         // The seam wraps: a line just west of x = 0 covers the east edge.
         let west = RiverLine {
             points: vec![[-3.0, 10.5], [0.5, 10.5]],
-            flow_km2: vec![1e6; 2],
+            flow_km2: vec![5e6; 2],
             parent: None,
             mouth: Mouth::Sea,
         };
-        assert!(coverage(&[west], 1920, 20)[10 * 1920 + 1918] > 0.5);
+        assert!(coverage(&[west], 1920, 20, 40_000.0)[10 * 1920 + 1918] > 0.5);
+    }
+
+    #[test]
+    fn drawn_width_barely_jumps_between_rasters() {
+        // From a base map to the next raster twice as wide (the first detail
+        // level), a river narrows by 2^(2/3) = 1.26× in km, whatever the base.
+        let km = |flow: f32, raster: f64| {
+            let pixel_km = 40_000.0 / raster;
+            draw_width_px(flow, raster, pixel_km, 1.0) * pixel_km
+        };
+        for base in [1920.0, 4096.0, 8192.0] {
+            for flow in [2e5, 1e6, 4e6] {
+                let ratio = km(flow, base) / km(flow, 2.0 * base);
+                assert!(
+                    (1.0..=1.3).contains(&ratio),
+                    "{base} px, {flow} km²: {ratio}"
+                );
+            }
+        }
+        // Close up, the real width takes over.
+        assert!((km(4e6, 1e7) - REAL_WIDTH_KM * 2000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn sub_pixel_coverage_adds_up_to_the_width() {
+        for width in [0.2, 0.6, 1.0, 2.5] {
+            let total: f32 = (-5..=5).map(|d| band_coverage(d as f64 + 0.3, width)).sum();
+            assert!((total as f64 - width).abs() < 1e-6, "{width}: {total}");
+        }
     }
 
     #[test]
