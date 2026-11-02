@@ -473,8 +473,21 @@ struct NoiseFields {
     highland_offset: Vec<f32>,
 }
 
+/// Rows sampled at a time by [`NoiseFields::sample`]: enough to keep every
+/// core busy, few enough that the band of samples stays small (about 30 MB
+/// at 8192 pixels of width).
+const BAND_ROWS: usize = 64;
+
 impl NoiseFields {
-    fn sample(sampler: &Sampler, width: u32, height: u32) -> Self {
+    /// Samples every pixel, band by band, writing each band's fields (and,
+    /// when `debug` is given, the noise debug layers) straight into their
+    /// layers: every sample is never held at once.
+    fn sample(
+        sampler: &Sampler,
+        width: u32,
+        height: u32,
+        debug: Option<&mut Vec<DebugLayer>>,
+    ) -> Self {
         let n = (width * height) as usize;
         let w = width as usize;
         let mut f = Self {
@@ -486,56 +499,48 @@ impl NoiseFields {
             variability_m: vec![0.0; n],
             highland_offset: vec![0.0; n],
         };
-        (
-            f.elevation.par_chunks_mut(w),
-            f.moisture.par_chunks_mut(w),
-            f.volcanic_zone.par_chunks_mut(w),
-            f.temperature_anomaly.par_chunks_mut(w),
-            f.variability_t.par_chunks_mut(w),
-            f.variability_m.par_chunks_mut(w),
-            f.highland_offset.par_chunks_mut(w),
-        )
-            .into_par_iter()
-            .enumerate()
-            .for_each(|(y, (e, m, v, a, vt, vm, h))| {
-                for x in 0..w {
-                    let s = sampler.sample(x as u32, y as u32);
-                    (e[x], m[x], v[x], a[x]) = (
-                        s.elevation,
-                        s.moisture,
-                        s.volcanic_zone,
-                        s.temperature_anomaly,
-                    );
-                    (vt[x], vm[x], h[x]) = (s.variability_t, s.variability_m, s.highland_offset());
-                }
-            });
-        f
-    }
-
-    fn from_samples(samples: impl ParallelIterator<Item = Sample>) -> Self {
-        let picked: Vec<[f32; 7]> = samples
-            .map(|s| {
-                [
-                    s.elevation,
-                    s.moisture,
-                    s.volcanic_zone,
-                    s.temperature_anomaly,
-                    s.variability_t,
-                    s.variability_m,
-                    s.highland_offset(),
-                ]
-            })
-            .collect();
-        let column = |k: usize| picked.par_iter().map(|v| v[k]).collect::<Vec<f32>>();
-        Self {
-            elevation: column(0),
-            moisture: column(1),
-            volcanic_zone: column(2),
-            temperature_anomaly: column(3),
-            variability_t: column(4),
-            variability_m: column(5),
-            highland_offset: column(6),
+        let mut layers: Vec<DebugLayer> = match debug {
+            Some(_) => NOISE_LAYERS
+                .iter()
+                .map(|&(name, ramp, _)| DebugLayer {
+                    name,
+                    ramp,
+                    values: vec![0.0; n],
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        let mut band: Vec<Sample> = Vec::with_capacity(BAND_ROWS * w);
+        for y0 in (0..height as usize).step_by(BAND_ROWS) {
+            let y1 = (y0 + BAND_ROWS).min(height as usize);
+            band.clear();
+            band.par_extend(
+                (y0..y1)
+                    .into_par_iter()
+                    .flat_map_iter(|y| (0..w).map(move |x| sampler.sample(x as u32, y as u32))),
+            );
+            let range = y0 * w..y1 * w;
+            let fill = |layer: &mut [f32], value: fn(&Sample) -> f32| {
+                layer[range.clone()]
+                    .par_iter_mut()
+                    .zip(band.par_iter())
+                    .for_each(|(v, s)| *v = value(s));
+            };
+            fill(&mut f.elevation, |s| s.elevation);
+            fill(&mut f.moisture, |s| s.moisture);
+            fill(&mut f.volcanic_zone, |s| s.volcanic_zone);
+            fill(&mut f.temperature_anomaly, |s| s.temperature_anomaly);
+            fill(&mut f.variability_t, |s| s.variability_t);
+            fill(&mut f.variability_m, |s| s.variability_m);
+            fill(&mut f.highland_offset, Sample::highland_offset);
+            for (layer, &(_, _, value)) in layers.iter_mut().zip(NOISE_LAYERS) {
+                fill(&mut layer.values, value);
+            }
         }
+        if let Some(debug) = debug {
+            debug.extend(layers);
+        }
+        f
     }
 }
 
@@ -613,27 +618,8 @@ pub fn generate_with_progress(
     // Every pixel is independent: sample rows in parallel. The result stays
     // deterministic because each pixel only depends on its coordinates.
     let sampler = Sampler::new(params);
-    let pixels = || {
-        (0..height)
-            .into_par_iter()
-            .flat_map_iter(move |y| (0..width).map(move |x| (x, y)))
-    };
-    let (fields, mut debug) = if keep {
-        let samples: Vec<Sample> = pixels().map(|(x, y)| sampler.sample(x, y)).collect();
-        let debug: Vec<DebugLayer> = NOISE_LAYERS
-            .par_iter()
-            .map(|&(name, ramp, value)| DebugLayer {
-                name,
-                ramp,
-                values: samples.par_iter().map(value).collect(),
-            })
-            .collect();
-        (NoiseFields::from_samples(samples.into_par_iter()), debug)
-    } else {
-        // Without debug layers, never hold every sample at once: write each
-        // row's fields straight into their layers.
-        (NoiseFields::sample(&sampler, width, height), Vec::new())
-    };
+    let mut debug = Vec::new();
+    let fields = NoiseFields::sample(&sampler, width, height, keep.then_some(&mut debug));
 
     let rules = &planet.rules;
     let grid = params.grid();
@@ -675,6 +661,7 @@ pub fn generate_with_progress(
                 .collect(),
         });
     }
+    drop(erosion);
     if keep {
         debug.push(DebugLayer {
             name: "elevation",
@@ -700,6 +687,7 @@ pub fn generate_with_progress(
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
         .collect();
+    drop(anomaly);
     if keep {
         debug.push(DebugLayer {
             name: "temperature",
@@ -711,8 +699,9 @@ pub fn generate_with_progress(
     // ── Pass 4: distance to the coast ─────────────────────────────────────────
     progress(Stage::Coast);
     // Shores are the land pixels close to open water.
-    let water: Vec<bool> = relief.iter().map(|&r| r < rules.waterline).collect();
-    let coast_distance_km = grid.distance_to(&water, COAST_DISTANCE_CAP_KM);
+    let open_water: Vec<bool> = relief.par_iter().map(|&r| r < rules.waterline).collect();
+    let coast_distance_km = grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM);
+    drop(open_water);
     if keep {
         debug.push(DebugLayer {
             name: "coast_distance",
@@ -735,12 +724,15 @@ pub fn generate_with_progress(
         temperature: &raw_temperature,
         noise: &moisture_noise,
     });
+    drop(moisture_noise);
     if keep {
         debug.push(DebugLayer {
             name: "precipitation",
             ramp: Ramp::Signed,
             values: precipitation,
         });
+    } else {
+        drop(precipitation);
     }
     if keep {
         debug.push(DebugLayer {
@@ -757,16 +749,21 @@ pub fn generate_with_progress(
     let (dt, dm, dvz) = (shift.temperature, shift.moisture, shift.volcanic);
     // Regional variability is part of the stored climate, so the exported
     // layers still explain every biome.
-    let mut moisture: Vec<f32> = raw_moisture
-        .iter()
+    // Shifted in place: the raw fields are not needed any more.
+    let mut moisture = raw_moisture;
+    moisture
+        .par_iter_mut()
         .zip(&variability_m)
-        .map(|(m, v)| (m + dm + regional_variability(*v, Field::Moisture)).clamp(-1.0, 1.0))
-        .collect();
-    let temperature: Vec<f32> = raw_temperature
-        .iter()
+        .for_each(|(m, v)| {
+            *m = (*m + dm + regional_variability(*v, Field::Moisture)).clamp(-1.0, 1.0)
+        });
+    let mut temperature = raw_temperature;
+    temperature
+        .par_iter_mut()
         .zip(&variability_t)
-        .map(|(t, v)| (t + dt + regional_variability(*v, Field::Temperature)).clamp(0.0, 1.0))
-        .collect();
+        .for_each(|(t, v)| {
+            *t = (*t + dt + regional_variability(*v, Field::Temperature)).clamp(0.0, 1.0)
+        });
     drop((variability_t, variability_m));
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
@@ -788,11 +785,14 @@ pub fn generate_with_progress(
     };
     // Deltas and estuaries at the mouths of the large rivers.
     let deltas = delta::outlets(&mut river_lines, &grid, &height_above_water, params.seed);
+    drop(height_above_water);
     // Valleys and floodplains along the rivers. Carving never creates water,
     // so the coast distance and the drainage stay valid.
     let waterline = params.sea_level + rules.waterline;
     let mut above: Vec<f32> = elevation.iter().map(|e| e - waterline).collect();
     let mut floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
+    // Only the flow and the lakes are needed from here on.
+    let (flow_km2, lake) = water.into_flow_and_lakes();
     let delta_plain = delta::plains(&deltas, &river_lines, &grid, &mut above, &mut moisture);
     for (f, d) in floodplain.iter_mut().zip(delta_plain) {
         *f = f.max(d);
@@ -823,8 +823,7 @@ pub fn generate_with_progress(
         debug.push(DebugLayer {
             name: "flow",
             ramp: Ramp::Unsigned,
-            values: water
-                .flow_km2
+            values: flow_km2
                 .iter()
                 .map(|f| (f + 1.0).log10() / FLOW_LOG_MAX)
                 .collect(),
@@ -847,8 +846,8 @@ pub fn generate_with_progress(
                 temperature: temperature[i],
                 volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
-                lake: water.lake[i],
-                river: !water.lake[i] && river_coverage[i] >= rivers::RIVER_COVERAGE,
+                lake: lake[i],
+                river: !lake[i] && river_coverage[i] >= rivers::RIVER_COVERAGE,
                 highland_offset: highland_offset[i],
             };
             planet.remap(rules.choose(input))
@@ -863,7 +862,7 @@ pub fn generate_with_progress(
             elevation,
             moisture,
             temperature,
-            flow_km2: water.flow_km2,
+            flow_km2,
             volcanic_zone,
             coast_distance_km,
             floodplain,

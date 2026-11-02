@@ -47,17 +47,28 @@ pub struct Hydrology {
     pub flow_km2: Vec<f32>,
     pub lake: Vec<bool>,
     pub river: Vec<bool>,
-    /// The pixel each land pixel drains to (None on the sea); see
-    /// [`Hydrology::receiver`]. 32-bit indices keep large maps in memory.
-    receivers: Vec<Option<u32>>,
+    /// The pixel each land pixel drains to ([`NO_RECEIVER`] on the sea);
+    /// see [`Hydrology::receiver`]. 32-bit indices keep large maps in memory.
+    receivers: Vec<u32>,
     /// The depression-filled surface the water flows on.
     pub filled: Vec<f32>,
 }
 
+/// Receiver of the pixels that drain nowhere (the sea). Maps are at most
+/// 16384 × 16384 pixels, so no pixel has this index.
+const NO_RECEIVER: u32 = u32::MAX;
+
 impl Hydrology {
     /// The pixel `i` drains to, or None on the sea.
     pub fn receiver(&self, i: usize) -> Option<usize> {
-        self.receivers[i].map(|j| j as usize)
+        let j = self.receivers[i];
+        (j != NO_RECEIVER).then_some(j as usize)
+    }
+
+    /// The flow and the lakes, dropping the routing layers once rivers
+    /// are traced and carved.
+    pub fn into_flow_and_lakes(self) -> (Vec<f32>, Vec<bool>) {
+        (self.flow_km2, self.lake)
     }
 }
 
@@ -187,11 +198,12 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     // run straight and parallel down a regular slope converge into the
     // noise's valleys and join, as river networks do.
     let route = routing_noise(grid, seed);
-    let receivers: Vec<Option<u32>> = (0..n)
+    drop(noise);
+    let receivers: Vec<u32> = (0..n)
         .into_par_iter()
         .map(|i| {
             if sea[i] {
-                return None;
+                return NO_RECEIVER;
             }
             let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
             let mut lower = [(0usize, 0.0f32, 0.0f32); 8];
@@ -214,7 +226,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
                 .iter()
                 .map(|&(j, slope, down)| (j, slope / steepest + ROUTE_WEIGHT * down / pull))
                 .max_by(|a, b| a.1.total_cmp(&b.1))
-                .map(|(j, _)| j as u32)
+                .map_or(NO_RECEIVER, |(j, _)| j as u32)
         })
         .collect();
     drop(route);
@@ -232,10 +244,9 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
         .collect();
     for &i in order.iter().rev() {
         let i = i as usize;
-        if let Some(j) = receivers[i].map(|j| j as usize)
-            && !sea[j]
-        {
-            flow_km2[j] += flow_km2[i];
+        let j = receivers[i];
+        if j != NO_RECEIVER && !sea[j as usize] {
+            flow_km2[j as usize] += flow_km2[i];
         }
     }
 
