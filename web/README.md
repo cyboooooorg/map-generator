@@ -24,9 +24,14 @@ mise run dev
 In the viewer:
 
 - **Globe / Map** switches between the globe and the flat map, with an animated morph.
-- **Grid** shows a 30° graticule.
 - Drag to rotate the globe or pan the map, scroll to zoom.
 - Click a point to see its coordinates, biome, elevation above the coastline, temperature, moisture and river flow.
+- **Display** (folded by default on narrow screens):
+  - **Layer**: biomes (the generated map), or elevation, temperature, moisture and river flow coloured on the GPU, with a legend.
+  - **Relief**: raises land above the coastline and shades its slopes; seas stay flat.
+  - **Sunlight**: lights the planet from a sun whose latitude follows the season and the world's axial tilt, with day, night and a terminator on both the globe and the map. Off, a headlight follows the camera.
+  - **Atmosphere**: blue rim around the globe. **Grid**: 30° graticule.
+  - **Hexes**: the hex grid of the world (majority biome per hex, outlines, a blue dot on river hexes), computed by the server for the chosen number of columns.
 
 **New world** opens the generation form. Each parameter is either random (left to the planet preset, then to the generator defaults) or fixed with its slider. Progress is streamed live from the server, and the new world opens when it is ready.
 
@@ -45,13 +50,13 @@ There is nothing to configure here: the server address is fixed in `vite.config.
 
 ## Code layout
 
-| Path                    | Content                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------ |
-| `src/lib/api/client.ts` | Typed API calls and the job progress stream                                    |
-| `src/lib/api/types/`    | API types generated from the Rust server by `cargo test` (ts-rs): do not edit  |
-| `src/lib/geo.ts`        | Coordinate conventions (texture, globe, flat map) and ray intersections        |
-| `src/lib/layers/`       | 16-bit layer decoding in a Web Worker (browsers decode PNGs to 8 bits)         |
-| `src/lib/viewer/`       | three.js view: one mesh morphing between plane and sphere in its vertex shader |
-| `src/components/`       | Svelte components: viewer, world list, generation form, point information      |
+| Path                    | Content                                                                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/lib/api/client.ts` | Typed API calls and the job progress stream                                                                                                                                                |
+| `src/lib/api/types/`    | API types generated from the Rust server by `cargo test` (ts-rs): do not edit                                                                                                              |
+| `src/lib/geo.ts`        | Coordinate conventions (texture, globe, flat map) and ray intersections                                                                                                                    |
+| `src/lib/layers/`       | 16-bit layer decoding in a Web Worker (browsers decode PNGs to 8 bits)                                                                                                                     |
+| `src/lib/viewer/`       | three.js view (`PlanetView.ts`): one mesh morphing between plane and sphere in its vertex shader; GLSL in `shaders.ts`, colour ramps shared by the shader and the legend in `colormaps.ts` |
+| `src/components/`       | Svelte components: viewer, world list, generation form, point information                                                                                                                  |
 
 TypeScript runs in its strictest settings (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), and `npm run check` fails on any warning.

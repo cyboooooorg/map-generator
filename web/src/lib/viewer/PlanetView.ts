@@ -1,30 +1,74 @@
-// three.js view of a world: one mesh that morphs between the flat map and the
-// globe in its vertex shader, a graticule drawn the same way, and picking.
-// Coordinate conventions are documented in ../geo.ts.
+// three.js view of a world: one mesh morphing between the flat map and the
+// globe in its vertex shader, data layers coloured on the GPU, relief, light
+// (headlight or sun), atmosphere, graticule, hex overlay and picking.
+// Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import {
+  AdditiveBlending,
+  BackSide,
   BufferGeometry,
+  ClampToEdgeWrapping,
   Color,
+  DataTexture,
   DoubleSide,
   Float32BufferAttribute,
+  HalfFloatType,
+  LinearFilter,
   LineSegments,
   Mesh,
   MOUSE,
+  NearestFilter,
   PerspectiveCamera,
   PlaneGeometry,
   Raycaster,
+  RepeatWrapping,
+  RGBAFormat,
   Scene,
   ShaderMaterial,
+  SphereGeometry,
   SRGBColorSpace,
   Texture,
   TextureLoader,
+  UnsignedByteType,
   Vector2,
   Vector3,
   WebGLRenderer,
+  type IUniform,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { type LonLat, planeToLonLat, rayPlaneZ0, raySphere, sphereToLonLat, type Vec3 } from '../geo';
+import type { HexMap } from '../api/types/HexMap';
+import {
+  type LonLat,
+  lonLatToSphere,
+  planeToLonLat,
+  rayPlaneZ0,
+  raySphere,
+  sphereToLonLat,
+  type Vec3,
+} from '../geo';
+import type { WorldLayers } from '../layers';
+import {
+  atmosphereFragment,
+  atmosphereVertex,
+  LAYER_IDS,
+  type Layer,
+  lineFragment,
+  surfaceFragment,
+  surfaceVertex,
+} from './shaders';
 
 export type ViewMode = 'globe' | 'map';
+
+/** Where the light comes from. */
+export type Lighting =
+  | { kind: 'headlight' }
+  | {
+      kind: 'sun';
+      /** Fraction of the year: 0 = northern spring equinox, 0.25 = northern summer solstice. */
+      season: number;
+      /** Longitude under the sun, in degrees. */
+      longitudeDeg: number;
+      axialTiltDeg: number;
+    };
 
 const MORPH_MS = 1200;
 /** Camera distances: the globe has radius 1, the map is 2π × π. */
@@ -32,50 +76,8 @@ const GLOBE_DISTANCE = 3.2;
 const MAP_DISTANCE = 5.5;
 /** Pointer moves larger than this (px) are drags, not clicks. */
 const CLICK_TOLERANCE = 5;
-
-// Shared by the surface and the graticule: positions come from the uv
-// coordinates, so both morph together. `uLift` raises lines above the surface.
-const vertexShader = /* glsl */ `
-  uniform float uMorph;
-  uniform float uLift;
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  const float PI = 3.141592653589793;
-  void main() {
-    vUv = uv;
-    float lon = uv.x * 2.0 * PI;
-    float lat = (uv.y - 0.5) * PI;
-    vec3 sphere = vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
-    vec3 plane = vec3((uv.x - 0.5) * 2.0 * PI, (uv.y - 0.5) * PI, 0.0);
-    vec3 normal = normalize(mix(vec3(0.0, 0.0, 1.0), sphere, uMorph));
-    vec3 position = mix(plane, sphere, uMorph) + normal * uLift;
-    vNormal = normalize(normalMatrix * normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-// Light follows the camera (a headlight slightly above and to the left), and
-// only shades the globe: the flat map keeps its colours untouched.
-const surfaceFragment = /* glsl */ `
-  uniform sampler2D uMap;
-  uniform float uMorph;
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  void main() {
-    vec4 colour = texture2D(uMap, vUv);
-    float light = 0.35 + 0.75 * max(dot(vNormal, normalize(vec3(-0.4, 0.5, 1.0))), 0.0);
-    gl_FragColor = vec4(colour.rgb * mix(1.0, light, uMorph), 1.0);
-    #include <colorspace_fragment>
-  }
-`;
-
-const lineFragment = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uOpacity;
-  void main() {
-    gl_FragColor = vec4(uColor, uOpacity);
-  }
-`;
+/** Headlight direction in view space: above and to the left of the camera. */
+const HEADLIGHT = new Vector3(-0.4, 0.5, 1).normalize();
 
 /** Graticule every `step` degrees, as line segments in uv space. */
 function graticule(step: number): BufferGeometry {
@@ -99,6 +101,30 @@ function graticule(step: number): BufferGeometry {
   return geometry;
 }
 
+function emptyTexture(): DataTexture {
+  const texture = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** Hex biome colours (rgb) and river flags (a) as a columns × rows texture. */
+function hexTexture(map: HexMap): DataTexture {
+  const colours = map.biomes.map((b) => {
+    const c = Number.parseInt(b.color.slice(1), 16);
+    return [(c >> 16) & 255, (c >> 8) & 255, c & 255] as const;
+  });
+  const data = new Uint8Array(map.columns * map.rows * 4);
+  map.cells.biome.forEach((id, i) => {
+    const [r, g, b] = colours[id] ?? [0, 0, 0];
+    data.set([r, g, b, map.cells.river[i] ? 255 : 0], i * 4);
+  });
+  const texture = new DataTexture(data, map.columns, map.rows, RGBAFormat, UnsignedByteType);
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export class PlanetView {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
@@ -106,8 +132,33 @@ export class PlanetView {
   private readonly controls: OrbitControls;
   private readonly surface: Mesh<PlaneGeometry, ShaderMaterial>;
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
+  private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>;
   private readonly resizeObserver: ResizeObserver;
+  /** Uniforms shared by the surface and the graticule (the same objects). */
+  private readonly shared = {
+    uMorph: { value: 1 } as IUniform<number>,
+    uRelief: { value: 0 } as IUniform<number>,
+    uCoast: { value: 0 } as IUniform<number>,
+    uHasData: { value: 0 } as IUniform<number>,
+    uData: { value: emptyTexture() } as IUniform<Texture>,
+  };
+  /** Surface-only uniforms. */
+  private readonly u = {
+    uLift: { value: 0 } as IUniform<number>,
+    uMap: { value: emptyTexture() } as IUniform<Texture>,
+    uLayer: { value: LAYER_IDS.biomes as number } as IUniform<number>,
+    uTexel: { value: new Vector2(1 / 1024, 1 / 512) } as IUniform<Vector2>,
+    uLightMode: { value: 0 } as IUniform<number>,
+    uLightDir: { value: new Vector3(0, 0, 1) } as IUniform<Vector3>,
+    uSunDir: { value: new Vector3(0, 0, 1) } as IUniform<Vector3>,
+    uHexOn: { value: 0 } as IUniform<number>,
+    uHex: { value: emptyTexture() } as IUniform<Texture>,
+    uHexGrid: { value: [1, 1, 1, 1] } as IUniform<number[]>,
+    uMapSize: { value: new Vector2(1, 1) } as IUniform<Vector2>,
+  };
+  private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
+  private atmosphereOn = true;
   private mode: ViewMode = 'globe';
   private morph = 1;
   private animation: { from: number; to: number; start: number } | null = null;
@@ -122,26 +173,27 @@ export class PlanetView {
     this.scene.background = new Color('#05070d');
 
     this.surface = new Mesh(
-      new PlaneGeometry(1, 1, 360, 180),
+      // 2 vertices per degree: enough for the relief to follow the data.
+      new PlaneGeometry(1, 1, 720, 360),
       new ShaderMaterial({
-        vertexShader,
+        vertexShader: surfaceVertex,
         fragmentShader: surfaceFragment,
-        uniforms: { uMap: { value: null }, uMorph: { value: 1 }, uLift: { value: 0 } },
+        uniforms: { ...this.shared, ...this.u },
         side: DoubleSide,
       }),
     );
-    // The plane geometry provides uv in [0, 1]; positions come from the shader.
+    // Positions come from the shader: the geometry bounds are meaningless.
     this.surface.frustumCulled = false;
     this.scene.add(this.surface);
 
     this.grid = new LineSegments(
       graticule(30),
       new ShaderMaterial({
-        vertexShader,
+        vertexShader: surfaceVertex,
         fragmentShader: lineFragment,
         uniforms: {
-          uMorph: { value: 1 },
-          uLift: { value: 0.002 },
+          ...this.shared,
+          uLift: { value: 0.003 },
           uColor: { value: new Color('#ffffff') },
           uOpacity: { value: 0.25 },
         },
@@ -152,6 +204,25 @@ export class PlanetView {
     this.grid.frustumCulled = false;
     this.grid.visible = false;
     this.scene.add(this.grid);
+
+    this.atmosphere = new Mesh(
+      new SphereGeometry(1.06, 96, 48),
+      new ShaderMaterial({
+        vertexShader: atmosphereVertex,
+        fragmentShader: atmosphereFragment,
+        uniforms: {
+          uOpacity: this.atmosphereOpacity,
+          uColor: { value: new Color('#5c9dff') },
+          uLightMode: this.u.uLightMode,
+          uSunDir: this.u.uSunDir,
+        },
+        side: BackSide,
+        blending: AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    this.scene.add(this.atmosphere);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
@@ -173,7 +244,68 @@ export class PlanetView {
     texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     this.texture?.dispose();
     this.texture = texture;
-    this.surface.material.uniforms['uMap']!.value = texture;
+    this.u.uMap.value = texture;
+  }
+
+  /**
+   * Uploads the decoded layers, or clears them with null. `coast` is the
+   * elevation of the coastline: the world's sea level plus its preset waterline.
+   */
+  setData(layers: WorldLayers | null, coast: number): void {
+    this.shared.uData.value.dispose();
+    if (!layers) {
+      this.shared.uData.value = emptyTexture();
+      this.shared.uHasData.value = 0;
+      return;
+    }
+    const texture = new DataTexture(layers.surface, layers.width, layers.height, RGBAFormat, HalfFloatType);
+    texture.magFilter = LinearFilter;
+    texture.minFilter = LinearFilter;
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = ClampToEdgeWrapping;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    this.shared.uData.value = texture;
+    this.shared.uHasData.value = 1;
+    this.shared.uCoast.value = coast;
+    this.u.uTexel.value.set(1 / layers.width, 1 / layers.height);
+    this.u.uMapSize.value.set(layers.width, layers.height);
+  }
+
+  setLayer(layer: Layer): void {
+    this.u.uLayer.value = LAYER_IDS[layer];
+  }
+
+  /** Relief exaggeration in [0, 1]: 0 is flat. */
+  setRelief(relief: number): void {
+    this.shared.uRelief.value = relief;
+  }
+
+  setLighting(lighting: Lighting): void {
+    this.u.uLightMode.value = lighting.kind === 'sun' ? 1 : 0;
+    if (lighting.kind === 'sun') {
+      const declination = ((lighting.axialTiltDeg * Math.PI) / 180) * Math.sin(2 * Math.PI * lighting.season);
+      const [x, y, z] = lonLatToSphere({ lon: (lighting.longitudeDeg * Math.PI) / 180, lat: declination });
+      this.u.uSunDir.value.set(x, y, z);
+    }
+  }
+
+  setAtmosphere(visible: boolean): void {
+    this.atmosphereOn = visible;
+  }
+
+  /** Shows a hex grid over the map (majority biome per hex), or hides it with null. */
+  setHex(map: HexMap | null): void {
+    this.u.uHex.value.dispose();
+    if (!map) {
+      this.u.uHex.value = emptyTexture();
+      this.u.uHexOn.value = 0;
+      return;
+    }
+    this.u.uHex.value = hexTexture(map);
+    this.u.uHexGrid.value = [map.columns, map.rows, map.hex_width_px, map.hex_size_px];
+    this.u.uMapSize.value.set(map.source.width, map.source.height);
+    this.u.uHexOn.value = 1;
   }
 
   setMode(mode: ViewMode): void {
@@ -199,10 +331,12 @@ export class PlanetView {
     this.canvas.removeEventListener('pointerup', this.handlePointerUp);
     this.controls.dispose();
     this.texture?.dispose();
-    this.surface.geometry.dispose();
-    this.surface.material.dispose();
-    this.grid.geometry.dispose();
-    this.grid.material.dispose();
+    this.shared.uData.value.dispose();
+    this.u.uHex.value.dispose();
+    for (const object of [this.surface, this.grid, this.atmosphere]) {
+      object.geometry.dispose();
+      object.material.dispose();
+    }
     this.renderer.dispose();
   }
 
@@ -239,9 +373,12 @@ export class PlanetView {
         this.animation = null;
       }
     }
-    this.surface.material.uniforms['uMorph']!.value = this.morph;
-    this.grid.material.uniforms['uMorph']!.value = this.morph;
+    this.shared.uMorph.value = this.morph;
+    // The atmosphere only makes sense around the globe: fade it with the morph.
+    this.atmosphere.visible = this.atmosphereOn && this.morph > 0.01;
+    this.atmosphereOpacity.value = this.morph ** 3;
     this.controls.update();
+    this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -271,6 +408,8 @@ export class PlanetView {
     this.onPick(this.mode === 'globe' ? this.pickGlobe(origin, direction) : this.pickMap(origin, direction));
   };
 
+  // Picking ignores the relief displacement: at most a few percent of the
+  // radius, which shifts the picked point by a fraction of a degree.
   private pickGlobe(origin: Vec3, direction: Vec3): LonLat | null {
     const t = raySphere(origin, direction, 1);
     if (t === null) {
