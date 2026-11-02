@@ -448,54 +448,76 @@ fn intersection(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> [f64; 2] 
     [a[0] + t * r[0], a[1] + t * r[1]]
 }
 
-/// Ends tributaries at the first river they cross before their own mouth:
-/// where two tributaries join their parent side by side, their snapped ends
-/// can cross. The truncated line then flows into the river it met.
-fn end_at_first_crossing(lines: &mut [RiverLine], tail: f64) {
+/// Ends every river at the first other river it crosses, which it then
+/// joins: two tributaries snapped side by side onto their parent, a meander
+/// swinging across the parent upstream of the confluence, or two rivers
+/// reaching the coast at the same place.
+///
+/// A line is only cut downstream of its own tributaries' mouths, so none of
+/// them is left dangling; a line joined by a cut protects the joining point in
+/// turn. The very end of a tributary, which lies on its parent, is not a
+/// crossing.
+fn end_at_first_crossing(lines: &mut [RiverLine]) {
     let index = SegmentIndex::new(lines);
-    // Lines that receive tributaries keep their length, except for a short
-    // overshoot across their own parent (a few samples at the very end).
-    let mut has_children = vec![false; lines.len()];
+    // First segment of each line that may be cut: past its tributaries' mouths.
+    let mut protected = vec![0usize; lines.len()];
     for line in lines.iter() {
         if let Some(p) = line.parent {
-            has_children[p] = true;
+            let k = nearest_point(&lines[p].points, line.points[line.points.len() - 1]);
+            protected[p] = protected[p].max(k);
         }
     }
     for id in 0..lines.len() {
-        let Some(parent) = lines[id].parent else {
-            continue;
-        };
-        let reach = if has_children[id] { tail / 12.0 } else { tail };
-        // Only the confluence tail, where the snapping moved the line.
-        let points = &lines[id].points;
-        let mut from_mouth = 0.0;
-        let mut first = points.len().saturating_sub(1);
-        while first > 0 && from_mouth < reach {
-            let (a, b) = (points[first - 1], points[first]);
-            from_mouth += ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
-            first -= 1;
-        }
+        let last = lines[id].points.len().saturating_sub(1);
         let mut cut = None;
-        for s in first..lines[id].points.len().saturating_sub(1) {
+        for s in protected[id]..last {
             let (a, b) = (lines[id].points[s], lines[id].points[s + 1]);
             let hit = index
                 .crossings(lines, id, s, a, b)
                 .into_iter()
-                .find(|&(other, _, _)| other != id && (!has_children[id] || other == parent));
-            if let Some((other, _, point)) = hit {
-                cut = Some((s, other, point));
+                .find(|&(other, _, _)| {
+                    other != id
+                        && !(lines[id].parent == Some(other) && s + 1 == last)
+                        && !flows_into(lines, other, id)
+                });
+            if let Some((other, t, point)) = hit {
+                cut = Some((s, other, t, point));
                 break;
             }
         }
-        if let Some((s, other, point)) = cut {
+        if let Some((s, other, t, point)) = cut {
             let line = &mut lines[id];
             line.points.truncate(s + 1);
             line.flow_km2.truncate(s + 1);
             line.points.push(point);
             line.flow_km2.push(line.flow_km2[s]);
             line.parent = Some(other);
+            line.mouth = Mouth::River;
+            protected[other] = protected[other].max(t + 1);
         }
     }
+}
+
+/// Does line `from` reach line `to` through its chain of parents? Joining
+/// such a line would make the two rivers flow into each other.
+fn flows_into(lines: &[RiverLine], from: usize, to: usize) -> bool {
+    let mut line = from;
+    for _ in 0..lines.len() {
+        match lines[line].parent {
+            Some(p) if p == to => return true,
+            Some(p) => line = p,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// Index of the point of `points` closest to `p`.
+fn nearest_point(points: &[[f64; 2]], p: [f64; 2]) -> usize {
+    let distance = |q: &[f64; 2]| (q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2);
+    (0..points.len())
+        .min_by(|&i, &j| distance(&points[i]).total_cmp(&distance(&points[j])))
+        .unwrap_or(0)
 }
 
 /// Smooths the traced lines and adds meanders.
@@ -675,7 +697,7 @@ pub fn shape(lines: &[RiverLine], grid: &Grid, filled: &[f32], seed: u32) -> Vec
             mouth: line.mouth,
         });
     }
-    end_at_first_crossing(&mut out, 48.0 * k);
+    end_at_first_crossing(&mut out);
     out
 }
 

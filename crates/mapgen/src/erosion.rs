@@ -5,18 +5,42 @@
 //! down, evaporates, or reaches the sea. Thousands of droplets carve valleys
 //! into the ridges and leave fans and deltas at their feet.
 //!
-//! The simulation runs on a fixed-size grid ([`EROSION_WIDTH`] ×
-//! [`EROSION_HEIGHT`], or the map size if smaller), whatever the output
-//! resolution, so a world keeps the
-//! same valleys at every size and the cost stays bounded. The resulting height
-//! change is then interpolated back onto the full-resolution elevation.
+//! The simulation runs on a coarser grid than the map: one cell per
+//! [`CELL_PX`] × [`CELL_PX`] map pixels, at least [`EROSION_WIDTH`] ×
+//! [`EROSION_HEIGHT`] (or the map size if smaller) and at most
+//! [`MAX_EROSION_WIDTH`] × [`MAX_EROSION_HEIGHT`], so the cost stays bounded.
+//! The resulting height change is smoothed back onto the full-resolution
+//! elevation with a cubic B-spline, and never moves a pixel across the
+//! waterline: at 16 map pixels per cell, a linear interpolation drew a grid of
+//! pits and bumps that flipped flat lowlands between land and sea.
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
+use rayon::prelude::*;
 
-/// Width of the erosion grid in pixels.
+/// Smallest erosion grid width, in cells.
 pub const EROSION_WIDTH: u32 = 512;
-/// Height of the erosion grid in pixels.
+/// Smallest erosion grid height, in cells.
 pub const EROSION_HEIGHT: u32 = 256;
+/// Largest erosion grid width, in cells.
+pub const MAX_EROSION_WIDTH: u32 = 2048;
+/// Largest erosion grid height, in cells.
+pub const MAX_EROSION_HEIGHT: u32 = 1024;
+/// Map pixels per erosion cell side, between the two grid bounds.
+pub const CELL_PX: u32 = 4;
+
+/// Share of a pixel's height above (or depth below) the waterline that
+/// erosion may remove (or deposition fill): below 1, so no pixel changes
+/// between land and sea.
+const WATERLINE_MARGIN: f32 = 0.9;
+
+/// Erosion grid size for a `width` × `height` map.
+pub fn grid_size(width: u32, height: u32) -> (u32, u32) {
+    let side = |px: u32, min: u32, max: u32| (px / CELL_PX).clamp(min, max).min(px);
+    (
+        side(width, EROSION_WIDTH, MAX_EROSION_WIDTH),
+        side(height, EROSION_HEIGHT, MAX_EROSION_HEIGHT),
+    )
+}
 
 /// Droplet physics, after Hans Theobald Beyer's "Implementation of a method
 /// for hydraulic erosion" (2015).
@@ -204,11 +228,8 @@ pub fn erode(
     seed: u32,
 ) -> Vec<f32> {
     let (w, h) = (width as usize, height as usize);
-    // Never upsample: small maps erode at their own resolution.
-    let (ew, eh) = (
-        EROSION_WIDTH.min(width) as usize,
-        EROSION_HEIGHT.min(height) as usize,
-    );
+    let (ew, eh) = grid_size(width, height);
+    let (ew, eh) = (ew as usize, eh as usize);
 
     // Box-average the full-resolution map down to the erosion grid.
     let mut sum = vec![0.0f32; ew * eh];
@@ -233,26 +254,74 @@ pub fn erode(
     };
     let droplets = (strength.max(0.0) * (ew * eh) as f32) as usize;
     simulate(&mut map, waterline, droplets, seed as u64);
+    let delta: Vec<f32> = map.z.iter().zip(&original).map(|(a, b)| a - b).collect();
 
-    // Interpolate the height change back onto every full-resolution pixel.
-    let delta = HeightMap {
-        w: ew,
-        h: eh,
-        z: map.z.iter().zip(&original).map(|(a, b)| a - b).collect(),
-    };
+    // Spread the height change over every full-resolution pixel with a cubic
+    // B-spline: smooth (C2) across cell borders, where a bilinear
+    // interpolation leaves creases that draw the grid.
+    let columns: Vec<(i64, [f32; 4])> = (0..w)
+        .map(|x| spline_taps((x as f32 + 0.5) * ew as f32 / w as f32 - 0.5))
+        .collect();
     let mut change = vec![0.0f32; w * h];
-    for y in 0..h {
-        // Pixel centre in erosion-grid coordinates (cell centres at +0.5).
-        let ey = (y as f32 + 0.5) * eh as f32 / h as f32 - 0.5;
-        let fade = polar_fade(y, h);
-        for x in 0..w {
-            let ex = (x as f32 + 0.5) * ew as f32 / w as f32 - 0.5;
-            let d = delta.sample(ex, ey).0 * fade;
-            change[y * w + x] = d;
-            elevation[y * w + x] = (elevation[y * w + x] + d).clamp(-1.0, 1.0);
-        }
-    }
+    elevation
+        .par_chunks_mut(w)
+        .zip(change.par_chunks_mut(w))
+        .enumerate()
+        .for_each_init(
+            || vec![0.0f32; ew],
+            |row, (y, (elevation, change))| {
+                let fade = polar_fade(y, h);
+                if fade == 0.0 {
+                    return;
+                }
+                // Blend the 4 grid rows around this pixel row first.
+                let (y0, wy) = spline_taps((y as f32 + 0.5) * eh as f32 / h as f32 - 0.5);
+                row.fill(0.0);
+                for (k, &wgt) in wy.iter().enumerate() {
+                    let gy = (y0 + k as i64).clamp(0, eh as i64 - 1) as usize;
+                    for (r, d) in row.iter_mut().zip(&delta[gy * ew..(gy + 1) * ew]) {
+                        *r += wgt * d;
+                    }
+                }
+                for ((e, c), (x0, wx)) in elevation.iter_mut().zip(change.iter_mut()).zip(&columns)
+                {
+                    let mut d = 0.0;
+                    for (k, &wgt) in wx.iter().enumerate() {
+                        d += wgt * row[(x0 + k as i64).rem_euclid(ew as i64) as usize];
+                    }
+                    d *= fade;
+                    // Keep every pixel on its side of the waterline: the grid
+                    // average can stay above the sea while some of its pixels
+                    // dip below, and deposits must not raise shoals into islands.
+                    d = if *e >= waterline {
+                        d.max((waterline - *e) * WATERLINE_MARGIN)
+                    } else {
+                        d.min((waterline - *e) * WATERLINE_MARGIN)
+                    };
+                    *c = d;
+                    *e = (*e + d).clamp(-1.0, 1.0);
+                }
+            },
+        );
     change
+}
+
+/// First grid index and weights of the uniform cubic B-spline at `pos`, in
+/// grid coordinates (cell centres on integers).
+fn spline_taps(pos: f32) -> (i64, [f32; 4]) {
+    let i = pos.floor();
+    let t = pos - i;
+    let (t2, t3) = (t * t, t * t * t);
+    let u = 1.0 - t;
+    (
+        i as i64 - 1,
+        [
+            u * u * u / 6.0,
+            (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0,
+            (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0,
+            t3 / 6.0,
+        ],
+    )
 }
 
 #[cfg(test)]
@@ -290,6 +359,46 @@ mod tests {
             if *b >= 0.0 {
                 assert!(*a >= -1e-3, "land dug below the waterline: {b} -> {a}");
             }
+        }
+    }
+
+    #[test]
+    fn no_pixel_crosses_the_waterline() {
+        // A wavy lowland around the waterline, finer than the erosion grid.
+        let (w, h) = (256u32, 128u32);
+        let mut map: Vec<f32> = (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let (fx, fy) = (x as f32 / w as f32, y as f32 / h as f32);
+                0.3 - 1.2 * ((fx - 0.5).powi(2) + (fy - 0.5).powi(2)).sqrt()
+                    + 0.05 * (x as f32 * 0.9).sin() * (y as f32 * 0.7).cos()
+            })
+            .collect();
+        let before = map.clone();
+        erode(&mut map, w, h, 0.0, 2.0, 4);
+        for (b, a) in before.iter().zip(&map) {
+            assert_eq!(
+                *b >= 0.0,
+                *a >= 0.0,
+                "pixel crossed the waterline: {b} -> {a}"
+            );
+        }
+    }
+
+    #[test]
+    fn grid_follows_the_map_size_within_bounds() {
+        assert_eq!(grid_size(1920, 1080), (512, 270));
+        assert_eq!(grid_size(4096, 2048), (1024, 512));
+        assert_eq!(grid_size(8192, 4096), (2048, 1024));
+        assert_eq!(grid_size(16384, 8192), (2048, 1024));
+        assert_eq!(grid_size(128, 64), (128, 64));
+    }
+
+    #[test]
+    fn spline_weights_sum_to_one() {
+        for pos in [0.0, 0.25, 3.5, 7.99] {
+            let (_, wgt) = spline_taps(pos);
+            assert!((wgt.iter().sum::<f32>() - 1.0).abs() < 1e-6);
         }
     }
 
