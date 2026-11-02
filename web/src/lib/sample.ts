@@ -6,6 +6,7 @@ import type { WorldMetadata } from './api/types/WorldMetadata';
 import { lonLatToPixel, type LonLat } from './geo';
 import { hexAt, type HexCell } from './hex';
 import type { WorldLayers } from './layers';
+import { EXTRA, halfAt, quantizedAt, SURFACE } from './layers/decode';
 import type { RiverHit, RiverIndex } from './rivers';
 
 export interface PointSample {
@@ -34,21 +35,21 @@ export function samplePoint(point: LonLat, meta: WorldMetadata, layers: WorldLay
   const [x, y] = lonLatToPixel(point, layers.width, layers.height);
   const i = y * layers.width + x;
   const extra = layers.extra;
-  const coastKm = extra ? (extra.coastKm[i] ?? 0) : null;
+  const coastKm = extra ? halfAt(extra.packed, i, EXTRA.coastKm) : null;
   return {
     x,
     y,
     biome: meta.biomes[layers.biomes[i] ?? 0],
-    relief: (layers.elevation[i] ?? 0) - coastline(meta),
-    temperature: layers.temperature[i] ?? 0,
-    moisture: layers.moisture[i] ?? 0,
-    flowKm2: layers.flowKm2[i] ?? 0,
+    relief: quantizedAt(layers.elevation, i) - coastline(meta),
+    temperature: halfAt(layers.surface, i, SURFACE.temperature),
+    moisture: halfAt(layers.surface, i, SURFACE.moisture),
+    flowKm2: Math.max(0, 10 ** halfAt(layers.surface, i, SURFACE.logFlow) - 1),
     coastKm,
     coastCapped: extra !== null && coastKm !== null && coastKm >= extra.coastMaxKm * 0.999,
-    volcanic: extra ? (extra.volcanic[i] ?? 0) : null,
+    volcanic: extra ? halfAt(extra.packed, i, EXTRA.volcanic) : null,
     // Version 2 worlds have no floodplain layer: decoded as zeros, shown as missing.
-    floodplain: extra && meta.layers.floodplain ? (extra.floodplain[i] ?? 0) : null,
-    highlandOffset: extra ? (extra.highlandOffset[i] ?? 0) : null,
+    floodplain: extra && meta.layers.floodplain ? halfAt(extra.packed, i, EXTRA.floodplain) : null,
+    highlandOffset: extra ? halfAt(extra.packed, i, EXTRA.highlandOffset) : null,
   };
 }
 

@@ -66,6 +66,8 @@ In the sidebar:
 
 On narrow screens (760 px wide or less), the world list and the viewer take the whole screen one at a time: **Worlds** and **Viewer** in the header switch between them. Picking a world opens the viewer, and **New world** opens the form, whose buttons stay pinned to the bottom of the screen while the parameters scroll.
 
+A decoded world takes about 11 bytes per pixel in the page (19 with the layers of format version 2 and later), about 0.6 GB for 8192 × 4096.
+
 For everyday use, run the whole app in Docker instead: see "Web app" in the repository README.
 
 ## Checks
@@ -86,7 +88,7 @@ There is nothing to configure here: the server address is fixed in `vite.config.
 | `src/lib/api/client.ts`                   | Typed API calls and the job progress stream                                                                                                                                                |
 | `src/lib/api/types/`                      | API types generated from the Rust server by `cargo test` (ts-rs): do not edit                                                                                                              |
 | `src/lib/geo.ts`                          | Coordinate conventions (texture, globe, flat map) and ray intersections                                                                                                                    |
-| `src/lib/layers/`                         | 16-bit layer decoding in a Web Worker (browsers decode PNGs to 8 bits)                                                                                                                     |
+| `src/lib/layers/`                         | 16-bit layer decoding and biome statistics in a Web Worker (browsers decode PNGs to 8 bits); layers stay packed as half floats, as the GPU takes them, and are converted on read           |
 | `src/lib/viewer/`                         | three.js view (`PlanetView.ts`): one mesh morphing between plane and sphere in its vertex shader; GLSL in `shaders.ts`, colour ramps shared by the shader and the legend in `colormaps.ts` |
 | `src/lib/viewer/TileLayer.ts`, `tiles.ts` | Deep zoom: quadtree level selection (screen-space error, frustum and horizon culling), tile loading (priority queue, abort, GPU cache) and detail patches                                  |
 | `src/lib/world.svelte.ts`                 | Loading of one shown world: metadata, decoded layers, biome statistics (`stats.ts`) and the river index (`rivers.ts`)                                                                      |

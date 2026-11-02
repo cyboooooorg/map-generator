@@ -1,6 +1,9 @@
-// Web Worker: fetches and decodes the layers of one world off the main thread.
-import { decodeLayers, EXTRA_FILES, type LayerFiles } from './decode';
+// Web Worker: fetches and decodes the layers of one world off the main
+// thread, and computes its biome statistics there too (a pass over every
+// pixel).
+import { decodeLayers, EXTRA_FILES, type LayerFiles, type WorldLayers } from './decode';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
+import { worldStats, type WorldStats } from '../stats';
 
 export interface WorkerRequest {
   /** Base URL of the world's raw_data/ directory, ending with '/'. */
@@ -9,7 +12,7 @@ export interface WorkerRequest {
 }
 
 export type WorkerResponse =
-  | { ok: true; layers: import('./decode').WorldLayers }
+  | { ok: true; layers: WorldLayers; stats: WorldStats }
   | { ok: false; error: string };
 
 async function fetchFile(url: string): Promise<ArrayBuffer> {
@@ -47,18 +50,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }),
     );
     const layers = decodeLayers(meta, files);
-    const response: WorkerResponse = { ok: true, layers };
-    const transfer: ArrayBufferLike[] = [
-      layers.elevation.buffer,
-      layers.moisture.buffer,
-      layers.temperature.buffer,
-      layers.flowKm2.buffer,
-      layers.biomes.buffer,
-      layers.surface.buffer,
-    ];
+    const stats = worldStats(layers.biomes, layers.width, layers.height, meta.biomes, meta.circumference_km);
+    const response: WorkerResponse = { ok: true, layers, stats };
+    const transfer: ArrayBufferLike[] = [layers.elevation.data.buffer, layers.biomes.buffer, layers.surface.buffer];
     if (layers.extra) {
-      const e = layers.extra;
-      transfer.push(e.volcanic.buffer, e.coastKm.buffer, e.highlandOffset.buffer, e.floodplain.buffer, e.packed.buffer);
+      transfer.push(layers.extra.packed.buffer);
     }
     self.postMessage(response, { transfer: transfer as Transferable[] });
   } catch (error) {
