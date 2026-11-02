@@ -133,7 +133,7 @@ mise run logs    # follow its logs
 mise run down    # stop it
 ```
 
-The container reads and writes `worlds/` of this checkout (worlds generated with `mise run gen` show up too, as long as they have `raw_data/`) and reads the preset files of `presets/`: any `.toml` preset added there is offered in the form, no rebuild needed. Generated files keep the host owner.
+The container reads and writes `worlds/` of this checkout (worlds generated with `mise run gen` show up too, as long as they have `raw_data/`) and reads the preset files of `presets/`: any `.toml` preset added there is offered in the form without a rebuild, once the server restarts (`docker restart map-generator`): it reads the presets at startup. Generated files keep the host owner.
 
 | Piece     | Technology                               | Location         |
 | --------- | ---------------------------------------- | ---------------- |
