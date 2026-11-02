@@ -20,7 +20,7 @@ use crate::api::{
     WorldSummary,
 };
 use crate::catalog::Catalog;
-use crate::tiles::{self, TileCache};
+use crate::tiles::{self, TileCache, TileError};
 use crate::worlds;
 use axum::extract::{Path as UrlPath, Query, State};
 use axum::http::{StatusCode, header};
@@ -94,6 +94,9 @@ pub struct Config {
     pub static_dir: PathBuf,
     /// Largest map accepted, in pixels (see [`DEFAULT_MAX_PIXELS`]).
     pub max_pixels: u64,
+    /// Memory budget of the worlds loaded for tiles and hex grids (see
+    /// [`tiles`]).
+    pub tile_cache_bytes: usize,
 }
 
 pub struct AppState {
@@ -106,7 +109,19 @@ pub struct AppState {
     /// Worlds being generated, to refuse a second job writing the same directory.
     pending: Mutex<Vec<String>>,
     tiles: TileCache,
+    /// Tiles rendered at once (each one uses every core). A request waits
+    /// for its turn without holding a thread, so an abandoned one (the
+    /// viewer moved on) is dropped before it renders.
+    renders: Semaphore,
+    /// Hex grids resampled at once: each one holds a histogram per hex.
+    hex_grids: Semaphore,
 }
+
+/// Tiles rendered at once.
+const CONCURRENT_RENDERS: usize = 4;
+/// Seconds after which a client should retry a tile refused while a
+/// generation runs.
+const RETRY_AFTER_S: &str = "10";
 
 type Shared = Arc<AppState>;
 
@@ -129,7 +144,9 @@ pub fn router(config: Config) -> Router {
         next_job: AtomicU64::new(1),
         queue: Semaphore::new(1),
         pending: Mutex::new(Vec::new()),
-        tiles: TileCache::default(),
+        tiles: TileCache::new(config.tile_cache_bytes),
+        renders: Semaphore::new(CONCURRENT_RENDERS),
+        hex_grids: Semaphore::new(1),
         config: config.clone(),
     });
     let spa = ServeDir::new(&config.static_dir)
@@ -218,26 +235,35 @@ async fn tile(
     if !worlds::is_valid_id(&id) || !tile.is_valid() {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
     }
+    let revision = world_revision(&state, &id).await?;
     let dir = state.config.worlds_dir.join(&id);
-    let summary = {
-        let worlds_dir = state.config.worlds_dir.clone();
-        let id = id.clone();
-        tokio::task::spawn_blocking(move || worlds::summary(&worlds_dir, &id))
-            .await
-            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    }
-    .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no world {id}")))?;
-    let world = state
-        .tiles
-        .world(&dir, &id, summary.modified_ms)
+    let world = match state.tiles.world(&dir, &id, revision).await {
+        Ok(world) => world,
+        Err(TileError::Busy) => {
+            return Ok((
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(header::RETRY_AFTER, RETRY_AFTER_S)],
+                Json(ApiError {
+                    error: "a generation is running: tiles are paused".into(),
+                }),
+            )
+                .into_response());
+        }
+        Err(TileError::Failed(e)) => return Err(Failure(StatusCode::INTERNAL_SERVER_ERROR, e)),
+    };
+    // Wait for a turn here, not on a blocking thread: a request the viewer
+    // abandons meanwhile is dropped without rendering.
+    let _turn = state
+        .renders
+        .acquire()
         .await
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let png = tokio::task::spawn_blocking(move || tiles::render_png(&world, tile))
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     // A URL naming the current revision never changes: cache it for good.
-    let cache = if query.rev == Some(summary.modified_ms) {
+    let cache = if query.rev == Some(revision) {
         "public, max-age=31536000, immutable"
     } else {
         "no-cache"
@@ -252,6 +278,19 @@ async fn tile(
         .into_response())
 }
 
+/// The revision of a world (see [`worlds::revision`]), or 404.
+async fn world_revision(state: &AppState, id: &str) -> Result<u64, Failure> {
+    let worlds_dir = state.config.worlds_dir.clone();
+    let owned = id.to_string();
+    tokio::task::spawn_blocking(move || worlds::revision(&worlds_dir, &owned))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no raw data for {id}")))
+}
+
+/// Resamples a world onto a hex grid from the world loaded for the tiles
+/// (loading it if needed). Nothing is written: the `hexgrid` tool writes
+/// `hex/hex.json` and `hex/hex.png`.
 async fn hex_grid(
     State(state): State<Shared>,
     UrlPath(id): UrlPath<String>,
@@ -270,19 +309,31 @@ async fn hex_grid(
             ),
         ));
     }
-    let dir = state.config.worlds_dir.join(&id);
-    if !dir.join("raw_data").is_dir() {
-        return Err(Failure(
-            StatusCode::NOT_FOUND,
-            format!("no raw data for {id}"),
-        ));
-    }
+    let revision = world_revision(&state, &id).await?;
     let river_flow = request.river_flow_km2.unwrap_or(DEFAULT_RIVER_FLOW_KM2);
-    tokio::task::spawn_blocking(move || mapgen::hex::resample(&dir, request.columns, river_flow))
+    let _turn = state
+        .hex_grids
+        .acquire()
         .await
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .map(Json)
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let dir = state.config.worlds_dir.join(&id);
+    // While a generation runs, the world is loaded for this request only.
+    let world = state
+        .tiles
+        .world_or_load(&dir, &id, revision)
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    tokio::task::spawn_blocking(move || {
+        hex::resample_world(
+            world.world(),
+            |i| world.is_river(i),
+            request.columns,
+            river_flow,
+        )
+    })
+    .await
+    .map(Json)
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 async fn create_world(
@@ -349,8 +400,6 @@ async fn create_world(
         );
     }
 
-    // Worlds loaded for the deep zoom would add to the generation's peak.
-    state.tiles.clear();
     let task_state = state.clone();
     let task_world = world_id.clone();
     tokio::spawn(async move {
@@ -377,6 +426,9 @@ async fn create_world(
             finish(JobStatus::Cancelled);
             return;
         }
+        // Worlds loaded for the tiles would add to the generation's peak:
+        // free them, and load none until it ends.
+        let paused_tiles = task_state.tiles.suspend();
         let worlds_dir = task_state.config.worlds_dir.clone();
         let progress = tx.clone();
         let thread_cancel = cancel.clone();
@@ -432,6 +484,9 @@ async fn create_world(
                 error: format!("generation crashed: {e}"),
             },
         };
+        // Tiles resume before the job reports its end, so a viewer opening
+        // the new world is served at once.
+        drop(paused_tiles);
         finish(status);
     });
 
@@ -538,6 +593,7 @@ mod tests {
             presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets")),
             static_dir: root.join("static"),
             max_pixels: DEFAULT_MAX_PIXELS,
+            tile_cache_bytes: tiles::DEFAULT_BUDGET_BYTES,
         }
     }
 
@@ -649,6 +705,40 @@ mod tests {
             let (status, _) = call(&app, "GET", bad, None).await;
             assert!(status.is_client_error(), "{bad} gave {status}");
         }
+
+        // While a generation runs, tiles are refused for later and the hex
+        // grid still works.
+        let big = r#"{"planet": "barren", "seed": 9, "width": 512, "height": 256}"#;
+        let (_, body) = call(&app, "POST", "/api/worlds", Some(big)).await;
+        let big: serde_json::Value = serde_json::from_str(&body).unwrap();
+        loop {
+            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
+            if list.contains("\"status\":\"running\"") {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let request = Request::get("/api/worlds/frozen-3/tiles/1/0/0")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.headers().contains_key(header::RETRY_AFTER));
+        let (status, _) = call(
+            &app,
+            "POST",
+            "/api/worlds/frozen-3/hex",
+            Some(r#"{"columns": 8}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let job = big["job_id"].as_str().unwrap();
+        call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
+        call(&app, "GET", &format!("/api/jobs/{job}/events"), None).await;
+        let (status, _) = call(&app, "GET", "/api/worlds/frozen-3/tiles/1/0/0", None).await;
+        assert_eq!(status, StatusCode::OK);
+        // The server resamples without writing hex/ into the world.
+        assert!(!config.worlds_dir.join("frozen-3/hex").exists());
 
         let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-3", None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);

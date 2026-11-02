@@ -92,15 +92,24 @@ pub fn list(dir: &Path) -> Vec<WorldSummary> {
     worlds
 }
 
+/// A world's revision: the modification time of its `raw_data/world.json`
+/// in milliseconds (the summary's `modified_ms`), from the file's metadata
+/// only. `None` when the world has no raw data.
+pub fn revision(dir: &Path, id: &str) -> Option<u64> {
+    let path = dir.join(id).join("raw_data").join("world.json");
+    let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+    Some(
+        modified
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64),
+    )
+}
+
 /// Reads one world's summary from its `raw_data/world.json`.
 pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
     let path = dir.join(id).join("raw_data").join("world.json");
     let meta: Value = serde_json::from_str(&std::fs::read_to_string(&path).ok()?).ok()?;
-    let modified_ms = std::fs::metadata(&path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_millis() as u64);
+    let modified_ms = revision(dir, id).unwrap_or(0);
     let f = |key: &str| meta[key].as_f64().unwrap_or(0.0) as f32;
     let u = |key: &str| meta[key].as_u64().unwrap_or(0) as u32;
     Some(WorldSummary {
