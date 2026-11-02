@@ -28,7 +28,7 @@ In the viewer:
 - Click a point to see its coordinates, biome, elevation above the coastline, temperature, moisture and river flow.
 - **Display** (folded by default on narrow screens):
   - **Layer**: biomes (the generated map), or elevation, temperature, moisture and river flow coloured on the GPU, with a legend.
-  - **Relief**: raises land above the coastline and shades its slopes; seas stay flat. The biome layer and the detail tiles are hillshaded already, so on them it only raises the land.
+  - **Relief**: raises land above the coastline and shades its slopes; seas stay flat, except on worlds whose seas have dried up (barren), where basins sink below the old coastline and are shaded like land. The sun glints only on liquid seas. The biome layer and the detail tiles are hillshaded already, so on them it only raises the land.
   - **Sunlight**: lights the planet from a sun whose latitude follows the season and the world's axial tilt, with day, night and a terminator on both the globe and the map. Off, a headlight follows the camera.
   - **Atmosphere**: blue rim around the globe. **Grid**: 30° graticule.
   - **Hexes**: the hex grid of the world (majority biome per hex, outlines, a blue dot on river hexes), computed by the server for the chosen number of columns.

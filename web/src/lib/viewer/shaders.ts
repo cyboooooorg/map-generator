@@ -20,6 +20,8 @@ const common = /* glsl */ `
   uniform float uMorph;
   uniform float uRelief;
   uniform float uCoast;
+  // 1 when the sea is liquid; 0 when it has dried up (barren worlds).
+  uniform float uLiquidSea;
   uniform float uHasData;
   uniform sampler2D uData;
 
@@ -52,10 +54,15 @@ export const surfaceVertex = /* glsl */ `
     vec3 plane = vec3((g.x - 0.5) * 2.0 * PI, (g.y - 0.5) * PI, 0.0);
     vec3 normal = normalize(mix(vec3(0.0, 0.0, 1.0), sphere, uMorph));
 
-    // Land rises above the coastline; seas stay flat at the surface.
+    // Land rises above the coastline; liquid seas stay flat at the surface,
+    // dried-up basins sink below it.
     float height = 0.0;
     if (uHasData > 0.5) {
-      height = max(dataAt(g).r - uCoast, 0.0) * uRelief * ${RELIEF_SCALE.toFixed(4)};
+      float above = dataAt(g).r - uCoast;
+      if (uLiquidSea > 0.5) {
+        above = max(above, 0.0);
+      }
+      height = above * uRelief * ${RELIEF_SCALE.toFixed(4)};
     }
     vec3 position = mix(plane, sphere, uMorph) + normal * (height + uLift);
 
@@ -145,7 +152,7 @@ export const surfaceFragment = /* glsl */ `
     vec4 data = dataAt(vUv);
     float aboveCoast = data.r - uCoast;
     bool hasData = uHasData > 0.5;
-    bool water = hasData && aboveCoast < 0.0;
+    bool water = hasData && uLiquidSea > 0.5 && aboveCoast < 0.0;
 
     vec3 colour;
     if (uTileOn > 0.5) {
