@@ -8,8 +8,8 @@
 //!
 //! - **Elevation**: the base elevation, smoothly interpolated, plus fractal
 //!   octaves limited to features smaller than two base pixels (so the base
-//!   coastlines move by less than a base pixel) and larger than two tile
-//!   pixels (so a tile is the low-pass of its children). Amplitudes follow
+//!   coastlines move by less than a base pixel) and larger than six tile
+//!   pixels (so a tile is the low-pass of its children, without grain). Amplitudes follow
 //!   a 1/f law on high ground and fall faster on plains, which stay calm at
 //!   every zoom level. Height detail fades out at the waterline; near the
 //!   coast the base elevation is read at a sideways-displaced position
@@ -42,7 +42,7 @@ pub const MAX_LEVEL: u32 = 8;
 const DETAIL_AMPLITUDE: f32 = 0.0015;
 /// Extra amplitude on high ground: detail grows to `1 + MOUNTAIN_BOOST` times
 /// the plain amplitude 0.3 elevation units above the coastline.
-const MOUNTAIN_BOOST: f32 = 5.0;
+const MOUNTAIN_BOOST: f32 = 3.0;
 /// Amplitude ratio between successive detail octaves: below 1/2 on plains,
 /// so they get calmer at every zoom level instead of rougher; 1/2 (1/f) on
 /// high ground.
@@ -54,6 +54,12 @@ const CHANNEL_DEPTH: f32 = 5e-4;
 /// Half-width of the channel banks, in drawn river widths: the banks rise
 /// from the middle of the river to `CHANNEL_SPREAD / 2` widths away.
 const CHANNEL_SPREAD: f64 = 2.0;
+/// Wavelength of the finest detail octave, in tile pixels: features of one
+/// or two pixels only read as grain.
+const FINEST_PX: f64 = 6.0;
+/// Share of the height detail kept on ice and snow (below the polar
+/// temperature), which stay smooth.
+const ICE_ROUGHNESS: f32 = 0.1;
 /// Share of the height detail removed on a floodplain (weight 1).
 const FLOODPLAIN_CALM: f32 = 0.8;
 /// Height detail fades out within this distance of the waterline, so it can
@@ -239,7 +245,7 @@ impl DetailWorld {
         let (x, y) = self.base_xy(lon, lat);
         let base = bicubic(&w.elevation, w.width, w.height, x, y);
         let first = 2.0 * self.base_px_km();
-        let last = 2.0 * pixel_km;
+        let last = FINEST_PX * pixel_km;
         if last > first {
             return base;
         }
@@ -279,7 +285,14 @@ impl DetailWorld {
         // 1/f on high ground, none at the waterline.
         let above = base - waterline;
         let high = (above / 0.3).clamp(0.0, 1.0);
-        let amplitude = DETAIL_AMPLITUDE * (1.0 + MOUNTAIN_BOOST * high);
+        // Ice and snow are smooth: detail fades out below the polar
+        // temperature.
+        let polar = w.params.planet.rules.polar;
+        let t = bilinear(&w.temperature, w.width, w.height, x, y);
+        let thaw = smoothstep(polar - 0.05, polar + 0.1, t);
+        let amplitude = DETAIL_AMPLITUDE
+            * (1.0 + MOUNTAIN_BOOST * high)
+            * (ICE_ROUGHNESS + (1.0 - ICE_ROUGHNESS) * thaw);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
         let shore = smoothstep(0.0, SHORE_FADE, above.abs());
         // Floodplains stay flat valley floors.
@@ -354,12 +367,11 @@ impl DetailWorld {
                     highland_offset: sample(&w.highland_offset),
                 };
                 let biome = planet.remap(planet.rules.choose(input));
-                let key = (tile.x as usize * n + px) ^ ((tile.y as usize * n + py) << 20);
                 let mut colour = if biome.is_water() {
                     biome_color(biome).map(f32::from)
                 } else {
                     let shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
-                    ecotone_colour_for(planet, key, input).map(|c| c * shade)
+                    ecotone_colour_for(planet, input).map(|c| c * shade)
                 };
                 let c = coverage[i];
                 if c > 0.0 && input.temperature >= planet.rules.polar && !biome.is_water() {

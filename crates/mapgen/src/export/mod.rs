@@ -204,7 +204,7 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
             // Lakes are not recomputed without their flag: a pixel whose
             // biome differs from its recomputed one keeps a flat colour.
             let mut color = if land == biome || on_river {
-                ecotone_colour(world, i, input)
+                ecotone_colour(world, input)
             } else {
                 biome_color(biome).map(f32::from)
             };
