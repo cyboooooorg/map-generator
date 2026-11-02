@@ -76,11 +76,20 @@ pub enum Biome {
     Lake,
     /// A river channel carrying the runoff of a large basin.
     River,
+    // ── Appended after id 29 (caustic worlds) ─────────────────────────────────
+    /// Open acid sea; replaces ocean on caustic worlds.
+    AcidSea,
+    /// Deep acid sea basins.
+    DeepAcidSea,
+    /// A stream of corrosive runoff; replaces rivers on caustic worlds.
+    AcidRiver,
+    /// Shores crusted with acid-precipitate salts; replaces beaches.
+    AcidShore,
 }
 
 impl Biome {
     /// Every biome, in id order.
-    pub const ALL: [Biome; 30] = [
+    pub const ALL: [Biome; 34] = [
         Biome::DeepOcean,
         Biome::Ocean,
         Biome::Beach,
@@ -111,6 +120,10 @@ impl Biome {
         Biome::SeaIce,
         Biome::Lake,
         Biome::River,
+        Biome::AcidSea,
+        Biome::DeepAcidSea,
+        Biome::AcidRiver,
+        Biome::AcidShore,
     ];
 
     /// Whether the biome is a water surface, liquid or frozen (flat, not hillshaded).
@@ -128,6 +141,9 @@ impl Biome {
                 | Biome::MagmaSea
                 | Biome::FrozenOcean
                 | Biome::CausticLake
+                | Biome::AcidSea
+                | Biome::DeepAcidSea
+                | Biome::AcidRiver
                 | Biome::Lake
                 | Biome::River
         )
@@ -174,7 +190,12 @@ pub fn biome_color(b: Biome) -> [u8; 3] {
         Biome::FrozenOcean => [140, 195, 235],
         Biome::GlacialPlain => [200, 220, 240],
         // Caustic world exclusives
-        Biome::CausticLake => [60, 170, 40],
+        // Teal-green liquids, set apart from the yellow-green acid land.
+        Biome::CausticLake => [48, 168, 112],
+        Biome::AcidSea => [32, 138, 100],
+        Biome::DeepAcidSea => [16, 84, 66],
+        Biome::AcidRiver => [64, 196, 136],
+        Biome::AcidShore => [214, 220, 150],
         Biome::ToxicSwamp => [45, 100, 20],
         Biome::AcidFlatland => [165, 185, 60],
         // Barren world exclusives
@@ -219,6 +240,10 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::SeaIce => "Sea Ice",
         Biome::Lake => "Lake",
         Biome::River => "River",
+        Biome::AcidSea => "Acid Sea",
+        Biome::DeepAcidSea => "Deep Acid Sea",
+        Biome::AcidRiver => "Acid River",
+        Biome::AcidShore => "Acid Shore",
     }
 }
 
@@ -604,7 +629,12 @@ mod tests {
             ("frozen", &[Biome::FrozenOcean, Biome::GlacialPlain]),
             (
                 "caustic",
-                &[Biome::CausticLake, Biome::ToxicSwamp, Biome::AcidFlatland],
+                &[
+                    Biome::CausticLake,
+                    Biome::ToxicSwamp,
+                    Biome::AcidFlatland,
+                    Biome::AcidSea,
+                ],
             ),
             ("barren", &[Biome::RockyWaste, Biome::DustPlain]),
         ];

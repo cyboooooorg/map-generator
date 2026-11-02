@@ -26,7 +26,7 @@
 use crate::biome::{Biome, BiomeInput, biome_color};
 use crate::climate::temperature;
 use crate::export::ecotone::ecotone_colour_for;
-use crate::export::{LIGHT, RELIEF_KM, shade};
+use crate::export::{LIGHT, RELIEF_KM, shade, water_colour, water_depths};
 use crate::rivers::{self, RiverLine};
 use crate::world::World;
 use image::{Rgb, RgbImage};
@@ -118,6 +118,9 @@ pub struct DetailWorld {
     /// Share of the height detail each base pixel's surface gets, sampled
     /// bilinearly so it changes smoothly across biome borders.
     roughness: Vec<f32>,
+    /// Depth of each base water pixel below its surface (see
+    /// [`water_depths`]), for the shallow tint of lakes.
+    depths: Vec<f32>,
 }
 
 /// Bilinear sample of a row-major base layer at base pixel coordinates
@@ -228,9 +231,11 @@ impl DetailWorld {
             })
             .collect();
         let roughness = world.biomes.iter().map(|&b| roughness(b)).collect();
+        let depths = water_depths(&world);
         Self {
             lakes,
             roughness,
+            depths,
             noise: Perlin::new(seed.wrapping_add(1000)),
             warp_noise: Perlin::new(seed.wrapping_add(1001)),
             rivers,
@@ -380,7 +385,14 @@ impl DetailWorld {
                 let dry = planet.rules.choose(input);
                 let biome = planet.remap(dry);
                 let mut colour = if biome.is_water() {
-                    biome_color(biome).map(f32::from)
+                    // Seas from the detailed elevation; lakes from the base
+                    // depth below their surface.
+                    let depth = if above < 0.0 {
+                        -above
+                    } else {
+                        sample(&self.depths)
+                    };
+                    water_colour(biome, depth)
                 } else {
                     let mut shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
                     if dry.is_lava() {
