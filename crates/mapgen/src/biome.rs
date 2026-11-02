@@ -114,6 +114,11 @@ impl Biome {
     ];
 
     /// Whether the biome is a water surface, liquid or frozen (flat, not hillshaded).
+    /// Molten ground: no water lies on it, and rivers start at its edge.
+    pub fn is_lava(self) -> bool {
+        matches!(self, Biome::Volcano | Biome::LavaField)
+    }
+
     pub fn is_water(self) -> bool {
         matches!(
             self,
@@ -348,6 +353,18 @@ impl BiomeRules {
             temperature: t,
             ..
         } = input;
+        // Lava overrides water: no lake or river inside a lava field or a
+        // volcano, whose rivers start at its edge instead.
+        if (input.lake || input.river) && e >= self.waterline {
+            let dry = self.choose(BiomeInput {
+                lake: false,
+                river: false,
+                ..input
+            });
+            if dry.is_lava() {
+                return dry;
+            }
+        }
         let base = if e < self.waterline {
             self.ocean(e, t)
         } else if input.lake {
@@ -458,6 +475,28 @@ impl BiomeRules {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lava_overrides_lakes_and_rivers() {
+        let rules = crate::preset::Preset::load("terran").unwrap().rules;
+        let input = |lake: bool, river: bool, volcanic_zone: f32| BiomeInput {
+            elevation: rules.highland + 0.05,
+            moisture: 0.2,
+            temperature: 0.5,
+            volcanic_zone,
+            coast_distance_km: 1000.0,
+            lake,
+            river,
+            highland_offset: 0.0,
+        };
+        let lava = rules.lava_zone + 0.05;
+        assert!(rules.choose(input(false, false, lava)).is_lava());
+        assert!(rules.choose(input(true, false, lava)).is_lava());
+        assert!(rules.choose(input(false, true, lava)).is_lava());
+        // Away from lava, water stays water.
+        assert_eq!(rules.choose(input(true, false, 0.0)), Biome::Lake);
+        assert_eq!(rules.choose(input(false, true, 0.0)), Biome::River);
+    }
     use crate::preset::Preset;
 
     /// Every biome a planet preset can produce, over a coarse grid of inputs.

@@ -50,8 +50,10 @@ pub fn export_svg(world: &World, path: &str) -> std::io::Result<()> {
                 (mid[0].rem_euclid(w as f64) as usize).min(w - 1),
                 (mid[1] as usize).min(h - 1),
             );
-            // Frozen rivers are not drawn, as in the PNG.
-            if world.temperature[my * w + mx] >= planet.rules.polar {
+            // Frozen rivers and rivers under lava are not drawn, as in the PNG.
+            let i = my * w + mx;
+            let lava = planet.rules.choose(world.biome_input(i)).is_lava();
+            if world.temperature[i] >= planet.rules.polar && !lava {
                 let width = widths[start..=stop].iter().sum::<f64>() / (stop - start + 1) as f64;
                 let min_x = points.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
                 let max_x = points.iter().map(|p| p[0]).fold(f64::MIN, f64::max);

@@ -196,7 +196,8 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
             }
             // The land under a river: the biome the pixel has without it.
             let input = world.biome_input(i);
-            let land = planet.remap(planet.rules.choose(input));
+            let dry = planet.rules.choose(input);
+            let land = planet.remap(dry);
             if style == Style::Flat {
                 // Rivers are drawn as vector paths over the flat SVG map.
                 return biome_color(if on_river { land } else { biome });
@@ -210,9 +211,10 @@ pub fn render_pixels(world: &World, style: Style) -> Vec<[u8; 3]> {
             };
             let f = hillshade(world, &grid, x, y);
             color = color.map(|c| c * f);
-            // Anti-aliased river on top, except where it is frozen.
+            // Anti-aliased river on top, except where it is frozen or under
+            // lava.
             let c = coverage[i];
-            if c > 0.0 && world.temperature[i] >= planet.rules.polar {
+            if c > 0.0 && world.temperature[i] >= planet.rules.polar && !dry.is_lava() {
                 for (channel, river) in color.iter_mut().zip(river_colour) {
                     *channel = *channel * (1.0 - c) + river * c;
                 }
