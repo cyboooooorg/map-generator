@@ -167,22 +167,114 @@ fn brush(radius: i32) -> Vec<(i64, i64, f32)> {
     cells
 }
 
+/// Cells a droplet can reach from its start: its longest path, the brush
+/// radius and the bilinear neighbour, rounded up.
+const REACH: usize = PHYSICS.max_steps as usize + PHYSICS.radius as usize + 2;
+/// Smallest tile side for the parallel simulation: two reaches, so tiles
+/// running at the same time (one tile apart) never touch the same cells.
+const MIN_TILE: usize = 2 * REACH;
+
 /// Runs the droplets on `map`. Droplets only start on land (`z >= waterline`)
 /// and stop when they reach water, whose currents carry their sediment
 /// offshore. Erosion fades out within `shore_band` above the waterline.
+///
+/// The grid is cut into tiles at least [`MIN_TILE`] cells wide, run in four
+/// checkerboard phases: within a phase, active tiles are a tile apart, so
+/// their droplets never meet and they run in parallel, each on a copy of
+/// its tile and the cells around it. Each tile gets droplets in proportion
+/// to its land and its own random stream, so the result does not depend on
+/// the number of threads.
 fn simulate(map: &mut HeightMap, waterline: f32, shore_band: f32, droplets: usize, seed: u64) {
-    let p = &PHYSICS;
-    let brush = brush(p.radius);
-    let mut rng = StdRng::seed_from_u64(seed);
-    let land: Vec<usize> = (0..map.z.len())
-        .filter(|&i| map.z[i] >= waterline)
-        .collect();
-    if land.is_empty() {
+    let land_total = map.z.iter().filter(|&&z| z >= waterline).count();
+    if land_total == 0 || droplets == 0 {
         return;
     }
+    // Columns wrap around, so the checkerboard needs an even count.
+    let tiles_x = (map.w / MIN_TILE) & !1;
+    let tiles_y = (map.h / MIN_TILE).max(1);
+    if tiles_x < 2 {
+        let starts: Vec<usize> = (0..map.z.len())
+            .filter(|&i| map.z[i] >= waterline)
+            .collect();
+        let mut rng = StdRng::seed_from_u64(seed);
+        run_droplets(map, &starts, droplets, waterline, shore_band, &mut rng);
+        return;
+    }
+    let edge = |k: usize, n: usize, total: usize| k * total / n;
+    let h = map.h as i64;
+    for phase in 0..4 {
+        let (cx, cy) = (phase % 2, phase / 2);
+        if cy >= tiles_y {
+            continue;
+        }
+        let tiles: Vec<(usize, usize)> = (0..tiles_y)
+            .filter(|ty| ty % 2 == cy)
+            .flat_map(|ty| {
+                (0..tiles_x)
+                    .filter(|tx| tx % 2 == cx)
+                    .map(move |tx| (tx, ty))
+            })
+            .collect();
+        let done: Vec<(i64, i64, HeightMap)> = tiles
+            .par_iter()
+            .map(|&(tx, ty)| {
+                let (x0, x1) = (edge(tx, tiles_x, map.w), edge(tx + 1, tiles_x, map.w));
+                let (y0, y1) = (edge(ty, tiles_y, map.h), edge(ty + 1, tiles_y, map.h));
+                // The tile and its reach around it, clipped at the poles.
+                let left = x0 as i64 - REACH as i64;
+                let top = (y0 as i64 - REACH as i64).max(0);
+                let bottom = (y1 as i64 + REACH as i64).min(h);
+                let lw = x1 - x0 + 2 * REACH;
+                let lh = (bottom - top) as usize;
+                let mut local = HeightMap {
+                    w: lw,
+                    h: lh,
+                    z: (0..lh)
+                        .flat_map(|ly| (0..lw).map(move |lx| (lx, ly)))
+                        .map(|(lx, ly)| map.z[map.idx(left + lx as i64, top + ly as i64)])
+                        .collect(),
+                };
+                let starts: Vec<usize> = (y0..y1)
+                    .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+                    .filter(|&(x, y)| map.z[y * map.w + x] >= waterline)
+                    .map(|(x, y)| (y - top as usize) * lw + (x - x0 + REACH))
+                    .collect();
+                let count = (droplets as u64 * starts.len() as u64 / land_total as u64) as usize;
+                let tile = (ty * tiles_x + tx) as u64;
+                let mut rng =
+                    StdRng::seed_from_u64(seed ^ tile.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+                run_droplets(&mut local, &starts, count, waterline, shore_band, &mut rng);
+                (left, top, local)
+            })
+            .collect();
+        for (left, top, local) in done {
+            for ly in 0..local.h {
+                for lx in 0..local.w {
+                    let i = map.idx(left + lx as i64, top + ly as i64);
+                    map.z[i] = local.z[ly * local.w + lx];
+                }
+            }
+        }
+    }
+}
 
-    for _ in 0..droplets {
-        let start = land[rng.random_range(0..land.len())];
+/// Runs `count` droplets on `map`, each starting in a random cell of
+/// `starts`.
+fn run_droplets(
+    map: &mut HeightMap,
+    starts: &[usize],
+    count: usize,
+    waterline: f32,
+    shore_band: f32,
+    rng: &mut StdRng,
+) {
+    let p = &PHYSICS;
+    let brush = brush(p.radius);
+    if starts.is_empty() {
+        return;
+    }
+    for _ in 0..count {
+        let start = starts[rng.random_range(0..starts.len())];
         let mut px = (start % map.w) as f32 + rng.random_range(0.0..1.0);
         let mut py = (start / map.w) as f32 + rng.random_range(0.0..1.0);
         let (mut dx, mut dy) = (0.0f32, 0.0f32);
@@ -449,6 +541,26 @@ fn spline_taps(pos: f32) -> (i64, [f32; 4]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tiled_erosion_does_not_depend_on_the_thread_count() {
+        // Wide enough for several tiles (MIN_TILE cells each).
+        let (w, h) = (1024, 512);
+        let run = |threads: usize| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            pool.install(|| {
+                let mut elevation = island(w, h);
+                erode(&mut elevation, w, h, 0.0, 1.0, 9, &vec![1.0; h as usize]);
+                elevation
+            })
+        };
+        let one = run(1);
+        assert_eq!(one, run(4));
+        assert_ne!(one, island(w, h), "erosion changed nothing");
+    }
 
     /// A cone-shaped island in the middle of the map.
     fn island(w: u32, h: u32) -> Vec<f32> {
