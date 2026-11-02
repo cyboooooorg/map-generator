@@ -167,8 +167,11 @@ export const surfaceFragment = /* glsl */ `
     }
 
     // Relief shading: tilt the normal by the elevation slope (land only).
+    // The biome map and the detail tiles are hillshaded already: shading
+    // them again would double every slope.
     vec3 normal = normalize(vNormal);
-    if (hasData && uRelief > 0.0 && !water) {
+    bool shaded = uTileOn > 0.5 || uLayer == 0;
+    if (hasData && uRelief > 0.0 && !water && !shaded) {
       float east = dataAt(vUv + vec2(uTexel.x, 0.0)).r - dataAt(vUv - vec2(uTexel.x, 0.0)).r;
       float north = dataAt(vUv + vec2(0.0, uTexel.y)).r - dataAt(vUv - vec2(0.0, uTexel.y)).r;
       normal = normalize(normal - uRelief * 40.0 * (east * vEast + north * vNorth));
