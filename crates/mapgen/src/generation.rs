@@ -4,6 +4,7 @@ use crate::climate::{
     Field, MoistureInput, moisture, regional_variability, row_temperatures, temperature,
     temperature_anomaly,
 };
+use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
@@ -656,17 +657,23 @@ pub fn generate_with_progress(
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
     let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
-    let river_lines = rivers::shape(
+    let mut river_lines = rivers::shape(
         &rivers::trace(&grid, &water),
         &grid,
         &water.filled,
         params.seed,
     );
+    // Deltas and estuaries at the mouths of the large rivers.
+    let deltas = delta::outlets(&mut river_lines, &grid, &height_above_water, params.seed);
     // Valleys and floodplains along the rivers. Carving never creates water,
     // so the coast distance and the drainage stay valid.
     let waterline = params.sea_level + rules.waterline;
     let mut above: Vec<f32> = elevation.iter().map(|e| e - waterline).collect();
-    let floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
+    let mut floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
+    let delta_plain = delta::plains(&deltas, &river_lines, &grid, &mut above, &mut moisture);
+    for (f, d) in floodplain.iter_mut().zip(delta_plain) {
+        *f = f.max(d);
+    }
     for ((e, a), r) in elevation.iter_mut().zip(&above).zip(relief.iter_mut()) {
         *e = a + waterline;
         *r = (*e - params.sea_level).clamp(-1.0, 1.0);
