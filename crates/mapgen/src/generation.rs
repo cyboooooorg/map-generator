@@ -185,7 +185,7 @@ const FLOW_LOG_MAX: f32 = 7.0;
 /// A generation step, reported to progress callbacks as it starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Stage {
     Noise,
     Erosion,

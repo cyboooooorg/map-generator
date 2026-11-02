@@ -11,7 +11,7 @@ use std::fmt;
 
 /// Inclusive bounds of a numeric parameter.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Limits {
     pub min: f32,
     pub max: f32,
@@ -63,7 +63,7 @@ pub mod fallback {
 /// sets them, otherwise from [`fallback`].
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields))]
 pub struct WorldRequest {
     /// Built-in preset name or preset file path; `None` picks a random built-in.
     pub planet: Option<String>,

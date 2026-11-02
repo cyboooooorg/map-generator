@@ -111,11 +111,13 @@ The grid is pointy-top in "odd-r" offset coordinates: odd rows are shifted half 
 
 The repository is a Cargo workspace:
 
-| Path             | Content                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `crates/mapgen/` | The `mapgen` library: generation passes, presets, exports, and `WorldRequest` (parameter limits and defaults) |
-| `crates/cli/`    | The `map-generator` and `hexgrid` command-line tools, thin wrappers around the library                        |
-| `presets/`       | Built-in planet presets (embedded in the binaries) and `examples/`                                            |
+| Path                     | Content                                                                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `crates/mapgen/`         | The `mapgen` library: generation passes, presets, exports, and `WorldRequest` (parameter limits and defaults)                                                      |
+| `crates/cli/`            | The `map-generator` and `hexgrid` command-line tools, thin wrappers around the library                                                                             |
+| `crates/server/`         | The `mapgen-server` web server: world library, generation jobs with live progress, static files; see its module documentation for routes and environment variables |
+| `web/src/lib/api/types/` | TypeScript types of the server API, generated from the Rust types by `cargo test` (ts-rs); do not edit by hand                                                     |
+| `presets/`               | Built-in planet presets (embedded in the binaries) and `examples/`                                                                                                 |
 
 The library also reports generation progress: `generate_with_progress` calls back as each stage starts (noise, erosion, temperature, coast, moisture, rivers, biomes). Its `ts` feature derives TypeScript bindings on the types a web front-end needs.
 

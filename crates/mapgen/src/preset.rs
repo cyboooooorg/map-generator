@@ -45,7 +45,7 @@ const BUILT_IN: [(&str, &str); 5] = [
 /// A generation parameter given by a preset: a fixed value or a range to draw from.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ParamDefault {
     Fixed(f32),
     Range([f32; 2]),
@@ -80,7 +80,7 @@ impl ParamDefault {
 /// parameters missing here fall back to the generator's own defaults.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Defaults {
     pub sea_level: Option<ParamDefault>,
     pub volcanic: Option<ParamDefault>,
