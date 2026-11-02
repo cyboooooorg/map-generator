@@ -1,0 +1,14 @@
+# Example custom preset: the terran planet type with Earth's own size and
+# tilt, and a sea level that gives about Earth's share of land (29 %; the
+# relief of each seed spreads it over 20-50 %), instead of random values.
+#   mise run gen -- --planet presets/examples/earth-like.toml
+name = "earth-like"
+description = "Earth's size, tilt and land share, full biome spectrum"
+
+# A fixed value, or a [min, max] range drawn at random. Command-line options
+# still win over these.
+[defaults]
+sea_level = [0.24, 0.30]
+circumference = 40075
+axial_tilt = 23.44
+volcanic = [0.1, 0.3]

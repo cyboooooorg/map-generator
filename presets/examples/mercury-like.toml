@@ -1,0 +1,32 @@
+# Example custom preset: a small, airless world of grey rock, with dark
+# smooth plains in its old basins.
+#   mise run gen -- --planet presets/examples/mercury-like.toml
+name = "mercury-like"
+description = "Small airless grey world, cratered highlands and dark plains"
+
+# A fixed value, or a [min, max] range drawn at random. Command-line options
+# still win over these. No water ever flowed: no erosion. The sea level only
+# sets how much of the surface the smooth basins cover.
+[defaults]
+sea_level = [0.10, 0.30]
+circumference = 15329
+axial_tilt = 0.0
+volcanic = 0.0
+erosion = 0.0
+
+[climate]
+moisture = -0.9
+volcanic = -0.4
+
+# target = [biomes replaced by it]
+[remap]
+# Old lava-flooded basins: dark smooth plains.
+AshLand = [
+  "DeepOcean", "Ocean", "SeaIce", "Lake", "FrozenLake", "River", "Beach", "Wetland",
+]
+# Cratered highlands: grey rock, no ice outside shadowed craters.
+RockyWaste = [
+  "Plain", "Shrubland", "Savanna", "Desert", "Forest", "Jungle", "Taiga", "Tundra",
+  "IceCap", "LavaField", "Volcano",
+]
+Mountain = ["Snow"]

@@ -174,7 +174,16 @@ A planet type is a TOML preset. The five built-in ones live in `presets/` and ar
 | `caustic`  | Acid world — corrosive atmosphere, toxic wetlands | `AcidSea`, `DeepAcidSea`, `CausticLake`, `AcidRiver`, `AcidShore`, `ToxicSwamp`, `AcidFlatland` |
 | `barren`   | Dead rock — arid and lifeless, no water           | `RockyWaste`, `DustPlain`                                                                       |
 
-To create a new planet type, write a preset file and pass its path:
+To create a new planet type, write a preset file and pass its path. `presets/examples/` holds one per rocky planet of the Solar System, with its real size and tilt:
+
+| Example        | Look                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| `mercury-like` | Small and airless, no erosion: grey cratered highlands (`RockyWaste`), dark smooth basins (`AshLand`)     |
+| `venus-like`   | Earth-sized furnace, no erosion: basalt plains (`ScorchedWaste`) around highland plateaus with lava flows |
+| `earth-like`   | `terran` with Earth's size, tilt and about its share of land                                              |
+| `mars-like`    | Small cold desert: dust basins where the seas were, polar ice caps                                        |
+
+The web app lists them with the built-in types.
 
 ```bash
 mise run gen -- --planet presets/examples/mars-like.toml
