@@ -23,10 +23,10 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
 
-/// Bumped whenever the layout of `raw_data/` changes incompatibly.
 /// Name of the river polylines file.
 pub const RIVERS_FILE: &str = "rivers.json";
 
+/// Bumped whenever the layout of `raw_data/` changes incompatibly.
 /// Version 2 adds the volcanic zone, coast distance and highland offset
 /// layers, and the river polylines; version 3 the floodplain layer.
 pub const FORMAT_VERSION: u32 = 3;

@@ -13,7 +13,7 @@ pub use svg::export_svg;
 use crate::generation::Generated;
 use crate::geo::Grid;
 use crate::rivers;
-use crate::world::{Biome, World, biome_color};
+use crate::world::{Biome, World, WorldParams, biome_color};
 use ecotone::ecotone_colour;
 use rayon::prelude::*;
 use std::path::Path;
@@ -38,8 +38,8 @@ impl Default for ExportOptions {
 }
 
 /// Name of a world's output directory: `<planet>-<seed>`.
-pub fn world_dir_name(world: &World) -> String {
-    format!("{}-{}", world.params.planet.name, world.params.seed)
+pub fn world_dir_name(params: &WorldParams) -> String {
+    format!("{}-{}", params.planet.name, params.seed)
 }
 
 /// Writes every output of a generated world into `dir` (created if needed).
