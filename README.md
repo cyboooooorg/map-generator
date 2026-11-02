@@ -100,7 +100,7 @@ mise run hex -- worlds/terran-42 --columns 96
 | Option               | Description                                                                | Default  |
 | -------------------- | -------------------------------------------------------------------------- | -------- |
 | `<world>`            | world directory produced by `mise run gen`                                 | required |
-| `--columns <n>`      | hex columns around the planet, `4`–`4096`; rows follow from the map height | `96`     |
+| `--columns <n>`      | hex columns around the planet, `4`–`1024`; rows follow from the map height | `96`     |
 | `--river-flow <km²>` | land hexes whose largest river drains at least this area get a river flag  | `500000` |
 
 It writes `<world>/hex/`:
