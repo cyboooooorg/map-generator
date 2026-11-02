@@ -5,7 +5,7 @@
 //! and `<world>/hex/hex.png`. The hexes are regular in map space (the
 //! equirectangular projection), not on the sphere: polar hexes cover less
 //! real ground than equatorial ones.
-use crate::export::raw_data::{BiomeInfo, WorldMetadata, read_scalar};
+use crate::export::raw_data::{BiomeInfo, read_biome_ids, read_metadata, read_scalar};
 use image::{Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -128,23 +128,18 @@ pub struct HexCells {
 /// the hex map.
 pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<HexMap, String> {
     let raw = world_dir.join("raw_data");
-    let text = std::fs::read_to_string(raw.join("world.json"))
-        .map_err(|e| format!("{}: {e}", raw.join("world.json").display()))?;
-    let meta: WorldMetadata =
-        serde_json::from_str(&text).map_err(|e| format!("world.json: {e}"))?;
+    let meta = read_metadata(&raw)?;
     let (width, height) = (meta.width, meta.height);
     let river_id = meta
         .biomes
         .iter()
         .find(|b| b.key == crate::biome::Biome::River)
         .map(|b| b.id);
-    let biomes = image::open(raw.join(&meta.layers.biomes.file))
-        .map_err(|e| format!("{}: {e}", meta.layers.biomes.file))?
-        .to_luma8();
-    let elevation = read_scalar(&raw, &meta.layers.elevation)?;
-    let moisture = read_scalar(&raw, &meta.layers.moisture)?;
-    let temperature = read_scalar(&raw, &meta.layers.temperature)?;
-    let flow = read_scalar(&raw, &meta.layers.flow)?;
+    let biomes = read_biome_ids(&raw, &meta)?;
+    let elevation = read_scalar(&raw, &meta.layers.elevation, &meta)?;
+    let moisture = read_scalar(&raw, &meta.layers.moisture, &meta)?;
+    let temperature = read_scalar(&raw, &meta.layers.temperature, &meta)?;
+    let flow = read_scalar(&raw, &meta.layers.flow, &meta)?;
 
     let grid = HexGrid::new(width, height, columns);
     let n = grid.cell_count();
