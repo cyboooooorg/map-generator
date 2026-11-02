@@ -94,9 +94,15 @@ export function followJob(
       }
     };
     source.onerror = () => {
-      // The server closes the stream after the final status; anything else is a lost connection.
+      // The server closes the stream after the final status. A stream closed
+      // before it means the job is gone: the server restarted, typically
+      // because the generation ran out of memory.
       if (source.readyState === EventSource.CLOSED) {
-        resolve({ status: 'failed', error: 'lost the connection to the server' });
+        resolve({
+          status: 'failed',
+          error:
+            'the server stopped during the generation (out of memory?): try a smaller map, or give the server more memory',
+        });
       }
     };
   });

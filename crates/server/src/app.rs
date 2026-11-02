@@ -27,7 +27,7 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use mapgen::detail::TileId;
 use mapgen::export::{ExportOptions, export_world, world_dir_name};
-use mapgen::generation::{Stage, generate_with_progress};
+use mapgen::generation::{GenerateOptions, Stage, generate_with_progress};
 use mapgen::hex::{DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
 use std::collections::HashMap;
@@ -40,9 +40,14 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::WatchStream;
 use tower_http::services::{ServeDir, ServeFile};
 
-/// Largest map side the server accepts: generation memory grows with the
-/// pixel count, and this keeps one job under a few GB.
+/// Largest map side the server accepts.
 pub const MAX_SIZE: u32 = 8192;
+/// Default largest map the server accepts, in pixels (4096 × 2048). A
+/// generation peaks at about 140 bytes per pixel (about 1.1 GB here): keep the
+/// limit under the memory the server can use, or it gets killed mid-job.
+pub const DEFAULT_MAX_PIXELS: u64 = 4096 * 2048;
+/// Peak generation memory per pixel, for the error message.
+const BYTES_PER_PIXEL: u64 = 140;
 
 /// Where the server reads and writes its files.
 #[derive(Clone, Debug)]
@@ -51,6 +56,8 @@ pub struct Config {
     pub presets_dir: PathBuf,
     /// Built front-end (`web/dist`); missing in development, where Vite serves it.
     pub static_dir: PathBuf,
+    /// Largest map accepted, in pixels (see [`DEFAULT_MAX_PIXELS`]).
+    pub max_pixels: u64,
 }
 
 pub struct AppState {
@@ -107,7 +114,7 @@ async fn presets(State(state): State<Shared>) -> Json<Vec<PresetInfo>> {
     Json(state.catalog.list())
 }
 
-async fn form() -> Json<FormSpec> {
+async fn form(State(state): State<Shared>) -> Json<FormSpec> {
     let spec = |limits, fallback| ParamSpec { limits, fallback };
     Json(FormSpec {
         sea_level: spec(request::SEA_LEVEL, fallback::SEA_LEVEL),
@@ -118,6 +125,7 @@ async fn form() -> Json<FormSpec> {
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,
         max_size: MAX_SIZE,
+        max_pixels: state.config.max_pixels,
     })
 }
 
@@ -248,6 +256,17 @@ async fn create_world(
         .resolve(&mut rand::rng())
         .map_err(|e| bad(e.to_string()))?;
     let params = resolved.params;
+    let pixels = params.width as u64 * params.height as u64;
+    if pixels > state.config.max_pixels {
+        return Err(bad(format!(
+            "{} × {} needs about {:.1} GB of memory; this server accepts up to {} pixels \
+             (MAPGEN_MAX_PIXELS)",
+            params.width,
+            params.height,
+            (pixels * BYTES_PER_PIXEL) as f64 / 1e9,
+            state.config.max_pixels
+        )));
+    }
 
     let world_id = format!("{}-{}", params.planet.name, params.seed);
     {
@@ -269,6 +288,8 @@ async fn create_world(
         .expect("jobs lock")
         .insert(job_id.clone(), rx);
 
+    // Worlds loaded for the deep zoom would add to the generation's peak.
+    state.tiles.clear();
     let task_state = state.clone();
     let task_world = world_id.clone();
     tokio::spawn(async move {
@@ -281,10 +302,25 @@ async fn create_world(
                 let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
                 progress.send_replace(JobStatus::Running { stage, step, steps });
             };
-            let generated = generate_with_progress(&params, report);
+            // The web app does not show the diagnostic maps: skip them, which also
+            // saves about twenty map-sized layers of memory.
+            let generated = generate_with_progress(
+                &params,
+                GenerateOptions {
+                    debug_layers: false,
+                },
+                report,
+            );
             report(Stage::Export);
             let dir = worlds_dir.join(world_dir_name(&generated.world));
-            export_world(&generated, &dir, ExportOptions::default())
+            export_world(
+                &generated,
+                &dir,
+                ExportOptions {
+                    raw_data: true,
+                    noise_maps: false,
+                },
+            )
         })
         .await;
         let status = match result {
@@ -354,6 +390,7 @@ mod tests {
             worlds_dir: root.join("worlds"),
             presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets")),
             static_dir: root.join("static"),
+            max_pixels: DEFAULT_MAX_PIXELS,
         }
     }
 
@@ -392,6 +429,7 @@ mod tests {
             r#"{"sea_level": 3.0}"#,
             r#"{"planet": "/etc/passwd.toml"}"#,
             r#"{"width": 100000}"#,
+            r#"{"width": 8192, "height": 4096}"#,
             r#"{"unknown": 1}"#,
         ] {
             let (status, _) = call(&app, "POST", "/api/worlds", Some(body)).await;

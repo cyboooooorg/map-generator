@@ -164,7 +164,7 @@ pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
     let w = grid.width as i64;
     let mut donors: Vec<Vec<usize>> = vec![Vec::new(); n];
     for i in (0..n).filter(|&i| hydro.river[i]) {
-        if let Some(j) = hydro.receiver[i] {
+        if let Some(j) = hydro.receiver(i) {
             donors[j].push(i);
         }
     }
@@ -174,8 +174,8 @@ pub fn trace(grid: &Grid, hydro: &Hydrology) -> Vec<RiverLine> {
     // (lowest river pixel of the line, parent line, pixel it flows into)
     let mut stack: Vec<(usize, Option<usize>, Option<usize>)> = (0..n)
         .filter(|&i| hydro.river[i])
-        .filter(|&i| hydro.receiver[i].is_none_or(|j| !hydro.river[j]))
-        .map(|i| (i, None, hydro.receiver[i]))
+        .filter(|&i| hydro.receiver(i).is_none_or(|j| !hydro.river[j]))
+        .map(|i| (i, None, hydro.receiver(i)))
         .collect();
     // Deterministic order: largest rivers first.
     stack.sort_by(|a, b| hydro.flow_km2[a.0].total_cmp(&hydro.flow_km2[b.0]));

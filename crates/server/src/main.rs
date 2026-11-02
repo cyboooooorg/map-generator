@@ -7,6 +7,7 @@
 //! | `MAPGEN_WORLDS_DIR`   | `worlds`     | generated worlds, read and written       |
 //! | `MAPGEN_PRESETS_DIR`  | `presets`    | extra planet presets (`*.toml`)          |
 //! | `MAPGEN_STATIC_DIR`   | `web/dist`   | built web front-end                      |
+//! | `MAPGEN_MAX_PIXELS`   | `8388608`    | largest map accepted (width × height)    |
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |
 mod api;
@@ -34,6 +35,10 @@ async fn main() -> std::io::Result<()> {
         worlds_dir: PathBuf::from(env_or("MAPGEN_WORLDS_DIR", "worlds")),
         presets_dir: PathBuf::from(env_or("MAPGEN_PRESETS_DIR", "presets")),
         static_dir: PathBuf::from(env_or("MAPGEN_STATIC_DIR", "web/dist")),
+        max_pixels: std::env::var("MAPGEN_MAX_PIXELS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(app::DEFAULT_MAX_PIXELS),
     };
     std::fs::create_dir_all(&config.worlds_dir)?;
     let address = format!("{}:{}", env_or("HOST", "0.0.0.0"), env_or("PORT", "3000"));

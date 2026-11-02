@@ -226,7 +226,9 @@
     <span>Size</span>
     <select bind:value={size} disabled={running}>
       {#each sizes as [w, h] (`${w}x${h}`)}
-        <option value={`${w}x${h}`} disabled={w > spec.max_size || h > spec.max_size}>{w} × {h}</option>
+        <option value={`${w}x${h}`} disabled={w > spec.max_size || h > spec.max_size || w * h > spec.max_pixels}
+          >{w} × {h}{w * h > spec.max_pixels ? ' (too large for this server)' : ''}</option
+        >
       {/each}
     </select>
   </label>

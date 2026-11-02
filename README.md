@@ -50,7 +50,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                     |
 | `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)                                                                                                     | off                          |
-| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                                                                                                               | off                          |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the memory they need (about a third of the peak)                                                         | off                          |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
@@ -141,7 +141,7 @@ The container reads and writes `worlds/` of this checkout (worlds generated with
 | Front-end | Svelte 5, strict TypeScript, three.js    | `web/`           |
 | Container | Multi-stage `Dockerfile`, `compose.yaml` | repository root  |
 
-Generations run one at a time (each one already uses every core) and stream their progress to the page. Zooming in loads [detail tiles](#detail-tiles--deep-zoom) rendered on demand by the server (`GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=`), cached by the browser for good since the URL names the world revision; the server keeps the two most recently used worlds in memory. The server refuses to overwrite an existing world: delete it first or pick another seed. Maps are limited to 8192 pixels per side.
+Generations run one at a time (each one already uses every core) and stream their progress to the page. Zooming in loads [detail tiles](#detail-tiles--deep-zoom) rendered on demand by the server (`GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=`), cached by the browser for good since the URL names the world revision; the server keeps the two most recently used worlds in memory. The server refuses to overwrite an existing world: delete it first or pick another seed. Maps are limited to `MAPGEN_MAX_PIXELS` pixels (default 4096 × 2048) and 8192 pixels per side. A generation peaks at about 140 bytes per pixel (about 1.1 GB at 4096 × 2048, 0.3 GB at the default 1920 × 1080): keep the limit under the memory the container can use, or the server is killed mid-job. On macOS the Docker VM of Colima has 2 GB by default; give it more (`colima stop && colima start --memory 6`) before raising the limit. The web app skips the diagnostic maps, which would add about 75 bytes per pixel.
 
 For development with hot reload, see [web/README.md](web/README.md) (`mise run dev`).
 

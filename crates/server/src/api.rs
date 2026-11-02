@@ -41,6 +41,9 @@ pub struct FormSpec {
     pub default_height: u32,
     /// Largest width or height the server accepts.
     pub max_size: u32,
+    /// Largest map the server accepts, in pixels (width × height).
+    #[ts(type = "number")]
+    pub max_pixels: u64,
 }
 
 /// A generated world, as listed in the library.
