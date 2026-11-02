@@ -2,7 +2,7 @@
 //! TypeScript definitions in `web/src/lib/api/types/` (see `.cargo/config.toml`).
 use mapgen::generation::Stage;
 use mapgen::preset::{Defaults, ParamDefault};
-use mapgen::request::Limits;
+use mapgen::request::{Limits, WorldRequest};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -95,12 +95,29 @@ pub enum JobStatus {
     Failed {
         error: String,
     },
+    /// Stopped at the client's request (`DELETE /api/jobs/{id}`).
+    Cancelled,
 }
 
 impl JobStatus {
     pub fn is_finished(&self) -> bool {
-        matches!(self, JobStatus::Done { .. } | JobStatus::Failed { .. })
+        matches!(
+            self,
+            JobStatus::Done { .. } | JobStatus::Failed { .. } | JobStatus::Cancelled
+        )
     }
+}
+
+/// A generation job, as listed by `GET /api/jobs`.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct JobInfo {
+    pub job_id: String,
+    /// Id the world will have once generated.
+    pub world_id: String,
+    /// The request, as sent by the client, so a reloaded page can show it.
+    pub request: WorldRequest,
+    pub status: JobStatus,
 }
 
 /// Error body of every failed API call.

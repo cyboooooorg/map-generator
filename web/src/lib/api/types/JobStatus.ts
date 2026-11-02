@@ -4,4 +4,4 @@ import type { Stage } from "./Stage";
 /**
  * State of a generation job, streamed as server-sent events.
  */
-export type JobStatus = { "status": "queued" } | { "status": "running", stage: Stage, step: number, steps: number, } | { "status": "done", world_id: string, } | { "status": "failed", error: string, };
+export type JobStatus = { "status": "queued" } | { "status": "running", stage: Stage, step: number, steps: number, } | { "status": "done", world_id: string, } | { "status": "failed", error: string, } | { "status": "cancelled" };
