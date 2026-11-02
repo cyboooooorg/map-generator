@@ -1,7 +1,7 @@
 //! Resamples a generated world onto a hexagonal grid, for games and other
 //! tile-based uses. See `mapgen::hex` for the output format.
 use clap::Parser;
-use mapgen::hex::{DEFAULT_RIVER_FLOW_KM2, resample};
+use mapgen::hex::{COLUMNS, DEFAULT_RIVER_FLOW_KM2, resample};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -13,7 +13,7 @@ struct Args {
     world: PathBuf,
 
     /// Number of hex columns around the planet (the grid wraps east-west)
-    #[arg(long, default_value_t = 96, value_parser = clap::value_parser!(u32).range(4..=4096))]
+    #[arg(long, default_value_t = 96, value_parser = clap::value_parser!(u32).range(*COLUMNS.start() as i64..=*COLUMNS.end() as i64))]
     columns: u32,
 
     /// Land hexes whose largest river drains at least this area (km²) get a river flag

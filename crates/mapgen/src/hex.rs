@@ -12,6 +12,9 @@ use std::path::Path;
 
 /// Land hexes whose largest river drains at least this area (km²) get a river flag.
 pub const DEFAULT_RIVER_FLOW_KM2: f32 = 500_000.0;
+/// Range of hex columns accepted. The aggregation keeps a biome histogram per
+/// hex, so the upper bound caps its memory (the web app uses 16 to 256).
+pub const COLUMNS: std::ops::RangeInclusive<u32> = 4..=1024;
 
 /// Pointy-top hex grid laid over a `width × height` map, in "odd-r" offset
 /// coordinates: odd rows are shifted half a hex east. Columns wrap around.
