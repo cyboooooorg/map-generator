@@ -258,7 +258,9 @@ fn smooth(grid: &Grid, values: &[f32], radius_km: f32) -> Vec<f32> {
     let horizontal: Vec<f32> = (0..h)
         .into_par_iter()
         .flat_map_iter(|y| {
-            let r = ((radius_km / grid.dx_km(y as u32)).round() as usize).min(w / 2);
+            // At most (w - 1) / 2: a window wider than the row would count
+            // pixels twice.
+            let r = ((radius_km / grid.dx_km(y as u32)).round() as usize).min((w - 1) / 2);
             let row = &values[y * w..(y + 1) * w];
             let n = (2 * r + 1) as f32;
             let mut sum: f32 = (0..=2 * r).map(|k| row[(k + w - r) % w]).sum();
