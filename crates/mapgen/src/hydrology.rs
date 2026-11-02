@@ -7,8 +7,10 @@
 //!    noise, so paths across flats wander instead of running straight to the
 //!    spill point; it never changes heights above the flats, so divides and
 //!    lakes do not move.
-//! 2. **Flow routing**: each land pixel drains to its steepest lower
-//!    neighbour on the filled surface.
+//! 2. **Flow routing**: each land pixel drains to a lower neighbour on the
+//!    filled surface, chosen by steepness and by the descent of a
+//!    large-scale routing noise, so networks branch instead of running
+//!    parallel down even slopes.
 //! 3. **Accumulation**: every pixel adds its runoff (area × rain) and passes
 //!    the total downstream. The flow of a pixel is the wet-equivalent area, in
 //!    km², that drains through it.
@@ -25,6 +27,11 @@ const FLAT_EPSILON: f32 = 1e-5;
 /// Frequency of the flat noise on the unit sphere, at 1920 pixels of map
 /// width (scaled with the width so features stay a few pixels wide).
 const FLAT_NOISE_FREQUENCY: f64 = 200.0;
+/// Wavelength of the routing noise, km.
+const ROUTE_WAVELENGTH_KM: f64 = 1200.0;
+/// Weight of the routing noise against the slope when choosing between
+/// lower neighbours (the steepest scores 1).
+const ROUTE_WEIGHT: f32 = 1.0;
 /// Filled pits shallower than this (elevation units) stay dry land.
 const LAKE_MIN_DEPTH: f32 = 0.004;
 /// A filled pit becomes a lake only if this much flow (km²) reaches it.
@@ -69,6 +76,28 @@ fn flat_noise(grid: &Grid, seed: u32) -> Vec<f32> {
                 lat.sin() * frequency,
             ];
             ((perlin.get(p) as f32 + 1.0) / 2.0).clamp(0.0, 1.0)
+        })
+        .collect()
+}
+
+/// Large-scale noise guiding the choice between lower neighbours, so river
+/// networks branch like trees instead of running parallel down even slopes.
+/// Its wavelength is set in km, so networks do not depend on the map size.
+fn routing_noise(grid: &Grid, seed: u32) -> Vec<f32> {
+    let perlin = Perlin::new(seed.wrapping_add(810));
+    let radius_km = grid.circumference_km as f64 / std::f64::consts::TAU;
+    let frequency = radius_km / ROUTE_WAVELENGTH_KM;
+    (0..grid.pixel_count())
+        .map(|i| {
+            let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
+            let lon = (x as f64 + 0.5) / grid.width as f64 * std::f64::consts::TAU;
+            let lat = grid.latitude(y);
+            let p = [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()];
+            let (a, b) = (
+                perlin.get(p.map(|c| c * frequency)),
+                perlin.get(p.map(|c| c * frequency * 2.3 + 7.1)),
+            );
+            (a + 0.4 * b) as f32
         })
         .collect()
 }
@@ -137,23 +166,40 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
         }
     }
 
-    // ── 2. Steepest-descent receivers on the filled surface ───────────────────
+    // ── 2. Receivers on the filled surface ────────────────────────────────────
+    // Always a lower neighbour (so drainage stays acyclic and the filled
+    // surface valid), chosen by steepness and, as a tie-breaker on even
+    // slopes, by the descent of a large-scale routing noise: paths that would
+    // run straight and parallel down a regular slope converge into the
+    // noise's valleys and join, as river networks do.
+    let route = routing_noise(grid, seed);
     let receivers: Vec<Option<u32>> = (0..n)
         .map(|i| {
             if sea[i] {
                 return None;
             }
             let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
-            grid.neighbours(x, y)
+            let lower: Vec<(usize, f32, f32)> = grid
+                .neighbours(x, y)
                 .map(|(nx, ny, d)| {
                     let j = grid.index(nx, ny);
-                    (j, (filled[i] - filled[j]) / d)
+                    (j, (filled[i] - filled[j]) / d, (route[i] - route[j]) / d)
                 })
-                .filter(|&(_, slope)| slope > 0.0)
+                .filter(|&(_, slope, _)| slope > 0.0)
+                .collect();
+            let steepest = lower.iter().fold(0.0f32, |m, l| m.max(l.1));
+            let pull = lower
+                .iter()
+                .fold(0.0f32, |m, l| m.max(l.2.abs()))
+                .max(1e-12);
+            lower
+                .iter()
+                .map(|&(j, slope, down)| (j, slope / steepest + ROUTE_WEIGHT * down / pull))
                 .max_by(|a, b| a.1.total_cmp(&b.1))
                 .map(|(j, _)| j as u32)
         })
         .collect();
+    drop(route);
 
     // ── 3. Accumulate runoff downstream (highest pixels first) ────────────────
     let mut flow_km2: Vec<f32> = (0..n)
