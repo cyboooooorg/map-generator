@@ -13,7 +13,7 @@
 //! | `flow.png`        | 16-bit grey, `log10(1 + km²)` with the same formula          |
 //! | `biomes.png`      | 8-bit grey, pixel = biome id (see the `biomes` table)       |
 use crate::biome::biome_color;
-use crate::generation::{COAST_DISTANCE_CAP_KM, Sampler};
+use crate::generation::{COAST_DISTANCE_CAP_KM, Sample, Sampler};
 use crate::preset::Preset;
 use crate::world::WorldParams;
 use crate::world::{Biome, World, biome_name};
@@ -23,7 +23,7 @@ use std::error::Error;
 use std::path::Path;
 
 /// Bumped whenever the layout of `raw_data/` changes incompatibly.
-/// Version 2 adds the volcanic zone and coast distance layers.
+/// Version 2 adds the volcanic zone, coast distance and highland offset layers.
 pub const FORMAT_VERSION: u32 = 2;
 
 /// Content of `raw_data/world.json`.
@@ -66,6 +66,9 @@ pub struct Layers {
     /// Distance to open water in km, capped (format version 2 and later).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coast_distance: Option<ScalarLayerInfo>,
+    /// Local shift of the highland line (format version 2 and later).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highland_offset: Option<ScalarLayerInfo>,
     pub biomes: BiomeLayerInfo,
 }
 
@@ -165,6 +168,13 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             min: 0.0,
             max: COAST_DISTANCE_CAP_KM,
         },
+        ScalarLayer {
+            name: "highland_offset",
+            encoding: "gray16",
+            values: &world.highland_offset,
+            min: -1.0,
+            max: 1.0,
+        },
     ];
 
     let mut infos = Vec::with_capacity(scalars.len());
@@ -198,7 +208,8 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         flow,
         volcanic_zone,
         coast_distance,
-    ]: [ScalarLayerInfo; 6] = infos
+        highland_offset,
+    ]: [ScalarLayerInfo; 7] = infos
         .try_into()
         .map_err(|_| "unexpected number of scalar layers")?;
     let metadata = WorldMetadata {
@@ -222,6 +233,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             flow,
             volcanic_zone: Some(volcanic_zone),
             coast_distance: Some(coast_distance),
+            highland_offset: Some(highland_offset),
             biomes: BiomeLayerInfo {
                 file: "biomes.png".into(),
                 encoding: "gray8-biome-id".into(),
@@ -300,16 +312,22 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    // Version 1 worlds: resample the noise-derived layers from the seed.
+    let resampled = |pick: &dyn Fn(&Sample) -> f32| -> Vec<f32> {
+        let sampler = Sampler::new(&params);
+        (0..params.height)
+            .flat_map(|y| (0..params.width).map(move |x| (x, y)))
+            .map(|(x, y)| pick(&sampler.sample(x, y)))
+            .collect()
+    };
+    let shift = params.planet.climate.volcanic;
     let volcanic_zone = match &meta.layers.volcanic_zone {
         Some(info) => read_scalar(&raw, info)?,
-        None => {
-            let sampler = Sampler::new(&params);
-            let shift = params.planet.climate.volcanic;
-            (0..params.height)
-                .flat_map(|y| (0..params.width).map(move |x| (x, y)))
-                .map(|(x, y)| (sampler.sample(x, y).volcanic_zone + shift).clamp(0.0, 1.0))
-                .collect()
-        }
+        None => resampled(&|s| (s.volcanic_zone + shift).clamp(0.0, 1.0)),
+    };
+    let highland_offset = match &meta.layers.highland_offset {
+        Some(info) => read_scalar(&raw, info)?,
+        None => resampled(&Sample::highland_offset),
     };
     let coast_distance_km = match &meta.layers.coast_distance {
         Some(info) => read_scalar(&raw, info)?,
@@ -330,6 +348,7 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
         elevation,
         volcanic_zone,
         coast_distance_km,
+        highland_offset,
         biomes,
     })
 }
@@ -410,6 +429,7 @@ mod tests {
         v1.format_version = 1;
         v1.layers.volcanic_zone = None;
         v1.layers.coast_distance = None;
+        v1.layers.highland_offset = None;
         std::fs::write(dir.join("world.json"), serde_json::to_string(&v1).unwrap()).unwrap();
         let old = load_world(&world_dir).unwrap();
         assert!(
@@ -423,6 +443,12 @@ mod tests {
                 .iter()
                 .zip(&world.coast_distance_km)
                 .all(|(a, b)| (a - b).abs() < 1.0)
+        );
+        assert!(
+            old.highland_offset
+                .iter()
+                .zip(&world.highland_offset)
+                .all(|(a, b)| (a - b).abs() < 1e-3)
         );
         std::fs::remove_dir_all(world_dir).unwrap();
     }

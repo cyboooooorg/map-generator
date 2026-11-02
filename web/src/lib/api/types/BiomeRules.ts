@@ -32,7 +32,8 @@ shore_top: number,
  */
 shore_width_km: number, 
 /**
- * Above this elevation, land is highland (mountain or snow).
+ * Above this elevation (plus the pixel's highland offset), land is
+ * highland: mountain or snow.
  */
 highland: number, 
 /**

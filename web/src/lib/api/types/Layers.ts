@@ -17,4 +17,8 @@ volcanic_zone?: ScalarLayerInfo | null,
 /**
  * Distance to open water in km, capped (format version 2 and later).
  */
-coast_distance?: ScalarLayerInfo | null, biomes: BiomeLayerInfo, };
+coast_distance?: ScalarLayerInfo | null, 
+/**
+ * Local shift of the highland line (format version 2 and later).
+ */
+highland_offset?: ScalarLayerInfo | null, biomes: BiomeLayerInfo, };

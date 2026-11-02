@@ -242,7 +242,8 @@ pub struct BiomeRules {
     pub shore_top: f32,
     /// Shore only forms on land closer to open water than this, in km.
     pub shore_width_km: f32,
-    /// Above this elevation, land is highland (mountain or snow).
+    /// Above this elevation (plus the pixel's highland offset), land is
+    /// highland: mountain or snow.
     pub highland: f32,
     /// Above this elevation, highland is always snow.
     pub snow_line: f32,
@@ -292,8 +293,8 @@ impl Default for BiomeRules {
             sea_ice_temperature: 0.07,
             shore_top: 0.0,
             shore_width_km: 40.0,
-            highland: 0.70,
-            snow_line: 0.88,
+            highland: 0.10,
+            snow_line: 0.30,
             highland_snow_temperature: 0.35,
             polar: 0.10,
             boreal: 0.30,
@@ -304,10 +305,10 @@ impl Default for BiomeRules {
             forest_moisture: 0.20,
             desert_moisture: -0.05,
             jungle_moisture: 0.30,
-            volcano_elevation: 0.80,
+            volcano_elevation: 0.15,
             volcano_zone: 0.55,
             lava_zone: 0.30,
-            ash_elevation: 0.30,
+            ash_elevation: 0.0,
             ash_zone: 0.15,
         }
     }
@@ -330,6 +331,9 @@ pub struct BiomeInput {
     pub lake: bool,
     /// On a river.
     pub river: bool,
+    /// Local shift of the highland line, so mountain borders do not follow
+    /// elevation contours.
+    pub highland_offset: f32,
 }
 
 // ── Top-level biome selector ──────────────────────────────────────────────────
@@ -356,8 +360,8 @@ impl BiomeRules {
             Biome::River
         } else if e < self.shore_top && input.coast_distance_km <= self.shore_width_km {
             self.shore(t, m)
-        } else if e > self.highland {
-            self.highland(e, t)
+        } else if e + input.highland_offset > self.highland {
+            self.highland(e + input.highland_offset, t)
         } else {
             self.land(t, m)
         };
@@ -473,6 +477,7 @@ mod tests {
                                 coast_distance_km: 0.0,
                                 lake,
                                 river,
+                                highland_offset: 0.0,
                             };
                             out.insert(preset.remap(preset.rules.choose(input)));
                         }
@@ -501,6 +506,7 @@ mod tests {
             coast_distance_km,
             lake: false,
             river: false,
+            highland_offset: 0.0,
         };
         assert_eq!(rules.choose(lowland(10.0)), Biome::Beach);
         assert_ne!(rules.choose(lowland(500.0)), Biome::Beach);
@@ -516,6 +522,7 @@ mod tests {
             coast_distance_km: 0.0,
             lake: false,
             river: false,
+            highland_offset: 0.0,
         };
         assert_eq!(BiomeRules::default().choose(input), Biome::SeaIce);
     }
@@ -530,6 +537,7 @@ mod tests {
             coast_distance_km: 0.0,
             lake: false,
             river: false,
+            highland_offset: 0.0,
         };
         assert_eq!(BiomeRules::default().choose(input), Biome::DeepOcean);
     }

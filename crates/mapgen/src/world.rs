@@ -75,6 +75,8 @@ pub struct World {
     pub volcanic_zone: Vec<f32>,
     /// Distance to the nearest open water in km, capped (0 on water).
     pub coast_distance_km: Vec<f32>,
+    /// Local shift of the highland line used by biome selection.
+    pub highland_offset: Vec<f32>,
     pub biomes: Vec<Biome>,
 }
 

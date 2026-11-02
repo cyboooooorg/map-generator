@@ -226,6 +226,7 @@ worlds/<planet>-<seed>/
 │   ├── flow.png       ← 16-bit greyscale layer, log scale
 │   ├── volcanic_zone.png  ← 16-bit greyscale layer
 │   ├── coast_distance.png ← 16-bit greyscale layer
+│   ├── highland_offset.png ← 16-bit greyscale layer
 │   └── biomes.png     ← 8-bit greyscale, pixel = biome id
 └── noise_maps/
     ├── noise_warp_x.png
@@ -241,6 +242,7 @@ worlds/<planet>-<seed>/
     ├── noise_temperature_anomaly.png
     ├── noise_variability_t.png
     ├── noise_variability_m.png
+    ├── noise_highland_jitter.png
     ├── erosion.png
     ├── elevation.png
     ├── temperature.png
@@ -262,15 +264,16 @@ worlds/<planet>-<seed>/
 
 `raw_data/` holds one lossless PNG per layer, pixel-aligned with `world.png` (row 0 = north pole, column 0 = longitude 0), and a `world.json` describing how to decode them.
 
-| File                 | Encoding         | Content                                                                                      |
-| -------------------- | ---------------- | -------------------------------------------------------------------------------------------- |
-| `elevation.png`      | 16-bit grey      | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`) |
-| `moisture.png`       | 16-bit grey      | Moisture in `[-1, 1]`, planet-type offset included                                           |
-| `temperature.png`    | 16-bit grey      | Temperature in `[0, 1]`, planet-type offset included                                         |
-| `flow.png`           | 16-bit grey, log | River flow: `log10(1 + km²)` in `[0, 8]`, the wet-equivalent area draining through the pixel |
-| `volcanic_zone.png`  | 16-bit grey      | Volcanic zone in `[0, 1]` as biome selection sees it (planet shift included)                 |
-| `coast_distance.png` | 16-bit grey      | Distance to the nearest open water in `[0, 2000]` km (0 on water, capped)                    |
-| `biomes.png`         | 8-bit grey       | Biome id of each pixel                                                                       |
+| File                  | Encoding         | Content                                                                                                                                  |
+| --------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `elevation.png`       | 16-bit grey      | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`)                                             |
+| `moisture.png`        | 16-bit grey      | Moisture in `[-1, 1]`, planet-type offset included                                                                                       |
+| `temperature.png`     | 16-bit grey      | Temperature in `[0, 1]`, planet-type offset included                                                                                     |
+| `flow.png`            | 16-bit grey, log | River flow: `log10(1 + km²)` in `[0, 8]`, the wet-equivalent area draining through the pixel                                             |
+| `volcanic_zone.png`   | 16-bit grey      | Volcanic zone in `[0, 1]` as biome selection sees it (planet shift included)                                                             |
+| `coast_distance.png`  | 16-bit grey      | Distance to the nearest open water in `[0, 2000]` km (0 on water, capped)                                                                |
+| `highland_offset.png` | 16-bit grey      | Local shift of the mountain line in `[-1, 1]`: a pixel is highland when `elevation − sea_level + offset` exceeds the preset's `highland` |
+| `biomes.png`          | 8-bit grey       | Biome id of each pixel                                                                                                                   |
 
 A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵`.
 
@@ -293,9 +296,9 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 }
 ```
 
-The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone` and `coast_distance`, so that every input of biome selection is exported.
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported.
 
-The `mapgen` library reloads a world with `export::raw_data::load_world`; for version 1 worlds it recomputes the two missing layers from the world parameters and elevation.
+The `mapgen` library reloads a world with `export::raw_data::load_world`; for version 1 worlds it recomputes the missing layers from the world parameters and elevation.
 
 Reading a layer in Python:
 
@@ -333,6 +336,7 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `noise_temperature_anomaly.png` | `[-1, 1]` | Large-scale temperature anomaly noise (features of ~3 000 km)                                    |
 | `noise_variability_t.png`       | `[-1, 1]` | Regional variability noise added to temperature                                                  |
 | `noise_variability_m.png`       | `[-1, 1]` | Regional variability noise added to moisture                                                     |
+| `noise_highland_jitter.png`     | `[-1, 1]` | Noise shifting the mountain line (× 0.5 gives `highland_offset`)                                 |
 | `erosion.png`                   | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                 |
 | `elevation.png`                 | `[-1, 1]` | Final elevation, after erosion                                                                   |
 | `temperature.png`               | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt))          |

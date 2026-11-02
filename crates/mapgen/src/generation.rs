@@ -30,7 +30,19 @@ pub struct Sample {
     /// Regional climate variability noise for temperature and moisture.
     pub variability_t: f32,
     pub variability_m: f32,
+    /// Highland line jitter noise, roughly in `[-1, 1]`.
+    pub highland_jitter: f32,
 }
+
+impl Sample {
+    /// Local shift of the highland line used by biome selection.
+    pub fn highland_offset(&self) -> f32 {
+        HIGHLAND_JITTER * self.highland_jitter
+    }
+}
+
+/// Weight of the highland line jitter (about 0.09 of standard deviation).
+const HIGHLAND_JITTER: f32 = 0.50;
 
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
@@ -49,6 +61,7 @@ pub struct Sampler {
     anomaly_noise: Perlin,
     /// Regional climate variability (soils, aspect, local circulation).
     variability_noise: Perlin,
+    highland_noise: Perlin,
 }
 
 impl Sampler {
@@ -76,6 +89,7 @@ impl Sampler {
             volcano_noise: Perlin::new(seed.wrapping_add(300)),
             anomaly_noise: Perlin::new(seed.wrapping_add(400)),
             variability_noise: Perlin::new(seed.wrapping_add(500)),
+            highland_noise: Perlin::new(seed.wrapping_add(700)),
         }
     }
 
@@ -157,6 +171,9 @@ impl Sampler {
             5,
         );
 
+        let h = 4.0 * s;
+        let highland_jitter = fbm(&self.highland_noise, nx * h, ny * h, nz * h, 4);
+
         Sample {
             warp_x: warp_x as f32,
             warp_y: warp_y as f32,
@@ -171,6 +188,7 @@ impl Sampler {
             temperature_anomaly,
             variability_t,
             variability_m,
+            highland_jitter,
         }
     }
 }
@@ -215,6 +233,7 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
     }),
     ("noise_variability_t", Ramp::Signed, |s| s.variability_t),
     ("noise_variability_m", Ramp::Signed, |s| s.variability_m),
+    ("noise_highland_jitter", Ramp::Signed, |s| s.highland_jitter),
 ];
 
 /// Coast distances are computed up to this value; further pixels get the cap.
@@ -414,6 +433,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
         .iter()
         .map(|s| (s.volcanic_zone + dvz).clamp(0.0, 1.0))
         .collect();
+    let highland_offset: Vec<f32> = samples.iter().map(Sample::highland_offset).collect();
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
@@ -425,6 +445,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
                 coast_distance_km: coast_distance_km[i],
                 lake: water.lake[i],
                 river: water.river[i],
+                highland_offset: highland_offset[i],
             };
             planet.remap(rules.choose(input))
         })
@@ -441,6 +462,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
             flow_km2: water.flow_km2,
             volcanic_zone,
             coast_distance_km,
+            highland_offset,
             biomes,
         },
         debug,
