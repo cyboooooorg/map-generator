@@ -78,6 +78,8 @@ export class TileLayer {
   private readonly loading = new Map<string, AbortController>();
   /** Tiles whose download failed, with the time to retry them. */
   private readonly failed = new Map<string, number>();
+  /** Timers that wake the view up when failed tiles can be retried. */
+  private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>();
   private world: { id: string; revision: number; firstLevel: number } | null = null;
   private enabled = true;
   private frame = 0;
@@ -86,9 +88,14 @@ export class TileLayer {
   private readonly sphere = new Sphere();
   private readonly corners = Array.from({ length: 5 }, () => new Vector3());
 
+  /**
+   * @param onChange called when the view should be drawn again: a tile
+   *   arrived, or a failed one can be retried.
+   */
   constructor(
     private readonly scene: Scene,
     private readonly makeMaterial: PatchMaterialFactory,
+    private readonly onChange: () => void,
   ) {}
 
   /** Shows the detail of a world (`revision` keys the browser cache), or none. */
@@ -231,10 +238,16 @@ export class TileLayer {
       texture.needsUpdate = true;
       this.cache.set(key, { texture, lastUsed: this.frame });
       this.failed.delete(key);
+      this.onChange();
     } catch {
       if (!controller.signal.aborted) {
         // Retry later: a tile left out shows a blurry ancestor for good.
         this.failed.set(key, performance.now() + RETRY_MS);
+        const timer = setTimeout(() => {
+          this.retryTimers.delete(timer);
+          this.onChange();
+        }, RETRY_MS);
+        this.retryTimers.add(timer);
       }
     } finally {
       if (this.loading.get(key) === controller) {
@@ -321,5 +334,9 @@ export class TileLayer {
     }
     this.cache.clear();
     this.failed.clear();
+    for (const timer of this.retryTimers) {
+      clearTimeout(timer);
+    }
+    this.retryTimers.clear();
   }
 }
