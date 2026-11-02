@@ -11,6 +11,8 @@
   interface Props {
     /** World to show, or null for an empty view. */
     worldId: string | null;
+    /** Its revision (modification time), which keys the cached detail tiles. */
+    revision: number | null;
     /** Its metadata, once loaded. */
     meta: WorldMetadata | null;
     /** Its decoded layers, once loaded: needed by every display except biomes. */
@@ -18,7 +20,7 @@
     onPick: (point: LonLat | null) => void;
   }
 
-  let { worldId, meta, layers, onPick }: Props = $props();
+  let { worldId, revision, meta, layers, onPick }: Props = $props();
 
   const LAYERS: { id: Layer; label: string }[] = [
     { id: 'biomes', label: 'Biomes' },
@@ -78,6 +80,11 @@
 
   $effect(() => {
     view?.setData(layers, meta ? meta.sea_level + meta.preset.rules.waterline : 0);
+  });
+  $effect(() => {
+    view?.setDetail(
+      worldId && meta && revision !== null ? { id: worldId, revision, baseWidth: meta.width } : null,
+    );
   });
   $effect(() => view?.setMode(mode));
   $effect(() => view?.setLayer(dataReady ? layer : 'biomes'));

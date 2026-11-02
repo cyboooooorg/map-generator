@@ -31,6 +31,7 @@ import {
   UnsignedByteType,
   Vector2,
   Vector3,
+  Vector4,
   WebGLRenderer,
   type IUniform,
 } from 'three';
@@ -46,12 +47,14 @@ import {
   type Vec3,
 } from '../geo';
 import type { WorldLayers } from '../layers';
+import { TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
   atmosphereVertex,
   LAYER_IDS,
   type Layer,
   lineFragment,
+  RELIEF_SCALE,
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
@@ -78,6 +81,8 @@ const MAP_DISTANCE = 5.5;
 const CLICK_TOLERANCE = 5;
 /** Headlight direction in view space: above and to the left of the camera. */
 const HEADLIGHT = new Vector3(-0.4, 0.5, 1).normalize();
+/** Lowest camera altitude over the globe (radius 1): about 2 km on an Earth-sized planet. */
+const MIN_ALTITUDE = 0.0003;
 
 /** Graticule every `step` degrees, as line segments in uv space. */
 function graticule(step: number): BufferGeometry {
@@ -134,6 +139,9 @@ export class PlanetView {
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
   private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>;
   private readonly resizeObserver: ResizeObserver;
+  private readonly tiles: TileLayer;
+  private layer: Layer = 'biomes';
+  private hexOn = false;
   /** Uniforms shared by the surface and the graticule (the same objects). */
   private readonly shared = {
     uMorph: { value: 1 } as IUniform<number>,
@@ -155,6 +163,11 @@ export class PlanetView {
     uHex: { value: emptyTexture() } as IUniform<Texture>,
     uHexGrid: { value: [1, 1, 1, 1] } as IUniform<number[]>,
     uMapSize: { value: new Vector2(1, 1) } as IUniform<Vector2>,
+    // The base surface covers the whole planet and draws no detail tile.
+    uTileRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
+    uTileOn: { value: 0 } as IUniform<number>,
+    uTile: { value: emptyTexture() } as IUniform<Texture>,
+    uTexRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
   };
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
@@ -194,6 +207,7 @@ export class PlanetView {
         uniforms: {
           ...this.shared,
           uLift: { value: 0.003 },
+          uTileRect: { value: new Vector4(0, 0, 1, 1) },
           uColor: { value: new Color('#ffffff') },
           uOpacity: { value: 0.25 },
         },
@@ -224,11 +238,31 @@ export class PlanetView {
     );
     this.scene.add(this.atmosphere);
 
+    this.tiles = new TileLayer(
+      this.scene,
+      () =>
+        new ShaderMaterial({
+          vertexShader: surfaceVertex,
+          fragmentShader: surfaceFragment,
+          // Shared uniform objects, except the patch's own tile and rectangle.
+          uniforms: {
+            ...this.shared,
+            ...this.u,
+            uTileRect: { value: new Vector4(0, 0, 1, 1) },
+            uTileOn: { value: 0 },
+            uTile: { value: null },
+            uTexRect: { value: new Vector4(0, 0, 1, 1) },
+          },
+          side: DoubleSide,
+        }),
+    );
+
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.applyModeControls();
     this.camera.position.set(0, 0, GLOBE_DISTANCE);
 
+    canvas.addEventListener('wheel', this.handleWheel, { passive: false });
     canvas.addEventListener('pointerdown', this.handlePointerDown);
     canvas.addEventListener('pointerup', this.handlePointerUp);
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -274,6 +308,16 @@ export class PlanetView {
 
   setLayer(layer: Layer): void {
     this.u.uLayer.value = LAYER_IDS[layer];
+    this.layer = layer;
+    this.tiles.setEnabled(layer === 'biomes' && !this.hexOn);
+  }
+
+  /**
+   * Streams detail tiles of a world when zooming in (`revision` keys the
+   * browser cache), or stops with null.
+   */
+  setDetail(world: { id: string; revision: number; baseWidth: number } | null): void {
+    this.tiles.setWorld(world);
   }
 
   /** Relief exaggeration in [0, 1]: 0 is flat. */
@@ -300,8 +344,12 @@ export class PlanetView {
     if (!map) {
       this.u.uHex.value = emptyTexture();
       this.u.uHexOn.value = 0;
+      this.hexOn = false;
+      this.tiles.setEnabled(this.layer === 'biomes');
       return;
     }
+    this.hexOn = true;
+    this.tiles.setEnabled(false);
     this.u.uHex.value = hexTexture(map);
     this.u.uHexGrid.value = [map.columns, map.rows, map.hex_width_px, map.hex_size_px];
     this.u.uMapSize.value.set(map.source.width, map.source.height);
@@ -327,9 +375,11 @@ export class PlanetView {
   dispose(): void {
     this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
+    this.canvas.removeEventListener('wheel', this.handleWheel);
     this.canvas.removeEventListener('pointerdown', this.handlePointerDown);
     this.canvas.removeEventListener('pointerup', this.handlePointerUp);
     this.controls.dispose();
+    this.tiles.dispose();
     this.texture?.dispose();
     this.shared.uData.value.dispose();
     this.u.uHex.value.dispose();
@@ -344,8 +394,10 @@ export class PlanetView {
     const globe = this.mode === 'globe';
     this.controls.enableRotate = globe;
     this.controls.enablePan = !globe;
+    // On the globe the wheel is handled here, by altitude (see handleWheel).
+    this.controls.enableZoom = !globe;
     this.controls.screenSpacePanning = true;
-    this.controls.minDistance = globe ? 1.15 : 0.3;
+    this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : 0.002;
     this.controls.maxDistance = globe ? 8 : 12;
     this.controls.mouseButtons = globe
       ? { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
@@ -377,9 +429,41 @@ export class PlanetView {
     // The atmosphere only makes sense around the globe: fade it with the morph.
     this.atmosphere.visible = this.atmosphereOn && this.morph > 0.01;
     this.atmosphereOpacity.value = this.morph ** 3;
+    // Near the surface: slower rotation, and a near plane that follows the
+    // altitude so depth precision holds down to a few hundred metres.
+    const altitude = this.altitude();
+    this.controls.rotateSpeed = Math.min(1, Math.max(0.002, altitude * 0.6));
+    this.camera.near = Math.max(altitude * 0.1, 1e-6);
+    this.camera.far = altitude + 4;
+    this.camera.updateProjectionMatrix();
     this.controls.update();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
+    if (!this.animation) {
+      this.tiles.update(this.camera, this.morph, this.renderer.domElement.height);
+    }
     this.renderer.render(this.scene, this.camera);
+  };
+
+  /** Height of the camera above the surface (globe) or the map plane. */
+  private altitude(): number {
+    return this.mode === 'globe'
+      ? this.camera.position.length() - 1
+      : Math.abs(this.camera.position.z);
+  }
+
+  // On the globe each wheel step scales the altitude, so zooming stays
+  // smooth from orbit down to the deepest tiles.
+  private readonly handleWheel = (event: WheelEvent): void => {
+    if (this.mode !== 'globe') {
+      return;
+    }
+    event.preventDefault();
+    const relief = this.shared.uRelief.value * RELIEF_SCALE;
+    const altitude = Math.min(
+      GLOBE_DISTANCE * 2.5,
+      Math.max(MIN_ALTITUDE + relief, this.altitude() * Math.exp(event.deltaY * 0.0015)),
+    );
+    this.camera.position.setLength(1 + altitude);
   };
 
   private readonly handlePointerDown = (event: PointerEvent): void => {

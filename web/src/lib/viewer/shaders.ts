@@ -31,7 +31,11 @@ const common = /* glsl */ `
 export const surfaceVertex = /* glsl */ `
   ${common}
   uniform float uLift;
+  // Part of the planet this mesh covers (u0, v0, du, dv): the whole planet
+  // for the base surface, one quadtree tile for a detail patch.
+  uniform vec4 uTileRect;
   varying vec2 vUv;
+  varying vec2 vLocalUv;
   varying vec3 vNormal;
   varying vec3 vSphere;
   varying vec3 vEast;
@@ -39,17 +43,19 @@ export const surfaceVertex = /* glsl */ `
   varying vec3 vWorld;
 
   void main() {
-    vUv = uv;
-    float lon = uv.x * 2.0 * PI;
-    float lat = (uv.y - 0.5) * PI;
+    vec2 g = uTileRect.xy + uv * uTileRect.zw;
+    vUv = g;
+    vLocalUv = uv;
+    float lon = g.x * 2.0 * PI;
+    float lat = (g.y - 0.5) * PI;
     vec3 sphere = vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
-    vec3 plane = vec3((uv.x - 0.5) * 2.0 * PI, (uv.y - 0.5) * PI, 0.0);
+    vec3 plane = vec3((g.x - 0.5) * 2.0 * PI, (g.y - 0.5) * PI, 0.0);
     vec3 normal = normalize(mix(vec3(0.0, 0.0, 1.0), sphere, uMorph));
 
     // Land rises above the coastline; seas stay flat at the surface.
     float height = 0.0;
     if (uHasData > 0.5) {
-      height = max(dataAt(uv).r - uCoast, 0.0) * uRelief * ${RELIEF_SCALE.toFixed(4)};
+      height = max(dataAt(g).r - uCoast, 0.0) * uRelief * ${RELIEF_SCALE.toFixed(4)};
     }
     vec3 position = mix(plane, sphere, uMorph) + normal * (height + uLift);
 
@@ -75,7 +81,11 @@ export const surfaceFragment = /* glsl */ `
   uniform sampler2D uHex;      // columns × rows: rgb = biome colour, a = river flag
   uniform vec4 uHexGrid;       // columns, rows, hex width (px), hex size (px)
   uniform vec2 uMapSize;       // map width and height in pixels
+  uniform float uTileOn;       // 1 on a detail patch with a tile texture
+  uniform sampler2D uTile;     // detail tile, row 0 = north
+  uniform vec4 uTexRect;       // part of uTile this patch shows (u0, v0, du, dv), v down
   varying vec2 vUv;
+  varying vec2 vLocalUv;
   varying vec3 vNormal;
   varying vec3 vSphere;
   varying vec3 vEast;
@@ -138,7 +148,10 @@ export const surfaceFragment = /* glsl */ `
     bool water = hasData && aboveCoast < 0.0;
 
     vec3 colour;
-    if (uLayer == 0 || !hasData) {
+    if (uTileOn > 0.5) {
+      // Detail tiles are drawn on the biome layer only.
+      colour = texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb;
+    } else if (uLayer == 0 || !hasData) {
       colour = texture2D(uMap, vUv).rgb;
     } else if (uLayer == 1) {
       colour = toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));

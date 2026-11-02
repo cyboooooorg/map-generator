@@ -116,9 +116,9 @@ pub fn latitude_row(height: u32, latitude_deg: f64) -> f64 {
 /// Vertical exaggeration of the hillshade: one elevation unit is treated as
 /// `RELIEF_KM` kilometres. Planet-scale slopes are tiny, so this is far above
 /// real relief on purpose.
-const RELIEF_KM: f32 = 1500.0;
+pub(crate) const RELIEF_KM: f32 = 1500.0;
 /// Light direction (east, north, up), from the north-west at 45° altitude.
-const LIGHT: [f32; 3] = [-0.5, 0.5, std::f32::consts::FRAC_1_SQRT_2];
+pub(crate) const LIGHT: [f32; 3] = [-0.5, 0.5, std::f32::consts::FRAC_1_SQRT_2];
 
 /// Brightness factor of a land pixel lit from the north-west: 1.0 on flat
 /// ground, darker on slopes facing south-east, brighter facing north-west.

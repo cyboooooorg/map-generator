@@ -24,7 +24,7 @@ mise run dev
 In the viewer:
 
 - **Globe / Map** switches between the globe and the flat map, with an animated morph.
-- Drag to rotate the globe or pan the map, scroll to zoom.
+- Drag to rotate the globe or pan the map, scroll to zoom. Zooming goes from the whole planet down to about 300 m per pixel: on the biome layer, detail tiles rendered by the server stream in as you get closer (the coarser picture stays until they arrive). On the globe, rotation slows down near the surface.
 - Click a point to see its coordinates, biome, elevation above the coastline, temperature, moisture and river flow.
 - **Display** (folded by default on narrow screens):
   - **Layer**: biomes (the generated map), or elevation, temperature, moisture and river flow coloured on the GPU, with a legend.
@@ -50,13 +50,14 @@ There is nothing to configure here: the server address is fixed in `vite.config.
 
 ## Code layout
 
-| Path                    | Content                                                                                                                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/lib/api/client.ts` | Typed API calls and the job progress stream                                                                                                                                                |
-| `src/lib/api/types/`    | API types generated from the Rust server by `cargo test` (ts-rs): do not edit                                                                                                              |
-| `src/lib/geo.ts`        | Coordinate conventions (texture, globe, flat map) and ray intersections                                                                                                                    |
-| `src/lib/layers/`       | 16-bit layer decoding in a Web Worker (browsers decode PNGs to 8 bits)                                                                                                                     |
-| `src/lib/viewer/`       | three.js view (`PlanetView.ts`): one mesh morphing between plane and sphere in its vertex shader; GLSL in `shaders.ts`, colour ramps shared by the shader and the legend in `colormaps.ts` |
-| `src/components/`       | Svelte components: viewer, world list, generation form, point information                                                                                                                  |
+| Path                                      | Content                                                                                                                                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/lib/api/client.ts`                   | Typed API calls and the job progress stream                                                                                                                                                |
+| `src/lib/api/types/`                      | API types generated from the Rust server by `cargo test` (ts-rs): do not edit                                                                                                              |
+| `src/lib/geo.ts`                          | Coordinate conventions (texture, globe, flat map) and ray intersections                                                                                                                    |
+| `src/lib/layers/`                         | 16-bit layer decoding in a Web Worker (browsers decode PNGs to 8 bits)                                                                                                                     |
+| `src/lib/viewer/`                         | three.js view (`PlanetView.ts`): one mesh morphing between plane and sphere in its vertex shader; GLSL in `shaders.ts`, colour ramps shared by the shader and the legend in `colormaps.ts` |
+| `src/lib/viewer/TileLayer.ts`, `tiles.ts` | Deep zoom: quadtree level selection (screen-space error, frustum and horizon culling), tile loading (priority queue, abort, GPU cache) and detail patches                                  |
+| `src/components/`                         | Svelte components: viewer, world list, generation form, point information                                                                                                                  |
 
 TypeScript runs in its strictest settings (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), and `npm run check` fails on any warning.

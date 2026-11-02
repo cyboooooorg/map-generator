@@ -11,6 +11,7 @@
 //! lakes and volcanic biomes keep their exact inputs, so they stay crisp.
 //! This is rendering only: the exported biome layer is unchanged.
 use crate::biome::{BiomeInput, biome_color};
+use crate::preset::Preset;
 use crate::world::World;
 
 /// Standard deviation of the temperature offsets (`[0, 1]` scale).
@@ -46,11 +47,16 @@ fn hash(i: usize) -> f32 {
     (x >> 8) as f32 / (1u32 << 24) as f32
 }
 
-/// Colour of pixel `i` with soft borders, as linear-ish sRGB floats in `[0, 255]`.
+/// Colour of pixel `i` with soft borders, as sRGB floats in `[0, 255]`.
 /// `input` is the exact biome input of the pixel.
 pub fn ecotone_colour(world: &World, i: usize, input: BiomeInput) -> [f32; 3] {
-    let planet = &world.params.planet;
-    let (sin, cos) = (hash(i) * std::f32::consts::TAU).sin_cos();
+    ecotone_colour_for(&world.params.planet, i, input)
+}
+
+/// Like [`ecotone_colour`] for any planet; `key` only decorrelates the offset
+/// rotation between neighbouring pixels.
+pub fn ecotone_colour_for(planet: &Preset, key: usize, input: BiomeInput) -> [f32; 3] {
+    let (sin, cos) = (hash(key) * std::f32::consts::TAU).sin_cos();
     let mut sum = [0.0f32; 3];
     for (x, y) in unit_offsets() {
         let (dt, dm) = (x * cos - y * sin, x * sin + y * cos);

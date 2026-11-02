@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 axum = "0.8.9"
+image = { version = "0.25", default-features = false, features = ["png"] }
 mapgen = { workspace = true, features = ["ts"] }
 rand.workspace = true
 serde.workspace = true
