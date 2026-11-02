@@ -19,3 +19,10 @@ jobs:
         run: mise run lint
       - name: Test
         run: mise run test
+      - name: Generated TypeScript types are committed
+        # `cargo test` regenerates web/src/lib/api/types from the Rust API types.
+        run: git diff --exit-code -- web/src/lib/api/types
+      - name: Front-end checks
+        run: mise run web:check
+      - name: Front-end build
+        run: mise run web:build

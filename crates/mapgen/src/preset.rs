@@ -26,6 +26,7 @@
 //! DustPlain = ["Plain", "Desert"]
 //! ```
 use crate::biome::{Biome, BiomeRules};
+use crate::request;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -34,16 +35,17 @@ use std::path::Path;
 
 /// The built-in presets, in the order `--planet` lists them.
 const BUILT_IN: [(&str, &str); 5] = [
-    ("terran", include_str!("../presets/terran.toml")),
-    ("volcanic", include_str!("../presets/volcanic.toml")),
-    ("frozen", include_str!("../presets/frozen.toml")),
-    ("caustic", include_str!("../presets/caustic.toml")),
-    ("barren", include_str!("../presets/barren.toml")),
+    ("terran", include_str!("../../../presets/terran.toml")),
+    ("volcanic", include_str!("../../../presets/volcanic.toml")),
+    ("frozen", include_str!("../../../presets/frozen.toml")),
+    ("caustic", include_str!("../../../presets/caustic.toml")),
+    ("barren", include_str!("../../../presets/barren.toml")),
 ];
 
 /// A generation parameter given by a preset: a fixed value or a range to draw from.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ParamDefault {
     Fixed(f32),
     Range([f32; 2]),
@@ -78,6 +80,7 @@ impl ParamDefault {
 /// parameters missing here fall back to the generator's own defaults.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Defaults {
     pub sea_level: Option<ParamDefault>,
     pub volcanic: Option<ParamDefault>,
@@ -89,6 +92,7 @@ pub struct Defaults {
 /// Global shifts added to every pixel before biome selection.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ClimateShift {
     /// Added to temperature (`[0, 1]` scale).
     pub temperature: f32,
@@ -101,6 +105,7 @@ pub struct ClimateShift {
 /// A planet type. See the module documentation for the file format.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Preset {
     /// Short identifier, used in output directory names.
     pub name: String,
@@ -117,6 +122,7 @@ pub struct Preset {
     pub remap: BTreeMap<Biome, Vec<Biome>>,
     /// `remap` inverted: the final biome for each biome id.
     #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
     lookup: Vec<Biome>,
 }
 
@@ -151,15 +157,15 @@ impl Preset {
         }
 
         let d = &preset.defaults;
-        for (field, value, min, max) in [
-            ("sea_level", d.sea_level, -1.0, 1.0),
-            ("volcanic", d.volcanic, 0.0, 1.0),
-            ("circumference", d.circumference, 1.0, f32::MAX),
-            ("axial_tilt", d.axial_tilt, 0.0, 90.0),
-            ("erosion", d.erosion, 0.0, 5.0),
+        for (field, value, limits) in [
+            ("sea_level", d.sea_level, request::SEA_LEVEL),
+            ("volcanic", d.volcanic, request::VOLCANIC),
+            ("circumference", d.circumference, request::CIRCUMFERENCE_KM),
+            ("axial_tilt", d.axial_tilt, request::AXIAL_TILT_DEG),
+            ("erosion", d.erosion, request::EROSION),
         ] {
             if let Some(v) = value {
-                v.check(field, min, max).map_err(fail)?;
+                v.check(field, limits.min, limits.max).map_err(fail)?;
             }
         }
 

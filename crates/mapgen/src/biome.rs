@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 /// The discriminant is the biome id written to `raw_data/biomes.png`: never
 /// reorder or remove variants, only append new ones.
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[repr(u8)]
 pub enum Biome {
     // ── Standard water ────────────────────────────────────────────────────────
@@ -228,6 +229,7 @@ pub fn biome_name(b: Biome) -> &'static str {
 /// the others keep their default value.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BiomeRules {
     // Altitude bands
     /// Below this elevation, a pixel is open water.

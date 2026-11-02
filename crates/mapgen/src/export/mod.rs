@@ -9,9 +9,79 @@ pub use png::{export_legend_png, export_png};
 pub use raw_data::export_raw_data;
 pub use svg::export_svg;
 
+use crate::generation::Generated;
 use crate::geo::Grid;
 use crate::world::{World, biome_color};
 use rayon::prelude::*;
+use std::path::Path;
+
+/// Which optional outputs [`export_world`] writes. The maps (`world.png`,
+/// `world.svg`, `legend.png`) are always written.
+#[derive(Clone, Copy, Debug)]
+pub struct ExportOptions {
+    /// `raw_data/`: world.json and the layer PNGs.
+    pub raw_data: bool,
+    /// `noise_maps/`: one diagnostic PNG per intermediate layer.
+    pub noise_maps: bool,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        Self {
+            raw_data: true,
+            noise_maps: true,
+        }
+    }
+}
+
+/// Name of a world's output directory: `<planet>-<seed>`.
+pub fn world_dir_name(world: &World) -> String {
+    format!("{}-{}", world.params.planet.name, world.params.seed)
+}
+
+/// Writes every output of a generated world into `dir` (created if needed).
+/// The exports are independent and dominated by PNG encoding, so they run in
+/// parallel.
+pub fn export_world(
+    generated: &Generated,
+    dir: &Path,
+    options: ExportOptions,
+) -> Result<(), String> {
+    let world = &generated.world;
+    let path = |sub: &str| dir.join(sub).to_string_lossy().into_owned();
+    let io = |e: std::io::Error| e.to_string();
+    std::fs::create_dir_all(dir).map_err(io)?;
+    if options.raw_data {
+        std::fs::create_dir_all(dir.join("raw_data")).map_err(io)?;
+    }
+    if options.noise_maps {
+        std::fs::create_dir_all(dir.join("noise_maps")).map_err(io)?;
+    }
+
+    type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
+    let mut exports: Vec<Export> = vec![
+        Box::new(|| export_png(world, &path("world.png")).map_err(|e| e.to_string())),
+        Box::new(|| export_svg(world, &path("world.svg")).map_err(|e| e.to_string())),
+        Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
+    ];
+    if options.raw_data {
+        exports.push(Box::new(|| {
+            export_raw_data(world, &dir.join("raw_data")).map_err(|e| e.to_string())
+        }));
+    }
+    if options.noise_maps {
+        exports.push(Box::new(|| {
+            export_noise_maps(
+                &generated.debug,
+                world.width,
+                world.height,
+                &path("noise_maps"),
+            )
+            .map_err(|e| e.to_string())
+        }));
+    }
+    exports.par_iter().try_for_each(|export| export())
+}
 
 /// Contour lines are drawn whenever a tile and a neighbour straddle one of these levels.
 const CONTOUR_LEVELS: &[f32] = &[-0.45, -0.15, 0.0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90];

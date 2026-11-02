@@ -1,0 +1,14 @@
+[package]
+name = "map-generator"
+description = "Command-line tools: map-generator (generate a world) and hexgrid (hex resampling)"
+version.workspace = true
+edition.workspace = true
+default-run = "map-generator"
+
+[dependencies]
+mapgen.workspace = true
+clap.workspace = true
+image.workspace = true
+rand.workspace = true
+rayon.workspace = true
+serde_json.workspace = true

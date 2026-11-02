@@ -207,7 +207,7 @@ pub fn moisture(input: &MoistureInput) -> (Vec<f32>, Vec<f32>) {
         .iter()
         .map(|r| 1.0 - 2.0 * (-r / NEUTRAL_RAIN).exp2())
         .collect();
-    let moisture = (0..grid.len())
+    let moisture = (0..grid.pixel_count())
         .into_par_iter()
         .map(|i| {
             let band = circulation_band(grid.latitude((i / w) as u32));
@@ -283,7 +283,7 @@ mod tests {
 
     /// A row of ocean on the west half and flat land on the east half.
     fn half_ocean(grid: &Grid) -> Vec<f32> {
-        (0..grid.len())
+        (0..grid.pixel_count())
             .map(|i| {
                 if i % grid.width as usize >= grid.width as usize / 2 {
                     0.1
@@ -302,8 +302,8 @@ mod tests {
             circumference_km: 40_000.0,
         };
         let height = half_ocean(&grid);
-        let temperature = vec![0.8; grid.len()];
-        let noise = vec![0.0; grid.len()];
+        let temperature = vec![0.8; grid.pixel_count()];
+        let noise = vec![0.0; grid.pixel_count()];
         let input = MoistureInput {
             grid,
             height_above_water: &height,
@@ -330,8 +330,8 @@ mod tests {
             }
         }
         let flat = half_ocean(&grid);
-        let temperature = vec![0.8; grid.len()];
-        let noise = vec![0.0; grid.len()];
+        let temperature = vec![0.8; grid.pixel_count()];
+        let noise = vec![0.0; grid.pixel_count()];
         let with_ridge = MoistureInput {
             grid,
             height_above_water: &height,
@@ -354,13 +354,13 @@ mod tests {
             height: 20,
             circumference_km: 40_000.0,
         };
-        let flat = vec![0.5; grid.len()];
+        let flat = vec![0.5; grid.pixel_count()];
         assert!(
             smooth(&grid, &flat, 3_000.0)
                 .iter()
                 .all(|v| (v - 0.5).abs() < 1e-5)
         );
-        let mut spike = vec![0.0; grid.len()];
+        let mut spike = vec![0.0; grid.pixel_count()];
         spike[grid.index(0, 10)] = 1.0;
         let s = smooth(&grid, &spike, 2_000.0);
         // The spike spreads to its western neighbour across the seam.

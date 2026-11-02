@@ -1,0 +1,60 @@
+import { encode } from 'fast-png';
+import { describe, expect, it } from 'vitest';
+import type { WorldMetadata } from '../api/types/WorldMetadata';
+import { decodeLayers } from './decode';
+
+const width = 2;
+const height = 1;
+
+function png16(values: number[]): ArrayBuffer {
+  const bytes = encode({ width, height, channels: 1, depth: 16, data: Uint16Array.from(values) });
+  return bytes.slice().buffer;
+}
+
+function png8(values: number[]): ArrayBuffer {
+  const bytes = encode({ width, height, channels: 1, depth: 8, data: Uint8Array.from(values) });
+  return bytes.slice().buffer;
+}
+
+// Only the fields decodeLayers reads; the rest of the metadata is irrelevant here.
+const meta = {
+  width,
+  height,
+  layers: {
+    elevation: { file: 'elevation.png', encoding: 'gray16', min: -1, max: 1 },
+    moisture: { file: 'moisture.png', encoding: 'gray16', min: -1, max: 1 },
+    temperature: { file: 'temperature.png', encoding: 'gray16', min: 0, max: 1 },
+    flow: { file: 'flow.png', encoding: 'gray16-log10', min: 0, max: 8 },
+    biomes: { file: 'biomes.png', encoding: 'gray8-biome-id' },
+  },
+} as unknown as WorldMetadata;
+
+describe('decodeLayers', () => {
+  it('rescales 16-bit layers and undoes the log scale of flow', () => {
+    const layers = decodeLayers(meta, {
+      elevation: png16([0, 65535]),
+      moisture: png16([32768, 0]),
+      temperature: png16([65535, 0]),
+      // log10(1 + 999) = 3 → 3 / 8 of the range.
+      flow: png16([0, Math.round((3 / 8) * 65535)]),
+      biomes: png8([1, 29]),
+    });
+    expect(Array.from(layers.elevation)).toEqual([-1, 1]);
+    expect(layers.moisture[0]).toBeCloseTo(0, 4);
+    expect(layers.temperature[0]).toBe(1);
+    expect(layers.flowKm2[0]).toBe(0);
+    expect(layers.flowKm2[1]).toBeCloseTo(999, -1);
+    expect(Array.from(layers.biomes)).toEqual([1, 29]);
+  });
+
+  it('rejects a layer of the wrong size or depth', () => {
+    const files = {
+      elevation: png8([0, 0]),
+      moisture: png16([0, 0]),
+      temperature: png16([0, 0]),
+      flow: png16([0, 0]),
+      biomes: png8([0, 0]),
+    };
+    expect(() => decodeLayers(meta, files)).toThrow(/expected 1 of 16/);
+  });
+});

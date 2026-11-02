@@ -60,7 +60,7 @@ impl PartialOrd for Node {
 /// `height` is the elevation above the waterline (negative on the sea);
 /// `moisture` in `[-1, 1]` sets how much rain runs off.
 pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32]) -> Hydrology {
-    let n = grid.len();
+    let n = grid.pixel_count();
     let sea: Vec<bool> = height.iter().map(|&z| z < 0.0).collect();
 
     // ── 1. Priority-flood from the sea ────────────────────────────────────────
@@ -144,7 +144,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32]) -> Hydrology {
 /// Filled pits (connected pixels flooded deeper than [`LAKE_MIN_DEPTH`]) that
 /// receive at least [`LAKE_MIN_FLOW_KM2`] at their deepest inflow point.
 fn lakes(grid: &Grid, height: &[f32], filled: &[f32], flow: &[f32], sea: &[bool]) -> Vec<bool> {
-    let n = grid.len();
+    let n = grid.pixel_count();
     let flooded: Vec<bool> = (0..n)
         .map(|i| !sea[i] && filled[i] - height[i] > LAKE_MIN_DEPTH)
         .collect();
@@ -192,7 +192,7 @@ mod tests {
 
     /// Sea in the west quarter, land rising eastwards.
     fn ramp(g: &Grid) -> Vec<f32> {
-        (0..g.len())
+        (0..g.pixel_count())
             .map(|i| {
                 let x = (i % g.width as usize) as f32;
                 if x < 16.0 { -0.5 } else { (x - 16.0) * 0.01 }
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn flow_grows_downstream() {
         let g = grid();
-        let h = hydrology(&g, &ramp(&g), &vec![1.0; g.len()]);
+        let h = hydrology(&g, &ramp(&g), &vec![1.0; g.pixel_count()]);
         let row = 16 * 64;
         assert_eq!(h.flow_km2[row + 5], 0.0, "sea has no flow");
         assert!(h.flow_km2[row + 17] > h.flow_km2[row + 40]);
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn deserts_have_no_runoff() {
         let g = grid();
-        let h = hydrology(&g, &ramp(&g), &vec![-1.0; g.len()]);
+        let h = hydrology(&g, &ramp(&g), &vec![-1.0; g.pixel_count()]);
         assert!(h.flow_km2.iter().all(|&f| f == 0.0));
         assert!(!h.river.iter().any(|&r| r));
     }
@@ -227,7 +227,7 @@ mod tests {
                 height[y * 64 + x] = 0.05;
             }
         }
-        let h = hydrology(&g, &height, &vec![1.0; g.len()]);
+        let h = hydrology(&g, &height, &vec![1.0; g.pixel_count()]);
         assert!(h.lake[16 * 64 + 40]);
         assert!(!h.lake[16 * 64 + 20]);
     }
