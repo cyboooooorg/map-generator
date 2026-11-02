@@ -165,7 +165,8 @@
   let textureOf: string | null = null;
 
   // The base map, reloaded when the world or its revision changes (a world
-  // regenerated under the same id).
+  // regenerated under the same id). A newer load cancels this one: its
+  // result and its errors are dropped.
   $effect(() => {
     const current = view;
     const id = worldId;
@@ -187,10 +188,16 @@
     loading = true;
     error = null;
     hexOn = false;
+    const controller = new AbortController();
     current
-      .setTexture(worldFile(id, 'world.png', rev))
-      .catch((e: unknown) => (error = `Could not load the map: ${String(e)}`))
-      .finally(() => (loading = false));
+      .setTexture(worldFile(id, 'world.png', rev), controller.signal)
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) error = `Could not load the map: ${String(e)}`;
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) loading = false;
+      });
+    return () => controller.abort();
   });
 
   $effect(() => {

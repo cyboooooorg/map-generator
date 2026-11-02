@@ -6,11 +6,28 @@ import type { WorkerRequest, WorkerResponse } from './worker';
 
 export type { WorldLayers } from './decode';
 
-export function loadLayers(id: string, meta: WorldMetadata): Promise<WorldLayers> {
+/**
+ * Fetches and decodes the layers of a world in a Web Worker. Aborting
+ * `signal` terminates the worker (its downloads and decoding stop) and
+ * rejects with the abort reason.
+ */
+export function loadLayers(id: string, meta: WorldMetadata, signal?: AbortSignal): Promise<WorldLayers> {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason as Error);
+  }
   const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   return new Promise<WorldLayers>((resolve, reject) => {
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+    const finish = () => {
       worker.terminate();
+      signal?.removeEventListener('abort', abort);
+    };
+    const abort = () => {
+      finish();
+      reject(signal?.reason as Error);
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      finish();
       if (event.data.ok) {
         resolve(event.data.layers);
       } else {
@@ -18,7 +35,7 @@ export function loadLayers(id: string, meta: WorldMetadata): Promise<WorldLayers
       }
     };
     worker.onerror = (event) => {
-      worker.terminate();
+      finish();
       reject(new Error(event.message));
     };
     const request: WorkerRequest = { base: worldFile(id, 'raw_data/'), meta };
