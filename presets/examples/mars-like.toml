@@ -6,8 +6,12 @@ description = "Small cold desert world with polar caps"
 
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.
+#
+# The sea level stays in the usual range even though no water is left: the
+# oceans are remapped to dust below, and biome elevations are measured from
+# the sea level, so a very low one would put every pixel above the snow line.
 [defaults]
-sea_level = [-0.6, -0.4]
+sea_level = [0.10, 0.30]
 circumference = 21300
 axial_tilt = 25.2
 volcanic = [0.0, 0.3]
@@ -16,14 +20,19 @@ volcanic = [0.0, 0.3]
 temperature = -0.08
 moisture = -0.7
 
-# Any BiomeRules field; the others keep their default.
+# Any BiomeRules field; the others keep their default. Ice only near the
+# poles (down to about 65 degrees): too dry for snow on lower mountains.
 [rules]
-polar = 0.12
+polar = 0.04
+sea_ice_temperature = 0.04
+highland_snow_temperature = 0.04
+snow_line = 0.6
 
 # target = [biomes replaced by it]
 [remap]
 DustPlain = [
-  "Ocean", "DeepOcean", "Lake", "River", "Beach", "Wetland",
+  "Ocean", "DeepOcean", "Lake", "FrozenLake", "River", "Beach", "Wetland",
   "Plain", "Shrubland", "Savanna", "Desert", "Forest", "Jungle", "Taiga", "Tundra",
 ]
+IceCap = ["SeaIce"]
 RockyWaste = ["Mountain"]
