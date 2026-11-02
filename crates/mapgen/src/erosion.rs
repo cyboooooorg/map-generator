@@ -64,6 +64,11 @@ const SLOPE_GAIN: f32 = 10.0;
 /// second value: plains and deserts stay smooth while mountains get their
 /// valleys.
 const FLAT_SLOPE: (f32, f32) = (0.04, 0.1);
+/// Depth below its spill level (elevation units) from which a cell of the
+/// terrain before erosion is part of a basin that flat-ground deposits must
+/// not fill.
+const BASIN_DEPTH: f32 = 0.001;
+
 /// Radius, in cells, of each box pass of the blur applied on flat ground.
 const FLAT_BLUR: usize = 2;
 
@@ -481,11 +486,19 @@ fn erode_pass(
     // reach the plains), and the deposits of slowing droplets no longer
     // roughen plains and deserts.
     let soft = blur(&raw, ew, eh, FLAT_BLUR);
+    // Basins of the terrain before erosion hold lakes: the blurred deposits
+    // of flat ground must not fill them (carving them deeper is fine).
+    let spill = spill_levels(&original, ew, eh, waterline);
     let mut delta: Vec<f32> = (0..ew * eh)
         .into_par_iter()
         .map(|i| {
             let steep = smoothstep(FLAT_SLOPE.0, FLAT_SLOPE.1, slope(i));
-            soft[i] + (raw[i] - soft[i]) * steep
+            let change = soft[i] + (raw[i] - soft[i]) * steep;
+            if spill[i] - original[i] > BASIN_DEPTH {
+                change.min(0.0)
+            } else {
+                change
+            }
         })
         .collect();
     if pass.detail_only {
@@ -595,6 +608,57 @@ fn spline_taps(pos: f32) -> (i64, [f32; 4]) {
     )
 }
 
+/// The level water would rise to on each cell of a `w` × `h` grid
+/// (wrapping east-west): its height, or the spill level of the hollow it
+/// lies in. Cells below `waterline` are the sea.
+fn spill_levels(z: &[f32], w: usize, h: usize, waterline: f32) -> Vec<f32> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    #[derive(PartialEq)]
+    struct Level(f32);
+    impl Eq for Level {}
+    impl Ord for Level {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.0.total_cmp(&other.0)
+        }
+    }
+    impl PartialOrd for Level {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    let neighbours = |i: usize| {
+        let (x, y) = ((i % w) as i64, (i / w) as i64);
+        (-1i64..=1)
+            .flat_map(move |dy| (-1i64..=1).map(move |dx| (dx, dy)))
+            .filter(move |&(dx, dy)| (dx, dy) != (0, 0) && (0..h as i64).contains(&(y + dy)))
+            .map(move |(dx, dy)| ((y + dy) as usize) * w + (x + dx).rem_euclid(w as i64) as usize)
+    };
+    let mut level = z.to_vec();
+    let mut done: Vec<bool> = z.iter().map(|&v| v < waterline).collect();
+    let mut heap: BinaryHeap<Reverse<(Level, usize)>> = (0..w * h)
+        .filter(|&i| done[i])
+        .map(|i| Reverse((Level(level[i]), i)))
+        .collect();
+    if heap.is_empty() {
+        // No sea: drain everything towards the lowest cell.
+        if let Some(lowest) = (0..w * h).min_by(|&a, &b| z[a].total_cmp(&z[b])) {
+            done[lowest] = true;
+            heap.push(Reverse((Level(level[lowest]), lowest)));
+        }
+    }
+    while let Some(Reverse((Level(v), i))) = heap.pop() {
+        for j in neighbours(i) {
+            if !done[j] {
+                done[j] = true;
+                level[j] = level[j].max(v);
+                heap.push(Reverse((Level(level[j]), j)));
+            }
+        }
+    }
+    level
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -617,6 +681,35 @@ mod tests {
         let one = run(1);
         assert_eq!(one, run(4));
         assert_ne!(one, island(w, h), "erosion changed nothing");
+    }
+
+    #[test]
+    fn erosion_never_fills_a_basin() {
+        // The island with a crater: a closed bowl on its summit.
+        let (w, h) = (512u32, 256u32);
+        let mut elevation = island(w, h);
+        let bowl = |x: u32, y: u32| {
+            let (dx, dy) = (x as f32 - 256.0, y as f32 - 128.0);
+            dx * dx + dy * dy < 20.0 * 20.0
+        };
+        for y in 0..h {
+            for x in 0..w {
+                if bowl(x, y) {
+                    elevation[(y * w + x) as usize] -= 0.2;
+                }
+            }
+        }
+        let change = erode(&mut elevation, w, h, 0.0, 2.0, 5, &vec![1.0; h as usize]);
+        // Away from the rim, where the spline spreads the walls' change.
+        for y in 0..h {
+            for x in 0..w {
+                let (dx, dy) = (x as f32 - 256.0, y as f32 - 128.0);
+                if dx * dx + dy * dy < 12.0 * 12.0 {
+                    let c = change[(y * w + x) as usize];
+                    assert!(c <= 1e-6, "basin floor raised by {c} at ({x}, {y})");
+                }
+            }
+        }
     }
 
     /// A cone-shaped island in the middle of the map.
