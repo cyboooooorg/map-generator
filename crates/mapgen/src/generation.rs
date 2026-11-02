@@ -273,7 +273,13 @@ impl Sampler {
         // Low ground inland keeps a share of the fine octaves: plains and
         // deserts are smooth, coasts keep their outline and mountains their
         // foothills.
-        let inland = smoothstep(COAST_BAND.0, COAST_BAND.1, coarse + fine - self.waterline);
+        // Away from the coast both ways: inland plains, and abyssal plains
+        // on the sea floor (seen on planets whose seas have dried up).
+        let inland = smoothstep(
+            COAST_BAND.0,
+            COAST_BAND.1,
+            (coarse + fine - self.waterline).abs(),
+        );
         let roughness = (1.0 - (1.0 - PLAIN_ROUGHNESS) * inland).max(mountain_weight);
         let continent = coarse + fine * roughness;
 
@@ -712,12 +718,18 @@ pub fn generate_with_progress(
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
     let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
-    let mut river_lines = rivers::shape(
-        &rivers::trace(&grid, &water),
-        &grid,
-        &water.filled,
-        params.seed,
-    );
+    // Planets without liquid water (rivers remapped to dry ground) have no
+    // rivers to draw, carve or end in deltas: only the drainage flow is kept.
+    let mut river_lines = if planet.remap(Biome::River).is_water() {
+        rivers::shape(
+            &rivers::trace(&grid, &water),
+            &grid,
+            &water.filled,
+            params.seed,
+        )
+    } else {
+        Vec::new()
+    };
     // Deltas and estuaries at the mouths of the large rivers.
     let deltas = delta::outlets(&mut river_lines, &grid, &height_above_water, params.seed);
     // Valleys and floodplains along the rivers. Carving never creates water,
@@ -919,6 +931,14 @@ mod tests {
         assert_eq!(full.world.elevation, lean.world.elevation);
         assert_eq!(full.world.moisture, lean.world.moisture);
         assert_eq!(full.world.rivers.len(), lean.world.rivers.len());
+    }
+
+    #[test]
+    fn dry_planets_have_no_rivers() {
+        let barren = generate(&params(3, "barren")).world;
+        assert!(barren.rivers.is_empty());
+        assert!(barren.floodplain.iter().all(|&f| f == 0.0));
+        assert!(!generate(&params(3, "terran")).world.rivers.is_empty());
     }
 
     #[test]

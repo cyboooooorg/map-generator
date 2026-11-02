@@ -9,13 +9,16 @@ volcanic = -0.40
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, Volcano).
 [remap]
+# Dry sea basins and old shores are rock; dry lake beds are dust flats;
+# without snow, high peaks are bare mountain.
 RockyWaste = [
-  "DeepOcean", "Ocean", "SeaIce", "Lake", "River", "CausticLake", "FrozenOcean",
-  "AcidSea", "DeepAcidSea", "AcidRiver", "AcidShore", "FrozenLake",
+  "DeepOcean", "Ocean", "SeaIce", "River", "CausticLake", "FrozenOcean",
+  "AcidSea", "DeepAcidSea", "AcidRiver", "AcidShore",
   "Beach", "Wetland", "ToxicSwamp",
-  "LavaField", "AshLand", "ScorchedWaste", "Snow",
+  "LavaField", "AshLand", "ScorchedWaste",
 ]
 DustPlain = [
   "Plain", "Shrubland", "Savanna", "Desert", "Tundra", "IceCap", "GlacialPlain",
-  "AcidFlatland", "Forest", "Jungle", "Taiga",
+  "AcidFlatland", "Forest", "Jungle", "Taiga", "Lake", "FrozenLake",
 ]
+Mountain = ["Snow"]
