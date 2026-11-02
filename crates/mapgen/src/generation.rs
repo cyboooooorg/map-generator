@@ -177,7 +177,7 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
 
 /// Coast distances are computed up to this value; further pixels get the cap.
 /// Also the full scale of the `coast_distance` debug map.
-const COAST_DISTANCE_CAP_KM: f32 = 2_000.0;
+pub const COAST_DISTANCE_CAP_KM: f32 = 2_000.0;
 
 /// Full scale of the `flow` debug map: log10 of the drainage area in km².
 const FLOW_LOG_MAX: f32 = 7.0;
@@ -356,6 +356,10 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
 
     // ── Pass 7: biomes ────────────────────────────────────────────────────────
     progress(Stage::Biomes);
+    let volcanic_zone: Vec<f32> = samples
+        .iter()
+        .map(|s| (s.volcanic_zone + dvz).clamp(0.0, 1.0))
+        .collect();
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
@@ -363,7 +367,7 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
                 elevation: relief[i],
                 moisture: moisture[i],
                 temperature: temperature[i],
-                volcanic_zone: (samples[i].volcanic_zone + dvz).clamp(0.0, 1.0),
+                volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
                 lake: water.lake[i],
                 river: water.river[i],
@@ -381,6 +385,8 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
             moisture,
             temperature,
             flow_km2: water.flow_km2,
+            volcanic_zone,
+            coast_distance_km,
             biomes,
         },
         debug,

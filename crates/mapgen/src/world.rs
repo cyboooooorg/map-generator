@@ -71,6 +71,10 @@ pub struct World {
     /// Wet-equivalent drainage area in km² flowing through each pixel
     /// (0 on the sea): rivers are pixels above a threshold.
     pub flow_km2: Vec<f32>,
+    /// Volcanic zone in `[0, 1]` as biome selection sees it (planet shift included).
+    pub volcanic_zone: Vec<f32>,
+    /// Distance to the nearest open water in km, capped (0 on water).
+    pub coast_distance_km: Vec<f32>,
     pub biomes: Vec<Biome>,
 }
 
