@@ -54,3 +54,55 @@ export function saveSetting(key: string, value: unknown): void {
     // Preferences are a convenience: losing them is fine.
   }
 }
+
+/** A setting written at most once per delay, with the last value saved. */
+export interface DebouncedSetting<T> {
+  /** Schedules a write of `value`, replacing a pending one. */
+  save(value: T): void;
+  /** Writes the pending value now, if any. */
+  flush(): void;
+}
+
+/** Flushes of the debounced writes pending, run when the page is hidden. */
+const pending = new Set<() => void>();
+let flushOnHide = false;
+
+/**
+ * Saves a setting that can change many times a second (a slider dragged, an
+ * animation) without writing storage at that rate: the last value is written
+ * `ms` after the changes stop, on `flush()`, or when the page is hidden.
+ */
+export function debouncedSetting<T>(key: string, ms: number): DebouncedSetting<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let value: { current: T } | null = null;
+  const flush = (): void => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pending.delete(flush);
+    if (value) {
+      saveSetting(key, value.current);
+      value = null;
+    }
+  };
+  if (!flushOnHide && typeof window !== 'undefined') {
+    flushOnHide = true;
+    window.addEventListener('pagehide', () => {
+      for (const f of [...pending]) {
+        f();
+      }
+    });
+  }
+  return {
+    save(next) {
+      value = { current: next };
+      pending.add(flush);
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(flush, ms);
+    },
+    flush,
+  };
+}

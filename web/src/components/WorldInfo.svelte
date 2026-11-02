@@ -148,9 +148,9 @@
 
       <div class="downloads">
         <span>Download</span>
-        <a href={worldFile(world.id, 'world.png')} download={`${world.id}.png`}>map PNG</a>
-        <a href={worldFile(world.id, 'world.svg')} download={`${world.id}.svg`}>SVG</a>
-        <a href={worldFile(world.id, 'legend.png')} download={`${world.id}-legend.png`}>legend</a>
+        <a href={worldFile(world.id, 'world.png', summary?.modified_ms)} download={`${world.id}.png`}>map PNG</a>
+        <a href={worldFile(world.id, 'world.svg', summary?.modified_ms)} download={`${world.id}.svg`}>SVG</a>
+        <a href={worldFile(world.id, 'legend.png', summary?.modified_ms)} download={`${world.id}-legend.png`}>legend</a>
         <button class="link" onclick={zip} disabled={zipping}>{zipping ? 'zipping…' : 'raw data (ZIP)'}</button>
       </div>
     {:else if world.error}

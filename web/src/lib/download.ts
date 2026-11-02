@@ -23,7 +23,7 @@ export function rawDataFiles(meta: WorldMetadata): string[] {
 export async function downloadRawData(id: string, meta: WorldMetadata): Promise<void> {
   const entries = await Promise.all(
     rawDataFiles(meta).map(async (file): Promise<[string, Uint8Array]> => {
-      const response = await fetch(worldFile(id, `raw_data/${file}`));
+      const response = await fetch(worldFile(id, `raw_data/${file}`), { cache: 'no-cache' });
       if (!response.ok) {
         throw new Error(`raw_data/${file}: ${response.status} ${response.statusText}`);
       }

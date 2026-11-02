@@ -15,13 +15,19 @@ export class LoadedWorld {
   stats = $state.raw<WorldStats | null>(null);
   rivers = $state.raw<RiverIndex | null>(null);
   error = $state<string | null>(null);
-  private generation = 0;
+  /** Aborts the current load: its downloads and its decoding worker. */
+  private controller: AbortController | null = null;
 
-  /** Loads a world, or clears the pane with null. Earlier loads are abandoned. */
+  /**
+   * Loads a world, or clears the pane with null. Earlier loads are aborted.
+   * Loading the id shown again reloads it (a world regenerated in place).
+   */
   load(id: string | null): void {
-    this.generation += 1;
-    const generation = this.generation;
-    const current = () => generation === this.generation;
+    this.controller?.abort();
+    const controller = new AbortController();
+    this.controller = controller;
+    const { signal } = controller;
+    const current = () => !signal.aborted;
     this.id = id;
     this.meta = null;
     this.layers = null;
@@ -32,15 +38,15 @@ export class LoadedWorld {
       return;
     }
     (async () => {
-      const meta = await api.metadata(id);
+      const meta = await api.metadata(id, signal);
       if (!current()) return;
       this.meta = meta;
-      const layers = await loadLayers(id, meta);
+      const layers = await loadLayers(id, meta, signal);
       if (!current()) return;
       this.layers = layers;
       this.stats = worldStats(layers.biomes, layers.width, layers.height, meta.biomes, meta.circumference_km);
       if (meta.rivers) {
-        const file = await api.rivers(id, meta.rivers);
+        const file = await api.rivers(id, meta.rivers, signal);
         if (!current()) return;
         this.rivers = new RiverIndex(file, meta.circumference_km);
       }
