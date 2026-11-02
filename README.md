@@ -346,8 +346,8 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | ------------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
 | `noise_warp_x.png`              | `[-1, 1]` | Domain-warp field, X axis                                                                        |
 | `noise_warp_y.png`              | `[-1, 1]` | Domain-warp field, Y axis                                                                        |
-| `noise_continent.png`           | `[-1, 1]` | Low-frequency FBM continent shape                                                                |
-| `noise_mountain.png`            | `[0, 1]`  | Ridged noise (mountain peaks)                                                                    |
+| `noise_continent.png`           | `[-1, 1]` | Continent shape: FBM, fractal outline near the coast, smoothed plains inland                     |
+| `noise_mountain.png`            | `[0, 1]`  | Ridged noise (mountain ridges, with two finer ridged octaves)                                    |
 | `noise_mountain_wt.png`         | `[0, 1]`  | Mountain blend weight (derived from continent height)                                            |
 | `noise_elevation.png`           | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                                 |
 | `noise_biome_elev.png`          | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                     |
@@ -442,6 +442,14 @@ The generated layers stop at the base resolution (about 20 km per pixel at 1920 
 - **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed) with the base map's width law at the level's resolution (`W` = columns × 256): no jump in width when tiles replace the base map, 1.26× thinner in km at each level, down to their real width (`0.002 × √flow` km).
 
 A tile takes about 4 ms on 10 cores. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
+
+### Elevation — continents, coasts and mountains
+
+Elevation before erosion is `continent + mountain × mountain_weight × mountain_blend`.
+
+- **Continents.** A 5-octave FBM on the unit sphere. Its 2 coarse octaves shape continents and basins; its 3 fine ones add hills. On low ground inland (more than about 0.03–0.2 above the waterline) only 30 % of the fine octaves remain, so plains and deserts are smooth; coasts keep them all, and so does high ground, with the mountain weight.
+- **Coastlines.** Near the waterline the FBM is sampled at a position displaced sideways by every octave finer than its own, down to about two map pixels, each by half its wavelength and 0.8× less at each finer octave. A low "plate" step is added there too: a Voronoi cell noise (±0.06, borders softened over about 1/20 of a cell) that gives coasts straight stretches and angular corners. Both fade out away from the coast, where they would only wrinkle the relief. Coasts are fractal instead of smooth contours. The finest outline octaves follow the map resolution, so a larger map adds detail to the same continents.
+- **Mountains.** A ridged noise on a domain-warped position, with two finer ridged octaves concentrated on its ridges (35 % of its height), weighted from continent height 0.2 upwards.
 
 ### Hydraulic erosion
 
