@@ -1,0 +1,51 @@
+########################################################################################################
+# Planet viewer on http://planets.localhost, behind the machine-wide Traefik
+# (~/Developer/workstation, stacks/traefik). Use the mise tasks rather than calling compose directly:
+#   mise run up     builds and starts the app (exports the variables below)
+#   mise run down   stops it
+#   mise run logs   follows the logs
+########################################################################################################
+
+# Fixed project name, whatever the checkout directory is called
+name: map-generator
+
+# ---------------------------------------------------------------------------------------------------- #
+# Networks
+# ---------------------------------------------------------------------------------------------------- #
+networks:
+  # Shared network created by the Traefik stack
+  proxy:
+    external: true
+
+# ---------------------------------------------------------------------------------------------------- #
+# Services
+# ---------------------------------------------------------------------------------------------------- #
+services:
+  # ---------------------------------------------------------------------------------------------------- #
+  # Planet viewer
+  # Reads and writes the worlds of this checkout; reads its presets (built-in ones are embedded).
+  # ---------------------------------------------------------------------------------------------------- #
+  planets:
+    build: .
+    image: map-generator:local
+    container_name: map-generator
+    restart: unless-stopped
+    # Host UID/GID, so generated worlds keep the host owner
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      - ./worlds:/data/worlds
+      - ./presets:/data/presets:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      # Check every second while starting, so that Traefik (which skips a container that is
+      # still starting) routes to it as soon as it is up
+      start_interval: 1s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.map-generator.rule=Host(`planets.localhost`)
+      - traefik.http.services.map-generator.loadbalancer.server.port=3000
+    networks:
+      - proxy

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#MISE description="Builds and starts the planet viewer in Docker on http://planets.localhost (behind Traefik)"
+set -euo pipefail
+cd "$MISE_PROJECT_ROOT"
+
+url=http://planets.localhost
+
+# Machine-wide Traefik from ~/Developer/workstation (also starts Colima on macOS)
+mise run -q g:traefik:up
+
+# Generated worlds keep the host owner
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+export HOST_UID HOST_GID
+
+# Bind mount source: create it as the host user, not as root by Docker
+mkdir -p worlds
+
+docker compose up -d --build --wait --remove-orphans
+
+# Traefik adds the route a moment after the container turns healthy
+for _ in {1..20}; do
+  [[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/healthz")" == 200 ]] && break
+  sleep 0.5
+done
+echo "map-generator: $url"

@@ -121,19 +121,44 @@ The repository is a Cargo workspace:
 
 The library also reports generation progress: `generate_with_progress` calls back as each stage starts (noise, erosion, temperature, coast, moisture, rivers, biomes). Its `ts` feature derives TypeScript bindings on the types a web front-end needs.
 
+## Web app
+
+A browser app to explore the generated worlds as a 3D globe or a flat map, inspect any point, and generate new worlds from a form. It is a personal tool served locally behind the machine-wide Traefik, like the other `*.localhost` apps.
+
+```bash
+mise run up      # build and start it on http://planets.localhost
+mise run logs    # follow its logs
+mise run down    # stop it
+```
+
+The container reads and writes `worlds/` of this checkout (worlds generated with `mise run gen` show up too, as long as they have `raw_data/`) and reads the preset files of `presets/`: any `.toml` preset added there is offered in the form, no rebuild needed. Generated files keep the host owner.
+
+| Piece     | Technology                               | Location         |
+| --------- | ---------------------------------------- | ---------------- |
+| Server    | Rust, axum; calls the `mapgen` library   | `crates/server/` |
+| Front-end | Svelte 5, strict TypeScript, three.js    | `web/`           |
+| Container | Multi-stage `Dockerfile`, `compose.yaml` | repository root  |
+
+Generations run one at a time (each one already uses every core) and stream their progress to the page. The server refuses to overwrite an existing world: delete it first or pick another seed. Maps are limited to 8192 pixels per side.
+
+For development with hot reload, see [web/README.md](web/README.md) (`mise run dev`).
+
 ### Development tasks
 
-| Task                    | Description                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `mise run build`        | Build the optimized binary                                                          |
-| `mise run gen`          | Build, then generate a world                                                        |
-| `mise run hex`          | Resample a generated world onto a hex grid, see [Hex grid export](#hex-grid-export) |
-| `mise run test`         | Run the test suite                                                                  |
-| `mise run lint`         | Check formatting and run clippy (`-D warnings`)                                     |
-| `mise run fmt`          | Format the code                                                                     |
-| `mise run clean-worlds` | Delete every generated world under `worlds/`                                        |
+| Task                            | Description                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| `mise run build`                | Build the optimized binary                                                          |
+| `mise run gen`                  | Build, then generate a world                                                        |
+| `mise run up` / `down` / `logs` | Start, stop, follow the web app in Docker (see [Web app](#web-app))                 |
+| `mise run dev`                  | Run the web server and the front-end with hot reload                                |
+| `mise run web:check`            | Type-check and test the front-end                                                   |
+| `mise run hex`                  | Resample a generated world onto a hex grid, see [Hex grid export](#hex-grid-export) |
+| `mise run test`                 | Run the test suite                                                                  |
+| `mise run lint`                 | Check formatting and run clippy (`-D warnings`)                                     |
+| `mise run fmt`                  | Format the code                                                                     |
+| `mise run clean-worlds`         | Delete every generated world under `worlds/`                                        |
 
-The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint` and `mise run test` on every push to `main` and on pull requests.
+The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint`, `mise run test` (and checks the generated TypeScript types are committed) and `mise run web:check` / `web:build` on every push to `main` and on pull requests.
 
 ### Planet presets
 

@@ -77,3 +77,15 @@ server=$!
 trap 'kill $server 2>/dev/null' EXIT
 cd web && npm run dev
 """
+
+# ---------------------------------------------------------------------------------------------------- #
+# Docker (behind the machine-wide Traefik, http://planets.localhost)
+# `up` is a file task in mise-tasks/
+# ---------------------------------------------------------------------------------------------------- #
+[tasks.down]
+description = "Stops the planet viewer container"
+run = "docker compose down --remove-orphans"
+
+[tasks.logs]
+description = "Follows the planet viewer container logs"
+run = "docker compose logs -f planets"
