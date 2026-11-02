@@ -1,0 +1,20 @@
+# Fire world: scorching, bone-dry and heavily volcanic. Ocean basins fill
+# with magma and lowlands are scoured to bare rock.
+name = "volcanic"
+description = "Fire world: extreme heat, near-zero moisture"
+
+[climate]
+temperature = 0.45
+moisture = -0.55
+volcanic = 0.50
+
+# target = [biomes replaced by it]; unlisted biomes stay as they are
+# (Mountain, LavaField, AshLand, Volcano).
+[remap]
+MagmaSea = ["DeepOcean", "Ocean", "SeaIce", "Lake"]
+LavaField = ["River"]
+AshLand = ["Beach", "Wetland", "Forest", "Jungle", "Taiga"]
+ScorchedWaste = [
+  "Plain", "Shrubland", "Savanna", "Desert",
+  "IceCap", "Tundra", "Snow", "GlacialPlain",
+]

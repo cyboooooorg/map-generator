@@ -119,7 +119,10 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         "height": h,
         "projection": "equirectangular, row 0 = north pole, column 0 = longitude 0",
         "seed": world.params.seed,
-        "planet_type": world.params.planet_type,
+        "planet_type": world.params.planet.name,
+        // The full resolved preset, so the world can be regenerated even if
+        // the preset file changes or disappears.
+        "preset": world.params.planet,
         "sea_level": world.params.sea_level,
         "volcanic_intensity": world.params.volcanic_intensity,
         "circumference_km": world.params.circumference_km,
@@ -140,7 +143,8 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
 mod tests {
     use super::*;
     use crate::generation::generate;
-    use crate::world::{PlanetType, WorldParams};
+    use crate::preset::Preset;
+    use crate::world::WorldParams;
 
     #[test]
     fn quantise_covers_the_full_range() {
@@ -155,7 +159,7 @@ mod tests {
             width: 32,
             height: 16,
             seed: 9,
-            planet_type: PlanetType::Caustic,
+            planet: Preset::load("caustic").unwrap(),
             sea_level: 0.0,
             volcanic_intensity: 0.5,
             circumference_km: 40_075.0,

@@ -1,4 +1,4 @@
-use crate::biome::{BiomeInput, BiomeRules, planet_offsets};
+use crate::biome::BiomeInput;
 use crate::climate::{MoistureInput, moisture, row_temperatures, temperature};
 use crate::erosion::erode;
 use crate::geo::Grid;
@@ -184,7 +184,7 @@ const FLOW_LOG_MAX: f32 = 7.0;
 /// Generates a world, running every pass in order.
 pub fn generate(params: &WorldParams) -> Generated {
     let (width, height) = (params.width, params.height);
-    let planet_type = params.planet_type;
+    let planet = &params.planet;
 
     // ── Pass 1: noise ─────────────────────────────────────────────────────────
     // Every pixel is independent: sample rows in parallel. The result stays
@@ -204,7 +204,7 @@ pub fn generate(params: &WorldParams) -> Generated {
         })
         .collect();
 
-    let rules = BiomeRules::default();
+    let rules = &planet.rules;
     let grid = params.grid();
     let n = params.pixel_count();
 
@@ -289,7 +289,8 @@ pub fn generate(params: &WorldParams) -> Generated {
     // Planet-type global offsets shift the whole climate before rivers and
     // biomes. Store the climate exactly as biome selection sees it, so the
     // exported data explains the biome of every pixel.
-    let (dt, dm, dvz) = planet_offsets(planet_type);
+    let shift = planet.climate;
+    let (dt, dm, dvz) = (shift.temperature, shift.moisture, shift.volcanic);
     let moisture: Vec<f32> = raw_moisture
         .iter()
         .map(|m| (m + dm).clamp(-1.0, 1.0))
@@ -324,7 +325,7 @@ pub fn generate(params: &WorldParams) -> Generated {
                 lake: water.lake[i],
                 river: water.river[i],
             };
-            rules.choose(input, planet_type)
+            planet.remap(rules.choose(input))
         })
         .collect();
 
@@ -347,13 +348,14 @@ pub fn generate(params: &WorldParams) -> Generated {
 mod tests {
     use super::*;
     use crate::climate::EARTH_AXIAL_TILT_DEG;
+    use crate::preset::Preset;
 
-    pub fn params(seed: u32, planet_type: PlanetType) -> WorldParams {
+    pub fn params(seed: u32, planet: &str) -> WorldParams {
         WorldParams {
             width: 64,
             height: 32,
             seed,
-            planet_type,
+            planet: Preset::load(planet).unwrap(),
             sea_level: 0.1,
             volcanic_intensity: 0.5,
             circumference_km: EARTH_CIRCUMFERENCE_KM,
@@ -362,26 +364,26 @@ mod tests {
         }
     }
 
-    fn small_world(seed: u32, planet: PlanetType) -> World {
+    fn small_world(seed: u32, planet: &str) -> World {
         generate(&params(seed, planet)).world
     }
 
     #[test]
     fn same_seed_produces_same_world() {
-        let a = small_world(42, PlanetType::Terran);
-        let b = small_world(42, PlanetType::Terran);
+        let a = small_world(42, "terran");
+        let b = small_world(42, "terran");
         assert_eq!(a.biomes, b.biomes);
         assert_eq!(a.elevation, b.elevation);
     }
 
     #[test]
     fn seed_near_u32_max_does_not_overflow() {
-        small_world(u32::MAX, PlanetType::Terran);
+        small_world(u32::MAX, "terran");
     }
 
     #[test]
     fn every_layer_has_one_value_per_pixel() {
-        let w = small_world(7, PlanetType::Frozen);
+        let w = small_world(7, "frozen");
         for len in [
             w.elevation.len(),
             w.moisture.len(),
@@ -394,7 +396,7 @@ mod tests {
 
     #[test]
     fn stored_climate_includes_planet_offsets() {
-        let w = small_world(5, PlanetType::Frozen);
+        let w = small_world(5, "frozen");
         // Frozen offsets cool the planet by 0.55: nothing reaches tropical heat.
         assert!(w.temperature.iter().all(|t| (0.0..=0.45).contains(t)));
         assert!(w.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
@@ -405,7 +407,7 @@ mod tests {
         let g = |circumference_km| {
             WorldParams {
                 circumference_km,
-                ..params(0, PlanetType::Terran)
+                ..params(0, "terran")
             }
             .gravity_modifier()
         };
@@ -416,7 +418,7 @@ mod tests {
 
     #[test]
     fn debug_layers_match_the_world() {
-        let g = generate(&params(11, PlanetType::Terran));
+        let g = generate(&params(11, "terran"));
         let elevation = g.debug.iter().find(|l| l.name == "elevation").unwrap();
         assert_eq!(elevation.values, g.world.elevation);
     }

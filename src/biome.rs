@@ -2,12 +2,12 @@
 //!
 //! This module owns the [`Biome`] type and all biome-related logic:
 //!  - [`Biome`]             — the enum itself (colour, name, sort order).
-//!  - [`planet_offsets`]    — climate deltas driven by planet archetype.
 //!  - [`BiomeRules`]        — every selection threshold, and the selector itself:
 //!    altitude/temperature/moisture → base biome → volcanic override.
-//!  - [`apply_planet_type`] — final remap to planet-exclusive biomes.
-use crate::world::PlanetType;
-use serde::Serialize;
+//!
+//! Planet-specific climate shifts and biome remapping live in the planet
+//! presets (see [`crate::preset`]).
+use serde::{Deserialize, Serialize};
 
 // ── Biome type ────────────────────────────────────────────────────────────────
 
@@ -15,7 +15,7 @@ use serde::Serialize;
 ///
 /// The discriminant is the biome id written to `raw_data/biomes.png`: never
 /// reorder or remove variants, only append new ones.
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u8)]
 pub enum Biome {
     // ── Standard water ────────────────────────────────────────────────────────
@@ -216,24 +216,6 @@ pub fn biome_name(b: Biome) -> &'static str {
     }
 }
 
-// ── Planet climate offsets ────────────────────────────────────────────────────
-
-/// Returns `(Δtemperature, Δmoisture, Δvolcanic_zone)` for the given planet
-/// archetype.  The caller clamps the resulting values to their valid ranges.
-pub fn planet_offsets(pt: PlanetType) -> (f32, f32, f32) {
-    match pt {
-        PlanetType::Terran => (0.00, 0.00, 0.00),
-        // Scorching hot, bone-dry, heavily volcanic
-        PlanetType::Volcanic => (0.45, -0.55, 0.50),
-        // Perpetually cold, slightly more frozen precipitation
-        PlanetType::Frozen => (-0.55, 0.15, -0.30),
-        // Mildly warm, saturated with caustic moisture
-        PlanetType::Caustic => (0.10, 0.55, 0.00),
-        // Arid lifeless rock, no volcanic activity
-        PlanetType::Barren => (0.00, -0.65, -0.40),
-    }
-}
-
 // ── Thresholds ────────────────────────────────────────────────────────────────
 
 /// Every threshold used by biome selection, in one place.
@@ -241,7 +223,11 @@ pub fn planet_offsets(pt: PlanetType) -> (f32, f32, f32) {
 /// Elevations are relative to the shifted sea level (`elevation - sea_level`)
 /// in `[-1, 1]`; temperatures in `[0, 1]`; moisture in `[-1, 1]`; volcanic
 /// zone in `[0, 1]`.
-#[derive(Clone, Debug)]
+///
+/// In a planet preset, the `[rules]` table overrides any of these fields;
+/// the others keep their default value.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct BiomeRules {
     // Altitude bands
     /// Below this elevation, a pixel is open water.
@@ -347,9 +333,9 @@ pub struct BiomeInput {
 // ── Top-level biome selector ──────────────────────────────────────────────────
 
 impl BiomeRules {
-    /// Selects the final biome for a pixel by running the full pipeline:
-    /// altitude band → volcanic override → planet remapping.
-    pub fn choose(&self, input: BiomeInput, pt: PlanetType) -> Biome {
+    /// Selects the biome of a pixel: altitude band, then volcanic override.
+    /// Planet presets remap the result afterwards.
+    pub fn choose(&self, input: BiomeInput) -> Biome {
         let BiomeInput {
             elevation: e,
             moisture: m,
@@ -373,8 +359,7 @@ impl BiomeRules {
         } else {
             self.land(t, m)
         };
-        let after_volcano = self.apply_volcanic(base, e, input.volcanic_zone);
-        apply_planet_type(after_volcano, pt)
+        self.apply_volcanic(base, e, input.volcanic_zone)
     }
 
     // ── Altitude bands ────────────────────────────────────────────────────────
@@ -464,125 +449,31 @@ impl BiomeRules {
     }
 }
 
-// ── Planet-type biome remapping ───────────────────────────────────────────────
-
-/// Final pass that converts standard biomes into planet-exclusive ones.
-///
-/// Called after the volcanic override so volcanic modifiers are visible here.
-/// [`PlanetType::Terran`] is a no-op; all other archetypes remap some or all biomes.
-pub fn apply_planet_type(biome: Biome, pt: PlanetType) -> Biome {
-    match pt {
-        PlanetType::Terran => biome,
-
-        // ── Volcanic world ────────────────────────────────────────────────────
-        // Ocean basins fill with magma; lowlands are scoured to bare rock.
-        PlanetType::Volcanic => match biome {
-            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce | Biome::Lake => Biome::MagmaSea,
-            Biome::River => Biome::LavaField,
-            Biome::Beach | Biome::Wetland => Biome::AshLand,
-            Biome::Plain | Biome::Shrubland | Biome::Savanna | Biome::Desert => {
-                Biome::ScorchedWaste
-            }
-            Biome::Forest | Biome::Jungle | Biome::Taiga => Biome::AshLand,
-            Biome::IceCap | Biome::Tundra | Biome::Snow | Biome::GlacialPlain => {
-                Biome::ScorchedWaste
-            }
-            other => other, // Mountain, LavaField, AshLand, Volcano — keep as-is
-        },
-
-        // ── Frozen world ──────────────────────────────────────────────────────
-        // Oceans are sealed under ice; temperate zones become permafrost plains.
-        PlanetType::Frozen => match biome {
-            Biome::DeepOcean
-            | Biome::Ocean
-            | Biome::SeaIce
-            | Biome::MagmaSea
-            | Biome::Lake
-            | Biome::River => Biome::FrozenOcean,
-            Biome::Beach | Biome::Wetland => Biome::IceCap,
-            Biome::Plain | Biome::Shrubland => Biome::GlacialPlain,
-            Biome::Forest | Biome::Jungle => Biome::Taiga,
-            Biome::Savanna | Biome::Desert => Biome::GlacialPlain,
-            Biome::LavaField | Biome::AshLand | Biome::ScorchedWaste => Biome::GlacialPlain,
-            other => other, // Tundra, IceCap, Taiga, Snow, Mountain — keep as-is
-        },
-
-        // ── Caustic world ─────────────────────────────────────────────────────
-        // Oceans become acid seas; vegetation zones drown in toxic runoff.
-        PlanetType::Caustic => match biome {
-            Biome::DeepOcean | Biome::Ocean | Biome::SeaIce | Biome::Lake | Biome::River => {
-                Biome::CausticLake
-            }
-            Biome::Beach | Biome::Wetland | Biome::Forest | Biome::Jungle | Biome::Taiga => {
-                Biome::ToxicSwamp
-            }
-            Biome::Plain | Biome::Shrubland | Biome::Savanna | Biome::Tundra | Biome::Desert => {
-                Biome::AcidFlatland
-            }
-            Biome::IceCap | Biome::Snow | Biome::GlacialPlain => Biome::AcidFlatland,
-            other => other, // Mountain, LavaField, AshLand, Volcano — keep as-is
-        },
-
-        // ── Barren world ──────────────────────────────────────────────────────
-        // No liquid water; all life extinct; only rock and dust remain.
-        PlanetType::Barren => match biome {
-            Biome::DeepOcean
-            | Biome::Ocean
-            | Biome::SeaIce
-            | Biome::Lake
-            | Biome::River
-            | Biome::CausticLake
-            | Biome::FrozenOcean => Biome::RockyWaste,
-            Biome::Beach | Biome::Wetland | Biome::ToxicSwamp => Biome::RockyWaste,
-            Biome::Plain
-            | Biome::Shrubland
-            | Biome::Savanna
-            | Biome::Desert
-            | Biome::Tundra
-            | Biome::IceCap
-            | Biome::GlacialPlain
-            | Biome::AcidFlatland => Biome::DustPlain,
-            Biome::Forest | Biome::Jungle | Biome::Taiga => Biome::DustPlain,
-            Biome::LavaField | Biome::AshLand | Biome::ScorchedWaste | Biome::Snow => {
-                Biome::RockyWaste
-            }
-            other => other, // Mountain, Volcano — keep as-is
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::preset::Preset;
 
-    const ALL_PLANETS: [PlanetType; 5] = [
-        PlanetType::Terran,
-        PlanetType::Volcanic,
-        PlanetType::Frozen,
-        PlanetType::Caustic,
-        PlanetType::Barren,
-    ];
-
-    /// Every biome `BiomeRules::choose` can return for a planet, over a coarse grid of inputs.
-    fn reachable(pt: PlanetType) -> std::collections::BTreeSet<Biome> {
+    /// Every biome a planet preset can produce, over a coarse grid of inputs.
+    fn reachable(preset: &Preset) -> std::collections::BTreeSet<Biome> {
         let steps = |lo: f32, hi: f32| (0..=20).map(move |i| lo + (hi - lo) * i as f32 / 20.0);
         let mut out = std::collections::BTreeSet::new();
         for e in steps(-1.0, 1.0) {
             for m in steps(-1.0, 1.0) {
                 for t in steps(0.0, 1.0) {
                     for vz in steps(0.0, 1.0) {
-                        out.insert(BiomeRules::default().choose(
-                            BiomeInput {
+                        for (lake, river) in [(false, false), (true, false), (false, true)] {
+                            let input = BiomeInput {
                                 elevation: e,
                                 moisture: m,
                                 temperature: t,
                                 volcanic_zone: vz,
                                 coast_distance_km: 0.0,
-                                lake: false,
-                                river: false,
-                            },
-                            pt,
-                        ));
+                                lake,
+                                river,
+                            };
+                            out.insert(preset.remap(preset.rules.choose(input)));
+                        }
                     }
                 }
             }
@@ -609,14 +500,8 @@ mod tests {
             lake: false,
             river: false,
         };
-        assert_eq!(
-            rules.choose(lowland(10.0), PlanetType::Terran),
-            Biome::Beach
-        );
-        assert_ne!(
-            rules.choose(lowland(500.0), PlanetType::Terran),
-            Biome::Beach
-        );
+        assert_eq!(rules.choose(lowland(10.0)), Biome::Beach);
+        assert_ne!(rules.choose(lowland(500.0)), Biome::Beach);
     }
 
     #[test]
@@ -630,10 +515,7 @@ mod tests {
             lake: false,
             river: false,
         };
-        assert_eq!(
-            BiomeRules::default().choose(input, PlanetType::Terran),
-            Biome::SeaIce
-        );
+        assert_eq!(BiomeRules::default().choose(input), Biome::SeaIce);
     }
 
     #[test]
@@ -647,15 +529,12 @@ mod tests {
             lake: false,
             river: false,
         };
-        assert_eq!(
-            BiomeRules::default().choose(input, PlanetType::Terran),
-            Biome::DeepOcean
-        );
+        assert_eq!(BiomeRules::default().choose(input), Biome::DeepOcean);
     }
 
     #[test]
     fn barren_worlds_have_no_water_or_life() {
-        let biomes = reachable(PlanetType::Barren);
+        let biomes = reachable(&Preset::load("barren").unwrap());
         for b in [
             Biome::Lake,
             Biome::River,
@@ -671,26 +550,25 @@ mod tests {
 
     #[test]
     fn exclusive_biomes_stay_on_their_planet() {
-        let exclusive = [
+        let exclusive: [(&str, &[Biome]); 4] = [
+            ("volcanic", &[Biome::MagmaSea, Biome::ScorchedWaste]),
+            ("frozen", &[Biome::FrozenOcean, Biome::GlacialPlain]),
             (
-                PlanetType::Volcanic,
-                [Biome::MagmaSea, Biome::ScorchedWaste].as_slice(),
-            ),
-            (
-                PlanetType::Frozen,
-                &[Biome::FrozenOcean, Biome::GlacialPlain],
-            ),
-            (
-                PlanetType::Caustic,
+                "caustic",
                 &[Biome::CausticLake, Biome::ToxicSwamp, Biome::AcidFlatland],
             ),
-            (PlanetType::Barren, &[Biome::RockyWaste, Biome::DustPlain]),
+            ("barren", &[Biome::RockyWaste, Biome::DustPlain]),
         ];
-        for pt in ALL_PLANETS {
-            let biomes = reachable(pt);
+        for preset in Preset::built_in() {
+            let biomes = reachable(&preset);
             for (owner, list) in exclusive {
                 for b in list {
-                    assert_eq!(biomes.contains(b), owner == pt, "{b:?} on {pt:?}");
+                    assert_eq!(
+                        biomes.contains(b),
+                        owner == preset.name,
+                        "{b:?} on {}",
+                        preset.name
+                    );
                 }
             }
         }

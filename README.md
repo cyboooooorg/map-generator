@@ -26,7 +26,7 @@ mise run build
 mise run gen [-- [OPTIONS]]
 ```
 
-All parameters are optional. Any omitted value is chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
+All parameters are optional. Any omitted value comes from the planet preset when it sets one, and is otherwise chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
 
 ```text
 Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g
@@ -36,20 +36,21 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 
 ### Options
 
-| Flag                    | Values                                                  | Default                      |
-| ----------------------- | ------------------------------------------------------- | ---------------------------- |
-| `--planet <type>`       | `terran` · `volcanic` · `frozen` · `caustic` · `barren` | random                       |
-| `--seed <u32>`          | any 32-bit unsigned integer                             | random                       |
-| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                  | random in `[-0.30, 0.50)`    |
-| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`       |
-| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)          | random in `[20 000, 80 000)` |
-| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                        | random in `[5, 40)`          |
-| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it   | `1.0`                        |
-| `--width <px>`          | map width, `2`–`16384`                                  | `1920`                       |
-| `--height <px>`         | map height, `2`–`16384`                                 | `1080`                       |
-| `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                     |
-| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)      | off                          |
-| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                | off                          |
+| Flag                    | Values                                                  | Default                                                                                                                                   |                 |
+| ----------------------- | ------------------------------------------------------- | ----------------------------                                                                                                              |                 |
+| `--planet <name\        | file>`                                                  | built-in preset (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in |
+| `--list-planets`        | list the built-in presets and exit                      |                                                                                                                                           |                 |
+| `--seed <u32>`          | any 32-bit unsigned integer                             | random                                                                                                                                    |                 |
+| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                  | random in `[-0.30, 0.50)`                                                                                                                 |                 |
+| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                   | random in `[0.0, 1.0)`                                                                                                                    |                 |
+| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)          | random in `[20 000, 80 000)`                                                                                                              |                 |
+| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                        | random in `[5, 40)`                                                                                                                       |                 |
+| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it   | `1.0`                                                                                                                                     |                 |
+| `--width <px>`          | map width, `2`–`16384`                                  | `1920`                                                                                                                                    |                 |
+| `--height <px>`         | map height, `2`–`16384`                                 | `1080`                                                                                                                                    |                 |
+| `--out-dir <path>`      | directory receiving the generated worlds                | `worlds`                                                                                                                                  |                 |
+| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)      | off                                                                                                                                       |                 |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images                | off                                                                                                                                       |                 |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
@@ -120,15 +121,52 @@ The grid is pointy-top in "odd-r" offset coordinates: odd rows are shifted half 
 
 The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint` and `mise run test` on every push to `main` and on pull requests.
 
-### Planet types
+### Planet presets
 
-| Type       | Description                                       | Exclusive biomes                            |
+A planet type is a TOML preset. The five built-in ones live in `presets/` and are embedded in the binary:
+
+| Preset     | Description                                       | Exclusive biomes                            |
 | ---------- | ------------------------------------------------- | ------------------------------------------- |
 | `terran`   | Earth-like — full biome spectrum                  | —                                           |
 | `volcanic` | Fire world — extreme heat, near-zero moisture     | `MagmaSea`, `ScorchedWaste`                 |
 | `frozen`   | Ice world — perpetually frozen                    | `FrozenOcean`, `GlacialPlain`               |
 | `caustic`  | Acid world — corrosive atmosphere, toxic wetlands | `CausticLake`, `ToxicSwamp`, `AcidFlatland` |
 | `barren`   | Dead rock — arid and lifeless, no water           | `RockyWaste`, `DustPlain`                   |
+
+To create a new planet type, write a preset file and pass its path:
+
+```bash
+mise run gen -- --planet presets/examples/mars-like.toml
+```
+
+```toml
+name = "mars-like"                 # lowercase letters, digits and dashes; used in the output directory name
+description = "Small cold desert world with polar caps"
+
+[defaults]                         # a fixed value or a [min, max] range drawn at random
+sea_level = [-0.6, -0.4]           # sea_level, volcanic, circumference, axial_tilt, erosion
+circumference = 21300
+
+[climate]                          # added to every pixel before biome selection
+temperature = -0.08                # [0, 1] scale
+moisture = -0.7                    # [-1, 1] scale
+volcanic = 0.0                     # [0, 1] scale
+
+[rules]                            # override any biome selection threshold
+polar = 0.12
+
+[remap]                            # target = [biomes replaced by it]
+DustPlain = ["Ocean", "DeepOcean", "Lake", "River", "Plain", "Desert"]
+RockyWaste = ["Mountain"]
+```
+
+Every table is optional.
+
+- **`[defaults]`**: command-line options always win; parameters set neither on the command line nor here use the generator defaults listed under [Options](#options).
+- **`[rules]`**: accepts any field of `BiomeRules` in `src/biome.rs` (`waterline`, `polar`, `forest_moisture`, `shore_width_km`…), each documented there. Fields left out keep their default.
+- **`[remap]`**: runs after biome selection; biome names are the keys of the biome table (`DeepOcean`, `SeaIce`, `LavaField`…). A biome listed under two targets is an error, and so is an unknown field or biome name.
+
+`raw_data/world.json` stores the full resolved preset under `preset`, so a world can be regenerated even if its preset file changes.
 
 ### Output
 
@@ -287,7 +325,7 @@ S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
 | ~54°       | Nearly uniform temperature across latitudes              |
 | 70°+       | Poles receive more sunlight over a year than the equator |
 
-The planet type then shifts the whole temperature field (for example `−0.55` on frozen worlds).
+The `[climate]` table of the planet preset then shifts the whole temperature field (for example `−0.55` on frozen worlds).
 
 ### Moisture — winds and rain shadows
 
@@ -298,7 +336,7 @@ Moisture comes from winds carrying ocean evaporation over land:
 - **North-south supply.** Rows with little ocean of their own still receive background humidity, set by the ocean fraction within ±20° of latitude and of the whole planet.
 - **Circulation bands.** A `cos(6 · latitude)` term adds the wet equator and 60° belts and the dry 30° desert belts and poles.
 
-The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.30 × noise`, then clamped. The planet type then shifts the whole field (for example `−0.55` on volcanic worlds).
+The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.30 × noise`, then clamped. The `[climate]` table of the planet preset then shifts the whole field (for example `−0.55` on volcanic worlds).
 
 ### Rivers and lakes
 

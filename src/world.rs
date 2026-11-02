@@ -1,40 +1,9 @@
 use crate::geo::Grid;
 use crate::noise::EARTH_CIRCUMFERENCE_KM;
-use serde::Serialize;
-use std::fmt;
+use crate::preset::Preset;
 
 // Re-export so existing `use crate::world::*;` in other modules keeps working.
 pub use crate::biome::{Biome, biome_color, biome_name};
-
-/// Master planet archetype.  Controls global temperature/moisture offsets and
-/// unlocks planet-specific biomes during biome selection.
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug, clap::ValueEnum)]
-#[serde(rename_all = "lowercase")]
-pub enum PlanetType {
-    /// Earth-like — full biome spectrum, no global modifier.
-    Terran,
-    /// Fire world — extreme heat, near-zero moisture, volcanic terrain dominates.
-    Volcanic,
-    /// Ice world — perpetually frozen, glaciers and permafrost everywhere.
-    Frozen,
-    /// Acid world — corrosive atmosphere, toxic wetlands, caustic pools.
-    Caustic,
-    /// Dead rock — arid and lifeless, dust and stone as far as the eye can see.
-    Barren,
-}
-
-impl fmt::Display for PlanetType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            PlanetType::Terran => "terran",
-            PlanetType::Volcanic => "volcanic",
-            PlanetType::Frozen => "frozen",
-            PlanetType::Caustic => "caustic",
-            PlanetType::Barren => "barren",
-        };
-        f.write_str(s)
-    }
-}
 
 /// Everything needed to generate a world. The same parameters always produce
 /// the same world.
@@ -43,9 +12,8 @@ pub struct WorldParams {
     pub width: u32,
     pub height: u32,
     pub seed: u32,
-    /// Master planet archetype driving global temperature/moisture offsets and
-    /// unlocking planet-specific biomes.
-    pub planet_type: PlanetType,
+    /// Planet preset: climate shift, biome rules and biome remapping.
+    pub planet: Preset,
     /// Elevation bias applied before biome selection.
     /// 0.0 = default. Positive → more ocean, negative → more land. Range [-1, 1].
     pub sea_level: f32,

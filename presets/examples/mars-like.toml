@@ -1,0 +1,29 @@
+# Example custom preset: a small, cold desert world with polar ice and dry
+# basins where its oceans used to be.
+#   mise run gen -- --planet presets/examples/mars-like.toml
+name = "mars-like"
+description = "Small cold desert world with polar caps"
+
+# A fixed value, or a [min, max] range drawn at random. Command-line options
+# still win over these.
+[defaults]
+sea_level = [-0.6, -0.4]
+circumference = 21300
+axial_tilt = 25.2
+volcanic = [0.0, 0.3]
+
+[climate]
+temperature = -0.08
+moisture = -0.7
+
+# Any BiomeRules field; the others keep their default.
+[rules]
+polar = 0.12
+
+# target = [biomes replaced by it]
+[remap]
+DustPlain = [
+  "Ocean", "DeepOcean", "Lake", "River", "Beach", "Wetland",
+  "Plain", "Shrubland", "Savanna", "Desert", "Forest", "Jungle", "Taiga", "Tundra",
+]
+RockyWaste = ["Mountain"]
