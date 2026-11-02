@@ -5,6 +5,7 @@
 //! (noise, erosion, climate, rivers, biomes) and [`export::export_world`]
 //! writes the maps, raw data and diagnostic maps.
 pub mod biome;
+pub mod carve;
 pub mod climate;
 pub mod detail;
 pub mod erosion;

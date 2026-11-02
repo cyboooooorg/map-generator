@@ -48,6 +48,8 @@ const MOUNTAIN_BOOST: f32 = 5.0;
 /// high ground.
 const PLAIN_GAIN: f64 = 0.35;
 const MOUNTAIN_GAIN: f64 = 0.5;
+/// Share of the height detail removed on a floodplain (weight 1).
+const FLOODPLAIN_CALM: f32 = 0.8;
 /// Height detail fades out within this distance of the waterline, so it can
 /// never turn the shore into islets and ponds: coasts get their detail from
 /// the sideways displacement instead.
@@ -274,7 +276,9 @@ impl DetailWorld {
         let amplitude = DETAIL_AMPLITUDE * (1.0 + MOUNTAIN_BOOST * high);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
         let shore = smoothstep(0.0, SHORE_FADE, above.abs());
-        base + amplitude * shore * band_limited(&self.noise, p, radius, first, last, gain)
+        // Floodplains stay flat valley floors.
+        let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&w.floodplain, w.width, w.height, x, y);
+        base + amplitude * shore * floor * band_limited(&self.noise, p, radius, first, last, gain)
     }
 
     /// Renders one tile as an RGB image.
