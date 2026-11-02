@@ -122,7 +122,7 @@
     from: WorldRequest | null,
   ): { random: boolean; percent: number } | null {
     if (from?.land_fraction !== undefined) {
-      return { random: false, percent: from.land_fraction * 100 };
+      return { random: false, percent: toPercent(from.land_fraction) };
     }
     if (from?.sea_level !== undefined) {
       return null;
@@ -132,8 +132,13 @@
       return null;
     }
     return typeof d === 'number'
-      ? { random: false, percent: d * 100 }
-      : { random: true, percent: ((d[0] + d[1]) / 2) * 100 };
+      ? { random: false, percent: toPercent(d) }
+      : { random: true, percent: toPercent((d[0] + d[1]) / 2) };
+  }
+
+  /** A fraction in percent, rounded to 0.01 so 0.29 shows as 29, not 28.999999999999996. */
+  function toPercent(fraction: number): number {
+    return Math.round(fraction * 10_000) / 100;
   }
 
   /** The preset a request names: by spec (built-in name or file) or by preset name. */
