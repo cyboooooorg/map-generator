@@ -1,5 +1,5 @@
 // Web Worker: fetches and decodes the layers of one world off the main thread.
-import { decodeLayers, type LayerFiles } from './decode';
+import { decodeLayers, EXTRA_FILES, type LayerFiles } from './decode';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
 
 export interface WorkerRequest {
@@ -36,18 +36,30 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       flow: flow!,
       biomes: biomes!,
     };
+    // Layers of later format versions: fetched when listed, skipped otherwise.
+    await Promise.all(
+      EXTRA_FILES.map(async (name) => {
+        const info = l[name];
+        if (info) {
+          files[name] = await fetchFile(base + info.file);
+        }
+      }),
+    );
     const layers = decodeLayers(meta, files);
     const response: WorkerResponse = { ok: true, layers };
-    self.postMessage(response, {
-      transfer: [
-        layers.elevation.buffer,
-        layers.moisture.buffer,
-        layers.temperature.buffer,
-        layers.flowKm2.buffer,
-        layers.biomes.buffer,
-        layers.surface.buffer,
-      ],
-    });
+    const transfer: ArrayBufferLike[] = [
+      layers.elevation.buffer,
+      layers.moisture.buffer,
+      layers.temperature.buffer,
+      layers.flowKm2.buffer,
+      layers.biomes.buffer,
+      layers.surface.buffer,
+    ];
+    if (layers.extra) {
+      const e = layers.extra;
+      transfer.push(e.volcanic.buffer, e.coastKm.buffer, e.highlandOffset.buffer, e.floodplain.buffer, e.packed.buffer);
+    }
+    self.postMessage(response, { transfer: transfer as Transferable[] });
   } catch (error) {
     const response: WorkerResponse = { ok: false, error: String(error) };
     self.postMessage(response);

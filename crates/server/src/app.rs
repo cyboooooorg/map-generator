@@ -10,11 +10,14 @@
 //! | `DELETE /api/worlds/{id}`       | delete a world                                    |
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
 //! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=` | deep-zoom detail tile (PNG) |
+//! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
+//! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
 //! | `GET /worlds/{id}/...`          | world files (maps, raw data, diagnostic maps)     |
 //! | anything else                   | the web front-end (single-page app)               |
 use crate::api::{
-    ApiError, FormSpec, HexRequest, JobCreated, JobStatus, ParamSpec, PresetInfo, WorldSummary,
+    ApiError, FormSpec, HexRequest, JobCreated, JobInfo, JobStatus, ParamSpec, PresetInfo,
+    WorldSummary,
 };
 use crate::catalog::Catalog;
 use crate::tiles::{self, TileCache};
@@ -33,9 +36,9 @@ use mapgen::request::{self, WorldRequest, fallback};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::{Notify, Semaphore, watch};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::WatchStream;
 use tower_http::services::{ServeDir, ServeFile};
@@ -48,6 +51,39 @@ pub const MAX_SIZE: u32 = 8192;
 pub const DEFAULT_MAX_PIXELS: u64 = 4096 * 2048;
 /// Peak generation memory per pixel, for the error message.
 const BYTES_PER_PIXEL: u64 = 140;
+/// Finished jobs kept for `GET /api/jobs`; older ones are forgotten.
+const FINISHED_JOBS_KEPT: usize = 20;
+
+/// A generation job: its progress, and how to cancel it.
+struct Job {
+    world_id: String,
+    request: WorldRequest,
+    status: watch::Receiver<JobStatus>,
+    cancel: Arc<Cancel>,
+}
+
+/// Cancellation of a job, seen by the waiting task and the generation thread.
+#[derive(Default)]
+struct Cancel {
+    requested: AtomicBool,
+    /// Wakes the task while it waits for its turn in the queue.
+    notify: Notify,
+}
+
+impl Cancel {
+    fn request(&self) {
+        self.requested.store(true, Ordering::SeqCst);
+        // Stores a permit when the task is not waiting yet.
+        self.notify.notify_one();
+    }
+
+    fn is_requested(&self) -> bool {
+        self.requested.load(Ordering::SeqCst)
+    }
+}
+
+/// Unwinding payload that stops a cancelled generation at its next stage.
+struct Cancelled;
 
 /// Where the server reads and writes its files.
 #[derive(Clone, Debug)]
@@ -63,7 +99,7 @@ pub struct Config {
 pub struct AppState {
     config: Config,
     catalog: Catalog,
-    jobs: Mutex<HashMap<String, watch::Receiver<JobStatus>>>,
+    jobs: Mutex<HashMap<String, Job>>,
     next_job: AtomicU64,
     /// One generation at a time: each one already uses every core.
     queue: Semaphore,
@@ -104,6 +140,8 @@ pub fn router(config: Config) -> Router {
         .route("/api/worlds/{id}", delete(delete_world))
         .route("/api/worlds/{id}/hex", post(hex_grid))
         .route("/api/worlds/{id}/tiles/{z}/{x}/{y}", get(tile))
+        .route("/api/jobs", get(list_jobs))
+        .route("/api/jobs/{id}", delete(cancel_job))
         .route("/api/jobs/{id}/events", get(job_events))
         .nest_service("/worlds", ServeDir::new(&config.worlds_dir))
         .fallback_service(spa)
@@ -238,6 +276,7 @@ async fn create_world(
     State(state): State<Shared>,
     Json(mut request): Json<WorldRequest>,
 ) -> Result<(StatusCode, Json<JobCreated>), Failure> {
+    let original = request.clone();
     let bad = |msg: String| Failure(StatusCode::BAD_REQUEST, msg);
     for (field, value) in [("width", request.width), ("height", request.height)] {
         if value.is_some_and(|v| v > MAX_SIZE) {
@@ -282,23 +321,61 @@ async fn create_world(
 
     let job_id = state.next_job.fetch_add(1, Ordering::Relaxed).to_string();
     let (tx, rx) = watch::channel(JobStatus::Queued);
-    state
-        .jobs
-        .lock()
-        .expect("jobs lock")
-        .insert(job_id.clone(), rx);
+    let cancel = Arc::new(Cancel::default());
+    {
+        let mut jobs = state.jobs.lock().expect("jobs lock");
+        forget_old_jobs(&mut jobs);
+        jobs.insert(
+            job_id.clone(),
+            Job {
+                world_id: world_id.clone(),
+                request: original,
+                status: rx,
+                cancel: cancel.clone(),
+            },
+        );
+    }
 
     // Worlds loaded for the deep zoom would add to the generation's peak.
     state.tiles.clear();
     let task_state = state.clone();
     let task_world = world_id.clone();
     tokio::spawn(async move {
-        let _permit = task_state.queue.acquire().await;
+        let finish = |status: JobStatus| {
+            if let JobStatus::Failed { error } = &status {
+                tracing::error!("generation of {task_world} failed: {error}");
+            }
+            tx.send_replace(status);
+            task_state
+                .pending
+                .lock()
+                .expect("pending lock")
+                .retain(|id| id != &task_world);
+        };
+        // A job cancelled while it waits for its turn never starts.
+        let _permit = tokio::select! {
+            permit = task_state.queue.acquire() => permit,
+            () = cancel.notify.notified() => {
+                finish(JobStatus::Cancelled);
+                return;
+            }
+        };
+        if cancel.is_requested() {
+            finish(JobStatus::Cancelled);
+            return;
+        }
         let worlds_dir = task_state.config.worlds_dir.clone();
         let progress = tx.clone();
+        let thread_cancel = cancel.clone();
         let result = tokio::task::spawn_blocking(move || {
             let steps = Stage::ALL.len() as u32;
             let report = |stage: Stage| {
+                // Stages cannot be interrupted: a cancelled generation stops
+                // when the next one starts. `resume_unwind` skips the panic
+                // hook, so nothing is logged as a crash.
+                if thread_cancel.is_requested() {
+                    std::panic::resume_unwind(Box::new(Cancelled));
+                }
                 let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
                 progress.send_replace(JobStatus::Running { stage, step, steps });
             };
@@ -328,22 +405,70 @@ async fn create_world(
                 world_id: task_world.clone(),
             },
             Ok(Err(e)) => JobStatus::Failed { error: e },
+            Err(e) if e.is_panic() && cancel.is_requested() => JobStatus::Cancelled,
             Err(e) => JobStatus::Failed {
                 error: format!("generation crashed: {e}"),
             },
         };
-        if let JobStatus::Failed { error } = &status {
-            tracing::error!("generation of {task_world} failed: {error}");
-        }
-        tx.send_replace(status);
-        task_state
-            .pending
-            .lock()
-            .expect("pending lock")
-            .retain(|id| id != &task_world);
+        finish(status);
     });
 
     Ok((StatusCode::ACCEPTED, Json(JobCreated { job_id, world_id })))
+}
+
+/// Drops the oldest finished jobs beyond [`FINISHED_JOBS_KEPT`].
+fn forget_old_jobs(jobs: &mut HashMap<String, Job>) {
+    let mut finished: Vec<u64> = jobs
+        .iter()
+        .filter(|(_, job)| job.status.borrow().is_finished())
+        .filter_map(|(id, _)| id.parse().ok())
+        .collect();
+    if finished.len() < FINISHED_JOBS_KEPT {
+        return;
+    }
+    finished.sort_unstable();
+    for id in &finished[..=finished.len() - FINISHED_JOBS_KEPT] {
+        jobs.remove(&id.to_string());
+    }
+}
+
+async fn list_jobs(State(state): State<Shared>) -> Json<Vec<JobInfo>> {
+    let jobs = state.jobs.lock().expect("jobs lock");
+    let mut list: Vec<(u64, JobInfo)> = jobs
+        .iter()
+        .map(|(id, job)| {
+            (
+                id.parse().unwrap_or(0),
+                JobInfo {
+                    job_id: id.clone(),
+                    world_id: job.world_id.clone(),
+                    request: job.request.clone(),
+                    status: job.status.borrow().clone(),
+                },
+            )
+        })
+        .collect();
+    list.sort_unstable_by_key(|(id, _)| std::cmp::Reverse(*id));
+    Json(list.into_iter().map(|(_, info)| info).collect())
+}
+
+async fn cancel_job(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> Result<StatusCode, Failure> {
+    let jobs = state.jobs.lock().expect("jobs lock");
+    let job = jobs
+        .get(&id)
+        .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no job {id}")))?;
+    if job.status.borrow().is_finished() {
+        return Err(Failure(
+            StatusCode::CONFLICT,
+            format!("job {id} is already finished"),
+        ));
+    }
+    job.cancel.request();
+    // The final status (cancelled) follows on the event stream.
+    Ok(StatusCode::ACCEPTED)
 }
 
 async fn job_events(
@@ -355,7 +480,7 @@ async fn job_events(
         .lock()
         .expect("jobs lock")
         .get(&id)
-        .cloned()
+        .map(|job| job.status.clone())
         .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no job {id}")))?;
     let mut finished = false;
     // Stream every status change; stop after the final one.
@@ -504,5 +629,58 @@ mod tests {
         let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-3", None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         assert!(!config.worlds_dir.join("frozen-3").exists());
+    }
+
+    #[tokio::test]
+    async fn lists_and_cancels_jobs() {
+        let config = temp_config("cancel");
+        let app = router(config.clone());
+        // The first job holds the queue; the second waits behind it.
+        let first = r#"{"planet": "barren", "seed": 1, "width": 512, "height": 256}"#;
+        let small = r#"{"planet": "barren", "seed": 2, "width": 64, "height": 32}"#;
+        let (_, body) = call(&app, "POST", "/api/worlds", Some(first)).await;
+        let first: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let (_, body) = call(&app, "POST", "/api/worlds", Some(small)).await;
+        let second: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let second_id = second["job_id"].as_str().unwrap();
+
+        let (status, list) = call(&app, "GET", "/api/jobs", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        assert_eq!(list[0]["job_id"], second_id, "most recent first");
+        assert_eq!(list[0]["world_id"], "barren-2");
+        assert_eq!(list[0]["request"]["seed"], 2);
+
+        let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{second_id}"), None).await;
+        assert_eq!(status, StatusCode::ACCEPTED);
+        let uri = format!("/api/jobs/{second_id}/events");
+        let (_, events) = call(&app, "GET", &uri, None).await;
+        assert!(events.contains("\"status\":\"cancelled\""), "{events}");
+        assert!(!config.worlds_dir.join("barren-2").exists());
+
+        // A finished job cannot be cancelled; an unknown one does not exist.
+        let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{second_id}"), None).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) = call(&app, "DELETE", "/api/jobs/999", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        // A running job stops when its next stage starts.
+        let first_id = first["job_id"].as_str().unwrap();
+        loop {
+            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
+            if list.contains("\"status\":\"running\"") {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{first_id}"), None).await;
+        assert_eq!(status, StatusCode::ACCEPTED);
+        let (_, events) = call(&app, "GET", &format!("/api/jobs/{first_id}/events"), None).await;
+        assert!(events.contains("\"status\":\"cancelled\""), "{events}");
+        assert!(!config.worlds_dir.join("barren-1").exists());
+
+        // The queue is free again.
+        let (status, _) = call(&app, "POST", "/api/worlds", Some(small)).await;
+        assert_eq!(status, StatusCode::ACCEPTED);
     }
 }

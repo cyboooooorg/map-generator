@@ -90,3 +90,60 @@ export function formatLonLat({ lon, lat }: LonLat): string {
   const ew = lonDeg >= 0 ? 'E' : 'W';
   return `${Math.abs(latDeg).toFixed(1)}° ${ns}, ${Math.abs(lonDeg).toFixed(1)}° ${ew}`;
 }
+
+/** Angle between two points seen from the planet centre, in radians. */
+export function centralAngle(a: LonLat, b: LonLat): number {
+  // Haversine: accurate for short and long distances alike.
+  const dLat = b.lat - a.lat;
+  const dLon = b.lon - a.lon;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat) * Math.cos(b.lat) * Math.sin(dLon / 2) ** 2;
+  return 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Great-circle distance between two points of a planet, in km. */
+export function distanceKm(a: LonLat, b: LonLat, circumferenceKm: number): number {
+  return (centralAngle(a, b) * circumferenceKm) / TAU;
+}
+
+/** Length of a path of great-circle legs, in km. */
+export function pathKm(points: readonly LonLat[], circumferenceKm: number): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    total += distanceKm(points[i - 1]!, points[i]!, circumferenceKm);
+  }
+  return total;
+}
+
+/** `count + 1` points evenly spaced along the great circle from `a` to `b`. */
+export function greatCircleArc(a: LonLat, b: LonLat, count: number): LonLat[] {
+  const pa = lonLatToSphere(a);
+  const pb = lonLatToSphere(b);
+  const angle = centralAngle(a, b);
+  const points: LonLat[] = [];
+  for (let i = 0; i <= count; i += 1) {
+    const t = i / count;
+    if (angle < 1e-9) {
+      points.push(a);
+      continue;
+    }
+    // Spherical linear interpolation.
+    const wa = Math.sin((1 - t) * angle) / Math.sin(angle);
+    const wb = Math.sin(t * angle) / Math.sin(angle);
+    points.push(sphereToLonLat([wa * pa[0] + wb * pb[0], wa * pa[1] + wb * pb[1], wa * pa[2] + wb * pb[2]]));
+  }
+  return points;
+}
+
+/** Texture coordinates (u, v) of a point; v = 1 at the north pole. */
+export function lonLatToUv({ lon, lat }: LonLat): [number, number] {
+  return [wrapLon(lon) / TAU, lat / Math.PI + 0.5];
+}
+
+/** Longitude and latitude in degrees, longitude in [-180, 180], for copying. */
+export function lonLatDegrees({ lon, lat }: LonLat): [number, number] {
+  let lonDeg = (wrapLon(lon) * 180) / Math.PI;
+  if (lonDeg > 180) {
+    lonDeg -= 360;
+  }
+  return [(lat * 180) / Math.PI, lonDeg];
+}

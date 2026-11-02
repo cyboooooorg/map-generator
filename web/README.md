@@ -1,6 +1,6 @@
 # Planet viewer (web front-end)
 
-Browser front-end of the map generator: a library of generated worlds, a 3D globe and a flat map that morph into each other, point inspection, and a form that launches new generations on the server.
+Browser front-end of the map generator: a library of generated worlds, a 3D globe and a flat map that morph into each other, point inspection, measurements and side-by-side comparison, and a form that queues new generations on the server.
 
 ## Prerequisites
 
@@ -25,17 +25,46 @@ In the viewer:
 
 - **Globe / Map** switches between the globe and the flat map, with an animated morph.
 - Drag to rotate the globe or pan the map, scroll to zoom towards the point under the cursor. Zooming goes from the whole planet down to about 300 m per pixel: on the biome layer, detail tiles rendered by the server stream in as you get closer (the coarser picture stays until they arrive). On the globe, rotation slows down near the surface.
-- Click a point to see its coordinates, biome, elevation above the coastline, temperature, moisture and river flow.
+- Hovering shows the coordinates, biome and elevation under the pointer at the bottom of a wide viewer.
+- Click a point to see its coordinates, biome, elevation above the coastline, temperature, moisture, drainage area and, on worlds with `raw_data` format version 2 or later, the distance to the sea, the volcanic zone, the floodplain weight and the shift of the mountain line. Near a river it also shows the river (flow there and at its mouth, length, where it ends, estuary or delta branch); with the hex grid on, the hex under the point. **Copy** copies the latitude and longitude in degrees.
+- The tools in the top-left corner: **Reset view** (whole planet, north up), **Measure** (click points to measure a path of great-circle legs, in km on this planet), **Screenshot** (the view as a PNG) and **?** (the keyboard shortcuts).
 - **Display** (folded by default on narrow screens):
-  - **Layer**: biomes (the generated map), or elevation, temperature, moisture and river flow coloured on the GPU, with a legend.
+  - **Layer**: biomes (the generated map), or elevation, temperature, moisture, river flow, volcanic zone, distance to the sea and floodplains coloured on the GPU, with a legend. The last three need a world of format version 2 (3 for floodplains). On the biome layer, the legend lists the biomes of the planet with their share of its surface: hover one to highlight it on the planet, click it to keep it highlighted.
   - **Relief**: raises land above the coastline and shades its slopes; seas stay flat, except on worlds whose seas have dried up (barren), where basins sink below the old coastline and are shaded like land. The sun glints only on liquid seas. The biome layer and the detail tiles are hillshaded already, so on them it only raises the land.
-  - **Sunlight**: lights the planet from a sun whose latitude follows the season and the world's axial tilt, with day, night and a terminator on both the globe and the map. Off, a headlight follows the camera.
+  - **Sunlight**: lights the planet from a sun whose latitude follows the season and the world's axial tilt, with day, night and a terminator on both the globe and the map. **Play** runs through a year in 12 seconds; the latitude under the sun is shown below the slider. Off, a headlight follows the camera.
   - **Atmosphere**: blue rim around the globe. **Grid**: 30° graticule.
-  - **Hexes**: the hex grid of the world (majority biome per hex, outlines, a blue dot on river hexes), computed by the server for the chosen number of columns.
+  - **Hexes**: the hex grid of the world (majority biome per hex, outlines, a blue dot on river hexes), computed by the server for the chosen number of columns and river threshold. **Download hex JSON** saves the grid shown.
+- The display settings (except the hex grid itself) are remembered by the browser.
 
-**New world** opens the generation form. Each parameter is either random (left to the planet preset, then to the generator defaults) or fixed with its slider. Progress is streamed live from the server, and the new world opens when it is ready.
+Keyboard shortcuts, when no form field has the focus:
 
-On narrow screens (760 px wide or less), the world list and the viewer take the whole screen one at a time: **Worlds** and **Viewer** in the header switch between them. Picking a world opens the viewer, and **New world** opens the form, whose progress bar and **Close** / **Generate** buttons stay pinned to the bottom of the screen while the parameters scroll. A generation keeps running if you switch to the viewer meanwhile, and the new world opens when it is ready.
+| Key       | Action                                |
+| --------- | ------------------------------------- |
+| `G` / `M` | globe / flat map                      |
+| `1` – `8` | layer                                 |
+| `R`       | reset the view                        |
+| `H`       | hexes                                 |
+| `L`       | sunlight                              |
+| `S`       | play the seasons (with sunlight)      |
+| `A`       | atmosphere                            |
+| `N`       | grid                                  |
+| `D`       | measure distances                     |
+| `P`       | screenshot                            |
+| `Esc`     | close the point panel, stop measuring |
+| `?`       | shortcut help                         |
+
+In the sidebar:
+
+- The selected world's card shows every parameter, its gravity, surface, land and water shares, river count and age, and how much of the planet each biome covers. Its actions: **Vary…** opens the form filled with the world's parameters, **Copy command** copies the `mise run gen` command that regenerates it, **Copy link** copies a link that opens it, **Compare with** shows a second world beside it, and **Download** offers the map PNG, the SVG, the legend and a ZIP of `raw_data/` built in the browser.
+- The world list can be searched by id or seed, filtered by planet and sorted; the sort and filter are remembered. **Select** picks several worlds, to delete them or to compare two of them.
+- Deleting a world hides it at once and offers **Undo** for six seconds; the files are deleted afterwards (or when the page closes).
+- The address names the worlds shown (`#world=<id>&compare=<id>`): reloading keeps them, and the link can be shared.
+
+**New world** opens the generation form. Each parameter is either random (left to the planet preset, then to the generator defaults) or fixed with its slider; **Roll** draws a seed. A world is named after its planet and seed, and the server refuses to overwrite one: when the planet and seed match an existing world, the form says so and offers to replace it. **Generate** sends the job and closes the form: generations run in the background, one at a time, the others waiting in a queue. The **Generations** list shows each one with its stage, elapsed time, an estimate of the time left (learnt from earlier generations in this browser) and **Cancel**. A reloaded page picks up the generations still running. When one finishes, the new world opens if you have not picked another one meanwhile; otherwise a notification offers to open it.
+
+**Compare** shows two worlds side by side (stacked on narrow screens). **Link cameras** moves both views together; **Swap** exchanges them.
+
+On narrow screens (760 px wide or less), the world list and the viewer take the whole screen one at a time: **Worlds** and **Viewer** in the header switch between them. Picking a world opens the viewer, and **New world** opens the form, whose buttons stay pinned to the bottom of the screen while the parameters scroll.
 
 For everyday use, run the whole app in Docker instead: see "Web app" in the repository README.
 
@@ -60,6 +89,11 @@ There is nothing to configure here: the server address is fixed in `vite.config.
 | `src/lib/layers/`                         | 16-bit layer decoding in a Web Worker (browsers decode PNGs to 8 bits)                                                                                                                     |
 | `src/lib/viewer/`                         | three.js view (`PlanetView.ts`): one mesh morphing between plane and sphere in its vertex shader; GLSL in `shaders.ts`, colour ramps shared by the shader and the legend in `colormaps.ts` |
 | `src/lib/viewer/TileLayer.ts`, `tiles.ts` | Deep zoom: quadtree level selection (screen-space error, frustum and horizon culling), tile loading (priority queue, abort, GPU cache) and detail patches                                  |
-| `src/components/`                         | Svelte components: viewer, world list, generation form, point information                                                                                                                  |
+| `src/lib/world.svelte.ts`                 | Loading of one shown world: metadata, decoded layers, biome statistics (`stats.ts`) and the river index (`rivers.ts`)                                                                      |
+| `src/lib/jobs.svelte.ts`                  | Generation jobs followed by the page: progress, cancellation, time estimates, jobs picked up after a reload                                                                                |
+| `src/lib/sample.ts`, `hex.ts`             | Values of a world, a river and a hex at one point                                                                                                                                          |
+| `src/lib/format.ts`, `download.ts`        | Number and date formatting, the request and command that reproduce a world, file downloads and the raw data ZIP                                                                            |
+| `src/lib/settings.ts`                     | Preferences in `localStorage`, guarded so the app works without storage                                                                                                                    |
+| `src/components/`                         | Svelte components: world pane (viewer, point information, pointer readout, measurement), world card, world list, generation jobs, generation form, notifications                           |
 
 TypeScript runs in its strictest settings (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), and `npm run check` fails on any warning.

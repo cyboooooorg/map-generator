@@ -4,7 +4,7 @@
 /** A colour stop: position in [0, 1] and an sRGB colour. */
 type Stop = readonly [number, readonly [number, number, number]];
 
-export type DataLayer = 'elevation' | 'temperature' | 'moisture' | 'flow';
+export type DataLayer = 'elevation' | 'temperature' | 'moisture' | 'flow' | 'volcanic' | 'coast' | 'floodplain';
 
 export interface Ramp {
   label: string;
@@ -64,6 +64,41 @@ export const RAMPS: Record<DataLayer, Ramp> = {
       [0.55, [25, 60, 115]],
       [0.75, [55, 160, 225]],
       [1.0, [225, 250, 255]],
+    ],
+  },
+  // Raw_data format version 2 and later.
+  volcanic: {
+    label: 'Volcanic zone',
+    min: 'none',
+    max: 'volcanic',
+    stops: [
+      [0.0, [30, 30, 36]],
+      [0.4, [95, 60, 50]],
+      [0.7, [210, 90, 30]],
+      [1.0, [255, 220, 90]],
+    ],
+  },
+  // t = √(km / cap): the first hundreds of km get most of the ramp.
+  coast: {
+    label: 'Distance to the sea',
+    min: '0 km',
+    max: 'cap (√ scale)',
+    stops: [
+      [0.0, [235, 245, 250]],
+      [0.25, [110, 200, 190]],
+      [0.6, [60, 110, 160]],
+      [1.0, [40, 25, 70]],
+    ],
+  },
+  // Raw_data format version 3 and later.
+  floodplain: {
+    label: 'Floodplain',
+    min: 'none',
+    max: 'valley floor',
+    stops: [
+      [0.0, [24, 26, 32]],
+      [0.5, [70, 130, 100]],
+      [1.0, [170, 235, 160]],
     ],
   },
 };

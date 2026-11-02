@@ -1,105 +1,246 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import GenerateForm from './components/GenerateForm.svelte';
-  import InfoPanel from './components/InfoPanel.svelte';
-  import Viewer from './components/Viewer.svelte';
+  import JobList from './components/JobList.svelte';
+  import Toasts from './components/Toasts.svelte';
+  import WorldInfo from './components/WorldInfo.svelte';
   import WorldList from './components/WorldList.svelte';
-  import { api } from './lib/api/client';
+  import WorldPane from './components/WorldPane.svelte';
+  import { api, worldFile } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
+  import type { JobCreated } from './lib/api/types/JobCreated';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
-  import type { WorldMetadata } from './lib/api/types/WorldMetadata';
+  import type { WorldRequest } from './lib/api/types/WorldRequest';
   import type { WorldSummary } from './lib/api/types/WorldSummary';
-  import type { LonLat } from './lib/geo';
-  import { loadLayers, type WorldLayers } from './lib/layers';
+  import { requestFromWorld } from './lib/format';
+  import { jobs, type TrackedJob } from './lib/jobs.svelte';
+  import { loadSetting, saveSetting } from './lib/settings';
+  import { toasts } from './lib/toasts.svelte';
+  import type { CameraState } from './lib/viewer/PlanetView';
+  import { LoadedWorld } from './lib/world.svelte';
+
+  /** How long a deleted world can be restored, in ms. */
+  const UNDO_MS = 6000;
 
   let worlds = $state<WorldSummary[]>([]);
   let presets = $state<PresetInfo[]>([]);
   let spec = $state<FormSpec | null>(null);
   let selectedId = $state<string | null>(null);
-  let meta = $state<WorldMetadata | null>(null);
-  let layers = $state<WorldLayers | null>(null);
-  let picked = $state<LonLat | null>(null);
-  let generating = $state(false);
-  let error = $state<string | null>(null);
+  let compareId = $state<string | null>(null);
+  let fatal = $state<string | null>(null);
+  /** Set once the address has been read: until then, writing it would erase it. */
+  let ready = $state(false);
+  /** The generation form, when open: blank, or varying a world. */
+  let form = $state<{ initial: WorldRequest | null; variedFrom: string | null } | null>(null);
+  /** Worlds deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
+  let hidden = $state<string[]>([]);
+  let linkCameras = $state(loadSetting('linkCameras', true));
+  $effect(() => saveSetting('linkCameras', linkCameras));
   /**
    * Which pane fills the screen on narrow layouts (the CSS ignores it on wide
    * ones, where the sidebar and the viewer sit side by side).
    */
   let pane = $state<'sidebar' | 'viewer'>('sidebar');
 
+  const primary = new LoadedWorld();
+  const secondary = new LoadedWorld();
+  let primaryPane = $state<WorldPane | null>(null);
+  let secondaryPane = $state<WorldPane | null>(null);
+  /** The job whose world opens when ready, if the selection has not changed meanwhile. */
+  let autoOpen: { jobId: string; selection: string | null } | null = null;
+  /** Deletions waiting for their undo delay, flushed if the page closes. */
+  const pendingDeletes = new Set<string>();
+
+  const visible = $derived(worlds.filter((w) => !hidden.includes(w.id)));
+  const existing = $derived(new Set(worlds.map((w) => w.id)));
+  const revision = (id: string | null) => worlds.find((w) => w.id === id)?.modified_ms ?? null;
+
   async function refresh(): Promise<void> {
     worlds = await api.worlds();
   }
 
-  onMount(async () => {
-    try {
-      [presets, spec] = await Promise.all([api.presets(), api.form()]);
-      await refresh();
-      selectedId = worlds[0]?.id ?? null;
-      if (selectedId) {
-        pane = 'viewer';
-      }
-    } catch (e) {
-      error = `Cannot reach the server: ${String(e)}`;
-    }
-  });
+  /** `#world=<id>&compare=<id>`: the worlds shown, so a reload or a shared link opens them. */
+  function readHash(): { world: string | null; compare: string | null } {
+    const params = new URLSearchParams(location.hash.slice(1));
+    return { world: params.get('world'), compare: params.get('compare') };
+  }
 
-  // Load the metadata, then the raw layers in a worker, of the selected world.
-  $effect(() => {
-    const id = selectedId;
-    meta = null;
-    layers = null;
-    picked = null;
-    if (!id) {
-      return;
-    }
-    let cancelled = false;
-    api
-      .metadata(id)
-      .then(async (m) => {
-        if (cancelled) return;
-        meta = m;
-        const decoded = await loadLayers(id, m);
-        if (!cancelled) layers = decoded;
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) error = `Could not load ${id}: ${String(e)}`;
-      });
-    return () => {
-      cancelled = true;
-    };
-  });
-
-  async function remove(world: WorldSummary): Promise<void> {
-    if (!confirm(`Delete ${world.id}? This removes its files.`)) {
-      return;
-    }
-    try {
-      await api.deleteWorld(world.id);
-      if (selectedId === world.id) {
-        selectedId = null;
-      }
-      await refresh();
-    } catch (e) {
-      error = String(e);
+  function applyHash(): void {
+    const { world, compare } = readHash();
+    const known = (id: string | null) => (id && worlds.some((w) => w.id === id) ? id : null);
+    if (known(world)) {
+      selectedId = world;
+      compareId = known(compare);
+      pane = 'viewer';
     }
   }
 
+  onMount(() => {
+    (async () => {
+      try {
+        [presets, spec] = await Promise.all([api.presets(), api.form()]);
+        jobs.defaultSize = [spec.default_width, spec.default_height];
+        await refresh();
+        applyHash();
+        if (!selectedId) {
+          selectedId = worlds[0]?.id ?? null;
+          if (selectedId) {
+            pane = 'viewer';
+          }
+        }
+        ready = true;
+        await jobs.reattach();
+      } catch (e) {
+        fatal = `Cannot reach the server: ${String(e)}`;
+      }
+    })();
+    window.addEventListener('hashchange', applyHash);
+    window.addEventListener('pagehide', flushDeletes);
+    return () => {
+      window.removeEventListener('hashchange', applyHash);
+      window.removeEventListener('pagehide', flushDeletes);
+    };
+  });
+
+  // Keep the address in step with the worlds shown, without filling the history.
+  $effect(() => {
+    if (!ready) {
+      return;
+    }
+    const params = new URLSearchParams();
+    if (selectedId) params.set('world', selectedId);
+    if (selectedId && compareId) params.set('compare', compareId);
+    const hash = params.toString();
+    if (location.hash.slice(1) !== hash) {
+      history.replaceState(null, '', hash ? `#${hash}` : location.pathname + location.search);
+    }
+  });
+
+  $effect(() => {
+    const id = selectedId;
+    untrack(() => primary.load(id));
+  });
+  $effect(() => {
+    const id = selectedId ? compareId : null;
+    untrack(() => secondary.load(id));
+  });
+
+  jobs.onFinished = (job: TrackedJob) => {
+    const status = job.status;
+    void refresh().then(() => {
+      if (status.status === 'done') {
+        if (autoOpen?.jobId === job.jobId && autoOpen.selection === selectedId) {
+          select(status.world_id);
+          toasts.show(`${status.world_id} is ready.`);
+        } else {
+          toasts.show(`${status.world_id} is ready.`, {
+            action: { label: 'Open', run: () => select(status.world_id) },
+            ms: 8000,
+          });
+        }
+        // Finished jobs leave the list after a while.
+        setTimeout(() => jobs.dismiss(job.jobId), 8000);
+      } else if (status.status === 'failed') {
+        toasts.error(`${job.worldId} failed: ${status.error}`);
+      } else if (status.status === 'cancelled') {
+        toasts.show(`${job.worldId} cancelled.`);
+        setTimeout(() => jobs.dismiss(job.jobId), 4000);
+      }
+    });
+  };
+
   function select(id: string): void {
+    if (id === compareId) {
+      compareId = null;
+    }
     selectedId = id;
     pane = 'viewer';
   }
 
-  function startGenerating(): void {
-    generating = true;
+  function compare(a: string, b: string): void {
+    selectedId = a;
+    compareId = b;
+    pane = 'viewer';
+  }
+
+  function swap(): void {
+    [selectedId, compareId] = [compareId, selectedId];
+  }
+
+  function removeWorlds(ids: string[]): void {
+    if (ids.length === 0) {
+      return;
+    }
+    hidden = [...hidden, ...ids];
+    for (const id of ids) {
+      pendingDeletes.add(id);
+    }
+    if (compareId && ids.includes(compareId)) {
+      compareId = null;
+    }
+    if (selectedId && ids.includes(selectedId)) {
+      selectedId = visible[0]?.id ?? null;
+      compareId = null;
+    }
+    const timer = setTimeout(() => void commitDeletes(ids), UNDO_MS);
+    toasts.show(ids.length === 1 ? `Deleted ${ids[0]}.` : `Deleted ${ids.length} worlds.`, {
+      ms: UNDO_MS,
+      action: {
+        label: 'Undo',
+        run: () => {
+          clearTimeout(timer);
+          for (const id of ids) {
+            pendingDeletes.delete(id);
+          }
+          hidden = hidden.filter((id) => !ids.includes(id));
+        },
+      },
+    });
+  }
+
+  async function commitDeletes(ids: string[]): Promise<void> {
+    const results = await Promise.allSettled(
+      ids.map((id) => {
+        pendingDeletes.delete(id);
+        return api.deleteWorld(id);
+      }),
+    );
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        toasts.error(`Could not delete: ${String(result.reason)}`);
+      }
+    }
+    await refresh();
+    hidden = hidden.filter((id) => !ids.includes(id));
+  }
+
+  /** The page is closing: send the deletions still waiting for their undo delay. */
+  function flushDeletes(): void {
+    for (const id of pendingDeletes) {
+      void fetch(`/api/worlds/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true });
+    }
+    pendingDeletes.clear();
+  }
+
+  function openForm(initial: WorldRequest | null = null, variedFrom: string | null = null): void {
+    form = { initial, variedFrom };
     pane = 'sidebar';
   }
 
-  async function generated(worldId: string): Promise<void> {
-    generating = false;
-    await refresh();
-    selectedId = worldId;
-    pane = 'viewer';
+  function submitted(job: JobCreated, request: WorldRequest): void {
+    form = null;
+    autoOpen = { jobId: job.job_id, selection: selectedId };
+    jobs.track(job.job_id, job.world_id, request, { status: 'queued' }, true);
+    // A replaced world disappeared from the server.
+    void refresh();
+  }
+
+  function cameraFrom(target: () => WorldPane | null) {
+    return (state: CameraState) => {
+      if (linkCameras && compareId) {
+        target()?.applyCamera(state);
+      }
+    };
   }
 </script>
 
@@ -116,35 +257,77 @@
           >Viewer</button
         >
       </div>
-      <button class="primary" onclick={startGenerating} disabled={!spec || generating}>New world</button>
+      <button class="primary" onclick={() => openForm()} disabled={!spec}>New world</button>
     </header>
-    {#if error}
-      <p class="error">{error} <button onclick={() => (error = null)}>Dismiss</button></p>
+    {#if fatal}
+      <p class="error">{fatal} <button onclick={() => (fatal = null)}>Dismiss</button></p>
     {/if}
-    <!-- Hidden with CSS, not unmounted, so that a running generation keeps
-         following its job while the viewer pane is shown. -->
     <div class="content">
-      {#if generating && spec}
-        <GenerateForm {presets} {spec} onDone={generated} onCancel={() => (generating = false)} />
+      <JobList onOpen={select} />
+      {#if form && spec}
+        <GenerateForm
+          {presets}
+          {spec}
+          {existing}
+          initial={form.initial}
+          variedFrom={form.variedFrom}
+          onSubmitted={submitted}
+          onCancel={() => (form = null)}
+        />
       {:else}
-        <WorldList {worlds} {selectedId} onSelect={select} onDelete={remove} />
+        <WorldInfo
+          world={primary}
+          summary={worlds.find((w) => w.id === selectedId)}
+          worlds={visible}
+          {compareId}
+          onVary={() => primary.meta && openForm(requestFromWorld(primary.meta), primary.id)}
+          onCompare={(id) => (compareId = id)}
+          onDelete={() => selectedId && removeWorlds([selectedId])}
+        />
+        <WorldList worlds={visible} {selectedId} {compareId} onSelect={select} onDelete={removeWorlds} onCompare={compare} />
       {/if}
     </div>
   </aside>
 
-  <main>
-    <Viewer
-      worldId={selectedId}
-      revision={worlds.find((w) => w.id === selectedId)?.modified_ms ?? null}
-      {meta}
-      {layers}
-      onPick={(point) => (picked = point)}
-    />
-    {#if picked && meta}
-      <InfoPanel point={picked} {meta} {layers} onClose={() => (picked = null)} />
+  <main class:comparing={compareId !== null}>
+    {#if compareId}
+      <div class="compare-bar">
+        <span class="names">
+          <img src={worldFile(selectedId ?? '', 'world.png')} alt="" />
+          <strong>{selectedId}</strong>
+          <span class="muted">vs</span>
+          <img src={worldFile(compareId, 'world.png')} alt="" />
+          <strong>{compareId}</strong>
+        </span>
+        <label class="check"><input type="checkbox" bind:checked={linkCameras} /> Link cameras</label>
+        <button onclick={swap}>Swap</button>
+        <button onclick={() => (compareId = null)}>Close</button>
+      </div>
     {/if}
+    <div class="panes">
+      <WorldPane
+        bind:this={primaryPane}
+        world={primary}
+        revision={revision(selectedId)}
+        keyboard={true}
+        label={compareId ? selectedId : null}
+        onCameraChange={cameraFrom(() => secondaryPane)}
+      />
+      {#if compareId}
+        <WorldPane
+          bind:this={secondaryPane}
+          world={secondary}
+          revision={revision(compareId)}
+          keyboard={false}
+          label={compareId}
+          onCameraChange={cameraFrom(() => primaryPane)}
+        />
+      {/if}
+    </div>
   </main>
 </div>
+
+<Toasts />
 
 <style>
   .layout {
@@ -163,6 +346,12 @@
     align-content: start;
     gap: 12px;
   }
+  .content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    align-content: start;
+  }
   header {
     display: flex;
     justify-content: space-between;
@@ -176,9 +365,55 @@
     position: relative;
     min-width: 0;
     min-height: 0;
-    /* The viewer overlays (InfoPanel) adapt to the viewer width, not the
-       window: the sidebar takes 340 px of it on wide layouts. */
-    container-type: inline-size;
+    display: grid;
+    /* The compare bar's names must not widen the viewer past the screen. */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  main.comparing {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .panes {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 1px;
+    background: var(--border);
+    min-height: 0;
+  }
+  .compare-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-bar .names {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .compare-bar img {
+    width: 36px;
+    height: 20px;
+    object-fit: cover;
+    border-radius: 3px;
+  }
+  .compare-bar button {
+    padding: 3px 10px;
+  }
+  .check {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .muted {
+    color: var(--muted);
   }
   .error {
     color: var(--danger);
@@ -245,6 +480,11 @@
     .tabs button.active {
       background: var(--accent);
       color: var(--accent-text);
+    }
+    /* Two worlds stack vertically on a phone. */
+    .panes {
+      grid-auto-flow: row;
+      grid-auto-rows: minmax(0, 1fr);
     }
   }
 </style>

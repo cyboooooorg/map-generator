@@ -1,6 +1,7 @@
 // three.js view of a world: one mesh morphing between the flat map and the
 // globe in its vertex shader, data layers coloured on the GPU, relief, light
-// (headlight or sun), atmosphere, graticule, hex overlay and picking.
+// (headlight or sun), atmosphere, graticule, hex overlay, biome highlight,
+// measured paths, picking and hovering, screenshots and camera sharing.
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import {
   AdditiveBlending,
@@ -23,6 +24,7 @@ import {
   PlaneGeometry,
   Quaternion,
   Raycaster,
+  RedFormat,
   RepeatWrapping,
   RGBAFormat,
   Scene,
@@ -41,7 +43,9 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { HexMap } from '../api/types/HexMap';
 import {
+  greatCircleArc,
   type LonLat,
+  lonLatToUv,
   lonLatToSphere,
   planeToLonLat,
   rayPlaneZ0,
@@ -63,6 +67,14 @@ import {
 } from './shaders';
 
 export type ViewMode = 'globe' | 'map';
+
+/** Where the camera is, to show another view from the same place. */
+export interface CameraState {
+  mode: ViewMode;
+  position: [number, number, number];
+  target: [number, number, number];
+  up: [number, number, number];
+}
 
 /** Where the light comes from. */
 export type Lighting =
@@ -104,6 +116,55 @@ function graticule(step: number): BufferGeometry {
   }
   const geometry = new BufferGeometry();
   // Positions are computed in the shader; three.js still needs the attribute.
+  geometry.setAttribute('position', new Float32BufferAttribute(new Array((uvs.length / 2) * 3).fill(0), 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  return geometry;
+}
+
+/**
+ * A path of great-circle legs as line segments in uv space, with a small
+ * circle around each point. Segments crossing the date line are cut in two
+ * at the edge of the map, so the flat map shows no line across it.
+ */
+function pathGeometry(points: readonly LonLat[]): BufferGeometry {
+  const uvs: number[] = [];
+  const push = (a: LonLat, b: LonLat) => {
+    const [u0, v0] = lonLatToUv(a);
+    const [u1, v1] = lonLatToUv(b);
+    if (Math.abs(u1 - u0) < 0.5) {
+      uvs.push(u0, v0, u1, v1);
+      return;
+    }
+    // Crossing eastwards (u wraps from 1 to 0) or westwards.
+    const east = u1 < u0;
+    const edge = east ? 1 : 0;
+    const unwrapped = east ? u1 + 1 : u1 - 1;
+    const t = (edge - u0) / (unwrapped - u0);
+    const v = v0 + t * (v1 - v0);
+    uvs.push(u0, v0, edge, v, 1 - edge, v, u1, v1);
+  };
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const arc = greatCircleArc(a, b, 64);
+    for (let k = 1; k < arc.length; k += 1) {
+      push(arc[k - 1]!, arc[k]!);
+    }
+  }
+  const radius = (0.6 * Math.PI) / 180;
+  for (const p of points) {
+    const stretch = 1 / Math.max(0.1, Math.cos(p.lat));
+    let previous: LonLat | null = null;
+    for (let k = 0; k <= 24; k += 1) {
+      const angle = (k / 24) * 2 * Math.PI;
+      const q = { lon: p.lon + Math.cos(angle) * radius * stretch, lat: p.lat + Math.sin(angle) * radius };
+      if (previous) {
+        push(previous, q);
+      }
+      previous = q;
+    }
+  }
+  const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(new Array((uvs.length / 2) * 3).fill(0), 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
   return geometry;
@@ -172,7 +233,14 @@ export class PlanetView {
     uTileOn: { value: 0 } as IUniform<number>,
     uTile: { value: emptyTexture() } as IUniform<Texture>,
     uTexRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
+    uHasExtra: { value: 0 } as IUniform<number>,
+    uExtra: { value: emptyTexture() } as IUniform<Texture>,
+    uCoastMax: { value: 2000 } as IUniform<number>,
+    uHasBiomes: { value: 0 } as IUniform<number>,
+    uBiomes: { value: emptyTexture() } as IUniform<Texture>,
+    uHighlight: { value: -1 } as IUniform<number>,
   };
+  private readonly path: LineSegments<BufferGeometry, ShaderMaterial>;
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
   private atmosphereOn = true;
@@ -180,9 +248,19 @@ export class PlanetView {
   private morph = 1;
   private animation: { from: number; to: number; start: number } | null = null;
   private pointerDown: Vector2 | null = null;
+  /** Last pointer position over the canvas, hovered on the next frame. */
+  private hoverAt: Vector2 | null = null;
+  private hoverPending = false;
+  /** Whether the user is steering this view (pointer over it): only then it reports its camera. */
+  private steering = false;
+  private applyingCamera = false;
 
   /** Called with the picked point, or null when a click misses the planet. */
   onPick: (point: LonLat | null) => void = () => {};
+  /** Called with the point under the pointer (at most once a frame), or null off the planet. */
+  onHover: (point: LonLat | null) => void = () => {};
+  /** Called when the user moves the camera of this view. */
+  onCameraChange: (state: CameraState) => void = () => {};
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
@@ -247,6 +325,26 @@ export class PlanetView {
     );
     this.scene.add(this.atmosphere);
 
+    this.path = new LineSegments(
+      new BufferGeometry(),
+      new ShaderMaterial({
+        vertexShader: surfaceVertex,
+        fragmentShader: lineFragment,
+        uniforms: {
+          ...this.shared,
+          uLift: { value: 0.004 },
+          uTileRect: { value: new Vector4(0, 0, 1, 1) },
+          uColor: { value: new Color('#ffd166') },
+          uOpacity: { value: 1 },
+        },
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    this.path.frustumCulled = false;
+    this.path.visible = false;
+    this.scene.add(this.path);
+
     this.tiles = new TileLayer(
       this.scene,
       () =>
@@ -276,6 +374,10 @@ export class PlanetView {
     canvas.addEventListener('wheel', this.handleWheel, { passive: false });
     canvas.addEventListener('pointerdown', this.handlePointerDown);
     canvas.addEventListener('pointerup', this.handlePointerUp);
+    canvas.addEventListener('pointermove', this.handlePointerMove);
+    canvas.addEventListener('pointerenter', this.handlePointerEnter);
+    canvas.addEventListener('pointerleave', this.handlePointerLeave);
+    this.controls.addEventListener('change', this.handleControlsChange);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
@@ -300,10 +402,39 @@ export class PlanetView {
    */
   setData(layers: WorldLayers | null, coast: number, liquidSea = true): void {
     this.shared.uData.value.dispose();
+    this.u.uExtra.value.dispose();
+    this.u.uBiomes.value.dispose();
+    this.u.uExtra.value = emptyTexture();
+    this.u.uBiomes.value = emptyTexture();
+    this.u.uHasExtra.value = 0;
+    this.u.uHasBiomes.value = 0;
     if (!layers) {
       this.shared.uData.value = emptyTexture();
       this.shared.uHasData.value = 0;
       return;
+    }
+    const biomes = new DataTexture(layers.biomes, layers.width, layers.height, RedFormat, UnsignedByteType);
+    // Rows of an odd width are not 4-byte aligned.
+    biomes.unpackAlignment = 1;
+    biomes.magFilter = NearestFilter;
+    biomes.minFilter = NearestFilter;
+    biomes.wrapS = RepeatWrapping;
+    biomes.wrapT = ClampToEdgeWrapping;
+    biomes.generateMipmaps = false;
+    biomes.needsUpdate = true;
+    this.u.uBiomes.value = biomes;
+    this.u.uHasBiomes.value = 1;
+    if (layers.extra) {
+      const extra = new DataTexture(layers.extra.packed, layers.width, layers.height, RGBAFormat, HalfFloatType);
+      extra.magFilter = LinearFilter;
+      extra.minFilter = LinearFilter;
+      extra.wrapS = RepeatWrapping;
+      extra.wrapT = ClampToEdgeWrapping;
+      extra.generateMipmaps = false;
+      extra.needsUpdate = true;
+      this.u.uExtra.value = extra;
+      this.u.uHasExtra.value = 1;
+      this.u.uCoastMax.value = layers.extra.coastMaxKm;
     }
     const texture = new DataTexture(layers.surface, layers.width, layers.height, RGBAFormat, HalfFloatType);
     texture.magFilter = LinearFilter;
@@ -386,18 +517,79 @@ export class PlanetView {
     this.grid.visible = visible;
   }
 
+  /** Highlights one biome (id), fading the others; null shows them all. */
+  setHighlight(biome: number | null): void {
+    this.u.uHighlight.value = biome ?? -1;
+  }
+
+  /** Draws a path of great-circle legs through the points (fewer than one hides it). */
+  setPath(points: readonly LonLat[]): void {
+    this.path.geometry.dispose();
+    this.path.geometry = pathGeometry(points);
+    this.path.visible = points.length > 0;
+  }
+
+  /** Back to the starting view of the current mode: whole planet, north up. */
+  resetView(): void {
+    this.controls.target.set(0, 0, 0);
+    this.camera.position.set(0, 0, this.mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(0, 0, 0);
+    this.controls.update();
+  }
+
+  getCamera(): CameraState {
+    return {
+      mode: this.mode,
+      position: this.camera.position.toArray(),
+      target: this.controls.target.toArray(),
+      up: this.camera.up.toArray(),
+    };
+  }
+
+  /** Moves the camera to a state reported by another view (same mode expected). */
+  setCamera(state: CameraState): void {
+    this.applyingCamera = true;
+    if (state.mode !== this.mode) {
+      this.setMode(state.mode);
+      // Skip the morph: the other view has finished it already.
+      this.animation = null;
+      this.morph = state.mode === 'globe' ? 1 : 0;
+    }
+    this.camera.position.fromArray(state.position);
+    this.controls.target.fromArray(state.target);
+    this.camera.up.fromArray(state.up);
+    this.camera.lookAt(this.controls.target);
+    this.controls.update();
+    this.applyingCamera = false;
+  }
+
+  /** The current view as a PNG (without the HTML overlays). */
+  screenshot(): Promise<Blob | null> {
+    // The drawing buffer is only valid right after rendering: render and
+    // read it in the same task.
+    this.renderer.render(this.scene, this.camera);
+    return new Promise((resolve) => this.canvas.toBlob(resolve, 'image/png'));
+  }
+
   dispose(): void {
     this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener('wheel', this.handleWheel);
     this.canvas.removeEventListener('pointerdown', this.handlePointerDown);
     this.canvas.removeEventListener('pointerup', this.handlePointerUp);
+    this.canvas.removeEventListener('pointermove', this.handlePointerMove);
+    this.canvas.removeEventListener('pointerenter', this.handlePointerEnter);
+    this.canvas.removeEventListener('pointerleave', this.handlePointerLeave);
+    this.controls.removeEventListener('change', this.handleControlsChange);
     this.controls.dispose();
     this.tiles.dispose();
     this.texture?.dispose();
     this.shared.uData.value.dispose();
     this.u.uHex.value.dispose();
-    for (const object of [this.surface, this.grid, this.atmosphere]) {
+    this.u.uExtra.value.dispose();
+    this.u.uBiomes.value.dispose();
+    for (const object of [this.surface, this.grid, this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -458,6 +650,10 @@ export class PlanetView {
       this.tiles.update(this.camera, this.morph, this.renderer.domElement.height);
     }
     this.renderer.render(this.scene, this.camera);
+    if (this.hoverPending) {
+      this.hoverPending = false;
+      this.onHover(this.hoverAt ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
+    }
   };
 
   /** Height of the camera above the surface (globe) or the map plane. */
@@ -484,6 +680,7 @@ export class PlanetView {
     this.camera.position.setLength(1 + altitude);
     this.camera.updateMatrixWorld();
     if (!anchor) {
+      this.reportCamera();
       return;
     }
     // Turn the camera around the centre until the anchor is back under the
@@ -497,7 +694,45 @@ export class PlanetView {
       this.camera.lookAt(0, 0, 0);
       this.camera.updateMatrixWorld();
     }
+    this.reportCamera();
+    this.hoverPending = true;
   };
+
+  private reportCamera(): void {
+    if (this.steering && !this.applyingCamera) {
+      this.onCameraChange(this.getCamera());
+    }
+  }
+
+  private readonly handleControlsChange = (): void => {
+    this.reportCamera();
+  };
+
+  private readonly handlePointerEnter = (): void => {
+    this.steering = true;
+  };
+
+  private readonly handlePointerLeave = (): void => {
+    this.steering = false;
+    this.hoverAt = null;
+    this.hoverPending = true;
+  };
+
+  private readonly handlePointerMove = (event: PointerEvent): void => {
+    this.steering = true;
+    // While dragging, the point under the pointer is meaningless.
+    this.hoverAt = event.buttons === 0 ? new Vector2(event.clientX, event.clientY) : null;
+    this.hoverPending = true;
+  };
+
+  /** Point of the planet under a point of the canvas, or null. */
+  private pickAt(clientX: number, clientY: number): LonLat | null {
+    if (this.animation) {
+      return null;
+    }
+    const { origin, direction } = this.rayAt(clientX, clientY);
+    return this.mode === 'globe' ? this.pickGlobe(origin, direction) : this.pickMap(origin, direction);
+  }
 
   /** Ray from the camera through a point of the canvas, in world space. */
   private rayAt(clientX: number, clientY: number): { origin: Vec3; direction: Vec3 } {
@@ -535,8 +770,7 @@ export class PlanetView {
     if (this.animation) {
       return;
     }
-    const { origin, direction } = this.rayAt(event.clientX, event.clientY);
-    this.onPick(this.mode === 'globe' ? this.pickGlobe(origin, direction) : this.pickMap(origin, direction));
+    this.onPick(this.pickAt(event.clientX, event.clientY));
   };
 
   // Picking ignores the relief displacement: at most a few percent of the
