@@ -62,6 +62,100 @@ pub fn scale(width: u32) -> f64 {
     width as f64 / REFERENCE_WIDTH
 }
 
+// ── Data file ─────────────────────────────────────────────────────────────────
+
+/// Content of `raw_data/rivers.json`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct RiversFile {
+    pub version: u32,
+    /// Drawn width: `w0_ref_px × (flow / q0_km2)^exponent`, capped at
+    /// `max_ref_px`, in reference pixels (1/`reference_width_px` of the
+    /// circumference).
+    pub width_law: WidthLaw,
+    pub rivers: Vec<RiverEntry>,
+}
+
+/// Parameters of the drawn width of rivers.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct WidthLaw {
+    pub w0_ref_px: f32,
+    pub q0_km2: f32,
+    pub exponent: f32,
+    pub max_ref_px: f32,
+    pub reference_width_px: u32,
+}
+
+/// One river polyline of `rivers.json`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct RiverEntry {
+    pub id: u32,
+    /// The river this one flows into, when `mouth` is `river`.
+    pub parent: Option<u32>,
+    pub mouth: Mouth,
+    /// `[longitude°, latitude°, flow km²]` from head to mouth. Longitudes are
+    /// continuous along a river, so they may leave `[0, 360)` at the seam.
+    pub points: Vec<[f32; 3]>,
+}
+
+impl RiversFile {
+    /// Converts polylines in map pixels to the file format.
+    pub fn from_lines(lines: &[RiverLine], width: u32, height: u32) -> Self {
+        let (w, h) = (width as f64, height as f64);
+        Self {
+            version: 1,
+            width_law: WidthLaw {
+                w0_ref_px: 0.9,
+                q0_km2: RIVER_MIN_FLOW_KM2,
+                exponent: 0.5,
+                max_ref_px: 4.0,
+                reference_width_px: REFERENCE_WIDTH as u32,
+            },
+            rivers: lines
+                .iter()
+                .enumerate()
+                .map(|(id, line)| RiverEntry {
+                    id: id as u32,
+                    parent: line.parent.map(|p| p as u32),
+                    mouth: line.mouth,
+                    points: line
+                        .points
+                        .iter()
+                        .zip(&line.flow_km2)
+                        .map(|(p, &f)| {
+                            [
+                                (p[0] / w * 360.0) as f32,
+                                (90.0 - p[1] / h * 180.0) as f32,
+                                f.round(),
+                            ]
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+
+    /// Converts back to polylines in the pixels of a `width` × `height` map.
+    pub fn to_lines(&self, width: u32, height: u32) -> Vec<RiverLine> {
+        let (w, h) = (width as f64, height as f64);
+        self.rivers
+            .iter()
+            .map(|r| RiverLine {
+                points: r
+                    .points
+                    .iter()
+                    .map(|p| [p[0] as f64 / 360.0 * w, (90.0 - p[1] as f64) / 180.0 * h])
+                    .collect(),
+                flow_km2: r.points.iter().map(|p| p[2]).collect(),
+                parent: r.parent.map(|p| p as usize),
+                mouth: r.mouth,
+            })
+            .collect()
+    }
+}
+
 // ── Tracing ───────────────────────────────────────────────────────────────────
 
 /// Chains river pixels into polylines following the receivers.
@@ -693,6 +787,23 @@ mod tests {
                 }
             }
             assert_eq!(crossings, 0, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn the_data_file_round_trips() {
+        let w = world(5);
+        let file = RiversFile::from_lines(&w.rivers, w.width, w.height);
+        let json = serde_json::to_string(&file).unwrap();
+        let back: RiversFile = serde_json::from_str(&json).unwrap();
+        let lines = back.to_lines(w.width, w.height);
+        assert_eq!(lines.len(), w.rivers.len());
+        for (a, b) in lines.iter().zip(&w.rivers) {
+            assert_eq!(a.parent, b.parent);
+            assert_eq!(a.mouth, b.mouth);
+            for (p, q) in a.points.iter().zip(&b.points) {
+                assert!((p[0] - q[0]).abs() < 1e-3 && (p[1] - q[1]).abs() < 1e-3);
+            }
         }
     }
 

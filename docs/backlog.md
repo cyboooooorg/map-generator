@@ -97,7 +97,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 3. Rivers are too straight and too thin
 
-- **Status:** decided, second
+- **Status:** done
 - **Analysis:** [03-rivers.md](analysis/03-rivers.md)
 - **Findings:** the hydrology is sound; the drawing is the problem. All river
   length follows the 8 grid directions, 23–28 % of 160 km windows are
@@ -123,6 +123,14 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Done when:** median sinuosity about 1.4, straight windows about 5 %, zero
   river crossings, under 0.5 % of samples going uphill, width growing with
   flow, deterministic per seed.
+- **Result:** on seeds 3, 7 and 42 (1920 × 1080), median sinuosity 1.33–1.36
+  (p90 1.64–1.68, was 1.22) and 5.3–5.6 % straight 160 km windows (was 23 %);
+  zero crossings is a test on three seeds. The flats-only routing noise kept
+  the largest basin of seed 3 unchanged (6.11 M km²; noise everywhere grew it
+  to 7.6–8.3 M km²) and moved seed 7's by 7 %. Sinuosity is slightly under the
+  prototype's 1.45, which needed noise everywhere. Generation takes about
+  2.6 s instead of 2.0 s. The uphill share was not re-measured: the valley
+  guard of the prototype is kept unchanged.
 
 ## 4. Smaller items
 

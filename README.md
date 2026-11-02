@@ -227,6 +227,7 @@ worlds/<planet>-<seed>/
 │   ├── volcanic_zone.png  ← 16-bit greyscale layer
 │   ├── coast_distance.png ← 16-bit greyscale layer
 │   ├── highland_offset.png ← 16-bit greyscale layer
+│   ├── rivers.json    ← river polylines with their flow
 │   └── biomes.png     ← 8-bit greyscale, pixel = biome id
 └── noise_maps/
     ├── noise_warp_x.png
@@ -302,9 +303,23 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 }
 ```
 
-The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported.
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`.
 
-The `mapgen` library reloads a world with `export::raw_data::load_world`; for version 1 worlds it recomputes the missing layers from the world parameters and elevation.
+`rivers.json` holds the drawn river polylines (version 2 and later; its file name is in `world.json` under `rivers`):
+
+```json
+{
+  "version": 1,
+  "width_law": { "w0_ref_px": 0.9, "q0_km2": 120000, "exponent": 0.5, "max_ref_px": 4, "reference_width_px": 1920 },
+  "rivers": [
+    { "id": 0, "parent": null, "mouth": "sea", "points": [[129.656, -62.275, 158147], [129.802, -62.306, 158175]] }
+  ]
+}
+```
+
+Each river lists `[longitude°, latitude°, flow km²]` from head to mouth; longitudes are continuous along a river, so they may leave `[0, 360)` where it crosses the seam. `mouth` is `sea`, `lake` or `river` (then `parent` is the river it joins). The drawn width is `w0_ref_px × (flow / q0_km2)^exponent`, capped at `max_ref_px`, in reference pixels (1/`reference_width_px` of the circumference). About 0.5 MB per world (250 KB gzipped).
+
+The `mapgen` library reloads a world with `export::raw_data::load_world`; for version 1 worlds it recomputes the missing layers from the world parameters and elevation (and has no river polylines).
 
 Reading a layer in Python:
 

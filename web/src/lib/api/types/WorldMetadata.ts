@@ -17,6 +17,10 @@ planet_type: string,
  */
 preset: Preset, sea_level: number, volcanic_intensity: number, circumference_km: number, gravity_modifier: number, axial_tilt_deg: number, erosion: number, layers: Layers, 
 /**
+ * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
+ */
+rivers?: string | null, 
+/**
  * Every biome, in id order.
  */
 biomes: Array<BiomeInfo>, };
