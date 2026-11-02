@@ -32,7 +32,6 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   Texture,
-  TextureLoader,
   UnsignedByteType,
   Vector2,
   Vector3,
@@ -243,6 +242,9 @@ export class PlanetView {
   private readonly path: LineSegments<BufferGeometry, ShaderMaterial>;
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
+  /** Counts setTexture calls: only the latest one may set the map. */
+  private textureRequest = 0;
+  private disposed = false;
   private atmosphereOn = true;
   private mode: ViewMode = 'globe';
   private morph = 1;
@@ -384,14 +386,46 @@ export class PlanetView {
     this.renderer.setAnimationLoop(this.render);
   }
 
-  /** Shows a world map (an equirectangular image URL). */
-  async setTexture(url: string): Promise<void> {
-    const texture = await new TextureLoader().loadAsync(url);
+  /**
+   * Shows a world map (an equirectangular image URL). The image is decoded
+   * off the main thread. Aborting `signal` drops the load: the promise
+   * rejects and the current map stays. A later call does not cancel an
+   * earlier one by itself, but the view keeps only the map of the latest call.
+   */
+  async setTexture(url: string, signal?: AbortSignal): Promise<void> {
+    this.textureRequest += 1;
+    const request = this.textureRequest;
+    const response = await fetch(url, signal ? { signal } : {});
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    signal?.throwIfAborted();
+    // ImageBitmaps ignore texture.flipY: flip while decoding instead, so
+    // row 0 (north) ends at the top of the texture, as geo.ts expects.
+    const bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+    if (this.disposed || request !== this.textureRequest || signal?.aborted) {
+      bitmap.close();
+      signal?.throwIfAborted();
+      return;
+    }
+    const texture = new Texture(bitmap);
+    texture.flipY = false;
     texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    this.texture?.dispose();
+    texture.needsUpdate = true;
+    this.disposeTexture();
     this.texture = texture;
     this.u.uMap.value = texture;
+  }
+
+  /** Frees the GPU copy and the decoded image of the base map. */
+  private disposeTexture(): void {
+    if (this.texture) {
+      this.texture.dispose();
+      (this.texture.image as ImageBitmap).close();
+      this.texture = null;
+    }
   }
 
   /**
@@ -573,6 +607,7 @@ export class PlanetView {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener('wheel', this.handleWheel);
@@ -584,7 +619,7 @@ export class PlanetView {
     this.controls.removeEventListener('change', this.handleControlsChange);
     this.controls.dispose();
     this.tiles.dispose();
-    this.texture?.dispose();
+    this.disposeTexture();
     this.shared.uData.value.dispose();
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();

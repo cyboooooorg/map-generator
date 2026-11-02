@@ -58,6 +58,8 @@ class Jobs {
   onFinished: (job: TrackedJob) => void = () => {};
   private times: StageTimes = loadNumbers(TIMES_KEY);
   private followed = new Set<string>();
+  /** Stops listening to a job's progress stream, by job id. */
+  private streams = new Map<string, () => void>();
 
   get active(): TrackedJob[] {
     return this.list.filter((j) => !isFinished(j.status));
@@ -86,7 +88,10 @@ class Jobs {
       },
       ...this.list,
     ];
-    followJob(jobId, (s) => this.update(jobId, s)).done.then((final) => {
+    const stream = followJob(jobId, (s) => this.update(jobId, s));
+    this.streams.set(jobId, stream.cancel);
+    void stream.done.then((final) => {
+      this.streams.delete(jobId);
       this.update(jobId, final);
       const job = this.find(jobId);
       if (job) {
@@ -119,7 +124,10 @@ class Jobs {
     }
   }
 
+  /** Removes a job from the list, and stops following it if it still runs. */
   dismiss(jobId: string): void {
+    this.streams.get(jobId)?.();
+    this.streams.delete(jobId);
     this.list = this.list.filter((j) => j.jobId !== jobId);
   }
 

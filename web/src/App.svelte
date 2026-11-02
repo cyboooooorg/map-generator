@@ -129,6 +129,14 @@
     const status = job.status;
     void refresh().then(() => {
       if (status.status === 'done') {
+        // A world replaced in place keeps its id: selecting it again would
+        // change nothing, so reload the panes that show it.
+        if (status.world_id === selectedId) {
+          primary.load(status.world_id);
+        }
+        if (selectedId && status.world_id === compareId) {
+          secondary.load(status.world_id);
+        }
         if (autoOpen?.jobId === job.jobId && autoOpen.selection === selectedId) {
           select(status.world_id);
           toasts.show(`${status.world_id} is ready.`);
@@ -293,10 +301,10 @@
     {#if compareId}
       <div class="compare-bar">
         <span class="names">
-          <img src={worldFile(selectedId ?? '', 'world.png')} alt="" />
+          <img src={worldFile(selectedId ?? '', 'world.png', revision(selectedId))} alt="" />
           <strong>{selectedId}</strong>
           <span class="muted">vs</span>
-          <img src={worldFile(compareId, 'world.png')} alt="" />
+          <img src={worldFile(compareId, 'world.png', revision(compareId))} alt="" />
           <strong>{compareId}</strong>
         </span>
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> Link cameras</label>

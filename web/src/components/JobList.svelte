@@ -11,8 +11,10 @@
   let { onOpen }: Props = $props();
 
   let now = $state(Date.now());
+  // A boolean, so that progress updates of the jobs do not restart the timer.
+  const ticking = $derived(jobs.active.length > 0);
   $effect(() => {
-    if (jobs.active.length === 0) {
+    if (!ticking) {
       return;
     }
     const timer = setInterval(() => (now = Date.now()), 1000);
