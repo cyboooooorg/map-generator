@@ -238,6 +238,7 @@ worlds/<planet>-<seed>/
     ├── noise_moisture.png
     ├── noise_volcanic_raw.png
     ├── noise_volcanic_zone.png
+    ├── noise_temperature_anomaly.png
     ├── erosion.png
     ├── elevation.png
     ├── temperature.png
@@ -315,25 +316,26 @@ Every intermediate layer of the generation is exported into `noise_maps/` for st
 
 Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative values to blue/cyan, and positive values to yellow/red. Unsigned maps (range `[0, 1]`) run the full blue-to-red range.
 
-| File                      | Range     | Description                                                                                      |
-| ------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
-| `noise_warp_x.png`        | `[-1, 1]` | Domain-warp field, X axis                                                                        |
-| `noise_warp_y.png`        | `[-1, 1]` | Domain-warp field, Y axis                                                                        |
-| `noise_continent.png`     | `[-1, 1]` | Low-frequency FBM continent shape                                                                |
-| `noise_mountain.png`      | `[0, 1]`  | Ridged noise (mountain peaks)                                                                    |
-| `noise_mountain_wt.png`   | `[0, 1]`  | Mountain blend weight (derived from continent height)                                            |
-| `noise_elevation.png`     | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                                 |
-| `noise_biome_elev.png`    | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                     |
-| `noise_moisture.png`      | `[-1, 1]` | Moisture noise (local variation added to the climate model)                                      |
-| `noise_volcanic_raw.png`  | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                           |
-| `noise_volcanic_zone.png` | `[0, 1]`  | Processed volcanic zone (threshold applied)                                                      |
-| `erosion.png`             | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                 |
-| `elevation.png`           | `[-1, 1]` | Final elevation, after erosion                                                                   |
-| `temperature.png`         | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt))          |
-| `coast_distance.png`      | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                     |
-| `precipitation.png`       | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                    |
-| `moisture.png`            | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows)) |
-| `flow.png`                | `[0, 1]`  | River flow: `log10(1 + drainage km²) / 7` (see [Rivers and lakes](#rivers-and-lakes))            |
+| File                            | Range     | Description                                                                                      |
+| ------------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
+| `noise_warp_x.png`              | `[-1, 1]` | Domain-warp field, X axis                                                                        |
+| `noise_warp_y.png`              | `[-1, 1]` | Domain-warp field, Y axis                                                                        |
+| `noise_continent.png`           | `[-1, 1]` | Low-frequency FBM continent shape                                                                |
+| `noise_mountain.png`            | `[0, 1]`  | Ridged noise (mountain peaks)                                                                    |
+| `noise_mountain_wt.png`         | `[0, 1]`  | Mountain blend weight (derived from continent height)                                            |
+| `noise_elevation.png`           | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                                 |
+| `noise_biome_elev.png`          | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                     |
+| `noise_moisture.png`            | `[-1, 1]` | Moisture noise (local variation added to the climate model)                                      |
+| `noise_volcanic_raw.png`        | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                           |
+| `noise_volcanic_zone.png`       | `[0, 1]`  | Processed volcanic zone (threshold applied)                                                      |
+| `noise_temperature_anomaly.png` | `[-1, 1]` | Large-scale temperature anomaly noise (features of ~3 000 km)                                    |
+| `erosion.png`                   | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                 |
+| `elevation.png`                 | `[-1, 1]` | Final elevation, after erosion                                                                   |
+| `temperature.png`               | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt))          |
+| `coast_distance.png`            | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                     |
+| `precipitation.png`             | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                    |
+| `moisture.png`                  | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows)) |
+| `flow.png`                      | `[0, 1]`  | River flow: `log10(1 + drainage km²) / 7` (see [Rivers and lakes](#rivers-and-lakes))            |
 
 #### Geographic reference lines
 
@@ -364,6 +366,8 @@ S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
 ```
 
 `S` is then rescaled so that an Earth-like tilt (23.44°) gives `0.0` at the poles and `1.0` at the equator, and clamped to `[0, 1]`. Land then cools by `0.3` per unit of elevation above the waterline; the sea surface does not.
+
+A large-scale anomaly is added on top: `0.40 × fbm` on land and `0.20 × fbm` on the sea (features of about 3 000 km, standard deviation about 0.08 on land). It stands for ocean currents, monsoons and continentality without modelling them, so climate zones shift by up to ~15° of latitude between continents instead of following parallels. It is zero-mean: the share of cold and hot climates does not change.
 
 | Axial tilt | Effect                                                   |
 | ---------- | -------------------------------------------------------- |

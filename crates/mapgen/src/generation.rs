@@ -1,5 +1,5 @@
 use crate::biome::BiomeInput;
-use crate::climate::{MoistureInput, moisture, row_temperatures, temperature};
+use crate::climate::{MoistureInput, moisture, row_temperatures, temperature, temperature_anomaly};
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
@@ -22,6 +22,8 @@ pub struct Sample {
     pub moisture: f32,
     pub volcanic_raw: f32,
     pub volcanic_zone: f32,
+    /// Large-scale temperature anomaly noise, roughly in `[-1, 1]`.
+    pub temperature_anomaly: f32,
 }
 
 /// Noise sources and derived constants for one world.
@@ -37,6 +39,8 @@ pub struct Sampler {
     warp_noise_a: Perlin,
     warp_noise_b: Perlin,
     volcano_noise: Perlin,
+    /// Continental-scale temperature anomalies (currents, monsoons, continentality).
+    anomaly_noise: Perlin,
 }
 
 impl Sampler {
@@ -62,6 +66,7 @@ impl Sampler {
             warp_noise_b: Perlin::new(seed.wrapping_add(201)),
             // Low-frequency noise that selects which mountain chains turn volcanic.
             volcano_noise: Perlin::new(seed.wrapping_add(300)),
+            anomaly_noise: Perlin::new(seed.wrapping_add(400)),
         }
     }
 
@@ -123,6 +128,15 @@ impl Sampler {
         let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
         let volcanic_zone = ((volcanic_raw - self.volcanic_threshold) * 4.0).clamp(0.0, 1.0);
 
+        // Features of ~3 000 km: whole zones shift between continents.
+        let temperature_anomaly = fbm(
+            &self.anomaly_noise,
+            nx * 1.2 * s,
+            ny * 1.2 * s,
+            nz * 1.2 * s,
+            3,
+        );
+
         Sample {
             warp_x: warp_x as f32,
             warp_y: warp_y as f32,
@@ -134,6 +148,7 @@ impl Sampler {
             moisture,
             volcanic_raw,
             volcanic_zone,
+            temperature_anomaly,
         }
     }
 }
@@ -173,6 +188,9 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
     ("noise_moisture", Ramp::Signed, |s| s.moisture),
     ("noise_volcanic_raw", Ramp::Signed, |s| s.volcanic_raw),
     ("noise_volcanic_zone", Ramp::Unsigned, |s| s.volcanic_zone),
+    ("noise_temperature_anomaly", Ramp::Signed, |s| {
+        s.temperature_anomaly
+    }),
 ];
 
 /// Coast distances are computed up to this value; further pixels get the cap.
@@ -282,7 +300,11 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
     let raw_temperature: Vec<f32> = relief
         .par_iter()
         .enumerate()
-        .map(|(i, &r)| temperature(row_temperature[i / width as usize], r - rules.waterline))
+        .map(|(i, &r)| {
+            let above_water = r - rules.waterline;
+            temperature(row_temperature[i / width as usize], above_water)
+                + temperature_anomaly(samples[i].temperature_anomaly, above_water >= 0.0)
+        })
         .collect();
     debug.push(DebugLayer {
         name: "temperature",
@@ -445,10 +467,17 @@ mod tests {
 
     #[test]
     fn stored_climate_includes_planet_offsets() {
-        let w = small_world(5, "frozen");
-        // Frozen offsets cool the planet by 0.55: nothing reaches tropical heat.
-        assert!(w.temperature.iter().all(|t| (0.0..=0.45).contains(t)));
-        assert!(w.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
+        let frozen = small_world(5, "frozen");
+        let terran = small_world(5, "terran");
+        // The frozen preset cools every pixel by 0.55; both are clamped to [0, 1].
+        for (f, t) in frozen.temperature.iter().zip(&terran.temperature) {
+            if *t < 1.0 {
+                assert!((f - (t - 0.55).max(0.0)).abs() < 1e-5, "{f} vs {t}");
+            } else {
+                assert!(*f >= 0.45 - 1e-5, "{f} vs {t}");
+            }
+        }
+        assert!(frozen.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
     }
 
     #[test]
