@@ -33,6 +33,7 @@ use crate::climate::temperature;
 use crate::export::ecotone::ecotone_colour_for;
 use crate::export::raw_data::{Layer16, LoadedWorld};
 use crate::export::{LIGHT, RELIEF_KM, shade, water_colour, water_depths_of};
+use crate::hex;
 use crate::rivers;
 use image::{Rgb, RgbImage};
 use noise::{NoiseFn, Perlin};
@@ -123,7 +124,7 @@ pub struct DetailWorld {
     warp_noise: Perlin,
     /// Bounding box of each river polyline in base pixels.
     river_bounds: Vec<[f64; 4]>,
-    /// Per base pixel: the [`LAKE`] bit.
+    /// Per base pixel: [`LAKE`] and [`RIVER`] bits.
     flags: Vec<u8>,
     /// Depth of each base water pixel below its surface (see
     /// [`water_depths_of`]), for the shallow tint of lakes.
@@ -133,6 +134,8 @@ pub struct DetailWorld {
 /// Flag of base lake pixels (water above the waterline, not under a drawn
 /// river); sampled bilinearly for smooth shores.
 const LAKE: u8 = 1;
+/// Flag of base river pixels (see [`hex::is_river`]).
+const RIVER: u8 = 2;
 
 /// A row-major base layer, read one value at a time.
 trait Samples {
@@ -275,13 +278,19 @@ impl DetailWorld {
         );
         let planet = &world.params.planet;
         let waterline = world.params.sea_level + planet.rules.waterline;
+        let river = planet.remap(Biome::River);
         let flags = (0..world.biomes.len())
             .into_par_iter()
             .map(|i| {
-                let lake = world.biomes[i].is_water()
+                let biome = world.biomes[i];
+                let lake = biome.is_water()
                     && world.elevation.get(i) >= waterline
                     && coverage[i] < rivers::RIVER_COVERAGE;
-                if lake { LAKE } else { 0 }
+                let mut flags = if lake { LAKE } else { 0 };
+                if hex::is_river(biome, river, coverage[i]) {
+                    flags |= RIVER;
+                }
+                flags
             })
             .collect();
         drop(coverage);
@@ -299,6 +308,11 @@ impl DetailWorld {
     /// The base layers.
     pub fn world(&self) -> &LoadedWorld {
         &self.world
+    }
+
+    /// Whether base pixel `i` is a river (see [`hex::is_river`]).
+    pub fn is_river(&self, i: usize) -> bool {
+        self.flags[i] & RIVER != 0
     }
 
     /// Bytes held, river polylines aside.

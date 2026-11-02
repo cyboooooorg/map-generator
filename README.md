@@ -106,7 +106,7 @@ mise run hex -- worlds/terran-42 --columns 96
 It writes `<world>/hex/`:
 
 - `hex.png`: the map painted with one colour per hex, outlined, with a blue dot on river hexes.
-- `hex.json`: the grid layout and one entry per hex (row-major, `index = row × columns + col`): majority `biome` id (rivers never win a hex; they set `river` instead), mean `elevation`, `moisture` and `temperature`, `max_flow_km2` and `river`. The biome table is copied from `world.json`.
+- `hex.json`: the grid layout and one entry per hex (row-major, `index = row × columns + col`): majority `biome` id (rivers never win a hex, whatever biome the preset remaps them to, such as `AcidRiver` on caustic worlds or `LavaField` on volcanic ones, where the river polylines tell them apart; they set `river` instead), mean `elevation`, `moisture` and `temperature`, `max_flow_km2` and `river`. The biome table is copied from `world.json`.
 
 The same resampling runs in the web app (hex overlay of the viewer), through the `mapgen::hex` library module.
 

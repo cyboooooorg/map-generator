@@ -7,7 +7,7 @@
 //! real ground than equatorial ones.
 use crate::biome::Biome;
 use crate::export::raw_data::{BiomeInfo, LoadedWorld, biome_table, load_layers};
-
+use crate::rivers;
 use image::{Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -128,15 +128,32 @@ pub struct HexCells {
     pub river: Vec<bool>,
 }
 
+/// Whether a pixel of biome `biome` (as stored, after the preset's remap)
+/// is a river. Rivers are thin lines that never win a hex; the flow flag
+/// shows them instead. A preset can remap rivers to another biome
+/// (`AcidRiver`, or `LavaField` on volcanic worlds, which also has pixels of
+/// its own), so those count only under a drawn river (`coverage`, see
+/// [`rivers::coverage`]).
+pub fn is_river(biome: Biome, remapped_river: Biome, coverage: f32) -> bool {
+    matches!(biome, Biome::River | Biome::AcidRiver)
+        || (biome == remapped_river && coverage >= rivers::RIVER_COVERAGE)
+}
+
 /// Resamples the world in `world_dir` onto a grid of `columns` hex columns,
 /// writes `hex/hex.json` and `hex/hex.png` next to its raw data, and returns
 /// the hex map.
 pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<HexMap, String> {
     let world = load_layers(world_dir)?;
-    // A river is a thin line: it never wins a hex, the flow flag shows it.
+    let coverage = rivers::coverage(
+        &world.rivers,
+        world.width,
+        world.height,
+        world.params.circumference_km as f64,
+    );
+    let river = world.params.planet.remap(Biome::River);
     let map = resample_world(
         &world,
-        |i| world.biomes[i] == Biome::River,
+        |i| is_river(world.biomes[i], river, coverage[i]),
         columns,
         river_flow_km2,
     );
@@ -145,7 +162,8 @@ pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<H
 }
 
 /// Resamples a loaded world onto a grid of `columns` hex columns.
-/// `is_river(i)` tells the river pixels, which never win a hex.
+/// `is_river(i)` tells the river pixels (see [`is_river`]), which never
+/// win a hex.
 pub fn resample_world(
     world: &LoadedWorld,
     is_river: impl Fn(usize) -> bool,
@@ -354,5 +372,54 @@ mod tests {
                 .unwrap();
         assert_eq!(read.cells.biome, map.cells.biome);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn remapped_rivers_never_win_a_hex() {
+        use crate::generation::generate;
+        use crate::request::WorldRequest;
+        // Caustic worlds store their rivers as AcidRiver.
+        let request = WorldRequest {
+            planet: Some("caustic".into()),
+            seed: Some(4),
+            sea_level: Some(0.1),
+            width: Some(512),
+            height: Some(256),
+            ..Default::default()
+        };
+        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        assert!(world.biomes.contains(&Biome::AcidRiver), "no river to test");
+        let world = LoadedWorld::from_world(&world);
+        let coverage = rivers::coverage(
+            &world.rivers,
+            world.width,
+            world.height,
+            world.params.circumference_km as f64,
+        );
+        let river = world.params.planet.remap(Biome::River);
+        // Hexes a few pixels wide: some would be mostly river.
+        let map = resample_world(
+            &world,
+            |i| is_river(world.biomes[i], river, coverage[i]),
+            256,
+            DEFAULT_RIVER_FLOW_KM2,
+        );
+        assert!(!map.cells.biome.contains(&Biome::AcidRiver.id()));
+        assert!(!map.cells.biome.contains(&Biome::River.id()));
+        // Without the river mask, they do.
+        let naive = resample_world(&world, |_| false, 256, DEFAULT_RIVER_FLOW_KM2);
+        assert!(naive.cells.biome.contains(&Biome::AcidRiver.id()));
+    }
+
+    #[test]
+    fn river_pixels() {
+        let cov = rivers::RIVER_COVERAGE;
+        assert!(is_river(Biome::AcidRiver, Biome::AcidRiver, 0.0));
+        assert!(is_river(Biome::River, Biome::River, 0.0));
+        // Volcanic worlds remap rivers to lava fields, which also exist on
+        // their own: only those under a drawn river are rivers.
+        assert!(is_river(Biome::LavaField, Biome::LavaField, cov));
+        assert!(!is_river(Biome::LavaField, Biome::LavaField, 0.0));
+        assert!(!is_river(Biome::Forest, Biome::River, 1.0));
     }
 }
