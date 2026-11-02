@@ -32,6 +32,10 @@ services:
     restart: unless-stopped
     # Host UID/GID, so generated worlds keep the host owner
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      # Largest map accepted (width × height): 8192 × 4096 peaks at about 3.4 GB,
+      # within the 6 GB Colima VM of the workstation setup. Lower it on smaller VMs.
+      MAPGEN_MAX_PIXELS: "33554432"
     volumes:
       - ./worlds:/data/worlds
       - ./presets:/data/presets:ro
