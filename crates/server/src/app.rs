@@ -621,6 +621,7 @@ mod tests {
         for bad in [
             "/api/worlds/frozen-3/tiles/2/8/0",
             "/api/worlds/frozen-3/tiles/9/0/0",
+            "/api/worlds/frozen-3/tiles/40/0/0",
             "/api/worlds/nope-1/tiles/0/0/0",
         ] {
             let (status, _) = call(&app, "GET", bad, None).await;
