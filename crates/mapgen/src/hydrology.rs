@@ -18,6 +18,7 @@
 //!    are pixels whose flow exceeds a threshold.
 use crate::geo::Grid;
 use noise::{NoiseFn, Perlin};
+use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
@@ -66,6 +67,7 @@ fn flat_noise(grid: &Grid, seed: u32) -> Vec<f32> {
     let perlin = Perlin::new(seed.wrapping_add(800));
     let frequency = FLAT_NOISE_FREQUENCY * grid.width as f64 / 1920.0;
     (0..grid.pixel_count())
+        .into_par_iter()
         .map(|i| {
             let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
             let lon = (x as f64 + 0.5) / grid.width as f64 * std::f64::consts::TAU;
@@ -88,6 +90,7 @@ fn routing_noise(grid: &Grid, seed: u32) -> Vec<f32> {
     let radius_km = grid.circumference_km as f64 / std::f64::consts::TAU;
     let frequency = radius_km / ROUTE_WAVELENGTH_KM;
     (0..grid.pixel_count())
+        .into_par_iter()
         .map(|i| {
             let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
             let lon = (x as f64 + 0.5) / grid.width as f64 * std::f64::consts::TAU;
@@ -131,18 +134,29 @@ impl PartialOrd for Node {
 pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hydrology {
     let n = grid.pixel_count();
     let noise = flat_noise(grid, seed);
-    let sea: Vec<bool> = height.iter().map(|&z| z < 0.0).collect();
+    let sea: Vec<bool> = height.par_iter().map(|&z| z < 0.0).collect();
 
     // ── 1. Priority-flood from the sea ────────────────────────────────────────
     let mut filled = height.to_vec();
-    let mut done = vec![false; n];
-    let mut order = Vec::with_capacity(n); // ascending filled height
-    let mut heap = BinaryHeap::new();
-    for i in (0..n).filter(|&i| sea[i]) {
-        done[i] = true;
-        heap.push(Node(filled[i], i as u32));
-    }
-    if heap.is_empty() {
+    // Every sea pixel is done from the start, but only those next to land
+    // seed the flood: the others have no neighbour left to raise. Pops come
+    // out in key order either way, so the result is the same.
+    let mut done = sea.clone();
+    let mut order = Vec::new(); // ascending filled height
+    let coast: Vec<u32> = (0..n)
+        .into_par_iter()
+        .filter(|&i| {
+            sea[i] && {
+                let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
+                grid.neighbours(x, y)
+                    .any(|(nx, ny, _)| !sea[grid.index(nx, ny)])
+            }
+        })
+        .map(|i| i as u32)
+        .collect();
+    let mut heap: BinaryHeap<Node> = coast.iter().map(|&i| Node(filled[i as usize], i)).collect();
+    let any_sea = sea.iter().any(|&s| s);
+    if !any_sea {
         // No sea at all: drain everything towards the lowest pixel.
         let lowest = (0..n)
             .min_by(|&a, &b| height[a].total_cmp(&height[b]))
@@ -174,19 +188,23 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     // noise's valleys and join, as river networks do.
     let route = routing_noise(grid, seed);
     let receivers: Vec<Option<u32>> = (0..n)
+        .into_par_iter()
         .map(|i| {
             if sea[i] {
                 return None;
             }
             let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
-            let lower: Vec<(usize, f32, f32)> = grid
-                .neighbours(x, y)
-                .map(|(nx, ny, d)| {
-                    let j = grid.index(nx, ny);
-                    (j, (filled[i] - filled[j]) / d, (route[i] - route[j]) / d)
-                })
-                .filter(|&(_, slope, _)| slope > 0.0)
-                .collect();
+            let mut lower = [(0usize, 0.0f32, 0.0f32); 8];
+            let mut count = 0;
+            for (nx, ny, d) in grid.neighbours(x, y) {
+                let j = grid.index(nx, ny);
+                let slope = (filled[i] - filled[j]) / d;
+                if slope > 0.0 {
+                    lower[count] = (j, slope, (route[i] - route[j]) / d);
+                    count += 1;
+                }
+            }
+            let lower = &lower[..count];
             let steepest = lower.iter().fold(0.0f32, |m, l| m.max(l.1));
             let pull = lower
                 .iter()
@@ -203,6 +221,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
 
     // ── 3. Accumulate runoff downstream (highest pixels first) ────────────────
     let mut flow_km2: Vec<f32> = (0..n)
+        .into_par_iter()
         .map(|i| {
             if sea[i] {
                 return 0.0;
@@ -223,6 +242,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     // ── 4. Lakes and rivers ───────────────────────────────────────────────────
     let lake = lakes(grid, height, &filled, &flow_km2, &sea);
     let river = (0..n)
+        .into_par_iter()
         .map(|i| !sea[i] && !lake[i] && flow_km2[i] >= RIVER_MIN_FLOW_KM2)
         .collect();
     Hydrology {
@@ -239,6 +259,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
 fn lakes(grid: &Grid, height: &[f32], filled: &[f32], flow: &[f32], sea: &[bool]) -> Vec<bool> {
     let n = grid.pixel_count();
     let flooded: Vec<bool> = (0..n)
+        .into_par_iter()
         .map(|i| !sea[i] && filled[i] - height[i] > LAKE_MIN_DEPTH)
         .collect();
     let mut lake = vec![false; n];
