@@ -394,6 +394,25 @@ pub const RIVER_COVERAGE: f32 = 0.5;
 
 // ── Shaping ───────────────────────────────────────────────────────────────────
 
+/// Moving average of a polyline over `radius` points on each side, the
+/// endpoints kept (the mouth must stay where it joins).
+fn moving_average(points: &[[f64; 2]], radius: usize) -> Vec<[f64; 2]> {
+    let n = points.len();
+    (0..n)
+        .map(|i| {
+            if i == 0 || i + 1 == n {
+                return points[i];
+            }
+            let r = radius.min(i).min(n - 1 - i);
+            let window = &points[i - r..=i + r];
+            let sum = window
+                .iter()
+                .fold([0.0, 0.0], |s, p| [s[0] + p[0], s[1] + p[1]]);
+            [sum[0] / window.len() as f64, sum[1] / window.len() as f64]
+        })
+        .collect()
+}
+
 /// Chaikin corner cutting, endpoints kept.
 fn chaikin(points: &[[f64; 2]], flow: &[f32], iterations: usize) -> (Vec<[f64; 2]>, Vec<f32>) {
     let (mut p, mut f) = (points.to_vec(), flow.to_vec());
@@ -637,7 +656,10 @@ pub fn shape(lines: &[RiverLine], grid: &Grid, filled: &[f32], seed: u32) -> Vec
     // Undisplaced resampled centrelines, aligned with `out`, for snapping.
     let mut bases: Vec<Vec<[f64; 2]>> = Vec::with_capacity(lines.len());
     for (id, line) in lines.iter().enumerate() {
-        let (smooth, smooth_flow) = chaikin(&line.points, &line.flow_km2, 3);
+        // Average out the pixel staircase first: on small maps a pixel is up
+        // to two reference pixels, and corner cutting alone leaves zigzags.
+        let unstepped = moving_average(&line.points, 2);
+        let (smooth, smooth_flow) = chaikin(&unstepped, &line.flow_km2, 3);
         let (base, flow, arc) = resample(&smooth, &smooth_flow, step);
         let m = base.len();
         let total = arc[m - 1];
