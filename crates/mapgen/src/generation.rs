@@ -1,5 +1,8 @@
 use crate::biome::BiomeInput;
-use crate::climate::{MoistureInput, moisture, row_temperatures, temperature, temperature_anomaly};
+use crate::climate::{
+    Field, MoistureInput, moisture, regional_variability, row_temperatures, temperature,
+    temperature_anomaly,
+};
 use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::hydrology::hydrology;
@@ -24,6 +27,9 @@ pub struct Sample {
     pub volcanic_zone: f32,
     /// Large-scale temperature anomaly noise, roughly in `[-1, 1]`.
     pub temperature_anomaly: f32,
+    /// Regional climate variability noise for temperature and moisture.
+    pub variability_t: f32,
+    pub variability_m: f32,
 }
 
 /// Noise sources and derived constants for one world.
@@ -41,6 +47,8 @@ pub struct Sampler {
     volcano_noise: Perlin,
     /// Continental-scale temperature anomalies (currents, monsoons, continentality).
     anomaly_noise: Perlin,
+    /// Regional climate variability (soils, aspect, local circulation).
+    variability_noise: Perlin,
 }
 
 impl Sampler {
@@ -67,6 +75,7 @@ impl Sampler {
             // Low-frequency noise that selects which mountain chains turn volcanic.
             volcano_noise: Perlin::new(seed.wrapping_add(300)),
             anomaly_noise: Perlin::new(seed.wrapping_add(400)),
+            variability_noise: Perlin::new(seed.wrapping_add(500)),
         }
     }
 
@@ -137,6 +146,17 @@ impl Sampler {
             3,
         );
 
+        // Features from ~1 000 km down to ~60 km; two independent samples.
+        let f = 6.0 * s;
+        let variability_t = fbm(&self.variability_noise, nx * f, ny * f, nz * f, 5);
+        let variability_m = fbm(
+            &self.variability_noise,
+            nx * f + 17.3,
+            ny * f - 4.1,
+            nz * f + 9.7,
+            5,
+        );
+
         Sample {
             warp_x: warp_x as f32,
             warp_y: warp_y as f32,
@@ -149,6 +169,8 @@ impl Sampler {
             volcanic_raw,
             volcanic_zone,
             temperature_anomaly,
+            variability_t,
+            variability_m,
         }
     }
 }
@@ -191,6 +213,8 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
     ("noise_temperature_anomaly", Ramp::Signed, |s| {
         s.temperature_anomaly
     }),
+    ("noise_variability_t", Ramp::Signed, |s| s.variability_t),
+    ("noise_variability_m", Ramp::Signed, |s| s.variability_m),
 ];
 
 /// Coast distances are computed up to this value; further pixels get the cap.
@@ -354,13 +378,21 @@ pub fn generate_with_progress(params: &WorldParams, progress: impl Fn(Stage)) ->
     // exported data explains the biome of every pixel.
     let shift = planet.climate;
     let (dt, dm, dvz) = (shift.temperature, shift.moisture, shift.volcanic);
+    // Regional variability is part of the stored climate, so the exported
+    // layers still explain every biome.
     let moisture: Vec<f32> = raw_moisture
         .iter()
-        .map(|m| (m + dm).clamp(-1.0, 1.0))
+        .zip(&samples)
+        .map(|(m, s)| {
+            (m + dm + regional_variability(s.variability_m, Field::Moisture)).clamp(-1.0, 1.0)
+        })
         .collect();
     let temperature: Vec<f32> = raw_temperature
         .iter()
-        .map(|t| (t + dt).clamp(0.0, 1.0))
+        .zip(&samples)
+        .map(|(t, s)| {
+            (t + dt + regional_variability(s.variability_t, Field::Temperature)).clamp(0.0, 1.0)
+        })
         .collect();
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────

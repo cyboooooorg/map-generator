@@ -239,6 +239,8 @@ worlds/<planet>-<seed>/
     ├── noise_volcanic_raw.png
     ├── noise_volcanic_zone.png
     ├── noise_temperature_anomaly.png
+    ├── noise_variability_t.png
+    ├── noise_variability_m.png
     ├── erosion.png
     ├── elevation.png
     ├── temperature.png
@@ -329,6 +331,8 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `noise_volcanic_raw.png`        | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                           |
 | `noise_volcanic_zone.png`       | `[0, 1]`  | Processed volcanic zone (threshold applied)                                                      |
 | `noise_temperature_anomaly.png` | `[-1, 1]` | Large-scale temperature anomaly noise (features of ~3 000 km)                                    |
+| `noise_variability_t.png`       | `[-1, 1]` | Regional variability noise added to temperature                                                  |
+| `noise_variability_m.png`       | `[-1, 1]` | Regional variability noise added to moisture                                                     |
 | `erosion.png`                   | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                 |
 | `elevation.png`                 | `[-1, 1]` | Final elevation, after erosion                                                                   |
 | `temperature.png`               | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt))          |
@@ -387,7 +391,11 @@ Moisture comes from winds carrying ocean evaporation over land:
 - **North-south supply.** Rows with little ocean of their own still receive background humidity, set by the ocean fraction within ±20° of latitude and of the whole planet.
 - **Circulation bands.** A `cos(6 · latitude)` term adds the wet equator and 60° belts and the dry 30° desert belts and poles.
 
-The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.30 × noise`, then clamped. The `[climate]` table of the planet preset then shifts the whole field (for example `−0.55` on volcanic worlds).
+The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.50 × noise`, then clamped. The `[climate]` table of the planet preset then shifts the whole field (for example `−0.55` on volcanic worlds).
+
+### Regional variability
+
+Before biome selection, both climate fields get a regional variability term standing for local differences of soil, aspect and circulation: `0.25 × fbm` on temperature (about 2 °C of standard deviation) and an independent `0.50 × fbm` on moisture (about 0.09), with features from about 1 000 km down to 60 km. Biome borders then become irregular and interleaved instead of following isotherms and isohyets. The term is part of the exported `temperature` and `moisture` layers, so they still explain every biome.
 
 ### Rivers and lakes
 

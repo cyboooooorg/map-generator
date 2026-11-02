@@ -54,6 +54,25 @@ pub fn temperature_anomaly(noise: f32, land: bool) -> f32 {
     noise * if land { ANOMALY_LAND } else { ANOMALY_SEA }
 }
 
+/// A climate field that regional variability applies to.
+#[derive(Clone, Copy, Debug)]
+pub enum Field {
+    Temperature,
+    Moisture,
+}
+
+/// Regional climate variability for a noise sample in `[-1, 1]`: local
+/// differences of soil, aspect and circulation (about 2 °C and 0.09 of
+/// moisture of standard deviation). It makes biome borders irregular and
+/// interleaved instead of following isotherms and isohyets.
+pub fn regional_variability(noise: f32, field: Field) -> f32 {
+    noise
+        * match field {
+            Field::Temperature => 0.25,
+            Field::Moisture => 0.50,
+        }
+}
+
 /// Temperature of a pixel: its row temperature, cooled on land with altitude.
 /// The sea surface follows latitude only, whatever the depth underneath.
 ///
@@ -88,7 +107,7 @@ const RAIN_SMOOTHING_KM: f32 = 100.0;
 /// Weights of the precipitation, circulation-band and noise terms.
 const RAIN_WEIGHT: f32 = 0.75;
 const BAND_WEIGHT: f32 = 0.25;
-const NOISE_WEIGHT: f32 = 0.30;
+const NOISE_WEIGHT: f32 = 0.50;
 
 /// Zonal wind at `latitude` in `[-1, 1]`: positive blows east. Easterly trade
 /// winds near the equator, westerlies at mid-latitudes, polar easterlies.
