@@ -81,6 +81,9 @@ pub struct DetailWorld {
     warp_noise: Perlin,
     /// River polylines with their bounding boxes in base pixels.
     rivers: Vec<(RiverLine, [f64; 4])>,
+    /// 1 on base lake pixels (water above the waterline, not under a drawn
+    /// river), 0 elsewhere; sampled bilinearly for smooth shores.
+    lakes: Vec<f32>,
 }
 
 /// Bilinear sample of a row-major base layer at base pixel coordinates
@@ -152,7 +155,18 @@ impl DetailWorld {
             })
             .collect();
         let seed = world.params.seed;
+        let coverage = rivers::coverage(&world.rivers, world.width, world.height);
+        let waterline = world.params.sea_level + world.params.planet.rules.waterline;
+        let lakes = (0..world.biomes.len())
+            .map(|i| {
+                let lake = world.biomes[i].is_water()
+                    && world.elevation[i] >= waterline
+                    && coverage[i] < rivers::RIVER_COVERAGE;
+                if lake { 1.0 } else { 0.0 }
+            })
+            .collect();
         Self {
+            lakes,
             noise: Perlin::new(seed.wrapping_add(1000)),
             warp_noise: Perlin::new(seed.wrapping_add(1001)),
             rivers,
@@ -240,14 +254,8 @@ impl DetailWorld {
                 // Temperature follows the detailed elevation (lapse rate).
                 let t =
                     sample(&w.temperature) + temperature(0.0, above) - temperature(0.0, base_above);
-                // Lakes: base pixels that are water above the waterline.
-                let nearest = w.index(
-                    (cx.floor() as i64).rem_euclid(w.width as i64) as u32,
-                    (cy.floor() as i64).clamp(0, w.height as i64 - 1) as u32,
-                );
-                let lake = w.biomes[nearest].is_water()
-                    && w.elevation[nearest] - w.params.sea_level >= planet.rules.waterline
-                    && above >= 0.0;
+                // Lakes: smooth shores from the base lake mask.
+                let lake = sample(&self.lakes) > 0.5 && above >= 0.0;
                 let input = BiomeInput {
                     elevation: relief,
                     moisture: sample(&w.moisture),
