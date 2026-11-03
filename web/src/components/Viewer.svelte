@@ -112,6 +112,8 @@
   let season = $state(saved.season);
   let sunLongitude = $state(saved.sunLongitude);
   let playing = $state(false);
+  /** Whether the canvas has a size: hidden (narrow screens showing the list), nothing animates. */
+  let canvasVisible = $state(true);
   let hexOn = $state(false);
   let hexColumns = $state(saved.hexColumns);
   let hexRiverLog = $state(saved.hexRiverLog);
@@ -188,6 +190,8 @@
       view.onPick = (point) => onPick(point);
       view.onHover = (point) => onHover(point);
       view.onCameraChange = (state) => onCameraChange?.(state);
+      canvasVisible = view.visible;
+      view.onVisibilityChange = (visible) => (canvasVisible = visible);
     } catch (e) {
       error = `WebGL is not available: ${String(e)}`;
     }
@@ -291,9 +295,10 @@
     );
   });
 
-  // The season animation: one year every YEAR_SECONDS.
+  // The season animation: one year every YEAR_SECONDS, paused while the
+  // canvas is hidden (it resumes from the same day).
   $effect(() => {
-    if (!playing || !sun) {
+    if (!playing || !sun || !canvasVisible) {
       return;
     }
     let last = performance.now();

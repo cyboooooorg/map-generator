@@ -71,7 +71,7 @@ In the sidebar:
 
 On narrow screens (760 px wide or less), the world list and the viewer take the whole screen one at a time: **Worlds** and **Viewer** in the header switch between them. Picking a world opens the viewer, and **New world** opens the form, whose buttons stay pinned to the bottom of the screen while the parameters scroll.
 
-The viewer draws a frame only when something changes (the camera and its damping, the morph between globe and map, a loaded tile, a display setting, a resize), so an idle page costs no GPU time. A decoded world takes about 11 bytes per pixel in the page (19 with the layers of format version 2 and later), about 0.6 GB for 8192 × 4096. Worlds wider than the GPU's texture limit (8192 × 4096 on a GPU limited to 4096 pixels) are shown at a lower resolution; the point readout still reads every pixel.
+The viewer draws a frame only when something changes (the camera and its damping, the morph between globe and map, a loaded tile, a display setting, a resize), so an idle page costs no GPU time. A hidden viewer (on narrow screens, while the world list shows) draws nothing: the season animation and the cloud drift pause, and resume where they were when it shows again. A decoded world takes about 11 bytes per pixel in the page (19 with the layers of format version 2 and later), about 0.6 GB for 8192 × 4096. Worlds wider than the GPU's texture limit (8192 × 4096 on a GPU limited to 4096 pixels) are shown at a lower resolution; the point readout still reads every pixel.
 
 For everyday use, run the whole app in Docker instead: see "Web app" in the repository README.
 

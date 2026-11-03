@@ -349,6 +349,18 @@ export class PlanetView {
   onHover: (point: LonLat | null) => void = () => {};
   /** Called when the user moves the camera of this view. */
   onCameraChange: (state: CameraState) => void = () => {};
+  /** Called when the canvas gets a size or loses it (see `visible`). */
+  onVisibilityChange: (visible: boolean) => void = () => {};
+  /**
+   * Whether the canvas has a size. A canvas without one (in an element with
+   * `display: none`, such as the viewer of a narrow screen showing the world
+   * list) draws nothing, and the cloud drift stops, until it shows again.
+   */
+  private shown = false;
+
+  get visible(): boolean {
+    return this.shown;
+  }
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
@@ -944,7 +956,12 @@ export class PlanetView {
 
   private resize(): void {
     const { clientWidth, clientHeight } = this.canvas;
-    if (clientWidth === 0 || clientHeight === 0) {
+    const visible = clientWidth > 0 && clientHeight > 0;
+    if (visible !== this.shown) {
+      this.shown = visible;
+      this.onVisibilityChange(visible);
+    }
+    if (!visible) {
       return;
     }
     this.renderer.setSize(clientWidth, clientHeight, false);
@@ -957,6 +974,11 @@ export class PlanetView {
 
   private readonly render = (now: number): void => {
     this.frame = null;
+    // Hidden: keep the pending changes (`dirty`) for the frame that the
+    // resize to a visible size requests. No frame means no drift timer.
+    if (!this.shown) {
+      return;
+    }
     if (this.animation) {
       const t = Math.min(1, (now - this.animation.start) / MORPH_MS);
       const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
