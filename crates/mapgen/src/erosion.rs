@@ -362,8 +362,10 @@ fn polar_fade(y: usize, h: usize) -> f32 {
     ((cos_latitude - 0.25) / 0.25).clamp(0.0, 1.0)
 }
 
-/// Erodes a full-resolution, row-major `elevation` map in place and returns
-/// the height change of each pixel.
+/// Erodes a full-resolution, row-major `elevation` map of `size` (width,
+/// height) in place. When given, `change` (one value per pixel, zero on
+/// entry) receives the height change of each pixel; skip it when the change
+/// is not needed, which saves a map-sized layer.
 ///
 /// `waterline` is the absolute elevation of the sea surface. `strength` scales
 /// the number of droplets (1.0 = one per erosion-grid pixel; 0 disables).
@@ -371,34 +373,40 @@ fn polar_fade(y: usize, h: usize) -> f32 {
 /// all year (see [`thaw`]).
 pub fn erode(
     elevation: &mut [f32],
-    width: u32,
-    height: u32,
+    size: (u32, u32),
     waterline: f32,
     strength: f32,
     seed: u32,
     thaw: &[f32],
-) -> Vec<f32> {
+    mut change: Option<&mut [f32]>,
+) {
+    let (width, height) = size;
     let (w, h) = (width as usize, height as usize);
     if strength <= 0.0 {
-        return vec![0.0; w * h];
+        return;
     }
-    let pass = |elevation: &mut [f32], grid: (u32, u32), stream: u32, detail_only| {
+    let mut pass = |elevation: &mut [f32], grid: (u32, u32), stream: u32, detail_only| {
         let pass = Pass {
             grid: (grid.0 as usize, grid.1 as usize),
             strength,
             seed: crate::noise::stream_seed(seed, stream) as u64,
             detail_only,
         };
-        erode_pass(elevation, (w, h), waterline, &pass, thaw)
+        erode_pass(
+            elevation,
+            (w, h),
+            waterline,
+            &pass,
+            thaw,
+            change.as_deref_mut(),
+        )
     };
     let coarse = coarse_grid_size(width, height);
-    let mut change = pass(elevation, coarse, crate::noise::stream::EROSION, false);
+    pass(elevation, coarse, crate::noise::stream::EROSION, false);
     let fine = grid_size(width, height);
     if fine.0 > coarse.0 {
-        let detail = pass(elevation, fine, crate::noise::stream::EROSION_FINE, true);
-        change.par_iter_mut().zip(detail).for_each(|(c, d)| *c += d);
+        pass(elevation, fine, crate::noise::stream::EROSION_FINE, true);
     }
-    change
 }
 
 /// Grid of the main erosion pass: the same number of cells whatever the
@@ -418,30 +426,39 @@ struct Pass {
     detail_only: bool,
 }
 
-/// Runs one erosion pass on `elevation` (`size` = map width and height)
-/// and returns the height change of each pixel.
+/// Runs one erosion pass on `elevation` (`size` = map width and height),
+/// adding the height change of each pixel to `change` when given.
 fn erode_pass(
     elevation: &mut [f32],
     size: (usize, usize),
     waterline: f32,
     pass: &Pass,
     thaw: &[f32],
-) -> Vec<f32> {
+    change: Option<&mut [f32]>,
+) {
     let (w, h) = size;
     let (ew, eh) = pass.grid;
     let strength = pass.strength;
 
     // Box-average the full-resolution map down to the erosion grid.
+    // One grid row per task: each cell still adds its pixels row by row,
+    // left to right, so the sums do not depend on the thread count.
     let mut sum = vec![0.0f32; ew * eh];
     let mut count = vec![0u32; ew * eh];
-    for y in 0..h {
-        let ey = y * eh / h;
-        for x in 0..w {
-            let i = ey * ew + x * ew / w;
-            sum[i] += elevation[y * w + x];
-            count[i] += 1;
-        }
-    }
+    sum.par_chunks_mut(ew)
+        .zip(count.par_chunks_mut(ew))
+        .enumerate()
+        .for_each(|(ey, (sum, count))| {
+            // The map rows y with y * eh / h == ey.
+            let rows = (ey * h).div_ceil(eh)..((ey + 1) * h).div_ceil(eh);
+            for y in rows {
+                for x in 0..w {
+                    let i = x * ew / w;
+                    sum[i] += elevation[y * w + x];
+                    count[i] += 1;
+                }
+            }
+        });
     let original: Vec<f32> = sum
         .iter()
         .zip(&count)
@@ -513,53 +530,58 @@ fn erode_pass(
     let columns: Vec<(i64, [f32; 4])> = (0..w)
         .map(|x| spline_taps((x as f32 + 0.5) * ew as f32 / w as f32 - 0.5))
         .collect();
-    let mut change = vec![0.0f32; w * h];
-    elevation
-        .par_chunks_mut(w)
-        .zip(change.par_chunks_mut(w))
-        .enumerate()
-        .for_each_init(
+    let spread =
+        |row: &mut Vec<f32>, y: usize, elevation: &mut [f32], change: Option<&mut [f32]>| {
+            // No rivers carve frozen ground: ice sheets stay smooth.
+            let fade = polar_fade(y, h) * thaw.get(y).copied().unwrap_or(1.0);
+            if fade == 0.0 {
+                return;
+            }
+            // Blend the 4 grid rows around this pixel row first.
+            let (y0, wy) = spline_taps((y as f32 + 0.5) * eh as f32 / h as f32 - 0.5);
+            row.fill(0.0);
+            for (k, &wgt) in wy.iter().enumerate() {
+                let gy = (y0 + k as i64).clamp(0, eh as i64 - 1) as usize;
+                for (r, d) in row.iter_mut().zip(&delta[gy * ew..(gy + 1) * ew]) {
+                    *r += wgt * d;
+                }
+            }
+            let mut change = change.map(|c| c.iter_mut());
+            for (e, (x0, wx)) in elevation.iter_mut().zip(&columns) {
+                let mut d = 0.0;
+                for (k, &wgt) in wx.iter().enumerate() {
+                    d += wgt * row[(x0 + k as i64).rem_euclid(ew as i64) as usize];
+                }
+                d *= fade;
+                // Fade out towards the shore, pixel by pixel as on the grid.
+                if d < 0.0 {
+                    d *= smoothstep(0.0, SHORE_BAND, *e - waterline);
+                }
+                // Keep every pixel on its side of the waterline: the grid
+                // average can stay above the sea while some of its pixels
+                // dip below, and deposits must not raise shoals into islands.
+                d = if *e >= waterline {
+                    d.max((waterline - *e) * WATERLINE_MARGIN)
+                } else {
+                    d.min((waterline - *e) * WATERLINE_MARGIN)
+                };
+                if let Some(c) = change.as_mut().and_then(Iterator::next) {
+                    *c += d;
+                }
+                *e = (*e + d).clamp(-1.0, 1.0);
+            }
+        };
+    let rows = elevation.par_chunks_mut(w).enumerate();
+    match change {
+        Some(change) => rows.zip(change.par_chunks_mut(w)).for_each_init(
             || vec![0.0f32; ew],
-            |row, (y, (elevation, change))| {
-                // No rivers carve frozen ground: ice sheets stay smooth.
-                let fade = polar_fade(y, h) * thaw.get(y).copied().unwrap_or(1.0);
-                if fade == 0.0 {
-                    return;
-                }
-                // Blend the 4 grid rows around this pixel row first.
-                let (y0, wy) = spline_taps((y as f32 + 0.5) * eh as f32 / h as f32 - 0.5);
-                row.fill(0.0);
-                for (k, &wgt) in wy.iter().enumerate() {
-                    let gy = (y0 + k as i64).clamp(0, eh as i64 - 1) as usize;
-                    for (r, d) in row.iter_mut().zip(&delta[gy * ew..(gy + 1) * ew]) {
-                        *r += wgt * d;
-                    }
-                }
-                for ((e, c), (x0, wx)) in elevation.iter_mut().zip(change.iter_mut()).zip(&columns)
-                {
-                    let mut d = 0.0;
-                    for (k, &wgt) in wx.iter().enumerate() {
-                        d += wgt * row[(x0 + k as i64).rem_euclid(ew as i64) as usize];
-                    }
-                    d *= fade;
-                    // Fade out towards the shore, pixel by pixel as on the grid.
-                    if d < 0.0 {
-                        d *= smoothstep(0.0, SHORE_BAND, *e - waterline);
-                    }
-                    // Keep every pixel on its side of the waterline: the grid
-                    // average can stay above the sea while some of its pixels
-                    // dip below, and deposits must not raise shoals into islands.
-                    d = if *e >= waterline {
-                        d.max((waterline - *e) * WATERLINE_MARGIN)
-                    } else {
-                        d.min((waterline - *e) * WATERLINE_MARGIN)
-                    };
-                    *c = d;
-                    *e = (*e + d).clamp(-1.0, 1.0);
-                }
-            },
-        );
-    change
+            |row, ((y, elevation), change)| spread(row, y, elevation, Some(change)),
+        ),
+        None => rows.for_each_init(
+            || vec![0.0f32; ew],
+            |row, (y, elevation)| spread(row, y, elevation, None),
+        ),
+    }
 }
 
 /// Approximately Gaussian blur of a grid wrapping in longitude: three box
@@ -674,7 +696,15 @@ mod tests {
                 .unwrap();
             pool.install(|| {
                 let mut elevation = island(w, h);
-                erode(&mut elevation, w, h, 0.0, 1.0, 9, &vec![1.0; h as usize]);
+                erode(
+                    &mut elevation,
+                    (w, h),
+                    0.0,
+                    1.0,
+                    9,
+                    &vec![1.0; h as usize],
+                    None,
+                );
                 elevation
             })
         };
@@ -699,7 +729,17 @@ mod tests {
                 }
             }
         }
-        let change = erode(&mut elevation, w, h, 0.0, 2.0, 5, &vec![1.0; h as usize]);
+        let mut change = vec![0.0; (w * h) as usize];
+        let thaw = vec![1.0; h as usize];
+        erode(
+            &mut elevation,
+            (w, h),
+            0.0,
+            2.0,
+            5,
+            &thaw,
+            Some(&mut change),
+        );
         // Away from the rim, where the spline spreads the walls' change.
         for y in 0..h {
             for x in 0..w {
@@ -728,8 +768,8 @@ mod tests {
     fn erosion_is_deterministic() {
         let mut a = island(128, 64);
         let mut b = island(128, 64);
-        erode(&mut a, 128, 64, 0.0, 0.5, 1, &[]);
-        erode(&mut b, 128, 64, 0.0, 0.5, 1, &[]);
+        erode(&mut a, (128, 64), 0.0, 0.5, 1, &[], None);
+        erode(&mut b, (128, 64), 0.0, 0.5, 1, &[], None);
         assert_eq!(a, b);
     }
 
@@ -737,7 +777,8 @@ mod tests {
     fn erosion_lowers_peaks_and_never_digs_below_the_sea() {
         let mut map = island(128, 64);
         let before = map.clone();
-        let change = erode(&mut map, 128, 64, 0.0, 1.0, 2, &[]);
+        let mut change = vec![0.0; 128 * 64];
+        erode(&mut map, (128, 64), 0.0, 1.0, 2, &[], Some(&mut change));
         assert!(change.iter().any(|&d| d < 0.0), "nothing eroded");
         for (b, a) in before.iter().zip(&map) {
             if *b >= 0.0 {
@@ -759,7 +800,7 @@ mod tests {
             })
             .collect();
         let before = map.clone();
-        erode(&mut map, w, h, 0.0, 2.0, 4, &[]);
+        erode(&mut map, (w, h), 0.0, 2.0, 4, &[], None);
         for (b, a) in before.iter().zip(&map) {
             assert_eq!(
                 *b >= 0.0,
@@ -790,7 +831,7 @@ mod tests {
     fn zero_strength_changes_nothing() {
         let mut map = island(64, 32);
         let before = map.clone();
-        erode(&mut map, 64, 32, 0.0, 0.0, 3, &[]);
+        erode(&mut map, (64, 32), 0.0, 0.0, 3, &[], None);
         assert_eq!(map, before);
     }
 }
