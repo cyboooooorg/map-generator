@@ -8,7 +8,10 @@
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
   import { MAX_SEED, randomSeed } from '../lib/format';
+  import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
   import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
+  import { jobs } from '../lib/jobs.svelte';
+  import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
 
   interface Props {
     presets: PresetInfo[];
@@ -79,7 +82,7 @@
     },
     pressure_bar: {
       label: 'Pressure (bar)',
-      help: 'Earth: 1 · Mars: 0.006 · Venus: 92 · 0: airless',
+      help: 'Earth: 1 · Mars: 0.006 · Venus: 92 · 0 (slider at the far left): airless. Logarithmic slider',
       defaultsKey: 'pressure',
       slider: [0, 100],
       step: 0.001,
@@ -278,6 +281,18 @@
     return request;
   }
 
+  /** What the chosen size costs: time (once learnt in this browser) and memory. */
+  const cost = $derived.by(() => {
+    const [w, h] = size.split('x').map(Number);
+    const pixels = (w ?? 0) * (h ?? 0);
+    const seconds = jobs.estimate(pixels / 1e6);
+    return {
+      time: seconds === null ? null : formatEstimate(seconds),
+      server: formatBytes(serverPeakBytes(pixels)),
+      viewer: formatBytes(viewerBytes(pixels)),
+    };
+  });
+
   /** Id the world will get (planet-seed), when both are fixed. */
   const targetId = $derived(
     !randomPlanet && selectedPreset && /^\d+$/.test(seed.trim()) ? `${selectedPreset.name}-${Number(seed)}` : null,
@@ -386,13 +401,26 @@
       </legend>
       {#if !fields[field].random}
         <div class="slider">
-          <input
-            type="range"
-            min={info.slider[0]}
-            max={info.slider[1]}
-            step={info.step}
-            bind:value={fields[field].value}
-          />
+          {#if field === 'pressure_bar'}
+            <!-- Logarithmic: position 0 is airless, then 0.001 to 1000 bar. -->
+            <input
+              type="range"
+              min={0}
+              max={PRESSURE_STEPS}
+              step={1}
+              value={pressureToSlider(fields[field].value)}
+              oninput={(e) => (fields.pressure_bar.value = sliderToPressure(Number(e.currentTarget.value)))}
+              aria-label="Pressure, logarithmic"
+            />
+          {:else}
+            <input
+              type="range"
+              min={info.slider[0]}
+              max={info.slider[1]}
+              step={info.step}
+              bind:value={fields[field].value}
+            />
+          {/if}
           <!-- step="any": the slider step counts from the server minimum (1 km for
                the circumference), so a stepped input would reject round values
                such as 50000. -->
@@ -437,6 +465,10 @@
       {/each}
     </select>
   </label>
+  <p class="help cost">
+    {cost.time ? `Takes ${cost.time} here` : 'Time: known after a first generation in this browser'} · server peak
+    about {cost.server} · viewer about {cost.viewer}
+  </p>
 
   <!-- Sticks to the bottom of the screen on narrow layouts, so the buttons
        stay in view while the parameters scroll. -->

@@ -4,6 +4,7 @@ import { api, followJob, isFinished } from './api/client';
 import type { JobStatus } from './api/types/JobStatus';
 import type { Stage } from './api/types/Stage';
 import type { WorldRequest } from './api/types/WorldRequest';
+import { estimateSeconds } from './estimate';
 import { loadNumbers, saveSetting } from './settings';
 
 /** Stages in generation order (mapgen::generation::Stage::ALL). */
@@ -129,6 +130,11 @@ class Jobs {
     this.streams.get(jobId)?.();
     this.streams.delete(jobId);
     this.list = this.list.filter((j) => j.jobId !== jobId);
+  }
+
+  /** Estimated seconds of a whole generation of `megapixels`, or null without enough history. */
+  estimate(megapixels: number): number | null {
+    return estimateSeconds(this.times, STAGES, megapixels);
   }
 
   /** Estimated seconds left, or null without enough history. */
