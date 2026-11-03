@@ -1,6 +1,7 @@
 // One world shown in a viewer pane: its metadata, decoded layers, surface
 // statistics and rivers, loaded in that order (each step can take a while
 // on large maps, and the earlier ones are useful on their own).
+import { t } from './i18n/index.svelte';
 import { api } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { loadLayers, type WorldLayers } from './layers';
@@ -60,7 +61,7 @@ export class LoadedWorld {
     })().catch((e: unknown) => {
       if (current()) {
         this.progress = null;
-        this.error = `Could not load ${id}: ${String(e)}`;
+        this.error = t.world.loadFailed({ id, error: String(e) });
       }
     });
   }

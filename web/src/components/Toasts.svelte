@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index.svelte';
   import { toasts } from '../lib/toasts.svelte';
 </script>
 
@@ -15,7 +16,7 @@
           }}>{action.label}</button
         >
       {/if}
-      <button class="close" onclick={() => toasts.dismiss(toast.id)} aria-label="Dismiss">×</button>
+      <button class="close" onclick={() => toasts.dismiss(toast.id)} aria-label={t.toasts.dismiss}>×</button>
     </div>
   {/each}
 </div>

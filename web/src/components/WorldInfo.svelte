@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { getLocale, t } from '../lib/i18n/index.svelte';
+  import { biomeName, presetDescription, presetName } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatGeology, formatInt, formatShare, surfaceColour } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatGeology, formatInt, formatNumber, formatShare, surfaceColour, withUnit } from '../lib/format';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -37,7 +39,7 @@
 
   async function copy(text: string, what: string): Promise<void> {
     const ok = await copyText(text);
-    toasts.show(ok ? `${what} copied.` : 'The browser refused to copy.', { kind: ok ? 'info' : 'error' });
+    toasts.show(ok ? t.worldInfo.copied({ what }) : t.worldInfo.copyRefused, { kind: ok ? 'info' : 'error' });
   }
 
   async function reroll(): Promise<void> {
@@ -57,7 +59,7 @@
     try {
       await downloadRawData(world.id, meta);
     } catch (e) {
-      toasts.error(`Could not build the archive: ${String(e)}`);
+      toasts.error(t.worldInfo.archiveFailed({ error: String(e) }));
     } finally {
       zipping = false;
     }
@@ -68,47 +70,47 @@
   <details class="card" bind:open>
     <summary>
       <span class="title">
-        <strong>{meta?.preset.name ?? summary?.planet ?? world.id}</strong>
+        <strong>{meta ? presetName(meta.preset) : (summary?.planet ?? world.id)}</strong>
         <small>{world.id}</small>
       </span>
     </summary>
 
     {#if meta}
-      <p class="description">{meta.preset.description}</p>
+      <p class="description">{presetDescription(meta.preset)}</p>
       <dl>
-        <dt>Seed</dt>
+        <dt>{t.worldInfo.seed}</dt>
         <dd>{meta.seed}</dd>
-        <dt>Map</dt>
+        <dt>{t.worldInfo.map}</dt>
         <dd>{meta.width} × {meta.height} px</dd>
-        <dt>Sea level</dt>
-        <dd>{meta.sea_level.toFixed(3)}</dd>
-        <dt>Volcanism</dt>
-        <dd>{meta.volcanic_intensity.toFixed(2)}</dd>
-        <dt>Erosion</dt>
-        <dd>{meta.erosion.toFixed(2)}</dd>
-        <dt>Circumference</dt>
-        <dd>{formatInt(meta.circumference_km)} km</dd>
-        <dt>Axial tilt</dt>
-        <dd>{meta.axial_tilt_deg.toFixed(1)}°</dd>
-        <dt>Gravity</dt>
-        <dd>{meta.gravity_modifier.toFixed(2)} g</dd>
-        <dt>Atmosphere</dt>
+        <dt>{t.worldInfo.seaLevel}</dt>
+        <dd>{formatNumber(meta.sea_level, 3)}</dd>
+        <dt>{t.worldInfo.volcanism}</dt>
+        <dd>{formatNumber(meta.volcanic_intensity, 2)}</dd>
+        <dt>{t.worldInfo.erosion}</dt>
+        <dd>{formatNumber(meta.erosion, 2)}</dd>
+        <dt>{t.worldInfo.circumference}</dt>
+        <dd>{withUnit(formatInt(meta.circumference_km), 'km')}</dd>
+        <dt>{t.worldInfo.axialTilt}</dt>
+        <dd>{formatNumber(meta.axial_tilt_deg, 1)}°</dd>
+        <dt>{t.worldInfo.gravity}</dt>
+        <dd>{withUnit(formatNumber(meta.gravity_modifier, 2), 'g')}</dd>
+        <dt>{t.worldInfo.atmosphere}</dt>
         <dd>{formatAtmosphere(meta)}</dd>
-        <dt>Geology</dt>
+        <dt>{t.worldInfo.geology}</dt>
         <dd>{formatGeology(meta)}</dd>
         {#if stats}
-          <dt>Surface</dt>
+          <dt>{t.worldInfo.surface}</dt>
           <dd>{formatArea(stats.surfaceKm2)}</dd>
-          <dt>Land / water</dt>
+          <dt>{t.worldInfo.landWater}</dt>
           <dd>{formatShare(stats.land)} / {formatShare(stats.water)}</dd>
         {/if}
         {#if world.rivers}
-          <dt>Rivers</dt>
+          <dt>{t.worldInfo.rivers}</dt>
           <dd>{formatInt(world.rivers.file.rivers.length)}</dd>
         {/if}
         {#if summary}
-          <dt>Generated</dt>
-          <dd title={new Date(summary.modified_ms).toLocaleString()}>{formatAgo(summary.modified_ms)}</dd>
+          <dt>{t.worldInfo.generated}</dt>
+          <dd title={new Date(summary.modified_ms).toLocaleString(getLocale())}>{formatAgo(summary.modified_ms)}</dd>
         {/if}
       </dl>
 
@@ -118,7 +120,7 @@
             <span
               style:background={surfaceColour(entry.biome)}
               style:flex-grow={entry.share}
-              title={`${entry.biome.name}: ${formatShare(entry.share)}`}
+              title={`${biomeName(entry.biome)}: ${formatShare(entry.share)}`}
             ></span>
           {/each}
         </div>
@@ -126,7 +128,7 @@
           {#each allBiomes ? stats.shares : stats.shares.slice(0, TOP_BIOMES) as entry (entry.biome.id)}
             <li>
               <span class="swatch" style:background={surfaceColour(entry.biome)}></span>
-              <span class="name">{entry.biome.name}</span>
+              <span class="name">{biomeName(entry.biome)}</span>
               <span class="value">{formatShare(entry.share)}</span>
               <span class="value area">{formatArea(entry.areaKm2)}</span>
             </li>
@@ -134,29 +136,29 @@
         </ul>
         {#if stats.shares.length > TOP_BIOMES}
           <button class="link" onclick={() => (allBiomes = !allBiomes)}>
-            {allBiomes ? 'Show fewer' : `Show all ${stats.shares.length} biomes`}
+            {allBiomes ? t.worldInfo.showFewer : t.worldInfo.showAll({ count: stats.shares.length })}
           </button>
         {/if}
       {:else}
-        <p class="muted">Measuring the biomes…</p>
+        <p class="muted">{t.worldInfo.measuring}</p>
       {/if}
 
       <div class="actions">
-        <button onclick={reroll} disabled={rerolling} title="Generate this world again with a new random seed"
-          >{rerolling ? 'Sending…' : 'Reroll'}</button
+        <button onclick={reroll} disabled={rerolling} title={t.worldInfo.rerollHelp}
+          >{rerolling ? t.worldInfo.sending : t.worldInfo.reroll}</button
         >
-        <button onclick={onVary} title="Open the form with this world's parameters">Vary…</button>
-        <button onclick={() => copy(cliCommand(meta), 'Command')} title="Command line that regenerates this world"
-          >Copy command</button
+        <button onclick={onVary} title={t.worldInfo.varyHelp}>{t.worldInfo.vary}</button>
+        <button onclick={() => copy(cliCommand(meta), t.worldInfo.command)} title={t.worldInfo.copyCommandHelp}
+          >{t.worldInfo.copyCommand}</button
         >
-        <button onclick={() => copy(link(), 'Link')} title="Link that opens this world, with the camera, layer, relief and sun shown">Copy link</button>
-        <button class="danger" onclick={onDelete}>Delete</button>
+        <button onclick={() => copy(link(), t.worldInfo.link)} title={t.worldInfo.copyLinkHelp}>{t.worldInfo.copyLink}</button>
+        <button class="danger" onclick={onDelete}>{t.worldInfo.delete}</button>
       </div>
 
       <label class="compare">
-        <span>Compare with</span>
+        <span>{t.worldInfo.compareWith}</span>
         <select value={compareId ?? ''} onchange={(e) => onCompare(e.currentTarget.value || null)}>
-          <option value="">nothing</option>
+          <option value="">{t.worldInfo.nothing}</option>
           {#each others as other (other.id)}
             <option value={other.id}>{other.id}</option>
           {/each}
@@ -164,16 +166,16 @@
       </label>
 
       <div class="downloads">
-        <span>Download</span>
-        <a href={worldFile(world.id, 'world.png', summary?.modified_ms)} download={`${world.id}.png`}>map PNG</a>
-        <a href={worldFile(world.id, 'world.svg', summary?.modified_ms)} download={`${world.id}.svg`}>SVG</a>
-        <a href={worldFile(world.id, 'legend.png', summary?.modified_ms)} download={`${world.id}-legend.png`}>legend</a>
-        <button class="link" onclick={zip} disabled={zipping}>{zipping ? 'zipping…' : 'raw data (ZIP)'}</button>
+        <span>{t.worldInfo.download}</span>
+        <a href={worldFile(world.id, 'world.png', summary?.modified_ms)} download={`${world.id}.png`}>{t.worldInfo.mapPng}</a>
+        <a href={worldFile(world.id, 'world.svg', summary?.modified_ms)} download={`${world.id}.svg`}>{t.worldInfo.svg}</a>
+        <a href={worldFile(world.id, 'legend.png', summary?.modified_ms)} download={`${world.id}-legend.png`}>{t.worldInfo.legend}</a>
+        <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
       </div>
     {:else if world.error}
       <p class="error">{world.error}</p>
     {:else}
-      <p class="muted">Loading…</p>
+      <p class="muted">{t.worldInfo.loading}</p>
     {/if}
   </details>
 {/if}

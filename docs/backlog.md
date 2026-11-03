@@ -263,3 +263,30 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Deferred (2026-11-03):** too costly for now (a new subsystem, heavy
   tuning, a full climate per epoch). It waits for a cheaper way of
   drifting continents; candidates are listed in the analysis.
+| Step | Change                                                                                                        | Seeds  | Status |
+| ---- | ------------------------------------------------------------------------------------------------------------- | ------ | ------ |
+| 1    | `[geology]` in presets and `world.json`, `--surface-age`, form field, regime in the world info; no effect yet | Same   | todo   |
+| 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`    | Change | todo   |
+| 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                  | Same   | todo   |
+| 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                     | Same   | todo   |
+| 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                            | Same   | todo   |
+| 6    | Optional: ray systems and ejecta albedo fading with age; lava flooding of basins (maria) at given epochs      | Change | todo   |
+
+## 10. Internationalisation of the web app
+
+- **Status:** done
+- **Analysis:** [09-i18n.md](analysis/09-i18n.md)
+- **Problem:** every string of the web app is English, written in the
+  templates; numbers and dates are formatted for English only.
+- **Decision (2026-11-03):** a typed in-house catalog (English source, French typed
+  with the same shape), the locale detected from the browser and chosen
+  in the header; biome names, stages, request errors and built-in
+  presets translated; generated files and the CLI stay English.
+
+| Step | Change                                                                               | Seeds | Status |
+| ---- | ------------------------------------------------------------------------------------ | ----- | ------ |
+| 1    | i18n module, typed English catalog, `Intl` formatters, locale detection and selector | Same  | done   |
+| 2    | Strings moved to the catalog, area by area; formatting localised                     | Same  | done   |
+| 3    | Server: structured request errors, `[locales.*]` in presets                          | Same  | done   |
+| 4    | French catalog, French built-in presets, layout checked with longer strings          | Same  | done   |
+| 5    | Guard against literal text in templates, in CI                                       | Same  | done   |

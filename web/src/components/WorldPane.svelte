@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { biomeName } from '../lib/i18n/names.svelte';
+  import { t } from '../lib/i18n/index.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
   import type { LinkedDisplay } from '../lib/display';
-  import { formatKm } from '../lib/format';
+  import { formatKm, formatNumber } from '../lib/format';
   import { formatLonLat, pathKm, type LonLat } from '../lib/geo';
   import type { ViewLink } from '../lib/link';
   import { samplePoint } from '../lib/sample';
@@ -132,8 +134,8 @@
     <p class="readout" aria-live="off">
       {[
         formatLonLat(hover),
-        hoverSample?.biome?.name,
-        hoverSample ? `${hoverSample.relief >= 0 ? '+' : ''}${hoverSample.relief.toFixed(3)}` : null,
+        hoverSample?.biome ? biomeName(hoverSample.biome) : null,
+        hoverSample ? `${hoverSample.relief >= 0 ? '+' : ''}${formatNumber(hoverSample.relief, 3)}` : null,
       ]
         .filter(Boolean)
         .join(' · ')}
@@ -141,15 +143,15 @@
   {/if}
 
   {#if measuring}
-    <div class="measure" role="region" aria-label="Distance measurement">
-      <strong>{path.length < 2 ? 'Click points on the planet' : formatKm(distance)}</strong>
+    <div class="measure" role="region" aria-label={t.measure.label}>
+      <strong>{path.length < 2 ? t.measure.start : formatKm(distance)}</strong>
       {#if path.length >= 2}
-        <small>{path.length - 1} leg{path.length > 2 ? 's' : ''}, along great circles</small>
+        <small>{t.measure.legs({ legs: path.length - 1 })}</small>
       {/if}
       <div class="actions">
-        <button onclick={() => (path = path.slice(0, -1))} disabled={path.length === 0}>Undo</button>
-        <button onclick={() => (path = [])} disabled={path.length === 0}>Clear</button>
-        <button onclick={toggleMeasure}>Done</button>
+        <button onclick={() => (path = path.slice(0, -1))} disabled={path.length === 0}>{t.measure.undo}</button>
+        <button onclick={() => (path = [])} disabled={path.length === 0}>{t.measure.clear}</button>
+        <button onclick={toggleMeasure}>{t.measure.done}</button>
       </div>
     </div>
   {:else if picked && world.meta}

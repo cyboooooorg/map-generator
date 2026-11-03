@@ -1,13 +1,16 @@
 <script lang="ts">
+  import { errorText } from '../lib/i18n/errors';
+  import { t } from '../lib/i18n/index.svelte';
+  import { presetDescription, presetName } from '../lib/i18n/names.svelte';
   import { untrack } from 'svelte';
-  import { ApiFailure, api } from '../lib/api/client';
+  import { api } from '../lib/api/client';
   import type { Defaults } from '../lib/api/types/Defaults';
   import type { FormSpec } from '../lib/api/types/FormSpec';
   import type { JobCreated } from '../lib/api/types/JobCreated';
   import type { ParamDefault } from '../lib/api/types/ParamDefault';
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
-  import { MAX_SEED, randomSeed } from '../lib/format';
+  import { formatInt, MAX_SEED, randomSeed } from '../lib/format';
   import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
   import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
@@ -42,8 +45,6 @@
     | 'surface_age_ga';
 
   interface FieldInfo {
-    label: string;
-    help: string;
     /** Key of the preset `[defaults]` table. */
     defaultsKey: keyof Defaults;
     /** Slider range; the number input accepts the full server limits. */
@@ -53,56 +54,44 @@
 
   const FIELDS: Record<Field, FieldInfo> = {
     sea_level: {
-      label: 'Sea level',
-      help: 'Positive: more ocean',
       defaultsKey: 'sea_level',
       slider: [-1, 1],
       step: 0.01,
     },
     volcanic: {
-      label: 'Volcanism',
-      help: 'Share of mountain chains that erupt',
       defaultsKey: 'volcanic',
       slider: [0, 1],
       step: 0.01,
     },
     circumference_km: {
-      label: 'Circumference (km)',
-      help: 'Earth: 40 075 km',
       defaultsKey: 'circumference',
       slider: [5_000, 120_000],
       step: 100,
     },
     axial_tilt_deg: {
-      label: 'Axial tilt (°)',
-      help: 'Earth: 23.4°',
       defaultsKey: 'axial_tilt',
       slider: [0, 90],
       step: 0.1,
     },
     erosion: {
-      label: 'Erosion',
-      help: '0 disables it',
       defaultsKey: 'erosion',
       slider: [0, 5],
       step: 0.1,
     },
     pressure_bar: {
-      label: 'Pressure (bar)',
-      help: 'Earth: 1 · Mars: 0.006 · Venus: 92 · 0 (slider at the far left): airless. Logarithmic slider',
       defaultsKey: 'pressure',
       slider: [0, 100],
       step: 0.001,
     },
     surface_age_ga: {
-      label: 'Surface age (Ga)',
-      help: 'How long impacts have cratered the surface. Earth: about 0.4 · Venus: 0.5 · Mars, the Moon: 4',
       defaultsKey: 'surface_age',
       slider: [0, 4.6],
       step: 0.01,
     },
   };
   const FIELD_NAMES = Object.keys(FIELDS) as Field[];
+  /** Label and help of a field other than the sea level, in the active locale. */
+  const fieldText = (field: Exclude<Field, 'sea_level'>) => t.form.fields[field];
   /** Every field but the sea level, which has its own fieldset. */
   const OTHER_FIELDS = FIELD_NAMES.filter((field) => field !== 'sea_level');
 
@@ -327,7 +316,7 @@
       saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields });
       onSubmitted(job, request);
     } catch (e) {
-      error = e instanceof ApiFailure ? e.message : String(e);
+      error = errorText(e);
     } finally {
       submitting = false;
     }
@@ -335,41 +324,41 @@
 </script>
 
 <form onsubmit={submit}>
-  <h2>{variedFrom ? `Vary ${variedFrom}` : 'New world'}</h2>
+  <h2>{variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newWorld}</h2>
   {#if variedFrom}
-    <p class="help">Starts from every parameter of {variedFrom}: change the ones you want.</p>
+    <p class="help">{t.form.variedHelp({ id: variedFrom })}</p>
   {:else if memory}
-    <p class="help">Starts from your last generation (except its seed). <strong>Defaults</strong> starts over.</p>
+    <p class="help">{t.form.memoryHelpBefore}<strong>{t.form.memoryHelpDefaults}</strong>{t.form.memoryHelpAfter}</p>
   {/if}
   {#if missingPreset}
-    <p class="error">The preset {start.initial?.planet} is not offered by this server: pick another one.</p>
+    <p class="error">{t.form.missingPreset({ preset: start.initial?.planet ?? '' })}</p>
   {/if}
 
   <label class="row">
-    <span>Planet</span>
+    <span>{t.form.planet}</span>
     <select value={planet} onchange={(e) => choosePreset(e.currentTarget.value)} disabled={randomPlanet}>
       {#each presets as preset (preset.spec)}
-        <option value={preset.spec}>{preset.name}{preset.built_in ? '' : ` (${preset.spec})`}</option>
+        <option value={preset.spec}>{presetName(preset)}{preset.built_in ? '' : ` (${preset.spec})`}</option>
       {/each}
     </select>
   </label>
   <label class="check">
     <input type="checkbox" bind:checked={randomPlanet} />
-    Random built-in planet
+    {t.form.randomPlanet}
   </label>
   {#if selectedPreset && !randomPlanet}
-    <p class="help">{selectedPreset.description}</p>
+    <p class="help">{presetDescription(selectedPreset)}</p>
   {/if}
 
   <fieldset>
     <legend>
-      <select class="mode" bind:value={seaBy} aria-label="Set the sea by">
-        <option value="level">Sea level</option>
-        <option value="land">Land share (%)</option>
+      <select class="mode" bind:value={seaBy} aria-label={t.form.seaBy}>
+        <option value="level">{t.form.seaLevel}</option>
+        <option value="land">{t.form.landShare}</option>
       </select>
       <label class="check inline">
         <input type="checkbox" bind:checked={fields.sea_level.random} />
-        random
+        {t.form.random}
       </label>
     </legend>
     {#if !fields.sea_level.random}
@@ -396,9 +385,7 @@
       </div>
     {/if}
     <p class="help">
-      {seaBy === 'level'
-        ? 'Positive: more ocean'
-        : 'Share of the surface above the sea, which is set to match. Earth: 29 %'}
+      {seaBy === 'level' ? t.form.seaLevelHelp : t.form.landShareHelp}
     </p>
   </fieldset>
 
@@ -407,10 +394,10 @@
     {@const limits = spec[field].limits}
     <fieldset>
       <legend>
-        {info.label}
+        {fieldText(field).label}
         <label class="check inline">
           <input type="checkbox" bind:checked={fields[field].random} />
-          random
+          {t.form.random}
         </label>
       </legend>
       {#if !fields[field].random}
@@ -424,7 +411,7 @@
               step={1}
               value={pressureToSlider(fields[field].value)}
               oninput={(e) => (fields.pressure_bar.value = sliderToPressure(Number(e.currentTarget.value)))}
-              aria-label="Pressure, logarithmic"
+              aria-label={t.form.pressureSlider}
             />
           {:else}
             <input
@@ -441,47 +428,49 @@
           <input type="number" min={limits.min} max={limits.max} step="any" bind:value={fields[field].value} />
         </div>
       {/if}
-      <p class="help">{info.help}</p>
+      <p class="help">{fieldText(field).help}</p>
     </fieldset>
   {/each}
 
   <div class="row">
-    <label for="seed">Seed</label>
+    <label for="seed">{t.form.seed}</label>
     <div class="seed">
-      <input id="seed" type="text" inputmode="numeric" placeholder="random" bind:value={seed} />
-      <button type="button" onclick={rollSeed} title="Draw a random seed">Roll</button>
-      <button type="button" onclick={() => (seed = '')} disabled={seed === ''} title="Let the server draw it"
-        >Clear</button
+      <input id="seed" type="text" inputmode="numeric" placeholder={t.form.seedPlaceholder} bind:value={seed} />
+      <button type="button" onclick={rollSeed} title={t.form.rollHelp}>{t.form.roll}</button>
+      <button type="button" onclick={() => (seed = '')} disabled={seed === ''} title={t.form.clearHelp}
+        >{t.form.clear}</button
       >
     </div>
   </div>
   {#if !seedValid}
-    <p class="error">The seed is a whole number between 0 and 4 294 967 295.</p>
+    <p class="error">{t.form.seedInvalid({ max: formatInt(MAX_SEED) })}</p>
   {:else if conflict}
     <div class="warning">
       <p>
-        {targetId} exists already: a world is named after its planet and seed. Roll a new seed, or replace it.
+        {t.form.exists({ id: targetId ?? '' })}
       </p>
       <label class="check">
         <input type="checkbox" bind:checked={replace} />
-        Replace {targetId} (once the new world is complete)
+        {t.form.replace({ id: targetId ?? '' })}
       </label>
     </div>
   {/if}
 
   <label class="row">
-    <span>Size</span>
+    <span>{t.form.size}</span>
     <select bind:value={size}>
       {#each sizes as [w, h] (`${w}x${h}`)}
         <option value={`${w}x${h}`} disabled={w > spec.max_size || h > spec.max_size || w * h > spec.max_pixels}
-          >{w} × {h}{w * h > spec.max_pixels ? ' (too large for this server)' : ''}</option
+          >{w} × {h}{w * h > spec.max_pixels ? t.form.tooLarge : ''}</option
         >
       {/each}
     </select>
   </label>
   <p class="help cost">
-    {cost.time ? `Takes ${cost.time} here` : 'Time: known after a first generation in this browser'} · server peak
-    about {cost.server} · viewer about {cost.viewer}
+    {cost.time ? t.form.takes({ time: cost.time }) : t.form.timeUnknown}{t.form.peaks({
+      server: cost.server,
+      viewer: cost.viewer,
+    })}
   </p>
 
   <!-- Sticks to the bottom of the screen on narrow layouts, so the buttons
@@ -490,14 +479,14 @@
     {#if error}
       <p class="error">{error}</p>
     {/if}
-    <p class="help">The generation runs in the background: keep exploring meanwhile, or queue more worlds.</p>
+    <p class="help">{t.form.background}</p>
     <div class="actions">
-      <button type="button" class="reset" onclick={resetForm} title="Back to the preset defaults, and forget the last form"
-        >Defaults</button
+      <button type="button" class="reset" onclick={resetForm} title={t.form.defaultsHelp}
+        >{t.form.defaults}</button
       >
-      <button type="button" onclick={onCancel}>Close</button>
+      <button type="button" onclick={onCancel}>{t.form.close}</button>
       <button type="submit" class="primary" disabled={submitting || !seedValid || (conflict && !replace)}>
-        {submitting ? 'Sending…' : 'Generate'}
+        {submitting ? t.form.sending : t.form.generate}
       </button>
     </div>
   </div>

@@ -67,6 +67,7 @@ fn info(p: &Preset, spec: &str, built_in: bool) -> PresetInfo {
         description: p.description.clone(),
         built_in,
         defaults: p.defaults.clone(),
+        locales: p.locales.clone(),
     }
 }
 

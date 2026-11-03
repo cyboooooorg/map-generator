@@ -2,18 +2,22 @@
   import { onMount, untrack } from 'svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobList from './components/JobList.svelte';
+  import LanguageSelect from './components/LanguageSelect.svelte';
   import Thumbnail from './components/Thumbnail.svelte';
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
   import WorldList from './components/WorldList.svelte';
   import WorldPane from './components/WorldPane.svelte';
-  import { ApiFailure, api } from './lib/api/client';
+  import { api } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { JobCreated } from './lib/api/types/JobCreated';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import type { WorldSummary } from './lib/api/types/WorldSummary';
   import { requestFromWorld, rerollRequest } from './lib/format';
+  import { errorText } from './lib/i18n/errors';
+  import { setPresetLocales } from './lib/i18n/names.svelte';
+  import { getLocale, t } from './lib/i18n/index.svelte';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { decodeView, decodeWorlds, linkHash, type ViewLink } from './lib/link';
   import { loadSetting, saveSetting } from './lib/settings';
@@ -135,6 +139,7 @@
     try {
       if (!spec) {
         [presets, spec] = await Promise.all([api.presets(), api.form()]);
+        setPresetLocales(presets);
         jobs.defaultSize = [spec.default_width, spec.default_height];
       }
       await refresh();
@@ -150,11 +155,18 @@
       }
       await jobs.reattach();
     } catch (e) {
-      fatal = `Cannot reach the server: ${String(e)}`;
+      fatal = String(e);
     } finally {
       starting = false;
     }
   }
+
+  // The page's language follows the interface's, for screen readers,
+  // hyphenation and the browser's own controls.
+  $effect(() => {
+    document.documentElement.lang = getLocale();
+    document.title = t.app.title;
+  });
 
   onMount(() => {
     void start();
@@ -207,19 +219,19 @@
         }
         if (autoOpen?.jobId === job.jobId && autoOpen.selection === selectedId) {
           select(status.world_id);
-          toasts.show(`${status.world_id} is ready.`);
+          toasts.show(t.app.ready({ id: status.world_id }));
         } else {
-          toasts.show(`${status.world_id} is ready.`, {
-            action: { label: 'Open', run: () => select(status.world_id) },
+          toasts.show(t.app.ready({ id: status.world_id }), {
+            action: { label: t.app.open, run: () => select(status.world_id) },
             ms: 8000,
           });
         }
         // Finished jobs leave the list after a while.
         setTimeout(() => jobs.dismiss(job.jobId), 8000);
       } else if (status.status === 'failed') {
-        toasts.error(`${job.worldId} failed: ${status.error}`);
+        toasts.error(t.app.failed({ id: job.worldId, error: status.error }));
       } else if (status.status === 'cancelled') {
-        toasts.show(`${job.worldId} cancelled.`);
+        toasts.show(t.app.cancelled({ id: job.worldId }));
         setTimeout(() => jobs.dismiss(job.jobId), 4000);
       }
     });
@@ -267,10 +279,10 @@
       compareId = null;
     }
     const timer = setTimeout(() => void commitDeletes(ids), UNDO_MS);
-    toasts.show(ids.length === 1 ? `Deleted ${ids[0]}.` : `Deleted ${ids.length} worlds.`, {
+    toasts.show(t.app.deleted({ ids }), {
       ms: UNDO_MS,
       action: {
-        label: 'Undo',
+        label: t.app.undo,
         run: () => {
           clearTimeout(timer);
           for (const id of ids) {
@@ -291,7 +303,7 @@
     );
     for (const result of results) {
       if (result.status === 'rejected') {
-        toasts.error(`Could not delete: ${String(result.reason)}`);
+        toasts.error(t.app.deleteFailed({ error: String(result.reason) }));
       }
     }
     await refresh();
@@ -327,7 +339,7 @@
       const job = await api.createWorld(request);
       submitted(job, request);
     } catch (e) {
-      toasts.error(`Could not reroll: ${e instanceof ApiFailure ? e.message : String(e)}`);
+      toasts.error(t.app.rerollFailed({ error: errorText(e) }));
     }
   }
 
@@ -343,23 +355,24 @@
 <div class="layout" class:show-viewer={pane === 'viewer'}>
   <aside class="sidebar">
     <header>
-      <h1>Planets</h1>
+      <h1>{t.app.title}</h1>
       <!-- Only shown on narrow screens, where one pane is visible at a time. -->
       <div class="tabs">
         <button class:active={pane === 'sidebar'} aria-pressed={pane === 'sidebar'} onclick={() => (pane = 'sidebar')}
-          >Worlds</button
+          >{t.app.tabWorlds}</button
         >
         <button class:active={pane === 'viewer'} aria-pressed={pane === 'viewer'} onclick={() => (pane = 'viewer')}
-          >Viewer</button
+          >{t.app.tabViewer}</button
         >
       </div>
-      <button class="primary" onclick={() => openForm()} disabled={!spec}>New world</button>
+      <LanguageSelect />
+      <button class="primary" onclick={() => openForm()} disabled={!spec}>{t.app.newWorld}</button>
     </header>
     {#if fatal}
       <p class="error" role="alert">
-        {fatal}
-        <button onclick={() => void start()} disabled={starting}>{starting ? 'Retrying…' : 'Retry'}</button>
-        <button onclick={() => (fatal = null)}>Dismiss</button>
+        {t.app.unreachable({ error: fatal })}
+        <button onclick={() => void start()} disabled={starting}>{starting ? t.app.retrying : t.app.retry}</button>
+        <button onclick={() => (fatal = null)}>{t.app.dismiss}</button>
       </p>
     {/if}
     <div class="content">
@@ -405,18 +418,18 @@
         <span class="names">
           <Thumbnail id={selectedId ?? ''} revision={revision(selectedId)} width={36} height={20} radius={3} />
           <strong>{selectedId}</strong>
-          <span class="muted">vs</span>
+          <span class="muted">{t.app.versus}</span>
           <Thumbnail id={compareId} revision={revision(compareId)} width={36} height={20} radius={3} />
           <strong>{compareId}</strong>
         </span>
-        <label class="check"><input type="checkbox" bind:checked={linkCameras} /> Link cameras</label>
+        <label class="check"><input type="checkbox" bind:checked={linkCameras} /> {t.app.linkCameras}</label>
         <label
           class="check"
-          title="The right (or lower) pane mirrors the layer, relief, sunlight and season, atmosphere, clouds and grid of the main one"
-          ><input type="checkbox" bind:checked={linkDisplay} /> Link display</label
+          title={t.app.linkDisplayHelp}
+          ><input type="checkbox" bind:checked={linkDisplay} /> {t.app.linkDisplay}</label
         >
-        <button onclick={swap}>Swap</button>
-        <button onclick={() => (compareId = null)}>Close</button>
+        <button onclick={swap}>{t.app.swap}</button>
+        <button onclick={() => (compareId = null)}>{t.app.close}</button>
       </div>
     {/if}
     <div class="panes">
@@ -566,6 +579,9 @@
       top: 0;
       z-index: 1;
       gap: 8px;
+      /* The title, the tabs, the language and the button do not fit a phone's
+         width in one row (nor longer translations): wrap rather than clip. */
+      flex-wrap: wrap;
       padding-top: 10px;
       background: var(--bg);
     }
@@ -581,6 +597,7 @@
     }
     .tabs {
       display: flex;
+      flex-shrink: 0;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;

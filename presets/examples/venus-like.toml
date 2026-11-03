@@ -4,6 +4,10 @@
 name = "venus-like"
 description = "Earth-sized furnace: volcanic plains, highland continents, lava"
 
+[locales.fr]
+name = "Type Vénus"
+description = "Fournaise de la taille de la Terre : plaines volcaniques, continents de hauts plateaux, lave"
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these. Venus spins backwards with a tilt of 177.4 degrees,
 # the same seasons as 2.6 degrees. No liquid water: no erosion. The sea level

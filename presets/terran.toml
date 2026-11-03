@@ -1,3 +1,7 @@
 # Earth-like world: the full biome spectrum, no climate shift, no remapping.
 name = "terran"
 description = "Earth-like, full biome spectrum"
+
+[locales.fr]
+name = "Tellurique"
+description = "Comme la Terre, tous les biomes"

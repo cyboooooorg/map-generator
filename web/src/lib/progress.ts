@@ -1,11 +1,17 @@
 // Download and decode progress of the files of a world, for the loading
 // bar of the viewer.
 
+
 /** Where the loading of a set of files stands. */
 export interface LoadProgress {
   /** 'download' while bytes arrive, 'decode' once every file is in. */
   stage: 'download' | 'decode';
-  /** The file (or decoding step) being worked on, as shown to the user. */
+  /**
+   * The file being downloaded or decoded; empty for the biome statistics,
+   * the last decoding step. See `progressLabel` (progressText.ts) for the
+   * text shown: this module runs in the decoding worker too, so it stays
+   * free of the interface's language.
+   */
   label: string;
   /** Bytes received (download), or steps done (decode). */
   done: number;
@@ -97,13 +103,4 @@ export function progressShare(progress: LoadProgress): number | null {
     return null;
   }
   return progress.total === 0 ? 1 : Math.min(progress.done / progress.total, 1);
-}
-
-/** "12.3 / 45.6 MB", "12.3 MB" while the size is unknown, or "2 / 5" for steps. */
-export function progressText(progress: LoadProgress): string {
-  if (progress.stage === 'decode') {
-    return progress.total === null ? '' : `${progress.done} / ${progress.total}`;
-  }
-  const mb = (bytes: number) => (bytes / 1e6).toFixed(1);
-  return progress.total === null ? `${mb(progress.done)} MB` : `${mb(progress.done)} / ${mb(progress.total)} MB`;
 }

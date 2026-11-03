@@ -1,53 +1,85 @@
 // Formatting shared by the components, and the requests and commands that
 // reproduce a world.
 import type { BiomeInfo } from './api/types/BiomeInfo';
-import type { Regime } from './api/types/Regime';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import type { WorldRequest } from './api/types/WorldRequest';
+import { getLocale, t } from './i18n/index.svelte';
 
-const integer = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
+/** Number formats of the active locale, built once per locale and options. */
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
+function numberFormat(options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const locale = getLocale();
+  const key = `${locale} ${JSON.stringify(options)}`;
+  let format = numberFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(locale, options);
+    numberFormats.set(key, format);
+  }
+  return format;
+}
+
+/** A number with `digits` decimals in the active locale (decimal comma in French). */
+export function formatNumber(value: number, digits = 0): string {
+  return numberFormat({ minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
+}
+
+/** A number with at most `digits` decimals, trailing zeros dropped (0.5, 100). */
+export function formatUpTo(value: number, digits: number): string {
+  return numberFormat({ maximumFractionDigits: digits }).format(value);
+}
+
+/** A number followed by its unit, with the locale's space between them. */
+export function withUnit(value: string, unit: string): string {
+  return `${value}${t.format.unitSpace}${unit}`;
+}
 
 /** A whole number with thousands separators. */
 export function formatInt(value: number): string {
-  return integer.format(value);
+  return numberFormat({ maximumFractionDigits: 0 }).format(value);
 }
-
-const significant = new Intl.NumberFormat('en', { maximumSignificantDigits: 3 });
 
 /** A large area, in km², rounded to three significant digits. */
 export function formatArea(km2: number): string {
+  const significant = numberFormat({ maximumSignificantDigits: 3 });
   if (km2 >= 1e6) {
-    return `${significant.format(km2 / 1e6)} M km²`;
+    return withUnit(significant.format(km2 / 1e6), t.format.millionKm2);
   }
-  return `${significant.format(km2)} km²`;
+  return withUnit(significant.format(km2), 'km²');
 }
 
 /** A distance in km, with a decimal under 10 km. */
 export function formatKm(km: number): string {
-  return km < 10 ? `${km.toFixed(1)} km` : `${formatInt(km)} km`;
+  return withUnit(km < 10 ? formatNumber(km, 1) : formatInt(km), 'km');
 }
 
 /** A fraction as a percentage; small non-zero values stay visible. */
 export function formatShare(share: number): string {
   if (share > 0 && share < 0.001) {
-    return '<0.1 %';
+    return withUnit(`<${formatNumber(0.1, 1)}`, '%');
   }
-  return `${(share * 100).toFixed(share < 0.1 ? 1 : 0)} %`;
+  return withUnit(formatNumber(share * 100, share < 0.1 ? 1 : 0), '%');
 }
 
 /** A duration in seconds, as "42 s" or "3 min 05 s". */
 export function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
   if (s < 60) {
-    return `${s} s`;
+    return withUnit(String(s), 's');
   }
-  return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
+  return `${withUnit(String(Math.floor(s / 60)), 'min')} ${withUnit(String(s % 60).padStart(2, '0'), 's')}`;
 }
 
-const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const relativeFormats = new Map<string, Intl.RelativeTimeFormat>();
 
 /** How long ago a timestamp (ms since the epoch) was, as "3 hours ago". */
 export function formatAgo(ms: number, now = Date.now()): string {
+  const locale = getLocale();
+  let relative = relativeFormats.get(locale);
+  if (!relative) {
+    relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    relativeFormats.set(locale, relative);
+  }
   const seconds = (ms - now) / 1000;
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
     ['year', 31_536_000],
@@ -62,7 +94,7 @@ export function formatAgo(ms: number, now = Date.now()): string {
       return relative.format(Math.round(seconds / size), unit);
     }
   }
-  return 'just now';
+  return t.format.justNow;
 }
 
 /** Largest seed the generator takes (a u32). */
@@ -155,32 +187,29 @@ export function saveBlob(blob: Blob, name: string): void {
 export function formatAtmosphere(meta: WorldMetadata): string {
   const pressure = meta.pressure_bar ?? 1;
   if (pressure === 0) {
-    return 'none';
+    return t.worldInfo.airless;
   }
-  const bar = pressure < 0.1 ? pressure.toPrecision(2) : pressure.toFixed(2);
+  const digits = pressure < 0.1 ? Math.max(0, 1 - Math.floor(Math.log10(pressure))) : 2;
+  const bar = withUnit(formatNumber(pressure, digits), 'bar');
   const clouds = meta.preset.atmosphere?.clouds ?? 'water';
-  return clouds === 'none' ? `${bar} bar, no clouds` : `${bar} bar, ${clouds} clouds`;
+  return clouds === 'none'
+    ? t.worldInfo.pressureNoClouds({ pressure: bar })
+    : t.worldInfo.pressureClouds({ pressure: bar, clouds: t.clouds[clouds] });
 }
-
-const REGIMES: Record<Regime, string> = {
-  plates: 'plate tectonics',
-  stagnant: 'stagnant lid',
-  episodic: 'episodic lid',
-  heat_pipe: 'heat pipe',
-};
 
 /**
  * The tectonic regime and surface age of a world, e.g. "stagnant lid,
- * surface 3.8 Ga". Worlds made before geology get Earth's regime and no age.
+ * surface 3.8 Ga", in the active locale. Worlds made before geology get
+ * Earth's regime and no age.
  */
 export function formatGeology(meta: WorldMetadata): string {
-  const regime = REGIMES[meta.preset.geology?.regime ?? 'plates'];
+  const regime = t.regimes[meta.preset.geology?.regime ?? 'plates'];
   const age = meta.surface_age_ga;
   if (age == null) {
     return regime;
   }
-  const shown = age >= 1 ? `${age.toFixed(1)} Ga` : `${Math.round(age * 1000)} Ma`;
-  return `${regime}, surface ${shown}`;
+  const shown = age >= 1 ? withUnit(formatNumber(age, 1), 'Ga') : withUnit(formatNumber(age * 1000), 'Ma');
+  return t.worldInfo.geologySurface({ regime, age: shown });
 }
 
 /**
