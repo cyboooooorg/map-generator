@@ -641,27 +641,28 @@ pub fn generate_with_progress(
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
     let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
-    let erosion = erode(
+    // The height change is only kept for its debug map.
+    let mut erosion = keep.then(|| vec![0.0; n]);
+    erode(
         &mut elevation,
-        width,
-        height,
+        (width, height),
         params.sea_level + rules.waterline,
         params.erosion,
         params.seed,
         &thaw,
+        erosion.as_deref_mut(),
     );
-    if keep {
+    if let Some(mut values) = erosion {
+        // ×10: height changes are small next to the [-1, 1] elevation range.
+        values
+            .par_iter_mut()
+            .for_each(|d| *d = (*d * 10.0).clamp(-1.0, 1.0));
         debug.push(DebugLayer {
             name: "erosion",
             ramp: Ramp::Signed,
-            // ×10: height changes are small next to the [-1, 1] elevation range.
-            values: erosion
-                .iter()
-                .map(|d| (d * 10.0).clamp(-1.0, 1.0))
-                .collect(),
+            values,
         });
     }
-    drop(erosion);
     if keep {
         debug.push(DebugLayer {
             name: "elevation",
