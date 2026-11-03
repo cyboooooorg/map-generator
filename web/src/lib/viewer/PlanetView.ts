@@ -13,9 +13,11 @@ import {
   DataTexture,
   DoubleSide,
   FrontSide,
+  GreaterDepth,
   Float32BufferAttribute,
   HalfFloatType,
   LinearFilter,
+  LessEqualDepth,
   LineSegments,
   Mesh,
   MOUSE,
@@ -56,7 +58,7 @@ import {
   type Vec3,
 } from '../geo';
 import type { WorldLayers } from '../layers';
-import type { Sky } from '../sky';
+import { liftSky, type Sky } from '../sky';
 import { downsample, fitFactor } from './textures';
 import { DETAIL_STENCIL, TileLayer } from './TileLayer';
 import {
@@ -100,6 +102,14 @@ const MAP_DISTANCE = 5.5;
 const CLICK_TOLERANCE = 5;
 /** Altitudes (planet radii, or map units) over which clouds fade in when zooming out. */
 const CLOUD_FADE: [number, number] = [0.15, 0.5];
+/** Seconds for the drifting cloud layer to go once around the planet. */
+const CLOUD_DRIFT_PERIOD_S = 300;
+/**
+ * Redraw interval while only the clouds drift, ms. The drift is slow (a few
+ * pixels a second at the equator), so ten frames a second look smooth and
+ * cost a tenth of a continuous loop.
+ */
+const CLOUD_DRIFT_FRAME_MS = 100;
 
 function smoothstepJs(edge0: number, edge1: number, x: number): number {
   const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
@@ -225,7 +235,8 @@ export class PlanetView {
   private readonly controls: OrbitControls;
   private readonly surface: Mesh<PlaneGeometry, ShaderMaterial>;
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
-  private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>;
+  /** The atmosphere's ground (veil) and sky passes. */
+  private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>[];
   private readonly resizeObserver: ResizeObserver;
   private readonly tiles: TileLayer;
   private layer: Layer = 'biomes';
@@ -246,6 +257,7 @@ export class PlanetView {
     uCloudsOn: { value: 0 } as IUniform<number>,
     uClouds: { value: emptyTexture() } as IUniform<Texture>,
     uCloudTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
+    uCloudShift: { value: 0 } as IUniform<number>,
     uLayer: { value: LAYER_IDS.biomes as number } as IUniform<number>,
     uTexel: { value: new Vector2(1 / 1024, 1 / 512) } as IUniform<Vector2>,
     uLightMode: { value: 0 } as IUniform<number>,
@@ -289,7 +301,21 @@ export class PlanetView {
   /** Whether the world has a cloud layer, and whether it is shown. */
   private hasClouds = false;
   private cloudsOn = true;
-  /** Scattering uniforms of the sky shader, Earth's until a world sets them. */
+  /** Whether the cloud layer drifts, the last drift update, and its redraw timer. */
+  private cloudsDrifting = false;
+  private cloudDriftAt: number | null = null;
+  private cloudDriftTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The world's sky before the lift over the relief, Earth's until a world sets it. */
+  private worldSky: Sky = {
+    top: 1.04,
+    betaR: [4.7, 11.4, 27.8],
+    betaM: 4.6,
+    mieAlbedo: [1, 1, 1],
+    heightR: 0.009,
+    heightM: 0.0043,
+    g: 0.76,
+  };
+  /** Scattering uniforms of the sky shader (see applySky). */
   private readonly sky = {
     uTop: { value: 1.04 } as IUniform<number>,
     uBetaR: { value: new Vector3(4.7, 11.4, 27.8) } as IUniform<Vector3>,
@@ -363,33 +389,42 @@ export class PlanetView {
     this.grid.renderOrder = 2;
     this.scene.add(this.grid);
 
-    // A unit sphere scaled to the top of the world's atmosphere. Drawn after
-    // the surface without depth test: the shader stops its rays at the
-    // ground itself, and veils it (see atmosphereFragment).
-    this.atmosphere = new Mesh(
-      new SphereGeometry(1, 96, 48),
-      new ShaderMaterial({
-        vertexShader: atmosphereVertex,
-        fragmentShader: atmosphereFragment,
-        uniforms: {
-          uOpacity: this.atmosphereOpacity,
-          uLightMode: this.u.uLightMode,
-          uSunDir: this.u.uSunDir,
-          uLightDir: this.u.uLightDir,
-          ...this.sky,
-        },
-        side: BackSide,
-        blending: CustomBlending,
-        blendEquation: AddEquation,
-        blendSrc: OneFactor,
-        blendDst: SrcAlphaFactor,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.atmosphere.renderOrder = 1;
-    this.scene.add(this.atmosphere);
+    // A unit sphere scaled to the top of the world's atmosphere, drawn after
+    // the surface from its far side, twice (see atmosphereFragment): where
+    // the surface is in front of it (the depth test passes on greater
+    // depths) to veil the ground, and elsewhere to draw the sky. Relief
+    // rising above the sphere at the limb thus hides the sky behind it.
+    const shell = new SphereGeometry(1, 96, 48);
+    const skyPass = (ground: boolean): Mesh<SphereGeometry, ShaderMaterial> => {
+      const mesh = new Mesh(
+        shell,
+        new ShaderMaterial({
+          vertexShader: atmosphereVertex,
+          fragmentShader: atmosphereFragment,
+          uniforms: {
+            uOpacity: this.atmosphereOpacity,
+            uLightMode: this.u.uLightMode,
+            uSunDir: this.u.uSunDir,
+            uLightDir: this.u.uLightDir,
+            ...this.sky,
+            uGround: { value: ground ? 1 : 0 },
+          },
+          side: BackSide,
+          blending: CustomBlending,
+          blendEquation: AddEquation,
+          blendSrc: OneFactor,
+          blendDst: SrcAlphaFactor,
+          transparent: true,
+          depthFunc: ground ? GreaterDepth : LessEqualDepth,
+          depthWrite: false,
+        }),
+      );
+      mesh.renderOrder = 1;
+      mesh.scale.setScalar(this.worldSky.top);
+      this.scene.add(mesh);
+      return mesh;
+    };
+    this.atmosphere = [skyPass(true), skyPass(false)];
 
     this.path = new LineSegments(
       new BufferGeometry(),
@@ -498,6 +533,37 @@ export class PlanetView {
   setCloudsVisible(visible: boolean): void {
     this.requestRender();
     this.cloudsOn = visible;
+  }
+
+  /** Lets the cloud layer drift slowly eastwards around the planet, or stops it where it is. */
+  setCloudsDrifting(drifting: boolean): void {
+    this.cloudsDrifting = drifting;
+    this.requestRender();
+  }
+
+  /**
+   * Moves the drifting clouds to the current time and, while they show,
+   * schedules the next redraw; stops the clock otherwise.
+   */
+  private driftClouds(): void {
+    const visible = this.u.uCloudsOn.value > 0;
+    if (!this.cloudsDrifting || !visible) {
+      this.cloudDriftAt = null;
+      return;
+    }
+    const now = performance.now();
+    if (this.cloudDriftAt !== null) {
+      // A hidden tab draws no frames: resume where the clouds were.
+      const seconds = Math.min(now - this.cloudDriftAt, 1000) / 1000;
+      this.u.uCloudShift.value = (this.u.uCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
+    }
+    this.cloudDriftAt = now;
+    if (this.cloudDriftTimer === null) {
+      this.cloudDriftTimer = setTimeout(() => {
+        this.cloudDriftTimer = null;
+        this.requestRender();
+      }, CLOUD_DRIFT_FRAME_MS);
+    }
   }
 
   /** Frees the cloud texture and its decoded image. */
@@ -645,6 +711,7 @@ export class PlanetView {
   setRelief(relief: number): void {
     this.requestRender();
     this.shared.uRelief.value = relief;
+    this.applySky();
   }
 
   setLighting(lighting: Lighting): void {
@@ -666,10 +733,18 @@ export class PlanetView {
   setSky(sky: Sky | null): void {
     this.requestRender();
     this.hasSky = sky !== null;
-    if (!sky) {
-      return;
+    if (sky) {
+      this.worldSky = sky;
+      this.applySky();
     }
-    this.atmosphere.scale.setScalar(sky.top);
+  }
+
+  /** Sets the sky uniforms from the world's sky, raised above the displaced relief. */
+  private applySky(): void {
+    const sky = liftSky(this.worldSky, this.shared.uRelief.value * RELIEF_SCALE);
+    for (const pass of this.atmosphere) {
+      pass.scale.setScalar(sky.top);
+    }
     this.sky.uTop.value = sky.top;
     this.sky.uBetaR.value.set(...sky.betaR);
     this.sky.uBetaM.value = sky.betaM;
@@ -793,11 +868,14 @@ export class PlanetView {
     this.tiles.dispose();
     this.disposeTexture();
     this.disposeClouds();
+    if (this.cloudDriftTimer !== null) {
+      clearTimeout(this.cloudDriftTimer);
+    }
     this.shared.uData.value.dispose();
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
-    for (const object of [this.surface, this.grid, this.atmosphere, this.path]) {
+    for (const object of [this.surface, this.grid, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -880,13 +958,17 @@ export class PlanetView {
   private draw(): void {
     this.shared.uMorph.value = this.morph;
     // The atmosphere only makes sense around the globe: fade it with the morph.
-    this.atmosphere.visible = this.atmosphereOn && this.hasSky && this.morph > 0.01;
+    const skyVisible = this.atmosphereOn && this.hasSky && this.morph > 0.01;
+    for (const pass of this.atmosphere) {
+      pass.visible = skyVisible;
+    }
     this.atmosphereOpacity.value = this.morph ** 3;
     const altitude = this.altitude();
     // Clouds fade out as the camera nears the ground, before the detail
     // tiles get sharper than the cloud layer.
     this.u.uCloudsOn.value =
       this.cloudsOn && this.hasClouds ? smoothstepJs(CLOUD_FADE[0], CLOUD_FADE[1], altitude) : 0;
+    this.driftClouds();
     this.camera.near = Math.max(altitude * 0.1, 1e-6);
     this.camera.far = altitude + 4;
     this.camera.updateProjectionMatrix();

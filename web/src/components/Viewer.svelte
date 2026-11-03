@@ -73,6 +73,7 @@
     graticule: false,
     atmosphere: true,
     clouds: true,
+    cloudDrift: false,
     sun: false,
     season: 0.25,
     sunLongitude: 0,
@@ -89,6 +90,7 @@
   let graticule = $state(saved.graticule);
   let atmosphere = $state(saved.atmosphere);
   let clouds = $state(saved.clouds);
+  let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
   let season = $state(saved.season);
   let sunLongitude = $state(saved.sunLongitude);
@@ -144,6 +146,7 @@
       graticule,
       atmosphere,
       clouds,
+      cloudDrift,
       sun,
       season,
       sunLongitude,
@@ -230,6 +233,7 @@
     return () => controller.abort();
   });
   $effect(() => view?.setCloudsVisible(clouds));
+  $effect(() => view?.setCloudsDrifting(cloudDrift));
   $effect(() => {
     view?.setDetail(
       worldId && meta && revision !== null ? { id: worldId, revision, baseWidth: meta.width } : null,
@@ -373,6 +377,9 @@
         case 'c':
           clouds = !clouds;
           break;
+        case 'w':
+          if (clouds) cloudDrift = !cloudDrift;
+          break;
         case 'n':
           graticule = !graticule;
           break;
@@ -411,6 +418,7 @@
     ['S', 'Play the seasons (with sunlight)'],
     ['A', 'Atmosphere'],
     ['C', 'Clouds'],
+    ['W', 'Cloud drift (with clouds)'],
     ['N', 'Grid'],
     ['D', 'Measure distances'],
     ['P', 'Screenshot'],
@@ -484,6 +492,9 @@
       {/if}
       <label class="check"><input type="checkbox" bind:checked={atmosphere} /> Atmosphere</label>
       <label class="check"><input type="checkbox" bind:checked={clouds} /> Clouds</label>
+      {#if clouds}
+        <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> Drift</label>
+      {/if}
       <label class="check"><input type="checkbox" bind:checked={graticule} /> Grid</label>
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />
@@ -644,6 +655,9 @@
   .panel label.check {
     display: flex;
     gap: 6px;
+  }
+  .panel label.check.sub {
+    padding-left: 18px;
   }
   .small {
     padding: 2px 8px;

@@ -112,6 +112,7 @@ export const surfaceFragment = /* glsl */ `
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
   uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
   uniform vec3 uCloudTint;     // linear colour of the clouds
+  uniform float uCloudShift;   // eastward drift of the cloud layer, in turns
   varying vec2 vUv;
   varying vec2 vLocalUv;
   varying vec3 vNormal;
@@ -251,10 +252,11 @@ export const surfaceFragment = /* glsl */ `
     if (uCloudsOn > 0.0) {
       // Opacity of the cover: thin clouds are translucent veils, only
       // thick ones hide the ground.
-      cover = smoothstep(0.3, 1.0, texture2D(uClouds, vUv).r) * 0.85 * uCloudsOn;
+      vec2 cloudUv = vUv - vec2(uCloudShift, 0.0);
+      cover = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv).r) * 0.85 * uCloudsOn;
       float lat = (vUv.y - 0.5) * PI;
       vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
-      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, vUv + towardsLight * 0.004 * uMorph).r) * uCloudsOn;
+      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + towardsLight * 0.004 * uMorph).r) * uCloudsOn;
       colour *= 1.0 - 0.45 * shadow;
     }
     colour *= shade;
@@ -300,14 +302,20 @@ export const atmosphereVertex = /* glsl */ `
 `;
 
 // Single scattering through the atmosphere shell around the globe (radius
-// 1, centred on the origin), drawn after the surface with depth testing
-// off: for each pixel the view ray is marched through the shell (and
-// stopped at the ground), each sample lit by sunlight attenuated along its
-// own ray to the sun. Rayleigh (gas, per channel) and Mie (aerosols, one
-// extinction tinted by their albedo) scattering. The output is premultiplied
-// in-scattered light plus, in alpha, the transmittance of the ray: blended
-// as dst × alpha + src, it draws the sky around the planet and veils the
-// ground in one pass (an opaque Venus hides its surface).
+// 1, centred on the origin), drawn after the surface: for each pixel the
+// view ray is marched through the shell (and stopped at the ground), each
+// sample lit by sunlight attenuated along its own ray to the sun. Rayleigh
+// (gas, per channel) and Mie (aerosols, one extinction tinted by their
+// albedo) scattering. The output is premultiplied in-scattered light plus,
+// in alpha, the transmittance of the ray: blended as dst × alpha + src, it
+// veils the ground (an opaque Venus hides its surface) and draws the sky.
+//
+// The shell is drawn twice, from its far side, split by the depth test
+// (uGround): where the surface is in front of the far side, the ray stops
+// at the ground and veils it; elsewhere it crosses the whole shell, the sky.
+// The ground of the shader is the unit sphere, but displaced relief rises
+// above it at the limb: there the ray stops at its closest point to the
+// planet, where such a peak stands, instead of drawing the sky over it.
 export const atmosphereFragment = /* glsl */ `
   uniform float uOpacity;
   uniform int uLightMode;
@@ -320,6 +328,7 @@ export const atmosphereFragment = /* glsl */ `
   uniform float uHeightR;
   uniform float uHeightM;
   uniform float uG;
+  uniform float uGround;       // 1: the surface pass, 0: the sky pass
   varying vec3 vWorld;
 
   const int VIEW_STEPS = 16;
@@ -347,7 +356,10 @@ export const atmosphereFragment = /* glsl */ `
     vec2 ground = sphere(origin, dir, 1.0);
     bool hitsGround = ground.x > 0.0 && ground.x < ground.y;
     float near = max(shell.x, 0.0);
-    float far = hitsGround ? min(shell.y, ground.x) : shell.y;
+    bool surface = uGround > 0.5;
+    // Relief above the unit sphere: the peak stands near the limb point.
+    float limb = max(-dot(origin, dir), near);
+    float far = hitsGround ? min(shell.y, ground.x) : surface ? min(shell.y, limb) : shell.y;
     float ds = (far - near) / float(VIEW_STEPS);
 
     vec3 sumR = vec3(0.0);
@@ -385,7 +397,7 @@ export const atmosphereFragment = /* glsl */ `
     // Soft exposure: bright skies saturate instead of clipping.
     vec3 colour = 1.0 - exp(-EXPOSURE * 4.0 * PI * light);
     vec3 transmittance = exp(-(uBetaR * depthR + uBetaM * depthM));
-    float behind = hitsGround ? dot(transmittance, vec3(1.0 / 3.0)) : 1.0;
+    float behind = surface ? dot(transmittance, vec3(1.0 / 3.0)) : 1.0;
     gl_FragColor = vec4(colour * uOpacity, mix(1.0, behind, uOpacity));
   }
 `;

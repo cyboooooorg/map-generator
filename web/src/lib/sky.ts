@@ -67,6 +67,25 @@ export function skyFromWorld(meta: WorldMetadata): Sky | null {
   };
 }
 
+/**
+ * The sky stretched upwards by `lift` (planet radii), for relief displaced
+ * above the ground: the shell and its scale heights grow by the same
+ * factor and the coefficients shrink by it, so the zenith optical depths,
+ * hence the look, stay the same while the mountains stay under the sky.
+ */
+export function liftSky(sky: Sky, lift: number): Sky {
+  const thickness = sky.top - 1;
+  const k = (thickness + Math.max(lift, 0)) / thickness;
+  return {
+    ...sky,
+    top: 1 + thickness * k,
+    betaR: sky.betaR.map((b) => b / k) as [number, number, number],
+    betaM: sky.betaM / k,
+    heightR: sky.heightR * k,
+    heightM: sky.heightM * k,
+  };
+}
+
 /** Linear colour of a world's clouds: white water, pale yellow sulfuric acid, ochre dust. */
 export function cloudTint(meta: WorldMetadata): [number, number, number] {
   switch (meta.preset.atmosphere?.clouds) {

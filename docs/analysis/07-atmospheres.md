@@ -152,6 +152,18 @@ polar rain both meant sinking dry air there, while the Arctic is about
 poles and a polar stratus term is added). Cover then matches Earth's
 latitude profile and its two-thirds mean.
 
+**Review (after step 5).** On the globe the water clouds read as too many
+and too linear near the equator: wide overcast blobs, and east-west
+streaks where the ×3 squeeze was strongest, at the equator. The noise is
+now warped by a larger noise (swirls and fronts), squeezed only at
+mid-latitudes (×2 at 45°, none at the equator or the poles), and broken
+into finer cells, stronger in the tropics (convective clusters); the
+equatorial convergence is a narrow band of its own, and the cover ramp is
+wider (`smoothstep(0, 0.9)`), so cloud fields have thick cores and thin
+edges. The mean cover drops to 0.42–0.49 (about 30 % of the ground hidden
+in the viewer, half before): Earth's two-thirds counts thin cirrus that a
+satellite image barely shows.
+
 ## 4. Rendering (viewer)
 
 - **Sky shell.** The rim glow becomes a single-scattering shader on a
@@ -182,7 +194,23 @@ latitude profile and its two-thirds mean.
   (narrower equatorial band, 0.75–0.8 instead of 0.9). The drift by
   latitude is not done: it would need a frame every few seconds, against
   the render-on-demand loop.
+- **Drift (after step 5).** A solid eastward rotation of the cloud layer
+  instead of a drift by latitude: a per-latitude speed would shear the
+  layer into streaks within minutes. It is optional (off by default) and
+  cheap: the texture lookup is offset by a uniform, and while the clouds
+  drift the viewer redraws every 100 ms rather than every frame, since a
+  turn takes five minutes (a few pixels a second at the equator).
 - **Airless worlds** draw no shell: a hard limb against space.
+- **Review (after step 5).** At full relief, mountains rise 0.06 radius
+  above the ground, above the 0.036 of Earth's shell, and the shader's
+  ground was the unit sphere, drawn without depth test: the halo was
+  painted over the peaks at the limb. The shell now rises with the relief
+  exaggeration (scale heights stretched, coefficients divided by the same
+  factor, so the zenith optical depths are kept), and it is drawn twice
+  from its far side, split by the depth test: where the surface is in
+  front, the ray stops at the ground (or, for a peak above the unit
+  sphere, at its closest point to the planet) and veils it; elsewhere it
+  draws the sky, now hidden by the peaks in front of it.
 - **Calibration (step 2).** Shell thickness `0.03 + 0.02 log10(1 + p)`
   of the radius; zenith optical depth `0.25 p^0.35` for the gas (blue
   channel) and `2 × haze` for the aerosols, so dense atmospheres take
