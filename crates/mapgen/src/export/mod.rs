@@ -4,6 +4,7 @@ pub mod noise_maps;
 pub mod png;
 pub mod raw_data;
 pub mod svg;
+pub mod variation;
 
 pub use noise_maps::export_noise_maps;
 pub use png::{export_legend_png, export_png};
@@ -17,6 +18,7 @@ use crate::world::{Biome, World, WorldParams, biome_color, surface_color};
 use ecotone::{ecotone_colour, linear_to_srgb, srgb_to_linear};
 use rayon::prelude::*;
 use std::path::Path;
+use variation::SurfaceVariation;
 
 /// Which optional outputs [`export_world`] writes. The maps (`world.png`,
 /// `world.svg`, `legend.png`) are always written.
@@ -356,6 +358,11 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
     let (coverage, depths) = (&layers.coverage, &layers.depths);
     let river_biome = planet.remap(Biome::River);
     let river_colour = surface_color(river_biome).map(f32::from);
+    let variation = SurfaceVariation::new(world.params.seed, world.params.circumference_km as f64);
+    let (lon_step, lat_step) = (
+        std::f64::consts::TAU / w as f64,
+        std::f64::consts::PI / h as f64,
+    );
 
     (0..h)
         .into_par_iter()
@@ -397,6 +404,11 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
             } else {
                 surface_color(biome).map(f32::from)
             };
+            if !dry.is_lava() {
+                let lon = (x as f64 + 0.5) * lon_step;
+                let lat = std::f64::consts::FRAC_PI_2 - (y as f64 + 0.5) * lat_step;
+                color = variation.apply(color, lon, lat);
+            }
             let mut f = hillshade(world, &grid, x, y);
             // Lava is fluid: its relief barely shows.
             if dry.is_lava() {
