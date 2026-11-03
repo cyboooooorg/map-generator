@@ -17,6 +17,7 @@ import {
   Float32BufferAttribute,
   HalfFloatType,
   LinearFilter,
+  LinearMipmapLinearFilter,
   LessEqualDepth,
   LineSegments,
   Mesh,
@@ -57,10 +58,21 @@ import {
   sphereToLonLat,
   type Vec3,
 } from '../geo';
-import type { WorldLayers } from '../layers';
+import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { liftSky, type Sky } from '../sky';
-import { downsample, fitFactor } from './textures';
-import { DETAIL_STENCIL, TileLayer } from './TileLayer';
+import { fullPixelRatio, pixelRatio } from './pixelRatio';
+import {
+  altitudeForMapHeight,
+  clampMapCentre,
+  GLOBE_DISTANCE,
+  lerpLonLat,
+  MAP_DISTANCE,
+  mapHeightForAltitude,
+  mapPoint,
+  morphCamera,
+} from './viewTransfer';
+import { downsample, fitFactor, releaseOnUpload } from './textures';
+import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
   atmosphereVertex,
@@ -94,10 +106,10 @@ export type Lighting =
       axialTiltDeg: number;
     };
 
+/** Layers drawn from uExtra, uploaded the first time one of them is shown. */
+const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodplain']);
+
 const MORPH_MS = 1200;
-/** Camera distances: the globe has radius 1, the map is 2π × π. */
-const GLOBE_DISTANCE = 3.2;
-const MAP_DISTANCE = 5.5;
 /** Pointer moves larger than this (px) are drags, not clicks. */
 const CLICK_TOLERANCE = 5;
 /** Altitudes (planet radii, or map units) over which clouds fade in when zooming out. */
@@ -120,6 +132,12 @@ function smoothstepJs(edge0: number, edge1: number, x: number): number {
 const HEADLIGHT = new Vector3(-0.4, 0.5, 1).normalize();
 /** Lowest camera altitude over the globe (radius 1): about 2 km on an Earth-sized planet. */
 const MIN_ALTITUDE = 0.0003;
+/** Farthest camera distance from the globe's centre, and the map camera's height range. */
+const GLOBE_MAX_DISTANCE = 8;
+const MAP_MIN_DISTANCE = 0.002;
+const MAP_MAX_DISTANCE = 12;
+/** Latitude (radians) the camera stops short of the poles at when switching views. */
+const POLE_LIMIT = (89.5 * Math.PI) / 180;
 
 /** Graticule every `step` degrees, as line segments in uv space. */
 function graticule(step: number): BufferGeometry {
@@ -198,8 +216,11 @@ function emptyTexture(): DataTexture {
   return texture;
 }
 
-/** An RGBA half-float data layer, filtered, wrapping east-west. */
-function halfFloatTexture(data: Uint16Array, width: number, height: number): DataTexture {
+/**
+ * An RGBA half-float data layer, filtered, wrapping east-west. `owned`: the
+ * array is a copy made for the GPU, dropped once uploaded.
+ */
+function halfFloatTexture(data: Uint16Array, width: number, height: number, owned: boolean): DataTexture {
   const texture = new DataTexture(data, width, height, RGBAFormat, HalfFloatType);
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearFilter;
@@ -207,6 +228,25 @@ function halfFloatTexture(data: Uint16Array, width: number, height: number): Dat
   texture.wrapT = ClampToEdgeWrapping;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
+  releaseOnUpload(texture, owned);
+  return texture;
+}
+
+/**
+ * The cloud cover as a single-channel texture (one byte per pixel, row 0 =
+ * north), filtered with mipmaps, wrapping east-west.
+ */
+function cloudTexture(image: Grey8): DataTexture {
+  const texture = new DataTexture(image.data, image.width, image.height, RedFormat, UnsignedByteType);
+  // Rows of an odd width are not 4-byte aligned.
+  texture.unpackAlignment = 1;
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  releaseOnUpload(texture);
   return texture;
 }
 
@@ -226,6 +266,23 @@ function hexTexture(map: HexMap): DataTexture {
   texture.minFilter = NearestFilter;
   texture.needsUpdate = true;
   return texture;
+}
+
+/**
+ * Detail tile textures each view keeps while several views are open (two
+ * compared worlds): half the budget of a single view, so comparing does
+ * not double the GPU memory of the tiles.
+ */
+const COMPARE_TILE_BUDGET = MAX_TEXTURES / 2;
+
+/** Views alive, which share the tile budget. */
+const liveViews = new Set<PlanetView>();
+
+function balanceTileBudgets(): void {
+  const budget = liveViews.size > 1 ? COMPARE_TILE_BUDGET : MAX_TEXTURES;
+  for (const view of liveViews) {
+    view.setTileBudget(budget);
+  }
 }
 
 export class PlanetView {
@@ -290,6 +347,11 @@ export class PlanetView {
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
   /**
+   * The world whose layers of format version 2 are not uploaded yet (with
+   * the factor that fits them to the GPU), until a layer needs them.
+   */
+  private pendingExtra: { packed: Uint16Array; width: number; height: number; factor: number } | null = null;
+  /**
    * Rendering on demand: a frame is requested when something changed (a
    * setter, the camera, a loaded tile, a resize), and frames keep coming
    * only while the camera's damping or the morph animation runs.
@@ -298,6 +360,8 @@ export class PlanetView {
   private dirty = true;
   private readonly lastPosition = new Vector3();
   private readonly lastQuaternion = new Quaternion();
+  /** When the camera or the morph last moved (see pixelRatio). */
+  private lastMotion = -Infinity;
   /** Counts setTexture calls: only the latest one may set the map. */
   private textureRequest = 0;
   private disposed = false;
@@ -305,9 +369,20 @@ export class PlanetView {
   /** Whether the world has an atmosphere to draw. */
   private hasSky = true;
   private cloudRequest = 0;
-  /** Whether the world has a cloud layer, and whether it is shown. */
+  /** The cloud layer of the world, and its download once started. */
+  private cloudSource: {
+    url: string;
+    tint: [number, number, number];
+    signal: AbortSignal | undefined;
+    request: number;
+    loading: Promise<void> | null;
+  } | null = null;
+  /**
+   * Whether the cloud layer is uploaded, and whether it is shown (hidden
+   * until told otherwise, so a world shown without clouds never loads it).
+   */
   private hasClouds = false;
-  private cloudsOn = true;
+  private cloudsOn = false;
   /** Whether the cloud layer drifts, the last drift update, and its redraw timer. */
   private cloudsDrifting = false;
   private cloudDriftAt: number | null = null;
@@ -334,11 +409,37 @@ export class PlanetView {
   };
   private mode: ViewMode = 'globe';
   private morph = 1;
-  private animation: { from: number; to: number; start: number } | null = null;
+  /**
+   * The morph between globe and map under way. While `follow` holds, the
+   * camera follows the point at the centre of the screen as it moves from
+   * `centreFrom` to `centreTo`, from `altitude` above the globe to
+   * `mapHeight` above the map (see viewTransfer.ts).
+   */
+  private animation: {
+    from: number;
+    to: number;
+    start: number;
+    follow: boolean;
+    centreFrom: LonLat;
+    centreTo: LonLat;
+    altitude: number;
+    mapHeight: number;
+  } | null = null;
+  /** Distance from the camera to the point it follows during the morph. */
+  private morphDistance = 0;
   private pointerDown: Vector2 | null = null;
-  /** Last pointer position over the canvas, hovered on the next frame. */
-  private hoverAt: Vector2 | null = null;
+  /** Last pointer position over the canvas, hovered on the next frame (when `hovering`). */
+  private readonly hoverAt = new Vector2();
+  private hovering = false;
   private hoverPending = false;
+  /** Scratch objects of picking, reused by every hover. */
+  private readonly raycaster = new Raycaster();
+  private readonly ndc = new Vector2();
+  private readonly ray: { origin: [number, number, number]; direction: [number, number, number] } = {
+    origin: [0, 0, 0],
+    direction: [0, 0, 0],
+  };
+  private readonly turn = new Quaternion();
   /** Whether the user is steering this view (pointer over it): only then it reports its camera. */
   private steering = false;
   private applyingCamera = false;
@@ -365,7 +466,7 @@ export class PlanetView {
   constructor(private readonly canvas: HTMLCanvasElement) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
     this.renderer = new WebGLRenderer({ canvas, antialias: true, stencil: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio));
     this.scene.background = new Color('#05070d');
 
     this.surface = new Mesh(
@@ -505,6 +606,18 @@ export class PlanetView {
     this.resizeObserver.observe(canvas);
     this.resize();
     this.requestRender();
+    liveViews.add(this);
+    balanceTileBudgets();
+  }
+
+  /**
+   * Sets how many detail tile textures this view keeps on the GPU. Views
+   * set it themselves: MAX_TEXTURES alone, half as many each while two are
+   * open.
+   */
+  setTileBudget(count: number): void {
+    this.tiles.setTextureBudget(count);
+    this.requestRender();
   }
 
   /** Draws the scene on the next frame. */
@@ -522,37 +635,62 @@ export class PlanetView {
 
   /**
    * Shows a cloud cover layer (8-bit `clouds.png`) tinted by `tint` (linear
-   * RGB), or none with a null url. Like the base map, only the latest call
-   * takes effect.
+   * RGB), or none with a null url. The layer is downloaded and decoded only
+   * while clouds are shown (see setCloudsVisible): the promise resolves at
+   * once while they are hidden. Aborting `signal` drops the load, also one
+   * started later by setCloudsVisible. Like the base map, only the latest
+   * call takes effect.
    */
-  async setClouds(url: string | null, tint: [number, number, number], signal?: AbortSignal): Promise<void> {
+  setClouds(url: string | null, tint: [number, number, number], signal?: AbortSignal): Promise<void> {
     this.cloudRequest += 1;
-    const request = this.cloudRequest;
-    if (!url) {
-      this.hasClouds = false;
-      this.requestRender();
-      return;
-    }
-    const bitmap = await this.decodeImage(url, signal);
-    if (this.disposed || request !== this.cloudRequest || signal?.aborted) {
-      bitmap.close();
-      signal?.throwIfAborted();
-      return;
-    }
-    const texture = new Texture(bitmap);
-    texture.flipY = false;
-    texture.wrapS = RepeatWrapping;
-    texture.needsUpdate = true;
+    // The previous world's clouds would not match the new map.
     this.disposeClouds();
-    this.u.uClouds.value = texture;
-    this.u.uCloudTint.value.set(...tint);
-    this.hasClouds = true;
+    this.hasClouds = false;
     this.requestRender();
+    this.cloudSource = url ? { url, tint, signal, request: this.cloudRequest, loading: null } : null;
+    return this.cloudsOn ? this.loadClouds() : Promise.resolve();
   }
 
+  /**
+   * Downloads and uploads the cloud layer of the current source, once:
+   * every caller gets the same promise. A failed load can be tried again.
+   */
+  private loadClouds(): Promise<void> {
+    const source = this.cloudSource;
+    if (!source) {
+      return Promise.resolve();
+    }
+    source.loading ??= (async () => {
+      try {
+        const image = await loadGrey8(source.url, this.renderer.capabilities.maxTextureSize, source.signal);
+        if (this.disposed || source.request !== this.cloudRequest) {
+          return;
+        }
+        this.disposeClouds();
+        this.u.uClouds.value = cloudTexture(image);
+        this.u.uCloudTint.value.set(...source.tint);
+        this.hasClouds = true;
+        this.requestRender();
+      } catch (error) {
+        source.loading = null;
+        throw error;
+      }
+    })();
+    return source.loading;
+  }
+
+  /** Shows or hides the cloud layer; the first time it shows, it is downloaded. */
   setCloudsVisible(visible: boolean): void {
     this.requestRender();
     this.cloudsOn = visible;
+    const source = this.cloudSource;
+    if (visible && source && !source.loading) {
+      this.loadClouds().catch((e: unknown) => {
+        if (!source.signal?.aborted) {
+          console.warn('Could not load the clouds', e);
+        }
+      });
+    }
   }
 
   /** Lets the cloud layer drift slowly eastwards around the planet, or stops it where it is. */
@@ -586,14 +724,9 @@ export class PlanetView {
     }
   }
 
-  /** Frees the cloud texture and its decoded image. */
+  /** Frees the cloud texture. */
   private disposeClouds(): void {
-    const texture = this.u.uClouds.value;
-    const image = texture.image as unknown;
-    texture.dispose();
-    if (image instanceof ImageBitmap) {
-      image.close();
-    }
+    this.u.uClouds.value.dispose();
     this.u.uClouds.value = emptyTexture();
   }
 
@@ -643,13 +776,15 @@ export class PlanetView {
     texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     texture.needsUpdate = true;
+    // The bitmap is closed once uploaded: only the GPU copy stays.
+    releaseOnUpload(texture);
     this.disposeTexture();
     this.texture = texture;
     this.u.uMap.value = texture;
     this.requestRender();
   }
 
-  /** Frees the GPU copy and the decoded image of the base map. */
+  /** Frees the GPU copy of the base map, and its decoded image if it was never uploaded. */
   private disposeTexture(): void {
     if (this.texture) {
       this.texture.dispose();
@@ -670,6 +805,7 @@ export class PlanetView {
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
     this.u.uExtra.value = emptyTexture();
+    this.pendingExtra = null;
     this.u.uBiomes.value = emptyTexture();
     this.u.uHasExtra.value = 0;
     this.u.uHasBiomes.value = 0;
@@ -693,16 +829,21 @@ export class PlanetView {
     biomes.wrapT = ClampToEdgeWrapping;
     biomes.generateMipmaps = false;
     biomes.needsUpdate = true;
+    releaseOnUpload(biomes, factor > 1);
     this.u.uBiomes.value = biomes;
     this.u.uHasBiomes.value = 1;
+    // The layers of format version 2 are uploaded on first use: most views
+    // never show them, and they take as much GPU memory as uData.
+    this.pendingExtra = layers.extra
+      ? { packed: layers.extra.packed, width: layers.width, height: layers.height, factor }
+      : null;
     if (layers.extra) {
-      const packed = fit(layers.extra.packed, 4);
-      this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height);
       this.u.uHasExtra.value = 1;
       this.u.uCoastMax.value = layers.extra.coastMaxKm;
     }
+    this.uploadExtraIfShown();
     const surface = fit(layers.surface, 4);
-    const texture = halfFloatTexture(surface.data, surface.width, surface.height);
+    const texture = halfFloatTexture(surface.data, surface.width, surface.height, factor > 1);
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
     this.shared.uCoast.value = coast;
@@ -711,10 +852,24 @@ export class PlanetView {
     this.u.uMapSize.value.set(layers.width, layers.height);
   }
 
+  /** Uploads the layers of format version 2 when the layer shown needs them and they are not on the GPU yet. */
+  private uploadExtraIfShown(): void {
+    const pending = this.pendingExtra;
+    if (!pending || !EXTRA_LAYERS.has(this.layer)) {
+      return;
+    }
+    const packed = downsample(pending.packed, pending.width, pending.height, 4, pending.factor);
+    this.u.uExtra.value.dispose();
+    this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height, pending.factor > 1);
+    // Only the GPU copy is needed from now on.
+    this.pendingExtra = null;
+  }
+
   setLayer(layer: Layer): void {
     this.requestRender();
     this.u.uLayer.value = LAYER_IDS[layer];
     this.layer = layer;
+    this.uploadExtraIfShown();
     this.tiles.setEnabled(layer === 'biomes' && !this.hexOn);
   }
 
@@ -798,12 +953,80 @@ export class PlanetView {
     if (mode === this.mode) {
       return;
     }
+    // The place at the centre of the screen stays there, at an equivalent
+    // zoom: the camera follows it through the morph.
+    const centre = this.viewCentre();
+    const relief = this.shared.uRelief.value * RELIEF_SCALE;
+    let altitude: number;
+    let mapHeight: number;
+    if (this.mode === 'globe') {
+      altitude = this.altitude();
+      mapHeight = Math.min(MAP_MAX_DISTANCE, Math.max(MAP_MIN_DISTANCE, mapHeightForAltitude(altitude)));
+    } else {
+      mapHeight = this.altitude();
+      altitude = Math.min(GLOBE_MAX_DISTANCE - 1, Math.max(MIN_ALTITUDE + relief, altitudeForMapHeight(mapHeight)));
+    }
+    let centreTo = centre;
+    if (mode === 'map') {
+      // Zoomed out, the map stays in view rather than half off screen.
+      const halfHeight = (mapHeight * Math.tan((this.camera.fov * Math.PI) / 360)) / this.camera.zoom;
+      const [x, y] = mapPoint(centre);
+      const [cx, cy] = clampMapCentre(x, y, halfHeight * this.camera.aspect, halfHeight);
+      centreTo = planeToLonLat(cx, cy) ?? centre;
+    }
     this.mode = mode;
-    this.animation = { from: this.morph, to: mode === 'globe' ? 1 : 0, start: performance.now() };
-    this.controls.target.set(0, 0, 0);
-    this.camera.position.set(0, 0, mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
-    this.camera.up.set(0, 1, 0);
+    this.animation = {
+      from: this.morph,
+      to: mode === 'globe' ? 1 : 0,
+      start: performance.now(),
+      follow: true,
+      centreFrom: centre,
+      centreTo,
+      altitude,
+      mapHeight,
+    };
     this.applyModeControls();
+  }
+
+  /** Longitude and latitude at the centre of the screen (the closest point of the map when off it). */
+  private viewCentre(): LonLat {
+    this.ndc.set(0, 0);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const origin = this.raycaster.ray.origin.toArray();
+    const direction = this.raycaster.ray.direction.toArray();
+    if (this.mode === 'globe') {
+      const t = raySphere(origin, direction, 1);
+      const hit = t === null ? this.camera.position : new Vector3(...origin).addScaledVector(new Vector3(...direction), t);
+      return sphereToLonLat(hit.toArray());
+    }
+    const t = rayPlaneZ0(origin, direction) ?? 0;
+    const x = Math.min(Math.PI, Math.max(-Math.PI, origin[0] + direction[0] * t));
+    const y = Math.min(Math.PI / 2, Math.max(-Math.PI / 2, origin[1] + direction[1] * t));
+    return planeToLonLat(x, y) ?? { lon: 0, lat: 0 };
+  }
+
+  /**
+   * Places the camera for the morph under way at `progress` (0 to 1) of the
+   * way, or at its end in the controls' own terms (the globe orbits its
+   * centre, the map pans with a target on the plane).
+   */
+  private followMorph(progress: number): void {
+    const animation = this.animation!;
+    // Not quite at the poles, where "north up" has no direction.
+    const centre = lerpLonLat(animation.centreFrom, animation.centreTo, progress);
+    centre.lat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, centre.lat));
+    const { target, position } = morphCamera(centre, animation.mapHeight, animation.altitude, this.morph);
+    this.camera.position.set(...position);
+    this.camera.up.set(0, 1, 0);
+    if (progress < 1) {
+      this.controls.target.set(...target);
+      this.morphDistance = this.camera.position.distanceTo(this.controls.target);
+    } else if (this.mode === 'globe') {
+      this.controls.target.set(0, 0, 0);
+    } else {
+      this.controls.target.set(target[0], target[1], 0);
+    }
+    this.camera.lookAt(this.controls.target);
   }
 
   setGraticule(visible: boolean): void {
@@ -861,6 +1084,9 @@ export class PlanetView {
   /** Back to the starting view of the current mode: whole planet, north up. */
   resetView(): void {
     this.requestRender();
+    if (this.animation) {
+      this.animation.follow = false;
+    }
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, 0, this.mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
     this.camera.up.set(0, 1, 0);
@@ -905,6 +1131,8 @@ export class PlanetView {
 
   dispose(): void {
     this.disposed = true;
+    liveViews.delete(this);
+    balanceTileBudgets();
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
       this.frame = null;
@@ -947,8 +1175,8 @@ export class PlanetView {
     this.controls.enableZoom = !globe;
     this.controls.zoomToCursor = !globe;
     this.controls.screenSpacePanning = true;
-    this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : 0.002;
-    this.controls.maxDistance = globe ? 8 : 12;
+    this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : MAP_MIN_DISTANCE;
+    this.controls.maxDistance = globe ? GLOBE_MAX_DISTANCE : MAP_MAX_DISTANCE;
     this.controls.mouseButtons = globe
       ? { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
       : { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
@@ -979,10 +1207,17 @@ export class PlanetView {
     if (!this.shown) {
       return;
     }
+    // While the camera follows the morph, it is placed here: the controls
+    // (whose distance limits are those of the mode reached) wait for the end.
+    let following = false;
     if (this.animation) {
       const t = Math.min(1, (now - this.animation.start) / MORPH_MS);
       const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
       this.morph = this.animation.from + (this.animation.to - this.animation.from) * eased;
+      if (this.animation.follow) {
+        this.followMorph(t === 1 ? 1 : eased);
+        following = t < 1;
+      }
       if (t === 1) {
         this.animation = null;
       }
@@ -996,7 +1231,9 @@ export class PlanetView {
     // continue until it has settled. OrbitControls' own change threshold is
     // too coarse near the surface, where its residue would show as a jump at
     // the next interaction: compare the camera itself.
-    this.controls.update();
+    if (!following) {
+      this.controls.update();
+    }
     const moving =
       this.lastPosition.distanceToSquared(this.camera.position) > 1e-16 ||
       1 - Math.abs(this.lastQuaternion.dot(this.camera.quaternion)) > 1e-14;
@@ -1005,15 +1242,27 @@ export class PlanetView {
     if (moving) {
       this.dirty = true;
     }
+    // A lower resolution while the view moves; the frame after it settles
+    // is drawn at full resolution again.
+    if (moving || this.animation) {
+      this.lastMotion = now;
+    }
+    const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion);
+    const settling = ratio < fullPixelRatio(window.devicePixelRatio);
+    if (ratio !== this.renderer.getPixelRatio()) {
+      // Resizes the drawing buffer (not the canvas box): redraw it now.
+      this.renderer.setPixelRatio(ratio);
+      this.dirty = true;
+    }
     if (this.dirty) {
       this.dirty = false;
       this.draw();
     }
     if (this.hoverPending) {
       this.hoverPending = false;
-      this.onHover(this.hoverAt ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
+      this.onHover(this.hovering ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
     }
-    if (moving || this.animation) {
+    if (moving || this.animation || settling) {
       this.schedule();
     }
   };
@@ -1037,13 +1286,18 @@ export class PlanetView {
     this.camera.updateProjectionMatrix();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
     if (!this.animation) {
-      this.tiles.update(this.camera, this.morph, this.renderer.domElement.height);
+      // Tiles are picked for the full resolution, whatever the frame's:
+      // moving would otherwise swap them for coarser ones and back.
+      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio));
     }
     this.renderer.render(this.scene, this.camera);
   }
 
   /** Height of the camera above the surface (globe) or the map plane. */
   private altitude(): number {
+    if (this.animation?.follow) {
+      return this.morphDistance;
+    }
     return this.mode === 'globe'
       ? this.camera.position.length() - 1
       : Math.abs(this.camera.position.z);
@@ -1077,7 +1331,7 @@ export class PlanetView {
       if (!now) {
         break;
       }
-      this.camera.position.applyQuaternion(new Quaternion().setFromUnitVectors(now, anchor));
+      this.camera.position.applyQuaternion(this.turn.setFromUnitVectors(now, anchor));
       this.camera.lookAt(0, 0, 0);
       this.camera.updateMatrixWorld();
     }
@@ -1103,7 +1357,7 @@ export class PlanetView {
 
   private readonly handlePointerLeave = (): void => {
     this.steering = false;
-    this.hoverAt = null;
+    this.hovering = false;
     this.hoverPending = true;
     this.schedule();
   };
@@ -1111,7 +1365,8 @@ export class PlanetView {
   private readonly handlePointerMove = (event: PointerEvent): void => {
     this.steering = true;
     // While dragging, the point under the pointer is meaningless.
-    this.hoverAt = event.buttons === 0 ? new Vector2(event.clientX, event.clientY) : null;
+    this.hovering = event.buttons === 0;
+    this.hoverAt.set(event.clientX, event.clientY);
     this.hoverPending = true;
     this.schedule();
   };
@@ -1125,16 +1380,18 @@ export class PlanetView {
     return this.mode === 'globe' ? this.pickGlobe(origin, direction) : this.pickMap(origin, direction);
   }
 
-  /** Ray from the camera through a point of the canvas, in world space. */
+  /**
+   * Ray from the camera through a point of the canvas, in world space. The
+   * arrays returned are reused by the next call: hovering calls it every
+   * frame the pointer moves.
+   */
   private rayAt(clientX: number, clientY: number): { origin: Vec3; direction: Vec3 } {
     const rect = this.canvas.getBoundingClientRect();
-    const ndc = new Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    const raycaster = new Raycaster();
-    raycaster.setFromCamera(ndc, this.camera);
-    return { origin: raycaster.ray.origin.toArray(), direction: raycaster.ray.direction.toArray() };
+    this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    this.raycaster.ray.origin.toArray(this.ray.origin);
+    this.raycaster.ray.direction.toArray(this.ray.direction);
+    return this.ray;
   }
 
   /** Unit-sphere point under a point of the canvas, or null off the globe. */

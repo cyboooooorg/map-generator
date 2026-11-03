@@ -2,7 +2,7 @@ import { encode } from 'fast-png';
 import { DataUtils } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
-import { decodeLayers, EXTRA, halfAt, quantizedAt, SURFACE } from './decode';
+import { decodeGrey8, decodeLayers, EXTRA, halfAt, quantizedAt, SURFACE } from './decode';
 
 const width = 2;
 const height = 1;
@@ -131,5 +131,28 @@ describe('decodeLayers', () => {
       biomes: png8([0, 0]),
     };
     expect(() => decodeLayers(meta, files)).toThrow(/expected 1 of 16/);
+  });
+});
+
+describe('decodeGrey8', () => {
+  it('keeps one byte per pixel, row 0 first', () => {
+    const image = decodeGrey8(png8([10, 200]), 4096);
+    expect(image).toEqual({ data: Uint8Array.from([10, 200]), width: 2, height: 1 });
+    expect(image.data.buffer.byteLength).toBe(2);
+  });
+
+  it('keeps the first channel of a colour image', () => {
+    const rgb = encode({ width: 2, height: 1, channels: 3, depth: 8, data: Uint8Array.from([1, 2, 3, 4, 5, 6]) });
+    expect(Array.from(decodeGrey8(rgb.slice().buffer, 4096).data)).toEqual([1, 4]);
+  });
+
+  it('shrinks images larger than the GPU allows', () => {
+    const image = decodeGrey8(png8([10, 200]), 1);
+    expect(image.width).toBe(1);
+    expect(image.height).toBe(1);
+  });
+
+  it('refuses 16-bit images', () => {
+    expect(() => decodeGrey8(png16([0, 1]), 4096)).toThrow(/16-bit/);
   });
 });

@@ -114,7 +114,7 @@ export const surfaceFragment = /* glsl */ `
   uniform float uTropics;      // 1 draws the equator, tropics and polar circles
   uniform float uTilt;         // axial tilt, degrees
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
-  uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
+  uniform sampler2D uClouds;   // cloud cover in r, row 0 = north (sampled at 1 - v)
   uniform vec3 uCloudTint;     // linear colour of the clouds
   uniform float uCloudShift;   // eastward drift of the cloud layer, in turns
   varying vec2 vUv;
@@ -258,12 +258,15 @@ export const surfaceFragment = /* glsl */ `
     bool hasData = uHasData > 0.5;
     bool water = hasData && uLiquidSea > 0.5 && aboveCoast < 0.0;
 
+    // The surface colours (detail tile or base map), sampled once: they are
+    // the biome layer, and tell lava and magma apart on every layer (below).
+    // Detail tiles are drawn on the biome layer only.
+    vec3 surface = uTileOn > 0.5
+      ? texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb
+      : texture2D(uMap, vUv).rgb;
     vec3 colour;
-    if (uTileOn > 0.5) {
-      // Detail tiles are drawn on the biome layer only.
-      colour = texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb;
-    } else if (uLayer == 0 || !hasData) {
-      colour = texture2D(uMap, vUv).rgb;
+    if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
+      colour = surface;
     } else if (uLayer == 1) {
       colour = toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));
     } else if (uLayer == 2) {
@@ -273,7 +276,7 @@ export const surfaceFragment = /* glsl */ `
     } else if (uLayer == 4) {
       colour = toLinear(ramp_flow(data.a / 7.0));
     } else if (uHasExtra < 0.5) {
-      colour = texture2D(uMap, vUv).rgb;
+      colour = surface;
     } else {
       vec4 extra = texture2D(uExtra, vec2(vUv.x, 1.0 - vUv.y));
       if (uLayer == 5) {
@@ -300,20 +303,25 @@ export const surfaceFragment = /* glsl */ `
     // one screen pixel wide wherever the elevation crosses a level, so it
     // stays sharp at every zoom (the elevation is the base layer,
     // interpolated).
-    // fwidth is taken everywhere, outside the branch, as derivatives
-    // need every pixel of a quad.
-    float contour = contours(data.r);
-    if (uSeaContours > 0.5 && hasData && aboveCoast < 0.0) {
-      colour = mix(colour, CONTOUR_COLOUR, CONTOUR_OPACITY * contour);
+    // fwidth needs every pixel of a quad: it is taken in branches on
+    // uniforms only (the same for every pixel), never on the pixel's own
+    // depth or height, and skipped altogether when the lines are off.
+    if (uSeaContours > 0.5 && uHasData > 0.5) {
+      float contour = contours(data.r);
+      if (aboveCoast < 0.0) {
+        colour = mix(colour, CONTOUR_COLOUR, CONTOUR_OPACITY * contour);
+      }
     }
     // Altitude contours on land, from the coastline up: regular lines and,
     // every LAND_INDEX_EVERY of them, stronger index lines.
-    float landWidth = max(fwidth(aboveCoast), 1e-6);
-    float landLine = periodicLines(aboveCoast, LAND_STEP, landWidth);
-    float indexLine = periodicLines(aboveCoast, LAND_STEP * LAND_INDEX_EVERY, landWidth);
-    if (uLandContours > 0.5 && hasData && aboveCoast > 0.5 * LAND_STEP) {
-      float share = max(LAND_OPACITY * landLine, LAND_INDEX_OPACITY * indexLine);
-      colour = mix(colour, LAND_CONTOUR_COLOUR, share);
+    if (uLandContours > 0.5 && uHasData > 0.5) {
+      float landWidth = max(fwidth(aboveCoast), 1e-6);
+      float landLine = periodicLines(aboveCoast, LAND_STEP, landWidth);
+      float indexLine = periodicLines(aboveCoast, LAND_STEP * LAND_INDEX_EVERY, landWidth);
+      if (aboveCoast > 0.5 * LAND_STEP) {
+        float share = max(LAND_OPACITY * landLine, LAND_INDEX_OPACITY * indexLine);
+        colour = mix(colour, LAND_CONTOUR_COLOUR, share);
+      }
     }
 
     // Lava and magma glow on the night side (sun mode, biome map and detail
@@ -322,9 +330,6 @@ export const surfaceFragment = /* glsl */ `
     // comes close (deserts and rust have green above half their red).
     // Read from the surface colours whatever the layer shown, so the glint
     // stays off magma on every layer too.
-    vec3 surface = uTileOn > 0.5
-      ? texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb
-      : texture2D(uMap, vUv).rgb;
     float lava = (1.0 - smoothstep(0.12, 0.35, surface.g / max(surface.r, 1e-4))) * smoothstep(0.02, 0.1, surface.r);
     float glow = 0.0;
     if (uLightMode == 1 && uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
@@ -368,11 +373,11 @@ export const surfaceFragment = /* glsl */ `
     if (uCloudsOn > 0.0) {
       // Opacity of the cover: thin clouds are translucent veils, only
       // thick ones hide the ground.
-      vec2 cloudUv = vUv - vec2(uCloudShift, 0.0);
+      vec2 cloudUv = vec2(vUv.x - uCloudShift, 1.0 - vUv.y);
       cover = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv).r) * 0.85 * uCloudsOn;
       float lat = (vUv.y - 0.5) * PI;
       vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
-      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + towardsLight * 0.004 * uMorph).r) * uCloudsOn;
+      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + vec2(1.0, -1.0) * towardsLight * 0.004 * uMorph).r) * uCloudsOn;
       colour *= 1.0 - 0.45 * shadow;
     }
     colour *= shade;

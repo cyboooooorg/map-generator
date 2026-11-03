@@ -16,6 +16,7 @@ import { decode } from 'fast-png';
 import { DataUtils } from 'three';
 import type { ScalarLayerInfo } from '../api/types/ScalarLayerInfo';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
+import { downsample, fitFactor } from '../viewer/textures';
 
 /** A 16-bit layer as stored: pixel `p` is `min + data[p] × scale`. */
 export interface Quantized {
@@ -180,4 +181,34 @@ export function halfAt(packed: Uint16Array, i: number, channel: number): number 
 /** The value of a quantized layer at pixel `i`. */
 export function quantizedAt(layer: Quantized, i: number): number {
   return layer.min + (layer.data[i] ?? 0) * layer.scale;
+}
+
+/** A single-channel 8-bit image, row-major, row 0 = north. */
+export interface Grey8 {
+  data: Uint8Array;
+  width: number;
+  height: number;
+}
+
+/**
+ * Decodes an 8-bit grey PNG (such as `clouds.png`), shrunk to fit `maxSize`
+ * pixels per side. Only the first channel of an image with more is kept.
+ */
+export function decodeGrey8(file: ArrayBuffer, maxSize: number): Grey8 {
+  const png = decode(file);
+  if (png.depth !== 8) {
+    throw new Error(`image has ${png.depth}-bit channels, expected 8`);
+  }
+  const pixels = png.data as Uint8Array;
+  let grey: Uint8Array;
+  if (png.channels === 1) {
+    grey = owned(pixels, (a) => a.slice());
+  } else {
+    grey = new Uint8Array(png.width * png.height);
+    for (let i = 0; i < grey.length; i += 1) {
+      grey[i] = pixels[i * png.channels]!;
+    }
+  }
+  const factor = fitFactor(png.width, png.height, maxSize);
+  return downsample(grey, png.width, png.height, 1, factor);
 }

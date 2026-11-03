@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest';
+import { fullPixelRatio, MAX_PIXEL_RATIO, MOVING_PIXEL_RATIO, pixelRatio, SETTLE_MS } from './pixelRatio';
+
+describe('pixelRatio', () => {
+  it('caps the settled ratio', () => {
+    expect(fullPixelRatio(3)).toBe(MAX_PIXEL_RATIO);
+    expect(fullPixelRatio(1.5)).toBe(1.5);
+    expect(pixelRatio(3, Infinity)).toBe(MAX_PIXEL_RATIO);
+    expect(pixelRatio(1, SETTLE_MS)).toBe(1);
+  });
+
+  it('lowers the ratio while the view moves and shortly after', () => {
+    expect(pixelRatio(2, 0)).toBe(MOVING_PIXEL_RATIO);
+    expect(pixelRatio(3, SETTLE_MS - 1)).toBe(MOVING_PIXEL_RATIO);
+    expect(pixelRatio(2, SETTLE_MS)).toBe(2);
+  });
+
+  it('never raises a low device ratio', () => {
+    expect(pixelRatio(1, 0)).toBe(1);
+    expect(pixelRatio(0.8, 0)).toBe(0.8);
+  });
+});

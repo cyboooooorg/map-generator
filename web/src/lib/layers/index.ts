@@ -1,11 +1,12 @@
-// Loads the decoded layers of a world through a Web Worker.
+// Loads the decoded layers of a world through Web Workers.
 import type { WorldMetadata } from '../api/types/WorldMetadata';
 import { worldFile } from '../api/client';
 import type { WorldStats } from '../stats';
-import type { WorldLayers } from './decode';
+import type { Grey8, WorldLayers } from './decode';
+import type { GreyRequest, GreyResponse } from './greyWorker';
 import type { WorkerRequest, WorkerResponse } from './worker';
 
-export type { WorldLayers } from './decode';
+export type { Grey8, WorldLayers } from './decode';
 
 /** A world's decoded layers and the biome statistics computed from them. */
 export interface DecodedWorld {
@@ -13,18 +14,19 @@ export interface DecodedWorld {
   stats: WorldStats;
 }
 
+type Answer<Response> = Extract<Response, { ok: true }>;
+
 /**
- * Fetches and decodes the layers of a world, and computes its biome
- * statistics, in a Web Worker. Aborting
- * `signal` terminates the worker (its downloads and decoding stop) and
- * rejects with the abort reason.
+ * Posts one request to a worker and resolves with its answer, terminating
+ * the worker afterwards. Aborting `signal` terminates it at once (its
+ * downloads and decoding stop) and rejects with the abort reason.
  */
-export function loadLayers(id: string, meta: WorldMetadata, signal?: AbortSignal): Promise<DecodedWorld> {
-  if (signal?.aborted) {
-    return Promise.reject(signal.reason as Error);
-  }
-  const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-  return new Promise<DecodedWorld>((resolve, reject) => {
+function runOnce<Request, Response extends { ok: true } | { ok: false; error: string }>(
+  worker: Worker,
+  request: Request,
+  signal?: AbortSignal,
+): Promise<Answer<Response>> {
+  return new Promise<Answer<Response>>((resolve, reject) => {
     const finish = () => {
       worker.terminate();
       signal?.removeEventListener('abort', abort);
@@ -34,19 +36,44 @@ export function loadLayers(id: string, meta: WorldMetadata, signal?: AbortSignal
       reject(signal?.reason as Error);
     };
     signal?.addEventListener('abort', abort, { once: true });
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+    worker.onmessage = (event: MessageEvent<Response>) => {
       finish();
-      if (event.data.ok) {
-        resolve({ layers: event.data.layers, stats: event.data.stats });
+      const data = event.data;
+      if (data.ok) {
+        resolve(data as Answer<Response>);
       } else {
-        reject(new Error(event.data.error));
+        reject(new Error((data as { error: string }).error));
       }
     };
     worker.onerror = (event) => {
       finish();
       reject(new Error(event.message));
     };
-    const request: WorkerRequest = { base: worldFile(id, 'raw_data/'), meta };
     worker.postMessage(request);
   });
+}
+
+/**
+ * Fetches and decodes the layers of a world, and computes its biome
+ * statistics, in a Web Worker. Aborting `signal` terminates the worker
+ * (its downloads and decoding stop) and rejects with the abort reason.
+ */
+export async function loadLayers(id: string, meta: WorldMetadata, signal?: AbortSignal): Promise<DecodedWorld> {
+  signal?.throwIfAborted();
+  const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+  const request: WorkerRequest = { base: worldFile(id, 'raw_data/'), meta };
+  const { layers, stats } = await runOnce<WorkerRequest, WorkerResponse>(worker, request, signal);
+  return { layers, stats };
+}
+
+/**
+ * Fetches and decodes an 8-bit grey image (such as `clouds.png`) in a Web
+ * Worker, one byte per pixel, shrunk to fit `maxSize` pixels per side.
+ * Aborting `signal` terminates the worker and rejects with the abort reason.
+ */
+export async function loadGrey8(url: string, maxSize: number, signal?: AbortSignal): Promise<Grey8> {
+  signal?.throwIfAborted();
+  const worker = new Worker(new URL('./greyWorker.ts', import.meta.url), { type: 'module' });
+  const { image } = await runOnce<GreyRequest, GreyResponse>(worker, { url, maxSize }, signal);
+  return image;
 }
