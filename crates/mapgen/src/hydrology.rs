@@ -66,8 +66,16 @@ impl Hydrology {
         (j != NO_RECEIVER).then_some(j as usize)
     }
 
-    /// The flow and the lakes, dropping the routing layers once rivers
-    /// are traced and carved.
+    /// Frees the routing layers (`receivers` and `river`) once the rivers
+    /// are traced: afterwards [`Hydrology::receiver`] must not be called and
+    /// `river` is empty.
+    pub fn release_routing(&mut self) {
+        self.receivers = Vec::new();
+        self.river = Vec::new();
+    }
+
+    /// The flow and the lakes, dropping the rest once rivers are traced and
+    /// carved.
     pub fn into_flow_and_lakes(self) -> (Vec<f32>, Vec<bool>) {
         (self.flow_km2, self.lake)
     }

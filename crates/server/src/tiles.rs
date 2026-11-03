@@ -215,7 +215,7 @@ mod tests {
                 noise_maps: false,
             };
             export_world(
-                &generate(&params),
+                generate(&params),
                 &root.join(format!("{planet}-{seed}")),
                 options,
             )
