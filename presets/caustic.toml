@@ -3,6 +3,10 @@
 name = "caustic"
 description = "Acid world: corrosive atmosphere, toxic wetlands"
 
+[locales.fr]
+name = "Caustique"
+description = "Monde acide : atmosphère corrosive, marais toxiques"
+
 [climate]
 temperature = 4.5
 moisture = 0.55

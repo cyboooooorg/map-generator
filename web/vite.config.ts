@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
@@ -13,6 +14,10 @@ export default defineConfig({
       '/worlds': server,
       '/healthz': server,
     },
+  },
+  test: {
+    // English for every test, whatever the machine's language.
+    setupFiles: ['src/test-setup.ts'],
   },
   build: {
     // three.js alone is ~700 kB: one chunk is fine for a local tool.

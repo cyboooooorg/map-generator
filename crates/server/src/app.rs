@@ -26,8 +26,8 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, CreateQuery, FormSpec, HexRequest, JobCreated, JobInfo, JobStatus, ParamSpec,
-    PresetInfo, WorldSummary,
+    ApiError, CreateQuery, ErrorDetail, FormSpec, HexRequest, JobCreated, JobInfo, JobStatus,
+    ParamSpec, PresetInfo, WorldSummary,
 };
 use crate::catalog::Catalog;
 use crate::memory;
@@ -153,7 +153,23 @@ pub struct Failure(StatusCode, String);
 
 impl IntoResponse for Failure {
     fn into_response(self) -> Response {
-        (self.0, Json(ApiError { error: self.1 })).into_response()
+        Rejection(self, None).into_response()
+    }
+}
+
+/// A [`Failure`] with the machine-readable reason clients translate.
+pub struct Rejection(Failure, Option<ErrorDetail>);
+
+impl From<Failure> for Rejection {
+    fn from(failure: Failure) -> Self {
+        Self(failure, None)
+    }
+}
+
+impl IntoResponse for Rejection {
+    fn into_response(self) -> Response {
+        let Rejection(Failure(status, error), detail) = self;
+        (status, Json(ApiError { error, detail })).into_response()
     }
 }
 
@@ -166,6 +182,7 @@ fn world_failure(error: TileError, what: &str) -> Response {
             [(header::RETRY_AFTER, RETRY_AFTER_S)],
             Json(ApiError {
                 error: format!("a generation is running: {what} are paused, retry when it ends"),
+                detail: Some(ErrorDetail::Busy),
             }),
         )
             .into_response(),
@@ -465,22 +482,37 @@ async fn create_world(
     State(state): State<Shared>,
     Query(query): Query<CreateQuery>,
     Json(request): Json<WorldRequest>,
-) -> Result<(StatusCode, Json<JobCreated>), Failure> {
+) -> Result<(StatusCode, Json<JobCreated>), Rejection> {
     let replace = query.replace.unwrap_or(false);
     let original = request.clone();
     let bad = |msg: String| Failure(StatusCode::BAD_REQUEST, msg);
+    let rejected = |msg: String, detail: ErrorDetail| {
+        Rejection(Failure(StatusCode::BAD_REQUEST, msg), Some(detail))
+    };
     for (field, value) in [("width", request.width), ("height", request.height)] {
-        if value.is_some_and(|v| v > MAX_SIZE) {
-            return Err(bad(format!("{field} must be at most {MAX_SIZE}")));
+        if let Some(value) = value.filter(|&v| v > MAX_SIZE) {
+            return Err(rejected(
+                format!("{field} must be at most {MAX_SIZE}"),
+                ErrorDetail::SizeOutOfRange {
+                    field: field.to_owned(),
+                    value,
+                    min: mapgen::request::MAP_SIZE.0,
+                    max: MAX_SIZE,
+                },
+            ));
         }
     }
     // Only catalog presets: never a path chosen by the client.
     let preset = match &request.planet {
         Some(spec) => Some((
-            state
-                .catalog
-                .resolve(spec)
-                .ok_or_else(|| bad(format!("unknown planet preset {spec:?}")))?,
+            state.catalog.resolve(spec).ok_or_else(|| {
+                rejected(
+                    format!("unknown planet preset {spec:?}"),
+                    ErrorDetail::UnknownPreset {
+                        preset: spec.clone(),
+                    },
+                )
+            })?,
             spec.clone(),
         )),
         None => None,
@@ -496,35 +528,52 @@ async fn create_world(
     })
     .await
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .map_err(|e| bad(e.to_string()))?;
+    .map_err(|e| Rejection(bad(e.to_string()), ErrorDetail::of_request(&e)))?;
     let params = resolved.params;
     let pixels = params.width as u64 * params.height as u64;
     if pixels > state.config.max_pixels {
-        return Err(bad(format!(
-            "{} × {} needs about {:.1} GB of memory; this server accepts up to {} pixels \
-             (MAPGEN_MAX_PIXELS)",
-            params.width,
-            params.height,
-            (pixels * BYTES_PER_PIXEL) as f64 / 1e9,
-            state.config.max_pixels
-        )));
+        return Err(rejected(
+            format!(
+                "{} × {} needs about {:.1} GB of memory; this server accepts up to {} pixels \
+                 (MAPGEN_MAX_PIXELS)",
+                params.width,
+                params.height,
+                (pixels * BYTES_PER_PIXEL) as f64 / 1e9,
+                state.config.max_pixels
+            ),
+            ErrorDetail::TooManyPixels {
+                width: params.width,
+                height: params.height,
+                max_pixels: state.config.max_pixels,
+            },
+        ));
     }
 
     let world_id = world_dir_name(&params);
     {
         let mut pending = state.pending.lock().expect("pending lock");
         if pending.contains(&world_id) {
-            return Err(Failure(
-                StatusCode::CONFLICT,
-                format!("world {world_id} is being generated already"),
+            return Err(Rejection(
+                Failure(
+                    StatusCode::CONFLICT,
+                    format!("world {world_id} is being generated already"),
+                ),
+                Some(ErrorDetail::BeingGenerated {
+                    world: world_id.clone(),
+                }),
             ));
         }
         if !replace && state.config.worlds_dir.join(&world_id).exists() {
-            return Err(Failure(
-                StatusCode::CONFLICT,
-                format!(
-                    "world {world_id} already exists: replace it, delete it or pick another seed"
+            return Err(Rejection(
+                Failure(
+                    StatusCode::CONFLICT,
+                    format!(
+                        "world {world_id} already exists: replace it, delete it or pick another seed"
+                    ),
                 ),
+                Some(ErrorDetail::WorldExists {
+                    world: world_id.clone(),
+                }),
             ));
         }
         pending.push(world_id.clone());
@@ -837,6 +886,41 @@ mod tests {
         }
         let (status, _) = call(&app, "DELETE", "/api/worlds/..%2Fetc-1", None).await;
         assert!(status.is_client_error());
+    }
+
+    #[tokio::test]
+    async fn rejected_requests_carry_a_machine_readable_detail() {
+        let app = router(temp_config("detail"));
+        let detail = |body: &str| -> serde_json::Value {
+            serde_json::from_str::<serde_json::Value>(body).unwrap()["detail"].clone()
+        };
+        let (status, body) = call(&app, "POST", "/api/worlds", Some(r#"{"sea_level": 3.0}"#)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let out_of_range = detail(&body);
+        assert_eq!(out_of_range["code"], "out_of_range");
+        assert_eq!(out_of_range["field"], "sea_level");
+        assert!(out_of_range["min"].is_number() && out_of_range["max"].is_number());
+        let (_, body) = call(&app, "POST", "/api/worlds", Some(r#"{"width": 100000}"#)).await;
+        assert_eq!(detail(&body)["code"], "size_out_of_range");
+        let (_, body) = call(
+            &app,
+            "POST",
+            "/api/worlds",
+            Some(r#"{"planet": "nowhere"}"#),
+        )
+        .await;
+        assert_eq!(detail(&body)["code"], "unknown_preset");
+        let (_, body) = call(
+            &app,
+            "POST",
+            "/api/worlds",
+            Some(r#"{"sea_level": 0.1, "land_fraction": 0.3}"#),
+        )
+        .await;
+        assert_eq!(detail(&body)["code"], "sea_level_and_land_fraction");
+        // Errors without a detail send none.
+        let (_, body) = call(&app, "DELETE", "/api/worlds/..%2Fetc-1", None).await;
+        assert!(detail(&body).is_null());
     }
 
     #[tokio::test]

@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { ApiFailure } from '../lib/api/client';
+  import { errorText } from '../lib/i18n/errors';
   import { formatDuration } from '../lib/format';
-  import { jobs, STAGE_LABELS, type TrackedJob } from '../lib/jobs.svelte';
+  import { t } from '../lib/i18n/index.svelte';
+  import { jobs, type TrackedJob } from '../lib/jobs.svelte';
   import { toasts } from '../lib/toasts.svelte';
 
   interface Props {
@@ -25,14 +26,14 @@
     try {
       await jobs.cancel(job.jobId);
     } catch (e) {
-      toasts.error(e instanceof ApiFailure ? e.message : String(e));
+      toasts.error(errorText(e));
     }
   }
 </script>
 
 {#if jobs.list.length > 0}
-  <section aria-label="Generations">
-    <h2>Generations</h2>
+  <section aria-label={t.jobs.title}>
+    <h2>{t.jobs.title}</h2>
     <ul>
       {#each jobs.list as job (job.jobId)}
         {@const status = job.status}
@@ -41,38 +42,38 @@
             <strong>{job.worldId}</strong>
             {#if status.status === 'queued' || status.status === 'running'}
               <button class="small" onclick={() => cancel(job)} disabled={job.cancelling}>
-                {job.cancelling ? 'Cancelling…' : 'Cancel'}
+                {job.cancelling ? t.jobs.cancelling : t.jobs.cancel}
               </button>
             {:else if status.status === 'done'}
               <span class="buttons">
-                <button class="small" onclick={() => onOpen(status.world_id)}>Open</button>
-                <button class="small" onclick={() => jobs.dismiss(job.jobId)} aria-label="Dismiss">×</button>
+                <button class="small" onclick={() => onOpen(status.world_id)}>{t.jobs.open}</button>
+                <button class="small" onclick={() => jobs.dismiss(job.jobId)} aria-label={t.jobs.dismiss}>×</button>
               </span>
             {:else}
-              <button class="small" onclick={() => jobs.dismiss(job.jobId)} aria-label="Dismiss">×</button>
+              <button class="small" onclick={() => jobs.dismiss(job.jobId)} aria-label={t.jobs.dismiss}>×</button>
             {/if}
           </div>
           {#if status.status === 'queued'}
-            <small>Waiting for the generator…</small>
+            <small>{t.jobs.waiting}</small>
           {:else if status.status === 'running'}
             {@const left = jobs.remaining(job, now)}
             <progress max={status.steps} value={status.step - 1}></progress>
             <small>
               {[
-                `${STAGE_LABELS[status.stage]} (${status.step}/${status.steps})`,
+                t.jobs.stageStep({ stage: t.stages[status.stage], step: status.step, steps: status.steps }),
                 job.runStart !== null ? formatDuration((now - job.runStart) / 1000) : null,
-                left !== null ? `about ${formatDuration(left)} left` : null,
+                left !== null ? t.jobs.left({ time: formatDuration(left) }) : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}
             </small>
             {#if job.cancelling}
-              <small>The current stage finishes first.</small>
+              <small>{t.jobs.stageFirst}</small>
             {/if}
           {:else if status.status === 'done'}
-            <small>Ready · seed {job.worldId.slice(job.worldId.lastIndexOf('-') + 1)}</small>
+            <small>{t.jobs.ready({ seed: job.worldId.slice(job.worldId.lastIndexOf('-') + 1) })}</small>
           {:else if status.status === 'cancelled'}
-            <small>Cancelled</small>
+            <small>{t.jobs.cancelled}</small>
           {:else}
             <small class="error">{status.error}</small>
           {/if}

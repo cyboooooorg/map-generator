@@ -6,6 +6,9 @@
 //     x = cos(lat) sin(lon), y = sin(lat), z = cos(lat) cos(lon)
 // - Flat map: plane z = 0, 2π wide and π high, centred on the origin.
 
+import { formatNumber, withUnit } from './format';
+import { t } from './i18n/index.svelte';
+
 export interface LonLat {
   /** Longitude in radians, in [0, 2π). */
   lon: number;
@@ -86,9 +89,12 @@ export function formatLonLat({ lon, lat }: LonLat): string {
   if (lonDeg > 180) {
     lonDeg -= 360;
   }
-  const ns = latDeg >= 0 ? 'N' : 'S';
-  const ew = lonDeg >= 0 ? 'E' : 'W';
-  return `${Math.abs(latDeg).toFixed(1)}° ${ns}, ${Math.abs(lonDeg).toFixed(1)}° ${ew}`;
+  const ns = latDeg >= 0 ? t.geo.north : t.geo.south;
+  const ew = lonDeg >= 0 ? t.geo.east : t.geo.west;
+  return t.geo.point({
+    lat: withUnit(`${formatNumber(Math.abs(latDeg), 1)}°`, ns),
+    lon: withUnit(`${formatNumber(Math.abs(lonDeg), 1)}°`, ew),
+  });
 }
 
 /** Angle between two points seen from the planet centre, in radians. */

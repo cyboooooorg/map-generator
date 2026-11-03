@@ -1,6 +1,8 @@
 // Keyboard shortcuts of the viewer: which key does what, the help table, and
 // the small steps some of them take.
 
+import { t } from './i18n/index.svelte';
+
 /** What a shortcut does. */
 export type Shortcut =
   | { action: 'layer'; index: number }
@@ -83,27 +85,30 @@ export function altAllowed(key: string): boolean {
 }
 
 /** The help table: keys, and what they do. */
-export const SHORTCUT_HELP: readonly [string, string][] = [
-  ['G / M', 'Globe / flat map'],
-  [`1 – ${LAYER_KEYS}`, 'Layer'],
-  ['+ / −', 'More / less relief'],
-  ['[ / ]', 'Previous / next world of the list'],
-  ['R', 'Reset the view'],
-  ['H', 'Hexes'],
-  ['L', 'Sunlight'],
-  ['S', 'Play / pause the seasons (turns sunlight on)'],
-  ['A', 'Atmosphere'],
-  ['C', 'Clouds'],
-  ['W', 'Cloud drift (turns clouds on)'],
-  ['N', 'Grid'],
-  ['T', 'Tropics and polar circles'],
-  ['K', 'Depth contours (isobaths)'],
-  ['J', 'Elevation contours'],
-  ['D', 'Measure distances'],
-  ['P', 'Screenshot'],
-  ['Esc', 'Close this help or the point panel, stop measuring'],
-  ['?', 'This help'],
-];
+/** The shortcut help: keys and their action in the active locale. */
+export function shortcutHelp(): readonly [string, string][] {
+  return [
+    ['G / M', t.shortcuts.mode],
+    [`1 – ${LAYER_KEYS}`, t.shortcuts.layer],
+    ['+ / −', t.shortcuts.relief],
+    ['[ / ]', t.shortcuts.world],
+    ['R', t.shortcuts.reset],
+    ['H', t.shortcuts.hexes],
+    ['L', t.shortcuts.sunlight],
+    ['S', t.shortcuts.seasons],
+    ['A', t.shortcuts.atmosphere],
+    ['C', t.shortcuts.clouds],
+    ['W', t.shortcuts.drift],
+    ['N', t.shortcuts.grid],
+    ['T', t.shortcuts.tropics],
+    ['K', t.shortcuts.depthContours],
+    ['J', t.shortcuts.elevationContours],
+    ['D', t.shortcuts.measure],
+    ['P', t.shortcuts.screenshot],
+    ['Esc', t.shortcuts.escape],
+    ['?', t.shortcuts.help],
+  ];
+}
 
 /** Relief exaggeration change of one `+` or `-` press. */
 export const RELIEF_STEP = 0.1;

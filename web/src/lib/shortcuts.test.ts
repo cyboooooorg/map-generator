@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { altAllowed, shortcutFor, SHORTCUT_HELP, stepRelief, stepWorld } from './shortcuts';
+import { altAllowed, shortcutFor, shortcutHelp, stepRelief, stepWorld } from './shortcuts';
 
 describe('shortcutFor', () => {
   it('maps digits to layers and letters in either case', () => {
@@ -31,7 +31,7 @@ describe('shortcutFor', () => {
   });
 
   it('lists every key in the help', () => {
-    const keys = SHORTCUT_HELP.map(([key]) => key).join(' ');
+    const keys = shortcutHelp().map(([key]) => key).join(' ');
     for (const key of ['G', 'M', 'R', 'H', 'L', 'S', 'A', 'C', 'W', 'N', 'T', 'K', 'J', 'D', 'P', '?', '[', ']', '+']) {
       expect(keys).toContain(key);
     }
