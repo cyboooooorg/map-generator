@@ -16,9 +16,8 @@ axial_tilt = 2.6
 volcanic = [0.5, 0.9]
 erosion = 0.0
 
-# The dense atmosphere keeps the whole surface at about the same heat.
+# The dense atmosphere spreads its heat to the poles (see [atmosphere]).
 [climate]
-temperature = 27.0
 moisture = -0.9
 volcanic = 0.5
 
@@ -28,6 +27,7 @@ volcanic = 0.5
 rayleigh = [0.6, 0.5, 0.3]           # sky colour of the gas and its absorbers
 haze = 1.0
 haze_colour = [1.0, 0.88, 0.6]
+greenhouse = 450.0                 # °C: about 460 °C at the surface, like Venus
 clouds = "sulfuric"
 cloud_cover = 1.0
 

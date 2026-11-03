@@ -16,17 +16,19 @@ sea_level = [0.10, 0.30]
 circumference = 21300
 axial_tilt = 25.2
 volcanic = [0.0, 0.3]
+# No liquid water today (0.006 bar), but rivers carved its valleys once.
+erosion = 1.0
 
 [climate]
-temperature = -3.6
+temperature = -60.0                # °C: about −60 °C on average, like Mars
 moisture = -0.7
 
 # Any BiomeRules field; the others keep their default. Ice only near the
 # poles (down to about 65 degrees): too dry for snow on lower mountains.
 [rules]
-polar = -13.5
-sea_ice_temperature = -13.5
-highland_snow_temperature = -13.5
+polar = -70.0
+sea_ice_temperature = -70.0
+highland_snow_temperature = -70.0
 snow_line = 0.6
 
 # Thin CO2 laden with fine dust: a butterscotch sky (with blue sunsets),

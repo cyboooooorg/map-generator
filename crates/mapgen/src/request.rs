@@ -225,9 +225,17 @@ impl WorldRequest {
             fallback::CIRCUMFERENCE_KM,
         );
         let axial_tilt_deg = pick(self.axial_tilt_deg, d.axial_tilt, fallback::AXIAL_TILT_DEG);
+        let erosion_set = self.erosion.is_some() || d.erosion.is_some();
         let erosion = pick(self.erosion, d.erosion, fallback::EROSION);
         // Drawn after the others, so their draws do not change.
         let pressure_bar = pick(self.pressure_bar, d.pressure, fallback::PRESSURE_BAR);
+        // Without liquid water, rain carves nothing unless asked for (a
+        // planet that was wetter once).
+        let erosion = if !erosion_set && pressure_bar < crate::atmosphere::LIQUID_WATER_BAR {
+            0.0
+        } else {
+            erosion
+        };
         let seed = self.seed.unwrap_or_else(|| rng.random());
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
@@ -303,6 +311,29 @@ mod tests {
         // More land needs a lower sea.
         assert!(level(0.6) < level(0.3));
         assert!(level(0.3) < level(0.1));
+    }
+
+    #[test]
+    fn worlds_without_liquid_water_erode_only_when_asked() {
+        let resolve = |planet: &str, pressure: f32, erosion: Option<f32>| {
+            WorldRequest {
+                planet: Some(planet.into()),
+                pressure_bar: Some(pressure),
+                erosion,
+                width: Some(16),
+                height: Some(8),
+                ..Default::default()
+            }
+            .resolve(&mut rand::rng())
+            .unwrap()
+            .params
+            .erosion
+        };
+        assert_eq!(resolve("terran", 1.0, None), 1.0);
+        assert_eq!(resolve("terran", 0.005, None), 0.0);
+        assert_eq!(resolve("terran", 0.005, Some(2.0)), 2.0);
+        // Barren worlds set their erosion: valleys from a wetter past.
+        assert_eq!(resolve("barren", 0.005, None), 1.0);
     }
 
     #[test]

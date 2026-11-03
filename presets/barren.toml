@@ -8,6 +8,8 @@ volcanic = -0.40
 
 [defaults]
 pressure = [0.0, 0.01]                 # surface pressure in bar, drawn in this range
+# Too thin for liquid water today; water shaped the valleys long ago.
+erosion = 1.0
 
 # At most a trace of gas and dust.
 [atmosphere]
