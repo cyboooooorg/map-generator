@@ -19,6 +19,7 @@ mod api;
 mod app;
 mod catalog;
 mod memory;
+mod thumbs;
 mod tiles;
 mod worlds;
 

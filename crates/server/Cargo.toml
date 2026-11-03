@@ -8,6 +8,8 @@ edition.workspace = true
 axum = "0.8.9"
 image = { version = "0.25", default-features = false, features = ["png"] }
 mapgen = { workspace = true, features = ["ts"] }
+# Row-by-row decoding of world.png for thumbnails, see src/thumbs.rs
+png = "0.18.1"
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
