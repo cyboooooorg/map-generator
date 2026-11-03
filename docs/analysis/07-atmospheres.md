@@ -116,6 +116,17 @@ Temperatures are in °C (step 0).
 Every seed of a non-Earth preset changes once, in the step that brings
 these effects.
 
+**Outcome (step 3).** `contrast = 1 / (1 + 0.1 (p − 1))` above 1 bar
+(the steeper `k` first considered flattened 5–20 bar worlds too much).
+With temperatures in real degrees, the two planets named after real ones
+were set to their real means: `venus-like` gets a greenhouse of 450 °C
+(448–475 °C at the surface), `mars-like` a climate shift of −60 °C
+(−87 to −21 °C) with its ice thresholds lowered to −70 °C, which keeps
+its caps exactly. `volcanic` moves its +20 °C into its greenhouse.
+`mars-like` and `barren` set `erosion = 1`. On 18 worlds of the nine
+presets, biome shares move by at most 1.4 points (ash land on volcanic
+worlds): the dense presets remap almost every biome.
+
 ## 3. Clouds (generation)
 
 A cloud cover in `[0, 1]` per pixel, exported as `raw_data/clouds.png`

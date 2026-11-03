@@ -17,7 +17,40 @@
 //! ```
 //!
 //! Every field is optional; a preset without the table gets Earth's.
+use crate::geo::Grid;
 use serde::{Deserialize, Serialize};
+
+/// Below this surface pressure (bar) no water stays liquid: no rain, no
+/// rivers or lakes, and no hydraulic erosion unless the preset asks for it
+/// (valleys carved when the planet was wetter). Water's triple point is at
+/// 0.006 bar.
+pub const LIQUID_WATER_BAR: f32 = 0.01;
+
+/// How much of Earth's equator-to-pole temperature difference a planet
+/// keeps: dense air carries heat to the poles. 1 up to 1 bar, then
+/// `1 / (1 + 0.1 (p − 1))`: 0.45 at 13 bar, 0.1 on Venus (92 bar). Thin
+/// atmospheres keep Earth's contrast: their cold comes from the climate
+/// shift.
+pub fn heat_contrast(pressure_bar: f32) -> f32 {
+    1.0 / (1.0 + 0.1 * (pressure_bar - 1.0).max(0.0))
+}
+
+/// Pulls each row temperature (°C) towards their area-weighted mean by
+/// [`heat_contrast`]: the global mean does not move.
+pub fn transport_heat(rows: &mut [f32], grid: &Grid, pressure_bar: f32) {
+    let contrast = heat_contrast(pressure_bar);
+    if contrast >= 1.0 {
+        return;
+    }
+    let weights: Vec<f32> = (0..rows.len() as u32)
+        .map(|y| grid.latitude(y).cos() as f32)
+        .collect();
+    let mean =
+        rows.iter().zip(&weights).map(|(t, w)| t * w).sum::<f32>() / weights.iter().sum::<f32>();
+    for t in rows {
+        *t = mean + (*t - mean) * contrast;
+    }
+}
 
 /// What clouds are made of, which sets where they form and how they look.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -97,6 +130,30 @@ impl Atmosphere {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dense_air_evens_temperatures_out_and_keeps_their_mean() {
+        let grid = Grid {
+            width: 4,
+            height: 90,
+            circumference_km: 40_000.0,
+        };
+        let rows = crate::climate::row_temperatures(&grid, 23.44);
+        let mean = |r: &[f32]| {
+            let w: Vec<f32> = (0..r.len() as u32)
+                .map(|y| grid.latitude(y).cos() as f32)
+                .collect();
+            r.iter().zip(&w).map(|(t, w)| t * w).sum::<f32>() / w.iter().sum::<f32>()
+        };
+        let mut earth = rows.clone();
+        transport_heat(&mut earth, &grid, 1.0);
+        assert_eq!(earth, rows);
+        let mut venus = rows.clone();
+        transport_heat(&mut venus, &grid, 92.0);
+        let spread = |r: &[f32]| r[44] - r[0];
+        assert!(spread(&venus) < 0.11 * spread(&rows));
+        assert!((mean(&venus) - mean(&rows)).abs() < 1e-3);
+    }
 
     #[test]
     fn earth_is_the_default_and_valid() {

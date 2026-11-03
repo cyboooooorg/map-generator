@@ -836,6 +836,7 @@ mod tests {
             volcanic: Some(0.3),
             circumference_km: Some(40_000.0),
             axial_tilt_deg: Some(23.44),
+            pressure_bar: Some(1.0),
             width: Some(480),
             height: Some(240),
             ..Default::default()

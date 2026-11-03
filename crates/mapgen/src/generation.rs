@@ -1,3 +1,4 @@
+use crate::atmosphere::{LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
 use crate::climate::{
@@ -633,11 +634,12 @@ pub fn generate_with_progress(
         variability_m,
         highland_offset,
     } = fields;
-    let thaw = crate::erosion::thaw(
-        &row_temperatures(&grid, params.axial_tilt_deg),
-        planet.climate.temperature,
-        rules.polar,
-    );
+    // Rows of sea-level temperature, evened out by dense air.
+    let mut row_temperature = row_temperatures(&grid, params.axial_tilt_deg);
+    transport_heat(&mut row_temperature, &grid, params.pressure_bar);
+    // The planet's shift and its atmosphere's greenhouse warming.
+    let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
+    let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
     let erosion = erode(
         &mut elevation,
         width,
@@ -674,7 +676,6 @@ pub fn generate_with_progress(
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
-    let row_temperature = row_temperatures(&grid, params.axial_tilt_deg);
     let raw_temperature: Vec<f32> = relief
         .par_iter()
         .enumerate()
@@ -747,7 +748,10 @@ pub fn generate_with_progress(
     // biomes. Store the climate exactly as biome selection sees it, so the
     // exported data explains the biome of every pixel.
     let shift = planet.climate;
-    let (dt, dm, dvz) = (shift.temperature, shift.moisture, shift.volcanic);
+    let (dt, dm, dvz) = (warming, shift.moisture, shift.volcanic);
+    // Too thin an atmosphere keeps no liquid water: no rain anywhere, so no
+    // rivers or lakes.
+    let liquid_water = params.pressure_bar >= LIQUID_WATER_BAR;
     // Regional variability is part of the stored climate, so the exported
     // layers still explain every biome.
     // Shifted in place: the raw fields are not needed any more.
@@ -756,7 +760,11 @@ pub fn generate_with_progress(
         .par_iter_mut()
         .zip(&variability_m)
         .for_each(|(m, v)| {
-            *m = (*m + dm + regional_variability(*v, Field::Moisture)).clamp(-1.0, 1.0)
+            *m = if liquid_water {
+                (*m + dm + regional_variability(*v, Field::Moisture)).clamp(-1.0, 1.0)
+            } else {
+                -1.0
+            }
         });
     let mut temperature = raw_temperature;
     temperature

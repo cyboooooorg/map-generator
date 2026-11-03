@@ -68,7 +68,7 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 
 **erosion** — how much rain carves the terrain: droplets per cell of the erosion grid, see [Erosion](#hydraulic-erosion).
 
-**pressure** — surface pressure of the atmosphere, in bar (Earth: 1, Mars: 0.006, Venus: 92, 0 for an airless world). Presets give their own range (`[defaults] pressure`); the sky colour, haze and clouds come from the preset's `[atmosphere]` table. It is stored in `world.json` (`pressure_bar`; worlds made before it had Earth's 1 bar) and, for now, changes nothing in the generated world: the climate effects and the rendering of atmospheres come next (see `docs/analysis/07-atmospheres.md`).
+**pressure** — surface pressure of the atmosphere, in bar (Earth: 1, Mars: 0.006, Venus: 92, 0 for an airless world). Presets give their own range (`[defaults] pressure`); the sky colour, haze and clouds come from the preset's `[atmosphere]` table. It is stored in `world.json` (`pressure_bar`; worlds made before it had Earth's 1 bar). Dense air evens temperatures out between the equator and the poles, and below 0.01 bar no water stays liquid: no rain, rivers or lakes, and no hydraulic erosion unless the request or the preset sets it (see [Temperature](#temperature--axial-tilt)). The viewer draws the sky from it.
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -205,13 +205,13 @@ circumference = 21300
 pressure = 0.006                   # bar
 
 [climate]                          # added to every pixel before biome selection
-temperature = -3.6                 # °C
+temperature = -60.0                # °C
 moisture = -0.7                    # [-1, 1] scale
 volcanic = 0.0                     # [0, 1] scale
 
 [rules]                            # override any biome selection threshold
-polar = -13.5                      # temperatures in °C
-highland_snow_temperature = -13.5
+polar = -70.0                      # temperatures in °C
+highland_snow_temperature = -70.0
 
 [atmosphere]                       # sky and clouds; Earth's when left out
 haze = 0.4                         # aerosol density, 0 (clear) to 1 (opaque)
@@ -440,7 +440,9 @@ A large-scale anomaly is added on top: `18 °C × fbm` on land and `9 °C × fbm
 | ~54°       | Nearly uniform temperature across latitudes              |
 | 70°+       | Poles receive more sunlight over a year than the equator |
 
-The `[climate]` table of the planet preset then shifts the whole temperature field (for example `−27 °C` on frozen worlds). Biomes use annual mean thresholds: sea ice below −13.5 °C, ice cap below −11.6 °C, boreal (tundra, taiga) below 0 °C, temperate below 12 °C and tropical above; highland is snow below 2.6 °C. They were converted from the former `[0, 1]` scale through the same curve, so each sits at the latitude it had.
+The atmosphere then acts on these rows. **Heat transport:** above 1 bar, dense air carries heat to the poles, so each row is pulled towards the area-weighted mean by `1 / (1 + 0.1 × (pressure − 1))` (0.45 at 13 bar, 0.1 on Venus at 92 bar); the global mean does not move, and thinner atmospheres keep Earth's contrast. **Greenhouse:** the preset's `[atmosphere] greenhouse` is added to every pixel (450 °C on `venus-like`, 20 °C on `volcanic`). **Liquid water:** below 0.01 bar (water's triple point is 0.006 bar) moisture is −1 everywhere, so there is no rain, no river and no lake, and erosion is off unless the request or the preset sets it (`mars-like` and `barren` keep `erosion = 1` for valleys carved when they were wetter).
+
+The `[climate]` table of the planet preset then shifts the whole temperature field (for example `−27 °C` on frozen worlds, `−60 °C` on `mars-like`, whose ice thresholds are lowered to `−70 °C` to keep its caps). Biomes use annual mean thresholds: sea ice below −13.5 °C, ice cap below −11.6 °C, boreal (tundra, taiga) below 0 °C, temperate below 12 °C and tropical above; highland is snow below 2.6 °C. They were converted from the former `[0, 1]` scale through the same curve, so each sits at the latitude it had.
 
 ### Moisture — winds and rain shadows
 
