@@ -77,7 +77,7 @@ pub fn export_world(
         Box::new(|| {
             let mut map = surface.clone();
             draw_contours(world, layers, &mut map);
-            export_png(world, &map, &path("world.png")).map_err(|e| e.to_string())
+            export_png(world, map, &path("world.png")).map_err(|e| e.to_string())
         }),
         Box::new(|| export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())),
         Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
