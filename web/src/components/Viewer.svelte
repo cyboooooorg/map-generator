@@ -8,6 +8,7 @@
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
   import { debouncedSetting, loadSetting } from '../lib/settings';
+  import { skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient, RAMPS } from '../lib/viewer/colormaps';
   import { type CameraState, PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
@@ -218,6 +219,7 @@
   $effect(() => view?.setRelief(dataReady ? relief : 0));
   $effect(() => view?.setGraticule(graticule));
   $effect(() => view?.setAtmosphere(atmosphere));
+  $effect(() => view?.setSky(meta ? skyFromWorld(meta) : null));
   $effect(() => view?.setHighlight(dataReady ? highlight : null));
   $effect(() => view?.setPath(path));
   $effect(() => {

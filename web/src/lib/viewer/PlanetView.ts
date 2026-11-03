@@ -4,11 +4,12 @@
 // measured paths, picking and hovering, screenshots and camera sharing.
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import {
-  AdditiveBlending,
+  AddEquation,
   BackSide,
   BufferGeometry,
   ClampToEdgeWrapping,
   Color,
+  CustomBlending,
   DataTexture,
   DoubleSide,
   FrontSide,
@@ -20,6 +21,7 @@ import {
   MOUSE,
   NotEqualStencilFunc,
   NearestFilter,
+  OneFactor,
   PerspectiveCamera,
   PlaneGeometry,
   Quaternion,
@@ -30,6 +32,7 @@ import {
   Scene,
   ShaderMaterial,
   SphereGeometry,
+  SrcAlphaFactor,
   SRGBColorSpace,
   Texture,
   UnsignedByteType,
@@ -53,6 +56,7 @@ import {
   type Vec3,
 } from '../geo';
 import type { WorldLayers } from '../layers';
+import type { Sky } from '../sky';
 import { downsample, fitFactor } from './textures';
 import { DETAIL_STENCIL, TileLayer } from './TileLayer';
 import {
@@ -268,6 +272,18 @@ export class PlanetView {
   private textureRequest = 0;
   private disposed = false;
   private atmosphereOn = true;
+  /** Whether the world has an atmosphere to draw. */
+  private hasSky = true;
+  /** Scattering uniforms of the sky shader, Earth's until a world sets them. */
+  private readonly sky = {
+    uTop: { value: 1.04 } as IUniform<number>,
+    uBetaR: { value: new Vector3(4.7, 11.4, 27.8) } as IUniform<Vector3>,
+    uBetaM: { value: 4.6 } as IUniform<number>,
+    uMieAlbedo: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
+    uHeightR: { value: 0.009 } as IUniform<number>,
+    uHeightM: { value: 0.0043 } as IUniform<number>,
+    uG: { value: 0.76 } as IUniform<number>,
+  };
   private mode: ViewMode = 'globe';
   private morph = 1;
   private animation: { from: number; to: number; start: number } | null = null;
@@ -328,25 +344,36 @@ export class PlanetView {
     );
     this.grid.frustumCulled = false;
     this.grid.visible = false;
+    // Overlays draw over the sky, which veils the surface only.
+    this.grid.renderOrder = 2;
     this.scene.add(this.grid);
 
+    // A unit sphere scaled to the top of the world's atmosphere. Drawn after
+    // the surface without depth test: the shader stops its rays at the
+    // ground itself, and veils it (see atmosphereFragment).
     this.atmosphere = new Mesh(
-      new SphereGeometry(1.06, 96, 48),
+      new SphereGeometry(1, 96, 48),
       new ShaderMaterial({
         vertexShader: atmosphereVertex,
         fragmentShader: atmosphereFragment,
         uniforms: {
           uOpacity: this.atmosphereOpacity,
-          uColor: { value: new Color('#5c9dff') },
           uLightMode: this.u.uLightMode,
           uSunDir: this.u.uSunDir,
+          uLightDir: this.u.uLightDir,
+          ...this.sky,
         },
         side: BackSide,
-        blending: AdditiveBlending,
+        blending: CustomBlending,
+        blendEquation: AddEquation,
+        blendSrc: OneFactor,
+        blendDst: SrcAlphaFactor,
         transparent: true,
+        depthTest: false,
         depthWrite: false,
       }),
     );
+    this.atmosphere.renderOrder = 1;
     this.scene.add(this.atmosphere);
 
     this.path = new LineSegments(
@@ -367,6 +394,7 @@ export class PlanetView {
     );
     this.path.frustumCulled = false;
     this.path.visible = false;
+    this.path.renderOrder = 2;
     this.scene.add(this.path);
 
     this.tiles = new TileLayer(
@@ -565,6 +593,23 @@ export class PlanetView {
   setAtmosphere(visible: boolean): void {
     this.requestRender();
     this.atmosphereOn = visible;
+  }
+
+  /** The world's sky (see skyFromWorld), or null for an airless world. */
+  setSky(sky: Sky | null): void {
+    this.requestRender();
+    this.hasSky = sky !== null;
+    if (!sky) {
+      return;
+    }
+    this.atmosphere.scale.setScalar(sky.top);
+    this.sky.uTop.value = sky.top;
+    this.sky.uBetaR.value.set(...sky.betaR);
+    this.sky.uBetaM.value = sky.betaM;
+    this.sky.uMieAlbedo.value.set(...sky.mieAlbedo);
+    this.sky.uHeightR.value = sky.heightR;
+    this.sky.uHeightM.value = sky.heightM;
+    this.sky.uG.value = sky.g;
   }
 
   /** Shows a hex grid over the map (majority biome per hex), or hides it with null. */
@@ -767,7 +812,7 @@ export class PlanetView {
   private draw(): void {
     this.shared.uMorph.value = this.morph;
     // The atmosphere only makes sense around the globe: fade it with the morph.
-    this.atmosphere.visible = this.atmosphereOn && this.morph > 0.01;
+    this.atmosphere.visible = this.atmosphereOn && this.hasSky && this.morph > 0.01;
     this.atmosphereOpacity.value = this.morph ** 3;
     const altitude = this.altitude();
     this.camera.near = Math.max(altitude * 0.1, 1e-6);

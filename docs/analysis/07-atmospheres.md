@@ -154,6 +154,13 @@ A cloud cover in `[0, 1]` per pixel, exported as `raw_data/clouds.png`
   when zooming close in the deep zoom.
 - **Flat map.** No sky; the cloud layer as an optional overlay.
 - **Airless worlds** draw no shell: a hard limb against space.
+- **Calibration (step 2).** Shell thickness `0.03 + 0.02 log10(1 + p)`
+  of the radius; zenith optical depth `0.25 p^0.35` for the gas (blue
+  channel) and `2 × haze` for the aerosols, so dense atmospheres take
+  the colour of their haze rather than a deep blue; aerosol anisotropy
+  from 0.76 (clear) down to 0.26 (thick haze, which scatters many times).
+  The preset's `rayleigh` sets the gas colour with its absorbers: Earth
+  blue, Venus yellow-white, volcanic orange, caustic yellow-green.
 
 The viewer only draws when something changes, so the shader's cost is
 paid per frame of interaction only.
