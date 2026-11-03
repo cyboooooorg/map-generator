@@ -253,22 +253,23 @@ pub fn moisture(input: &MoistureInput) -> (Vec<f32>, Vec<f32>) {
 
     // Rain rate of every pixel, blending both wind directions by how much the
     // wind blows each way, so the field stays continuous across wind belts.
-    let rate: Vec<f32> = (0..grid.height)
-        .into_par_iter()
-        .flat_map_iter(|y| {
-            let east_share = (1.0 + zonal_wind(grid.latitude(y))) / 2.0;
-            let b = background[y as usize];
-            let east = rain_along_row(input, y, 1, b);
-            let west = rain_along_row(input, y, -1, b);
-            (0..w).map(move |x| east_share * east[x] + (1.0 - east_share) * west[x])
-        })
-        .collect();
-    let rate = smooth(&grid, &rate, RAIN_SMOOTHING_KM);
-
-    let rain: Vec<f32> = rate
-        .iter()
-        .map(|r| 1.0 - 2.0 * (-r / NEUTRAL_RAIN).exp2())
-        .collect();
+    // Scoped so the unsmoothed rate is freed once smoothed.
+    let mut rain = {
+        let rate: Vec<f32> = (0..grid.height)
+            .into_par_iter()
+            .flat_map_iter(|y| {
+                let east_share = (1.0 + zonal_wind(grid.latitude(y))) / 2.0;
+                let b = background[y as usize];
+                let east = rain_along_row(input, y, 1, b);
+                let west = rain_along_row(input, y, -1, b);
+                (0..w).map(move |x| east_share * east[x] + (1.0 - east_share) * west[x])
+            })
+            .collect();
+        smooth(&grid, &rate, RAIN_SMOOTHING_KM)
+    };
+    // The smoothed rate turned into the precipitation term, in place.
+    rain.par_iter_mut()
+        .for_each(|r| *r = 1.0 - 2.0 * (-*r / NEUTRAL_RAIN).exp2());
     let moisture = (0..grid.pixel_count())
         .into_par_iter()
         .map(|i| {
