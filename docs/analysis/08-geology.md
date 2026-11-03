@@ -1,0 +1,456 @@
+# Analysis: geology, impact craters and geological time
+
+Backlog items 8 and 9. User request: study how plate tectonics works,
+whether every kind of planet has plates, whether the surface of a dead
+world changes (impact craters), and whether continental drift could be
+shown with a time slider in millions of years.
+
+Today the elevation is a pure function of the position: Perlin octaves
+on the sphere (`Sampler::sample` in `generation.rs`), ridged mountains
+and volcanic cones. The `PLATE_STEP` cell noise only gives coasts
+straight stretches and corners: there are no plates, no plate
+boundaries, no craters and no notion of time.
+
+## Decisions (2026-11-03)
+
+Taken with the user:
+
+- **The scientific findings are recorded here** (sections 1 to 3), for
+  this work and for the plate tectonics to come.
+- **Now:** impact craters, and a time slider that moves the surface of
+  dead worlds through their cratering history (sections 4 to 7).
+- **Later:** plate tectonics and continental drift (section 8). The
+  simulation approach studied is too costly for now; it waits until a
+  cheaper way of drifting continents is found.
+
+## 1. Tectonic regimes
+
+Plate tectonics is the exception: among the bodies of the Solar System
+only Earth has it, active and confirmed. Its lithosphere (crust and
+rigid upper mantle, about 100 km thick) is broken into about fifteen
+rigid plates moving over the ductile asthenosphere at 2–15 cm per year.
+The main driving force is the pull of the slabs sinking at subduction
+zones (*slab pull*), with mantle convection and *ridge push*.
+
+Planetary scientists classify bodies by tectonic regime:
+
+| Regime                    | Mechanism                                                                  | Examples                               |
+| ------------------------- | -------------------------------------------------------------------------- | -------------------------------------- |
+| Mobile lid (plates)       | Lithosphere broken into plates, recycled into the mantle by subduction     | Earth                                  |
+| Stagnant lid              | A single rigid plate; heat escapes by conduction and a few giant volcanoes | Mars, Mercury, the Moon                |
+| Episodic lid              | Stagnant for hundreds of millions of years, then overturned globally       | Venus (probably)                       |
+| Heat pipe                 | Volcanism so intense that lava resurfaces the planet continuously          | Io; early Earth (Moore & Webb 2013)    |
+| Plutonic or "squishy" lid | Weak lithosphere deformed by intrusions, without rigid plates              | Proposed for Venus and early Earth     |
+| Ice tectonics             | Plates of ice over a subsurface ocean                                      | Europa (subduction proposed), Ganymede |
+
+What favours plate tectonics, according to the models:
+
+- **Liquid water**, the factor cited most often: it hydrates and weakens
+  the lithosphere and lubricates subduction. Venus, almost Earth's size
+  but dry, has no plates.
+- **Enough internal heat**: small bodies (Moon, Mercury, Mars) cooled
+  fast, their lithosphere thickened and froze into a single lid.
+- **A surface that is not too hot**: a hot surface heals the damage
+  that weakens the lithosphere and pushes towards a stagnant lid
+  (Landuyt & Bercovici 2009; Foley, Bercovici & Landuyt 2012), an
+  argument for Venus.
+- **Size**, debated: for super-Earths, Valencia, O'Connell & Sasselov
+  (2007) predict plates, O'Neill & Lenardic (2007) a stagnant lid. The
+  question is open, which leaves a generator free to choose.
+
+A cold world can keep its plates: Earth had them during its "snowball"
+glaciations. A regime is not fixed either: Venus may have had plates
+early on (Weller et al. 2023, from its atmospheric nitrogen), and the
+Earth itself probably went through a heat-pipe or squishy-lid stage
+before modern plates.
+
+### Bodies of the Solar System
+
+| Body     | Regime                   | Surface                                                                       |
+| -------- | ------------------------ | ----------------------------------------------------------------------------- |
+| Earth    | Plates                   | Oceans < 200 Ma old, continents up to 4 Ga; about 190 impact structures known |
+| Venus    | Episodic or squishy lid  | About 1 000 craters, randomly spread: global resurfacing 300–750 Ma ago       |
+| Mars     | Stagnant lid             | Old cratered south, smooth north (dichotomy), Tharsis bulge, Valles Marineris |
+| Mercury  | Stagnant lid             | Saturated with craters, lobate scarps from global contraction (radius −7 km)  |
+| The Moon | Stagnant lid             | Saturated highlands, maria (impact basins flooded by lava 3–3.9 Ga ago)       |
+| Io       | Heat pipe                | No impact crater visible: resurfaced faster than craters form                 |
+| Europa   | Ice tectonics (proposed) | Few craters, bands and ridges in the ice shell (Kattenhorn & Prockter 2014)   |
+
+## 2. Plate tectonics and continental drift
+
+Orders of magnitude, used by section 8:
+
+- **Speeds:** 2–15 cm per year, that is 20–150 km per million years
+  (1 cm/yr = 10 km/Ma). The Atlantic opens at about 2.5 cm/yr, the
+  fastest Pacific ridges at 15 cm/yr; India moved at 15–20 cm/yr before
+  hitting Asia.
+- **Plate boundaries:**
+
+  | Boundary                        | Relief                                               |
+  | ------------------------------- | ---------------------------------------------------- |
+  | Divergent (ocean)               | Mid-ocean ridge, new oceanic crust of age 0          |
+  | Divergent (continent)           | Rift valley, then a new ocean (East Africa, Red Sea) |
+  | Convergent, ocean–continent     | Trench, volcanic arc, coastal range (Andes)          |
+  | Convergent, ocean–ocean         | Trench and island arc (Japan, Marianas)              |
+  | Convergent, continent–continent | Collision range and plateau (Himalaya, Tibet)        |
+  | Transform                       | Strike-slip fault, little relief (San Andreas)       |
+
+- **Hotspots** (mantle plumes) stay roughly fixed while plates move
+  over them: chains of volcanoes ageing away from the plume (Hawaii).
+- **Sea floor depth** follows the age of the oceanic crust as it cools:
+  about 2.5 km + 0.35 km × √(age in Ma) up to about 70 Ma, then
+  flattening (Parsons & Sclater 1977). Ridges stand high, old floors are
+  abyssal plains.
+- **Ages:** the oldest oceanic crust is about 180 Ma old (western
+  Pacific), since it is recycled by subduction; continental crust,
+  too light to sink, keeps rocks of 4 Ga (Acasta gneiss) and minerals
+  of 4.4 Ga (Jack Hills zircons).
+- **Supercontinent cycle** (Wilson cycle): about 400–600 Ma. Rodinia
+  formed about 1.1 Ga ago and broke up about 750 Ma ago; Pangaea formed
+  about 335 Ma ago and broke up from about 175–200 Ma ago. Projections
+  of the next one (Pangaea Proxima, Amasia, Novopangaea) look 200–250 Ma
+  ahead.
+- **Sea level** varies by about ±200 m over these cycles (young, hot
+  ridges displace water), so the share of land is not constant in time.
+
+## 3. Impact cratering
+
+Without tectonics the surface still changes: by impacts above all,
+and to a lesser degree by early volcanism (lunar maria), global
+contraction (Mercury's scarps) and space weathering. Cratering follows
+well-established laws.
+
+### How many craters, and how old
+
+- **Size distribution:** a power law, N(>D) ∝ D^−b, with b ≈ 2 from a
+  few km to about 100 km on the lunar highlands, steeper below a few km.
+  For each 100 km crater there are hundreds of 10 km ones.
+- **Chronology:** the crater density dates a surface. The lunar
+  chronology of Neukum (1983, Neukum et al. 2001) gives the cumulative
+  density of craters of 1 km or more on a surface of age T (Ga):
+
+  ```text
+  N(1 km) = 5.44e-14 × (exp(6.93 T) − 1) + 8.38e-4 × T     per km²
+  ```
+
+  The flux fell steeply until about 3.5 Ga and has been roughly constant
+  since (the linear term). A 4 Ga surface gets about 0.063 craters of
+  1 km or more per km²; with b = 2, a Moon-sized body gets about 6 000
+  craters of 20 km or more, close to the 5 185 counted on the Moon
+  (Head et al. 2010). The shape of the size distribution is assumed not
+  to change with time, so the same curve dates every crater size.
+  Whether the early flux was a decline or a late spike (the Late Heavy
+  Bombardment) is debated (Boehnke & Harrison 2016); for a generator the
+  difference does not show.
+- **Saturation:** old surfaces such as the lunar highlands reach an
+  equilibrium where each new crater erases as many as it adds (Gault
+  1970). The density stops growing; the surface stays a jumble of
+  overlapping craters.
+- **Retention:** on an active world craters disappear faster than they
+  form. Earth keeps about 190 known impact structures, most younger than
+  500 Ma, erased by erosion, sediment and subduction; Venus none older
+  than its resurfacing; Io none at all.
+
+### Shape
+
+- **Simple craters:** bowls about D/5 deep (Pike 1977), with a raised
+  rim.
+- **Complex craters**, above a transition diameter that scales about as
+  1/g (15–20 km on the Moon, 5–8 km on Mars, 2–4 km on Earth): a flat
+  floor, terraced walls and a central peak, shallower (on the Moon,
+  depth ≈ 1.044 D^0.301 km, Pike 1974).
+- **Peak-ring basins** above about 150–200 km on the Moon, and
+  **multi-ring basins** above a few hundred km (Orientale, about 930 km
+  across its outer ring).
+- **Ejecta blanket:** thickness ≈ 0.14 R^0.74 (r/R)^−3 in metres, R the
+  crater radius in metres, r the distance from the centre (McGetchin,
+  Settle & Head 1973): most of it within one radius of the rim.
+- **Rays:** bright streaks of fresh ejecta around young craters
+  (Tycho), which fade in about 1 Ga (the lunar Copernican system).
+
+### Degradation
+
+- **Airless bodies:** craters soften by topographic diffusion under
+  small impacts, with a lunar diffusivity of about 5.5 m² per Ma
+  (Fassett & Thomson 2014): about 120 m of smoothing in 3 Ga, which
+  only matters for craters below about a kilometre. Larger craters
+  are degraded mostly by younger craters and their ejecta.
+- **Worlds with water:** rain and rivers erase small craters within
+  millions of years and fill large ones with sediment (Mars kept its
+  Noachian craters, but worn).
+
+### Atmosphere
+
+A thick atmosphere breaks up small impactors before they reach the
+ground: Venus (92 bar) has no crater smaller than about 1.5–2 km and
+few below 30 km; on Earth (1 bar) stony bodies below about 50 m
+fragment; on Mars (0.006 bar) craters of a few metres exist. A rough
+fit of the smallest crater:
+
+```text
+D_min ≈ 0.1 km × (pressure in bar)^0.75     (2 m on Mars, 3 km on Venus)
+```
+
+with a deficit up to about ten times `D_min`.
+
+## 4. Geology of a world
+
+A new `[geology]` table in presets, stored in `world.json` with the
+resolved preset like `[atmosphere]`:
+
+```toml
+[geology]
+regime = "stagnant"          # plates | stagnant | episodic | heat_pipe
+surface_age = 4.0            # Ga: age of the oldest surviving surface
+wet_until = 3.5              # Ga: end of the era of liquid water; 0 = still wet; omit if never wet
+```
+
+- `regime` has no effect on the elevation yet: it records the regime
+  for section 8, and sets the defaults below. It is shown in the world
+  info.
+- `surface_age` sets the crater density through the chronology. Like
+  the pressure, it becomes a generation parameter (`--surface-age`,
+  form field) drawn from a preset range.
+- `wet_until` splits craters in two: those older than it are applied
+  before the hydraulic erosion, which wears them (a Noachian Mars);
+  those younger are applied after it, fresh. A world with liquid water
+  today (pressure above `LIQUID_WATER_BAR`) is forced to 0.
+
+Presets without the table get Earth's values: `terran` worlds keep a
+few large, worn craters.
+
+| Preset         | Regime    | Surface age (Ga) | Wet until (Ga) | Expected look                                      |
+| -------------- | --------- | ---------------- | -------------- | -------------------------------------------------- |
+| `terran`       | plates    | 0.2–0.6          | 0              | Rare, large, eroded craters, none on the sea floor |
+| `earth-like`   | plates    | 0.4              | 0              | Same                                               |
+| `frozen`       | plates    | 0.5–2.0          | 0              | Some craters, softened                             |
+| `caustic`      | episodic  | 0.3–0.8          | 0              | Few craters, none small (dense air)                |
+| `volcanic`     | heat_pipe | 0.001–0.05       | 0              | Almost none: lava resurfaces the planet            |
+| `barren`       | stagnant  | 3.0–4.2          | 3.5            | Cratered, old craters worn, young ones fresh       |
+| `mars-like`    | stagnant  | 4.0              | 3.5            | Mars: worn southern craters, fresher young ones    |
+| `venus-like`   | episodic  | 0.5              | 0              | About a thousand craters, none below 2 km          |
+| `mercury-like` | stagnant  | 4.0              | never          | Saturated, fresh-looking                           |
+
+## 5. Craters (generation and tiles)
+
+### A crater field as a function of position
+
+Craters follow the pattern of the volcanic cones (`Sampler::cone`, one
+point per lattice cell with `nearest_point`): a pure function of the
+position on the sphere, deterministic per seed, with a seed stream of
+its own. This keeps them consistent between the base map and the detail
+tiles, and lets the time slider ask for the surface at any epoch.
+
+- **Octaves of size:** diameters are split into octaves `[D_k, 2 D_k]`,
+  from the smallest crater the atmosphere lets through (or the tile's
+  pixel) to the largest basin. Each octave has its own 3D lattice, sized
+  so that the expected count per cell matches the chronology:
+  `n_k = N(1 km) × D_k^−2 × 0.75` per km², capped at the saturation
+  density. Each cell holds zero or more craters, with a diameter in the
+  octave (power law), an age and a profile jitter drawn from its hash.
+- **Ages:** drawn by inverting the chronology between 0 and
+  `surface_age`, so most craters of an old surface are very old.
+  Craters are also drawn in the future, at the constant late flux, up
+  to 1 Ga ahead (negative ages), for the slider; they are absent at the
+  present epoch.
+- **Profile:** a radial function of the distance in crater radii: a bowl
+  (simple) or a flat floor with a central peak (complex) and terraces,
+  a rim, and an ejecta blanket in `(r/R)^−3`; depths and rim heights in
+  km from Pike's laws; the simple–complex transition at
+  `15 km × 1.62 / g` (g in m/s², from the gravity already derived from
+  the circumference); a peak ring above about ten times the transition.
+  A low-frequency noise makes rims and ejecta irregular.
+- **Superposition:** craters are applied in age order, oldest first.
+  Inside a crater the previous relief is replaced, not added to: the
+  floor is levelled at its own depth below the rim, and ejecta bury the
+  older relief in proportion to their thickness. Adding profiles would
+  stack bowls into deep pits on saturated surfaces.
+- **Degradation:** each crater is smoothed with the diffusion length
+  `√(κ × exposure)`, its exposure being its age minus the epoch shown;
+  κ = 5.5 m²/Ma on airless worlds. Craters older than `wet_until` are
+  also worn by the hydraulic erosion pass. On worlds with liquid water
+  today, craters smaller than about 20 km are dropped (erased in a few
+  Ma) and, under the `plates` regime, craters on the sea floor too
+  (oceanic crust is younger than 200 Ma and buried in sediment).
+- **Atmosphere:** craters smaller than `D_min` (section 3) are dropped,
+  with a deficit up to ten times `D_min`.
+- **Units:** crater depths are in km, while the elevation has no unit
+  yet (open point of analysis 07). This step fixes an `ELEVATION_KM`,
+  calibrated so that Earth-like worlds' highest peaks and deepest
+  trenches read as about 9 and 11 km, and uses it for craters only.
+
+### In the pipeline
+
+```text
+noise → craters older than wet_until → erosion → craters younger than wet_until → temperature → …
+```
+
+Craters make closed basins: on wet worlds the depression filling turns
+them into crater lakes. Biomes follow from the new elevation; crater
+interiors and ejecta get no biome of their own in this step.
+
+### At the base resolution and in the tiles
+
+- The base map (about 20 km per pixel at 1920 px on an Earth-sized
+  planet) holds the craters of two base pixels or more. Smaller ones
+  exist only in the detail tiles, which evaluate the same crater field
+  down to two tile pixels: zooming in reveals smaller and smaller
+  craters, as on real images.
+- `raw_data` moves to `format_version` 7 with a new layer,
+  `elevation_base.png`: the elevation after erosion and before the
+  young craters. `elevation.png` keeps the present elevation, so the
+  tools that read it do not change. The tiles render from the base
+  layer plus the young craters at the tile's own resolution, so crater
+  rims stay sharp at every zoom level instead of being interpolated.
+  Older worlds have no craters and no base layer: their tiles do not
+  change.
+- **Cost:** a pixel checks the neighbouring cells of about ten octaves.
+  Per tile, the craters that overlap the tile are gathered once per
+  octave, then each pixel only visits that short list. The target is to
+  stay within twice the current 4–6 ms per tile; it is measured in the
+  step that adds the tiles.
+
+## 6. Time slider
+
+### What it shows
+
+The slider moves the **epoch** of the surface: 0 is the world as
+generated, positive values go back in time (Ma before present),
+negative values go forward, up to 1 Ga. At an epoch `t`:
+
+- craters with an age of `t` or more are shown, the others not yet;
+- each crater shows the degradation of its exposure (age − t): going
+  back in time freshens them;
+- the biomes and the hillshading follow the elevation at `t`.
+
+On a world with liquid water, changing the relief would also change its
+lakes, rivers and erosion, which the slider does not recompute: the
+slider is only offered on worlds **without liquid water today**
+(pressure below `LIQUID_WATER_BAR`), and it stops at `wet_until`, before
+which erosion reshaped the craters. In practice it covers the dead
+worlds the request was about: `barren`, `mars-like`, `mercury-like`, and
+any world of thin enough air.
+
+### Server
+
+- `GET /api/worlds/{id}/epoch/{ma}/{layer}.png`, `layer` one of
+  `world`, `elevation` and `biomes`: the base-resolution layers that
+  change with the epoch, rendered from `elevation_base.png` and the
+  crater field with the generation's own rules. An optional `scale`
+  (1/2, 1/4) renders a reduced version for dragging.
+- Tiles take an `epoch` query parameter.
+- Epochs are rounded to the slider steps, and URLs name the world
+  revision, the render version and the epoch, so browsers cache them for
+  good like tiles. The server keeps the last few epochs rendered in
+  memory, within the tile cache budget.
+- Expected cost at 1920 × 1080: a few hundred milliseconds per epoch
+  (base layer plus about ten octaves of craters on 2 M pixels, in
+  parallel), about 16 times less at 1/4 scale. Measured in that step.
+
+### Viewer
+
+- A slider below the view, on worlds that allow it, labelled in Ma or
+  Ga, with a non-linear scale (fine steps near the present, 1 Ma up to
+  100 Ma, 10 Ma up to 1 Ga, 50 Ma beyond), a "present" button and a
+  keyboard shortcut.
+- While dragging, the 1/4-scale layers replace the base surface and its
+  relief; on release, the full layers, then tiles at that epoch. The
+  epoch and the slider position are kept in the URL state like the
+  other view settings.
+- Picking and the info panel read the epoch's elevation and biome. The
+  hex overlay, the biome statistics and the comparison mode stay at the
+  present epoch in this version.
+
+## 7. Order
+
+Each step is a pull request:
+
+| Step | Change                                                                                                        | Seeds  |
+| ---- | ------------------------------------------------------------------------------------------------------------- | ------ |
+| 1    | `[geology]` in presets and `world.json`, `--surface-age`, form field, regime in the world info; no effect yet | Same   |
+| 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`    | Change |
+| 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                  | Same   |
+| 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                     | Same   |
+| 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                            | Same   |
+| 6    | Optional: ray systems and ejecta albedo fading with age; lava flooding of basins (maria) at given epochs      | Change |
+
+Step 2 is the only step that changes worlds (every preset, a little on
+`terran`, a lot on `barren`).
+
+## 8. Plate tectonics (deferred)
+
+Studied, then deferred by the user until a cheaper way of drifting
+continents is found. What was studied:
+
+- **Approach:** a simulation on a point mesh of the sphere (about
+  100–150 k points, 60 km apart), following Cortial et al., *Procedural
+  Tectonic Planets* (Eurographics 2019). Plates are rigid rotations
+  about Euler poles; at each step of 1–5 Ma, points move, subduction,
+  collision, rifting and new oceanic crust are resolved, and the crust
+  (continental or oceanic), its thickness and age and the orogenic belts
+  are updated. The result would replace the coarse continent octaves;
+  mountains and volcanic arcs would follow the convergent boundaries,
+  and the existing noise would keep the fine detail. Other references:
+  PlaTec (Viitanen 2012, on a flat map), Tectonics.js (Davidson), and
+  for real reconstructions GPlates and Scotese's PALEOMAP.
+- **Time slider:** a deterministic simulation from a random start
+  (−300 Ma), the generated world being its state at 0 and the future its
+  continuation (+200 Ma). Keyframes every ~10 Ma, a low-resolution
+  preview per epoch, and "generate at this epoch" for a full world.
+- **Why deferred:** the simulation is a large new subsystem, its tuning
+  (credible continents, an emerging supercontinent cycle) is the bulk of
+  the work, every `terran` seed changes, and each epoch would need its
+  own climate, rivers and biomes.
+- **Cheaper directions to evaluate later:** a kinematic-only model,
+  where the position at time `t` is the plate's rotation applied to the
+  present noise (no collision simulation; orogens read from the relative
+  speed at the boundaries); or drift shown only as land outlines and
+  plate boundaries, without regenerating the climate.
+
+The `[geology] regime` of section 4 is where this work will hook in.
+
+## 9. Open points
+
+- Elevation units: `ELEVATION_KM` is introduced for craters only; the
+  lapse rate and the relief exaggeration keep their own scales.
+- Craters on wet worlds are dropped or worn by a rule, not by the
+  erosion of the detail tiles, which has no erosion of its own.
+- The slider leaves temperature and moisture at the present epoch: a
+  few kilometres of crater relief barely move them on dry worlds.
+- A CLI `--epoch` to export a world at a past epoch, if useful.
+- Episodic resurfacing (Venus-like) and stagnant-lid landforms (a
+  Tharsis-like bulge, a hemispheric dichotomy, contraction scarps) could
+  later give dead worlds more than craters.
+
+## References
+
+- Boehnke, P. & Harrison, T. M. (2016). Illusory Late Heavy
+  Bombardments. *PNAS* 113, 10802–10806.
+- Cortial, Y., Peytavie, A., Galin, É. & Guérin, É. (2019). Procedural
+  tectonic planets. *Computer Graphics Forum* 38(2), 1–11.
+- Fassett, C. I. & Thomson, B. J. (2014). Crater degradation on the
+  lunar maria. *JGR Planets* 119, 2255–2271.
+- Foley, B. J., Bercovici, D. & Landuyt, W. (2012). The conditions for
+  plate tectonics on super-Earths. *EPSL* 331–332, 281–290.
+- Gault, D. E. (1970). Saturation and equilibrium conditions for impact
+  cratering on the lunar surface. *Radio Science* 5, 273–291.
+- Head, J. W. et al. (2010). Global distribution of large lunar craters.
+  *Science* 329, 1504–1507.
+- Kattenhorn, S. A. & Prockter, L. M. (2014). Evidence for subduction in
+  the ice shell of Europa. *Nature Geoscience* 7, 762–767.
+- McGetchin, T. R., Settle, M. & Head, J. W. (1973). Radial thickness
+  variation in impact crater ejecta. *EPSL* 20, 226–236.
+- Moore, W. B. & Webb, A. A. G. (2013). Heat-pipe Earth. *Nature* 501,
+  501–505.
+- Neukum, G., Ivanov, B. A. & Hartmann, W. K. (2001). Cratering records
+  in the inner Solar System. *Space Science Reviews* 96, 55–86.
+- O'Neill, C. & Lenardic, A. (2007). Geological consequences of
+  super-sized Earths. *GRL* 34, L19204.
+- Parsons, B. & Sclater, J. G. (1977). An analysis of the variation of
+  ocean floor bathymetry and heat flow with age. *JGR* 82, 803–827.
+- Pike, R. J. (1977). Size-dependence in the shape of fresh impact
+  craters on the Moon. In *Impact and Explosion Cratering*, 489–509.
+- Valencia, D., O'Connell, R. J. & Sasselov, D. (2007). Inevitability of
+  plate tectonics on super-Earths. *ApJ* 670, L45–L48.
+- Weller, M. B. et al. (2023). Venus's atmospheric nitrogen explained by
+  ancient plate tectonics. *Nature Astronomy* 7, 1436–1444.

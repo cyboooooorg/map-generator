@@ -224,3 +224,42 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Rejected:** a 2:1 map size for square pixels (the grid already scales
   slopes by latitude); rock and snow from the slope (later, with the tiles'
   micro-relief).
+
+## 8. Impact craters and geological time
+
+- **Status:** decided
+- **Analysis:** [08-geology.md](analysis/08-geology.md)
+- **Problem:** no world has impact craters, so dead worlds (`barren`,
+  `mars-like`, `mercury-like`) look like dry Earths; the surface has no
+  history and no notion of time.
+- **Decision (2026-11-03):** a `[geology]` preset table (tectonic
+  regime, surface age, end of the wet era) stored in `world.json`, with
+  the surface age as a generation parameter; a crater field computed as
+  a function of the position (lunar chronology, gravity-scaled
+  morphology, superposition in age order, atmospheric filtering, worn by
+  the erosion of the wet era), shared by the base map and the detail
+  tiles; a time slider moving the surface of worlds without liquid water
+  through their cratering history, up to 1 Ga into the future.
+
+| Step | Change                                                                                                         | Seeds  | Status |
+| ---- | -------------------------------------------------------------------------------------------------------------- | ------ | ------ |
+| 1    | `[geology]` in presets and `world.json`, `--surface-age`, form field, regime in the world info; no effect yet  | Same   | todo   |
+| 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`     | Change | todo   |
+| 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                   | Same   | todo   |
+| 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                      | Same   | todo   |
+| 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                             | Same   | todo   |
+| 6    | Optional: ray systems and ejecta albedo fading with age; lava flooding of basins (maria) at given epochs       | Change | todo   |
+
+## 9. Plate tectonics and continental drift
+
+- **Status:** analysis
+- **Analysis:** [08-geology.md](analysis/08-geology.md), section 8
+- **Problem:** continents come from noise, not from plates: mountains
+  and volcanoes are not tied to plate boundaries, and continents cannot
+  drift over time.
+- **Studied:** a plate simulation on a point mesh of the sphere
+  (Cortial et al. 2019) replacing the coarse continent octaves, with a
+  time slider over keyframes of the simulation.
+- **Deferred (2026-11-03):** too costly for now (a new subsystem, heavy
+  tuning, a full climate per epoch). It waits for a cheaper way of
+  drifting continents; candidates are listed in the analysis.
