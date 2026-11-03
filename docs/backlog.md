@@ -216,7 +216,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Step | Change                                                                                              | Seeds | Status |
 | ---- | --------------------------------------------------------------------------------------------------- | ----- | ------ |
 | 1    | Surface palette, ecotones and river edges mixed in linear light, `surface_color` in the biome table | Same  | done   |
-| 2    | Water colour from depth (absorption), no visible step between Ocean and Deep Ocean                  | Same  | todo   |
+| 2    | Water colour from depth (absorption), no visible step between Ocean and Deep Ocean                  | Same  | done   |
 | 3    | Small colour variation within a biome, shared by the base map and the tiles                         | Same  | todo   |
 | 4    | Viewer: lava and magma glow on the night side                                                       | Same  | todo   |
 
