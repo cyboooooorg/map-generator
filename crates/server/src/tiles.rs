@@ -9,8 +9,8 @@
 //!
 //! A generation needs all the memory it can get: while one runs, the cache
 //! is emptied and [`TileCache::world`] refuses to load worlds
-//! ([`TileError::Busy`]); tile requests then answer 503 and the viewer
-//! retries them later.
+//! ([`TileError::Busy`]); tile and hex grid requests then answer 503 with
+//! `Retry-After`, and the viewer retries them later.
 use mapgen::detail::{DetailWorld, TileId};
 use mapgen::export::raw_data::load_layers;
 use std::path::Path;
@@ -111,26 +111,6 @@ impl TileCache {
             .map_err(TileError::Failed)?;
         self.trim();
         Ok(world)
-    }
-
-    /// The loaded world when the cache can serve it; otherwise (while a
-    /// generation runs) a world loaded for this caller only, not kept.
-    pub async fn world_or_load(
-        &self,
-        dir: &Path,
-        id: &str,
-        revision: u64,
-    ) -> Result<Arc<DetailWorld>, String> {
-        match self.world(dir, id, revision).await {
-            Ok(world) => Ok(world),
-            Err(TileError::Failed(e)) => Err(e),
-            Err(TileError::Busy) => {
-                let dir = dir.to_path_buf();
-                tokio::task::spawn_blocking(move || load(&dir))
-                    .await
-                    .map_err(|e| e.to_string())?
-            }
-        }
     }
 
     /// Evicts the least recently used worlds beyond the budget, keeping the
@@ -256,9 +236,6 @@ mod tests {
                 cache.world(&dir, "barren-4", 1).await,
                 Err(TileError::Busy)
             ));
-            // The hex grid still gets a world, not kept.
-            cache.world_or_load(&dir, "barren-4", 1).await.unwrap();
-            assert!(cache.ids().is_empty());
         }
         cache.world(&dir, "barren-4", 1).await.unwrap();
         assert_eq!(cache.ids(), ["barren-4"]);
