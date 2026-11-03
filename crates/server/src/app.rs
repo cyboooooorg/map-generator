@@ -46,11 +46,13 @@ use tower_http::services::{ServeDir, ServeFile};
 /// Largest map side the server accepts.
 pub const MAX_SIZE: u32 = 8192;
 /// Default largest map the server accepts, in pixels (4096 × 2048). A
-/// generation peaks at about 140 bytes per pixel (about 1.1 GB here): keep the
-/// limit under the memory the server can use, or it gets killed mid-job.
+/// generation without noise maps, as the server runs it, peaks at about 70
+/// bytes per pixel (measured in Docker: 545 MiB here, 2.0 GiB at 8192 ×
+/// 4096): keep the limit under the memory the server can use, or it gets
+/// killed mid-job.
 pub const DEFAULT_MAX_PIXELS: u64 = 4096 * 2048;
 /// Peak generation memory per pixel, for the error message.
-const BYTES_PER_PIXEL: u64 = 140;
+const BYTES_PER_PIXEL: u64 = 70;
 /// Finished jobs kept for `GET /api/jobs`; older ones are forgotten.
 const FINISHED_JOBS_KEPT: usize = 20;
 
