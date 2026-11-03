@@ -12,6 +12,7 @@
 //! | `temperature.png` | 16-bit grey, same formula                                   |
 //! | `flow.png`        | 16-bit grey, `log10(1 + km²)` with the same formula          |
 //! | `biomes.png`      | 8-bit grey, pixel = biome id (see the `biomes` table)       |
+//! | `clouds.png`      | 8-bit grey, cloud cover `pixel / 255` (worlds with clouds)  |
 //!
 //! [`load_world`] (and the hex resampling) refuse a world whose
 //! `format_version` is newer than [`FORMAT_VERSION`], or whose layers do not
@@ -40,8 +41,8 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// Version 2 adds the volcanic zone, coast distance and highland offset
 /// layers, and the river polylines; version 3 the floodplain layer;
 /// version 4 stores temperatures in °C instead of the former `[0, 1]`
-/// scale.
-pub const FORMAT_VERSION: u32 = 4;
+/// scale; version 5 adds the cloud cover.
+pub const FORMAT_VERSION: u32 = 5;
 
 /// First format version whose temperatures are in °C.
 const CELSIUS_VERSION: u32 = 4;
@@ -98,10 +99,16 @@ pub struct Layers {
     /// Floodplain weight of the river valleys (format version 3 and later).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub floodplain: Option<ScalarLayerInfo>,
+    /// Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
+    /// (max − min)`); format version 5 and later, absent on worlds without
+    /// clouds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clouds: Option<ScalarLayerInfo>,
     pub biomes: BiomeLayerInfo,
 }
 
-/// A 16-bit layer: pixel `p` decodes to `min + p / 65535 × (max − min)`.
+/// A 16-bit layer: pixel `p` decodes to `min + p / 65535 × (max − min)`
+/// (`gray8` layers: `min + p / 255 × (max − min)`).
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ScalarLayerInfo {
@@ -212,6 +219,25 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         .ok_or("layer size does not match the world size")?
         .save(dir.join("biomes.png"))?;
 
+    let clouds = if world.clouds.is_empty() {
+        None
+    } else {
+        let cover: Vec<u8> = world
+            .clouds
+            .iter()
+            .map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8)
+            .collect();
+        GrayImage::from_raw(w, h, cover)
+            .ok_or("layer size does not match the world size")?
+            .save(dir.join("clouds.png"))?;
+        Some(ScalarLayerInfo {
+            file: "clouds.png".into(),
+            encoding: "gray8".into(),
+            min: 0.0,
+            max: 1.0,
+        })
+    };
+
     let [
         elevation,
         moisture,
@@ -248,6 +274,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             coast_distance: Some(coast_distance),
             highland_offset: Some(highland_offset),
             floodplain: Some(floodplain),
+            clouds,
             biomes: BiomeLayerInfo {
                 file: "biomes.png".into(),
                 encoding: "gray8-biome-id".into(),
@@ -512,6 +539,7 @@ impl LoadedWorld {
             highland_offset,
             biomes: self.biomes,
             rivers: self.rivers,
+            clouds: Vec::new(),
         }
     }
 }

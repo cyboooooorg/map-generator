@@ -20,6 +20,10 @@
 use crate::geo::Grid;
 use serde::{Deserialize, Serialize};
 
+/// Below this surface pressure (bar) a world has no atmosphere to speak of:
+/// no sky, no clouds.
+pub const AIRLESS_BAR: f32 = 1e-4;
+
 /// Below this surface pressure (bar) no water stays liquid: no rain, no
 /// rivers or lakes, and no hydraulic erosion unless the preset asks for it
 /// (valleys carved when the planet was wetter). Water's triple point is at

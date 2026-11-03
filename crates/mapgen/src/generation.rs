@@ -1,10 +1,11 @@
-use crate::atmosphere::{LIQUID_WATER_BAR, transport_heat};
+use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
 };
+use crate::clouds::CloudInput;
 use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
@@ -727,12 +728,31 @@ pub fn generate_with_progress(
         noise: &moisture_noise,
     });
     drop(moisture_noise);
+    // Clouds form where air rises and rains (see the clouds module).
+    let clouds = crate::clouds::clouds(&CloudInput {
+        grid,
+        kind: if params.pressure_bar < AIRLESS_BAR {
+            CloudKind::None
+        } else {
+            planet.atmosphere.clouds
+        },
+        cover_shift: planet.atmosphere.cloud_cover,
+        precipitation: &precipitation,
+        seed: params.seed,
+    });
     if keep {
         debug.push(DebugLayer {
             name: "precipitation",
             ramp: Ramp::Signed,
             values: precipitation,
         });
+        if !clouds.is_empty() {
+            debug.push(DebugLayer {
+                name: "clouds",
+                ramp: Ramp::Unsigned,
+                values: clouds.clone(),
+            });
+        }
     } else {
         drop(precipitation);
     }
@@ -879,6 +899,7 @@ pub fn generate_with_progress(
             highland_offset,
             biomes,
             rivers: river_lines,
+            clouds,
         },
         debug,
     }

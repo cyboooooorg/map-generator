@@ -70,7 +70,7 @@ pub struct World {
     pub elevation: Vec<f32>,
     /// Moisture in `[-1, 1]` (`> 0` is wet), planet offset included.
     pub moisture: Vec<f32>,
-    /// Temperature in `[0, 1]` (`0` = polar, `1` = equatorial), planet offset included.
+    /// Annual mean temperature in °C, planet offset and greenhouse included.
     pub temperature: Vec<f32>,
     /// Wet-equivalent drainage area in km² flowing through each pixel
     /// (0 on the sea): rivers are pixels above a threshold.
@@ -87,6 +87,9 @@ pub struct World {
     pub biomes: Vec<Biome>,
     /// Smoothed, meandering river polylines (see `rivers`).
     pub rivers: Vec<RiverLine>,
+    /// Cloud cover in `[0, 1]`, empty for a world without clouds (or
+    /// reloaded from `raw_data`, where the viewer reads it).
+    pub clouds: Vec<f32>,
 }
 
 impl World {

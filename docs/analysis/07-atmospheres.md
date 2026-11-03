@@ -143,6 +143,15 @@ A cloud cover in `[0, 1]` per pixel, exported as `raw_data/clouds.png`
   a few regional storms; `none` exports nothing.
 - `cloud_cover` shifts the whole field, for drier or cloudier worlds.
 
+**Outcome (step 4).** Two fixes were needed on Earth-like worlds: the
+poles came out clear, first because the north-south squeeze of the noise
+folded the whole polar cap into a single noise value (the squeeze now
+fades towards the poles), then because the circulation band and the low
+polar rain both meant sinking dry air there, while the Arctic is about
+60 % overcast with low stratus (the rain term now fades out towards the
+poles and a polar stratus term is added). Cover then matches Earth's
+latitude profile and its two-thirds mean.
+
 ## 4. Rendering (viewer)
 
 - **Sky shell.** The rim glow becomes a single-scattering shader on a
