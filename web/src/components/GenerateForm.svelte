@@ -24,7 +24,7 @@
 
   let { presets, spec, initial = null, variedFrom = null, existing, onSubmitted, onCancel }: Props = $props();
 
-  type Field = 'sea_level' | 'volcanic' | 'circumference_km' | 'axial_tilt_deg' | 'erosion';
+  type Field = 'sea_level' | 'volcanic' | 'circumference_km' | 'axial_tilt_deg' | 'erosion' | 'pressure_bar';
 
   interface FieldInfo {
     label: string;
@@ -71,6 +71,13 @@
       defaultsKey: 'erosion',
       slider: [0, 5],
       step: 0.1,
+    },
+    pressure_bar: {
+      label: 'Pressure (bar)',
+      help: 'Earth: 1 · Mars: 0.006 · Venus: 92 · 0: airless',
+      defaultsKey: 'pressure',
+      slider: [0, 100],
+      step: 0.001,
     },
   };
   const FIELD_NAMES = Object.keys(FIELDS) as Field[];

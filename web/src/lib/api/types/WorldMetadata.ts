@@ -15,7 +15,11 @@ planet_type: string,
  * The full resolved preset, so the world can be regenerated even if the
  * preset file changes or disappears.
  */
-preset: Preset, sea_level: number, volcanic_intensity: number, circumference_km: number, gravity_modifier: number, axial_tilt_deg: number, erosion: number, layers: Layers, 
+preset: Preset, sea_level: number, volcanic_intensity: number, circumference_km: number, gravity_modifier: number, axial_tilt_deg: number, erosion: number, 
+/**
+ * Surface pressure in bar. Worlds made before it existed had Earth's.
+ */
+pressure_bar: number, layers: Layers, 
 /**
  * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
  */

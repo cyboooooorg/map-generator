@@ -78,6 +78,8 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     circumference_km: round(meta.circumference_km, 1),
     axial_tilt_deg: round(meta.axial_tilt_deg, 2),
     erosion: round(meta.erosion, 2),
+    // Worlds made before the atmosphere had Earth's pressure.
+    pressure_bar: round(meta.pressure_bar ?? 1, 4),
     width: meta.width,
     height: meta.height,
   };
@@ -98,6 +100,7 @@ export function cliCommand(meta: WorldMetadata): string {
     `--circumference ${r.circumference_km}`,
     `--axial-tilt ${r.axial_tilt_deg}`,
     `--erosion ${r.erosion}`,
+    `--pressure ${r.pressure_bar}`,
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];
@@ -123,4 +126,15 @@ export function saveBlob(blob: Blob, name: string): void {
   link.click();
   // Give the browser time to start the download before revoking.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** The pressure and clouds of a world, e.g. "1.00 bar, water clouds". */
+export function formatAtmosphere(meta: WorldMetadata): string {
+  const pressure = meta.pressure_bar ?? 1;
+  if (pressure === 0) {
+    return 'none';
+  }
+  const bar = pressure < 0.1 ? pressure.toPrecision(2) : pressure.toFixed(2);
+  const clouds = meta.preset.atmosphere?.clouds ?? 'water';
+  return clouds === 'none' ? `${bar} bar, no clouds` : `${bar} bar, ${clouds} clouds`;
 }

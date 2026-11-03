@@ -29,6 +29,8 @@ pub struct WorldParams {
     pub axial_tilt_deg: f32,
     /// Hydraulic erosion strength: droplets per erosion-grid pixel. 0 disables it.
     pub erosion: f32,
+    /// Surface pressure in bar (0 = airless).
+    pub pressure_bar: f32,
 }
 
 impl WorldParams {

@@ -4,6 +4,7 @@
 //! complete [`world::WorldParams`]. [`generation::generate`] runs every pass
 //! (noise, erosion, climate, rivers, biomes) and [`export::export_world`]
 //! writes the maps, raw data and diagnostic maps.
+pub mod atmosphere;
 pub mod biome;
 pub mod carve;
 pub mod climate;

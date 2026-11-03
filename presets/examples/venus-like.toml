@@ -9,6 +9,7 @@ description = "Earth-sized furnace: volcanic plains, highland continents, lava"
 # the same seasons as 2.6 degrees. No liquid water: no erosion. The sea level
 # only sets how much of the surface the lowland plains cover (about 70 %).
 [defaults]
+pressure = 92.0
 sea_level = [0.25, 0.35]
 circumference = 38025
 axial_tilt = 2.6
@@ -20,6 +21,15 @@ erosion = 0.0
 temperature = 27.0
 moisture = -0.9
 volcanic = 0.5
+
+# 92 bar of CO2 under a total deck of sulfuric acid clouds: a yellow-white
+# sky, and a surface hidden from space.
+[atmosphere]
+rayleigh = [0.17, 0.41, 1.0]
+haze = 1.0
+haze_colour = [1.0, 0.92, 0.7]
+clouds = "sulfuric"
+cloud_cover = 1.0
 
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, LavaField, AshLand, Volcano).

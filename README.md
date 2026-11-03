@@ -29,29 +29,30 @@ mise run gen [-- [OPTIONS]]
 All parameters are optional. Any omitted value comes from the planet preset when it sets one, and is otherwise chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
 
 ```text
-Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g
+Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g pressure=0.412 bar
 World generated → worlds/frozen-2590618090/
-Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --width 1920 --height 1080
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.41237 --width 1920 --height 1080
 ```
 
 ### Options
 
-| Flag                    | Values                                                                                                                                                 | Default                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| `--planet <preset>`     | built-in preset name (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or path to a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in              |
-| `--list-planets`        | list the built-in presets and exit                                                                                                                     | —                            |
-| `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                            | random                       |
-| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[0.10, 0.40)`     |
-| `--land-fraction <f32>` | share of the surface that is land, `[0.0, 1.0]`; sets the sea level to match, so it cannot be combined with `--sea-level`                              | —                            |
-| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                                                                                                                  | random in `[0.0, 1.0)`       |
-| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)                                                                                                         | random in `[20 000, 80 000)` |
-| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`          |
-| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it                                                                                                  | `1.0`                        |
-| `--width <px>`          | map width, `2`–`16384`                                                                                                                                 | `1920`                       |
-| `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                       |
-| `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                     |
-| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)                                                                                                     | off                          |
-| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the memory they need (they roughly double the peak)                                                      | off                          |
+| Flag                    | Values                                                                                                                                                 | Default                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| `--planet <preset>`     | built-in preset name (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or path to a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in                              |
+| `--list-planets`        | list the built-in presets and exit                                                                                                                     | —                                            |
+| `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                            | random                                       |
+| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[0.10, 0.40)`                     |
+| `--land-fraction <f32>` | share of the surface that is land, `[0.0, 1.0]`; sets the sea level to match, so it cannot be combined with `--sea-level`                              | —                                            |
+| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                                                                                                                  | random in `[0.0, 1.0)`                       |
+| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)                                                                                                         | random in `[20 000, 80 000)`                 |
+| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`                          |
+| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it                                                                                                  | `1.0`                                        |
+| `--pressure <bar>`      | surface pressure in bar, `[0, 1000]`; `0` is airless                                                                                                   | from the preset, else random in `[0.7, 1.5)` |
+| `--width <px>`          | map width, `2`–`16384`                                                                                                                                 | `1920`                                       |
+| `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                                       |
+| `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                                     |
+| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)                                                                                                     | off                                          |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the memory they need (they roughly double the peak)                                                      | off                                          |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
@@ -66,6 +67,8 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 **axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt).
 
 **erosion** — how much rain carves the terrain: droplets per cell of the erosion grid, see [Erosion](#hydraulic-erosion).
+
+**pressure** — surface pressure of the atmosphere, in bar (Earth: 1, Mars: 0.006, Venus: 92, 0 for an airless world). Presets give their own range (`[defaults] pressure`); the sky colour, haze and clouds come from the preset's `[atmosphere]` table. It is stored in `world.json` (`pressure_bar`; worlds made before it had Earth's 1 bar) and, for now, changes nothing in the generated world: the climate effects and the rendering of atmospheres come next (see `docs/analysis/07-atmospheres.md`).
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -197,8 +200,9 @@ name = "mars-like"                 # lowercase letters, digits and dashes; used 
 description = "Small cold desert world with polar caps"
 
 [defaults]                         # a fixed value or a [min, max] range drawn at random
-sea_level = [0.10, 0.30]           # sea_level or land_fraction, volcanic, circumference, axial_tilt, erosion
+sea_level = [0.10, 0.30]           # sea_level or land_fraction, volcanic, circumference, axial_tilt, erosion, pressure
 circumference = 21300
+pressure = 0.006                   # bar
 
 [climate]                          # added to every pixel before biome selection
 temperature = -3.6                 # °C
@@ -208,6 +212,11 @@ volcanic = 0.0                     # [0, 1] scale
 [rules]                            # override any biome selection threshold
 polar = -13.5                      # temperatures in °C
 highland_snow_temperature = -13.5
+
+[atmosphere]                       # sky and clouds; Earth's when left out
+haze = 0.4                         # aerosol density, 0 (clear) to 1 (opaque)
+haze_colour = [0.85, 0.6, 0.4]     # aerosol tint (butterscotch dust)
+clouds = "dust"                    # water | sulfuric | dust | none
 
 [remap]                            # target = [biomes replaced by it]
 DustPlain = ["Ocean", "DeepOcean", "Lake", "River", "Plain", "Desert"]
@@ -221,6 +230,7 @@ To make a dry world, remap its oceans rather than lowering `sea_level`: biome el
 
 - **`[defaults]`**: command-line options always win; parameters set neither on the command line nor here use the generator defaults listed under [Options](#options).
 - **`[rules]`**: accepts any field of `BiomeRules` in `src/biome.rs` (`waterline`, `polar`, `forest_moisture`, `shore_width_km`…), each documented there. Fields left out keep their default.
+- **`[atmosphere]`**: `rayleigh` (relative scattering per red, green, blue channel: the clear-sky colour; Earth's air is about `[0.17, 0.41, 1.0]`), `haze` and `haze_colour` (aerosols), `greenhouse` (°C added to every temperature), `clouds` (`water`, `sulfuric`, `dust` or `none`) and `cloud_cover` (−1 to 1). Each field is optional and defaults to Earth's. See `src/atmosphere.rs`.
 - **`[remap]`**: runs after biome selection; biome names are the keys of the biome table (`DeepOcean`, `SeaIce`, `LavaField`…). A biome listed under two targets is an error, and so is an unknown field or biome name.
 
 `raw_data/world.json` stores the full resolved preset under `preset`, so a world can be regenerated even if its preset file changes.
@@ -311,6 +321,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
   "height": 1080,
   "seed": 42,
   "planet_type": "terran",
+  "pressure_bar": 0.93,
   "layers": {
     "elevation": { "file": "elevation.png", "encoding": "gray16", "min": -1.0, "max": 1.0 },
     "biomes": { "file": "biomes.png", "encoding": "gray8-biome-id" }

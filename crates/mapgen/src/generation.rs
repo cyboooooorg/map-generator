@@ -893,6 +893,7 @@ mod tests {
             circumference_km: EARTH_CIRCUMFERENCE_KM,
             axial_tilt_deg: EARTH_AXIAL_TILT_DEG,
             erosion: 1.0,
+            pressure_bar: 1.0,
         }
     }
 

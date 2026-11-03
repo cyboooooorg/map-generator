@@ -42,6 +42,11 @@ pub const AXIAL_TILT_DEG: Limits = Limits {
     min: 0.0,
     max: 90.0,
 };
+/// Surface pressure in bar: 0 is airless, Venus has 92.
+pub const PRESSURE_BAR: Limits = Limits {
+    min: 0.0,
+    max: 1000.0,
+};
 /// Hydraulic erosion strength (droplets per erosion-grid pixel).
 pub const EROSION: Limits = Limits { min: 0.0, max: 5.0 };
 /// Map width and height in pixels.
@@ -58,6 +63,8 @@ pub mod fallback {
     pub const CIRCUMFERENCE_KM: ParamDefault = ParamDefault::Range([20_000.0, 80_000.0]);
     pub const AXIAL_TILT_DEG: ParamDefault = ParamDefault::Range([5.0, 40.0]);
     pub const EROSION: ParamDefault = ParamDefault::Fixed(1.0);
+    /// Around Earth's 1 bar.
+    pub const PRESSURE_BAR: ParamDefault = ParamDefault::Range([0.7, 1.5]);
     pub const WIDTH: u32 = 1920;
     pub const HEIGHT: u32 = 1080;
 }
@@ -79,6 +86,8 @@ pub struct WorldRequest {
     pub circumference_km: Option<f32>,
     pub axial_tilt_deg: Option<f32>,
     pub erosion: Option<f32>,
+    /// Surface pressure in bar.
+    pub pressure_bar: Option<f32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -152,6 +161,7 @@ impl WorldRequest {
             ("circumference_km", self.circumference_km, CIRCUMFERENCE_KM),
             ("axial_tilt_deg", self.axial_tilt_deg, AXIAL_TILT_DEG),
             ("erosion", self.erosion, EROSION),
+            ("pressure_bar", self.pressure_bar, PRESSURE_BAR),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -216,6 +226,8 @@ impl WorldRequest {
         );
         let axial_tilt_deg = pick(self.axial_tilt_deg, d.axial_tilt, fallback::AXIAL_TILT_DEG);
         let erosion = pick(self.erosion, d.erosion, fallback::EROSION);
+        // Drawn after the others, so their draws do not change.
+        let pressure_bar = pick(self.pressure_bar, d.pressure, fallback::PRESSURE_BAR);
         let seed = self.seed.unwrap_or_else(|| rng.random());
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
@@ -227,6 +239,7 @@ impl WorldRequest {
             circumference_km,
             axial_tilt_deg,
             erosion,
+            pressure_bar,
         };
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);

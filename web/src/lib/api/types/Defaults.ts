@@ -10,4 +10,8 @@ export type Defaults = { sea_level: ParamDefault | null,
  * Share of the surface that is land; the sea level is computed to
  * match it. Exclusive with `sea_level`.
  */
-land_fraction: ParamDefault | null, volcanic: ParamDefault | null, circumference: ParamDefault | null, axial_tilt: ParamDefault | null, erosion: ParamDefault | null, };
+land_fraction: ParamDefault | null, volcanic: ParamDefault | null, circumference: ParamDefault | null, axial_tilt: ParamDefault | null, erosion: ParamDefault | null, 
+/**
+ * Surface pressure in bar (0 = airless).
+ */
+pressure: ParamDefault | null, };
