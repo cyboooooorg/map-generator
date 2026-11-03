@@ -314,7 +314,8 @@ export class PlanetView {
     uHasBiomes: { value: 0 } as IUniform<number>,
     uBiomes: { value: emptyTexture() } as IUniform<Texture>,
     uHighlight: { value: -1 } as IUniform<number>,
-    uContours: { value: 0 } as IUniform<number>,
+    uSeaContours: { value: 0 } as IUniform<number>,
+    uLandContours: { value: 0 } as IUniform<number>,
   };
   private readonly path: LineSegments<BufferGeometry, ShaderMaterial>;
   /** Equator, tropics and polar circles, one mesh per colour. */
@@ -888,8 +889,14 @@ export class PlanetView {
   }
 
   /** Shows or hides the depth contours under water. */
-  setContours(visible: boolean): void {
-    this.u.uContours.value = visible ? 1 : 0;
+  setSeaContours(visible: boolean): void {
+    this.u.uSeaContours.value = visible ? 1 : 0;
+    this.requestRender();
+  }
+
+  /** Shows or hides the altitude contours on land. */
+  setLandContours(visible: boolean): void {
+    this.u.uLandContours.value = visible ? 1 : 0;
     this.requestRender();
   }
 

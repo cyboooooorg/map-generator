@@ -73,6 +73,7 @@
     graticule: false,
     referenceLines: true,
     contours: true,
+    landContours: true,
     atmosphere: true,
     clouds: true,
     cloudDrift: false,
@@ -91,7 +92,9 @@
   let relief = $state(saved.relief);
   let graticule = $state(saved.graticule);
   let referenceLines = $state(saved.referenceLines);
-  let contours = $state(saved.contours);
+  // `contours` keeps its saved name: it was the only (depth) contour toggle.
+  let seaContours = $state(saved.contours);
+  let landContours = $state(saved.landContours);
   let atmosphere = $state(saved.atmosphere);
   let clouds = $state(saved.clouds);
   let cloudDrift = $state(saved.cloudDrift);
@@ -149,7 +152,8 @@
       relief,
       graticule,
       referenceLines,
-      contours,
+      contours: seaContours,
+      landContours,
       atmosphere,
       clouds,
       cloudDrift,
@@ -258,7 +262,8 @@
   $effect(() => view?.setGraticule(graticule));
   $effect(() => view?.setReferenceTilt(meta ? meta.axial_tilt_deg : null));
   $effect(() => view?.setReferenceLines(referenceLines));
-  $effect(() => view?.setContours(contours));
+  $effect(() => view?.setSeaContours(seaContours));
+  $effect(() => view?.setLandContours(landContours));
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setSky(meta ? skyFromWorld(meta) : null));
   $effect(() => view?.setHighlight(dataReady ? highlight : null));
@@ -403,7 +408,10 @@
           referenceLines = !referenceLines;
           break;
         case 'k':
-          contours = !contours;
+          seaContours = !seaContours;
+          break;
+        case 'j':
+          landContours = !landContours;
           break;
         case 'd':
           if (worldId) onToggleMeasure();
@@ -443,7 +451,8 @@
     ['W', 'Cloud drift (with clouds)'],
     ['N', 'Grid'],
     ['T', 'Tropics and polar circles'],
-    ['K', 'Depth contours'],
+    ['K', 'Depth contours (isobaths)'],
+    ['J', 'Elevation contours'],
     ['D', 'Measure distances'],
     ['P', 'Screenshot'],
     ['Esc', 'Close the point panel, stop measuring'],
@@ -523,8 +532,11 @@
       <label class="check" title="Equator, tropics and polar circles">
         <input type="checkbox" bind:checked={referenceLines} /> Tropics
       </label>
-      <label class="check" title="Depth contours under water (needs the world's data)">
-        <input type="checkbox" bind:checked={contours} disabled={!dataReady} /> Contours
+      <label class="check" title="Depth contours (isobaths) under water, in pale blue (needs the world's data)">
+        <input type="checkbox" bind:checked={seaContours} disabled={!dataReady} /> Depth contours
+      </label>
+      <label class="check" title="Elevation contours on land, in brown, every fifth one stronger (needs the world's data)">
+        <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> Elevation contours
       </label>
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />
