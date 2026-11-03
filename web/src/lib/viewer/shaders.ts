@@ -109,7 +109,8 @@ export const surfaceFragment = /* glsl */ `
   uniform float uHasBiomes;
   uniform sampler2D uBiomes;
   uniform float uHighlight;    // biome id to highlight, or -1
-  uniform float uContours;     // 1 draws the depth contours under water
+  uniform float uSeaContours;  // 1 draws the depth contours under water
+  uniform float uLandContours; // 1 draws the altitude contours on land
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
   uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
   uniform vec3 uCloudTint;     // linear colour of the clouds
@@ -130,11 +131,18 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('coast')}
   ${glslRamp('floodplain')}
 
-  // Contour lines: a pale blue mixed over the sea (linear colour, share).
+  // Depth contours: a pale blue mixed over the sea (linear colour, share).
   // world.png darkens its contours instead, which barely shows on the dark
   // surface palette of open water.
   const vec3 CONTOUR_COLOUR = vec3(0.45, 0.6, 0.72);
   const float CONTOUR_OPACITY = 0.45;
+  // Altitude contours: topographic brown on land, every LAND_STEP above the
+  // coastline (elevation units), every LAND_INDEX_EVERY-th line stronger.
+  const vec3 LAND_CONTOUR_COLOUR = vec3(0.16, 0.08, 0.03);
+  const float LAND_STEP = 0.05;
+  const float LAND_INDEX_EVERY = 5.0;
+  const float LAND_OPACITY = 0.3;
+  const float LAND_INDEX_OPACITY = 0.6;
 
   // Coverage of a line about one screen pixel wide where elevation e
   // crosses level, e changing by width per pixel.
@@ -156,6 +164,12 @@ export const surfaceFragment = /* glsl */ `
     line = max(line, contourAt(e, 0.75, width));
     line = max(line, contourAt(e, 0.90, width));
     return line;
+  }
+
+  // Coverage of lines every spacing of h, h changing by width per pixel.
+  float periodicLines(float h, float spacing, float width) {
+    float offset = abs(fract(h / spacing + 0.5) - 0.5) * spacing;
+    return 1.0 - smoothstep(0.5, 1.5, offset / width);
   }
 
   // Brightness of lava at night, relative to its day colour.
@@ -260,8 +274,17 @@ export const surfaceFragment = /* glsl */ `
     // fwidth is taken everywhere, outside the branch, as derivatives
     // need every pixel of a quad.
     float contour = contours(data.r);
-    if (uContours > 0.5 && hasData && aboveCoast < 0.0) {
+    if (uSeaContours > 0.5 && hasData && aboveCoast < 0.0) {
       colour = mix(colour, CONTOUR_COLOUR, CONTOUR_OPACITY * contour);
+    }
+    // Altitude contours on land, from the coastline up: regular lines and,
+    // every LAND_INDEX_EVERY of them, stronger index lines.
+    float landWidth = max(fwidth(aboveCoast), 1e-6);
+    float landLine = periodicLines(aboveCoast, LAND_STEP, landWidth);
+    float indexLine = periodicLines(aboveCoast, LAND_STEP * LAND_INDEX_EVERY, landWidth);
+    if (uLandContours > 0.5 && hasData && aboveCoast > 0.5 * LAND_STEP) {
+      float share = max(LAND_OPACITY * landLine, LAND_INDEX_OPACITY * indexLine);
+      colour = mix(colour, LAND_CONTOUR_COLOUR, share);
     }
 
     // Lava and magma glow on the night side (sun mode, biome map and detail
