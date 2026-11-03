@@ -6,13 +6,13 @@
   import WorldInfo from './components/WorldInfo.svelte';
   import WorldList from './components/WorldList.svelte';
   import WorldPane from './components/WorldPane.svelte';
-  import { api, worldFile } from './lib/api/client';
+  import { ApiFailure, api, worldFile } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { JobCreated } from './lib/api/types/JobCreated';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import type { WorldSummary } from './lib/api/types/WorldSummary';
-  import { requestFromWorld } from './lib/format';
+  import { requestFromWorld, rerollRequest } from './lib/format';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { loadSetting, saveSetting } from './lib/settings';
   import { toasts } from './lib/toasts.svelte';
@@ -241,6 +241,20 @@
     jobs.track(job.job_id, job.world_id, request, { status: 'queued' }, true);
   }
 
+  /** Queues the selected world again with a new random seed. */
+  async function reroll(): Promise<void> {
+    if (!primary.meta) {
+      return;
+    }
+    const request = rerollRequest(primary.meta);
+    try {
+      const job = await api.createWorld(request);
+      submitted(job, request);
+    } catch (e) {
+      toasts.error(`Could not reroll: ${e instanceof ApiFailure ? e.message : String(e)}`);
+    }
+  }
+
   function cameraFrom(target: () => WorldPane | null) {
     return (state: CameraState) => {
       if (linkCameras && compareId) {
@@ -287,6 +301,7 @@
           worlds={visible}
           {compareId}
           onVary={() => primary.meta && openForm(requestFromWorld(primary.meta), primary.id)}
+          onReroll={reroll}
           onCompare={(id) => (compareId = id)}
           onDelete={() => selectedId && removeWorlds([selectedId])}
         />

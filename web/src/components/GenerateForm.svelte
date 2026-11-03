@@ -7,6 +7,7 @@
   import type { ParamDefault } from '../lib/api/types/ParamDefault';
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
+  import { MAX_SEED, randomSeed } from '../lib/format';
 
   interface Props {
     presets: PresetInfo[];
@@ -94,7 +95,6 @@
     [4096, 2048],
     [8192, 4096],
   ];
-  const MAX_SEED = 4_294_967_295;
 
   /** Each parameter: random (left to the preset or the server) or a fixed value. */
   type FieldState = Record<Field, { random: boolean; value: number }>;
@@ -198,9 +198,7 @@
   }
 
   function rollSeed(): void {
-    const values = new Uint32Array(1);
-    crypto.getRandomValues(values);
-    seed = String(values[0] ?? 0);
+    seed = String(randomSeed());
   }
 
   function buildRequest(): WorldRequest {
