@@ -6,6 +6,7 @@
   import { downloadJson } from '../lib/download';
   import { formatArea, formatShare, saveBlob, surfaceColour } from '../lib/format';
   import type { LonLat } from '../lib/geo';
+  import type { LoadProgress } from '../lib/progress';
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
@@ -17,6 +18,7 @@
   import { type CameraState, PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
+  import LoadingBar from './LoadingBar.svelte';
 
   interface Props {
     world: LoadedWorld;
@@ -143,6 +145,8 @@
   let hovered = $state<number | null>(null);
   let pinned = $state<number | null>(null);
   let loading = $state(false);
+  /** The base map's download and decoding, while it loads. */
+  let mapProgress = $state.raw<LoadProgress | null>(null);
   let error = $state<string | null>(null);
   let showHelp = $state(false);
   let panelOpen = $state(saved.panelOpen && wideQuery.matches);
@@ -283,23 +287,30 @@
     }
     textureOf = id;
     loading = true;
+    mapProgress = null;
     error = null;
     hexOn = false;
     const controller = new AbortController();
+    const progress = (p: LoadProgress) => {
+      if (!controller.signal.aborted) mapProgress = p;
+    };
     // The render without lines (format version 6), which the reference
     // lines and contours are drawn over; world.png, which has them baked
     // in, for older worlds.
     current
-      .setTexture(worldFile(id, 'raw_data/surface.png', rev), controller.signal)
+      .setTexture(worldFile(id, 'raw_data/surface.png', rev), controller.signal, progress)
       .catch((e: unknown) => {
         if (controller.signal.aborted) throw e;
-        return current.setTexture(worldFile(id, 'world.png', rev), controller.signal);
+        return current.setTexture(worldFile(id, 'world.png', rev), controller.signal, progress);
       })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) error = `Could not load the map: ${String(e)}`;
       })
       .finally(() => {
-        if (!controller.signal.aborted) loading = false;
+        if (!controller.signal.aborted) {
+          loading = false;
+          mapProgress = null;
+        }
       });
     return () => controller.abort();
   });
@@ -744,9 +755,17 @@
   {#if !worldId}
     <p class="overlay">Select a world, or generate a new one.</p>
   {:else if loading}
-    <p class="overlay">Loading…</p>
+    <div class="overlay">
+      <div class="loading">
+        <p>Loading…</p>
+        {#if mapProgress}<LoadingBar progress={mapProgress} />{/if}
+      </div>
+    </div>
   {:else if !dataReady && !world.error}
-    <p class="chip">Loading the raw data…</p>
+    <div class="chip">
+      <p>Loading the raw data…</p>
+      {#if world.progress}<LoadingBar progress={world.progress} />{/if}
+    </div>
   {/if}
   {#if error || world.error}
     <p class="overlay error">{error ?? world.error}</p>
@@ -967,6 +986,23 @@
     margin: 0;
     pointer-events: none;
     color: var(--muted);
+  }
+  .loading {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+  }
+  .loading p,
+  .chip p {
+    margin: 0;
+  }
+  .chip:has(:global(.loading-bar)) {
+    border-radius: 10px;
+    padding: 6px 12px;
+    text-align: center;
+  }
+  .chip :global(.loading-bar) {
+    margin: 4px 0 2px;
   }
   .overlay.error {
     color: var(--danger);

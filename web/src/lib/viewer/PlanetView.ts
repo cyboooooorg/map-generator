@@ -60,6 +60,7 @@ import {
   type Vec3,
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
+import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
 import {
@@ -228,6 +229,12 @@ function sunDepthTexture(top: number, heightR: number, heightM: number): DataTex
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
+}
+
+/** The last part of a URL's path ("world.png"), for progress labels. */
+function fileName(url: string): string {
+  const path = url.split(/[?#]/)[0] ?? url;
+  return path.slice(path.lastIndexOf('/') + 1) || path;
 }
 
 function emptyTexture(): DataTexture {
@@ -752,13 +759,25 @@ export class PlanetView {
   }
 
   /** Downloads and decodes an equirectangular image, north up, within the GPU's texture size. */
-  private async decodeImage(url: string, signal?: AbortSignal): Promise<ImageBitmap> {
+  private async decodeImage(
+    url: string,
+    signal?: AbortSignal,
+    onProgress?: (progress: LoadProgress) => void,
+  ): Promise<ImageBitmap> {
     const response = await fetch(url, signal ? { signal } : {});
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
-    const blob = await response.blob();
+    const label = fileName(url);
+    const blob = onProgress
+      ? new Blob([
+          await readWithProgress(response, ({ received, total }) =>
+            onProgress({ stage: 'download', label, done: received, total }),
+          ),
+        ])
+      : await response.blob();
     signal?.throwIfAborted();
+    onProgress?.({ stage: 'decode', label: `Decoding ${label}`, done: 0, total: null });
     // ImageBitmaps ignore texture.flipY: flip while decoding instead, so
     // row 0 (north) ends at the top of the texture, as geo.ts expects.
     let bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
@@ -782,11 +801,12 @@ export class PlanetView {
    * off the main thread. Aborting `signal` drops the load: the promise
    * rejects and the current map stays. A later call does not cancel an
    * earlier one by itself, but the view keeps only the map of the latest call.
+   * `onProgress` follows the download (bytes received) and the decoding.
    */
-  async setTexture(url: string, signal?: AbortSignal): Promise<void> {
+  async setTexture(url: string, signal?: AbortSignal, onProgress?: (progress: LoadProgress) => void): Promise<void> {
     this.textureRequest += 1;
     const request = this.textureRequest;
-    const bitmap = await this.decodeImage(url, signal);
+    const bitmap = await this.decodeImage(url, signal, onProgress);
     if (this.disposed || request !== this.textureRequest || signal?.aborted) {
       bitmap.close();
       signal?.throwIfAborted();

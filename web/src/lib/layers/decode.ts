@@ -129,7 +129,7 @@ function logFlow(info: ScalarLayerInfo): (value: number) => number {
   return info.encoding === 'gray16-log10' ? (v) => v : (v) => Math.log10(1 + v);
 }
 
-function decodeExtra(meta: WorldMetadata, files: LayerFiles): ExtraLayers | null {
+function decodeExtra(meta: WorldMetadata, files: LayerFiles, step: (file: string) => void): ExtraLayers | null {
   const { width, height, layers } = meta;
   const volcanicInfo = layers.volcanic_zone;
   const coastInfo = layers.coast_distance;
@@ -139,25 +139,42 @@ function decodeExtra(meta: WorldMetadata, files: LayerFiles): ExtraLayers | null
   }
   // Zero-filled: half-float 0 is 0, the floodplain of version 2 worlds.
   const packed = new Uint16Array(width * height * 4);
+  step(volcanicInfo.file);
   packChannel(packed, EXTRA.volcanic, decode16(files.volcanic_zone, width, height), volcanicInfo);
+  step(coastInfo.file);
   packChannel(packed, EXTRA.coastKm, decode16(files.coast_distance, width, height), coastInfo);
+  step(highlandInfo.file);
   packChannel(packed, EXTRA.highlandOffset, decode16(files.highland_offset, width, height), highlandInfo);
   if (layers.floodplain && files.floodplain) {
+    step(layers.floodplain.file);
     packChannel(packed, EXTRA.floodplain, decode16(files.floodplain, width, height), layers.floodplain);
   }
   return { packed, coastMaxKm: coastInfo.max };
 }
 
-export function decodeLayers(meta: WorldMetadata, files: LayerFiles): WorldLayers {
+/**
+ * Decodes the layer files of a world. `step` is called with the name of
+ * each file before it is decoded (for a progress report).
+ */
+export function decodeLayers(
+  meta: WorldMetadata,
+  files: LayerFiles,
+  step: (file: string) => void = () => {},
+): WorldLayers {
   const { width, height, layers } = meta;
+  step(layers.biomes.file);
   const biomes = decodeGrey(files.biomes, width, height, 8);
+  step(layers.elevation.file);
   const elevation = decode16(files.elevation, width, height);
   const surface = new Uint16Array(width * height * 4);
   packChannel(surface, SURFACE.elevation, elevation, layers.elevation);
   // Format version 3 and older stored temperatures on a [0, 1] scale.
   const toCelsius = meta.format_version < CELSIUS_VERSION ? celsius : undefined;
+  step(layers.temperature.file);
   packChannel(surface, SURFACE.temperature, decode16(files.temperature, width, height), layers.temperature, toCelsius);
+  step(layers.moisture.file);
   packChannel(surface, SURFACE.moisture, decode16(files.moisture, width, height), layers.moisture);
+  step(layers.flow.file);
   packChannel(surface, SURFACE.logFlow, decode16(files.flow, width, height), layers.flow, logFlow(layers.flow));
   return {
     width,
@@ -169,7 +186,7 @@ export function decodeLayers(meta: WorldMetadata, files: LayerFiles): WorldLayer
     },
     biomes: biomes instanceof Uint8Array ? owned(biomes, (a) => a.slice()) : Uint8Array.from(biomes),
     surface,
-    extra: decodeExtra(meta, files),
+    extra: decodeExtra(meta, files, step),
   };
 }
 
