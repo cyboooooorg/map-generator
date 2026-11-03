@@ -274,7 +274,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 10. Internationalisation of the web app
 
-- **Status:** decided
+- **Status:** done
 - **Analysis:** [09-i18n.md](analysis/09-i18n.md)
 - **Problem:** every string of the web app is English, written in the
   templates; numbers and dates are formatted for English only.
@@ -285,8 +285,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 | Step | Change                                                                               | Seeds | Status |
 | ---- | ------------------------------------------------------------------------------------ | ----- | ------ |
-| 1    | i18n module, typed English catalog, `Intl` formatters, locale detection and selector | Same  | todo   |
-| 2    | Strings moved to the catalog, area by area; formatting localised                     | Same  | todo   |
-| 3    | Server: structured request errors, `[locales.*]` in presets                          | Same  | todo   |
-| 4    | French catalog, French built-in presets, layout checked with longer strings          | Same  | todo   |
-| 5    | Guard against literal text in templates, in CI                                       | Same  | todo   |
+| 1    | i18n module, typed English catalog, `Intl` formatters, locale detection and selector | Same  | done   |
+| 2    | Strings moved to the catalog, area by area; formatting localised                     | Same  | done   |
+| 3    | Server: structured request errors, `[locales.*]` in presets                          | Same  | done   |
+| 4    | French catalog, French built-in presets, layout checked with longer strings          | Same  | done   |
+| 5    | Guard against literal text in templates, in CI                                       | Same  | done   |
