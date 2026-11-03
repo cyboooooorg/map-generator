@@ -71,6 +71,11 @@ pub struct World {
     /// Terrain height in `[-1, 1]` after erosion, before the sea-level shift.
     /// Biome selection uses `elevation - sea_level`.
     pub elevation: Vec<f32>,
+    /// The elevation without the craters younger than the wet era (those
+    /// drawn after the erosion, see [`crate::craters`]): the surface the
+    /// time slider draws them on. `None` on a world reloaded from
+    /// `raw_data`, which only keeps it on disk.
+    pub elevation_base: Option<Vec<f32>>,
     /// Moisture in `[-1, 1]` (`> 0` is wet), planet offset included.
     pub moisture: Vec<f32>,
     /// Annual mean temperature in °C, planet offset and greenhouse included.

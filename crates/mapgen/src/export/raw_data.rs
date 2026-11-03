@@ -43,8 +43,9 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// layers, and the river polylines; version 3 the floodplain layer;
 /// version 4 stores temperatures in °C instead of the former `[0, 1]`
 /// scale; version 5 adds the cloud cover; version 6 the surface render
-/// without overlaid lines.
-pub const FORMAT_VERSION: u32 = 6;
+/// without overlaid lines; version 7 the elevation without the young
+/// impact craters, and its worlds have craters.
+pub const FORMAT_VERSION: u32 = 7;
 
 /// First format version whose temperatures are in °C.
 const CELSIUS_VERSION: u32 = 4;
@@ -89,6 +90,10 @@ pub struct WorldMetadata {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Layers {
     pub elevation: ScalarLayerInfo,
+    /// The elevation without the impact craters younger than the wet era,
+    /// same encoding as `elevation` (format version 7 and later).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elevation_base: Option<ScalarLayerInfo>,
     pub moisture: ScalarLayerInfo,
     pub temperature: ScalarLayerInfo,
     /// `log10(1 + km²)` of the drainage area.
@@ -244,6 +249,23 @@ pub fn export_raw_data(
         });
     }
 
+    let elevation_base = match &world.elevation_base {
+        Some(values) => {
+            let (min, max) = ELEVATION;
+            let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
+            ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
+                .ok_or("layer size does not match the world size")?
+                .save(dir.join("elevation_base.png"))?;
+            Some(ScalarLayerInfo {
+                file: "elevation_base.png".into(),
+                encoding: "gray16".into(),
+                min,
+                max,
+            })
+        }
+        None => None,
+    };
+
     let ids: Vec<u8> = world.biomes.iter().map(|b| b.id()).collect();
     GrayImage::from_raw(w, h, ids)
         .ok_or("layer size does not match the world size")?
@@ -319,6 +341,7 @@ pub fn export_raw_data(
         surface_age_ga: Some(world.params.surface_age_ga),
         layers: Layers {
             elevation,
+            elevation_base,
             moisture,
             temperature,
             flow,
@@ -591,6 +614,7 @@ impl LoadedWorld {
             coast_distance_km,
             floodplain,
             highland_offset,
+            elevation_base: None,
             biomes: self.biomes,
             rivers: self.rivers,
             clouds: Vec::new(),

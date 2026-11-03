@@ -6,7 +6,12 @@ import type { ScalarLayerInfo } from "./ScalarLayerInfo";
 /**
  * The layer files of `raw_data/`.
  */
-export type Layers = { elevation: ScalarLayerInfo, moisture: ScalarLayerInfo, temperature: ScalarLayerInfo, 
+export type Layers = { elevation: ScalarLayerInfo, 
+/**
+ * The elevation without the impact craters younger than the wet era,
+ * same encoding as `elevation` (format version 7 and later).
+ */
+elevation_base?: ScalarLayerInfo | null, moisture: ScalarLayerInfo, temperature: ScalarLayerInfo, 
 /**
  * `log10(1 + km²)` of the drainage area.
  */

@@ -30,6 +30,7 @@
 //! (0.75 GB at 8192 × 4096).
 use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
+use crate::craters::{CraterField, Window, base_min_diameter_km};
 use crate::export::colour::{linear_of, to_srgb};
 use crate::export::ecotone::ecotone_colour_for;
 use crate::export::raw_data::{Layer16, LoadedWorld};
@@ -49,7 +50,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 2;
+pub const RENDER_VERSION: u32 = 3;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -87,6 +88,9 @@ const COAST_WARP_DECAY: f64 = 0.8;
 /// Distance from the waterline (elevation units) over which the coastal
 /// displacement fades out, so inland relief and rivers stay in place.
 const COAST_BAND: (f32, f32) = (0.01, 0.04);
+/// Smallest impact crater a tile draws, in tile pixels across (as the base
+/// map, see [`crate::craters`]).
+const CRATER_MIN_PIXELS: f64 = 4.0;
 /// Warp of the climate sampling position, in base pixels.
 const CLIMATE_WARP_PX: f64 = 1.0;
 
@@ -139,6 +143,9 @@ pub struct DetailWorld {
     /// Depth of each base water pixel below its surface (see
     /// [`water_depths_of`]), for the shallow tint of lakes.
     depths: Vec<f32>,
+    /// The world's impact craters, to find and draw those smaller than the
+    /// base map's.
+    craters: CraterField,
 }
 
 /// Flag of base lake pixels (water above the waterline, not under a drawn
@@ -306,6 +313,7 @@ impl DetailWorld {
         drop(coverage);
         let depths = water_depths_of(&world.params, |i| world.elevation.get(i), &world.biomes);
         Self {
+            craters: CraterField::context(&world.params),
             flags,
             depths,
             noise: Perlin::new(seed.wrapping_add(1000)),
@@ -403,6 +411,104 @@ impl DetailWorld {
         base + amplitude * shore * floor * band_limited(&self.noise, p, radius, first, last, gain)
     }
 
+    /// Elevation of a tile with a one-pixel border, for slopes (row-major,
+    /// `TILE_SIZE + 2` wide): the detailed elevation, the impact craters too
+    /// small for the base map, and the rivers' channels (`channel`, same
+    /// layout). Also the same without those craters, which biomes follow: a
+    /// small crater changes the relief, not the ground it is dug into.
+    fn tile_elevation(&self, tile: TileId, pixel_km: f64, channel: &[f32]) -> (Vec<f32>, Vec<f32>) {
+        let w = &self.world;
+        let side = TILE_SIZE as usize + 2;
+        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+        let craters = self.crater_relief(tile, pixel_km);
+        (0..side * side)
+            .into_par_iter()
+            .map(|i| {
+                let (px, py) = ((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
+                let (lon, lat) = tile.lon_lat(px, py);
+                let ground = self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km);
+                let e = match &craters {
+                    // Craters never dig the land below the sea.
+                    Some(relief) if ground >= waterline => {
+                        (ground + relief[i]).max(waterline + 1e-6)
+                    }
+                    Some(relief) => ground + relief[i],
+                    None => ground,
+                };
+                // The river's channel and banks, never below the sea.
+                let channelled = |e: f32| {
+                    if e >= waterline {
+                        (e - channel[i]).max(waterline + 1e-6)
+                    } else {
+                        e
+                    }
+                };
+                (channelled(e), channelled(ground))
+            })
+            .unzip()
+    }
+
+    /// Relief of the impact craters between [`CRATER_MIN_PIXELS`] tile
+    /// pixels and the base map's smallest (which the base elevation holds)
+    /// on a tile with its border, or `None` when there is none.
+    fn crater_relief(&self, tile: TileId, pixel_km: f64) -> Option<Vec<f32>> {
+        let w = &self.world;
+        let min_km = CRATER_MIN_PIXELS * pixel_km;
+        let max_km = base_min_diameter_km(&w.params.grid());
+        if min_km >= max_km {
+            return None;
+        }
+        let side = TILE_SIZE as usize + 2;
+        let (cols, rows) = tile.grid();
+        let (lon0, lat0) = tile.lon_lat(-1.0, -1.0);
+        let window = Window {
+            width: side,
+            height: side,
+            lat0,
+            dlat: PI / (rows as f64 * TILE_SIZE as f64),
+            lon0,
+            dlon: TAU / (cols as f64 * TILE_SIZE as f64),
+        };
+        // The cap around the tile's centre that holds its corners.
+        let (lon_c, lat_c) =
+            tile.lon_lat(TILE_SIZE as f64 / 2.0 - 0.5, TILE_SIZE as f64 / 2.0 - 0.5);
+        let centre = sphere(lon_c, lat_c, 1.0);
+        let angle = [
+            (-1.0, -1.0),
+            (side as f64, -1.0),
+            (-1.0, side as f64),
+            (side as f64, side as f64),
+        ]
+        .iter()
+        .map(|&(px, py)| {
+            let (lon, lat) = tile.lon_lat(px, py);
+            let p = sphere(lon, lat.clamp(-PI / 2.0, PI / 2.0), 1.0);
+            (p[0] * centre[0] + p[1] * centre[1] + p[2] * centre[2])
+                .clamp(-1.0, 1.0)
+                .acos()
+        })
+        .fold(0.0f64, f64::max);
+        let craters = self.craters.near(centre, angle, min_km, max_km);
+        if craters.is_empty() {
+            return None;
+        }
+        let ground = |c: &crate::craters::Crater| {
+            let lat = c.centre[2].clamp(-1.0, 1.0).asin();
+            let lon = c.centre[1].atan2(c.centre[0]).rem_euclid(TAU);
+            let (x, y) = self.base_xy(lon, lat);
+            bilinear(&w.elevation, w.width, w.height, x, y)
+        };
+        // The hillshade exaggerates relief about 60 times (`RELIEF_KM`), for
+        // the gentle slopes of the base map: small crater walls would turn
+        // vertical. Their relief shrinks with their size, from the base
+        // map's at its smallest crater down to a tenth.
+        let gain = |c: &crate::craters::Crater| ((c.diameter_km / max_km) as f32).clamp(0.1, 1.0);
+        let mut relief = vec![0.0; side * side];
+        self.craters
+            .add_relief(&craters, &window, ground, gain, &mut relief);
+        Some(relief)
+    }
+
     /// Renders one tile as an RGB image.
     pub fn render_tile(&self, tile: TileId) -> RgbImage {
         let w = &self.world;
@@ -411,24 +517,9 @@ impl DetailWorld {
         let n = TILE_SIZE as usize;
         let pixel_km = w.params.circumference_km as f64 / (cols as f64 * TILE_SIZE as f64);
 
-        // Elevation with a one-pixel border, for slopes.
         let side = n + 2;
         let (coverage, channel) = self.river_coverage(tile, pixel_km);
-        let waterline = w.params.sea_level + planet.rules.waterline;
-        let elevation: Vec<f32> = (0..side * side)
-            .into_par_iter()
-            .map(|i| {
-                let (px, py) = ((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
-                let (lon, lat) = tile.lon_lat(px, py);
-                let e = self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km);
-                // The river's channel and banks, never below the sea.
-                if e >= waterline {
-                    (e - channel[i]).max(waterline + 1e-6)
-                } else {
-                    e
-                }
-            })
-            .collect();
+        let (elevation, surface) = self.tile_elevation(tile, pixel_km, &channel);
 
         let river_colour = linear_of(surface_color(planet.remap(Biome::River)));
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
@@ -439,7 +530,9 @@ impl DetailWorld {
             .map(|i| {
                 let (px, py) = (i % n, i / n);
                 let (lon, lat) = tile.lon_lat(px as f64, py as f64);
-                let e = elevation[(py + 1) * side + px + 1];
+                // Biomes follow the ground without the tile's small craters;
+                // the hillshade shows them.
+                let e = surface[(py + 1) * side + px + 1];
                 let relief = (e - w.params.sea_level).clamp(-1.0, 1.0);
                 let above = relief - planet.rules.waterline;
 
@@ -674,6 +767,54 @@ mod tests {
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
         DetailWorld::new(LoadedWorld::from_world(&world))
+    }
+
+    /// A small airless, heavily cratered world.
+    fn cratered_world() -> DetailWorld {
+        let planet = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/mercury-like.toml"
+        );
+        let request = WorldRequest {
+            planet: Some(planet.into()),
+            seed: Some(5),
+            sea_level: Some(0.15),
+            surface_age_ga: Some(4.0),
+            width: Some(512),
+            height: Some(256),
+            ..Default::default()
+        };
+        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        DetailWorld::new(LoadedWorld::from_world(&world))
+    }
+
+    #[test]
+    fn tiles_draw_craters_too_small_for_the_base_map() {
+        let d = cratered_world();
+        // Base pixels are 30 km: the base map has no crater under 120 km.
+        let tile = TileId { z: 5, x: 20, y: 12 };
+        let pixel_km = d.world().params.circumference_km as f64 / (64.0 * TILE_SIZE as f64);
+        let relief = d.crater_relief(tile, pixel_km).expect("craters");
+        let deepest = relief.iter().fold(0.0f32, |m, &v| m.min(v)) * crate::craters::ELEVATION_KM;
+        assert!(deepest < -0.5, "deepest cavity {deepest} km");
+        // Coarse tiles leave the craters to the base elevation.
+        assert!(d.crater_relief(TileId { z: 0, x: 0, y: 0 }, 1e3).is_none());
+    }
+
+    #[test]
+    fn neighbouring_tiles_agree_on_craters() {
+        let d = cratered_world();
+        let (z, x, y) = (5, 20, 12);
+        let pixel_km = d.world().params.circumference_km as f64 / (64.0 * TILE_SIZE as f64);
+        let side = TILE_SIZE as usize + 2;
+        let no_rivers = vec![0.0; side * side];
+        let (a, _) = d.tile_elevation(TileId { z, x, y }, pixel_km, &no_rivers);
+        let (b, _) = d.tile_elevation(TileId { z, x: x + 1, y }, pixel_km, &no_rivers);
+        // Column 256 of the first tile is column 0 of the next one.
+        for row in 0..side {
+            let (ea, eb) = (a[row * side + side - 1], b[row * side + 1]);
+            assert!((ea - eb).abs() < 1e-5, "row {row}: {ea} vs {eb}");
+        }
     }
 
     #[test]

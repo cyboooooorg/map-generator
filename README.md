@@ -52,7 +52,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--width <px>`          | map width, `2`–`16384`                                                                                                                                 | `1920`                                       |
 | `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                                     |
-| `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)                                                                                                     | off                                          |
+| `--no-raw-data`         | skip the `raw_data/` export (about 15 MB at 1920 × 1080)                                                                                               | off                                          |
 | `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the time they take; also set by `MAPGEN_NO_NOISE_MAPS` (see [Environment](#environment))                 | off                                          |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
@@ -275,6 +275,7 @@ worlds/<planet>-<seed>/
 ├── raw_data/
 │   ├── world.json     ← planet parameters, layer encodings, biome table
 │   ├── elevation.png  ← 16-bit greyscale layer
+│   ├── elevation_base.png ← 16-bit greyscale layer, without the young craters
 │   ├── moisture.png   ← 16-bit greyscale layer
 │   ├── temperature.png ← 16-bit greyscale layer
 │   ├── flow.png       ← 16-bit greyscale layer, log scale
@@ -334,19 +335,20 @@ Clear liquids take their colour from their depth (Beer-Lambert absorption in lin
 
 `raw_data/` holds one lossless PNG per layer, pixel-aligned with `world.png` (row 0 = north pole, column 0 = longitude 0), and a `world.json` describing how to decode them.
 
-| File                  | Encoding         | Content                                                                                                                                  |
-| --------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `elevation.png`       | 16-bit grey      | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`)                                             |
-| `moisture.png`        | 16-bit grey      | Moisture in `[-1, 1]`, planet-type offset included                                                                                       |
-| `temperature.png`     | 16-bit grey      | Annual mean temperature in °C (−200 to 600), planet-type offset included                                                                 |
-| `flow.png`            | 16-bit grey, log | River flow: `log10(1 + km²)` in `[0, 8]`, the wet-equivalent area draining through the pixel                                             |
-| `volcanic_zone.png`   | 16-bit grey      | Volcanic zone in `[0, 1]` as biome selection sees it (planet shift included)                                                             |
-| `coast_distance.png`  | 16-bit grey      | Distance to the nearest open water in `[0, 2000]` km (0 on water, capped)                                                                |
-| `highland_offset.png` | 16-bit grey      | Local shift of the mountain line in `[-1, 1]`: a pixel is highland when `elevation − sea_level + offset` exceeds the preset's `highland` |
-| `floodplain.png`      | 16-bit grey      | Floodplain weight in `[0, 1]`: 1 on the flat floor of a river valley, 0 away from rivers                                                 |
-| `biomes.png`          | 8-bit grey       | Biome id of each pixel                                                                                                                   |
-| `clouds.png`          | 8-bit grey       | Cloud cover in `[0, 1]` (`pixel / 255`), from the climate and the cloud kind; absent when the planet has no clouds                       |
-| `surface.png`         | 8-bit RGB        | The render of `world.png` without its reference lines and depth contours: the viewer draws them itself, and can hide them                |
+| File                  | Encoding         | Content                                                                                                                                                                               |
+| --------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `elevation.png`       | 16-bit grey      | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`)                                                                                          |
+| `elevation_base.png`  | 16-bit grey      | The elevation without the impact craters younger than the wet era (those drawn after erosion), same range: the surface the time slider will draw them on (format version 7 and later) |
+| `moisture.png`        | 16-bit grey      | Moisture in `[-1, 1]`, planet-type offset included                                                                                                                                    |
+| `temperature.png`     | 16-bit grey      | Annual mean temperature in °C (−200 to 600), planet-type offset included                                                                                                              |
+| `flow.png`            | 16-bit grey, log | River flow: `log10(1 + km²)` in `[0, 8]`, the wet-equivalent area draining through the pixel                                                                                          |
+| `volcanic_zone.png`   | 16-bit grey      | Volcanic zone in `[0, 1]` as biome selection sees it (planet shift included)                                                                                                          |
+| `coast_distance.png`  | 16-bit grey      | Distance to the nearest open water in `[0, 2000]` km (0 on water, capped)                                                                                                             |
+| `highland_offset.png` | 16-bit grey      | Local shift of the mountain line in `[-1, 1]`: a pixel is highland when `elevation − sea_level + offset` exceeds the preset's `highland`                                              |
+| `floodplain.png`      | 16-bit grey      | Floodplain weight in `[0, 1]`: 1 on the flat floor of a river valley, 0 away from rivers                                                                                              |
+| `biomes.png`          | 8-bit grey       | Biome id of each pixel                                                                                                                                                                |
+| `clouds.png`          | 8-bit grey       | Cloud cover in `[0, 1]` (`pixel / 255`), from the climate and the cloud kind; absent when the planet has no clouds                                                                    |
+| `surface.png`         | 8-bit RGB        | The render of `world.png` without its reference lines and depth contours: the viewer draws them itself, and can hide them                                                             |
 
 A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵` of the range (0.012 °C for temperature).
 
@@ -371,7 +373,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 }
 ```
 
-The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`; version 4 stores temperatures in °C instead of the former `[0, 1]` scale; version 5 adds `clouds`; version 6 adds `surface`. Older worlds still load: missing layers are recomputed, or zero for `floodplain`, and the temperatures of versions 1–3 (layer and preset thresholds) are converted to °C through the Earth-fitted curve, which keeps their biomes.
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`; version 4 stores temperatures in °C instead of the former `[0, 1]` scale; version 5 adds `clouds`; version 6 adds `surface`; version 7 adds `elevation_base`, and its worlds have impact craters. Older worlds still load: missing layers are recomputed, or zero for `floodplain`, and the temperatures of versions 1–3 (layer and preset thresholds) are converted to °C through the Earth-fitted curve, which keeps their biomes.
 
 `rivers.json` holds the drawn river polylines (version 2 and later; its file name is in `world.json` under `rivers`):
 
@@ -535,7 +537,9 @@ The generated layers stop at the base resolution (about 20 km per pixel at 1920 
 - **Channels**: each river is cut into the detailed elevation along the same curve as its drawing, `0.0005 × (flow / 120 000 km²)^0.3` elevation units deep (exaggerated like the rest of the relief), with banks rising from a quarter of the drawn width to the full width from its middle, so the hillshade shows them; never below the sea.
 - **Picture**: the generation's own biome rules and preset remap, soft borders, hillshading, and the vector rivers redrawn at the tile's scale (Catmull-Rom smoothed) with the base map's width law at the level's resolution (`W` = columns × 256): no jump in width when tiles replace the base map, 1.26× thinner in km at each level, down to their real width (`0.002 × √flow` km).
 
-A tile takes about 4 ms on 10 cores. A world prepared for tiles keeps its layers as stored in `raw_data/` (16 bits per value, decoded as they are sampled), a byte of lake and river flags and the water depth per pixel: about 22 bytes per base pixel (0.2 GB at 4096 × 2048, 0.75 GB at 8192 × 4096), loaded in about 0.1 s at 4096 × 2048 since the layer files are decoded in parallel. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
+- **Craters**: the [impact craters](#impact-craters) too small for the base map (from 4 tile pixels up to its smallest, 4 base pixels) are drawn on each tile from the same crater field, so zooming in reveals smaller and smaller ones. They are added to the relief rather than replacing it (see the craters section), scaled down with their size from the base map's relief at its smallest crater to a tenth of it, since the hillshade's 60-fold exaggeration would make small crater walls vertical. Biomes follow the ground without them: a small crater changes the relief, not the surface it is dug into.
+
+A tile takes about 4 ms on 10 cores; on a heavily cratered world (a 4 Ga `mercury-like`) about 10–12 ms, against 5 ms without craters. A world prepared for tiles keeps its layers as stored in `raw_data/` (16 bits per value, decoded as they are sampled), a byte of lake and river flags and the water depth per pixel: about 22 bytes per base pixel (0.2 GB at 4096 × 2048, 0.75 GB at 8192 × 4096), loaded in about 0.1 s at 4096 × 2048 since the layer files are decoded in parallel. Coast-related biomes (beaches, wetlands) still use the base coast distance, so their 40 km band is smoother than the detailed coastline at the deepest levels.
 
 ### Elevation — continents, coasts and mountains
 
@@ -567,6 +571,8 @@ Craters follow the planet's surface age (`--surface-age`), gravity, atmosphere a
 - **Shape.** Simple craters are bowls `D/5` deep with a rim of `0.036 D`. Above a transition diameter of `15 km × 1.62 / g` (the Moon's 15 km, about 2.5 km at Earth's gravity) they get a flat floor and a central peak, then a peak ring above about seven times the transition, and grow shallower (Pike). Ejecta thin out as `(r/R)⁻³` and stop at 3 radii; rims and ejecta are irregular. Elevations are converted with `ELEVATION_KM` = 25 km per elevation unit, calibrated on Earth-like worlds (median sea floor about 4 km deep, highest peaks 8–10 km).
 - **Superposition.** Craters are drawn in age order, oldest first: inside a crater the previous relief is replaced (15 % of it kept), outside, ejecta bury it.
 - **Water.** Craters older than the end of the wet era are drawn before the hydraulic erosion, worn by their exposure to water (a 20 km crater keeps `1/e` of its relief after 0.1 Ga at erosion 1, larger ones last longer in proportion), then eroded; younger ones are drawn after it, fresh. A world with liquid water today (0.01 bar or more) is wet to the present, so its craters are worn: Earth-like worlds keep only a few large, faint ones. Craters on the floor of a sea that still fills the basins (the preset's ocean is still water, ice-sealed sea, acid or magma) leave nothing. Craters make closed basins, which the hydrology fills into lakes on wet worlds.
+- **Diffusion.** Small impacts slowly smooth every crater (lunar topographic diffusivity, 5.5 m² per Ma): a crater of radius `R` loses `1/e` of its relief once `5.5 m²/Ma × age` reaches 5 % of `R²`, so old surfaces lose their sub-kilometre craters (a 500 m crater is subdued in about 0.6 Ga) while the craters of the base map are untouched.
+- **Detail tiles.** Craters too small for the base map appear in the [detail tiles](#detail-tiles--deep-zoom). The grids are searched only around each tile, giving exactly the craters of the whole sphere. These craters are added to the relief instead of replacing it, which keeps neighbouring tiles identical at their borders: at saturation small cavities cover only about 7 % of the ground per octave, so adding them digs no pits.
 - **Air.** A thick atmosphere breaks up small impactors: no crater below `0.1 km × p^0.75` (3 km on Venus), fewer below ten times that.
 - **Cost.** Craters are drawn in waves of craters that share no pixel, each crater after every older one it overlaps, so a wave runs in parallel and the result is the same as drawing them one at a time. On a 4 Ga Mercury-sized world, the most cratered of the examples, generations with and without craters take the same time within run-to-run variation (about 1 s at 1920 × 1080, 18 s at 8192 × 4096).
 
