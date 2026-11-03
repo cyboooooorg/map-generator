@@ -15,6 +15,7 @@
   import type { WorldSummary } from './lib/api/types/WorldSummary';
   import { requestFromWorld, rerollRequest } from './lib/format';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
+  import { decodeView, decodeWorlds, linkHash, type ViewLink } from './lib/link';
   import { loadSetting, saveSetting } from './lib/settings';
   import { stepWorld } from './lib/shortcuts';
   import { toasts } from './lib/toasts.svelte';
@@ -87,20 +88,42 @@
     refresh().catch((e: unknown) => console.warn('Could not refresh the world list', e));
   }
 
-  /** `#world=<id>&compare=<id>`: the worlds shown, so a reload or a shared link opens them. */
-  function readHash(): { world: string | null; compare: string | null } {
-    const params = new URLSearchParams(location.hash.slice(1));
-    return { world: params.get('world'), compare: params.get('compare') };
-  }
-
+  /**
+   * `#world=<id>&compare=<id>`: the worlds shown, so a reload or a shared
+   * link opens them. A copied link also carries the view (see lib/link.ts),
+   * applied once to the main pane; the address then names only the worlds.
+   */
   function applyHash(): void {
-    const { world, compare } = readHash();
+    const params = new URLSearchParams(location.hash.slice(1));
+    const { world, compare } = decodeWorlds(params);
     const known = (id: string | null) => (id && worlds.some((w) => w.id === id) ? id : null);
     if (known(world)) {
       selectedId = world;
       compareId = known(compare);
       pane = 'viewer';
+      pendingView = decodeView(params);
     }
+  }
+
+  /** The view of a link, until the panes can take it (the compared one follows a linked camera). */
+  let pendingView = $state.raw<ViewLink | null>(null);
+  $effect(() => {
+    const target = primaryPane;
+    const other = compareId ? secondaryPane : null;
+    const view = pendingView;
+    if (target && view && (!compareId || other)) {
+      pendingView = null;
+      untrack(() => {
+        target.applyView(view);
+        if (view.camera && linkCameras) other?.applyCamera(view.camera);
+      });
+    }
+  });
+
+  /** A link to the worlds shown and the main pane's view (Copy link). */
+  function shareLink(): string {
+    const hash = linkHash(selectedId, compareId, primaryPane?.viewState() ?? null);
+    return `${location.origin}${location.pathname}#${hash}`;
   }
 
   let starting = $state(false);
@@ -360,6 +383,7 @@
           onVary={() => primary.meta && openForm(requestFromWorld(primary.meta), primary.id)}
           onReroll={reroll}
           onCompare={(id) => (compareId = id)}
+          link={shareLink}
           onDelete={() => selectedId && removeWorlds([selectedId])}
         />
         <WorldList

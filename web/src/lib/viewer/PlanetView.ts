@@ -1149,16 +1149,20 @@ export class PlanetView {
     };
   }
 
-  /** Moves the camera to a state reported by another view (same mode expected). */
+  /**
+   * Moves the camera to a state reported by another view, or read from a
+   * link, switching the mode at once if it differs. A morph under way is
+   * cut short: it would carry the camera elsewhere.
+   */
   setCamera(state: CameraState): void {
     this.requestRender();
     this.applyingCamera = true;
     if (state.mode !== this.mode) {
       this.setMode(state.mode);
-      // Skip the morph: the other view has finished it already.
-      this.animation = null;
-      this.morph = state.mode === 'globe' ? 1 : 0;
     }
+    // Skip the morph: the other view has finished it already.
+    this.animation = null;
+    this.morph = state.mode === 'globe' ? 1 : 0;
     this.camera.position.fromArray(state.position);
     this.controls.target.fromArray(state.target);
     this.camera.up.fromArray(state.up);

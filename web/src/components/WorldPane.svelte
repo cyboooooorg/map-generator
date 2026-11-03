@@ -3,6 +3,7 @@
   import type { LinkedDisplay } from '../lib/display';
   import { formatKm } from '../lib/format';
   import { formatLonLat, pathKm, type LonLat } from '../lib/geo';
+  import type { ViewLink } from '../lib/link';
   import { samplePoint } from '../lib/sample';
   import type { CameraState } from '../lib/viewer/PlanetView';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -90,6 +91,16 @@
   /** Shows the same place as another pane. */
   export function applyCamera(state: CameraState): void {
     viewer?.applyCamera(state);
+  }
+
+  /** The camera, layer, relief and sun shown, for a link to this view. */
+  export function viewState(): ViewLink | null {
+    return viewer?.viewState() ?? null;
+  }
+
+  /** Opens the view of a link (the parts it has). */
+  export function applyView(link: ViewLink): void {
+    viewer?.applyView(link);
   }
 </script>
 

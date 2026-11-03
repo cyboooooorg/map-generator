@@ -6,6 +6,7 @@
   import { downloadJson } from '../lib/download';
   import { formatArea, formatShare, saveBlob, surfaceColour } from '../lib/format';
   import type { LonLat } from '../lib/geo';
+  import type { ViewLink } from '../lib/link';
   import type { LoadProgress } from '../lib/progress';
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
@@ -244,9 +245,16 @@
     if (changes.graticule !== undefined) graticule = changes.graticule;
   });
 
+  /** A camera to show (a link's, a linked pane's), kept until the view exists. */
+  let pendingCamera: CameraState | null = null;
+
   onMount(() => {
     try {
       view = new PlanetView(canvas);
+      if (pendingCamera) {
+        view.setCamera(pendingCamera);
+        pendingCamera = null;
+      }
       view.onPick = (point) => onPick(point);
       view.onHover = (point) => onHover(point);
       view.onCameraChange = (state) => onCameraChange?.(state);
@@ -430,10 +438,47 @@
     view?.resetView();
   }
 
-  /** Shows the same place as another viewer. */
+  /** Shows the same place as another viewer (once the view exists, if it does not yet). */
   export function applyCamera(state: CameraState): void {
     mode = state.mode;
-    view?.setCamera(state);
+    if (view) {
+      view.setCamera(state);
+    } else {
+      pendingCamera = state;
+    }
+  }
+
+  /** The camera, layer, relief and sun shown, for a link to this view. */
+  export function viewState(): ViewLink | null {
+    if (!view) {
+      return null;
+    }
+    return {
+      camera: view.getCamera(),
+      layer: shown,
+      relief,
+      sun: sun ? { on: true, season, longitudeDeg: sunLongitude } : { on: false },
+    };
+  }
+
+  /**
+   * Opens the view of a link: the parts it has replace the current ones.
+   * A layer this world lacks is kept as the choice, and the biomes shown
+   * meanwhile (as when picked by hand).
+   */
+  export function applyView(link: ViewLink): void {
+    if (link.layer) layer = link.layer;
+    if (link.relief !== undefined) relief = link.relief;
+    if (link.sun) {
+      sun = link.sun.on;
+      if (link.sun.on) {
+        season = link.sun.season;
+        sunLongitude = link.sun.longitudeDeg;
+      }
+    }
+    if (link.camera) {
+      applyCamera(link.camera);
+    }
   }
 
   /** Saves the current view as a PNG. */
