@@ -201,7 +201,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 7. Surface colours
 
-- **Status:** in progress
+- **Status:** done
 - **Problem:** the hillshaded renders use the classification palette: every
   biome a saturated, arbitrary colour (bright green plains, royal blue seas),
   which reads as an atlas, not as a planet seen from orbit. Hillshading,
@@ -218,7 +218,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 1    | Surface palette, ecotones and river edges mixed in linear light, `surface_color` in the biome table | Same  | done   |
 | 2    | Water colour from depth (absorption), no visible step between Ocean and Deep Ocean                  | Same  | done   |
 | 3    | Small colour variation within a biome, shared by the base map and the tiles                         | Same  | done   |
-| 4    | Viewer: lava and magma glow on the night side                                                       | Same  | todo   |
+| 4    | Viewer: lava and magma glow on the night side                                                       | Same  | done   |
 
 - **Rejected:** a 2:1 map size for square pixels (the grid already scales
   slopes by latitude); rock and snow from the slope (later, with the tiles'
