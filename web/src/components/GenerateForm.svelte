@@ -7,6 +7,7 @@
   import type { ParamDefault } from '../lib/api/types/ParamDefault';
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
+  import { replaceWorld } from '../lib/replace';
 
   interface Props {
     presets: PresetInfo[];
@@ -245,10 +246,10 @@
     submitting = true;
     try {
       const request = buildRequest();
-      if (conflict && replace && targetId) {
-        await api.deleteWorld(targetId);
-      }
-      const job = await api.createWorld(request);
+      // A replacement deletes the old world only once the server has
+      // validated the request (see replaceWorld).
+      const job =
+        conflict && replace && targetId ? await replaceWorld(targetId, request) : await api.createWorld(request);
       onSubmitted(job, request);
     } catch (e) {
       error = e instanceof ApiFailure ? e.message : String(e);
