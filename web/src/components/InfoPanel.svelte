@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n/index.svelte';
-  import { biomeName } from '../lib/i18n/names';
+  import { biomeName } from '../lib/i18n/names.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
   import type { WorldMetadata } from '../lib/api/types/WorldMetadata';
   import { copyText, formatArea, formatKm, formatNumber, surfaceColour, withUnit } from '../lib/format';

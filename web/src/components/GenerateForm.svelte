@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
-  import { presetDescription, presetName } from '../lib/i18n/names';
+  import { presetDescription, presetName } from '../lib/i18n/names.svelte';
   import { untrack } from 'svelte';
-  import { ApiFailure, api } from '../lib/api/client';
+  import { api } from '../lib/api/client';
   import type { Defaults } from '../lib/api/types/Defaults';
   import type { FormSpec } from '../lib/api/types/FormSpec';
   import type { JobCreated } from '../lib/api/types/JobCreated';
@@ -303,7 +304,7 @@
       saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields });
       onSubmitted(job, request);
     } catch (e) {
-      error = e instanceof ApiFailure ? e.message : String(e);
+      error = errorText(e);
     } finally {
       submitting = false;
     }

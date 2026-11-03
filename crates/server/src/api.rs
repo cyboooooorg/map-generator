@@ -1,9 +1,10 @@
 //! Types exchanged with the web front-end. `cargo test` regenerates their
 //! TypeScript definitions in `web/src/lib/api/types/` (see `.cargo/config.toml`).
 use mapgen::generation::Stage;
-use mapgen::preset::{Defaults, ParamDefault};
+use mapgen::preset::{Defaults, ParamDefault, PresetLocale};
 use mapgen::request::{Limits, WorldRequest};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use ts_rs::TS;
 
 /// A planet preset the generation form can offer.
@@ -17,6 +18,8 @@ pub struct PresetInfo {
     /// Whether the preset is embedded in the generator or read from a file.
     pub built_in: bool,
     pub defaults: Defaults,
+    /// Translated name and description, by language code (`fr`).
+    pub locales: BTreeMap<String, PresetLocale>,
 }
 
 /// Limits and default draw of one numeric parameter.
@@ -141,7 +144,69 @@ pub struct JobInfo {
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]
 pub struct ApiError {
+    /// What went wrong, in English.
     pub error: String,
+    /// The reason in a form clients can word themselves (the web app
+    /// translates it), for the errors a user can fix.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub detail: Option<ErrorDetail>,
+}
+
+/// Machine-readable reason of a failed request (`code`), with its values.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[serde(tag = "code", rename_all = "snake_case")]
+#[ts(export)]
+pub enum ErrorDetail {
+    /// A parameter is outside its limits (`field` is the request field).
+    OutOfRange { field: String, min: f32, max: f32 },
+    /// The map width or height is outside the accepted sizes.
+    SizeOutOfRange {
+        field: String,
+        value: u32,
+        min: u32,
+        max: u32,
+    },
+    /// Both `sea_level` and `land_fraction` are set.
+    SeaLevelAndLandFraction,
+    /// No preset of that name or file.
+    UnknownPreset { preset: String },
+    /// The map has more pixels than this server accepts.
+    TooManyPixels {
+        width: u32,
+        height: u32,
+        #[ts(type = "number")]
+        max_pixels: u64,
+    },
+    /// The world is being generated already.
+    BeingGenerated { world: String },
+    /// The world exists and the request does not replace it.
+    WorldExists { world: String },
+    /// A generation is running: tiles and hex grids are paused.
+    Busy,
+}
+
+impl ErrorDetail {
+    /// The detail of a request validation error, when it has one (preset
+    /// errors keep their text only).
+    pub fn of_request(error: &mapgen::request::RequestError) -> Option<Self> {
+        use mapgen::request::{MAP_SIZE, RequestError};
+        match error {
+            RequestError::OutOfRange { field, limits } => Some(Self::OutOfRange {
+                field: (*field).to_owned(),
+                min: limits.min,
+                max: limits.max,
+            }),
+            RequestError::BadSize { field, value } => Some(Self::SizeOutOfRange {
+                field: (*field).to_owned(),
+                value: *value,
+                min: MAP_SIZE.0,
+                max: MAP_SIZE.1,
+            }),
+            RequestError::SeaLevelAndLandFraction => Some(Self::SeaLevelAndLandFraction),
+            RequestError::Preset(_) => None,
+        }
+    }
 }
 
 /// Request to resample a world onto a hex grid.

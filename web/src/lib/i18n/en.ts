@@ -433,4 +433,29 @@ export const en = {
   world: {
     loadFailed: (p: { id: string; error: string }) => `Could not load ${p.id}: ${p.error}`,
   },
+  /** Request errors the server explains with a code (see `ErrorDetail`). */
+  errors: {
+    outOfRange: (p: { field: string; min: string; max: string }) => `${p.field} must be between ${p.min} and ${p.max}.`,
+    sizeOutOfRange: (p: { field: string; value: number; min: number; max: number }) =>
+      `The map ${p.field} is ${p.value}: it must be between ${p.min} and ${p.max} pixels.`,
+    seaLevelAndLandFraction: 'Set the sea level or the land share, not both.',
+    unknownPreset: (p: { preset: string }) => `There is no planet preset named ${p.preset}.`,
+    tooManyPixels: (p: { width: number; height: number; max: string }) =>
+      `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,
+    beingGenerated: (p: { world: string }) => `${p.world} is being generated already.`,
+    worldExists: (p: { world: string }) => `${p.world} exists already: replace it, delete it or pick another seed.`,
+    busy: 'A generation is running: try again once it ends.',
+    /** Names of the request fields, in the error messages. */
+    fields: {
+      sea_level: 'Sea level',
+      land_fraction: 'Land share',
+      volcanic: 'Volcanism',
+      circumference_km: 'Circumference',
+      axial_tilt_deg: 'Axial tilt',
+      erosion: 'Erosion',
+      pressure_bar: 'Pressure',
+      width: 'width',
+      height: 'height',
+    } as Record<string, string>,
+  },
 };

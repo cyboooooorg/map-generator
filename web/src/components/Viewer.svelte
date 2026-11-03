@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
-  import { biomeName } from '../lib/i18n/names';
+  import { biomeName } from '../lib/i18n/names.svelte';
   import { onDestroy, onMount, untrack } from 'svelte';
   import { ApiFailure, api, worldFile } from '../lib/api/client';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -418,7 +419,7 @@
         })
         .catch((e: unknown) => {
           if (!controller.signal.aborted) {
-            toasts.error(t.viewer.hexFailed({ error: e instanceof ApiFailure ? e.message : String(e) }));
+            toasts.error(t.viewer.hexFailed({ error: errorText(e) }));
           }
         })
         .finally(() => {

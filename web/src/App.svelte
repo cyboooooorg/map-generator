@@ -8,13 +8,15 @@
   import WorldInfo from './components/WorldInfo.svelte';
   import WorldList from './components/WorldList.svelte';
   import WorldPane from './components/WorldPane.svelte';
-  import { ApiFailure, api } from './lib/api/client';
+  import { api } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { JobCreated } from './lib/api/types/JobCreated';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import type { WorldSummary } from './lib/api/types/WorldSummary';
   import { requestFromWorld, rerollRequest } from './lib/format';
+  import { errorText } from './lib/i18n/errors';
+  import { setPresetLocales } from './lib/i18n/names.svelte';
   import { getLocale, t } from './lib/i18n/index.svelte';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { decodeView, decodeWorlds, linkHash, type ViewLink } from './lib/link';
@@ -137,6 +139,7 @@
     try {
       if (!spec) {
         [presets, spec] = await Promise.all([api.presets(), api.form()]);
+        setPresetLocales(presets);
         jobs.defaultSize = [spec.default_width, spec.default_height];
       }
       await refresh();
@@ -336,7 +339,7 @@
       const job = await api.createWorld(request);
       submitted(job, request);
     } catch (e) {
-      toasts.error(t.app.rerollFailed({ error: e instanceof ApiFailure ? e.message : String(e) }));
+      toasts.error(t.app.rerollFailed({ error: errorText(e) }));
     }
   }
 

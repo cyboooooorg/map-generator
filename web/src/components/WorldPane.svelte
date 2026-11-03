@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { biomeName } from '../lib/i18n/names';
+  import { biomeName } from '../lib/i18n/names.svelte';
   import { t } from '../lib/i18n/index.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
   import type { LinkedDisplay } from '../lib/display';

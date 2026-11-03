@@ -10,6 +10,10 @@
 //! name = "mars-like"                 # lowercase letters, digits and dashes
 //! description = "Cold desert world"
 //!
+//! [locales.fr]                       # optional: name and description per language
+//! name = "Martienne"
+//! description = "Désert froid"
+//!
 //! [defaults]                         # a fixed value or a [min, max] range
 //! sea_level = [0.1, 0.3]             # or land_fraction = 0.29, not both
 //! axial_tilt = 25.2
@@ -131,10 +135,26 @@ pub struct Preset {
     /// Target biome → biomes replaced by it.
     #[serde(default)]
     pub remap: BTreeMap<Biome, Vec<Biome>>,
+    /// Translated name and description, by language code (`fr`). Only the
+    /// preset files carry them: `world.json` does not, so a world does not
+    /// change when a translation does.
+    #[serde(skip_serializing)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub locales: BTreeMap<String, PresetLocale>,
     /// `remap` inverted: the final biome for each biome id.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
     lookup: Vec<Biome>,
+}
+
+/// The name and description of a preset in one language. Either may be
+/// left out: the English one is shown instead.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields))]
+pub struct PresetLocale {
+    pub name: Option<String>,
+    pub description: Option<String>,
 }
 
 /// A preset as written, before validation.
@@ -144,6 +164,8 @@ struct PresetSpec {
     name: String,
     #[serde(default)]
     description: String,
+    #[serde(default)]
+    locales: BTreeMap<String, PresetLocale>,
     #[serde(default)]
     defaults: Defaults,
     #[serde(default)]
@@ -197,6 +219,15 @@ impl TryFrom<PresetSpec> for Preset {
             }
         }
 
+        for language in spec.locales.keys() {
+            let valid = (2..=3).contains(&language.len())
+                && language.chars().all(|c| c.is_ascii_lowercase());
+            if !valid {
+                return Err(format!(
+                    "locales.{language}: a language code is two or three lowercase letters (fr, de)"
+                ));
+            }
+        }
         spec.atmosphere.validate()?;
 
         let mut lookup = Biome::ALL.to_vec();
@@ -219,6 +250,7 @@ impl TryFrom<PresetSpec> for Preset {
             rules: spec.rules,
             atmosphere: spec.atmosphere,
             remap: spec.remap,
+            locales: spec.locales,
             lookup,
         })
     }
@@ -376,6 +408,29 @@ mod tests {
     }
 
     #[test]
+    fn locales_are_read_but_not_written_to_worlds() {
+        let p = Preset::from_toml(
+            r#"
+            name = "dune"
+            description = "Sand world"
+            [locales.fr]
+            name = "Dune"
+            description = "Monde de sable"
+            [locales.de]
+            description = "Sandwelt"
+            "#,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(p.locales["fr"].name.as_deref(), Some("Dune"));
+        assert_eq!(p.locales["de"].name, None);
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(!json.contains("locales"), "{json}");
+        let back: Preset = serde_json::from_str(&json).unwrap();
+        assert!(back.locales.is_empty());
+    }
+
+    #[test]
     fn invalid_presets_are_rejected() {
         let cases = [
             ("name = \"Bad Name\"", "lowercase"),
@@ -394,6 +449,8 @@ mod tests {
                 "not both",
             ),
             ("name = \"x\"\n[defaults]\nland_fraction = 1.5", "within"),
+            ("name = \"x\"\n[locales.FR]\nname = \"X\"", "language code"),
+            ("name = \"x\"\n[locales.fr]\ntitle = \"X\"", "unknown field"),
         ];
         for (text, expected) in cases {
             let err = Preset::from_toml(text, "test").unwrap_err().to_string();

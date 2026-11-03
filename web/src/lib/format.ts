@@ -24,6 +24,11 @@ export function formatNumber(value: number, digits = 0): string {
   return numberFormat({ minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 }
 
+/** A number with at most `digits` decimals, trailing zeros dropped (0.5, 100). */
+export function formatUpTo(value: number, digits: number): string {
+  return numberFormat({ maximumFractionDigits: digits }).format(value);
+}
+
 /** A number followed by its unit, with the locale's space between them. */
 export function withUnit(value: string, unit: string): string {
   return `${value}${t.format.unitSpace}${unit}`;

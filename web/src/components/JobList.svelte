@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ApiFailure } from '../lib/api/client';
+  import { errorText } from '../lib/i18n/errors';
   import { formatDuration } from '../lib/format';
   import { t } from '../lib/i18n/index.svelte';
   import { jobs, type TrackedJob } from '../lib/jobs.svelte';
@@ -26,7 +26,7 @@
     try {
       await jobs.cancel(job.jobId);
     } catch (e) {
-      toasts.error(e instanceof ApiFailure ? e.message : String(e));
+      toasts.error(errorText(e));
     }
   }
 </script>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getLocale, t } from '../lib/i18n/index.svelte';
-  import { biomeName, presetDescription, presetName } from '../lib/i18n/names';
+  import { biomeName, presetDescription, presetName } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
