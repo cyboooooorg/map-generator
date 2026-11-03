@@ -15,6 +15,7 @@
   import { requestFromWorld, rerollRequest } from './lib/format';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { loadSetting, saveSetting } from './lib/settings';
+  import { stepWorld } from './lib/shortcuts';
   import { toasts } from './lib/toasts.svelte';
   import type { CameraState } from './lib/viewer/PlanetView';
   import { LoadedWorld } from './lib/world.svelte';
@@ -34,6 +35,8 @@
   let form = $state<{ initial: WorldRequest | null; variedFrom: string | null } | null>(null);
   /** Worlds deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
   let hidden = $state<string[]>([]);
+  /** World ids in the order the list shows them (sorted, filtered). */
+  let listOrder = $state<string[]>([]);
   let linkCameras = $state(loadSetting('linkCameras', true));
   $effect(() => saveSetting('linkCameras', linkCameras));
   /**
@@ -163,6 +166,14 @@
     }
     selectedId = id;
     pane = 'viewer';
+  }
+
+  /** `[` / `]` in the viewer: the previous or next world of the list. */
+  function step(direction: 1 | -1): void {
+    const next = stepWorld(listOrder, selectedId, direction);
+    if (next) {
+      select(next);
+    }
   }
 
   function compare(a: string, b: string): void {
@@ -305,7 +316,15 @@
           onCompare={(id) => (compareId = id)}
           onDelete={() => selectedId && removeWorlds([selectedId])}
         />
-        <WorldList worlds={visible} {selectedId} {compareId} onSelect={select} onDelete={removeWorlds} onCompare={compare} />
+        <WorldList
+          worlds={visible}
+          {selectedId}
+          {compareId}
+          bind:order={listOrder}
+          onSelect={select}
+          onDelete={removeWorlds}
+          onCompare={compare}
+        />
       {/if}
     </div>
   </aside>
@@ -332,6 +351,7 @@
         revision={revision(selectedId)}
         keyboard={true}
         label={compareId ? selectedId : null}
+        onStepWorld={step}
         onCameraChange={cameraFrom(() => secondaryPane)}
       />
       {#if compareId}

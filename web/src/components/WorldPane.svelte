@@ -16,11 +16,13 @@
     /** Shown in a corner when two worlds are compared. */
     label?: string | null;
     onCameraChange?: (state: CameraState) => void;
+    /** `[` / `]`: show the previous (-1) or next (1) world of the list. */
+    onStepWorld?: (direction: 1 | -1) => void;
     /** Whether its display changes are saved as the preferences (the main pane only). */
     persistDisplay?: boolean;
   }
 
-  let { world, revision, keyboard, label = null, onCameraChange, persistDisplay = true }: Props = $props();
+  let { world, revision, keyboard, label = null, onCameraChange, onStepWorld, persistDisplay = true }: Props = $props();
 
   let viewer = $state<Viewer | null>(null);
   let picked = $state<LonLat | null>(null);
@@ -91,6 +93,7 @@
     onToggleMeasure={toggleMeasure}
     onEscape={escape}
     {...onCameraChange ? { onCameraChange } : {}}
+    {...onStepWorld ? { onStepWorld } : {}}
   />
 
   {#if label}

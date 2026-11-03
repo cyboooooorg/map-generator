@@ -9,6 +9,7 @@
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
+  import { altAllowed, SHORTCUT_HELP, shortcutFor, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient, RAMPS } from '../lib/viewer/colormaps';
@@ -33,6 +34,8 @@
     /** Escape: close what the pane shows over the viewer. */
     onEscape: () => void;
     onCameraChange?: (state: CameraState) => void;
+    /** `[` / `]`: show the previous (-1) or next (1) world of the list. */
+    onStepWorld?: (direction: 1 | -1) => void;
     /**
      * Whether display changes are saved as the preferences. Only the main
      * viewer saves them: a compare pane starts from them but would otherwise
@@ -53,6 +56,7 @@
     onToggleMeasure,
     onEscape,
     onCameraChange,
+    onStepWorld,
     persistDisplay = true,
   }: Props = $props();
 
@@ -393,103 +397,129 @@
   }
 
   function handleKey(event: KeyboardEvent): void {
-    if (!keyboard || event.ctrlKey || event.metaKey || event.altKey) {
+    if (!keyboard || event.ctrlKey || event.metaKey || (event.altKey && !altAllowed(event.key))) {
       return;
     }
     const target = event.target as HTMLElement | null;
     if (target && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName))) {
       return;
     }
-    const key = event.key;
-    let handled = true;
-    if (key >= '1' && key <= '8' && key.length === 1) {
-      selectLayer(Number(key) - 1);
-    } else {
-      switch (key.toLowerCase()) {
-        case 'g':
-          mode = 'globe';
-          break;
-        case 'm':
-          mode = 'map';
-          break;
-        case 'r':
-          resetView();
-          break;
-        case 'h':
-          if (worldId) hexOn = !hexOn;
-          break;
-        case 'l':
-          sun = !sun;
-          break;
-        case 's':
-          if (sun) playing = !playing;
-          break;
-        case 'a':
-          atmosphere = !atmosphere;
-          break;
-        case 'c':
-          clouds = !clouds;
-          break;
-        case 'w':
-          if (clouds) cloudDrift = !cloudDrift;
-          break;
-        case 'n':
-          graticule = !graticule;
-          break;
-        case 't':
-          referenceLines = !referenceLines;
-          break;
-        case 'k':
-          seaContours = !seaContours;
-          break;
-        case 'j':
-          landContours = !landContours;
-          break;
-        case 'd':
-          if (worldId) onToggleMeasure();
-          break;
-        case 'p':
-          if (worldId) void screenshot();
-          break;
-        case '?':
-          showHelp = !showHelp;
-          break;
-        case 'escape':
-          if (showHelp) {
-            showHelp = false;
-          } else {
-            pinned = null;
-            onEscape();
-          }
-          break;
-        default:
-          handled = false;
-      }
+    const shortcut = shortcutFor(event.key);
+    if (!shortcut) {
+      return;
     }
-    if (handled) {
-      event.preventDefault();
+    event.preventDefault();
+    switch (shortcut.action) {
+      case 'layer':
+        selectLayer(shortcut.index);
+        break;
+      case 'globe':
+        mode = 'globe';
+        break;
+      case 'map':
+        mode = 'map';
+        break;
+      case 'reset':
+        resetView();
+        break;
+      case 'hexes':
+        if (worldId) hexOn = !hexOn;
+        break;
+      case 'sunlight':
+        sun = !sun;
+        break;
+      case 'seasons':
+        // The seasons need the sun: turn it on and play.
+        if (!sun) {
+          sun = true;
+          playing = true;
+        } else {
+          playing = !playing;
+        }
+        break;
+      case 'atmosphere':
+        atmosphere = !atmosphere;
+        break;
+      case 'clouds':
+        clouds = !clouds;
+        break;
+      case 'drift':
+        // Drifting needs the clouds: show them and drift.
+        if (!clouds) {
+          clouds = true;
+          cloudDrift = true;
+        } else {
+          cloudDrift = !cloudDrift;
+        }
+        break;
+      case 'grid':
+        graticule = !graticule;
+        break;
+      case 'tropics':
+        referenceLines = !referenceLines;
+        break;
+      case 'depthContours':
+        seaContours = !seaContours;
+        break;
+      case 'elevationContours':
+        landContours = !landContours;
+        break;
+      case 'measure':
+        if (worldId) onToggleMeasure();
+        break;
+      case 'screenshot':
+        if (worldId) void screenshot();
+        break;
+      case 'help':
+        showHelp = !showHelp;
+        break;
+      case 'escape':
+        if (showHelp) {
+          showHelp = false;
+        } else {
+          pinned = null;
+          onEscape();
+        }
+        break;
+      case 'previousWorld':
+        onStepWorld?.(-1);
+        break;
+      case 'nextWorld':
+        onStepWorld?.(1);
+        break;
+      case 'reliefUp':
+        if (dataReady) relief = stepRelief(relief, 1);
+        break;
+      case 'reliefDown':
+        if (dataReady) relief = stepRelief(relief, -1);
+        break;
     }
   }
 
-  const SHORTCUTS: [string, string][] = [
-    ['G / M', 'Globe / flat map'],
-    ['1 – 8', 'Layer'],
-    ['R', 'Reset the view'],
-    ['H', 'Hexes'],
-    ['L', 'Sunlight'],
-    ['S', 'Play the seasons (with sunlight)'],
-    ['A', 'Atmosphere'],
-    ['C', 'Clouds'],
-    ['W', 'Cloud drift (with clouds)'],
-    ['N', 'Grid'],
-    ['T', 'Tropics and polar circles'],
-    ['K', 'Depth contours (isobaths)'],
-    ['J', 'Elevation contours'],
-    ['D', 'Measure distances'],
-    ['P', 'Screenshot'],
-    ['Esc', 'Close the point panel, stop measuring'],
-    ['?', 'This help'],
-  ];
+  // The help takes the focus when it opens, and gives it back when it
+  // closes, so a keyboard user lands where they were.
+  let helpDialog = $state<HTMLDivElement | null>(null);
+  $effect(() => {
+    if (!showHelp || !helpDialog) {
+      return;
+    }
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    helpDialog.focus();
+    return () => {
+      if (previous?.isConnected) {
+        previous.focus();
+      }
+    };
+  });
+
+  function helpKey(event: KeyboardEvent): void {
+    // Also in a compare pane, which has no other shortcuts.
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      showHelp = false;
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKey} />
@@ -638,13 +668,20 @@
   {/if}
 
   {#if showHelp}
-    <div class="help" role="dialog" aria-label="Keyboard shortcuts">
+    <div
+      class="help"
+      role="dialog"
+      aria-label="Keyboard shortcuts"
+      tabindex="-1"
+      bind:this={helpDialog}
+      onkeydown={helpKey}
+    >
       <header>
         <strong>Keyboard shortcuts</strong>
         <button class="close" onclick={() => (showHelp = false)} aria-label="Close">×</button>
       </header>
       <dl>
-        {#each SHORTCUTS as [key, action] (key)}
+        {#each SHORTCUT_HELP as [key, action] (key)}
           <dt><kbd>{key}</kbd></dt>
           <dd>{action}</dd>
         {/each}
@@ -838,6 +875,9 @@
     border-radius: 8px;
     padding: 10px 14px;
     z-index: 2;
+  }
+  .help:focus-visible {
+    outline: 2px solid var(--accent);
   }
   .help header {
     display: flex;

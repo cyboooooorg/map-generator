@@ -11,9 +11,11 @@
     onSelect: (id: string) => void;
     onDelete: (ids: string[]) => void;
     onCompare: (a: string, b: string) => void;
+    /** Ids of the worlds shown, in their order (written by the list). */
+    order?: string[];
   }
 
-  let { worlds, selectedId, compareId, onSelect, onDelete, onCompare }: Props = $props();
+  let { worlds, selectedId, compareId, onSelect, onDelete, onCompare, order = $bindable([]) }: Props = $props();
 
   type Sort = 'newest' | 'oldest' | 'planet' | 'seed' | 'size';
   const SORTS: { id: Sort; label: string }[] = [
@@ -45,6 +47,9 @@
     return worlds
       .filter((w) => (planet === '' || w.planet === planet) && (q === '' || w.id.toLowerCase().includes(q)))
       .sort(COMPARE[sort]);
+  });
+  $effect(() => {
+    order = shown.map((w) => w.id);
   });
   // Forget chosen worlds that disappeared (deleted).
   $effect(() => {
