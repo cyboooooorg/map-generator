@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { ApiFailure, api, worldFile } from '../lib/api/client';
   import type { HexMap } from '../lib/api/types/HexMap';
+  import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
   import { formatArea, formatShare, saveBlob, surfaceColour } from '../lib/format';
   import type { LonLat } from '../lib/geo';
@@ -9,6 +10,7 @@
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
+  import { altAllowed, SHORTCUT_HELP, shortcutFor, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient, RAMPS } from '../lib/viewer/colormaps';
@@ -33,6 +35,12 @@
     /** Escape: close what the pane shows over the viewer. */
     onEscape: () => void;
     onCameraChange?: (state: CameraState) => void;
+    /** `[` / `]`: show the previous (-1) or next (1) world of the list. */
+    onStepWorld?: (direction: 1 | -1) => void;
+    /** Called with the linked display settings whenever one changes (the main pane). */
+    onDisplayChange?: (display: LinkedDisplay) => void;
+    /** Settings to mirror ("Link display", a compare pane), or null to keep its own. */
+    linkedDisplay?: LinkedDisplay | null;
     /**
      * Whether display changes are saved as the preferences. Only the main
      * viewer saves them: a compare pane starts from them but would otherwise
@@ -53,6 +61,9 @@
     onToggleMeasure,
     onEscape,
     onCameraChange,
+    onStepWorld,
+    onDisplayChange,
+    linkedDisplay = null,
     persistDisplay = true,
   }: Props = $props();
 
@@ -93,6 +104,7 @@
     hexColumns: 64,
     hexRiverLog: DEFAULT_RIVER_LOG,
     legendOpen: true,
+    panelOpen: true,
   });
 
   let canvas: HTMLCanvasElement;
@@ -120,16 +132,30 @@
   let hexBusy = $state(false);
   /** Whether the server answered that it is busy generating: the request is retried. */
   let hexServerBusy = $state(false);
-  // Narrow screens start with the legend folded too: it would cover the planet.
-  const wide = window.matchMedia('(min-width: 900px)').matches;
-  let legendOpen = $state(saved.legendOpen && wide);
+  // Narrow screens fold the legend and the display panel, which would cover
+  // the planet; wide ones open them as last chosen on a wide screen. Both
+  // follow the window as it is resized across the limit.
+  const wideQuery = window.matchMedia('(min-width: 900px)');
+  let wide = $state(wideQuery.matches);
+  /** The legend and panel states chosen on a wide screen, saved as the preferences. */
+  let wideChoice = { legendOpen: saved.legendOpen, panelOpen: saved.panelOpen };
+  let legendOpen = $state(saved.legendOpen && wideQuery.matches);
   let hovered = $state<number | null>(null);
   let pinned = $state<number | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let showHelp = $state(false);
-  // Folded by default on narrow screens, where it would hide the planet.
-  let panelOpen = $state(wide);
+  let panelOpen = $state(saved.panelOpen && wideQuery.matches);
+
+  $effect(() => {
+    const change = (event: MediaQueryListEvent) => {
+      wide = event.matches;
+      legendOpen = wide && wideChoice.legendOpen;
+      panelOpen = wide && wideChoice.panelOpen;
+    };
+    wideQuery.addEventListener('change', change);
+    return () => wideQuery.removeEventListener('change', change);
+  });
 
   const worldId = $derived(world.id);
   const meta = $derived(world.meta);
@@ -163,6 +189,10 @@
     if (!persistDisplay) {
       return;
     }
+    // Folded for lack of room is not a choice: only wide screens change it.
+    if (wide) {
+      wideChoice = { legendOpen, panelOpen };
+    }
     display.save({
       mode,
       layer,
@@ -179,9 +209,35 @@
       sunLongitude,
       hexColumns,
       hexRiverLog,
-      // A legend folded for lack of room stays open on wide screens.
-      legendOpen: wide ? legendOpen : saved.legendOpen,
+      ...wideChoice,
     });
+  });
+
+  /** The settings "Link display" mirrors, as this pane has them. */
+  function currentLinked(): LinkedDisplay {
+    return { layer, relief, sun, season, sunLongitude, atmosphere, clouds, graticule };
+  }
+
+  $effect(() => {
+    const current = currentLinked();
+    onDisplayChange?.(current);
+  });
+
+  // A compare pane with "Link display": follow the main pane's settings.
+  $effect(() => {
+    const source = linkedDisplay;
+    if (!source) {
+      return;
+    }
+    const changes = untrack(() => linkedChanges(currentLinked(), source));
+    if (changes.layer !== undefined && LAYERS.some((l) => l.id === changes.layer)) layer = changes.layer as Layer;
+    if (changes.relief !== undefined) relief = changes.relief;
+    if (changes.sun !== undefined) sun = changes.sun;
+    if (changes.season !== undefined) season = changes.season;
+    if (changes.sunLongitude !== undefined) sunLongitude = changes.sunLongitude;
+    if (changes.atmosphere !== undefined) atmosphere = changes.atmosphere;
+    if (changes.clouds !== undefined) clouds = changes.clouds;
+    if (changes.graticule !== undefined) graticule = changes.graticule;
   });
 
   onMount(() => {
@@ -393,103 +449,129 @@
   }
 
   function handleKey(event: KeyboardEvent): void {
-    if (!keyboard || event.ctrlKey || event.metaKey || event.altKey) {
+    if (!keyboard || event.ctrlKey || event.metaKey || (event.altKey && !altAllowed(event.key))) {
       return;
     }
     const target = event.target as HTMLElement | null;
     if (target && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName))) {
       return;
     }
-    const key = event.key;
-    let handled = true;
-    if (key >= '1' && key <= '8' && key.length === 1) {
-      selectLayer(Number(key) - 1);
-    } else {
-      switch (key.toLowerCase()) {
-        case 'g':
-          mode = 'globe';
-          break;
-        case 'm':
-          mode = 'map';
-          break;
-        case 'r':
-          resetView();
-          break;
-        case 'h':
-          if (worldId) hexOn = !hexOn;
-          break;
-        case 'l':
-          sun = !sun;
-          break;
-        case 's':
-          if (sun) playing = !playing;
-          break;
-        case 'a':
-          atmosphere = !atmosphere;
-          break;
-        case 'c':
-          clouds = !clouds;
-          break;
-        case 'w':
-          if (clouds) cloudDrift = !cloudDrift;
-          break;
-        case 'n':
-          graticule = !graticule;
-          break;
-        case 't':
-          referenceLines = !referenceLines;
-          break;
-        case 'k':
-          seaContours = !seaContours;
-          break;
-        case 'j':
-          landContours = !landContours;
-          break;
-        case 'd':
-          if (worldId) onToggleMeasure();
-          break;
-        case 'p':
-          if (worldId) void screenshot();
-          break;
-        case '?':
-          showHelp = !showHelp;
-          break;
-        case 'escape':
-          if (showHelp) {
-            showHelp = false;
-          } else {
-            pinned = null;
-            onEscape();
-          }
-          break;
-        default:
-          handled = false;
-      }
+    const shortcut = shortcutFor(event.key);
+    if (!shortcut) {
+      return;
     }
-    if (handled) {
-      event.preventDefault();
+    event.preventDefault();
+    switch (shortcut.action) {
+      case 'layer':
+        selectLayer(shortcut.index);
+        break;
+      case 'globe':
+        mode = 'globe';
+        break;
+      case 'map':
+        mode = 'map';
+        break;
+      case 'reset':
+        resetView();
+        break;
+      case 'hexes':
+        if (worldId) hexOn = !hexOn;
+        break;
+      case 'sunlight':
+        sun = !sun;
+        break;
+      case 'seasons':
+        // The seasons need the sun: turn it on and play.
+        if (!sun) {
+          sun = true;
+          playing = true;
+        } else {
+          playing = !playing;
+        }
+        break;
+      case 'atmosphere':
+        atmosphere = !atmosphere;
+        break;
+      case 'clouds':
+        clouds = !clouds;
+        break;
+      case 'drift':
+        // Drifting needs the clouds: show them and drift.
+        if (!clouds) {
+          clouds = true;
+          cloudDrift = true;
+        } else {
+          cloudDrift = !cloudDrift;
+        }
+        break;
+      case 'grid':
+        graticule = !graticule;
+        break;
+      case 'tropics':
+        referenceLines = !referenceLines;
+        break;
+      case 'depthContours':
+        seaContours = !seaContours;
+        break;
+      case 'elevationContours':
+        landContours = !landContours;
+        break;
+      case 'measure':
+        if (worldId) onToggleMeasure();
+        break;
+      case 'screenshot':
+        if (worldId) void screenshot();
+        break;
+      case 'help':
+        showHelp = !showHelp;
+        break;
+      case 'escape':
+        if (showHelp) {
+          showHelp = false;
+        } else {
+          pinned = null;
+          onEscape();
+        }
+        break;
+      case 'previousWorld':
+        onStepWorld?.(-1);
+        break;
+      case 'nextWorld':
+        onStepWorld?.(1);
+        break;
+      case 'reliefUp':
+        if (dataReady) relief = stepRelief(relief, 1);
+        break;
+      case 'reliefDown':
+        if (dataReady) relief = stepRelief(relief, -1);
+        break;
     }
   }
 
-  const SHORTCUTS: [string, string][] = [
-    ['G / M', 'Globe / flat map'],
-    ['1 – 8', 'Layer'],
-    ['R', 'Reset the view'],
-    ['H', 'Hexes'],
-    ['L', 'Sunlight'],
-    ['S', 'Play the seasons (with sunlight)'],
-    ['A', 'Atmosphere'],
-    ['C', 'Clouds'],
-    ['W', 'Cloud drift (with clouds)'],
-    ['N', 'Grid'],
-    ['T', 'Tropics and polar circles'],
-    ['K', 'Depth contours (isobaths)'],
-    ['J', 'Elevation contours'],
-    ['D', 'Measure distances'],
-    ['P', 'Screenshot'],
-    ['Esc', 'Close the point panel, stop measuring'],
-    ['?', 'This help'],
-  ];
+  // The help takes the focus when it opens, and gives it back when it
+  // closes, so a keyboard user lands where they were.
+  let helpDialog = $state<HTMLDivElement | null>(null);
+  $effect(() => {
+    if (!showHelp || !helpDialog) {
+      return;
+    }
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    helpDialog.focus();
+    return () => {
+      if (previous?.isConnected) {
+        previous.focus();
+      }
+    };
+  });
+
+  function helpKey(event: KeyboardEvent): void {
+    // Also in a compare pane, which has no other shortcuts.
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      showHelp = false;
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKey} />
@@ -497,7 +579,7 @@
 <div class="viewer">
   <canvas bind:this={canvas} class:measuring></canvas>
 
-  <div class="toolbar" aria-label="Tools">
+  <div class="toolbar" role="toolbar" aria-label="Tools">
     <button onclick={resetView} disabled={!worldId} title="Reset the view (R)">Reset view</button>
     <button
       onclick={onToggleMeasure}
@@ -510,7 +592,7 @@
     <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title="Keyboard shortcuts (?)">?</button>
   </div>
 
-  <div class="panel" aria-label="Display">
+  <div class="panel" role="region" aria-label="Display">
     <div class="row">
       <div class="segmented">
         <button class:active={mode === 'globe'} onclick={() => (mode = 'globe')} title="Globe (G)">Globe</button>
@@ -599,7 +681,7 @@
 
   {#if dataReady && shown !== 'biomes'}
     {@const ramp = RAMPS[shown]}
-    <div class="legend" aria-label="Legend">
+    <div class="legend" role="region" aria-label="Legend">
       <strong>{ramp.label}</strong>
       <div class="bar" style:background={cssGradient(shown)}></div>
       <div class="ends">
@@ -608,7 +690,7 @@
       </div>
     </div>
   {:else if shown === 'biomes' && world.stats}
-    <div class="legend biomes" aria-label="Biome legend">
+    <div class="legend biomes" role="region" aria-label="Biome legend">
       <button class="legend-title" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen}>
         <strong>Biomes</strong>
         <small class="muted">{legendOpen ? 'hide' : `${world.stats.shares.length}, show`}</small>
@@ -638,13 +720,20 @@
   {/if}
 
   {#if showHelp}
-    <div class="help" role="dialog" aria-label="Keyboard shortcuts">
+    <div
+      class="help"
+      role="dialog"
+      aria-label="Keyboard shortcuts"
+      tabindex="-1"
+      bind:this={helpDialog}
+      onkeydown={helpKey}
+    >
       <header>
         <strong>Keyboard shortcuts</strong>
         <button class="close" onclick={() => (showHelp = false)} aria-label="Close">×</button>
       </header>
       <dl>
-        {#each SHORTCUTS as [key, action] (key)}
+        {#each SHORTCUT_HELP as [key, action] (key)}
           <dt><kbd>{key}</kbd></dt>
           <dd>{action}</dd>
         {/each}
@@ -838,6 +927,9 @@
     border-radius: 8px;
     padding: 10px 14px;
     z-index: 2;
+  }
+  .help:focus-visible {
+    outline: 2px solid var(--accent);
   }
   .help header {
     display: flex;

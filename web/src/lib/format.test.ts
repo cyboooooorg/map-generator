@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatDuration, formatShare, requestFromWorld, surfaceColour } from './format';
+import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
 
 const meta = {
   planet_type: 'frozen',
@@ -33,6 +33,13 @@ describe('format', () => {
       'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
         '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --width 1920 --height 1080',
     );
+  });
+
+  it('rerolls a world with a new seed and every other parameter kept', () => {
+    expect(rerollRequest(meta, 7)).toEqual({ ...requestFromWorld(meta), seed: 7 });
+    const seed = rerollRequest(meta).seed ?? -1;
+    expect(Number.isInteger(seed) && seed >= 0 && seed <= MAX_SEED).toBe(true);
+    expect(Number.isInteger(randomSeed())).toBe(true);
   });
 
   it('describes the atmosphere, with Earth for worlds made before it', () => {

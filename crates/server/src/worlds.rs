@@ -21,6 +21,10 @@ pub fn is_valid_id(id: &str) -> bool {
 /// Prefix of the temporary directories generations export into. A dot is
 /// never part of a world id, so the library never lists them.
 const TEMP_PREFIX: &str = ".tmp-";
+/// Prefix a replaced world is renamed to while its replacement moves in
+/// (see [`TempDir::commit_replacing`]). Never the prefix of a temporary
+/// directory, whatever the world id.
+const OLD_PREFIX: &str = ".old-";
 
 /// The directory a world is exported into before it is complete, deleted on
 /// drop unless [`commit`](Self::commit) renamed it into place: an export
@@ -47,6 +51,36 @@ impl TempDir {
         std::fs::rename(&self.path, target).map_err(|e| format!("{}: {e}", target.display()))
         // On failure, drop removes the temporary directory.
     }
+
+    /// Renames the directory to `target`, replacing the world there if
+    /// any: the old world is moved aside to `.old-<id>`, the new one
+    /// renamed into place, then the old one removed. If the new one cannot
+    /// be moved in, the old one is moved back, so a failed commit keeps the
+    /// old world. A server killed between the two renames finds the old
+    /// world aside at startup and restores it ([`sweep_temp_dirs`]).
+    pub fn commit_replacing(self, target: &Path) -> Result<(), String> {
+        let name = target
+            .file_name()
+            .ok_or_else(|| format!("{}: no directory name", target.display()))?
+            .to_string_lossy();
+        let aside = target.with_file_name(format!("{OLD_PREFIX}{name}"));
+        let _ = std::fs::remove_dir_all(&aside);
+        let replaced = match std::fs::rename(target, &aside) {
+            Ok(()) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(e) => return Err(format!("{}: {e}", target.display())),
+        };
+        if let Err(e) = std::fs::rename(&self.path, target) {
+            if replaced && let Err(back) = std::fs::rename(&aside, target) {
+                tracing::error!("could not restore {}: {back}", target.display());
+            }
+            return Err(format!("{}: {e}", target.display()));
+        }
+        if replaced && let Err(e) = std::fs::remove_dir_all(&aside) {
+            tracing::warn!("could not remove {}: {e}", aside.display());
+        }
+        Ok(())
+    }
 }
 
 impl Drop for TempDir {
@@ -60,13 +94,31 @@ impl Drop for TempDir {
     }
 }
 
-/// Removes the temporary directories a killed server left under `dir`.
+/// Removes the temporary directories a killed server left under `dir`, and
+/// puts back a replaced world it had moved aside but not replaced yet.
 pub fn sweep_temp_dirs(dir: &Path) {
     let Ok(read) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in read.flatten() {
-        if entry.file_name().to_string_lossy().starts_with(TEMP_PREFIX) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if let Some(id) = name.strip_prefix(OLD_PREFIX) {
+            let path = entry.path();
+            let target = dir.join(id);
+            if is_valid_id(id) && !target.exists() {
+                match std::fs::rename(&path, &target) {
+                    Ok(()) => tracing::info!(
+                        "restored {} after an unfinished replacement",
+                        target.display()
+                    ),
+                    Err(e) => tracing::warn!("could not restore {}: {e}", target.display()),
+                }
+            } else if let Err(e) = std::fs::remove_dir_all(&path) {
+                tracing::warn!("could not remove {}: {e}", path.display());
+            }
+            continue;
+        }
+        if name.starts_with(TEMP_PREFIX) {
             let path = entry.path();
             match std::fs::remove_dir_all(&path) {
                 Ok(()) => tracing::info!("removed the unfinished export {}", path.display()),
@@ -193,6 +245,46 @@ mod tests {
         sweep_temp_dirs(&root);
         assert!(!root.join(".tmp-terran-3").exists());
         assert!(root.join("terran-2").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn replacing_commits_swap_the_world_or_keep_the_old_one() {
+        let root = std::env::temp_dir().join(format!("mapgen-replace-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("terran-1")).unwrap();
+        std::fs::write(root.join("terran-1/world.png"), b"old").unwrap();
+        let target = root.join("terran-1");
+
+        // A replacement swaps the directories and removes the old one.
+        let temp = TempDir::create(&root, "terran-1").unwrap();
+        std::fs::write(temp.path().join("world.png"), b"new").unwrap();
+        temp.commit_replacing(&target).unwrap();
+        assert_eq!(std::fs::read(target.join("world.png")).unwrap(), b"new");
+        assert!(!root.join(".old-terran-1").exists());
+        assert!(!root.join(".tmp-terran-1").exists());
+
+        // Nothing to replace: a plain commit.
+        let temp = TempDir::create(&root, "terran-2").unwrap();
+        temp.commit_replacing(&root.join("terran-2")).unwrap();
+        assert!(root.join("terran-2").is_dir());
+
+        // The new directory cannot move in (gone here): the old world stays.
+        let temp = TempDir::create(&root, "terran-1").unwrap();
+        std::fs::remove_dir_all(temp.path()).unwrap();
+        assert!(temp.commit_replacing(&target).is_err());
+        assert_eq!(std::fs::read(target.join("world.png")).unwrap(), b"new");
+        assert!(!root.join(".old-terran-1").exists());
+
+        // Killed between the renames: the sweep restores the old world, or
+        // removes it when its replacement made it into place.
+        std::fs::rename(&target, root.join(".old-terran-1")).unwrap();
+        std::fs::create_dir_all(root.join(".old-terran-2")).unwrap();
+        sweep_temp_dirs(&root);
+        assert_eq!(std::fs::read(target.join("world.png")).unwrap(), b"new");
+        assert!(!root.join(".old-terran-1").exists());
+        assert!(!root.join(".old-terran-2").exists());
+        assert!(root.join("terran-2").is_dir());
         std::fs::remove_dir_all(root).unwrap();
     }
 

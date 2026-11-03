@@ -7,12 +7,19 @@
   import type { ParamDefault } from '../lib/api/types/ParamDefault';
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
-  import { replaceWorld } from '../lib/replace';
+  import { MAX_SEED, randomSeed } from '../lib/format';
+  import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
+  import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
+  import { jobs } from '../lib/jobs.svelte';
+  import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
 
   interface Props {
     presets: PresetInfo[];
     spec: FormSpec;
-    /** Parameters to start from (varying an existing world), or null for the preset defaults. */
+    /**
+     * Parameters to start from (varying an existing world), or null for the
+     * last form submitted in this browser (the preset defaults without one).
+     */
     initial?: WorldRequest | null;
     /** Id of the world being varied, for the title. */
     variedFrom?: string | null;
@@ -75,7 +82,7 @@
     },
     pressure_bar: {
       label: 'Pressure (bar)',
-      help: 'Earth: 1 · Mars: 0.006 · Venus: 92 · 0: airless',
+      help: 'Earth: 1 · Mars: 0.006 · Venus: 92 · 0 (slider at the far left): airless. Logarithmic slider',
       defaultsKey: 'pressure',
       slider: [0, 100],
       step: 0.001,
@@ -95,7 +102,6 @@
     [4096, 2048],
     [8192, 4096],
   ];
-  const MAX_SEED = 4_294_967_295;
 
   /** Each parameter: random (left to the preset or the server) or a fixed value. */
   type FieldState = Record<Field, { random: boolean; value: number }>;
@@ -154,25 +160,45 @@
     return name === undefined ? undefined : presets.find((p) => p.spec === name || p.name === name);
   }
 
+  /** Whether a map size is one this server accepts. */
+  function sizeFits(value: string): boolean {
+    const [w, h] = value.split('x').map(Number);
+    return !!w && !!h && w <= spec.max_size && h <= spec.max_size && w * h <= spec.max_pixels;
+  }
+
   // The form starts from the props as they are when it opens; later prop
   // changes must not reset what the user typed, hence untrack.
   const start = untrack(() => ({ initial, preset: findPreset(initial?.planet) ?? presets[0] }));
   const missingPreset = start.initial?.planet !== undefined && !findPreset(start.initial.planet);
-  let planet = $state(start.preset?.spec ?? '');
-  let randomPlanet = $state(false);
+  /** A blank form starts from the last one submitted, if its preset is still offered. */
+  const memory = untrack(() => {
+    const stored = initial === null ? loadFormMemory(FIELD_NAMES) : null;
+    return stored && presets.some((p) => p.spec === stored.planet) ? stored : null;
+  });
+  const memoryPreset = untrack(() => (memory ? presets.find((p) => p.spec === memory.planet) : undefined));
+  let planet = $state(memoryPreset?.spec ?? start.preset?.spec ?? '');
+  let randomPlanet = $state(memory?.randomPlanet ?? false);
   let seed = $state(start.initial?.seed !== undefined ? String(start.initial.seed) : '');
   let size = $state(
     untrack(() =>
       start.initial?.width && start.initial.height
         ? `${start.initial.width}x${start.initial.height}`
-        : `${spec.default_width}x${spec.default_height}`,
+        : memory && sizeFits(memory.size)
+          ? memory.size
+          : `${spec.default_width}x${spec.default_height}`,
     ),
   );
-  let fields = $state<FieldState>(untrack(() => initialState(start.preset, start.initial)));
-  const startLand = untrack(() => landDefault(start.preset, start.initial));
-  let seaBy = $state<SeaBy>(startLand ? 'land' : 'level');
+  let fields = $state<FieldState>(
+    untrack(() =>
+      memory
+        ? { ...initialState(memoryPreset, null), ...(memory.fields as Partial<FieldState>) }
+        : initialState(start.preset, start.initial),
+    ),
+  );
+  const startLand = untrack(() => (memory ? null : landDefault(start.preset, start.initial)));
+  let seaBy = $state<SeaBy>(memory?.seaBy ?? (startLand ? 'land' : 'level'));
   /** Land share in percent, used when `seaBy` is 'land'. */
-  let landPercent = $state(startLand?.percent ?? 29);
+  let landPercent = $state(memory?.landPercent ?? startLand?.percent ?? 29);
   let submitting = $state(false);
   let error = $state<string | null>(null);
   let replace = $state(false);
@@ -198,10 +224,33 @@
     landPercent = land?.percent ?? 29;
   }
 
+  /**
+   * Back to the defaults: the first preset's (or the varied world's)
+   * parameters, the server's map size and a random seed, and the
+   * remembered form forgotten.
+   */
+  function resetForm(): void {
+    clearFormMemory();
+    const preset = start.preset;
+    randomPlanet = false;
+    choosePreset(preset?.spec ?? '');
+    if (start.initial) {
+      fields = initialState(preset, start.initial);
+      const land = landDefault(preset, start.initial);
+      seaBy = land ? 'land' : 'level';
+      landPercent = land?.percent ?? 29;
+    }
+    seed = start.initial?.seed !== undefined ? String(start.initial.seed) : '';
+    size =
+      start.initial?.width && start.initial.height
+        ? `${start.initial.width}x${start.initial.height}`
+        : `${spec.default_width}x${spec.default_height}`;
+    replace = false;
+    error = null;
+  }
+
   function rollSeed(): void {
-    const values = new Uint32Array(1);
-    crypto.getRandomValues(values);
-    seed = String(values[0] ?? 0);
+    seed = String(randomSeed());
   }
 
   function buildRequest(): WorldRequest {
@@ -232,6 +281,18 @@
     return request;
   }
 
+  /** What the chosen size costs: time (once learnt in this browser) and memory. */
+  const cost = $derived.by(() => {
+    const [w, h] = size.split('x').map(Number);
+    const pixels = (w ?? 0) * (h ?? 0);
+    const seconds = jobs.estimate(pixels / 1e6);
+    return {
+      time: seconds === null ? null : formatEstimate(seconds),
+      server: formatBytes(serverPeakBytes(pixels)),
+      viewer: formatBytes(viewerBytes(pixels)),
+    };
+  });
+
   /** Id the world will get (planet-seed), when both are fixed. */
   const targetId = $derived(
     !randomPlanet && selectedPreset && /^\d+$/.test(seed.trim()) ? `${selectedPreset.name}-${Number(seed)}` : null,
@@ -246,10 +307,10 @@
     submitting = true;
     try {
       const request = buildRequest();
-      // A replacement deletes the old world only once the server has
-      // validated the request (see replaceWorld).
-      const job =
-        conflict && replace && targetId ? await replaceWorld(targetId, request) : await api.createWorld(request);
+      // The server swaps the new world in once it is complete: a failed or
+      // cancelled generation keeps the old one.
+      const job = await api.createWorld(request, { replace: conflict && replace });
+      saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields });
       onSubmitted(job, request);
     } catch (e) {
       error = e instanceof ApiFailure ? e.message : String(e);
@@ -263,6 +324,8 @@
   <h2>{variedFrom ? `Vary ${variedFrom}` : 'New world'}</h2>
   {#if variedFrom}
     <p class="help">Starts from every parameter of {variedFrom}: change the ones you want.</p>
+  {:else if memory}
+    <p class="help">Starts from your last generation (except its seed). <strong>Defaults</strong> starts over.</p>
   {/if}
   {#if missingPreset}
     <p class="error">The preset {start.initial?.planet} is not offered by this server: pick another one.</p>
@@ -338,13 +401,26 @@
       </legend>
       {#if !fields[field].random}
         <div class="slider">
-          <input
-            type="range"
-            min={info.slider[0]}
-            max={info.slider[1]}
-            step={info.step}
-            bind:value={fields[field].value}
-          />
+          {#if field === 'pressure_bar'}
+            <!-- Logarithmic: position 0 is airless, then 0.001 to 1000 bar. -->
+            <input
+              type="range"
+              min={0}
+              max={PRESSURE_STEPS}
+              step={1}
+              value={pressureToSlider(fields[field].value)}
+              oninput={(e) => (fields.pressure_bar.value = sliderToPressure(Number(e.currentTarget.value)))}
+              aria-label="Pressure, logarithmic"
+            />
+          {:else}
+            <input
+              type="range"
+              min={info.slider[0]}
+              max={info.slider[1]}
+              step={info.step}
+              bind:value={fields[field].value}
+            />
+          {/if}
           <!-- step="any": the slider step counts from the server minimum (1 km for
                the circumference), so a stepped input would reject round values
                such as 50000. -->
@@ -374,7 +450,7 @@
       </p>
       <label class="check">
         <input type="checkbox" bind:checked={replace} />
-        Replace {targetId} (deletes its files)
+        Replace {targetId} (once the new world is complete)
       </label>
     </div>
   {/if}
@@ -389,6 +465,10 @@
       {/each}
     </select>
   </label>
+  <p class="help cost">
+    {cost.time ? `Takes ${cost.time} here` : 'Time: known after a first generation in this browser'} · server peak
+    about {cost.server} · viewer about {cost.viewer}
+  </p>
 
   <!-- Sticks to the bottom of the screen on narrow layouts, so the buttons
        stay in view while the parameters scroll. -->
@@ -398,6 +478,9 @@
     {/if}
     <p class="help">The generation runs in the background: keep exploring meanwhile, or queue more worlds.</p>
     <div class="actions">
+      <button type="button" class="reset" onclick={resetForm} title="Back to the preset defaults, and forget the last form"
+        >Defaults</button
+      >
       <button type="button" onclick={onCancel}>Close</button>
       <button type="submit" class="primary" disabled={submitting || !seedValid || (conflict && !replace)}>
         {submitting ? 'Sending…' : 'Generate'}
@@ -503,6 +586,9 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+  .actions .reset {
+    margin-right: auto;
   }
   @media (max-width: 760px) {
     .footer {

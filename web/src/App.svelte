@@ -6,21 +6,25 @@
   import WorldInfo from './components/WorldInfo.svelte';
   import WorldList from './components/WorldList.svelte';
   import WorldPane from './components/WorldPane.svelte';
-  import { api, worldFile } from './lib/api/client';
+  import { ApiFailure, api, worldFile } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { JobCreated } from './lib/api/types/JobCreated';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import type { WorldSummary } from './lib/api/types/WorldSummary';
-  import { requestFromWorld } from './lib/format';
+  import { requestFromWorld, rerollRequest } from './lib/format';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { loadSetting, saveSetting } from './lib/settings';
+  import { stepWorld } from './lib/shortcuts';
   import { toasts } from './lib/toasts.svelte';
+  import type { LinkedDisplay } from './lib/display';
   import type { CameraState } from './lib/viewer/PlanetView';
   import { LoadedWorld } from './lib/world.svelte';
 
   /** How long a deleted world can be restored, in ms. */
   const UNDO_MS = 6000;
+  /** Shortest wait between two list refreshes on focus, in ms. */
+  const REFRESH_EVERY_MS = 5000;
 
   let worlds = $state<WorldSummary[]>([]);
   let presets = $state<PresetInfo[]>([]);
@@ -34,8 +38,15 @@
   let form = $state<{ initial: WorldRequest | null; variedFrom: string | null } | null>(null);
   /** Worlds deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
   let hidden = $state<string[]>([]);
+  /** World ids in the order the list shows them (sorted, filtered). */
+  let listOrder = $state<string[]>([]);
   let linkCameras = $state(loadSetting('linkCameras', true));
   $effect(() => saveSetting('linkCameras', linkCameras));
+  /** Whether the compare pane mirrors the main pane's display settings. */
+  let linkDisplay = $state(loadSetting('linkDisplay', false));
+  $effect(() => saveSetting('linkDisplay', linkDisplay));
+  /** The main pane's linked display settings, as it reports them. */
+  let mainDisplay = $state<LinkedDisplay | null>(null);
   /**
    * Which pane fills the screen on narrow layouts (the CSS ignores it on wide
    * ones, where the sidebar and the viewer sit side by side).
@@ -55,8 +66,24 @@
   const existing = $derived(new Set(worlds.map((w) => w.id)));
   const revision = (id: string | null) => worlds.find((w) => w.id === id)?.modified_ms ?? null;
 
+  /** When the list was last asked for (ms), to throttle the focus refreshes. */
+  let lastRefresh = 0;
+
   async function refresh(): Promise<void> {
+    lastRefresh = Date.now();
     worlds = await api.worlds();
+  }
+
+  /**
+   * The page came back to the front: list the worlds again, so those made
+   * meanwhile (`mise run gen`, another tab) show up. At most once every
+   * REFRESH_EVERY_MS; a failure is left for the next one.
+   */
+  function refreshOnReturn(): void {
+    if (!ready || document.visibilityState !== 'visible' || Date.now() - lastRefresh < REFRESH_EVERY_MS) {
+      return;
+    }
+    refresh().catch((e: unknown) => console.warn('Could not refresh the world list', e));
   }
 
   /** `#world=<id>&compare=<id>`: the worlds shown, so a reload or a shared link opens them. */
@@ -75,12 +102,19 @@
     }
   }
 
-  onMount(() => {
-    (async () => {
-      try {
+  let starting = $state(false);
+
+  /** Loads the presets, the form limits and the worlds; run again by Retry. */
+  async function start(): Promise<void> {
+    fatal = null;
+    starting = true;
+    try {
+      if (!spec) {
         [presets, spec] = await Promise.all([api.presets(), api.form()]);
         jobs.defaultSize = [spec.default_width, spec.default_height];
-        await refresh();
+      }
+      await refresh();
+      if (!ready) {
         applyHash();
         if (!selectedId) {
           selectedId = worlds[0]?.id ?? null;
@@ -89,16 +123,26 @@
           }
         }
         ready = true;
-        await jobs.reattach();
-      } catch (e) {
-        fatal = `Cannot reach the server: ${String(e)}`;
       }
-    })();
+      await jobs.reattach();
+    } catch (e) {
+      fatal = `Cannot reach the server: ${String(e)}`;
+    } finally {
+      starting = false;
+    }
+  }
+
+  onMount(() => {
+    void start();
     window.addEventListener('hashchange', applyHash);
     window.addEventListener('pagehide', flushDeletes);
+    window.addEventListener('focus', refreshOnReturn);
+    document.addEventListener('visibilitychange', refreshOnReturn);
     return () => {
       window.removeEventListener('hashchange', applyHash);
       window.removeEventListener('pagehide', flushDeletes);
+      window.removeEventListener('focus', refreshOnReturn);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
     };
   });
 
@@ -163,6 +207,14 @@
     }
     selectedId = id;
     pane = 'viewer';
+  }
+
+  /** `[` / `]` in the viewer: the previous or next world of the list. */
+  function step(direction: 1 | -1): void {
+    const next = stepWorld(listOrder, selectedId, direction);
+    if (next) {
+      select(next);
+    }
   }
 
   function compare(a: string, b: string): void {
@@ -239,8 +291,20 @@
     form = null;
     autoOpen = { jobId: job.job_id, selection: selectedId };
     jobs.track(job.job_id, job.world_id, request, { status: 'queued' }, true);
-    // A replaced world disappeared from the server.
-    void refresh();
+  }
+
+  /** Queues the selected world again with a new random seed. */
+  async function reroll(): Promise<void> {
+    if (!primary.meta) {
+      return;
+    }
+    const request = rerollRequest(primary.meta);
+    try {
+      const job = await api.createWorld(request);
+      submitted(job, request);
+    } catch (e) {
+      toasts.error(`Could not reroll: ${e instanceof ApiFailure ? e.message : String(e)}`);
+    }
   }
 
   function cameraFrom(target: () => WorldPane | null) {
@@ -268,7 +332,11 @@
       <button class="primary" onclick={() => openForm()} disabled={!spec}>New world</button>
     </header>
     {#if fatal}
-      <p class="error">{fatal} <button onclick={() => (fatal = null)}>Dismiss</button></p>
+      <p class="error" role="alert">
+        {fatal}
+        <button onclick={() => void start()} disabled={starting}>{starting ? 'Retrying…' : 'Retry'}</button>
+        <button onclick={() => (fatal = null)}>Dismiss</button>
+      </p>
     {/if}
     <div class="content">
       <JobList onOpen={select} />
@@ -289,10 +357,19 @@
           worlds={visible}
           {compareId}
           onVary={() => primary.meta && openForm(requestFromWorld(primary.meta), primary.id)}
+          onReroll={reroll}
           onCompare={(id) => (compareId = id)}
           onDelete={() => selectedId && removeWorlds([selectedId])}
         />
-        <WorldList worlds={visible} {selectedId} {compareId} onSelect={select} onDelete={removeWorlds} onCompare={compare} />
+        <WorldList
+          worlds={visible}
+          {selectedId}
+          {compareId}
+          bind:order={listOrder}
+          onSelect={select}
+          onDelete={removeWorlds}
+          onCompare={compare}
+        />
       {/if}
     </div>
   </aside>
@@ -308,6 +385,11 @@
           <strong>{compareId}</strong>
         </span>
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> Link cameras</label>
+        <label
+          class="check"
+          title="The right (or lower) pane mirrors the layer, relief, sunlight and season, atmosphere, clouds and grid of the main one"
+          ><input type="checkbox" bind:checked={linkDisplay} /> Link display</label
+        >
         <button onclick={swap}>Swap</button>
         <button onclick={() => (compareId = null)}>Close</button>
       </div>
@@ -319,6 +401,8 @@
         revision={revision(selectedId)}
         keyboard={true}
         label={compareId ? selectedId : null}
+        onStepWorld={step}
+        onDisplayChange={(display) => (mainDisplay = display)}
         onCameraChange={cameraFrom(() => secondaryPane)}
       />
       {#if compareId}
@@ -328,6 +412,7 @@
           revision={revision(compareId)}
           keyboard={false}
           persistDisplay={false}
+          linkedDisplay={linkDisplay ? mainDisplay : null}
           label={compareId}
           onCameraChange={cameraFrom(() => primaryPane)}
         />

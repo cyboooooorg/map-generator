@@ -64,6 +64,24 @@ export function formatAgo(ms: number, now = Date.now()): string {
   return 'just now';
 }
 
+/** Largest seed the generator takes (a u32). */
+export const MAX_SEED = 4_294_967_295;
+
+/** A random seed, drawn from the browser's cryptographic generator. */
+export function randomSeed(): number {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return values[0] ?? 0;
+}
+
+/**
+ * The request that generates a world again with every parameter the same
+ * but a new seed: a sibling of the world, under a new id.
+ */
+export function rerollRequest(meta: WorldMetadata, seed: number = randomSeed()): WorldRequest {
+  return { ...requestFromWorld(meta), seed };
+}
+
 /** Rounds a parameter as the CLI prints it, so commands stay readable. */
 function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));

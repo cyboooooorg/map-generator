@@ -28,7 +28,7 @@ In the viewer:
 - Hovering shows the coordinates, biome and elevation under the pointer at the bottom of a wide viewer.
 - Click a point to see its coordinates, biome, elevation above the coastline, annual mean temperature in °C (worlds of format version 3 and older stored a `[0, 1]` scale, converted on load with the generator's Earth-fitted curve), moisture, drainage area and, on worlds with `raw_data` format version 2 or later, the distance to the sea, the volcanic zone, the floodplain weight and the shift of the mountain line. Near a river it also shows the river (flow there and at its mouth, length, where it ends, estuary or delta branch); with the hex grid on, the hex under the point. **Copy** copies the latitude and longitude in degrees.
 - The tools in the top-left corner: **Reset view** (whole planet, north up), **Measure** (click points to measure a path of great-circle legs, in km on this planet), **Screenshot** (the view as a PNG) and **?** (the keyboard shortcuts).
-- **Display** (folded by default on narrow screens):
+- **Display**: open or folded as you last left it on a wide screen; narrow screens (under 900 px) fold it and the biome legend, which would hide the planet, and reopen them when the window grows back:
   - **Layer**: biomes (the generated map), or elevation, temperature (−30 °C to 40 °C), moisture, river flow, volcanic zone, distance to the sea and floodplains coloured on the GPU, with a legend. The last three need a world of format version 2 (3 for floodplains). On the biome layer, the legend lists the biomes of the planet with their share of its surface, in their surface colours (classification colours while the hex grid is shown): hover one to highlight it on the planet, click it to keep it highlighted.
   - **Relief**: raises land above the coastline and shades its slopes; seas stay flat, except on worlds whose seas have dried up (barren), where basins sink below the old coastline and are shaded like land. The sun glints only on liquid seas, as a broad, faint sheen, and barely on magma. The biome layer and the detail tiles are hillshaded already, so on them it only raises the land.
   - **Sunlight**: lights the planet from a sun whose latitude follows the season and the world's axial tilt, with day, night and a terminator on both the globe and the map. Lava and magma glow on the night side (on the biome layer and the detail tiles, not on the hex grid); they are told by their surface colour, red with almost no green. **Play** runs through a year in 12 seconds; the latitude under the sun is shown below the slider. Off, a headlight follows the camera.
@@ -38,36 +38,41 @@ In the viewer:
 
 Keyboard shortcuts, when no form field has the focus:
 
-| Key       | Action                                |
-| --------- | ------------------------------------- |
-| `G` / `M` | globe / flat map                      |
-| `1` – `8` | layer                                 |
-| `R`       | reset the view                        |
-| `H`       | hexes                                 |
-| `L`       | sunlight                              |
-| `S`       | play the seasons (with sunlight)      |
-| `A`       | atmosphere                            |
-| `C`       | clouds                                |
-| `W`       | cloud drift (with clouds)             |
-| `N`       | grid                                  |
-| `T`       | tropics and polar circles             |
-| `K`       | depth contours                        |
-| `J`       | elevation contours                    |
-| `D`       | measure distances                     |
-| `P`       | screenshot                            |
-| `Esc`     | close the point panel, stop measuring |
-| `?`       | shortcut help                         |
+| Key       | Action                                              |
+| --------- | --------------------------------------------------- |
+| `G` / `M` | globe / flat map                                    |
+| `1` – `8` | layer                                               |
+| `+` / `-` | more / less relief (steps of 0.1)                   |
+| `[` / `]` | previous / next world, in the order the list shows  |
+| `R`       | reset the view                                      |
+| `H`       | hexes                                               |
+| `L`       | sunlight                                            |
+| `S`       | play / pause the seasons (turns sunlight on)        |
+| `A`       | atmosphere                                          |
+| `C`       | clouds                                              |
+| `W`       | cloud drift (turns clouds on)                       |
+| `N`       | grid                                                |
+| `T`       | tropics and polar circles                           |
+| `K`       | depth contours                                      |
+| `J`       | elevation contours                                  |
+| `D`       | measure distances                                   |
+| `P`       | screenshot                                          |
+| `Esc`     | close the help or the point panel, stop measuring   |
+| `?`       | shortcut help                                       |
+
+The help takes the keyboard focus when it opens and gives it back when it closes (`Esc` or `×`). The brackets and `+` / `-` also work when the layout types them with Alt (Option), as French and German Mac keyboards do.
 
 In the sidebar:
 
-- The selected world's card shows every parameter, its gravity, its atmosphere (surface pressure and cloud kind; worlds made before atmospheres show Earth's 1 bar), surface, land and water shares, river count and age, and how much of the planet each biome covers. Its actions: **Vary…** opens the form filled with the world's parameters, **Copy command** copies the `mise run gen` command that regenerates it, **Copy link** copies a link that opens it, **Compare with** shows a second world beside it, and **Download** offers the map PNG, the SVG, the legend and a ZIP of `raw_data/` built in the browser.
+- The selected world's card shows every parameter, its gravity, its atmosphere (surface pressure and cloud kind; worlds made before atmospheres show Earth's 1 bar), surface, land and water shares, river count and age, and how much of the planet each biome covers. Its actions: **Reroll** queues the same world again with a new random seed (every other parameter kept, the new world opens when ready), **Vary…** opens the form filled with the world's parameters, **Copy command** copies the `mise run gen` command that regenerates it, **Copy link** copies a link that opens it, **Compare with** shows a second world beside it, and **Download** offers the map PNG, the SVG, the legend and a ZIP of `raw_data/` built in the browser.
+- The world list is asked for again when the page comes back to the front (a window focus or the tab shown again, at most once every 5 seconds), so worlds made meanwhile with `mise run gen` or in another tab show up. When the server cannot be reached at startup, **Retry** tries again.
 - The world list can be searched by id or seed, filtered by planet and sorted; the sort and filter are remembered. **Select** picks several worlds, to delete them or to compare two of them.
 - Deleting a world hides it at once and offers **Undo** for six seconds; the files are deleted afterwards (or when the page closes).
 - The address names the worlds shown (`#world=<id>&compare=<id>`): reloading keeps them, and the link can be shared.
 
-**New world** opens the generation form (sea level or land share, volcanism, circumference, axial tilt, erosion and surface pressure). Each parameter is either random (left to the planet preset, then to the generator defaults) or fixed with its slider; **Roll** draws a seed. A world is named after its planet and seed, and the server refuses to overwrite one: when the planet and seed match an existing world, the form says so and offers to replace it. A replacement deletes the old world only once the server has accepted the parameters (it checks them before it looks for an existing world), so an invalid request or an unreachable server leaves the old world in place; a generation that fails after that cannot bring it back. **Generate** sends the job and closes the form: generations run in the background, one at a time, the others waiting in a queue. The **Generations** list shows each one with its stage, elapsed time, an estimate of the time left (learnt from earlier generations in this browser) and **Cancel**. A reloaded page picks up the generations still running. When one finishes, the new world opens if you have not picked another one meanwhile; otherwise a notification offers to open it. A world replaced in place reloads in the panes that show it: its map URLs carry the world revision (`?rev=`), and its raw data is revalidated with the server, so the browser never shows files of the replaced world.
+**New world** opens the generation form (sea level or land share, volcanism, circumference, axial tilt, erosion and surface pressure). The pressure slider is logarithmic, from 0.001 to 1000 bar, with airless (0 bar) at its far left, so Mars's 0.006 bar is as easy to reach as Venus's 92; the number beside it takes any value. Under the size, the form shows how long the generation should take (from the stage timings learnt from earlier generations in this browser, once there are some), the server's memory peak (interpolated from the figures measured in Docker, see "Web app" in the repository README: 0.16 GiB at 1920 × 1080, 0.55 GiB at 4096 × 2048, 2.0 GiB at 8192 × 4096) and the page's memory for the decoded world (19 bytes per pixel, see below). Each parameter is either random (left to the planet preset, then to the generator defaults) or fixed with its slider; **Roll** draws a seed. The browser remembers the last form you submitted: **New world** starts from it (planet, size and every parameter, but not the seed, which would name the same world), and **Defaults** goes back to the preset defaults and forgets it. **Vary…** always starts from the varied world. A world is named after its planet and seed, and the server refuses to overwrite one: when the planet and seed match an existing world, the form says so and offers to replace it. The server swaps the new world in place of the old one only once it is complete (`POST /api/worlds?replace=true`), so the old world stays visible and usable meanwhile, and a request that is refused, a generation that fails or one you cancel leaves it in place. **Generate** sends the job and closes the form: generations run in the background, one at a time, the others waiting in a queue. The **Generations** list shows each one with its stage, elapsed time, an estimate of the time left (learnt from earlier generations in this browser) and **Cancel**. A reloaded page picks up the generations still running. When one finishes, the new world opens if you have not picked another one meanwhile; otherwise a notification offers to open it. A world replaced in place reloads in the panes that show it: its map URLs carry the world revision (`?rev=`), and its raw data is revalidated with the server, so the browser never shows files of the replaced world.
 
-**Compare** shows two worlds side by side (stacked on narrow screens). **Link cameras** moves both views together; **Swap** exchanges them.
+**Compare** shows two worlds side by side (stacked on narrow screens). **Link cameras** moves both views together. **Link display** (off by default) makes the compare pane mirror the main one's layer, relief, sunlight (season and sun longitude), atmosphere, clouds and grid as they change, so both worlds are seen the same way; the rest (contours, drift, hexes) stays per pane. **Swap** exchanges them. Both choices are remembered.
 
 On narrow screens (760 px wide or less), the world list and the viewer take the whole screen one at a time: **Worlds** and **Viewer** in the header switch between them. Picking a world opens the viewer, and **New world** opens the form, whose buttons stay pinned to the bottom of the screen while the parameters scroll.
 
@@ -98,10 +103,13 @@ There is nothing to configure here: the server address is fixed in `vite.config.
 | `src/lib/viewer/TileLayer.ts`, `tiles.ts` | Deep zoom: quadtree level selection (screen-space error, frustum and horizon culling), tile loading (priority queue, coarse fallbacks, abort with hysteresis, retry backoff, GPU cache) and detail patches                                                          |
 | `src/lib/world.svelte.ts`                 | Loading of one shown world: metadata, decoded layers, biome statistics (`stats.ts`) and the river index (`rivers.ts`)                                                                                                                                               |
 | `src/lib/jobs.svelte.ts`                  | Generation jobs followed by the page: progress, cancellation, time estimates, jobs picked up after a reload                                                                                                                                                         |
-| `src/lib/replace.ts`                      | Replacing a world in place, deleting the old one only once the server has validated the request                                                                                                                                                                     |
 | `src/lib/sample.ts`, `hex.ts`             | Values of a world, a river and a hex at one point                                                                                                                                                                                                                   |
 | `src/lib/format.ts`, `download.ts`        | Number and date formatting, the request and command that reproduce a world, file downloads and the raw data ZIP                                                                                                                                                     |
 | `src/lib/settings.ts`                     | Preferences in `localStorage`, guarded so the app works without storage                                                                                                                                                                                             |
+| `src/lib/formMemory.ts`                   | The generation form remembered from its last submission                                                                                                                                                                                                             |
+| `src/lib/shortcuts.ts`                    | Keyboard shortcuts of the viewer (keys, help table, relief and world steps)                                                                                                                                                                                         |
+| `src/lib/display.ts`                      | Display settings a compare pane mirrors with "Link display"                                                                                                                                                                                                         |
+| `src/lib/pressure.ts`, `estimate.ts`      | Logarithmic pressure slider; time and memory estimates of a map size                                                                                                                                                                                                |
 | `src/components/`                         | Svelte components: world pane (viewer, point information, pointer readout, measurement), world card, world list, generation jobs, generation form, notifications                                                                                                    |
 
 TypeScript runs in its strictest settings (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), and `npm run check` fails on any warning.

@@ -55,6 +55,15 @@ export function saveSetting(key: string, value: unknown): void {
   }
 }
 
+/** Forgets a stored value; silently does nothing when storage is unavailable. */
+export function removeSetting(key: string): void {
+  try {
+    localStorage.removeItem(PREFIX + key);
+  } catch {
+    // Nothing to forget without storage.
+  }
+}
+
 /** A setting written at most once per delay, with the last value saved. */
 export interface DebouncedSetting<T> {
   /** Schedules a write of `value`, replacing a pending one. */

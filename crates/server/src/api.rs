@@ -73,6 +73,17 @@ pub struct WorldSummary {
     pub modified_ms: u64,
 }
 
+/// Query of a generation request (`POST /api/worlds?replace=true`).
+#[derive(Clone, Debug, Default, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, optional_fields)]
+pub struct CreateQuery {
+    /// Replace the world of the same id if it exists, instead of refusing
+    /// with 409. The old world stays until the new one is complete: a
+    /// generation that fails or is cancelled keeps it.
+    pub replace: Option<bool>,
+}
+
 /// Answer to a generation request.
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]

@@ -7,6 +7,7 @@
 //! | `GET /api/form`                 | parameter limits and defaults                     |
 //! | `GET /api/worlds`               | generated worlds, most recent first               |
 //! | `POST /api/worlds`              | queue a generation (`WorldRequest` body)          |
+//! | `POST /api/worlds?replace=true` | same, replacing the world of that id once done    |
 //! | `DELETE /api/worlds/{id}`       | delete a world (409 while it is being generated)  |
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
 //! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=` | deep-zoom detail tile (PNG) |
@@ -24,8 +25,8 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, FormSpec, HexRequest, JobCreated, JobInfo, JobStatus, ParamSpec, PresetInfo,
-    WorldSummary,
+    ApiError, CreateQuery, FormSpec, HexRequest, JobCreated, JobInfo, JobStatus, ParamSpec,
+    PresetInfo, WorldSummary,
 };
 use crate::catalog::Catalog;
 use crate::memory;
@@ -411,10 +412,18 @@ async fn hex_grid(
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
+/// Queues a generation. A world of the same id is refused with 409, unless
+/// the query asks to replace it: the new world is then generated into its
+/// temporary directory as usual and swapped in place of the old one at the
+/// end (see [`worlds::TempDir::commit_replacing`]), so a generation that
+/// fails or is cancelled keeps the old world. The old world cannot be
+/// deleted meanwhile (409, like any world being generated).
 async fn create_world(
     State(state): State<Shared>,
+    Query(query): Query<CreateQuery>,
     Json(request): Json<WorldRequest>,
 ) -> Result<(StatusCode, Json<JobCreated>), Failure> {
+    let replace = query.replace.unwrap_or(false);
     let original = request.clone();
     let bad = |msg: String| Failure(StatusCode::BAD_REQUEST, msg);
     for (field, value) in [("width", request.width), ("height", request.height)] {
@@ -461,10 +470,18 @@ async fn create_world(
     let world_id = world_dir_name(&params);
     {
         let mut pending = state.pending.lock().expect("pending lock");
-        if pending.contains(&world_id) || state.config.worlds_dir.join(&world_id).exists() {
+        if pending.contains(&world_id) {
             return Err(Failure(
                 StatusCode::CONFLICT,
-                format!("world {world_id} already exists: delete it or pick another seed"),
+                format!("world {world_id} is being generated already"),
+            ));
+        }
+        if !replace && state.config.worlds_dir.join(&world_id).exists() {
+            return Err(Failure(
+                StatusCode::CONFLICT,
+                format!(
+                    "world {world_id} already exists: replace it, delete it or pick another seed"
+                ),
             ));
         }
         pending.push(world_id.clone());
@@ -546,13 +563,26 @@ async fn create_world(
             if thread_cancel.is_requested() {
                 std::panic::resume_unwind(Box::new(Cancelled));
             }
-            temp.commit(&worlds_dir.join(&id))
+            let target = worlds_dir.join(&id);
+            if replace {
+                temp.commit_replacing(&target)
+            } else {
+                temp.commit(&target)
+            }
         })
         .await;
         let status = match result {
-            Ok(Ok(())) => JobStatus::Done {
-                world_id: task_world.clone(),
-            },
+            Ok(Ok(())) => {
+                // Drop any cached copy of the replaced world: the cache is
+                // emptied while a generation runs, but the swap must never
+                // leave the old revision behind.
+                if replace {
+                    task_state.tiles.forget(&task_world);
+                }
+                JobStatus::Done {
+                    world_id: task_world.clone(),
+                }
+            }
             Ok(Err(e)) => JobStatus::Failed { error: e },
             Err(e) if e.is_panic() && cancel.is_requested() => JobStatus::Cancelled,
             Err(e) => JobStatus::Failed {
@@ -871,6 +901,93 @@ mod tests {
         let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-3", None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         assert!(!config.worlds_dir.join("frozen-3").exists());
+    }
+
+    /// Waits for the end of a job and returns its event stream.
+    async fn wait_job(app: &Router, created: &str) -> String {
+        let created: serde_json::Value = serde_json::from_str(created).unwrap();
+        let uri = format!("/api/jobs/{}/events", created["job_id"].as_str().unwrap());
+        call(app, "GET", &uri, None).await.1
+    }
+
+    async fn world_width(app: &Router, id: &str) -> Option<u64> {
+        let (_, list) = call(app, "GET", "/api/worlds", None).await;
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["id"] == id)
+            .map(|w| w["width"].as_u64().unwrap())
+    }
+
+    #[tokio::test]
+    async fn replaces_a_world_once_the_new_one_is_complete() {
+        let config = temp_config("replace");
+        let app = router(config.clone());
+        let old = r#"{"planet": "frozen", "seed": 5, "width": 64, "height": 32}"#;
+        let (status, body) = call(&app, "POST", "/api/worlds", Some(old)).await;
+        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+        assert!(wait_job(&app, &body).await.contains("\"status\":\"done\""));
+        // Loaded for the tiles, so the cache holds the old revision.
+        let (status, _) = call(&app, "GET", "/api/worlds/frozen-5/tiles/0/0/0", None).await;
+        assert_eq!(status, StatusCode::OK);
+
+        // Without the flag, the existing world is refused.
+        let new = r#"{"planet": "frozen", "seed": 5, "width": 128, "height": 64}"#;
+        let (status, _) = call(&app, "POST", "/api/worlds", Some(new)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) = call(&app, "POST", "/api/worlds?replace=maybe", Some(new)).await;
+        assert!(status.is_client_error());
+
+        // Cancelled mid-generation: the old world stays, untouched.
+        let slow = r#"{"planet": "frozen", "seed": 5, "width": 512, "height": 256}"#;
+        let (status, body) = call(&app, "POST", "/api/worlds?replace=true", Some(slow)).await;
+        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+        // Being generated: neither deleted nor queued twice.
+        let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-5", None).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) = call(&app, "POST", "/api/worlds?replace=true", Some(new)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let job = created["job_id"].as_str().unwrap();
+        loop {
+            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
+            if list.contains("\"status\":\"running\"") {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            world_width(&app, "frozen-5").await,
+            Some(64),
+            "kept while it runs"
+        );
+        call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
+        assert!(
+            wait_job(&app, &body)
+                .await
+                .contains("\"status\":\"cancelled\"")
+        );
+        assert_eq!(world_width(&app, "frozen-5").await, Some(64));
+        assert!(!config.worlds_dir.join(".tmp-frozen-5").exists());
+        assert!(!config.worlds_dir.join(".old-frozen-5").exists());
+
+        // Completed: the new world takes the place (and id) of the old one,
+        // and its tiles come from the new revision.
+        let (status, body) = call(&app, "POST", "/api/worlds?replace=true", Some(new)).await;
+        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+        assert!(wait_job(&app, &body).await.contains("\"status\":\"done\""));
+        assert_eq!(world_width(&app, "frozen-5").await, Some(128));
+        assert!(!config.worlds_dir.join(".old-frozen-5").exists());
+        let (status, _) = call(&app, "GET", "/api/worlds/frozen-5/tiles/0/0/0", None).await;
+        assert_eq!(status, StatusCode::OK);
+
+        // Nothing to replace: the flag generates as usual.
+        let other = r#"{"planet": "frozen", "seed": 6, "width": 64, "height": 32}"#;
+        let (status, body) = call(&app, "POST", "/api/worlds?replace=true", Some(other)).await;
+        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+        assert!(wait_job(&app, &body).await.contains("\"status\":\"done\""));
+        assert_eq!(world_width(&app, "frozen-6").await, Some(64));
     }
 
     #[tokio::test]

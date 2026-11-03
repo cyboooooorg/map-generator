@@ -14,15 +14,18 @@
     worlds: WorldSummary[];
     compareId: string | null;
     onVary: () => void;
+    /** Generates the same world again with a new random seed. */
+    onReroll: () => Promise<void>;
     onCompare: (id: string | null) => void;
     onDelete: () => void;
   }
 
-  let { world, summary, worlds, compareId, onVary, onCompare, onDelete }: Props = $props();
+  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, onDelete }: Props = $props();
 
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
   let zipping = $state(false);
+  let rerolling = $state(false);
   $effect(() => saveSetting('worldInfoOpen', open));
 
   const meta = $derived(world.meta);
@@ -37,6 +40,15 @@
 
   function link(): string {
     return `${location.origin}${location.pathname}#world=${encodeURIComponent(world.id ?? '')}`;
+  }
+
+  async function reroll(): Promise<void> {
+    rerolling = true;
+    try {
+      await onReroll();
+    } finally {
+      rerolling = false;
+    }
   }
 
   async function zip(): Promise<void> {
@@ -130,6 +142,9 @@
       {/if}
 
       <div class="actions">
+        <button onclick={reroll} disabled={rerolling} title="Generate this world again with a new random seed"
+          >{rerolling ? 'Sending…' : 'Reroll'}</button
+        >
         <button onclick={onVary} title="Open the form with this world's parameters">Vary…</button>
         <button onclick={() => copy(cliCommand(meta), 'Command')} title="Command line that regenerates this world"
           >Copy command</button
@@ -249,7 +264,7 @@
     border: none;
     background: none;
     padding: 0;
-    color: var(--accent);
+    color: var(--link);
     text-align: left;
   }
   .actions {
@@ -286,7 +301,7 @@
     color: var(--muted);
   }
   .downloads a {
-    color: var(--accent);
+    color: var(--link);
   }
   .muted {
     color: var(--muted);
