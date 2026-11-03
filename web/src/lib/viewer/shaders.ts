@@ -10,6 +10,7 @@
 //   r = volcanic zone, g = distance to the sea (km), b = floodplain, a = highland offset.
 // `uBiomes` holds the biome id of each pixel (r × 255), for highlighting one biome.
 import { glslRamp } from './colormaps';
+import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH } from './sunDepth';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
 export const LAYER_IDS = {
@@ -446,6 +447,11 @@ export const atmosphereVertex = /* glsl */ `
 // in alpha, the transmittance of the ray: blended as dst × alpha + src, it
 // veils the ground (an opaque Venus hides its surface) and draws the sky.
 //
+// The optical depth towards the sun is not marched but looked up in a
+// small table (uSunDepth, see sunDepth.ts) of the Chapman function of each
+// species, an exponential atmosphere over a sphere: one texture fetch per
+// sample instead of eight steps (sixteen exp) towards the sun.
+//
 // The shell is drawn twice, from its far side, split by the depth test
 // (uGround): where the surface is in front of the far side, the ray stops
 // at the ground and veils it; elsewhere it crosses the whole shell, the sky.
@@ -465,10 +471,13 @@ export const atmosphereFragment = /* glsl */ `
   uniform float uHeightM;
   uniform float uG;
   uniform float uGround;       // 1: the surface pass, 0: the sky pass
+  uniform sampler2D uSunDepth; // optical depth towards the sun over density (sunDepth.ts)
   varying vec3 vWorld;
 
   const int VIEW_STEPS = 16;
-  const int SUN_STEPS = 8;
+  // From [0, 1] to the centres of the first and last texels.
+  const vec2 SUN_DEPTH_SCALE = vec2(${(SUN_DEPTH_WIDTH - 1) / SUN_DEPTH_WIDTH}, ${(SUN_DEPTH_HEIGHT - 1) / SUN_DEPTH_HEIGHT});
+  const vec2 SUN_DEPTH_OFFSET = vec2(${0.5 / SUN_DEPTH_WIDTH}, ${0.5 / SUN_DEPTH_HEIGHT});
   const float PI = 3.14159265;
   const float EXPOSURE = 1.6;
 
@@ -504,22 +513,23 @@ export const atmosphereFragment = /* glsl */ `
     float depthM = 0.0;
     for (int i = 0; i < VIEW_STEPS; i++) {
       vec3 p = origin + dir * (near + (float(i) + 0.5) * ds);
-      float h = max(length(p) - 1.0, 0.0);
-      float dR = exp(-h / uHeightR) * ds;
-      float dM = exp(-h / uHeightM) * ds;
+      float r = max(length(p), 1.0);
+      float h = r - 1.0;
+      float densityR = exp(-h / uHeightR);
+      float densityM = exp(-h / uHeightM);
+      float dR = densityR * ds;
+      float dM = densityM * ds;
       depthR += dR;
       depthM += dM;
-      // In the planet's shadow, no sunlight reaches this sample.
-      vec2 shadow = sphere(p, sun, 1.0);
-      if (shadow.x > 0.0 && shadow.x < shadow.y) continue;
-      float dl = sphere(p, sun, uTop).y / float(SUN_STEPS);
-      float sunR = 0.0;
-      float sunM = 0.0;
-      for (int j = 0; j < SUN_STEPS; j++) {
-        float hl = max(length(p + sun * (float(j) + 0.5) * dl) - 1.0, 0.0);
-        sunR += exp(-hl / uHeightR) * dl;
-        sunM += exp(-hl / uHeightM) * dl;
-      }
+      // In the planet's shadow (below the ray grazing the ground), no
+      // sunlight reaches this sample.
+      float mu = dot(p, sun) / r;
+      float grazing = -sqrt(max(1.0 - 1.0 / (r * r), 0.0));
+      if (mu < grazing) continue;
+      vec2 at = vec2(sqrt((mu - grazing) / (1.0 - grazing)), sqrt(h / (uTop - 1.0)));
+      vec2 factor = texture2D(uSunDepth, at * SUN_DEPTH_SCALE + SUN_DEPTH_OFFSET).rg;
+      float sunR = densityR * factor.r;
+      float sunM = densityM * factor.g;
       vec3 attenuation = exp(-(uBetaR * (depthR + sunR) + uBetaM * (depthM + sunM)));
       sumR += dR * attenuation;
       sumM += dM * attenuation;

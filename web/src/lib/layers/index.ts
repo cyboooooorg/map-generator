@@ -1,6 +1,7 @@
 // Loads the decoded layers of a world through Web Workers.
 import type { WorldMetadata } from '../api/types/WorldMetadata';
 import { worldFile } from '../api/client';
+import type { LoadProgress } from '../progress';
 import type { WorldStats } from '../stats';
 import type { Grey8, WorldLayers } from './decode';
 import type { GreyRequest, GreyResponse } from './greyWorker';
@@ -18,13 +19,15 @@ type Answer<Response> = Extract<Response, { ok: true }>;
 
 /**
  * Posts one request to a worker and resolves with its answer, terminating
- * the worker afterwards. Aborting `signal` terminates it at once (its
+ * the worker afterwards. Progress messages before the answer go to
+ * `onProgress`. Aborting `signal` terminates the worker at once (its
  * downloads and decoding stop) and rejects with the abort reason.
  */
-function runOnce<Request, Response extends { ok: true } | { ok: false; error: string }>(
+function runOnce<Request, Response extends { ok: true } | { ok: false; error: string } | { progress: LoadProgress }>(
   worker: Worker,
   request: Request,
   signal?: AbortSignal,
+  onProgress?: (progress: LoadProgress) => void,
 ): Promise<Answer<Response>> {
   return new Promise<Answer<Response>>((resolve, reject) => {
     const finish = () => {
@@ -37,8 +40,12 @@ function runOnce<Request, Response extends { ok: true } | { ok: false; error: st
     };
     signal?.addEventListener('abort', abort, { once: true });
     worker.onmessage = (event: MessageEvent<Response>) => {
-      finish();
       const data = event.data;
+      if ('progress' in data) {
+        if (!signal?.aborted) onProgress?.(data.progress);
+        return;
+      }
+      finish();
       if (data.ok) {
         resolve(data as Answer<Response>);
       } else {
@@ -55,14 +62,21 @@ function runOnce<Request, Response extends { ok: true } | { ok: false; error: st
 
 /**
  * Fetches and decodes the layers of a world, and computes its biome
- * statistics, in a Web Worker. Aborting `signal` terminates the worker
- * (its downloads and decoding stop) and rejects with the abort reason.
+ * statistics, in a Web Worker. `onProgress` follows the downloads (bytes
+ * of all the files) and then the decoding steps. Aborting `signal`
+ * terminates the worker (its downloads and decoding stop) and rejects with
+ * the abort reason.
  */
-export async function loadLayers(id: string, meta: WorldMetadata, signal?: AbortSignal): Promise<DecodedWorld> {
+export async function loadLayers(
+  id: string,
+  meta: WorldMetadata,
+  signal?: AbortSignal,
+  onProgress?: (progress: LoadProgress) => void,
+): Promise<DecodedWorld> {
   signal?.throwIfAborted();
   const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   const request: WorkerRequest = { base: worldFile(id, 'raw_data/'), meta };
-  const { layers, stats } = await runOnce<WorkerRequest, WorkerResponse>(worker, request, signal);
+  const { layers, stats } = await runOnce<WorkerRequest, WorkerResponse>(worker, request, signal, onProgress);
   return { layers, stats };
 }
 

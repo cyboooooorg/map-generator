@@ -17,10 +17,12 @@
     /** Generates the same world again with a new random seed. */
     onReroll: () => Promise<void>;
     onCompare: (id: string | null) => void;
+    /** The link Copy link copies: the worlds shown and the view. */
+    link: () => string;
     onDelete: () => void;
   }
 
-  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, onDelete }: Props = $props();
+  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, link, onDelete }: Props = $props();
 
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
@@ -36,10 +38,6 @@
   async function copy(text: string, what: string): Promise<void> {
     const ok = await copyText(text);
     toasts.show(ok ? `${what} copied.` : 'The browser refused to copy.', { kind: ok ? 'info' : 'error' });
-  }
-
-  function link(): string {
-    return `${location.origin}${location.pathname}#world=${encodeURIComponent(world.id ?? '')}`;
   }
 
   async function reroll(): Promise<void> {
@@ -149,7 +147,7 @@
         <button onclick={() => copy(cliCommand(meta), 'Command')} title="Command line that regenerates this world"
           >Copy command</button
         >
-        <button onclick={() => copy(link(), 'Link')} title="Link that opens this world">Copy link</button>
+        <button onclick={() => copy(link(), 'Link')} title="Link that opens this world, with the camera, layer, relief and sun shown">Copy link</button>
         <button class="danger" onclick={onDelete}>Delete</button>
       </div>
 

@@ -4,6 +4,7 @@
 import { api } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { loadLayers, type WorldLayers } from './layers';
+import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
 import type { WorldStats } from './stats';
 
@@ -15,6 +16,8 @@ export class LoadedWorld {
   stats = $state.raw<WorldStats | null>(null);
   rivers = $state.raw<RiverIndex | null>(null);
   error = $state<string | null>(null);
+  /** How far the download and decoding of the layers have got, while they load. */
+  progress = $state.raw<LoadProgress | null>(null);
   /** Aborts the current load: its downloads and its decoding worker. */
   private controller: AbortController | null = null;
 
@@ -34,6 +37,7 @@ export class LoadedWorld {
     this.stats = null;
     this.rivers = null;
     this.error = null;
+    this.progress = null;
     if (!id) {
       return;
     }
@@ -41,8 +45,11 @@ export class LoadedWorld {
       const meta = await api.metadata(id, signal);
       if (!current()) return;
       this.meta = meta;
-      const { layers, stats } = await loadLayers(id, meta, signal);
+      const { layers, stats } = await loadLayers(id, meta, signal, (progress) => {
+        if (current()) this.progress = progress;
+      });
       if (!current()) return;
+      this.progress = null;
       this.layers = layers;
       this.stats = stats;
       if (meta.rivers) {
@@ -52,6 +59,7 @@ export class LoadedWorld {
       }
     })().catch((e: unknown) => {
       if (current()) {
+        this.progress = null;
         this.error = `Could not load ${id}: ${String(e)}`;
       }
     });

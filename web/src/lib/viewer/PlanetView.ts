@@ -31,6 +31,7 @@ import {
   Raycaster,
   RedFormat,
   RepeatWrapping,
+  RGFormat,
   RGBAFormat,
   Scene,
   ShaderMaterial,
@@ -59,6 +60,7 @@ import {
   type Vec3,
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
+import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
 import {
@@ -71,6 +73,7 @@ import {
   mapPoint,
   morphCamera,
 } from './viewTransfer';
+import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH, sunDepthTable } from './sunDepth';
 import { downsample, fitFactor, releaseOnUpload } from './textures';
 import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
@@ -208,6 +211,30 @@ function pathGeometry(points: readonly LonLat[]): BufferGeometry {
   geometry.setAttribute('position', new Float32BufferAttribute(new Array((uvs.length / 2) * 3).fill(0), 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
   return geometry;
+}
+
+/** The optical depth table of the sky shader, for a shell and its scale heights (see sunDepth.ts). */
+function sunDepthTexture(top: number, heightR: number, heightM: number): DataTexture {
+  const texture = new DataTexture(
+    sunDepthTable(top, heightR, heightM),
+    SUN_DEPTH_WIDTH,
+    SUN_DEPTH_HEIGHT,
+    RGFormat,
+    HalfFloatType,
+  );
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  texture.wrapS = ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** The last part of a URL's path ("world.png"), for progress labels. */
+function fileName(url: string): string {
+  const path = url.split(/[?#]/)[0] ?? url;
+  return path.slice(path.lastIndexOf('/') + 1) || path;
 }
 
 function emptyTexture(): DataTexture {
@@ -406,6 +433,7 @@ export class PlanetView {
     uHeightR: { value: 0.009 } as IUniform<number>,
     uHeightM: { value: 0.0043 } as IUniform<number>,
     uG: { value: 0.76 } as IUniform<number>,
+    uSunDepth: { value: sunDepthTexture(1.04, 0.009, 0.0043) } as IUniform<DataTexture>,
   };
   private mode: ViewMode = 'globe';
   private morph = 1;
@@ -731,13 +759,25 @@ export class PlanetView {
   }
 
   /** Downloads and decodes an equirectangular image, north up, within the GPU's texture size. */
-  private async decodeImage(url: string, signal?: AbortSignal): Promise<ImageBitmap> {
+  private async decodeImage(
+    url: string,
+    signal?: AbortSignal,
+    onProgress?: (progress: LoadProgress) => void,
+  ): Promise<ImageBitmap> {
     const response = await fetch(url, signal ? { signal } : {});
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
-    const blob = await response.blob();
+    const label = fileName(url);
+    const blob = onProgress
+      ? new Blob([
+          await readWithProgress(response, ({ received, total }) =>
+            onProgress({ stage: 'download', label, done: received, total }),
+          ),
+        ])
+      : await response.blob();
     signal?.throwIfAborted();
+    onProgress?.({ stage: 'decode', label: `Decoding ${label}`, done: 0, total: null });
     // ImageBitmaps ignore texture.flipY: flip while decoding instead, so
     // row 0 (north) ends at the top of the texture, as geo.ts expects.
     let bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
@@ -761,11 +801,12 @@ export class PlanetView {
    * off the main thread. Aborting `signal` drops the load: the promise
    * rejects and the current map stays. A later call does not cancel an
    * earlier one by itself, but the view keeps only the map of the latest call.
+   * `onProgress` follows the download (bytes received) and the decoding.
    */
-  async setTexture(url: string, signal?: AbortSignal): Promise<void> {
+  async setTexture(url: string, signal?: AbortSignal, onProgress?: (progress: LoadProgress) => void): Promise<void> {
     this.textureRequest += 1;
     const request = this.textureRequest;
-    const bitmap = await this.decodeImage(url, signal);
+    const bitmap = await this.decodeImage(url, signal, onProgress);
     if (this.disposed || request !== this.textureRequest || signal?.aborted) {
       bitmap.close();
       signal?.throwIfAborted();
@@ -919,6 +960,11 @@ export class PlanetView {
     const sky = liftSky(this.worldSky, this.shared.uRelief.value * RELIEF_SCALE);
     for (const pass of this.atmosphere) {
       pass.scale.setScalar(sky.top);
+    }
+    const s = this.sky;
+    if (s.uTop.value !== sky.top || s.uHeightR.value !== sky.heightR || s.uHeightM.value !== sky.heightM) {
+      s.uSunDepth.value.dispose();
+      s.uSunDepth.value = sunDepthTexture(sky.top, sky.heightR, sky.heightM);
     }
     this.sky.uTop.value = sky.top;
     this.sky.uBetaR.value.set(...sky.betaR);
@@ -1103,16 +1149,20 @@ export class PlanetView {
     };
   }
 
-  /** Moves the camera to a state reported by another view (same mode expected). */
+  /**
+   * Moves the camera to a state reported by another view, or read from a
+   * link, switching the mode at once if it differs. A morph under way is
+   * cut short: it would carry the camera elsewhere.
+   */
   setCamera(state: CameraState): void {
     this.requestRender();
     this.applyingCamera = true;
     if (state.mode !== this.mode) {
       this.setMode(state.mode);
-      // Skip the morph: the other view has finished it already.
-      this.animation = null;
-      this.morph = state.mode === 'globe' ? 1 : 0;
     }
+    // Skip the morph: the other view has finished it already.
+    this.animation = null;
+    this.morph = state.mode === 'globe' ? 1 : 0;
     this.camera.position.fromArray(state.position);
     this.controls.target.fromArray(state.target);
     this.camera.up.fromArray(state.up);
@@ -1156,6 +1206,7 @@ export class PlanetView {
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
+    this.sky.uSunDepth.value.dispose();
     for (const object of [this.surface, this.grid, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
