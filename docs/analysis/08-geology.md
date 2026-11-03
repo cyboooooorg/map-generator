@@ -199,22 +199,27 @@ A new `[geology]` table in presets, stored in `world.json` with the
 resolved preset like `[atmosphere]`:
 
 ```toml
+[defaults]
+surface_age = [3.0, 4.2]     # Ga: age of the oldest surviving surface
+
 [geology]
 regime = "stagnant"          # plates | stagnant | episodic | heat_pipe
-surface_age = 4.0            # Ga: age of the oldest surviving surface
-wet_until = 3.5              # Ga: end of the era of liquid water; 0 = still wet; omit if never wet
+wet_until = 3.5              # Ga: end of the era of liquid water
 ```
 
 - `regime` has no effect on the elevation yet: it records the regime
-  for section 8, and sets the defaults below. It is shown in the world
-  info.
+  for section 8. It is shown in the world info.
 - `surface_age` sets the crater density through the chronology. Like
-  the pressure, it becomes a generation parameter (`--surface-age`,
-  form field) drawn from a preset range.
+  the pressure, it is a generation parameter (`--surface-age`, form
+  field, `surface_age_ga` in `world.json`) drawn from the preset's
+  `[defaults]`, so it sits there rather than in `[geology]`.
 - `wet_until` splits craters in two: those older than it are applied
   before the hydraulic erosion, which wears them (a Noachian Mars);
-  those younger are applied after it, fresh. A world with liquid water
-  today (pressure above `LIQUID_WATER_BAR`) is forced to 0.
+  those younger are applied after it, fresh. `0` means still wet, and
+  a value at or above the surface age means never wet (Mercury, written
+  `4.6`, the upper limit): no special value is needed, since no crater
+  is then older than it. A world with liquid water today (pressure
+  above `LIQUID_WATER_BAR`) is forced to 0 (`Geology::wet_until_ga`).
 
 Presets without the table get Earth's values: `terran` worlds keep a
 few large, worn craters.
@@ -229,7 +234,16 @@ few large, worn craters.
 | `barren`       | stagnant  | 3.0–4.2          | 3.5            | Cratered, old craters worn, young ones fresh       |
 | `mars-like`    | stagnant  | 4.0              | 3.5            | Mars: worn southern craters, fresher young ones    |
 | `venus-like`   | episodic  | 0.5              | 0              | About a thousand craters, none below 2 km          |
-| `mercury-like` | stagnant  | 4.0              | never          | Saturated, fresh-looking                           |
+| `mercury-like` | stagnant  | 4.0              | 4.6 (never)    | Saturated, fresh-looking                           |
+
+**Outcome (step 1).** As planned, with the surface age in `[defaults]`
+and "never wet" written as a `wet_until` at the upper limit. The
+surface age is drawn after every other parameter, the seed included, so
+the draws of a seeded request do not move. Worlds made before it have
+no `surface_age_ga` in `world.json`: the viewer shows their regime only,
+the reproduce command leaves the age to the preset, and a reloaded world
+gets an age of 0 (no craters), which is what they have. Worlds do not
+change.
 
 ## 5. Craters (generation and tiles)
 

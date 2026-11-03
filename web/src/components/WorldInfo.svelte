@@ -4,7 +4,7 @@
   import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatInt, formatNumber, formatShare, surfaceColour, withUnit } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatGeology, formatInt, formatNumber, formatShare, surfaceColour, withUnit } from '../lib/format';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -96,6 +96,8 @@
         <dd>{withUnit(formatNumber(meta.gravity_modifier, 2), 'g')}</dd>
         <dt>{t.worldInfo.atmosphere}</dt>
         <dd>{formatAtmosphere(meta)}</dd>
+        <dt>{t.worldInfo.geology}</dt>
+        <dd>{formatGeology(meta)}</dd>
         {#if stats}
           <dt>{t.worldInfo.surface}</dt>
           <dd>{formatArea(stats.surfaceKm2)}</dd>

@@ -17,4 +17,8 @@ land_fraction?: number, volcanic?: number, circumference_km?: number, axial_tilt
 /**
  * Surface pressure in bar.
  */
-pressure_bar?: number, width?: number, height?: number, };
+pressure_bar?: number, 
+/**
+ * Age of the oldest surviving surface, in Ga.
+ */
+surface_age_ga?: number, width?: number, height?: number, };

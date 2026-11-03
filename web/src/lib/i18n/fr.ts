@@ -148,6 +148,12 @@ export const fr: Messages = {
     dust: 'de poussière',
     none: 'aucun',
   },
+  regimes: {
+    plates: 'tectonique des plaques',
+    stagnant: 'couvercle stagnant',
+    episodic: 'couvercle épisodique',
+    heat_pipe: 'caloduc',
+  },
   worldInfo: {
     copied: (p) => `Copié dans le presse-papiers${S}: ${p.what.toLowerCase()}.`,
     copyRefused: 'Le navigateur a refusé la copie.',
@@ -164,6 +170,8 @@ export const fr: Messages = {
     airless: 'aucune',
     pressureClouds: (p) => `${p.pressure}, nuages ${p.clouds}`,
     pressureNoClouds: (p) => `${p.pressure}, sans nuages`,
+    geology: 'Géologie',
+    geologySurface: (p) => `${p.regime}, surface de ${p.age}`,
     surface: 'Surface',
     landWater: 'Terres / eaux',
     rivers: 'Rivières',
@@ -260,6 +268,10 @@ export const fr: Messages = {
       pressure_bar: {
         label: 'Pression (bar)',
         help: `Terre${S}: 1 · Mars${S}: 0,006 · Vénus${S}: 92 · 0 (curseur tout à gauche)${S}: sans atmosphère. Curseur logarithmique`,
+      },
+      surface_age_ga: {
+        label: 'Âge de la surface (Ga)',
+        help: `Depuis combien de temps les impacts criblent la surface. Terre${S}: environ 0,4 · Vénus${S}: 0,5 · Mars, la Lune${S}: 4`,
       },
     },
     pressureSlider: 'Pression, logarithmique',
@@ -427,6 +439,7 @@ export const fr: Messages = {
       axial_tilt_deg: 'Inclinaison de l’axe',
       erosion: 'Érosion',
       pressure_bar: 'Pression',
+      surface_age_ga: 'Âge de la surface',
       width: 'largeur',
       height: 'hauteur',
     },

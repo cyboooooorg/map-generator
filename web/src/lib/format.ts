@@ -132,6 +132,8 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     erosion: round(meta.erosion, 2),
     // Worlds made before the atmosphere had Earth's pressure.
     pressure_bar: round(meta.pressure_bar ?? 1, 4),
+    // Worlds made before the surface age leave it to the preset.
+    ...(meta.surface_age_ga == null ? {} : { surface_age_ga: round(meta.surface_age_ga, 3) }),
     width: meta.width,
     height: meta.height,
   };
@@ -153,6 +155,7 @@ export function cliCommand(meta: WorldMetadata): string {
     `--axial-tilt ${r.axial_tilt_deg}`,
     `--erosion ${r.erosion}`,
     `--pressure ${r.pressure_bar}`,
+    ...(r.surface_age_ga === undefined ? [] : [`--surface-age ${r.surface_age_ga}`]),
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];
@@ -192,6 +195,21 @@ export function formatAtmosphere(meta: WorldMetadata): string {
   return clouds === 'none'
     ? t.worldInfo.pressureNoClouds({ pressure: bar })
     : t.worldInfo.pressureClouds({ pressure: bar, clouds: t.clouds[clouds] });
+}
+
+/**
+ * The tectonic regime and surface age of a world, e.g. "stagnant lid,
+ * surface 3.8 Ga", in the active locale. Worlds made before geology get
+ * Earth's regime and no age.
+ */
+export function formatGeology(meta: WorldMetadata): string {
+  const regime = t.regimes[meta.preset.geology?.regime ?? 'plates'];
+  const age = meta.surface_age_ga;
+  if (age == null) {
+    return regime;
+  }
+  const shown = age >= 1 ? withUnit(formatNumber(age, 1), 'Ga') : withUnit(formatNumber(age * 1000), 'Ma');
+  return t.worldInfo.geologySurface({ regime, age: shown });
 }
 
 /**

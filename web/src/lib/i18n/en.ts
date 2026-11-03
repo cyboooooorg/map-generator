@@ -7,6 +7,7 @@
 import type { Biome } from '../api/types/Biome';
 import type { CloudKind } from '../api/types/CloudKind';
 import type { Mouth } from '../api/types/Mouth';
+import type { Regime } from '../api/types/Regime';
 import type { Stage } from '../api/types/Stage';
 import type { DataLayer } from '../viewer/colormaps';
 import type { Layer } from '../viewer/shaders';
@@ -162,6 +163,13 @@ export const en = {
     dust: 'dust',
     none: 'none',
   } satisfies Record<CloudKind, string>,
+  /** Tectonic regimes. */
+  regimes: {
+    plates: 'plate tectonics',
+    stagnant: 'stagnant lid',
+    episodic: 'episodic lid',
+    heat_pipe: 'heat pipe',
+  } satisfies Record<Regime, string>,
   /** The world card. */
   worldInfo: {
     copied: (p: { what: string }) => `${p.what} copied.`,
@@ -179,6 +187,8 @@ export const en = {
     airless: 'none',
     pressureClouds: (p: { pressure: string; clouds: string }) => `${p.pressure}, ${p.clouds} clouds`,
     pressureNoClouds: (p: { pressure: string }) => `${p.pressure}, no clouds`,
+    geology: 'Geology',
+    geologySurface: (p: { regime: string; age: string }) => `${p.regime}, surface ${p.age}`,
     surface: 'Surface',
     landWater: 'Land / water',
     rivers: 'Rivers',
@@ -277,6 +287,10 @@ export const en = {
       pressure_bar: {
         label: 'Pressure (bar)',
         help: 'Earth: 1 · Mars: 0.006 · Venus: 92 · 0 (slider at the far left): airless. Logarithmic slider',
+      },
+      surface_age_ga: {
+        label: 'Surface age (Ga)',
+        help: 'How long impacts have cratered the surface. Earth: about 0.4 · Venus: 0.5 · Mars, the Moon: 4',
       },
     },
     pressureSlider: 'Pressure, logarithmic',
@@ -454,6 +468,7 @@ export const en = {
       axial_tilt_deg: 'Axial tilt',
       erosion: 'Erosion',
       pressure_bar: 'Pressure',
+      surface_age_ga: 'Surface age',
       width: 'width',
       height: 'height',
     } as Record<string, string>,

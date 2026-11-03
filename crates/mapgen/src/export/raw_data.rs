@@ -72,6 +72,10 @@ pub struct WorldMetadata {
     /// Surface pressure in bar. Worlds made before it existed had Earth's.
     #[serde(default = "earth_pressure")]
     pub pressure_bar: f32,
+    /// Age of the oldest surviving surface, in Ga. Worlds made before it
+    /// existed have none (and no craters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface_age_ga: Option<f32>,
     pub layers: Layers,
     /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -312,6 +316,7 @@ pub fn export_raw_data(
         axial_tilt_deg: world.params.axial_tilt_deg,
         erosion: world.params.erosion,
         pressure_bar: world.params.pressure_bar,
+        surface_age_ga: Some(world.params.surface_age_ga),
         layers: Layers {
             elevation,
             moisture,
@@ -615,6 +620,8 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         axial_tilt_deg: meta.axial_tilt_deg,
         erosion: meta.erosion,
         pressure_bar: meta.pressure_bar,
+        // Worlds made before the surface age have no craters: a fresh surface.
+        surface_age_ga: meta.surface_age_ga.unwrap_or(0.0),
     };
     let l = &meta.layers;
     let infos = [
@@ -776,6 +783,7 @@ mod tests {
             axial_tilt_deg: 23.44,
             erosion: 1.0,
             pressure_bar: 1.0,
+            surface_age_ga: 0.4,
         })
         .world;
         let world_dir =

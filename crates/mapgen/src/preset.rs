@@ -18,10 +18,16 @@
 //! sea_level = [0.1, 0.3]             # or land_fraction = 0.29, not both
 //! axial_tilt = 25.2
 //!
+//! surface_age = [3.0, 4.2]           # Ga
+//!
 //! [climate]                          # added to every pixel before biome selection
 //! temperature = -15.0                # °C
 //! moisture = -0.6
 //! volcanic = 0.0
+//!
+//! [geology]                          # see the geology module
+//! regime = "stagnant"
+//! wet_until = 3.5                    # Ga
 //!
 //! [rules]                            # any BiomeRules field
 //! polar = -5.0                       # °C
@@ -31,6 +37,7 @@
 //! ```
 use crate::atmosphere::Atmosphere;
 use crate::biome::{Biome, BiomeRules};
+use crate::geology::Geology;
 use crate::request;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
@@ -97,6 +104,8 @@ pub struct Defaults {
     pub erosion: Option<ParamDefault>,
     /// Surface pressure in bar (0 = airless).
     pub pressure: Option<ParamDefault>,
+    /// Age of the oldest surviving surface, in Ga.
+    pub surface_age: Option<ParamDefault>,
 }
 
 /// Global shifts added to every pixel before biome selection.
@@ -132,6 +141,10 @@ pub struct Preset {
     /// Sky and clouds; Earth's when the preset has no `[atmosphere]` table.
     #[serde(default)]
     pub atmosphere: Atmosphere,
+    /// Tectonic regime and wet era; Earth's when the preset has no
+    /// `[geology]` table.
+    #[serde(default)]
+    pub geology: Geology,
     /// Target biome → biomes replaced by it.
     #[serde(default)]
     pub remap: BTreeMap<Biome, Vec<Biome>>,
@@ -175,6 +188,8 @@ struct PresetSpec {
     #[serde(default)]
     atmosphere: Atmosphere,
     #[serde(default)]
+    geology: Geology,
+    #[serde(default)]
     remap: BTreeMap<Biome, Vec<Biome>>,
 }
 
@@ -213,6 +228,7 @@ impl TryFrom<PresetSpec> for Preset {
             ("axial_tilt", d.axial_tilt, request::AXIAL_TILT_DEG),
             ("erosion", d.erosion, request::EROSION),
             ("pressure", d.pressure, request::PRESSURE_BAR),
+            ("surface_age", d.surface_age, request::SURFACE_AGE_GA),
         ] {
             if let Some(v) = value {
                 v.check(field, limits.min, limits.max)?;
@@ -229,6 +245,7 @@ impl TryFrom<PresetSpec> for Preset {
             }
         }
         spec.atmosphere.validate()?;
+        spec.geology.validate()?;
 
         let mut lookup = Biome::ALL.to_vec();
         let mut seen = BTreeMap::new();
@@ -249,6 +266,7 @@ impl TryFrom<PresetSpec> for Preset {
             climate: spec.climate,
             rules: spec.rules,
             atmosphere: spec.atmosphere,
+            geology: spec.geology,
             remap: spec.remap,
             locales: spec.locales,
             lookup,
@@ -451,11 +469,25 @@ mod tests {
             ("name = \"x\"\n[defaults]\nland_fraction = 1.5", "within"),
             ("name = \"x\"\n[locales.FR]\nname = \"X\"", "language code"),
             ("name = \"x\"\n[locales.fr]\ntitle = \"X\"", "unknown field"),
+            ("name = \"x\"\n[defaults]\nsurface_age = 5.0", "within"),
+            ("name = \"x\"\n[geology]\nwet_until = -1.0", "within"),
+            (
+                "name = \"x\"\n[geology]\nregime = \"floating\"",
+                "unknown variant",
+            ),
         ];
         for (text, expected) in cases {
             let err = Preset::from_toml(text, "test").unwrap_err().to_string();
             assert!(err.contains(expected), "{text:?} gave {err:?}");
         }
+    }
+
+    #[test]
+    fn presets_without_geology_get_earths() {
+        let p = Preset::from_toml("name = \"x\"", "test").unwrap();
+        assert_eq!(p.geology, Geology::default());
+        let barren = Preset::load("barren").unwrap();
+        assert_eq!(barren.geology.regime, crate::geology::Regime::Stagnant);
     }
 
     #[test]

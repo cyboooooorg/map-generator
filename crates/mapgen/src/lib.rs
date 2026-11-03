@@ -16,6 +16,7 @@ pub mod erosion;
 pub mod export;
 pub mod generation;
 pub mod geo;
+pub mod geology;
 pub mod hex;
 pub mod hydrology;
 pub mod noise;

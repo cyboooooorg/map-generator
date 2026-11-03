@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { formatAgo, formatArea, formatDuration, formatKm, formatNumber, formatShare } from '../format';
+import type { WorldMetadata } from '../api/types/WorldMetadata';
+import { formatAgo, formatArea, formatDuration, formatGeology, formatKm, formatNumber, formatShare } from '../format';
 import { formatLonLat } from '../geo';
 import { getLocale, setLocale, t } from './index.svelte';
 import { initialLocale } from './locale';
@@ -25,7 +26,16 @@ describe('French', () => {
     expect(t.app.newWorld).toBe('New world');
   });
 
-  it('formats numbers, units and times the French way', () => {
+  it('describes the geology in French', () => {
+    setLocale('fr');
+    const meta = { surface_age_ga: 3.8, preset: { geology: { regime: 'stagnant', wet_until: 3.5 } } };
+    expect(formatGeology(meta as unknown as WorldMetadata)).toBe(`couvercle stagnant, surface de 3,8${S}Ga`);
+    expect(formatGeology({ ...meta, surface_age_ga: 0.02 } as unknown as WorldMetadata)).toBe(
+      `couvercle stagnant, surface de 20${S}Ma`,
+    );
+  });
+
+    it('formats numbers, units and times the French way', () => {
     setLocale('fr');
     expect(formatNumber(1.5, 1)).toBe('1,5');
     expect(formatKm(2.25)).toBe(`2,3${S}km`);

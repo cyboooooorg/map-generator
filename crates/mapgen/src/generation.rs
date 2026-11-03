@@ -899,6 +899,7 @@ mod tests {
             axial_tilt_deg: EARTH_AXIAL_TILT_DEG,
             erosion: 1.0,
             pressure_bar: 1.0,
+            surface_age_ga: 0.4,
         }
     }
 

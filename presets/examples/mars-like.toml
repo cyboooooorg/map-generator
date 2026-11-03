@@ -16,6 +16,7 @@ description = "Petit désert froid aux calottes polaires"
 # the sea level, so a very low one would put every pixel above the snow line.
 [defaults]
 pressure = 0.006
+surface_age = 4.0                      # Ga: age of the oldest surviving surface
 sea_level = [0.10, 0.30]
 circumference = 21300
 axial_tilt = 25.2
@@ -42,6 +43,11 @@ rayleigh = [0.17, 0.41, 1.0]
 haze = 0.4
 haze_colour = [0.85, 0.6, 0.4]
 clouds = "dust"
+
+# A single lid since its youth; its water was lost about 3.5 Ga ago.
+[geology]
+regime = "stagnant"
+wet_until = 3.5                        # Ga: end of the era of liquid water
 
 # target = [biomes replaced by it]
 [remap]

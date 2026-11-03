@@ -12,6 +12,7 @@ volcanic = -0.40
 
 [defaults]
 pressure = [0.0, 0.01]                 # surface pressure in bar, drawn in this range
+surface_age = [3.0, 4.2]               # Ga: age of the oldest surviving surface
 # Too thin for liquid water today; water shaped the valleys long ago.
 erosion = 1.0
 
@@ -20,6 +21,12 @@ erosion = 1.0
 haze = 0.05
 haze_colour = [0.9, 0.85, 0.75]
 clouds = "none"
+
+# A dead rock with a single rigid lid: impacts are all that has changed
+# its surface since its water was lost, about 3.5 Ga ago.
+[geology]
+regime = "stagnant"
+wet_until = 3.5                        # Ga: end of the era of liquid water
 
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, Volcano).

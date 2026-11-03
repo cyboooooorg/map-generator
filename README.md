@@ -29,9 +29,9 @@ mise run gen [-- [OPTIONS]]
 All parameters are optional. Any omitted value comes from the planet preset when it sets one, and is otherwise chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
 
 ```text
-Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g pressure=0.412 bar
+Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g pressure=0.412 bar surface_age=1.24 Ga (plate tectonics)
 World generated → worlds/frozen-2590618090/
-Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.41237 --width 1920 --height 1080
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.41237 --surface-age 1.2381 --width 1920 --height 1080
 ```
 
 ### Options
@@ -48,6 +48,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`                          |
 | `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it                                                                                                  | `1.0`                                        |
 | `--pressure <bar>`      | surface pressure in bar, `[0, 1000]`; `0` is airless                                                                                                   | from the preset, else random in `[0.7, 1.5)` |
+| `--surface-age <Ga>`    | age of the oldest surviving surface in Ga, `[0, 4.6]`: how long impacts have cratered it                                                               | from the preset, else random in `[0.2, 0.6)` |
 | `--width <px>`          | map width, `2`–`16384`                                                                                                                                 | `1920`                                       |
 | `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                                     |
@@ -69,6 +70,8 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 **erosion** — how much rain carves the terrain: droplets per cell of the erosion grid, see [Erosion](#hydraulic-erosion).
 
 **pressure** — surface pressure of the atmosphere, in bar (Earth: 1, Mars: 0.006, Venus: 92, 0 for an airless world). Presets give their own range (`[defaults] pressure`); the sky colour, haze and clouds come from the preset's `[atmosphere]` table. It is stored in `world.json` (`pressure_bar`; worlds made before it had Earth's 1 bar). Dense air evens temperatures out between the equator and the poles, and below 0.01 bar no water stays liquid: no rain, rivers or lakes, and no hydraulic erosion unless the request or the preset sets it (see [Temperature](#temperature--axial-tilt)). The viewer draws the sky from it.
+
+**surface-age** — age of the oldest surviving surface, in Ga (billions of years): how long impacts have been cratering it since it was last renewed. Earth keeps few craters older than about 0.4 Ga (erosion and subduction erase them), Venus was resurfaced about 0.5 Ga ago, the Moon and Mars keep surfaces of 4 Ga or more. Presets give their own range (`[defaults] surface_age`), along with their tectonic regime and the end of their wet era (`[geology]`, see [Planet presets](#planet-presets)). It is stored in `world.json` (`surface_age_ga`; worlds made before it have none). It has no effect on the terrain yet: it prepares the impact craters planned in [docs/analysis/08-geology.md](docs/analysis/08-geology.md), so worlds do not change.
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -217,9 +220,10 @@ name = "Type Mars"
 description = "Petit désert froid aux calottes polaires"
 
 [defaults]                         # a fixed value or a [min, max] range drawn at random
-sea_level = [0.10, 0.30]           # sea_level or land_fraction, volcanic, circumference, axial_tilt, erosion, pressure
+sea_level = [0.10, 0.30]           # sea_level or land_fraction, volcanic, circumference, axial_tilt, erosion, pressure, surface_age
 circumference = 21300
 pressure = 0.006                   # bar
+surface_age = 4.0                  # Ga
 
 [climate]                          # added to every pixel before biome selection
 temperature = -60.0                # °C
@@ -235,6 +239,10 @@ haze = 0.4                         # aerosol density, 0 (clear) to 1 (opaque)
 haze_colour = [0.85, 0.6, 0.4]     # aerosol tint (butterscotch dust)
 clouds = "dust"                    # water | sulfuric | dust | none
 
+[geology]                          # tectonic regime and wet era; Earth's when left out
+regime = "stagnant"                # plates | stagnant | episodic | heat_pipe
+wet_until = 3.5                    # Ga: end of the era of liquid water
+
 [remap]                            # target = [biomes replaced by it]
 DustPlain = ["Ocean", "DeepOcean", "Lake", "River", "Plain", "Desert"]
 IceCap = ["SeaIce"]
@@ -249,6 +257,7 @@ To make a dry world, remap its oceans rather than lowering `sea_level`: biome el
 - **`[defaults]`**: command-line options always win; parameters set neither on the command line nor here use the generator defaults listed under [Options](#options).
 - **`[rules]`**: accepts any field of `BiomeRules` in `src/biome.rs` (`waterline`, `polar`, `forest_moisture`, `shore_width_km`…), each documented there. Fields left out keep their default.
 - **`[atmosphere]`**: `rayleigh` (relative scattering per red, green, blue channel: the clear-sky colour; Earth's air is about `[0.17, 0.41, 1.0]`), `haze` and `haze_colour` (aerosols), `greenhouse` (°C added to every temperature), `clouds` (`water`, `sulfuric`, `dust` or `none`) and `cloud_cover` (−1 to 1). Each field is optional and defaults to Earth's. See `src/atmosphere.rs`.
+- **`[geology]`**: `regime` (`plates`, `stagnant`, `episodic` or `heat_pipe`: how the planet loses its heat, from Earth's plates to the single rigid lid of Mars and the Moon, Venus's global overturns and Io's lava) and `wet_until` (Ga before present when liquid water disappeared: `0` for a world still wet, a value at or above the surface age for one never wet, like Mercury; a world with liquid water today counts as still wet whatever the preset says). Both default to Earth's (`plates`, `0`). They are recorded and shown for now; the impact craters will follow them. See `src/geology.rs`.
 - **`[remap]`**: runs after biome selection; biome names are the keys of the biome table (`DeepOcean`, `SeaIce`, `LavaField`…). A biome listed under two targets is an error, and so is an unknown field or biome name.
 
 `raw_data/world.json` stores the full resolved preset under `preset`, so a world can be regenerated even if its preset file changes.
@@ -351,6 +360,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
   "seed": 42,
   "planet_type": "terran",
   "pressure_bar": 0.93,
+  "surface_age_ga": 0.41,
   "layers": {
     "elevation": { "file": "elevation.png", "encoding": "gray16", "min": -1.0, "max": 1.0 },
     "biomes": { "file": "biomes.png", "encoding": "gray8-biome-id" }

@@ -35,7 +35,14 @@
 
   let { presets, spec, initial = null, variedFrom = null, existing, onSubmitted, onCancel }: Props = $props();
 
-  type Field = 'sea_level' | 'volcanic' | 'circumference_km' | 'axial_tilt_deg' | 'erosion' | 'pressure_bar';
+  type Field =
+    | 'sea_level'
+    | 'volcanic'
+    | 'circumference_km'
+    | 'axial_tilt_deg'
+    | 'erosion'
+    | 'pressure_bar'
+    | 'surface_age_ga';
 
   interface FieldInfo {
     /** Key of the preset `[defaults]` table. */
@@ -75,6 +82,11 @@
       defaultsKey: 'pressure',
       slider: [0, 100],
       step: 0.001,
+    },
+    surface_age_ga: {
+      defaultsKey: 'surface_age',
+      slider: [0, 4.6],
+      step: 0.01,
     },
   };
   const FIELD_NAMES = Object.keys(FIELDS) as Field[];
