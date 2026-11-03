@@ -10,9 +10,14 @@ export type BiomeInfo = { id: number, key: Biome,
  */
 name: string, 
 /**
- * `#RRGGBB`.
+ * Classification colour, `#RRGGBB` (see [`biome_color`]).
  */
 color: string, 
+/**
+ * Surface colour of the hillshaded renders, `#RRGGBB` (see
+ * [`surface_color`]). Empty in worlds written before it existed.
+ */
+surface_color: string, 
 /**
  * Whether the biome is a water surface.
  */

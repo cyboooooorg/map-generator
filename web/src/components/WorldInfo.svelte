@@ -2,7 +2,7 @@
   import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatInt, formatShare } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatInt, formatShare, surfaceColour } from '../lib/format';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -104,7 +104,7 @@
         <div class="bar" aria-hidden="true">
           {#each stats.shares as entry (entry.biome.id)}
             <span
-              style:background={entry.biome.color}
+              style:background={surfaceColour(entry.biome)}
               style:flex-grow={entry.share}
               title={`${entry.biome.name}: ${formatShare(entry.share)}`}
             ></span>
@@ -113,7 +113,7 @@
         <ul class="biomes">
           {#each allBiomes ? stats.shares : stats.shares.slice(0, TOP_BIOMES) as entry (entry.biome.id)}
             <li>
-              <span class="swatch" style:background={entry.biome.color}></span>
+              <span class="swatch" style:background={surfaceColour(entry.biome)}></span>
               <span class="name">{entry.biome.name}</span>
               <span class="value">{formatShare(entry.share)}</span>
               <span class="value area">{formatArea(entry.areaKm2)}</span>

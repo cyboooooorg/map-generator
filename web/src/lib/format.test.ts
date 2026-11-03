@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatDuration, formatShare, requestFromWorld } from './format';
+import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatDuration, formatShare, requestFromWorld, surfaceColour } from './format';
 
 const meta = {
   planet_type: 'frozen',
@@ -58,5 +58,14 @@ describe('format', () => {
     expect(formatDuration(185)).toBe('3 min 05 s');
     expect(formatAgo(1_000_000, 1_000_000 + 2 * 3_600_000)).toBe('2 hours ago');
     expect(formatAgo(1_000_000, 1_000_000 + 5_000)).toBe('just now');
+  });
+});
+
+describe('surfaceColour', () => {
+  it('prefers the surface colour', () => {
+    expect(surfaceColour({ color: '#FF0000', surface_color: '#102030' })).toBe('#102030');
+  });
+  it('falls back to the classification colour for older worlds', () => {
+    expect(surfaceColour({ color: '#FF0000', surface_color: '' })).toBe('#FF0000');
   });
 });

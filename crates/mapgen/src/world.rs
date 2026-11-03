@@ -5,7 +5,7 @@ use crate::preset::Preset;
 use crate::rivers::RiverLine;
 
 // Re-export so existing `use crate::world::*;` in other modules keeps working.
-pub use crate::biome::{Biome, biome_color, biome_name};
+pub use crate::biome::{Biome, biome_color, biome_name, surface_color};
 
 /// Everything needed to generate a world. The same parameters always produce
 /// the same world.

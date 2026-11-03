@@ -131,7 +131,11 @@ pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
 
     // ── Layout constants ──────────────────────────────────────────────────────
     const PAD: u32 = 14;
-    const SWATCH_W: u32 = 48;
+    // Two swatches per biome: the surface colour of world.png, then the
+    // classification colour of the SVG and the biome table.
+    const SWATCH_W: u32 = 32;
+    const PAIR_GAP: u32 = 4;
+    const PAIR_W: u32 = 2 * SWATCH_W + PAIR_GAP;
     const SWATCH_H: u32 = CHAR_H;
     const SWATCH_GAP: u32 = 8;
     const ROW_H: u32 = SWATCH_H + 6;
@@ -146,7 +150,7 @@ pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
         .map(|&b| biome_name(b).len())
         .max()
         .unwrap_or(10) as u32;
-    let biome_col_w = SWATCH_W + SWATCH_GAP + max_biome_len * CHAR_W;
+    let biome_col_w = PAIR_W + SWATCH_GAP + max_biome_len * CHAR_W;
 
     // For metadata we align values at a fixed column (longest key + ": ").
     let max_key_len = meta.iter().map(|(k, _)| k.len()).max().unwrap_or(0) as u32;
@@ -208,13 +212,15 @@ pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
 
     // ── One row per biome ─────────────────────────────────────────────────────
     for &b in &biomes {
-        let color = biome_color(b);
-        fill_rect(&mut img, PAD, y, SWATCH_W, SWATCH_H, color);
-        outline_rect(&mut img, PAD, y, SWATCH_W, SWATCH_H, BORDER_COLOR);
+        for (k, color) in [surface_color(b), biome_color(b)].into_iter().enumerate() {
+            let x = PAD + k as u32 * (SWATCH_W + PAIR_GAP);
+            fill_rect(&mut img, x, y, SWATCH_W, SWATCH_H, color);
+            outline_rect(&mut img, x, y, SWATCH_W, SWATCH_H, BORDER_COLOR);
+        }
         draw_str(
             &mut img,
             biome_name(b),
-            PAD + SWATCH_W + SWATCH_GAP,
+            PAD + PAIR_W + SWATCH_GAP,
             y,
             TEXT_COLOR,
         );

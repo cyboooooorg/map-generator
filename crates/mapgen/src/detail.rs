@@ -28,11 +28,11 @@
 //! per value, see [`Layer16`]), decoded as they are sampled, plus a byte of
 //! flags and the water depth per pixel: about 23 bytes per base pixel
 //! (0.75 GB at 8192 × 4096).
-use crate::biome::{Biome, BiomeInput, biome_color};
+use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
 use crate::export::ecotone::ecotone_colour_for;
 use crate::export::raw_data::{Layer16, LoadedWorld};
-use crate::export::{LIGHT, RELIEF_KM, shade, water_colour, water_depths_of};
+use crate::export::{LIGHT, RELIEF_KM, blend_river, shade, water_colour, water_depths_of};
 use crate::hex;
 use crate::rivers;
 use image::{Rgb, RgbImage};
@@ -419,7 +419,7 @@ impl DetailWorld {
             })
             .collect();
 
-        let river_colour = biome_color(planet.remap(Biome::River)).map(f32::from);
+        let river_colour = surface_color(planet.remap(Biome::River)).map(f32::from);
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
 
@@ -482,9 +482,7 @@ impl DetailWorld {
                     && !biome.is_water()
                     && !dry.is_lava()
                 {
-                    for (channel, river) in colour.iter_mut().zip(river_colour) {
-                        *channel = *channel * (1.0 - c) + river * c;
-                    }
+                    colour = blend_river(colour, river_colour, c);
                 }
                 colour.map(|c| c.clamp(0.0, 255.0) as u8)
             })

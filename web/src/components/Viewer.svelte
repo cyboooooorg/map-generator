@@ -3,7 +3,7 @@
   import { ApiFailure, api, worldFile } from '../lib/api/client';
   import type { HexMap } from '../lib/api/types/HexMap';
   import { downloadJson } from '../lib/download';
-  import { formatArea, formatShare, saveBlob } from '../lib/format';
+  import { formatArea, formatShare, saveBlob, surfaceColour } from '../lib/format';
   import type { LonLat } from '../lib/geo';
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
@@ -546,7 +546,7 @@
                 aria-pressed={pinned === entry.biome.id}
                 title="Hover to highlight, click to keep it highlighted"
               >
-                <span class="swatch" style:background={entry.biome.color}></span>
+                <span class="swatch" style:background={hexOn ? entry.biome.color : surfaceColour(entry.biome)}></span>
                 <span class="name">{entry.biome.name}</span>
                 <span class="value">{formatShare(entry.share)}</span>
               </button>

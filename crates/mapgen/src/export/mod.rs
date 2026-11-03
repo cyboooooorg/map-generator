@@ -13,8 +13,8 @@ pub use svg::export_svg;
 use crate::generation::Generated;
 use crate::geo::Grid;
 use crate::rivers;
-use crate::world::{Biome, World, WorldParams, biome_color};
-use ecotone::ecotone_colour;
+use crate::world::{Biome, World, WorldParams, biome_color, surface_color};
+use ecotone::{ecotone_colour, linear_to_srgb, srgb_to_linear};
 use rayon::prelude::*;
 use std::path::Path;
 
@@ -154,7 +154,7 @@ const SHADE_RANGE: f32 = 0.4;
 /// whatever their colour (see [`water_depths`]); on ice, the whiter fast ice
 /// along the shore. Rivers stay flat.
 pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
-    let colour = biome_color(biome).map(f32::from);
+    let colour = surface_color(biome).map(f32::from);
     if matches!(biome, Biome::River | Biome::AcidRiver) {
         return colour;
     }
@@ -239,6 +239,16 @@ const MAGMA_CRUST: [f32; 3] = [60.0, 20.0, 10.0];
 /// Lightening of water at the shore line (towards white).
 const SHALLOW_TINT: f32 = 0.25;
 
+/// `colour` covered by a river over a fraction `coverage` of the pixel, both
+/// sRGB in `[0, 255]`; the mix is in linear light, so anti-aliased banks do
+/// not darken.
+pub(crate) fn blend_river(colour: [f32; 3], river: [f32; 3], coverage: f32) -> [f32; 3] {
+    std::array::from_fn(|k| {
+        let (a, b) = (srgb_to_linear(colour[k]), srgb_to_linear(river[k]));
+        linear_to_srgb(a * (1.0 - coverage) + b * coverage)
+    })
+}
+
 /// How a map is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Style {
@@ -285,7 +295,7 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
     let (coverage, depths) = (&layers.coverage, &layers.depths);
     let river_biome = planet.remap(Biome::River);
-    let river_colour = biome_color(river_biome).map(f32::from);
+    let river_colour = surface_color(river_biome).map(f32::from);
 
     (0..h)
         .into_par_iter()
@@ -325,7 +335,7 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
             let mut color = if land == biome || on_river {
                 ecotone_colour(world, input)
             } else {
-                biome_color(biome).map(f32::from)
+                surface_color(biome).map(f32::from)
             };
             let mut f = hillshade(world, &grid, x, y);
             // Lava is fluid: its relief barely shows.
@@ -337,9 +347,7 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
             // lava.
             let c = coverage[i];
             if c > 0.0 && world.temperature[i] >= planet.rules.polar && !dry.is_lava() {
-                for (channel, river) in color.iter_mut().zip(river_colour) {
-                    *channel = *channel * (1.0 - c) + river * c;
-                }
+                color = blend_river(color, river_colour, c);
             }
             color.map(|c| c.clamp(0.0, 255.0) as u8)
         })

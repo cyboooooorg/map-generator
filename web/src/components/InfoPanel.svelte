@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HexMap } from '../lib/api/types/HexMap';
   import type { WorldMetadata } from '../lib/api/types/WorldMetadata';
-  import { copyText, formatArea, formatKm } from '../lib/format';
+  import { copyText, formatArea, formatKm, surfaceColour } from '../lib/format';
   import { formatLonLat, lonLatDegrees, type LonLat } from '../lib/geo';
   import type { WorldLayers } from '../lib/layers';
   import type { RiverIndex } from '../lib/rivers';
@@ -50,7 +50,7 @@
   {#if sample}
     {#if sample.biome}
       <p class="biome">
-        <span class="swatch" style:background={sample.biome.color}></span>
+        <span class="swatch" style:background={surfaceColour(sample.biome)}></span>
         {sample.biome.name}
       </p>
     {/if}
