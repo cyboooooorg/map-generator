@@ -404,6 +404,25 @@ export const fr: Messages = {
     escape: 'Fermer cette aide ou le panneau du point, arrêter la mesure',
     help: 'Cette aide',
   },
+  units: {
+    title: 'Unités',
+    Ga: {
+      name: `Ga${S}: un milliard d’années (10⁹ ans, 1${S}000${S}Ma)`,
+      examples: `la Terre et le Système solaire${S}: 4,5${S}Ga · les mers lunaires${S}: 3 à 3,9${S}Ga`,
+    },
+    Ma: {
+      name: `Ma${S}: un million d’années (10⁶ ans)`,
+      examples: `fin des dinosaures${S}: 66${S}Ma · Vénus renouvelée il y a 300 à 750${S}Ma`,
+    },
+    bar: {
+      name: `bar${S}: pression au sol, 1${S}bar vaut à peu près l’air de la Terre au niveau de la mer`,
+      examples: `Mars${S}: 0,006 · Terre${S}: 1 · Vénus${S}: 92`,
+    },
+    g: {
+      name: `g${S}: gravité de surface, 1${S}g est celle de la Terre (9,81${S}m/s²)`,
+      examples: `Lune${S}: 0,17 · Mars${S}: 0,38 · Terre${S}: 1`,
+    },
+  },
   loading: {
     decoding: (p) => `Décodage de ${p.file}`,
     stats: 'Calcul des statistiques des biomes',
