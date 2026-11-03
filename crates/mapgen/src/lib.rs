@@ -8,6 +8,7 @@ pub mod atmosphere;
 pub mod biome;
 pub mod carve;
 pub mod climate;
+pub mod clouds;
 pub mod delta;
 pub mod detail;
 pub mod erosion;

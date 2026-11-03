@@ -145,7 +145,7 @@ pub fn zonal_wind(latitude: f64) -> f32 {
 
 /// Large-scale circulation bias in `[-1, 1]`: rising wet air at the equator
 /// and around 60°, sinking dry air around 30° (desert belts) and at the poles.
-fn circulation_band(latitude: f64) -> f32 {
+pub(crate) fn circulation_band(latitude: f64) -> f32 {
     (6.0 * latitude).cos() as f32
 }
 

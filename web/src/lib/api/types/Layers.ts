@@ -25,4 +25,10 @@ highland_offset?: ScalarLayerInfo | null,
 /**
  * Floodplain weight of the river valleys (format version 3 and later).
  */
-floodplain?: ScalarLayerInfo | null, biomes: BiomeLayerInfo, };
+floodplain?: ScalarLayerInfo | null, 
+/**
+ * Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
+ * (max − min)`); format version 5 and later, absent on worlds without
+ * clouds.
+ */
+clouds?: ScalarLayerInfo | null, biomes: BiomeLayerInfo, };

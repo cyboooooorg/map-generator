@@ -255,7 +255,8 @@ worlds/<planet>-<seed>/
 │   ├── highland_offset.png ← 16-bit greyscale layer
 │   ├── floodplain.png ← 16-bit greyscale layer
 │   ├── rivers.json    ← river polylines with their flow
-│   └── biomes.png     ← 8-bit greyscale, pixel = biome id
+│   ├── biomes.png     ← 8-bit greyscale, pixel = biome id
+│   └── clouds.png     ← 8-bit greyscale cloud cover (worlds with clouds)
 └── noise_maps/
     ├── noise_warp_x.png
     ├── noise_warp_y.png
@@ -276,6 +277,7 @@ worlds/<planet>-<seed>/
     ├── temperature.png
     ├── coast_distance.png
     ├── precipitation.png
+    ├── clouds.png
     ├── moisture.png
     └── flow.png
 ```
@@ -309,6 +311,7 @@ Water lightens towards its shore, up to 25 % towards white over the last `0.05` 
 | `highland_offset.png` | 16-bit grey      | Local shift of the mountain line in `[-1, 1]`: a pixel is highland when `elevation − sea_level + offset` exceeds the preset's `highland` |
 | `floodplain.png`      | 16-bit grey      | Floodplain weight in `[0, 1]`: 1 on the flat floor of a river valley, 0 away from rivers                                                 |
 | `biomes.png`          | 8-bit grey       | Biome id of each pixel                                                                                                                   |
+| `clouds.png`          | 8-bit grey       | Cloud cover in `[0, 1]` (`pixel / 255`), from the climate and the cloud kind; absent when the planet has no clouds                       |
 
 A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵` of the range (0.012 °C for temperature).
 
@@ -332,7 +335,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 }
 ```
 
-The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`; version 4 stores temperatures in °C instead of the former `[0, 1]` scale. Older worlds still load: missing layers are recomputed, or zero for `floodplain`, and the temperatures of versions 1–3 (layer and preset thresholds) are converted to °C through the Earth-fitted curve, which keeps their biomes.
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`; version 4 stores temperatures in °C instead of the former `[0, 1]` scale; version 5 adds `clouds`. Older worlds still load: missing layers are recomputed, or zero for `floodplain`, and the temperatures of versions 1–3 (layer and preset thresholds) are converted to °C through the Earth-fitted curve, which keeps their biomes.
 
 `rivers.json` holds the drawn river polylines (version 2 and later; its file name is in `world.json` under `rivers`):
 
@@ -392,6 +395,7 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `temperature.png`               | `[0, 1]`  | Temperature before the planet-type offset, −30 °C to 40 °C (see [Temperature](#temperature--axial-tilt)) |
 | `coast_distance.png`            | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                             |
 | `precipitation.png`             | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                            |
+| `clouds.png`                    | `[0, 1]`  | Cloud cover (see [Clouds](#clouds))                                                                      |
 | `moisture.png`                  | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows))         |
 | `flow.png`                      | `[0, 1]`  | River flow: `log10(1 + drainage km²) / 7` (see [Rivers and lakes](#rivers-and-lakes))                    |
 
@@ -454,6 +458,17 @@ Moisture comes from winds carrying ocean evaporation over land:
 - **Circulation bands.** A `cos(6 · latitude)` term adds the wet equator and 60° belts and the dry 30° desert belts and poles.
 
 The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75 × rain + 0.25 × band + 0.50 × noise`, then clamped. The `[climate]` table of the planet preset then shifts the whole field (for example `−0.55` on volcanic worlds).
+
+### Clouds
+
+The cloud cover of each pixel, in `[0, 1]`, depends on the atmosphere's cloud kind (`[atmosphere] clouds`):
+
+- **water**: `0.2 × circulation band + 0.4 × rain + 0.25`, plus polar stratus (`+0.35` towards the poles, where the rain term fades out: cold air rains little but stays overcast), plus `1.2 ×` a 5-octave noise, through `smoothstep(0, 0.7)`. Clouds gather where air rises (the equatorial convergence and the storm tracks around 60°) and where it rains (windward slopes), and thin out over the subtropical highs. Earth-like worlds come out about two-thirds overcast (Earth: 67 %): 0.9 at the equator, 0.5 around 30°, 0.75 along the storm tracks, 0.6–0.85 at the poles.
+- **sulfuric**: a deck in zonal bands, `smoothstep(−0.3, 0.6, 0.2 + 0.7 × cover + noise)`: total on `venus-like`, patchy on `volcanic` worlds.
+- **dust**: low, patchy and thin (`0.8 × smoothstep(0.15, 0.6, …)`), about 10 % of `mars-like` worlds.
+- **none**: no cloud layer.
+
+`[atmosphere] cloud_cover` shifts the cover (−0.3 on frozen worlds). The noise has features of about 3 000 km, squeezed north-south (×3, ×6 for sulfuric decks) so clouds stretch along the winds into streets and bands; the squeeze fades out towards the poles. Airless worlds have no clouds.
 
 ### Regional variability
 
