@@ -14,8 +14,8 @@ pressure = [5.0, 20.0]                 # surface pressure in bar, drawn in this 
 # Dense air thick with volcanic aerosols: an orange sky, patchy sulfuric
 # clouds.
 [atmosphere]
-rayleigh = [0.17, 0.41, 1.0]
-haze = 0.6
+rayleigh = [0.5, 0.35, 0.25]           # sky colour of the gas and its absorbers
+haze = 0.45
 haze_colour = [1.0, 0.55, 0.25]
 clouds = "sulfuric"
 cloud_cover = -0.2
