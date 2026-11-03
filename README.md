@@ -255,6 +255,7 @@ Each run creates a `worlds/<planet>-<seed>/` directory with the following layout
 ```text
 worlds/<planet>-<seed>/
 ├── world.png          ← hillshaded biome map with soft borders, bathymetry and reference lines
+├── thumb.png          ← world.png scaled down to 512 pixels wide, for lists
 ├── world.svg          ← equivalent vector image
 ├── legend.png         ← biome legend with planet metadata
 ├── raw_data/
@@ -299,6 +300,7 @@ worlds/<planet>-<seed>/
 | File / folder | Description                                                                                                                                                                                                                                                                  |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `world.png`   | PNG (1920 × 1080 by default) with biome surface colours (satellite-like palette), soft biome borders (ecotones), hillshaded land (light from the north-west), meandering rivers whose width grows with their flow, depth contours under water and geographic reference lines |
+| `thumb.png`   | `world.png` scaled down to 512 pixels wide (narrower maps keep their size), same aspect ratio, by area averaging in linear light: 0.1–0.2 MB instead of a full-size image for the web app's world list.                                                                      |
 | `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling                                                                                                                     |
 | `legend.png`  | Auto-sized PNG listing every biome present on the map (surface and classification swatches + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                                                                                  |
 | `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                                                                                                                       |

@@ -5,10 +5,11 @@ pub mod noise_maps;
 pub mod png;
 pub mod raw_data;
 pub mod svg;
+pub mod thumbnail;
 pub mod variation;
 
 pub use noise_maps::NoiseMapWriter;
-pub use png::{export_legend_png, export_png};
+pub use png::{export_legend_png, export_png, world_image};
 pub use raw_data::export_raw_data;
 pub use svg::export_svg;
 
@@ -24,7 +25,7 @@ use std::sync::LazyLock;
 use variation::SurfaceVariation;
 
 /// Which optional outputs [`export_world`] writes. The maps (`world.png`,
-/// `world.svg`, `legend.png`) are always written. The diagnostic maps of
+/// its thumbnail `thumb.png`, `world.svg`, `legend.png`) are always written. The diagnostic maps of
 /// `noise_maps/` are written during the generation, by a [`NoiseMapWriter`].
 #[derive(Clone, Copy, Debug)]
 pub struct ExportOptions {
@@ -75,7 +76,13 @@ pub fn export_world(
             // raw_data/surface.png needs the render without contours.
             let mut map = surface.clone();
             draw_contours(world, layers, &mut map);
-            export_png(world, map, &path("world.png")).map_err(|e| e.to_string())
+            // The thumbnail is downscaled from the image itself: no other
+            // full-size copy.
+            let image = world_image(world, map);
+            image.save(path("world.png")).map_err(|e| e.to_string())?;
+            thumbnail::thumbnail(&image)
+                .save(path(thumbnail::THUMB_FILE))
+                .map_err(|e| e.to_string())
         }),
         Box::new(|| export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())),
         Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
