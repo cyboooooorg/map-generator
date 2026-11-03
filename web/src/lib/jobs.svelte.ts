@@ -19,16 +19,6 @@ export const STAGES: readonly Stage[] = [
   'export',
 ];
 
-export const STAGE_LABELS: Record<Stage, string> = {
-  noise: 'Shaping continents',
-  erosion: 'Eroding the terrain',
-  temperature: 'Computing temperatures',
-  coast: 'Measuring coastlines',
-  moisture: 'Blowing winds and rain',
-  rivers: 'Routing rivers and lakes',
-  biomes: 'Choosing biomes',
-  export: 'Writing the maps',
-};
 
 export interface TrackedJob {
   jobId: string;
