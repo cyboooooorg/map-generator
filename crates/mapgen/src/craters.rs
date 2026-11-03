@@ -63,6 +63,13 @@ const EARTH_GRAVITY: f64 = 9.81;
 /// last longer in proportion.
 const WEAR_GA: f64 = 0.1;
 const WEAR_KM: f64 = 20.0;
+/// Topographic diffusion of crater profiles by small impacts, m² per Ma
+/// (the Moon, Fassett & Thomson 2014): a crater of radius `R` loses `1/e`
+/// of its relief once `κ t` reaches [`DIFFUSION_SHARE`] of `R²`. A 500 m
+/// crater is subdued in about 0.6 Ga, a 2 km one barely in 4 Ga; craters of
+/// the base map (tens of km) are untouched.
+const DIFFUSIVITY_M2_PER_MA: f64 = 5.5;
+const DIFFUSION_SHARE: f64 = 0.05;
 /// Below this share of its relief left, a worn crater is not drawn.
 const WORN_OUT: f64 = 0.03;
 /// Share of the previous relief kept inside a new crater.
@@ -174,6 +181,40 @@ fn cube_point(face: u32, a: f64, b: f64) -> [f64; 3] {
     [p[0] / n, p[1] / n, p[2] / n]
 }
 
+/// The cube face holding the unit vector `p` and its gnomonic coordinates
+/// on it, in `[-1, 1]²`: the inverse of [`cube_point`].
+fn cube_cell(p: [f64; 3]) -> (u32, f64, f64) {
+    let [x, y, z] = p;
+    let (ax, ay, az) = (x.abs(), y.abs(), z.abs());
+    if ax >= ay && ax >= az {
+        if x > 0.0 {
+            (0, y / x, z / x)
+        } else {
+            (1, y / x, -z / x)
+        }
+    } else if ay >= az {
+        if y > 0.0 {
+            (2, -x / y, z / y)
+        } else {
+            (3, -x / y, -z / y)
+        }
+    } else if z > 0.0 {
+        (4, x / z, y / z)
+    } else {
+        (5, -x / z, y / z)
+    }
+}
+
+/// Sorts craters oldest first; the shape hash breaks ties, so the order is
+/// total.
+fn sort_oldest_first(craters: &mut [Crater]) {
+    craters.sort_by(|a, b| {
+        b.age_ga
+            .total_cmp(&a.age_ga)
+            .then_with(|| a.shape.cmp(&b.shape))
+    });
+}
+
 /// Solid angle of the gnomonic rectangle `[a0, a1] × [b0, b1]` of a cube face.
 fn solid_angle(a0: f64, a1: f64, b0: f64, b1: f64) -> f64 {
     let corner = |a: f64, b: f64| (a * b).atan2((1.0 + a * a + b * b).sqrt());
@@ -195,6 +236,26 @@ pub struct CraterField {
     /// End of the wet era, Ga before present.
     wet_until_ga: f64,
     erosion: f64,
+    /// Where craters come from: the seed of the crater stream, the density
+    /// of craters of 1 km or more (per km²), the surface age (Ga) and the
+    /// smallest crater the atmosphere lets through (km).
+    seed: u32,
+    density: f64,
+    surface_age_ga: f64,
+    air_km: f64,
+}
+
+/// A latitude-longitude grid of pixel centres, as a detail tile's: row `y`
+/// at latitude `lat0 − y × dlat`, column `x` at longitude `lon0 + x × dlon`
+/// (radians).
+#[derive(Clone, Copy, Debug)]
+pub struct Window {
+    pub width: usize,
+    pub height: usize,
+    pub lat0: f64,
+    pub dlat: f64,
+    pub lon0: f64,
+    pub dlon: f64,
 }
 
 /// Which craters a pass draws.
@@ -214,12 +275,12 @@ pub fn base_min_diameter_km(grid: &Grid) -> f64 {
 }
 
 impl CraterField {
-    /// Every crater of the world `p` of `min_diameter_km` or more that has
-    /// survived to the present, oldest first.
-    pub fn new(p: &WorldParams, min_diameter_km: f64) -> Self {
+    /// The crater field of the world `p` without any crater yet: what
+    /// drawing and finding them needs (see [`Self::near`]).
+    pub fn context(p: &WorldParams) -> Self {
         let radius_km = p.circumference_km as f64 / (2.0 * PI);
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
-        let mut field = CraterField {
+        CraterField {
             craters: Vec::new(),
             radius_km,
             transition_km: MOON_TRANSITION_KM * MOON_GRAVITY / gravity,
@@ -229,81 +290,284 @@ impl CraterField {
                 .any(|&b| p.planet.remap(b).is_water()),
             wet_until_ga: p.planet.geology.wet_until_ga(p.pressure_bar) as f64,
             erosion: p.erosion as f64,
-        };
-        let surface_age = p.surface_age_ga as f64;
-        let density = crater_density(surface_age).min(SATURATION);
-        if density <= 0.0 {
+            seed: stream_seed(p.seed, stream::CRATERS),
+            density: crater_density(p.surface_age_ga as f64).min(SATURATION),
+            surface_age_ga: p.surface_age_ga as f64,
+            air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
+        }
+    }
+
+    /// Every crater of the world `p` of `min_diameter_km` or more that has
+    /// survived to the present, oldest first.
+    pub fn new(p: &WorldParams, min_diameter_km: f64) -> Self {
+        let mut field = Self::context(p);
+        if field.density <= 0.0 {
             return field;
         }
-        let seed = stream_seed(p.seed, stream::CRATERS);
-        let air_km = AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75);
-        // Basins up to about the planet's radius (South Pole–Aitken is 1.4
-        // Moon radii, Hellas 0.7 Mars radii).
-        let largest = radius_km;
-        let first = min_diameter_km.max(1e-3).log2().floor() as i32;
-        let last = largest.log2().floor() as i32;
-        let face_area = 4.0 * PI * radius_km * radius_km / 6.0;
-        for octave in first..=last {
-            let low = 2f64.powi(octave);
-            // N(>D) − N(>2D), per km².
-            let per_km2 = 0.75 * density / (low * low);
-            // About two craters per cell, at least one cell per face.
-            let cells = ((per_km2 * face_area / 2.0).sqrt().ceil() as u32).max(1);
-            let step = 2.0 / f64::from(cells);
+        for octave in field.octaves(min_diameter_km, f64::INFINITY) {
+            let cells = field.cells(octave);
             let found: Vec<Crater> = (0..6 * cells)
                 .into_par_iter()
                 .flat_map_iter(|row| {
                     let (face, i) = (row / cells, row % cells);
-                    (0..cells).flat_map(move |j| {
-                        let a0 = -1.0 + step * f64::from(i);
-                        let b0 = -1.0 + step * f64::from(j);
-                        let omega = solid_angle(a0, a0 + step, b0, b0 + step);
-                        let mut rng = Rng::cell(seed, octave, face, i, j);
-                        let count = rng.poisson(per_km2 * omega * radius_km * radius_km);
-                        (0..count).filter_map(move |_| {
-                            let centre =
-                                cube_point(face, a0 + step * rng.unit(), b0 + step * rng.unit());
-                            // Power law within the octave: N(>D) ∝ D⁻².
-                            let diameter_km = low / (1.0 - 0.75 * rng.unit()).sqrt();
-                            let age_ga = age_at(rng.unit(), surface_age);
-                            let survives = rng.unit()
-                                < f64::from(smoothstep(
-                                    air_km as f32,
-                                    (10.0 * air_km) as f32,
-                                    diameter_km as f32,
-                                ))
-                                || air_km <= 0.0;
-                            let shape = rng.next();
-                            (survives && diameter_km >= min_diameter_km).then_some(Crater {
-                                centre,
-                                diameter_km,
-                                age_ga,
-                                shape,
-                            })
-                        })
-                    })
+                    let field = &field;
+                    (0..cells).flat_map(move |j| field.cell_craters(octave, face, i, j))
                 })
+                .filter(|c| c.diameter_km >= min_diameter_km)
                 .collect();
             field.craters.extend(found);
         }
-        // Oldest first; the shape hash breaks ties, so the order is total.
-        field.craters.sort_by(|a, b| {
-            b.age_ga
-                .total_cmp(&a.age_ga)
-                .then_with(|| a.shape.cmp(&b.shape))
-        });
+        sort_oldest_first(&mut field.craters);
         field
     }
 
-    /// Share of its relief a crater keeps after its exposure to liquid
-    /// water: 1 when it formed after the wet era or without erosion.
-    fn wear(&self, crater: &Crater) -> f64 {
-        let exposure = (crater.age_ga - self.wet_until_ga).max(0.0);
-        if exposure == 0.0 || self.erosion <= 0.0 {
-            return 1.0;
+    /// The craters with a diameter in `[min_km, max_km)` whose ejecta reach
+    /// the spherical cap of `angle` radians around `centre`, oldest first:
+    /// the same craters as [`Self::new`], found from the lattice cells
+    /// around the cap only.
+    pub fn near(&self, centre: [f64; 3], angle: f64, min_km: f64, max_km: f64) -> Vec<Crater> {
+        if self.density <= 0.0 || min_km >= max_km {
+            return Vec::new();
         }
-        let lasts = WEAR_GA * crater.diameter_km / WEAR_KM / self.erosion;
-        (-exposure / lasts).exp()
+        let mut found = Vec::new();
+        for octave in self.octaves(min_km, max_km) {
+            let cells = self.cells(octave);
+            // Widest reach of the octave's craters.
+            let reach =
+                EJECTA_RADII * (1.0 + 2.0 * RIM_JITTER) * 2f64.powi(octave) / self.radius_km;
+            let cap = angle + reach;
+            // Points of the cap, closer than a quarter of the smallest cell
+            // (cells shrink to a third of `2 / cells` at face corners).
+            let spacing = (2.0 / f64::from(cells) / 3.0 / 4.0).min(cap / 4.0);
+            let mut keys: Vec<(u32, u32, u32)> = Vec::new();
+            let lat_c = centre[2].clamp(-1.0, 1.0).asin();
+            let lon_c = centre[1].atan2(centre[0]);
+            let rows = (2.0 * cap / spacing).ceil() as i64;
+            for r in 0..=rows {
+                let lat = (lat_c - cap + r as f64 * spacing).clamp(-PI / 2.0, PI / 2.0);
+                let cos_lat = lat.cos();
+                let half = if lat.abs() + cap >= PI / 2.0 || cap >= PI / 2.0 {
+                    PI
+                } else {
+                    (cap.sin() / cos_lat).min(1.0).asin()
+                };
+                let step = spacing / cos_lat.max(1e-6);
+                let n = ((2.0 * half / step).ceil() as i64).min(1 << 20);
+                for k in 0..=n {
+                    let lon = lon_c - half + k as f64 * step;
+                    let p = [cos_lat * lon.cos(), cos_lat * lon.sin(), lat.sin()];
+                    let (face, a, b) = cube_cell(p);
+                    let index =
+                        |t: f64| (((t + 1.0) / 2.0 * f64::from(cells)) as u32).min(cells - 1);
+                    keys.push((face, index(a), index(b)));
+                }
+            }
+            keys.sort_unstable();
+            keys.dedup();
+            let (cos_angle, sin_angle) = (angle.cos(), angle.sin());
+            found.extend(
+                keys.into_iter()
+                    .flat_map(|(face, i, j)| self.cell_craters(octave, face, i, j))
+                    .filter(|c| (min_km..max_km).contains(&c.diameter_km))
+                    .filter(|c| {
+                        let reach = self.reach(c);
+                        let dot = c.centre[0] * centre[0]
+                            + c.centre[1] * centre[1]
+                            + c.centre[2] * centre[2];
+                        angle + reach >= PI
+                            || dot > cos_angle * reach.cos() - sin_angle * reach.sin()
+                    }),
+            );
+        }
+        sort_oldest_first(&mut found);
+        found
+    }
+
+    /// Octaves holding diameters in `[min_km, max_km)`, up to basins of
+    /// about the planet's radius (South Pole–Aitken is 1.4 Moon radii,
+    /// Hellas 0.7 Mars radii).
+    fn octaves(&self, min_km: f64, max_km: f64) -> std::ops::RangeInclusive<i32> {
+        let first = min_km.max(1e-3).log2().floor() as i32;
+        let largest = self.radius_km.log2().floor() as i32;
+        // Octave k holds [2^k, 2^(k+1)): it has diameters below max_km when
+        // 2^k < max_km.
+        let below_max = if max_km.is_finite() {
+            max_km.log2().ceil() as i32 - 1
+        } else {
+            largest
+        };
+        first..=largest.min(below_max)
+    }
+
+    /// Craters per km² of an octave: `N(>D) − N(>2D)`.
+    fn per_km2(&self, octave: i32) -> f64 {
+        let low = 2f64.powi(octave);
+        0.75 * self.density / (low * low)
+    }
+
+    /// Cells per face edge of an octave's grid: about two craters per cell,
+    /// at least one cell per face.
+    fn cells(&self, octave: i32) -> u32 {
+        let face_area = 4.0 * PI * self.radius_km * self.radius_km / 6.0;
+        ((self.per_km2(octave) * face_area / 2.0).sqrt().ceil() as u32).max(1)
+    }
+
+    /// The craters of one lattice cell that survived the atmosphere,
+    /// whatever their size within the octave.
+    fn cell_craters(&self, octave: i32, face: u32, i: u32, j: u32) -> impl Iterator<Item = Crater> {
+        let cells = self.cells(octave);
+        let step = 2.0 / f64::from(cells);
+        let (a0, b0) = (-1.0 + step * f64::from(i), -1.0 + step * f64::from(j));
+        let omega = solid_angle(a0, a0 + step, b0, b0 + step);
+        let mut rng = Rng::cell(self.seed, octave, face, i, j);
+        let count = rng.poisson(self.per_km2(octave) * omega * self.radius_km * self.radius_km);
+        let (low, surface_age, air_km) = (2f64.powi(octave), self.surface_age_ga, self.air_km);
+        (0..count).filter_map(move |_| {
+            let centre = cube_point(face, a0 + step * rng.unit(), b0 + step * rng.unit());
+            // Power law within the octave: N(>D) ∝ D⁻².
+            let diameter_km = low / (1.0 - 0.75 * rng.unit()).sqrt();
+            let age_ga = age_at(rng.unit(), surface_age);
+            let survives = air_km <= 0.0
+                || rng.unit()
+                    < f64::from(smoothstep(
+                        air_km as f32,
+                        (10.0 * air_km) as f32,
+                        diameter_km as f32,
+                    ));
+            let shape = rng.next();
+            survives.then_some(Crater {
+                centre,
+                diameter_km,
+                age_ga,
+                shape,
+            })
+        })
+    }
+
+    /// Share of its relief a crater keeps: worn by liquid water for the
+    /// time it spent in the wet era (with erosion), and by the slow
+    /// diffusion of small impacts since it formed.
+    fn wear(&self, crater: &Crater) -> f64 {
+        let radius_m = 500.0 * crater.diameter_km;
+        let diffused = DIFFUSIVITY_M2_PER_MA * crater.age_ga * 1000.0;
+        let mut wear = (-diffused / (DIFFUSION_SHARE * radius_m * radius_m)).exp();
+        let exposure = (crater.age_ga - self.wet_until_ga).max(0.0);
+        if exposure > 0.0 && self.erosion > 0.0 {
+            let lasts = WEAR_GA * crater.diameter_km / WEAR_KM / self.erosion;
+            wear *= (-exposure / lasts).exp();
+        }
+        wear
+    }
+
+    /// Adds the relief of `craters` to `relief`, one value per pixel of
+    /// `window`, each crater's profile added to whatever is there rather
+    /// than replacing it.
+    ///
+    /// The detail tiles draw the craters too small for the base map this
+    /// way: added profiles depend on the position only, not on the order or
+    /// on what the window holds, so neighbouring tiles agree at their
+    /// borders. Small cavities seldom overlap (about 7 % of the ground per
+    /// octave at saturation), so adding them digs no pits. `ground` gives
+    /// the elevation at a crater, for the sea rule; `gain` scales its relief.
+    pub fn add_relief(
+        &self,
+        craters: &[Crater],
+        window: &Window,
+        ground: impl Fn(&Crater) -> f32,
+        gain: impl Fn(&Crater) -> f32,
+        relief: &mut [f32],
+    ) {
+        let (w, h) = (window.width, window.height);
+        debug_assert_eq!(relief.len(), w * h);
+        let lat_of = |y: usize| (window.lat0 - y as f64 * window.dlat).clamp(-PI / 2.0, PI / 2.0);
+        let columns: Vec<(f64, f64)> = (0..w)
+            .map(|x| {
+                let lon = window.lon0 + x as f64 * window.dlon;
+                (lon.cos(), lon.sin())
+            })
+            .collect();
+        // What each drawn crater needs, prepared once.
+        struct Drawn {
+            c: [f64; 3],
+            radius: f64,
+            reach: f64,
+            cos_reach: f64,
+            east: [f64; 3],
+            north: [f64; 3],
+            profile: Profile,
+            wear: f32,
+            /// Longitude from the window's first column, in (-π, π].
+            lon: f64,
+            rows: (usize, usize),
+        }
+        let drawn: Vec<Drawn> = craters
+            .iter()
+            .filter_map(|crater| {
+                let wear = self.wear(crater);
+                if wear < WORN_OUT || (self.sea && ground(crater) < self.waterline) {
+                    return None;
+                }
+                let c = crater.centre;
+                let reach = self.reach(crater);
+                let lat = c[2].clamp(-1.0, 1.0).asin();
+                let y0 = ((window.lat0 - (lat + reach)) / window.dlat)
+                    .floor()
+                    .max(0.0) as usize;
+                let y1 = ((window.lat0 - (lat - reach)) / window.dlat).ceil();
+                if y1 < 0.0 || y0 >= h {
+                    return None;
+                }
+                let (east, north) = tangent_basis(c);
+                Some(Drawn {
+                    c,
+                    radius: 0.5 * crater.diameter_km / self.radius_km,
+                    reach,
+                    cos_reach: reach.cos(),
+                    east,
+                    north,
+                    profile: Profile::new(crater, self.transition_km),
+                    wear: wear as f32 * gain(crater),
+                    lon: (c[1].atan2(c[0]) - window.lon0 + PI).rem_euclid(2.0 * PI) - PI,
+                    rows: (y0, (y1 as usize).min(h - 1)),
+                })
+            })
+            .collect();
+        // Rows in parallel: a crater only adds to the pixels of its rows.
+        relief.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            let row_lat = lat_of(y);
+            let (cos_lat, sin_lat) = (row_lat.cos(), row_lat.sin());
+            for d in drawn.iter().filter(|d| (d.rows.0..=d.rows.1).contains(&y)) {
+                let (x0, x1) = if row_lat.abs() + d.reach >= PI / 2.0 {
+                    (0, w - 1)
+                } else {
+                    let half = (d.reach.sin() / cos_lat).min(1.0).asin();
+                    let x0 = ((d.lon - half) / window.dlon).floor().max(0.0);
+                    let x1 = ((d.lon + half) / window.dlon).ceil();
+                    if x1 < 0.0 || x0 as usize >= w {
+                        continue;
+                    }
+                    (x0 as usize, (x1 as usize).min(w - 1))
+                };
+                let c = d.c;
+                for (value, &(cos_lon, sin_lon)) in row[x0..=x1].iter_mut().zip(&columns[x0..=x1]) {
+                    let v = [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat];
+                    let dot = (v[0] * c[0] + v[1] * c[1] + v[2] * c[2]).clamp(-1.0, 1.0);
+                    if dot < d.cos_reach {
+                        continue;
+                    }
+                    let r = dot.acos() / d.radius;
+                    let along = |b: [f64; 3]| v[0] * b[0] + v[1] * b[1] + v[2] * b[2];
+                    let (e, n) = (along(d.east), along(d.north));
+                    let len = (e * e + n * n).sqrt();
+                    let direction = if len > 1e-12 {
+                        (e / len, n / len)
+                    } else {
+                        (1.0, 0.0)
+                    };
+                    *value += d.profile.blend(r, direction, 0.0, 0.0, d.wear);
+                }
+            }
+        });
     }
 
     /// Whether a crater belongs to `era`.
@@ -903,7 +1167,11 @@ mod tests {
         };
         let mut serial = base;
         for crater in &field.craters {
-            for (i, v) in field.draw(crater, 1.0, &serial, &px) {
+            let wear = field.wear(crater);
+            if wear < WORN_OUT {
+                continue;
+            }
+            for (i, v) in field.draw(crater, wear as f32, &serial, &px) {
                 serial[i as usize] = v;
             }
         }
@@ -914,6 +1182,92 @@ mod tests {
                 .len()
                 > 1
         );
+    }
+
+    #[test]
+    fn cube_cells_invert_cube_points() {
+        for face in 0..6 {
+            for (a, b) in [(0.0, 0.0), (0.3, -0.8), (-0.99, 0.99), (0.5, 0.25)] {
+                let (f, a2, b2) = cube_cell(cube_point(face, a, b));
+                assert_eq!(f, face);
+                assert!((a - a2).abs() < 1e-12 && (b - b2).abs() < 1e-12);
+            }
+        }
+    }
+
+    #[test]
+    fn craters_near_a_cap_are_those_of_the_whole_sphere() {
+        let p = moon(4.0);
+        let all = CraterField::new(&p, 4.0);
+        let field = CraterField::context(&p);
+        for (centre, angle) in [
+            ([1.0, 0.0, 0.0], 0.05),
+            (cube_point(4, 0.99, -0.99), 0.02),
+            ([0.0, 0.0, 1.0], 0.1),
+        ] {
+            let near = field.near(centre, angle, 4.0, 40.0);
+            let expected: Vec<Crater> = all
+                .craters
+                .iter()
+                .filter(|c| c.diameter_km < 40.0)
+                .filter(|c| {
+                    let dot: f64 = (0..3).map(|k| c.centre[k] * centre[k]).sum();
+                    dot.clamp(-1.0, 1.0).acos() < angle + field.reach(c)
+                })
+                .copied()
+                .collect();
+            assert!(!expected.is_empty());
+            assert_eq!(near, expected);
+        }
+    }
+
+    #[test]
+    fn diffusion_wears_small_old_craters_only() {
+        let field = CraterField {
+            wet_until_ga: 4.6,
+            ..CraterField::context(&moon(4.0))
+        };
+        let crater = |diameter_km, age_ga| Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km,
+            age_ga,
+            shape: 0,
+        };
+        assert!(field.wear(&crater(0.5, 3.0)) < 0.05);
+        assert!(field.wear(&crater(0.5, 0.01)) > 0.9);
+        assert!(field.wear(&crater(4.0, 3.9)) > 0.8);
+        assert!(field.wear(&crater(40.0, 4.0)) > 0.99);
+    }
+
+    #[test]
+    fn added_relief_does_not_depend_on_the_window() {
+        let p = moon(4.0);
+        let field = CraterField::context(&p);
+        let centre = [1.0, 0.0, 0.0];
+        let craters = field.near(centre, 0.02, 1.0, 8.0);
+        assert!(!craters.is_empty());
+        let step = 0.0005;
+        let window = |x0: usize, y0: usize| Window {
+            width: 64,
+            height: 64,
+            lat0: 0.016 - y0 as f64 * step,
+            dlat: step,
+            lon0: -0.016 + x0 as f64 * step,
+            dlon: step,
+        };
+        let relief = |win: &Window| {
+            let mut r = vec![0.0; 64 * 64];
+            field.add_relief(&craters, win, |_| 0.5, |_| 1.0, &mut r);
+            r
+        };
+        let (a, b) = (relief(&window(0, 0)), relief(&window(20, 10)));
+        assert!(a.iter().any(|&v| v != 0.0));
+        for y in 0..54 {
+            for x in 0..44 {
+                let (va, vb) = (a[(y + 10) * 64 + x + 20], b[y * 64 + x]);
+                assert!((va - vb).abs() < 1e-5, "{va} vs {vb}");
+            }
+        }
     }
 
     #[test]

@@ -687,22 +687,23 @@ pub fn generate_with_progress(
             values,
         });
     }
-    if let Some(relief) = crater_relief.as_mut() {
-        relief
-            .par_iter_mut()
-            .zip(&elevation)
-            .for_each(|(r, e)| *r -= e);
-    }
+    // The young craters' height change, kept to export the elevation
+    // without them (the surface the time slider draws them on).
+    let mut young_craters = elevation.clone();
     craters.apply(&mut elevation, &grid, Era::Dry);
     drop(craters);
+    young_craters
+        .par_iter_mut()
+        .zip(&elevation)
+        .for_each(|(d, e)| *d = e - *d);
     if let (Some(sink), Some(mut values)) = (sink, crater_relief) {
         // The young craters' change added to the old ones' (the erosion in
         // between left out); ×5: a crater moves the elevation by a few
         // tenths at most.
         values
             .par_iter_mut()
-            .zip(&elevation)
-            .for_each(|(r, e)| *r = ((*r + e) * 5.0).clamp(-1.0, 1.0));
+            .zip(&young_craters)
+            .for_each(|(r, d)| *r = ((*r + d) * 5.0).clamp(-1.0, 1.0));
         sink.layer(DebugLayer {
             name: "craters",
             ramp: Ramp::Signed,
@@ -895,12 +896,20 @@ pub fn generate_with_progress(
         })
         .collect();
 
+    // Later passes (valleys, deltas) change the elevation additively: they
+    // stay in the base.
+    young_craters
+        .par_iter_mut()
+        .zip(&elevation)
+        .for_each(|(d, e)| *d = e - *d);
+    let elevation_base = Some(young_craters);
     Generated {
         world: World {
             params: params.clone(),
             width,
             height,
             elevation,
+            elevation_base,
             moisture,
             temperature,
             flow_km2,

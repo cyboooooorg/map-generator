@@ -371,6 +371,48 @@ Implemented in `craters.rs`, with these changes from the plan:
 - **Debug map:** `noise_maps/craters.png`, the height change of both
   passes.
 
+### Outcome (step 3)
+
+- **The tiles do not redraw the base map's craters.** The plan rendered
+  the tiles from `elevation_base.png` plus every young crater at the
+  tile's resolution. But a crater replacing the relief needs the ground
+  level at its site when it formed, which a tile cannot know: part of the
+  crater lies outside it, and its older neighbours too, so two tiles
+  would disagree at their border. Craters of 4 base pixels or more stay
+  in the interpolated base elevation, as in step 2; tiles add the smaller
+  ones (from 4 tile pixels).
+- **Small craters are added, not replaced.** An added profile depends
+  only on the position: it does not depend on the drawing order or on
+  the window, so neighbouring tiles agree exactly (tested). At saturation
+  small cavities cover about 7 % of the ground per octave, so adding
+  them digs no pits. The sea rule reads the base elevation at the
+  crater's centre.
+- **Search around a tile.** `CraterField::near` samples the cap around a
+  tile (closer than a quarter of the smallest cell), collects the lattice
+  cells it touches and draws their craters: exactly the craters of the
+  whole sphere (tested), in about 0.6 ms.
+- **Relief scaled down with size.** The hillshade exaggerates relief
+  about 60 times (`RELIEF_KM`, tuned on the base map's gentle slopes), so
+  small crater walls came out vertical and black. A tile crater's relief
+  is scaled by `D / D_base`, clamped to `[0.1, 1]`: the base map's look
+  at its smallest crater, no jump at that size.
+- **Biomes ignore small craters.** Their floors fell below the old sea
+  level of `mercury-like` and turned to its dark basin biome. Biomes now
+  follow the tile's ground without its small craters; the hillshade
+  shows them.
+- **Diffusion** (planned for the tiles) is applied to every crater's
+  wear: `exp(−κ t / (0.05 R²))` with `κ` = 5.5 m²/Ma. Sub-kilometre
+  craters of old surfaces fade; base map craters lose under 1 %.
+- **Cost:** 10–12 ms per tile on a 4 Ga `mercury-like` against 5 ms
+  without craters (rows in parallel), a little over the target of twice.
+  Craters larger than the tile are evaluated at every pixel; a coarser
+  grid for them could close the gap if needed.
+- **`elevation_base.png`** is exported (format version 7, about 2.5–3 MB
+  at 1920 × 1080) but not loaded by the tiles. The time slider (step 4)
+  will draw the young craters older than the epoch on it at the base
+  resolution, as the generation does, then let the tiles add the small
+  ones of that epoch. `RENDER_VERSION` is 3.
+
 ## 6. Time slider
 
 ### What it shows
