@@ -472,12 +472,8 @@ impl DetailWorld {
                     } else {
                         sample(&self.depths)
                     };
-                    let colour = water_colour(biome, depth);
-                    if biome == Biome::MagmaSea {
-                        self.variation.magma(colour, lon, lat)
-                    } else {
-                        colour
-                    }
+                    self.variation
+                        .sea(biome, water_colour(biome, depth), lon, lat)
                 } else {
                     let mut shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
                     let mut colour = ecotone_colour_for(planet, input);
