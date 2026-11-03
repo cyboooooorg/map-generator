@@ -60,6 +60,7 @@ import {
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { liftSky, type Sky } from '../sky';
+import { fullPixelRatio, pixelRatio } from './pixelRatio';
 import { downsample, fitFactor, releaseOnUpload } from './textures';
 import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
@@ -346,6 +347,8 @@ export class PlanetView {
   private dirty = true;
   private readonly lastPosition = new Vector3();
   private readonly lastQuaternion = new Quaternion();
+  /** When the camera or the morph last moved (see pixelRatio). */
+  private lastMotion = -Infinity;
   /** Counts setTexture calls: only the latest one may set the map. */
   private textureRequest = 0;
   private disposed = false;
@@ -424,7 +427,7 @@ export class PlanetView {
   constructor(private readonly canvas: HTMLCanvasElement) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
     this.renderer = new WebGLRenderer({ canvas, antialias: true, stencil: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio));
     this.scene.background = new Color('#05070d');
 
     this.surface = new Mesh(
@@ -1120,6 +1123,18 @@ export class PlanetView {
     if (moving) {
       this.dirty = true;
     }
+    // A lower resolution while the view moves; the frame after it settles
+    // is drawn at full resolution again.
+    if (moving || this.animation) {
+      this.lastMotion = now;
+    }
+    const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion);
+    const settling = ratio < fullPixelRatio(window.devicePixelRatio);
+    if (ratio !== this.renderer.getPixelRatio()) {
+      // Resizes the drawing buffer (not the canvas box): redraw it now.
+      this.renderer.setPixelRatio(ratio);
+      this.dirty = true;
+    }
     if (this.dirty) {
       this.dirty = false;
       this.draw();
@@ -1128,7 +1143,7 @@ export class PlanetView {
       this.hoverPending = false;
       this.onHover(this.hoverAt ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
     }
-    if (moving || this.animation) {
+    if (moving || this.animation || settling) {
       this.schedule();
     }
   };
@@ -1152,7 +1167,9 @@ export class PlanetView {
     this.camera.updateProjectionMatrix();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
     if (!this.animation) {
-      this.tiles.update(this.camera, this.morph, this.renderer.domElement.height);
+      // Tiles are picked for the full resolution, whatever the frame's:
+      // moving would otherwise swap them for coarser ones and back.
+      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio));
     }
     this.renderer.render(this.scene, this.camera);
   }
