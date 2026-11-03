@@ -160,7 +160,65 @@ impl Biome {
     }
 }
 
-/// Canonical biome → RGB colour mapping, shared by all export backends.
+/// Surface colour of a biome as seen from orbit, sRGB: the palette of the
+/// hillshaded renders (`world.png` and the viewer's detail tiles).
+///
+/// Unlike [`biome_color`], which keeps biomes apart on classification maps,
+/// these colours follow satellite imagery: vegetation is dark and olive,
+/// deserts are pale tan, open water is dark. Exotic biomes keep a hue of
+/// their own, at the same muted saturation.
+pub fn surface_color(b: Biome) -> [u8; 3] {
+    match b {
+        // Water: dark, so the shore tint and the sun glint read.
+        Biome::DeepOcean => [8, 22, 48],
+        Biome::Ocean => [18, 48, 86],
+        Biome::Lake => [28, 60, 90],
+        Biome::River => [45, 85, 120],
+        // Shore
+        Biome::Beach => [196, 178, 140],
+        Biome::Wetland => [62, 78, 48],
+        // Cold
+        Biome::IceCap => [232, 238, 244],
+        Biome::Tundra => [118, 112, 88],
+        Biome::Taiga => [38, 56, 36],
+        // Temperate
+        Biome::Shrubland => [128, 118, 78],
+        Biome::Plain => [104, 116, 62],
+        Biome::Forest => [44, 66, 32],
+        // Tropical
+        Biome::Savanna => [150, 132, 80],
+        Biome::Desert => [212, 184, 138],
+        Biome::Jungle => [30, 58, 28],
+        // High elevation
+        Biome::Mountain => [112, 102, 90],
+        Biome::Snow => [242, 244, 248],
+        // Volcanic: incandescent vents, dark cooling flows, grey ash.
+        Biome::Volcano => [226, 72, 20],
+        Biome::LavaField => [150, 56, 24],
+        Biome::AshLand => [72, 68, 66],
+        Biome::MagmaSea => [196, 52, 12],
+        Biome::ScorchedWaste => [66, 50, 40],
+        // Ice
+        Biome::FrozenOcean => [176, 198, 214],
+        Biome::GlacialPlain => [214, 224, 232],
+        Biome::SeaIce => [200, 214, 226],
+        Biome::FrozenLake => [190, 208, 222],
+        // Caustic: sickly greens and yellows.
+        Biome::CausticLake => [92, 140, 60],
+        Biome::AcidSea => [70, 118, 52],
+        Biome::DeepAcidSea => [40, 72, 36],
+        Biome::AcidRiver => [110, 160, 70],
+        Biome::AcidShore => [196, 190, 130],
+        Biome::ToxicSwamp => [74, 86, 34],
+        Biome::AcidFlatland => [170, 164, 96],
+        // Barren
+        Biome::RockyWaste => [104, 96, 86],
+        Biome::DustPlain => [176, 150, 112],
+    }
+}
+
+/// Classification colour of a biome: saturated and far apart, for the flat
+/// SVG, the legend's key swatches, the hex grid and the biome table.
 pub fn biome_color(b: Biome) -> [u8; 3] {
     match b {
         // Water

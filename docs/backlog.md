@@ -198,3 +198,28 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 3    | Climate: heat transport, greenhouse, no liquid water below 0.01 bar; presets recalibrated | Change | done   |
 | 4    | Cloud layer: generation, `raw_data/clouds.png`, `format_version` 5                        | Same   | done   |
 | 5    | Viewer: cloud layer, cloud shadows, flat-map overlay, toggle, optional drift              | Same   | done   |
+
+## 7. Surface colours
+
+- **Status:** in progress
+- **Problem:** the hillshaded renders use the classification palette: every
+  biome a saturated, arbitrary colour (bright green plains, royal blue seas),
+  which reads as an atlas, not as a planet seen from orbit. Hillshading,
+  ecotones, the globe, the sky and the clouds already exist (items 1, 2 and
+  6); the colours themselves are what is left.
+- **Decision (2026-11-03):** a second, satellite-like palette for the
+  hillshaded renders only (`world.png`, detail tiles, the viewer's biome
+  legend); the classification palette stays on the SVG, the hex grid, the
+  biome table's `color` and the legend's second swatch. Colours are mixed in
+  linear light. Then, in this order:
+
+| Step | Change                                                                                              | Seeds | Status |
+| ---- | --------------------------------------------------------------------------------------------------- | ----- | ------ |
+| 1    | Surface palette, ecotones and river edges mixed in linear light, `surface_color` in the biome table | Same  | done   |
+| 2    | Water colour from depth (absorption), no visible step between Ocean and Deep Ocean                  | Same  | todo   |
+| 3    | Small colour variation within a biome, shared by the base map and the tiles                         | Same  | todo   |
+| 4    | Viewer: lava and magma glow on the night side                                                       | Same  | todo   |
+
+- **Rejected:** a 2:1 map size for square pixels (the grid already scales
+  slopes by latitude); rock and snow from the slope (later, with the tiles'
+  micro-relief).

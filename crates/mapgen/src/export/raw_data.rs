@@ -17,7 +17,7 @@
 //! [`load_world`] (and the hex resampling) refuse a world whose
 //! `format_version` is newer than [`FORMAT_VERSION`], or whose layers do not
 //! have the size `world.json` announces.
-use crate::biome::biome_color;
+use crate::biome::{biome_color, surface_color};
 use crate::climate::{TEMPERATURE_RANGE, celsius};
 use crate::generation::{COAST_DISTANCE_CAP_KM, Sampler};
 use crate::preset::Preset;
@@ -135,8 +135,12 @@ pub struct BiomeInfo {
     pub key: Biome,
     /// Display name.
     pub name: String,
-    /// `#RRGGBB`.
+    /// Classification colour, `#RRGGBB` (see [`biome_color`]).
     pub color: String,
+    /// Surface colour of the hillshaded renders, `#RRGGBB` (see
+    /// [`surface_color`]). Empty in worlds written before it existed.
+    #[serde(default)]
+    pub surface_color: String,
     /// Whether the biome is a water surface.
     pub water: bool,
 }
@@ -297,12 +301,13 @@ pub fn biome_table() -> Vec<BiomeInfo> {
     Biome::ALL
         .iter()
         .map(|&b| {
-            let [r, g, bl] = biome_color(b);
+            let hex = |[r, g, b]: [u8; 3]| format!("#{r:02X}{g:02X}{b:02X}");
             BiomeInfo {
                 id: b.id(),
                 key: b,
                 name: biome_name(b).into(),
-                color: format!("#{r:02X}{g:02X}{bl:02X}"),
+                color: hex(biome_color(b)),
+                surface_color: hex(surface_color(b)),
                 water: b.is_water(),
             }
         })

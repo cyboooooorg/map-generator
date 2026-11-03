@@ -13,7 +13,11 @@
 //! nudged less: volcanoes stay sharper than climate borders. Coastlines,
 //! shores, rivers and lakes keep their exact inputs and stay crisp. This is
 //! rendering only: the exported biome layer is unchanged.
-use crate::biome::{BiomeInput, biome_color};
+//!
+//! Colours come from [`surface_color`] and are averaged in linear light, as
+//! light from a mixed surface adds up: an sRGB average would make every
+//! border darker and muddier than both sides.
+use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::preset::Preset;
 use crate::world::World;
 use std::sync::LazyLock;
@@ -62,6 +66,36 @@ fn unit_offsets() -> [[f32; 4]; SAMPLES] {
     })
 }
 
+/// sRGB channel in `[0, 255]` to linear light in `[0, 1]`.
+pub(crate) fn srgb_to_linear(c: f32) -> f32 {
+    let c = (c / 255.0).clamp(0.0, 1.0);
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// Linear light in `[0, 1]` to an sRGB channel in `[0, 255]`.
+pub(crate) fn linear_to_srgb(c: f32) -> f32 {
+    let c = c.clamp(0.0, 1.0);
+    let s = if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    };
+    s * 255.0
+}
+
+/// [`surface_color`] of every biome in linear light, indexed by biome id.
+static LINEAR: LazyLock<Vec<[f32; 3]>> = LazyLock::new(|| {
+    let mut table = vec![[0.0; 3]; Biome::ALL.len()];
+    for b in Biome::ALL {
+        table[b.id() as usize] = surface_color(b).map(|c| srgb_to_linear(c as f32));
+    }
+    table
+});
+
 /// The input nudged by an offset in standard deviations.
 fn nudge(input: BiomeInput, o: [f32; 4]) -> BiomeInput {
     BiomeInput {
@@ -90,15 +124,15 @@ pub fn ecotone_colour_for(planet: &Preset, input: BiomeInput) -> [f32; 3] {
         choose(o) == centre
     });
     if far {
-        return biome_color(centre).map(f32::from);
+        return surface_color(centre).map(f32::from);
     }
     let mut sum = [0.0f32; 3];
     for &o in OFFSETS.iter() {
-        for (s, c) in sum.iter_mut().zip(biome_color(choose(o))) {
-            *s += c as f32;
+        for (s, c) in sum.iter_mut().zip(LINEAR[choose(o).id() as usize]) {
+            *s += c;
         }
     }
-    sum.map(|s| s / SAMPLES as f32)
+    sum.map(|s| linear_to_srgb(s / SAMPLES as f32))
 }
 
 #[cfg(test)]
@@ -133,8 +167,8 @@ mod tests {
         };
         // Right on the highland line: mountain and forest colours mix.
         let edge = ecotone_colour_for(&planet, input(rules.highland - 0.05));
-        let low = biome_color(planet.remap(rules.choose(input(rules.highland - 0.2))));
-        let high = biome_color(planet.remap(rules.choose(input(rules.highland + 0.2))));
+        let low = surface_color(planet.remap(rules.choose(input(rules.highland - 0.2))));
+        let high = surface_color(planet.remap(rules.choose(input(rules.highland + 0.2))));
         assert_ne!(edge, low.map(f32::from));
         assert_ne!(edge, high.map(f32::from));
         // Far from it, the exact colour.
@@ -142,5 +176,15 @@ mod tests {
             ecotone_colour_for(&planet, input(rules.highland - 0.2)),
             low.map(f32::from)
         );
+    }
+
+    #[test]
+    fn srgb_round_trips_and_blends_brighter_than_srgb() {
+        for c in [0.0, 1.0, 10.0, 128.0, 254.0, 255.0] {
+            assert!((linear_to_srgb(srgb_to_linear(c)) - c).abs() < 0.01, "{c}");
+        }
+        // Half black, half white is about 188 in sRGB, not 128.
+        let mid = linear_to_srgb((srgb_to_linear(0.0) + srgb_to_linear(255.0)) / 2.0);
+        assert!((mid - 188.0).abs() < 1.0, "{mid}");
     }
 }

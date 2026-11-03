@@ -1,5 +1,6 @@
 // Formatting shared by the components, and the requests and commands that
 // reproduce a world.
+import type { BiomeInfo } from './api/types/BiomeInfo';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import type { WorldRequest } from './api/types/WorldRequest';
 
@@ -137,4 +138,12 @@ export function formatAtmosphere(meta: WorldMetadata): string {
   const bar = pressure < 0.1 ? pressure.toPrecision(2) : pressure.toFixed(2);
   const clouds = meta.preset.atmosphere?.clouds ?? 'water';
   return clouds === 'none' ? `${bar} bar, no clouds` : `${bar} bar, ${clouds} clouds`;
+}
+
+/**
+ * Colour a biome has on the hillshaded biome map: its surface colour, or its
+ * classification colour for worlds written before surface colours existed.
+ */
+export function surfaceColour(biome: Pick<BiomeInfo, 'color' | 'surface_color'>): string {
+  return biome.surface_color || biome.color;
 }

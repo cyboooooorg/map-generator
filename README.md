@@ -282,17 +282,19 @@ worlds/<planet>-<seed>/
     └── flow.png
 ```
 
-| File / folder | Description                                                                                                                                                                                                                                 |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world.png`   | PNG (1920 × 1080 by default) with biome colours, soft biome borders (ecotones), hillshaded land (light from the north-west), meandering rivers whose width grows with their flow, depth contours under water and geographic reference lines |
-| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling                                                                                    |
-| `legend.png`  | Auto-sized PNG listing every biome present on the map (colour swatch + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                                                                       |
-| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                                                                                      |
-| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                                                                                              |
+| File / folder | Description                                                                                                                                                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world.png`   | PNG (1920 × 1080 by default) with biome surface colours (satellite-like palette), soft biome borders (ecotones), hillshaded land (light from the north-west), meandering rivers whose width grows with their flow, depth contours under water and geographic reference lines |
+| `world.svg`   | Same map as a vector image (run-length encoded `<rect>` rows), without hillshading so the encoding stays compact; suitable for web embedding and scaling                                                                                                                     |
+| `legend.png`  | Auto-sized PNG listing every biome present on the map (surface and classification swatches + name) plus planet metadata (type, seed, sea level, volcanic intensity, circumference, gravity)                                                                                  |
+| `raw_data/`   | Machine-readable world data, see [Raw data](#raw-data)                                                                                                                                                                                                                       |
+| `noise_maps/` | False-colour PNG for each intermediate noise layer (see below)                                                                                                                                                                                                               |
 
 #### Soft biome borders
 
-`world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its inputs select when nudged by 128 small offsets (a 4D Gaussian, σ 0.9 °C on temperature, 0.05 on moisture, 0.003 on the highland line and 0.004 on the volcanic zone): far from any threshold the colour is flat (8 probes tell, so most pixels skip the sampling), near one the colours mix. The width of a transition is set in input units, not pixels, so it suits any zoom level; mountain, snow and volcanic borders soften too, volcanoes less than climate borders. The same offsets serve every pixel, so transitions show neither grain nor terraces. Coastlines, shores, rivers and lakes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
+`world.png` and the viewer's detail tiles use a **surface palette** (`surface_color` in `src/biome.rs`): colours as seen from orbit, with dark olive vegetation, pale tan deserts and dark open water, while exotic biomes keep a muted hue of their own. The **classification palette** (`biome_color`), saturated and far apart, stays on `world.svg`, the hex grid and the `color` of the biome table. `legend.png` shows both swatches for each biome: surface first, classification second.
+
+`world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its inputs select when nudged by 128 small offsets (a 4D Gaussian, σ 0.9 °C on temperature, 0.05 on moisture, 0.003 on the highland line and 0.004 on the volcanic zone): far from any threshold the colour is flat (8 probes tell, so most pixels skip the sampling), near one the colours mix, averaged in linear light (an sRGB average darkens every border). The width of a transition is set in input units, not pixels, so it suits any zoom level; mountain, snow and volcanic borders soften too, volcanoes less than climate borders. The same offsets serve every pixel, so transitions show neither grain nor terraces. Coastlines, shores, rivers and lakes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
 
 Water lightens towards its shore, up to 25 % towards white over the last `0.05` elevation units of depth, so seas and lakes show the rim of their basin whatever their colour; a lake's depth is measured from its own level (its highest pixel), not from the sea. Frozen seas and lakes lighten too, as whiter fast ice along the shore, and magma seas darken into a cooled crust; rivers stay flat. Contour lines are drawn under water only, as bathymetry: on land the hillshade shows the relief, and contours drew rings that read as altitude bands. The hillshade follows a soft curve (`1 + 0.4 × tanh((lit − 1) / 0.4)`, relative to flat ground) rather than a hard clamp, so steep slopes stay distinct; detail tiles use the same curve.
 
@@ -315,7 +317,7 @@ Water lightens towards its shore, up to 25 % towards white over the last `0.05` 
 
 A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵` of the range (0.012 °C for temperature).
 
-`world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name, colour and whether it is a water surface:
+`world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name, classification colour (`color`), surface colour (`surface_color`, empty in worlds written before it existed) and whether it is a water surface:
 
 ```json
 {
@@ -330,7 +332,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
     "biomes": { "file": "biomes.png", "encoding": "gray8-biome-id" }
   },
   "biomes": [
-    { "id": 0, "key": "DeepOcean", "name": "Deep Ocean", "color": "#0A148C", "water": true }
+    { "id": 0, "key": "DeepOcean", "name": "Deep Ocean", "color": "#0A148C", "surface_color": "#081630", "water": true }
   ]
 }
 ```
