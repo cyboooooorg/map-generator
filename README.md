@@ -52,7 +52,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                                     |
 | `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)                                                                                                     | off                                          |
-| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the time they take                                                                                       | off                                          |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the time they take; also set by `MAPGEN_NO_NOISE_MAPS` (see [Environment](#environment))                 | off                                          |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
@@ -71,6 +71,19 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 **pressure** — surface pressure of the atmosphere, in bar (Earth: 1, Mars: 0.006, Venus: 92, 0 for an airless world). Presets give their own range (`[defaults] pressure`); the sky colour, haze and clouds come from the preset's `[atmosphere]` table. It is stored in `world.json` (`pressure_bar`; worlds made before it had Earth's 1 bar). Dense air evens temperatures out between the equator and the poles, and below 0.01 bar no water stays liquid: no rain, rivers or lakes, and no hydraulic erosion unless the request or the preset sets it (see [Temperature](#temperature--axial-tilt)). The viewer draws the sky from it.
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
+
+### Environment
+
+| Variable               | Effect                                                                                                                          | Default |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `MAPGEN_NO_NOISE_MAPS` | `true` (or `1`, `yes`, `on`) skips the noise maps like `--no-noise-maps`; `false` (or `0`, `no`, `off`) keeps them, the default | `false` |
+
+The flag wins when both are given: `--no-noise-maps` always skips the maps. For example, to skip them for every run of a shell session:
+
+```bash
+export MAPGEN_NO_NOISE_MAPS=true
+mise run gen -- --planet terran
+```
 
 ### Examples
 
@@ -374,7 +387,7 @@ elevation = [lo + p / 65535 * (hi - lo) for p in pixels.getdata()]
 
 #### Noise maps (false colour)
 
-Every intermediate layer of the generation is exported into `noise_maps/` for study and debugging (skip them with `--no-noise-maps`). Each map is written as soon as its layer is computed, during the generation, and the layer freed, so they are never all held in memory: they add about 10 bytes per pixel to the peak memory (0.6 GiB instead of 0.55 GiB at 4096 × 2048, 2.3 GiB instead of 2.0 GiB at 8192 × 4096) and little time, as they are encoded on the side. They share a **jet colour ramp**:
+Every intermediate layer of the generation is exported into `noise_maps/` for study and debugging (skip them with `--no-noise-maps` or `MAPGEN_NO_NOISE_MAPS=true`). Each map is written as soon as its layer is computed, during the generation, and the layer freed, so they are never all held in memory: they add about 10 bytes per pixel to the peak memory (0.6 GiB instead of 0.55 GiB at 4096 × 2048, 2.3 GiB instead of 2.0 GiB at 8192 × 4096) and little time, as they are encoded on the side. They share a **jet colour ramp**:
 
 > blue (low) → cyan → green → yellow → red (high)
 
