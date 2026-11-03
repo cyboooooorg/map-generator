@@ -354,7 +354,7 @@ mod tests {
         let params = request.resolve(&mut rand::rng()).unwrap().params;
         let dir = std::env::temp_dir().join(format!("mapgen-hex-{}", std::process::id()));
         export_world(
-            &generate(&params),
+            generate(&params),
             &dir,
             ExportOptions {
                 raw_data: true,

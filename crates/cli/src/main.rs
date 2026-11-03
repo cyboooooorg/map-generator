@@ -154,7 +154,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         raw_data: !args.no_raw_data,
         noise_maps: !args.no_noise_maps,
     };
-    export_world(&generated, &dir, options)?;
+    export_world(generated, &dir, options)?;
 
     println!("World generated → {}/", dir.display());
     // Exact values (the summary above is rounded) so the world can be

@@ -380,11 +380,14 @@ pub struct DebugLayer {
     pub values: Vec<f32>,
 }
 
-/// The output of [`generate`]: the world and the intermediate layers that
-/// produced it.
+/// The output of [`generate`]: the world, the intermediate layers that
+/// produced it, and what its export reuses.
 pub struct Generated {
     pub world: World,
     pub debug: Vec<DebugLayer>,
+    /// Anti-aliased river coverage of the map (see [`rivers::coverage`]),
+    /// computed for the biomes and handed over to the export.
+    pub river_coverage: Vec<f32>,
 }
 
 /// A noise layer exported as a diagnostic map: name, colour ramp, extractor.
@@ -671,18 +674,16 @@ pub fn generate_with_progress(
         });
     }
     // Elevation relative to the shifted sea level: what biome selection sees.
-    let mut relief: Vec<f32> = elevation
-        .iter()
-        .map(|e| (e - params.sea_level).clamp(-1.0, 1.0))
-        .collect();
+    // Computed where needed rather than kept as a layer.
+    let relief = |e: f32| (e - params.sea_level).clamp(-1.0, 1.0);
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
-    let raw_temperature: Vec<f32> = relief
+    let raw_temperature: Vec<f32> = elevation
         .par_iter()
         .enumerate()
-        .map(|(i, &r)| {
-            let above_water = r - rules.waterline;
+        .map(|(i, &e)| {
+            let above_water = relief(e) - rules.waterline;
             temperature(row_temperature[i / width as usize], above_water)
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
@@ -694,7 +695,7 @@ pub fn generate_with_progress(
             ramp: Ramp::Unsigned,
             // −30 °C to 40 °C over the ramp.
             values: raw_temperature
-                .iter()
+                .par_iter()
                 .map(|t| ((t + 30.0) / 70.0).clamp(0.0, 1.0))
                 .collect(),
         });
@@ -703,7 +704,10 @@ pub fn generate_with_progress(
     // ── Pass 4: distance to the coast ─────────────────────────────────────────
     progress(Stage::Coast);
     // Shores are the land pixels close to open water.
-    let open_water: Vec<bool> = relief.par_iter().map(|&r| r < rules.waterline).collect();
+    let open_water: Vec<bool> = elevation
+        .par_iter()
+        .map(|&e| relief(e) < rules.waterline)
+        .collect();
     let coast_distance_km = grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM);
     drop(open_water);
     if keep {
@@ -711,7 +715,7 @@ pub fn generate_with_progress(
             name: "coast_distance",
             ramp: Ramp::Unsigned,
             values: coast_distance_km
-                .iter()
+                .par_iter()
                 .map(|d| d / COAST_DISTANCE_CAP_KM)
                 .collect(),
         });
@@ -721,7 +725,10 @@ pub fn generate_with_progress(
     progress(Stage::Moisture);
     // Winds carry ocean evaporation inland; it rains out with distance and on
     // windward slopes, leaving rain shadows behind mountains.
-    let height_above_water: Vec<f32> = relief.iter().map(|r| r - rules.waterline).collect();
+    let height_above_water: Vec<f32> = elevation
+        .par_iter()
+        .map(|&e| relief(e) - rules.waterline)
+        .collect();
     let (raw_moisture, precipitation) = moisture(&MoistureInput {
         grid,
         height_above_water: &height_above_water,
@@ -799,20 +806,17 @@ pub fn generate_with_progress(
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
-    let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
+    let mut water = hydrology(&grid, &height_above_water, &moisture, params.seed);
     // Planets without anything liquid to flow (rivers remapped to dry
     // ground) have no rivers to draw, carve or end in deltas: only the
     // drainage flow is kept. Lava rivers of volcanic worlds still flow.
     let flowing = planet.remap(Biome::River);
-    let mut river_lines = if flowing.is_water() || flowing.is_lava() {
-        rivers::shape(
-            &rivers::trace(&grid, &water),
-            &grid,
-            &water.filled,
-            params.seed,
-        )
-    } else {
-        Vec::new()
+    let traced = (flowing.is_water() || flowing.is_lava()).then(|| rivers::trace(&grid, &water));
+    // The receivers and river pixels only serve the tracing.
+    water.release_routing();
+    let mut river_lines = match traced {
+        Some(traced) => rivers::shape(&traced, &grid, &water.filled, params.seed),
+        None => Vec::new(),
     };
     // Deltas and estuaries at the mouths of the large rivers.
     let deltas = delta::outlets(&mut river_lines, &grid, &height_above_water, params.seed);
@@ -820,23 +824,24 @@ pub fn generate_with_progress(
     // Valleys and floodplains along the rivers. Carving never creates water,
     // so the coast distance and the drainage stay valid.
     let waterline = params.sea_level + rules.waterline;
-    let mut above: Vec<f32> = elevation.iter().map(|e| e - waterline).collect();
+    let mut above: Vec<f32> = elevation.par_iter().map(|e| e - waterline).collect();
     let mut floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
     // Only the flow and the lakes are needed from here on.
     let (flow_km2, lake) = water.into_flow_and_lakes();
     let delta_plain = delta::plains(&deltas, &river_lines, &grid, &mut above, &mut moisture);
-    for (f, d) in floodplain.iter_mut().zip(delta_plain) {
-        *f = f.max(d);
-    }
-    for ((e, a), r) in elevation.iter_mut().zip(&above).zip(relief.iter_mut()) {
-        *e = a + waterline;
-        *r = (*e - params.sea_level).clamp(-1.0, 1.0);
-    }
-    drop(above);
+    floodplain
+        .par_iter_mut()
+        .zip(delta_plain)
+        .for_each(|(f, d)| *f = f.max(d));
+    elevation
+        .par_iter_mut()
+        .zip(above)
+        .for_each(|(e, a)| *e = a + waterline);
     // Rivers water their floodplain: green strips across dry land.
-    for (m, f) in moisture.iter_mut().zip(&floodplain) {
-        *m = (*m + RIPARIAN_MOISTURE * f).clamp(-1.0, 1.0);
-    }
+    moisture
+        .par_iter_mut()
+        .zip(&floodplain)
+        .for_each(|(m, f)| *m = (*m + RIPARIAN_MOISTURE * f).clamp(-1.0, 1.0));
     if keep {
         if let Some(layer) = debug.iter_mut().find(|l| l.name == "elevation") {
             layer.values.clone_from(&elevation);
@@ -855,7 +860,7 @@ pub fn generate_with_progress(
             name: "flow",
             ramp: Ramp::Unsigned,
             values: flow_km2
-                .iter()
+                .par_iter()
                 .map(|f| (f + 1.0).log10() / FLOW_LOG_MAX)
                 .collect(),
         });
@@ -863,16 +868,15 @@ pub fn generate_with_progress(
 
     // ── Pass 7: biomes ────────────────────────────────────────────────────────
     progress(Stage::Biomes);
-    let volcanic_zone: Vec<f32> = raw_volcanic_zone
-        .iter()
-        .map(|v| (v + dvz).clamp(0.0, 1.0))
-        .collect();
-    drop(raw_volcanic_zone);
+    let mut volcanic_zone = raw_volcanic_zone;
+    volcanic_zone
+        .par_iter_mut()
+        .for_each(|v| *v = (*v + dvz).clamp(0.0, 1.0));
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
             let input = BiomeInput {
-                elevation: relief[i],
+                elevation: relief(elevation[i]),
                 moisture: moisture[i],
                 temperature: temperature[i],
                 volcanic_zone: volcanic_zone[i],
@@ -903,6 +907,7 @@ pub fn generate_with_progress(
             clouds,
         },
         debug,
+        river_coverage,
     }
 }
 
@@ -1026,6 +1031,19 @@ mod tests {
         assert!(barren.floodplain.iter().all(|&f| f == 0.0));
         assert!(!generate(&params(3, "terran")).world.rivers.is_empty());
         assert!(!generate(&params(3, "volcanic")).world.rivers.is_empty());
+    }
+
+    #[test]
+    fn handed_over_river_coverage_matches_the_rivers() {
+        let g = generate(&params(3, "terran"));
+        let w = &g.world;
+        let coverage = rivers::coverage(
+            &w.rivers,
+            w.width,
+            w.height,
+            w.params.circumference_km as f64,
+        );
+        assert_eq!(g.river_coverage, coverage);
     }
 
     #[test]

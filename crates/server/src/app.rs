@@ -545,7 +545,7 @@ async fn create_world(
             let id = world_dir_name(&generated.world.params);
             let temp = worlds::TempDir::create(&worlds_dir, &id)?;
             export_world(
-                &generated,
+                generated,
                 temp.path(),
                 ExportOptions {
                     raw_data: true,
