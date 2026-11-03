@@ -17,6 +17,7 @@ import {
   Float32BufferAttribute,
   HalfFloatType,
   LinearFilter,
+  LinearMipmapLinearFilter,
   LessEqualDepth,
   LineSegments,
   Mesh,
@@ -57,7 +58,7 @@ import {
   sphereToLonLat,
   type Vec3,
 } from '../geo';
-import type { WorldLayers } from '../layers';
+import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { liftSky, type Sky } from '../sky';
 import { downsample, fitFactor } from './textures';
 import { DETAIL_STENCIL, TileLayer } from './TileLayer';
@@ -213,6 +214,23 @@ function halfFloatTexture(data: Uint16Array, width: number, height: number): Dat
   return texture;
 }
 
+/**
+ * The cloud cover as a single-channel texture (one byte per pixel, row 0 =
+ * north), filtered with mipmaps, wrapping east-west.
+ */
+function cloudTexture(image: Grey8): DataTexture {
+  const texture = new DataTexture(image.data, image.width, image.height, RedFormat, UnsignedByteType);
+  // Rows of an odd width are not 4-byte aligned.
+  texture.unpackAlignment = 1;
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 /** Hex biome colours (rgb) and river flags (a) as a columns × rows texture. */
 function hexTexture(map: HexMap): DataTexture {
   const colours = map.biomes.map((b) => {
@@ -313,9 +331,20 @@ export class PlanetView {
   /** Whether the world has an atmosphere to draw. */
   private hasSky = true;
   private cloudRequest = 0;
-  /** Whether the world has a cloud layer, and whether it is shown. */
+  /** The cloud layer of the world, and its download once started. */
+  private cloudSource: {
+    url: string;
+    tint: [number, number, number];
+    signal: AbortSignal | undefined;
+    request: number;
+    loading: Promise<void> | null;
+  } | null = null;
+  /**
+   * Whether the cloud layer is uploaded, and whether it is shown (hidden
+   * until told otherwise, so a world shown without clouds never loads it).
+   */
   private hasClouds = false;
-  private cloudsOn = true;
+  private cloudsOn = false;
   /** Whether the cloud layer drifts, the last drift update, and its redraw timer. */
   private cloudsDrifting = false;
   private cloudDriftAt: number | null = null;
@@ -530,37 +559,62 @@ export class PlanetView {
 
   /**
    * Shows a cloud cover layer (8-bit `clouds.png`) tinted by `tint` (linear
-   * RGB), or none with a null url. Like the base map, only the latest call
-   * takes effect.
+   * RGB), or none with a null url. The layer is downloaded and decoded only
+   * while clouds are shown (see setCloudsVisible): the promise resolves at
+   * once while they are hidden. Aborting `signal` drops the load, also one
+   * started later by setCloudsVisible. Like the base map, only the latest
+   * call takes effect.
    */
-  async setClouds(url: string | null, tint: [number, number, number], signal?: AbortSignal): Promise<void> {
+  setClouds(url: string | null, tint: [number, number, number], signal?: AbortSignal): Promise<void> {
     this.cloudRequest += 1;
-    const request = this.cloudRequest;
-    if (!url) {
-      this.hasClouds = false;
-      this.requestRender();
-      return;
-    }
-    const bitmap = await this.decodeImage(url, signal);
-    if (this.disposed || request !== this.cloudRequest || signal?.aborted) {
-      bitmap.close();
-      signal?.throwIfAborted();
-      return;
-    }
-    const texture = new Texture(bitmap);
-    texture.flipY = false;
-    texture.wrapS = RepeatWrapping;
-    texture.needsUpdate = true;
+    // The previous world's clouds would not match the new map.
     this.disposeClouds();
-    this.u.uClouds.value = texture;
-    this.u.uCloudTint.value.set(...tint);
-    this.hasClouds = true;
+    this.hasClouds = false;
     this.requestRender();
+    this.cloudSource = url ? { url, tint, signal, request: this.cloudRequest, loading: null } : null;
+    return this.cloudsOn ? this.loadClouds() : Promise.resolve();
   }
 
+  /**
+   * Downloads and uploads the cloud layer of the current source, once:
+   * every caller gets the same promise. A failed load can be tried again.
+   */
+  private loadClouds(): Promise<void> {
+    const source = this.cloudSource;
+    if (!source) {
+      return Promise.resolve();
+    }
+    source.loading ??= (async () => {
+      try {
+        const image = await loadGrey8(source.url, this.renderer.capabilities.maxTextureSize, source.signal);
+        if (this.disposed || source.request !== this.cloudRequest) {
+          return;
+        }
+        this.disposeClouds();
+        this.u.uClouds.value = cloudTexture(image);
+        this.u.uCloudTint.value.set(...source.tint);
+        this.hasClouds = true;
+        this.requestRender();
+      } catch (error) {
+        source.loading = null;
+        throw error;
+      }
+    })();
+    return source.loading;
+  }
+
+  /** Shows or hides the cloud layer; the first time it shows, it is downloaded. */
   setCloudsVisible(visible: boolean): void {
     this.requestRender();
     this.cloudsOn = visible;
+    const source = this.cloudSource;
+    if (visible && source && !source.loading) {
+      this.loadClouds().catch((e: unknown) => {
+        if (!source.signal?.aborted) {
+          console.warn('Could not load the clouds', e);
+        }
+      });
+    }
   }
 
   /** Lets the cloud layer drift slowly eastwards around the planet, or stops it where it is. */
@@ -594,14 +648,9 @@ export class PlanetView {
     }
   }
 
-  /** Frees the cloud texture and its decoded image. */
+  /** Frees the cloud texture. */
   private disposeClouds(): void {
-    const texture = this.u.uClouds.value;
-    const image = texture.image as unknown;
-    texture.dispose();
-    if (image instanceof ImageBitmap) {
-      image.close();
-    }
+    this.u.uClouds.value.dispose();
     this.u.uClouds.value = emptyTexture();
   }
 

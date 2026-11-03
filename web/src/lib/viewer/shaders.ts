@@ -114,7 +114,7 @@ export const surfaceFragment = /* glsl */ `
   uniform float uTropics;      // 1 draws the equator, tropics and polar circles
   uniform float uTilt;         // axial tilt, degrees
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
-  uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
+  uniform sampler2D uClouds;   // cloud cover in r, row 0 = north (sampled at 1 - v)
   uniform vec3 uCloudTint;     // linear colour of the clouds
   uniform float uCloudShift;   // eastward drift of the cloud layer, in turns
   varying vec2 vUv;
@@ -373,11 +373,11 @@ export const surfaceFragment = /* glsl */ `
     if (uCloudsOn > 0.0) {
       // Opacity of the cover: thin clouds are translucent veils, only
       // thick ones hide the ground.
-      vec2 cloudUv = vUv - vec2(uCloudShift, 0.0);
+      vec2 cloudUv = vec2(vUv.x - uCloudShift, 1.0 - vUv.y);
       cover = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv).r) * 0.85 * uCloudsOn;
       float lat = (vUv.y - 0.5) * PI;
       vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
-      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + towardsLight * 0.004 * uMorph).r) * uCloudsOn;
+      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + vec2(1.0, -1.0) * towardsLight * 0.004 * uMorph).r) * uCloudsOn;
       colour *= 1.0 - 0.45 * shadow;
     }
     colour *= shade;
