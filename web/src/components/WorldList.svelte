@@ -191,7 +191,7 @@
     border: none;
     background: none;
     padding: 0;
-    color: var(--accent);
+    color: var(--link);
   }
   .danger:hover:not(:disabled) {
     border-color: var(--danger);

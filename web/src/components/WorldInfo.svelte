@@ -264,7 +264,7 @@
     border: none;
     background: none;
     padding: 0;
-    color: var(--accent);
+    color: var(--link);
     text-align: left;
   }
   .actions {
@@ -301,7 +301,7 @@
     color: var(--muted);
   }
   .downloads a {
-    color: var(--accent);
+    color: var(--link);
   }
   .muted {
     color: var(--muted);

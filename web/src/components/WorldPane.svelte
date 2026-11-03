@@ -130,7 +130,7 @@
   {/if}
 
   {#if measuring}
-    <div class="measure" aria-label="Distance measurement">
+    <div class="measure" role="region" aria-label="Distance measurement">
       <strong>{path.length < 2 ? 'Click points on the planet' : formatKm(distance)}</strong>
       {#if path.length >= 2}
         <small>{path.length - 1} leg{path.length > 2 ? 's' : ''}, along great circles</small>

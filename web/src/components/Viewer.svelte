@@ -104,6 +104,7 @@
     hexColumns: 64,
     hexRiverLog: DEFAULT_RIVER_LOG,
     legendOpen: true,
+    panelOpen: true,
   });
 
   let canvas: HTMLCanvasElement;
@@ -131,16 +132,30 @@
   let hexBusy = $state(false);
   /** Whether the server answered that it is busy generating: the request is retried. */
   let hexServerBusy = $state(false);
-  // Narrow screens start with the legend folded too: it would cover the planet.
-  const wide = window.matchMedia('(min-width: 900px)').matches;
-  let legendOpen = $state(saved.legendOpen && wide);
+  // Narrow screens fold the legend and the display panel, which would cover
+  // the planet; wide ones open them as last chosen on a wide screen. Both
+  // follow the window as it is resized across the limit.
+  const wideQuery = window.matchMedia('(min-width: 900px)');
+  let wide = $state(wideQuery.matches);
+  /** The legend and panel states chosen on a wide screen, saved as the preferences. */
+  let wideChoice = { legendOpen: saved.legendOpen, panelOpen: saved.panelOpen };
+  let legendOpen = $state(saved.legendOpen && wideQuery.matches);
   let hovered = $state<number | null>(null);
   let pinned = $state<number | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let showHelp = $state(false);
-  // Folded by default on narrow screens, where it would hide the planet.
-  let panelOpen = $state(wide);
+  let panelOpen = $state(saved.panelOpen && wideQuery.matches);
+
+  $effect(() => {
+    const change = (event: MediaQueryListEvent) => {
+      wide = event.matches;
+      legendOpen = wide && wideChoice.legendOpen;
+      panelOpen = wide && wideChoice.panelOpen;
+    };
+    wideQuery.addEventListener('change', change);
+    return () => wideQuery.removeEventListener('change', change);
+  });
 
   const worldId = $derived(world.id);
   const meta = $derived(world.meta);
@@ -174,6 +189,10 @@
     if (!persistDisplay) {
       return;
     }
+    // Folded for lack of room is not a choice: only wide screens change it.
+    if (wide) {
+      wideChoice = { legendOpen, panelOpen };
+    }
     display.save({
       mode,
       layer,
@@ -190,8 +209,7 @@
       sunLongitude,
       hexColumns,
       hexRiverLog,
-      // A legend folded for lack of room stays open on wide screens.
-      legendOpen: wide ? legendOpen : saved.legendOpen,
+      ...wideChoice,
     });
   });
 
@@ -561,7 +579,7 @@
 <div class="viewer">
   <canvas bind:this={canvas} class:measuring></canvas>
 
-  <div class="toolbar" aria-label="Tools">
+  <div class="toolbar" role="toolbar" aria-label="Tools">
     <button onclick={resetView} disabled={!worldId} title="Reset the view (R)">Reset view</button>
     <button
       onclick={onToggleMeasure}
@@ -574,7 +592,7 @@
     <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title="Keyboard shortcuts (?)">?</button>
   </div>
 
-  <div class="panel" aria-label="Display">
+  <div class="panel" role="region" aria-label="Display">
     <div class="row">
       <div class="segmented">
         <button class:active={mode === 'globe'} onclick={() => (mode = 'globe')} title="Globe (G)">Globe</button>
@@ -663,7 +681,7 @@
 
   {#if dataReady && shown !== 'biomes'}
     {@const ramp = RAMPS[shown]}
-    <div class="legend" aria-label="Legend">
+    <div class="legend" role="region" aria-label="Legend">
       <strong>{ramp.label}</strong>
       <div class="bar" style:background={cssGradient(shown)}></div>
       <div class="ends">
@@ -672,7 +690,7 @@
       </div>
     </div>
   {:else if shown === 'biomes' && world.stats}
-    <div class="legend biomes" aria-label="Biome legend">
+    <div class="legend biomes" role="region" aria-label="Biome legend">
       <button class="legend-title" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen}>
         <strong>Biomes</strong>
         <small class="muted">{legendOpen ? 'hide' : `${world.stats.shares.length}, show`}</small>

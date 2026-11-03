@@ -7,8 +7,11 @@
   --border: #2a3242;
   --text: #e6e9ef;
   --muted: #8b95a7;
-  --accent: #4f8cff;
+  /* Filled buttons: white text on it is 4.8:1 (WCAG AA). */
+  --accent: #336de0;
   --accent-text: #ffffff;
+  /* Links and accent text on the dark background (6:1). */
+  --link: #4f8cff;
   --danger: #ff6b6b;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 14px;
