@@ -121,42 +121,6 @@ const HEADLIGHT = new Vector3(-0.4, 0.5, 1).normalize();
 /** Lowest camera altitude over the globe (radius 1): about 2 km on an Earth-sized planet. */
 const MIN_ALTITUDE = 0.0003;
 
-/** Dash pattern of the reference lines, in segments of 1/720 turn. */
-const DASH_ON = 3;
-const DASH_PERIOD = 5;
-
-/**
- * Dotted parallels at `latitudes` (degrees), as line segments in uv space,
- * or an empty geometry.
- */
-function parallels(latitudes: number[]): BufferGeometry {
-  const uvs: number[] = [];
-  const samples = 720;
-  for (const lat of latitudes) {
-    const v = (lat + 90) / 180;
-    for (let i = 0; i < samples; i += 1) {
-      if (i % DASH_PERIOD < DASH_ON) {
-        uvs.push(i / samples, v, (i + 1) / samples, v);
-      }
-    }
-  }
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(new Array((uvs.length / 2) * 3).fill(0), 3));
-  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
-  return geometry;
-}
-
-/**
- * Reference parallels as world.png draws them, as (latitudes of an axial
- * tilt in degrees, colour): the equator, the tropics at ±tilt and the polar
- * circles at ±(90° − tilt).
- */
-export const REFERENCE_LINES: [(tilt: number) => number[], string][] = [
-  [() => [0], '#dc3232'],
-  [(tilt) => [tilt, -tilt], '#dc9600'],
-  [(tilt) => [90 - tilt, tilt - 90], '#00c8f0'],
-];
-
 /** Graticule every `step` degrees, as line segments in uv space. */
 function graticule(step: number): BufferGeometry {
   const uvs: number[] = [];
@@ -316,10 +280,10 @@ export class PlanetView {
     uHighlight: { value: -1 } as IUniform<number>,
     uSeaContours: { value: 0 } as IUniform<number>,
     uLandContours: { value: 0 } as IUniform<number>,
+    uTropics: { value: 0 } as IUniform<number>,
+    uTilt: { value: 23.5 } as IUniform<number>,
   };
   private readonly path: LineSegments<BufferGeometry, ShaderMaterial>;
-  /** Equator, tropics and polar circles, one mesh per colour. */
-  private readonly references: LineSegments<BufferGeometry, ShaderMaterial>[];
   /** Axial tilt the reference lines are drawn for, or null for none. */
   private referenceTilt: number | null = null;
   private referencesOn = false;
@@ -432,31 +396,6 @@ export class PlanetView {
     this.grid.renderOrder = 2;
     this.scene.add(this.grid);
 
-    // Over the sky and the clouds like the graticule, so they stay
-    // readable; detail tiles do not hide them either.
-    this.references = REFERENCE_LINES.map(([, colour]) => {
-      const lines = new LineSegments(
-        parallels([]),
-        new ShaderMaterial({
-          vertexShader: surfaceVertex,
-          fragmentShader: lineFragment,
-          uniforms: {
-            ...this.shared,
-            uLift: { value: 0.003 },
-            uTileRect: { value: new Vector4(0, 0, 1, 1) },
-            uColor: { value: new Color(colour) },
-            uOpacity: { value: 0.85 },
-          },
-          transparent: true,
-          depthWrite: false,
-        }),
-      );
-      lines.frustumCulled = false;
-      lines.visible = false;
-      lines.renderOrder = 2;
-      this.scene.add(lines);
-      return lines;
-    });
 
     // A unit sphere scaled to the top of the world's atmosphere, drawn after
     // the surface from its far side, twice (see atmosphereFragment): where
@@ -862,16 +801,10 @@ export class PlanetView {
 
   /**
    * Sets the axial tilt (degrees) the equator, tropics and polar circles
-   * are drawn for, or null when no world is shown.
+   * are drawn for, or null when no world is shown (none drawn).
    */
   setReferenceTilt(tilt: number | null): void {
-    if (tilt === this.referenceTilt) return;
     this.referenceTilt = tilt;
-    REFERENCE_LINES.forEach(([latitudes], k) => {
-      const lines = this.references[k]!;
-      lines.geometry.dispose();
-      lines.geometry = parallels(tilt === null ? [] : latitudes(tilt));
-    });
     this.applyReferences();
   }
 
@@ -882,9 +815,8 @@ export class PlanetView {
   }
 
   private applyReferences(): void {
-    for (const lines of this.references) {
-      lines.visible = this.referencesOn && this.referenceTilt !== null;
-    }
+    this.u.uTilt.value = this.referenceTilt ?? 0;
+    this.u.uTropics.value = this.referencesOn && this.referenceTilt !== null ? 1 : 0;
     this.requestRender();
   }
 
@@ -984,7 +916,7 @@ export class PlanetView {
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
-    for (const object of [this.surface, this.grid, ...this.atmosphere, this.path, ...this.references]) {
+    for (const object of [this.surface, this.grid, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
     }
