@@ -47,6 +47,9 @@ pub const PRESSURE_BAR: Limits = Limits {
     min: 0.0,
     max: 1000.0,
 };
+/// Age of the oldest surviving surface, in Ga (the Solar System is 4.57 Ga
+/// old).
+pub const SURFACE_AGE_GA: Limits = Limits { min: 0.0, max: 4.6 };
 /// Hydraulic erosion strength (droplets per erosion-grid pixel).
 pub const EROSION: Limits = Limits { min: 0.0, max: 5.0 };
 /// Map width and height in pixels.
@@ -65,6 +68,8 @@ pub mod fallback {
     pub const EROSION: ParamDefault = ParamDefault::Fixed(1.0);
     /// Around Earth's 1 bar.
     pub const PRESSURE_BAR: ParamDefault = ParamDefault::Range([0.7, 1.5]);
+    /// Earth's: erosion and subduction keep few craters older than this.
+    pub const SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.2, 0.6]);
     pub const WIDTH: u32 = 1920;
     pub const HEIGHT: u32 = 1080;
 }
@@ -88,6 +93,8 @@ pub struct WorldRequest {
     pub erosion: Option<f32>,
     /// Surface pressure in bar.
     pub pressure_bar: Option<f32>,
+    /// Age of the oldest surviving surface, in Ga.
+    pub surface_age_ga: Option<f32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -162,6 +169,7 @@ impl WorldRequest {
             ("axial_tilt_deg", self.axial_tilt_deg, AXIAL_TILT_DEG),
             ("erosion", self.erosion, EROSION),
             ("pressure_bar", self.pressure_bar, PRESSURE_BAR),
+            ("surface_age_ga", self.surface_age_ga, SURFACE_AGE_GA),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -237,6 +245,10 @@ impl WorldRequest {
             erosion
         };
         let seed = self.seed.unwrap_or_else(|| rng.random());
+        // Drawn last, so the draws above (seed included) do not change.
+        let surface_age_ga = self
+            .surface_age_ga
+            .unwrap_or_else(|| d.surface_age.unwrap_or(fallback::SURFACE_AGE_GA).pick(rng));
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
             height: self.height.unwrap_or(fallback::HEIGHT),
@@ -248,6 +260,7 @@ impl WorldRequest {
             axial_tilt_deg,
             erosion,
             pressure_bar,
+            surface_age_ga,
         };
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
@@ -337,6 +350,25 @@ mod tests {
     }
 
     #[test]
+    fn surface_age_comes_from_the_request_then_the_preset() {
+        let age = |planet: &str, surface_age_ga| {
+            WorldRequest {
+                planet: Some(planet.into()),
+                surface_age_ga,
+                width: Some(16),
+                height: Some(8),
+                ..Default::default()
+            }
+            .resolve(&mut rand::rng())
+            .unwrap()
+            .params
+            .surface_age_ga
+        };
+        assert_eq!(age("barren", Some(1.5)), 1.5);
+        assert!((3.0..4.2).contains(&age("barren", None)));
+    }
+
+    #[test]
     fn sea_level_and_land_fraction_are_exclusive() {
         let request = WorldRequest {
             sea_level: Some(0.2),
@@ -355,6 +387,8 @@ mod tests {
         let p = resolved.params;
         assert!((0.10..0.40).contains(&p.sea_level));
         assert!((5.0..40.0).contains(&p.axial_tilt_deg));
+        // The planet is random: its preset may set its own range.
+        assert!(SURFACE_AGE_GA.contains(p.surface_age_ga));
         assert_eq!((p.width, p.height), (1920, 1080));
     }
 
@@ -367,6 +401,10 @@ mod tests {
             },
             WorldRequest {
                 width: Some(1),
+                ..Default::default()
+            },
+            WorldRequest {
+                surface_age_ga: Some(5.0),
                 ..Default::default()
             },
             WorldRequest {

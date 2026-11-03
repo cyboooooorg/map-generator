@@ -4,6 +4,7 @@ import type { Biome } from "./Biome";
 import type { BiomeRules } from "./BiomeRules";
 import type { ClimateShift } from "./ClimateShift";
 import type { Defaults } from "./Defaults";
+import type { Geology } from "./Geology";
 
 /**
  * A planet type. See the module documentation for the file format.
@@ -20,6 +21,11 @@ name: string, description: string, defaults: Defaults, climate: ClimateShift, ru
  * Sky and clouds; Earth's when the preset has no `[atmosphere]` table.
  */
 atmosphere: Atmosphere, 
+/**
+ * Tectonic regime and wet era; Earth's when the preset has no
+ * `[geology]` table.
+ */
+geology: Geology, 
 /**
  * Target biome → biomes replaced by it.
  */

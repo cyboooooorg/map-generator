@@ -9,6 +9,7 @@ moisture = 0.55
 
 [defaults]
 pressure = [2.0, 5.0]                 # surface pressure in bar, drawn in this range
+surface_age = [0.3, 0.8]               # Ga: age of the oldest surviving surface
 
 # A dense, corrosive haze tints the sky yellow-green; acid clouds.
 [atmosphere]
@@ -16,6 +17,10 @@ rayleigh = [0.4, 0.55, 0.25]           # sky colour of the gas and its absorbers
 haze = 0.3
 haze_colour = [0.85, 0.95, 0.45]
 clouds = "sulfuric"
+
+# Like Venus: the lid overturns now and then, wiping out the craters.
+[geology]
+regime = "episodic"
 
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, LavaField, AshLand, Volcano).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatGeology, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
 
 const meta = {
   planet_type: 'frozen',
@@ -11,6 +11,7 @@ const meta = {
   axial_tilt_deg: 18.7234,
   erosion: 1,
   pressure_bar: 0.41237,
+  surface_age_ga: 1.23456,
   width: 1920,
   height: 1080,
 } as WorldMetadata;
@@ -26,13 +27,18 @@ describe('format', () => {
       axial_tilt_deg: 18.72,
       erosion: 1,
       pressure_bar: 0.4124,
+      surface_age_ga: 1.235,
       width: 1920,
       height: 1080,
     });
     expect(cliCommand(meta)).toBe(
       'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
-        '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --width 1920 --height 1080',
+        '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 --width 1920 --height 1080',
     );
+    // Worlds made before the surface age leave it to the preset.
+    const old = { ...meta, surface_age_ga: undefined } as unknown as WorldMetadata;
+    expect(requestFromWorld(old)).not.toHaveProperty('surface_age_ga');
+    expect(cliCommand(old)).not.toContain('--surface-age');
   });
 
   it('rerolls a world with a new seed and every other parameter kept', () => {
@@ -51,6 +57,18 @@ describe('format', () => {
     const old = { ...meta, preset: {} } as unknown as WorldMetadata;
     delete (old as { pressure_bar?: number }).pressure_bar;
     expect(formatAtmosphere(old)).toBe('1.00 bar, water clouds');
+  });
+
+  it("describes the geology, with Earth's regime for worlds made before it", () => {
+    const preset = { geology: { regime: 'stagnant', wet_until: 3.5 } };
+    expect(formatGeology({ ...meta, surface_age_ga: 3.8, preset } as unknown as WorldMetadata)).toBe(
+      'stagnant lid, surface 3.8 Ga',
+    );
+    expect(formatGeology({ ...meta, surface_age_ga: 0.02, preset } as unknown as WorldMetadata)).toBe(
+      'stagnant lid, surface 20 Ma',
+    );
+    const old = { ...meta, surface_age_ga: undefined, preset: {} } as unknown as WorldMetadata;
+    expect(formatGeology(old)).toBe('plate tectonics');
   });
 
   it('formats shares, areas, durations and ages', () => {

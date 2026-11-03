@@ -330,6 +330,7 @@ mod tests {
             sea_level: Some(0.2),
             land_fraction: None,
             pressure_bar: Some(1.0),
+            surface_age_ga: Some(0.4),
             volcanic: Some(0.3),
             circumference_km: Some(40_000.0),
             axial_tilt_deg: Some(23.44),

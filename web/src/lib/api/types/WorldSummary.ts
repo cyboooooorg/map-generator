@@ -13,6 +13,11 @@ id: string, planet: string, seed: number, width: number, height: number, sea_lev
  */
 pressure_bar: number, 
 /**
+ * Age of the oldest surviving surface in Ga; `null` for worlds made
+ * before it existed.
+ */
+surface_age_ga: number | null, 
+/**
  * Last modification time, in milliseconds since the Unix epoch.
  */
 modified_ms: number, };

@@ -174,6 +174,7 @@ struct Meta {
     erosion: f32,
     gravity_modifier: f32,
     pressure_bar: f32,
+    surface_age_ga: Option<f32>,
 }
 
 impl Default for Meta {
@@ -191,6 +192,8 @@ impl Default for Meta {
             gravity_modifier: 0.0,
             // Worlds made before the atmosphere had Earth's pressure.
             pressure_bar: 1.0,
+            // Worlds made before the surface age have none.
+            surface_age_ga: None,
         }
     }
 }
@@ -213,6 +216,7 @@ pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
         erosion: meta.erosion,
         gravity_modifier: meta.gravity_modifier,
         pressure_bar: meta.pressure_bar,
+        surface_age_ga: meta.surface_age_ga,
         modified_ms,
     })
 }
@@ -296,7 +300,7 @@ mod tests {
             (
                 "terran-1",
                 r#"{"planet_type": "terran", "seed": 1, "width": 64, "height": 32,
-                    "pressure_bar": 2.5, "layers": {"elevation": {}}, "biomes": [1, 2]}"#,
+                    "pressure_bar": 2.5, "surface_age_ga": 3.8, "layers": {"elevation": {}}, "biomes": [1, 2]}"#,
             ),
             // Before the atmosphere: Earth's pressure.
             ("frozen-2", r#"{"planet_type": "frozen", "seed": 2}"#),
@@ -307,8 +311,10 @@ mod tests {
         let terran = summary(&root, "terran-1").unwrap();
         assert_eq!((terran.planet.as_str(), terran.width), ("terran", 64));
         assert_eq!(terran.pressure_bar, 2.5);
+        assert_eq!(terran.surface_age_ga, Some(3.8));
         let frozen = summary(&root, "frozen-2").unwrap();
         assert_eq!((frozen.seed, frozen.pressure_bar), (2, 1.0));
+        assert_eq!(frozen.surface_age_ga, None);
         assert!(summary(&root, "barren-3").is_none());
         std::fs::remove_dir_all(root).unwrap();
     }

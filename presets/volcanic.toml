@@ -9,6 +9,7 @@ volcanic = 0.50
 
 [defaults]
 pressure = [5.0, 20.0]                 # surface pressure in bar, drawn in this range
+surface_age = [0.001, 0.05]            # Ga: age of the oldest surviving surface
 
 # Dense air thick with volcanic aerosols: an orange sky, patchy sulfuric
 # clouds.
@@ -19,6 +20,10 @@ haze_colour = [1.0, 0.55, 0.25]
 greenhouse = 20.0                  # °C
 clouds = "sulfuric"
 cloud_cover = -0.2
+
+# Like Io: lava resurfaces the planet faster than craters form.
+[geology]
+regime = "heat_pipe"
 
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, LavaField, AshLand, Volcano).

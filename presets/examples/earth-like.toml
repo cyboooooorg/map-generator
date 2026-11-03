@@ -8,8 +8,13 @@ description = "Earth's size, tilt and land share, full biome spectrum"
 # still win over these.
 [defaults]
 pressure = 1.0
+surface_age = 0.4                      # Ga: age of the oldest surviving surface
 # The sea level is computed for each seed to leave this share of land.
 land_fraction = 0.29
 circumference = 40075
 axial_tilt = 23.44
 volcanic = [0.1, 0.3]
+
+# Plates recycle the sea floor and erosion wears the land: few craters.
+[geology]
+regime = "plates"

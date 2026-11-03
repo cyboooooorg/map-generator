@@ -227,7 +227,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 8. Impact craters and geological time
 
-- **Status:** decided
+- **Status:** in progress
 - **Analysis:** [08-geology.md](analysis/08-geology.md)
 - **Problem:** no world has impact craters, so dead worlds (`barren`,
   `mars-like`, `mercury-like`) look like dry Earths; the surface has no
@@ -243,7 +243,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 | Step | Change                                                                                                         | Seeds  | Status |
 | ---- | -------------------------------------------------------------------------------------------------------------- | ------ | ------ |
-| 1    | `[geology]` in presets and `world.json`, `--surface-age`, form field, regime in the world info; no effect yet  | Same   | todo   |
+| 1    | `[geology]` in presets and `world.json`, `--surface-age`, form field, regime in the world info; no effect yet  | Same   | done   |
 | 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`     | Change | todo   |
 | 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                   | Same   | todo   |
 | 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                      | Same   | todo   |

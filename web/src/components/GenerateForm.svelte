@@ -32,7 +32,14 @@
 
   let { presets, spec, initial = null, variedFrom = null, existing, onSubmitted, onCancel }: Props = $props();
 
-  type Field = 'sea_level' | 'volcanic' | 'circumference_km' | 'axial_tilt_deg' | 'erosion' | 'pressure_bar';
+  type Field =
+    | 'sea_level'
+    | 'volcanic'
+    | 'circumference_km'
+    | 'axial_tilt_deg'
+    | 'erosion'
+    | 'pressure_bar'
+    | 'surface_age_ga';
 
   interface FieldInfo {
     label: string;
@@ -86,6 +93,13 @@
       defaultsKey: 'pressure',
       slider: [0, 100],
       step: 0.001,
+    },
+    surface_age_ga: {
+      label: 'Surface age (Ga)',
+      help: 'How long impacts have cratered the surface. Earth: about 0.4 · Venus: 0.5 · Mars, the Moon: 4',
+      defaultsKey: 'surface_age',
+      slider: [0, 4.6],
+      step: 0.01,
     },
   };
   const FIELD_NAMES = Object.keys(FIELDS) as Field[];

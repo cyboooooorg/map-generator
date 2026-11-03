@@ -54,6 +54,12 @@ struct Args {
     #[arg(long, value_parser = parse_in(request::PRESSURE_BAR))]
     pressure: Option<f32>,
 
+    /// Age of the oldest surviving surface in Ga, in [0, 4.6]: how long
+    /// impacts have cratered it (Earth: about 0.4, the Moon: 4.4)
+    /// [default: from the preset, else random in 0.2..0.6]
+    #[arg(long, value_parser = parse_in(request::SURFACE_AGE_GA))]
+    surface_age: Option<f32>,
+
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]
     #[arg(long, value_parser = parse_in(request::EROSION))]
     erosion: Option<f32>,
@@ -128,6 +134,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         axial_tilt_deg: args.axial_tilt,
         erosion: args.erosion,
         pressure_bar: args.pressure,
+        surface_age_ga: args.surface_age,
         width: Some(args.width),
         height: Some(args.height),
     };
@@ -135,7 +142,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     let p = &resolved.params;
     println!(
         "Parameters → planet={} seed={} sea_level={:.2} volcanic={:.2} \
-         circumference={:.0} km tilt={:.1}° gravity≈{:.2}g pressure={:.3} bar",
+         circumference={:.0} km tilt={:.1}° gravity≈{:.2}g pressure={:.3} bar \
+         surface_age={:.2} Ga ({})",
         p.planet.name,
         p.seed,
         p.sea_level,
@@ -143,7 +151,9 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.circumference_km,
         p.axial_tilt_deg,
         p.gravity_modifier(),
-        p.pressure_bar
+        p.pressure_bar,
+        p.surface_age_ga,
+        p.planet.geology.regime.label()
     );
 
     let dir = args.out_dir.join(world_dir_name(p));
@@ -178,7 +188,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // regenerated; the size too, since the relief depends on the resolution.
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
-         --circumference {} --axial-tilt {} --erosion {} --pressure {} --width {} --height {}",
+         --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -187,6 +197,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.axial_tilt_deg,
         p.erosion,
         p.pressure_bar,
+        p.surface_age_ga,
         p.width,
         p.height
     );

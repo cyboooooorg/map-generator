@@ -19,7 +19,12 @@ preset: Preset, sea_level: number, volcanic_intensity: number, circumference_km:
 /**
  * Surface pressure in bar. Worlds made before it existed had Earth's.
  */
-pressure_bar: number, layers: Layers, 
+pressure_bar: number, 
+/**
+ * Age of the oldest surviving surface, in Ga. Worlds made before it
+ * existed have none (and no craters).
+ */
+surface_age_ga?: number | null, layers: Layers, 
 /**
  * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
  */

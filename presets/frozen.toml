@@ -10,6 +10,7 @@ volcanic = -0.30
 
 [defaults]
 pressure = [0.3, 1.0]                 # surface pressure in bar, drawn in this range
+surface_age = [0.5, 2.0]               # Ga: age of the oldest surviving surface
 
 # Thin, clean air: a pale sky, sparse water clouds.
 [atmosphere]
@@ -17,6 +18,10 @@ rayleigh = [0.17, 0.41, 1.0]
 haze = 0.05
 clouds = "water"
 cloud_cover = -0.3
+
+# Plates keep moving under the ice, as during Earth's snowball eras.
+[geology]
+regime = "plates"
 
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Tundra, IceCap, Taiga, Snow, Mountain).

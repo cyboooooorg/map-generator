@@ -14,4 +14,8 @@ land_fraction: ParamDefault | null, volcanic: ParamDefault | null, circumference
 /**
  * Surface pressure in bar (0 = airless).
  */
-pressure: ParamDefault | null, };
+pressure: ParamDefault | null, 
+/**
+ * Age of the oldest surviving surface, in Ga.
+ */
+surface_age: ParamDefault | null, };

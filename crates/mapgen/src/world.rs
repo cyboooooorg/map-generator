@@ -31,6 +31,9 @@ pub struct WorldParams {
     pub erosion: f32,
     /// Surface pressure in bar (0 = airless).
     pub pressure_bar: f32,
+    /// Age of the oldest surviving surface, in Ga: how long impacts have
+    /// cratered it.
+    pub surface_age_ga: f32,
 }
 
 impl WorldParams {
