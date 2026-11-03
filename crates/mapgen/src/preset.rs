@@ -15,12 +15,12 @@
 //! axial_tilt = 25.2
 //!
 //! [climate]                          # added to every pixel before biome selection
-//! temperature = -0.35
+//! temperature = -15.0                # °C
 //! moisture = -0.6
 //! volcanic = 0.0
 //!
 //! [rules]                            # any BiomeRules field
-//! polar = 0.2
+//! polar = -5.0                       # °C
 //!
 //! [remap]                            # target = [biomes replaced by it]
 //! DustPlain = ["Plain", "Desert"]
@@ -97,7 +97,7 @@ pub struct Defaults {
 #[serde(default, deny_unknown_fields)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ClimateShift {
-    /// Added to temperature (`[0, 1]` scale).
+    /// Added to temperature, °C.
     pub temperature: f32,
     /// Added to moisture (`[-1, 1]` scale).
     pub moisture: f32,
@@ -225,6 +225,25 @@ impl fmt::Display for PresetError {
 impl std::error::Error for PresetError {}
 
 impl Preset {
+    /// Converts a preset stored by a world of format version 3 or older,
+    /// whose temperatures were on the former `[0, 1]` scale, to °C: its
+    /// thresholds through the same curve as the temperatures (so every
+    /// biome is kept), its climate shift by the curve's mean slope.
+    pub fn to_celsius(&mut self) {
+        use crate::climate::{DEGREES_PER_UNIT, celsius};
+        let r = &mut self.rules;
+        for t in [
+            &mut r.sea_ice_temperature,
+            &mut r.highland_snow_temperature,
+            &mut r.polar,
+            &mut r.boreal,
+            &mut r.temperate,
+        ] {
+            *t = celsius(*t);
+        }
+        self.climate.temperature *= DEGREES_PER_UNIT;
+    }
+
     /// Parses and validates a preset. `origin` names the source in errors.
     pub fn from_toml(text: &str, origin: &str) -> Result<Self, PresetError> {
         toml::from_str(text).map_err(|e| PresetError(format!("{origin}: {e}")))
@@ -317,6 +336,31 @@ mod tests {
         let back: Preset = serde_json::from_str(&json).unwrap();
         assert_eq!(back.remap(Biome::Ocean), Biome::MagmaSea);
         assert_eq!(back.remap(Biome::Mountain), Biome::Mountain);
+    }
+
+    #[test]
+    fn old_presets_convert_to_the_celsius_thresholds() {
+        // The former [0, 1] defaults land on today's °C defaults.
+        let mut old = Preset::load("terran").unwrap();
+        let r = &mut old.rules;
+        (r.sea_ice_temperature, r.highland_snow_temperature) = (0.07, 0.35);
+        (r.polar, r.boreal, r.temperate) = (0.10, 0.30, 0.55);
+        old.climate.temperature = -0.6;
+        old.to_celsius();
+        let new = crate::biome::BiomeRules::default();
+        for (a, b) in [
+            (old.rules.sea_ice_temperature, new.sea_ice_temperature),
+            (
+                old.rules.highland_snow_temperature,
+                new.highland_snow_temperature,
+            ),
+            (old.rules.polar, new.polar),
+            (old.rules.boreal, new.boreal),
+            (old.rules.temperate, new.temperate),
+        ] {
+            assert!((a - b).abs() < 0.1, "{a} vs {b}");
+        }
+        assert!((old.climate.temperature + 27.0).abs() < 1e-4);
     }
 
     #[test]

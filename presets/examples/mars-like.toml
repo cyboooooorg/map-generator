@@ -17,15 +17,15 @@ axial_tilt = 25.2
 volcanic = [0.0, 0.3]
 
 [climate]
-temperature = -0.08
+temperature = -3.6
 moisture = -0.7
 
 # Any BiomeRules field; the others keep their default. Ice only near the
 # poles (down to about 65 degrees): too dry for snow on lower mountains.
 [rules]
-polar = 0.04
-sea_ice_temperature = 0.04
-highland_snow_temperature = 0.04
+polar = -13.5
+sea_ice_temperature = -13.5
+highland_snow_temperature = -13.5
 snow_line = 0.6
 
 # target = [biomes replaced by it]

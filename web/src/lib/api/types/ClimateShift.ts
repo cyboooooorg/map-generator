@@ -5,7 +5,7 @@
  */
 export type ClimateShift = { 
 /**
- * Added to temperature (`[0, 1]` scale).
+ * Added to temperature, °C.
  */
 temperature: number, 
 /**

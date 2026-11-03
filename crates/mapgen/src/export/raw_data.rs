@@ -17,6 +17,7 @@
 //! `format_version` is newer than [`FORMAT_VERSION`], or whose layers do not
 //! have the size `world.json` announces.
 use crate::biome::biome_color;
+use crate::climate::{TEMPERATURE_RANGE, celsius};
 use crate::generation::{COAST_DISTANCE_CAP_KM, Sampler};
 use crate::preset::Preset;
 use crate::rivers::{RiverLine, RiversFile};
@@ -33,8 +34,13 @@ pub const RIVERS_FILE: &str = "rivers.json";
 
 /// Bumped whenever the layout of `raw_data/` changes incompatibly.
 /// Version 2 adds the volcanic zone, coast distance and highland offset
-/// layers, and the river polylines; version 3 the floodplain layer.
-pub const FORMAT_VERSION: u32 = 3;
+/// layers, and the river polylines; version 3 the floodplain layer;
+/// version 4 stores temperatures in °C instead of the former `[0, 1]`
+/// scale.
+pub const FORMAT_VERSION: u32 = 4;
+
+/// First format version whose temperatures are in °C.
+const CELSIUS_VERSION: u32 = 4;
 
 /// Content of `raw_data/world.json`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -135,7 +141,7 @@ struct ScalarLayer<'a> {
 /// Ranges the 16-bit layers are quantised over.
 const ELEVATION: (f32, f32) = (-1.0, 1.0);
 const MOISTURE: (f32, f32) = (-1.0, 1.0);
-const TEMPERATURE: (f32, f32) = (0.0, 1.0);
+const TEMPERATURE: (f32, f32) = TEMPERATURE_RANGE;
 /// `log10(1 + km²)`: drainage areas span 0 to millions of km².
 const FLOW_LOG10: (f32, f32) = (0.0, 8.0);
 const VOLCANIC_ZONE: (f32, f32) = (0.0, 1.0);
@@ -615,6 +621,22 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         Layer16::quantise(&distance, COAST_DISTANCE)
     });
     let floodplain = floodplain.unwrap_or_else(|| Layer16::zeros(n));
+    // Before version 4, temperatures were on a `[0, 1]` scale: convert the
+    // layer and the thresholds of the stored preset with the same curve,
+    // which keeps every biome.
+    let temperature = if meta.format_version < CELSIUS_VERSION {
+        let values: Vec<f32> = (0..n)
+            .into_par_iter()
+            .map(|i| celsius(temperature.get(i)))
+            .collect();
+        Layer16::quantise(&values, TEMPERATURE)
+    } else {
+        temperature
+    };
+    let mut params = params;
+    if meta.format_version < CELSIUS_VERSION {
+        params.planet.to_celsius();
+    }
 
     Ok(LoadedWorld {
         width: meta.width,

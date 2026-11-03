@@ -4,7 +4,7 @@
  * Every threshold used by biome selection, in one place.
  *
  * Elevations are relative to the shifted sea level (`elevation - sea_level`)
- * in `[-1, 1]`; temperatures in `[0, 1]`; moisture in `[-1, 1]`; volcanic
+ * in `[-1, 1]`; temperatures in °C (annual means); moisture in `[-1, 1]`; volcanic
  * zone in `[0, 1]`.
  *
  * In a planet preset, the `[rules]` table overrides any of these fields;

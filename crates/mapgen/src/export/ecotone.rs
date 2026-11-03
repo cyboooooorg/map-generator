@@ -18,8 +18,8 @@ use crate::preset::Preset;
 use crate::world::World;
 use std::sync::LazyLock;
 
-/// Standard deviation of the temperature offsets (`[0, 1]` scale).
-const SIGMA_T: f32 = 0.02;
+/// Standard deviation of the temperature offsets, °C.
+const SIGMA_T: f32 = 0.9;
 /// Standard deviation of the moisture offsets (`[-1, 1]` scale).
 const SIGMA_M: f32 = 0.05;
 /// Standard deviation of the highland line offsets (elevation units).
@@ -65,7 +65,7 @@ fn unit_offsets() -> [[f32; 4]; SAMPLES] {
 /// The input nudged by an offset in standard deviations.
 fn nudge(input: BiomeInput, o: [f32; 4]) -> BiomeInput {
     BiomeInput {
-        temperature: (input.temperature + o[0] * SIGMA_T).clamp(0.0, 1.0),
+        temperature: input.temperature + o[0] * SIGMA_T,
         moisture: (input.moisture + o[1] * SIGMA_M).clamp(-1.0, 1.0),
         highland_offset: input.highland_offset + o[2] * SIGMA_H,
         volcanic_zone: (input.volcanic_zone + o[3] * SIGMA_V).clamp(0.0, 1.0),
@@ -124,7 +124,7 @@ mod tests {
             // Temperate forest, far from the climate thresholds.
             elevation: 0.05,
             moisture: 0.6,
-            temperature: 0.42,
+            temperature: 6.0,
             volcanic_zone: 0.0,
             coast_distance_km: 1000.0,
             lake: false,

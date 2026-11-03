@@ -350,7 +350,7 @@ fn run_droplets(
 pub fn thaw(row_temperature: &[f32], shift: f32, polar: f32) -> Vec<f32> {
     row_temperature
         .iter()
-        .map(|t| smoothstep(polar - 0.05, polar + 0.1, t + shift))
+        .map(|t| smoothstep(polar - 2.25, polar + 4.5, t + shift))
         .collect()
 }
 

@@ -4,7 +4,7 @@ name = "frozen"
 description = "Ice world: perpetually frozen"
 
 [climate]
-temperature = -0.55
+temperature = -27.0
 moisture = 0.15
 volcanic = -0.30
 

@@ -4,7 +4,7 @@ name = "caustic"
 description = "Acid world: corrosive atmosphere, toxic wetlands"
 
 [climate]
-temperature = 0.10
+temperature = 4.5
 moisture = 0.55
 
 # target = [biomes replaced by it]; unlisted biomes stay as they are

@@ -451,7 +451,7 @@ impl DetailWorld {
                 let input = BiomeInput {
                     elevation: relief,
                     moisture: sample(&w.moisture),
-                    temperature: t.clamp(0.0, 1.0),
+                    temperature: t,
                     volcanic_zone: sample(&w.volcanic_zone),
                     coast_distance_km: sample(&w.coast_distance_km),
                     lake,

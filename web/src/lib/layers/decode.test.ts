@@ -19,6 +19,7 @@ function png8(values: number[]): ArrayBuffer {
 
 // Only the fields decodeLayers reads; the rest of the metadata is irrelevant here.
 const meta = {
+  format_version: 4,
   width,
   height,
   layers: {
@@ -51,6 +52,19 @@ describe('decodeLayers', () => {
     expect(layers.surface.length).toBe(8);
     expect(DataUtils.fromHalfFloat(layers.surface[0]!)).toBe(-1);
     expect(DataUtils.fromHalfFloat(layers.surface[7]!)).toBeCloseTo(3, 2);
+  });
+
+  it('converts the [0, 1] temperatures of format version 3 to °C', () => {
+    const v3 = { ...meta, format_version: 3 } as unknown as WorldMetadata;
+    const layers = decodeLayers(v3, {
+      elevation: png16([0, 0]),
+      moisture: png16([0, 0]),
+      temperature: png16([65535, 0]),
+      flow: png16([0, 0]),
+      biomes: png8([1, 1]),
+    });
+    expect(halfAt(layers.surface, 0, SURFACE.temperature)).toBeCloseTo(27, 1);
+    expect(halfAt(layers.surface, 1, SURFACE.temperature)).toBeCloseTo(-18, 1);
   });
 
   it('packs a linear flow layer as log10(1 + km²)', () => {

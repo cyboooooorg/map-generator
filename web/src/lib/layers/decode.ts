@@ -11,6 +11,7 @@
 // above the coastline. That is 11 bytes per pixel on the main thread
 // (19 with the layers of format version 2), instead of 4-byte floats per
 // layer next to the GPU copies.
+import { CELSIUS_VERSION, celsius } from '../climate';
 import { decode } from 'fast-png';
 import { DataUtils } from 'three';
 import type { ScalarLayerInfo } from '../api/types/ScalarLayerInfo';
@@ -33,7 +34,7 @@ export interface WorldLayers {
   biomes: Uint8Array;
   /**
    * The four scalar layers packed for the GPU as RGBA half floats:
-   * elevation, temperature in [0, 1], moisture in [-1, 1],
+   * elevation, temperature in °C, moisture in [-1, 1],
    * log10(1 + drainage area in km²).
    */
   surface: Uint16Array;
@@ -152,7 +153,9 @@ export function decodeLayers(meta: WorldMetadata, files: LayerFiles): WorldLayer
   const elevation = decode16(files.elevation, width, height);
   const surface = new Uint16Array(width * height * 4);
   packChannel(surface, SURFACE.elevation, elevation, layers.elevation);
-  packChannel(surface, SURFACE.temperature, decode16(files.temperature, width, height), layers.temperature);
+  // Format version 3 and older stored temperatures on a [0, 1] scale.
+  const toCelsius = meta.format_version < CELSIUS_VERSION ? celsius : undefined;
+  packChannel(surface, SURFACE.temperature, decode16(files.temperature, width, height), layers.temperature, toCelsius);
   packChannel(surface, SURFACE.moisture, decode16(files.moisture, width, height), layers.moisture);
   packChannel(surface, SURFACE.logFlow, decode16(files.flow, width, height), layers.flow, logFlow(layers.flow));
   return {
