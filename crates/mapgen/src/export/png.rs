@@ -4,11 +4,12 @@ use font8x8::UnicodeFonts;
 use image::{ImageResult, Rgb, RgbImage};
 
 /// Writes the biome map: `surface` (the detailed render, see
-/// [`super::render_pixels`]) with dotted latitude reference lines on top.
-pub fn export_png(world: &World, surface: &[[u8; 3]], path: &str) -> ImageResult<()> {
+/// [`super::render_pixels`]) with dotted latitude reference lines on top,
+/// drawn into it.
+pub fn export_png(world: &World, surface: Vec<[u8; 3]>, path: &str) -> ImageResult<()> {
     let (w, h) = (world.width, world.height);
-    let mut img = RgbImage::from_raw(w, h, surface.to_vec().into_flattened())
-        .expect("one pixel per map pixel");
+    let mut img =
+        RgbImage::from_raw(w, h, surface.into_flattened()).expect("one pixel per map pixel");
 
     for (latitude, color) in reference_lines(world.params.axial_tilt_deg) {
         let row = latitude_row(h, latitude).round() as u32;
@@ -89,12 +90,13 @@ fn outline_rect(img: &mut RgbImage, x: u32, y: u32, w: u32, h: u32, color: [u8; 
 /// Generate a legend PNG listing every biome that actually appears on the map.
 pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
     // ── Collect biomes present on this map, in canonical order ────────────────
-    let biomes: Vec<Biome> = world
-        .biomes
-        .iter()
-        .copied()
-        .collect::<std::collections::BTreeSet<_>>()
+    let mut present = [false; Biome::ALL.len()];
+    for b in &world.biomes {
+        present[b.id() as usize] = true;
+    }
+    let biomes: Vec<Biome> = Biome::ALL
         .into_iter()
+        .filter(|b| present[b.id() as usize])
         .collect();
 
     // ── Planet metadata lines (key, value) ───────────────────────────────────

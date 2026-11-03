@@ -58,11 +58,13 @@ use tower_http::set_header::SetResponseHeaderLayer;
 /// Largest map side the server accepts.
 pub const MAX_SIZE: u32 = 8192;
 /// Default largest map the server accepts, in pixels (4096 × 2048). A
-/// generation peaks at about 140 bytes per pixel (about 1.1 GB here): keep the
-/// limit under the memory the server can use, or it gets killed mid-job.
+/// generation without noise maps, as the server runs it, peaks at about 70
+/// bytes per pixel (measured in Docker: 545 MiB here, 2.0 GiB at 8192 ×
+/// 4096): keep the limit under the memory the server can use, or it gets
+/// killed mid-job.
 pub const DEFAULT_MAX_PIXELS: u64 = 4096 * 2048;
 /// Peak generation memory per pixel, for the error message.
-const BYTES_PER_PIXEL: u64 = 140;
+const BYTES_PER_PIXEL: u64 = 70;
 /// Finished jobs kept for `GET /api/jobs`; older ones are forgotten.
 const FINISHED_JOBS_KEPT: usize = 20;
 
@@ -530,28 +532,15 @@ async fn create_world(
                 let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
                 progress.send_replace(JobStatus::Running { stage, step, steps });
             };
-            // The web app does not show the diagnostic maps: skip them, which also
-            // saves about twenty map-sized layers of memory.
-            let generated = generate_with_progress(
-                &params,
-                GenerateOptions {
-                    debug_layers: false,
-                },
-                report,
-            );
+            // The web app does not show the diagnostic maps: skip them (no
+            // debug sink), and the time they take.
+            let generated = generate_with_progress(&params, GenerateOptions::default(), report);
             report(Stage::Export);
             // Written into a temporary directory, renamed into place once
             // complete: a cancelled, failed or crashed export leaves nothing.
             let id = world_dir_name(&generated.world.params);
             let temp = worlds::TempDir::create(&worlds_dir, &id)?;
-            export_world(
-                &generated,
-                temp.path(),
-                ExportOptions {
-                    raw_data: true,
-                    noise_maps: false,
-                },
-            )?;
+            export_world(generated, temp.path(), ExportOptions { raw_data: true })?;
             // The export cannot be interrupted: a cancel that arrived
             // meanwhile drops it here.
             if thread_cancel.is_requested() {

@@ -7,7 +7,7 @@ pub mod raw_data;
 pub mod svg;
 pub mod variation;
 
-pub use noise_maps::export_noise_maps;
+pub use noise_maps::NoiseMapWriter;
 pub use png::{export_legend_png, export_png};
 pub use raw_data::export_raw_data;
 pub use svg::export_svg;
@@ -24,21 +24,17 @@ use std::sync::LazyLock;
 use variation::SurfaceVariation;
 
 /// Which optional outputs [`export_world`] writes. The maps (`world.png`,
-/// `world.svg`, `legend.png`) are always written.
+/// `world.svg`, `legend.png`) are always written. The diagnostic maps of
+/// `noise_maps/` are written during the generation, by a [`NoiseMapWriter`].
 #[derive(Clone, Copy, Debug)]
 pub struct ExportOptions {
     /// `raw_data/`: world.json and the layer PNGs.
     pub raw_data: bool,
-    /// `noise_maps/`: one diagnostic PNG per intermediate layer.
-    pub noise_maps: bool,
 }
 
 impl Default for ExportOptions {
     fn default() -> Self {
-        Self {
-            raw_data: true,
-            noise_maps: true,
-        }
+        Self { raw_data: true }
     }
 }
 
@@ -51,22 +47,23 @@ pub fn world_dir_name(params: &WorldParams) -> String {
 /// The exports are independent and dominated by PNG encoding, so they run in
 /// parallel.
 pub fn export_world(
-    generated: &Generated,
+    generated: Generated,
     dir: &Path,
     options: ExportOptions,
 ) -> Result<(), String> {
-    let world = &generated.world;
+    let Generated {
+        world,
+        river_coverage,
+    } = generated;
+    let world = &world;
     let path = |sub: &str| dir.join(sub).to_string_lossy().into_owned();
     let io = |e: std::io::Error| e.to_string();
     std::fs::create_dir_all(dir).map_err(io)?;
     if options.raw_data {
         std::fs::create_dir_all(dir.join("raw_data")).map_err(io)?;
     }
-    if options.noise_maps {
-        std::fs::create_dir_all(dir.join("noise_maps")).map_err(io)?;
-    }
 
-    let layers = MapLayers::new(world);
+    let layers = MapLayers::with_coverage(world, river_coverage);
     let layers = &layers;
     // The detailed render, shared by world.png (which adds the reference
     // lines) and raw_data/surface.png (without them, for the viewer).
@@ -75,9 +72,10 @@ pub fn export_world(
     type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
     let mut exports: Vec<Export> = vec![
         Box::new(|| {
+            // raw_data/surface.png needs the render without contours.
             let mut map = surface.clone();
             draw_contours(world, layers, &mut map);
-            export_png(world, &map, &path("world.png")).map_err(|e| e.to_string())
+            export_png(world, map, &path("world.png")).map_err(|e| e.to_string())
         }),
         Box::new(|| export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())),
         Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
@@ -85,17 +83,6 @@ pub fn export_world(
     if options.raw_data {
         exports.push(Box::new(|| {
             export_raw_data(world, &dir.join("raw_data"), Some(surface)).map_err(|e| e.to_string())
-        }));
-    }
-    if options.noise_maps {
-        exports.push(Box::new(|| {
-            export_noise_maps(
-                &generated.debug,
-                world.width,
-                world.height,
-                &path("noise_maps"),
-            )
-            .map_err(|e| e.to_string())
         }));
     }
     exports.par_iter().try_for_each(|export| export())
@@ -370,6 +357,15 @@ impl MapLayers {
             || water_depths(world),
         );
         Self { coverage, depths }
+    }
+
+    /// Like [`MapLayers::new`], reusing the river coverage the generation
+    /// computed ([`Generated::river_coverage`]).
+    pub fn with_coverage(world: &World, coverage: Vec<f32>) -> Self {
+        Self {
+            coverage,
+            depths: water_depths(world),
+        }
     }
 }
 

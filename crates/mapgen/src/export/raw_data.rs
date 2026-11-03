@@ -266,9 +266,17 @@ pub fn export_raw_data(
 
     let surface = match surface {
         Some(pixels) => {
-            image::RgbImage::from_raw(w, h, pixels.to_vec().into_flattened())
-                .ok_or("surface size does not match the world size")?
-                .save(dir.join("surface.png"))?;
+            if pixels.len() != (w * h) as usize {
+                return Err("surface size does not match the world size".into());
+            }
+            // Saved from the borrowed pixels: no copy of the render.
+            image::save_buffer(
+                dir.join("surface.png"),
+                pixels.as_flattened(),
+                w,
+                h,
+                image::ExtendedColorType::Rgb8,
+            )?;
             Some(ImageLayerInfo {
                 file: "surface.png".into(),
                 encoding: "rgb8".into(),

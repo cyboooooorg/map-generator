@@ -151,6 +151,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Volcanoes are rare on non-volcanic presets: the volcanic zone seldom exceeds its thresholds | todo   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents  | done   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)   | todo   |
+| Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed       | done   |
 
 ## 5. Terrain realism, second round
 

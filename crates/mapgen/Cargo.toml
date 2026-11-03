@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+crc32fast.workspace = true
+fdeflate.workspace = true
 font8x8.workspace = true
 image.workspace = true
 noise.workspace = true

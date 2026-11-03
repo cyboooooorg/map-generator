@@ -373,18 +373,35 @@ pub enum Ramp {
     Unsigned,
 }
 
-/// An intermediate layer kept for the diagnostic maps.
+/// An intermediate layer for the diagnostic maps, or a band of its rows.
 pub struct DebugLayer {
     pub name: &'static str,
     pub ramp: Ramp,
+    /// Row-major values: a whole layer, or the next rows of one.
     pub values: Vec<f32>,
 }
 
-/// The output of [`generate`]: the world and the intermediate layers that
-/// produced it.
+/// Receives the diagnostic layers as the generation computes them, so they
+/// can be written and freed one by one instead of all being kept until the
+/// export (they would cost about twenty map-sized layers of memory).
+///
+/// Most layers come whole, from the generation thread. The noise layers
+/// are sampled band by band: they come as successive [`DebugLayer`]s of the
+/// same name holding the next rows, top to bottom, one band of every noise
+/// layer at a time from parallel threads. A layer is complete once it has
+/// one value per pixel. [`NoiseMapWriter`](crate::export::noise_maps::NoiseMapWriter)
+/// writes them as PNGs.
+pub trait DebugSink: Sync {
+    /// Takes a whole layer or the next band of one.
+    fn layer(&self, layer: DebugLayer);
+}
+
+/// The output of [`generate`]: the world, and what its export reuses.
 pub struct Generated {
     pub world: World,
-    pub debug: Vec<DebugLayer>,
+    /// Anti-aliased river coverage of the map (see [`rivers::coverage`]),
+    /// computed for the biomes and handed over to the export.
+    pub river_coverage: Vec<f32>,
 }
 
 /// A noise layer exported as a diagnostic map: name, colour ramp, extractor.
@@ -446,18 +463,13 @@ impl Stage {
     ];
 }
 
-/// What [`generate_with_progress`] keeps besides the world.
-#[derive(Clone, Copy, Debug)]
-pub struct GenerateOptions {
-    /// Keep every intermediate layer for the diagnostic maps. They cost about
-    /// twenty map-sized layers of memory: skip them when not exported.
-    pub debug_layers: bool,
-}
-
-impl Default for GenerateOptions {
-    fn default() -> Self {
-        Self { debug_layers: true }
-    }
+/// What [`generate_with_progress`] produces besides the world.
+#[derive(Clone, Copy, Default)]
+pub struct GenerateOptions<'a> {
+    /// Receives every intermediate layer for the diagnostic maps as soon as
+    /// it is computed. None (the default) skips them, and the work and
+    /// memory they need.
+    pub debug: Option<&'a dyn DebugSink>,
 }
 
 /// The noise fields later passes need, one value per pixel (much smaller
@@ -478,15 +490,11 @@ struct NoiseFields {
 const BAND_ROWS: usize = 64;
 
 impl NoiseFields {
-    /// Samples every pixel, band by band, writing each band's fields (and,
-    /// when `debug` is given, the noise debug layers) straight into their
-    /// layers: every sample is never held at once.
-    fn sample(
-        sampler: &Sampler,
-        width: u32,
-        height: u32,
-        debug: Option<&mut Vec<DebugLayer>>,
-    ) -> Self {
+    /// Samples every pixel, band by band, writing each band's fields
+    /// straight into their layers (and, when `debug` is given, handing it
+    /// each band of the noise debug layers): every sample is never held at
+    /// once.
+    fn sample(sampler: &Sampler, width: u32, height: u32, debug: Option<&dyn DebugSink>) -> Self {
         let n = (width * height) as usize;
         let w = width as usize;
         let mut f = Self {
@@ -497,17 +505,6 @@ impl NoiseFields {
             variability_t: vec![0.0; n],
             variability_m: vec![0.0; n],
             highland_offset: vec![0.0; n],
-        };
-        let mut layers: Vec<DebugLayer> = match debug {
-            Some(_) => NOISE_LAYERS
-                .iter()
-                .map(|&(name, ramp, _)| DebugLayer {
-                    name,
-                    ramp,
-                    values: vec![0.0; n],
-                })
-                .collect(),
-            None => Vec::new(),
         };
         let mut band: Vec<Sample> = Vec::with_capacity(BAND_ROWS * w);
         for y0 in (0..height as usize).step_by(BAND_ROWS) {
@@ -532,12 +529,17 @@ impl NoiseFields {
             fill(&mut f.variability_t, |s| s.variability_t);
             fill(&mut f.variability_m, |s| s.variability_m);
             fill(&mut f.highland_offset, Sample::highland_offset);
-            for (layer, &(_, _, value)) in layers.iter_mut().zip(NOISE_LAYERS) {
-                fill(&mut layer.values, value);
+            if let Some(sink) = debug {
+                // One task per layer: each one is coloured and encoded as
+                // its band arrives.
+                NOISE_LAYERS.par_iter().for_each(|&(name, ramp, value)| {
+                    sink.layer(DebugLayer {
+                        name,
+                        ramp,
+                        values: band.iter().map(value).collect(),
+                    })
+                });
             }
-        }
-        if let Some(debug) = debug {
-            debug.extend(layers);
         }
         f
     }
@@ -597,7 +599,7 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     coarse.sea_level
 }
 
-/// Generates a world, running every pass in order, with every debug layer.
+/// Generates a world, running every pass in order, without debug layers.
 pub fn generate(params: &WorldParams) -> Generated {
     generate_with_progress(params, GenerateOptions::default(), |_| {})
 }
@@ -610,15 +612,24 @@ pub fn generate_with_progress(
 ) -> Generated {
     let (width, height) = (params.width, params.height);
     let planet = &params.planet;
-    let keep = options.debug_layers;
+    let sink = options.debug;
+    // Hands a debug layer to the sink, computing it only when there is one.
+    let debug = |name: &'static str, ramp: Ramp, values: &dyn Fn() -> Vec<f32>| {
+        if let Some(sink) = sink {
+            sink.layer(DebugLayer {
+                name,
+                ramp,
+                values: values(),
+            });
+        }
+    };
 
     // ── Pass 1: noise ─────────────────────────────────────────────────────────
     progress(Stage::Noise);
     // Every pixel is independent: sample rows in parallel. The result stays
     // deterministic because each pixel only depends on its coordinates.
     let sampler = Sampler::new(params);
-    let mut debug = Vec::new();
-    let fields = NoiseFields::sample(&sampler, width, height, keep.then_some(&mut debug));
+    let fields = NoiseFields::sample(&sampler, width, height, sink);
 
     let rules = &planet.rules;
     let grid = params.grid();
@@ -641,86 +652,76 @@ pub fn generate_with_progress(
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
     let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
-    let erosion = erode(
+    // The height change is only kept for its debug map.
+    let mut erosion = sink.map(|_| vec![0.0; n]);
+    erode(
         &mut elevation,
-        width,
-        height,
+        (width, height),
         params.sea_level + rules.waterline,
         params.erosion,
         params.seed,
         &thaw,
+        erosion.as_deref_mut(),
     );
-    if keep {
-        debug.push(DebugLayer {
+    if let (Some(sink), Some(mut values)) = (sink, erosion) {
+        // ×10: height changes are small next to the [-1, 1] elevation range.
+        values
+            .par_iter_mut()
+            .for_each(|d| *d = (*d * 10.0).clamp(-1.0, 1.0));
+        sink.layer(DebugLayer {
             name: "erosion",
             ramp: Ramp::Signed,
-            // ×10: height changes are small next to the [-1, 1] elevation range.
-            values: erosion
-                .iter()
-                .map(|d| (d * 10.0).clamp(-1.0, 1.0))
-                .collect(),
-        });
-    }
-    drop(erosion);
-    if keep {
-        debug.push(DebugLayer {
-            name: "elevation",
-            ramp: Ramp::Signed,
-            values: elevation.clone(),
+            values,
         });
     }
     // Elevation relative to the shifted sea level: what biome selection sees.
-    let mut relief: Vec<f32> = elevation
-        .iter()
-        .map(|e| (e - params.sea_level).clamp(-1.0, 1.0))
-        .collect();
+    // Computed where needed rather than kept as a layer.
+    let relief = |e: f32| (e - params.sea_level).clamp(-1.0, 1.0);
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
-    let raw_temperature: Vec<f32> = relief
+    let raw_temperature: Vec<f32> = elevation
         .par_iter()
         .enumerate()
-        .map(|(i, &r)| {
-            let above_water = r - rules.waterline;
+        .map(|(i, &e)| {
+            let above_water = relief(e) - rules.waterline;
             temperature(row_temperature[i / width as usize], above_water)
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
         .collect();
     drop(anomaly);
-    if keep {
-        debug.push(DebugLayer {
-            name: "temperature",
-            ramp: Ramp::Unsigned,
-            // −30 °C to 40 °C over the ramp.
-            values: raw_temperature
-                .iter()
-                .map(|t| ((t + 30.0) / 70.0).clamp(0.0, 1.0))
-                .collect(),
-        });
-    }
+    debug("temperature", Ramp::Unsigned, &|| {
+        // −30 °C to 40 °C over the ramp.
+        raw_temperature
+            .par_iter()
+            .map(|t| ((t + 30.0) / 70.0).clamp(0.0, 1.0))
+            .collect()
+    });
 
     // ── Pass 4: distance to the coast ─────────────────────────────────────────
     progress(Stage::Coast);
     // Shores are the land pixels close to open water.
-    let open_water: Vec<bool> = relief.par_iter().map(|&r| r < rules.waterline).collect();
+    let open_water: Vec<bool> = elevation
+        .par_iter()
+        .map(|&e| relief(e) < rules.waterline)
+        .collect();
     let coast_distance_km = grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM);
     drop(open_water);
-    if keep {
-        debug.push(DebugLayer {
-            name: "coast_distance",
-            ramp: Ramp::Unsigned,
-            values: coast_distance_km
-                .iter()
-                .map(|d| d / COAST_DISTANCE_CAP_KM)
-                .collect(),
-        });
-    }
+    debug("coast_distance", Ramp::Unsigned, &|| {
+        coast_distance_km
+            .par_iter()
+            .map(|d| d / COAST_DISTANCE_CAP_KM)
+            .collect()
+    });
 
     // ── Pass 5: moisture ──────────────────────────────────────────────────────
     progress(Stage::Moisture);
     // Winds carry ocean evaporation inland; it rains out with distance and on
     // windward slopes, leaving rain shadows behind mountains.
-    let height_above_water: Vec<f32> = relief.iter().map(|r| r - rules.waterline).collect();
+    let height_above_water: Vec<f32> = elevation
+        .par_iter()
+        .map(|&e| relief(e) - rules.waterline)
+        .collect();
     let (raw_moisture, precipitation) = moisture(&MoistureInput {
         grid,
         height_above_water: &height_above_water,
@@ -740,29 +741,19 @@ pub fn generate_with_progress(
         precipitation: &precipitation,
         seed: params.seed,
     });
-    if keep {
-        debug.push(DebugLayer {
+    if let Some(sink) = sink {
+        sink.layer(DebugLayer {
             name: "precipitation",
             ramp: Ramp::Signed,
             values: precipitation,
         });
-        if !clouds.is_empty() {
-            debug.push(DebugLayer {
-                name: "clouds",
-                ramp: Ramp::Unsigned,
-                values: clouds.clone(),
-            });
-        }
     } else {
         drop(precipitation);
     }
-    if keep {
-        debug.push(DebugLayer {
-            name: "moisture",
-            ramp: Ramp::Signed,
-            values: raw_moisture.clone(),
-        });
+    if !clouds.is_empty() {
+        debug("clouds", Ramp::Unsigned, &|| clouds.clone());
     }
+    debug("moisture", Ramp::Signed, &|| raw_moisture.clone());
 
     // Planet-type global offsets shift the whole climate before rivers and
     // biomes. Store the climate exactly as biome selection sees it, so the
@@ -798,20 +789,17 @@ pub fn generate_with_progress(
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
-    let water = hydrology(&grid, &height_above_water, &moisture, params.seed);
+    let mut water = hydrology(&grid, &height_above_water, &moisture, params.seed);
     // Planets without anything liquid to flow (rivers remapped to dry
     // ground) have no rivers to draw, carve or end in deltas: only the
     // drainage flow is kept. Lava rivers of volcanic worlds still flow.
     let flowing = planet.remap(Biome::River);
-    let mut river_lines = if flowing.is_water() || flowing.is_lava() {
-        rivers::shape(
-            &rivers::trace(&grid, &water),
-            &grid,
-            &water.filled,
-            params.seed,
-        )
-    } else {
-        Vec::new()
+    let traced = (flowing.is_water() || flowing.is_lava()).then(|| rivers::trace(&grid, &water));
+    // The receivers and river pixels only serve the tracing.
+    water.release_routing();
+    let mut river_lines = match traced {
+        Some(traced) => rivers::shape(&traced, &grid, &water.filled, params.seed),
+        None => Vec::new(),
     };
     // Deltas and estuaries at the mouths of the large rivers.
     let deltas = delta::outlets(&mut river_lines, &grid, &height_above_water, params.seed);
@@ -819,59 +807,47 @@ pub fn generate_with_progress(
     // Valleys and floodplains along the rivers. Carving never creates water,
     // so the coast distance and the drainage stay valid.
     let waterline = params.sea_level + rules.waterline;
-    let mut above: Vec<f32> = elevation.iter().map(|e| e - waterline).collect();
+    let mut above: Vec<f32> = elevation.par_iter().map(|e| e - waterline).collect();
     let mut floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
     // Only the flow and the lakes are needed from here on.
     let (flow_km2, lake) = water.into_flow_and_lakes();
     let delta_plain = delta::plains(&deltas, &river_lines, &grid, &mut above, &mut moisture);
-    for (f, d) in floodplain.iter_mut().zip(delta_plain) {
-        *f = f.max(d);
-    }
-    for ((e, a), r) in elevation.iter_mut().zip(&above).zip(relief.iter_mut()) {
-        *e = a + waterline;
-        *r = (*e - params.sea_level).clamp(-1.0, 1.0);
-    }
-    drop(above);
+    floodplain
+        .par_iter_mut()
+        .zip(delta_plain)
+        .for_each(|(f, d)| *f = f.max(d));
+    elevation
+        .par_iter_mut()
+        .zip(above)
+        .for_each(|(e, a)| *e = a + waterline);
     // Rivers water their floodplain: green strips across dry land.
-    for (m, f) in moisture.iter_mut().zip(&floodplain) {
-        *m = (*m + RIPARIAN_MOISTURE * f).clamp(-1.0, 1.0);
-    }
-    if keep {
-        if let Some(layer) = debug.iter_mut().find(|l| l.name == "elevation") {
-            layer.values.clone_from(&elevation);
-        }
-        debug.push(DebugLayer {
-            name: "floodplain",
-            ramp: Ramp::Unsigned,
-            values: floodplain.clone(),
-        });
-    }
+    moisture
+        .par_iter_mut()
+        .zip(&floodplain)
+        .for_each(|(m, f)| *m = (*m + RIPARIAN_MOISTURE * f).clamp(-1.0, 1.0));
+    debug("elevation", Ramp::Signed, &|| elevation.clone());
+    debug("floodplain", Ramp::Unsigned, &|| floodplain.clone());
     // The biome layer marks rivers where they are drawn, so it matches the map.
     let river_coverage =
         rivers::coverage(&river_lines, width, height, params.circumference_km as f64);
-    if keep {
-        debug.push(DebugLayer {
-            name: "flow",
-            ramp: Ramp::Unsigned,
-            values: flow_km2
-                .iter()
-                .map(|f| (f + 1.0).log10() / FLOW_LOG_MAX)
-                .collect(),
-        });
-    }
+    debug("flow", Ramp::Unsigned, &|| {
+        flow_km2
+            .par_iter()
+            .map(|f| (f + 1.0).log10() / FLOW_LOG_MAX)
+            .collect()
+    });
 
     // ── Pass 7: biomes ────────────────────────────────────────────────────────
     progress(Stage::Biomes);
-    let volcanic_zone: Vec<f32> = raw_volcanic_zone
-        .iter()
-        .map(|v| (v + dvz).clamp(0.0, 1.0))
-        .collect();
-    drop(raw_volcanic_zone);
+    let mut volcanic_zone = raw_volcanic_zone;
+    volcanic_zone
+        .par_iter_mut()
+        .for_each(|v| *v = (*v + dvz).clamp(0.0, 1.0));
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
             let input = BiomeInput {
-                elevation: relief[i],
+                elevation: relief(elevation[i]),
                 moisture: moisture[i],
                 temperature: temperature[i],
                 volcanic_zone: volcanic_zone[i],
@@ -901,7 +877,7 @@ pub fn generate_with_progress(
             rivers: river_lines,
             clouds,
         },
-        debug,
+        river_coverage,
     }
 }
 
@@ -1000,22 +976,38 @@ mod tests {
         assert_eq!(seen.into_inner().unwrap(), Stage::ALL[..7]);
     }
 
+    /// A sink that keeps every debug layer, joining the bands of each one.
+    #[derive(Default)]
+    struct Collect(std::sync::Mutex<Vec<DebugLayer>>);
+
+    impl DebugSink for Collect {
+        fn layer(&self, piece: DebugLayer) {
+            let mut layers = self.0.lock().unwrap();
+            match layers.iter_mut().find(|l| l.name == piece.name) {
+                Some(layer) => layer.values.extend(piece.values),
+                None => layers.push(piece),
+            }
+        }
+    }
+
+    /// Generates with every debug layer, collected.
+    fn generate_with_debug(params: &WorldParams) -> (Generated, Vec<DebugLayer>) {
+        let sink = Collect::default();
+        let g = generate_with_progress(params, GenerateOptions { debug: Some(&sink) }, |_| {});
+        (g, sink.0.into_inner().unwrap())
+    }
+
     #[test]
     fn skipping_debug_layers_gives_the_same_world() {
         let p = params(13, "volcanic");
-        let full = generate(&p);
-        let lean = generate_with_progress(
-            &p,
-            GenerateOptions {
-                debug_layers: false,
-            },
-            |_| {},
-        );
-        assert!(lean.debug.is_empty());
+        let (full, debug) = generate_with_debug(&p);
+        let lean = generate(&p);
+        assert_eq!(debug.len(), NOISE_LAYERS.len() + 9);
         assert_eq!(full.world.biomes, lean.world.biomes);
         assert_eq!(full.world.elevation, lean.world.elevation);
         assert_eq!(full.world.moisture, lean.world.moisture);
         assert_eq!(full.world.rivers.len(), lean.world.rivers.len());
+        assert_eq!(full.river_coverage, lean.river_coverage);
     }
 
     #[test]
@@ -1029,8 +1021,24 @@ mod tests {
 
     #[test]
     fn debug_layers_match_the_world() {
-        let g = generate(&params(11, "terran"));
-        let elevation = g.debug.iter().find(|l| l.name == "elevation").unwrap();
+        let p = params(11, "terran");
+        let (g, debug) = generate_with_debug(&p);
+        let n = p.pixel_count();
+        assert!(debug.iter().all(|l| l.values.len() == n));
+        let elevation = debug.iter().find(|l| l.name == "elevation").unwrap();
         assert_eq!(elevation.values, g.world.elevation);
+    }
+
+    #[test]
+    fn handed_over_river_coverage_matches_the_rivers() {
+        let g = generate(&params(3, "terran"));
+        let w = &g.world;
+        let coverage = rivers::coverage(
+            &w.rivers,
+            w.width,
+            w.height,
+            w.params.circumference_km as f64,
+        );
+        assert_eq!(g.river_coverage, coverage);
     }
 }
