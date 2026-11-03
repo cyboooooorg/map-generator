@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { biomeName } from '../lib/i18n/names';
   import { t } from '../lib/i18n/index.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
   import type { LinkedDisplay } from '../lib/display';
@@ -133,7 +134,7 @@
     <p class="readout" aria-live="off">
       {[
         formatLonLat(hover),
-        hoverSample?.biome?.name,
+        hoverSample?.biome ? biomeName(hoverSample.biome) : null,
         hoverSample ? `${hoverSample.relief >= 0 ? '+' : ''}${formatNumber(hoverSample.relief, 3)}` : null,
       ]
         .filter(Boolean)

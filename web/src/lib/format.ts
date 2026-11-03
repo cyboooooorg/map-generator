@@ -179,11 +179,14 @@ export function saveBlob(blob: Blob, name: string): void {
 export function formatAtmosphere(meta: WorldMetadata): string {
   const pressure = meta.pressure_bar ?? 1;
   if (pressure === 0) {
-    return 'none';
+    return t.worldInfo.airless;
   }
-  const bar = pressure < 0.1 ? pressure.toPrecision(2) : pressure.toFixed(2);
+  const digits = pressure < 0.1 ? Math.max(0, 1 - Math.floor(Math.log10(pressure))) : 2;
+  const bar = withUnit(formatNumber(pressure, digits), 'bar');
   const clouds = meta.preset.atmosphere?.clouds ?? 'water';
-  return clouds === 'none' ? `${bar} bar, no clouds` : `${bar} bar, ${clouds} clouds`;
+  return clouds === 'none'
+    ? t.worldInfo.pressureNoClouds({ pressure: bar })
+    : t.worldInfo.pressureClouds({ pressure: bar, clouds: t.clouds[clouds] });
 }
 
 /**
