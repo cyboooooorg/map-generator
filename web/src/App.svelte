@@ -2,6 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobList from './components/JobList.svelte';
+  import LanguageSelect from './components/LanguageSelect.svelte';
   import Thumbnail from './components/Thumbnail.svelte';
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
@@ -14,6 +15,7 @@
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import type { WorldSummary } from './lib/api/types/WorldSummary';
   import { requestFromWorld, rerollRequest } from './lib/format';
+  import { getLocale } from './lib/i18n/index.svelte';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { decodeView, decodeWorlds, linkHash, type ViewLink } from './lib/link';
   import { loadSetting, saveSetting } from './lib/settings';
@@ -155,6 +157,12 @@
       starting = false;
     }
   }
+
+  // The page's language follows the interface's, for screen readers,
+  // hyphenation and the browser's own controls.
+  $effect(() => {
+    document.documentElement.lang = getLocale();
+  });
 
   onMount(() => {
     void start();
@@ -353,6 +361,7 @@
           >Viewer</button
         >
       </div>
+      <LanguageSelect />
       <button class="primary" onclick={() => openForm()} disabled={!spec}>New world</button>
     </header>
     {#if fatal}

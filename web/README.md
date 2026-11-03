@@ -38,27 +38,27 @@ In the viewer:
 
 Keyboard shortcuts, when no form field has the focus:
 
-| Key       | Action                                              |
-| --------- | --------------------------------------------------- |
-| `G` / `M` | globe / flat map                                    |
-| `1` – `8` | layer                                               |
-| `+` / `-` | more / less relief (steps of 0.1)                   |
-| `[` / `]` | previous / next world, in the order the list shows  |
-| `R`       | reset the view                                      |
-| `H`       | hexes                                               |
-| `L`       | sunlight                                            |
-| `S`       | play / pause the seasons (turns sunlight on)        |
-| `A`       | atmosphere                                          |
-| `C`       | clouds                                              |
-| `W`       | cloud drift (turns clouds on)                       |
-| `N`       | grid                                                |
-| `T`       | tropics and polar circles                           |
-| `K`       | depth contours                                      |
-| `J`       | elevation contours                                  |
-| `D`       | measure distances                                   |
-| `P`       | screenshot                                          |
-| `Esc`     | close the help or the point panel, stop measuring   |
-| `?`       | shortcut help                                       |
+| Key       | Action                                             |
+| --------- | -------------------------------------------------- |
+| `G` / `M` | globe / flat map                                   |
+| `1` – `8` | layer                                              |
+| `+` / `-` | more / less relief (steps of 0.1)                  |
+| `[` / `]` | previous / next world, in the order the list shows |
+| `R`       | reset the view                                     |
+| `H`       | hexes                                              |
+| `L`       | sunlight                                           |
+| `S`       | play / pause the seasons (turns sunlight on)       |
+| `A`       | atmosphere                                         |
+| `C`       | clouds                                             |
+| `W`       | cloud drift (turns clouds on)                      |
+| `N`       | grid                                               |
+| `T`       | tropics and polar circles                          |
+| `K`       | depth contours                                     |
+| `J`       | elevation contours                                 |
+| `D`       | measure distances                                  |
+| `P`       | screenshot                                         |
+| `Esc`     | close the help or the point panel, stop measuring  |
+| `?`       | shortcut help                                      |
 
 The help takes the keyboard focus when it opens and gives it back when it closes (`Esc` or `×`). The brackets and `+` / `-` also work when the layout types them with Alt (Option), as French and German Mac keyboards do.
 
@@ -109,7 +109,8 @@ There is nothing to configure here: the server address is fixed in `vite.config.
 | `src/lib/progress.ts`                     | Download progress read from streamed responses (bytes received out of `Content-Length`) and the text of the loading bars                                                                                                                                                                                           |
 | `src/lib/jobs.svelte.ts`                  | Generation jobs followed by the page: progress, cancellation, time estimates, jobs picked up after a reload                                                                                                                                                                                                        |
 | `src/lib/sample.ts`, `hex.ts`             | Values of a world, a river and a hex at one point                                                                                                                                                                                                                                                                  |
-| `src/lib/format.ts`, `download.ts`        | Number and date formatting, the request and command that reproduce a world, file downloads and the raw data ZIP                                                                                                                                                                                                    |
+| `src/lib/format.ts`, `download.ts`        | Number, unit and date formatting in the active locale, the request and command that reproduce a world, file downloads and the raw data ZIP                                                                                                                                                                         |
+| `src/lib/i18n/`                           | Interface languages: the English catalog (`en.ts`, the source), the active locale (`index.svelte.ts`, read through `t`) and its choice (`locale.ts`: saved choice, else the browser's languages)                                                                                                                   |
 | `src/lib/settings.ts`                     | Preferences in `localStorage`, guarded so the app works without storage                                                                                                                                                                                                                                            |
 | `src/lib/link.ts`                         | Links to a view: the worlds, the camera, the layer, the relief and the sun in the address fragment, read defensively                                                                                                                                                                                               |
 | `src/lib/formMemory.ts`                   | The generation form remembered from its last submission                                                                                                                                                                                                                                                            |
