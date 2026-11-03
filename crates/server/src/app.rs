@@ -119,8 +119,8 @@ pub struct AppState {
 
 /// Tiles rendered at once.
 const CONCURRENT_RENDERS: usize = 4;
-/// Seconds after which a client should retry a tile refused while a
-/// generation runs.
+/// Seconds after which a client should retry a tile or a hex grid refused
+/// while a generation runs.
 const RETRY_AFTER_S: &str = "10";
 
 type Shared = Arc<AppState>;
@@ -131,6 +131,22 @@ pub struct Failure(StatusCode, String);
 impl IntoResponse for Failure {
     fn into_response(self) -> Response {
         (self.0, Json(ApiError { error: self.1 })).into_response()
+    }
+}
+
+/// A world the tile cache cannot serve: 503 with `Retry-After` while a
+/// generation runs, 500 when loading failed.
+fn world_failure(error: TileError, what: &str) -> Response {
+    match error {
+        TileError::Busy => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(header::RETRY_AFTER, RETRY_AFTER_S)],
+            Json(ApiError {
+                error: format!("a generation is running: {what} are paused, retry when it ends"),
+            }),
+        )
+            .into_response(),
+        TileError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }
 
@@ -242,17 +258,7 @@ async fn tile(
     let dir = state.config.worlds_dir.join(&id);
     let world = match state.tiles.world(&dir, &id, revision).await {
         Ok(world) => world,
-        Err(TileError::Busy) => {
-            return Ok((
-                StatusCode::SERVICE_UNAVAILABLE,
-                [(header::RETRY_AFTER, RETRY_AFTER_S)],
-                Json(ApiError {
-                    error: "a generation is running: tiles are paused".into(),
-                }),
-            )
-                .into_response());
-        }
-        Err(TileError::Failed(e)) => return Err(Failure(StatusCode::INTERNAL_SERVER_ERROR, e)),
+        Err(e) => return Ok(world_failure(e, "tiles")),
     };
     // Wait for a turn here, not on a blocking thread: a request the viewer
     // abandons meanwhile is dropped without rendering.
@@ -294,12 +300,13 @@ async fn world_revision(state: &AppState, id: &str) -> Result<u64, Failure> {
 
 /// Resamples a world onto a hex grid from the world loaded for the tiles
 /// (loading it if needed). Nothing is written: the `hexgrid` tool writes
-/// `hex/hex.json` and `hex/hex.png`.
+/// `hex/hex.json` and `hex/hex.png`. While a generation runs, answers 503
+/// like the tiles: loading a world then would add to the generation's peak.
 async fn hex_grid(
     State(state): State<Shared>,
     UrlPath(id): UrlPath<String>,
     Json(request): Json<HexRequest>,
-) -> Result<Json<HexMap>, Failure> {
+) -> Result<Response, Failure> {
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
     }
@@ -321,12 +328,10 @@ async fn hex_grid(
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let dir = state.config.worlds_dir.join(&id);
-    // While a generation runs, the world is loaded for this request only.
-    let world = state
-        .tiles
-        .world_or_load(&dir, &id, revision)
-        .await
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let world = match state.tiles.world(&dir, &id, revision).await {
+        Ok(world) => world,
+        Err(e) => return Ok(world_failure(e, "hex grids")),
+    };
     tokio::task::spawn_blocking(move || {
         hex::resample_world(
             world.world(),
@@ -336,7 +341,7 @@ async fn hex_grid(
         )
     })
     .await
-    .map(Json)
+    .map(|map: HexMap| Json(map).into_response())
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
@@ -732,8 +737,7 @@ mod tests {
             assert!(status.is_client_error(), "{bad} gave {status}");
         }
 
-        // While a generation runs, tiles are refused for later and the hex
-        // grid still works.
+        // While a generation runs, tiles and hex grids are refused for later.
         let big = r#"{"planet": "barren", "seed": 9, "width": 512, "height": 256}"#;
         let (_, body) = call(&app, "POST", "/api/worlds", Some(big)).await;
         let big: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -750,14 +754,13 @@ mod tests {
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(response.headers().contains_key(header::RETRY_AFTER));
-        let (status, _) = call(
-            &app,
-            "POST",
-            "/api/worlds/frozen-3/hex",
-            Some(r#"{"columns": 8}"#),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
+        let request = Request::post("/api/worlds/frozen-3/hex")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"columns": 8}"#))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.headers().contains_key(header::RETRY_AFTER));
         let job = big["job_id"].as_str().unwrap();
         call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
         call(&app, "GET", &format!("/api/jobs/{job}/events"), None).await;
