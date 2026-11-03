@@ -63,6 +63,12 @@ const MAX_TEXTURES = 300;
 
 /** Stencil value marking the pixels a detail patch covers. */
 export const DETAIL_STENCIL = 1;
+/**
+ * Version of the server's tile renderer (mapgen::detail::RENDER_VERSION),
+ * part of the tile URL so that tiles cached for good are dropped when the
+ * renderer changes. A server test checks both values agree.
+ */
+export const TILE_RENDER_VERSION = 2;
 
 /** Creates the material of a patch; uniforms come from the base surface. */
 export type PatchMaterialFactory = () => ShaderMaterial;
@@ -286,7 +292,7 @@ export class TileLayer {
     this.loading.set(key, { controller, started: performance.now() });
     let status: number | null = null;
     try {
-      const url = `/api/worlds/${encodeURIComponent(world.id)}/tiles/${key}?rev=${world.revision}`;
+      const url = `/api/worlds/${encodeURIComponent(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}`;
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
         status = response.status;

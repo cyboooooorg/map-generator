@@ -28,7 +28,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use mapgen::detail::TileId;
+use mapgen::detail::{RENDER_VERSION, TileId};
 use mapgen::export::{ExportOptions, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, Stage, generate_with_progress};
 use mapgen::hex::{self, DEFAULT_RIVER_FLOW_KM2, HexMap};
@@ -221,10 +221,12 @@ async fn delete_world(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Query of a tile request: the world revision the client knows.
+/// Query of a tile request: the world revision and the renderer version
+/// the client knows.
 #[derive(serde::Deserialize)]
 struct TileQuery {
     rev: Option<u64>,
+    render: Option<u32>,
 }
 
 async fn tile(
@@ -263,8 +265,9 @@ async fn tile(
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
-    // A URL naming the current revision never changes: cache it for good.
-    let cache = if query.rev == Some(revision) {
+    // A URL naming the current revision and renderer never changes: cache
+    // it for good.
+    let cache = if query.rev == Some(revision) && query.render == Some(RENDER_VERSION) {
         "public, max-age=31536000, immutable"
     } else {
         "no-cache"
@@ -595,6 +598,16 @@ mod tests {
     use axum::http::Request;
     use http_body_util::BodyExt;
     use tower::ServiceExt;
+
+    #[test]
+    fn viewer_and_server_agree_on_the_tile_renderer_version() {
+        let viewer = include_str!("../../../web/src/lib/viewer/TileLayer.ts");
+        let expected = format!("export const TILE_RENDER_VERSION = {RENDER_VERSION};");
+        assert!(
+            viewer.contains(&expected),
+            "TileLayer.ts must declare `{expected}`"
+        );
+    }
 
     fn temp_config(name: &str) -> Config {
         let root =

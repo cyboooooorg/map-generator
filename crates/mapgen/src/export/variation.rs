@@ -11,7 +11,7 @@
 //! Seas get a pattern of their own kind ([`SurfaceVariation::sea`]): swirls
 //! of plankton-like colour drawn by currents on water and acid, open leads
 //! between floes on ice, rafts of cooled crust on magma.
-use super::ecotone::{linear_to_srgb, srgb_to_linear};
+use super::colour::{linear_of, mix};
 use crate::biome::Biome;
 use crate::noise::{fbm, smoothstep, stream, stream_seed};
 use noise::{NoiseFn, Perlin};
@@ -33,9 +33,9 @@ const MAGMA_WAVELENGTH_KM: f64 = 1200.0;
 /// Octaves of the magma crust: down to about 75 km.
 const MAGMA_OCTAVES: u32 = 5;
 /// Colour of cooled crust floating on magma, sRGB.
-const CRUST: [f32; 3] = [52.0, 22.0, 14.0];
+const CRUST: [u8; 3] = [52, 22, 14];
 /// Colour of the hottest, freshly exposed magma, sRGB.
-const HOT: [f32; 3] = [255.0, 150.0, 40.0];
+const HOT: [u8; 3] = [255, 150, 40];
 /// Largest share of crust over a magma pixel.
 const CRUST_COVER: f32 = 0.6;
 /// Largest share of the hot colour.
@@ -56,15 +56,24 @@ const ACID_SWIRL_SHARE: f32 = 0.14;
 /// Largest relative change of brightness of a sea.
 const SEA_TONE: f32 = 0.08;
 /// Swirl colour on water: a teal plankton bloom, sRGB.
-const WATER_SWIRL: [f32; 3] = [24.0, 92.0, 84.0];
+const WATER_SWIRL: [u8; 3] = [24, 92, 84];
 /// Swirl colour on acid: a sulphur-yellow precipitate, sRGB.
-const ACID_SWIRL: [f32; 3] = [150.0, 150.0, 30.0];
+const ACID_SWIRL: [u8; 3] = [150, 150, 30];
 /// Longest wavelength of the cracks between ice floes, km.
 const FLOE_WAVELENGTH_KM: f64 = 700.0;
 /// Largest share of open water in a lead between floes.
 const LEAD_SHARE: f32 = 0.35;
 /// Colour of the open water in leads, sRGB.
-const LEAD: [f32; 3] = [36.0, 72.0, 104.0];
+const LEAD: [u8; 3] = [36, 72, 104];
+
+/// The constant colours of the sea patterns, in linear light.
+struct Tints {
+    water_swirl: [f32; 3],
+    acid_swirl: [f32; 3],
+    lead: [f32; 3],
+    crust: [f32; 3],
+    hot: [f32; 3],
+}
 
 /// The variation fields of one world.
 pub struct SurfaceVariation {
@@ -80,6 +89,8 @@ pub struct SurfaceVariation {
     floes: Perlin,
     /// Planet radius, km.
     radius_km: f64,
+    /// The constant colours of the sea patterns, in linear light.
+    tints: Tints,
     /// Noise frequency on the unit sphere.
     frequency: f64,
     /// Noise frequency of the magma crust on the unit sphere.
@@ -98,23 +109,31 @@ impl SurfaceVariation {
             sea_warp: Perlin::new(stream_seed(seed, stream::SURFACE).wrapping_add(4)),
             floes: Perlin::new(stream_seed(seed, stream::SURFACE).wrapping_add(5)),
             radius_km,
+            tints: Tints {
+                water_swirl: linear_of(WATER_SWIRL),
+                acid_swirl: linear_of(ACID_SWIRL),
+                lead: linear_of(LEAD),
+                crust: linear_of(CRUST),
+                hot: linear_of(HOT),
+            },
             frequency: radius_km / WAVELENGTH_KM,
             magma_frequency: radius_km / MAGMA_WAVELENGTH_KM,
         }
     }
 
-    /// `colour` of a sea, lake or ice pixel of `biome` (sRGB in `[0, 255]`)
-    /// at longitude `lon` and latitude `lat`, varied by the kind of liquid:
+    /// `colour` of a sea, lake or ice pixel of `biome`, in linear light, at
+    /// longitude `lon` and latitude `lat`, varied by the kind of liquid:
     /// swirls on water and acid, leads between floes on ice, crust on
-    /// magma. Rivers are returned unchanged. Mixed in linear light.
+    /// magma. Rivers are returned unchanged.
     pub fn sea(&self, biome: Biome, colour: [f32; 3], lon: f64, lat: f64) -> [f32; 3] {
+        let t = &self.tints;
         match biome {
             Biome::MagmaSea => self.magma(colour, lon, lat),
             Biome::DeepOcean | Biome::Ocean | Biome::Lake => {
-                self.swirl(colour, WATER_SWIRL, SWIRL_SHARE, lon, lat)
+                self.swirl(colour, t.water_swirl, SWIRL_SHARE, lon, lat)
             }
             Biome::DeepAcidSea | Biome::AcidSea | Biome::CausticLake => {
-                self.swirl(colour, ACID_SWIRL, ACID_SWIRL_SHARE, lon, lat)
+                self.swirl(colour, t.acid_swirl, ACID_SWIRL_SHARE, lon, lat)
             }
             Biome::FrozenOcean | Biome::SeaIce | Biome::FrozenLake => self.floes(colour, lon, lat),
             _ => colour,
@@ -128,7 +147,7 @@ impl SurfaceVariation {
     }
 
     /// Currents drawn as warped swirls of `tint`, up to `strength`, over
-    /// `colour`.
+    /// `colour` (both linear).
     fn swirl(
         &self,
         colour: [f32; 3],
@@ -148,15 +167,11 @@ impl SurfaceVariation {
         ];
         let n = (fbm(&self.sea, q[0], q[1], q[2], SWIRL_OCTAVES) * GAIN).clamp(-1.0, 1.0);
         let share = strength * smoothstep(0.1, 0.9, n);
-        let tone = self.sea_tone(p);
-        std::array::from_fn(|k| {
-            let base = srgb_to_linear(colour[k]);
-            linear_to_srgb((base + (srgb_to_linear(tint[k]) - base) * share) * tone)
-        })
+        mix(colour, tint, share).map(|c| c * self.sea_tone(p))
     }
 
     /// Ice broken into floes: thin, darker leads of open water along the
-    /// crests of a ridged noise.
+    /// crests of a ridged noise. Linear light.
     fn floes(&self, colour: [f32; 3], lon: f64, lat: f64) -> [f32; 3] {
         let p = sphere(lon, lat, self.radius_km / FLOE_WAVELENGTH_KM);
         let ridge = |scale: f64| {
@@ -164,29 +179,20 @@ impl SurfaceVariation {
         };
         let crack = ridge(1.0).max(ridge(2.3) * 0.97);
         let share = LEAD_SHARE * smoothstep(0.92, 0.99, crack);
-        let tone = self.sea_tone(p);
-        std::array::from_fn(|k| {
-            let base = srgb_to_linear(colour[k]);
-            linear_to_srgb((base + (srgb_to_linear(LEAD[k]) - base) * share) * tone)
-        })
+        mix(colour, self.tints.lead, share).map(|c| c * self.sea_tone(p))
     }
 
-    /// `colour` of a magma sea pixel (sRGB in `[0, 255]`) at longitude
-    /// `lon` and latitude `lat`: rafts of dark cooled crust drift over it,
-    /// and the magma shows yellow-hot between the largest gaps. Mixed in
-    /// linear light.
+    /// Magma (linear light): rafts of dark cooled crust drift over it, and
+    /// it shows yellow-hot between the largest gaps.
     fn magma(&self, colour: [f32; 3], lon: f64, lat: f64) -> [f32; 3] {
-        let f = self.magma_frequency;
-        let p = sphere(lon, lat, f);
+        let p = sphere(lon, lat, self.magma_frequency);
         let n = (fbm(&self.magma, p[0], p[1], p[2], MAGMA_OCTAVES) * GAIN).clamp(-1.0, 1.0);
         let crust = CRUST_COVER * smoothstep(0.15, 0.75, n);
         let hot = HOT_SHARE * smoothstep(-0.35, -0.85, n);
         std::array::from_fn(|k| {
-            let base = srgb_to_linear(colour[k]);
-            let mixed = base
-                + (srgb_to_linear(CRUST[k]) - base) * crust
-                + (srgb_to_linear(HOT[k]) - base) * hot;
-            linear_to_srgb(mixed)
+            colour[k]
+                + (self.tints.crust[k] - colour[k]) * crust
+                + (self.tints.hot[k] - colour[k]) * hot
         })
     }
 
@@ -206,8 +212,9 @@ impl SurfaceVariation {
     }
 }
 
-/// Point at `lon`, `lat` (radians) on a sphere of radius `f`.
-fn sphere(lon: f64, lat: f64, f: f64) -> [f64; 3] {
+/// Point at `lon`, `lat` (radians) on a sphere of radius `f`: the one
+/// mapping the base map and the detail tiles share.
+pub(crate) fn sphere(lon: f64, lat: f64, f: f64) -> [f64; 3] {
     [
         lat.cos() * lon.cos() * f,
         lat.cos() * lon.sin() * f,
@@ -218,6 +225,7 @@ fn sphere(lon: f64, lat: f64, f: f64) -> [f64; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::export::colour::{to_linear, to_srgb};
 
     #[test]
     fn variation_is_small_deterministic_and_varies() {
@@ -244,7 +252,7 @@ mod tests {
         let (mut darkest, mut brightest) = (f32::MAX, 0.0f32);
         for k in 0..2000 {
             let (lon, lat) = (k as f64 * 0.0123, (k as f64 * 0.0071).sin());
-            let c = v.sea(Biome::MagmaSea, magma, lon, lat);
+            let c = to_srgb(v.sea(Biome::MagmaSea, to_linear(magma), lon, lat));
             darkest = darkest.min(c[0]);
             brightest = brightest.max(c[1]);
         }
@@ -263,7 +271,7 @@ mod tests {
             let colours: std::collections::BTreeSet<[i32; 3]> = (0..2000)
                 .map(|k| {
                     let (lon, lat) = (k as f64 * 0.0123, (k as f64 * 0.0071).sin());
-                    v.sea(biome, base, lon, lat).map(|c| c.round() as i32)
+                    to_srgb(v.sea(biome, to_linear(base), lon, lat)).map(|c| c.round() as i32)
                 })
                 .collect();
             assert!(colours.len() > 20, "{biome:?}: {} colours", colours.len());

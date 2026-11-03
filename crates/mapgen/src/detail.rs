@@ -30,9 +30,10 @@
 //! (0.75 GB at 8192 × 4096).
 use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
+use crate::export::colour::{linear_of, to_srgb};
 use crate::export::ecotone::ecotone_colour_for;
 use crate::export::raw_data::{Layer16, LoadedWorld};
-use crate::export::variation::SurfaceVariation;
+use crate::export::variation::{SurfaceVariation, sphere};
 use crate::export::{LIGHT, RELIEF_KM, blend_river, shade, water_colour, water_depths_of};
 use crate::hex;
 use crate::rivers;
@@ -43,6 +44,12 @@ use std::f64::consts::{PI, TAU};
 
 /// Tile side in pixels.
 pub const TILE_SIZE: u32 = 256;
+/// Version of the tile renderer. Tiles are cached by browsers for good
+/// under a URL naming the world revision and this version: bump it (and
+/// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
+/// the colours or the shading of tiles change, or browsers keep showing
+/// tiles drawn by the previous renderer.
+pub const RENDER_VERSION: u32 = 2;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -349,7 +356,7 @@ impl DetailWorld {
         if last > first {
             return base;
         }
-        let p = [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()];
+        let p = sphere(lon, lat, 1.0);
         let radius = w.params.circumference_km as f64 / TAU;
         let waterline = w.params.sea_level + w.params.planet.rules.waterline;
 
@@ -423,7 +430,7 @@ impl DetailWorld {
             })
             .collect();
 
-        let river_colour = surface_color(planet.remap(Biome::River)).map(f32::from);
+        let river_colour = linear_of(surface_color(planet.remap(Biome::River)));
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
 
@@ -437,7 +444,7 @@ impl DetailWorld {
                 let above = relief - planet.rules.waterline;
 
                 // Climate at a warped position: irregular biome borders.
-                let p = [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()];
+                let p = sphere(lon, lat, 1.0);
                 let f = radius / (4.0 * warp_km);
                 let wx = self.warp_noise.get([p[0] * f, p[1] * f, p[2] * f]);
                 let wy = self
@@ -472,16 +479,18 @@ impl DetailWorld {
                     } else {
                         sample(&self.depths)
                     };
-                    self.variation
-                        .sea(biome, water_colour(biome, depth), lon, lat)
+                    to_srgb(
+                        self.variation
+                            .sea(biome, water_colour(biome, depth), lon, lat),
+                    )
                 } else {
                     let mut shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
-                    let mut colour = ecotone_colour_for(planet, input);
                     if dry.is_lava() {
                         shade = 1.0 + (shade - 1.0) * LAVA_SHADE;
-                    } else {
-                        colour = self.variation.apply(colour, lon, lat);
                     }
+                    let colour = self
+                        .variation
+                        .apply(ecotone_colour_for(planet, input), lon, lat);
                     colour.map(|c| c * shade)
                 };
                 let c = coverage[i];
