@@ -8,6 +8,16 @@ temperature = -27.0
 moisture = 0.15
 volcanic = -0.30
 
+[defaults]
+pressure = [0.3, 1.0]                 # surface pressure in bar, drawn in this range
+
+# Thin, clean air: a pale sky, sparse water clouds.
+[atmosphere]
+rayleigh = [0.17, 0.41, 1.0]
+haze = 0.05
+clouds = "water"
+cloud_cover = -0.3
+
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Tundra, IceCap, Taiga, Snow, Mountain).
 [remap]

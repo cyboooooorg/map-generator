@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { cliCommand, formatAgo, formatArea, formatDuration, formatShare, requestFromWorld } from './format';
+import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatDuration, formatShare, requestFromWorld } from './format';
 
 const meta = {
   planet_type: 'frozen',
@@ -10,6 +10,7 @@ const meta = {
   circumference_km: 51823.43,
   axial_tilt_deg: 18.7234,
   erosion: 1,
+  pressure_bar: 0.41237,
   width: 1920,
   height: 1080,
 } as WorldMetadata;
@@ -24,13 +25,25 @@ describe('format', () => {
       circumference_km: 51823.4,
       axial_tilt_deg: 18.72,
       erosion: 1,
+      pressure_bar: 0.4124,
       width: 1920,
       height: 1080,
     });
     expect(cliCommand(meta)).toBe(
       'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
-        '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --width 1920 --height 1080',
+        '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --width 1920 --height 1080',
     );
+  });
+
+  it('describes the atmosphere, with Earth for worlds made before it', () => {
+    const preset = { atmosphere: { clouds: 'dust' } };
+    expect(formatAtmosphere({ ...meta, pressure_bar: 0.006, preset } as unknown as WorldMetadata)).toBe(
+      '0.0060 bar, dust clouds',
+    );
+    expect(formatAtmosphere({ ...meta, pressure_bar: 0, preset } as unknown as WorldMetadata)).toBe('none');
+    const old = { ...meta, preset: {} } as unknown as WorldMetadata;
+    delete (old as { pressure_bar?: number }).pressure_bar;
+    expect(formatAtmosphere(old)).toBe('1.00 bar, water clouds');
   });
 
   it('formats shares, areas, durations and ages', () => {

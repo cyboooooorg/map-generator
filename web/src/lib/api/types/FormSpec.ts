@@ -10,7 +10,7 @@ export type FormSpec = { sea_level: ParamSpec,
  * Limits of `land_fraction`, the alternative to `sea_level`; without
  * it, the sea level falls back as usual.
  */
-land_fraction: Limits, volcanic: ParamSpec, circumference_km: ParamSpec, axial_tilt_deg: ParamSpec, erosion: ParamSpec, default_width: number, default_height: number, 
+land_fraction: Limits, volcanic: ParamSpec, circumference_km: ParamSpec, axial_tilt_deg: ParamSpec, erosion: ParamSpec, pressure_bar: ParamSpec, default_width: number, default_height: number, 
 /**
  * Largest width or height the server accepts.
  */

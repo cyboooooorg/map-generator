@@ -25,6 +25,7 @@
 //! [remap]                            # target = [biomes replaced by it]
 //! DustPlain = ["Plain", "Desert"]
 //! ```
+use crate::atmosphere::Atmosphere;
 use crate::biome::{Biome, BiomeRules};
 use crate::request;
 use rand::RngExt;
@@ -90,6 +91,8 @@ pub struct Defaults {
     pub circumference: Option<ParamDefault>,
     pub axial_tilt: Option<ParamDefault>,
     pub erosion: Option<ParamDefault>,
+    /// Surface pressure in bar (0 = airless).
+    pub pressure: Option<ParamDefault>,
 }
 
 /// Global shifts added to every pixel before biome selection.
@@ -122,6 +125,9 @@ pub struct Preset {
     pub climate: ClimateShift,
     #[serde(default)]
     pub rules: BiomeRules,
+    /// Sky and clouds; Earth's when the preset has no `[atmosphere]` table.
+    #[serde(default)]
+    pub atmosphere: Atmosphere,
     /// Target biome → biomes replaced by it.
     #[serde(default)]
     pub remap: BTreeMap<Biome, Vec<Biome>>,
@@ -144,6 +150,8 @@ struct PresetSpec {
     climate: ClimateShift,
     #[serde(default)]
     rules: BiomeRules,
+    #[serde(default)]
+    atmosphere: Atmosphere,
     #[serde(default)]
     remap: BTreeMap<Biome, Vec<Biome>>,
 }
@@ -182,11 +190,14 @@ impl TryFrom<PresetSpec> for Preset {
             ("circumference", d.circumference, request::CIRCUMFERENCE_KM),
             ("axial_tilt", d.axial_tilt, request::AXIAL_TILT_DEG),
             ("erosion", d.erosion, request::EROSION),
+            ("pressure", d.pressure, request::PRESSURE_BAR),
         ] {
             if let Some(v) = value {
                 v.check(field, limits.min, limits.max)?;
             }
         }
+
+        spec.atmosphere.validate()?;
 
         let mut lookup = Biome::ALL.to_vec();
         let mut seen = BTreeMap::new();
@@ -206,6 +217,7 @@ impl TryFrom<PresetSpec> for Preset {
             defaults: spec.defaults,
             climate: spec.climate,
             rules: spec.rules,
+            atmosphere: spec.atmosphere,
             remap: spec.remap,
             lookup,
         })

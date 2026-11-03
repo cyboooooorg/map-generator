@@ -8,6 +8,18 @@ temperature = 20.0
 moisture = -0.55
 volcanic = 0.50
 
+[defaults]
+pressure = [5.0, 20.0]                 # surface pressure in bar, drawn in this range
+
+# Dense air thick with volcanic aerosols: an orange sky, patchy sulfuric
+# clouds.
+[atmosphere]
+rayleigh = [0.17, 0.41, 1.0]
+haze = 0.6
+haze_colour = [1.0, 0.55, 0.25]
+clouds = "sulfuric"
+cloud_cover = -0.2
+
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, LavaField, AshLand, Volcano).
 [remap]

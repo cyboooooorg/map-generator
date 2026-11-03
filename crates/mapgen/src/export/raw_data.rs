@@ -29,6 +29,10 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
 
+fn earth_pressure() -> f32 {
+    1.0
+}
+
 /// Name of the river polylines file.
 pub const RIVERS_FILE: &str = "rivers.json";
 
@@ -62,6 +66,9 @@ pub struct WorldMetadata {
     pub gravity_modifier: f32,
     pub axial_tilt_deg: f32,
     pub erosion: f32,
+    /// Surface pressure in bar. Worlds made before it existed had Earth's.
+    #[serde(default = "earth_pressure")]
+    pub pressure_bar: f32,
     pub layers: Layers,
     /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -231,6 +238,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         gravity_modifier: world.params.gravity_modifier(),
         axial_tilt_deg: world.params.axial_tilt_deg,
         erosion: world.params.erosion,
+        pressure_bar: world.params.pressure_bar,
         layers: Layers {
             elevation,
             moisture,
@@ -529,6 +537,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         circumference_km: meta.circumference_km,
         axial_tilt_deg: meta.axial_tilt_deg,
         erosion: meta.erosion,
+        pressure_bar: meta.pressure_bar,
     };
     let l = &meta.layers;
     let infos = [
@@ -689,6 +698,7 @@ mod tests {
             circumference_km: 40_075.0,
             axial_tilt_deg: 23.44,
             erosion: 1.0,
+            pressure_bar: 1.0,
         })
         .world;
         let world_dir =

@@ -127,6 +127,8 @@ pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
         axial_tilt_deg: f("axial_tilt_deg"),
         erosion: f("erosion"),
         gravity_modifier: f("gravity_modifier"),
+        // Worlds made before the atmosphere had Earth's pressure.
+        pressure_bar: meta["pressure_bar"].as_f64().unwrap_or(1.0) as f32,
         modified_ms,
     })
 }

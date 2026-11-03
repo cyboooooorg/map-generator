@@ -40,6 +40,7 @@ pub struct FormSpec {
     pub circumference_km: ParamSpec,
     pub axial_tilt_deg: ParamSpec,
     pub erosion: ParamSpec,
+    pub pressure_bar: ParamSpec,
     pub default_width: u32,
     pub default_height: u32,
     /// Largest width or height the server accepts.
@@ -65,6 +66,8 @@ pub struct WorldSummary {
     pub axial_tilt_deg: f32,
     pub erosion: f32,
     pub gravity_modifier: f32,
+    /// Surface pressure in bar.
+    pub pressure_bar: f32,
     /// Last modification time, in milliseconds since the Unix epoch.
     #[ts(type = "number")]
     pub modified_ms: u64,

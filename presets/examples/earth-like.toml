@@ -7,6 +7,7 @@ description = "Earth's size, tilt and land share, full biome spectrum"
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.
 [defaults]
+pressure = 1.0
 # The sea level is computed for each seed to leave this share of land.
 land_fraction = 0.29
 circumference = 40075

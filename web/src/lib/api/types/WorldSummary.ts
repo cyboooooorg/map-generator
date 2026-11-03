@@ -9,6 +9,10 @@ export type WorldSummary = {
  */
 id: string, planet: string, seed: number, width: number, height: number, sea_level: number, volcanic_intensity: number, circumference_km: number, axial_tilt_deg: number, erosion: number, gravity_modifier: number, 
 /**
+ * Surface pressure in bar.
+ */
+pressure_bar: number, 
+/**
  * Last modification time, in milliseconds since the Unix epoch.
  */
 modified_ms: number, };

@@ -8,6 +8,7 @@ description = "Small airless grey world, cratered highlands and dark plains"
 # still win over these. No water ever flowed: no erosion. The sea level only
 # sets how much of the surface the smooth basins cover.
 [defaults]
+pressure = 0.0
 sea_level = [0.10, 0.30]
 circumference = 15329
 axial_tilt = 0.0
@@ -17,6 +18,11 @@ erosion = 0.0
 [climate]
 moisture = -0.9
 volcanic = -0.4
+
+# No atmosphere: no sky, no clouds.
+[atmosphere]
+haze = 0.0
+clouds = "none"
 
 # target = [biomes replaced by it]
 [remap]

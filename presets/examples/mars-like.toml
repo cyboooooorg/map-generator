@@ -11,6 +11,7 @@ description = "Small cold desert world with polar caps"
 # oceans are remapped to dust below, and biome elevations are measured from
 # the sea level, so a very low one would put every pixel above the snow line.
 [defaults]
+pressure = 0.006
 sea_level = [0.10, 0.30]
 circumference = 21300
 axial_tilt = 25.2
@@ -27,6 +28,14 @@ polar = -13.5
 sea_ice_temperature = -13.5
 highland_snow_temperature = -13.5
 snow_line = 0.6
+
+# Thin CO2 laden with fine dust: a butterscotch sky (with blue sunsets),
+# dust clouds and storms.
+[atmosphere]
+rayleigh = [0.17, 0.41, 1.0]
+haze = 0.4
+haze_colour = [0.85, 0.6, 0.4]
+clouds = "dust"
 
 # target = [biomes replaced by it]
 [remap]

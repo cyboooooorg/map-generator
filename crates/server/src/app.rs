@@ -180,6 +180,7 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         circumference_km: spec(request::CIRCUMFERENCE_KM, fallback::CIRCUMFERENCE_KM),
         axial_tilt_deg: spec(request::AXIAL_TILT_DEG, fallback::AXIAL_TILT_DEG),
         erosion: spec(request::EROSION, fallback::EROSION),
+        pressure_bar: spec(request::PRESSURE_BAR, fallback::PRESSURE_BAR),
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,
         max_size: MAX_SIZE,
