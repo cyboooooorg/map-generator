@@ -149,24 +149,77 @@ pub(crate) fn shade(relative: f32) -> f32 {
 /// Largest brightening or darkening of the hillshade.
 const SHADE_RANGE: f32 = 0.4;
 
-/// Colour of a water pixel `depth` elevation units below the waterline:
-/// lighter towards the shore, so seas and lakes show the rim of their basin
-/// whatever their colour (see [`water_depths`]); on ice, the whiter fast ice
-/// along the shore. Rivers stay flat.
+/// Colour of a water pixel `depth` elevation units below its surface, sRGB
+/// in `[0, 255]`.
+///
+/// Clear liquids (water, acid) follow Beer-Lambert absorption in linear
+/// light: the light reflected by the bed fades with depth, faster in the
+/// channels the liquid absorbs most, towards the colour of deep water. Shelves
+/// turn turquoise (red is absorbed first), and the colour depends on the
+/// depth alone, so there is no step where Ocean becomes Deep Ocean. Lakes,
+/// measured from their own level, are shallow: their depth counts
+/// [`LAKE_DEPTH_SCALE`] times. Magma darkens into a cooled crust along its
+/// shore and ice whitens into fast ice; rivers stay flat.
 pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
     let colour = surface_color(biome).map(f32::from);
     if matches!(biome, Biome::River | Biome::AcidRiver) {
         return colour;
     }
-    let shallow = 1.0 - (depth.max(0.0) / SHALLOW_DEPTH).clamp(0.0, 1.0);
+    let depth = depth.max(0.0);
+    if let Some(liquid) = Liquid::of(biome) {
+        let depth = if matches!(biome, Biome::Lake | Biome::CausticLake) {
+            depth * LAKE_DEPTH_SCALE
+        } else {
+            depth
+        };
+        let (deep, bed) = (
+            liquid.deep.map(|c| srgb_to_linear(c as f32)),
+            liquid.bed.map(|c| srgb_to_linear(c as f32)),
+        );
+        return std::array::from_fn(|k| {
+            let seen = BED_VISIBILITY * (-liquid.absorption[k] * depth).exp();
+            linear_to_srgb(deep[k] + (bed[k] - deep[k]) * seen)
+        });
+    }
+    let shallow = 1.0 - (depth / SHALLOW_DEPTH).clamp(0.0, 1.0);
     let t = SHALLOW_TINT * shallow * shallow;
-    // Magma cools into a dark crust along its shores; water lightens.
     let target = if biome == Biome::MagmaSea {
         MAGMA_CRUST
     } else {
         [255.0; 3]
     };
     std::array::from_fn(|k| colour[k] + (target[k] - colour[k]) * t)
+}
+
+/// Optical model of a clear liquid (see [`water_colour`]).
+struct Liquid {
+    /// Colour of deep liquid, where no light comes back from the bed, sRGB.
+    deep: [u8; 3],
+    /// Colour of the bed under a thin layer, sRGB.
+    bed: [u8; 3],
+    /// Absorption per elevation unit of depth, per linear channel.
+    absorption: [f32; 3],
+}
+
+impl Liquid {
+    fn of(biome: Biome) -> Option<Self> {
+        match biome {
+            // Water absorbs red first, then green: sandy shallows, turquoise
+            // shelves, dark blue beyond the shelf break (0.30 deep).
+            Biome::DeepOcean | Biome::Ocean | Biome::Lake => Some(Self {
+                deep: surface_color(Biome::DeepOcean),
+                bed: surface_color(Biome::Beach),
+                absorption: [30.0, 11.0, 8.0],
+            }),
+            // Acid absorbs blue first: yellow-green shallows.
+            Biome::DeepAcidSea | Biome::AcidSea | Biome::CausticLake => Some(Self {
+                deep: surface_color(Biome::DeepAcidSea),
+                bed: surface_color(Biome::AcidShore),
+                absorption: [24.0, 18.0, 40.0],
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// Depth of every water pixel below its surface, in elevation units (0 on
@@ -232,12 +285,19 @@ pub(crate) fn water_depths_of(
     depth
 }
 
-/// Depth (elevation units) over which water lightens towards its shore.
+/// Depth (elevation units) over which ice whitens and magma crusts towards
+/// its shore.
 const SHALLOW_DEPTH: f32 = 0.05;
 /// Colour of the cooled crust towards which magma seas darken at the shore.
 const MAGMA_CRUST: [f32; 3] = [60.0, 20.0, 10.0];
-/// Lightening of water at the shore line (towards white).
+/// Whitening of ice at the shore line.
 const SHALLOW_TINT: f32 = 0.25;
+/// Share of the bed's colour seen through a film of clear liquid: even the
+/// shallowest water tints its bed.
+const BED_VISIBILITY: f32 = 0.55;
+/// Factor on lake depths: lakes are far shallower than seas, and would show
+/// their bed everywhere.
+const LAKE_DEPTH_SCALE: f32 = 4.0;
 
 /// `colour` covered by a river over a fraction `coverage` of the pixel, both
 /// sRGB in `[0, 255]`; the mix is in linear light, so anti-aliased banks do
@@ -356,7 +416,28 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
 
 #[cfg(test)]
 mod tests {
-    use super::latitude_row;
+    use super::{Biome, latitude_row, water_colour};
+
+    #[test]
+    fn water_darkens_with_depth_without_a_deep_ocean_step() {
+        let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        let mut previous = f32::MAX;
+        for k in 0..40 {
+            let l = luma(water_colour(Biome::Ocean, k as f32 * 0.02));
+            assert!(l <= previous, "lighter at depth {}", k as f32 * 0.02);
+            previous = l;
+        }
+        // Same depth, either side of the Deep Ocean threshold: same colour.
+        assert_eq!(
+            water_colour(Biome::Ocean, 0.3),
+            water_colour(Biome::DeepOcean, 0.3)
+        );
+        // Shallow water shows its bed: red is absorbed first.
+        let shelf = water_colour(Biome::Ocean, 0.05);
+        let deep = water_colour(Biome::Ocean, 0.6);
+        assert!(shelf[1] > deep[1] && shelf[2] > deep[2]);
+        assert!(shelf[0] < shelf[2]);
+    }
 
     #[test]
     fn north_is_at_the_top() {

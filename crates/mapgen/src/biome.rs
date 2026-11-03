@@ -205,8 +205,8 @@ pub fn surface_color(b: Biome) -> [u8; 3] {
         Biome::FrozenLake => [190, 208, 222],
         // Caustic: sickly greens and yellows.
         Biome::CausticLake => [92, 140, 60],
-        Biome::AcidSea => [70, 118, 52],
-        Biome::DeepAcidSea => [40, 72, 36],
+        Biome::AcidSea => [52, 104, 58],
+        Biome::DeepAcidSea => [26, 60, 42],
         Biome::AcidRiver => [110, 160, 70],
         Biome::AcidShore => [196, 190, 130],
         Biome::ToxicSwamp => [74, 86, 34],
