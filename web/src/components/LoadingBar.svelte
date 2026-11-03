@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type LoadProgress, progressShare, progressText } from '../lib/progress';
+  import { type LoadProgress, progressLabel, progressShare, progressText } from '../lib/progress';
 
   interface Props {
     progress: LoadProgress;
@@ -9,19 +9,20 @@
 
   const share = $derived(progressShare(progress));
   const text = $derived(progressText(progress));
+  const label = $derived(progressLabel(progress));
 </script>
 
 <!-- A slim bar under a loading message: the file being worked on, and how far it has got. -->
 <div class="loading-bar">
   <div class="caption">
-    <span class="label">{progress.label}</span>
+    <span class="label">{label}</span>
     {#if text}<span class="amount">{text}</span>{/if}
   </div>
   <div
     class="track"
     class:indeterminate={share === null}
     role="progressbar"
-    aria-label={progress.label}
+    aria-label={label}
     aria-valuemin="0"
     aria-valuemax="100"
     aria-valuenow={share === null ? undefined : Math.round(share * 100)}

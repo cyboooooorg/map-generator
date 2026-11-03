@@ -6,20 +6,14 @@ type Stop = readonly [number, readonly [number, number, number]];
 
 export type DataLayer = 'elevation' | 'temperature' | 'moisture' | 'flow' | 'volcanic' | 'coast' | 'floodplain';
 
+/** A ramp's stops; its legend texts are in the i18n catalog (`legends`). */
 export interface Ramp {
-  label: string;
   stops: readonly Stop[];
-  /** Legend labels at the start and end of the ramp. */
-  min: string;
-  max: string;
 }
 
 export const RAMPS: Record<DataLayer, Ramp> = {
   // t = (elevation above the coastline + 1) / 2: the coastline sits at 0.5.
   elevation: {
-    label: 'Elevation',
-    min: 'deep sea',
-    max: 'summits',
     stops: [
       [0.0, [8, 24, 80]],
       [0.42, [30, 90, 170]],
@@ -32,9 +26,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
   },
   // t = (°C + 30) / 70.
   temperature: {
-    label: 'Temperature',
-    min: '−30 °C',
-    max: '40 °C',
     stops: [
       [0.0, [45, 55, 160]],
       [0.25, [70, 160, 225]],
@@ -45,9 +36,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
   },
   // t = (moisture + 1) / 2.
   moisture: {
-    label: 'Moisture',
-    min: 'arid',
-    max: 'wet',
     stops: [
       [0.0, [140, 80, 35]],
       [0.35, [225, 205, 125]],
@@ -57,9 +45,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
   },
   // t = log10(1 + km²) / 7.
   flow: {
-    label: 'River flow',
-    min: '0 km²',
-    max: '10 M km²',
     stops: [
       [0.0, [12, 16, 28]],
       [0.55, [25, 60, 115]],
@@ -69,9 +54,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
   },
   // Raw_data format version 2 and later.
   volcanic: {
-    label: 'Volcanic zone',
-    min: 'none',
-    max: 'volcanic',
     stops: [
       [0.0, [30, 30, 36]],
       [0.4, [95, 60, 50]],
@@ -81,9 +63,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
   },
   // t = √(km / cap): the first hundreds of km get most of the ramp.
   coast: {
-    label: 'Distance to the sea',
-    min: '0 km',
-    max: 'cap (√ scale)',
     stops: [
       [0.0, [235, 245, 250]],
       [0.25, [110, 200, 190]],
@@ -93,9 +72,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
   },
   // Raw_data format version 3 and later.
   floodplain: {
-    label: 'Floodplain',
-    min: 'none',
-    max: 'valley floor',
     stops: [
       [0.0, [24, 26, 32]],
       [0.5, [70, 130, 100]],

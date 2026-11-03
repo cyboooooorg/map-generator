@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index.svelte';
+  import { biomeName } from '../lib/i18n/names';
   import { onDestroy, onMount, untrack } from 'svelte';
   import { ApiFailure, api, worldFile } from '../lib/api/client';
   import type { HexMap } from '../lib/api/types/HexMap';
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
-  import { formatArea, formatShare, saveBlob, surfaceColour } from '../lib/format';
+  import { formatArea, formatKm, formatNumber, formatShare, saveBlob, surfaceColour } from '../lib/format';
   import type { LonLat } from '../lib/geo';
   import type { ViewLink } from '../lib/link';
   import type { LoadProgress } from '../lib/progress';
@@ -12,10 +14,10 @@
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
-  import { altAllowed, SHORTCUT_HELP, shortcutFor, stepRelief } from '../lib/shortcuts';
+  import { altAllowed, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
-  import { cssGradient, RAMPS } from '../lib/viewer/colormaps';
+  import { cssGradient } from '../lib/viewer/colormaps';
   import { type CameraState, PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -71,17 +73,16 @@
   }: Props = $props();
 
   type Needs = 'none' | 'extra' | 'floodplain';
-  const LAYERS: { id: Layer; label: string; needs: Needs }[] = [
-    { id: 'biomes', label: 'Biomes', needs: 'none' },
-    { id: 'elevation', label: 'Elevation', needs: 'none' },
-    { id: 'temperature', label: 'Temperature', needs: 'none' },
-    { id: 'moisture', label: 'Moisture', needs: 'none' },
-    { id: 'flow', label: 'Rivers', needs: 'none' },
-    { id: 'volcanic', label: 'Volcanic zone', needs: 'extra' },
-    { id: 'coast', label: 'Distance to the sea', needs: 'extra' },
-    { id: 'floodplain', label: 'Floodplains', needs: 'floodplain' },
+  const LAYERS: { id: Layer; needs: Needs }[] = [
+    { id: 'biomes', needs: 'none' },
+    { id: 'elevation', needs: 'none' },
+    { id: 'temperature', needs: 'none' },
+    { id: 'moisture', needs: 'none' },
+    { id: 'flow', needs: 'none' },
+    { id: 'volcanic', needs: 'extra' },
+    { id: 'coast', needs: 'extra' },
+    { id: 'floodplain', needs: 'floodplain' },
   ];
-  const SEASONS = ['Spring equinox', 'Summer solstice', 'Autumn equinox', 'Winter solstice'];
   /** One year of the season animation, in seconds. */
   const YEAR_SECONDS = 12;
   /** mapgen::hex::DEFAULT_RIVER_FLOW_KM2, on the log10 slider. */
@@ -183,8 +184,8 @@
     const quarter = season * 4;
     const nearest = Math.round(quarter) % 4;
     return Math.abs(quarter - Math.round(quarter)) < 0.12
-      ? (SEASONS[nearest] ?? '')
-      : `Day ${Math.round(season * 365) % 365} of the year`;
+      ? (t.viewer.seasons[nearest] ?? '')
+      : t.viewer.dayOfYear({ day: Math.round(season * 365) % 365 });
   });
   const highlight = $derived(hovered ?? pinned);
 
@@ -261,7 +262,7 @@
       canvasVisible = view.visible;
       view.onVisibilityChange = (visible) => (canvasVisible = visible);
     } catch (e) {
-      error = `WebGL is not available: ${String(e)}`;
+      error = t.viewer.noWebgl({ error: String(e) });
     }
   });
 
@@ -312,7 +313,7 @@
         return current.setTexture(worldFile(id, 'world.png', rev), controller.signal, progress);
       })
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) error = `Could not load the map: ${String(e)}`;
+        if (!controller.signal.aborted) error = t.viewer.mapFailed({ error: String(e) });
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -417,7 +418,7 @@
         })
         .catch((e: unknown) => {
           if (!controller.signal.aborted) {
-            toasts.error(`Could not compute the hex grid: ${e instanceof ApiFailure ? e.message : String(e)}`);
+            toasts.error(t.viewer.hexFailed({ error: e instanceof ApiFailure ? e.message : String(e) }));
           }
         })
         .finally(() => {
@@ -487,7 +488,7 @@
     if (blob && worldId) {
       saveBlob(blob, `${worldId}-${shown}-${mode}.png`);
     } else {
-      toasts.error('The screenshot failed.');
+      toasts.error(t.viewer.screenshotFailed);
     }
   }
 
@@ -635,121 +636,125 @@
 <div class="viewer">
   <canvas bind:this={canvas} class:measuring></canvas>
 
-  <div class="toolbar" role="toolbar" aria-label="Tools">
-    <button onclick={resetView} disabled={!worldId} title="Reset the view (R)">Reset view</button>
+  <div class="toolbar" role="toolbar" aria-label={t.viewer.tools}>
+    <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
     <button
       onclick={onToggleMeasure}
       disabled={!worldId}
       class:active={measuring}
       aria-pressed={measuring}
-      title="Measure distances (D)">Measure</button
+      title={t.viewer.measureHelp}>{t.viewer.measure}</button
     >
-    <button onclick={screenshot} disabled={!worldId} title="Save the view as a PNG (P)">Screenshot</button>
-    <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title="Keyboard shortcuts (?)">?</button>
+    <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
+    <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
   </div>
 
-  <div class="panel" role="region" aria-label="Display">
+  <div class="panel" role="region" aria-label={t.viewer.display}>
     <div class="row">
       <div class="segmented">
-        <button class:active={mode === 'globe'} onclick={() => (mode = 'globe')} title="Globe (G)">Globe</button>
-        <button class:active={mode === 'map'} onclick={() => (mode = 'map')} title="Flat map (M)">Map</button>
+        <button class:active={mode === 'globe'} onclick={() => (mode = 'globe')} title={t.viewer.globeHelp}>{t.viewer.globe}</button>
+        <button class:active={mode === 'map'} onclick={() => (mode = 'map')} title={t.viewer.mapHelp}>{t.viewer.map}</button>
       </div>
       <button class="fold" onclick={() => (panelOpen = !panelOpen)} aria-expanded={panelOpen}>
-        {panelOpen ? 'Hide' : 'Display'}
+        {panelOpen ? t.viewer.hide : t.viewer.display}
       </button>
     </div>
 
     {#if panelOpen}
       <label>
-        <span>Layer</span>
+        <span>{t.viewer.layer}</span>
         <select bind:value={layer} disabled={!dataReady}>
           {#each LAYERS as option, i (option.id)}
             <option value={option.id} disabled={dataReady && !available(option.needs)}
-              >{i + 1}. {option.label}{!dataReady || available(option.needs) ? '' : ' (not in this world)'}</option
+              >{i + 1}. {t.viewer.layers[option.id]}{!dataReady || available(option.needs) ? '' : t.viewer.notInWorld}</option
             >
           {/each}
         </select>
       </label>
       <label>
-        <span>Relief</span>
+        <span>{t.viewer.relief}</span>
         <input type="range" min="0" max="1" step="0.05" bind:value={relief} disabled={!dataReady} />
       </label>
 
-      <label class="check"><input type="checkbox" bind:checked={sun} /> Sunlight</label>
+      <label class="check"><input type="checkbox" bind:checked={sun} /> {t.viewer.sunlight}</label>
       {#if sun}
         <label>
-          <span title="Sun declination follows the axial tilt">Season</span>
+          <span title={t.viewer.seasonHelp}>{t.viewer.season}</span>
           <input type="range" min="0" max="1" step="0.005" bind:value={season} />
-          <button class="small" onclick={() => (playing = !playing)} aria-pressed={playing} title="Play the seasons (S)"
-            >{playing ? 'Pause' : 'Play'}</button
+          <button class="small" onclick={() => (playing = !playing)} aria-pressed={playing} title={t.viewer.playHelp}
+            >{playing ? t.viewer.pause : t.viewer.play}</button
           >
         </label>
         <p class="muted">
-          {seasonLabel} · sun over {Math.abs(declination).toFixed(1)}° {declination >= 0 ? 'N' : 'S'}
+          {t.viewer.sunOver({
+            season: seasonLabel,
+            latitude: formatNumber(Math.abs(declination), 1),
+            north: declination >= 0,
+          })}
         </p>
         <label>
-          <span>Sun longitude</span>
+          <span>{t.viewer.sunLongitude}</span>
           <input type="range" min="0" max="360" step="1" bind:value={sunLongitude} />
           <small class="value">{sunLongitude}°</small>
         </label>
       {/if}
-      <label class="check"><input type="checkbox" bind:checked={atmosphere} /> Atmosphere</label>
-      <label class="check"><input type="checkbox" bind:checked={clouds} /> Clouds</label>
+      <label class="check"><input type="checkbox" bind:checked={atmosphere} /> {t.viewer.atmosphere}</label>
+      <label class="check"><input type="checkbox" bind:checked={clouds} /> {t.viewer.clouds}</label>
       {#if clouds}
-        <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> Drift</label>
+        <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> {t.viewer.drift}</label>
       {/if}
-      <label class="check"><input type="checkbox" bind:checked={graticule} /> Grid</label>
-      <label class="check" title="Equator, tropics and polar circles">
-        <input type="checkbox" bind:checked={referenceLines} /> Tropics
+      <label class="check"><input type="checkbox" bind:checked={graticule} /> {t.viewer.grid}</label>
+      <label class="check" title={t.viewer.tropicsHelp}>
+        <input type="checkbox" bind:checked={referenceLines} /> {t.viewer.tropics}
       </label>
-      <label class="check" title="Depth contours (isobaths) under water, in pale blue (needs the world's data)">
-        <input type="checkbox" bind:checked={seaContours} disabled={!dataReady} /> Depth contours
+      <label class="check" title={t.viewer.depthContoursHelp}>
+        <input type="checkbox" bind:checked={seaContours} disabled={!dataReady} /> {t.viewer.depthContours}
       </label>
-      <label class="check" title="Elevation contours on land, in brown, every fifth one stronger (needs the world's data)">
-        <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> Elevation contours
+      <label class="check" title={t.viewer.elevationContoursHelp}>
+        <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> {t.viewer.elevationContours}
       </label>
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />
-        Hexes
+        {t.viewer.hexes}
         {#if hexServerBusy}
-          <small class="muted" title="The server is generating a world: the hex grid follows once it is done"
-            >server busy, retrying…</small
+          <small class="muted" title={t.viewer.serverBusyHelp}
+            >{t.viewer.serverBusy}</small
           >
         {:else if hexBusy}
-          <small class="muted">computing…</small>
+          <small class="muted">{t.viewer.computing}</small>
         {/if}
       </label>
       {#if hexOn}
         <label>
-          <span>Columns</span>
+          <span>{t.viewer.columns}</span>
           <input type="range" min="16" max="256" step="4" bind:value={hexColumns} />
           <small class="value">{hexColumns}</small>
         </label>
         <label>
-          <span title="Land hexes crossed by a river draining more than this get a river dot">River from</span>
+          <span title={t.viewer.riverFromHelp}>{t.viewer.riverFrom}</span>
           <input type="range" min="3" max="7" step="0.1" bind:value={hexRiverLog} />
           <small class="value">{formatArea(10 ** hexRiverLog)}</small>
         </label>
-        <button class="small" onclick={downloadHex} disabled={!hexMap}>Download hex JSON</button>
+        <button class="small" onclick={downloadHex} disabled={!hexMap}>{t.viewer.downloadHex}</button>
       {/if}
     {/if}
   </div>
 
   {#if dataReady && shown !== 'biomes'}
-    {@const ramp = RAMPS[shown]}
-    <div class="legend" role="region" aria-label="Legend">
+    {@const ramp = t.legends[shown]}
+    <div class="legend" role="region" aria-label={t.viewer.legend}>
       <strong>{ramp.label}</strong>
       <div class="bar" style:background={cssGradient(shown)}></div>
       <div class="ends">
         <span>{ramp.min}</span>
-        <span>{shown === 'coast' && layers?.extra ? `${layers.extra.coastMaxKm} km (√ scale)` : ramp.max}</span>
+        <span>{shown === 'coast' && layers?.extra ? t.viewer.coastCap({ km: formatKm(layers.extra.coastMaxKm) }) : ramp.max}</span>
       </div>
     </div>
   {:else if shown === 'biomes' && world.stats}
-    <div class="legend biomes" role="region" aria-label="Biome legend">
+    <div class="legend biomes" role="region" aria-label={t.viewer.biomeLegend}>
       <button class="legend-title" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen}>
-        <strong>Biomes</strong>
-        <small class="muted">{legendOpen ? 'hide' : `${world.stats.shares.length}, show`}</small>
+        <strong>{t.viewer.biomes}</strong>
+        <small class="muted">{legendOpen ? t.viewer.legendHide : t.viewer.legendShow({ count: world.stats.shares.length })}</small>
       </button>
       {#if legendOpen}
         <ul onpointerleave={() => (hovered = null)}>
@@ -762,10 +767,10 @@
                 onblur={() => (hovered = null)}
                 onclick={() => (pinned = pinned === entry.biome.id ? null : entry.biome.id)}
                 aria-pressed={pinned === entry.biome.id}
-                title="Hover to highlight, click to keep it highlighted"
+                title={t.viewer.highlightHelp}
               >
                 <span class="swatch" style:background={hexOn ? entry.biome.color : surfaceColour(entry.biome)}></span>
-                <span class="name">{entry.biome.name}</span>
+                <span class="name">{biomeName(entry.biome)}</span>
                 <span class="value">{formatShare(entry.share)}</span>
               </button>
             </li>
@@ -779,17 +784,17 @@
     <div
       class="help"
       role="dialog"
-      aria-label="Keyboard shortcuts"
+      aria-label={t.viewer.shortcuts}
       tabindex="-1"
       bind:this={helpDialog}
       onkeydown={helpKey}
     >
       <header>
-        <strong>Keyboard shortcuts</strong>
-        <button class="close" onclick={() => (showHelp = false)} aria-label="Close">×</button>
+        <strong>{t.viewer.shortcuts}</strong>
+        <button class="close" onclick={() => (showHelp = false)} aria-label={t.viewer.close}>×</button>
       </header>
       <dl>
-        {#each SHORTCUT_HELP as [key, action] (key)}
+        {#each shortcutHelp() as [key, action] (key)}
           <dt><kbd>{key}</kbd></dt>
           <dd>{action}</dd>
         {/each}
@@ -798,17 +803,17 @@
   {/if}
 
   {#if !worldId}
-    <p class="overlay">Select a world, or generate a new one.</p>
+    <p class="overlay">{t.viewer.noWorld}</p>
   {:else if loading}
     <div class="overlay">
       <div class="loading">
-        <p>Loading…</p>
+        <p>{t.viewer.loading}</p>
         {#if mapProgress}<LoadingBar progress={mapProgress} />{/if}
       </div>
     </div>
   {:else if !dataReady && !world.error}
     <div class="chip">
-      <p>Loading the raw data…</p>
+      <p>{t.viewer.loadingData}</p>
       {#if world.progress}<LoadingBar progress={world.progress} />{/if}
     </div>
   {/if}

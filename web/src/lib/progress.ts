@@ -1,11 +1,17 @@
 // Download and decode progress of the files of a world, for the loading
 // bar of the viewer.
 
+import { formatNumber, withUnit } from './format';
+import { t } from './i18n/index.svelte';
+
 /** Where the loading of a set of files stands. */
 export interface LoadProgress {
   /** 'download' while bytes arrive, 'decode' once every file is in. */
   stage: 'download' | 'decode';
-  /** The file (or decoding step) being worked on, as shown to the user. */
+  /**
+   * The file being downloaded or decoded; empty for the biome statistics,
+   * the last decoding step. See `progressLabel` for the text shown.
+   */
   label: string;
   /** Bytes received (download), or steps done (decode). */
   done: number;
@@ -104,6 +110,14 @@ export function progressText(progress: LoadProgress): string {
   if (progress.stage === 'decode') {
     return progress.total === null ? '' : `${progress.done} / ${progress.total}`;
   }
-  const mb = (bytes: number) => (bytes / 1e6).toFixed(1);
-  return progress.total === null ? `${mb(progress.done)} MB` : `${mb(progress.done)} / ${mb(progress.total)} MB`;
+  const mb = (bytes: number) => formatNumber(bytes / 1e6, 1);
+  return withUnit(progress.total === null ? mb(progress.done) : `${mb(progress.done)} / ${mb(progress.total)}`, 'MB');
+}
+
+/** What the bar says is being worked on, in the active locale. */
+export function progressLabel(progress: LoadProgress): string {
+  if (progress.stage === 'download') {
+    return progress.label;
+  }
+  return progress.label ? t.loading.decoding({ file: progress.label }) : t.loading.stats;
 }

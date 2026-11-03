@@ -8,6 +8,8 @@ import type { Biome } from '../api/types/Biome';
 import type { CloudKind } from '../api/types/CloudKind';
 import type { Mouth } from '../api/types/Mouth';
 import type { Stage } from '../api/types/Stage';
+import type { DataLayer } from '../viewer/colormaps';
+import type { Layer } from '../viewer/shaders';
 
 export const en = {
   /** Language selector. */
@@ -299,5 +301,136 @@ export const en = {
     close: 'Close',
     generate: 'Generate',
     sending: 'Sending…',
+  },
+  /** The viewer: toolbar, display panel, legends, overlays. */
+  viewer: {
+    tools: 'Tools',
+    resetView: 'Reset view',
+    resetViewHelp: 'Reset the view (R)',
+    measure: 'Measure',
+    measureHelp: 'Measure distances (D)',
+    screenshot: 'Screenshot',
+    screenshotHelp: 'Save the view as a PNG (P)',
+    shortcutsHelp: 'Keyboard shortcuts (?)',
+    display: 'Display',
+    hide: 'Hide',
+    globe: 'Globe',
+    globeHelp: 'Globe (G)',
+    map: 'Map',
+    mapHelp: 'Flat map (M)',
+    layer: 'Layer',
+    layers: {
+      biomes: 'Biomes',
+      elevation: 'Elevation',
+      temperature: 'Temperature',
+      moisture: 'Moisture',
+      flow: 'Rivers',
+      volcanic: 'Volcanic zone',
+      coast: 'Distance to the sea',
+      floodplain: 'Floodplains',
+    } satisfies Record<Layer, string>,
+    notInWorld: ' (not in this world)',
+    relief: 'Relief',
+    sunlight: 'Sunlight',
+    season: 'Season',
+    seasonHelp: 'Sun declination follows the axial tilt',
+    play: 'Play',
+    pause: 'Pause',
+    playHelp: 'Play the seasons (S)',
+    seasons: ['Spring equinox', 'Summer solstice', 'Autumn equinox', 'Winter solstice'] as readonly string[],
+    dayOfYear: (p: { day: number }) => `Day ${p.day} of the year`,
+    sunOver: (p: { season: string; latitude: string; north: boolean }) =>
+      `${p.season} · sun over ${p.latitude}° ${p.north ? 'N' : 'S'}`,
+    sunLongitude: 'Sun longitude',
+    atmosphere: 'Atmosphere',
+    clouds: 'Clouds',
+    drift: 'Drift',
+    grid: 'Grid',
+    tropics: 'Tropics',
+    tropicsHelp: 'Equator, tropics and polar circles',
+    depthContours: 'Depth contours',
+    depthContoursHelp: "Depth contours (isobaths) under water, in pale blue (needs the world's data)",
+    elevationContours: 'Elevation contours',
+    elevationContoursHelp:
+      "Elevation contours on land, in brown, every fifth one stronger (needs the world's data)",
+    hexes: 'Hexes',
+    serverBusy: 'server busy, retrying…',
+    serverBusyHelp: 'The server is generating a world: the hex grid follows once it is done',
+    computing: 'computing…',
+    columns: 'Columns',
+    riverFrom: 'River from',
+    riverFromHelp: 'Land hexes crossed by a river draining more than this get a river dot',
+    downloadHex: 'Download hex JSON',
+    legend: 'Legend',
+    coastCap: (p: { km: string }) => `${p.km} (√ scale)`,
+    biomeLegend: 'Biome legend',
+    biomes: 'Biomes',
+    legendHide: 'hide',
+    legendShow: (p: { count: number }) => `${p.count}, show`,
+    highlightHelp: 'Hover to highlight, click to keep it highlighted',
+    shortcuts: 'Keyboard shortcuts',
+    close: 'Close',
+    noWorld: 'Select a world, or generate a new one.',
+    loading: 'Loading…',
+    loadingData: 'Loading the raw data…',
+    noWebgl: (p: { error: string }) => `WebGL is not available: ${p.error}`,
+    mapFailed: (p: { error: string }) => `Could not load the map: ${p.error}`,
+    hexFailed: (p: { error: string }) => `Could not compute the hex grid: ${p.error}`,
+    screenshotFailed: 'The screenshot failed.',
+  },
+  /** Legends of the data layers: title and the labels at both ends. */
+  legends: {
+    elevation: { label: 'Elevation', min: 'deep sea', max: 'summits' },
+    temperature: { label: 'Temperature', min: '−30 °C', max: '40 °C' },
+    moisture: { label: 'Moisture', min: 'arid', max: 'wet' },
+    flow: { label: 'River flow', min: '0 km²', max: '10 M km²' },
+    volcanic: { label: 'Volcanic zone', min: 'none', max: 'volcanic' },
+    coast: { label: 'Distance to the sea', min: '0 km', max: 'cap (√ scale)' },
+    floodplain: { label: 'Floodplain', min: 'none', max: 'valley floor' },
+  } satisfies Record<DataLayer, { label: string; min: string; max: string }>,
+  /** Actions of the keyboard shortcuts, in the order of the help. */
+  shortcuts: {
+    mode: 'Globe / flat map',
+    layer: 'Layer',
+    relief: 'More / less relief',
+    world: 'Previous / next world of the list',
+    reset: 'Reset the view',
+    hexes: 'Hexes',
+    sunlight: 'Sunlight',
+    seasons: 'Play / pause the seasons (turns sunlight on)',
+    atmosphere: 'Atmosphere',
+    clouds: 'Clouds',
+    drift: 'Cloud drift (turns clouds on)',
+    grid: 'Grid',
+    tropics: 'Tropics and polar circles',
+    depthContours: 'Depth contours (isobaths)',
+    elevationContours: 'Elevation contours',
+    measure: 'Measure distances',
+    screenshot: 'Screenshot',
+    escape: 'Close this help or the point panel, stop measuring',
+    help: 'This help',
+  },
+  /** Loading bars. */
+  loading: {
+    decoding: (p: { file: string }) => `Decoding ${p.file}`,
+    stats: 'Computing the biome statistics',
+  },
+  /** Coordinates. */
+  geo: {
+    north: 'N',
+    south: 'S',
+    east: 'E',
+    west: 'W',
+    /** Latitude then longitude, each already formatted. */
+    point: (p: { lat: string; lon: string }) => `${p.lat}, ${p.lon}`,
+  },
+  /** Cost estimates of a generation. */
+  estimate: {
+    underSecond: 'under a second',
+    about: (p: { time: string }) => `about ${p.time}`,
+  },
+  /** Loading of a world. */
+  world: {
+    loadFailed: (p: { id: string; error: string }) => `Could not load ${p.id}: ${p.error}`,
   },
 };
