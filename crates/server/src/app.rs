@@ -448,8 +448,9 @@ async fn create_world(
             return;
         }
         // Worlds loaded for the tiles would add to the generation's peak:
-        // free them, and load none until it ends.
-        let paused_tiles = task_state.tiles.suspend();
+        // free them, wait for a load in progress, and load none until it
+        // ends.
+        let paused_tiles = task_state.tiles.suspend().await;
         let worlds_dir = task_state.config.worlds_dir.clone();
         let progress = tx.clone();
         let thread_cancel = cancel.clone();
