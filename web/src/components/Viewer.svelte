@@ -451,8 +451,8 @@
     ['W', 'Cloud drift (with clouds)'],
     ['N', 'Grid'],
     ['T', 'Tropics and polar circles'],
-    ['K', 'Depth contours (sea)'],
-    ['J', 'Altitude contours (land)'],
+    ['K', 'Depth contours (isobaths)'],
+    ['J', 'Elevation contours'],
     ['D', 'Measure distances'],
     ['P', 'Screenshot'],
     ['Esc', 'Close the point panel, stop measuring'],
@@ -532,11 +532,11 @@
       <label class="check" title="Equator, tropics and polar circles">
         <input type="checkbox" bind:checked={referenceLines} /> Tropics
       </label>
-      <label class="check" title="Depth contours under water, in pale blue (needs the world's data)">
-        <input type="checkbox" bind:checked={seaContours} disabled={!dataReady} /> Sea contours
+      <label class="check" title="Depth contours (isobaths) under water, in pale blue (needs the world's data)">
+        <input type="checkbox" bind:checked={seaContours} disabled={!dataReady} /> Depth contours
       </label>
-      <label class="check" title="Altitude contours on land, in brown (needs the world's data)">
-        <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> Land contours
+      <label class="check" title="Elevation contours on land, in brown, every fifth one stronger (needs the world's data)">
+        <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> Elevation contours
       </label>
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />
