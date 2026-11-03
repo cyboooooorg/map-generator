@@ -94,6 +94,9 @@ export type Lighting =
       axialTiltDeg: number;
     };
 
+/** Layers drawn from uExtra, uploaded the first time one of them is shown. */
+const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodplain']);
+
 const MORPH_MS = 1200;
 /** Camera distances: the globe has radius 1, the map is 2π × π. */
 const GLOBE_DISTANCE = 3.2;
@@ -289,6 +292,11 @@ export class PlanetView {
   private referencesOn = false;
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
+  /**
+   * The world whose layers of format version 2 are not uploaded yet (with
+   * the factor that fits them to the GPU), until a layer needs them.
+   */
+  private pendingExtra: { packed: Uint16Array; width: number; height: number; factor: number } | null = null;
   /**
    * Rendering on demand: a frame is requested when something changed (a
    * setter, the camera, a loaded tile, a resize), and frames keep coming
@@ -670,6 +678,7 @@ export class PlanetView {
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
     this.u.uExtra.value = emptyTexture();
+    this.pendingExtra = null;
     this.u.uBiomes.value = emptyTexture();
     this.u.uHasExtra.value = 0;
     this.u.uHasBiomes.value = 0;
@@ -695,12 +704,16 @@ export class PlanetView {
     biomes.needsUpdate = true;
     this.u.uBiomes.value = biomes;
     this.u.uHasBiomes.value = 1;
+    // The layers of format version 2 are uploaded on first use: most views
+    // never show them, and they take as much GPU memory as uData.
+    this.pendingExtra = layers.extra
+      ? { packed: layers.extra.packed, width: layers.width, height: layers.height, factor }
+      : null;
     if (layers.extra) {
-      const packed = fit(layers.extra.packed, 4);
-      this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height);
       this.u.uHasExtra.value = 1;
       this.u.uCoastMax.value = layers.extra.coastMaxKm;
     }
+    this.uploadExtraIfShown();
     const surface = fit(layers.surface, 4);
     const texture = halfFloatTexture(surface.data, surface.width, surface.height);
     this.shared.uData.value = texture;
@@ -711,10 +724,24 @@ export class PlanetView {
     this.u.uMapSize.value.set(layers.width, layers.height);
   }
 
+  /** Uploads the layers of format version 2 when the layer shown needs them and they are not on the GPU yet. */
+  private uploadExtraIfShown(): void {
+    const pending = this.pendingExtra;
+    if (!pending || !EXTRA_LAYERS.has(this.layer)) {
+      return;
+    }
+    const packed = downsample(pending.packed, pending.width, pending.height, 4, pending.factor);
+    this.u.uExtra.value.dispose();
+    this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height);
+    // Only the GPU copy is needed from now on.
+    this.pendingExtra = null;
+  }
+
   setLayer(layer: Layer): void {
     this.requestRender();
     this.u.uLayer.value = LAYER_IDS[layer];
     this.layer = layer;
+    this.uploadExtraIfShown();
     this.tiles.setEnabled(layer === 'biomes' && !this.hexOn);
   }
 
