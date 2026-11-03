@@ -31,6 +31,7 @@ import {
   Raycaster,
   RedFormat,
   RepeatWrapping,
+  RGFormat,
   RGBAFormat,
   Scene,
   ShaderMaterial,
@@ -71,6 +72,7 @@ import {
   mapPoint,
   morphCamera,
 } from './viewTransfer';
+import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH, sunDepthTable } from './sunDepth';
 import { downsample, fitFactor, releaseOnUpload } from './textures';
 import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
@@ -208,6 +210,24 @@ function pathGeometry(points: readonly LonLat[]): BufferGeometry {
   geometry.setAttribute('position', new Float32BufferAttribute(new Array((uvs.length / 2) * 3).fill(0), 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
   return geometry;
+}
+
+/** The optical depth table of the sky shader, for a shell and its scale heights (see sunDepth.ts). */
+function sunDepthTexture(top: number, heightR: number, heightM: number): DataTexture {
+  const texture = new DataTexture(
+    sunDepthTable(top, heightR, heightM),
+    SUN_DEPTH_WIDTH,
+    SUN_DEPTH_HEIGHT,
+    RGFormat,
+    HalfFloatType,
+  );
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  texture.wrapS = ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function emptyTexture(): DataTexture {
@@ -406,6 +426,7 @@ export class PlanetView {
     uHeightR: { value: 0.009 } as IUniform<number>,
     uHeightM: { value: 0.0043 } as IUniform<number>,
     uG: { value: 0.76 } as IUniform<number>,
+    uSunDepth: { value: sunDepthTexture(1.04, 0.009, 0.0043) } as IUniform<DataTexture>,
   };
   private mode: ViewMode = 'globe';
   private morph = 1;
@@ -920,6 +941,11 @@ export class PlanetView {
     for (const pass of this.atmosphere) {
       pass.scale.setScalar(sky.top);
     }
+    const s = this.sky;
+    if (s.uTop.value !== sky.top || s.uHeightR.value !== sky.heightR || s.uHeightM.value !== sky.heightM) {
+      s.uSunDepth.value.dispose();
+      s.uSunDepth.value = sunDepthTexture(sky.top, sky.heightR, sky.heightM);
+    }
     this.sky.uTop.value = sky.top;
     this.sky.uBetaR.value.set(...sky.betaR);
     this.sky.uBetaM.value = sky.betaM;
@@ -1156,6 +1182,7 @@ export class PlanetView {
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
+    this.sky.uSunDepth.value.dispose();
     for (const object of [this.surface, this.grid, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
