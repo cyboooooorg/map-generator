@@ -72,3 +72,10 @@ input[type='range'] {
   width: 100%;
   accent-color: var(--accent);
 }
+
+/* A value or label with a unit explained in its tooltip (see lib/units.ts). */
+.unit-help {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}

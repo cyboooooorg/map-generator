@@ -15,6 +15,7 @@
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
+  import { UNITS } from '../lib/units';
   import { altAllowed, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
@@ -809,6 +810,13 @@
           <dd>{action}</dd>
         {/each}
       </dl>
+      <strong class="units">{t.units.title}</strong>
+      <dl>
+        {#each UNITS as unit (unit)}
+          <dt><abbr>{unit}</abbr></dt>
+          <dd>{t.units[unit].name}<br /><small>{t.units[unit].examples}</small></dd>
+        {/each}
+      </dl>
     </div>
   {/if}
 
@@ -1024,6 +1032,13 @@
   }
   .help dd {
     margin: 0;
+  }
+  .help .units {
+    display: block;
+    margin: 10px 0 6px;
+  }
+  .help small {
+    color: var(--muted);
   }
   kbd {
     font-family: ui-monospace, monospace;

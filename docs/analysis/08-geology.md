@@ -434,6 +434,19 @@ which erosion reshaped the craters. In practice it covers the dead
 worlds the request was about: `barren`, `mars-like`, `mercury-like`, and
 any world of thin enough air.
 
+**Decisions (2026-11-04),** taken with the user before step 4:
+
+- **Future:** up to 1 Ga ahead, craters drawn at the constant flux of
+  the last 3 Ga, from a population of their own so the present craters
+  do not move.
+- **Past:** back to the surface age (4 Ga on `mercury-like`, where the
+  oldest craters vanish one by one down to an almost smooth surface),
+  still capped at the end of the wet era on worlds that had water.
+- **Units:** Ma and Ga, unusual for most users, are explained in the
+  interface: a tooltip wherever a unit appears, and a table of units
+  with reference values in the help panel (with bar and g), in English
+  and French.
+
 ### Server
 
 - `GET /api/worlds/{id}/epoch/{ma}/{layer}.png`, `layer` one of

@@ -5,6 +5,7 @@
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
   import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatGeology, formatInt, formatNumber, formatShare, surfaceColour, withUnit } from '../lib/format';
+  import { unitTooltip } from '../lib/units';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -93,11 +94,19 @@
         <dt>{t.worldInfo.axialTilt}</dt>
         <dd>{formatNumber(meta.axial_tilt_deg, 1)}°</dd>
         <dt>{t.worldInfo.gravity}</dt>
-        <dd>{withUnit(formatNumber(meta.gravity_modifier, 2), 'g')}</dd>
+        <dd class="unit-help" title={unitTooltip('g')}>{withUnit(formatNumber(meta.gravity_modifier, 2), 'g')}</dd>
         <dt>{t.worldInfo.atmosphere}</dt>
-        <dd>{formatAtmosphere(meta)}</dd>
+        {#if (meta.pressure_bar ?? 1) > 0}
+          <dd class="unit-help" title={unitTooltip('bar')}>{formatAtmosphere(meta)}</dd>
+        {:else}
+          <dd>{formatAtmosphere(meta)}</dd>
+        {/if}
         <dt>{t.worldInfo.geology}</dt>
-        <dd>{formatGeology(meta)}</dd>
+        {#if meta.surface_age_ga != null}
+          <dd class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatGeology(meta)}</dd>
+        {:else}
+          <dd>{formatGeology(meta)}</dd>
+        {/if}
         {#if stats}
           <dt>{t.worldInfo.surface}</dt>
           <dd>{formatArea(stats.surfaceKm2)}</dd>

@@ -14,6 +14,7 @@
   import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
   import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
+  import { type Unit, unitTooltip } from '../lib/units';
   import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
 
   interface Props {
@@ -50,6 +51,8 @@
     /** Slider range; the number input accepts the full server limits. */
     slider: [number, number];
     step: number;
+    /** Less common units of the field, explained in a tooltip. */
+    units?: Unit[];
   }
 
   const FIELDS: Record<Field, FieldInfo> = {
@@ -79,11 +82,13 @@
       step: 0.1,
     },
     pressure_bar: {
+      units: ['bar'],
       defaultsKey: 'pressure',
       slider: [0, 100],
       step: 0.001,
     },
     surface_age_ga: {
+      units: ['Ga'],
       defaultsKey: 'surface_age',
       slider: [0, 4.6],
       step: 0.01,
@@ -394,7 +399,11 @@
     {@const limits = spec[field].limits}
     <fieldset>
       <legend>
-        {fieldText(field).label}
+        {#if info.units}
+          <span class="unit-help" title={unitTooltip(...info.units)}>{fieldText(field).label}</span>
+        {:else}
+          {fieldText(field).label}
+        {/if}
         <label class="check inline">
           <input type="checkbox" bind:checked={fields[field].random} />
           {t.form.random}

@@ -9,6 +9,7 @@ import type { CloudKind } from '../api/types/CloudKind';
 import type { Mouth } from '../api/types/Mouth';
 import type { Regime } from '../api/types/Regime';
 import type { Stage } from '../api/types/Stage';
+import type { Unit } from '../units';
 import type { DataLayer } from '../viewer/colormaps';
 import type { Layer } from '../viewer/shaders';
 
@@ -427,6 +428,26 @@ export const en = {
     escape: 'Close this help or the point panel, stop measuring',
     help: 'This help',
   },
+  /** The less common units, explained in tooltips and in the help panel. */
+  units: {
+    title: 'Units',
+    Ga: {
+      name: 'Ga: a billion years (10⁹ years, 1 000 Ma)',
+      examples: 'Earth and the Solar System: 4.5 Ga · lunar maria: 3 to 3.9 Ga',
+    },
+    Ma: {
+      name: 'Ma: a million years (10⁶ years)',
+      examples: 'end of the dinosaurs: 66 Ma · Venus resurfaced 300 to 750 Ma ago',
+    },
+    bar: {
+      name: "bar: surface pressure, 1 bar is about Earth's air at sea level",
+      examples: 'Mars: 0.006 · Earth: 1 · Venus: 92',
+    },
+    g: {
+      name: "g: surface gravity, 1 g is Earth's (9.81 m/s²)",
+      examples: 'Moon: 0.17 · Mars: 0.38 · Earth: 1',
+    },
+  } satisfies { title: string } & Record<Unit, { name: string; examples: string }>,
   /** Loading bars. */
   loading: {
     decoding: (p: { file: string }) => `Decoding ${p.file}`,
