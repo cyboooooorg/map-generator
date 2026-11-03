@@ -463,7 +463,7 @@ The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75
 
 The cloud cover of each pixel, in `[0, 1]`, depends on the atmosphere's cloud kind (`[atmosphere] clouds`):
 
-- **water**: `0.2 × circulation band + 0.4 × rain + 0.25`, plus polar stratus (`+0.35` towards the poles, where the rain term fades out: cold air rains little but stays overcast), plus `1.2 ×` a 5-octave noise, through `smoothstep(0, 0.7)`. Clouds gather where air rises (the equatorial convergence and the storm tracks around 60°) and where it rains (windward slopes), and thin out over the subtropical highs. Earth-like worlds come out about two-thirds overcast (Earth: 67 %): 0.9 at the equator, 0.5 around 30°, 0.75 along the storm tracks, 0.6–0.85 at the poles.
+- **water**: `0.15 × circulation band + 0.3 × rain + 0.26`, plus polar stratus (`+0.35` towards the poles, where the rain term fades out: cold air rains little but stays overcast), plus `1.4 ×` a 5-octave noise, through `smoothstep(0, 0.7)`. Clouds gather where air rises (the equatorial convergence and the storm tracks around 60°) and where it rains (windward slopes), and thin out over the subtropical highs. Earth-like worlds come out 63–65 % overcast (Earth: about 67 %): 0.75–0.8 at the equator, 0.5 around 30°, 0.7 along the storm tracks, 0.65–0.9 at the poles.
 - **sulfuric**: a deck in zonal bands, `smoothstep(−0.3, 0.6, 0.2 + 0.7 × cover + noise)`: total on `venus-like`, patchy on `volcanic` worlds.
 - **dust**: low, patchy and thin (`0.8 × smoothstep(0.15, 0.6, …)`), about 10 % of `mars-like` worlds.
 - **none**: no cloud layer.
