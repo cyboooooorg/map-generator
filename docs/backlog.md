@@ -244,7 +244,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Step | Change                                                                                                         | Seeds  | Status |
 | ---- | -------------------------------------------------------------------------------------------------------------- | ------ | ------ |
 | 1    | `[geology]` in presets and `world.json`, `--surface-age`, form field, regime in the world info; no effect yet  | Same   | done   |
-| 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`     | Change | todo   |
+| 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`     | Change | done   |
 | 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                   | Same   | todo   |
 | 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                      | Same   | todo   |
 | 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                             | Same   | todo   |

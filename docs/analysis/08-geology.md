@@ -324,6 +324,53 @@ interiors and ejecta get no biome of their own in this step.
   stay within twice the current 4–6 ms per tile; it is measured in the
   step that adds the tiles.
 
+### Outcome (step 2)
+
+Implemented in `craters.rs`, with these changes from the plan:
+
+- **Lattice:** a cube-sphere grid per octave rather than a 3D lattice:
+  each cell holds a Poisson number of craters expected from its exact
+  solid angle, so the density is uniform over the sphere. Octaves are
+  fixed (`[2^k, 2^(k+1)]` km) and cells depend only on the planet and
+  the seed, as step 3 needs.
+- **`ELEVATION_KM` = 25**, from Earth-like worlds (seeds 3, 7, 42): their
+  median sea floor sits at −0.16 units (4 km on Earth), their highest
+  peaks at 0.30–0.39 (8.8 km). The deepest sea floors then read as 13–18
+  km, deeper than Earth's trenches: the noise has no trench to calibrate
+  on.
+- **Smallest crater on the base map: 4 pixels**, not 2. At 2.5 pixels
+  small pits read as rings around a bright dot and their floors fell
+  into the dark basin biome of `mercury-like`, which made the ground
+  look bubbly. Smaller craters are left to the tiles.
+- **Ejecta stop at 3 radii**, not 4: beyond, they are thinner than 4 %
+  of the rim, and the outer ring cost half of the pixels drawn.
+- **Wet worlds:** a single wear law instead of dropping craters under
+  20 km: a crater keeps `exp(−exposure / τ)` of its relief, with
+  `τ = 0.1 Ga × (D / 20 km) / erosion` and the exposure the time it spent
+  while water was liquid (none without erosion). Earth-like worlds keep
+  a few large faint craters, Mars-like ones worn Noachian basins.
+- **Sea floors:** craters vanish under a sea that still fills the basins,
+  decided from the preset (its ocean is still a water biome: water,
+  ice-sealed, acid or magma), not from the pressure. With the pressure,
+  `venus-like` (92 bar, seas remapped to basalt) lost all its craters.
+  The wet era itself still follows the pressure (`Geology::wet_until_ga`).
+- **Diffusion** of crater profiles is not applied: it smooths about
+  120 m in 3 Ga, far below the base pixel. It belongs to the tiles.
+- **Parallel drawing:** craters are grouped in waves of craters that
+  share no pixel, each after every older one it overlaps; a wave is
+  computed in parallel and written at once, which gives exactly the
+  result of drawing one crater at a time (tested). Basins, alone in their
+  wave, compute their rows in parallel. Generations with and without
+  craters take the same time within run-to-run variation (4 Ga
+  `mercury-like`: about 1 s at 1920 × 1080, 18 s at 8192 × 4096), so the
+  craters run inside the Erosion stage, without a progress stage of
+  their own.
+- **Not done:** `--land-fraction` samples the relief without craters, so
+  on heavily cratered worlds the land share can drift slightly from the
+  target. No preset combines the two today.
+- **Debug map:** `noise_maps/craters.png`, the height change of both
+  passes.
+
 ## 6. Time slider
 
 ### What it shows
