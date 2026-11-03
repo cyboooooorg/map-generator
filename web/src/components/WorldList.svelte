@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { getLocale, t } from '../lib/i18n/index.svelte';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
-  import { formatAgo } from '../lib/format';
+  import { formatAgo, formatNumber } from '../lib/format';
   import { loadSetting, saveSetting } from '../lib/settings';
   import Thumbnail from './Thumbnail.svelte';
 
@@ -18,12 +19,12 @@
   let { worlds, selectedId, compareId, onSelect, onDelete, onCompare, order = $bindable([]) }: Props = $props();
 
   type Sort = 'newest' | 'oldest' | 'planet' | 'seed' | 'size';
-  const SORTS: { id: Sort; label: string }[] = [
-    { id: 'newest', label: 'Newest first' },
-    { id: 'oldest', label: 'Oldest first' },
-    { id: 'planet', label: 'Planet' },
-    { id: 'seed', label: 'Seed' },
-    { id: 'size', label: 'Largest map' },
+  const SORTS: { id: Sort }[] = [
+    { id: 'newest' },
+    { id: 'oldest' },
+    { id: 'planet' },
+    { id: 'seed' },
+    { id: 'size' },
   ];
   const COMPARE: Record<Sort, (a: WorldSummary, b: WorldSummary) => number> = {
     newest: (a, b) => b.modified_ms - a.modified_ms,
@@ -70,31 +71,31 @@
 </script>
 
 {#if worlds.length === 0}
-  <p class="empty">No world yet.</p>
+  <p class="empty">{t.worldList.empty}</p>
 {:else}
   <div class="toolbar">
-    <input type="search" placeholder="Search id or seed" bind:value={query} aria-label="Search worlds" />
-    <select bind:value={planet} aria-label="Filter by planet">
-      <option value="">All planets</option>
+    <input type="search" placeholder={t.worldList.search} bind:value={query} aria-label={t.worldList.searchLabel} />
+    <select bind:value={planet} aria-label={t.worldList.filterLabel}>
+      <option value="">{t.worldList.allPlanets}</option>
       {#each planets as name (name)}
         <option value={name}>{name}</option>
       {/each}
     </select>
-    <select bind:value={sort} aria-label="Sort">
+    <select bind:value={sort} aria-label={t.worldList.sortLabel}>
       {#each SORTS as option (option.id)}
-        <option value={option.id}>{option.label}</option>
+        <option value={option.id}>{t.worldList.sorts[option.id]}</option>
       {/each}
     </select>
     <button onclick={() => (selecting ? stopSelecting() : (selecting = true))} aria-pressed={selecting}>
-      {selecting ? 'Done' : 'Select'}
+      {selecting ? t.worldList.done : t.worldList.select}
     </button>
   </div>
 
   {#if selecting}
     <div class="selection">
-      <small>{chosen.length} selected</small>
-      <button class="link" onclick={() => (chosen = shown.map((w) => w.id))}>all</button>
-      <button class="link" onclick={() => (chosen = [])} disabled={chosen.length === 0}>none</button>
+      <small>{t.worldList.selected({ count: chosen.length })}</small>
+      <button class="link" onclick={() => (chosen = shown.map((w) => w.id))}>{t.worldList.all}</button>
+      <button class="link" onclick={() => (chosen = [])} disabled={chosen.length === 0}>{t.worldList.none}</button>
       <span class="spacer"></span>
       <button
         onclick={() => {
@@ -105,7 +106,7 @@
           }
         }}
         disabled={chosen.length !== 2}
-        title="Select exactly two worlds">Compare</button
+        title={t.worldList.compareHelp}>{t.worldList.compare}</button
       >
       <button
         class="danger"
@@ -113,13 +114,13 @@
           onDelete(chosen);
           stopSelecting();
         }}
-        disabled={chosen.length === 0}>Delete</button
+        disabled={chosen.length === 0}>{t.worldList.delete}</button
       >
     </div>
   {/if}
 
   {#if shown.length === 0}
-    <p class="empty">No world matches.</p>
+    <p class="empty">{t.worldList.noMatch}</p>
   {/if}
   <ul>
     {#each shown as world (world.id)}
@@ -130,7 +131,7 @@
               type="checkbox"
               checked={chosen.includes(world.id)}
               onchange={() => toggle(world.id)}
-              aria-label={`Select ${world.id}`}
+              aria-label={t.worldList.selectOne({ id: world.id })}
             />
           </label>
         {/if}
@@ -138,16 +139,18 @@
           <Thumbnail id={world.id} revision={world.modified_ms} width={72} height={40} />
           <span class="text">
             <strong>{world.planet}</strong>
-            <small>seed {world.seed} · {world.width}×{world.height}</small>
-            <small title={new Date(world.modified_ms).toLocaleString()}
-              >{formatAgo(world.modified_ms)} · sea {world.sea_level.toFixed(2)} · tilt {world.axial_tilt_deg.toFixed(
-                0,
-              )}°</small
+            <small>{t.worldList.seedSize({ seed: world.seed, width: world.width, height: world.height })}</small>
+            <small title={new Date(world.modified_ms).toLocaleString(getLocale())}
+              >{t.worldList.details({
+                ago: formatAgo(world.modified_ms),
+                sea: formatNumber(world.sea_level, 2),
+                tilt: formatNumber(world.axial_tilt_deg),
+              })}</small
             >
           </span>
         </button>
         {#if !selecting}
-          <button class="delete" onclick={() => onDelete([world.id])} aria-label={`Delete ${world.id}`}>×</button>
+          <button class="delete" onclick={() => onDelete([world.id])} aria-label={t.worldList.deleteOne({ id: world.id })}>×</button>
         {/if}
       </li>
     {/each}

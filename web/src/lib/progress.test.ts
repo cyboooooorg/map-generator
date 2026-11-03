@@ -4,9 +4,9 @@ import {
   expectedLength,
   type FileProgress,
   progressShare,
-  progressText,
   readWithProgress,
 } from './progress';
+import { progressText } from './progressText';
 
 function streamed(chunks: number[][], headers: Record<string, string> = {}): Response {
   const body = new ReadableStream<Uint8Array>({

@@ -75,10 +75,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     const steps = names.length + 1;
     let step = 0;
     const layers = decodeLayers(meta, files, (file) => {
-      report({ stage: 'decode', label: `Decoding ${file}`, done: step, total: steps });
+      report({ stage: 'decode', label: file, done: step, total: steps });
       step += 1;
     });
-    report({ stage: 'decode', label: 'Computing the biome statistics', done: step, total: steps });
+    // The statistics step has no file: the bar names it.
+    report({ stage: 'decode', label: '', done: step, total: steps });
     const stats = worldStats(layers.biomes, layers.width, layers.height, meta.biomes, meta.circumference_km);
     const response: WorkerResponse = { ok: true, layers, stats };
     const transfer: ArrayBufferLike[] = [layers.elevation.data.buffer, layers.biomes.buffer, layers.surface.buffer];

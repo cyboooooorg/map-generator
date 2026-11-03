@@ -4,6 +4,10 @@
 name = "mars-like"
 description = "Small cold desert world with polar caps"
 
+[locales.fr]
+name = "Type Mars"
+description = "Petit désert froid aux calottes polaires"
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.
 #

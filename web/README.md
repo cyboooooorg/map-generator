@@ -21,6 +21,8 @@ Development, with hot reload: run the server and the Vite dev server together, t
 mise run dev
 ```
 
+The interface is in English or French: the first visit follows the browser's languages (any `fr-*` gives French, anything else English), and the **EN / FR** selector in the header switches it at once and is remembered. Numbers, units and dates follow it (decimal comma and narrow no-break spaces in French). Biome names, generation stages, the request errors the server explains with a code, and the presets that carry a `[locales.fr]` table are translated too; the files a generation writes and the CLI stay in English. Keyboard shortcuts are the same in every language.
+
 In the viewer:
 
 - **Globe / Map** switches between the globe and the flat map, with an animated morph that keeps the place: the point at the centre of the screen stays there, at an equivalent zoom (the same scale near the ground, the whole map for the whole globe), and the camera follows it while the surface morphs. Zoomed out, the map is kept in view rather than half off screen.
@@ -38,27 +40,27 @@ In the viewer:
 
 Keyboard shortcuts, when no form field has the focus:
 
-| Key       | Action                                              |
-| --------- | --------------------------------------------------- |
-| `G` / `M` | globe / flat map                                    |
-| `1` – `8` | layer                                               |
-| `+` / `-` | more / less relief (steps of 0.1)                   |
-| `[` / `]` | previous / next world, in the order the list shows  |
-| `R`       | reset the view                                      |
-| `H`       | hexes                                               |
-| `L`       | sunlight                                            |
-| `S`       | play / pause the seasons (turns sunlight on)        |
-| `A`       | atmosphere                                          |
-| `C`       | clouds                                              |
-| `W`       | cloud drift (turns clouds on)                       |
-| `N`       | grid                                                |
-| `T`       | tropics and polar circles                           |
-| `K`       | depth contours                                      |
-| `J`       | elevation contours                                  |
-| `D`       | measure distances                                   |
-| `P`       | screenshot                                          |
-| `Esc`     | close the help or the point panel, stop measuring   |
-| `?`       | shortcut help                                       |
+| Key       | Action                                             |
+| --------- | -------------------------------------------------- |
+| `G` / `M` | globe / flat map                                   |
+| `1` – `8` | layer                                              |
+| `+` / `-` | more / less relief (steps of 0.1)                  |
+| `[` / `]` | previous / next world, in the order the list shows |
+| `R`       | reset the view                                     |
+| `H`       | hexes                                              |
+| `L`       | sunlight                                           |
+| `S`       | play / pause the seasons (turns sunlight on)       |
+| `A`       | atmosphere                                         |
+| `C`       | clouds                                             |
+| `W`       | cloud drift (turns clouds on)                      |
+| `N`       | grid                                               |
+| `T`       | tropics and polar circles                          |
+| `K`       | depth contours                                     |
+| `J`       | elevation contours                                 |
+| `D`       | measure distances                                  |
+| `P`       | screenshot                                         |
+| `Esc`     | close the help or the point panel, stop measuring  |
+| `?`       | shortcut help                                      |
 
 The help takes the keyboard focus when it opens and gives it back when it closes (`Esc` or `×`). The brackets and `+` / `-` also work when the layout types them with Alt (Option), as French and German Mac keyboards do.
 
@@ -84,6 +86,10 @@ On the GPU, a pane holds the data layers as RGBA half floats (8 bytes per pixel)
 
 For everyday use, run the whole app in Docker instead: see "Web app" in the repository README.
 
+## Translations
+
+Every string the interface shows comes from `src/lib/i18n/en.ts`; components read it through `t` (`t.viewer.layers.elevation`), and messages with values are functions of named parameters (`t.jobs.left({ time })`), so each language orders its words. To add a message, add it to `en.ts` and to every other catalog (the type check lists the ones missing it). To add a language, copy `fr.ts`, translate it, and add its code to `LOCALES` and `LOCALE_NAMES` in `locale.ts` and its catalog to `index.svelte.ts`; built-in presets take a `[locales.<code>]` table. Format numbers with the helpers of `lib/format.ts` (`formatNumber`, `formatUpTo`, `withUnit`…), which follow the locale. Tests run in English whatever the machine's language (`src/test-setup.ts`). A test (`src/lib/i18n/templates.test.ts`) fails on any word written in a component's markup outside an expression, text or `title`, `aria-label`, `placeholder`, `alt` and `label` attributes: write it in the catalogs instead (units and symbols that read the same in every language go in its `ALLOWED` list).
+
 ## Checks
 
 ```bash
@@ -97,25 +103,26 @@ There is nothing to configure here: the server address is fixed in `vite.config.
 
 ## Code layout
 
-| Path                                      | Content                                                                                                                                                                                                                                                                                                            |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/lib/api/client.ts`                   | Typed API calls and the job progress stream                                                                                                                                                                                                                                                                        |
-| `src/lib/api/types/`                      | API types generated from the Rust server by `cargo test` (ts-rs): do not edit                                                                                                                                                                                                                                      |
-| `src/lib/geo.ts`                          | Coordinate conventions (texture, globe, flat map) and ray intersections                                                                                                                                                                                                                                            |
-| `src/lib/layers/`                         | 16-bit layer decoding and biome statistics in a Web Worker (browsers decode PNGs to 8 bits); layers stay packed as half floats, as the GPU takes them, and are converted on read; the cloud cover is decoded to one byte per pixel in its own worker                                                               |
-| `src/lib/viewer/`                         | three.js view (`PlanetView.ts`): one mesh morphing between plane and sphere in its vertex shader, drawn on demand; GLSL in `shaders.ts`, ramps in `colormaps.ts`, the sky's optical depth table in `sunDepth.ts`, textures in `textures.ts`, pixel ratio in `pixelRatio.ts`, globe/map camera in `viewTransfer.ts` |
-| `src/lib/viewer/TileLayer.ts`, `tiles.ts` | Deep zoom: quadtree level selection (screen-space error, frustum and horizon culling), tile loading (priority queue, coarse fallbacks, abort with hysteresis, retry backoff, GPU cache) and detail patches                                                                                                         |
-| `src/lib/world.svelte.ts`                 | Loading of one shown world: metadata, decoded layers, biome statistics (`stats.ts`) and the river index (`rivers.ts`)                                                                                                                                                                                              |
-| `src/lib/progress.ts`                     | Download progress read from streamed responses (bytes received out of `Content-Length`) and the text of the loading bars                                                                                                                                                                                           |
-| `src/lib/jobs.svelte.ts`                  | Generation jobs followed by the page: progress, cancellation, time estimates, jobs picked up after a reload                                                                                                                                                                                                        |
-| `src/lib/sample.ts`, `hex.ts`             | Values of a world, a river and a hex at one point                                                                                                                                                                                                                                                                  |
-| `src/lib/format.ts`, `download.ts`        | Number and date formatting, the request and command that reproduce a world, file downloads and the raw data ZIP                                                                                                                                                                                                    |
-| `src/lib/settings.ts`                     | Preferences in `localStorage`, guarded so the app works without storage                                                                                                                                                                                                                                            |
-| `src/lib/link.ts`                         | Links to a view: the worlds, the camera, the layer, the relief and the sun in the address fragment, read defensively                                                                                                                                                                                               |
-| `src/lib/formMemory.ts`                   | The generation form remembered from its last submission                                                                                                                                                                                                                                                            |
-| `src/lib/shortcuts.ts`                    | Keyboard shortcuts of the viewer (keys, help table, relief and world steps)                                                                                                                                                                                                                                        |
-| `src/lib/display.ts`                      | Display settings a compare pane mirrors with "Link display"                                                                                                                                                                                                                                                        |
-| `src/lib/pressure.ts`, `estimate.ts`      | Logarithmic pressure slider; time and memory estimates of a map size                                                                                                                                                                                                                                               |
-| `src/components/`                         | Svelte components: world pane (viewer, point information, pointer readout, measurement), world card, world list and thumbnails, generation jobs, generation form, notifications                                                                                                                                    |
+| Path                                      | Content                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/api/client.ts`                   | Typed API calls and the job progress stream                                                                                                                                                                                                                                                                                                           |
+| `src/lib/api/types/`                      | API types generated from the Rust server by `cargo test` (ts-rs): do not edit                                                                                                                                                                                                                                                                         |
+| `src/lib/geo.ts`                          | Coordinate conventions (texture, globe, flat map) and ray intersections                                                                                                                                                                                                                                                                               |
+| `src/lib/layers/`                         | 16-bit layer decoding and biome statistics in a Web Worker (browsers decode PNGs to 8 bits); layers stay packed as half floats, as the GPU takes them, and are converted on read; the cloud cover is decoded to one byte per pixel in its own worker                                                                                                  |
+| `src/lib/viewer/`                         | three.js view (`PlanetView.ts`): one mesh morphing between plane and sphere in its vertex shader, drawn on demand; GLSL in `shaders.ts`, ramps in `colormaps.ts`, the sky's optical depth table in `sunDepth.ts`, textures in `textures.ts`, pixel ratio in `pixelRatio.ts`, globe/map camera in `viewTransfer.ts`                                    |
+| `src/lib/viewer/TileLayer.ts`, `tiles.ts` | Deep zoom: quadtree level selection (screen-space error, frustum and horizon culling), tile loading (priority queue, coarse fallbacks, abort with hysteresis, retry backoff, GPU cache) and detail patches                                                                                                                                            |
+| `src/lib/world.svelte.ts`                 | Loading of one shown world: metadata, decoded layers, biome statistics (`stats.ts`) and the river index (`rivers.ts`)                                                                                                                                                                                                                                 |
+| `src/lib/progress.ts`, `progressText.ts`  | Download progress read from streamed responses (bytes received out of `Content-Length`), and the text of the loading bars (apart, as the decoding worker must not depend on the interface's language)                                                                                                                                                 |
+| `src/lib/jobs.svelte.ts`                  | Generation jobs followed by the page: progress, cancellation, time estimates, jobs picked up after a reload                                                                                                                                                                                                                                           |
+| `src/lib/sample.ts`, `hex.ts`             | Values of a world, a river and a hex at one point                                                                                                                                                                                                                                                                                                     |
+| `src/lib/format.ts`, `download.ts`        | Number, unit and date formatting in the active locale, the request and command that reproduce a world, file downloads and the raw data ZIP                                                                                                                                                                                                            |
+| `src/lib/i18n/`                           | Interface languages: the catalogs (`en.ts`, the source; `fr.ts`, typed after it, so a missing or extra message fails `svelte-check`), the active locale (`index.svelte.ts`, read through `t`), its choice (`locale.ts`), names from the generator (`names.svelte.ts`: biomes by key, presets by their `[locales.*]`) and error messages (`errors.ts`) |
+| `src/lib/settings.ts`                     | Preferences in `localStorage`, guarded so the app works without storage                                                                                                                                                                                                                                                                               |
+| `src/lib/link.ts`                         | Links to a view: the worlds, the camera, the layer, the relief and the sun in the address fragment, read defensively                                                                                                                                                                                                                                  |
+| `src/lib/formMemory.ts`                   | The generation form remembered from its last submission                                                                                                                                                                                                                                                                                               |
+| `src/lib/shortcuts.ts`                    | Keyboard shortcuts of the viewer (keys, help table, relief and world steps)                                                                                                                                                                                                                                                                           |
+| `src/lib/display.ts`                      | Display settings a compare pane mirrors with "Link display"                                                                                                                                                                                                                                                                                           |
+| `src/lib/pressure.ts`, `estimate.ts`      | Logarithmic pressure slider; time and memory estimates of a map size                                                                                                                                                                                                                                                                                  |
+| `src/components/`                         | Svelte components: world pane (viewer, point information, pointer readout, measurement), world card, world list and thumbnails, generation jobs, generation form, notifications                                                                                                                                                                       |
 
 TypeScript runs in its strictest settings (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), and `npm run check` fails on any warning.

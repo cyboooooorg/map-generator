@@ -4,6 +4,10 @@
 name = "earth-like"
 description = "Earth's size, tilt and land share, full biome spectrum"
 
+[locales.fr]
+name = "Type Terre"
+description = "Taille, inclinaison et part des terres de la Terre, tous les biomes"
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.
 [defaults]

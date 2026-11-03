@@ -777,7 +777,7 @@ export class PlanetView {
         ])
       : await response.blob();
     signal?.throwIfAborted();
-    onProgress?.({ stage: 'decode', label: `Decoding ${label}`, done: 0, total: null });
+    onProgress?.({ stage: 'decode', label, done: 0, total: null });
     // ImageBitmaps ignore texture.flipY: flip while decoding instead, so
     // row 0 (north) ends at the top of the texture, as geo.ts expects.
     let bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });

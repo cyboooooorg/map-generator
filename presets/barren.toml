@@ -2,6 +2,10 @@
 name = "barren"
 description = "Dead rock: arid and lifeless, no water"
 
+[locales.fr]
+name = "Stérile"
+description = "Roche morte : aride et sans vie, sans eau"
+
 [climate]
 moisture = -0.65
 volcanic = -0.40

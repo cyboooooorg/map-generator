@@ -1,6 +1,9 @@
 // What a map size costs: generation time (learnt from earlier generations in
 // this browser) and memory, shown next to the size in the generation form.
 
+import { formatNumber, withUnit } from './format';
+import { t } from './i18n/index.svelte';
+
 /**
  * Memory the server peaks at during a generation, measured in Docker (see
  * "Web app" in the repository README): [pixels, bytes]. Sizes in between
@@ -61,21 +64,21 @@ export function estimateSeconds(
 /** An estimated duration, rounded as estimates deserve: "about 8 s", "about 2 min 30 s". */
 export function formatEstimate(seconds: number): string {
   if (seconds < 1) {
-    return 'under a second';
+    return t.estimate.underSecond;
   }
   if (seconds < 60) {
-    return `about ${Math.round(seconds)} s`;
+    return t.estimate.about({ time: withUnit(String(Math.round(seconds)), 's') });
   }
   const rounded = Math.round(seconds / 10) * 10;
-  const minutes = Math.floor(rounded / 60);
+  const minutes = withUnit(String(Math.floor(rounded / 60)), 'min');
   const rest = rounded % 60;
-  return rest === 0 ? `about ${minutes} min` : `about ${minutes} min ${rest} s`;
+  return t.estimate.about({ time: rest === 0 ? minutes : `${minutes} ${withUnit(String(rest), 's')}` });
 }
 
 /** A memory size, in binary units as the README quotes them: "160 MiB", "1.2 GiB". */
 export function formatBytes(bytes: number): string {
   if (bytes >= GIB) {
-    return `${(bytes / GIB).toFixed(1)} GiB`;
+    return withUnit(formatNumber(bytes / GIB, 1), 'GiB');
   }
-  return `${Math.max(10, Math.round(bytes / MIB / 10) * 10)} MiB`;
+  return withUnit(String(Math.max(10, Math.round(bytes / MIB / 10) * 10)), 'MiB');
 }
