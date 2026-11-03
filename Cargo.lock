@@ -891,6 +891,8 @@ dependencies = [
 name = "mapgen"
 version = "0.1.0"
 dependencies = [
+ "crc32fast",
+ "fdeflate",
  "font8x8",
  "image",
  "noise",

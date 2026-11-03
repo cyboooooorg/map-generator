@@ -1,5 +1,5 @@
 use clap::Parser;
-use mapgen::export::{ExportOptions, export_world, world_dir_name};
+use mapgen::export::{ExportOptions, NoiseMapWriter, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, generate_with_progress};
 use mapgen::preset::Preset;
 use mapgen::request::{self, Limits, WorldRequest};
@@ -77,7 +77,8 @@ struct Args {
     #[arg(long)]
     no_raw_data: bool,
 
-    /// Skip the diagnostic noise maps
+    /// Skip the diagnostic noise maps (noise_maps/), and the time and memory
+    /// they take
     #[arg(long)]
     no_noise_maps: bool,
 }
@@ -140,19 +141,30 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.pressure_bar
     );
 
-    // Debug layers only feed the noise maps: skip them (and their memory)
-    // when the maps are not exported.
+    let dir = args.out_dir.join(world_dir_name(p));
+    // The noise maps are written as the generation computes their layers,
+    // each one freed once encoded: they are never all kept in memory.
+    let noise_maps = if args.no_noise_maps {
+        None
+    } else {
+        Some(NoiseMapWriter::new(
+            &dir.join("noise_maps"),
+            p.width,
+            p.height,
+        )?)
+    };
     let generated = generate_with_progress(
         p,
         GenerateOptions {
-            debug_layers: !args.no_noise_maps,
+            debug: noise_maps.as_ref().map(|w| w as _),
         },
         |_| {},
     );
-    let dir = args.out_dir.join(world_dir_name(&generated.world.params));
+    if let Some(writer) = noise_maps {
+        writer.finish()?;
+    }
     let options = ExportOptions {
         raw_data: !args.no_raw_data,
-        noise_maps: !args.no_noise_maps,
     };
     export_world(generated, &dir, options)?;
 

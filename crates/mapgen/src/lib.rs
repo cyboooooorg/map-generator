@@ -3,7 +3,8 @@
 //! [`request::WorldRequest`] describes what to generate; resolving it gives
 //! complete [`world::WorldParams`]. [`generation::generate`] runs every pass
 //! (noise, erosion, climate, rivers, biomes) and [`export::export_world`]
-//! writes the maps, raw data and diagnostic maps.
+//! writes the maps and raw data. The diagnostic maps are written during the
+//! generation, by an [`export::NoiseMapWriter`] passed as its debug sink.
 pub mod atmosphere;
 pub mod biome;
 pub mod carve;
