@@ -174,3 +174,27 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 3    | Erosion on real slopes, tapered near the waterline, sediment carried offshore                                                         | Change | done   |
 | 4    | Tiles: coast warped sideways, calmer plains detail, soft shading, no double shading                                                   | Same   | done   |
 | 5    | River terrain: valleys and floodplains at generation, riparian moisture, calm floodplains and channels in tiles, deltas and estuaries | Change | done   |
+
+## 6. Atmospheres
+
+- **Status:** decided
+- **Analysis:** [07-atmospheres.md](analysis/07-atmospheres.md)
+- **Problem:** every planet shows the same blue rim glow, airless worlds
+  included, and the climate ignores the atmosphere: Venus keeps Earth's
+  equator-to-pole contrast, airless worlds get rain unless their preset
+  turns erosion off.
+- **Decision (2026-11-03):** an `[atmosphere]` preset table (pressure, sky
+  colour, haze, greenhouse, cloud kind) stored in `world.json`, with
+  pressure as a generation parameter; physical single scattering in the
+  viewer; heat transport, greenhouse and liquid water driven by the
+  atmosphere; a cloud layer computed from the climate, exported as
+  `raw_data/clouds.png` and shown as an optional layer.
+
+| Step | Change                                                                                    | Seeds  | Status |
+| ---- | ----------------------------------------------------------------------------------------- | ------ | ------ |
+| 0    | Temperatures in °C: Earth-fitted curve, thresholds and presets in °C, `format_version` 4  | Change | todo   |
+| 1    | `[atmosphere]` in presets and `world.json`, `--pressure`, form field; no effect yet       | Same   | todo   |
+| 2    | Viewer: scattering sky shell and aerial perspective from the world's atmosphere           | Same   | todo   |
+| 3    | Climate: heat transport, greenhouse, no liquid water below 0.01 bar; presets recalibrated | Change | todo   |
+| 4    | Cloud layer: generation, `raw_data/clouds.png`, `format_version` 5                        | Same   | todo   |
+| 5    | Viewer: cloud sphere, cloud shadows, drift, flat-map overlay, toggle                      | Same   | todo   |
