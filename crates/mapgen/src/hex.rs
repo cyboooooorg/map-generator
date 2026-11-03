@@ -353,15 +353,7 @@ mod tests {
         };
         let params = request.resolve(&mut rand::rng()).unwrap().params;
         let dir = std::env::temp_dir().join(format!("mapgen-hex-{}", std::process::id()));
-        export_world(
-            generate(&params),
-            &dir,
-            ExportOptions {
-                raw_data: true,
-                noise_maps: false,
-            },
-        )
-        .unwrap();
+        export_world(generate(&params), &dir, ExportOptions { raw_data: true }).unwrap();
 
         let map = resample(&dir, 16, DEFAULT_RIVER_FLOW_KM2).unwrap();
         assert_eq!(map.columns, 16);

@@ -52,7 +52,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                                       |
 | `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                                     |
 | `--no-raw-data`         | skip the `raw_data/` export (~7 MB at 1920 × 1080)                                                                                                     | off                                          |
-| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the memory they need (they roughly double the peak)                                                      | off                                          |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the time they take                                                                                       | off                                          |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
@@ -374,7 +374,7 @@ elevation = [lo + p / 65535 * (hi - lo) for p in pixels.getdata()]
 
 #### Noise maps (false colour)
 
-Every intermediate layer of the generation is exported into `noise_maps/` for study and debugging. They share a **jet colour ramp**:
+Every intermediate layer of the generation is exported into `noise_maps/` for study and debugging (skip them with `--no-noise-maps`). Each map is written as soon as its layer is computed, during the generation, and the layer freed, so they are never all held in memory: they add about 10 bytes per pixel to the peak memory (0.6 GiB instead of 0.55 GiB at 4096 × 2048, 2.3 GiB instead of 2.0 GiB at 8192 × 4096) and little time, as they are encoded on the side. They share a **jet colour ramp**:
 
 > blue (low) → cyan → green → yellow → red (high)
 

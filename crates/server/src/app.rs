@@ -530,28 +530,15 @@ async fn create_world(
                 let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
                 progress.send_replace(JobStatus::Running { stage, step, steps });
             };
-            // The web app does not show the diagnostic maps: skip them, which also
-            // saves about twenty map-sized layers of memory.
-            let generated = generate_with_progress(
-                &params,
-                GenerateOptions {
-                    debug_layers: false,
-                },
-                report,
-            );
+            // The web app does not show the diagnostic maps: skip them (no
+            // debug sink), and the time they take.
+            let generated = generate_with_progress(&params, GenerateOptions::default(), report);
             report(Stage::Export);
             // Written into a temporary directory, renamed into place once
             // complete: a cancelled, failed or crashed export leaves nothing.
             let id = world_dir_name(&generated.world.params);
             let temp = worlds::TempDir::create(&worlds_dir, &id)?;
-            export_world(
-                generated,
-                temp.path(),
-                ExportOptions {
-                    raw_data: true,
-                    noise_maps: false,
-                },
-            )?;
+            export_world(generated, temp.path(), ExportOptions { raw_data: true })?;
             // The export cannot be interrupted: a cancel that arrived
             // meanwhile drops it here.
             if thread_cancel.is_requested() {
