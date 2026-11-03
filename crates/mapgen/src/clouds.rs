@@ -85,8 +85,8 @@ pub fn clouds(input: &CloudInput) -> Vec<f32> {
                     // never bare at the poles.
                     // Polar stratus: the sinking polar air stays overcast.
                     let stratus = 0.35 * (1.0 - polar);
-                    let rising = 0.2 * circulation_band(lat) + 0.4 * rain + 0.25 + stratus;
-                    smoothstep(0.0, 0.7, rising + 1.2 * n + 0.5 * shift)
+                    let rising = 0.15 * circulation_band(lat) + 0.3 * rain + 0.26 + stratus;
+                    smoothstep(0.0, 0.7, rising + 1.4 * n + 0.5 * shift)
                 }
                 CloudKind::Sulfuric => smoothstep(-0.3, 0.6, 0.2 + 0.7 * shift + 1.0 * n),
                 CloudKind::Dust => 0.8 * smoothstep(0.15, 0.6, 0.05 + 0.5 * shift + 1.4 * n),

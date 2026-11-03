@@ -109,6 +109,9 @@ export const surfaceFragment = /* glsl */ `
   uniform float uHasBiomes;
   uniform sampler2D uBiomes;
   uniform float uHighlight;    // biome id to highlight, or -1
+  uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
+  uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
+  uniform vec3 uCloudTint;     // linear colour of the clouds
   varying vec2 vUv;
   varying vec2 vLocalUv;
   varying vec3 vNormal;
@@ -241,14 +244,37 @@ export const surfaceFragment = /* glsl */ `
       float globe = 0.35 + 0.75 * lambert;
       shade = mix(relief, globe, uMorph);
     }
+    // Clouds: their shadow on the ground, offset away from the light (on
+    // the globe), then the cloud layer itself, lit like flat ground.
+    vec3 light = uLightMode == 1 ? uSunDir : uLightDir;
+    float cover = 0.0;
+    if (uCloudsOn > 0.0) {
+      // Opacity of the cover: thin clouds are translucent veils, only
+      // thick ones hide the ground.
+      cover = smoothstep(0.3, 1.0, texture2D(uClouds, vUv).r) * 0.85 * uCloudsOn;
+      float lat = (vUv.y - 0.5) * PI;
+      vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
+      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, vUv + towardsLight * 0.004 * uMorph).r) * uCloudsOn;
+      colour *= 1.0 - 0.45 * shadow;
+    }
     colour *= shade;
 
-    // Sun glint on the sea, on the globe only.
+    // Sun glint on the sea, on the globe only, dimmed under clouds.
     if (water) {
-      vec3 light = uLightMode == 1 ? uSunDir : uLightDir;
       vec3 view = normalize(cameraPosition - vWorld);
       float glint = pow(max(dot(reflect(-light, normal), view), 0.0), 60.0);
-      colour += vec3(0.5) * glint * uMorph;
+      colour += vec3(0.5) * glint * uMorph * (1.0 - cover);
+    }
+
+    if (cover > 0.0) {
+      float cloudShade;
+      if (uLightMode == 1) {
+        float sunHeight = dot(normalize(vSphere), uSunDir);
+        cloudShade = 0.04 + 0.96 * smoothstep(-0.08, 0.15, sunHeight) * (0.6 + 0.4 * clamp(sunHeight, 0.0, 1.0));
+      } else {
+        cloudShade = mix(1.0, 0.35 + 0.75 * max(dot(normalize(vNormal), uLightDir), 0.0), uMorph);
+      }
+      colour = mix(colour, uCloudTint * cloudShade, cover);
     }
 
     gl_FragColor = vec4(colour, 1.0);

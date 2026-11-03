@@ -8,7 +8,7 @@
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
   import { debouncedSetting, loadSetting } from '../lib/settings';
-  import { skyFromWorld } from '../lib/sky';
+  import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient, RAMPS } from '../lib/viewer/colormaps';
   import { type CameraState, PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
@@ -72,6 +72,7 @@
     relief: 0,
     graticule: false,
     atmosphere: true,
+    clouds: true,
     sun: false,
     season: 0.25,
     sunLongitude: 0,
@@ -87,6 +88,7 @@
   let relief = $state(saved.relief);
   let graticule = $state(saved.graticule);
   let atmosphere = $state(saved.atmosphere);
+  let clouds = $state(saved.clouds);
   let sun = $state(saved.sun);
   let season = $state(saved.season);
   let sunLongitude = $state(saved.sunLongitude);
@@ -141,6 +143,7 @@
       relief,
       graticule,
       atmosphere,
+      clouds,
       sun,
       season,
       sunLongitude,
@@ -209,6 +212,24 @@
   $effect(() => {
     view?.setData(layers, meta ? coastline(meta) : 0, meta ? seaIsLiquid(meta) : true);
   });
+  // The cloud layer of worlds that have one (format version 5 and later).
+  $effect(() => {
+    const current = view;
+    const id = worldId;
+    const file = meta?.layers.clouds?.file;
+    if (!current) {
+      return;
+    }
+    const controller = new AbortController();
+    const url = id && file ? worldFile(id, `raw_data/${file}`, revision) : null;
+    current
+      .setClouds(url, meta ? cloudTint(meta) : [1, 1, 1], controller.signal)
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) console.warn('Could not load the clouds', e);
+      });
+    return () => controller.abort();
+  });
+  $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => {
     view?.setDetail(
       worldId && meta && revision !== null ? { id: worldId, revision, baseWidth: meta.width } : null,
@@ -349,6 +370,9 @@
         case 'a':
           atmosphere = !atmosphere;
           break;
+        case 'c':
+          clouds = !clouds;
+          break;
         case 'n':
           graticule = !graticule;
           break;
@@ -386,6 +410,7 @@
     ['L', 'Sunlight'],
     ['S', 'Play the seasons (with sunlight)'],
     ['A', 'Atmosphere'],
+    ['C', 'Clouds'],
     ['N', 'Grid'],
     ['D', 'Measure distances'],
     ['P', 'Screenshot'],
@@ -458,6 +483,7 @@
         </label>
       {/if}
       <label class="check"><input type="checkbox" bind:checked={atmosphere} /> Atmosphere</label>
+      <label class="check"><input type="checkbox" bind:checked={clouds} /> Clouds</label>
       <label class="check"><input type="checkbox" bind:checked={graticule} /> Grid</label>
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />

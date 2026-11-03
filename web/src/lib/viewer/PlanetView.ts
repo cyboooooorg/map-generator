@@ -98,6 +98,14 @@ const GLOBE_DISTANCE = 3.2;
 const MAP_DISTANCE = 5.5;
 /** Pointer moves larger than this (px) are drags, not clicks. */
 const CLICK_TOLERANCE = 5;
+/** Altitudes (planet radii, or map units) over which clouds fade in when zooming out. */
+const CLOUD_FADE: [number, number] = [0.15, 0.5];
+
+function smoothstepJs(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+  return t * t * (3 - 2 * t);
+}
+
 /** Headlight direction in view space: above and to the left of the camera. */
 const HEADLIGHT = new Vector3(-0.4, 0.5, 1).normalize();
 /** Lowest camera altitude over the globe (radius 1): about 2 km on an Earth-sized planet. */
@@ -235,6 +243,9 @@ export class PlanetView {
   private readonly u = {
     uLift: { value: 0 } as IUniform<number>,
     uMap: { value: emptyTexture() } as IUniform<Texture>,
+    uCloudsOn: { value: 0 } as IUniform<number>,
+    uClouds: { value: emptyTexture() } as IUniform<Texture>,
+    uCloudTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
     uLayer: { value: LAYER_IDS.biomes as number } as IUniform<number>,
     uTexel: { value: new Vector2(1 / 1024, 1 / 512) } as IUniform<Vector2>,
     uLightMode: { value: 0 } as IUniform<number>,
@@ -274,6 +285,10 @@ export class PlanetView {
   private atmosphereOn = true;
   /** Whether the world has an atmosphere to draw. */
   private hasSky = true;
+  private cloudRequest = 0;
+  /** Whether the world has a cloud layer, and whether it is shown. */
+  private hasClouds = false;
+  private cloudsOn = true;
   /** Scattering uniforms of the sky shader, Earth's until a world sets them. */
   private readonly sky = {
     uTop: { value: 1.04 } as IUniform<number>,
@@ -451,14 +466,53 @@ export class PlanetView {
   }
 
   /**
-   * Shows a world map (an equirectangular image URL). The image is decoded
-   * off the main thread. Aborting `signal` drops the load: the promise
-   * rejects and the current map stays. A later call does not cancel an
-   * earlier one by itself, but the view keeps only the map of the latest call.
+   * Shows a cloud cover layer (8-bit `clouds.png`) tinted by `tint` (linear
+   * RGB), or none with a null url. Like the base map, only the latest call
+   * takes effect.
    */
-  async setTexture(url: string, signal?: AbortSignal): Promise<void> {
-    this.textureRequest += 1;
-    const request = this.textureRequest;
+  async setClouds(url: string | null, tint: [number, number, number], signal?: AbortSignal): Promise<void> {
+    this.cloudRequest += 1;
+    const request = this.cloudRequest;
+    if (!url) {
+      this.hasClouds = false;
+      this.requestRender();
+      return;
+    }
+    const bitmap = await this.decodeImage(url, signal);
+    if (this.disposed || request !== this.cloudRequest || signal?.aborted) {
+      bitmap.close();
+      signal?.throwIfAborted();
+      return;
+    }
+    const texture = new Texture(bitmap);
+    texture.flipY = false;
+    texture.wrapS = RepeatWrapping;
+    texture.needsUpdate = true;
+    this.disposeClouds();
+    this.u.uClouds.value = texture;
+    this.u.uCloudTint.value.set(...tint);
+    this.hasClouds = true;
+    this.requestRender();
+  }
+
+  setCloudsVisible(visible: boolean): void {
+    this.requestRender();
+    this.cloudsOn = visible;
+  }
+
+  /** Frees the cloud texture and its decoded image. */
+  private disposeClouds(): void {
+    const texture = this.u.uClouds.value;
+    const image = texture.image as unknown;
+    texture.dispose();
+    if (image instanceof ImageBitmap) {
+      image.close();
+    }
+    this.u.uClouds.value = emptyTexture();
+  }
+
+  /** Downloads and decodes an equirectangular image, north up, within the GPU's texture size. */
+  private async decodeImage(url: string, signal?: AbortSignal): Promise<ImageBitmap> {
     const response = await fetch(url, signal ? { signal } : {});
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
@@ -480,6 +534,19 @@ export class PlanetView {
         resizeQuality: 'high',
       });
     }
+    return bitmap;
+  }
+
+  /**
+   * Shows a world map (an equirectangular image URL). The image is decoded
+   * off the main thread. Aborting `signal` drops the load: the promise
+   * rejects and the current map stays. A later call does not cancel an
+   * earlier one by itself, but the view keeps only the map of the latest call.
+   */
+  async setTexture(url: string, signal?: AbortSignal): Promise<void> {
+    this.textureRequest += 1;
+    const request = this.textureRequest;
+    const bitmap = await this.decodeImage(url, signal);
     if (this.disposed || request !== this.textureRequest || signal?.aborted) {
       bitmap.close();
       signal?.throwIfAborted();
@@ -725,6 +792,7 @@ export class PlanetView {
     this.controls.dispose();
     this.tiles.dispose();
     this.disposeTexture();
+    this.disposeClouds();
     this.shared.uData.value.dispose();
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();
@@ -815,6 +883,10 @@ export class PlanetView {
     this.atmosphere.visible = this.atmosphereOn && this.hasSky && this.morph > 0.01;
     this.atmosphereOpacity.value = this.morph ** 3;
     const altitude = this.altitude();
+    // Clouds fade out as the camera nears the ground, before the detail
+    // tiles get sharper than the cloud layer.
+    this.u.uCloudsOn.value =
+      this.cloudsOn && this.hasClouds ? smoothstepJs(CLOUD_FADE[0], CLOUD_FADE[1], altitude) : 0;
     this.camera.near = Math.max(altitude * 0.1, 1e-6);
     this.camera.far = altitude + 4;
     this.camera.updateProjectionMatrix();

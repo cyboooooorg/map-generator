@@ -173,6 +173,15 @@ latitude profile and its two-thirds mean.
   following the zonal wind. A "Clouds" toggle and shortcut; they fade out
   when zooming close in the deep zoom.
 - **Flat map.** No sky; the cloud layer as an optional overlay.
+- **Outcome (step 5).** The clouds are drawn in the surface shader rather
+  than on a second sphere: one code path for the globe, the flat map and
+  the detail tiles (which share its uniforms), and the sky shell veils
+  them like the ground. The cover goes through `smoothstep(0.3, 1)`
+  (up to 0.85 opacity) so thin clouds stay translucent; at full opacity a
+  two-thirds cover hid the continents. The water cover was also eased
+  (narrower equatorial band, 0.75–0.8 instead of 0.9). The drift by
+  latitude is not done: it would need a frame every few seconds, against
+  the render-on-demand loop.
 - **Airless worlds** draw no shell: a hard limb against space.
 - **Calibration (step 2).** Shell thickness `0.03 + 0.02 log10(1 + p)`
   of the radius; zenith optical depth `0.25 p^0.35` for the gas (blue
