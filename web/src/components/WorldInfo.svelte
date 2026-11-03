@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getLocale, t } from '../lib/i18n/index.svelte';
-  import { biomeName } from '../lib/i18n/names';
+  import { biomeName, presetDescription, presetName } from '../lib/i18n/names';
   import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
@@ -70,13 +70,13 @@
   <details class="card" bind:open>
     <summary>
       <span class="title">
-        <strong>{meta?.preset.name ?? summary?.planet ?? world.id}</strong>
+        <strong>{meta ? presetName(meta.preset) : (summary?.planet ?? world.id)}</strong>
         <small>{world.id}</small>
       </span>
     </summary>
 
     {#if meta}
-      <p class="description">{meta.preset.description}</p>
+      <p class="description">{presetDescription(meta.preset)}</p>
       <dl>
         <dt>{t.worldInfo.seed}</dt>
         <dd>{meta.seed}</dd>
