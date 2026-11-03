@@ -61,6 +61,16 @@ import {
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { liftSky, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
+import {
+  altitudeForMapHeight,
+  clampMapCentre,
+  GLOBE_DISTANCE,
+  lerpLonLat,
+  MAP_DISTANCE,
+  mapHeightForAltitude,
+  mapPoint,
+  morphCamera,
+} from './viewTransfer';
 import { downsample, fitFactor, releaseOnUpload } from './textures';
 import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
@@ -100,9 +110,6 @@ export type Lighting =
 const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodplain']);
 
 const MORPH_MS = 1200;
-/** Camera distances: the globe has radius 1, the map is 2π × π. */
-const GLOBE_DISTANCE = 3.2;
-const MAP_DISTANCE = 5.5;
 /** Pointer moves larger than this (px) are drags, not clicks. */
 const CLICK_TOLERANCE = 5;
 /** Altitudes (planet radii, or map units) over which clouds fade in when zooming out. */
@@ -125,6 +132,12 @@ function smoothstepJs(edge0: number, edge1: number, x: number): number {
 const HEADLIGHT = new Vector3(-0.4, 0.5, 1).normalize();
 /** Lowest camera altitude over the globe (radius 1): about 2 km on an Earth-sized planet. */
 const MIN_ALTITUDE = 0.0003;
+/** Farthest camera distance from the globe's centre, and the map camera's height range. */
+const GLOBE_MAX_DISTANCE = 8;
+const MAP_MIN_DISTANCE = 0.002;
+const MAP_MAX_DISTANCE = 12;
+/** Latitude (radians) the camera stops short of the poles at when switching views. */
+const POLE_LIMIT = (89.5 * Math.PI) / 180;
 
 /** Graticule every `step` degrees, as line segments in uv space. */
 function graticule(step: number): BufferGeometry {
@@ -396,7 +409,24 @@ export class PlanetView {
   };
   private mode: ViewMode = 'globe';
   private morph = 1;
-  private animation: { from: number; to: number; start: number } | null = null;
+  /**
+   * The morph between globe and map under way. While `follow` holds, the
+   * camera follows the point at the centre of the screen as it moves from
+   * `centreFrom` to `centreTo`, from `altitude` above the globe to
+   * `mapHeight` above the map (see viewTransfer.ts).
+   */
+  private animation: {
+    from: number;
+    to: number;
+    start: number;
+    follow: boolean;
+    centreFrom: LonLat;
+    centreTo: LonLat;
+    altitude: number;
+    mapHeight: number;
+  } | null = null;
+  /** Distance from the camera to the point it follows during the morph. */
+  private morphDistance = 0;
   private pointerDown: Vector2 | null = null;
   /** Last pointer position over the canvas, hovered on the next frame (when `hovering`). */
   private readonly hoverAt = new Vector2();
@@ -923,12 +953,80 @@ export class PlanetView {
     if (mode === this.mode) {
       return;
     }
+    // The place at the centre of the screen stays there, at an equivalent
+    // zoom: the camera follows it through the morph.
+    const centre = this.viewCentre();
+    const relief = this.shared.uRelief.value * RELIEF_SCALE;
+    let altitude: number;
+    let mapHeight: number;
+    if (this.mode === 'globe') {
+      altitude = this.altitude();
+      mapHeight = Math.min(MAP_MAX_DISTANCE, Math.max(MAP_MIN_DISTANCE, mapHeightForAltitude(altitude)));
+    } else {
+      mapHeight = this.altitude();
+      altitude = Math.min(GLOBE_MAX_DISTANCE - 1, Math.max(MIN_ALTITUDE + relief, altitudeForMapHeight(mapHeight)));
+    }
+    let centreTo = centre;
+    if (mode === 'map') {
+      // Zoomed out, the map stays in view rather than half off screen.
+      const halfHeight = (mapHeight * Math.tan((this.camera.fov * Math.PI) / 360)) / this.camera.zoom;
+      const [x, y] = mapPoint(centre);
+      const [cx, cy] = clampMapCentre(x, y, halfHeight * this.camera.aspect, halfHeight);
+      centreTo = planeToLonLat(cx, cy) ?? centre;
+    }
     this.mode = mode;
-    this.animation = { from: this.morph, to: mode === 'globe' ? 1 : 0, start: performance.now() };
-    this.controls.target.set(0, 0, 0);
-    this.camera.position.set(0, 0, mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
-    this.camera.up.set(0, 1, 0);
+    this.animation = {
+      from: this.morph,
+      to: mode === 'globe' ? 1 : 0,
+      start: performance.now(),
+      follow: true,
+      centreFrom: centre,
+      centreTo,
+      altitude,
+      mapHeight,
+    };
     this.applyModeControls();
+  }
+
+  /** Longitude and latitude at the centre of the screen (the closest point of the map when off it). */
+  private viewCentre(): LonLat {
+    this.ndc.set(0, 0);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const origin = this.raycaster.ray.origin.toArray();
+    const direction = this.raycaster.ray.direction.toArray();
+    if (this.mode === 'globe') {
+      const t = raySphere(origin, direction, 1);
+      const hit = t === null ? this.camera.position : new Vector3(...origin).addScaledVector(new Vector3(...direction), t);
+      return sphereToLonLat(hit.toArray());
+    }
+    const t = rayPlaneZ0(origin, direction) ?? 0;
+    const x = Math.min(Math.PI, Math.max(-Math.PI, origin[0] + direction[0] * t));
+    const y = Math.min(Math.PI / 2, Math.max(-Math.PI / 2, origin[1] + direction[1] * t));
+    return planeToLonLat(x, y) ?? { lon: 0, lat: 0 };
+  }
+
+  /**
+   * Places the camera for the morph under way at `progress` (0 to 1) of the
+   * way, or at its end in the controls' own terms (the globe orbits its
+   * centre, the map pans with a target on the plane).
+   */
+  private followMorph(progress: number): void {
+    const animation = this.animation!;
+    // Not quite at the poles, where "north up" has no direction.
+    const centre = lerpLonLat(animation.centreFrom, animation.centreTo, progress);
+    centre.lat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, centre.lat));
+    const { target, position } = morphCamera(centre, animation.mapHeight, animation.altitude, this.morph);
+    this.camera.position.set(...position);
+    this.camera.up.set(0, 1, 0);
+    if (progress < 1) {
+      this.controls.target.set(...target);
+      this.morphDistance = this.camera.position.distanceTo(this.controls.target);
+    } else if (this.mode === 'globe') {
+      this.controls.target.set(0, 0, 0);
+    } else {
+      this.controls.target.set(target[0], target[1], 0);
+    }
+    this.camera.lookAt(this.controls.target);
   }
 
   setGraticule(visible: boolean): void {
@@ -986,6 +1084,9 @@ export class PlanetView {
   /** Back to the starting view of the current mode: whole planet, north up. */
   resetView(): void {
     this.requestRender();
+    if (this.animation) {
+      this.animation.follow = false;
+    }
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, 0, this.mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
     this.camera.up.set(0, 1, 0);
@@ -1074,8 +1175,8 @@ export class PlanetView {
     this.controls.enableZoom = !globe;
     this.controls.zoomToCursor = !globe;
     this.controls.screenSpacePanning = true;
-    this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : 0.002;
-    this.controls.maxDistance = globe ? 8 : 12;
+    this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : MAP_MIN_DISTANCE;
+    this.controls.maxDistance = globe ? GLOBE_MAX_DISTANCE : MAP_MAX_DISTANCE;
     this.controls.mouseButtons = globe
       ? { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
       : { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
@@ -1106,10 +1207,17 @@ export class PlanetView {
     if (!this.shown) {
       return;
     }
+    // While the camera follows the morph, it is placed here: the controls
+    // (whose distance limits are those of the mode reached) wait for the end.
+    let following = false;
     if (this.animation) {
       const t = Math.min(1, (now - this.animation.start) / MORPH_MS);
       const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
       this.morph = this.animation.from + (this.animation.to - this.animation.from) * eased;
+      if (this.animation.follow) {
+        this.followMorph(t === 1 ? 1 : eased);
+        following = t < 1;
+      }
       if (t === 1) {
         this.animation = null;
       }
@@ -1123,7 +1231,9 @@ export class PlanetView {
     // continue until it has settled. OrbitControls' own change threshold is
     // too coarse near the surface, where its residue would show as a jump at
     // the next interaction: compare the camera itself.
-    this.controls.update();
+    if (!following) {
+      this.controls.update();
+    }
     const moving =
       this.lastPosition.distanceToSquared(this.camera.position) > 1e-16 ||
       1 - Math.abs(this.lastQuaternion.dot(this.camera.quaternion)) > 1e-14;
@@ -1185,6 +1295,9 @@ export class PlanetView {
 
   /** Height of the camera above the surface (globe) or the map plane. */
   private altitude(): number {
+    if (this.animation?.follow) {
+      return this.morphDistance;
+    }
     return this.mode === 'globe'
       ? this.camera.position.length() - 1
       : Math.abs(this.camera.position.z);
