@@ -11,9 +11,14 @@
 //! | `MAPGEN_TILE_CACHE_MB`| `1024`       | memory for worlds loaded for tiles (MiB) |
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |
+//! | `MALLOC_ARENA_MAX`    | glibc's      | glibc arenas; the Docker image sets `2`  |
+//!
+//! After a generation and after evicting worlds from the tile cache, the
+//! server gives the freed memory back to the system (see [`memory`]).
 mod api;
 mod app;
 mod catalog;
+mod memory;
 mod tiles;
 mod worlds;
 

@@ -7,6 +7,7 @@
   import type { LonLat } from '../lib/geo';
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
+  import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
@@ -32,6 +33,12 @@
     /** Escape: close what the pane shows over the viewer. */
     onEscape: () => void;
     onCameraChange?: (state: CameraState) => void;
+    /**
+     * Whether display changes are saved as the preferences. Only the main
+     * viewer saves them: a compare pane starts from them but would otherwise
+     * overwrite them with its own.
+     */
+    persistDisplay?: boolean;
   }
 
   let {
@@ -46,6 +53,7 @@
     onToggleMeasure,
     onEscape,
     onCameraChange,
+    persistDisplay = true,
   }: Props = $props();
 
   type Needs = 'none' | 'extra' | 'floodplain';
@@ -64,6 +72,8 @@
   const YEAR_SECONDS = 12;
   /** mapgen::hex::DEFAULT_RIVER_FLOW_KM2, on the log10 slider. */
   const DEFAULT_RIVER_LOG = Math.log10(500_000);
+  /** Wait before asking a server busy generating for the hex grid again, ms. */
+  const HEX_RETRY_MS = 5000;
 
   /** Display preferences kept between visits. */
   const saved = loadSetting('display', {
@@ -102,10 +112,14 @@
   let season = $state(saved.season);
   let sunLongitude = $state(saved.sunLongitude);
   let playing = $state(false);
+  /** Whether the canvas has a size: hidden (narrow screens showing the list), nothing animates. */
+  let canvasVisible = $state(true);
   let hexOn = $state(false);
   let hexColumns = $state(saved.hexColumns);
   let hexRiverLog = $state(saved.hexRiverLog);
   let hexBusy = $state(false);
+  /** Whether the server answered that it is busy generating: the request is retried. */
+  let hexServerBusy = $state(false);
   // Narrow screens start with the legend folded too: it would cover the planet.
   const wide = window.matchMedia('(min-width: 900px)').matches;
   let legendOpen = $state(saved.legendOpen && wide);
@@ -146,6 +160,9 @@
   // Debounced: the season animation and the sliders change these every frame.
   const display = debouncedSetting<typeof saved>('display', 300);
   $effect(() => {
+    if (!persistDisplay) {
+      return;
+    }
     display.save({
       mode,
       layer,
@@ -173,6 +190,8 @@
       view.onPick = (point) => onPick(point);
       view.onHover = (point) => onHover(point);
       view.onCameraChange = (state) => onCameraChange?.(state);
+      canvasVisible = view.visible;
+      view.onVisibilityChange = (visible) => (canvasVisible = visible);
     } catch (e) {
       error = `WebGL is not available: ${String(e)}`;
     }
@@ -276,9 +295,10 @@
     );
   });
 
-  // The season animation: one year every YEAR_SECONDS.
+  // The season animation: one year every YEAR_SECONDS, paused while the
+  // canvas is hidden (it resumes from the same day).
   $effect(() => {
-    if (!playing || !sun) {
+    if (!playing || !sun || !canvasVisible) {
       return;
     }
     let last = performance.now();
@@ -300,28 +320,40 @@
     if (!current || !id || !hexOn) {
       current?.setHex(null);
       hexMap = null;
+      hexBusy = false;
+      hexServerBusy = false;
       return;
     }
-    let cancelled = false;
+    // A newer request (another slider value, another world, hexes turned
+    // off) aborts this one: its result and its errors are dropped.
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       hexBusy = true;
-      api
-        .hex(id, { columns, river_flow_km2: riverFlow })
+      retryWhileBusy((signal) => api.hex(id, { columns, river_flow_km2: riverFlow }, signal), {
+        signal: controller.signal,
+        // The server answers 503 while it generates a world.
+        isBusy: (e) => e instanceof ApiFailure && e.status === 503,
+        delayMs: HEX_RETRY_MS,
+        onBusy: () => (hexServerBusy = true),
+      })
         .then((map) => {
-          if (!cancelled) {
-            current.setHex(map);
-            hexMap = map;
-          }
+          current.setHex(map);
+          hexMap = map;
         })
         .catch((e: unknown) => {
-          if (!cancelled) error = e instanceof ApiFailure ? e.message : String(e);
+          if (!controller.signal.aborted) {
+            toasts.error(`Could not compute the hex grid: ${e instanceof ApiFailure ? e.message : String(e)}`);
+          }
         })
         .finally(() => {
-          if (!cancelled) hexBusy = false;
+          if (!controller.signal.aborted) {
+            hexBusy = false;
+            hexServerBusy = false;
+          }
         });
     }, 300);
     return () => {
-      cancelled = true;
+      controller.abort();
       clearTimeout(timer);
     };
   });
@@ -541,7 +573,13 @@
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />
         Hexes
-        {#if hexBusy}<small class="muted">computing…</small>{/if}
+        {#if hexServerBusy}
+          <small class="muted" title="The server is generating a world: the hex grid follows once it is done"
+            >server busy, retrying…</small
+          >
+        {:else if hexBusy}
+          <small class="muted">computing…</small>
+        {/if}
       </label>
       {#if hexOn}
         <label>

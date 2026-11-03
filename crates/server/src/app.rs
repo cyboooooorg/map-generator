@@ -15,15 +15,24 @@
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
 //! | `GET /worlds/{id}/...`          | world files (maps, raw data, diagnostic maps)     |
 //! | anything else                   | the web front-end (single-page app)               |
+//!
+//! World files and the front-end's `index.html` are sent with
+//! `Cache-Control: no-cache` (a world id is reused when a world is deleted
+//! and generated again; the browser revalidates, a 304 when unchanged), the
+//! hashed front-end bundles under `/assets/` with a one-year `immutable`.
+//! JSON, JavaScript, CSS and SVG answers above 1 KiB are gzipped (fastest
+//! level) when the client accepts it; PNG images are already compressed and
+//! sent as they are.
 use crate::api::{
     ApiError, FormSpec, HexRequest, JobCreated, JobInfo, JobStatus, ParamSpec, PresetInfo,
     WorldSummary,
 };
 use crate::catalog::Catalog;
+use crate::memory;
 use crate::tiles::{self, TileCache, TileError};
 use crate::worlds;
 use axum::extract::{Path as UrlPath, Query, State};
-use axum::http::{StatusCode, header};
+use axum::http::{Extensions, HeaderMap, HeaderValue, StatusCode, Version, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -41,7 +50,10 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{Notify, Semaphore, watch};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::WatchStream;
+use tower_http::compression::predicate::{Predicate, SizeAbove};
+use tower_http::compression::{CompressionLayer, CompressionLevel};
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 
 /// Largest map side the server accepts.
 pub const MAX_SIZE: u32 = 8192;
@@ -121,8 +133,13 @@ pub struct AppState {
 
 /// Tiles rendered at once.
 const CONCURRENT_RENDERS: usize = 4;
-/// Seconds after which a client should retry a tile refused while a
-/// generation runs.
+/// Cache policy of a URL whose content never changes.
+const IMMUTABLE: &str = "public, max-age=31536000, immutable";
+/// Smallest answer worth compressing, in bytes.
+const COMPRESS_ABOVE: u64 = 1024;
+
+/// Seconds after which a client should retry a tile or a hex grid refused
+/// while a generation runs.
 const RETRY_AFTER_S: &str = "10";
 
 type Shared = Arc<AppState>;
@@ -133,6 +150,22 @@ pub struct Failure(StatusCode, String);
 impl IntoResponse for Failure {
     fn into_response(self) -> Response {
         (self.0, Json(ApiError { error: self.1 })).into_response()
+    }
+}
+
+/// A world the tile cache cannot serve: 503 with `Retry-After` while a
+/// generation runs, 500 when loading failed.
+fn world_failure(error: TileError, what: &str) -> Response {
+    match error {
+        TileError::Busy => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(header::RETRY_AFTER, RETRY_AFTER_S)],
+            Json(ApiError {
+                error: format!("a generation is running: {what} are paused, retry when it ends"),
+            }),
+        )
+            .into_response(),
+        TileError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }
 
@@ -153,6 +186,29 @@ pub fn router(config: Config) -> Router {
     });
     let spa = ServeDir::new(&config.static_dir)
         .fallback(ServeFile::new(config.static_dir.join("index.html")));
+    // Vite names the bundles after their content hash: cache them for good
+    // (but not a 404, which a later build may fill).
+    let assets = Router::new()
+        .nest_service("/assets", ServeDir::new(config.static_dir.join("assets")))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            |response: &Response| {
+                response
+                    .status()
+                    .is_success()
+                    .then_some(HeaderValue::from_static(IMMUTABLE))
+            },
+        ));
+    let files = Router::new()
+        .nest_service("/worlds", ServeDir::new(&config.worlds_dir))
+        .fallback_service(spa)
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ));
+    let compression = CompressionLayer::new()
+        .quality(CompressionLevel::Fastest)
+        .compress_when(SizeAbove::new(COMPRESS_ABOVE).and(compressible));
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/api/presets", get(presets))
@@ -164,9 +220,30 @@ pub fn router(config: Config) -> Router {
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
         .route("/api/jobs/{id}/events", get(job_events))
-        .nest_service("/worlds", ServeDir::new(&config.worlds_dir))
-        .fallback_service(spa)
+        .merge(assets)
+        .merge(files)
         .with_state(state)
+        .layer(compression)
+}
+
+/// Whether an answer is worth compressing: text formats only. PNG images
+/// are compressed already, and the job event stream must not be buffered.
+fn compressible(_: StatusCode, _: Version, headers: &HeaderMap, _: &Extensions) -> bool {
+    let Some(content_type) = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return false;
+    };
+    let mime = content_type.split(';').next().unwrap_or("").trim();
+    matches!(
+        mime,
+        "application/json"
+            | "text/javascript"
+            | "application/javascript"
+            | "text/css"
+            | "image/svg+xml"
+    )
 }
 
 async fn presets(State(state): State<Shared>) -> Json<Vec<PresetInfo>> {
@@ -216,10 +293,13 @@ async fn delete_world(
     if !dir.is_dir() {
         return Err(Failure(StatusCode::NOT_FOUND, format!("no world {id}")));
     }
-    state.tiles.forget(&id);
+    let forgotten = state.tiles.forget(&id);
     tokio::fs::remove_dir_all(&dir)
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if forgotten {
+        let _ = tokio::task::spawn_blocking(memory::release).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -244,17 +324,7 @@ async fn tile(
     let dir = state.config.worlds_dir.join(&id);
     let world = match state.tiles.world(&dir, &id, revision).await {
         Ok(world) => world,
-        Err(TileError::Busy) => {
-            return Ok((
-                StatusCode::SERVICE_UNAVAILABLE,
-                [(header::RETRY_AFTER, RETRY_AFTER_S)],
-                Json(ApiError {
-                    error: "a generation is running: tiles are paused".into(),
-                }),
-            )
-                .into_response());
-        }
-        Err(TileError::Failed(e)) => return Err(Failure(StatusCode::INTERNAL_SERVER_ERROR, e)),
+        Err(e) => return Ok(world_failure(e, "tiles")),
     };
     // Wait for a turn here, not on a blocking thread: a request the viewer
     // abandons meanwhile is dropped without rendering.
@@ -270,7 +340,7 @@ async fn tile(
     // A URL naming the current revision and renderer never changes: cache
     // it for good.
     let cache = if query.rev == Some(revision) && query.render == Some(RENDER_VERSION) {
-        "public, max-age=31536000, immutable"
+        IMMUTABLE
     } else {
         "no-cache"
     };
@@ -296,12 +366,13 @@ async fn world_revision(state: &AppState, id: &str) -> Result<u64, Failure> {
 
 /// Resamples a world onto a hex grid from the world loaded for the tiles
 /// (loading it if needed). Nothing is written: the `hexgrid` tool writes
-/// `hex/hex.json` and `hex/hex.png`.
+/// `hex/hex.json` and `hex/hex.png`. While a generation runs, answers 503
+/// like the tiles: loading a world then would add to the generation's peak.
 async fn hex_grid(
     State(state): State<Shared>,
     UrlPath(id): UrlPath<String>,
     Json(request): Json<HexRequest>,
-) -> Result<Json<HexMap>, Failure> {
+) -> Result<Response, Failure> {
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
     }
@@ -323,12 +394,10 @@ async fn hex_grid(
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let dir = state.config.worlds_dir.join(&id);
-    // While a generation runs, the world is loaded for this request only.
-    let world = state
-        .tiles
-        .world_or_load(&dir, &id, revision)
-        .await
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let world = match state.tiles.world(&dir, &id, revision).await {
+        Ok(world) => world,
+        Err(e) => return Ok(world_failure(e, "hex grids")),
+    };
     tokio::task::spawn_blocking(move || {
         hex::resample_world(
             world.world(),
@@ -338,7 +407,7 @@ async fn hex_grid(
         )
     })
     .await
-    .map(Json)
+    .map(|map: HexMap| Json(map).into_response())
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
@@ -445,8 +514,9 @@ async fn create_world(
             return;
         }
         // Worlds loaded for the tiles would add to the generation's peak:
-        // free them, and load none until it ends.
-        let paused_tiles = task_state.tiles.suspend();
+        // free them, wait for a load in progress, and load none until it
+        // ends.
+        let paused_tiles = task_state.tiles.suspend().await;
         let worlds_dir = task_state.config.worlds_dir.clone();
         let progress = tx.clone();
         let thread_cancel = cancel.clone();
@@ -489,8 +559,10 @@ async fn create_world(
                 error: format!("generation crashed: {e}"),
             },
         };
-        // Tiles resume before the job reports its end, so a viewer opening
-        // the new world is served at once.
+        // The generation's memory, freed by now, goes back to the system
+        // (a few milliseconds), then tiles resume before the job reports its
+        // end, so a viewer opening the new world is served at once.
+        let _ = tokio::task::spawn_blocking(memory::release).await;
         drop(paused_tiles);
         finish(status);
     });
@@ -631,6 +703,43 @@ mod tests {
         (status, String::from_utf8_lossy(&bytes).into_owned())
     }
 
+    async fn get_gzip(app: &Router, uri: &str) -> Response {
+        let request = Request::get(uri)
+            .header(header::ACCEPT_ENCODING, "gzip")
+            .body(Body::empty())
+            .unwrap();
+        app.clone().oneshot(request).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn caches_hashed_bundles_and_revalidates_the_page() {
+        let config = temp_config("static");
+        std::fs::create_dir_all(config.static_dir.join("assets")).unwrap();
+        std::fs::write(config.static_dir.join("index.html"), "<!doctype html>").unwrap();
+        let script = "console.log('planets');\n".repeat(100);
+        std::fs::write(config.static_dir.join("assets/index-abc123.js"), &script).unwrap();
+        let app = router(config);
+
+        let response = get_gzip(&app, "/assets/index-abc123.js").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], IMMUTABLE);
+        assert_eq!(response.headers()[header::CONTENT_ENCODING], "gzip");
+        let missing = get_gzip(&app, "/assets/index-old.js").await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        assert!(!missing.headers().contains_key(header::CACHE_CONTROL));
+
+        // The page itself, and any route of the single-page app.
+        for uri in ["/", "/index.html", "/some/route"] {
+            let response = get_gzip(&app, uri).await;
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            assert_eq!(
+                response.headers()[header::CACHE_CONTROL],
+                "no-cache",
+                "{uri}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn lists_built_in_and_example_presets() {
         let app = router(temp_config("presets"));
@@ -678,8 +787,14 @@ mod tests {
 
         let (_, list) = call(&app, "GET", "/api/worlds", None).await;
         assert!(list.contains("\"id\":\"frozen-3\""));
-        let (status, _) = call(&app, "GET", "/worlds/frozen-3/world.png", None).await;
-        assert_eq!(status, StatusCode::OK);
+        // World files are revalidated, PNG images never compressed.
+        let response = get_gzip(&app, "/worlds/frozen-3/world.png").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
+        assert!(!response.headers().contains_key(header::CONTENT_ENCODING));
+        let response = get_gzip(&app, "/worlds/frozen-3/raw_data/world.json").await;
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
+        assert_eq!(response.headers()[header::CONTENT_ENCODING], "gzip");
 
         // Same planet and seed again: the directory exists.
         let (status, _) = call(&app, "POST", "/api/worlds", Some(request)).await;
@@ -721,8 +836,7 @@ mod tests {
             assert!(status.is_client_error(), "{bad} gave {status}");
         }
 
-        // While a generation runs, tiles are refused for later and the hex
-        // grid still works.
+        // While a generation runs, tiles and hex grids are refused for later.
         let big = r#"{"planet": "barren", "seed": 9, "width": 512, "height": 256}"#;
         let (_, body) = call(&app, "POST", "/api/worlds", Some(big)).await;
         let big: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -739,14 +853,13 @@ mod tests {
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(response.headers().contains_key(header::RETRY_AFTER));
-        let (status, _) = call(
-            &app,
-            "POST",
-            "/api/worlds/frozen-3/hex",
-            Some(r#"{"columns": 8}"#),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
+        let request = Request::post("/api/worlds/frozen-3/hex")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"columns": 8}"#))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.headers().contains_key(header::RETRY_AFTER));
         let job = big["job_id"].as_str().unwrap();
         call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
         call(&app, "GET", &format!("/api/jobs/{job}/events"), None).await;

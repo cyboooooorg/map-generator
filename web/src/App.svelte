@@ -327,6 +327,7 @@
           world={secondary}
           revision={revision(compareId)}
           keyboard={false}
+          persistDisplay={false}
           label={compareId}
           onCameraChange={cameraFrom(() => primaryPane)}
         />

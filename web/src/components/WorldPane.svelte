@@ -16,9 +16,11 @@
     /** Shown in a corner when two worlds are compared. */
     label?: string | null;
     onCameraChange?: (state: CameraState) => void;
+    /** Whether its display changes are saved as the preferences (the main pane only). */
+    persistDisplay?: boolean;
   }
 
-  let { world, revision, keyboard, label = null, onCameraChange }: Props = $props();
+  let { world, revision, keyboard, label = null, onCameraChange, persistDisplay = true }: Props = $props();
 
   let viewer = $state<Viewer | null>(null);
   let picked = $state<LonLat | null>(null);
@@ -83,6 +85,7 @@
     {path}
     {measuring}
     {keyboard}
+    {persistDisplay}
     onPick={pick}
     onHover={(point) => (hover = point)}
     onToggleMeasure={toggleMeasure}
