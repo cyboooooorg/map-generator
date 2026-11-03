@@ -71,6 +71,8 @@
     layer: 'biomes' as string,
     relief: 0,
     graticule: false,
+    referenceLines: true,
+    contours: true,
     atmosphere: true,
     clouds: true,
     cloudDrift: false,
@@ -88,6 +90,8 @@
   let layer = $state<Layer>(LAYERS.some((l) => l.id === saved.layer) ? (saved.layer as Layer) : 'biomes');
   let relief = $state(saved.relief);
   let graticule = $state(saved.graticule);
+  let referenceLines = $state(saved.referenceLines);
+  let contours = $state(saved.contours);
   let atmosphere = $state(saved.atmosphere);
   let clouds = $state(saved.clouds);
   let cloudDrift = $state(saved.cloudDrift);
@@ -144,6 +148,8 @@
       layer,
       relief,
       graticule,
+      referenceLines,
+      contours,
       atmosphere,
       clouds,
       cloudDrift,
@@ -201,8 +207,15 @@
     error = null;
     hexOn = false;
     const controller = new AbortController();
+    // The render without lines (format version 6), which the reference
+    // lines and contours are drawn over; world.png, which has them baked
+    // in, for older worlds.
     current
-      .setTexture(worldFile(id, 'world.png', rev), controller.signal)
+      .setTexture(worldFile(id, 'raw_data/surface.png', rev), controller.signal)
+      .catch((e: unknown) => {
+        if (controller.signal.aborted) throw e;
+        return current.setTexture(worldFile(id, 'world.png', rev), controller.signal);
+      })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) error = `Could not load the map: ${String(e)}`;
       })
@@ -243,6 +256,9 @@
   $effect(() => view?.setLayer(shown));
   $effect(() => view?.setRelief(dataReady ? relief : 0));
   $effect(() => view?.setGraticule(graticule));
+  $effect(() => view?.setReferenceTilt(meta ? meta.axial_tilt_deg : null));
+  $effect(() => view?.setReferenceLines(referenceLines));
+  $effect(() => view?.setContours(contours));
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setSky(meta ? skyFromWorld(meta) : null));
   $effect(() => view?.setHighlight(dataReady ? highlight : null));
@@ -383,6 +399,12 @@
         case 'n':
           graticule = !graticule;
           break;
+        case 't':
+          referenceLines = !referenceLines;
+          break;
+        case 'k':
+          contours = !contours;
+          break;
         case 'd':
           if (worldId) onToggleMeasure();
           break;
@@ -420,6 +442,8 @@
     ['C', 'Clouds'],
     ['W', 'Cloud drift (with clouds)'],
     ['N', 'Grid'],
+    ['T', 'Tropics and polar circles'],
+    ['K', 'Depth contours'],
     ['D', 'Measure distances'],
     ['P', 'Screenshot'],
     ['Esc', 'Close the point panel, stop measuring'],
@@ -496,6 +520,12 @@
         <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> Drift</label>
       {/if}
       <label class="check"><input type="checkbox" bind:checked={graticule} /> Grid</label>
+      <label class="check" title="Equator, tropics and polar circles">
+        <input type="checkbox" bind:checked={referenceLines} /> Tropics
+      </label>
+      <label class="check" title="Depth contours under water (needs the world's data)">
+        <input type="checkbox" bind:checked={contours} disabled={!dataReady} /> Contours
+      </label>
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />
         Hexes
