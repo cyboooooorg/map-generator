@@ -19,7 +19,7 @@
 //! is emptied, the generation waits for a load in progress to finish, and
 //! [`TileCache::world`] refuses to load worlds until it ends
 //! ([`TileError::Busy`]); tile and hex grid requests then answer 503 with
-//! `Retry-After`, and the viewer retries its tiles later.
+//! `Retry-After`, and the viewer retries them later.
 use crate::memory;
 use mapgen::detail::{DetailWorld, TileId};
 use mapgen::export::raw_data::load_layers;
