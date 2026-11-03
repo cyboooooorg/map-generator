@@ -60,7 +60,7 @@ import {
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { liftSky, type Sky } from '../sky';
-import { downsample, fitFactor } from './textures';
+import { downsample, fitFactor, releaseOnUpload } from './textures';
 import { DETAIL_STENCIL, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
@@ -202,8 +202,11 @@ function emptyTexture(): DataTexture {
   return texture;
 }
 
-/** An RGBA half-float data layer, filtered, wrapping east-west. */
-function halfFloatTexture(data: Uint16Array, width: number, height: number): DataTexture {
+/**
+ * An RGBA half-float data layer, filtered, wrapping east-west. `owned`: the
+ * array is a copy made for the GPU, dropped once uploaded.
+ */
+function halfFloatTexture(data: Uint16Array, width: number, height: number, owned: boolean): DataTexture {
   const texture = new DataTexture(data, width, height, RGBAFormat, HalfFloatType);
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearFilter;
@@ -211,6 +214,7 @@ function halfFloatTexture(data: Uint16Array, width: number, height: number): Dat
   texture.wrapT = ClampToEdgeWrapping;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
+  releaseOnUpload(texture, owned);
   return texture;
 }
 
@@ -228,6 +232,7 @@ function cloudTexture(image: Grey8): DataTexture {
   texture.minFilter = LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
   texture.needsUpdate = true;
+  releaseOnUpload(texture);
   return texture;
 }
 
@@ -700,13 +705,15 @@ export class PlanetView {
     texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     texture.needsUpdate = true;
+    // The bitmap is closed once uploaded: only the GPU copy stays.
+    releaseOnUpload(texture);
     this.disposeTexture();
     this.texture = texture;
     this.u.uMap.value = texture;
     this.requestRender();
   }
 
-  /** Frees the GPU copy and the decoded image of the base map. */
+  /** Frees the GPU copy of the base map, and its decoded image if it was never uploaded. */
   private disposeTexture(): void {
     if (this.texture) {
       this.texture.dispose();
@@ -751,6 +758,7 @@ export class PlanetView {
     biomes.wrapT = ClampToEdgeWrapping;
     biomes.generateMipmaps = false;
     biomes.needsUpdate = true;
+    releaseOnUpload(biomes, factor > 1);
     this.u.uBiomes.value = biomes;
     this.u.uHasBiomes.value = 1;
     // The layers of format version 2 are uploaded on first use: most views
@@ -764,7 +772,7 @@ export class PlanetView {
     }
     this.uploadExtraIfShown();
     const surface = fit(layers.surface, 4);
-    const texture = halfFloatTexture(surface.data, surface.width, surface.height);
+    const texture = halfFloatTexture(surface.data, surface.width, surface.height, factor > 1);
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
     this.shared.uCoast.value = coast;
@@ -781,7 +789,7 @@ export class PlanetView {
     }
     const packed = downsample(pending.packed, pending.width, pending.height, 4, pending.factor);
     this.u.uExtra.value.dispose();
-    this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height);
+    this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height, pending.factor > 1);
     // Only the GPU copy is needed from now on.
     this.pendingExtra = null;
   }

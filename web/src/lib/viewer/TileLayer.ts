@@ -38,6 +38,7 @@ import {
   tileKey,
   tileRect,
 } from './tiles';
+import { releaseOnUpload } from './textures';
 
 /** Split a tile while one of its texels covers more screen pixels than this. */
 const SPLIT_PX = 1.5;
@@ -100,7 +101,7 @@ export function retryDelay(attempts: number, status: number | null): number {
   return Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** Math.max(0, attempts - 1));
 }
 
-/** Frees a tile texture and its decoded image. */
+/** Frees a tile texture, and its decoded image if it was never uploaded. */
 function disposeTile(texture: Texture): void {
   texture.dispose();
   (texture.image as ImageBitmap).close();
@@ -309,6 +310,9 @@ export class TileLayer {
       texture.magFilter = LinearFilter;
       texture.minFilter = LinearMipmapLinearFilter;
       texture.needsUpdate = true;
+      // The bitmap is closed once uploaded: a cached tile keeps only its
+      // GPU copy, and patches showing it share that copy.
+      releaseOnUpload(texture);
       this.cache.set(key, { texture, lastUsed: this.frame });
       this.failed.delete(key);
       this.onChange();

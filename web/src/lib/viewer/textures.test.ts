@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { downsample, fitFactor } from './textures';
+import { downsample, fitFactor, releaseOnUpload, type UploadedTexture } from './textures';
 
 describe('fitFactor', () => {
   it('is 1 when the image fits', () => {
@@ -34,5 +34,26 @@ describe('downsample', () => {
     const { data: out, width } = downsample(data, 3, 1, 1, 2);
     expect(width).toBe(2);
     expect(Array.from(out)).toEqual([1, 2]);
+  });
+});
+
+describe('releaseOnUpload', () => {
+  const upload = (texture: UploadedTexture) => (texture.onUpdate as ((t: unknown) => void) | null)?.(texture);
+
+  it('drops the pixels a data texture owns after its upload, once', () => {
+    const texture: UploadedTexture = { image: { data: new Uint8Array(4), width: 2, height: 2 }, onUpdate: null };
+    releaseOnUpload(texture);
+    expect((texture.image as { data: unknown }).data).not.toBeNull();
+    upload(texture);
+    expect(texture.image).toEqual({ data: null, width: 2, height: 2 });
+    expect(texture.onUpdate).toBeNull();
+  });
+
+  it('keeps pixels shared with the decoded world', () => {
+    const data = new Uint8Array(4);
+    const texture: UploadedTexture = { image: { data, width: 2, height: 2 }, onUpdate: null };
+    releaseOnUpload(texture, false);
+    upload(texture);
+    expect((texture.image as { data: unknown }).data).toBe(data);
   });
 });

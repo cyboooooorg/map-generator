@@ -42,3 +42,32 @@ export function downsample<T extends Uint8Array | Uint16Array>(
   }
   return { data: out, width: w, height: h };
 }
+
+/** The part of a three.js texture `releaseOnUpload` touches. */
+export interface UploadedTexture {
+  image: unknown;
+  onUpdate: ((texture: never) => void) | null;
+}
+
+/**
+ * Lets the CPU copy of a texture go once the GPU has it: closes its
+ * ImageBitmap, or drops the pixel array of a data texture that owns it
+ * (`ownsData`; an array shared with the decoded world stays).
+ *
+ * Nothing uploads the texture again: three.js uploads only when the
+ * texture's version changes (`needsUpdate`, never set again here: a
+ * sampling setting changed after the upload would need it), resizing the
+ * canvas keeps the textures, and the WebGL context is only lost when the
+ * view is disposed.
+ */
+export function releaseOnUpload(texture: UploadedTexture, ownsData = true): void {
+  texture.onUpdate = () => {
+    texture.onUpdate = null;
+    const image = texture.image;
+    if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) {
+      image.close();
+    } else if (ownsData && typeof image === 'object' && image !== null && 'data' in image) {
+      (image as { data: unknown }).data = null;
+    }
+  };
+}
