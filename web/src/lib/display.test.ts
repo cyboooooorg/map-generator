@@ -8,6 +8,7 @@ const main: LinkedDisplay = {
   season: 0.25,
   sunLongitude: 90,
   atmosphere: false,
+  stars: true,
   clouds: true,
   graticule: true,
 };

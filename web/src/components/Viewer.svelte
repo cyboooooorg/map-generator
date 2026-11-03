@@ -101,6 +101,7 @@
     contours: true,
     landContours: true,
     atmosphere: true,
+    stars: true,
     clouds: true,
     cloudDrift: false,
     sun: false,
@@ -123,6 +124,7 @@
   let seaContours = $state(saved.contours);
   let landContours = $state(saved.landContours);
   let atmosphere = $state(saved.atmosphere);
+  let stars = $state(saved.stars);
   let clouds = $state(saved.clouds);
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
@@ -209,6 +211,7 @@
       contours: seaContours,
       landContours,
       atmosphere,
+      stars,
       clouds,
       cloudDrift,
       sun,
@@ -222,7 +225,7 @@
 
   /** The settings "Link display" mirrors, as this pane has them. */
   function currentLinked(): LinkedDisplay {
-    return { layer, relief, sun, season, sunLongitude, atmosphere, clouds, graticule };
+    return { layer, relief, sun, season, sunLongitude, atmosphere, stars, clouds, graticule };
   }
 
   $effect(() => {
@@ -243,6 +246,7 @@
     if (changes.season !== undefined) season = changes.season;
     if (changes.sunLongitude !== undefined) sunLongitude = changes.sunLongitude;
     if (changes.atmosphere !== undefined) atmosphere = changes.atmosphere;
+    if (changes.stars !== undefined) stars = changes.stars;
     if (changes.clouds !== undefined) clouds = changes.clouds;
     if (changes.graticule !== undefined) graticule = changes.graticule;
   });
@@ -361,6 +365,7 @@
   $effect(() => view?.setSeaContours(seaContours));
   $effect(() => view?.setLandContours(landContours));
   $effect(() => view?.setAtmosphere(atmosphere));
+  $effect(() => view?.setStars(stars));
   $effect(() => view?.setSky(meta ? skyFromWorld(meta) : null));
   $effect(() => view?.setHighlight(dataReady ? highlight : null));
   $effect(() => view?.setPath(path));
@@ -550,6 +555,9 @@
       case 'atmosphere':
         atmosphere = !atmosphere;
         break;
+      case 'stars':
+        stars = !stars;
+        break;
       case 'clouds':
         clouds = !clouds;
         break;
@@ -700,6 +708,7 @@
         </label>
       {/if}
       <label class="check"><input type="checkbox" bind:checked={atmosphere} /> {t.viewer.atmosphere}</label>
+      <label class="check" title={t.viewer.starsHelp}><input type="checkbox" bind:checked={stars} /> {t.viewer.stars}</label>
       <label class="check"><input type="checkbox" bind:checked={clouds} /> {t.viewer.clouds}</label>
       {#if clouds}
         <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> {t.viewer.drift}</label>

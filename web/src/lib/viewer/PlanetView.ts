@@ -5,7 +5,9 @@
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import {
   AddEquation,
+  AdditiveBlending,
   BackSide,
+  BufferAttribute,
   BufferGeometry,
   ClampToEdgeWrapping,
   Color,
@@ -27,6 +29,7 @@ import {
   OneFactor,
   PerspectiveCamera,
   PlaneGeometry,
+  Points,
   Quaternion,
   Raycaster,
   RedFormat,
@@ -83,9 +86,12 @@ import {
   type Layer,
   lineFragment,
   RELIEF_SCALE,
+  starsFragment,
+  starsVertex,
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
+import { starField } from './stars';
 
 export type ViewMode = 'globe' | 'map';
 
@@ -319,6 +325,8 @@ export class PlanetView {
   private readonly controls: OrbitControls;
   private readonly surface: Mesh<PlaneGeometry, ShaderMaterial>;
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
+  /** The star field (see stars.ts). */
+  private readonly stars: Points<BufferGeometry, ShaderMaterial>;
   /** The atmosphere's ground (veil) and sky passes. */
   private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>[];
   private readonly resizeObserver: ResizeObserver;
@@ -393,6 +401,8 @@ export class PlanetView {
   private textureRequest = 0;
   private disposed = false;
   private atmosphereOn = true;
+  /** Whether the star field is shown. */
+  private starsOn = true;
   /** Whether the world has an atmosphere to draw. */
   private hasSky = true;
   private cloudRequest = 0;
@@ -496,6 +506,28 @@ export class PlanetView {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, stencil: true });
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio));
     this.scene.background = new Color('#05070d');
+
+    // The stars, behind everything (see starsVertex).
+    const field = starField();
+    const starGeometry = new BufferGeometry();
+    starGeometry.setAttribute('position', new BufferAttribute(field.directions, 3));
+    starGeometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
+    starGeometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
+    this.stars = new Points(
+      starGeometry,
+      new ShaderMaterial({
+        vertexShader: starsVertex,
+        fragmentShader: starsFragment,
+        uniforms: { uPixelRatio: { value: 1 }, uOpacity: { value: 1 } },
+        blending: AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    // Directions, not positions: the geometry bounds are meaningless.
+    this.stars.frustumCulled = false;
+    this.stars.renderOrder = -1;
+    this.scene.add(this.stars);
 
     this.surface = new Mesh(
       // 2 vertices per degree: enough for the relief to follow the data.
@@ -940,6 +972,12 @@ export class PlanetView {
     }
   }
 
+  /** Shows or hides the star field around the globe. */
+  setStars(visible: boolean): void {
+    this.requestRender();
+    this.starsOn = visible;
+  }
+
   setAtmosphere(visible: boolean): void {
     this.requestRender();
     this.atmosphereOn = visible;
@@ -1207,7 +1245,7 @@ export class PlanetView {
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
     this.sky.uSunDepth.value.dispose();
-    for (const object of [this.surface, this.grid, ...this.atmosphere, this.path]) {
+    for (const object of [this.surface, this.grid, this.stars, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -1326,6 +1364,10 @@ export class PlanetView {
       pass.visible = skyVisible;
     }
     this.atmosphereOpacity.value = this.morph ** 3;
+    // The stars belong to the globe's sky, like the atmosphere.
+    this.stars.visible = this.starsOn && this.morph > 0.01;
+    this.stars.material.uniforms['uOpacity']!.value = this.morph ** 3;
+    this.stars.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
     const altitude = this.altitude();
     // Clouds fade out as the camera nears the ground, before the detail
     // tiles get sharper than the cloud layer.
