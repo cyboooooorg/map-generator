@@ -667,6 +667,7 @@ mod tests {
             circumference_km: Some(40_000.0),
             axial_tilt_deg: Some(23.44),
             pressure_bar: Some(1.0),
+            surface_age_ga: Some(0.4),
             width: Some(512),
             height: Some(256),
             ..Default::default()

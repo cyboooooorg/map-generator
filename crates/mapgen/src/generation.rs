@@ -6,6 +6,7 @@ use crate::climate::{
     temperature, temperature_anomaly,
 };
 use crate::clouds::CloudInput;
+use crate::craters::{CraterField, Era, base_min_diameter_km};
 use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
@@ -652,6 +653,18 @@ pub fn generate_with_progress(
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
     let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
+    // Impact craters: those of the wet era are worn by the erosion, the
+    // younger ones are drawn over it. Their height change is only kept for
+    // its debug map.
+    let craters = CraterField::new(params, base_min_diameter_km(&grid));
+    let mut crater_relief = sink.map(|_| elevation.clone());
+    craters.apply(&mut elevation, &grid, Era::Wet);
+    if let Some(relief) = crater_relief.as_mut() {
+        relief
+            .par_iter_mut()
+            .zip(&elevation)
+            .for_each(|(r, e)| *r = e - *r);
+    }
     // The height change is only kept for its debug map.
     let mut erosion = sink.map(|_| vec![0.0; n]);
     erode(
@@ -670,6 +683,28 @@ pub fn generate_with_progress(
             .for_each(|d| *d = (*d * 10.0).clamp(-1.0, 1.0));
         sink.layer(DebugLayer {
             name: "erosion",
+            ramp: Ramp::Signed,
+            values,
+        });
+    }
+    if let Some(relief) = crater_relief.as_mut() {
+        relief
+            .par_iter_mut()
+            .zip(&elevation)
+            .for_each(|(r, e)| *r -= e);
+    }
+    craters.apply(&mut elevation, &grid, Era::Dry);
+    drop(craters);
+    if let (Some(sink), Some(mut values)) = (sink, crater_relief) {
+        // The young craters' change added to the old ones' (the erosion in
+        // between left out); ×5: a crater moves the elevation by a few
+        // tenths at most.
+        values
+            .par_iter_mut()
+            .zip(&elevation)
+            .for_each(|(r, e)| *r = ((*r + e) * 5.0).clamp(-1.0, 1.0));
+        sink.layer(DebugLayer {
+            name: "craters",
             ramp: Ramp::Signed,
             values,
         });
@@ -1003,7 +1038,7 @@ mod tests {
         let p = params(13, "volcanic");
         let (full, debug) = generate_with_debug(&p);
         let lean = generate(&p);
-        assert_eq!(debug.len(), NOISE_LAYERS.len() + 9);
+        assert_eq!(debug.len(), NOISE_LAYERS.len() + 10);
         assert_eq!(full.world.biomes, lean.world.biomes);
         assert_eq!(full.world.elevation, lean.world.elevation);
         assert_eq!(full.world.moisture, lean.world.moisture);
