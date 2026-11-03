@@ -129,6 +129,9 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('coast')}
   ${glslRamp('floodplain')}
 
+  // Brightness of lava at night, relative to its day colour.
+  const float LAVA_GLOW = 0.9;
+
   vec3 toLinear(vec3 srgb) {
     return pow(srgb, vec3(2.2));
   }
@@ -217,6 +220,18 @@ export const surfaceFragment = /* glsl */ `
       }
     }
 
+    // Lava and magma glow on the night side (sun mode, biome map and detail
+    // tiles). They are told by their colour, red with almost no green, so
+    // detail tiles glow at their own resolution; no other surface colour
+    // comes close (deserts and rust have green above half their red).
+    float glow = 0.0;
+    if (uLightMode == 1 && uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
+      float lava = smoothstep(0.35, 0.12, colour.g / max(colour.r, 1e-4)) * smoothstep(0.02, 0.1, colour.r);
+      float night = 1.0 - smoothstep(-0.08, 0.15, dot(normalize(vSphere), uSunDir));
+      glow = LAVA_GLOW * lava * night;
+    }
+    vec3 emitted = colour * glow;
+
     // Relief shading: tilt the normal by the elevation slope (land only).
     // The biome map and the detail tiles are hillshaded already: shading
     // them again would double every slope.
@@ -260,6 +275,7 @@ export const surfaceFragment = /* glsl */ `
       colour *= 1.0 - 0.45 * shadow;
     }
     colour *= shade;
+    colour += emitted;
 
     // Sun glint on the sea, on the globe only, dimmed under clouds.
     if (water) {
