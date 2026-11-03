@@ -17,6 +17,31 @@ export function tileKey({ z, x, y }: TileId): string {
   return `${z}/${x}/${y}`;
 }
 
+/**
+ * A number naming a tile, unique up to MAX_LEVEL: the key of the caches,
+ * built without allocating (unlike tileKey, which names the tile URL).
+ */
+export function tileIndex(z: number, x: number, y: number): number {
+  // Up to 2^(MAX_LEVEL + 1) columns and 2^MAX_LEVEL rows.
+  return (z * 2 ** (MAX_LEVEL + 1) + x) * 2 ** MAX_LEVEL + y;
+}
+
+/** The tile a tileIndex names. */
+export function tileOfIndex(index: number): TileId {
+  const rows = 2 ** MAX_LEVEL;
+  const cols = 2 ** (MAX_LEVEL + 1);
+  const y = index % rows;
+  const rest = (index - y) / rows;
+  const x = rest % cols;
+  return { z: (rest - x) / cols, x, y };
+}
+
+/** tileIndex of the ancestor of tile (z, x, y) at a coarser level. */
+export function ancestorIndex(z: number, x: number, y: number, level: number): number {
+  const shift = z - level;
+  return tileIndex(level, x >> shift, y >> shift);
+}
+
 export function grid(z: number): { cols: number; rows: number } {
   return { cols: 2 ** (z + 1), rows: 2 ** z };
 }

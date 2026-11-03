@@ -398,9 +398,18 @@ export class PlanetView {
   private morph = 1;
   private animation: { from: number; to: number; start: number } | null = null;
   private pointerDown: Vector2 | null = null;
-  /** Last pointer position over the canvas, hovered on the next frame. */
-  private hoverAt: Vector2 | null = null;
+  /** Last pointer position over the canvas, hovered on the next frame (when `hovering`). */
+  private readonly hoverAt = new Vector2();
+  private hovering = false;
   private hoverPending = false;
+  /** Scratch objects of picking, reused by every hover. */
+  private readonly raycaster = new Raycaster();
+  private readonly ndc = new Vector2();
+  private readonly ray: { origin: [number, number, number]; direction: [number, number, number] } = {
+    origin: [0, 0, 0],
+    direction: [0, 0, 0],
+  };
+  private readonly turn = new Quaternion();
   /** Whether the user is steering this view (pointer over it): only then it reports its camera. */
   private steering = false;
   private applyingCamera = false;
@@ -1141,7 +1150,7 @@ export class PlanetView {
     }
     if (this.hoverPending) {
       this.hoverPending = false;
-      this.onHover(this.hoverAt ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
+      this.onHover(this.hovering ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
     }
     if (moving || this.animation || settling) {
       this.schedule();
@@ -1209,7 +1218,7 @@ export class PlanetView {
       if (!now) {
         break;
       }
-      this.camera.position.applyQuaternion(new Quaternion().setFromUnitVectors(now, anchor));
+      this.camera.position.applyQuaternion(this.turn.setFromUnitVectors(now, anchor));
       this.camera.lookAt(0, 0, 0);
       this.camera.updateMatrixWorld();
     }
@@ -1235,7 +1244,7 @@ export class PlanetView {
 
   private readonly handlePointerLeave = (): void => {
     this.steering = false;
-    this.hoverAt = null;
+    this.hovering = false;
     this.hoverPending = true;
     this.schedule();
   };
@@ -1243,7 +1252,8 @@ export class PlanetView {
   private readonly handlePointerMove = (event: PointerEvent): void => {
     this.steering = true;
     // While dragging, the point under the pointer is meaningless.
-    this.hoverAt = event.buttons === 0 ? new Vector2(event.clientX, event.clientY) : null;
+    this.hovering = event.buttons === 0;
+    this.hoverAt.set(event.clientX, event.clientY);
     this.hoverPending = true;
     this.schedule();
   };
@@ -1257,16 +1267,18 @@ export class PlanetView {
     return this.mode === 'globe' ? this.pickGlobe(origin, direction) : this.pickMap(origin, direction);
   }
 
-  /** Ray from the camera through a point of the canvas, in world space. */
+  /**
+   * Ray from the camera through a point of the canvas, in world space. The
+   * arrays returned are reused by the next call: hovering calls it every
+   * frame the pointer moves.
+   */
   private rayAt(clientX: number, clientY: number): { origin: Vec3; direction: Vec3 } {
     const rect = this.canvas.getBoundingClientRect();
-    const ndc = new Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    const raycaster = new Raycaster();
-    raycaster.setFromCamera(ndc, this.camera);
-    return { origin: raycaster.ray.origin.toArray(), direction: raycaster.ray.direction.toArray() };
+    this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    this.raycaster.ray.origin.toArray(this.ray.origin);
+    this.raycaster.ray.direction.toArray(this.ray.direction);
+    return this.ray;
   }
 
   /** Unit-sphere point under a point of the canvas, or null off the globe. */
