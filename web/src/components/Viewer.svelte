@@ -32,6 +32,12 @@
     /** Escape: close what the pane shows over the viewer. */
     onEscape: () => void;
     onCameraChange?: (state: CameraState) => void;
+    /**
+     * Whether display changes are saved as the preferences. Only the main
+     * viewer saves them: a compare pane starts from them but would otherwise
+     * overwrite them with its own.
+     */
+    persistDisplay?: boolean;
   }
 
   let {
@@ -46,6 +52,7 @@
     onToggleMeasure,
     onEscape,
     onCameraChange,
+    persistDisplay = true,
   }: Props = $props();
 
   type Needs = 'none' | 'extra' | 'floodplain';
@@ -146,6 +153,9 @@
   // Debounced: the season animation and the sliders change these every frame.
   const display = debouncedSetting<typeof saved>('display', 300);
   $effect(() => {
+    if (!persistDisplay) {
+      return;
+    }
     display.save({
       mode,
       layer,
