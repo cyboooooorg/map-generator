@@ -109,6 +109,7 @@ export const surfaceFragment = /* glsl */ `
   uniform float uHasBiomes;
   uniform sampler2D uBiomes;
   uniform float uHighlight;    // biome id to highlight, or -1
+  uniform float uContours;     // 1 draws the depth contours under water
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
   uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
   uniform vec3 uCloudTint;     // linear colour of the clouds
@@ -128,6 +129,34 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('volcanic')}
   ${glslRamp('coast')}
   ${glslRamp('floodplain')}
+
+  // Contour lines: a pale blue mixed over the sea (linear colour, share).
+  // world.png darkens its contours instead, which barely shows on the dark
+  // surface palette of open water.
+  const vec3 CONTOUR_COLOUR = vec3(0.45, 0.6, 0.72);
+  const float CONTOUR_OPACITY = 0.45;
+
+  // Coverage of a line about one screen pixel wide where elevation e
+  // crosses level, e changing by width per pixel.
+  float contourAt(float e, float level, float width) {
+    return 1.0 - smoothstep(0.5, 1.5, abs(e - level) / width);
+  }
+
+  // Coverage of the depth contours, at mapgen::export::CONTOUR_LEVELS.
+  float contours(float e) {
+    float width = max(fwidth(e), 1e-6);
+    float line = 0.0;
+    line = max(line, contourAt(e, -0.45, width));
+    line = max(line, contourAt(e, -0.15, width));
+    line = max(line, contourAt(e, 0.0, width));
+    line = max(line, contourAt(e, 0.15, width));
+    line = max(line, contourAt(e, 0.30, width));
+    line = max(line, contourAt(e, 0.45, width));
+    line = max(line, contourAt(e, 0.60, width));
+    line = max(line, contourAt(e, 0.75, width));
+    line = max(line, contourAt(e, 0.90, width));
+    return line;
+  }
 
   // Brightness of lava at night, relative to its day colour.
   const float LAVA_GLOW = 0.9;
@@ -222,6 +251,17 @@ export const surfaceFragment = /* glsl */ `
         float grey = dot(colour, vec3(0.2126, 0.7152, 0.0722));
         colour = mix(vec3(grey), colour, 0.15) * 0.3;
       }
+    }
+
+    // Depth contours under water, at the levels of world.png: a line about
+    // one screen pixel wide wherever the elevation crosses a level, so it
+    // stays sharp at every zoom (the elevation is the base layer,
+    // interpolated).
+    // fwidth is taken everywhere, outside the branch, as derivatives
+    // need every pixel of a quad.
+    float contour = contours(data.r);
+    if (uContours > 0.5 && hasData && aboveCoast < 0.0) {
+      colour = mix(colour, CONTOUR_COLOUR, CONTOUR_OPACITY * contour);
     }
 
     // Lava and magma glow on the night side (sun mode, biome map and detail

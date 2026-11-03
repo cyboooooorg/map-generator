@@ -1,4 +1,7 @@
-use super::{DASH_OFF, DASH_ON, MapLayers, Style, latitude_row, reference_lines, render_pixels};
+use super::{
+    DASH_OFF, DASH_ON, MapLayers, Style, draw_contours, latitude_row, reference_lines,
+    render_pixels,
+};
 use crate::rivers;
 use crate::world::{Biome, World, biome_color};
 use std::fs::File;
@@ -14,7 +17,8 @@ use std::io::{BufWriter, Write};
 /// The file is streamed to disk rather than built in memory.
 pub fn export_svg(world: &World, layers: &MapLayers, path: &str) -> std::io::Result<()> {
     let (w, h) = (world.width as usize, world.height as usize);
-    let pixels = render_pixels(world, layers, Style::Flat);
+    let mut pixels = render_pixels(world, layers, Style::Flat);
+    draw_contours(world, layers, &mut pixels);
 
     let mut out = BufWriter::new(File::create(path)?);
     writeln!(out, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;

@@ -256,7 +256,8 @@ worlds/<planet>-<seed>/
 │   ├── floodplain.png ← 16-bit greyscale layer
 │   ├── rivers.json    ← river polylines with their flow
 │   ├── biomes.png     ← 8-bit greyscale, pixel = biome id
-│   └── clouds.png     ← 8-bit greyscale cloud cover (worlds with clouds)
+│   ├── clouds.png     ← 8-bit greyscale cloud cover (worlds with clouds)
+│   └── surface.png    ← world.png without its lines, for the viewer
 └── noise_maps/
     ├── noise_warp_x.png
     ├── noise_warp_y.png
@@ -316,6 +317,7 @@ Clear liquids take their colour from their depth (Beer-Lambert absorption in lin
 | `floodplain.png`      | 16-bit grey      | Floodplain weight in `[0, 1]`: 1 on the flat floor of a river valley, 0 away from rivers                                                 |
 | `biomes.png`          | 8-bit grey       | Biome id of each pixel                                                                                                                   |
 | `clouds.png`          | 8-bit grey       | Cloud cover in `[0, 1]` (`pixel / 255`), from the climate and the cloud kind; absent when the planet has no clouds                       |
+| `surface.png`         | 8-bit RGB        | The render of `world.png` without its reference lines and depth contours: the viewer draws them itself, and can hide them                |
 
 A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵` of the range (0.012 °C for temperature).
 
@@ -339,7 +341,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 }
 ```
 
-The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`; version 4 stores temperatures in °C instead of the former `[0, 1]` scale; version 5 adds `clouds`. Older worlds still load: missing layers are recomputed, or zero for `floodplain`, and the temperatures of versions 1–3 (layer and preset thresholds) are converted to °C through the Earth-fitted curve, which keeps their biomes.
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`; version 4 stores temperatures in °C instead of the former `[0, 1]` scale; version 5 adds `clouds`; version 6 adds `surface`. Older worlds still load: missing layers are recomputed, or zero for `floodplain`, and the temperatures of versions 1–3 (layer and preset thresholds) are converted to °C through the Earth-fitted curve, which keeps their biomes.
 
 `rivers.json` holds the drawn river polylines (version 2 and later; its file name is in `world.json` under `rivers`):
 

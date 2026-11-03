@@ -68,15 +68,23 @@ pub fn export_world(
 
     let layers = MapLayers::new(world);
     let layers = &layers;
+    // The detailed render, shared by world.png (which adds the reference
+    // lines) and raw_data/surface.png (without them, for the viewer).
+    let surface = render_pixels(world, layers, Style::Detailed);
+    let surface = &surface;
     type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
     let mut exports: Vec<Export> = vec![
-        Box::new(|| export_png(world, layers, &path("world.png")).map_err(|e| e.to_string())),
+        Box::new(|| {
+            let mut map = surface.clone();
+            draw_contours(world, layers, &mut map);
+            export_png(world, &map, &path("world.png")).map_err(|e| e.to_string())
+        }),
         Box::new(|| export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())),
         Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
     ];
     if options.raw_data {
         exports.push(Box::new(|| {
-            export_raw_data(world, &dir.join("raw_data")).map_err(|e| e.to_string())
+            export_raw_data(world, &dir.join("raw_data"), Some(surface)).map_err(|e| e.to_string())
         }));
     }
     if options.noise_maps {
@@ -365,15 +373,52 @@ impl MapLayers {
     }
 }
 
-/// Computes the final colour of every pixel, in the same row-major order as
-/// the world layers. Contour lines are drawn under water only, as bathymetry:
+/// Darkens the pixels on a contour line, under water only, as bathymetry:
 /// on land the hillshade shows the relief, and contours would draw rings.
+/// `pixels` come from [`render_pixels`]; the viewer draws its own contours
+/// over `raw_data/surface.png`, which has none.
+pub fn draw_contours(world: &World, layers: &MapLayers, pixels: &mut [[u8; 3]]) {
+    let (w, h) = (world.width, world.height);
+    let river_biome = world.params.planet.remap(Biome::River);
+    let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
+    let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
+    pixels
+        .par_chunks_mut(w as usize)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y = y as u32;
+            for (x, pixel) in row.iter_mut().enumerate() {
+                let x = x as u32;
+                let i = world.index(x, y);
+                let biome = world.biomes[i];
+                let on_river = biome == river_biome && layers.coverage[i] >= rivers::RIVER_COVERAGE;
+                if !biome.is_water() || on_river {
+                    continue;
+                }
+                let e = elev(x, y);
+                let neighbours = [
+                    (x > 0).then(|| elev(x - 1, y)),
+                    (x + 1 < w).then(|| elev(x + 1, y)),
+                    (y > 0).then(|| elev(x, y - 1)),
+                    (y + 1 < h).then(|| elev(x, y + 1)),
+                ];
+                if neighbours
+                    .into_iter()
+                    .flatten()
+                    .any(|n| crosses_contour(e, n))
+                {
+                    *pixel = pixel.map(|c| (c as f32 * (1.0 - CONTOUR_DARKNESS)) as u8);
+                }
+            }
+        });
+}
+
+/// Computes the final colour of every pixel, in the same row-major order as
+/// the world layers, without contour lines (see [`draw_contours`]).
 pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8; 3]> {
     let (w, h) = (world.width, world.height);
     let grid = world.params.grid();
     let planet = &world.params.planet;
-    let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
-    let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
     let (coverage, depths) = (&layers.coverage, &layers.depths);
     let river_biome = planet.remap(Biome::River);
     let river_colour = linear_of(surface_color(river_biome));
@@ -388,7 +433,6 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
         .flat_map_iter(|y| (0..w).map(move |x| (x, y)))
         .map(|(x, y)| {
             let i = world.index(x, y);
-            let e = elev(x, y);
             let biome = world.biomes[i];
             let on_river = biome == river_biome && coverage[i] >= rivers::RIVER_COVERAGE;
             let lon = (x as f64 + 0.5) * lon_step;
@@ -403,21 +447,7 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
                     }
                     Style::Flat => flat_water_colour(biome, depths[i]),
                 };
-                let mut color = color.map(|c| c.clamp(0.0, 255.0) as u8);
-                let neighbours = [
-                    (x > 0).then(|| elev(x - 1, y)),
-                    (x + 1 < w).then(|| elev(x + 1, y)),
-                    (y > 0).then(|| elev(x, y - 1)),
-                    (y + 1 < h).then(|| elev(x, y + 1)),
-                ];
-                if neighbours
-                    .into_iter()
-                    .flatten()
-                    .any(|n| crosses_contour(e, n))
-                {
-                    color = color.map(|c| (c as f32 * (1.0 - CONTOUR_DARKNESS)) as u8);
-                }
-                return color;
+                return color.map(|c| c.clamp(0.0, 255.0) as u8);
             }
             // The land under a river: the biome the pixel has without it.
             let input = world.biome_input(i);

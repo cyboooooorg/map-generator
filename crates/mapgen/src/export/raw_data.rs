@@ -13,6 +13,7 @@
 //! | `flow.png`        | 16-bit grey, `log10(1 + km²)` with the same formula          |
 //! | `biomes.png`      | 8-bit grey, pixel = biome id (see the `biomes` table)       |
 //! | `clouds.png`      | 8-bit grey, cloud cover `pixel / 255` (worlds with clouds)  |
+//! | `surface.png`     | 8-bit RGB, `world.png` without its overlaid lines           |
 //!
 //! [`load_world`] (and the hex resampling) refuse a world whose
 //! `format_version` is newer than [`FORMAT_VERSION`], or whose layers do not
@@ -41,8 +42,9 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// Version 2 adds the volcanic zone, coast distance and highland offset
 /// layers, and the river polylines; version 3 the floodplain layer;
 /// version 4 stores temperatures in °C instead of the former `[0, 1]`
-/// scale; version 5 adds the cloud cover.
-pub const FORMAT_VERSION: u32 = 5;
+/// scale; version 5 adds the cloud cover; version 6 the surface render
+/// without overlaid lines.
+pub const FORMAT_VERSION: u32 = 6;
 
 /// First format version whose temperatures are in °C.
 const CELSIUS_VERSION: u32 = 4;
@@ -104,7 +106,21 @@ pub struct Layers {
     /// clouds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clouds: Option<ScalarLayerInfo>,
+    /// The hillshaded render of `world.png` without its reference and
+    /// contour lines, which the viewer draws itself (format version 6 and
+    /// later).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<ImageLayerInfo>,
     pub biomes: BiomeLayerInfo,
+}
+
+/// A colour image layer.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ImageLayerInfo {
+    pub file: String,
+    /// `rgb8`.
+    pub encoding: String,
 }
 
 /// A 16-bit layer: pixel `p` decodes to `min + p / 65535 × (max − min)`
@@ -172,8 +188,14 @@ fn quantise(v: f32, min: f32, max: f32) -> u16 {
     ((v.clamp(min, max) - min) / (max - min) * u16::MAX as f32).round() as u16
 }
 
-/// Writes `world.json` and one PNG per layer into `dir`.
-pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> {
+/// Writes `world.json` and one PNG per layer into `dir`. `surface`, the
+/// map's pixels without overlaid lines (see [`super::render_pixels`]), is
+/// written as `surface.png` when given.
+pub fn export_raw_data(
+    world: &World,
+    dir: &Path,
+    surface: Option<&[[u8; 3]]>,
+) -> Result<(), Box<dyn Error>> {
     let (w, h) = (world.width, world.height);
     let layer = |name, values, range| ScalarLayer {
         name,
@@ -242,6 +264,19 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
         })
     };
 
+    let surface = match surface {
+        Some(pixels) => {
+            image::RgbImage::from_raw(w, h, pixels.to_vec().into_flattened())
+                .ok_or("surface size does not match the world size")?
+                .save(dir.join("surface.png"))?;
+            Some(ImageLayerInfo {
+                file: "surface.png".into(),
+                encoding: "rgb8".into(),
+            })
+        }
+        None => None,
+    };
+
     let [
         elevation,
         moisture,
@@ -279,6 +314,7 @@ pub fn export_raw_data(world: &World, dir: &Path) -> Result<(), Box<dyn Error>> 
             highland_offset: Some(highland_offset),
             floodplain: Some(floodplain),
             clouds,
+            surface,
             biomes: BiomeLayerInfo {
                 file: "biomes.png".into(),
                 encoding: "gray8-biome-id".into(),
@@ -738,7 +774,7 @@ mod tests {
             std::env::temp_dir().join(format!("map-generator-test-{}", std::process::id()));
         let dir = world_dir.join("raw_data");
         std::fs::create_dir_all(&dir).unwrap();
-        export_raw_data(&world, &dir).unwrap();
+        export_raw_data(&world, &dir, None).unwrap();
 
         let biomes = image::open(dir.join("biomes.png")).unwrap().to_luma8();
         let elevation = image::open(dir.join("elevation.png")).unwrap().to_luma16();
