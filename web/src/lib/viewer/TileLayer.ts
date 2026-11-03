@@ -59,8 +59,8 @@ const KEEP_MS = 400;
 const FALLBACK_LEVELS = 2;
 /** Hidden patch meshes kept for reuse. */
 const MAX_SPARE = 128;
-/** Tile textures kept on the GPU. */
-const MAX_TEXTURES = 300;
+/** Tile textures kept on the GPU, by default (see setTextureBudget). */
+export const MAX_TEXTURES = 300;
 
 /** Stencil value marking the pixels a detail patch covers. */
 export const DETAIL_STENCIL = 1;
@@ -132,6 +132,7 @@ export class TileLayer {
   private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>();
   private world: { id: string; revision: number; firstLevel: number } | null = null;
   private enabled = true;
+  private maxTextures = MAX_TEXTURES;
   private frame = 0;
   private readonly frustum = new Frustum();
   private readonly matrix = new Matrix4();
@@ -152,6 +153,15 @@ export class TileLayer {
   setWorld(world: { id: string; revision: number; baseWidth: number } | null): void {
     this.clear();
     this.world = world && { id: world.id, revision: world.revision, firstLevel: firstDetailLevel(world.baseWidth) };
+  }
+
+  /**
+   * Sets how many tile textures stay on the GPU (the least recently shown
+   * go first, from the next update on). Tiles the current view shows are
+   * kept even beyond it.
+   */
+  setTextureBudget(count: number): void {
+    this.maxTextures = Math.max(1, Math.floor(count));
   }
 
   /** Detail only makes sense on the biome layer. */
@@ -408,11 +418,11 @@ export class TileLayer {
 
   /** Frees the least recently used textures beyond the budget. */
   private evict(): void {
-    if (this.cache.size <= MAX_TEXTURES) {
+    if (this.cache.size <= this.maxTextures) {
       return;
     }
     const byAge = [...this.cache.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
-    for (const [key, tile] of byAge.slice(0, this.cache.size - MAX_TEXTURES)) {
+    for (const [key, tile] of byAge.slice(0, this.cache.size - this.maxTextures)) {
       if (tile.lastUsed === this.frame) {
         break;
       }

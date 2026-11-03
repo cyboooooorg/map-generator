@@ -61,7 +61,7 @@ import {
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { liftSky, type Sky } from '../sky';
 import { downsample, fitFactor, releaseOnUpload } from './textures';
-import { DETAIL_STENCIL, TileLayer } from './TileLayer';
+import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
   atmosphereVertex,
@@ -252,6 +252,23 @@ function hexTexture(map: HexMap): DataTexture {
   texture.minFilter = NearestFilter;
   texture.needsUpdate = true;
   return texture;
+}
+
+/**
+ * Detail tile textures each view keeps while several views are open (two
+ * compared worlds): half the budget of a single view, so comparing does
+ * not double the GPU memory of the tiles.
+ */
+const COMPARE_TILE_BUDGET = MAX_TEXTURES / 2;
+
+/** Views alive, which share the tile budget. */
+const liveViews = new Set<PlanetView>();
+
+function balanceTileBudgets(): void {
+  const budget = liveViews.size > 1 ? COMPARE_TILE_BUDGET : MAX_TEXTURES;
+  for (const view of liveViews) {
+    view.setTileBudget(budget);
+  }
 }
 
 export class PlanetView {
@@ -546,6 +563,18 @@ export class PlanetView {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
+    this.requestRender();
+    liveViews.add(this);
+    balanceTileBudgets();
+  }
+
+  /**
+   * Sets how many detail tile textures this view keeps on the GPU. Views
+   * set it themselves: MAX_TEXTURES alone, half as many each while two are
+   * open.
+   */
+  setTileBudget(count: number): void {
+    this.tiles.setTextureBudget(count);
     this.requestRender();
   }
 
@@ -989,6 +1018,8 @@ export class PlanetView {
 
   dispose(): void {
     this.disposed = true;
+    liveViews.delete(this);
+    balanceTileBudgets();
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
       this.frame = null;
