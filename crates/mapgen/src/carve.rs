@@ -92,14 +92,15 @@ pub fn carve(
     lake: &[bool],
     above: &mut [f32],
 ) -> Vec<f32> {
-    let original = above.to_vec();
     let mut floodplain = vec![0f32; above.len()];
     // Lines are carved independently and merged with min / max, which do
     // not depend on the order: the result is the same as carving them one
-    // after another.
+    // after another. Every line is carved from the original terrain before
+    // the merge writes any of it, so no copy of it is needed.
+    let original: &[f32] = above;
     let carved: Vec<Vec<(u32, f32, f32)>> = lines
         .par_iter()
-        .map(|line| carve_line(line, grid, filled, lake, &original))
+        .map(|line| carve_line(line, grid, filled, lake, original))
         .collect();
     for (i, height, weight) in carved.into_iter().flatten() {
         let i = i as usize;
