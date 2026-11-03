@@ -5,7 +5,8 @@
 //! ([`LOADED_BYTES_PER_PIXEL`]): 0.2 GB at 4096 × 2048, 0.75 GB at
 //! 8192 × 4096. The most recently used worlds stay in memory within a byte
 //! budget (`MAPGEN_TILE_CACHE_MB`); the last one used is kept even when it
-//! alone exceeds it.
+//! alone exceeds it. The memory of evicted worlds is given back to the
+//! system before the next one loads ([`memory::release`]).
 //!
 //! Loads are bounded so that the budget holds while a world is being read,
 //! not only once it is in memory: one world loads at a time (a world is
@@ -19,6 +20,7 @@
 //! [`TileCache::world`] refuses to load worlds until it ends
 //! ([`TileError::Busy`]); tile and hex grid requests then answer 503 with
 //! `Retry-After`, and the viewer retries its tiles later.
+use crate::memory;
 use mapgen::detail::{DetailWorld, TileId};
 use mapgen::export::raw_data::load_layers;
 use std::path::Path;
@@ -144,11 +146,17 @@ impl TileCache {
                 }
                 let dir = dir.to_path_buf();
                 let expected = expected_bytes(&dir);
-                self.make_room(&cell, expected);
-                tokio::task::spawn_blocking(move || load(&dir))
-                    .await
-                    .map_err(|e| TileError::Failed(e.to_string()))?
-                    .map_err(TileError::Failed)
+                let evicted = self.make_room(&cell, expected);
+                tokio::task::spawn_blocking(move || {
+                    if !evicted.is_empty() {
+                        drop(evicted);
+                        memory::release();
+                    }
+                    load(&dir)
+                })
+                .await
+                .map_err(|e| TileError::Failed(e.to_string()))?
+                .map_err(TileError::Failed)
             })
             .await?
             .clone();
@@ -157,19 +165,23 @@ impl TileCache {
     }
 
     /// Evicts the least recently used loaded worlds, other than `loading`,
-    /// until `expected` more bytes fit the budget.
-    fn make_room(&self, loading: &Arc<OnceCell<Arc<DetailWorld>>>, expected: usize) {
+    /// until `expected` more bytes fit the budget. Returns them, to be
+    /// dropped off the async workers.
+    fn make_room(&self, loading: &Arc<OnceCell<Arc<DetailWorld>>>, expected: usize) -> Vec<Entry> {
         let mut state = self.lock();
         let mut total: usize = state.entries.iter().map(Entry::bytes).sum();
-        state.entries.retain(|e| {
-            if total + expected <= self.budget || Arc::ptr_eq(&e.world, loading) {
-                return true;
-            }
-            let bytes = e.bytes();
-            total -= bytes;
-            // Worlds still waiting for their turn hold nothing yet.
-            bytes == 0
-        });
+        state
+            .entries
+            .extract_if(.., |e| {
+                if total + expected <= self.budget || Arc::ptr_eq(&e.world, loading) {
+                    return false;
+                }
+                let bytes = e.bytes();
+                total -= bytes;
+                // Worlds still waiting for their turn hold nothing yet.
+                bytes > 0
+            })
+            .collect()
     }
 
     /// Evicts the least recently used worlds beyond the budget, keeping the
@@ -216,8 +228,12 @@ impl TileCache {
     }
 
     /// Forgets a world (deleted or regenerated).
-    pub fn forget(&self, id: &str) {
-        self.lock().entries.retain(|e| e.id != id);
+    /// Returns whether a loaded world was dropped.
+    pub fn forget(&self, id: &str) -> bool {
+        let mut state = self.lock();
+        let before: usize = state.entries.iter().map(Entry::bytes).sum();
+        state.entries.retain(|e| e.id != id);
+        state.entries.iter().map(Entry::bytes).sum::<usize>() < before
     }
 
     /// Ids of the worlds held, least recently used first.

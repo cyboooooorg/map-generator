@@ -28,6 +28,7 @@ use crate::api::{
     WorldSummary,
 };
 use crate::catalog::Catalog;
+use crate::memory;
 use crate::tiles::{self, TileCache, TileError};
 use crate::worlds;
 use axum::extract::{Path as UrlPath, Query, State};
@@ -290,10 +291,13 @@ async fn delete_world(
     if !dir.is_dir() {
         return Err(Failure(StatusCode::NOT_FOUND, format!("no world {id}")));
     }
-    state.tiles.forget(&id);
+    let forgotten = state.tiles.forget(&id);
     tokio::fs::remove_dir_all(&dir)
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if forgotten {
+        let _ = tokio::task::spawn_blocking(memory::release).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -566,8 +570,10 @@ async fn create_world(
                 error: format!("generation crashed: {e}"),
             },
         };
-        // Tiles resume before the job reports its end, so a viewer opening
-        // the new world is served at once.
+        // The generation's memory, freed by now, goes back to the system
+        // (a few milliseconds), then tiles resume before the job reports its
+        // end, so a viewer opening the new world is served at once.
+        let _ = tokio::task::spawn_blocking(memory::release).await;
         drop(paused_tiles);
         finish(status);
     });

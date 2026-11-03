@@ -39,7 +39,11 @@ RUN apt-get update \
 COPY --from=rust /usr/local/bin/mapgen-server /usr/local/bin/map-generator /usr/local/bin/hexgrid /usr/local/bin/
 COPY --from=web /web/dist /app/web
 
+# MALLOC_ARENA_MAX: fewer glibc arenas keep less freed memory after a
+# generation, at no measurable cost in generation time (see
+# crates/server/src/memory.rs)
 ENV MAPGEN_WORLDS_DIR=/data/worlds \
+	MALLOC_ARENA_MAX=2 \
 	MAPGEN_PRESETS_DIR=/data/presets \
 	MAPGEN_STATIC_DIR=/app/web \
 	HOST=0.0.0.0 \
