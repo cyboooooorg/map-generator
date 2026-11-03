@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { HexMap } from '../lib/api/types/HexMap';
+  import type { LinkedDisplay } from '../lib/display';
   import { formatKm } from '../lib/format';
   import { formatLonLat, pathKm, type LonLat } from '../lib/geo';
   import { samplePoint } from '../lib/sample';
@@ -18,11 +19,25 @@
     onCameraChange?: (state: CameraState) => void;
     /** `[` / `]`: show the previous (-1) or next (1) world of the list. */
     onStepWorld?: (direction: 1 | -1) => void;
+    /** Called with the linked display settings whenever one changes. */
+    onDisplayChange?: (display: LinkedDisplay) => void;
+    /** Display settings to mirror ("Link display"), or null. */
+    linkedDisplay?: LinkedDisplay | null;
     /** Whether its display changes are saved as the preferences (the main pane only). */
     persistDisplay?: boolean;
   }
 
-  let { world, revision, keyboard, label = null, onCameraChange, onStepWorld, persistDisplay = true }: Props = $props();
+  let {
+    world,
+    revision,
+    keyboard,
+    label = null,
+    onCameraChange,
+    onStepWorld,
+    onDisplayChange,
+    linkedDisplay = null,
+    persistDisplay = true,
+  }: Props = $props();
 
   let viewer = $state<Viewer | null>(null);
   let picked = $state<LonLat | null>(null);
@@ -94,6 +109,8 @@
     onEscape={escape}
     {...onCameraChange ? { onCameraChange } : {}}
     {...onStepWorld ? { onStepWorld } : {}}
+    {...onDisplayChange ? { onDisplayChange } : {}}
+    {linkedDisplay}
   />
 
   {#if label}

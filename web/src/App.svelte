@@ -17,6 +17,7 @@
   import { loadSetting, saveSetting } from './lib/settings';
   import { stepWorld } from './lib/shortcuts';
   import { toasts } from './lib/toasts.svelte';
+  import type { LinkedDisplay } from './lib/display';
   import type { CameraState } from './lib/viewer/PlanetView';
   import { LoadedWorld } from './lib/world.svelte';
 
@@ -41,6 +42,11 @@
   let listOrder = $state<string[]>([]);
   let linkCameras = $state(loadSetting('linkCameras', true));
   $effect(() => saveSetting('linkCameras', linkCameras));
+  /** Whether the compare pane mirrors the main pane's display settings. */
+  let linkDisplay = $state(loadSetting('linkDisplay', false));
+  $effect(() => saveSetting('linkDisplay', linkDisplay));
+  /** The main pane's linked display settings, as it reports them. */
+  let mainDisplay = $state<LinkedDisplay | null>(null);
   /**
    * Which pane fills the screen on narrow layouts (the CSS ignores it on wide
    * ones, where the sidebar and the viewer sit side by side).
@@ -379,6 +385,11 @@
           <strong>{compareId}</strong>
         </span>
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> Link cameras</label>
+        <label
+          class="check"
+          title="The right (or lower) pane mirrors the layer, relief, sunlight and season, atmosphere, clouds and grid of the main one"
+          ><input type="checkbox" bind:checked={linkDisplay} /> Link display</label
+        >
         <button onclick={swap}>Swap</button>
         <button onclick={() => (compareId = null)}>Close</button>
       </div>
@@ -391,6 +402,7 @@
         keyboard={true}
         label={compareId ? selectedId : null}
         onStepWorld={step}
+        onDisplayChange={(display) => (mainDisplay = display)}
         onCameraChange={cameraFrom(() => secondaryPane)}
       />
       {#if compareId}
@@ -400,6 +412,7 @@
           revision={revision(compareId)}
           keyboard={false}
           persistDisplay={false}
+          linkedDisplay={linkDisplay ? mainDisplay : null}
           label={compareId}
           onCameraChange={cameraFrom(() => primaryPane)}
         />

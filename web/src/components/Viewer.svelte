@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { ApiFailure, api, worldFile } from '../lib/api/client';
   import type { HexMap } from '../lib/api/types/HexMap';
+  import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
   import { formatArea, formatShare, saveBlob, surfaceColour } from '../lib/format';
   import type { LonLat } from '../lib/geo';
@@ -36,6 +37,10 @@
     onCameraChange?: (state: CameraState) => void;
     /** `[` / `]`: show the previous (-1) or next (1) world of the list. */
     onStepWorld?: (direction: 1 | -1) => void;
+    /** Called with the linked display settings whenever one changes (the main pane). */
+    onDisplayChange?: (display: LinkedDisplay) => void;
+    /** Settings to mirror ("Link display", a compare pane), or null to keep its own. */
+    linkedDisplay?: LinkedDisplay | null;
     /**
      * Whether display changes are saved as the preferences. Only the main
      * viewer saves them: a compare pane starts from them but would otherwise
@@ -57,6 +62,8 @@
     onEscape,
     onCameraChange,
     onStepWorld,
+    onDisplayChange,
+    linkedDisplay = null,
     persistDisplay = true,
   }: Props = $props();
 
@@ -186,6 +193,33 @@
       // A legend folded for lack of room stays open on wide screens.
       legendOpen: wide ? legendOpen : saved.legendOpen,
     });
+  });
+
+  /** The settings "Link display" mirrors, as this pane has them. */
+  function currentLinked(): LinkedDisplay {
+    return { layer, relief, sun, season, sunLongitude, atmosphere, clouds, graticule };
+  }
+
+  $effect(() => {
+    const current = currentLinked();
+    onDisplayChange?.(current);
+  });
+
+  // A compare pane with "Link display": follow the main pane's settings.
+  $effect(() => {
+    const source = linkedDisplay;
+    if (!source) {
+      return;
+    }
+    const changes = untrack(() => linkedChanges(currentLinked(), source));
+    if (changes.layer !== undefined && LAYERS.some((l) => l.id === changes.layer)) layer = changes.layer as Layer;
+    if (changes.relief !== undefined) relief = changes.relief;
+    if (changes.sun !== undefined) sun = changes.sun;
+    if (changes.season !== undefined) season = changes.season;
+    if (changes.sunLongitude !== undefined) sunLongitude = changes.sunLongitude;
+    if (changes.atmosphere !== undefined) atmosphere = changes.atmosphere;
+    if (changes.clouds !== undefined) clouds = changes.clouds;
+    if (changes.graticule !== undefined) graticule = changes.graticule;
   });
 
   onMount(() => {
