@@ -2,11 +2,11 @@
 // state so it can be tested on its own.
 
 /** Locales the web app is translated into; English is the source. */
-export const LOCALES = ['en'] as const;
+export const LOCALES = ['en', 'fr'] as const;
 export type Locale = (typeof LOCALES)[number];
 
 /** Native name of each locale, for the language selector. */
-export const LOCALE_NAMES: Record<Locale, string> = { en: 'English' };
+export const LOCALE_NAMES: Record<Locale, string> = { en: 'English', fr: 'Français' };
 
 export function isLocale(value: unknown): value is Locale {
   return typeof value === 'string' && (LOCALES as readonly string[]).includes(value);

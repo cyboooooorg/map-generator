@@ -144,7 +144,7 @@ The library also reports generation progress: `generate_with_progress` calls bac
 
 ## Web app
 
-A browser app to explore the generated worlds as a 3D globe or a flat map, switch between biome, elevation, temperature, moisture, river, volcanic, distance-to-sea and floodplain layers, raise the relief, light the planet with a seasonal sun, overlay the hex grid, inspect any point, its river and its hex, measure distances, compare two worlds side by side, download a world's files, and queue new worlds from a form. See [web/README.md](web/README.md) for the full feature list and the keyboard shortcuts. It is a personal tool served locally behind the machine-wide Traefik, like the other `*.localhost` apps.
+A browser app to explore the generated worlds as a 3D globe or a flat map, switch between biome, elevation, temperature, moisture, river, volcanic, distance-to-sea and floodplain layers, raise the relief, light the planet with a seasonal sun, overlay the hex grid, inspect any point, its river and its hex, measure distances, compare two worlds side by side, download a world's files, and queue new worlds from a form, in English or French. See [web/README.md](web/README.md) for the full feature list and the keyboard shortcuts. It is a personal tool served locally behind the machine-wide Traefik, like the other `*.localhost` apps.
 
 ```bash
 mise run up      # build and start it on http://planets.localhost
@@ -213,7 +213,7 @@ name = "mars-like"                 # lowercase letters, digits and dashes; used 
 description = "Small cold desert world with polar caps"
 
 [locales.fr]                       # name and description in another language, for the web app
-name = "Martienne"
+name = "Type Mars"
 description = "Petit désert froid aux calottes polaires"
 
 [defaults]                         # a fixed value or a [min, max] range drawn at random

@@ -3,6 +3,10 @@
 name = "volcanic"
 description = "Fire world: extreme heat, near-zero moisture"
 
+[locales.fr]
+name = "Volcanique"
+description = "Monde de feu : chaleur extrême, humidité presque nulle"
+
 [climate]
 moisture = -0.55
 volcanic = 0.50

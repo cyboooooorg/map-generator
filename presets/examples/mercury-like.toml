@@ -4,6 +4,10 @@
 name = "mercury-like"
 description = "Small airless grey world, cratered highlands and dark plains"
 
+[locales.fr]
+name = "Type Mercure"
+description = "Petit monde gris sans atmosphère, hauts plateaux cratérisés et plaines sombres"
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these. No water ever flowed: no erosion. The sea level only
 # sets how much of the surface the smooth basins cover.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The language of the interface. Hidden while a single language exists.
+  // The language of the interface (hidden if a single language exists).
   import { LOCALE_NAMES, LOCALES, getLocale, setLocale, t, type Locale } from '../lib/i18n/index.svelte';
 </script>
 
@@ -12,7 +12,8 @@
       title={t.language.label}
     >
       {#each LOCALES as locale (locale)}
-        <option value={locale}>{LOCALE_NAMES[locale]}</option>
+        <!-- The codes keep the header narrow; the full names are read out. -->
+        <option value={locale} aria-label={LOCALE_NAMES[locale]}>{locale.toUpperCase()}</option>
       {/each}
     </select>
   </label>

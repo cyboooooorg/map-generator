@@ -579,6 +579,9 @@
       top: 0;
       z-index: 1;
       gap: 8px;
+      /* The title, the tabs, the language and the button do not fit a phone's
+         width in one row (nor longer translations): wrap rather than clip. */
+      flex-wrap: wrap;
       padding-top: 10px;
       background: var(--bg);
     }
@@ -594,6 +597,7 @@
     }
     .tabs {
       display: flex;
+      flex-shrink: 0;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;

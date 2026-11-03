@@ -3,6 +3,10 @@
 name = "frozen"
 description = "Ice world: perpetually frozen"
 
+[locales.fr]
+name = "Glacée"
+description = "Monde de glace : gelé pour toujours"
+
 [climate]
 temperature = -27.0
 moisture = 0.15

@@ -7,13 +7,14 @@
 import { loadSetting, saveSetting } from '../settings';
 import type { Widen } from './catalog';
 import { en } from './en';
+import { fr } from './fr';
 import { initialLocale, type Locale } from './locale';
 
 export { LOCALES, LOCALE_NAMES, type Locale } from './locale';
 
 export type Messages = Widen<typeof en>;
 
-const catalogs: Record<Locale, Messages> = { en };
+const catalogs: Record<Locale, Messages> = { en, fr };
 
 const SETTING = 'locale';
 
