@@ -152,6 +152,18 @@ polar rain both meant sinking dry air there, while the Arctic is about
 poles and a polar stratus term is added). Cover then matches Earth's
 latitude profile and its two-thirds mean.
 
+**Review (after step 5).** On the globe the water clouds read as too many
+and too linear near the equator: wide overcast blobs, and east-west
+streaks where the ×3 squeeze was strongest, at the equator. The noise is
+now warped by a larger noise (swirls and fronts), squeezed only at
+mid-latitudes (×2 at 45°, none at the equator or the poles), and broken
+into finer cells, stronger in the tropics (convective clusters); the
+equatorial convergence is a narrow band of its own, and the cover ramp is
+wider (`smoothstep(0, 0.9)`), so cloud fields have thick cores and thin
+edges. The mean cover drops to 0.42–0.49 (about 30 % of the ground hidden
+in the viewer, half before): Earth's two-thirds counts thin cirrus that a
+satellite image barely shows.
+
 ## 4. Rendering (viewer)
 
 - **Sky shell.** The rim glow becomes a single-scattering shader on a

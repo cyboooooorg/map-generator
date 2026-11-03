@@ -463,12 +463,12 @@ The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75
 
 The cloud cover of each pixel, in `[0, 1]`, depends on the atmosphere's cloud kind (`[atmosphere] clouds`):
 
-- **water**: `0.15 × circulation band + 0.3 × rain + 0.26`, plus polar stratus (`+0.35` towards the poles, where the rain term fades out: cold air rains little but stays overcast), plus `1.4 ×` a 5-octave noise, through `smoothstep(0, 0.7)`. Clouds gather where air rises (the equatorial convergence and the storm tracks around 60°) and where it rains (windward slopes), and thin out over the subtropical highs. Earth-like worlds come out 63–65 % overcast (Earth: about 67 %): 0.75–0.8 at the equator, 0.5 around 30°, 0.7 along the storm tracks, 0.65–0.9 at the poles.
+- **water**: `0.12 × equatorial convergence` (a band about 10° wide) `+ 0.15 × circulation band + 0.25 × rain`, plus polar stratus (`+0.3` towards the poles, where the rain term fades out: cold air rains little but stays overcast), plus `1.5 ×` the cloud systems (4-octave noise) and `0.6 ×` finer cells (3 octaves, five times smaller; stronger in the tropics, where clouds are convective clusters), through `smoothstep(0, 0.9)` so cloud fields have thick cores and thin edges. Clouds gather where air rises (the equatorial convergence and the storm tracks around 60°) and where it rains (windward slopes), and thin out over the subtropical highs. Earth-like worlds come out with a mean cover of 0.42–0.49: about 0.67 at the equator, 0.29 around 30°, 0.45 along the storm tracks, 0.4 at the poles. In the viewer, where thin clouds are translucent, they hide about 30 % of the ground.
 - **sulfuric**: a deck in zonal bands, `smoothstep(−0.3, 0.6, 0.2 + 0.7 × cover + noise)`: total on `venus-like`, patchy on `volcanic` worlds.
 - **dust**: low, patchy and thin (`0.8 × smoothstep(0.15, 0.6, …)`), about 10 % of `mars-like` worlds.
 - **none**: no cloud layer.
 
-`[atmosphere] cloud_cover` shifts the cover (−0.3 on frozen worlds). The viewer draws the layer over the globe and the flat map (**Clouds**, `C`). The noise has features of about 3 000 km, squeezed north-south (×3, ×6 for sulfuric decks) so clouds stretch along the winds into streets and bands; the squeeze fades out towards the poles. Airless worlds have no clouds.
+`[atmosphere] cloud_cover` shifts the cover (−0.3 on frozen worlds). The viewer draws the layer over the globe and the flat map (**Clouds**, `C`). The noise has features of about 3 000 km. For water clouds it is warped by a larger noise, which curls cloud systems into swirls and fronts, and squeezed north-south only at mid-latitudes (up to ×2 at 45°), where the westerlies draw fronts into bands; tropical and polar clouds are not stretched. Sulfuric decks (×6) and dust (×1.5) are squeezed everywhere but near the poles. Airless worlds have no clouds.
 
 ### Regional variability
 
