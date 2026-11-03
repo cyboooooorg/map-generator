@@ -938,6 +938,7 @@ dependencies = [
  "axum",
  "http-body-util",
  "image",
+ "libc",
  "mapgen",
  "rand 0.10.0",
  "serde",
