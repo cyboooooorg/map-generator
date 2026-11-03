@@ -123,6 +123,8 @@ pub mod stream {
     pub const EROSION: u32 = 17;
     pub const EROSION_FINE: u32 = 18;
     pub const CLOUDS: u32 = 19;
+    /// Colour variation within biomes (rendering only).
+    pub const SURFACE: u32 = 20;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.
@@ -157,7 +159,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in stream::ELEVATION..=stream::CLOUDS {
+            for s in stream::ELEVATION..=stream::SURFACE {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }

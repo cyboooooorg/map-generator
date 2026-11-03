@@ -32,6 +32,7 @@ use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
 use crate::export::ecotone::ecotone_colour_for;
 use crate::export::raw_data::{Layer16, LoadedWorld};
+use crate::export::variation::SurfaceVariation;
 use crate::export::{LIGHT, RELIEF_KM, blend_river, shade, water_colour, water_depths_of};
 use crate::hex;
 use crate::rivers;
@@ -122,6 +123,8 @@ pub struct DetailWorld {
     world: LoadedWorld,
     noise: Perlin,
     warp_noise: Perlin,
+    /// Colour variation within biomes, as on the base map.
+    variation: SurfaceVariation,
     /// Bounding box of each river polyline in base pixels.
     river_bounds: Vec<[f64; 4]>,
     /// Per base pixel: [`LAKE`] and [`RIVER`] bits.
@@ -300,6 +303,7 @@ impl DetailWorld {
             depths,
             noise: Perlin::new(seed.wrapping_add(1000)),
             warp_noise: Perlin::new(seed.wrapping_add(1001)),
+            variation: SurfaceVariation::new(seed, world.params.circumference_km as f64),
             river_bounds,
             world,
         }
@@ -471,10 +475,13 @@ impl DetailWorld {
                     water_colour(biome, depth)
                 } else {
                     let mut shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
+                    let mut colour = ecotone_colour_for(planet, input);
                     if dry.is_lava() {
                         shade = 1.0 + (shade - 1.0) * LAVA_SHADE;
+                    } else {
+                        colour = self.variation.apply(colour, lon, lat);
                     }
-                    ecotone_colour_for(planet, input).map(|c| c * shade)
+                    colour.map(|c| c * shade)
                 };
                 let c = coverage[i];
                 if c > 0.0
