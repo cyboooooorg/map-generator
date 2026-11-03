@@ -89,6 +89,16 @@ export function worldFile(id: string, path: string, revision?: number | null): s
   return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
 }
 
+/**
+ * URL of the thumbnail of a world (`thumb.png`, 512 pixels wide), which the
+ * server makes from `world.png` for worlds generated before thumbnails. With
+ * the revision, the browser caches it for good.
+ */
+export function worldThumbnail(id: string, revision?: number | null): string {
+  const url = `/api/worlds/${encodeURIComponent(id)}/thumb`;
+  return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
+}
+
 const STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'done', 'failed', 'cancelled']);
 
 /** Whether a job status is final. */

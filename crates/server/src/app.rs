@@ -11,6 +11,7 @@
 //! | `DELETE /api/worlds/{id}`       | delete a world (409 while it is being generated)  |
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
 //! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=` | deep-zoom detail tile (PNG) |
+//! | `GET /api/worlds/{id}/thumb?rev=` | thumbnail (PNG), made for older worlds (see [`thumbs`]) |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
@@ -30,6 +31,7 @@ use crate::api::{
 };
 use crate::catalog::Catalog;
 use crate::memory;
+use crate::thumbs::{ThumbError, Thumbnails};
 use crate::tiles::{self, TileCache, TileError};
 use crate::worlds;
 use axum::extract::{Path as UrlPath, Query, State};
@@ -130,6 +132,7 @@ pub struct AppState {
     renders: Semaphore,
     /// Hex grids resampled at once: each one holds a histogram per hex.
     hex_grids: Semaphore,
+    thumbnails: Thumbnails,
 }
 
 /// Tiles rendered at once.
@@ -183,6 +186,7 @@ pub fn router(config: Config) -> Router {
         tiles: TileCache::new(config.tile_cache_bytes),
         renders: Semaphore::new(CONCURRENT_RENDERS),
         hex_grids: Semaphore::new(1),
+        thumbnails: Thumbnails::default(),
         config: config.clone(),
     });
     let spa = ServeDir::new(&config.static_dir)
@@ -218,6 +222,7 @@ pub fn router(config: Config) -> Router {
         .route("/api/worlds/{id}", delete(delete_world))
         .route("/api/worlds/{id}/hex", post(hex_grid))
         .route("/api/worlds/{id}/tiles/{z}/{x}/{y}", get(tile))
+        .route("/api/worlds/{id}/thumb", get(thumbnail))
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
         .route("/api/jobs/{id}/events", get(job_events))
@@ -341,6 +346,44 @@ async fn tile(
     // A URL naming the current revision and renderer never changes: cache
     // it for good.
     let cache = if query.rev == Some(revision) && query.render == Some(RENDER_VERSION) {
+        IMMUTABLE
+    } else {
+        "no-cache"
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, cache),
+        ],
+        png,
+    )
+        .into_response())
+}
+
+/// Query of a thumbnail request: the world revision the client knows.
+#[derive(serde::Deserialize)]
+struct ThumbQuery {
+    rev: Option<u64>,
+}
+
+/// The thumbnail of a world, made from its `world.png` if it has none
+/// (see [`crate::thumbs`]).
+async fn thumbnail(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    Query(query): Query<ThumbQuery>,
+) -> Result<Response, Failure> {
+    if !worlds::is_valid_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
+    }
+    let revision = world_revision(&state, &id).await?;
+    let dir = state.config.worlds_dir.join(&id);
+    let png = state.thumbnails.get(&dir).await.map_err(|e| match e {
+        ThumbError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no map for {id}")),
+        ThumbError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
+    })?;
+    // Like a tile: a URL naming the current revision never changes.
+    let cache = if query.rev == Some(revision) {
         IMMUTABLE
     } else {
         "no-cache"
@@ -825,6 +868,33 @@ mod tests {
         let response = get_gzip(&app, "/worlds/frozen-3/raw_data/world.json").await;
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
         assert_eq!(response.headers()[header::CONTENT_ENCODING], "gzip");
+
+        // The thumbnail: exported with the world, made again when missing
+        // (a world from before thumbnails), cached for good under the
+        // current revision.
+        let list_json: serde_json::Value = serde_json::from_str(&list).unwrap();
+        let rev = list_json[0]["modified_ms"].as_u64().unwrap();
+        let thumb_file = config.worlds_dir.join("frozen-3/thumb.png");
+        let exported = std::fs::read(&thumb_file).unwrap();
+        std::fs::remove_file(&thumb_file).unwrap();
+        let uri = format!("/api/worlds/frozen-3/thumb?rev={rev}");
+        let response = get_gzip(&app, &uri).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
+        assert_eq!(response.headers()[header::CACHE_CONTROL], IMMUTABLE);
+        assert!(!response.headers().contains_key(header::CONTENT_ENCODING));
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body, exported);
+        assert_eq!(std::fs::read(&thumb_file).unwrap(), exported);
+        let response = get_gzip(&app, "/api/worlds/frozen-3/thumb?rev=1").await;
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
+        for (bad, expected) in [
+            ("/api/worlds/nope-1/thumb", StatusCode::NOT_FOUND),
+            ("/api/worlds/..%2Fetc-1/thumb", StatusCode::BAD_REQUEST),
+        ] {
+            let (status, _) = call(&app, "GET", bad, None).await;
+            assert_eq!(status, expected, "{bad}");
+        }
 
         // Same planet and seed again: the directory exists.
         let (status, _) = call(&app, "POST", "/api/worlds", Some(request)).await;
