@@ -6,6 +6,7 @@
 
 import type { Biome } from '../api/types/Biome';
 import type { CloudKind } from '../api/types/CloudKind';
+import type { Mouth } from '../api/types/Mouth';
 import type { Stage } from '../api/types/Stage';
 
 export const en = {
@@ -204,5 +205,49 @@ export const en = {
     rawData: 'raw data (ZIP)',
     zipping: 'zipping…',
     loading: 'Loading…',
+  },
+  /** Information about a picked point. */
+  info: {
+    label: 'Point information',
+    copy: 'Copy',
+    copyHelp: 'Copy latitude, longitude in degrees',
+    close: 'Close',
+    copied: 'Coordinates copied.',
+    elevation: 'Elevation',
+    aboveCoastline: 'above the coastline',
+    temperature: 'Temperature',
+    annualMean: 'annual mean',
+    moisture: 'Moisture',
+    moistureScale: '-1 arid · 1 wet',
+    drainage: 'Drainage',
+    upstream: 'upstream',
+    toSea: 'To the sea',
+    over: (p: { distance: string }) => `over ${p.distance}`,
+    volcanic: 'Volcanic zone',
+    volcanicScale: '0 none · 1 volcanic',
+    floodplain: 'Floodplain',
+    floodplainScale: 'valley floor weight',
+    highland: 'Highland shift',
+    highlandScale: 'of the mountain line',
+    pixel: 'Pixel',
+    river: (p: { id: number }) => `River #${p.id}`,
+    flowHere: 'Flow here',
+    drained: 'drained',
+    atMouth: 'At the mouth',
+    length: 'Length',
+    endsIn: 'Ends in',
+    mouths: { sea: 'the sea', lake: 'a lake', river: 'another river' } satisfies Record<Mouth, string>,
+    estuary: ', through an estuary',
+    delta: 'Delta',
+    branchOf: (p: { id: number }) => `branch of river #${p.id}`,
+    hex: (p: { col: number; row: number }) => `Hex ${p.col}, ${p.row}`,
+    mainBiome: 'Main biome',
+    meanElevation: 'Mean elevation',
+    meanTemperature: 'Mean temperature',
+    meanMoisture: 'Mean moisture',
+    largestRiver: 'Largest river',
+    noRiver: 'none',
+    riverHex: ' (river hex)',
+    loading: 'Loading the raw data…',
   },
 };

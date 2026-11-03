@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index.svelte';
+  import { biomeName } from '../lib/i18n/names';
   import type { HexMap } from '../lib/api/types/HexMap';
   import type { WorldMetadata } from '../lib/api/types/WorldMetadata';
-  import { copyText, formatArea, formatKm, surfaceColour } from '../lib/format';
+  import { copyText, formatArea, formatKm, formatNumber, surfaceColour, withUnit } from '../lib/format';
   import { formatLonLat, lonLatDegrees, type LonLat } from '../lib/geo';
   import type { WorldLayers } from '../lib/layers';
   import type { RiverIndex } from '../lib/rivers';
@@ -26,105 +28,104 @@
   const river = $derived(rivers && layers ? riverAt(point, rivers, layers.width) : null);
   const hex = $derived(hexMap ? sampleHex(point, hexMap) : null);
 
-  const MOUTHS = { sea: 'the sea', lake: 'a lake', river: 'another river' } as const;
 
   async function copyCoordinates(): Promise<void> {
     const [lat, lon] = lonLatDegrees(point);
     const ok = await copyText(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
-    toasts.show(ok ? 'Coordinates copied.' : 'The browser refused to copy.', { kind: ok ? 'info' : 'error' });
+    toasts.show(ok ? t.info.copied : t.worldInfo.copyRefused, { kind: ok ? 'info' : 'error' });
   }
 
   function signed(value: number, digits: number): string {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`;
+    return `${value >= 0 ? '+' : ''}${formatNumber(value, digits)}`;
   }
 </script>
 
-<aside class="info" aria-label="Point information">
+<aside class="info" aria-label={t.info.label}>
   <header>
     <strong>{formatLonLat(point)}</strong>
     <span class="actions">
-      <button class="small" onclick={copyCoordinates} title="Copy latitude, longitude in degrees">Copy</button>
-      <button class="close" onclick={onClose} aria-label="Close">×</button>
+      <button class="small" onclick={copyCoordinates} title={t.info.copyHelp}>{t.info.copy}</button>
+      <button class="close" onclick={onClose} aria-label={t.info.close}>×</button>
     </span>
   </header>
   {#if sample}
     {#if sample.biome}
       <p class="biome">
         <span class="swatch" style:background={hexMap ? sample.biome.color : surfaceColour(sample.biome)}></span>
-        {sample.biome.name}
+        {biomeName(sample.biome)}
       </p>
     {/if}
     <dl>
-      <dt>Elevation</dt>
-      <dd>{signed(sample.relief, 3)} <small>above the coastline</small></dd>
-      <dt>Temperature</dt>
-      <dd>{sample.temperature.toFixed(1)} °C <small>annual mean</small></dd>
-      <dt>Moisture</dt>
-      <dd>{sample.moisture.toFixed(2)} <small>-1 arid · 1 wet</small></dd>
+      <dt>{t.info.elevation}</dt>
+      <dd>{signed(sample.relief, 3)} <small>{t.info.aboveCoastline}</small></dd>
+      <dt>{t.info.temperature}</dt>
+      <dd>{withUnit(formatNumber(sample.temperature, 1), '°C')} <small>{t.info.annualMean}</small></dd>
+      <dt>{t.info.moisture}</dt>
+      <dd>{formatNumber(sample.moisture, 2)} <small>{t.info.moistureScale}</small></dd>
       {#if sample.flowKm2 > 0}
-        <dt>Drainage</dt>
-        <dd>{formatArea(sample.flowKm2)} <small>upstream</small></dd>
+        <dt>{t.info.drainage}</dt>
+        <dd>{formatArea(sample.flowKm2)} <small>{t.info.upstream}</small></dd>
       {/if}
       {#if sample.coastKm !== null}
-        <dt>To the sea</dt>
-        <dd>{sample.coastCapped ? 'over ' : ''}{formatKm(sample.coastKm)}</dd>
+        <dt>{t.info.toSea}</dt>
+        <dd>{sample.coastCapped ? t.info.over({ distance: formatKm(sample.coastKm) }) : formatKm(sample.coastKm)}</dd>
       {/if}
       {#if sample.volcanic !== null}
-        <dt>Volcanic zone</dt>
-        <dd>{sample.volcanic.toFixed(2)} <small>0 none · 1 volcanic</small></dd>
+        <dt>{t.info.volcanic}</dt>
+        <dd>{formatNumber(sample.volcanic, 2)} <small>{t.info.volcanicScale}</small></dd>
       {/if}
       {#if sample.floodplain !== null && sample.floodplain > 0.01}
-        <dt>Floodplain</dt>
-        <dd>{sample.floodplain.toFixed(2)} <small>valley floor weight</small></dd>
+        <dt>{t.info.floodplain}</dt>
+        <dd>{formatNumber(sample.floodplain, 2)} <small>{t.info.floodplainScale}</small></dd>
       {/if}
       {#if sample.highlandOffset !== null}
-        <dt>Highland shift</dt>
-        <dd>{signed(sample.highlandOffset, 3)} <small>of the mountain line</small></dd>
+        <dt>{t.info.highland}</dt>
+        <dd>{signed(sample.highlandOffset, 3)} <small>{t.info.highlandScale}</small></dd>
       {/if}
-      <dt>Pixel</dt>
+      <dt>{t.info.pixel}</dt>
       <dd>{sample.x}, {sample.y}</dd>
     </dl>
 
     {#if river}
       {@const parent = river.river.parent !== null ? rivers?.byId.get(river.river.parent) : undefined}
-      <h3>River #{river.river.id}</h3>
+      <h3>{t.info.river({ id: river.river.id })}</h3>
       <dl>
-        <dt>Flow here</dt>
-        <dd>{formatArea(river.flowKm2)} <small>drained</small></dd>
-        <dt>At the mouth</dt>
+        <dt>{t.info.flowHere}</dt>
+        <dd>{formatArea(river.flowKm2)} <small>{t.info.drained}</small></dd>
+        <dt>{t.info.atMouth}</dt>
         <dd>{formatArea(rivers?.mouthFlowKm2(river.river) ?? 0)}</dd>
-        <dt>Length</dt>
+        <dt>{t.info.length}</dt>
         <dd>{formatKm(rivers?.lengthKm(river.river) ?? 0)}</dd>
-        <dt>Ends in</dt>
+        <dt>{t.info.endsIn}</dt>
         <dd>
-          {MOUTHS[river.river.mouth]}{#if parent}&nbsp;(#{parent.id}){/if}{#if river.river.estuary}, through an estuary{/if}
+          {t.info.mouths[river.river.mouth]}{#if parent}&nbsp;(#{parent.id}){/if}{#if river.river.estuary}{t.info.estuary}{/if}
         </dd>
         {#if river.river.source !== null}
-          <dt>Delta</dt>
-          <dd>branch of river #{river.river.source}</dd>
+          <dt>{t.info.delta}</dt>
+          <dd>{t.info.branchOf({ id: river.river.source })}</dd>
         {/if}
       </dl>
     {/if}
 
     {#if hex}
-      <h3>Hex {hex.cell.col}, {hex.cell.row}</h3>
+      <h3>{t.info.hex({ col: hex.cell.col, row: hex.cell.row })}</h3>
       <dl>
-        <dt>Main biome</dt>
+        <dt>{t.info.mainBiome}</dt>
         <dd>
-          {#if hex.biome}<span class="swatch inline" style:background={hex.biome.color}></span>{hex.biome.name}{/if}
+          {#if hex.biome}<span class="swatch inline" style:background={hex.biome.color}></span>{biomeName(hex.biome)}{/if}
         </dd>
-        <dt>Mean elevation</dt>
-        <dd>{signed(hex.elevation - coastline(meta), 3)} <small>above the coastline</small></dd>
-        <dt>Mean temperature</dt>
-        <dd>{hex.temperature.toFixed(1)} °C</dd>
-        <dt>Mean moisture</dt>
-        <dd>{hex.moisture.toFixed(2)}</dd>
-        <dt>Largest river</dt>
-        <dd>{hex.maxFlowKm2 > 0 ? formatArea(hex.maxFlowKm2) : 'none'}{hex.river ? ' (river hex)' : ''}</dd>
+        <dt>{t.info.meanElevation}</dt>
+        <dd>{signed(hex.elevation - coastline(meta), 3)} <small>{t.info.aboveCoastline}</small></dd>
+        <dt>{t.info.meanTemperature}</dt>
+        <dd>{withUnit(formatNumber(hex.temperature, 1), '°C')}</dd>
+        <dt>{t.info.meanMoisture}</dt>
+        <dd>{formatNumber(hex.moisture, 2)}</dd>
+        <dt>{t.info.largestRiver}</dt>
+        <dd>{hex.maxFlowKm2 > 0 ? formatArea(hex.maxFlowKm2) : t.info.noRiver}{hex.river ? t.info.riverHex : ''}</dd>
       </dl>
     {/if}
   {:else}
-    <p class="muted">Loading the raw data…</p>
+    <p class="muted">{t.info.loading}</p>
   {/if}
 </aside>
 
