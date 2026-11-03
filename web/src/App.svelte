@@ -2,11 +2,12 @@
   import { onMount, untrack } from 'svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobList from './components/JobList.svelte';
+  import Thumbnail from './components/Thumbnail.svelte';
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
   import WorldList from './components/WorldList.svelte';
   import WorldPane from './components/WorldPane.svelte';
-  import { api, worldFile } from './lib/api/client';
+  import { api } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { JobCreated } from './lib/api/types/JobCreated';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
@@ -301,10 +302,10 @@
     {#if compareId}
       <div class="compare-bar">
         <span class="names">
-          <img src={worldFile(selectedId ?? '', 'world.png', revision(selectedId))} alt="" />
+          <Thumbnail id={selectedId ?? ''} revision={revision(selectedId)} width={36} height={20} radius={3} />
           <strong>{selectedId}</strong>
           <span class="muted">vs</span>
-          <img src={worldFile(compareId, 'world.png', revision(compareId))} alt="" />
+          <Thumbnail id={compareId} revision={revision(compareId)} width={36} height={20} radius={3} />
           <strong>{compareId}</strong>
         </span>
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> Link cameras</label>
@@ -406,12 +407,6 @@
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
-  }
-  .compare-bar img {
-    width: 36px;
-    height: 20px;
-    object-fit: cover;
-    border-radius: 3px;
   }
   .compare-bar button {
     padding: 3px 10px;

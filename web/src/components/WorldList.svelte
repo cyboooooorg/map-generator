@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { formatAgo } from '../lib/format';
   import { loadSetting, saveSetting } from '../lib/settings';
+  import Thumbnail from './Thumbnail.svelte';
 
   interface Props {
     worlds: WorldSummary[];
@@ -130,7 +130,7 @@
           </label>
         {/if}
         <button class="pick" onclick={() => (selecting ? toggle(world.id) : onSelect(world.id))}>
-          <img src={worldFile(world.id, 'world.png', world.modified_ms)} alt="" loading="lazy" />
+          <Thumbnail id={world.id} revision={world.modified_ms} width={72} height={40} />
           <span class="text">
             <strong>{world.planet}</strong>
             <small>seed {world.seed} · {world.width}×{world.height}</small>
@@ -228,13 +228,6 @@
     text-align: left;
     padding: 6px;
     min-width: 0;
-  }
-  img {
-    width: 72px;
-    height: 40px;
-    object-fit: cover;
-    border-radius: 4px;
-    flex: none;
   }
   .text {
     display: grid;
