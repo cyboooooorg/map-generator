@@ -468,7 +468,7 @@ The cloud cover of each pixel, in `[0, 1]`, depends on the atmosphere's cloud ki
 - **dust**: low, patchy and thin (`0.8 × smoothstep(0.15, 0.6, …)`), about 10 % of `mars-like` worlds.
 - **none**: no cloud layer.
 
-`[atmosphere] cloud_cover` shifts the cover (−0.3 on frozen worlds). The viewer draws the layer over the globe and the flat map (**Clouds**, `C`). The noise has features of about 3 000 km. For water clouds it is warped by a larger noise, which curls cloud systems into swirls and fronts, and squeezed north-south only at mid-latitudes (up to ×2 at 45°), where the westerlies draw fronts into bands; tropical and polar clouds are not stretched. Sulfuric decks (×6) and dust (×1.5) are squeezed everywhere but near the poles. Airless worlds have no clouds.
+`[atmosphere] cloud_cover` shifts the cover (−0.3 on frozen worlds). The viewer draws the layer over the globe and the flat map (**Clouds**, `C`), and can let it drift slowly around the planet (**Drift**, `W`). The noise has features of about 3 000 km. For water clouds it is warped by a larger noise, which curls cloud systems into swirls and fronts, and squeezed north-south only at mid-latitudes (up to ×2 at 45°), where the westerlies draw fronts into bands; tropical and polar clouds are not stretched. Sulfuric decks (×6) and dust (×1.5) are squeezed everywhere but near the poles. Airless worlds have no clouds.
 
 ### Regional variability
 

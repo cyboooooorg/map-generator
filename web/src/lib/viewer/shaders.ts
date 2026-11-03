@@ -112,6 +112,7 @@ export const surfaceFragment = /* glsl */ `
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
   uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
   uniform vec3 uCloudTint;     // linear colour of the clouds
+  uniform float uCloudShift;   // eastward drift of the cloud layer, in turns
   varying vec2 vUv;
   varying vec2 vLocalUv;
   varying vec3 vNormal;
@@ -251,10 +252,11 @@ export const surfaceFragment = /* glsl */ `
     if (uCloudsOn > 0.0) {
       // Opacity of the cover: thin clouds are translucent veils, only
       // thick ones hide the ground.
-      cover = smoothstep(0.3, 1.0, texture2D(uClouds, vUv).r) * 0.85 * uCloudsOn;
+      vec2 cloudUv = vUv - vec2(uCloudShift, 0.0);
+      cover = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv).r) * 0.85 * uCloudsOn;
       float lat = (vUv.y - 0.5) * PI;
       vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
-      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, vUv + towardsLight * 0.004 * uMorph).r) * uCloudsOn;
+      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + towardsLight * 0.004 * uMorph).r) * uCloudsOn;
       colour *= 1.0 - 0.45 * shadow;
     }
     colour *= shade;

@@ -194,6 +194,12 @@ satellite image barely shows.
   (narrower equatorial band, 0.75–0.8 instead of 0.9). The drift by
   latitude is not done: it would need a frame every few seconds, against
   the render-on-demand loop.
+- **Drift (after step 5).** A solid eastward rotation of the cloud layer
+  instead of a drift by latitude: a per-latitude speed would shear the
+  layer into streaks within minutes. It is optional (off by default) and
+  cheap: the texture lookup is offset by a uniform, and while the clouds
+  drift the viewer redraws every 100 ms rather than every frame, since a
+  turn takes five minutes (a few pixels a second at the equator).
 - **Airless worlds** draw no shell: a hard limb against space.
 - **Review (after step 5).** At full relief, mountains rise 0.06 radius
   above the ground, above the 0.036 of Earth's shell, and the shader's

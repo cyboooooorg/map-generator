@@ -197,4 +197,4 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 2    | Viewer: scattering sky shell and aerial perspective from the world's atmosphere           | Same   | done   |
 | 3    | Climate: heat transport, greenhouse, no liquid water below 0.01 bar; presets recalibrated | Change | done   |
 | 4    | Cloud layer: generation, `raw_data/clouds.png`, `format_version` 5                        | Same   | done   |
-| 5    | Viewer: cloud layer, cloud shadows, flat-map overlay, toggle (drift not done)             | Same   | done   |
+| 5    | Viewer: cloud layer, cloud shadows, flat-map overlay, toggle, optional drift              | Same   | done   |

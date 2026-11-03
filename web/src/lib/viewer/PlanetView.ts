@@ -102,6 +102,14 @@ const MAP_DISTANCE = 5.5;
 const CLICK_TOLERANCE = 5;
 /** Altitudes (planet radii, or map units) over which clouds fade in when zooming out. */
 const CLOUD_FADE: [number, number] = [0.15, 0.5];
+/** Seconds for the drifting cloud layer to go once around the planet. */
+const CLOUD_DRIFT_PERIOD_S = 300;
+/**
+ * Redraw interval while only the clouds drift, ms. The drift is slow (a few
+ * pixels a second at the equator), so ten frames a second look smooth and
+ * cost a tenth of a continuous loop.
+ */
+const CLOUD_DRIFT_FRAME_MS = 100;
 
 function smoothstepJs(edge0: number, edge1: number, x: number): number {
   const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
@@ -249,6 +257,7 @@ export class PlanetView {
     uCloudsOn: { value: 0 } as IUniform<number>,
     uClouds: { value: emptyTexture() } as IUniform<Texture>,
     uCloudTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
+    uCloudShift: { value: 0 } as IUniform<number>,
     uLayer: { value: LAYER_IDS.biomes as number } as IUniform<number>,
     uTexel: { value: new Vector2(1 / 1024, 1 / 512) } as IUniform<Vector2>,
     uLightMode: { value: 0 } as IUniform<number>,
@@ -292,6 +301,10 @@ export class PlanetView {
   /** Whether the world has a cloud layer, and whether it is shown. */
   private hasClouds = false;
   private cloudsOn = true;
+  /** Whether the cloud layer drifts, the last drift update, and its redraw timer. */
+  private cloudsDrifting = false;
+  private cloudDriftAt: number | null = null;
+  private cloudDriftTimer: ReturnType<typeof setTimeout> | null = null;
   /** The world's sky before the lift over the relief, Earth's until a world sets it. */
   private worldSky: Sky = {
     top: 1.04,
@@ -520,6 +533,37 @@ export class PlanetView {
   setCloudsVisible(visible: boolean): void {
     this.requestRender();
     this.cloudsOn = visible;
+  }
+
+  /** Lets the cloud layer drift slowly eastwards around the planet, or stops it where it is. */
+  setCloudsDrifting(drifting: boolean): void {
+    this.cloudsDrifting = drifting;
+    this.requestRender();
+  }
+
+  /**
+   * Moves the drifting clouds to the current time and, while they show,
+   * schedules the next redraw; stops the clock otherwise.
+   */
+  private driftClouds(): void {
+    const visible = this.u.uCloudsOn.value > 0;
+    if (!this.cloudsDrifting || !visible) {
+      this.cloudDriftAt = null;
+      return;
+    }
+    const now = performance.now();
+    if (this.cloudDriftAt !== null) {
+      // A hidden tab draws no frames: resume where the clouds were.
+      const seconds = Math.min(now - this.cloudDriftAt, 1000) / 1000;
+      this.u.uCloudShift.value = (this.u.uCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
+    }
+    this.cloudDriftAt = now;
+    if (this.cloudDriftTimer === null) {
+      this.cloudDriftTimer = setTimeout(() => {
+        this.cloudDriftTimer = null;
+        this.requestRender();
+      }, CLOUD_DRIFT_FRAME_MS);
+    }
   }
 
   /** Frees the cloud texture and its decoded image. */
@@ -824,6 +868,9 @@ export class PlanetView {
     this.tiles.dispose();
     this.disposeTexture();
     this.disposeClouds();
+    if (this.cloudDriftTimer !== null) {
+      clearTimeout(this.cloudDriftTimer);
+    }
     this.shared.uData.value.dispose();
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();
@@ -921,6 +968,7 @@ export class PlanetView {
     // tiles get sharper than the cloud layer.
     this.u.uCloudsOn.value =
       this.cloudsOn && this.hasClouds ? smoothstepJs(CLOUD_FADE[0], CLOUD_FADE[1], altitude) : 0;
+    this.driftClouds();
     this.camera.near = Math.max(altitude * 0.1, 1e-6);
     this.camera.far = altitude + 4;
     this.camera.updateProjectionMatrix();
