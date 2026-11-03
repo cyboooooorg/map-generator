@@ -22,6 +22,8 @@
 
   /** How long a deleted world can be restored, in ms. */
   const UNDO_MS = 6000;
+  /** Shortest wait between two list refreshes on focus, in ms. */
+  const REFRESH_EVERY_MS = 5000;
 
   let worlds = $state<WorldSummary[]>([]);
   let presets = $state<PresetInfo[]>([]);
@@ -58,8 +60,24 @@
   const existing = $derived(new Set(worlds.map((w) => w.id)));
   const revision = (id: string | null) => worlds.find((w) => w.id === id)?.modified_ms ?? null;
 
+  /** When the list was last asked for (ms), to throttle the focus refreshes. */
+  let lastRefresh = 0;
+
   async function refresh(): Promise<void> {
+    lastRefresh = Date.now();
     worlds = await api.worlds();
+  }
+
+  /**
+   * The page came back to the front: list the worlds again, so those made
+   * meanwhile (`mise run gen`, another tab) show up. At most once every
+   * REFRESH_EVERY_MS; a failure is left for the next one.
+   */
+  function refreshOnReturn(): void {
+    if (!ready || document.visibilityState !== 'visible' || Date.now() - lastRefresh < REFRESH_EVERY_MS) {
+      return;
+    }
+    refresh().catch((e: unknown) => console.warn('Could not refresh the world list', e));
   }
 
   /** `#world=<id>&compare=<id>`: the worlds shown, so a reload or a shared link opens them. */
@@ -78,12 +96,19 @@
     }
   }
 
-  onMount(() => {
-    (async () => {
-      try {
+  let starting = $state(false);
+
+  /** Loads the presets, the form limits and the worlds; run again by Retry. */
+  async function start(): Promise<void> {
+    fatal = null;
+    starting = true;
+    try {
+      if (!spec) {
         [presets, spec] = await Promise.all([api.presets(), api.form()]);
         jobs.defaultSize = [spec.default_width, spec.default_height];
-        await refresh();
+      }
+      await refresh();
+      if (!ready) {
         applyHash();
         if (!selectedId) {
           selectedId = worlds[0]?.id ?? null;
@@ -92,16 +117,26 @@
           }
         }
         ready = true;
-        await jobs.reattach();
-      } catch (e) {
-        fatal = `Cannot reach the server: ${String(e)}`;
       }
-    })();
+      await jobs.reattach();
+    } catch (e) {
+      fatal = `Cannot reach the server: ${String(e)}`;
+    } finally {
+      starting = false;
+    }
+  }
+
+  onMount(() => {
+    void start();
     window.addEventListener('hashchange', applyHash);
     window.addEventListener('pagehide', flushDeletes);
+    window.addEventListener('focus', refreshOnReturn);
+    document.addEventListener('visibilitychange', refreshOnReturn);
     return () => {
       window.removeEventListener('hashchange', applyHash);
       window.removeEventListener('pagehide', flushDeletes);
+      window.removeEventListener('focus', refreshOnReturn);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
     };
   });
 
@@ -291,7 +326,11 @@
       <button class="primary" onclick={() => openForm()} disabled={!spec}>New world</button>
     </header>
     {#if fatal}
-      <p class="error">{fatal} <button onclick={() => (fatal = null)}>Dismiss</button></p>
+      <p class="error" role="alert">
+        {fatal}
+        <button onclick={() => void start()} disabled={starting}>{starting ? 'Retrying…' : 'Retry'}</button>
+        <button onclick={() => (fatal = null)}>Dismiss</button>
+      </p>
     {/if}
     <div class="content">
       <JobList onOpen={select} />

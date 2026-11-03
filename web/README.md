@@ -65,6 +65,7 @@ The help takes the keyboard focus when it opens and gives it back when it closes
 In the sidebar:
 
 - The selected world's card shows every parameter, its gravity, its atmosphere (surface pressure and cloud kind; worlds made before atmospheres show Earth's 1 bar), surface, land and water shares, river count and age, and how much of the planet each biome covers. Its actions: **Reroll** queues the same world again with a new random seed (every other parameter kept, the new world opens when ready), **Vary…** opens the form filled with the world's parameters, **Copy command** copies the `mise run gen` command that regenerates it, **Copy link** copies a link that opens it, **Compare with** shows a second world beside it, and **Download** offers the map PNG, the SVG, the legend and a ZIP of `raw_data/` built in the browser.
+- The world list is asked for again when the page comes back to the front (a window focus or the tab shown again, at most once every 5 seconds), so worlds made meanwhile with `mise run gen` or in another tab show up. When the server cannot be reached at startup, **Retry** tries again.
 - The world list can be searched by id or seed, filtered by planet and sorted; the sort and filter are remembered. **Select** picks several worlds, to delete them or to compare two of them.
 - Deleting a world hides it at once and offers **Undo** for six seconds; the files are deleted afterwards (or when the page closes).
 - The address names the worlds shown (`#world=<id>&compare=<id>`): reloading keeps them, and the link can be shared.
