@@ -1,8 +1,6 @@
 // Download and decode progress of the files of a world, for the loading
 // bar of the viewer.
 
-import { formatNumber, withUnit } from './format';
-import { t } from './i18n/index.svelte';
 
 /** Where the loading of a set of files stands. */
 export interface LoadProgress {
@@ -10,7 +8,9 @@ export interface LoadProgress {
   stage: 'download' | 'decode';
   /**
    * The file being downloaded or decoded; empty for the biome statistics,
-   * the last decoding step. See `progressLabel` for the text shown.
+   * the last decoding step. See `progressLabel` (progressText.ts) for the
+   * text shown: this module runs in the decoding worker too, so it stays
+   * free of the interface's language.
    */
   label: string;
   /** Bytes received (download), or steps done (decode). */
@@ -103,21 +103,4 @@ export function progressShare(progress: LoadProgress): number | null {
     return null;
   }
   return progress.total === 0 ? 1 : Math.min(progress.done / progress.total, 1);
-}
-
-/** "12.3 / 45.6 MB", "12.3 MB" while the size is unknown, or "2 / 5" for steps. */
-export function progressText(progress: LoadProgress): string {
-  if (progress.stage === 'decode') {
-    return progress.total === null ? '' : `${progress.done} / ${progress.total}`;
-  }
-  const mb = (bytes: number) => formatNumber(bytes / 1e6, 1);
-  return withUnit(progress.total === null ? mb(progress.done) : `${mb(progress.done)} / ${mb(progress.total)}`, 'MB');
-}
-
-/** What the bar says is being worked on, in the active locale. */
-export function progressLabel(progress: LoadProgress): string {
-  if (progress.stage === 'download') {
-    return progress.label;
-  }
-  return progress.label ? t.loading.decoding({ file: progress.label }) : t.loading.stats;
 }

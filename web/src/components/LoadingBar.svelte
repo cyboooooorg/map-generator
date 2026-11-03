@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { type LoadProgress, progressLabel, progressShare, progressText } from '../lib/progress';
+  import { type LoadProgress, progressShare } from '../lib/progress';
+  import { progressLabel, progressText } from '../lib/progressText';
 
   interface Props {
     progress: LoadProgress;
