@@ -8,11 +8,15 @@
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
   import { MAX_SEED, randomSeed } from '../lib/format';
+  import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
 
   interface Props {
     presets: PresetInfo[];
     spec: FormSpec;
-    /** Parameters to start from (varying an existing world), or null for the preset defaults. */
+    /**
+     * Parameters to start from (varying an existing world), or null for the
+     * last form submitted in this browser (the preset defaults without one).
+     */
     initial?: WorldRequest | null;
     /** Id of the world being varied, for the title. */
     variedFrom?: string | null;
@@ -153,25 +157,45 @@
     return name === undefined ? undefined : presets.find((p) => p.spec === name || p.name === name);
   }
 
+  /** Whether a map size is one this server accepts. */
+  function sizeFits(value: string): boolean {
+    const [w, h] = value.split('x').map(Number);
+    return !!w && !!h && w <= spec.max_size && h <= spec.max_size && w * h <= spec.max_pixels;
+  }
+
   // The form starts from the props as they are when it opens; later prop
   // changes must not reset what the user typed, hence untrack.
   const start = untrack(() => ({ initial, preset: findPreset(initial?.planet) ?? presets[0] }));
   const missingPreset = start.initial?.planet !== undefined && !findPreset(start.initial.planet);
-  let planet = $state(start.preset?.spec ?? '');
-  let randomPlanet = $state(false);
+  /** A blank form starts from the last one submitted, if its preset is still offered. */
+  const memory = untrack(() => {
+    const stored = initial === null ? loadFormMemory(FIELD_NAMES) : null;
+    return stored && presets.some((p) => p.spec === stored.planet) ? stored : null;
+  });
+  const memoryPreset = untrack(() => (memory ? presets.find((p) => p.spec === memory.planet) : undefined));
+  let planet = $state(memoryPreset?.spec ?? start.preset?.spec ?? '');
+  let randomPlanet = $state(memory?.randomPlanet ?? false);
   let seed = $state(start.initial?.seed !== undefined ? String(start.initial.seed) : '');
   let size = $state(
     untrack(() =>
       start.initial?.width && start.initial.height
         ? `${start.initial.width}x${start.initial.height}`
-        : `${spec.default_width}x${spec.default_height}`,
+        : memory && sizeFits(memory.size)
+          ? memory.size
+          : `${spec.default_width}x${spec.default_height}`,
     ),
   );
-  let fields = $state<FieldState>(untrack(() => initialState(start.preset, start.initial)));
-  const startLand = untrack(() => landDefault(start.preset, start.initial));
-  let seaBy = $state<SeaBy>(startLand ? 'land' : 'level');
+  let fields = $state<FieldState>(
+    untrack(() =>
+      memory
+        ? { ...initialState(memoryPreset, null), ...(memory.fields as Partial<FieldState>) }
+        : initialState(start.preset, start.initial),
+    ),
+  );
+  const startLand = untrack(() => (memory ? null : landDefault(start.preset, start.initial)));
+  let seaBy = $state<SeaBy>(memory?.seaBy ?? (startLand ? 'land' : 'level'));
   /** Land share in percent, used when `seaBy` is 'land'. */
-  let landPercent = $state(startLand?.percent ?? 29);
+  let landPercent = $state(memory?.landPercent ?? startLand?.percent ?? 29);
   let submitting = $state(false);
   let error = $state<string | null>(null);
   let replace = $state(false);
@@ -195,6 +219,31 @@
     const land = landDefault(preset, null);
     seaBy = land ? 'land' : 'level';
     landPercent = land?.percent ?? 29;
+  }
+
+  /**
+   * Back to the defaults: the first preset's (or the varied world's)
+   * parameters, the server's map size and a random seed, and the
+   * remembered form forgotten.
+   */
+  function resetForm(): void {
+    clearFormMemory();
+    const preset = start.preset;
+    randomPlanet = false;
+    choosePreset(preset?.spec ?? '');
+    if (start.initial) {
+      fields = initialState(preset, start.initial);
+      const land = landDefault(preset, start.initial);
+      seaBy = land ? 'land' : 'level';
+      landPercent = land?.percent ?? 29;
+    }
+    seed = start.initial?.seed !== undefined ? String(start.initial.seed) : '';
+    size =
+      start.initial?.width && start.initial.height
+        ? `${start.initial.width}x${start.initial.height}`
+        : `${spec.default_width}x${spec.default_height}`;
+    replace = false;
+    error = null;
   }
 
   function rollSeed(): void {
@@ -246,6 +295,7 @@
       // The server swaps the new world in once it is complete: a failed or
       // cancelled generation keeps the old one.
       const job = await api.createWorld(request, { replace: conflict && replace });
+      saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields });
       onSubmitted(job, request);
     } catch (e) {
       error = e instanceof ApiFailure ? e.message : String(e);
@@ -259,6 +309,8 @@
   <h2>{variedFrom ? `Vary ${variedFrom}` : 'New world'}</h2>
   {#if variedFrom}
     <p class="help">Starts from every parameter of {variedFrom}: change the ones you want.</p>
+  {:else if memory}
+    <p class="help">Starts from your last generation (except its seed). <strong>Defaults</strong> starts over.</p>
   {/if}
   {#if missingPreset}
     <p class="error">The preset {start.initial?.planet} is not offered by this server: pick another one.</p>
@@ -394,6 +446,9 @@
     {/if}
     <p class="help">The generation runs in the background: keep exploring meanwhile, or queue more worlds.</p>
     <div class="actions">
+      <button type="button" class="reset" onclick={resetForm} title="Back to the preset defaults, and forget the last form"
+        >Defaults</button
+      >
       <button type="button" onclick={onCancel}>Close</button>
       <button type="submit" class="primary" disabled={submitting || !seedValid || (conflict && !replace)}>
         {submitting ? 'Sending…' : 'Generate'}
@@ -499,6 +554,9 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+  .actions .reset {
+    margin-right: auto;
   }
   @media (max-width: 760px) {
     .footer {
