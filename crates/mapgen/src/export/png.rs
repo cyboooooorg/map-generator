@@ -7,6 +7,12 @@ use image::{ImageResult, Rgb, RgbImage};
 /// [`super::render_pixels`]) with dotted latitude reference lines on top,
 /// drawn into it.
 pub fn export_png(world: &World, surface: Vec<[u8; 3]>, path: &str) -> ImageResult<()> {
+    world_image(world, surface).save(path)
+}
+
+/// The image of `world.png`: `surface` with the reference lines drawn
+/// into it (see [`export_png`]).
+pub fn world_image(world: &World, surface: Vec<[u8; 3]>) -> RgbImage {
     let (w, h) = (world.width, world.height);
     let mut img =
         RgbImage::from_raw(w, h, surface.into_flattened()).expect("one pixel per map pixel");
@@ -20,8 +26,7 @@ pub fn export_png(world: &World, surface: Vec<[u8; 3]>, path: &str) -> ImageResu
             img.put_pixel(x, row, Rgb(color));
         }
     }
-
-    img.save(path)
+    img
 }
 
 // ── Legend PNG ────────────────────────────────────────────────────────────────
