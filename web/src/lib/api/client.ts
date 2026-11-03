@@ -64,11 +64,12 @@ export const api = {
     call<RiversFile>(worldFile(id, `raw_data/${file}`), fileInit(signal)),
   jobs: () => call<JobInfo[]>('/api/jobs'),
   cancelJob: (id: string) => call<void>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  hex: (id: string, request: HexRequest) =>
+  hex: (id: string, request: HexRequest, signal?: AbortSignal) =>
     call<HexMap>(`/api/worlds/${encodeURIComponent(id)}/hex`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
+      ...(signal ? { signal } : {}),
     }),
 };
 
