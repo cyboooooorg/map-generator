@@ -194,7 +194,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | ---- | ----------------------------------------------------------------------------------------- | ------ | ------ |
 | 0    | Temperatures in °C: Earth-fitted curve, thresholds and presets in °C, `format_version` 4  | Change | done   |
 | 1    | `[atmosphere]` in presets and `world.json`, `--pressure`, form field; no effect yet       | Same   | done   |
-| 2    | Viewer: scattering sky shell and aerial perspective from the world's atmosphere           | Same   | todo   |
+| 2    | Viewer: scattering sky shell and aerial perspective from the world's atmosphere           | Same   | done   |
 | 3    | Climate: heat transport, greenhouse, no liquid water below 0.01 bar; presets recalibrated | Change | todo   |
 | 4    | Cloud layer: generation, `raw_data/clouds.png`, `format_version` 5                        | Same   | todo   |
 | 5    | Viewer: cloud sphere, cloud shadows, drift, flat-map overlay, toggle                      | Same   | todo   |

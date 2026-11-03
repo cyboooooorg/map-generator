@@ -265,26 +265,101 @@ export const lineFragment = /* glsl */ `
 `;
 
 export const atmosphereVertex = /* glsl */ `
-  varying vec3 vNormal;
-  varying vec3 vWorldNormal;
+  varying vec3 vWorld;
   void main() {
-    vNormal = normalize(normalMatrix * normal);
-    vWorldNormal = normalize(normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
 
-// Rim glow of a slightly larger sphere, seen from inside (back faces).
+// Single scattering through the atmosphere shell around the globe (radius
+// 1, centred on the origin), drawn after the surface with depth testing
+// off: for each pixel the view ray is marched through the shell (and
+// stopped at the ground), each sample lit by sunlight attenuated along its
+// own ray to the sun. Rayleigh (gas, per channel) and Mie (aerosols, one
+// extinction tinted by their albedo) scattering. The output is premultiplied
+// in-scattered light plus, in alpha, the transmittance of the ray: blended
+// as dst × alpha + src, it draws the sky around the planet and veils the
+// ground in one pass (an opaque Venus hides its surface).
 export const atmosphereFragment = /* glsl */ `
   uniform float uOpacity;
-  uniform vec3 uColor;
   uniform int uLightMode;
   uniform vec3 uSunDir;
-  varying vec3 vNormal;
-  varying vec3 vWorldNormal;
+  uniform vec3 uLightDir;
+  uniform float uTop;
+  uniform vec3 uBetaR;
+  uniform float uBetaM;
+  uniform vec3 uMieAlbedo;
+  uniform float uHeightR;
+  uniform float uHeightM;
+  uniform float uG;
+  varying vec3 vWorld;
+
+  const int VIEW_STEPS = 16;
+  const int SUN_STEPS = 8;
+  const float PI = 3.14159265;
+  const float EXPOSURE = 1.6;
+
+  // Distances to the two intersections of a ray with a sphere at the origin
+  // (far > near; no hit gives near > far).
+  vec2 sphere(vec3 origin, vec3 dir, float radius) {
+    float b = dot(origin, dir);
+    float c = dot(origin, origin) - radius * radius;
+    float h = b * b - c;
+    if (h < 0.0) return vec2(1e9, -1e9);
+    h = sqrt(h);
+    return vec2(-b - h, -b + h);
+  }
+
   void main() {
-    float rim = pow(max(0.0, 0.72 + dot(vNormal, vec3(0.0, 0.0, 1.0))), 4.0);
-    float lit = uLightMode == 1 ? smoothstep(-0.3, 0.3, dot(vWorldNormal, uSunDir)) : 1.0;
-    gl_FragColor = vec4(uColor, 1.0) * rim * uOpacity * (0.15 + 0.85 * lit);
+    vec3 origin = cameraPosition;
+    vec3 dir = normalize(vWorld - cameraPosition);
+    vec3 sun = uLightMode == 1 ? uSunDir : uLightDir;
+    vec2 shell = sphere(origin, dir, uTop);
+    if (shell.y <= 0.0) discard;
+    vec2 ground = sphere(origin, dir, 1.0);
+    bool hitsGround = ground.x > 0.0 && ground.x < ground.y;
+    float near = max(shell.x, 0.0);
+    float far = hitsGround ? min(shell.y, ground.x) : shell.y;
+    float ds = (far - near) / float(VIEW_STEPS);
+
+    vec3 sumR = vec3(0.0);
+    vec3 sumM = vec3(0.0);
+    float depthR = 0.0;
+    float depthM = 0.0;
+    for (int i = 0; i < VIEW_STEPS; i++) {
+      vec3 p = origin + dir * (near + (float(i) + 0.5) * ds);
+      float h = max(length(p) - 1.0, 0.0);
+      float dR = exp(-h / uHeightR) * ds;
+      float dM = exp(-h / uHeightM) * ds;
+      depthR += dR;
+      depthM += dM;
+      // In the planet's shadow, no sunlight reaches this sample.
+      vec2 shadow = sphere(p, sun, 1.0);
+      if (shadow.x > 0.0 && shadow.x < shadow.y) continue;
+      float dl = sphere(p, sun, uTop).y / float(SUN_STEPS);
+      float sunR = 0.0;
+      float sunM = 0.0;
+      for (int j = 0; j < SUN_STEPS; j++) {
+        float hl = max(length(p + sun * (float(j) + 0.5) * dl) - 1.0, 0.0);
+        sunR += exp(-hl / uHeightR) * dl;
+        sunM += exp(-hl / uHeightM) * dl;
+      }
+      vec3 attenuation = exp(-(uBetaR * (depthR + sunR) + uBetaM * (depthM + sunM)));
+      sumR += dR * attenuation;
+      sumM += dM * attenuation;
+    }
+    float mu = dot(dir, sun);
+    float phaseR = 3.0 / (16.0 * PI) * (1.0 + mu * mu);
+    float g2 = uG * uG;
+    float phaseM = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) /
+      ((2.0 + g2) * pow(1.0 + g2 - 2.0 * uG * mu, 1.5));
+    vec3 light = sumR * uBetaR * phaseR + sumM * uBetaM * uMieAlbedo * phaseM;
+    // Soft exposure: bright skies saturate instead of clipping.
+    vec3 colour = 1.0 - exp(-EXPOSURE * 4.0 * PI * light);
+    vec3 transmittance = exp(-(uBetaR * depthR + uBetaM * depthM));
+    float behind = hitsGround ? dot(transmittance, vec3(1.0 / 3.0)) : 1.0;
+    gl_FragColor = vec4(colour * uOpacity, mix(1.0, behind, uOpacity));
   }
 `;
