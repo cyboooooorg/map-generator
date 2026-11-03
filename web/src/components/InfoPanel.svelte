@@ -50,7 +50,7 @@
   {#if sample}
     {#if sample.biome}
       <p class="biome">
-        <span class="swatch" style:background={surfaceColour(sample.biome)}></span>
+        <span class="swatch" style:background={hexMap ? sample.biome.color : surfaceColour(sample.biome)}></span>
         {sample.biome.name}
       </p>
     {/if}

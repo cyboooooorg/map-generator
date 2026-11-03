@@ -17,6 +17,7 @@
 //! Colours come from [`surface_color`] and are averaged in linear light, as
 //! light from a mixed surface adds up: an sRGB average would make every
 //! border darker and muddier than both sides.
+use super::colour::{linear_to_srgb, srgb_to_linear};
 use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::preset::Preset;
 use crate::world::World;
@@ -64,27 +65,6 @@ fn unit_offsets() -> [[f32; 4]; SAMPLES] {
         let sign = if k < half { 1.0 } else { -1.0 };
         [sign * a, sign * b, sign * c, sign * d]
     })
-}
-
-/// sRGB channel in `[0, 255]` to linear light in `[0, 1]`.
-pub(crate) fn srgb_to_linear(c: f32) -> f32 {
-    let c = (c / 255.0).clamp(0.0, 1.0);
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-/// Linear light in `[0, 1]` to an sRGB channel in `[0, 255]`.
-pub(crate) fn linear_to_srgb(c: f32) -> f32 {
-    let c = c.clamp(0.0, 1.0);
-    let s = if c <= 0.003_130_8 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    };
-    s * 255.0
 }
 
 /// [`surface_color`] of every biome in linear light, indexed by biome id.
@@ -176,15 +156,5 @@ mod tests {
             ecotone_colour_for(&planet, input(rules.highland - 0.2)),
             low.map(f32::from)
         );
-    }
-
-    #[test]
-    fn srgb_round_trips_and_blends_brighter_than_srgb() {
-        for c in [0.0, 1.0, 10.0, 128.0, 254.0, 255.0] {
-            assert!((linear_to_srgb(srgb_to_linear(c)) - c).abs() < 0.01, "{c}");
-        }
-        // Half black, half white is about 188 in sRGB, not 128.
-        let mid = linear_to_srgb((srgb_to_linear(0.0) + srgb_to_linear(255.0)) / 2.0);
-        assert!((mid - 188.0).abs() < 1.0, "{mid}");
     }
 }

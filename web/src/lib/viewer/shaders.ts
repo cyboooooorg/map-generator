@@ -228,12 +228,14 @@ export const surfaceFragment = /* glsl */ `
     // tiles). They are told by their colour, red with almost no green, so
     // detail tiles glow at their own resolution; no other surface colour
     // comes close (deserts and rust have green above half their red).
-    float lava = 0.0;
-    if (uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
-      lava = smoothstep(0.35, 0.12, colour.g / max(colour.r, 1e-4)) * smoothstep(0.02, 0.1, colour.r);
-    }
+    // Read from the surface colours whatever the layer shown, so the glint
+    // stays off magma on every layer too.
+    vec3 surface = uTileOn > 0.5
+      ? texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb
+      : texture2D(uMap, vUv).rgb;
+    float lava = (1.0 - smoothstep(0.12, 0.35, surface.g / max(surface.r, 1e-4))) * smoothstep(0.02, 0.1, surface.r);
     float glow = 0.0;
-    if (uLightMode == 1) {
+    if (uLightMode == 1 && uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
       float night = 1.0 - smoothstep(-0.08, 0.15, dot(normalize(vSphere), uSunDir));
       glow = LAVA_GLOW * lava * night;
     }
