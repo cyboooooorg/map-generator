@@ -58,7 +58,7 @@
       <dt>Elevation</dt>
       <dd>{signed(sample.relief, 3)} <small>above the coastline</small></dd>
       <dt>Temperature</dt>
-      <dd>{sample.temperature.toFixed(2)} <small>0 polar · 1 equatorial</small></dd>
+      <dd>{sample.temperature.toFixed(1)} °C <small>annual mean</small></dd>
       <dt>Moisture</dt>
       <dd>{sample.moisture.toFixed(2)} <small>-1 arid · 1 wet</small></dd>
       {#if sample.flowKm2 > 0}
@@ -116,7 +116,7 @@
         <dt>Mean elevation</dt>
         <dd>{signed(hex.elevation - coastline(meta), 3)} <small>above the coastline</small></dd>
         <dt>Mean temperature</dt>
-        <dd>{hex.temperature.toFixed(2)}</dd>
+        <dd>{hex.temperature.toFixed(1)} °C</dd>
         <dt>Mean moisture</dt>
         <dd>{hex.moisture.toFixed(2)}</dd>
         <dt>Largest river</dt>

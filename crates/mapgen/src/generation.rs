@@ -1,8 +1,8 @@
 use crate::biome::BiomeInput;
 use crate::carve;
 use crate::climate::{
-    Field, MoistureInput, moisture, regional_variability, row_temperatures, temperature,
-    temperature_anomaly,
+    Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
+    temperature, temperature_anomaly,
 };
 use crate::delta;
 use crate::erosion::erode;
@@ -689,7 +689,11 @@ pub fn generate_with_progress(
         debug.push(DebugLayer {
             name: "temperature",
             ramp: Ramp::Unsigned,
-            values: raw_temperature.clone(),
+            // −30 °C to 40 °C over the ramp.
+            values: raw_temperature
+                .iter()
+                .map(|t| ((t + 30.0) / 70.0).clamp(0.0, 1.0))
+                .collect(),
         });
     }
 
@@ -759,7 +763,8 @@ pub fn generate_with_progress(
         .par_iter_mut()
         .zip(&variability_t)
         .for_each(|(t, v)| {
-            *t = (*t + dt + regional_variability(*v, Field::Temperature)).clamp(0.0, 1.0)
+            *t = (*t + dt + regional_variability(*v, Field::Temperature))
+                .clamp(TEMPERATURE_RANGE.0, TEMPERATURE_RANGE.1)
         });
     drop((variability_t, variability_m));
 
@@ -933,13 +938,11 @@ mod tests {
             .world
         };
         let (frozen, terran) = (world("frozen"), world("terran"));
-        // The frozen preset cools every pixel by 0.55; both are clamped to [0, 1].
+        // The frozen preset cools every pixel by 27 °C.
+        let shift = frozen.params.planet.climate.temperature;
+        assert_eq!(shift, -27.0);
         for (f, t) in frozen.temperature.iter().zip(&terran.temperature) {
-            if *t < 1.0 {
-                assert!((f - (t - 0.55).max(0.0)).abs() < 1e-5, "{f} vs {t}");
-            } else {
-                assert!(*f >= 0.45 - 1e-5, "{f} vs {t}");
-            }
+            assert!((f - (t + shift)).abs() < 1e-3, "{f} vs {t}");
         }
         assert!(frozen.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
     }

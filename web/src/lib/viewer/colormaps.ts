@@ -30,10 +30,11 @@ export const RAMPS: Record<DataLayer, Ramp> = {
       [1.0, [245, 245, 245]],
     ],
   },
+  // t = (°C + 30) / 70.
   temperature: {
     label: 'Temperature',
-    min: 'polar',
-    max: 'equatorial',
+    min: '−30 °C',
+    max: '40 °C',
     stops: [
       [0.0, [45, 55, 160]],
       [0.25, [70, 160, 225]],

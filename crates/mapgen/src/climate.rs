@@ -1,13 +1,40 @@
 //! Climate model: temperature from annual insolation and altitude, moisture
 //! from winds carrying ocean evaporation over land.
+//!
+//! Temperatures are annual means in degrees Celsius.
 use crate::geo::Grid;
 use rayon::prelude::*;
 
 /// Earth's axial tilt in degrees, the calibration point of the temperature scale.
 pub const EARTH_AXIAL_TILT_DEG: f32 = 23.44;
 
-/// Cooling per unit of elevation above the waterline (elevation in `[-1, 1]`).
-const LAPSE_RATE: f32 = 0.3;
+/// Range temperatures are kept in, °C: the bounds of the exported layer,
+/// wide enough for any planet (Venus is about 460 °C).
+pub const TEMPERATURE_RANGE: (f32, f32) = (-200.0, 600.0);
+
+/// Mean slope of [`celsius`] over Earth's range of insolation, °C per unit:
+/// converts climate terms once expressed on the former `[0, 1]` scale.
+pub const DEGREES_PER_UNIT: f32 = 45.0;
+
+/// Cooling per unit of elevation above the waterline (elevation in `[-1, 1]`),
+/// in °C.
+const LAPSE_RATE: f32 = 0.3 * DEGREES_PER_UNIT;
+
+/// Range of insolation levels [`row_temperatures`] keeps, in units of
+/// Earth's equator-to-pole difference: beyond it the fitted curve would
+/// turn back.
+const INSOLATION_RANGE: (f32, f32) = (-0.5, 1.5);
+
+/// Annual mean sea-level temperature, in °C, for an insolation level `t`
+/// (0 at Earth's poles, 1 at its equator).
+///
+/// Fitted to Earth's annual zonal mean: −18 °C at the poles, 12 °C at 42°
+/// and 27 °C at the equator. Temperature is not linear in insolation (the
+/// tropics are flatter, heat being carried polewards), so a straight line
+/// would put mid-latitudes too cold.
+pub fn celsius(t: f32) -> f32 {
+    -18.0 + 66.2 * t - 21.2 * t * t
+}
 
 /// Second Legendre polynomial, P2(x) = (3x² − 1) / 2.
 fn p2(x: f64) -> f64 {
@@ -26,26 +53,27 @@ fn insolation(latitude: f64, axial_tilt_deg: f32) -> f64 {
     1.0 + s2 * p2(latitude.sin())
 }
 
-/// Sea-level temperature of each row in `[0, 1]`, calibrated so that an
-/// Earth-like tilt gives 0 at the poles and 1 at the equator. Other tilts can
-/// leave that range and are clamped.
+/// Sea-level temperature of each row, in °C (see [`celsius`]): Earth's tilt
+/// gives −18 °C at the poles and 27 °C at the equator. A lower tilt makes
+/// the poles colder, a higher one warmer, within [`INSOLATION_RANGE`].
 pub fn row_temperatures(grid: &Grid, axial_tilt_deg: f32) -> Vec<f32> {
     let pole = insolation(std::f64::consts::FRAC_PI_2, EARTH_AXIAL_TILT_DEG);
     let equator = insolation(0.0, EARTH_AXIAL_TILT_DEG);
     (0..grid.height)
         .map(|y| {
             let s = insolation(grid.latitude(y), axial_tilt_deg);
-            (((s - pole) / (equator - pole)) as f32).clamp(0.0, 1.0)
+            let t = ((s - pole) / (equator - pole)) as f32;
+            celsius(t.clamp(INSOLATION_RANGE.0, INSOLATION_RANGE.1))
         })
         .collect()
 }
 
-/// Weight of the large-scale temperature anomaly noise on land: about 0.08
-/// standard deviation, so climate zones move by up to ~15° of latitude
-/// between continents.
-const ANOMALY_LAND: f32 = 0.40;
+/// Weight of the large-scale temperature anomaly noise on land, °C: about
+/// 3.6 °C of standard deviation, so climate zones move by up to ~15° of
+/// latitude between continents.
+const ANOMALY_LAND: f32 = 0.40 * DEGREES_PER_UNIT;
 /// Weight on the sea, where water inertia damps the anomalies.
-const ANOMALY_SEA: f32 = 0.20;
+const ANOMALY_SEA: f32 = 0.20 * DEGREES_PER_UNIT;
 
 /// Temperature anomaly for a noise sample in `[-1, 1]`, standing for ocean
 /// currents, monsoons and continentality without modelling them. Zero-mean,
@@ -68,7 +96,7 @@ pub enum Field {
 pub fn regional_variability(noise: f32, field: Field) -> f32 {
     noise
         * match field {
-            Field::Temperature => 0.25,
+            Field::Temperature => 0.25 * DEGREES_PER_UNIT,
             Field::Moisture => 0.50,
         }
 }
@@ -121,9 +149,10 @@ fn circulation_band(latitude: f64) -> f32 {
     (6.0 * latitude).cos() as f32
 }
 
-/// Humidity that warm air can hold, relative to the warmest air.
+/// Humidity that warm air can hold, relative to the warmest air, from a
+/// temperature in °C: rises from polar (−18 °C) to equatorial (27 °C) air.
 fn holding_capacity(temperature: f32) -> f32 {
-    0.2 + 0.8 * temperature.clamp(0.0, 1.0)
+    0.2 + 0.8 * ((temperature + 18.0) / DEGREES_PER_UNIT).clamp(0.0, 1.0)
 }
 
 /// Inputs of the moisture model, all row-major on the same grid.
@@ -131,7 +160,7 @@ pub struct MoistureInput<'a> {
     pub grid: Grid,
     /// Elevation relative to the waterline (negative under water).
     pub height_above_water: &'a [f32],
-    /// Temperature in `[0, 1]`, before any planet-type offset.
+    /// Temperature in °C, before any planet-type offset.
     pub temperature: &'a [f32],
     /// Moisture noise in `[-1, 1]`, for local variation.
     pub noise: &'a [f32],
@@ -302,10 +331,12 @@ mod tests {
     }
 
     #[test]
-    fn earth_tilt_spans_the_full_range() {
+    fn earth_tilt_matches_earth_temperatures() {
         let t = row_temperatures(&grid(), EARTH_AXIAL_TILT_DEG);
-        assert!(t[0] < 0.02, "pole {}", t[0]);
-        assert!(t[44] > 0.98, "equator {}", t[44]);
+        assert!((t[0] + 18.0).abs() < 0.5, "pole {}", t[0]);
+        assert!((t[44] - 27.0).abs() < 0.5, "equator {}", t[44]);
+        // 43° south (rows are 2° tall): 12 °C at 42°.
+        assert!((t[66] - 11.5).abs() < 1.0, "43° {}", t[66]);
         // Symmetric hemispheres.
         assert!((t[10] - t[79]).abs() < 1e-5);
     }
@@ -411,7 +442,7 @@ mod tests {
 
     #[test]
     fn only_land_cools_with_altitude() {
-        assert_eq!(temperature(0.8, -0.5), 0.8);
-        assert!(temperature(0.8, 0.5) < 0.8);
+        assert_eq!(temperature(20.0, -0.5), 20.0);
+        assert!(temperature(20.0, 0.5) < 20.0);
     }
 }

@@ -259,7 +259,7 @@ pub fn biome_name(b: Biome) -> &'static str {
 /// Every threshold used by biome selection, in one place.
 ///
 /// Elevations are relative to the shifted sea level (`elevation - sea_level`)
-/// in `[-1, 1]`; temperatures in `[0, 1]`; moisture in `[-1, 1]`; volcanic
+/// in `[-1, 1]`; temperatures in °C (annual means); moisture in `[-1, 1]`; volcanic
 /// zone in `[0, 1]`.
 ///
 /// In a planet preset, the `[rules]` table overrides any of these fields;
@@ -327,15 +327,15 @@ impl Default for BiomeRules {
         Self {
             waterline: -0.15,
             deep_ocean: -0.45,
-            sea_ice_temperature: 0.07,
+            sea_ice_temperature: -13.5,
             shore_top: 0.0,
             shore_width_km: 40.0,
             highland: 0.10,
             snow_line: 0.30,
-            highland_snow_temperature: 0.35,
-            polar: 0.10,
-            boreal: 0.30,
-            temperate: 0.55,
+            highland_snow_temperature: 2.6,
+            polar: -11.6,
+            boreal: 0.0,
+            temperate: 12.0,
             wetland_moisture: 0.30,
             taiga_moisture: 0.05,
             shrubland_moisture: -0.10,
@@ -358,7 +358,7 @@ pub struct BiomeInput {
     pub elevation: f32,
     /// Moisture in `[-1, 1]` (`> 0` is wet).
     pub moisture: f32,
-    /// Temperature in `[0, 1]` (`0` = polar, `1` = equatorial).
+    /// Annual mean temperature in °C.
     pub temperature: f32,
     /// Volcanic zone in `[0, 1]` (`0` = inert, `1` = fully volcanic).
     pub volcanic_zone: f32,
@@ -514,7 +514,7 @@ mod tests {
         let input = |lake: bool, river: bool, volcanic_zone: f32| BiomeInput {
             elevation: rules.highland + 0.05,
             moisture: 0.2,
-            temperature: 0.5,
+            temperature: 20.0,
             volcanic_zone,
             coast_distance_km: 1000.0,
             lake,
@@ -537,7 +537,7 @@ mod tests {
         let mut out = std::collections::BTreeSet::new();
         for e in steps(-1.0, 1.0) {
             for m in steps(-1.0, 1.0) {
-                for t in steps(0.0, 1.0) {
+                for t in steps(-40.0, 40.0) {
                     for vz in steps(0.0, 1.0) {
                         for (lake, river) in [(false, false), (true, false), (false, true)] {
                             let input = BiomeInput {
@@ -572,7 +572,7 @@ mod tests {
         let lowland = |coast_distance_km| BiomeInput {
             elevation: -0.05,
             moisture: 0.0,
-            temperature: 0.6,
+            temperature: 20.0,
             volcanic_zone: 0.0,
             coast_distance_km,
             lake: false,
@@ -588,7 +588,7 @@ mod tests {
         let input = BiomeInput {
             elevation: -0.5,
             moisture: 0.0,
-            temperature: 0.05,
+            temperature: -15.0,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
             lake: false,
@@ -603,7 +603,7 @@ mod tests {
         let input = BiomeInput {
             elevation: -0.9,
             moisture: 0.0,
-            temperature: 0.5,
+            temperature: 20.0,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
             lake: false,

@@ -17,7 +17,7 @@ erosion = 0.0
 
 # The dense atmosphere keeps the whole surface at about the same heat.
 [climate]
-temperature = 0.6
+temperature = 27.0
 moisture = -0.9
 volcanic = 0.5
 

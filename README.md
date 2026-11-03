@@ -201,13 +201,13 @@ sea_level = [0.10, 0.30]           # sea_level or land_fraction, volcanic, circu
 circumference = 21300
 
 [climate]                          # added to every pixel before biome selection
-temperature = -0.08                # [0, 1] scale
+temperature = -3.6                 # °C
 moisture = -0.7                    # [-1, 1] scale
 volcanic = 0.0                     # [0, 1] scale
 
 [rules]                            # override any biome selection threshold
-polar = 0.04
-highland_snow_temperature = 0.04
+polar = -13.5                      # temperatures in °C
+highland_snow_temperature = -13.5
 
 [remap]                            # target = [biomes replaced by it]
 DustPlain = ["Ocean", "DeepOcean", "Lake", "River", "Plain", "Desert"]
@@ -280,7 +280,7 @@ worlds/<planet>-<seed>/
 
 #### Soft biome borders
 
-`world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its inputs select when nudged by 128 small offsets (a 4D Gaussian, σ 0.02 on temperature, 0.05 on moisture, 0.003 on the highland line and 0.004 on the volcanic zone): far from any threshold the colour is flat (8 probes tell, so most pixels skip the sampling), near one the colours mix. The width of a transition is set in input units, not pixels, so it suits any zoom level; mountain, snow and volcanic borders soften too, volcanoes less than climate borders. The same offsets serve every pixel, so transitions show neither grain nor terraces. Coastlines, shores, rivers and lakes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
+`world.png` draws biome borders as ecotones. Each land pixel takes the mean colour of the biomes its inputs select when nudged by 128 small offsets (a 4D Gaussian, σ 0.9 °C on temperature, 0.05 on moisture, 0.003 on the highland line and 0.004 on the volcanic zone): far from any threshold the colour is flat (8 probes tell, so most pixels skip the sampling), near one the colours mix. The width of a transition is set in input units, not pixels, so it suits any zoom level; mountain, snow and volcanic borders soften too, volcanoes less than climate borders. The same offsets serve every pixel, so transitions show neither grain nor terraces. Coastlines, shores, rivers and lakes keep their exact inputs and stay crisp. This is rendering only: `raw_data/biomes.png` and `world.svg` keep crisp, flat classes.
 
 Water lightens towards its shore, up to 25 % towards white over the last `0.05` elevation units of depth, so seas and lakes show the rim of their basin whatever their colour; a lake's depth is measured from its own level (its highest pixel), not from the sea. Frozen seas and lakes lighten too, as whiter fast ice along the shore, and magma seas darken into a cooled crust; rivers stay flat. Contour lines are drawn under water only, as bathymetry: on land the hillshade shows the relief, and contours drew rings that read as altitude bands. The hillshade follows a soft curve (`1 + 0.4 × tanh((lit − 1) / 0.4)`, relative to flat ground) rather than a hard clamp, so steep slopes stay distinct; detail tiles use the same curve.
 
@@ -292,7 +292,7 @@ Water lightens towards its shore, up to 25 % towards white over the last `0.05` 
 | --------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `elevation.png`       | 16-bit grey      | Terrain height in `[-1, 1]`, before the sea-level shift (biomes use `elevation − sea_level`)                                             |
 | `moisture.png`        | 16-bit grey      | Moisture in `[-1, 1]`, planet-type offset included                                                                                       |
-| `temperature.png`     | 16-bit grey      | Temperature in `[0, 1]`, planet-type offset included                                                                                     |
+| `temperature.png`     | 16-bit grey      | Annual mean temperature in °C (−200 to 600), planet-type offset included                                                                 |
 | `flow.png`            | 16-bit grey, log | River flow: `log10(1 + km²)` in `[0, 8]`, the wet-equivalent area draining through the pixel                                             |
 | `volcanic_zone.png`   | 16-bit grey      | Volcanic zone in `[0, 1]` as biome selection sees it (planet shift included)                                                             |
 | `coast_distance.png`  | 16-bit grey      | Distance to the nearest open water in `[0, 2000]` km (0 on water, capped)                                                                |
@@ -300,13 +300,13 @@ Water lightens towards its shore, up to 25 % towards white over the last `0.05` 
 | `floodplain.png`      | 16-bit grey      | Floodplain weight in `[0, 1]`: 1 on the flat floor of a river valley, 0 away from rivers                                                 |
 | `biomes.png`          | 8-bit grey       | Biome id of each pixel                                                                                                                   |
 
-A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵`.
+A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and `max` given per layer in `world.json`. For `flow` (encoding `gray16-log10`) this gives `log10(1 + km²)`: the area is `10^value − 1`. The precision is about `3 × 10⁻⁵` of the range (0.012 °C for temperature).
 
 `world.json` contains the generation parameters, the `layers` description and the `biomes` table mapping each id to its key, display name, colour and whether it is a water surface:
 
 ```json
 {
-  "format_version": 3,
+  "format_version": 4,
   "width": 1920,
   "height": 1080,
   "seed": 42,
@@ -321,7 +321,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
 }
 ```
 
-The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`. Older worlds still load: missing layers are recomputed, or zero for `floodplain`.
+The example is abridged. Biome ids are stable: new biomes only get appended. `format_version` changes when the layout of `raw_data/` changes: version 2 added `volcanic_zone`, `coast_distance` and `highland_offset`, so that every input of biome selection is exported, and `rivers.json`; version 3 added `floodplain`; version 4 stores temperatures in °C instead of the former `[0, 1]` scale. Older worlds still load: missing layers are recomputed, or zero for `floodplain`, and the temperatures of versions 1–3 (layer and preset thresholds) are converted to °C through the Earth-fitted curve, which keeps their biomes.
 
 `rivers.json` holds the drawn river polylines (version 2 and later; its file name is in `world.json` under `rivers`):
 
@@ -360,29 +360,29 @@ Every intermediate layer of the generation is exported into `noise_maps/` for st
 
 Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative values to blue/cyan, and positive values to yellow/red. Unsigned maps (range `[0, 1]`) run the full blue-to-red range.
 
-| File                            | Range     | Description                                                                                      |
-| ------------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
-| `noise_warp_x.png`              | `[-1, 1]` | Domain-warp field, X axis                                                                        |
-| `noise_warp_y.png`              | `[-1, 1]` | Domain-warp field, Y axis                                                                        |
-| `noise_continent.png`           | `[-1, 1]` | Continent shape: FBM, fractal outline near the coast, smoothed plains inland                     |
-| `noise_mountain.png`            | `[0, 1]`  | Ridged noise (mountain ridges, with two finer ridged octaves)                                    |
-| `noise_mountain_wt.png`         | `[0, 1]`  | Mountain blend weight (derived from continent height)                                            |
-| `noise_elevation.png`           | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                                 |
-| `noise_biome_elev.png`          | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                     |
-| `noise_moisture.png`            | `[-1, 1]` | Moisture noise (local variation added to the climate model)                                      |
-| `noise_volcanic_raw.png`        | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                           |
-| `noise_volcanic_zone.png`       | `[0, 1]`  | Volcanic zone: threshold applied, peaking on the volcanic cones                                  |
-| `noise_temperature_anomaly.png` | `[-1, 1]` | Large-scale temperature anomaly noise (features of ~3 000 km)                                    |
-| `noise_variability_t.png`       | `[-1, 1]` | Regional variability noise added to temperature                                                  |
-| `noise_variability_m.png`       | `[-1, 1]` | Regional variability noise added to moisture                                                     |
-| `noise_highland_jitter.png`     | `[-1, 1]` | Noise shifting the mountain line (× 0.5 gives `highland_offset`)                                 |
-| `erosion.png`                   | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                 |
-| `elevation.png`                 | `[-1, 1]` | Final elevation, after erosion                                                                   |
-| `temperature.png`               | `[0, 1]`  | Temperature before the planet-type offset (see [Temperature](#temperature--axial-tilt))          |
-| `coast_distance.png`            | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                     |
-| `precipitation.png`             | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                    |
-| `moisture.png`                  | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows)) |
-| `flow.png`                      | `[0, 1]`  | River flow: `log10(1 + drainage km²) / 7` (see [Rivers and lakes](#rivers-and-lakes))            |
+| File                            | Range     | Description                                                                                              |
+| ------------------------------- | --------- | -------------------------------------------------------------------------------------------------------- |
+| `noise_warp_x.png`              | `[-1, 1]` | Domain-warp field, X axis                                                                                |
+| `noise_warp_y.png`              | `[-1, 1]` | Domain-warp field, Y axis                                                                                |
+| `noise_continent.png`           | `[-1, 1]` | Continent shape: FBM, fractal outline near the coast, smoothed plains inland                             |
+| `noise_mountain.png`            | `[0, 1]`  | Ridged noise (mountain ridges, with two finer ridged octaves)                                            |
+| `noise_mountain_wt.png`         | `[0, 1]`  | Mountain blend weight (derived from continent height)                                                    |
+| `noise_elevation.png`           | `[-1, 1]` | Elevation before erosion = continent + mountain × weight × blend                                         |
+| `noise_biome_elev.png`          | `[-1, 1]` | Elevation shifted by `sea_level` — what biome selection sees                                             |
+| `noise_moisture.png`            | `[-1, 1]` | Moisture noise (local variation added to the climate model)                                              |
+| `noise_volcanic_raw.png`        | `[-1, 1]` | Raw volcanic-zone FBM before threshold                                                                   |
+| `noise_volcanic_zone.png`       | `[0, 1]`  | Volcanic zone: threshold applied, peaking on the volcanic cones                                          |
+| `noise_temperature_anomaly.png` | `[-1, 1]` | Large-scale temperature anomaly noise (features of ~3 000 km)                                            |
+| `noise_variability_t.png`       | `[-1, 1]` | Regional variability noise added to temperature                                                          |
+| `noise_variability_m.png`       | `[-1, 1]` | Regional variability noise added to moisture                                                             |
+| `noise_highland_jitter.png`     | `[-1, 1]` | Noise shifting the mountain line (× 0.5 gives `highland_offset`)                                         |
+| `erosion.png`                   | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                         |
+| `elevation.png`                 | `[-1, 1]` | Final elevation, after erosion                                                                           |
+| `temperature.png`               | `[0, 1]`  | Temperature before the planet-type offset, −30 °C to 40 °C (see [Temperature](#temperature--axial-tilt)) |
+| `coast_distance.png`            | `[0, 1]`  | Distance to the nearest open water, `1.0` = 2 000 km or more                                             |
+| `precipitation.png`             | `[-1, 1]` | Rain brought by the winds, smoothed (`0` = neutral rain rate)                                            |
+| `moisture.png`                  | `[-1, 1]` | Final moisture before the planet-type offset (see [Moisture](#moisture--winds-and-rain-shadows))         |
+| `flow.png`                      | `[0, 1]`  | River flow: `log10(1 + drainage km²) / 7` (see [Rivers and lakes](#rivers-and-lakes))                    |
 
 #### Geographic reference lines
 
@@ -412,9 +412,15 @@ P2(x) = (3x² − 1) / 2
 S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
 ```
 
-`S` is then rescaled so that an Earth-like tilt (23.44°) gives `0.0` at the poles and `1.0` at the equator, and clamped to `[0, 1]`. Land then cools by `0.3` per unit of elevation above the waterline; the sea surface does not.
+`S` is then rescaled so that an Earth-like tilt (23.44°) gives `t = 0` at the poles and `t = 1` at the equator (kept within `[−0.5, 1.5]` for other tilts), and turned into an annual mean temperature in °C by a curve fitted to Earth's zonal mean:
 
-A large-scale anomaly is added on top: `0.40 × fbm` on land and `0.20 × fbm` on the sea (features of about 3 000 km, standard deviation about 0.08 on land). It stands for ocean currents, monsoons and continentality without modelling them, so climate zones shift by up to ~15° of latitude between continents instead of following parallels. It is zero-mean: the share of cold and hot climates does not change.
+```text
+T = −18 + 66.2 t − 21.2 t²     (−18 °C at the poles, 12 °C at 42°, 27 °C at the equator)
+```
+
+Temperature is not linear in sunlight: the tropics are flatter, heat being carried polewards, so a straight line would leave the mid-latitudes too cold. Land then cools by `13.5 °C` per unit of elevation above the waterline; the sea surface does not.
+
+A large-scale anomaly is added on top: `18 °C × fbm` on land and `9 °C × fbm` on the sea (features of about 3 000 km, standard deviation about 3.6 °C on land). It stands for ocean currents, monsoons and continentality without modelling them, so climate zones shift by up to ~15° of latitude between continents instead of following parallels. It is zero-mean: the share of cold and hot climates does not change.
 
 | Axial tilt | Effect                                                   |
 | ---------- | -------------------------------------------------------- |
@@ -423,7 +429,7 @@ A large-scale anomaly is added on top: `0.40 × fbm` on land and `0.20 × fbm` o
 | ~54°       | Nearly uniform temperature across latitudes              |
 | 70°+       | Poles receive more sunlight over a year than the equator |
 
-The `[climate]` table of the planet preset then shifts the whole temperature field (for example `−0.55` on frozen worlds).
+The `[climate]` table of the planet preset then shifts the whole temperature field (for example `−27 °C` on frozen worlds). Biomes use annual mean thresholds: sea ice below −13.5 °C, ice cap below −11.6 °C, boreal (tundra, taiga) below 0 °C, temperate below 12 °C and tropical above; highland is snow below 2.6 °C. They were converted from the former `[0, 1]` scale through the same curve, so each sits at the latitude it had.
 
 ### Moisture — winds and rain shadows
 
@@ -438,7 +444,7 @@ The rain rate is smoothed over 100 km, mapped to `[-1, 1]` and combined as `0.75
 
 ### Regional variability
 
-Before biome selection, both climate fields get a regional variability term standing for local differences of soil, aspect and circulation: `0.25 × fbm` on temperature (about 2 °C of standard deviation) and an independent `0.50 × fbm` on moisture (about 0.09), with features from about 1 000 km down to 60 km. Biome borders then become irregular and interleaved instead of following isotherms and isohyets. The term is part of the exported `temperature` and `moisture` layers, so they still explain every biome.
+Before biome selection, both climate fields get a regional variability term standing for local differences of soil, aspect and circulation: `11.25 °C × fbm` on temperature (about 2 °C of standard deviation) and an independent `0.50 × fbm` on moisture (about 0.09), with features from about 1 000 km down to 60 km. Biome borders then become irregular and interleaved instead of following isotherms and isohyets. The term is part of the exported `temperature` and `moisture` layers, so they still explain every biome.
 
 ### Rivers and lakes
 
@@ -485,7 +491,7 @@ Erosion runs in two passes, on grids coarser than the map. The main pass always 
 - **Plains stay smooth.** Droplets only carve where the slope (exaggerated, per cell) exceeds 0.04, fully from 0.1. On flatter cells the height change is blurred (three box passes of 2 cells): valleys continue as wide, shallow swales, so they still drain and leave no basin at the foot of the mountains, and fans no longer roughen plains and deserts. Fine-scale roughness on deserts is about 5× lower than with uniform erosion, and mountains are about 3.5× rougher than plains.
 - **Coasts keep their profile.** Erosion fades out within 0.05 of the waterline, and the change spread back onto the full-resolution map (cubic B-spline, smooth across cell borders) never moves a pixel across the waterline: land is never dug below the sea and no new land rises from it.
 - **Poles.** Erosion fades out between 60° and 75° of latitude: droplets move in pixel steps and the projection stretches pixels east-west towards the poles, which would otherwise carve artificial north-south grooves.
-- **Frozen ground.** Ice carves no river valleys: erosion fades out on rows whose sea-level temperature (latitude and the preset's climate shift) stays below the preset's polar threshold, rising to full strength 0.1 above it. Frozen worlds keep smooth ice sheets, and only their thawed belts are eroded.
+- **Frozen ground.** Ice carves no river valleys: erosion fades out on rows whose sea-level temperature (latitude and the preset's climate shift) stays below the preset's polar threshold, rising to full strength 4.5 °C above it. Frozen worlds keep smooth ice sheets, and only their thawed belts are eroded.
 
 The two parameters derived from `--circumference` are computed as follows.
 

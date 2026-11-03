@@ -4,7 +4,7 @@ name = "volcanic"
 description = "Fire world: extreme heat, near-zero moisture"
 
 [climate]
-temperature = 0.45
+temperature = 20.0
 moisture = -0.55
 volcanic = 0.50
 

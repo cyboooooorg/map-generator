@@ -184,7 +184,7 @@ export const surfaceFragment = /* glsl */ `
     } else if (uLayer == 1) {
       colour = toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));
     } else if (uLayer == 2) {
-      colour = toLinear(ramp_temperature(data.g));
+      colour = toLinear(ramp_temperature((data.g + 30.0) / 70.0));
     } else if (uLayer == 3) {
       colour = toLinear(ramp_moisture((data.b + 1.0) * 0.5));
     } else if (uLayer == 4) {
