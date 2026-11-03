@@ -239,8 +239,6 @@
     form = null;
     autoOpen = { jobId: job.job_id, selection: selectedId };
     jobs.track(job.job_id, job.world_id, request, { status: 'queued' }, true);
-    // A replaced world disappeared from the server.
-    void refresh();
   }
 
   function cameraFrom(target: () => WorldPane | null) {
