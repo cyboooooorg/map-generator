@@ -35,6 +35,8 @@ services:
     environment:
       # Largest map accepted (width × height): 8192 × 4096 peaks at about 3.4 GB,
       # within the 6 GB Colima VM of the workstation setup. Lower it on smaller VMs.
+      # The image also sets MALLOC_ARENA_MAX=2, so the server keeps little memory
+      # between generations (see crates/server/src/memory.rs).
       MAPGEN_MAX_PIXELS: "33554432"
     volumes:
       - ./worlds:/data/worlds
