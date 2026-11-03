@@ -131,6 +131,10 @@ export const surfaceFragment = /* glsl */ `
 
   // Brightness of lava at night, relative to its day colour.
   const float LAVA_GLOW = 0.9;
+  // Sun glint on liquid seas: exponent of the lobe (lower is broader) and
+  // peak brightness added.
+  const float GLINT_SHARPNESS = 18.0;
+  const float GLINT_STRENGTH = 0.12;
 
   vec3 toLinear(vec3 srgb) {
     return pow(srgb, vec3(2.2));
@@ -224,9 +228,12 @@ export const surfaceFragment = /* glsl */ `
     // tiles). They are told by their colour, red with almost no green, so
     // detail tiles glow at their own resolution; no other surface colour
     // comes close (deserts and rust have green above half their red).
+    float lava = 0.0;
+    if (uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
+      lava = smoothstep(0.35, 0.12, colour.g / max(colour.r, 1e-4)) * smoothstep(0.02, 0.1, colour.r);
+    }
     float glow = 0.0;
-    if (uLightMode == 1 && uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
-      float lava = smoothstep(0.35, 0.12, colour.g / max(colour.r, 1e-4)) * smoothstep(0.02, 0.1, colour.r);
+    if (uLightMode == 1) {
       float night = 1.0 - smoothstep(-0.08, 0.15, dot(normalize(vSphere), uSunDir));
       glow = LAVA_GLOW * lava * night;
     }
@@ -277,11 +284,15 @@ export const surfaceFragment = /* glsl */ `
     colour *= shade;
     colour += emitted;
 
-    // Sun glint on the sea, on the globe only, dimmed under clouds.
+    // Sun glint on the sea, on the globe only, dimmed under clouds. Waves
+    // spread it into a broad, faint sheen (a tight bright spot made the
+    // globe look like a polished ball); viscous magma, crusted over, barely
+    // reflects at all.
     if (water) {
       vec3 view = normalize(cameraPosition - vWorld);
-      float glint = pow(max(dot(reflect(-light, normal), view), 0.0), 60.0);
-      colour += vec3(0.5) * glint * uMorph * (1.0 - cover);
+      float glint = pow(max(dot(reflect(-light, normal), view), 0.0), GLINT_SHARPNESS);
+      float strength = GLINT_STRENGTH * (1.0 - 0.9 * lava);
+      colour += vec3(strength) * glint * uMorph * (1.0 - cover);
     }
 
     if (cover > 0.0) {

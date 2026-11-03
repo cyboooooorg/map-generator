@@ -373,7 +373,13 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
             let biome = world.biomes[i];
             let on_river = biome == river_biome && coverage[i] >= rivers::RIVER_COVERAGE;
             if biome.is_water() && !on_river {
-                let mut color = water_colour(biome, depths[i]).map(|c| c as u8);
+                let mut color = water_colour(biome, depths[i]);
+                if biome == Biome::MagmaSea {
+                    let lon = (x as f64 + 0.5) * lon_step;
+                    let lat = std::f64::consts::FRAC_PI_2 - (y as f64 + 0.5) * lat_step;
+                    color = variation.magma(color, lon, lat);
+                }
+                let mut color = color.map(|c| c.clamp(0.0, 255.0) as u8);
                 let neighbours = [
                     (x > 0).then(|| elev(x - 1, y)),
                     (x + 1 < w).then(|| elev(x + 1, y)),
