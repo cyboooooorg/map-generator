@@ -195,6 +195,16 @@ satellite image barely shows.
   latitude is not done: it would need a frame every few seconds, against
   the render-on-demand loop.
 - **Airless worlds** draw no shell: a hard limb against space.
+- **Review (after step 5).** At full relief, mountains rise 0.06 radius
+  above the ground, above the 0.036 of Earth's shell, and the shader's
+  ground was the unit sphere, drawn without depth test: the halo was
+  painted over the peaks at the limb. The shell now rises with the relief
+  exaggeration (scale heights stretched, coefficients divided by the same
+  factor, so the zenith optical depths are kept), and it is drawn twice
+  from its far side, split by the depth test: where the surface is in
+  front, the ray stops at the ground (or, for a peak above the unit
+  sphere, at its closest point to the planet) and veils it; elsewhere it
+  draws the sky, now hidden by the peaks in front of it.
 - **Calibration (step 2).** Shell thickness `0.03 + 0.02 log10(1 + p)`
   of the radius; zenith optical depth `0.25 p^0.35` for the gas (blue
   channel) and `2 × haze` for the aerosols, so dense atmospheres take

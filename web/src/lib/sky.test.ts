@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { skyFromWorld } from './sky';
+import { liftSky, skyFromWorld } from './sky';
 
 const world = (pressure: number | undefined, atmosphere?: object) =>
   ({ pressure_bar: pressure, preset: { atmosphere } }) as unknown as WorldMetadata;
@@ -21,5 +21,16 @@ describe('skyFromWorld', () => {
     const dense = skyFromWorld(world(92))!;
     expect(dense.top).toBeGreaterThan(thin.top);
     expect(dense.betaR[2] * dense.heightR).toBeGreaterThan(thin.betaR[2] * thin.heightR * 10);
+  });
+});
+
+describe('liftSky', () => {
+  it('raises the top over the relief and keeps the zenith optical depths', () => {
+    const sky = skyFromWorld(world(1))!;
+    const lifted = liftSky(sky, 0.06);
+    expect(lifted.top).toBeCloseTo(sky.top + 0.06);
+    expect(lifted.betaR[2] * lifted.heightR).toBeCloseTo(sky.betaR[2] * sky.heightR);
+    expect(lifted.betaM * lifted.heightM).toBeCloseTo(sky.betaM * sky.heightM);
+    expect(liftSky(sky, 0)).toEqual(sky);
   });
 });

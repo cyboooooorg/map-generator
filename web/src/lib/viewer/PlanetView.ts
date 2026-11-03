@@ -13,9 +13,11 @@ import {
   DataTexture,
   DoubleSide,
   FrontSide,
+  GreaterDepth,
   Float32BufferAttribute,
   HalfFloatType,
   LinearFilter,
+  LessEqualDepth,
   LineSegments,
   Mesh,
   MOUSE,
@@ -56,7 +58,7 @@ import {
   type Vec3,
 } from '../geo';
 import type { WorldLayers } from '../layers';
-import type { Sky } from '../sky';
+import { liftSky, type Sky } from '../sky';
 import { downsample, fitFactor } from './textures';
 import { DETAIL_STENCIL, TileLayer } from './TileLayer';
 import {
@@ -225,7 +227,8 @@ export class PlanetView {
   private readonly controls: OrbitControls;
   private readonly surface: Mesh<PlaneGeometry, ShaderMaterial>;
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
-  private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>;
+  /** The atmosphere's ground (veil) and sky passes. */
+  private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>[];
   private readonly resizeObserver: ResizeObserver;
   private readonly tiles: TileLayer;
   private layer: Layer = 'biomes';
@@ -289,7 +292,17 @@ export class PlanetView {
   /** Whether the world has a cloud layer, and whether it is shown. */
   private hasClouds = false;
   private cloudsOn = true;
-  /** Scattering uniforms of the sky shader, Earth's until a world sets them. */
+  /** The world's sky before the lift over the relief, Earth's until a world sets it. */
+  private worldSky: Sky = {
+    top: 1.04,
+    betaR: [4.7, 11.4, 27.8],
+    betaM: 4.6,
+    mieAlbedo: [1, 1, 1],
+    heightR: 0.009,
+    heightM: 0.0043,
+    g: 0.76,
+  };
+  /** Scattering uniforms of the sky shader (see applySky). */
   private readonly sky = {
     uTop: { value: 1.04 } as IUniform<number>,
     uBetaR: { value: new Vector3(4.7, 11.4, 27.8) } as IUniform<Vector3>,
@@ -363,33 +376,42 @@ export class PlanetView {
     this.grid.renderOrder = 2;
     this.scene.add(this.grid);
 
-    // A unit sphere scaled to the top of the world's atmosphere. Drawn after
-    // the surface without depth test: the shader stops its rays at the
-    // ground itself, and veils it (see atmosphereFragment).
-    this.atmosphere = new Mesh(
-      new SphereGeometry(1, 96, 48),
-      new ShaderMaterial({
-        vertexShader: atmosphereVertex,
-        fragmentShader: atmosphereFragment,
-        uniforms: {
-          uOpacity: this.atmosphereOpacity,
-          uLightMode: this.u.uLightMode,
-          uSunDir: this.u.uSunDir,
-          uLightDir: this.u.uLightDir,
-          ...this.sky,
-        },
-        side: BackSide,
-        blending: CustomBlending,
-        blendEquation: AddEquation,
-        blendSrc: OneFactor,
-        blendDst: SrcAlphaFactor,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.atmosphere.renderOrder = 1;
-    this.scene.add(this.atmosphere);
+    // A unit sphere scaled to the top of the world's atmosphere, drawn after
+    // the surface from its far side, twice (see atmosphereFragment): where
+    // the surface is in front of it (the depth test passes on greater
+    // depths) to veil the ground, and elsewhere to draw the sky. Relief
+    // rising above the sphere at the limb thus hides the sky behind it.
+    const shell = new SphereGeometry(1, 96, 48);
+    const skyPass = (ground: boolean): Mesh<SphereGeometry, ShaderMaterial> => {
+      const mesh = new Mesh(
+        shell,
+        new ShaderMaterial({
+          vertexShader: atmosphereVertex,
+          fragmentShader: atmosphereFragment,
+          uniforms: {
+            uOpacity: this.atmosphereOpacity,
+            uLightMode: this.u.uLightMode,
+            uSunDir: this.u.uSunDir,
+            uLightDir: this.u.uLightDir,
+            ...this.sky,
+            uGround: { value: ground ? 1 : 0 },
+          },
+          side: BackSide,
+          blending: CustomBlending,
+          blendEquation: AddEquation,
+          blendSrc: OneFactor,
+          blendDst: SrcAlphaFactor,
+          transparent: true,
+          depthFunc: ground ? GreaterDepth : LessEqualDepth,
+          depthWrite: false,
+        }),
+      );
+      mesh.renderOrder = 1;
+      mesh.scale.setScalar(this.worldSky.top);
+      this.scene.add(mesh);
+      return mesh;
+    };
+    this.atmosphere = [skyPass(true), skyPass(false)];
 
     this.path = new LineSegments(
       new BufferGeometry(),
@@ -645,6 +667,7 @@ export class PlanetView {
   setRelief(relief: number): void {
     this.requestRender();
     this.shared.uRelief.value = relief;
+    this.applySky();
   }
 
   setLighting(lighting: Lighting): void {
@@ -666,10 +689,18 @@ export class PlanetView {
   setSky(sky: Sky | null): void {
     this.requestRender();
     this.hasSky = sky !== null;
-    if (!sky) {
-      return;
+    if (sky) {
+      this.worldSky = sky;
+      this.applySky();
     }
-    this.atmosphere.scale.setScalar(sky.top);
+  }
+
+  /** Sets the sky uniforms from the world's sky, raised above the displaced relief. */
+  private applySky(): void {
+    const sky = liftSky(this.worldSky, this.shared.uRelief.value * RELIEF_SCALE);
+    for (const pass of this.atmosphere) {
+      pass.scale.setScalar(sky.top);
+    }
     this.sky.uTop.value = sky.top;
     this.sky.uBetaR.value.set(...sky.betaR);
     this.sky.uBetaM.value = sky.betaM;
@@ -797,7 +828,7 @@ export class PlanetView {
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
-    for (const object of [this.surface, this.grid, this.atmosphere, this.path]) {
+    for (const object of [this.surface, this.grid, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -880,7 +911,10 @@ export class PlanetView {
   private draw(): void {
     this.shared.uMorph.value = this.morph;
     // The atmosphere only makes sense around the globe: fade it with the morph.
-    this.atmosphere.visible = this.atmosphereOn && this.hasSky && this.morph > 0.01;
+    const skyVisible = this.atmosphereOn && this.hasSky && this.morph > 0.01;
+    for (const pass of this.atmosphere) {
+      pass.visible = skyVisible;
+    }
     this.atmosphereOpacity.value = this.morph ** 3;
     const altitude = this.altitude();
     // Clouds fade out as the camera nears the ground, before the detail
