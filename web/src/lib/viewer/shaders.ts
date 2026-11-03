@@ -111,6 +111,8 @@ export const surfaceFragment = /* glsl */ `
   uniform float uHighlight;    // biome id to highlight, or -1
   uniform float uSeaContours;  // 1 draws the depth contours under water
   uniform float uLandContours; // 1 draws the altitude contours on land
+  uniform float uTropics;      // 1 draws the equator, tropics and polar circles
+  uniform float uTilt;         // axial tilt, degrees
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
   uniform sampler2D uClouds;   // cloud cover in r, same layout as uMap
   uniform vec3 uCloudTint;     // linear colour of the clouds
@@ -170,6 +172,33 @@ export const surfaceFragment = /* glsl */ `
   float periodicLines(float h, float spacing, float width) {
     float offset = abs(fract(h / spacing + 0.5) - 0.5) * spacing;
     return 1.0 - smoothstep(0.5, 1.5, offset / width);
+  }
+
+  // Reference parallels (equator, tropics, polar circles): width and dark
+  // edge in screen pixels, dashes per turn, and their colours (linear, the
+  // colours of world.png's lines).
+  const float REFERENCE_WIDTH = 3.0;
+  const float REFERENCE_EDGE = 1.0;
+  const float REFERENCE_DASHES = 240.0;
+  const vec3 EQUATOR_COLOUR = vec3(0.72, 0.03, 0.03);
+  const vec3 TROPIC_COLOUR = vec3(0.72, 0.30, 0.0);
+  const vec3 POLAR_COLOUR = vec3(0.0, 0.58, 0.87);
+
+  // Draws a dashed reference parallel at latitude lat (degrees) over colour:
+  // a coloured core REFERENCE_WIDTH pixels wide with a dark edge, so it
+  // reads on light and dark ground, ice and clouds alike.
+  vec3 referenceLine(vec3 colour, float lat, vec3 lineColour) {
+    float v = (lat + 90.0) / 180.0;
+    float pixels = abs(vUv.y - v) / max(fwidth(vUv.y), 1e-7);
+    float dash = step(0.4, fract(vUv.x * REFERENCE_DASHES));
+    float core = 1.0 - smoothstep(0.5 * REFERENCE_WIDTH - 0.5, 0.5 * REFERENCE_WIDTH + 0.5, pixels);
+    float edge = 1.0 - smoothstep(
+      0.5 * REFERENCE_WIDTH + REFERENCE_EDGE - 0.5,
+      0.5 * REFERENCE_WIDTH + REFERENCE_EDGE + 0.5,
+      pixels
+    );
+    colour = mix(colour, colour * 0.25, 0.8 * edge * dash);
+    return mix(colour, lineColour, core * dash);
   }
 
   // Brightness of lava at night, relative to its day colour.
@@ -369,6 +398,16 @@ export const surfaceFragment = /* glsl */ `
         cloudShade = mix(1.0, 0.35 + 0.75 * max(dot(normalize(vNormal), uLightDir), 0.0), uMorph);
       }
       colour = mix(colour, uCloudTint * cloudShade, cover);
+    }
+
+    // Reference parallels last, over the clouds, unshaded: they are map
+    // marks, not part of the ground.
+    if (uTropics > 0.5) {
+      colour = referenceLine(colour, 0.0, EQUATOR_COLOUR);
+      colour = referenceLine(colour, uTilt, TROPIC_COLOUR);
+      colour = referenceLine(colour, -uTilt, TROPIC_COLOUR);
+      colour = referenceLine(colour, 90.0 - uTilt, POLAR_COLOUR);
+      colour = referenceLine(colour, uTilt - 90.0, POLAR_COLOUR);
     }
 
     gl_FragColor = vec4(colour, 1.0);
