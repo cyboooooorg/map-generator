@@ -1,6 +1,6 @@
 //! The world library: generated worlds on disk, one directory each.
 use crate::api::WorldSummary;
-use serde_json::Value;
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -105,30 +105,62 @@ pub fn revision(dir: &Path, id: &str) -> Option<u64> {
     )
 }
 
+/// The fields of `raw_data/world.json` a summary needs: the layer and
+/// biome tables are skipped without being built. Fields missing from older
+/// worlds take their default.
+#[derive(Deserialize)]
+#[serde(default)]
+struct Meta {
+    planet_type: String,
+    seed: u64,
+    width: u32,
+    height: u32,
+    sea_level: f32,
+    volcanic_intensity: f32,
+    circumference_km: f32,
+    axial_tilt_deg: f32,
+    erosion: f32,
+    gravity_modifier: f32,
+    pressure_bar: f32,
+}
+
+impl Default for Meta {
+    fn default() -> Self {
+        Self {
+            planet_type: "unknown".into(),
+            seed: 0,
+            width: 0,
+            height: 0,
+            sea_level: 0.0,
+            volcanic_intensity: 0.0,
+            circumference_km: 0.0,
+            axial_tilt_deg: 0.0,
+            erosion: 0.0,
+            gravity_modifier: 0.0,
+            // Worlds made before the atmosphere had Earth's pressure.
+            pressure_bar: 1.0,
+        }
+    }
+}
+
 /// Reads one world's summary from its `raw_data/world.json`.
 pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
     let path = dir.join(id).join("raw_data").join("world.json");
-    let meta: Value = serde_json::from_str(&std::fs::read_to_string(&path).ok()?).ok()?;
+    let meta: Meta = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
     let modified_ms = revision(dir, id).unwrap_or(0);
-    let f = |key: &str| meta[key].as_f64().unwrap_or(0.0) as f32;
-    let u = |key: &str| meta[key].as_u64().unwrap_or(0) as u32;
     Some(WorldSummary {
         id: id.to_string(),
-        planet: meta["planet_type"]
-            .as_str()
-            .unwrap_or("unknown")
-            .to_string(),
-        seed: u("seed"),
-        width: u("width"),
-        height: u("height"),
-        sea_level: f("sea_level"),
-        volcanic_intensity: f("volcanic_intensity"),
-        circumference_km: f("circumference_km"),
-        axial_tilt_deg: f("axial_tilt_deg"),
-        erosion: f("erosion"),
-        gravity_modifier: f("gravity_modifier"),
-        // Worlds made before the atmosphere had Earth's pressure.
-        pressure_bar: meta["pressure_bar"].as_f64().unwrap_or(1.0) as f32,
+        planet: meta.planet_type,
+        seed: meta.seed as u32,
+        width: meta.width,
+        height: meta.height,
+        sea_level: meta.sea_level,
+        volcanic_intensity: meta.volcanic_intensity,
+        circumference_km: meta.circumference_km,
+        axial_tilt_deg: meta.axial_tilt_deg,
+        erosion: meta.erosion,
+        gravity_modifier: meta.gravity_modifier,
+        pressure_bar: meta.pressure_bar,
         modified_ms,
     })
 }
@@ -161,6 +193,31 @@ mod tests {
         sweep_temp_dirs(&root);
         assert!(!root.join(".tmp-terran-3").exists());
         assert!(root.join("terran-2").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn summaries_read_old_and_new_metadata() {
+        let root = std::env::temp_dir().join(format!("mapgen-summary-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for (id, json) in [
+            (
+                "terran-1",
+                r#"{"planet_type": "terran", "seed": 1, "width": 64, "height": 32,
+                    "pressure_bar": 2.5, "layers": {"elevation": {}}, "biomes": [1, 2]}"#,
+            ),
+            // Before the atmosphere: Earth's pressure.
+            ("frozen-2", r#"{"planet_type": "frozen", "seed": 2}"#),
+        ] {
+            std::fs::create_dir_all(root.join(id).join("raw_data")).unwrap();
+            std::fs::write(root.join(id).join("raw_data/world.json"), json).unwrap();
+        }
+        let terran = summary(&root, "terran-1").unwrap();
+        assert_eq!((terran.planet.as_str(), terran.width), ("terran", 64));
+        assert_eq!(terran.pressure_bar, 2.5);
+        let frozen = summary(&root, "frozen-2").unwrap();
+        assert_eq!((frozen.seed, frozen.pressure_bar), (2, 1.0));
+        assert!(summary(&root, "barren-3").is_none());
         std::fs::remove_dir_all(root).unwrap();
     }
 
