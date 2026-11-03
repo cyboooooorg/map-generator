@@ -429,6 +429,35 @@ export const lineFragment = /* glsl */ `
   }
 `;
 
+// Stars: points at infinity. Only the camera's rotation moves them, so
+// they stay put while the camera orbits the planet; drawn at the far plane
+// (z = w), behind everything, without writing depth.
+export const starsVertex = /* glsl */ `
+  attribute vec3 colour;
+  attribute float size;
+  uniform float uPixelRatio;
+  uniform float uOpacity;
+  varying vec3 vColour;
+  void main() {
+    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position * 10.0, 1.0);
+    gl_Position = clip.xyww;
+    gl_PointSize = size * uPixelRatio;
+    vColour = colour * uOpacity;
+  }
+`;
+
+// A soft round point, added to what is behind it.
+export const starsFragment = /* glsl */ `
+  varying vec3 vColour;
+  void main() {
+    float r = length(gl_PointCoord - 0.5) * 2.0;
+    float a = 1.0 - smoothstep(0.35, 1.0, r);
+    if (a <= 0.0) discard;
+    gl_FragColor = vec4(vColour * a, 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+
 export const atmosphereVertex = /* glsl */ `
   varying vec3 vWorld;
   void main() {
