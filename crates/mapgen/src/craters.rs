@@ -279,6 +279,9 @@ pub struct CraterField {
     /// today, where only space weathering darkens them (wind, rain and air
     /// erase them elsewhere).
     rays: bool,
+    /// For a planet tidally locked to its star, since when, Ga before
+    /// present: craters younger than that favour its leading hemisphere.
+    locked_since_ga: Option<f64>,
     /// The epoch shown, Ga before present (negative in the future): only
     /// the craters formed by then exist, worn for the time since.
     epoch_ga: f64,
@@ -320,6 +323,25 @@ pub fn darken_maria(albedo: &mut [f32], mare: &[bool]) {
 
 /// Lava fills the basin out to this share of its radius.
 const MARE_EXTENT: f64 = 0.9;
+
+/// Craters per area on the leading hemisphere of a tidally locked planet
+/// against the trailing one: it sweeps up more impactors, as the Moon's
+/// leading side does (models of near-Earth objects give 1.14 to 1.32 for
+/// the Moon, observations more).
+const LEADING_RATIO: f64 = 1.3;
+/// The apex of a locked planet's orbital motion: on the equator, 90° west
+/// of the point under its star (at longitude 180°, the map's centre), as
+/// the Moon's apex lies 90° west of the point under the Earth.
+const APEX: [f64; 3] = [0.0, 1.0, 0.0];
+
+/// The share of craters kept at an angle `cos_apex` (cosine) from the apex,
+/// formed while the planet was locked: `(1 + k cos γ) / (1 + k)` with
+/// `k = (ratio − 1) / (ratio + 1)`, so that the leading-to-trailing ratio
+/// is [`LEADING_RATIO`] and a density raised by `1 + k` keeps its mean.
+fn leading_share(cos_apex: f64) -> f64 {
+    let k = (LEADING_RATIO - 1.0) / (LEADING_RATIO + 1.0);
+    (1.0 + k * cos_apex) / (1.0 + k)
+}
 
 /// How far ahead the craters still to come are drawn, Ga.
 pub const FUTURE_GA: f64 = 1.0;
@@ -386,6 +408,17 @@ impl CraterField {
     /// present, negative in the future, down to [`FUTURE_GA`]).
     pub fn context_at(p: &WorldParams, epoch_ga: f64) -> Self {
         let radius_km = p.circumference_km as f64 / (2.0 * PI);
+        let star = crate::star::StarInfo::new(p.star, p.orbit_au);
+        let locked_since_ga = star.tidally_locked.then(|| {
+            f64::from((crate::star::AGE_GYR.min(star.lifetime_gyr) - star.locking_gyr).max(0.0))
+        });
+        // A locked planet draws more craters, and keeps a share of them by
+        // their angle to its apex (see `leading_share`): the same mean.
+        let raise = if locked_since_ga.is_some() {
+            1.0 + (LEADING_RATIO - 1.0) / (LEADING_RATIO + 1.0)
+        } else {
+            1.0
+        };
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
             craters: Vec::new(),
@@ -400,7 +433,7 @@ impl CraterField {
             erosion: p.erosion as f64,
             past: Population {
                 seed: stream_seed(p.seed, stream::CRATERS),
-                density: crater_density(p.surface_age_ga as f64).min(SATURATION),
+                density: crater_density(p.surface_age_ga as f64).min(SATURATION) * raise,
                 ages: Ages::Past {
                     surface_age_ga: p.surface_age_ga as f64,
                 },
@@ -410,7 +443,7 @@ impl CraterField {
             future: Population {
                 seed: stream_seed(p.seed, stream::FUTURE_CRATERS),
                 density: if p.surface_age_ga > 0.0 {
-                    FLUX_PER_GA * FUTURE_GA
+                    FLUX_PER_GA * FUTURE_GA * raise
                 } else {
                     0.0
                 },
@@ -418,6 +451,7 @@ impl CraterField {
             },
             air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
             rays: p.pressure_bar < crate::atmosphere::LIQUID_WATER_BAR,
+            locked_since_ga,
             epoch_ga: epoch_ga.max(-FUTURE_GA),
         }
     }
@@ -603,7 +637,7 @@ impl CraterField {
         let mut rng = Rng::cell(population.seed, octave, face, i, j);
         let area = self.radius_km * self.radius_km;
         let count = rng.poisson(per_km2(population, octave) * omega * area);
-        let (low, air_km) = (2f64.powi(octave), self.air_km);
+        let (low, air_km, locked_since) = (2f64.powi(octave), self.air_km, self.locked_since_ga);
         (0..count).filter_map(move |_| {
             let centre = cube_point(face, a0 + step * rng.unit(), b0 + step * rng.unit());
             // Power law within the octave: N(>D) ∝ D⁻².
@@ -621,6 +655,23 @@ impl CraterField {
                         diameter_km as f32,
                     ));
             let shape = rng.next();
+            // On a locked planet, the share of the craters its leading
+            // hemisphere favours (a draw of their own: unlocked worlds keep
+            // their craters).
+            let survives = match locked_since {
+                Some(since) => {
+                    let keep = if age_ga < since {
+                        let cos_apex =
+                            centre[0] * APEX[0] + centre[1] * APEX[1] + centre[2] * APEX[2];
+                        leading_share(cos_apex)
+                    } else {
+                        // Formed while it still rotated: anywhere alike.
+                        leading_share(0.0)
+                    };
+                    rng.unit() < keep && survives
+                }
+                None => survives,
+            };
             survives.then_some(Crater {
                 centre,
                 diameter_km,
@@ -1769,6 +1820,42 @@ mod tests {
         let mut albedo = vec![0.0; e.len()];
         darken_maria(&mut albedo, &mare);
         assert!(albedo.iter().zip(&mare).all(|(a, m)| (*a < 0.0) == *m));
+    }
+
+    #[test]
+    fn locked_planets_have_a_more_cratered_leading_hemisphere() {
+        // A planet of an M dwarf, locked, in the middle of its habitable zone.
+        let star = crate::star::parse_type("M5V").unwrap();
+        let locked = WorldParams {
+            star,
+            orbit_au: crate::star::orbit_at(star, 0.5),
+            ..moon(4.0)
+        };
+        let field = CraterField::new(&locked, 20.0);
+        let since = field.locked_since_ga.expect("locked");
+        let count = |young: bool, leading: bool| {
+            field
+                .craters
+                .iter()
+                .filter(|c| (c.age_ga < since) == young)
+                .filter(|c| (c.centre[1] > 0.0) == leading)
+                .count() as f64
+        };
+        // Hemispheres facing the apex and away from it: the ratio of
+        // `(1 + k/2) / (1 − k/2)`, about 1.14, for craters since the locking.
+        let ratio = count(true, true) / count(true, false);
+        assert!((1.05..1.25).contains(&ratio), "{ratio}");
+        if since < 3.9 {
+            // Older craters formed anywhere alike.
+            let old = count(false, true) / count(false, false);
+            assert!((0.9..1.1).contains(&old), "{old}");
+        }
+        // The mean density is kept.
+        let unlocked = CraterField::new(&moon(4.0), 20.0).craters.len() as f64;
+        let n = field.craters.len() as f64;
+        assert!((n / unlocked - 1.0).abs() < 0.05, "{n} vs {unlocked}");
+        // Unlocked worlds: no favoured side.
+        assert!(CraterField::context(&moon(4.0)).locked_since_ga.is_none());
     }
 
     #[test]
