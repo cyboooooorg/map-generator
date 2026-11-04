@@ -23,6 +23,7 @@
   import { cssGradient } from '../lib/viewer/colormaps';
   import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
+  import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
@@ -192,6 +193,17 @@
 
   const worldId = $derived(world.id);
   const meta = $derived(world.meta);
+  /**
+   * The system the star view shows: the previous world's while the next
+   * one's metadata loads, so the view does not flash the Sun's in between.
+   */
+  let shownSystem: { star: StarInfo; omega: number } | null = null;
+  const system = $derived.by(() => {
+    if (meta) {
+      shownSystem = { star: withOrbitDefaults(meta.star ?? SUN_SYSTEM), omega: periapsisAngle(meta.seed) };
+    }
+    return shownSystem ?? { star: withOrbitDefaults(SUN_SYSTEM), omega: 0 };
+  });
   const epochs = $derived(meta ? epochRange(meta) : null);
   /** The slider's stops, from the past (left) to the future (right). */
   const epochStops = $derived(epochs ? epochSteps(epochs).reverse() : []);
@@ -797,8 +809,8 @@
   {#if subject === 'star' && worldId}
     <StarPane
       bind:this={starPane}
-      star={withOrbitDefaults(meta?.star ?? SUN_SYSTEM)}
-      omega={periapsisAngle(meta?.seed ?? 0)}
+      star={system.star}
+      omega={system.omega}
       bind:animated={starAnimated}
       bind:distances={starDistances}
       bind:orbit={starOrbit}

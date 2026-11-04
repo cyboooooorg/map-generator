@@ -556,7 +556,12 @@ export const en = {
     outOfZone: 'outside the habitable zone',
     periapsis: (p: { distance: string }) => `periapsis ${p.distance}`,
     apoapsis: (p: { distance: string }) => `apoapsis ${p.distance}`,
-    animateHelp: 'The star turns and boils, red dwarfs flare, the planet goes round its orbit (ten frames a second)',
+    animateHelp: 'The star turns and boils, red dwarfs flare, the planet goes round its orbit in a minute (thirty frames a second)',
+    clock: (p: { scale: string; factor: string; day: string; year: string }) =>
+      `Time: 1 s = ${p.scale} (×${p.factor}) · day ${p.day} of ${p.year} since periapsis`,
+    clockHelp:
+      "The animation runs a year of the planet in one minute, so time goes faster by the factor shown. The speeds shown stay real ones, in km per real second: in one second of animation, the planet covers its speed times that factor. The day counts from the periapsis (from an arbitrary point on a circular orbit).",
+    hours: (p: { hours: string }) => `${p.hours} h`,
     schematic: 'Schematic: the star is not to scale; distances are in proportion.',
   },
   units: {

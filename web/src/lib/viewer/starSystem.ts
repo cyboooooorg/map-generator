@@ -49,9 +49,13 @@ export function systemScale(star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>,
  */
 export function keplerPosition(eccentricity: number, meanAnomaly: number): { trueAnomaly: number; distance: number } {
   const e = eccentricity;
-  let anomaly = e < 0.8 ? meanAnomaly : Math.PI;
+  // Within one turn (−π to π): Newton's method from M + e sin M (from ±π on
+  // very eccentric orbits) then converges for any time, however long the
+  // animation has run.
+  const m = meanAnomaly - 2 * Math.PI * Math.round(meanAnomaly / (2 * Math.PI));
+  let anomaly = e < 0.8 ? m + e * Math.sin(m) : m < 0 ? -Math.PI : Math.PI;
   for (let i = 0; i < 12; i += 1) {
-    anomaly -= (anomaly - e * Math.sin(anomaly) - meanAnomaly) / (1 - e * Math.cos(anomaly));
+    anomaly -= (anomaly - e * Math.sin(anomaly) - m) / (1 - e * Math.cos(anomaly));
   }
   const trueAnomaly =
     2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(anomaly / 2), Math.sqrt(1 - e) * Math.cos(anomaly / 2));

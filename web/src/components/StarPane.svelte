@@ -7,13 +7,13 @@
   import { unitTooltip } from '../lib/units';
   import { meanOrbitalSpeed, orbitalSpeed } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
-  import { type SystemLabels, StarView } from '../lib/viewer/StarView';
+  import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
 
   interface Props {
     star: StarInfo;
     /** Orientation of the orbit's periapsis, radians (see periapsisAngle). */
     omega: number;
-    /** Whether the star turns and boils (ten frames a second). */
+    /** Whether the star turns and boils (thirty frames a second at most). */
     animated: boolean;
     /** Whether the live distances are shown. */
     distances: boolean;
@@ -26,6 +26,8 @@
 
   let { star, omega, animated = $bindable(), distances = $bindable(), orbit = $bindable(), zone = $bindable(), prominences = $bindable() }: Props = $props();
   let labels = $state<SystemLabels | null>(null);
+  /** Share of the year elapsed since the periapsis, while animated. */
+  let yearFraction = $state(0);
   /** Width of the view, to keep the labels near its right edge on screen. */
   let width = $state(0);
 
@@ -39,6 +41,7 @@
   onMount(() => {
     const created = new StarView(canvas);
     created.onLabels = (next) => (labels = next);
+    created.onClock = (fraction) => (yearFraction = fraction);
     view = created;
     return () => {
       created.dispose();
@@ -64,6 +67,18 @@
       mean,
       fastest: kms(orbitalSpeed(star.mass, star.orbit_au, star.periapsis_au)),
       slowest: kms(orbitalSpeed(star.mass, star.orbit_au, star.apoapsis_au)),
+    });
+  });
+
+  /** How fast time runs in the animation, and the day of the year it shows. */
+  const clockText = $derived.by(() => {
+    const days = star.year_days / YEAR_S;
+    const scale = days < 1 ? t.starView.hours({ hours: formatUpTo(days * 24, 1) }) : t.worldInfo.yearDays({ days: formatUpTo(days, 1) });
+    return t.starView.clock({
+      scale,
+      factor: formatInt(Math.round((days * 86_400) / 100) * 100),
+      day: formatInt(Math.floor(yearFraction * star.year_days) + 1),
+      year: formatInt(Math.round(star.year_days)),
     });
   });
 
@@ -169,6 +184,9 @@
       {t.starView.animate}
     </label>
   </div>
+  {#if animated}
+    <small class="clock" title={t.starView.clockHelp}>{clockText}</small>
+  {/if}
   {#if distances && star.eccentricity <= 0.001}
     <!-- A circle has no closest or farthest point: say why none is marked. -->
     <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
@@ -217,6 +235,11 @@
   }
   .label.zone {
     color: #8fe0aa;
+  }
+  .clock {
+    color: #ffd27a;
+    font-variant-numeric: tabular-nums;
+    cursor: help;
   }
   h4 {
     margin: 4px 0 0;

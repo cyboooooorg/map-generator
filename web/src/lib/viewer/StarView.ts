@@ -1,7 +1,7 @@
 // The star view: a world's star as a globe you can turn, with its system
 // around it (the habitable zone, the planet's orbit and the planet), in
 // front of the same star field as the planet view. Drawn on demand; with
-// the animation on, ten frames a second.
+// the animation on, thirty frames a second at most.
 import {
   AdditiveBlending,
   CatmullRomCurve3,
@@ -55,8 +55,14 @@ export interface SystemLabels {
   outer: { x: number; y: number } | null;
 }
 
-/** Redraw interval while the star is animated, ms. */
-const FRAME_MS = 100;
+/** Shortest time between two animated frames, ms (thirty frames a second at most). */
+const FRAME_MS = 1000 / 30;
+/** Longest step of the animation clock, s: a stall (a world loading, a hidden tab) pauses the motion instead of making it jump. */
+const MAX_STEP_S = 0.1;
+/** Seconds of animation for one orbit of the planet. */
+export const YEAR_S = 60;
+/** Mean anomaly of the planet when the animation clock reads zero, radians. */
+const START_ANOMALY = 0.6;
 /** Width of the glow quad, in star radii. */
 const GLOW_SIZE = 7;
 
@@ -73,7 +79,8 @@ export class StarView {
   private readonly sky: Points<BufferGeometry, ShaderMaterial>;
   private readonly resizeObserver: ResizeObserver;
   private frame: number | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private loop: number | null = null;
+  private lastTick = 0;
   private time = 0;
   private info: StarInfo | null = null;
   /** Orientation of the periapsis in the orbital plane, radians. */
@@ -91,6 +98,8 @@ export class StarView {
   private readonly apsides: Mesh<SphereGeometry, MeshBasicMaterial>[];
   /** Called after each frame with the labelled points, while distances are shown. */
   onLabels: (labels: SystemLabels | null) => void = () => {};
+  /** Called on each animated frame with the share of the year elapsed since the periapsis (0 to 1). */
+  onClock: (yearFraction: number) => void = () => {};
   private disposed = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -199,6 +208,10 @@ export class StarView {
 
   /** Shows a world's star and system; `omega` orients the orbit's periapsis (radians). */
   setStar(info: StarInfo, omega = 0): void {
+    // Another system: its planet starts its orbit from the same point.
+    if (this.info && (this.info.type !== info.type || this.info.orbit_au !== info.orbit_au || this.omega !== omega)) {
+      this.time = 0;
+    }
     this.info = info;
     this.omega = omega;
     const u = this.star.material.uniforms;
@@ -267,20 +280,38 @@ export class StarView {
     for (const marker of this.apsides) marker.visible = this.distancesOn && this.orbitOn;
   }
 
-  /** Turns and boils the star, moves the planet along its orbit (ten frames a second), or stops them. */
+  /**
+   * Turns and boils the star and moves the planet along its orbit (a year in
+   * YEAR_S seconds, thirty frames a second at most, on the display's clock),
+   * or stops them.
+   */
   setAnimated(on: boolean): void {
-    if (on && this.timer === null) {
-      this.timer = setInterval(() => {
-        this.time += FRAME_MS / 1000;
-        this.star.material.uniforms['uTime']!.value = this.time;
-        this.animateProminences();
-        this.placePlanet();
-        this.requestRender();
-      }, FRAME_MS);
-    } else if (!on && this.timer !== null) {
-      clearInterval(this.timer);
-      this.timer = null;
+    if (on && this.loop === null && !this.disposed) {
+      this.lastTick = performance.now();
+      this.loop = requestAnimationFrame(this.tick);
+    } else if (!on && this.loop !== null) {
+      cancelAnimationFrame(this.loop);
+      this.loop = null;
     }
+  }
+
+  private readonly tick = (now: number): void => {
+    this.loop = requestAnimationFrame(this.tick);
+    const elapsed = now - this.lastTick;
+    if (elapsed < FRAME_MS - 4) return;
+    this.lastTick = now;
+    this.time += Math.min(elapsed / 1000, MAX_STEP_S);
+    this.star.material.uniforms['uTime']!.value = this.time;
+    this.animateProminences();
+    this.placePlanet();
+    const turn = this.meanAnomaly() / (2 * Math.PI);
+    this.onClock(turn - Math.floor(turn));
+    this.render();
+  };
+
+  /** Mean anomaly of the planet now, radians. */
+  private meanAnomaly(): number {
+    return START_ANOMALY + this.time * ((2 * Math.PI) / YEAR_S);
   }
 
   /** Back to the starting view: the whole system, seen from above its plane. */
@@ -397,10 +428,10 @@ export class StarView {
 
   private placePlanet(): void {
     if (!this.info) return;
-    // A turn in a minute when animated (not the real year), at Kepler's
-    // pace: faster near the star.
+    // A turn in YEAR_S seconds when animated (not the real year), at
+    // Kepler's pace: faster near the star.
     const e = this.info.eccentricity ?? 0;
-    const { trueAnomaly, distance } = keplerPosition(e, 0.6 + this.time * ((2 * Math.PI) / 60));
+    const { trueAnomaly, distance } = keplerPosition(e, this.meanAnomaly());
     this.planetAu = this.info.orbit_au * distance;
     this.planet.position.copy(this.inPlane(trueAnomaly, this.planetAu));
     const points = this.link.geometry.getAttribute('position') as BufferAttribute;
@@ -434,7 +465,11 @@ export class StarView {
   }
 
   private readonly render = (): void => {
-    this.frame = null;
+    if (this.frame !== null) {
+      cancelAnimationFrame(this.frame);
+      this.frame = null;
+    }
+    if (this.disposed) return;
     const moving = this.controls.update();
     // The glow faces the camera.
     this.glow.quaternion.copy(this.camera.quaternion);
