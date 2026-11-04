@@ -299,18 +299,6 @@ impl Candidate {
     }
 }
 
-/// Roman numeral of `n` (1 to 39).
-fn roman(mut n: usize) -> String {
-    let mut s = String::new();
-    for (value, digit) in [(10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")] {
-        while n >= value {
-            s.push_str(digit);
-            n -= value;
-        }
-    }
-    s
-}
-
 impl MoonSystem {
     /// The moons of world `p`, `None` when its request turned them off.
     pub fn draw(p: &WorldParams) -> Option<Self> {
@@ -595,7 +583,7 @@ impl MoonSystem {
                 let gravity = G * c.mass_kg / (radius * radius) / 9.81e-3;
                 let barycentre = c.a_km * c.mass_kg / (m_p + c.mass_kg);
                 Moon {
-                    name: roman(k + 1),
+                    name: crate::naming::roman(k + 1),
                     origin: c.origin,
                     composition: c.composition,
                     radius_km: radius as f32,
@@ -712,7 +700,7 @@ impl MoonSystem {
         }
         moons.sort_by(|a, b| a.semi_major_axis_km.total_cmp(&b.semi_major_axis_km));
         for (k, moon) in moons.iter_mut().enumerate() {
-            moon.name = roman(k + 1);
+            moon.name = crate::naming::roman(k + 1);
         }
         Self {
             planet_day_hours: day as f32,
@@ -1258,7 +1246,6 @@ mod tests {
             MoonSystem::draw(&params(9, 21_300.0)),
             MoonSystem::draw(&params(9, 21_300.0))
         );
-        assert_eq!(roman(14), "XIV");
     }
 
     #[test]

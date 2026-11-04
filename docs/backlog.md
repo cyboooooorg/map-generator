@@ -433,3 +433,20 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   in its sky with its phases and eclipses; tidal heating warming the
   climate and raising volcanism, watery worlds kept beyond the habitable
   edge.
+
+## 15. Names
+
+- **Status:** done
+- **Problem:** worlds were known by their id (`terran-42`), giants by a
+  bare letter counted among the giants only, moons by a bare numeral,
+  the star by its spectral type; nothing could be named.
+- **Done (2026-11-04):** scientific designations after the IAU's
+  conventions for exoplanets (`mapgen::naming`): the star's catalogue
+  number in a fictional survey (`MGS 46433`), a letter for each planet,
+  the world included, by its distance to the star, a Roman numeral for
+  each moon by its distance to its planet. The server gives them in each
+  world's summary, computed from `world.json` (older worlds included),
+  and `PUT /api/worlds/{id}/names` names the world and its moons
+  (`names.json`), edited from the world card.
+- **Later:** naming the star and the giants too; keeping given names
+  across a regeneration with `replace`.

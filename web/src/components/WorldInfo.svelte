@@ -10,6 +10,9 @@
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
   import { moonsOf } from '../lib/moons';
+  import { api } from '../lib/api/client';
+  import { errorText } from '../lib/i18n/errors';
+  import { designationBeside, givenNames, MAX_NAME_CHARS, worldName } from '../lib/names';
 
   interface Props {
     world: LoadedWorld;
@@ -24,9 +27,11 @@
     /** The link Copy link copies: the worlds shown and the view. */
     link: () => string;
     onDelete: () => void;
+    /** Called with the world's summary once its names are saved. */
+    onRenamed?: (summary: WorldSummary) => void;
   }
 
-  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, link, onDelete }: Props = $props();
+  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, link, onDelete, onRenamed }: Props = $props();
 
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
@@ -42,6 +47,43 @@
   const others = $derived(worlds.filter((w) => w.id !== worldId));
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
+  const names = $derived(summary?.names ?? null);
+  const title = $derived(names ? worldName(names) : meta ? presetName(meta.preset) : (summary?.planet ?? worldId));
+  /** A designation without its star's (`c` of `MGS 48213 c`), for short lists. */
+  const short = (designation: string) =>
+    names && designation.startsWith(`${names.star} `) ? designation.slice(names.star.length + 1) : designation;
+
+  // Renaming: the fields hold the names given, empty for a designation.
+  let renaming = $state(false);
+  let saving = $state(false);
+  let worldField = $state('');
+  let moonFields = $state<string[]>([]);
+  function startRenaming(): void {
+    if (!names) return;
+    worldField = names.name ?? '';
+    moonFields = names.moons.map((m) => m.name ?? '');
+    renaming = true;
+  }
+  // A world change closes the editor.
+  $effect(() => {
+    void worldId;
+    renaming = false;
+  });
+  async function saveNames(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!names || !worldId) return;
+    saving = true;
+    try {
+      const renamed = await api.renameWorld(worldId, givenNames(names, worldField, moonFields));
+      onRenamed?.(renamed);
+      renaming = false;
+      toasts.show(t.worldInfo.renamed({ name: worldName(renamed.names) }));
+    } catch (e) {
+      toasts.error(t.worldInfo.renameFailed({ error: errorText(e) }));
+    } finally {
+      saving = false;
+    }
+  }
 
   async function copy(text: string, what: string): Promise<void> {
     const ok = await copyText(text);
@@ -76,8 +118,12 @@
   <details class="card" bind:open>
     <summary>
       <span class="title">
-        <strong>{meta ? presetName(meta.preset) : (summary?.planet ?? worldId)}</strong>
-        <small>{worldId}</small>
+        <strong>{title}</strong>
+        <small
+          >{[names ? designationBeside(names.name, names.designation) : null, meta ? presetName(meta.preset) : null, worldId]
+            .filter(Boolean)
+            .join(' · ')}</small
+        >
       </span>
     </summary>
 
@@ -202,7 +248,10 @@
           <dd>
             {moons.length === 0
               ? t.worldInfo.noMoon
-              : t.worldInfo.moonsValue({ count: moons.length, names: moons.map((m) => m.name).join(', ') })}{#if meta.moons.binary}
+              : t.worldInfo.moonsValue({
+                  count: moons.length,
+                  names: moons.map((m, k) => names?.moons[k]?.name ?? m.name).join(', '),
+                })}{#if meta.moons.binary}
               · {t.worldInfo.binary}{/if}
           </dd>
           {#if !meta.giant}
@@ -239,7 +288,7 @@
               ? t.worldInfo.noGiants
               : t.worldInfo.giantsValue({
                   count: meta.giants.giants.length,
-                  names: meta.giants.giants.map((g) => g.name).join(', '),
+                  names: meta.giants.giants.map((g, i) => (names?.giants[i] ? short(names.giants[i]) : g.name)).join(', '),
                 })} · {t.worldInfo.impactsValue({ factor: `${formatUpTo(meta.giants.impact_factor, 2)}×` })}
           </dd>
         {/if}
@@ -297,15 +346,38 @@
           >{t.worldInfo.copyCommand}</button
         >
         <button onclick={() => copy(link(), t.worldInfo.link)} title={t.worldInfo.copyLinkHelp}>{t.worldInfo.copyLink}</button>
+        <button onclick={() => (renaming ? (renaming = false) : startRenaming())} disabled={!names} title={t.worldInfo.renameHelp}
+          >{t.worldInfo.rename}</button
+        >
         <button class="danger" onclick={onDelete}>{t.worldInfo.delete}</button>
       </div>
+
+      {#if renaming && names}
+        <form class="rename" onsubmit={saveNames}>
+          <label>
+            <span>{t.worldInfo.renameWorld}</span>
+            <input bind:value={worldField} placeholder={names.designation} maxlength={MAX_NAME_CHARS} />
+          </label>
+          {#each names.moons as moon, k (moon.designation)}
+            <label>
+              <span>{t.worldInfo.renameMoon({ designation: short(moon.designation) })}</span>
+              <input bind:value={moonFields[k]} placeholder={moon.designation} maxlength={MAX_NAME_CHARS} />
+            </label>
+          {/each}
+          <small class="muted">{t.worldInfo.renameNote({ star: names.star })}</small>
+          <div class="actions">
+            <button type="submit" disabled={saving}>{saving ? t.worldInfo.sending : t.worldInfo.renameSave}</button>
+            <button type="button" onclick={() => (renaming = false)}>{t.worldInfo.renameCancel}</button>
+          </div>
+        </form>
+      {/if}
 
       <label class="compare">
         <span>{t.worldInfo.compareWith}</span>
         <select value={compareId ?? ''} onchange={(e) => onCompare(e.currentTarget.value || null)}>
           <option value="">{t.worldInfo.nothing}</option>
           {#each others as other (other.id)}
-            <option value={other.id}>{other.id}</option>
+            <option value={other.id}>{worldName(other.names)} · {other.id}</option>
           {/each}
         </select>
       </label>
@@ -326,6 +398,19 @@
 {/if}
 
 <style>
+  .rename {
+    display: grid;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .rename label {
+    display: grid;
+    gap: 2px;
+  }
+  .rename label span {
+    font-size: 0.85em;
+    color: var(--muted);
+  }
   .card {
     border: 1px solid var(--border);
     border-radius: 8px;

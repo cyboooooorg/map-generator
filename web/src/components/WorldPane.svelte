@@ -9,12 +9,15 @@
   import { samplePoint } from '../lib/sample';
   import type { CameraState } from '../lib/viewer/PlanetView';
   import type { LoadedWorld } from '../lib/world.svelte';
+  import type { WorldNames } from '../lib/api/types/WorldNames';
   import InfoPanel from './InfoPanel.svelte';
   import Viewer from './Viewer.svelte';
 
   interface Props {
     world: LoadedWorld;
     revision: number | null;
+    /** The names of the world's system, from its summary. */
+    names?: WorldNames | null;
     /** Whether this pane answers keyboard shortcuts. */
     keyboard: boolean;
     /** Shown in a corner when two worlds are compared. */
@@ -33,6 +36,7 @@
   let {
     world,
     revision,
+    names = null,
     keyboard,
     label = null,
     onCameraChange,
@@ -112,6 +116,7 @@
     bind:hexMap
     {world}
     {revision}
+    {names}
     {path}
     {measuring}
     {keyboard}
