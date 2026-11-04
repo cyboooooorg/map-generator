@@ -773,6 +773,7 @@ async fn create_world(
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map_err(|e| Rejection(bad(e.to_string()), ErrorDetail::of_request(&e)))?;
     let params = resolved.params;
+    let ignored: Vec<String> = resolved.ignored.iter().map(|f| (*f).to_owned()).collect();
     let pixels = params.width as u64 * params.height as u64;
     if pixels > state.config.max_pixels {
         return Err(rejected(
@@ -937,7 +938,14 @@ async fn create_world(
         finish(status);
     });
 
-    Ok((StatusCode::ACCEPTED, Json(JobCreated { job_id, world_id })))
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(JobCreated {
+            job_id,
+            world_id,
+            ignored,
+        }),
+    ))
 }
 
 /// Drops the oldest finished jobs beyond [`FINISHED_JOBS_KEPT`].

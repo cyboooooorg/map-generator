@@ -48,6 +48,13 @@ describe('format', () => {
     const counted = { ...drifted, moons: { planet_day_hours: 24, count_asked: 3 } } as unknown as WorldMetadata;
     expect(requestFromWorld(counted).moons).toEqual({ count: 3 });
     expect(cliCommand(counted)).toContain('--moons 3');
+    // A giant has no ground: no volcanism, circumference or erosion asked for.
+    const giant = { ...meta, giant: { mass_earth: 318 } } as unknown as WorldMetadata;
+    expect(requestFromWorld(giant)).not.toHaveProperty('erosion');
+    expect(requestFromWorld(giant)).not.toHaveProperty('circumference_km');
+    expect(requestFromWorld(giant)).not.toHaveProperty('volcanic');
+    expect(cliCommand(giant)).not.toMatch(/--(volcanic|circumference|erosion) /);
+    expect(cliCommand(giant)).toContain('--mass 318');
     // Worlds made before the surface age leave it to the preset.
     const old = { ...meta, surface_age_ga: undefined } as unknown as WorldMetadata;
     expect(requestFromWorld(old)).not.toHaveProperty('surface_age_ga');

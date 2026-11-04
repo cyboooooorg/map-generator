@@ -20,6 +20,7 @@ export const fr: Messages = {
     justNow: 'à l’instant',
   },
   app: {
+    ignored: (p) => `Ignorés, cette planète n’en a pas l’usage${S}: ${p.fields}.`,
     title: 'Planètes',
     tabWorlds: 'Mondes',
     tabViewer: 'Vue',
@@ -792,6 +793,8 @@ export const fr: Messages = {
     noRoomForMoons: (p) =>
       `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies verrouillent la planète sur son étoile ou la gardent trop près. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
     moonsOfAMoon: `La lune d’une géante ne garde aucune lune (sa sphère de Hill est trop petite)${S}: demandez des lunes ou une lune de géante, pas les deux.`,
+    hotGiantMoons: (p) =>
+      `Une géante chaude ne garde aucune lune (${p.count} demandées)${S}: si près de son étoile, sa sphère de Hill est trop petite. Choisissez une orbite plus froide ou aucune lune.`,
     unknownPreset: (p) => `Aucun modèle de planète ne s’appelle ${p.preset}.`,
     tooManyPixels: (p) =>
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,

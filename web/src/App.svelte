@@ -334,6 +334,9 @@
     form = null;
     autoOpen = { jobId: job.job_id, selection: selectedId };
     jobs.track(job.job_id, job.world_id, request, { status: 'queued' }, true);
+    if (job.ignored.length > 0) {
+      toasts.show(t.app.ignored({ fields: job.ignored.join(', ') }));
+    }
   }
 
   /** Queues the selected world again with a new random seed. */

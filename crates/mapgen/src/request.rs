@@ -191,6 +191,10 @@ pub enum RequestError {
     /// Moons asked for on the moon of a giant (`host: giant`), which keeps
     /// none of its own: its Hill sphere is too small.
     MoonsOfAMoon,
+    /// Moons asked for on a hot giant, whose star's tides leave it none.
+    HotGiantMoons {
+        count: u8,
+    },
     Preset(PresetError),
 }
 
@@ -226,6 +230,11 @@ impl fmt::Display for RequestError {
                 "the moon of a giant keeps no moons of its own (its Hill sphere is too small): \
                  ask for moons or for host giant, not both"
             ),
+            RequestError::HotGiantMoons { count } => write!(
+                f,
+                "no moons for a hot giant (asked for {count}): so close to its star, its \
+                 Hill sphere is too small to keep any (pick a cooler orbit or no moons)"
+            ),
             RequestError::Preset(e) => e.fmt(f),
         }
     }
@@ -244,6 +253,11 @@ impl From<PresetError> for RequestError {
 pub struct Resolved {
     pub params: WorldParams,
     pub planet_spec: String,
+    /// Fields of the request the planet has no use for, ignored: a giant
+    /// has no ground (`circumference_km`, `erosion`, `volcanic`,
+    /// `land_fraction`), no giant neighbours and is nobody's moon (`giants`,
+    /// `host`); a rocky world has no giant's mass (`mass_earth`).
+    pub ignored: Vec<&'static str>,
 }
 
 impl WorldRequest {
@@ -422,6 +436,23 @@ impl WorldRequest {
         // so no erosion, volcanoes, moons of the rocky kind or giant
         // neighbours (not modelled for a giant).
         let giant = giant_mass_earth.is_some();
+        let ignored: Vec<&'static str> = if giant {
+            [
+                ("circumference_km", self.circumference_km.is_some()),
+                ("erosion", self.erosion.is_some()),
+                ("volcanic", self.volcanic.is_some()),
+                ("land_fraction", self.land_fraction.is_some()),
+                ("giants", self.giants.is_some()),
+                ("host", self.host.is_some()),
+            ]
+            .into_iter()
+            .filter_map(|(field, set)| set.then_some(field))
+            .collect()
+        } else if self.mass_earth.is_some() {
+            vec!["mass_earth"]
+        } else {
+            Vec::new()
+        };
         let circumference_km = match giant_mass_earth {
             Some(mass) => {
                 let at = crate::star::StarInfo::new(star, orbit_au, eccentricity).equilibrium_k;
@@ -491,6 +522,12 @@ impl WorldRequest {
             };
             let mut attempts = 0;
             while !room(&params) {
+                // A giant has room for any number of moons unless its star
+                // is so close it keeps none: drawing it another orbit would
+                // make it another kind of giant than the one asked for.
+                if giant {
+                    return Err(RequestError::HotGiantMoons { count: n });
+                }
                 if (star_set && orbit_set) || attempts >= MOON_ORBIT_ATTEMPTS {
                     return Err(RequestError::NoRoomForMoons { count: n });
                 }
@@ -529,12 +566,15 @@ impl WorldRequest {
         {
             params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
         }
-        if let Some(fraction) = land_fraction {
+        if let Some(fraction) = land_fraction
+            && !giant
+        {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
         }
         Ok(Resolved {
             params,
             planet_spec,
+            ignored,
         })
     }
 }
@@ -891,5 +931,50 @@ mod tests {
             );
             assert_eq!(p.moons, crate::moons::MoonsMode::None);
         }
+    }
+
+    #[test]
+    fn fields_a_planet_has_no_use_for_are_reported() {
+        let giant = WorldRequest {
+            planet: Some("gas-giant".into()),
+            seed: Some(3),
+            erosion: Some(0.5),
+            circumference_km: Some(30_000.0),
+            host: Some(crate::exomoon::HostMode::None),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        }
+        .resolve(&mut rand::rng())
+        .unwrap();
+        assert_eq!(giant.ignored, ["circumference_km", "erosion", "host"]);
+        let rocky = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(3),
+            mass_earth: Some(300.0),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        }
+        .resolve(&mut rand::rng())
+        .unwrap();
+        assert_eq!(rocky.ignored, ["mass_earth"]);
+    }
+
+    #[test]
+    fn a_hot_giant_keeps_no_moons_even_when_asked() {
+        let hot = WorldRequest {
+            planet: Some("hot-jupiter".into()),
+            seed: Some(2),
+            star: Some("G2V".into()),
+            moons: Some(crate::moons::MoonsMode::Count(2)),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        };
+        assert!(matches!(
+            hot.resolve(&mut rand::rng()),
+            Err(RequestError::HotGiantMoons { count: 2 })
+        ));
     }
 }
