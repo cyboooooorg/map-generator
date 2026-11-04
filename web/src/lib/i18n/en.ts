@@ -361,6 +361,11 @@ export const en = {
   /** The viewer: toolbar, display panel, legends, overlays. */
   viewer: {
     tools: 'Tools',
+    target: 'Show the planet or its star',
+    planetView: 'Planet',
+    planetViewHelp: 'The planet (O)',
+    starView: 'Star',
+    starViewHelp: 'Its star and its system: the habitable zone and the orbit (O)',
     resetView: 'Reset view',
     resetViewHelp: 'Reset the view (R)',
     measure: 'Measure',
@@ -464,6 +469,7 @@ export const en = {
     seasons: 'Play / pause the seasons (turns sunlight on)',
     atmosphere: 'Atmosphere',
     stars: 'Stars',
+    starView: 'Planet / its star',
     clouds: 'Clouds',
     drift: 'Cloud drift (turns clouds on)',
     grid: 'Grid',
@@ -488,6 +494,20 @@ export const en = {
     presentOnly: 'The biome statistics and the hex grid show the present.',
   },
   /** The less common units, explained in tooltips and in the help panel. */
+  /** The star view. */
+  starView: {
+    title: 'The star and its system',
+    size: 'Size',
+    sizeValue: (p: { radius: string; mass: string }) => `${p.radius} · ${p.mass}`,
+    lifetime: 'Lifetime',
+    gyr: 'billion years',
+    zone: 'Habitable zone',
+    range: (p: { inner: string; outer: string }) => `${p.inner} to ${p.outer}`,
+    equilibrium: 'Equilibrium',
+    animate: 'Animate',
+    animateHelp: 'The star turns and boils, red dwarfs flare, the planet goes round its orbit (ten frames a second)',
+    schematic: 'Schematic: the star is not to scale; distances are in proportion.',
+  },
   units: {
     title: 'Units',
     Ga: {

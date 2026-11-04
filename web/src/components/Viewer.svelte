@@ -22,6 +22,8 @@
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { vegetationShares } from '../lib/vegetation';
+  import StarPane from './StarPane.svelte';
+  import { SUN_SYSTEM } from '../lib/viewer/starSystem';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -129,6 +131,10 @@
   let landContours = $state(saved.landContours);
   let atmosphere = $state(saved.atmosphere);
   let stars = $state(saved.stars);
+  /** What the viewer shows: the planet, or its star and system. */
+  let subject = $state<'planet' | 'star'>('planet');
+  let starAnimated = $state(false);
+  let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
   let cloudDrift = $state(saved.cloudDrift);
@@ -558,9 +564,13 @@
     };
   });
 
-  /** Back to the whole planet, north up. */
+  /** Back to the whole planet, north up (or to the whole system, in the star view). */
   export function resetView(): void {
-    view?.resetView();
+    if (subject === 'star') {
+      starPane?.resetView();
+    } else {
+      view?.resetView();
+    }
   }
 
   /** Shows the same place as another viewer (once the view exists, if it does not yet). */
@@ -678,6 +688,9 @@
       case 'stars':
         stars = !stars;
         break;
+      case 'starView':
+        if (worldId) subject = subject === 'star' ? 'planet' : 'star';
+        break;
       case 'clouds':
         clouds = !clouds;
         break;
@@ -775,20 +788,41 @@
 <svelte:window onkeydown={handleKey} />
 
 <div class="viewer">
-  <canvas bind:this={canvas} class:measuring></canvas>
+  <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
+  <canvas bind:this={canvas} class:measuring class:hidden={subject === 'star'}></canvas>
+  {#if subject === 'star' && worldId}
+    <StarPane bind:this={starPane} star={meta?.star ?? SUN_SYSTEM} bind:animated={starAnimated} />
+  {/if}
 
   <div class="toolbar" role="toolbar" aria-label={t.viewer.tools}>
+    <div class="segmented" role="group" aria-label={t.viewer.target}>
+      <button
+        class:active={subject === 'planet'}
+        aria-pressed={subject === 'planet'}
+        onclick={() => (subject = 'planet')}
+        title={t.viewer.planetViewHelp}>{t.viewer.planetView}</button
+      >
+      <button
+        class:active={subject === 'star'}
+        aria-pressed={subject === 'star'}
+        onclick={() => (subject = 'star')}
+        disabled={!worldId}
+        title={t.viewer.starViewHelp}>{t.viewer.starView}</button
+      >
+    </div>
     <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
-    <button
-      onclick={onToggleMeasure}
-      disabled={!worldId}
-      class:active={measuring}
-      aria-pressed={measuring}
-      title={t.viewer.measureHelp}>{t.viewer.measure}</button
-    >
-    <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
+    {#if subject === 'planet'}
+      <button
+        onclick={onToggleMeasure}
+        disabled={!worldId}
+        class:active={measuring}
+        aria-pressed={measuring}
+        title={t.viewer.measureHelp}>{t.viewer.measure}</button
+      >
+      <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
+    {/if}
     <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
-    {#if epochs && epochStops.length > 1}
+    {#if subject === 'planet' && epochs && epochStops.length > 1}
       <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
         <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
         <input
@@ -813,6 +847,7 @@
     {/if}
   </div>
 
+  {#if subject === 'planet'}
   <div class="panel" role="region" aria-label={t.viewer.display}>
     <div class="row">
       <div class="segmented">
@@ -950,6 +985,7 @@
     </div>
   {/if}
 
+  {/if}
   {#if showHelp}
     <div
       class="help"
@@ -1013,6 +1049,9 @@
   }
   canvas:active {
     cursor: grabbing;
+  }
+  canvas.hidden {
+    display: none;
   }
   canvas.measuring {
     cursor: crosshair;
