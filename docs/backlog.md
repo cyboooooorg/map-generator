@@ -293,7 +293,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 11. The host star
 
-- **Status:** decided
+- **Status:** done
 - **Analysis:** [10-stars.md](analysis/10-stars.md)
 - **Problem:** every world orbits an implicit Sun at 1 AU: temperatures
   come from Earth's profile and preset shifts, the light is white, and
@@ -313,4 +313,4 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 3    | Viewer: the star at the sunlight direction, with the star field                | Same   | done   |
 | 4    | Viewer: "Star light", the planet and its sky lit by the star's colour          | Same   | done   |
 | 5    | Tidal locking of close-in planets                                              | Change | done   |
-| 6    | Vegetation colours adapted to the star, in the "Star light" view               | Same   | todo   |
+| 6    | Vegetation colours adapted to the star, in the "Star light" view               | Same   | done   |

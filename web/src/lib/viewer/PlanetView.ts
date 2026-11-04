@@ -328,10 +328,22 @@ export interface HostStar {
   angularDiameterDeg: number;
   /** Light the planet gets, relative to Earth's. */
   insolation: number;
+  /** Effective temperature, K. */
+  teffK: number;
+}
+
+/**
+ * How far vegetation is recoloured under a star (see the surface shader):
+ * towards dark purple-black below the Sun's temperature (fully at 3 300 K),
+ * towards gold above it (fully at 7 300 K); none for a Sun-like star.
+ */
+export function vegetationShift(teffK: number): [number, number] {
+  const clamp = (x: number) => Math.min(1, Math.max(0, x));
+  return [clamp((5772 - teffK) / 2500), clamp((teffK - 5772) / 1500)];
 }
 
 /** The Sun from Earth: worlds made before stars. */
-export const SUN_STAR: HostStar = { colour: [1, 1, 1], angularDiameterDeg: 0.533, insolation: 1 };
+export const SUN_STAR: HostStar = { colour: [1, 1, 1], angularDiameterDeg: 0.533, insolation: 1, teffK: 5772 };
 
 export class PlanetView {
   private readonly renderer: WebGLRenderer;
@@ -386,6 +398,8 @@ export class PlanetView {
     uExtra: { value: emptyTexture() } as IUniform<Texture>,
     uCoastMax: { value: 2000 } as IUniform<number>,
     uHasBiomes: { value: 0 } as IUniform<number>,
+    uVegetation: { value: new Array<number>(64).fill(0) } as IUniform<number[]>,
+    uVegShift: { value: new Vector2(0, 0) } as IUniform<Vector2>,
     uBiomes: { value: emptyTexture() } as IUniform<Texture>,
     uHighlight: { value: -1 } as IUniform<number>,
     uSeaContours: { value: 0 } as IUniform<number>,
@@ -1046,6 +1060,16 @@ export class PlanetView {
   private applyLightTint(): void {
     const [r, g, b] = this.starLightOn ? this.host.colour : [1, 1, 1];
     this.u.uLightTint.value.set(r, g, b);
+    const [cool, hot] = this.starLightOn ? vegetationShift(this.host.teffK) : [0, 0];
+    this.u.uVegShift.value.set(cool, hot);
+  }
+
+  /** Share of vegetation of each biome id (0 to 1), for "Star light". */
+  setVegetation(shares: readonly number[]): void {
+    this.requestRender();
+    const value = this.u.uVegetation.value;
+    value.fill(0);
+    shares.slice(0, value.length).forEach((share, id) => (value[id] = share));
   }
 
   /** Shows or hides the star field around the globe. */

@@ -21,6 +21,7 @@
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
+  import { vegetationShares } from '../lib/vegetation';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -463,10 +464,19 @@
   $effect(() => view?.setStars(stars));
   $effect(() => view?.setStarLight(starLight));
   $effect(() => {
+    const biomes = meta?.biomes;
+    if (biomes) view?.setVegetation(vegetationShares(biomes));
+  });
+  $effect(() => {
     const star = meta?.star;
     view?.setHostStar(
       star
-        ? { colour: star.light, angularDiameterDeg: star.angular_diameter_deg, insolation: star.insolation }
+        ? {
+            colour: star.light,
+            angularDiameterDeg: star.angular_diameter_deg,
+            insolation: star.insolation,
+            teffK: star.teff_k,
+          }
         : SUN_STAR,
     );
   });

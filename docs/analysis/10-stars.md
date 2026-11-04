@@ -322,6 +322,16 @@ continents around the substellar point inside a frozen night side. The
 viewer keeps its sun above the map's centre. Winds and clouds keep
 their latitude bands: a substellar circulation is left for later.
 
+### Step 6: vegetation under other stars
+
+In the "Star light" view only, the surface shader recolours vegetated
+biomes (by their share of plants: forest and jungle 1 down to tundra
+0.35) towards dark purple-black under stars cooler than the Sun (fully
+at 3 300 K) and towards gold under hotter ones (fully at 7 300 K),
+keeping their luminance; Sun-like stars leave them as they are. The
+exported maps keep Earth's colours. Under an M4V dwarf, the green
+continents of a locked planet turn dark brown in the orange light.
+
 ## 4. Open points
 
 - Locked planets keep latitude winds, rain and clouds; a substellar

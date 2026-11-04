@@ -110,6 +110,8 @@ export const surfaceFragment = /* glsl */ `
   uniform float uHasBiomes;
   uniform sampler2D uBiomes;
   uniform float uHighlight;    // biome id to highlight, or -1
+  uniform float uVegetation[64]; // share of vegetation of each biome id
+  uniform vec2 uVegShift;      // vegetation recoloured for a cool (x) or hot (y) star, 0 to 1
   uniform float uSeaContours;  // 1 draws the depth contours under water
   uniform float uLandContours; // 1 draws the altitude contours on land
   uniform float uTropics;      // 1 draws the equator, tropics and polar circles
@@ -287,6 +289,21 @@ export const surfaceFragment = /* glsl */ `
         colour = toLinear(ramp_coast(sqrt(clamp(extra.g / uCoastMax, 0.0, 1.0))));
       } else {
         colour = toLinear(ramp_floodplain(extra.b));
+      }
+    }
+    // Vegetation under another star ("Star light"): photosynthesis adapts
+    // to the light, so leaves turn dark, near black, under red dwarfs and
+    // yellow under F stars (Kiang et al. 2007). The biome map and the
+    // detail tiles only, by the share of vegetation of each biome.
+    if ((uVegShift.x > 0.0 || uVegShift.y > 0.0) && uHasBiomes > 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
+      float id = floor(texture2D(uBiomes, vec2(vUv.x, 1.0 - vUv.y)).r * 255.0 + 0.5);
+      float plants = uVegetation[int(min(id, 63.0))];
+      if (plants > 0.0) {
+        float lum = dot(colour, vec3(0.2126, 0.7152, 0.0722));
+        vec3 dark = vec3(0.55, 0.28, 0.42) * lum;
+        vec3 gold = vec3(1.35, 1.05, 0.3) * lum;
+        vec3 adapted = mix(mix(colour, dark, uVegShift.x), gold, uVegShift.y);
+        colour = mix(colour, adapted, plants);
       }
     }
     if (uHexOn > 0.5) {
