@@ -303,7 +303,7 @@ To make a dry world, remap its oceans rather than lowering `sea_level`: biome el
 
 ### Output
 
-Each run creates a `worlds/<planet>-<seed>/` directory with the following layout:
+Each run creates a `worlds/<planet>-<seed>/` directory with the following layout. Run again into an existing directory, it first removes the parts a run writes only when they apply (`raw_data/`, `moons/`, `host/`, `noise_maps/`), so none is left from the previous world; the other files are overwritten, and the names given in the web app (`names.json`) are kept.
 
 ```text
 worlds/<planet>-<seed>/
