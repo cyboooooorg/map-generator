@@ -95,16 +95,21 @@ Each planet type has a band of distances it can sit in and one it prefers
 (as a share of the zones above), from which its place is drawn before
 spacing:
 
-| Type          | Allowed                                     | Preferred                                   |
-| ------------- | ------------------------------------------- | ------------------------------------------- |
-| `hot-jupiter` | inner edge to 0.1 AU                        | 0.03 to 0.07 AU                             |
-| `caustic`     | inside the habitable zone's inner edge      | half to all of the inner edge's distance    |
-| `volcanic`    | inside the ice line                         | inner part of the habitable zone and inside |
-| `terran`      | the habitable zone, widened by 10 %         | the habitable zone                          |
-| `barren`      | inside the ice line                         | anywhere inside the ice line                |
-| `frozen`      | beyond the habitable zone's outer edge      | from the outer edge to twice the ice line   |
-| `gas-giant`   | beyond half the ice line (or a hot Jupiter) | log-normal around twice the ice line        |
-| `ice-giant`   | beyond the ice line                         | log-normal around five times the ice line   |
+- `hot-jupiter`: allowed from the inner edge to 0.1 AU, preferred 0.03 to
+  0.07 AU;
+- `caustic`: allowed inside the habitable zone's inner edge, preferred
+  from half that distance to it;
+- `volcanic`: allowed inside the ice line, preferred in the inner part of
+  the habitable zone and inside it;
+- `terran`: allowed in the habitable zone widened by 10 %, preferred in
+  the habitable zone;
+- `barren`: allowed and preferred anywhere inside the ice line;
+- `frozen`: allowed beyond the habitable zone's outer edge, preferred from
+  that edge to twice the ice line;
+- `gas-giant`: allowed beyond half the ice line (or as a hot Jupiter),
+  preferred log-normal around twice the ice line;
+- `ice-giant`: allowed beyond the ice line, preferred log-normal around
+  five times the ice line.
 
 With **quantities per type**, the engine draws a preferred distance for
 each planet asked, then spaces them (below). Types the request leaves to
