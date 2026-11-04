@@ -168,13 +168,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     let mut done = sea.clone();
     let coast: Vec<u32> = (0..n)
         .into_par_iter()
-        .filter(|&i| {
-            sea[i] && {
-                let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
-                grid.neighbours(x, y)
-                    .any(|(nx, ny, _)| !sea[grid.index(nx, ny)])
-            }
-        })
+        .filter(|&i| sea[i] && grid.neighbour_indices(i).any(|j| !sea[j]))
         .map(|i| i as u32)
         .collect();
     // Every land pixel is popped once, after the coast seeds: ascending
@@ -192,12 +186,12 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
         done[lowest] = true;
         heap.push(Node(filled[lowest], lowest as u32));
     }
+    // The hot loop of the hydrology: neighbours by index only (their
+    // distances are not needed here).
     while let Some(Node(z, i)) = heap.pop() {
         order.push(i);
         let i = i as usize;
-        let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
-        for (nx, ny, _) in grid.neighbours(x, y) {
-            let j = grid.index(nx, ny);
+        for j in grid.neighbour_indices(i) {
             if !done[j] {
                 done[j] = true;
                 // Only raises pixels below the flood level (flats): real
@@ -311,9 +305,7 @@ fn lakes(grid: &Grid, flooded: &[bool], flow: &[f32]) -> Vec<bool> {
         while k < region.len() {
             let i = region[k];
             k += 1;
-            let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
-            for (nx, ny, _) in grid.neighbours(x, y) {
-                let j = grid.index(nx, ny);
+            for j in grid.neighbour_indices(i) {
                 if flooded[j] && !seen[j] {
                     seen[j] = true;
                     region.push(j);
@@ -331,6 +323,104 @@ fn lakes(grid: &Grid, flooded: &[bool], flow: &[f32]) -> Vec<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The flood and the accumulation as first written, with the
+    /// neighbours and their distances: the reference the faster loop must
+    /// match to the bit.
+    fn serial_reference(
+        grid: &Grid,
+        height: &[f32],
+        moisture: &[f32],
+        seed: u32,
+        h: &Hydrology,
+    ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let n = grid.pixel_count();
+        let noise = flat_noise(grid, seed);
+        let sea: Vec<bool> = height.iter().map(|&z| z < 0.0).collect();
+        let mut filled = height.to_vec();
+        let mut spill = height.to_vec();
+        let mut done = sea.clone();
+        let coast: Vec<u32> = (0..n)
+            .filter(|&i| {
+                sea[i] && {
+                    let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
+                    grid.neighbours(x, y)
+                        .any(|(nx, ny, _)| !sea[grid.index(nx, ny)])
+                }
+            })
+            .map(|i| i as u32)
+            .collect();
+        let land = sea.iter().filter(|&&s| !s).count();
+        let mut order = Vec::new();
+        let mut heap: BinaryHeap<Node> =
+            coast.iter().map(|&i| Node(filled[i as usize], i)).collect();
+        if land == n {
+            let lowest = (0..n)
+                .min_by(|&a, &b| height[a].total_cmp(&height[b]))
+                .unwrap_or(0);
+            done[lowest] = true;
+            heap.push(Node(filled[lowest], lowest as u32));
+        }
+        while let Some(Node(z, i)) = heap.pop() {
+            order.push(i);
+            let i = i as usize;
+            let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
+            for (nx, ny, _) in grid.neighbours(x, y) {
+                let j = grid.index(nx, ny);
+                if !done[j] {
+                    done[j] = true;
+                    filled[j] = filled[j].max(z + FLAT_EPSILON * (1.0 + 2.0 * noise[j]));
+                    spill[j] = spill[j].max(spill[i]);
+                    heap.push(Node(filled[j], j as u32));
+                }
+            }
+        }
+        let mut flow: Vec<f32> = (0..n)
+            .map(|i| {
+                if sea[i] {
+                    return 0.0;
+                }
+                let y = i as u32 / grid.width;
+                grid.dx_km(y) * grid.dy_km() * runoff(moisture[i])
+            })
+            .collect();
+        for &i in order.iter().rev() {
+            let i = i as usize;
+            if let Some(j) = h.receiver(i)
+                && !sea[j]
+            {
+                flow[j] += flow[i];
+            }
+        }
+        (filled, spill, flow)
+    }
+
+    #[test]
+    fn the_flood_matches_its_first_version_to_the_bit() {
+        let g = Grid {
+            width: 256,
+            height: 128,
+            circumference_km: 40_000.0,
+        };
+        let perlin = Perlin::new(5);
+        for (case, sea_level) in [(0, 0.15), (1, 0.0), (2, -0.3), (3, -10.0)] {
+            // Islands, one-pixel straits, pits and (quantised) flats.
+            let height: Vec<f32> = (0..g.pixel_count())
+                .map(|i| {
+                    let (x, y) = ((i % 256) as f64, (i / 256) as f64);
+                    let v = perlin.get([x * 0.06, y * 0.06, case as f64]) as f32;
+                    ((v - sea_level) * 40.0).round() / 40.0
+                })
+                .collect();
+            let moisture: Vec<f32> = (0..g.pixel_count())
+                .map(|i| ((i % 17) as f32 / 8.0) - 1.0)
+                .collect();
+            let h = hydrology(&g, &height, &moisture, 9);
+            let (filled, _, flow) = serial_reference(&g, &height, &moisture, 9, &h);
+            assert_eq!(h.filled, filled, "case {case}: filled");
+            assert_eq!(h.flow_km2, flow, "case {case}: flow");
+        }
+    }
 
     fn grid() -> Grid {
         Grid {
