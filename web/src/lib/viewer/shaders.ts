@@ -683,6 +683,9 @@ export const skyBodyFragment = /* glsl */ `
   uniform vec3 uHaloColor;
   uniform float uHaloHeight;
   uniform float uHaloStrength;
+  // 1 for a body drawn larger than it is (a few pixels): a faint ring
+  // around it tells it from the stars.
+  uniform float uRing;
   uniform float uOpacity;
   // The body's own axes (its x, its spin axis, its z) in the viewer's
   // frame: its map turns and tilts with them.
@@ -718,6 +721,14 @@ export const skyBodyFragment = /* glsl */ `
   void main() {
     float r2 = dot(vP, vP);
     if (r2 > 1.0) {
+      if (uRing > 0.5) {
+        float r = sqrt(r2);
+        float ring = 1.0 - smoothstep(0.0, 0.35, abs(r - 2.4));
+        if (ring <= 0.0) discard;
+        gl_FragColor = vec4(vec3(0.75), 0.4 * ring * uOpacity);
+        #include <colorspace_fragment>
+        return;
+      }
       if (uHaloStrength <= 0.0) discard;
       float r = sqrt(r2);
       float fall = exp(-(r - 1.0) / max(uHaloHeight * 0.35, 1e-4));

@@ -1681,6 +1681,7 @@ export class PlanetView {
             uHaloHeight: { value: 0 },
             uHaloStrength: { value: 0 },
             uGrow: { value: 1 },
+            uRing: { value: 0 },
             uOpacity: { value: 1 },
             uAxisX: { value: new Vector3(1, 0, 0) },
             uAxisY: { value: new Vector3(0, 1, 0) },
@@ -1859,7 +1860,12 @@ export class PlanetView {
       right.normalize();
       (u['uUp']!.value as Vector3).copy(right).cross(dir).normalize();
       const half = ((body.angularDiameterDeg / 2) * Math.PI) / 180;
-      u['uHalf']!.value = Math.max(Math.tan(Math.min(half, 1.4)), smallest);
+      const tan = Math.tan(Math.min(half, 1.4));
+      u['uHalf']!.value = Math.max(tan, smallest);
+      // A body smaller than its few pixels gets a faint ring, so that it
+      // is not taken for a star.
+      const tiny = tan < smallest;
+      u['uRing']!.value = tiny ? 1 : 0;
       u['uOpacity']!.value = this.morph ** 3;
       const axes = body.axes ?? IDENTITY_AXES;
       (u['uAxisX']!.value as Vector3).set(...axes[0]);
@@ -1878,7 +1884,7 @@ export class PlanetView {
       (u['uHaloColor']!.value as Vector3).set(...(halo?.colour ?? [0, 0, 0]));
       u['uHaloHeight']!.value = height;
       u['uHaloStrength']!.value = halo?.strength ?? 0;
-      u['uGrow']!.value = 1 + 3 * height;
+      u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1);
     }
   }
 

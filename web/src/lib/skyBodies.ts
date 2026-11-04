@@ -130,28 +130,73 @@ const ICE: Vec3 = [0.72, 0.76, 0.8];
 /** The planet's colour seen from a moon before its map has loaded. */
 const PLANET: Vec3 = [0.35, 0.45, 0.6];
 
+/** What places a moon on its orbit. */
+type OrbitingMoon = Pick<
+  Moon,
+  'inclination_deg' | 'period_days' | 'migration' | 'semi_major_axis_km' | 'eccentricity' | 'seed'
+>;
+
 /**
- * Direction of a moon from its planet's centre, in the planet's frame:
- * full when the season starts (opposite the sun's longitude), the next
- * ones spread around the orbit, each going round at its period relative
- * to the year as the seasons turn; a binary's moon stays put.
+ * Longitude of a moon's periapsis on its orbit, radians: world.json does
+ * not store it, so its seed draws it.
  */
+export function periapsisLongitude(moon: Pick<Moon, 'seed'>): number {
+  return ((Math.abs(Math.trunc(moon.seed)) % 7919) / 7919) * 2 * Math.PI;
+}
+
+/** A point of an orbit at longitude `angle` (radians) on it, as a unit vector of the planet's frame. */
+function onOrbit(angle: number, tilt: number): Vec3 {
+  return [Math.sin(angle), -Math.cos(angle) * Math.sin(tilt), Math.cos(angle) * Math.cos(tilt)];
+}
+
+/**
+ * Where a moon is, from its planet's centre, in the planet's frame: its
+ * direction and its distance (km). Its mean longitude is opposite the
+ * sun's when the season starts (full, but for its eccentricity), the next
+ * moons spread round their orbits, each going round at its period
+ * relative to the year as the seasons turn; on its ellipse (Kepler's
+ * equation), nearer and faster at periapsis. A binary's moon stays put.
+ */
+export function moonPlace(
+  moon: OrbitingMoon,
+  index: number,
+  season: number,
+  yearDays: number,
+  sunLongitudeRad: number,
+): { direction: Vec3; distanceKm: number } {
+  // A binary: the planet turns with its moon, which hangs over the same
+  // point, at longitude 180° (as a moon keeps its planet there).
+  if (moon.migration === 'locked') {
+    return { direction: [0, 0, -1], distanceKm: moon.semi_major_axis_km };
+  }
+  const turns = (season * yearDays) / Math.max(moon.period_days, 1e-3);
+  const meanLongitude = sunLongitudeRad + Math.PI + index * 2.4 + 2 * Math.PI * (turns - Math.floor(turns));
+  const e = Math.min(Math.max(moon.eccentricity, 0), 0.95);
+  const periapsis = periapsisLongitude(moon);
+  // Kepler's equation, E - e sin E = M, by Newton's method.
+  const mean = meanLongitude - periapsis;
+  let eccentric = e < 0.8 ? mean : Math.PI;
+  for (let i = 0; i < 8; i += 1) {
+    eccentric -= (eccentric - e * Math.sin(eccentric) - mean) / (1 - e * Math.cos(eccentric));
+  }
+  const trueAnomaly =
+    2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(eccentric / 2), Math.sqrt(1 - e) * Math.cos(eccentric / 2));
+  const tilt = (moon.inclination_deg * Math.PI) / 180;
+  return {
+    direction: onOrbit(periapsis + trueAnomaly, tilt),
+    distanceKm: moon.semi_major_axis_km * (1 - e * Math.cos(eccentric)),
+  };
+}
+
+/** The direction of a moon from its planet's centre (see moonPlace). */
 export function moonDirection(
-  moon: Pick<Moon, 'inclination_deg' | 'period_days' | 'migration'>,
+  moon: OrbitingMoon,
   index: number,
   season: number,
   yearDays: number,
   sunLongitudeRad: number,
 ): Vec3 {
-  // A binary: the planet turns with its moon, which hangs over the same
-  // point, at longitude 180° (as a moon keeps its planet there).
-  if (moon.migration === 'locked') {
-    return [0, 0, -1];
-  }
-  const turns = (season * yearDays) / Math.max(moon.period_days, 1e-3);
-  const theta = sunLongitudeRad + Math.PI + index * 2.4 + 2 * Math.PI * turns;
-  const tilt = (moon.inclination_deg * Math.PI) / 180;
-  return [Math.sin(theta), -Math.cos(theta) * Math.sin(tilt), Math.cos(theta) * Math.cos(tilt)];
+  return moonPlace(moon, index, season, yearDays, sunLongitudeRad).direction;
 }
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -161,10 +206,7 @@ const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0
 const unit = (a: Vec3): Vec3 => scale(a, 1 / Math.max(Math.hypot(...a), 1e-12));
 
 /** What places a moon and turns it on itself. */
-type PlacedMoon = Pick<
-  Moon,
-  'inclination_deg' | 'period_days' | 'migration' | 'semi_major_axis_km' | 'tidally_locked' | 'seed'
->;
+type PlacedMoon = OrbitingMoon & Pick<Moon, 'tidally_locked'>;
 
 /**
  * The frame of moon `k` in its planet's frame, its own (its map's): `y`
@@ -180,14 +222,14 @@ function moonFrame(
   yearDays: number,
   sunLongitudeRad: number,
 ): { x: Vec3; y: Vec3; z: Vec3; centre: Vec3 } {
-  const z = moonDirection(moon, k, season, yearDays, sunLongitudeRad);
+  const { direction: z, distanceKm } = moonPlace(moon, k, season, yearDays, sunLongitudeRad);
   const tilt = (moon.inclination_deg * Math.PI) / 180;
   // The normal of the orbit of moonDirection, made orthogonal to z (a
   // binary's moon hangs at [0, 0, -1] whatever its inclination).
   const normal: Vec3 = [0, Math.cos(tilt), Math.sin(tilt)];
   const y = unit(sub(normal, scale(z, dot(normal, z))));
   const x = cross(y, z);
-  const centre = scale(z, moon.semi_major_axis_km);
+  const centre = scale(z, distanceKm);
   const spin = moonSpinHours(moon);
   if (spin === null) return { x, y, z, centre };
   // Turned on itself against the orbit's frame, which turns once per orbit.
@@ -270,17 +312,15 @@ export function orbitLoops(
     }
     if (moon.migration === "locked") return;
     const tilt = (moon.inclination_deg * Math.PI) / 180;
+    const e = Math.min(Math.max(moon.eccentricity, 0), 0.95);
+    const periapsis = periapsisLongitude(moon);
     const loop: Vec3[] = [];
     for (let i = 0; i < ORBIT_SAMPLES; i += 1) {
-      const theta = (2 * Math.PI * i) / ORBIT_SAMPLES;
-      // moonDirection's orbit, in km.
+      const nu = (2 * Math.PI * i) / ORBIT_SAMPLES;
+      // moonPlace's ellipse, in km.
       const p = scale(
-        [
-          Math.sin(theta),
-          -Math.cos(theta) * Math.sin(tilt),
-          Math.cos(theta) * Math.cos(tilt),
-        ],
-        moon.semi_major_axis_km,
+        onOrbit(periapsis + nu, tilt),
+        (moon.semi_major_axis_km * (1 - e * e)) / (1 + e * Math.cos(nu)),
       );
       if (!here) {
         loop.push(unit(p));
@@ -335,15 +375,16 @@ export function planetSky(
   const bodies: SkyBody[] = [];
   const casters: ShadowCaster[] = [];
   moons.forEach((moon, k) => {
-    const direction = moonDirection(moon, k, season, yearDays, sunLongitudeRad);
+    const { direction, distanceKm } = moonPlace(moon, k, season, yearDays, sunLongitudeRad);
     bodies.push({
       direction,
-      angularDiameterDeg: moon.angular_diameter_deg,
+      // Its apparent size at its mean distance, larger near periapsis.
+      angularDiameterDeg: (moon.angular_diameter_deg * moon.semi_major_axis_km) / distanceKm,
       colour: moon.composition === 'ice' ? ICE : ROCK,
       texture: textures(k),
       axes: axesIn(moonFrame(moon, k, season, yearDays, sunLongitudeRad), (v) => v),
     });
-    const distance = moon.semi_major_axis_km / planetRadiusKm;
+    const distance = distanceKm / planetRadiusKm;
     casters.push({ position: direction.map((c) => c * distance) as Vec3, radius: moon.radius_km / planetRadiusKm });
   });
   // The largest shadows first, when there are more moons than casters.
@@ -408,8 +449,9 @@ export function moonSystemSky(
   // Planet frame to the shown moon's.
   const local = (v: Vec3): Vec3 => [dot(v, here.x), dot(v, here.y), dot(v, here.z)];
   const [px, py, pz] = spinAxes(planetTurn);
+  // The planet from where the moon is on its ellipse.
   const sky = moonSky(
-    self,
+    { radius_km: self.radius_km, semi_major_axis_km: Math.hypot(...here.centre) },
     planetRadiusKm,
     planetTexture,
     look,
