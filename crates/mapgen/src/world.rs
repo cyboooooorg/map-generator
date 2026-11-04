@@ -45,6 +45,8 @@ pub struct WorldParams {
     /// worlds with plate tectonics, the continents as the plates have
     /// carried them by then (see `crate::plates`). 0 is the present.
     pub drift_ma: f32,
+    /// Whether the world has the moons its seed draws (see `crate::moons`).
+    pub moons: crate::moons::MoonsMode,
 }
 
 impl WorldParams {

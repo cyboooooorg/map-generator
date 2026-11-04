@@ -171,6 +171,24 @@ of a seed does not change until step 5.
   binaries only on small worlds, determinism, and the planet unchanged
   to the bit.
 
+**Outcome (step 1, 2026-11-04).** `src/moons.rs` draws the system as
+planned; `world.json` stores it under `moons`, and `--moons none` turns
+it off. Over 4 000 seeds:
+
+| World                     | No moon | One  | Two or more | Large moon | Binary |
+| ------------------------- | ------- | ---- | ----------- | ---------- | ------ |
+| Earth-sized, at 1 AU      | 63 %    | 21 % | 16 %        | 8.8 %      | none   |
+| Pluto-sized, at 30 AU     | 37 %    | 50 % | 13 %        | 48 %       | 10 %   |
+
+- The planet's mass follows from its size at Earth's density, as its
+  gravity does: a small icy world is then heavier than Pluto (1.85
+  g/cm³), so binaries are rarer than a Pluto density would give.
+- Each origin draws all of its values whatever its outcome, so one
+  origin's odds never shift another's draws; the planet's day is drawn
+  before the tidal-locking test, so a world's moons do not depend on
+  the order of the checks.
+- Moons are tidally locked to their planet except captured ones.
+
 ### Step 2: moon surfaces (Rust and server)
 
 - **Each moon generated as a world:** preset `barren` for rock, a new

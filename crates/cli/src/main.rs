@@ -1,6 +1,7 @@
 use clap::Parser;
 use mapgen::export::{ExportOptions, NoiseMapWriter, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, generate_with_progress};
+use mapgen::moons::{MoonOrigin, MoonSystem, MoonsMode};
 use mapgen::preset::Preset;
 use mapgen::request::{self, Limits, WorldRequest};
 use mapgen::star::StarInfo;
@@ -92,6 +93,13 @@ struct Args {
     #[arg(long, allow_hyphen_values = true, value_parser = parse_in(request::DRIFT_MA))]
     drift: Option<f32>,
 
+    /// Moons: `auto`, those the seed draws (about one rocky planet in 12
+    /// has a large moon, small worlds often a companion, others small
+    /// debris or captured moons, planets locked to their star none), or
+    /// `none` [default: auto]
+    #[arg(long)]
+    moons: Option<MoonsMode>,
+
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]
     #[arg(long, value_parser = parse_in(request::EROSION))]
     erosion: Option<f32>,
@@ -172,6 +180,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         hz_position: args.hz_position,
         eccentricity: args.eccentricity,
         drift_ma: args.drift,
+        moons: args.moons,
         width: Some(args.width),
         height: Some(args.height),
     };
@@ -205,6 +214,9 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         star.insolation,
     );
 
+    if let Some(system) = MoonSystem::draw(p) {
+        println!("Moons → {}", moons_summary(&system));
+    }
     let name = world_dir_name(p);
     let dir = args.out_dir.join(if p.drift_ma == 0.0 {
         name
@@ -243,7 +255,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
          --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
-         --star {} --orbit-au {} --eccentricity {}{} --width {} --height {}",
+         --star {} --orbit-au {} --eccentricity {}{}{} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -261,8 +273,48 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         } else {
             format!(" --drift {}", p.drift_ma)
         },
+        if p.moons == MoonsMode::None {
+            " --moons none"
+        } else {
+            ""
+        },
         p.width,
         p.height
     );
     Ok(())
+}
+
+/// One line on a world's moons: each one's name, origin, size and orbit.
+fn moons_summary(system: &MoonSystem) -> String {
+    if system.moons.is_empty() {
+        return "none".into();
+    }
+    let moons: Vec<String> = system
+        .moons
+        .iter()
+        .map(|m| {
+            let origin = match m.origin {
+                MoonOrigin::GiantImpact => "giant impact",
+                MoonOrigin::Debris => "debris",
+                MoonOrigin::Captured => "captured",
+            };
+            format!(
+                "{} ({origin}, {:.0} km{}, {:.1} planet radii, {:.2} d)",
+                m.name,
+                m.radius_km,
+                if m.round { "" } else { ", irregular" },
+                m.semi_major_axis_radii,
+                m.period_days
+            )
+        })
+        .collect();
+    format!(
+        "{}{}",
+        moons.join(", "),
+        if system.binary {
+            "; a binary planet"
+        } else {
+            ""
+        }
+    )
 }

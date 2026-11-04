@@ -127,6 +127,8 @@ pub struct WorldRequest {
     /// Epoch of the plates, Ma from the present (negative in the past), in
     /// `[-300, 300]`; the present when left out (never drawn).
     pub drift_ma: Option<f32>,
+    /// `auto` (the moons the seed draws, the default) or `none`.
+    pub moons: Option<crate::moons::MoonsMode>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -343,6 +345,7 @@ impl WorldRequest {
             orbit_au,
             eccentricity,
             drift_ma: self.drift_ma.unwrap_or(0.0),
+            moons: self.moons.unwrap_or_default(),
         };
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
