@@ -25,6 +25,7 @@
   import StarPane from './StarPane.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
+  import { moonSky, planetSky } from '../lib/skyBodies';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -555,6 +556,27 @@
           ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
           : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
     );
+  });
+  // The other bodies of the system in the sky, with their phases, and
+  // their shadows on the ground (eclipses): the moons from their planet,
+  // the planet from one of its moons.
+  const sky = $derived.by(() => {
+    const planet = world.worldMeta;
+    if (!planet) return null;
+    const planetRadiusKm = planet.circumference_km / (2 * Math.PI);
+    if (shownMoon) {
+      const map = world.worldId ? worldFile(world.worldId, 'raw_data/surface.png', revision) : null;
+      return moonSky(shownMoon, planetRadiusKm, map);
+    }
+    if (world.moon !== null || moons.length === 0) return null;
+    const longitude = ((locked ? 180 : sunLongitude) * Math.PI) / 180;
+    return planetSky(moons, planetRadiusKm, locked ? 0 : season, planet.star?.year_days ?? 365.25, longitude);
+  });
+  // Not aborted when the bodies move (every frame of the seasons): a map
+  // still loading is kept, and a newer set of bodies drops an older one.
+  $effect(() => {
+    view?.setSkyBodies(sky?.bodies ?? []);
+    view?.setShadowCasters(sky?.casters ?? []);
   });
 
   // The season animation: one year every YEAR_SECONDS, paused while the
