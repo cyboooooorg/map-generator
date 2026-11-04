@@ -298,11 +298,35 @@ distance, its −27 °C shift is gone), `caustic` −0.25–0.1, `volcanic`
 shift (thin air, no greenhouse), Venus's greenhouse drops from 450 to
 395 °C, Mercury gets −20 °C.
 
+### Steps 3 and 4: the star in the viewer
+
+With Sunlight on, the star is a point at infinity at the sun's
+direction, like the star field: a disk of its apparent diameter (at
+least 3 px), slightly darker at its limb, in its light's colour, in a
+glow growing with the light the planet gets. "Star light" multiplies
+the direct light, the clouds, the sea glint and the light entering the
+sky shell by the star's colour (the Sun white): under an M3 dwarf the
+day side turns ochre and the halo loses its blue.
+
+### Step 5: tidal locking
+
+A planet is locked when its locking time is shorter than its star's age
+(4.6 Gyr or its lifetime): at the middle of their habitable zones, M
+dwarfs' planets lock (M0V: 1.4 Gyr), K5V's do not (12 Gyr). Its
+temperature follows the angle θ from the substellar point, at the map's
+centre: `4 cos θ` times the mean light on the day side (none at night),
+through Earth's scale and curve (34 °C under the star, −56 °C on the
+night side), the atmosphere's heat transport over the sphere, then the
+star. An M4V planet at 0.3 in its zone shows an open ocean and green
+continents around the substellar point inside a frozen night side. The
+viewer keeps its sun above the map's centre. Winds and clouds keep
+their latitude bands: a substellar circulation is left for later.
+
 ## 4. Open points
 
-- Eyeball climates of locked planets need their own tuning (heat
-  transport by the atmosphere evens them out); step 5 starts with the
-  atmosphere's existing heat contrast.
+- Locked planets keep latitude winds, rain and clouds; a substellar
+  circulation (rising air and clouds under the star, winds towards it)
+  would make their day sides cloudier and their terminators wetter.
 
 - Multiple stars (binaries are common, especially among massive stars),
   eccentric orbits and their seasons, stellar evolution (a brightening

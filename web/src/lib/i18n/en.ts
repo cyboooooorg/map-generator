@@ -399,6 +399,7 @@ export const en = {
       `${p.season} · sun over ${p.latitude}° ${p.north ? 'N' : 'S'}`,
     sunLongitude: 'Sun longitude',
     atmosphere: 'Atmosphere',
+    lockedSun: 'Tidally locked: the star stays above the centre of the map, with no seasons',
     starLight: 'Star light',
     starLightHelp:
       "The planet and its sky lit by the colour of their star's light, as an eye used to the Sun would see them; off, a white light",

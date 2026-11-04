@@ -473,18 +473,22 @@
   $effect(() => view?.setSky(meta ? skyFromWorld(meta) : null));
   $effect(() => view?.setHighlight(dataReady ? highlight : null));
   $effect(() => view?.setPath(path));
+  /** A tidally locked world: its star stays above the map's centre (longitude 180°, the equator). */
+  const locked = $derived(meta?.star?.tidally_locked ?? false);
   $effect(() => {
     view?.setLighting(
-      sun
-        ? { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 }
-        : { kind: 'headlight' },
+      !sun
+        ? { kind: 'headlight' }
+        : locked
+          ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
+          : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
     );
   });
 
   // The season animation: one year every YEAR_SECONDS, paused while the
   // canvas is hidden (it resumes from the same day).
   $effect(() => {
-    if (!playing || !sun || !canvasVisible) {
+    if (!playing || !sun || !canvasVisible || locked) {
       return;
     }
     let last = performance.now();
@@ -830,7 +834,9 @@
       <label class="check" title={t.viewer.starLightHelp}
         ><input type="checkbox" bind:checked={starLight} /> {t.viewer.starLight}</label
       >
-      {#if sun}
+      {#if sun && locked}
+        <p class="muted">{t.viewer.lockedSun}</p>
+      {:else if sun}
         <label>
           <span title={t.viewer.seasonHelp}>{t.viewer.season}</span>
           <input type="range" min="0" max="1" step="0.005" bind:value={season} />

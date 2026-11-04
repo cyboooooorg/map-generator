@@ -68,6 +68,100 @@ pub fn row_temperatures(grid: &Grid, axial_tilt_deg: f32) -> Vec<f32> {
         .collect()
 }
 
+/// Steps of [`LockedClimate`]'s profile over the angle from the substellar
+/// point, 0 to 180°.
+const LOCKED_STEPS: usize = 720;
+
+/// The climate of a tidally locked planet: one face always towards its
+/// star, so temperature follows the angle θ from the substellar point (at
+/// the map's centre, longitude 180°, on the equator) instead of the
+/// latitude. The light is `4 cos θ` times the mean on the day side, none on
+/// the night side, turned into °C on Earth's scale and curve like the rows
+/// of [`row_temperatures`] (from 34 °C under the star to −56 °C on the
+/// night side, then evened out by the atmosphere and moved by the star,
+/// see [`LockedClimate::profile_mut`]).
+#[derive(Clone, Debug)]
+pub struct LockedClimate {
+    /// Sea-level temperature, °C, by step of θ.
+    profile: Vec<f32>,
+}
+
+impl Default for LockedClimate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LockedClimate {
+    pub fn new() -> Self {
+        let pole = insolation(std::f64::consts::FRAC_PI_2, EARTH_AXIAL_TILT_DEG);
+        let equator = insolation(0.0, EARTH_AXIAL_TILT_DEG);
+        let profile = (0..LOCKED_STEPS)
+            .map(|k| {
+                let theta = Self::angle(k);
+                let s = 4.0 * theta.cos().max(0.0);
+                let t = ((s - pole) / (equator - pole)) as f32;
+                celsius(t.clamp(INSOLATION_RANGE.0, INSOLATION_RANGE.1))
+            })
+            .collect();
+        Self { profile }
+    }
+
+    fn angle(step: usize) -> f64 {
+        (step as f64 + 0.5) / LOCKED_STEPS as f64 * std::f64::consts::PI
+    }
+
+    /// Pulls the profile towards its area-weighted mean (`sin θ`) by the
+    /// atmosphere's heat transport, like [`crate::atmosphere::transport_heat`].
+    pub fn transport_heat(&mut self, pressure_bar: f32) {
+        let contrast = crate::atmosphere::heat_contrast(pressure_bar);
+        if contrast >= 1.0 {
+            return;
+        }
+        let weights: Vec<f32> = (0..LOCKED_STEPS)
+            .map(|k| Self::angle(k).sin() as f32)
+            .collect();
+        let mean = self
+            .profile
+            .iter()
+            .zip(&weights)
+            .map(|(t, w)| t * w)
+            .sum::<f32>()
+            / weights.iter().sum::<f32>();
+        for t in &mut self.profile {
+            *t = mean + (*t - mean) * contrast;
+        }
+    }
+
+    /// The profile, to apply the star to it.
+    pub fn profile_mut(&mut self) -> &mut [f32] {
+        &mut self.profile
+    }
+
+    /// Angle from the substellar point of a pixel's centre, radians.
+    pub fn angle_at(grid: &Grid, x: u32, y: u32) -> f64 {
+        let lat = grid.latitude(y);
+        let lon = (x as f64 + 0.5) / grid.width as f64 * std::f64::consts::TAU;
+        (lat.cos() * (lon - std::f64::consts::PI).cos())
+            .clamp(-1.0, 1.0)
+            .acos()
+    }
+
+    /// Sea-level temperature at an angle from the substellar point, °C.
+    pub fn at_angle(&self, theta: f64) -> f32 {
+        let k = (theta / std::f64::consts::PI * LOCKED_STEPS as f64) as usize;
+        self.profile[k.min(LOCKED_STEPS - 1)]
+    }
+
+    /// Warmest sea-level temperature of each row (its point nearest the
+    /// star), for the per-row uses of the rows (where erosion thaws).
+    pub fn rows(&self, grid: &Grid) -> Vec<f32> {
+        (0..grid.height)
+            .map(|y| self.at_angle(grid.latitude(y).abs()))
+            .collect()
+    }
+}
+
 /// Weight of the large-scale temperature anomaly noise on land, °C: about
 /// 3.6 °C of standard deviation, so climate zones move by up to ~15° of
 /// latitude between continents.
@@ -329,6 +423,25 @@ mod tests {
             height: 90,
             circumference_km: 40_000.0,
         }
+    }
+
+    #[test]
+    fn a_locked_planet_is_hot_under_its_star_and_cold_behind() {
+        let locked = LockedClimate::new();
+        let grid = Grid {
+            width: 360,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        let substellar = locked.at_angle(LockedClimate::angle_at(&grid, 180, 90));
+        let antistellar = locked.at_angle(LockedClimate::angle_at(&grid, 0, 90));
+        assert!((substellar - 33.6).abs() < 0.5, "{substellar}");
+        assert!((antistellar - -56.4).abs() < 0.5, "{antistellar}");
+        // A dense atmosphere carries heat to the night side.
+        let mut thick = locked.clone();
+        thick.transport_heat(30.0);
+        assert!(thick.at_angle(3.0) > antistellar + 20.0);
+        assert_eq!(locked.rows(&grid).len(), 180);
     }
 
     #[test]

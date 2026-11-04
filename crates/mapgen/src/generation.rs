@@ -1,6 +1,7 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
+use crate::climate::LockedClimate;
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
@@ -16,7 +17,7 @@ use crate::noise::{
     EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged, smoothstep, stream, stream_seed,
 };
 use crate::rivers;
-use crate::star::{StarClimate, star_temperatures};
+use crate::star::{StarClimate, StarInfo, star_temperatures};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -650,20 +651,34 @@ pub fn generate_with_progress(
         highland_offset,
     } = fields;
     // Rows of sea-level temperature, evened out by dense air.
-    let mut row_temperature = row_temperatures(&grid, params.axial_tilt_deg);
-    transport_heat(&mut row_temperature, &grid, params.pressure_bar);
     // The host star: its light, regulated by a carbon cycle on wet worlds
     // with plate tectonics, and the planet's own heat.
-    star_temperatures(
-        &mut row_temperature,
-        StarClimate {
-            star: params.star,
-            orbit_au: params.orbit_au,
-            regulated: planet.geology.regime == Regime::Plates
-                && params.pressure_bar >= LIQUID_WATER_BAR,
-            internal_heat_k: planet.climate.internal_heat,
-        },
-    );
+    let star_climate = StarClimate {
+        star: params.star,
+        orbit_au: params.orbit_au,
+        regulated: planet.geology.regime == Regime::Plates
+            && params.pressure_bar >= LIQUID_WATER_BAR,
+        internal_heat_k: planet.climate.internal_heat,
+    };
+    // A tidally locked planet's climate follows the angle from the point
+    // under its star instead of the latitude.
+    let locked = StarInfo::new(params.star, params.orbit_au)
+        .tidally_locked
+        .then(|| {
+            let mut locked = LockedClimate::new();
+            locked.transport_heat(params.pressure_bar);
+            star_temperatures(locked.profile_mut(), star_climate);
+            locked
+        });
+    let row_temperature = match &locked {
+        Some(locked) => locked.rows(&grid),
+        None => {
+            let mut rows = row_temperatures(&grid, params.axial_tilt_deg);
+            transport_heat(&mut rows, &grid, params.pressure_bar);
+            star_temperatures(&mut rows, star_climate);
+            rows
+        }
+    };
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
     let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
@@ -735,7 +750,15 @@ pub fn generate_with_progress(
         .enumerate()
         .map(|(i, &e)| {
             let above_water = relief(e) - rules.waterline;
-            temperature(row_temperature[i / width as usize], above_water)
+            let sea_level = match &locked {
+                Some(locked) => locked.at_angle(LockedClimate::angle_at(
+                    &grid,
+                    (i % width as usize) as u32,
+                    (i / width as usize) as u32,
+                )),
+                None => row_temperature[i / width as usize],
+            };
+            temperature(sea_level, above_water)
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
         .collect();

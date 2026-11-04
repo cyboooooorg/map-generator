@@ -374,6 +374,7 @@ export const fr: Messages = {
     sunOver: (p) => `${p.season} · soleil au-dessus de ${p.latitude}°${S}${p.north ? 'N' : 'S'}`,
     sunLongitude: 'Longitude du soleil',
     atmosphere: 'Atmosphère',
+    lockedSun: `En rotation synchrone${S}: l’étoile reste au-dessus du centre de la carte, sans saisons`,
     starLight: 'Lumière de l’étoile',
     starLightHelp:
       `La planète et son ciel éclairés de la couleur de la lumière de leur étoile, comme les verrait un œil habitué au Soleil${S}; décoché, une lumière blanche`,
