@@ -214,6 +214,17 @@ export const fr: Messages = {
     giantHeat: 'Chaleur interne',
     giantHeatHelp: `Chaleur rayonnée par rapport à celle reçue de l’étoile${S}: Jupiter 1,7, Neptune 2,6, Uranus environ 1`,
     giantHeatValue: (p) => `${p.ratio}× la lumière absorbée`,
+    poles: 'Pôles',
+    polesHelp: `Au-delà d’environ 64° les bandes se défont. Les pôles de Jupiter portent un cyclone entouré de huit autres (nord) ou cinq (sud), sur des filaments repliés (Juno, Adriani et al. 2018)${S}; le nord de Saturne, un jet hexagonal autour d’un vortex polaire${S}; les géantes de glaces, une brume`,
+    polesValue: (p) => `nord${S}: ${p.north} · sud${S}: ${p.south}`,
+    pole: (p) =>
+      p.style === 'hexagon'
+        ? 'un hexagone'
+        : p.style === 'cyclones'
+          ? p.cyclones > 0
+            ? `un cyclone entouré de ${p.cyclones}`
+            : 'un cyclone polaire'
+          : 'une brume',
     giantRings: 'Anneaux · tempêtes',
     giantRingsValue: (p) => `${p.kind}, de ${p.inner} à ${p.outer} rayons`,
     greatSpot: 'une grande tache',
