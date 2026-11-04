@@ -178,7 +178,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 6. Atmospheres
 
-- **Status:** decided
+- **Status:** done
 - **Analysis:** [07-atmospheres.md](analysis/07-atmospheres.md)
 - **Problem:** every planet shows the same blue rim glow, airless worlds
   included, and the climate ignores the atmosphere: Venus keeps Earth's
