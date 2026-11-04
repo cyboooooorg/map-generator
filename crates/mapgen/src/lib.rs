@@ -22,6 +22,7 @@ pub mod geology;
 pub mod hex;
 pub mod hydrology;
 pub mod noise;
+pub mod plates;
 pub mod preset;
 pub mod request;
 pub mod rivers;

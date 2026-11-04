@@ -253,7 +253,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 9. Plate tectonics and continental drift
 
-- **Status:** analysis
+- **Status:** in progress (step 1: plates and boundaries as diagnostic maps)
 - **Analysis:** [08-geology.md](analysis/08-geology.md), section 8
 - **Problem:** continents come from noise, not from plates: mountains
   and volcanoes are not tied to plate boundaries, and continents cannot

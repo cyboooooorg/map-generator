@@ -129,6 +129,10 @@ pub mod stream {
     pub const CRATERS: u32 = 21;
     /// Impact craters still to come, for the time slider.
     pub const FUTURE_CRATERS: u32 = 22;
+    /// Tectonic plates: their centres, weights and Euler poles, and the
+    /// jagged subplates they are made of.
+    pub const PLATE_MOTION: u32 = 23;
+    pub const SUBPLATES: u32 = 24;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.
@@ -163,7 +167,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in stream::ELEVATION..=stream::FUTURE_CRATERS {
+            for s in stream::ELEVATION..=stream::SUBPLATES {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }

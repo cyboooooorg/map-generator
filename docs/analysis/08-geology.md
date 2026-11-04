@@ -679,6 +679,28 @@ a function of `t`, as the crater epochs are:
   epochs stays bounded (±200–300 Ma), beyond which constant poles give
   absurd overlaps unless stages are chained.
 
+**Outcome (step 1, first part, 2026-11-04).** `plates.rs` builds the
+plates and their boundaries, exported as diagnostic maps only
+(`noise_maps/plates.png` and `plate_boundaries.png`): no world changes.
+
+- Subplates: the cells of a jittered 3D lattice (frequency 5 on the unit
+  sphere, about 300 cells) looked up at a position displaced by two
+  octaves of noise (0.08), so their borders are jagged.
+- Plates: 10 to 15 weighted centres (weights up to 0.35 rad, a power
+  diagram), each subplate joining the nearest, so plates of varied sizes
+  follow the subplates' borders and wrap around the map.
+- Motion: one rotation vector per plate, a random Euler pole at 20 to
+  100 km/Ma (2 to 10 cm/yr).
+- Boundaries, on a grid of at most 1024 × 512: a pixel next to another
+  plate is a boundary; its convergence is the relative speed of the two
+  plates across the boundary. The direction across is taken over a 7 × 7
+  window, towards the other plate's pixels: from one neighbour only it
+  took one of 8 directions, which jumped along stepped boundaries and
+  combed the map. A multi-source Dijkstra gives every pixel its distance
+  to the nearest boundary and that boundary's convergence; far from the
+  boundaries this nearest-source value forms facets, which only matter
+  within the reach of boundary relief (a few hundred km).
+
 **Order:**
 
 1. Static plates at the present on `plates` worlds: mountains and
