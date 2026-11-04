@@ -24,6 +24,16 @@ hill_radius_km: number,
  */
 binary: boolean, 
 /**
+ * The range of the tides on the planet (moons and star), relative to
+ * Earth's; it sets the width of the tidal flats (see
+ * [`PlanetEffects`]). Missing on worlds made before it: 0.
+ */
+tide: number, 
+/**
+ * A large moon keeps the planet's axial tilt steady.
+ */
+tilt_steadied: boolean, 
+/**
  * Nearest first.
  */
 moons: Array<Moon>, };

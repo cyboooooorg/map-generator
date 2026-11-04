@@ -216,6 +216,12 @@ export const en = {
     noMoon: 'none',
     moonsValue: (p: { count: number; names: string }) => `${p.count} (${p.names})`,
     binary: 'a binary planet',
+    tides: 'Tides',
+    tidesHelp: 'Their range from the moons and the star, relative to Earth’s: tidal flats widen with it; a planet locked to its star has none',
+    tidesValue: (p: { tide: string }) => `×${p.tide} Earth’s`,
+    tiltHelp: 'A large moon keeps the axial tilt steady (the Moon holds Earth’s near 23°); without one it wanders, and is drawn from 0 to 60°',
+    tiltSteady: 'tilt steadied by its moon',
+    tiltFree: 'tilt left free',
     eccentricity: 'Eccentricity',
     eccentricityValue: (p: { e: string; periapsis: string; apoapsis: string }) =>
       `${p.e} · ${p.periapsis} to ${p.apoapsis}`,

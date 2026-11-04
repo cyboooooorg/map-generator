@@ -36,6 +36,12 @@ describe('sky bodies', () => {
     expect(fresh[2]).toBeCloseTo(1, 6);
   });
 
+  it('keeps the moon of a binary planet over the same point', () => {
+    const charon = moon({ migration: 'locked' });
+    expect(moonDirection(charon, 0, 0, 90_000, 0)).toEqual([0, 0, -1]);
+    expect(moonDirection(charon, 0, 0.37, 90_000, 1.2)).toEqual([0, 0, -1]);
+  });
+
   it('casts the moons shadows on their planet, at their size and distance', () => {
     const { bodies, casters } = planetSky([moon()], 6371, 0, 365.25, 0);
     expect(bodies[0]!.angularDiameterDeg).toBe(0.52);

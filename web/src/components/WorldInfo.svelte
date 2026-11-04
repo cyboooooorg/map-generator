@@ -148,6 +148,11 @@
               : t.worldInfo.moonsValue({ count: moons.length, names: moons.map((m) => m.name).join(', ') })}{#if meta.moons.binary}
               · {t.worldInfo.binary}{/if}
           </dd>
+          <dt title={t.worldInfo.tidesHelp}>{t.worldInfo.tides}</dt>
+          <dd>
+            {t.worldInfo.tidesValue({ tide: formatUpTo(meta.moons.tide, meta.moons.tide < 1 ? 2 : 1) })} ·
+            <span title={t.worldInfo.tiltHelp}>{meta.moons.tilt_steadied ? t.worldInfo.tiltSteady : t.worldInfo.tiltFree}</span>
+          </dd>
         {/if}
         {#if stats}
           <dt>{t.worldInfo.surface}</dt>

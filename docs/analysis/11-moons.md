@@ -315,7 +315,30 @@ the other bodies of the system in the sky and their shadows:
 - Binaries: the planet's day equals the moon's month, with a sub-moon
   point.
 
-### Choices taken by default (to confirm)
+**Outcome (step 5, 2026-11-04).** Moons shape their planet when its
+parameters are resolved, so `world.json` explains the world as
+generated:
+
+- **Axial tilt:** a drawn tilt (neither the request nor the preset sets
+  it) moves from `[5, 40]` to `[0, 60]` without a moon of mass ratio
+  0.005 or more, mapped linearly so no draw changes.
+- **Tides:** `PlanetEffects` sums the tidal heights of the moons and the
+  star, `mass ratio × (radius / distance)³ × size`, relative to Earth's
+  (the Sun's 0.46 of the Moon's). A planet locked to its star feels no
+  tide from it that comes and goes, nor a binary from its locked moon.
+  The preset's shore width is multiplied by the fourth root of the tides,
+  between 0.5 and 2: with the square root, shores of moonless Earths
+  fell from 2.1 % to 0.3 % of the land at 960 pixels, far beyond what the
+  range of tides does to tidal flats (the slope of the coast matters
+  more). With the fourth root, terran 7 goes from 3.9 % to 3.3 % of shores
+  at 1920 pixels (0.75 of the width, moonless). `world.json` stores the
+  tides and whether the tilt is steadied, and the preset's shore width as
+  used.
+- **Binaries:** the moon hangs over the same point of its planet in the
+  viewer's sky, at longitude 180°; the planet's day already equals the
+  moon's month (step 1).
+
+### Choices (confirmed by the user, 2026-11-04)
 
 - Moons are generated with the planet (not on demand when first
   opened): simpler, and the viewer opens them at once.
