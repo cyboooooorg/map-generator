@@ -355,3 +355,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   factor and the day of the year; a test checks that the animated motion
   and the vis-viva speed agree. Switching worlds no longer flashes the
   Sun's system while the next world loads.
+- **Follow-up (2026-11-04):** prominences are bundles of twelve thin
+  strands, as in H-alpha images of the Sun, instead of one tube: they
+  braid along the arch, carry knots of gas draining down the legs and
+  tear apart when they erupt. They are alpha-blended rather than added,
+  so the red of hydrogen stays red over the star's near-white glow.

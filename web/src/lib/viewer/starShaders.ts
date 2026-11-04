@@ -132,13 +132,23 @@ export const glowFragment = /* glsl */ `
 // hydrogen (H-alpha). `uLift` stretches an arc outwards from the star (an
 // eruption), `uOpacity` fades it.
 export const prominenceVertex = /* glsl */ `
+  attribute float aStrand;
+  attribute vec3 aDrift;
+  /** Radial stretch (1: at rest; more as an eruption rises). */
   uniform float uLift;
+  /** How far the strands fray apart, per unit of height. */
+  uniform float uFray;
   varying float vHeight;
+  varying float vAlong;
+  varying float vStrand;
   varying vec3 vViewNormal;
   void main() {
     float r = length(position);
-    vec3 lifted = position / r * (1.0 + (r - 1.0) * uLift);
-    vHeight = r - 1.0;
+    float height = r - 1.0;
+    vec3 lifted = position / r * (1.0 + height * uLift) + aDrift * height * uLift * uFray;
+    vHeight = height;
+    vAlong = uv.x;
+    vStrand = aStrand;
     vViewNormal = normalize(normalMatrix * normal);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(lifted, 1.0);
   }
@@ -150,13 +160,27 @@ export const prominenceFragment = /* glsl */ `
   uniform float uTime;
   uniform float uSeed;
   varying float vHeight;
+  varying float vAlong;
+  varying float vStrand;
   varying vec3 vViewNormal;
   void main() {
-    // Brighter along the edges of the tube, as a glowing thread of gas.
-    float rim = 1.0 - abs(normalize(vViewNormal).z);
-    float flicker = 0.85 + 0.15 * sin(uTime * 2.3 + vHeight * 40.0 + uSeed);
-    vec3 colour = uColor * (0.35 + 0.9 * rim) * flicker * uOpacity;
-    gl_FragColor = vec4(colour, 1.0);
+    // A thin thread: bright along its axis, fading to its edges.
+    float core = pow(abs(normalize(vViewNormal).z), 1.5);
+    // Knots of brighter gas flowing down both legs to the surface, as the
+    // matter of a prominence drains back along its field lines.
+    float leg = vAlong < 0.5 ? vAlong : 1.0 - vAlong;
+    float flow = fract(leg * (5.0 + 4.0 * vStrand) + uTime * (0.08 + 0.06 * vStrand) + vStrand * 7.0 + uSeed);
+    float knots = 0.45 + 0.55 * smoothstep(0.0, 0.25, flow) * smoothstep(0.75, 0.35, flow);
+    // Each strand its own brightness, flickering slowly.
+    float strand = 0.45 + 0.55 * fract(vStrand * 13.7 + uSeed);
+    float flicker = 0.85 + 0.15 * sin(uTime * (1.3 + vStrand) + vStrand * 40.0);
+    // Faint at the feet, where the strands crowd together against the bright
+    // disk, brightest in the legs and the arch.
+    float density = smoothstep(0.0, 0.08, vHeight) * (1.0 - 0.4 * smoothstep(0.1, 0.5, vHeight));
+    float glow = core * knots * strand * flicker * density;
+    // Blended over what is behind rather than added to it: added to the
+    // star's near-white glow, the red of hydrogen would wash out to white.
+    gl_FragColor = vec4(uColor * (0.55 + 0.6 * glow), clamp(glow * uOpacity, 0.0, 1.0));
     #include <colorspace_fragment>
   }
 `;
