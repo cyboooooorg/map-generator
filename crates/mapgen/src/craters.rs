@@ -419,6 +419,10 @@ impl CraterField {
         } else {
             1.0
         };
+        // Giants stir the impactors: their mass sets the rate (see
+        // `giants::impact_factor`; 1 without giants modelled).
+        let raise =
+            raise * crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor));
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
             craters: Vec::new(),
@@ -1478,6 +1482,8 @@ mod tests {
             drift_ma: 0.0,
             moons: crate::moons::MoonsMode::Auto,
             shape: None,
+            metallicity: 0.0,
+            giants: crate::giants::GiantsMode::None,
         }
     }
 

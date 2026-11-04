@@ -341,6 +341,8 @@ mod tests {
             eccentricity: Some(0.0),
             drift_ma: None,
             moons: None,
+            metallicity: None,
+            giants: None,
             width: Some(480),
             height: Some(240),
         };

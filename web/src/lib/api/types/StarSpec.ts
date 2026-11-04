@@ -28,4 +28,9 @@ orbit_au?: number,
  * Eccentricity of the orbit, a value or a range; left out, drawn like
  * the planets known (see [`draw_eccentricity`]).
  */
-eccentricity?: ParamDefault, };
+eccentricity?: ParamDefault, 
+/**
+ * Metallicity of the star, `[Fe/H]` in dex; left out, drawn like the
+ * stars nearby (see `crate::giants`).
+ */
+metallicity?: number, };

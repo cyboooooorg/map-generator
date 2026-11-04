@@ -397,3 +397,29 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 3    | Moon view: Planet / Star / Moon switch, the planet view on any body, moon panel, moons in the star view          | Same   | done   |
 | 4    | Skies: the planet in each moon's sky, the moons in the planet's sky, eclipses (optional)                         | Same   | done   |
 | 5    | Effects on the planet: axial tilt stabilised, tidal flats, binary rotation                                       | Change | done   |
+
+## 14. Giant planets
+
+- **Status:** step A done
+- **Analysis:** [12-gas-giants.md](analysis/12-gas-giants.md)
+- **Problem:** every world is a rocky or icy body alone around its star:
+  no giant planet in its system, no giant world to generate, and no
+  world can be the moon of a giant.
+- **Studied (2026-11-04):** types (gas and ice giants, hot Jupiters,
+  Sudarsky's cloud classes), interiors, formation (core and pebble
+  accretion, disk instability, migration), occurrence (by star mass,
+  orbit and metallicity) and gravitational influence (Hill spacing,
+  forced eccentricity, impact flux, moons, tidal heating, habitable
+  exomoons). Three ways in, to choose from: giant neighbours in the
+  system, giant worlds with their own pipeline, rocky worlds orbiting a
+  giant.
+- **Decided (2026-11-04):** all three, in that order, one pull request
+  each; giant worlds of every kind (cold Jupiters and Saturns, ice
+  giants, hot Jupiters, rings); a star metallicity, drawn and settable;
+  Earth-sized moons of giants rare when drawn, free in the form.
+- **Step A (2026-11-04):** giant neighbours drawn in each world's system
+  (`src/giants.rs`): a star metallicity (drawn, or set), gas and ice
+  giants and hot Jupiters at the observed odds, kept clear of the world
+  by Hill spacing; they raise a drawn eccentricity to the one they force
+  and set the crater rate; shown in the star view (compressed beyond the
+  world's system), its panel and the world card; `world.json` format 10.

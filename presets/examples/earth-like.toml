@@ -12,6 +12,7 @@ description = "Taille, inclinaison et part des terres de la Terre, tous les biom
 type = "G2V"                           # the Sun
 orbit_au = 1.0
 eccentricity = 0.0167                    # like Earth
+metallicity = 0.0                      # the Sun's
 
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.

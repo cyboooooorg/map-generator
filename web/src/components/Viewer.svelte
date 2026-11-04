@@ -26,6 +26,7 @@
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
   import { moonSky, planetSky } from '../lib/skyBodies';
+  import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -142,6 +143,7 @@
   let starOrbit = $state(true);
   let starZone = $state(true);
   let starProminences = $state(true);
+  let starGiants = $state(true);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
@@ -223,14 +225,18 @@
    * The system the star view shows: the previous world's while the next
    * one's metadata loads, so the view does not flash the Sun's in between.
    */
-  let shownSystem: { star: StarInfo; omega: number } | null = null;
+  let shownSystem: { star: StarInfo; omega: number; giants: GiantSystem | null } | null = null;
   const system = $derived.by(() => {
     // The world's, also while one of its moons is shown.
     const planet = world.worldMeta ?? (world.moon === null ? meta : null);
     if (planet) {
-      shownSystem = { star: withOrbitDefaults(planet.star ?? SUN_SYSTEM), omega: periapsisAngle(planet.seed) };
+      shownSystem = {
+        star: withOrbitDefaults(planet.star ?? SUN_SYSTEM),
+        omega: periapsisAngle(planet.seed),
+        giants: planet.giants ?? null,
+      };
     }
-    return shownSystem ?? { star: withOrbitDefaults(SUN_SYSTEM), omega: 0 };
+    return shownSystem ?? { star: withOrbitDefaults(SUN_SYSTEM), omega: 0, giants: null };
   });
   const epochs = $derived(meta ? epochRange(meta) : null);
   /** The slider's stops, from the past (left) to the future (right). */
@@ -887,6 +893,8 @@
       bind:orbit={starOrbit}
       bind:zone={starZone}
       bind:prominences={starProminences}
+      giantSystem={system.giants}
+      bind:giants={starGiants}
     />
   {/if}
 

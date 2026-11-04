@@ -76,4 +76,9 @@ tidally_locked: boolean,
 /**
  * Colour of the star's light, linear RGB, the Sun white.
  */
-light: [number, number, number], };
+light: [number, number, number], 
+/**
+ * Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
+ * have the Sun's.
+ */
+metallicity: number, };

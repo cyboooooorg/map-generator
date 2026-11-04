@@ -66,6 +66,11 @@ pub const MOON_COUNT: Limits = Limits {
 /// Star and orbit draws tried for a planet with room for the moons asked
 /// for.
 const MOON_ORBIT_ATTEMPTS: usize = 64;
+/// Metallicity of the star, dex (see `crate::giants`).
+pub const METALLICITY: Limits = Limits {
+    min: crate::giants::METALLICITY.0,
+    max: crate::giants::METALLICITY.1,
+};
 /// Epoch of the plates, Ma from the present (see `crate::plates`).
 pub const DRIFT_MA: Limits = Limits {
     min: -crate::plates::DRIFT_LIMIT_MA as f32,
@@ -137,6 +142,11 @@ pub struct WorldRequest {
     pub drift_ma: Option<f32>,
     /// `auto` (the moons the seed draws, the default) or `none`.
     pub moons: Option<crate::moons::MoonsMode>,
+    /// Metallicity of the star, `[Fe/H]` in dex, in `[-1, 0.5]`; drawn like
+    /// the stars nearby when left out.
+    pub metallicity: Option<f32>,
+    /// `auto` (the giant planets the seed draws, the default) or `none`.
+    pub giants: Option<crate::giants::GiantsMode>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -249,6 +259,7 @@ impl WorldRequest {
             ("hz_position", self.hz_position, HZ_POSITION),
             ("eccentricity", self.eccentricity, ECCENTRICITY),
             ("drift_ma", self.drift_ma, DRIFT_MA),
+            ("metallicity", self.metallicity, METALLICITY),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -366,6 +377,12 @@ impl WorldRequest {
             Ok((star, orbit_au, eccentricity))
         };
         let (star, orbit_au, eccentricity) = draw_orbit()?;
+        // Not drawn from the main stream: the values above keep their draws.
+        let metallicity = self
+            .metallicity
+            .or(s.metallicity)
+            .unwrap_or_else(|| crate::giants::draw_metallicity(seed));
+        let eccentricity_drawn = self.eccentricity.is_none() && s.eccentricity.is_none();
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
             height: self.height.unwrap_or(fallback::HEIGHT),
@@ -384,6 +401,8 @@ impl WorldRequest {
             drift_ma: self.drift_ma.unwrap_or(0.0),
             moons: self.moons.unwrap_or_default(),
             shape: None,
+            metallicity,
+            giants: self.giants.unwrap_or_default(),
         };
         // What the moons do to their planet: a large one keeps a drawn tilt
         // in the usual range (a free one ranges wider), and the tides
@@ -416,6 +435,20 @@ impl WorldRequest {
             params.axial_tilt_deg = effects.tilt(params.axial_tilt_deg, (range[0], range[1]));
         }
         params.planet.rules.shore_width_km *= effects.shore_factor;
+        // Eccentric giants force an eccentricity on the world: a drawn one is
+        // at least that (the giants are placed around the final orbit, which
+        // the moons may have drawn again).
+        let locked = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0).tidally_locked;
+        if eccentricity_drawn && !locked {
+            for _ in 0..3 {
+                let forced = crate::giants::GiantSystem::draw(&params)
+                    .map_or(0.0, |g| g.forced_eccentricity);
+                if forced <= params.eccentricity {
+                    break;
+                }
+                params.eccentricity = forced.min(ECCENTRICITY.max);
+            }
+        }
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
         }

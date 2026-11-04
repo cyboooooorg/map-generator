@@ -57,6 +57,8 @@ pub struct FormSpec {
     /// Limits of the number of moons a request can ask for (`moons:
     /// {"count": n}`); without one, the seed draws them.
     pub moon_count: Limits,
+    /// Limits of the star's metallicity (dex).
+    pub metallicity: Limits,
     pub default_width: u32,
     pub default_height: u32,
     /// Largest width or height the server accepts.

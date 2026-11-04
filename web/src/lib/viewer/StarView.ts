@@ -11,12 +11,14 @@ import {
   DoubleSide,
   Line,
   LineBasicMaterial,
+  LineDashedMaterial,
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
   PlaneGeometry,
   Points,
   RingGeometry,
+  SRGBColorSpace,
   Scene,
   ShaderMaterial,
   SphereGeometry,
@@ -24,6 +26,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { Giant } from '../api/types/Giant';
 import type { StarInfo } from '../api/types/StarInfo';
 import { fullPixelRatio } from './pixelRatio';
 import { starsFragment, starsVertex } from './shaders';
@@ -42,6 +45,8 @@ import {
   type MoonOrbit,
   orbitDistance,
   PLANET_MARKER,
+  compressedFrom,
+  giantMarkerSize,
   type Prominence,
   prominences,
   STAR_RADIUS,
@@ -62,6 +67,8 @@ export interface SystemLabels {
   apoapsis: { x: number; y: number } | null;
   inner: { x: number; y: number } | null;
   outer: { x: number; y: number } | null;
+  /** The giant planets now, by letter (empty when hidden). */
+  giants: { x: number; y: number; name: string }[];
 }
 
 /** Shortest time between two animated frames, ms (thirty frames a second at most). */
@@ -112,6 +119,13 @@ export class StarView {
   private disposed = false;
   /** The planet's moons around it (see setMoons), centred on the barycentre. */
   private readonly moonGroup = new Group();
+  /** The giant planets of the system, their orbits and rings (see setStar). */
+  private readonly giantGroup = new Group();
+  private giants: Giant[] = [];
+  private giantMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
+  private giantsOn = true;
+  /** How far the system reaches from the star, view units (see resetView). */
+  private reach = 6.8;
   private moonOrbits: MoonOrbit[] = [];
   private moonMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
 
@@ -205,6 +219,7 @@ export class StarView {
     this.planet = new Mesh(new SphereGeometry(PLANET_MARKER, 32, 16), new MeshBasicMaterial({ color: '#7fb2ff' }));
     this.scene.add(this.planet);
     this.scene.add(this.moonGroup);
+    this.scene.add(this.giantGroup);
     // Distances: the star–planet line and the periapsis and apoapsis.
     this.link = new Line(
       new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]),
@@ -225,8 +240,11 @@ export class StarView {
     this.resetView();
   }
 
-  /** Shows a world's star and system; `omega` orients the orbit's periapsis (radians). */
-  setStar(info: StarInfo, omega = 0): void {
+  /**
+   * Shows a world's star and system; `omega` orients the orbit's periapsis
+   * (radians); `giants` are the other planets of the system.
+   */
+  setStar(info: StarInfo, omega = 0, giants: Giant[] = []): void {
     // Another system: its planet starts its orbit from the same point.
     if (this.info && (this.info.type !== info.type || this.info.orbit_au !== info.orbit_au || this.omega !== omega)) {
       this.time = 0;
@@ -248,8 +266,11 @@ export class StarView {
     // Brighter stars glow more, within bounds.
     this.glow.material.uniforms['uStrength']!.value = Math.min(1.4, 0.6 + 0.12 * Math.log10(info.luminosity + 1e-4) + 0.5);
 
-    const at = systemScale(info);
+    const at = systemScale(info, giants);
     this.at = at;
+    this.giants = giants;
+    this.buildGiants(info);
+    this.reach = Math.max(at(compressedFrom(info) / 1.15), ...giants.map((g) => at(g.orbit_au * (1 + g.eccentricity))));
     this.zone.geometry.dispose();
     this.zone.geometry = new RingGeometry(at(info.hz_inner_au), at(info.hz_outer_au), 128);
     // The ellipse, the star at a focus.
@@ -322,8 +343,91 @@ export class StarView {
   setDistances(on: boolean): void {
     this.distancesOn = on;
     this.applyVisibility();
-    if (!on) this.onLabels(null);
     this.requestRender();
+  }
+
+  /** Shows or hides the giant planets, their orbits and their labels. */
+  setGiantsVisible(on: boolean): void {
+    this.giantsOn = on;
+    this.giantGroup.visible = on;
+    this.requestRender();
+  }
+
+  /**
+   * The giants' orbits (ellipses with the star at a focus, faint, in their
+   * own colour), their disks and rings, and a dashed circle where the
+   * distances start being compressed.
+   */
+  private buildGiants(info: StarInfo): void {
+    for (const child of [...this.giantGroup.children]) {
+      child.traverse((object) => {
+        const mesh = object as Mesh<BufferGeometry, MeshBasicMaterial>;
+        mesh.geometry?.dispose();
+        mesh.material?.dispose();
+      });
+      this.giantGroup.remove(child);
+    }
+    this.giantMarkers = [];
+    const from = compressedFrom(info);
+    if (this.giants.some((g) => g.orbit_au * (1 + g.eccentricity) > from)) {
+      const boundary = new Line(
+        new BufferGeometry().setFromPoints(
+          Array.from({ length: 193 }, (_, i) => this.inPlaneAt((i / 192) * 2 * Math.PI, from)),
+        ),
+        new LineDashedMaterial({ color: '#8a93a8', dashSize: 0.12, gapSize: 0.12, transparent: true, opacity: 0.5 }),
+      );
+      boundary.computeLineDistances();
+      boundary.renderOrder = 3;
+      this.giantGroup.add(boundary);
+    }
+    for (const giant of this.giants) {
+      const colour = new Color().setRGB(...giant.colour, SRGBColorSpace);
+      const orbit = new Line(
+        new BufferGeometry().setFromPoints(
+          Array.from({ length: 361 }, (_, i) => {
+            const nu = (i / 360) * 2 * Math.PI;
+            return this.inPlaneAt(nu + giant.periapsis_angle, giant.orbit_au * orbitDistance(giant.eccentricity, nu));
+          }),
+        ),
+        new LineBasicMaterial({ color: colour.clone().lerp(new Color('#c8d2e6'), 0.5), transparent: true, opacity: 0.45 }),
+      );
+      orbit.renderOrder = 3;
+      this.giantGroup.add(orbit);
+      const size = giantMarkerSize(giant.radius_earth);
+      const marker = new Mesh(new SphereGeometry(size, 32, 16), new MeshBasicMaterial({ color: colour }));
+      if (giant.rings !== 'none') {
+        const ring = new Mesh(
+          new RingGeometry(size * 1.35, size * 2.3, 64),
+          new MeshBasicMaterial({
+            color: colour.clone().lerp(new Color('#e8e0d0'), 0.5),
+            transparent: true,
+            opacity: giant.rings === 'bright' ? 0.6 : 0.22,
+            side: DoubleSide,
+            depthWrite: false,
+          }),
+        );
+        // Tilted, as most giants' rings (and spins) are.
+        ring.rotation.x = -Math.PI / 2 + 0.45;
+        ring.renderOrder = 3;
+        marker.add(ring);
+      }
+      this.giantMarkers.push(marker);
+      this.giantGroup.add(marker);
+    }
+  }
+
+  /**
+   * Places the giants at the animation's time: each at Kepler's pace, its
+   * year in proportion to the world's (a Jupiter around a world of Earth's
+   * year turns twelve times slower).
+   */
+  private placeGiants(): void {
+    const year = this.info?.year_days ?? 365.25;
+    this.giants.forEach((giant, k) => {
+      const mean = giant.phase + this.time * ((2 * Math.PI) / YEAR_S) * (year / giant.year_days);
+      const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, mean);
+      this.giantMarkers[k]?.position.copy(this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance));
+    });
   }
 
   /** Shows or hides the orbit line (and its periapsis and apoapsis). */
@@ -392,7 +496,7 @@ export class StarView {
     // Far enough for the system (out to about 7.6 star radii) to fit the
     // narrower side of the view.
     const halfFov = ((this.camera.fov / 2) * Math.PI) / 180;
-    const distance = (8.2 / Math.tan(halfFov)) / Math.min(1, this.camera.aspect);
+    const distance = ((this.reach + 1.4) / Math.tan(halfFov)) / Math.min(1, this.camera.aspect);
     this.camera.position.set(0, distance * 0.55, distance * 0.83);
     this.controls.target.set(0, 0, 0);
     this.controls.update();
@@ -401,6 +505,11 @@ export class StarView {
 
   dispose(): void {
     this.disposed = true;
+    this.giantGroup.traverse((object) => {
+      const mesh = object as Mesh<BufferGeometry, MeshBasicMaterial>;
+      mesh.geometry?.dispose();
+      mesh.material?.dispose();
+    });
     for (const child of this.arcs.children) {
       const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
       mesh.geometry.dispose();
@@ -490,7 +599,11 @@ export class StarView {
 
   /** A point of the orbital plane at a true anomaly and distance (AU), in view units. */
   private inPlane(trueAnomaly: number, au: number): Vector3 {
-    const angle = trueAnomaly + this.omega;
+    return this.inPlaneAt(trueAnomaly + this.omega, au);
+  }
+
+  /** A point of the orbital plane at an angle from the reference direction and a distance (AU), in view units. */
+  private inPlaneAt(angle: number, au: number): Vector3 {
     const r = this.at(au);
     return new Vector3(Math.cos(angle) * r, 0, -Math.sin(angle) * r);
   }
@@ -507,6 +620,7 @@ export class StarView {
     this.planetAu = this.info.orbit_au * distance;
     this.planet.position.copy(this.inPlane(trueAnomaly, this.planetAu));
     this.placeMoons();
+    this.placeGiants();
     const points = this.link.geometry.getAttribute('position') as BufferAttribute;
     points.setXYZ(1, this.planet.position.x, this.planet.position.y, this.planet.position.z);
     points.needsUpdate = true;
@@ -547,18 +661,28 @@ export class StarView {
     // The glow faces the camera.
     this.glow.quaternion.copy(this.camera.quaternion);
     this.renderer.render(this.scene, this.camera);
-    if (this.distancesOn && this.info) {
+    const giantsShown = this.giantsOn && this.giants.length > 0;
+    if ((this.distancesOn || giantsShown) && this.info) {
       // The zone's edges are labelled across the apsides line, away from
       // the periapsis and apoapsis labels.
       const edge = (au: number) => this.screen(this.inPlane(Math.PI / 2, au));
-      const planet = this.screen(this.planet.position);
+      const planet = this.distancesOn ? this.screen(this.planet.position) : null;
+      const on = this.distancesOn;
       this.onLabels({
         planet: planet && { ...planet, au: this.planetAu },
-        periapsis: this.orbitOn ? this.screen(this.apsides[0]!.position) : null,
-        apoapsis: this.orbitOn ? this.screen(this.apsides[1]!.position) : null,
-        inner: this.zoneOn ? edge(this.info.hz_inner_au) : null,
-        outer: this.zoneOn ? edge(this.info.hz_outer_au) : null,
+        periapsis: on && this.orbitOn ? this.screen(this.apsides[0]!.position) : null,
+        apoapsis: on && this.orbitOn ? this.screen(this.apsides[1]!.position) : null,
+        inner: on && this.zoneOn ? edge(this.info.hz_inner_au) : null,
+        outer: on && this.zoneOn ? edge(this.info.hz_outer_au) : null,
+        giants: giantsShown
+          ? this.giants.flatMap((giant, k) => {
+              const at = this.screen(this.giantMarkers[k]!.position);
+              return at ? [{ ...at, name: giant.name }] : [];
+            })
+          : [],
       });
+    } else {
+      this.onLabels(null);
     }
     if (moving) {
       this.requestRender();
