@@ -144,6 +144,8 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     // A world whose moons were turned off (one made before moons has none
     // either; regenerated, it gets those its seed draws).
     ...(meta.moons == null && meta.format_version >= 9 ? { moons: 'none' as const } : {}),
+    // A number of moons asked for.
+    ...(meta.moons?.count_asked != null ? { moons: { count: meta.moons.count_asked } } : {}),
     width: meta.width,
     height: meta.height,
   };
@@ -170,7 +172,7 @@ export function cliCommand(meta: WorldMetadata): string {
     `--orbit-au ${r.orbit_au}`,
     `--eccentricity ${r.eccentricity}`,
     ...(r.drift_ma === undefined ? [] : [`--drift=${r.drift_ma}`]),
-    ...(r.moons === undefined ? [] : [`--moons ${r.moons}`]),
+    ...(r.moons === undefined ? [] : [`--moons ${typeof r.moons === 'object' ? r.moons.count : r.moons}`]),
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];

@@ -22,8 +22,12 @@ describe('parseFormMemory', () => {
         eccentricityRandom: false,
         eccentricity: 0.05,
       },
+      moons: 3,
     };
     expect(parseFormMemory(stored, FIELDS)).toEqual(stored);
+    expect(parseFormMemory({ ...stored, moons: 'none' }, FIELDS)?.moons).toBe('none');
+    // An unknown or out-of-range number of moons falls back to the seed's.
+    expect(parseFormMemory({ ...stored, moons: 9 }, FIELDS)?.moons).toBe('auto');
   });
 
   it('drops malformed or unknown parameters and defaults the rest', () => {
@@ -35,6 +39,7 @@ describe('parseFormMemory', () => {
         landPercent: 'many',
         fields: { sea_level: { random: 'no', value: 1 }, pressure_bar: { random: false, value: 2 }, gone: {} },
         star: { klass: 'Q' },
+        moons: 'lots',
       },
       FIELDS,
     );
@@ -46,6 +51,7 @@ describe('parseFormMemory', () => {
       landPercent: 29,
       fields: { pressure_bar: { random: false, value: 2 } },
       star: null,
+      moons: 'auto',
     });
   });
 

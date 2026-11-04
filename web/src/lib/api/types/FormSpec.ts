@@ -22,7 +22,12 @@ orbit_au: Limits,
 /**
  * Limits of the orbit's eccentricity.
  */
-eccentricity: Limits, default_width: number, default_height: number, 
+eccentricity: Limits, 
+/**
+ * Limits of the number of moons a request can ask for (`moons:
+ * {"count": n}`); without one, the seed draws them.
+ */
+moon_count: Limits, default_width: number, default_height: number, 
 /**
  * Largest width or height the server accepts.
  */

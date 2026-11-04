@@ -381,6 +381,9 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   ratio up to about 0.15, around the barycentre, locked face to face);
   irregular moons below about 900 km across for rock and 400 km for ice,
   drawn as deformed meshes in the viewer only.
+- **Follow-up (2026-11-04):** the number of moons can be chosen in the
+  form and requests (1 to 6), the star and orbit drawn again when they
+  leave no room; see the analysis.
 - **Plan (2026-11-04):** every moon is a body of its world, generated
   with the planet as a small world of its own (`barren` or a new
   `icy-moon` preset, irregular ones with a `shape` layer) under

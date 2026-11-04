@@ -95,8 +95,9 @@ struct Args {
 
     /// Moons: `auto`, those the seed draws (about one rocky planet in 12
     /// has a large moon, small worlds often a companion, others small
-    /// debris or captured moons, planets locked to their star none), or
-    /// `none` [default: auto]
+    /// debris or captured moons, planets locked to their star none),
+    /// `none`, or a number from 1 to 6: that many moons, the star and orbit
+    /// drawn again if they leave no room for them [default: auto]
     #[arg(long)]
     moons: Option<MoonsMode>,
 
@@ -277,10 +278,10 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         } else {
             format!(" --drift {}", p.drift_ma)
         },
-        if p.moons == MoonsMode::None {
-            " --moons none"
-        } else {
-            ""
+        match p.moons {
+            MoonsMode::Auto => String::new(),
+            MoonsMode::None => " --moons none".into(),
+            MoonsMode::Count(n) => format!(" --moons {n}"),
         },
         p.width,
         p.height

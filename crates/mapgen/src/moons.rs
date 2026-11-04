@@ -36,7 +36,8 @@ use crate::world::WorldParams;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
-/// Whether a world has moons: those its seed draws, or none.
+/// Whether a world has moons: those its seed draws, none, or a given
+/// number (`{"count": 3}` in a request), drawn from the seed too.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
@@ -44,15 +45,35 @@ pub enum MoonsMode {
     #[default]
     Auto,
     None,
+    /// Exactly this many moons, 1 to [`MAX_MOON_COUNT`] (0 is `None`).
+    Count(u8),
 }
+
+/// Most moons a request can ask for.
+pub const MAX_MOON_COUNT: u8 = 6;
 
 impl std::str::FromStr for MoonsMode {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "auto" => Ok(Self::Auto),
-            "none" => Ok(Self::None),
-            other => Err(format!("unknown moons mode {other:?} (auto or none)")),
+            "none" | "0" => Ok(Self::None),
+            other => match other.parse::<u8>() {
+                Ok(n) if (1..=MAX_MOON_COUNT).contains(&n) => Ok(Self::Count(n)),
+                _ => Err(format!(
+                    "unknown moons mode {other:?} (auto, none or a number from 1 to {MAX_MOON_COUNT})"
+                )),
+            },
+        }
+    }
+}
+
+impl MoonsMode {
+    /// The number of moons asked for, if one is.
+    pub fn count(self) -> Option<u8> {
+        match self {
+            Self::Count(n) => Some(n),
+            _ => None,
         }
     }
 }
@@ -160,6 +181,10 @@ pub struct MoonSystem {
     /// A large moon keeps the planet's axial tilt steady.
     #[serde(default)]
     pub tilt_steadied: bool,
+    /// The number of moons the request asked for, when it asked for one
+    /// (otherwise the seed alone drew them).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count_asked: Option<u8>,
     /// Nearest first.
     pub moons: Vec<Moon>,
 }
@@ -200,6 +225,10 @@ const PHOBOS_OVER_MARS: f64 = 11.1 / 3390.0;
 const CAPTURE_ODDS: f64 = 0.15;
 const CAPTURED_RADIUS_KM: (f64, f64) = (1.0, 30.0);
 const CAPTURED_ORBIT: (f64, f64) = (0.05, 0.3);
+/// Semi-major axis range of the captured moons added to reach a number
+/// asked for, as a share of the Hill radius: wider, so that several fit
+/// (retrograde orbits stay stable out to half of it).
+const COUNT_CAPTURED_ORBIT: (f64, f64) = (0.03, 0.45);
 /// Diameter below which a body is not round, km, for rock and ice.
 const ROUND_ROCK_KM: f64 = 900.0;
 const ROUND_ICE_KM: f64 = 400.0;
@@ -209,6 +238,13 @@ const BINARY_MASS_RATIO: f64 = 0.05;
 /// Moons closer to a larger one than this many mutual Hill radii are
 /// dropped (orbits that close do not last).
 const SPACING_HILL: f64 = 8.0;
+/// Salt of the draw sequence of the moons added to reach a number asked
+/// for, and the most moons drawn for it.
+const COUNT_STREAM: u64 = 0x434f_554e_5445_4421;
+const COUNT_ATTEMPTS: usize = 1500;
+/// Width of the chaotic zone around a moon's orbit, in `a × q^(2/7)`
+/// (Wisdom 1980): smaller moons do not last there.
+const CHAOTIC_ZONE: f64 = 1.5;
 /// Beyond this share of the Hill radius the tides hardly move a moon.
 const TIDES_REACH: f64 = 0.1;
 
@@ -303,21 +339,17 @@ impl MoonSystem {
                     binary: false,
                     tide: 0.0,
                     tilt_steadied: false,
+                    count_asked: p.moons.count(),
                     moons: Vec::new(),
                 }
                 .with_effects(p),
             );
         }
 
-        let mut candidates = Vec::new();
         // Shares of the way from small to large worlds.
         let large = ((size - SMALL_WORLD) / (LARGE_WORLD - SMALL_WORLD)).clamp(0.0, 1.0);
         let impact_odds = IMPACT_ODDS.0 + (IMPACT_ODDS.1 - IMPACT_ODDS.0) * large;
-        let impact = rng.next() < impact_odds;
-        // Every draw happens whatever the outcome, so one origin's odds do
-        // not shift another's draws.
         let q_max = IMPACT_MASS_RATIO.1 + (IMPACT_MASS_RATIO.2 - IMPACT_MASS_RATIO.1) * large;
-        let q = rng.log_uniform(IMPACT_MASS_RATIO.0, q_max);
         let orbit = if large >= 1.0 {
             IMPACT_ORBIT_LARGE
         } else if large <= 0.0 {
@@ -329,91 +361,79 @@ impl MoonSystem {
                 mix(IMPACT_ORBIT_SMALL.1, IMPACT_ORBIT_LARGE.1),
             )
         };
-        let a_impact = rng.log_uniform(orbit.0, orbit.1) * r_p;
-        let (e_impact, i_impact) = (rng.uniform(0.0, 0.06), rng.uniform(0.0, 8.0));
-        let shape_impact = [rng.next(), rng.next()];
-        if impact {
+        let surface = |icy: bool| {
+            if icy {
+                Composition::Ice
+            } else {
+                Composition::Rock
+            }
+        };
+        // One moon of each origin, from the draws it takes (always all of
+        // them, so one origin's odds never shift another's draws).
+        let impact_moon = |rng: &mut Draws| {
+            let q = rng.log_uniform(IMPACT_MASS_RATIO.0, q_max);
+            let a_km = rng.log_uniform(orbit.0, orbit.1) * r_p;
+            let (eccentricity, inclination_deg) = (rng.uniform(0.0, 0.06), rng.uniform(0.0, 8.0));
+            let shape = [rng.next(), rng.next()];
             // Small cold worlds are ice and rock, like Charon (1.7 g/cm³).
             let icy = cold && size < LARGE_WORLD;
-            candidates.push(Candidate {
+            Candidate {
                 origin: MoonOrigin::GiantImpact,
-                composition: if icy {
-                    Composition::Ice
-                } else {
-                    Composition::Rock
-                },
+                composition: surface(icy),
                 mass_kg: q * m_p,
                 density: if icy { 1.7 } else { 3.3 },
-                a_km: a_impact,
-                eccentricity: e_impact,
-                inclination_deg: i_impact,
-                shape: shape_impact,
-            });
-        }
-
-        let debris = rng.next() < DEBRIS_ODDS && !impact;
-        let debris_count = 1 + usize::from(rng.next() < 0.5);
-        for k in 0..2 {
+                a_km,
+                eccentricity,
+                inclination_deg,
+                shape,
+            }
+        };
+        // The inner (k = 0) or outer debris moonlet.
+        let debris_moon = |rng: &mut Draws, k: usize| {
             let radius = r_p * PHOBOS_OVER_MARS * rng.log_uniform(DEBRIS_RADIUS.0, DEBRIS_RADIUS.1);
-            let a = if k == 0 {
+            let a_km = if k == 0 {
                 rng.log_uniform(2.2, 4.0)
             } else {
                 rng.log_uniform(5.0, 9.0)
             } * r_p;
-            let (e, i) = (rng.uniform(0.0, 0.02), rng.uniform(0.0, 2.0));
+            let (eccentricity, inclination_deg) = (rng.uniform(0.0, 0.02), rng.uniform(0.0, 2.0));
             let shape = [rng.next(), rng.next()];
-            if debris && k < debris_count {
-                let density = 1.9;
-                candidates.push(Candidate {
-                    origin: MoonOrigin::Debris,
-                    composition: if cold {
-                        Composition::Ice
-                    } else {
-                        Composition::Rock
-                    },
-                    mass_kg: 4.0 / 3.0 * PI * radius.powi(3) * density * 1e12,
-                    density,
-                    a_km: a,
-                    eccentricity: e,
-                    inclination_deg: i,
-                    shape,
-                });
+            let density = 1.9;
+            Candidate {
+                origin: MoonOrigin::Debris,
+                composition: surface(cold),
+                mass_kg: 4.0 / 3.0 * PI * radius.powi(3) * density * 1e12,
+                density,
+                a_km,
+                eccentricity,
+                inclination_deg,
+                shape,
             }
-        }
-
-        let captured = rng.next() < CAPTURE_ODDS;
-        let captured_count = 1 + (rng.next() * 3.0) as usize;
-        for k in 0..3 {
+        };
+        let captured_moon = |rng: &mut Draws, (lo, hi): (f64, f64)| {
             let radius = rng.log_uniform(CAPTURED_RADIUS_KM.0, CAPTURED_RADIUS_KM.1);
-            let a = rng.log_uniform(CAPTURED_ORBIT.0, CAPTURED_ORBIT.1) * hill;
-            let e = rng.uniform(0.1, 0.45);
-            let i = if rng.next() < 0.5 {
+            let a_km = rng.log_uniform(lo, hi) * hill;
+            let eccentricity = rng.uniform(0.1, 0.45);
+            let inclination_deg = if rng.next() < 0.5 {
                 rng.uniform(100.0, 170.0)
             } else {
                 rng.uniform(10.0, 60.0)
             };
             let shape = [rng.next(), rng.next()];
-            if captured && k < captured_count {
-                let density = if cold { 1.5 } else { 1.9 };
-                candidates.push(Candidate {
-                    origin: MoonOrigin::Captured,
-                    composition: if cold {
-                        Composition::Ice
-                    } else {
-                        Composition::Rock
-                    },
-                    mass_kg: 4.0 / 3.0 * PI * radius.powi(3) * density * 1e12,
-                    density,
-                    a_km: a,
-                    eccentricity: e,
-                    inclination_deg: i,
-                    shape,
-                });
+            let density = if cold { 1.5 } else { 1.9 };
+            Candidate {
+                origin: MoonOrigin::Captured,
+                composition: surface(cold),
+                mass_kg: 4.0 / 3.0 * PI * radius.powi(3) * density * 1e12,
+                density,
+                a_km,
+                eccentricity,
+                inclination_deg,
+                shape,
             }
-        }
-
+        };
         // Stable orbits only: beyond the Roche limit, within the Hill sphere.
-        candidates.retain(|c| {
+        let stable = |c: &Candidate| {
             let roche = if c.round() {
                 2.44 * r_p * (PLANET_DENSITY / c.density).cbrt()
             } else {
@@ -426,19 +446,98 @@ impl MoonSystem {
             };
             c.a_km * (1.0 - c.eccentricity) > roche
                 && c.a_km * (1.0 + c.eccentricity) < reach * hill
-        });
+        };
         // Orbits too close to a larger moon's do not last.
-        candidates.sort_by(|a, b| b.mass_kg.total_cmp(&a.mass_kg));
-        let mut kept: Vec<Candidate> = Vec::new();
-        for c in candidates {
-            let clear = kept.iter().all(|k| {
+        let clear = |kept: &[Candidate], c: &Candidate| {
+            kept.iter().all(|k| {
                 let mutual =
                     (c.a_km + k.a_km) / 2.0 * ((c.mass_kg + k.mass_kg) / (3.0 * m_p)).cbrt();
                 (c.a_km - k.a_km).abs() > SPACING_HILL * mutual
                     && (c.a_km / k.a_km).max(k.a_km / c.a_km) > 1.2
-            });
-            if clear {
+            })
+        };
+
+        let mut candidates = Vec::new();
+        let impact = rng.next() < impact_odds;
+        let moon = impact_moon(&mut rng);
+        if impact {
+            candidates.push(moon);
+        }
+        let debris = rng.next() < DEBRIS_ODDS && !impact;
+        let debris_count = 1 + usize::from(rng.next() < 0.5);
+        for k in 0..2 {
+            let moon = debris_moon(&mut rng, k);
+            if debris && k < debris_count {
+                candidates.push(moon);
+            }
+        }
+        let captured = rng.next() < CAPTURE_ODDS;
+        let captured_count = 1 + (rng.next() * 3.0) as usize;
+        for k in 0..3 {
+            let moon = captured_moon(&mut rng, CAPTURED_ORBIT);
+            if captured && k < captured_count {
+                candidates.push(moon);
+            }
+        }
+        candidates.retain(|c| stable(c));
+        candidates.sort_by(|a, b| b.mass_kg.total_cmp(&a.mass_kg));
+        let mut kept: Vec<Candidate> = Vec::new();
+        for c in candidates {
+            if clear(&kept, &c) {
                 kept.push(c);
+            }
+        }
+        // Moons added to reach a number asked for keep out of the chaotic
+        // zone of each heavier one (about 1.5 a q^(2/7) around its orbit,
+        // Wisdom 1980), from periapsis to apoapsis: the rule for orbits of
+        // comparable masses (`clear`) would leave no room beside a large
+        // moon.
+        let apart = |kept: &[Candidate], c: &Candidate| {
+            kept.iter().all(|k| {
+                let big = if k.mass_kg >= c.mass_kg { k } else { c };
+                let zone = CHAOTIC_ZONE * big.a_km * (big.mass_kg / m_p).powf(2.0 / 7.0);
+                let (inner, outer) = if c.a_km < k.a_km { (c, k) } else { (k, c) };
+                outer.a_km * (1.0 - outer.eccentricity) - inner.a_km * (1.0 + inner.eccentricity)
+                    > zone
+                    && outer.a_km / inner.a_km > 1.2
+            })
+        };
+        // A number of moons asked for: those the seed drew first (the
+        // largest when there are too many), then more from a draw sequence
+        // of their own: a giant-impact moon if there is none yet, debris
+        // moonlets close in, then captured moons far out, each kept when
+        // its orbit is stable and clear of the others. A Hill sphere too
+        // small for them all keeps fewer (the request checks it).
+        if let Some(n) = p.moons.count() {
+            let n = usize::from(n);
+            kept.truncate(n);
+            let mut extra = Draws(u64::from(stream_seed(p.seed, stream::MOONS)) ^ COUNT_STREAM);
+            let mut attempt = 0;
+            while kept.len() < n && attempt < COUNT_ATTEMPTS {
+                let has_impact = kept.iter().any(|c| c.origin == MoonOrigin::GiantImpact);
+                let debris_kept = kept
+                    .iter()
+                    .filter(|c| c.origin == MoonOrigin::Debris)
+                    .count();
+                let c = if !has_impact && attempt < COUNT_ATTEMPTS / 4 {
+                    impact_moon(&mut extra)
+                } else if debris_kept < 2 && attempt % 2 == 0 {
+                    debris_moon(&mut extra, debris_kept)
+                } else {
+                    // Far out only retrograde orbits last, as for the outer
+                    // irregular moons of Jupiter.
+                    let mut c = captured_moon(&mut extra, COUNT_CAPTURED_ORBIT);
+                    // Less eccentric, so that several share the space.
+                    c.eccentricity *= 0.5;
+                    if c.inclination_deg < 90.0 && c.a_km * (1.0 + c.eccentricity) >= hill / 3.0 {
+                        c.inclination_deg = 180.0 - c.inclination_deg;
+                    }
+                    c
+                };
+                if stable(&c) && apart(&kept, &c) {
+                    kept.push(c);
+                }
+                attempt += 1;
             }
         }
         kept.sort_by(|a, b| a.a_km.total_cmp(&b.a_km));
@@ -521,6 +620,7 @@ impl MoonSystem {
                 binary,
                 tide: 0.0,
                 tilt_steadied: false,
+                count_asked: p.moons.count(),
                 moons,
             }
             .with_effects(p),
@@ -835,6 +935,7 @@ mod tests {
             binary: false,
             tide: 0.0,
             tilt_steadied: false,
+            count_asked: None,
             moons,
         };
         let with = PlanetEffects::of(&earth, Some(&system(vec![moon.clone()])));
@@ -862,6 +963,49 @@ mod tests {
         red.orbit_au = crate::star::orbit_at(red.star, 0.5);
         let still = PlanetEffects::of(&red, None);
         assert_eq!((still.tide, still.shore_factor), (0.0, 0.5));
+    }
+
+    #[test]
+    fn a_number_asked_for_gives_that_many_stable_moons() {
+        // Short of room now and then (a crowded Hill sphere): the request
+        // then draws another orbit.
+        let mut short = 0;
+        for seed in 0..200 {
+            for n in 1..=MAX_MOON_COUNT {
+                let mut p = params(seed, 40_075.0);
+                p.moons = MoonsMode::Count(n);
+                let system = MoonSystem::draw(&p).unwrap();
+                if system.moons.len() < usize::from(n) {
+                    short += 1;
+                    continue;
+                }
+                assert_eq!(system.moons.len(), usize::from(n), "seed {seed} count {n}");
+                assert_eq!(system.count_asked, Some(n));
+                for m in &system.moons {
+                    assert!(
+                        m.semi_major_axis_km * (1.0 + m.eccentricity) < 0.5 * system.hill_radius_km
+                    );
+                }
+                // On a planet whose seed draws none, one moon is a large one,
+                // as the Moon.
+                let drawn = MoonSystem::draw(&params(seed, 40_075.0)).unwrap();
+                if n == 1 && drawn.moons.is_empty() {
+                    assert_eq!(system.moons[0].origin, MoonOrigin::GiantImpact);
+                }
+            }
+        }
+        assert!(short < 10, "{short} of 1200 systems short of moons");
+        // The moons the seed draws come first: asking for as many keeps them.
+        let mut p = params(19, 21_300.0);
+        let auto = MoonSystem::draw(&p).unwrap();
+        p.moons = MoonsMode::Count(auto.moons.len().max(1) as u8);
+        let asked = MoonSystem::draw(&p).unwrap();
+        if !auto.moons.is_empty() {
+            assert_eq!(asked.moons, auto.moons);
+        }
+        assert_eq!("3".parse::<MoonsMode>(), Ok(MoonsMode::Count(3)));
+        assert_eq!("0".parse::<MoonsMode>(), Ok(MoonsMode::None));
+        assert!("7".parse::<MoonsMode>().is_err());
     }
 
     #[test]

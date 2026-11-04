@@ -34,6 +34,11 @@ tide: number,
  */
 tilt_steadied: boolean, 
 /**
+ * The number of moons the request asked for, when it asked for one
+ * (otherwise the seed alone drew them).
+ */
+count_asked?: number | null, 
+/**
  * Nearest first.
  */
 moons: Array<Moon>, };
