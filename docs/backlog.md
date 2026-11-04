@@ -148,7 +148,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Depression filling: neighbours by index (4.2 → 2.4 s at 8192 × 4096, same worlds); parallel land masses gave no gain | done   |
 | Picking on the globe ignores the relief displacement (error under a degree)                                          | todo   |
 | Night side lighting is a fixed 7 % floor, not physically calibrated                                                  | todo   |
-| Volcanoes are rare on non-volcanic presets: the volcanic zone seldom exceeds its thresholds                          | todo   |
+| Volcanoes are rare on non-volcanic presets: ash and volcanoes need 0.15 above the waterline (`ash_elevation`)        | todo   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
 | Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
@@ -253,7 +253,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 9. Plate tectonics and continental drift
 
-- **Status:** in progress (step 1: plates and boundaries as diagnostic maps)
+- **Status:** in progress (step 1 done: static plates shape the relief)
 - **Analysis:** [08-geology.md](analysis/08-geology.md), section 8
 - **Problem:** continents come from noise, not from plates: mountains
   and volcanoes are not tied to plate boundaries, and continents cannot
@@ -280,7 +280,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 | Step | Change                                                                                                 | Seeds  | Status |
 | ---- | ------------------------------------------------------------------------------------------------------ | ------ | ------ |
-| 1    | Static plates on `plates` worlds: Voronoi subplates, velocities, boundary features (ranges, arcs)      | Change | todo   |
+| 1    | Static plates on `plates` worlds: Voronoi subplates, velocities, boundary features (ranges, arcs)      | Change | done   |
 | 2    | Kinematic drift: Euler poles per stage, plate of each pixel at an epoch, boundary relief from geometry | Same   | todo   |
 | 3    | Time slider for drift: low-resolution preview of the whole pipeline, "generate at this epoch"          | Same   | todo   |
 

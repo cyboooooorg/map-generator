@@ -701,6 +701,43 @@ plates and their boundaries, exported as diagnostic maps only
   boundaries this nearest-source value forms facets, which only matter
   within the reach of boundary relief (a few hundred km).
 
+**Outcome (step 1, second part, 2026-11-04).** The boundaries shape the
+relief of worlds with plate tectonics (`regime = "plates"`: `terran`,
+`frozen`, `earth-like`; their seeds change):
+
+- Each boundary pixel records the crust on its side and across
+  (continental above the edge of the shelf, 0.05 under the waterline,
+  from the continents' shape alone, so only boundary pixels are sampled);
+  the propagation carries the nearest boundary's index, and each coarse
+  pixel gets its relief, interpolated at full resolution. Reading the
+  nearest coarse pixel's plate and boundary at full resolution switched
+  between the overriding and the subducting side from one pixel to the
+  next: steps.
+- Features as in the README's table: collision ranges (0.12, 350 km),
+  coastal ranges and arcs over subducting oceans, trenches (0.16), island
+  arcs, mid-ocean ridges (0.1, 450 km), rifts; full from 5 cm/yr, arcs
+  from 2 cm/yr. The noise's mountains keep half their weight.
+- **Arc volcanoes:** a cone lattice of their own (200 km, 80 %): the
+  volcanic provinces' 900 km lattice almost never lands a cone on an arc
+  80 km wide. Arcs then reach a volcanic zone of 0.87; but the ash and
+  volcano biomes also need an elevation above the sea level reference
+  (`ash_elevation = 0`, 0.15 above the waterline, about 3.75 km), which
+  coastal arcs seldom reach: only the cones' summits turn volcanic (about
+  0.03 % of the land, none before). That threshold is the cause of the
+  smaller backlog item "volcanoes are rare"; changing it would also move
+  the ash of the volcanic preset, so it is left to that item.
+- **Poles:** the latitude-longitude grid stretches boundaries near the
+  poles into streaks; relief fades out between 70° and 85°, as erosion
+  does between 60° and 75°. A grid even over the sphere (a cube map)
+  would lift this.
+- **One grid for every map size** (1024 × 512): the boundaries, and so
+  the relief, do not depend on the resolution, and the land fraction
+  estimate (sampled at 512 × 256) sees the same relief.
+- On three `terran` seeds, mountains go from 8.9, 3.4 and 5.3 % of the
+  land to 8.4, 5.2 and 5.5 %, the land share gains 1.5 points (arcs and
+  ridges). Building the plates takes about 0.13 s per world, which also
+  makes the test suite slower (about 10 s instead of 3.5 s for `mapgen`).
+
 **Order:**
 
 1. Static plates at the present on `plates` worlds: mountains and

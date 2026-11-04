@@ -19,9 +19,11 @@
 //! negative: they part), in cm per year. Every pixel then gets its distance
 //! to the nearest boundary and that boundary's convergence.
 //!
-//! Nothing here changes a world yet: the generation only exports the plates
-//! and their boundaries as diagnostic maps. Relief along the boundaries
-//! (ranges, trenches, arcs, ridges, rifts) is the next step.
+//! **Relief.** Each pixel of the coarse grid gets what its nearest boundary
+//! does to the relief ([`PlateMap::relief`]): ranges, trenches, volcanic
+//! arcs, ridges and rifts, from the boundary's convergence and the crust
+//! on each side; the generation adds it to the continents of worlds with
+//! plate tectonics (`[geology] regime = "plates"`).
 use crate::geo::Grid;
 use crate::noise::{stream, stream_seed};
 use crate::world::WorldParams;
@@ -45,7 +47,8 @@ const PLATES: (usize, usize) = (10, 5);
 const PLATE_WEIGHT: f64 = 0.35;
 /// Plate speeds at their equator, km per Ma (1 km/Ma = 0.1 cm/yr).
 const PLATE_SPEED: (f64, f64) = (20.0, 100.0);
-/// Width of the coarse grid the boundaries are found on, pixels at most.
+/// Width of the coarse grid the boundaries are found on, pixels (about 40
+/// km per pixel on an Earth-sized planet).
 const COARSE_WIDTH: u32 = 1024;
 /// Half-width of the window the direction across a boundary is taken
 /// over, coarse pixels.
@@ -215,6 +218,58 @@ pub struct PlateMap {
     /// close (subduction, collision), negative where they part (ridges,
     /// rifts).
     pub convergence: Vec<f32>,
+    /// The boundary pixels, and the nearest one of each pixel.
+    boundaries: Vec<Boundary>,
+    nearest: Vec<u32>,
+    /// What the boundaries do to the relief of each pixel (see
+    /// [`PlateMap::relief`]).
+    reliefs: Vec<Relief>,
+}
+
+/// A boundary pixel: how its two plates move, and their crust on each side.
+#[derive(Clone, Copy, Debug)]
+struct Boundary {
+    /// Convergence, cm per year (see [`PlateMap::convergence`]).
+    convergence: f32,
+    /// The plate of the pixel, and the one across.
+    plate: u16,
+    other: u16,
+    /// Whether the crust is continental on the pixel's side, and across.
+    continental: bool,
+    other_continental: bool,
+}
+
+/// What plate boundaries do to the relief at a point (see
+/// [`PlateMap::relief`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Relief {
+    /// Height added (negative: lowered), elevation units, at Earth's
+    /// gravity.
+    pub uplift: f32,
+    /// Weight of mountain ridges, in `[0, 1]`.
+    pub orogeny: f32,
+    /// Weight of a volcanic arc, in `[0, 1]`.
+    pub arc: f32,
+}
+
+/// Convergence from which a volcanic arc is at full strength, cm per year.
+const ARC_SPEED: f32 = 2.0;
+/// Latitudes over which boundary relief fades out towards the poles,
+/// degrees.
+const POLAR_FADE_DEG: (f32, f32) = (70.0, 85.0);
+/// Convergence over which boundary relief grows from nothing to its full
+/// height, cm per year.
+const RELIEF_SPEED: (f32, f32) = (0.5, 5.0);
+
+/// A bump of width `sigma` (km) centred at `mu` km from the boundary.
+fn bump(d: f32, mu: f32, sigma: f32) -> f32 {
+    let t = (d - mu) / sigma;
+    (-t * t).exp()
+}
+
+fn smooth(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// Unit vector of the centre of pixel `i` of `grid`.
@@ -226,14 +281,21 @@ fn pixel_point(grid: &Grid, i: usize) -> [f64; 3] {
 }
 
 impl PlateMap {
-    /// The plates of world `p` and their boundaries, on a grid at most
-    /// [`COARSE_WIDTH`] pixels wide.
+    /// The plates of world `p` and their boundaries, on a grid
+    /// [`COARSE_WIDTH`] pixels wide, all crust oceanic.
     pub fn new(p: &WorldParams) -> Self {
+        Self::with_crust(p, |_| false)
+    }
+
+    /// Like [`Self::new`], with `continental` telling the crust at a unit
+    /// vector (evaluated on both sides of each boundary only).
+    pub fn with_crust(p: &WorldParams, continental: impl Fn([f64; 3]) -> bool + Sync) -> Self {
         let plates = Plates::new(p);
-        let width = p.width.clamp(16, COARSE_WIDTH);
+        // A fixed grid, whatever the map's size: the same world gets the
+        // same boundaries at every resolution.
         let grid = Grid {
-            width,
-            height: (width / 2).max(8),
+            width: COARSE_WIDTH,
+            height: COARSE_WIDTH / 2,
             circumference_km: p.circumference_km,
         };
         let n = grid.pixel_count();
@@ -246,16 +308,17 @@ impl PlateMap {
         // is taken over a window of pixels, from this pixel towards those
         // of the other plate: one neighbour only gives one of 8 directions,
         // which jump from pixel to pixel along a stepped boundary.
-        let seeds: Vec<(usize, f32)> = (0..n)
+        let seeds: Vec<(usize, Boundary)> = (0..n)
             .into_par_iter()
             .filter_map(|i| {
                 let a = plate[i];
                 let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
                 // The other plate: the first neighbour's that is not this one.
-                let b = grid
+                let (across_pixel, b) = grid
                     .neighbours(x, y)
-                    .map(|(nx, ny, _)| plate[grid.index(nx, ny)])
-                    .find(|&k| k != a)?;
+                    .map(|(nx, ny, _)| grid.index(nx, ny))
+                    .map(|j| (j, plate[j]))
+                    .find(|&(_, k)| k != a)?;
                 let p = pixel_point(&grid, i);
                 let mut towards = [0.0f64; 3];
                 for oy in -BOUNDARY_WINDOW..=BOUNDARY_WINDOW {
@@ -283,19 +346,138 @@ impl PlateMap {
                     towards[1] - t * p[1],
                     towards[2] - t * p[2],
                 ]);
-                let (a, b) = (usize::from(a), usize::from(b));
-                let (va, vb) = (plates.velocity(a, p), plates.velocity(b, p));
+                let (va, vb) = (
+                    plates.velocity(usize::from(a), p),
+                    plates.velocity(usize::from(b), p),
+                );
                 let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], across);
-                // km/Ma to cm/yr.
-                Some((i, (closing * 0.1) as f32))
+                Some((
+                    i,
+                    Boundary {
+                        // km/Ma to cm/yr.
+                        convergence: (closing * 0.1) as f32,
+                        plate: a,
+                        other: b,
+                        continental: continental(p),
+                        other_continental: continental(pixel_point(&grid, across_pixel)),
+                    },
+                ))
             })
             .collect();
-        let (boundary_km, convergence) = nearest_boundary(&grid, &seeds);
-        PlateMap {
+        let (boundary_km, nearest) = nearest_boundary(&grid, &seeds);
+        let boundaries: Vec<Boundary> = seeds.into_iter().map(|(_, b)| b).collect();
+        let convergence = nearest
+            .iter()
+            .map(|&k| boundaries.get(k as usize).map_or(0.0, |b| b.convergence))
+            .collect();
+        let mut map = PlateMap {
             grid,
             plate,
             boundary_km,
             convergence,
+            boundaries,
+            nearest,
+            reliefs: Vec::new(),
+        };
+        map.reliefs = (0..n).into_par_iter().map(|k| map.relief_of(k)).collect();
+        map
+    }
+
+    /// What the plate boundaries do to the relief at a longitude and
+    /// latitude, growing with the boundary's speed (full from 5 cm/yr):
+    ///
+    /// | Boundary                        | Relief                                              |
+    /// | ------------------------------- | --------------------------------------------------- |
+    /// | Continent–continent, closing    | A range on both sides (plateau and ridges)          |
+    /// | Continent over ocean, closing   | Coastal range and volcanic arc, 150–220 km inland   |
+    /// | Ocean under continent or ocean  | A trench along the boundary                         |
+    /// | Ocean over ocean, closing       | An island arc, 120 km from the boundary             |
+    /// | Ocean–ocean, parting            | A mid-ocean ridge, broad                            |
+    /// | Continent–continent, parting    | A rift valley and its shoulders                     |
+    ///
+    /// Between two oceanic plates, the one with the lower index overrides
+    /// the other. Computed on the coarse grid and interpolated between its
+    /// pixels: which side of a boundary a point is on switches the relief
+    /// from one pixel to the next, which would draw steps.
+    pub fn relief(&self, lon: f64, lat: f64) -> Relief {
+        let g = &self.grid;
+        let (w, h) = (i64::from(g.width), i64::from(g.height));
+        let x = lon.rem_euclid(2.0 * PI) / (2.0 * PI) * w as f64 - 0.5;
+        let y = ((PI / 2.0 - lat) / PI * h as f64 - 0.5).clamp(0.0, (h - 1) as f64);
+        let (x0, y0) = (x.floor() as i64, y.floor() as i64);
+        let (fx, fy) = ((x - x0 as f64) as f32, (y - y0 as f64) as f32);
+        let at =
+            |xx: i64, yy: i64| self.reliefs[(yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize];
+        let mix = |a: Relief, b: Relief, t: f32| Relief {
+            uplift: a.uplift + (b.uplift - a.uplift) * t,
+            orogeny: a.orogeny + (b.orogeny - a.orogeny) * t,
+            arc: a.arc + (b.arc - a.arc) * t,
+        };
+        let top = mix(at(x0, y0), at(x0 + 1, y0), fx);
+        let bottom = mix(at(x0, y0 + 1), at(x0 + 1, y0 + 1), fx);
+        mix(top, bottom, fy)
+    }
+
+    /// The relief of coarse pixel `k` (see [`Self::relief`]).
+    fn relief_of(&self, k: usize) -> Relief {
+        let Some(b) = self.boundaries.get(self.nearest[k] as usize) else {
+            return Relief::default();
+        };
+        let d = self.boundary_km[k];
+        let own = self.plate[k];
+        // The latitude-longitude grid stretches boundaries near the poles
+        // into streaks: relief fades out there, as erosion does.
+        let lat = self
+            .grid
+            .latitude(k as u32 / self.grid.width)
+            .abs()
+            .to_degrees() as f32;
+        let polar = 1.0 - smooth(POLAR_FADE_DEG.0, POLAR_FADE_DEG.1, lat);
+        if polar <= 0.0 {
+            return Relief::default();
+        }
+        let (mine, theirs, other) = if own == b.plate {
+            (b.continental, b.other_continental, b.other)
+        } else {
+            (b.other_continental, b.continental, b.plate)
+        };
+        let closing = smooth(RELIEF_SPEED.0, RELIEF_SPEED.1, b.convergence);
+        // Arcs need subduction, hardly its speed: full from 2 cm/yr.
+        let arcing = smooth(RELIEF_SPEED.0, ARC_SPEED, b.convergence);
+        let parting = smooth(RELIEF_SPEED.0, RELIEF_SPEED.1, -b.convergence);
+        let trench = || -0.16 * closing * bump(d, 40.0, 45.0);
+        let mut r = Relief::default();
+        if closing > 0.0 {
+            match (mine, theirs) {
+                (true, true) => {
+                    r.orogeny = closing * bump(d, 0.0, 350.0);
+                    r.uplift = 0.12 * r.orogeny;
+                }
+                (true, false) => {
+                    r.orogeny = closing * bump(d, 150.0, 150.0);
+                    r.uplift = 0.08 * closing * bump(d, 150.0, 120.0);
+                    r.arc = arcing * bump(d, 220.0, 80.0);
+                }
+                (false, true) => r.uplift = trench(),
+                (false, false) if own < other => {
+                    r.uplift = 0.12 * closing * bump(d, 120.0, 60.0);
+                    r.arc = arcing * bump(d, 120.0, 60.0);
+                }
+                (false, false) => r.uplift = trench(),
+            }
+        } else if parting > 0.0 {
+            match (mine, theirs) {
+                (false, false) => r.uplift = 0.1 * parting * bump(d, 0.0, 450.0),
+                (true, true) => {
+                    r.uplift = parting * (0.02 * bump(d, 120.0, 60.0) - 0.06 * bump(d, 0.0, 60.0));
+                }
+                _ => {}
+            }
+        }
+        Relief {
+            uplift: r.uplift * polar,
+            orogeny: r.orogeny * polar,
+            arc: r.arc * polar,
         }
     }
 
@@ -309,10 +491,10 @@ impl PlateMap {
     }
 }
 
-/// Distance to the nearest of `seeds` (boundary pixels with their
-/// convergence) and that seed's convergence, for every pixel (multi-source
-/// Dijkstra over [`Grid::neighbours`]).
-fn nearest_boundary(grid: &Grid, seeds: &[(usize, f32)]) -> (Vec<f32>, Vec<f32>) {
+/// Distance to the nearest of `seeds` (boundary pixels) and that seed's
+/// index in `seeds` (`u32::MAX` beyond [`MAX_BOUNDARY_KM`]), for every pixel
+/// (multi-source Dijkstra over [`Grid::neighbours`]).
+fn nearest_boundary(grid: &Grid, seeds: &[(usize, Boundary)]) -> (Vec<f32>, Vec<u32>) {
     #[derive(PartialEq)]
     struct Node(f32, usize);
     impl Eq for Node {}
@@ -328,11 +510,11 @@ fn nearest_boundary(grid: &Grid, seeds: &[(usize, f32)]) -> (Vec<f32>, Vec<f32>)
     }
     let n = grid.pixel_count();
     let mut distance = vec![f32::INFINITY; n];
-    let mut convergence = vec![0.0f32; n];
+    let mut nearest = vec![u32::MAX; n];
     let mut heap = BinaryHeap::new();
-    for &(i, c) in seeds {
+    for (k, &(i, _)) in seeds.iter().enumerate() {
         distance[i] = 0.0;
-        convergence[i] = c;
+        nearest[i] = k as u32;
         heap.push(Node(0.0, i));
     }
     while let Some(Node(d, i)) = heap.pop() {
@@ -345,7 +527,7 @@ fn nearest_boundary(grid: &Grid, seeds: &[(usize, f32)]) -> (Vec<f32>, Vec<f32>)
             let nd = d + step;
             if nd < distance[j] {
                 distance[j] = nd;
-                convergence[j] = convergence[i];
+                nearest[j] = nearest[i];
                 heap.push(Node(nd, j));
             }
         }
@@ -353,7 +535,7 @@ fn nearest_boundary(grid: &Grid, seeds: &[(usize, f32)]) -> (Vec<f32>, Vec<f32>)
     for d in &mut distance {
         *d = d.min(MAX_BOUNDARY_KM);
     }
-    (distance, convergence)
+    (distance, nearest)
 }
 
 #[cfg(test)]
@@ -402,6 +584,37 @@ mod tests {
         // Deterministic per seed.
         assert_eq!(map.plate, PlateMap::new(&params(3)).plate);
         assert_ne!(map.plate, PlateMap::new(&params(4)).plate);
+    }
+
+    #[test]
+    fn boundaries_raise_ranges_and_arcs_and_sink_trenches() {
+        // Continents in one hemisphere (x > 0), ocean in the other.
+        let map = PlateMap::with_crust(&params(5), |q| q[0] > 0.0);
+        let g = &map.grid;
+        let (mut range, mut trench, mut ridge, mut arc) = (false, false, false, false);
+        for k in 0..g.pixel_count() {
+            let r = map.reliefs[k];
+            assert!(
+                r.uplift.abs() <= 0.2
+                    && (0.0..=1.0).contains(&r.orogeny)
+                    && (0.0..=1.0).contains(&r.arc)
+            );
+            range |= r.orogeny > 0.3 && r.uplift > 0.03;
+            trench |= r.uplift < -0.05;
+            ridge |= r.uplift > 0.03 && r.orogeny == 0.0 && r.arc < 0.1;
+            arc |= r.arc > 0.5;
+        }
+        assert!(
+            range && trench && ridge && arc,
+            "{range} {trench} {ridge} {arc}"
+        );
+        // Nothing near the poles, where the grid stretches.
+        for x in 0..g.width {
+            assert_eq!(map.reliefs[g.index(x, 0)], Relief::default());
+        }
+        // Interpolated between pixels: no relief beyond them.
+        let r = map.relief(1.0, 0.3);
+        assert!(r.uplift.is_finite());
     }
 
     #[test]
