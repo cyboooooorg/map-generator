@@ -30,7 +30,12 @@ surface_age_ga?: number | null,
  * The host star and the orbit. Worlds made before it existed orbit
  * the Sun at 1 AU.
  */
-star?: StarInfo | null, layers: Layers, 
+star?: StarInfo | null, 
+/**
+ * Epoch of the plates, Ma from the present (negative in the past).
+ * Left out at the present, as in the worlds made before it existed.
+ */
+drift_ma?: number, layers: Layers, 
 /**
  * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
  */

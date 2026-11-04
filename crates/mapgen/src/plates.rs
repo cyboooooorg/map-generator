@@ -56,6 +56,15 @@ const COARSE_SIZE: u32 = 256;
 const BOUNDARY_WINDOW: i64 = 3;
 /// Distances to a boundary stop growing here, km.
 const MAX_BOUNDARY_KM: f32 = 3000.0;
+/// Length of a stage of plate motion, Ma: each plate gets a new Euler pole
+/// and speed every stage, its rotation vector moving linearly from one to
+/// the next.
+const STAGE_MA: f64 = 50.0;
+/// Farthest epoch from the present, Ma, in the past or the future: beyond,
+/// the present relief carried by the plates says little of the world.
+pub const DRIFT_LIMIT_MA: f64 = 300.0;
+/// Step of the integration of the plates' rotations, Ma.
+const DRIFT_STEP_MA: f64 = 1.0;
 
 /// SplitMix64 finaliser.
 fn mix(mut z: u64) -> u64 {
@@ -206,6 +215,132 @@ impl Plates {
     pub fn velocity(&self, plate: usize, p: [f64; 3]) -> [f64; 3] {
         cross(self.omegas[plate], p).map(|c| c * self.radius_km)
     }
+
+    /// The rotation vector of plate `plate` at the start of stage `stage`
+    /// (`stage × STAGE_MA` Ma from the present): the present one at stage
+    /// 0, drawn for the others from the plate and the stage alone.
+    fn stage_omega(&self, plate: usize, stage: i64) -> [f64; 3] {
+        if stage == 0 {
+            return self.omegas[plate];
+        }
+        let mut h = mix(u64::from(self.seed) ^ 0x5354_4147_4553);
+        for v in [plate as u64, stage as u64] {
+            h = mix(h ^ v.wrapping_add(0x9E37_79B9_7F4A_7C15));
+        }
+        let pole = random_direction(unit(h), unit(mix(h ^ 1)));
+        let speed_km = PLATE_SPEED.0 + (PLATE_SPEED.1 - PLATE_SPEED.0) * unit(mix(h ^ 2));
+        pole.map(|c| c * speed_km / self.radius_km)
+    }
+
+    /// The rotation vector of plate `plate` at `t_ma` (Ma from the present,
+    /// negative in the past), interpolated between its stages.
+    pub fn omega_at(&self, plate: usize, t_ma: f64) -> [f64; 3] {
+        let u = t_ma / STAGE_MA;
+        let stage = u.floor();
+        let f = u - stage;
+        let (a, b) = (
+            self.stage_omega(plate, stage as i64),
+            self.stage_omega(plate, stage as i64 + 1),
+        );
+        [0, 1, 2].map(|i| a[i] + (b[i] - a[i]) * f)
+    }
+
+    /// The plates at `t_ma` Ma from the present (negative in the past,
+    /// clamped to [`DRIFT_LIMIT_MA`]): the rotation carrying each plate from
+    /// where it lies today to where it lies then, and its motion then.
+    pub fn at_epoch(&self, t_ma: f64) -> Epoch {
+        let t_ma = t_ma.clamp(-DRIFT_LIMIT_MA, DRIFT_LIMIT_MA);
+        let steps = (t_ma.abs() / DRIFT_STEP_MA).ceil().max(1.0) as usize;
+        let dt = t_ma / steps as f64;
+        let rotations = (0..self.count())
+            .map(|k| {
+                let mut r = IDENTITY;
+                for i in 0..steps {
+                    let omega = self.omega_at(k, (i as f64 + 0.5) * dt);
+                    r = multiply(rotation(omega.map(|c| c * dt)), r);
+                }
+                r
+            })
+            .collect();
+        let omegas = (0..self.count()).map(|k| self.omega_at(k, t_ma)).collect();
+        Epoch {
+            t_ma,
+            rotations,
+            omegas,
+            radius_km: self.radius_km,
+        }
+    }
+}
+
+/// The plates at an epoch (see [`Plates::at_epoch`]).
+pub struct Epoch {
+    /// Ma from the present.
+    pub t_ma: f64,
+    /// Per plate: the rotation from its present position to its position
+    /// at the epoch.
+    rotations: Vec<Matrix>,
+    /// Per plate: its rotation vector at the epoch, radians per Ma.
+    omegas: Vec<[f64; 3]>,
+    radius_km: f64,
+}
+
+impl Epoch {
+    /// Where the point of plate `plate` at the unit vector `p` (at the
+    /// epoch) lies today.
+    pub fn origin(&self, plate: usize, p: [f64; 3]) -> [f64; 3] {
+        apply_transposed(&self.rotations[plate], p)
+    }
+
+    /// Where the point of plate `plate` lying today at `p` lies at the
+    /// epoch.
+    pub fn position(&self, plate: usize, p: [f64; 3]) -> [f64; 3] {
+        apply(&self.rotations[plate], p)
+    }
+
+    /// Velocity of plate `plate` at the unit vector `p` at the epoch, km
+    /// per Ma.
+    pub fn velocity(&self, plate: usize, p: [f64; 3]) -> [f64; 3] {
+        cross(self.omegas[plate], p).map(|c| c * self.radius_km)
+    }
+}
+
+type Matrix = [[f64; 3]; 3];
+
+const IDENTITY: Matrix = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// The rotation by the vector `v`: about its direction, by its length in
+/// radians (Rodrigues' formula).
+fn rotation(v: [f64; 3]) -> Matrix {
+    let angle = dot(v, v).sqrt();
+    if angle < 1e-15 {
+        return IDENTITY;
+    }
+    let [x, y, z] = v.map(|c| c / angle);
+    let (s, c) = angle.sin_cos();
+    let t = 1.0 - c;
+    [
+        [t * x * x + c, t * x * y - s * z, t * x * z + s * y],
+        [t * x * y + s * z, t * y * y + c, t * y * z - s * x],
+        [t * x * z - s * y, t * y * z + s * x, t * z * z + c],
+    ]
+}
+
+fn multiply(a: Matrix, b: Matrix) -> Matrix {
+    let mut m = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            m[i][j] = (0..3).map(|k| a[i][k] * b[k][j]).sum();
+        }
+    }
+    m
+}
+
+fn apply(m: &Matrix, p: [f64; 3]) -> [f64; 3] {
+    [0, 1, 2].map(|i| dot(m[i], p))
+}
+
+fn apply_transposed(m: &Matrix, p: [f64; 3]) -> [f64; 3] {
+    [0, 1, 2].map(|i| m[0][i] * p[0] + m[1][i] * p[1] + m[2][i] * p[2])
 }
 
 /// The plates and their boundaries on a coarse cube-sphere grid.
@@ -225,6 +360,21 @@ pub struct PlateMap {
     /// What the boundaries do to the relief of each cell (see
     /// [`PlateMap::relief`]).
     reliefs: Vec<Relief>,
+    plates: Plates,
+    /// The plates' motion up to the map's epoch, for a map away from the
+    /// present.
+    epoch: Option<Epoch>,
+}
+
+/// Where the crust at a point at the map's epoch lies today (see
+/// [`PlateMap::origin`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Origin {
+    /// The unit vector of its present position.
+    pub point: [f64; 3],
+    /// Crust formed since (or to be formed by then), where the plates
+    /// part: it lies nowhere today.
+    pub new_crust: bool,
 }
 
 /// A boundary cell: how its two plates move, and their crust on each side.
@@ -280,16 +430,49 @@ impl PlateMap {
     /// Like [`Self::new`], with `continental` telling the crust at a unit
     /// vector (evaluated on both sides of each boundary only).
     pub fn with_crust(p: &WorldParams, continental: impl Fn([f64; 3]) -> bool + Sync) -> Self {
+        Self::at_epoch(p, 0.0, continental)
+    }
+
+    /// Like [`Self::with_crust`], with the plates as they lie `t_ma` Ma
+    /// from the present (negative in the past, within
+    /// [`DRIFT_LIMIT_MA`]): each turned by its stage rotations. Where
+    /// several plates come to cover a cell, continental crust overrides
+    /// oceanic crust (which dives under it), then the lower plate index
+    /// wins; where none does, the plates have parted and new oceanic crust
+    /// fills the gap, joining the nearest plate.
+    pub fn at_epoch(
+        p: &WorldParams,
+        t_ma: f64,
+        continental: impl Fn([f64; 3]) -> bool + Sync,
+    ) -> Self {
         let plates = Plates::new(p);
         // A fixed grid, whatever the map's size: the same world gets the
         // same boundaries at every resolution.
         let grid = CubeGrid { size: COARSE_SIZE };
         let radius_km = f64::from(p.circumference_km) / std::f64::consts::TAU;
         let n = grid.cell_count();
-        let plate: Vec<u16> = (0..n)
+        let present: Vec<u16> = (0..n)
             .into_par_iter()
             .map(|k| plates.plate_at(grid.point(k)) as u16)
             .collect();
+        let epoch = (t_ma != 0.0).then(|| plates.at_epoch(t_ma));
+        // The plate and crust of each cell at the epoch (the crust of the
+        // present map is only sampled on its boundaries, below).
+        let (plate, crust) = match &epoch {
+            None => (present, None),
+            Some(epoch) => {
+                let (plate, crust) = epoch_cells(&grid, &plates, epoch, &present, &continental);
+                (plate, Some(crust))
+            }
+        };
+        let crust_of = |k: usize| match &crust {
+            Some(crust) => crust[k],
+            None => continental(grid.point(k)),
+        };
+        let velocity = |plate: u16, q: [f64; 3]| match &epoch {
+            Some(epoch) => epoch.velocity(usize::from(plate), q),
+            None => plates.velocity(usize::from(plate), q),
+        };
         // Boundary cells and their convergence: the speed of this plate
         // against the other one across the boundary. The direction across
         // is taken over a window of cells, from this cell towards those of
@@ -326,10 +509,7 @@ impl PlateMap {
                     towards[1] - t * p[1],
                     towards[2] - t * p[2],
                 ]);
-                let (va, vb) = (
-                    plates.velocity(usize::from(a), p),
-                    plates.velocity(usize::from(b), p),
-                );
+                let (va, vb) = (velocity(a, p), velocity(b, p));
                 let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], across);
                 Some((
                     k,
@@ -338,8 +518,8 @@ impl PlateMap {
                         convergence: (closing * 0.1) as f32,
                         plate: a,
                         other: b,
-                        continental: continental(p),
-                        other_continental: continental(grid.point(across_cell)),
+                        continental: crust_of(k),
+                        other_continental: crust_of(across_cell),
                     },
                 ))
             })
@@ -358,6 +538,8 @@ impl PlateMap {
             boundaries,
             nearest,
             reliefs: Vec::new(),
+            plates,
+            epoch,
         };
         map.reliefs = (0..n).into_par_iter().map(|k| map.relief_of(k)).collect();
         map
@@ -447,6 +629,107 @@ impl PlateMap {
     pub fn index_at(&self, p: [f64; 3]) -> usize {
         self.grid.index_of(p)
     }
+
+    /// Where the crust at the unit vector `p`, at the map's epoch, lies
+    /// today: `p` itself at the present. The plate is found to the point,
+    /// among those of the four cells around `p` (`continental` tells the
+    /// crust where two of them overlap), so coasts carried by the plates
+    /// stay sharp.
+    pub fn origin(&self, p: [f64; 3], continental: impl Fn([f64; 3]) -> bool) -> Origin {
+        let Some(epoch) = &self.epoch else {
+            return Origin {
+                point: p,
+                new_crust: false,
+            };
+        };
+        let (face, x, y) = self.grid.locate(p);
+        let (x0, y0) = (x.floor() as i64, y.floor() as i64);
+        let mut candidates: Vec<u16> = Vec::with_capacity(4);
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let k = self.plate[self.grid.cell(face, x0 + dx, y0 + dy)];
+            if !candidates.contains(&k) {
+                candidates.push(k);
+            }
+        }
+        candidates.sort_unstable();
+        let claims: Vec<(u16, [f64; 3])> = candidates
+            .into_iter()
+            .map(|k| (k, epoch.origin(usize::from(k), p)))
+            .filter(|&(k, o)| self.plates.plate_at(o) == usize::from(k))
+            .collect();
+        let point = match claims.as_slice() {
+            [] => {
+                let k = self.plate[self.grid.index_of(p)];
+                return Origin {
+                    point: epoch.origin(usize::from(k), p),
+                    new_crust: true,
+                };
+            }
+            [(_, o)] => *o,
+            // Continental crust first, then the lower index.
+            [(_, first), ..] => claims
+                .iter()
+                .find(|(_, o)| continental(*o))
+                .map_or(*first, |(_, o)| *o),
+        };
+        Origin {
+            point,
+            new_crust: false,
+        }
+    }
+}
+
+/// The plate and the crust (continental or not) of each cell of `grid` at
+/// `epoch` (see [`PlateMap::at_epoch`]), from the plates of the present
+/// map `present`.
+fn epoch_cells(
+    grid: &CubeGrid,
+    plates: &Plates,
+    epoch: &Epoch,
+    present: &[u16],
+    continental: &(impl Fn([f64; 3]) -> bool + Sync),
+) -> (Vec<u16>, Vec<bool>) {
+    let n = grid.cell_count();
+    // The plates covering each cell, by priority; none in the gaps.
+    let claims: Vec<Option<(u16, bool)>> = (0..n)
+        .into_par_iter()
+        .map(|c| {
+            let p = grid.point(c);
+            let mut best: Option<(u16, bool)> = None;
+            for k in 0..plates.count() {
+                let o = epoch.origin(k, p);
+                if usize::from(present[grid.index_of(o)]) != k {
+                    continue;
+                }
+                let crust = continental(o);
+                if best.is_none_or(|(_, b)| crust && !b) {
+                    best = Some((k as u16, crust));
+                }
+            }
+            best
+        })
+        .collect();
+    // New crust in the gaps: each cell joins the nearest covered cell's
+    // plate (breadth first), as oceanic crust.
+    let mut plate = vec![u16::MAX; n];
+    let mut crust = vec![false; n];
+    let mut queue = std::collections::VecDeque::new();
+    for (c, claim) in claims.iter().enumerate() {
+        if let Some((k, continental)) = claim {
+            plate[c] = *k;
+            crust[c] = *continental;
+            queue.push_back(c);
+        }
+    }
+    while let Some(c) = queue.pop_front() {
+        for j in grid.neighbours(c) {
+            if plate[j] == u16::MAX {
+                plate[j] = plate[c];
+                queue.push_back(j);
+            }
+        }
+    }
+    (plate, crust)
 }
 
 /// Distance to the nearest of `seeds` (boundary cells), km on a sphere of
@@ -524,6 +807,7 @@ mod tests {
             star: crate::star::SUN,
             orbit_au: 1.0,
             eccentricity: 0.0,
+            drift_ma: 0.0,
         }
     }
 
@@ -616,5 +900,70 @@ mod tests {
             )
         };
         assert!((rel(a, b) + rel(b, a)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn epochs_turn_the_plates_rigidly() {
+        let plates = Plates::new(&params(5));
+        let present = plates.at_epoch(0.0);
+        let p = normalise([0.3, -0.5, 0.8]);
+        for k in 0..plates.count() {
+            assert_eq!(present.position(k, p), p);
+        }
+        let mut moved = 0.0;
+        for t in [-100.0, 100.0] {
+            let epoch = plates.at_epoch(t);
+            for k in 0..plates.count() {
+                let q = epoch.position(k, p);
+                // Rotations: unit vectors stay unit, and come back.
+                assert!((dot(q, q) - 1.0).abs() < 1e-9);
+                let back = epoch.origin(k, q);
+                assert!((0..3).all(|a| (back[a] - p[a]).abs() < 1e-9));
+                moved += dot(p, q).clamp(-1.0, 1.0).acos() * plates.radius_km;
+            }
+        }
+        // 20 to 100 km per Ma, over 100 Ma: thousands of km on average.
+        let mean = moved / (2 * plates.count()) as f64;
+        assert!((500.0..12_000.0).contains(&mean), "{mean}");
+    }
+
+    #[test]
+    fn a_map_at_an_epoch_covers_the_sphere_and_opens_new_crust() {
+        let p = params(5);
+        let present = PlateMap::with_crust(&p, |q| q[0] > 0.0);
+        assert_eq!(
+            present.plate,
+            PlateMap::at_epoch(&p, 0.0, |q| q[0] > 0.0).plate
+        );
+        let map = PlateMap::at_epoch(&p, -150.0, |q| q[0] > 0.0);
+        assert!(
+            map.plate
+                .iter()
+                .all(|&k| usize::from(k) < map.plates.count())
+        );
+        assert_ne!(map.plate, present.plate);
+        let boundary = map.boundary_km.iter().filter(|&&d| d == 0.0).count();
+        assert!(
+            boundary > 0 && boundary < map.grid.cell_count() / 5,
+            "{boundary}"
+        );
+        // Most points come from somewhere on their plate; some, where the
+        // plates have parted, from nowhere (a quarter at 150 Ma: Earth renews
+        // its ocean floor in about 180 Ma).
+        let (mut old, mut new) = (0, 0);
+        for k in 0..2000 {
+            let q = random_direction((k as f64 * 0.618_034) % 1.0, (k as f64 * 0.414_213) % 1.0);
+            let origin = map.origin(q, |o| o[0] > 0.0);
+            if origin.new_crust {
+                new += 1;
+            } else {
+                old += 1;
+                assert!((dot(origin.point, origin.point) - 1.0).abs() < 1e-9);
+            }
+        }
+        assert!(new > 0 && old > 2 * new, "{old} {new}");
+        // At the present, every point is its own origin.
+        let q = normalise([0.2, 0.9, -0.1]);
+        assert_eq!(present.origin(q, |_| false).point, q);
     }
 }

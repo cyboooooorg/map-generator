@@ -753,6 +753,36 @@ exposed a river case: a tributary crossing its own parent upstream of
 its tributaries' mouths was never cut; it now is, and those tributaries
 take its course on to its mouth.
 
+**Outcome (step 2, kinematic drift, 2026-11-04).** `--drift <Ma>`
+generates a world at an epoch of its plates, within ±300 Ma:
+
+- **Stages:** every 50 Ma each plate gets an Euler pole and a speed
+  drawn from the plate and the stage alone (the present motion at stage
+  0); the rotation vector moves linearly between stages, and the
+  rotations are integrated in 1 Ma steps (Rodrigues' formula), one 3 × 3
+  matrix per plate: about 600 compositions per plate at 300 Ma.
+- **Cells at the epoch:** each cube cell tests every plate: it belongs to
+  plate `k` if `k`'s rotation brings back a point of `k` today.
+  Continental crust first, then the lower index; a cell no plate covers
+  is new oceanic crust, joined to the nearest covered cell's plate
+  (breadth first). The boundaries, their convergence (from the rotation
+  vectors at the epoch) and their relief then follow as at the present.
+- **Pixels:** each pixel tests the plates of the four cells around it
+  exactly (`Plates::plate_at` of its origin), so coasts carried by the
+  plates stay as sharp as at the present; the relief noises (continents,
+  mountains, volcanic provinces and cones) are sampled at the origin,
+  the climate noises, the arcs' cones and the boundary relief at the
+  point. New crust is ocean floor 0.3 below the waterline, keeping half
+  of the fine octaves.
+- At the present the code path is unchanged: `--drift 0` gives the same
+  world to the bit. An epoch takes the same time as the present (0.8 s at
+  960 × 480).
+- Limits: the continents are the present ones carried back or forth, so
+  in the past they tear along plate boundaries instead of reassembling
+  into an older supercontinent; overlapping crust is hidden, not folded
+  into ranges (the collision boundary raises one); a quarter of the
+  surface is new crust at 150 Ma, ten random plates moving independently.
+
 **Order:**
 
 1. Static plates at the present on `plates` worlds: mountains and

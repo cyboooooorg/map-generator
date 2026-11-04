@@ -125,6 +125,10 @@ const CONE_HEIGHT: f32 = 0.25;
 /// Depth below the waterline down to which the crust counts as
 /// continental (the continental shelf), elevation units.
 const CONTINENTAL_SHELF: f32 = 0.05;
+/// Depth of the crust formed where the plates part below the waterline, in
+/// continent-shape units, and the share of the fine octaves it keeps.
+const NEW_CRUST_DEPTH: f32 = 0.3;
+const NEW_CRUST_ROUGHNESS: f32 = 0.5;
 /// Share of the noise's mountain weight kept on worlds with plate
 /// tectonics: the rest of their ranges follow the plate boundaries.
 const NOISE_MOUNTAINS_WITH_PLATES: f32 = 0.5;
@@ -245,15 +249,20 @@ impl Sampler {
         if p.planet.geology.regime == crate::geology::Regime::Plates {
             // The crust of each side of a boundary: continental above the
             // edge of the shelf, from the continents' shape alone.
-            let shelf = sampler.waterline - CONTINENTAL_SHELF;
-            let map = crate::plates::PlateMap::with_crust(p, |q| {
-                let (coarse, fine) = sampler.continent_shape(q);
-                coarse + fine > shelf
+            let map = crate::plates::PlateMap::at_epoch(p, f64::from(p.drift_ma), |q| {
+                sampler.continental(q)
             });
             sampler.tectonics = Some(map);
             sampler.noise_mountains = NOISE_MOUNTAINS_WITH_PLATES;
         }
         sampler
+    }
+
+    /// Whether the crust at a unit vector is continental: above the edge of
+    /// the shelf, from the continents' shape alone.
+    fn continental(&self, p: [f64; 3]) -> bool {
+        let (coarse, fine) = self.continent_shape(p);
+        coarse + fine > self.waterline - CONTINENTAL_SHELF
     }
 
     /// The continents' shape at a unit vector: its coarse octaves and its
@@ -309,6 +318,18 @@ impl Sampler {
         let nx = lat.cos() * lon.cos();
         let ny = lat.cos() * lon.sin();
         let nz = lat.sin();
+        // The plates carry the crust: the relief of a point is that of its
+        // crust where it lies today (the point itself at the present),
+        // while the climate and the plate boundaries stay at the point.
+        let map_point = [nx, ny, nz];
+        let origin = self.tectonics.as_ref().map_or(
+            crate::plates::Origin {
+                point: map_point,
+                new_crust: false,
+            },
+            |t| t.origin(map_point, |q| self.continental(q)),
+        );
+        let [nx, ny, nz] = origin.point;
 
         // Domain warping: twist coordinates before sampling for organic coastlines.
         let warp_x = self
@@ -370,6 +391,13 @@ impl Sampler {
         } else {
             (coarse, fine)
         };
+        // Crust formed where the plates parted, since the present (or
+        // before it, in the past): ocean floor, smoother than the old one.
+        let (coarse, fine) = if origin.new_crust {
+            (self.waterline - NEW_CRUST_DEPTH, NEW_CRUST_ROUGHNESS * fine)
+        } else {
+            (coarse, fine)
+        };
         let mountain_weight = ((coarse + fine - 0.2) * 2.5).clamp(0.0, 1.0);
         // Low ground inland keeps a share of the fine octaves: plains and
         // deserts are smooth, coasts keep their outline and mountains their
@@ -407,7 +435,7 @@ impl Sampler {
         let plates = self
             .tectonics
             .as_ref()
-            .map_or(crate::plates::Relief::default(), |t| t.relief([nx, ny, nz]));
+            .map_or(crate::plates::Relief::default(), |t| t.relief(map_point));
         // Relief scales with gravity as the mountains do.
         let tectonic_uplift = plates.uplift * self.mountain_blend / 0.35;
         let mountain_weight = (mountain_weight * self.noise_mountains).max(plates.orogeny);
@@ -423,7 +451,7 @@ impl Sampler {
         // the cones of volcanic provinces.
         let arc_cone = if plates.arc > ARC_MIN {
             self.cone_on(
-                [nx, ny, nz],
+                map_point,
                 self.arc_cone_seed,
                 ARC_CONE_CELL_KM,
                 ARC_CONE_PRESENCE,
@@ -454,6 +482,8 @@ impl Sampler {
         // Positive sea_level raises the waterline (more ocean); negative lowers it.
         let biome_elevation = (elevation - self.sea_level).clamp(-1.0, 1.0);
 
+        // The climate stays at the map point.
+        let [nx, ny, nz] = map_point;
         let moisture = fbm(
             &self.moisture_noise,
             nx * 1.5 * s,
@@ -779,9 +809,18 @@ pub fn generate_with_progress(
     let rules = &planet.rules;
     let grid = params.grid();
     let n = params.pixel_count();
-    // The tectonic plates, as diagnostic maps only for now (see `plates`).
+    // The tectonic plates, as diagnostic maps: those shaping the relief
+    // (at the world's epoch) on worlds with plate tectonics, the present
+    // ones on the others.
     if let Some(sink) = sink {
-        let map = crate::plates::PlateMap::new(params);
+        let own;
+        let map = match &sampler.tectonics {
+            Some(map) => map,
+            None => {
+                own = crate::plates::PlateMap::new(params);
+                &own
+            }
+        };
         let count = map.plate.iter().copied().max().unwrap_or(0).max(1);
         let at = |i: usize| {
             let (x, y) = (i as u32 % width, i as u32 / width);
@@ -1174,6 +1213,7 @@ mod tests {
             star: crate::star::SUN,
             orbit_au: 1.0,
             eccentricity: 0.0,
+            drift_ma: 0.0,
         }
     }
 

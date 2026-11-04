@@ -41,6 +41,10 @@ pub struct WorldParams {
     pub orbit_au: f32,
     /// Eccentricity of the orbit (0 circular).
     pub eccentricity: f32,
+    /// Epoch of the plates, Ma from the present (negative in the past): on
+    /// worlds with plate tectonics, the continents as the plates have
+    /// carried them by then (see `crate::plates`). 0 is the present.
+    pub drift_ma: f32,
 }
 
 impl WorldParams {

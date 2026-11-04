@@ -58,6 +58,11 @@ pub const ORBIT_AU: Limits = Limits {
 /// Eccentricity of the planet's orbit: 0 circular; beyond 0.9 the planet
 /// would graze its star or leave its habitable zone for most of its year.
 pub const ECCENTRICITY: Limits = Limits { min: 0.0, max: 0.9 };
+/// Epoch of the plates, Ma from the present (see `crate::plates`).
+pub const DRIFT_MA: Limits = Limits {
+    min: -crate::plates::DRIFT_LIMIT_MA as f32,
+    max: crate::plates::DRIFT_LIMIT_MA as f32,
+};
 /// Position in the host star's habitable zone: 0 inner edge, 1 outer edge.
 pub const HZ_POSITION: Limits = Limits {
     min: -2.0,
@@ -119,6 +124,9 @@ pub struct WorldRequest {
     pub hz_position: Option<f32>,
     /// Eccentricity of the orbit, in `[0, 0.9]`.
     pub eccentricity: Option<f32>,
+    /// Epoch of the plates, Ma from the present (negative in the past), in
+    /// `[-300, 300]`; the present when left out (never drawn).
+    pub drift_ma: Option<f32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -211,6 +219,7 @@ impl WorldRequest {
             ("orbit_au", self.orbit_au, ORBIT_AU),
             ("hz_position", self.hz_position, HZ_POSITION),
             ("eccentricity", self.eccentricity, ECCENTRICITY),
+            ("drift_ma", self.drift_ma, DRIFT_MA),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -333,6 +342,7 @@ impl WorldRequest {
             star,
             orbit_au,
             eccentricity,
+            drift_ma: self.drift_ma.unwrap_or(0.0),
         };
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
