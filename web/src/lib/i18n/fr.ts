@@ -484,6 +484,8 @@ export const fr: Messages = {
     playOrbitsHelp: `Faire défiler les orbites${S}: une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
     orbitDay: (p) => `Jour ${p.days} d’une orbite de ${p.period}${S}jours`,
     moonSun: `Sur une lune, le soleil suit son orbite${S}: il en fait le tour une fois par mois, la lune gardant sa face vers sa planète`,
+    moonSunSpin: ({ hours }: { hours: string }) =>
+      `Cette lune capturée n’est pas synchrone${S}: elle tourne sur elle-même en ${hours}${S}h, sa planète se lève et se couche`,
     atmosphere: 'Atmosphère',
     lockedSun: `En rotation synchrone${S}: l’étoile reste au-dessus du centre de la carte, sans saisons`,
     starLight: 'Lumière de l’étoile',

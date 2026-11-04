@@ -27,7 +27,20 @@
   import { presetName } from '../lib/i18n/names.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
-  import { halo, joinSkies, orbitLoops, siblingOrbitLoops, moonSky, moonSystemSky, planetSky, siblingSky, sunLongitudeOnMoon } from '../lib/skyBodies';
+  import {
+    bodyTurn,
+    halo,
+    joinSkies,
+    moonSky,
+    moonSpinHours,
+    moonSystemSky,
+    orbitLoops,
+    planetSky,
+    siblingOrbitLoops,
+    siblingSky,
+    spinAxes,
+    sunLongitudeOnMoon,
+  } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -668,7 +681,12 @@
         show: hostShow,
         axialTiltDeg: planet.axial_tilt_deg,
       };
-      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude, look);
+      // The planet turns on itself under its moon as the orbit slider plays
+      // (not under a binary's moon, which turns with it), from the hour of
+      // its own view.
+      const dayHours = planet.moons?.planet_day_hours ?? 24;
+      const turn = shownMoon.migration === 'locked' ? 0 : bodyTurn(orbitDays, dayHours, yearDays);
+      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude, look, turn);
     }
     // The moon of a giant: the giant hangs over the face the world keeps
     // towards it (longitude 180°), its bands from its own world in host/.
@@ -680,6 +698,9 @@
         (host.giant.radius_earth * 40075) / (2 * Math.PI),
         map,
         { show: hostShow, axialTiltDeg: planet.axial_tilt_deg },
+        [0, 0, -1],
+        // It turns on itself (its storms with it) as the orbit slider plays.
+        spinAxes(bodyTurn(orbitDays, host.giant.rotation_hours, host.period_days)),
       );
       // The giant's other regular moons beside it, with their phases.
       const siblings = siblingSky(
@@ -699,10 +720,17 @@
   // A moon locked to its planet (or a world locked to its giant) turns
   // once per orbit against the stars, its planet fixed in its sky: the star
   // field turns with its orbit, so the other bodies are seen to move against
-  // the stars, not to circle the moon.
+  // the stars, not to circle the moon. A moon that is not locked turns once
+  // per day of its own, its planet rising and setting.
   const starsTurn = $derived.by(() => {
     const { yearDays, season: moonSeason } = moonClock;
-    const period = shownMoon && world.moon !== null ? shownMoon.period_days : (world.worldMeta?.host?.period_days ?? null);
+    const spin = shownMoon && world.moon !== null ? moonSpinHours(shownMoon) : null;
+    const period =
+      spin !== null
+        ? spin / 24
+        : shownMoon && world.moon !== null
+          ? shownMoon.period_days
+          : (world.worldMeta?.host?.period_days ?? null);
     if (period === null || period <= 0) return 0;
     const turns = (moonSeason * yearDays) / period;
     return -2 * Math.PI * (turns - Math.floor(turns));
@@ -1288,7 +1316,9 @@
           {t.viewer.orbitDay({
             days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
             period: formatNumber(orbitPeriod, orbitPeriod < 10 ? 2 : 1),
-          })}{#if shownMoon}<br />{t.viewer.moonSun}{/if}
+          })}{#if shownMoon}<br />{moonSpinHours(shownMoon) === null
+              ? t.viewer.moonSun
+              : t.viewer.moonSunSpin({ hours: formatNumber(moonSpinHours(shownMoon) ?? 0, 1) })}{/if}
         </p>
       {/if}
       <label class="check"><input type="checkbox" bind:checked={atmosphere} /> {t.viewer.atmosphere}</label>

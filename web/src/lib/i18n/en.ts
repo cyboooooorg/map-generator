@@ -516,6 +516,8 @@ export const en = {
     playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds',
     orbitDay: (p: { days: string; period: string }) => `Day ${p.days} of a ${p.period}-day orbit`,
     moonSun: 'On a moon the sun follows its orbit: it turns once a month, the moon keeping its face to its planet',
+    moonSunSpin: ({ hours }: { hours: string }) =>
+      `This captured moon is not locked: it spins in ${hours} h, its planet rising and setting`,
     atmosphere: 'Atmosphere',
     lockedSun: 'Tidally locked: the star stays above the centre of the map, with no seasons',
     starLight: 'Star light',
