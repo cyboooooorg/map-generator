@@ -499,6 +499,11 @@ export const en = {
     sunOver: (p: { season: string; latitude: string; north: boolean }) =>
       `${p.season} · sun over ${p.latitude}° ${p.north ? 'N' : 'S'}`,
     sunLongitude: 'Sun longitude',
+    orbits: 'Moon orbits',
+    orbitsHelp: 'Moves the moons along their orbits, as many days after the season (their phases, their eclipses)',
+    playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds',
+    orbitDay: (p: { days: string; period: string }) => `Day ${p.days} of a ${p.period}-day orbit`,
+    moonSun: 'On a moon the sun follows its orbit: it turns once a month, the moon keeping its face to its planet',
     atmosphere: 'Atmosphere',
     lockedSun: 'Tidally locked: the star stays above the centre of the map, with no seasons',
     starLight: 'Star light',

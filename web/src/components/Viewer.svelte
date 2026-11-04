@@ -25,7 +25,7 @@
   import StarPane from './StarPane.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
-  import { halo, joinSkies, moonSky, moonSystemSky, planetSky, siblingSky } from '../lib/skyBodies';
+  import { halo, joinSkies, moonSky, moonSystemSky, planetSky, siblingSky, sunLongitudeOnMoon } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -96,6 +96,8 @@
   ];
   /** One year of the season animation, in seconds. */
   const YEAR_SECONDS = 12;
+  /** One orbit of the orbit animation, in seconds. */
+  const ORBIT_SECONDS = 10;
   /** mapgen::hex::DEFAULT_RIVER_FLOW_KM2, on the log10 slider. */
   const DEFAULT_RIVER_LOG = Math.log10(500_000);
   /** Wait before asking a server busy generating for the hex grid again, ms. */
@@ -152,6 +154,9 @@
   let season = $state(saved.season);
   let sunLongitude = $state(saved.sunLongitude);
   let playing = $state(false);
+  /** Days the moons have moved on along their orbits past the season. */
+  let orbitDays = $state(0);
+  let orbitsPlaying = $state(false);
   /** Whether the canvas has a size: hidden (narrow screens showing the list), nothing animates. */
   let canvasVisible = $state(true);
   let hexOn = $state(false);
@@ -568,13 +573,44 @@
   $effect(() => view?.setPath(path));
   /** A tidally locked world: its star stays above the map's centre (longitude 180°, the equator). */
   const locked = $derived(meta?.star?.tidally_locked ?? false);
+  /**
+   * The clock of the moons: their planet's year, the time on their
+   * orbits (the season, its star's place in the planet's sky as the
+   * planet view has it, and the days past it), in moonDirection's terms.
+   */
+  const moonClock = $derived.by(() => {
+    const planet = world.worldMeta;
+    const yearDays = planet?.star?.year_days ?? 365.25;
+    const planetLocked = planet?.star?.tidally_locked ?? false;
+    return {
+      yearDays,
+      season: (planetLocked ? 0 : season) + orbitDays / yearDays,
+      longitude: ((planetLocked ? 180 : sunLongitude) * Math.PI) / 180,
+    };
+  });
+  /** The period the orbit slider spans: of the moon shown, or of the largest moon. */
+  const orbitPeriod = $derived.by(() => {
+    if (shownMoon) return shownMoon.period_days;
+    const largest = moons.reduce<(typeof moons)[number] | null>(
+      (best, m) => (m.migration !== 'locked' && (!best || m.radius_km > best.radius_km) ? m : best),
+      null,
+    );
+    return largest?.period_days ?? null;
+  });
   $effect(() => {
+    // On a moon, the sun stands where the moon's place on its orbit puts it.
+    const moonSun =
+      shownMoon && world.moon !== null
+        ? sunLongitudeOnMoon(shownMoon, world.moon - 1, moonClock.season, moonClock.yearDays, moonClock.longitude)
+        : null;
     view?.setLighting(
       !sun
         ? { kind: 'headlight' }
-        : locked
-          ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
-          : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
+        : moonSun !== null
+          ? { kind: 'sun', season, longitudeDeg: moonSun, axialTiltDeg: meta?.axial_tilt_deg ?? 0 }
+          : locked
+            ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
+            : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
     );
   });
   // The other bodies of the system in the sky, with their phases, and
@@ -587,12 +623,7 @@
     const planetId = world.worldId;
     const moonMap = (k: number) =>
       planetId ? worldFile(planetId, `moons/${k + 1}/raw_data/surface.png`, revision) : null;
-    const yearDays = planet.star?.year_days ?? 365.25;
-    // The moons go round as the planet's seasons play (its star's place
-    // in its sky as the planet view has it).
-    const planetLocked = planet.star?.tidally_locked ?? false;
-    const moonSeason = planetLocked ? 0 : season;
-    const longitude = ((planetLocked ? 180 : sunLongitude) * Math.PI) / 180;
+    const { yearDays, season: moonSeason, longitude } = moonClock;
     if (shownMoon && world.moon !== null) {
       const map = planetId ? worldFile(planetId, 'raw_data/surface.png', revision) : null;
       // The planet as its own view shows it: its clouds and its air, by
@@ -634,6 +665,22 @@
   $effect(() => {
     view?.setSkyBodies(sky?.bodies ?? []);
     view?.setShadowCasters(sky?.casters ?? []);
+  });
+
+  // The orbit animation: one orbit of the slider's period every
+  // ORBIT_SECONDS, paused while the canvas is hidden.
+  $effect(() => {
+    const period = orbitPeriod;
+    if (!orbitsPlaying || !sun || !canvasVisible || !period) {
+      return;
+    }
+    let last = performance.now();
+    let frame = requestAnimationFrame(function step(now) {
+      orbitDays = (orbitDays + ((now - last) / 1000 / ORBIT_SECONDS) * period) % (period * 1000);
+      last = now;
+      frame = requestAnimationFrame(step);
+    });
+    return () => cancelAnimationFrame(frame);
   });
 
   // The season animation: one year every YEAR_SECONDS, paused while the
@@ -1077,6 +1124,34 @@
           <input type="range" min="0" max="360" step="1" bind:value={sunLongitude} />
           <small class="value">{sunLongitude}°</small>
         </label>
+      {/if}
+      {#if sun && orbitPeriod && sky}
+        <label>
+          <span title={t.viewer.orbitsHelp}>{t.viewer.orbits}</span>
+          <input
+            type="range"
+            min="0"
+            max={orbitPeriod}
+            step={orbitPeriod / 400}
+            value={orbitDays % orbitPeriod}
+            oninput={(e) => {
+              const day = Number(e.currentTarget.value);
+              orbitDays = Math.floor(orbitDays / orbitPeriod) * orbitPeriod + day;
+            }}
+          />
+          <button
+            class="small"
+            onclick={() => (orbitsPlaying = !orbitsPlaying)}
+            aria-pressed={orbitsPlaying}
+            title={t.viewer.playOrbitsHelp}>{orbitsPlaying ? t.viewer.pause : t.viewer.play}</button
+          >
+        </label>
+        <p class="muted">
+          {t.viewer.orbitDay({
+            days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
+            period: formatNumber(orbitPeriod, orbitPeriod < 10 ? 2 : 1),
+          })}{#if shownMoon}<br />{t.viewer.moonSun}{/if}
+        </p>
       {/if}
       <label class="check"><input type="checkbox" bind:checked={atmosphere} /> {t.viewer.atmosphere}</label>
       <label class="check" title={t.viewer.starsHelp}><input type="checkbox" bind:checked={stars} /> {t.viewer.stars}</label>
