@@ -607,7 +607,7 @@ export const en = {
     orbitSection: 'Its orbit',
     origin: 'Origin',
     originHelp: 'How it formed: from the debris of a giant impact on its planet, from the debris disk of a smaller impact, or captured as it passed',
-    origins: { giant_impact: 'Giant impact', debris: 'Impact debris', captured: 'Captured' },
+    origins: { giant_impact: 'Giant impact', debris: 'Impact debris', captured: 'Captured', disk: 'Circumplanetary disk' },
     composition: 'Made of',
     compositions: { rock: 'Rock', ice: 'Ice and rock' },
     size: 'Size',

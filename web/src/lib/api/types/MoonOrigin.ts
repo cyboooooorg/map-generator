@@ -3,4 +3,4 @@
 /**
  * How a moon formed.
  */
-export type MoonOrigin = "giant_impact" | "debris" | "captured";
+export type MoonOrigin = "giant_impact" | "debris" | "captured" | "disk";

@@ -89,6 +89,9 @@ pub enum MoonOrigin {
     Debris,
     /// A passing body captured by the planet.
     Captured,
+    /// Grown in a giant planet's circumplanetary disk, as the Galilean
+    /// moons (a giant's regular moons).
+    Disk,
 }
 
 /// What a moon is made of.
@@ -313,6 +316,9 @@ impl MoonSystem {
     pub fn draw(p: &WorldParams) -> Option<Self> {
         if p.moons == MoonsMode::None {
             return None;
+        }
+        if let Some(mass_earth) = p.giant_mass_earth {
+            return Some(Self::of_giant(p, mass_earth));
         }
         let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
@@ -628,6 +634,99 @@ impl MoonSystem {
     }
 
     /// The system with what it does to its planet filled in.
+    /// The moons of a giant world: regular moons grown in its disk, about
+    /// 10⁻⁴ of its mass together (Canup & Ward 2006), on a resonant chain
+    /// from 4 to 8 of its radii outwards (periods doubling, as Io, Europa
+    /// and Ganymede), rock close in and ice and rock beyond about 9 radii
+    /// (Europa's and Ganymede's change); two to five of them, or as many as
+    /// asked; on some ice giants a large retrograde moon captured instead
+    /// (Triton, which scattered the regular ones). A hot giant keeps none:
+    /// its Hill sphere is too small and its tides drag them in.
+    fn of_giant(p: &WorldParams, mass_earth: f32) -> Self {
+        let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let look = crate::giant_world::Look::draw(p, mass_earth).info;
+        let r_g = f64::from(p.circumference_km) / (2.0 * PI);
+        let m_g = f64::from(mass_earth) * EARTH_MASS_KG;
+        let periapsis_km = f64::from(star.periapsis_au.max(1e-4)) * AU_KM;
+        let hill = periapsis_km * (m_g / (3.0 * f64::from(star.mass) * SUN_MASS_KG)).cbrt();
+        let day = f64::from(look.rotation_hours);
+        let synchronous = {
+            let t = day * 3600.0;
+            (G * m_g * t * t / (4.0 * PI * PI)).cbrt()
+        };
+        let asked = p.moons.count();
+        let drawn = 2 + (rng.next() * 4.0) as usize;
+        let captured_triton = look.kind == crate::giants::GiantKind::Ice && rng.next() < 0.35;
+        let first = rng.uniform(4.0, 8.0);
+        let mut moons: Vec<Moon> = Vec::new();
+        if !look.hot {
+            let count = asked.map_or(drawn, usize::from);
+            // Masses sharing 1e-4 of the giant's, unevenly.
+            let weights: Vec<f64> = (0..count).map(|_| rng.uniform(0.3, 1.7)).collect();
+            let total: f64 = weights.iter().sum();
+            let ice_line = rng.uniform(8.0, 11.0);
+            for (k, w) in weights.iter().enumerate() {
+                let mut a_radii = first * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
+                // A captured giant moon sweeps the outer disk: the regular
+                // moons left keep inside it.
+                if captured_triton {
+                    a_radii *= 0.5;
+                }
+                let a = (a_radii * r_g).min(hill / 3.0);
+                let mass = 1e-4 * m_g * w / total * if captured_triton { 0.02 } else { 1.0 };
+                let icy = a_radii > ice_line || star.equilibrium_k < 60.0;
+                let density = if icy { 1.9 } else { 3.3 };
+                moons.push(regular_moon(
+                    p,
+                    &mut rng,
+                    m_g,
+                    r_g,
+                    a,
+                    mass,
+                    density,
+                    icy,
+                    synchronous,
+                    MoonOrigin::Disk,
+                    0.3,
+                ));
+            }
+            if captured_triton && asked.is_none() {
+                // Triton: 2.4 times its mass in a retrograde orbit at 14 radii.
+                let a = (rng.uniform(12.0, 16.0) * r_g).min(hill / 3.0);
+                let mass = rng.uniform(1.5e-4, 3e-4) * m_g;
+                moons.push(regular_moon(
+                    p,
+                    &mut rng,
+                    m_g,
+                    r_g,
+                    a,
+                    mass,
+                    2.06,
+                    true,
+                    synchronous,
+                    MoonOrigin::Captured,
+                    157.0,
+                ));
+            }
+        }
+        moons.sort_by(|a, b| a.semi_major_axis_km.total_cmp(&b.semi_major_axis_km));
+        for (k, moon) in moons.iter_mut().enumerate() {
+            moon.name = roman(k + 1);
+        }
+        Self {
+            planet_day_hours: day as f32,
+            synchronous_orbit_km: synchronous as f32,
+            hill_radius_km: hill as f32,
+            binary: false,
+            // A giant has no shores for tides to set, and its tilt is its own.
+            tide: 0.0,
+            tilt_steadied: false,
+            count_asked: asked,
+            moons,
+        }
+    }
+
     fn with_effects(mut self, p: &WorldParams) -> Self {
         let effects = PlanetEffects::of(p, Some(&self));
         self.tide = effects.tide;
@@ -832,6 +931,57 @@ pub fn shape_layer(p: &WorldParams) -> Option<Vec<f32>> {
             })
             .collect(),
     )
+}
+
+/// A round moon of a giant on a near-circular orbit of semi-major axis `a`
+/// km (inclination `inclination` degrees, retrograde above 90).
+#[allow(clippy::too_many_arguments)]
+fn regular_moon(
+    p: &WorldParams,
+    rng: &mut Draws,
+    m_g: f64,
+    r_g: f64,
+    a: f64,
+    mass: f64,
+    density: f64,
+    icy: bool,
+    synchronous: f64,
+    origin: MoonOrigin,
+    inclination: f64,
+) -> Moon {
+    let _ = p;
+    let radius = (3.0 * mass / (4.0 * PI * density * 1e12)).cbrt();
+    let period = 2.0 * PI * (a.powi(3) / (G * (m_g + mass))).sqrt() / 86_400.0;
+    let retrograde = inclination > 90.0;
+    Moon {
+        name: String::new(),
+        origin,
+        composition: if icy {
+            Composition::Ice
+        } else {
+            Composition::Rock
+        },
+        radius_km: radius as f32,
+        axes_km: [radius as f32; 3],
+        round: true,
+        mass_ratio: (mass / m_g) as f32,
+        density: density as f32,
+        gravity: (G * mass / (radius * radius) * 1000.0 / 9.81) as f32,
+        semi_major_axis_km: a as f32,
+        semi_major_axis_radii: (a / r_g) as f32,
+        eccentricity: rng.uniform(0.0, 0.01) as f32,
+        inclination_deg: (inclination + rng.uniform(-0.3, 0.3)).max(0.0) as f32,
+        period_days: period as f32,
+        tidally_locked: true,
+        migration: if retrograde || a < synchronous {
+            Migration::Decaying
+        } else {
+            Migration::Receding
+        },
+        angular_diameter_deg: (2.0 * (radius / (a - r_g)).atan()).to_degrees() as f32,
+        barycentre_km: (a * mass / (m_g + mass)) as f32,
+        seed: (rng.next() * f64::from(u32::MAX)) as u32,
+    }
 }
 
 #[cfg(test)]
@@ -1109,5 +1259,63 @@ mod tests {
             MoonSystem::draw(&params(9, 21_300.0))
         );
         assert_eq!(roman(14), "XIV");
+    }
+
+    #[test]
+    fn giants_have_regular_moons_on_a_resonant_chain_and_hot_ones_none() {
+        let giant = |preset: &str, seed: u32, mass: f32, orbit_au: f32, moons: MoonsMode| {
+            let mut p = params(seed, 40_075.0);
+            p.planet = crate::preset::Preset::load(preset).unwrap();
+            p.giant_mass_earth = Some(mass);
+            p.orbit_au = orbit_au;
+            p.moons = moons;
+            p.circumference_km = crate::giant_world::radius_earth(&p, mass) * 40_075.0;
+            p
+        };
+        let (mut triton, mut disk_systems) = (0, 0);
+        for seed in 0..200 {
+            let p = giant("gas-giant", seed, 317.8, 5.2, MoonsMode::Auto);
+            let system = MoonSystem::draw(&p).unwrap();
+            assert!(
+                (2..=5).contains(&system.moons.len()),
+                "{}",
+                system.moons.len()
+            );
+            let total: f32 = system.moons.iter().map(|m| m.mass_ratio).sum();
+            assert!((total - 1e-4).abs() < 1e-6, "{total}");
+            for pair in system.moons.windows(2) {
+                let ratio = pair[1].period_days / pair[0].period_days;
+                assert!((1.6..2.4).contains(&ratio), "{ratio}");
+            }
+            // Galilean sizes.
+            assert!(
+                system
+                    .moons
+                    .iter()
+                    .all(|m| (300.0..3500.0).contains(&m.radius_km))
+            );
+            assert!(
+                system
+                    .moons
+                    .iter()
+                    .all(|m| m.origin == MoonOrigin::Disk && m.tidally_locked)
+            );
+            disk_systems += 1;
+            let ice =
+                MoonSystem::draw(&giant("ice-giant", seed, 17.0, 20.0, MoonsMode::Auto)).unwrap();
+            triton += usize::from(
+                ice.moons
+                    .iter()
+                    .any(|m| m.origin == MoonOrigin::Captured && m.inclination_deg > 90.0),
+            );
+        }
+        assert_eq!(disk_systems, 200);
+        assert!((40..100).contains(&triton), "{triton}");
+        // As many as asked; none for a hot Jupiter.
+        let asked =
+            MoonSystem::draw(&giant("gas-giant", 1, 317.8, 5.2, MoonsMode::Count(6))).unwrap();
+        assert_eq!(asked.moons.len(), 6);
+        let hot = MoonSystem::draw(&giant("hot-jupiter", 1, 300.0, 0.04, MoonsMode::Auto)).unwrap();
+        assert!(hot.moons.is_empty());
     }
 }
