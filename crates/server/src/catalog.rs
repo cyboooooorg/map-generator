@@ -1,5 +1,6 @@
 //! Planet presets the server accepts: the built-in ones plus every `.toml`
-//! file under the presets directory that is not a built-in.
+//! file under the presets directory that is not a built-in, nor a moon
+//! preset (`moons/`).
 //!
 //! Requests name a preset by its catalog `spec`, never by a raw path, so a
 //! client cannot make the server read arbitrary files. Presets are parsed
@@ -32,6 +33,10 @@ impl Catalog {
                 continue;
             };
             let spec = relative.to_string_lossy().replace('\\', "/");
+            // presets/moons/ holds the presets of moons, not planet types.
+            if spec.starts_with("moons/") {
+                continue;
+            }
             // presets/<name>.toml are the built-in sources: already listed.
             if built_in_names()
                 .iter()

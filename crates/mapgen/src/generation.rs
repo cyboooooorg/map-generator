@@ -125,6 +125,21 @@ const CONE_HEIGHT: f32 = 0.25;
 /// Depth below the waterline down to which the crust counts as
 /// continental (the continental shelf), elevation units.
 const CONTINENTAL_SHELF: f32 = 0.05;
+/// Share of the noise relief a body of `circumference_km` keeps: all of it
+/// above about 830 km in radius, below that [`SMALL_BODY_RELIEF`] of its
+/// radius over the noise's typical amplitude (half an elevation unit,
+/// 12.5 km).
+fn relief_share(circumference_km: f32) -> f32 {
+    let radius_km = circumference_km / (2.0 * std::f32::consts::PI);
+    (SMALL_BODY_RELIEF * radius_km / (0.5 * crate::craters::ELEVATION_KM)).min(1.0)
+}
+
+/// Relief of a small body, as a share of its radius.
+const SMALL_BODY_RELIEF: f32 = 0.015;
+
+/// Largest noise scale (relief features per Earth-sized ones), reached at
+/// about 5 000 km around.
+const MAX_NOISE_SCALE: f32 = 8.0;
 /// Depth of the crust formed where the plates part below the waterline, in
 /// continent-shape units, and the share of the fine octaves it keeps.
 const NEW_CRUST_DEPTH: f32 = 0.3;
@@ -212,7 +227,10 @@ impl Sampler {
         // Scale noise frequencies by planet size: a larger circumference
         // stretches the unit-sphere coordinates, producing broader continents.
         // Earth (40 075 km) ≡ scale 1.0.
-        let noise_scale = (EARTH_CIRCUMFERENCE_KM / p.circumference_km.max(1.0)) as f64;
+        // Capped: below about 5 000 km around (small moons), the relief
+        // would turn into grain.
+        let noise_scale =
+            (EARTH_CIRCUMFERENCE_KM / p.circumference_km.max(1.0)).min(MAX_NOISE_SCALE) as f64;
         let grid = p.grid();
         let mut sampler = Self {
             tectonics: None,
@@ -618,11 +636,14 @@ pub enum Stage {
     Biomes,
     /// Writing the output files (reported by the caller of [`export_world`](crate::export::export_world)).
     Export,
+    /// Generating and writing the moons (reported by the caller of
+    /// [`export_moons`](crate::export::export_moons)).
+    Moons,
 }
 
 impl Stage {
     /// Every stage, in the order they run.
-    pub const ALL: [Stage; 8] = [
+    pub const ALL: [Stage; 9] = [
         Stage::Noise,
         Stage::Erosion,
         Stage::Temperature,
@@ -631,6 +652,7 @@ impl Stage {
         Stage::Rivers,
         Stage::Biomes,
         Stage::Export,
+        Stage::Moons,
     ];
 }
 
@@ -864,6 +886,16 @@ pub fn generate_with_progress(
         variability_m,
         highland_offset,
     } = fields;
+    // Small bodies (moons) cannot hold the relief of a planet: it is
+    // flattened towards the sea level to a few percent of their radius,
+    // where craters shape them.
+    let flatten = relief_share(params.circumference_km);
+    if flatten < 1.0 {
+        let sea = params.sea_level;
+        elevation
+            .par_iter_mut()
+            .for_each(|e| *e = sea + (*e - sea) * flatten);
+    }
     // Rows of sea-level temperature, evened out by dense air.
     // The host star: its light, regulated by a carbon cycle on wet worlds
     // with plate tectonics, and the planet's own heat.
@@ -1215,6 +1247,7 @@ mod tests {
             eccentricity: 0.0,
             drift_ma: 0.0,
             moons: crate::moons::MoonsMode::Auto,
+            shape: None,
         }
     }
 

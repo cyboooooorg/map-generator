@@ -368,7 +368,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 13. Moons
 
-- **Status:** in progress (step 1 done: the moon system)
+- **Status:** in progress (steps 1 and 2 done: the moon system, moon
+  surfaces)
 - **Analysis:** [11-moons.md](analysis/11-moons.md)
 - **Problem:** worlds have a star and an orbit but no satellites: no
   moon in the star view or the sky, and nothing ties the axial tilt or
@@ -390,7 +391,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Step | Change                                                                                                           | Seeds  | Status |
 | ---- | ---------------------------------------------------------------------------------------------------------------- | ------ | ------ |
 | 1    | `moons` module: channels and odds, orbits, stability, shapes, migration; `world.json` `moons`; `--moons`         | Same   | done   |
-| 2    | Moon surfaces: each moon generated as a world (`barren`, `icy-moon`, `shape` layer), server routes for its tiles | Same   | todo   |
+| 2    | Moon surfaces: each moon generated as a world (`barren`, `icy-moon`, `shape` layer), server routes for its tiles | Same   | done   |
 | 3    | Moon view: Planet / Star / Moon switch, the planet view on any body, moon panel, moons in the star view          | Same   | todo   |
 | 4    | Skies: the planet in each moon's sky, the moons in the planet's sky, eclipses (optional)                         | Same   | todo   |
 | 5    | Effects on the planet: axial tilt stabilised, tidal flats, binary rotation                                       | Change | todo   |

@@ -39,6 +39,12 @@ floodplain?: ScalarLayerInfo | null,
  */
 albedo?: ScalarLayerInfo | null, 
 /**
+ * Radius of an irregular body as a share of its mean radius, 16 bits
+ * in `[0, 2]`: the globe's shape, which the elevation details (format
+ * version 9 and later, irregular moons only).
+ */
+shape?: ScalarLayerInfo | null, 
+/**
  * Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
  * (max − min)`); format version 5 and later, absent on worlds without
  * clouds.

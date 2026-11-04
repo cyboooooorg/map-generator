@@ -42,7 +42,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use mapgen::detail::{RENDER_VERSION, TileId};
-use mapgen::export::{ExportOptions, export_world, world_dir_name};
+use mapgen::export::{ExportOptions, export_moons, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, Stage, generate_with_progress};
 use mapgen::hex::{self, DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
@@ -241,6 +241,14 @@ pub fn router(config: Config) -> Router {
         .route("/api/worlds/{id}/hex", post(hex_grid))
         .route("/api/worlds/{id}/tiles/{z}/{x}/{y}", get(tile))
         .route("/api/worlds/{id}/epoch/{epoch}/{file}", get(epoch_layer))
+        .route(
+            "/api/worlds/{id}/moons/{moon}/tiles/{z}/{x}/{y}",
+            get(moon_tile),
+        )
+        .route(
+            "/api/worlds/{id}/moons/{moon}/epoch/{epoch}/{file}",
+            get(moon_epoch_layer),
+        )
         .route("/api/worlds/{id}/thumb", get(thumbnail))
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
@@ -382,8 +390,43 @@ async fn tile(
     UrlPath((id, z, x, y)): UrlPath<(String, u32, u32, u32)>,
     Query(query): Query<TileQuery>,
 ) -> Result<Response, Failure> {
-    let tile = TileId { z, x, y };
-    if !worlds::is_valid_id(&id) || !tile.is_valid() {
+    if !worlds::is_valid_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
+    }
+    body_tile(state, id, TileId { z, x, y }, query).await
+}
+
+/// A detail tile of moon `moon` (from 1) of a world, as [`tile`].
+async fn moon_tile(
+    State(state): State<Shared>,
+    UrlPath((id, moon, z, x, y)): UrlPath<(String, u32, u32, u32, u32)>,
+    Query(query): Query<TileQuery>,
+) -> Result<Response, Failure> {
+    let body = moon_body(&id, moon)?;
+    body_tile(state, body, TileId { z, x, y }, query).await
+}
+
+/// The body path of moon `moon` (from 1) of world `id`, as the world
+/// directory holds it: `<id>/moons/<moon>`.
+fn moon_body(id: &str, moon: u32) -> Result<String, Failure> {
+    if !worlds::is_valid_id(id) || !(1..=MAX_MOONS).contains(&moon) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid moon".into()));
+    }
+    Ok(format!("{id}/moons/{moon}"))
+}
+
+/// More moons than a world can have.
+const MAX_MOONS: u32 = 16;
+
+/// A detail tile of a body: a world (`id`) or one of its moons
+/// (`id/moons/n`, a world of its own in the world's directory).
+async fn body_tile(
+    state: Shared,
+    id: String,
+    tile: TileId,
+    query: TileQuery,
+) -> Result<Response, Failure> {
+    if !tile.is_valid() {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
     }
     let revision = world_revision(&state, &id).await?;
@@ -444,6 +487,28 @@ async fn epoch_layer(
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
     }
+    body_epoch_layer(state, id, epoch_ma, file, query).await
+}
+
+/// A layer of moon `moon` (from 1) of a world at an epoch, as
+/// [`epoch_layer`].
+async fn moon_epoch_layer(
+    State(state): State<Shared>,
+    UrlPath((id, moon, epoch_ma, file)): UrlPath<(String, u32, i32, String)>,
+    Query(query): Query<EpochQuery>,
+) -> Result<Response, Failure> {
+    let body = moon_body(&id, moon)?;
+    body_epoch_layer(state, body, epoch_ma, file, query).await
+}
+
+/// A layer of a body (see [`body_tile`]) at an epoch.
+async fn body_epoch_layer(
+    state: Shared,
+    id: String,
+    epoch_ma: i32,
+    file: String,
+    query: EpochQuery,
+) -> Result<Response, Failure> {
     let layer = tiles::EpochLayer::from_file(&file).ok_or_else(|| {
         Failure(
             StatusCode::NOT_FOUND,
@@ -761,6 +826,9 @@ async fn create_world(
             let id = world_dir_name(&generated.world.params);
             let temp = worlds::TempDir::create(&worlds_dir, &id)?;
             export_world(generated, temp.path(), ExportOptions { raw_data: true })?;
+            // The planet's memory is freed by now: its moons, one by one.
+            report(Stage::Moons);
+            export_moons(&params, temp.path(), ExportOptions { raw_data: true })?;
             // The export cannot be interrupted: a cancel that arrived
             // meanwhile drops it here.
             if thread_cancel.is_requested() {
@@ -892,6 +960,17 @@ mod tests {
     use axum::http::Request;
     use http_body_util::BodyExt;
     use tower::ServiceExt;
+
+    #[test]
+    fn moons_are_bodies_in_their_world_directory() {
+        assert_eq!(
+            moon_body("terran-42", 1).ok().as_deref(),
+            Some("terran-42/moons/1")
+        );
+        assert!(moon_body("terran-42", 0).is_err());
+        assert!(moon_body("terran-42", MAX_MOONS + 1).is_err());
+        assert!(moon_body("../etc", 1).is_err());
+    }
 
     #[test]
     fn viewer_and_server_agree_on_the_tile_renderer_version() {

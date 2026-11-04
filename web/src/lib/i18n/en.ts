@@ -108,6 +108,7 @@ export const en = {
     rivers: 'Routing rivers and lakes',
     biomes: 'Choosing biomes',
     export: 'Writing the maps',
+    moons: 'Shaping the moons',
   } satisfies Record<Stage, string>,
   /** Distance measurement. */
   measure: {

@@ -47,6 +47,10 @@ pub struct WorldParams {
     pub drift_ma: f32,
     /// Whether the world has the moons its seed draws (see `crate::moons`).
     pub moons: crate::moons::MoonsMode,
+    /// The three semi-axes of an irregular body (a moon too small to be
+    /// round) as shares of its mean radius, the first towards longitude
+    /// 180°, the last along the axis of rotation; `None` for a round one.
+    pub shape: Option<[f32; 3]>,
 }
 
 impl WorldParams {

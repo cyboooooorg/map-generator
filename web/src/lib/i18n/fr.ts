@@ -94,6 +94,7 @@ export const fr: Messages = {
     rivers: 'Tracé des rivières et des lacs',
     biomes: 'Choix des biomes',
     export: 'Écriture des cartes',
+    moons: 'Modelage des lunes',
   },
   measure: {
     label: 'Mesure de distance',

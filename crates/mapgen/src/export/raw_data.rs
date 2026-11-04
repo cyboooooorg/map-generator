@@ -46,8 +46,13 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// scale; version 5 adds the cloud cover; version 6 the surface render
 /// without overlaid lines; version 7 the elevation without the young
 /// impact craters, and its worlds have craters; version 8 the albedo of
-/// fresh craters.
-pub const FORMAT_VERSION: u32 = 8;
+/// fresh craters; version 9 the moons (under `moons` in `world.json`, each
+/// one a world of its own in `moons/<n>/`) and the shape of irregular
+/// bodies.
+pub const FORMAT_VERSION: u32 = 9;
+
+/// Range of the shape layer: the radius as a share of the mean one.
+const SHAPE: (f32, f32) = (0.0, 2.0);
 
 /// First format version whose temperatures are in °C.
 const CELSIUS_VERSION: u32 = 4;
@@ -91,6 +96,10 @@ pub struct WorldMetadata {
     /// them off, and in the worlds made before them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moons: Option<crate::moons::MoonSystem>,
+    /// The semi-axes of an irregular body, as shares of its mean radius
+    /// (see `WorldParams::shape`); left out for a round one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<[f32; 3]>,
     pub layers: Layers,
     /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -129,6 +138,11 @@ pub struct Layers {
     /// version 8 and later).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub albedo: Option<ScalarLayerInfo>,
+    /// Radius of an irregular body as a share of its mean radius, 16 bits
+    /// in `[0, 2]`: the globe's shape, which the elevation details (format
+    /// version 9 and later, irregular moons only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<ScalarLayerInfo>,
     /// Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
     /// (max − min)`); format version 5 and later, absent on worlds without
     /// clouds.
@@ -285,6 +299,23 @@ pub fn export_raw_data(
         None => None,
     };
 
+    let shape = match crate::moons::shape_layer(&world.params) {
+        Some(values) => {
+            let (min, max) = SHAPE;
+            let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
+            ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
+                .ok_or("layer size does not match the world size")?
+                .save(dir.join("shape.png"))?;
+            Some(ScalarLayerInfo {
+                file: "shape.png".into(),
+                encoding: "gray16".into(),
+                min,
+                max,
+            })
+        }
+        None => None,
+    };
+
     let albedo = if world.albedo.is_empty() {
         None
     } else {
@@ -379,6 +410,7 @@ pub fn export_raw_data(
         )),
         drift_ma: world.params.drift_ma,
         moons: crate::moons::MoonSystem::draw(&world.params),
+        shape: world.params.shape,
         layers: Layers {
             elevation,
             elevation_base,
@@ -391,6 +423,7 @@ pub fn export_raw_data(
             floodplain: Some(floodplain),
             clouds,
             albedo,
+            shape,
             surface,
             biomes: BiomeLayerInfo {
                 file: "biomes.png".into(),
@@ -746,6 +779,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         } else {
             crate::moons::MoonsMode::None
         },
+        shape: meta.shape,
     };
     let l = &meta.layers;
     let infos = [
@@ -924,6 +958,7 @@ mod tests {
             eccentricity: 0.0,
             drift_ma: 0.0,
             moons: crate::moons::MoonsMode::Auto,
+            shape: None,
         })
         .world;
         let world_dir =
