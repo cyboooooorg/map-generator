@@ -31,6 +31,8 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.orbitAndPosition;
     case 'no_room_for_moons':
       return t.errors.noRoomForMoons({ count: detail.count });
+    case 'moons_of_a_moon':
+      return t.errors.moonsOfAMoon;
   }
 }
 
