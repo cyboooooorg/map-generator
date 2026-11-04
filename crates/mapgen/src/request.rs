@@ -471,12 +471,10 @@ impl WorldRequest {
             }
         }
         // The moon of a giant: no moons of its own (the giant's tides take
-        // them), and tidal heat raises a drawn volcanism.
-        if let Some(host) = crate::exomoon::HostGiant::draw(&params) {
+        // them). Whether it is one depends on the seed and request only, not
+        // on the orbit drawn below.
+        if crate::exomoon::HostGiant::draw(&params).is_some() {
             params.moons = crate::moons::MoonsMode::None;
-            if self.volcanic.is_none() {
-                params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
-            }
         }
         // What the moons do to their planet: a large one keeps a drawn tilt
         // in the usual range (a free one ranges wider), and the tides
@@ -522,6 +520,14 @@ impl WorldRequest {
                 }
                 params.eccentricity = forced.min(ECCENTRICITY.max);
             }
+        }
+        // Tidal heat raises a drawn volcanism, from the giant as the final
+        // orbit places it (the giants may have forced its eccentricity), so
+        // that `host.tidal_flux` in `world.json` explains it.
+        if self.volcanic.is_none()
+            && let Some(host) = crate::exomoon::HostGiant::draw(&params)
+        {
+            params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
         }
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
@@ -856,6 +862,34 @@ mod tests {
             .unwrap()
             .params;
             assert_eq!(p.host, crate::exomoon::HostMode::None);
+        }
+    }
+
+    #[test]
+    fn a_giants_moon_takes_its_volcanism_from_its_final_orbit() {
+        // The giants may force the eccentricity after the host is known:
+        // the volcanism follows the tides of the final orbit.
+        for seed in 0..40 {
+            let p = WorldRequest {
+                planet: Some("terran".into()),
+                seed: Some(seed),
+                host: Some(crate::exomoon::HostMode::Giant),
+                metallicity: Some(0.5),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            }
+            .resolve(&mut rand::rng())
+            .unwrap()
+            .params;
+            let host = crate::exomoon::HostGiant::draw(&p).expect("a giant's moon");
+            assert!(
+                p.volcanic_intensity >= host.volcanism(),
+                "seed {seed}: {} < {}",
+                p.volcanic_intensity,
+                host.volcanism()
+            );
+            assert_eq!(p.moons, crate::moons::MoonsMode::None);
         }
     }
 }

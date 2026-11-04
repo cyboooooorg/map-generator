@@ -587,6 +587,7 @@ export const en = {
     coast: { label: 'Distance to the sea', min: '0 km', max: 'cap (√ scale)' },
     floodplain: { label: 'Floodplain', min: 'none', max: 'valley floor' },
     wind: { label: 'Wind', min: 'west', max: 'east' },
+    cloudTops: { label: 'Cloud tops', min: 'deep belts', max: 'high storms' },
   } satisfies Record<DataLayer, { label: string; min: string; max: string }>,
   /** Actions of the keyboard shortcuts, in the order of the help. */
   shortcuts: {

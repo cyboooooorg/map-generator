@@ -8,6 +8,7 @@ import {
   joinSkies,
   MAX_CASTERS,
   moonDirection,
+  moonPlace,
   moonSky,
   moonSpinHours,
   moonSystemSky,
@@ -46,7 +47,8 @@ const moon = (overrides: Partial<Moon> = {}): Moon =>
     gravity: 0.17,
     semi_major_axis_km: 384_400,
     semi_major_axis_radii: 60.3,
-    eccentricity: 0.05,
+    // Circular unless a test says otherwise (see the Kepler test).
+    eccentricity: 0,
     inclination_deg: 0,
     period_days: 27.3,
     tidally_locked: true,
@@ -65,6 +67,26 @@ describe('sky bodies', () => {
     // Half a month later it is new, towards the sun.
     const fresh = moonDirection(moon(), 0, 13.65 / 365.25, 365.25, 0);
     expect(fresh[2]).toBeCloseTo(1, 6);
+  });
+
+  it('moves an eccentric moon on its ellipse, nearer and faster at periapsis', () => {
+    const eccentric = moon({ eccentricity: 0.3, seed: 0 });
+    // Seed 0: the periapsis at longitude 0, where the mean longitude is half
+    // an orbit after the season starts (the sun at longitude 0).
+    const at = (days: number) => moonPlace(eccentric, 0, days / 365.25, 365.25, 0);
+    const peri = at(27.3 / 2);
+    const apo = at(0);
+    expect(peri.distanceKm).toBeCloseTo(384_400 * 0.7, 3);
+    expect(apo.distanceKm).toBeCloseTo(384_400 * 1.3, 3);
+    expect(peri.direction[2]).toBeCloseTo(1, 9);
+    // A tenth of a day either side, it sweeps a wider angle near periapsis (Kepler's second law).
+    const angle = (a: number[], b: number[]) => Math.acos(Math.min(1, a.reduce((sum, c, i) => sum + c * b[i]!, 0)));
+    const nearPeri = angle(at(27.3 / 2 - 0.1).direction, at(27.3 / 2 + 0.1).direction);
+    const nearApo = angle(at(-0.1).direction, at(0.1).direction);
+    expect(nearPeri / nearApo).toBeCloseTo((1.3 / 0.7) ** 2, 1);
+    // Larger in the sky and its orbit line nearer there.
+    const sky = (days: number) => planetSky([eccentric], 6371, days / 365.25, 365.25, 0).bodies[0]!;
+    expect(sky(27.3 / 2).angularDiameterDeg / sky(0).angularDiameterDeg).toBeCloseTo(1.3 / 0.7, 6);
   });
 
   it('keeps the moon of a binary planet over the same point', () => {

@@ -33,11 +33,30 @@ export function initialGiantChoice(initial: WorldRequest | null | undefined): Gi
  * (it has no giant neighbours and is nobody's moon).
  */
 export function applyGiantChoice(request: WorldRequest, choice: GiantChoice, giantWorld: boolean): void {
-  if (!choice.metallicityRandom) request.metallicity = choice.metallicity;
+  // A field emptied by the user holds no number: drawn, as when random.
+  if (!choice.metallicityRandom && Number.isFinite(choice.metallicity)) request.metallicity = choice.metallicity;
   if (giantWorld) {
-    if (!choice.massRandom) request.mass_earth = choice.mass;
+    if (!choice.massRandom && Number.isFinite(choice.mass) && choice.mass > 0) request.mass_earth = choice.mass;
     return;
   }
   if (choice.giants !== 'auto') request.giants = choice.giants;
   if (choice.host !== 'auto') request.host = choice.host;
+}
+
+/**
+ * Reads a remembered choice, keeping only well-formed values: each one
+ * missing or malformed takes the drawn default of `initialGiantChoice`.
+ */
+export function parseGiantChoice(raw: unknown): GiantChoice {
+  const choice = initialGiantChoice(null);
+  if (typeof raw !== 'object' || raw === null) return choice;
+  const r = raw as Record<string, unknown>;
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  if (typeof r.metallicityRandom === 'boolean') choice.metallicityRandom = r.metallicityRandom;
+  if (finite(r.metallicity)) choice.metallicity = r.metallicity;
+  if (r.giants === 'auto' || r.giants === 'none') choice.giants = r.giants;
+  if (r.host === 'auto' || r.host === 'none' || r.host === 'giant') choice.host = r.host;
+  if (typeof r.massRandom === 'boolean') choice.massRandom = r.massRandom;
+  if (finite(r.mass) && r.mass > 0) choice.mass = r.mass;
+  return choice;
 }

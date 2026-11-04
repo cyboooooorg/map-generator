@@ -553,6 +553,7 @@ export const fr: Messages = {
     coast: { label: 'Distance à la mer', min: `0${S}km`, max: 'plafond (échelle en √)' },
     floodplain: { label: 'Plaine inondable', min: 'aucune', max: 'fond de vallée' },
     wind: { label: 'Vent', min: 'ouest', max: 'est' },
+    cloudTops: { label: 'Sommets des nuages', min: 'bandes profondes', max: 'tempêtes hautes' },
   },
   shortcuts: {
     mode: 'Globe / carte plane',

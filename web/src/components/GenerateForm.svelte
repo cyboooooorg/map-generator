@@ -213,7 +213,7 @@
   /** The moons asked for: drawn by the seed, none, or a number. */
   let moons = $state<MoonChoice>(untrack(() => memory?.moons ?? moonChoiceOf(start.initial?.moons)));
   /** Metallicity, giant neighbours, a giant's moon, a giant's mass (see giantForm.ts). */
-  let giantChoice = $state<GiantChoice>(untrack(() => initialGiantChoice(start.initial)));
+  let giantChoice = $state<GiantChoice>(untrack(() => memory?.giant ?? initialGiantChoice(start.initial)));
   /** The star and the orbit (see starForm.ts). */
   let star = $state<StarChoice>(
     untrack(() => memory?.star ?? initialStarChoice(start.preset, start.initial, spec.hz_position.fallback)),
@@ -270,6 +270,8 @@
       seaBy = land ? 'land' : 'level';
       landPercent = land?.percent ?? 29;
     }
+    moons = moonChoiceOf(start.initial?.moons);
+    giantChoice = initialGiantChoice(start.initial);
     seed = start.initial?.seed !== undefined ? String(start.initial.seed) : '';
     size =
       start.initial?.width && start.initial.height
@@ -356,6 +358,7 @@
         fields,
         star,
         moons: giantChoice.host === 'giant' ? 'auto' : moons,
+        giant: giantChoice,
       });
       onSubmitted(job, request);
     } catch (e) {

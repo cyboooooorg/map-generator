@@ -9,7 +9,7 @@
 // `uExtra` packs the layers of raw_data format version 2 and later:
 //   r = volcanic zone, g = distance to the sea (km), b = floodplain, a = highland offset.
 // `uBiomes` holds the biome id of each pixel (r × 255), for highlighting one biome.
-import { glslRamp } from './colormaps';
+import { CLOUD_TOPS, glslRamp } from './colormaps';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH } from './sunDepth';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
@@ -201,6 +201,7 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('coast')}
   ${glslRamp('floodplain')}
   ${glslRamp('wind')}
+  ${glslRamp('cloudTops')}
 
   // The wind of a giant at the latitude of map row v (0 south, 1 north).
   float bandWind(float v) {
@@ -390,7 +391,9 @@ export const surfaceFragment = /* glsl */ `
     if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
       colour = surface;
     } else if (uLayer == 1) {
-      colour = toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));
+      colour = uGiant > 0.5
+        ? toLinear(ramp_cloudTops((data.r - ${CLOUD_TOPS[0].toFixed(3)}) / ${CLOUD_TOPS[1].toFixed(3)}))
+        : toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));
     } else if (uLayer == 2) {
       colour = toLinear(ramp_temperature((data.g - uTempRange.x) / uTempRange.y));
     } else if (uLayer == 3) {
@@ -680,6 +683,9 @@ export const skyBodyFragment = /* glsl */ `
   uniform vec3 uHaloColor;
   uniform float uHaloHeight;
   uniform float uHaloStrength;
+  // 1 for a body drawn larger than it is (a few pixels): a faint ring
+  // around it tells it from the stars.
+  uniform float uRing;
   uniform float uOpacity;
   // The body's own axes (its x, its spin axis, its z) in the viewer's
   // frame: its map turns and tilts with them.
@@ -715,6 +721,14 @@ export const skyBodyFragment = /* glsl */ `
   void main() {
     float r2 = dot(vP, vP);
     if (r2 > 1.0) {
+      if (uRing > 0.5) {
+        float r = sqrt(r2);
+        float ring = 1.0 - smoothstep(0.0, 0.35, abs(r - 2.4));
+        if (ring <= 0.0) discard;
+        gl_FragColor = vec4(vec3(0.75), 0.4 * ring * uOpacity);
+        #include <colorspace_fragment>
+        return;
+      }
       if (uHaloStrength <= 0.0) discard;
       float r = sqrt(r2);
       float fall = exp(-(r - 1.0) / max(uHaloHeight * 0.35, 1e-4));

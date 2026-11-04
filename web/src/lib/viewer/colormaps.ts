@@ -4,7 +4,7 @@
 /** A colour stop: position in [0, 1] and an sRGB colour. */
 type Stop = readonly [number, readonly [number, number, number]];
 
-export type DataLayer = 'elevation' | 'temperature' | 'moisture' | 'flow' | 'volcanic' | 'coast' | 'floodplain' | 'wind';
+export type DataLayer = 'elevation' | 'temperature' | 'moisture' | 'flow' | 'volcanic' | 'coast' | 'floodplain' | 'wind' | 'cloudTops';
 
 /** A ramp's stops; its legend texts are in the i18n catalog (`legends`). */
 export interface Ramp {
@@ -81,6 +81,17 @@ export const RAMPS: Record<DataLayer, Ramp> = {
       [1.0, [170, 35, 40]],
     ],
   },
+  // A giant's cloud tops, t over CLOUD_TOPS: deep belts in dark rust,
+  // the cloud deck tan, high zones cream, storm tops white.
+  cloudTops: {
+    stops: [
+      [0.0, [70, 35, 25]],
+      [0.2, [140, 80, 50]],
+      [0.35, [200, 160, 110]],
+      [0.6, [235, 220, 185]],
+      [1.0, [255, 255, 250]],
+    ],
+  },
   // Raw_data format version 3 and later.
   floodplain: {
     stops: [
@@ -114,3 +125,11 @@ export function cssGradient(name: DataLayer): string {
   const stops = RAMPS[name].stops.map(([p, [r, g, b]]) => `rgb(${r} ${g} ${b}) ${(p * 100).toFixed(2)}%`);
   return `linear-gradient(to right, ${stops.join(', ')})`;
 }
+
+/**
+ * The elevations a giant's cloud tops span (lowest, span), mapped onto the
+ * `cloudTops` ramp: the cloud deck sits at 0.3 (`CLOUD_DECK` in mapgen's
+ * giant_world.rs), belts and zones within about 0.08 of it, storm tops up
+ * to 0.5.
+ */
+export const CLOUD_TOPS: readonly [number, number] = [0.2, 0.3];
