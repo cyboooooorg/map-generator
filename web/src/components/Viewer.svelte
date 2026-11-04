@@ -666,6 +666,28 @@
    * orbits (the season, its star's place in the planet's sky as the
    * planet view has it, and the days past it), in moonDirection's terms.
    */
+  /**
+   * The planet's own day, hours: its rotation, or its orbit round the
+   * giant it is locked to.
+   */
+  const planetDayHours = $derived.by(() => {
+    const planet = world.worldMeta;
+    if (planet?.host) return planet.host.period_days * 24;
+    return planet?.moons?.planet_day_hours ?? 24;
+  });
+  /**
+   * The longitude under the sun on the planet, degrees: the Sun longitude
+   * slider, the planet turning on itself from there at its own day as the
+   * orbit time goes (the sun going west), so that its day passes while the
+   * moons go round; still on a planet locked to its star.
+   */
+  const planetHour = $derived.by(() => {
+    const planet = world.worldMeta;
+    if (planet?.star?.tidally_locked) return 180;
+    const yearDays = planet?.star?.year_days ?? 365.25;
+    const turned = sunLongitude - (bodyTurn(orbitDays, planetDayHours, yearDays) * 180) / Math.PI;
+    return ((turned % 360) + 360) % 360;
+  });
   const moonClock = $derived.by(() => {
     const planet = world.worldMeta;
     const yearDays = planet?.star?.year_days ?? 365.25;
@@ -673,7 +695,7 @@
     return {
       yearDays,
       season: (planetLocked ? 0 : season) + orbitDays / yearDays,
-      longitude: ((planetLocked ? 180 : sunLongitude) * Math.PI) / 180,
+      longitude: (planetHour * Math.PI) / 180,
     };
   });
   $effect(() => {
@@ -727,7 +749,14 @@
             }
           : locked
             ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
-            : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
+            : {
+                kind: 'sun',
+                season,
+                // On a body of the planet's own: the planet's hour; else (the
+                // giant, its other moons) the slider's.
+                longitudeDeg: onHostSystem ? sunLongitude : planetHour,
+                axialTiltDeg: meta?.axial_tilt_deg ?? 23.44,
+              },
     );
   });
   // The other bodies of the system in the sky, with their phases, and
@@ -783,12 +812,10 @@
         show: hostShow,
         axialTiltDeg: planet.axial_tilt_deg,
       };
-      // The planet turns on itself under its moon as the orbit slider plays
-      // (not under a binary's moon, which turns with it), from the hour of
-      // its own view.
-      const dayHours = planet.moons?.planet_day_hours ?? 24;
-      const turn = shownMoon.migration === 'locked' ? 0 : bodyTurn(orbitDays, dayHours, yearDays);
-      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude, look, turn);
+      // The planet turns on itself under its moon as its hour goes (see
+      // planetHour: its frame turns under the moons; a binary's moon turns
+      // with it).
+      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude, look);
     }
     // The moon of a giant: the giant hangs over the face the world keeps
     // towards it (longitude 180°), its bands from its own world in host/.
@@ -842,11 +869,20 @@
             : shownMoon && world.moon !== null
               ? shownMoon.period_days
               : (host?.period_days ?? null);
+    // The planet itself (not a giant's moon): once per day of its own
+    // against the stars, from the hour of its view (see planetHour).
+    if (body.kind === 'world' && !host) {
+      if (world.worldMeta?.star?.tidally_locked) return 0;
+      const turns = (orbitDays * 24) / Math.max(planetDayHours, 1e-3);
+      return -2 * Math.PI * (turns - Math.floor(turns));
+    }
     if (period === null || period <= 0) return 0;
     const turns = (moonSeason * yearDays) / period;
     return -2 * Math.PI * (turns - Math.floor(turns));
   });
-  $effect(() => view?.setStarsTurn(starsTurn));
+  // While the orbits play, the camera turns with the stars, so that the
+  // globe is seen to turn on itself under a still sky.
+  $effect(() => view?.setStarsTurn(starsTurn, orbitsPlaying));
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   $effect(() => {

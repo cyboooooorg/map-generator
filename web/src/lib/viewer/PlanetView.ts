@@ -137,6 +137,10 @@ const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodpla
 const MORPH_MS = 1200;
 /** How far the spin axes reach out of a body, in its radii (see setSpinAxes). */
 const SPIN_AXIS_LENGTH = 1.5;
+/** The arrow of the sense of rotation round it: its height, radius and arc (radians). */
+const SPIN_ARROW_HEIGHT = 1.3;
+const SPIN_ARROW_RADIUS = 0.3;
+const SPIN_ARROW_ARC = 1.5 * Math.PI;
 /** Colours of their north and south ends, linear. */
 const SPIN_AXIS_NORTH: [number, number, number] = [0.9, 0.9, 0.85];
 const SPIN_AXIS_SOUTH: [number, number, number] = [0.3, 0.45, 0.85];
@@ -1262,8 +1266,21 @@ export class PlanetView {
    * its planet turns once per orbit against the stars, its planet fixed in
    * its sky.
    */
-  setStarsTurn(radians: number): void {
+  setStarsTurn(radians: number, follow = false): void {
+    const step = radians - this.stars.rotation.y;
+    // The shortest way round (the angle wraps once a turn).
+    const delta = Math.atan2(Math.sin(step), Math.cos(step));
     this.stars.rotation.y = radians;
+    // The camera turned with them about the spin axis, on the globe: the
+    // stars stay still on the screen and the globe turns under them.
+    if (follow && this.mode === 'globe' && !this.animation) {
+      const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), delta);
+      this.camera.position.applyQuaternion(turn);
+      this.camera.up.applyQuaternion(turn);
+      this.controls.target.applyQuaternion(turn);
+      this.camera.lookAt(this.controls.target);
+      this.controls.update();
+    }
     this.requestRender();
   }
 
@@ -1844,12 +1861,30 @@ export class PlanetView {
     this.spinAxesOn = on;
     if (on && !this.spinAxis) {
       const geometry = new BufferGeometry();
-      geometry.setAttribute(
-        'position',
-        new Float32BufferAttribute([0, 1, 0, 0, SPIN_AXIS_LENGTH, 0, 0, -1, 0, 0, -SPIN_AXIS_LENGTH, 0], 3),
-      );
       const [n, s] = [SPIN_AXIS_NORTH, SPIN_AXIS_SOUTH];
-      geometry.setAttribute('color', new Float32BufferAttribute([...n, ...n, ...s, ...s], 3));
+      const points = [0, 1, 0, 0, SPIN_AXIS_LENGTH, 0, 0, -1, 0, 0, -SPIN_AXIS_LENGTH, 0];
+      const colours = [...n, ...n, ...s, ...s];
+      // The sense of rotation: an arrow bent round the axis near its north
+      // end, going the way the body turns (prograde, from z towards x).
+      const at = (angle: number, radius = SPIN_ARROW_RADIUS): number[] => [
+        radius * Math.sin(angle),
+        SPIN_ARROW_HEIGHT,
+        radius * Math.cos(angle),
+      ];
+      const steps = 24;
+      for (let i = 0; i < steps; i += 1) {
+        points.push(...at((SPIN_ARROW_ARC * i) / steps), ...at((SPIN_ARROW_ARC * (i + 1)) / steps));
+        colours.push(...n, ...n);
+      }
+      // Its head, at the end of the arc, pointing on along it.
+      const tip = at(SPIN_ARROW_ARC);
+      const back = SPIN_ARROW_ARC - 0.45;
+      for (const radius of [SPIN_ARROW_RADIUS * 0.75, SPIN_ARROW_RADIUS * 1.25]) {
+        points.push(...tip, ...at(back, radius));
+        colours.push(...n, ...n);
+      }
+      geometry.setAttribute('position', new Float32BufferAttribute(points, 3));
+      geometry.setAttribute('color', new Float32BufferAttribute(colours, 3));
       this.spinAxis = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true }));
       this.spinAxis.frustumCulled = false;
       this.spinAxis.renderOrder = 2;
