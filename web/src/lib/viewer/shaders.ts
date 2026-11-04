@@ -177,6 +177,13 @@ export const surfaceFragment = /* glsl */ `
   uniform float uWind[19];
   uniform float uBandTime;
   uniform float uHotGlow;      // a hot giant's night-side glow, 0 to 1
+  // A giant's rings, for their shadow: edges and gaps in planet radii, in
+  // the equatorial plane (y = 0); no rings when uRingOuter is 0.
+  uniform float uRingInner;
+  uniform float uRingOuter;
+  uniform float uRingOpacity;
+  uniform vec2 uRingGaps[4];
+  uniform float uRingGapCount;
   varying vec2 vUv;
   varying vec2 vLocalUv;
   varying vec3 vNormal;
@@ -348,6 +355,24 @@ export const surfaceFragment = /* glsl */ `
     return hidden;
   }
 
+  // Share of the sunlight a giant's rings hide at a point of the unit
+  // sphere: where the ray towards the sun crosses the ring plane, the
+  // rings' density there (thinner at their edges, none in their gaps).
+  float ringShadow(vec3 point) {
+    if (uRingOuter <= 0.0 || abs(uSunDir.y) < 1e-4) return 0.0;
+    float t = -point.y / uSunDir.y;
+    if (t <= 0.0) return 0.0;
+    float r = length((point + t * uSunDir).xz);
+    if (r < uRingInner || r > uRingOuter) return 0.0;
+    float across = (r - uRingInner) / (uRingOuter - uRingInner);
+    float density = uRingOpacity * smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
+    for (int k = 0; k < 4; k++) {
+      if (float(k) >= uRingGapCount) break;
+      density *= smoothstep(0.0, 1.0, abs(r - uRingGaps[k].x) / max(uRingGaps[k].y * 0.5, 1e-4));
+    }
+    return 0.85 * density;
+  }
+
   void main() {
     vec4 data = dataAt(vUv);
     float aboveCoast = data.r - uCoast;
@@ -481,6 +506,8 @@ export const surfaceFragment = /* glsl */ `
       float strength = 0.55 + 0.45 * clamp(sunHeight, 0.0, 1.0);
       // A moon's shadow on its planet, the planet's on its moon.
       float sunlit = uCasterCount > 0.0 ? 1.0 - eclipse(normalize(vSphere)) : 1.0;
+      // A giant's rings shadow a band of it.
+      sunlit *= 1.0 - ringShadow(normalize(vSphere));
       shade = (0.07 + 0.93 * day * strength * sunlit) * relief;
     } else {
       float globe = 0.35 + 0.75 * lambert;

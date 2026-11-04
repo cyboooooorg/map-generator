@@ -465,9 +465,8 @@ Giant worlds of their own (`src/giant_world.rs`), as presets
 - **Viewer:** the globe flattened, rings (ringlets, gaps, the planet's
   shadow), the bands drifting with their winds, a hot giant's night side
   glowing red, temperature and wind on ranges of their own; no detail
-  tiles (the server refuses them), no contours.
-- **Not done yet:** the form's giant fields (mass), after the form
-  rework of #120; the shadow of the rings on the planet.
+  tiles (the server refuses them), no contours; the rings' shadow on
+  the globe (added after, with the form's giant fields).
 
 ### Step C (2026-11-04)
 

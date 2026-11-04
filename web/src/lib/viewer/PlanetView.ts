@@ -409,6 +409,11 @@ export class PlanetView {
     uWind: { value: new Array<number>(19).fill(0) } as IUniform<number[]>,
     uBandTime: { value: 0 } as IUniform<number>,
     uHotGlow: { value: 0 } as IUniform<number>,
+    uRingInner: { value: 0 } as IUniform<number>,
+    uRingOuter: { value: 0 } as IUniform<number>,
+    uRingOpacity: { value: 0 } as IUniform<number>,
+    uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) } as IUniform<Vector2[]>,
+    uRingGapCount: { value: 0 } as IUniform<number>,
     uLayer: { value: LAYER_IDS.biomes as number } as IUniform<number>,
     uTexel: { value: new Vector2(1 / 1024, 1 / 512) } as IUniform<Vector2>,
     uLightMode: { value: 0 } as IUniform<number>,
@@ -920,6 +925,12 @@ export class PlanetView {
       this.rings = null;
     }
     const r = info?.rings;
+    // Their shadow on the globe (the surface shader).
+    this.u.uRingInner.value = r?.inner ?? 0;
+    this.u.uRingOuter.value = r?.outer ?? 0;
+    this.u.uRingOpacity.value = r?.opacity ?? 0;
+    this.u.uRingGapCount.value = Math.min(r?.gaps.length ?? 0, 4);
+    this.u.uRingGaps.value.forEach((gap, k) => gap.set(...(r?.gaps[k] ?? [0, 0])));
     if (r) {
       const gaps = Array.from({ length: 4 }, (_, k) => new Vector2(...(r.gaps[k] ?? [0, 0])));
       this.rings = new Mesh(
