@@ -1751,7 +1751,12 @@ mod tests {
         };
         let mut e = vec![0.3; grid.width as usize * grid.height as usize];
         let mare = field.apply(&mut e, &grid, Era::Dry);
-        let flooded: Vec<f32> = e.iter().zip(&mare).filter(|(_, m)| **m).map(|(v, _)| *v).collect();
+        let flooded: Vec<f32> = e
+            .iter()
+            .zip(&mare)
+            .filter(|(_, m)| **m)
+            .map(|(v, _)| *v)
+            .collect();
         assert!(flooded.len() > 100, "{}", flooded.len());
         // One flat level, between the floor and the ground around.
         let level = flooded[0];
@@ -1764,7 +1769,7 @@ mod tests {
         assert!(albedo.iter().zip(&mare).all(|(a, m)| (*a < 0.0) == *m));
     }
 
-        #[test]
+    #[test]
     fn cube_cells_invert_cube_points() {
         for face in 0..6 {
             for (a, b) in [(0.0, 0.0), (0.3, -0.8), (-0.99, 0.99), (0.5, 0.25)] {
