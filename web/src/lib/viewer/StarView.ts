@@ -127,6 +127,8 @@ export class StarView {
   private giantsOn = true;
   /** How far the system reaches from the star, view units (see resetView). */
   private reach = 6.8;
+  /** Whether the user moved the camera since the view was last fitted. */
+  private userMoved = false;
   private moonOrbits: MoonOrbit[] = [];
   private moonMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
 
@@ -140,6 +142,8 @@ export class StarView {
     this.controls.minDistance = STAR_RADIUS * 1.4;
     this.controls.maxDistance = 80;
     this.controls.addEventListener('change', () => this.requestRender());
+    // Only the user's drags and wheels start the controls, not resetView.
+    this.controls.addEventListener('start', () => (this.userMoved = true));
 
     const field = starField();
     const skyGeometry = new BufferGeometry();
@@ -271,7 +275,11 @@ export class StarView {
     this.at = at;
     this.giants = giants;
     this.buildGiants(info);
-    this.reach = Math.max(at(compressedFrom(info) / 1.15), ...giants.map((g) => at(g.orbit_au * (1 + g.eccentricity))));
+    const reach = Math.max(at(compressedFrom(info) / 1.15), ...giants.map((g) => at(g.orbit_au * (1 + g.eccentricity))));
+    // A system that reaches further (or less far) is fitted again, unless
+    // the user has moved the camera since the last fit.
+    const refit = reach !== this.reach && !this.userMoved;
+    this.reach = reach;
     this.zone.geometry.dispose();
     this.zone.geometry = new RingGeometry(at(info.hz_inner_au), at(info.hz_outer_au), 128);
     // The ellipse, the star at a focus.
@@ -283,6 +291,7 @@ export class StarView {
     this.apsides[0]!.position.copy(this.inPlane(0, info.orbit_au * (1 - e)));
     this.apsides[1]!.position.copy(this.inPlane(Math.PI, info.orbit_au * (1 + e)));
     this.placePlanet();
+    if (refit) this.resetView();
     this.requestRender();
   }
 
@@ -536,6 +545,9 @@ export class StarView {
     // narrower side of the view.
     const halfFov = ((this.camera.fov / 2) * Math.PI) / 180;
     const distance = ((this.reach + 1.4) / Math.tan(halfFov)) / Math.min(1, this.camera.aspect);
+    // Room to zoom out past the fitted view, however far the system reaches.
+    this.controls.maxDistance = Math.max(80, distance * 2);
+    this.userMoved = false;
     this.camera.position.set(0, distance * 0.55, distance * 0.83);
     this.controls.target.set(0, 0, 0);
     this.controls.update();
