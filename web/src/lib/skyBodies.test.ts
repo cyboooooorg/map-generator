@@ -4,6 +4,7 @@ import type { WorldMetadata } from './api/types/WorldMetadata';
 import { skyFromWorld } from './sky';
 import {
   eclipse,
+  giantSystemSky,
   halo,
   joinSkies,
   MAX_CASTERS,
@@ -243,6 +244,32 @@ describe('sky bodies', () => {
     // Its face towards its planet changes with it.
     const faceAt = (season: number) => face(planetSky([captured], 6371, season, 365.25, 0).bodies[0]!);
     expect(Math.abs(faceAt(0) - faceAt(spin / 4 / 24 / 365.25))).toBeGreaterThan(45);
+  });
+
+  it("shows a giant's moons from the giant and from one of them", () => {
+    const sibling = { radius_km: 1500, distance_km: 600_000, distance_radii: 8.5, period_days: 7, icy: true };
+    const host = { distance_km: 400_000, period_days: 3.5, siblings: [sibling] };
+    const textures = (body: 'world' | 'host' | number) => `${body}.png`;
+    // From the giant (70 000 km in radius): the world straight ahead (+z)
+    // and its sibling, each with its map, both orbits round it.
+    const fromGiant = giantSystemSky(host, 6000, 70_000, 'host', 0, 365.25, 0, textures);
+    expect(fromGiant.bodies.map((b) => b.texture)).toEqual(['world.png', '0.png']);
+    const world = fromGiant.bodies[0]!;
+    world.position!.forEach((c, i) => expect(c).toBeCloseTo([0, 0, 400_000 / 70_000][i]!, 9));
+    expect(world.radius).toBeCloseTo(6000 / 70_000, 9);
+    // The world shows the giant its face at longitude 180°.
+    expect(Math.abs(face(world))).toBeCloseTo(180, 9);
+    expect(fromGiant.orbits).toHaveLength(2);
+    expect(Math.hypot(...fromGiant.orbits[1]![0]!)).toBeCloseTo(600_000 / 70_000, 6);
+    // Turned on itself, the giant sees them elsewhere.
+    const turned = giantSystemSky(host, 6000, 70_000, 'host', 0, 365.25, Math.PI / 2, textures);
+    expect(turned.bodies[0]!.position![0]).toBeCloseTo(-400_000 / 70_000, 6);
+    // From the sibling: the giant hangs at longitude 180°, then the world;
+    // its own orbit passes through it.
+    const fromSibling = giantSystemSky(host, 6000, 70_000, 0, 0, 365.25, 0, textures);
+    expect(fromSibling.bodies.map((b) => b.texture)).toEqual(['host.png', 'world.png']);
+    fromSibling.bodies[0]!.direction.forEach((c, i) => expect(c).toBeCloseTo([0, 0, -1][i]!, 9));
+    expect(Math.min(...fromSibling.orbits[1]!.map((d) => Math.hypot(...d)))).toBeLessThan(1);
   });
 
   it("circles a giant's other moons round it", () => {
