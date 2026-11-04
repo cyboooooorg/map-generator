@@ -54,7 +54,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 4;
+pub const RENDER_VERSION: u32 = 5;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -421,8 +421,10 @@ impl DetailWorld {
         // 1/f on high ground, none at the waterline.
         let above = base - waterline;
         let high = (above / 0.3).clamp(0.0, 1.0);
-        // Snow, ice, lava and sand are smooth surfaces (see `roughness`).
+        // Snow, ice, lava and sand are smooth surfaces (see `roughness`);
+        // small bodies are flattened as their base relief is.
         let amplitude = DETAIL_AMPLITUDE
+            * crate::generation::relief_share(w.params.circumference_km)
             * (1.0 + MOUNTAIN_BOOST * high)
             * bilinear(&Roughness(&w.biomes), w.width, w.height, x, y);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;

@@ -126,16 +126,16 @@ const CONE_HEIGHT: f32 = 0.25;
 /// continental (the continental shelf), elevation units.
 const CONTINENTAL_SHELF: f32 = 0.05;
 /// Share of the noise relief a body of `circumference_km` keeps: all of it
-/// above about 830 km in radius, below that [`SMALL_BODY_RELIEF`] of its
+/// above about 2 100 km in radius, below that [`SMALL_BODY_RELIEF`] of its
 /// radius over the noise's typical amplitude (half an elevation unit,
 /// 12.5 km).
-fn relief_share(circumference_km: f32) -> f32 {
+pub(crate) fn relief_share(circumference_km: f32) -> f32 {
     let radius_km = circumference_km / (2.0 * std::f32::consts::PI);
     (SMALL_BODY_RELIEF * radius_km / (0.5 * crate::craters::ELEVATION_KM)).min(1.0)
 }
 
 /// Relief of a small body, as a share of its radius.
-const SMALL_BODY_RELIEF: f32 = 0.015;
+const SMALL_BODY_RELIEF: f32 = 0.006;
 
 /// Largest noise scale (relief features per Earth-sized ones), reached at
 /// about 5 000 km around.

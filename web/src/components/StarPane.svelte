@@ -5,7 +5,8 @@
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
-  import { meanOrbitalSpeed, orbitalSpeed } from '../lib/viewer/starSystem';
+  import type { Moon } from '../lib/api/types/Moon';
+  import { meanOrbitalSpeed, moonOrbits, orbitalSpeed } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
 
@@ -22,9 +23,25 @@
     zone: boolean;
     /** Whether the prominences (and eruptions) are drawn. */
     prominences: boolean;
+    /** The planet's moons, nearest first, drawn around it. */
+    moons?: readonly Moon[];
+    /** Whether the planet and its largest moon are a binary. */
+    binary?: boolean;
+    planetRadiusKm?: number;
   }
 
-  let { star, omega, animated = $bindable(), distances = $bindable(), orbit = $bindable(), zone = $bindable(), prominences = $bindable() }: Props = $props();
+  let {
+    star,
+    omega,
+    animated = $bindable(),
+    distances = $bindable(),
+    orbit = $bindable(),
+    zone = $bindable(),
+    prominences = $bindable(),
+    moons = [],
+    binary = false,
+    planetRadiusKm = 6371,
+  }: Props = $props();
   let labels = $state<SystemLabels | null>(null);
   /** Share of the year elapsed since the periapsis, while animated. */
   let yearFraction = $state(0);
@@ -55,6 +72,7 @@
   $effect(() => view?.setOrbitVisible(orbit));
   $effect(() => view?.setZoneVisible(zone));
   $effect(() => view?.setProminences(prominences));
+  $effect(() => view?.setMoons(moonOrbits(moons, planetRadiusKm, star.year_days, YEAR_S, binary)));
 
   const kms = (v: number) => withUnit(formatUpTo(v, 1), 'km/s');
   /** Mean speed, and its range on an eccentric orbit. */

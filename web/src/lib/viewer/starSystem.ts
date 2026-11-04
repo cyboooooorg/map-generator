@@ -1,5 +1,6 @@
 // What the star view draws, from a world's star: the look of its surface
 // and the layout of its system.
+import type { Moon } from '../api/types/Moon';
 import type { StarInfo } from '../api/types/StarInfo';
 
 /** The surface of a star as the star view draws it (see starSurfaceFragment). */
@@ -169,3 +170,55 @@ export const SUN_SYSTEM: StarInfo = {
   tidally_locked: false,
   light: [1, 1, 1],
 };
+
+/** A moon as the star view draws it around its planet (not to scale). */
+export interface MoonOrbit {
+  /** Radius of its orbit around the planet, view units. */
+  radius: number;
+  /** Size of its marker, view units. */
+  size: number;
+  /** Inclination of its orbit to the plane of the system, radians. */
+  inclination: number;
+  /** Radians per animated second; negative on a retrograde orbit. */
+  speed: number;
+  /** Angle at the start of the clock, radians. */
+  phase: number;
+  /** Share of the orbit's radius the planet swings around the barycentre (a binary), else 0. */
+  swing: number;
+}
+
+/** Radius of the planet's marker in the star view, view units. */
+export const PLANET_MARKER = 0.11;
+/** Shortest animated period of a moon, s: closer moons would only flicker. */
+const MOON_MIN_PERIOD_S = 2;
+
+/**
+ * The orbits the star view draws for a planet's moons, nearest first: the
+ * nth one at a fixed spacing from the planet (real distances span 2 to
+ * 1 000 planet radii), the largest moons drawn larger, each at its real
+ * period relative to the planet's year (`yearS` seconds when animated, two
+ * seconds at the shortest). A binary's planet swings around the barycentre.
+ */
+export function moonOrbits(
+  moons: readonly Pick<Moon, 'radius_km' | 'inclination_deg' | 'period_days' | 'barycentre_km' | 'semi_major_axis_km'>[],
+  planetRadiusKm: number,
+  yearDays: number,
+  yearS: number,
+  binary: boolean,
+): MoonOrbit[] {
+  return moons.map((moon, k) => {
+    const radius = PLANET_MARKER * (1.6 + 0.55 * k);
+    const relative = Math.min(1, Math.max(0.02, moon.radius_km / planetRadiusKm));
+    const period = Math.max(MOON_MIN_PERIOD_S, (moon.period_days / Math.max(yearDays, 1e-3)) * yearS);
+    const retrograde = moon.inclination_deg > 90;
+    const swing = binary && moon.barycentre_km > planetRadiusKm ? moon.barycentre_km / moon.semi_major_axis_km : 0;
+    return {
+      radius,
+      size: PLANET_MARKER * Math.max(0.18, Math.sqrt(relative)),
+      inclination: ((retrograde ? 180 - moon.inclination_deg : moon.inclination_deg) * Math.PI) / 180,
+      speed: ((retrograde ? -1 : 1) * 2 * Math.PI) / period,
+      phase: k * 2.4,
+      swing,
+    };
+  });
+}

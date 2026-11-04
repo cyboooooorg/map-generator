@@ -415,6 +415,11 @@ fn moon_body(id: &str, moon: u32) -> Result<String, Failure> {
     Ok(format!("{id}/moons/{moon}"))
 }
 
+/// The world id of a body path: the world itself, or a moon's world.
+fn world_of(body: &str) -> &str {
+    body.split('/').next().unwrap_or(body)
+}
+
 /// More moons than a world can have.
 const MAX_MOONS: u32 = 16;
 
@@ -429,7 +434,8 @@ async fn body_tile(
     if !tile.is_valid() {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
     }
-    let revision = world_revision(&state, &id).await?;
+    // A moon is generated with its world: it takes the world's revision.
+    let revision = world_revision(&state, world_of(&id)).await?;
     let epoch = checked_epoch(&state, &id, query.epoch).await?;
     let dir = state.config.worlds_dir.join(&id);
     let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
@@ -522,7 +528,8 @@ async fn body_epoch_layer(
             "scale must be 1, 2 or 4".into(),
         ));
     }
-    let revision = world_revision(&state, &id).await?;
+    // A moon is generated with its world: it takes the world's revision.
+    let revision = world_revision(&state, world_of(&id)).await?;
     let epoch = checked_epoch(&state, &id, Some(epoch_ma)).await?;
     let dir = state.config.worlds_dir.join(&id);
     let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
@@ -970,6 +977,8 @@ mod tests {
         assert!(moon_body("terran-42", 0).is_err());
         assert!(moon_body("terran-42", MAX_MOONS + 1).is_err());
         assert!(moon_body("../etc", 1).is_err());
+        assert_eq!(world_of("terran-42/moons/1"), "terran-42");
+        assert_eq!(world_of("terran-42"), "terran-42");
     }
 
     #[test]

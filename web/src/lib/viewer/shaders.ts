@@ -37,9 +37,17 @@ const common = /* glsl */ `
   uniform float uLiquidSea;
   uniform float uHasData;
   uniform sampler2D uData;
+  // An irregular body (a small moon): its radius as a share of its mean one.
+  uniform float uHasShape;
+  uniform sampler2D uShape;
+  uniform vec2 uShapeTexel;
 
   vec4 dataAt(vec2 uv) {
     return texture2D(uData, vec2(uv.x, 1.0 - uv.y));
+  }
+
+  float shapeAt(vec2 uv) {
+    return uHasShape > 0.5 ? texture2D(uShape, vec2(uv.x, 1.0 - uv.y)).r : 1.0;
   }
 `;
 
@@ -66,6 +74,23 @@ export const surfaceVertex = /* glsl */ `
     vec3 sphere = vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
     vec3 plane = vec3((g.x - 0.5) * 2.0 * PI, (g.y - 0.5) * PI, 0.0);
     vec3 normal = normalize(mix(vec3(0.0, 0.0, 1.0), sphere, uMorph));
+    vec3 eastward = vec3(cos(lon), 0.0, -sin(lon));
+    vec3 northward = vec3(-sin(lat) * sin(lon), cos(lat), -sin(lat) * cos(lon));
+    // An irregular body: the sphere scaled by its shape, the normal tilted
+    // by the shape's slopes (relief and lighting follow it).
+    float radius = 1.0;
+    if (uHasShape > 0.5) {
+      radius = shapeAt(g);
+      vec2 dx = vec2(uShapeTexel.x, 0.0);
+      vec2 dy = vec2(0.0, uShapeTexel.y);
+      float perLon = (shapeAt(g + dx) - shapeAt(g - dx)) / (4.0 * PI * uShapeTexel.x);
+      float perLat = (shapeAt(g + dy) - shapeAt(g - dy)) / (2.0 * PI * uShapeTexel.y);
+      vec3 tilted = normalize(
+        sphere - perLon / (radius * max(cos(lat), 0.05)) * eastward - perLat / radius * northward
+      );
+      normal = normalize(mix(vec3(0.0, 0.0, 1.0), tilted, uMorph));
+      radius = mix(1.0, radius, uMorph);
+    }
 
     // Land rises above the coastline; liquid seas stay flat at the surface,
     // dried-up basins sink below it.
@@ -77,12 +102,12 @@ export const surfaceVertex = /* glsl */ `
       }
       height = above * uRelief * ${RELIEF_SCALE.toFixed(4)};
     }
-    vec3 position = mix(plane, sphere, uMorph) + normal * (height + uLift);
+    vec3 position = mix(plane, sphere * radius, uMorph) + normal * (height + uLift);
 
     vSphere = sphere;
     vNormal = normal;
-    vEast = normalize(mix(vec3(1.0, 0.0, 0.0), vec3(cos(lon), 0.0, -sin(lon)), uMorph));
-    vNorth = normalize(mix(vec3(0.0, 1.0, 0.0), vec3(-sin(lat) * sin(lon), cos(lat), -sin(lat) * cos(lon)), uMorph));
+    vEast = normalize(mix(vec3(1.0, 0.0, 0.0), eastward, uMorph));
+    vNorth = normalize(mix(vec3(0.0, 1.0, 0.0), northward, uMorph));
     vec4 world = modelMatrix * vec4(position, 1.0);
     vWorld = world.xyz;
     gl_Position = projectionMatrix * viewMatrix * world;

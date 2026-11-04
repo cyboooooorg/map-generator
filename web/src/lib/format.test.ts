@@ -40,6 +40,11 @@ describe('format', () => {
         '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 ' +
         '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --width 1920 --height 1080',
     );
+    // An epoch of the plates, and moons turned off, are reproduced too.
+    const drifted = { ...meta, drift_ma: -120, format_version: 9 } as WorldMetadata;
+    expect(requestFromWorld(drifted)).toMatchObject({ drift_ma: -120, moons: 'none' });
+    expect(cliCommand(drifted)).toContain('--drift=-120 --moons none --width');
+    expect(requestFromWorld({ ...drifted, moons: { planet_day_hours: 24 } } as unknown as WorldMetadata)).not.toHaveProperty('moons');
     // Worlds made before the surface age leave it to the preset.
     const old = { ...meta, surface_age_ga: undefined } as unknown as WorldMetadata;
     expect(requestFromWorld(old)).not.toHaveProperty('surface_age_ga');

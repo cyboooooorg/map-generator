@@ -5,13 +5,27 @@ import { t } from './i18n/index.svelte';
 import { api } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
+import { moonBody } from './moons';
 import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
 import type { WorldStats } from './stats';
 
 export class LoadedWorld {
+  /**
+   * The body shown: the world's id, or one of its moons' (`<world>/moons/<n>`,
+   * see lib/moons.ts). `meta` and the layers are this body's.
+   */
   id = $state<string | null>(null);
+  /** The world loaded, whichever body is shown. */
+  worldId = $state<string | null>(null);
+  /** The moon shown (from 1, nearest first), or null for the world itself. */
+  moon = $state<number | null>(null);
+  /** The world's metadata (its star and moons), whichever body is shown. */
+  worldMeta = $state.raw<WorldMetadata | null>(null);
+  /** The world's biome statistics and rivers, whichever body is shown. */
+  worldStats = $state.raw<WorldStats | null>(null);
+  worldRivers = $state.raw<RiverIndex | null>(null);
   // Raw state: typed arrays and large JSON must not be proxied.
   meta = $state.raw<WorldMetadata | null>(null);
   layers = $state.raw<WorldLayers | null>(null);
@@ -42,6 +56,27 @@ export class LoadedWorld {
    * Loading the id shown again reloads it (a world regenerated in place).
    */
   load(id: string | null): void {
+    this.worldId = id;
+    this.moon = null;
+    this.worldMeta = null;
+    this.worldStats = null;
+    this.worldRivers = null;
+    this.loadBody(id);
+  }
+
+  /**
+   * Shows moon `n` (from 1) of the world loaded, or the world itself with
+   * null. The world's metadata stays.
+   */
+  showMoon(n: number | null): void {
+    if (n === this.moon || !this.worldId) {
+      return;
+    }
+    this.moon = n;
+    this.loadBody(n === null ? this.worldId : moonBody(this.worldId, n));
+  }
+
+  private loadBody(id: string | null): void {
     this.controller?.abort();
     this.epochController?.abort();
     this.present = null;
@@ -65,6 +100,9 @@ export class LoadedWorld {
       const meta = await api.metadata(id, signal);
       if (!current()) return;
       this.meta = meta;
+      if (id === this.worldId) {
+        this.worldMeta = meta;
+      }
       const { layers, stats } = await loadLayers(id, meta, signal, (progress) => {
         if (current()) this.progress = progress;
       });
@@ -73,12 +111,18 @@ export class LoadedWorld {
       this.present = layers;
       this.layers = layers;
       this.stats = stats;
+      if (id === this.worldId) {
+        this.worldStats = stats;
+      }
       // An epoch asked for before the layers arrived.
       this.showEpoch();
       if (meta.rivers) {
         const file = await api.rivers(id, meta.rivers, signal);
         if (!current()) return;
         this.rivers = new RiverIndex(file, meta.circumference_km);
+        if (id === this.worldId) {
+          this.worldRivers = this.rivers;
+        }
       }
     })().catch((e: unknown) => {
       if (current()) {

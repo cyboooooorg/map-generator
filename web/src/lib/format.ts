@@ -139,6 +139,11 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     star: meta.star?.type ?? 'G2V',
     orbit_au: round(meta.star?.orbit_au ?? 1, 5),
     eccentricity: round(meta.star?.eccentricity ?? 0, 4),
+    // A world away from the present of its plates (0 is left out).
+    ...(meta.drift_ma ? { drift_ma: meta.drift_ma } : {}),
+    // A world whose moons were turned off (one made before moons has none
+    // either; regenerated, it gets those its seed draws).
+    ...(meta.moons == null && meta.format_version >= 9 ? { moons: 'none' as const } : {}),
     width: meta.width,
     height: meta.height,
   };
@@ -164,6 +169,8 @@ export function cliCommand(meta: WorldMetadata): string {
     `--star ${r.star}`,
     `--orbit-au ${r.orbit_au}`,
     `--eccentricity ${r.eccentricity}`,
+    ...(r.drift_ma === undefined ? [] : [`--drift=${r.drift_ma}`]),
+    ...(r.moons === undefined ? [] : [`--moons ${r.moons}`]),
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];
