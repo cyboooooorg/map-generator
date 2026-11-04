@@ -3,7 +3,9 @@
   // and the numbers of both (see StarView.ts).
   import { onMount } from 'svelte';
   import type { StarInfo } from '../lib/api/types/StarInfo';
-  import { formatAu, formatEccentricity, formatNumber, formatOrbit, formatStar, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { unitTooltip } from '../lib/units';
+  import { meanOrbitalSpeed, orbitalSpeed } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { type SystemLabels, StarView } from '../lib/viewer/StarView';
 
@@ -18,9 +20,11 @@
     /** Whether the orbit line and the habitable zone are drawn. */
     orbit: boolean;
     zone: boolean;
+    /** Whether the prominences (and eruptions) are drawn. */
+    prominences: boolean;
   }
 
-  let { star, omega, animated = $bindable(), distances = $bindable(), orbit = $bindable(), zone = $bindable() }: Props = $props();
+  let { star, omega, animated = $bindable(), distances = $bindable(), orbit = $bindable(), zone = $bindable(), prominences = $bindable() }: Props = $props();
   let labels = $state<SystemLabels | null>(null);
   /** Width of the view, to keep the labels near its right edge on screen. */
   let width = $state(0);
@@ -47,6 +51,21 @@
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
   $effect(() => view?.setZoneVisible(zone));
+  $effect(() => view?.setProminences(prominences));
+
+  const kms = (v: number) => withUnit(formatUpTo(v, 1), 'km/s');
+  /** Mean speed, and its range on an eccentric orbit. */
+  const speedText = $derived.by(() => {
+    const mean = kms(meanOrbitalSpeed(star.mass, star.orbit_au));
+    if (star.eccentricity <= 0.001) {
+      return t.starView.speedCircular({ mean, earth: kms(29.78) });
+    }
+    return t.starView.speedRange({
+      mean,
+      fastest: kms(orbitalSpeed(star.mass, star.orbit_au, star.periapsis_au)),
+      slowest: kms(orbitalSpeed(star.mass, star.orbit_au, star.apoapsis_au)),
+    });
+  });
 
   /** Back to the starting view of the system. */
   export function resetView(): void {
@@ -61,6 +80,7 @@
       <span class="label planet" class:left={labels.planet.x > width * 0.6} style:left={`${labels.planet.x}px`} style:top={`${labels.planet.y}px`}
         >{t.starView.now({
           distance: formatAu(labels.planet.au),
+          speed: kms(orbitalSpeed(star.mass, star.orbit_au, labels.planet.au)),
           light: `${formatUpTo(lightAt(labels.planet.au), 2)}×`,
           zone: inZone(labels.planet.au) ? t.starView.inZone : t.starView.outOfZone,
         })}</span
@@ -89,53 +109,70 @@
   </div>
 {/if}
 <details class="star-panel" role="region" aria-label={t.starView.title} open>
-  <summary><strong>{formatStar(star)}</strong></summary>
+  <summary><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></summary>
+  <h4>{t.starView.starSection}</h4>
   <dl>
-    <dt>{t.starView.size}</dt>
+    <dt title={t.starView.temperatureHelp}>{t.starView.temperature}</dt>
+    <dd>{withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')}</dd>
+    <dt title={t.starView.luminosityHelp}>{t.starView.luminosity}</dt>
+    <dd class="unit-help" title={unitTooltip('L☉')}>{withUnit(formatUpTo(star.luminosity, star.luminosity < 0.01 ? 4 : 2), 'L☉')}</dd>
+    <dt title={t.starView.sizeHelp}>{t.starView.size}</dt>
     <dd>
       {t.starView.sizeValue({
         radius: withUnit(formatUpTo(star.radius, 2), 'R☉'),
         mass: withUnit(formatUpTo(star.mass, 2), 'M☉'),
       })}
     </dd>
-    <dt>{t.starView.lifetime}</dt>
+    <dt title={t.starView.lifetimeHelp}>{t.starView.lifetime}</dt>
     <dd>{withUnit(formatUpTo(star.lifetime_gyr, star.lifetime_gyr < 10 ? 1 : 0), t.starView.gyr)}</dd>
-    <dt>{t.starView.zone}</dt>
+    <dt title={t.starView.zoneHelp}><span class="swatch zone"></span>{t.starView.zone}</dt>
     <dd>
-      <span class="swatch zone"></span>{t.starView.range({
+      {t.starView.range({
         inner: formatAu(star.hz_inner_au),
         outer: formatAu(star.hz_outer_au),
       })}
     </dd>
-    <dt>{t.worldInfo.orbit}</dt>
-    <dd><span class="swatch orbit"></span>{formatOrbit(star)}</dd>
-    <dt>{t.worldInfo.eccentricity}</dt>
+  </dl>
+  <h4>{t.starView.planetSection}</h4>
+  <dl>
+    <dt title={t.starView.orbitHelp}><span class="swatch orbit"></span>{t.worldInfo.orbit}</dt>
+    <dd class="unit-help" title={unitTooltip('AU')}>{formatOrbit(star)}</dd>
+    <dt title={t.starView.eccentricityHelp}>{t.worldInfo.eccentricity}</dt>
     <dd>{formatEccentricity(star)}</dd>
+    <dt title={t.starView.speedHelp}>{t.starView.speed}</dt>
+    <dd>{speedText}</dd>
     <dt>{t.worldInfo.year}</dt>
     <dd>{formatYear(star.year_days)}</dd>
-    <dt>{t.starView.equilibrium}</dt>
+    <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
     <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
   </dl>
-  <label class="check">
-    <input type="checkbox" bind:checked={orbit} />
-    {t.starView.showOrbit}
-  </label>
-  <label class="check">
-    <input type="checkbox" bind:checked={zone} />
-    {t.starView.showZone}
-  </label>
-  <label class="check" title={t.starView.distancesHelp}>
-    <input type="checkbox" bind:checked={distances} />
-    {t.starView.distances}
-  </label>
+  <h4>{t.starView.displaySection}</h4>
+  <div class="checks">
+    <label class="check">
+      <input type="checkbox" bind:checked={orbit} />
+      {t.starView.showOrbit}
+    </label>
+    <label class="check">
+      <input type="checkbox" bind:checked={zone} />
+      {t.starView.showZone}
+    </label>
+    <label class="check" title={t.starView.prominencesHelp}>
+      <input type="checkbox" bind:checked={prominences} />
+      {t.starView.prominences}
+    </label>
+    <label class="check" title={t.starView.distancesHelp}>
+      <input type="checkbox" bind:checked={distances} />
+      {t.starView.distances}
+    </label>
+    <label class="check" title={t.starView.animateHelp}>
+      <input type="checkbox" bind:checked={animated} />
+      {t.starView.animate}
+    </label>
+  </div>
   {#if distances && star.eccentricity <= 0.001}
     <!-- A circle has no closest or farthest point: say why none is marked. -->
     <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
   {/if}
-  <label class="check" title={t.starView.animateHelp}>
-    <input type="checkbox" bind:checked={animated} />
-    {t.starView.animate}
-  </label>
   <small class="muted">{t.starView.schematic}</small>
 </details>
 
@@ -181,6 +218,21 @@
   .label.zone {
     color: #8fe0aa;
   }
+  h4 {
+    margin: 4px 0 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  dt[title] {
+    cursor: help;
+  }
+  .checks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 10px;
+  }
   .star-panel summary {
     cursor: pointer;
   }
@@ -191,7 +243,10 @@
     position: absolute;
     left: 12px;
     bottom: 12px;
-    max-width: min(360px, calc(100% - 24px));
+    max-width: min(380px, calc(100% - 24px));
+    /* Leave room for the toolbar above; scroll rather than cover it. */
+    max-height: calc(100% - 72px);
+    overflow-y: auto;
     display: grid;
     gap: 6px;
     padding: 10px 12px;
@@ -202,7 +257,8 @@
   }
   dl {
     display: grid;
-    grid-template-columns: auto 1fr;
+    /* A fixed first column lines the sections up with each other. */
+    grid-template-columns: 9.5em 1fr;
     gap: 2px 10px;
     margin: 0;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
+import { meanOrbitalSpeed, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -47,5 +47,25 @@ describe('star view', () => {
     const old = { ...SUN_SYSTEM, eccentricity: undefined, periapsis_au: undefined, apoapsis_au: undefined } as unknown as typeof SUN_SYSTEM;
     const star = withOrbitDefaults({ ...old, orbit_au: 0.5 });
     expect([star.eccentricity, star.periapsis_au, star.apoapsis_au]).toEqual([0, 0.5, 0.5]);
+  });
+
+  it('gives orbital speeds by the vis-viva equation', () => {
+    expect(meanOrbitalSpeed(1, 1)).toBeCloseTo(29.78, 2);
+    expect(orbitalSpeed(1, 1, 1)).toBeCloseTo(29.78, 2);
+    // Mercury: 59 km/s at perihelion, 39 km/s at aphelion.
+    expect(orbitalSpeed(1, 0.387, 0.307)).toBeCloseTo(58.98, 0);
+    expect(orbitalSpeed(1, 0.387, 0.467)).toBeCloseTo(38.86, 0);
+  });
+
+  it('gives active stars prominences anchored on their surface', () => {
+    expect(prominences('A', 1)).toHaveLength(0);
+    const arcs = prominences('M', 7);
+    expect(arcs).toHaveLength(7);
+    for (const arc of arcs) {
+      expect(Math.hypot(...arc.from)).toBeCloseTo(1, 5);
+      expect(Math.hypot(...arc.to)).toBeCloseTo(1, 5);
+      expect(arc.height).toBeGreaterThan(0);
+    }
+    expect(prominences('M', 7)).toEqual(arcs);
   });
 });

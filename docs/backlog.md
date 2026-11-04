@@ -338,3 +338,11 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   dwarfs) with its system around it (habitable zone, orbit, planet, not
   to scale), drawn procedurally in the browser from `world.json`, and an
   optional animation (ten frames a second, off by default).
+- **Follow-up (2026-11-04):** the panel is split into *The star*, *The
+  planet* and *Display*, names the spectral class (a G2V is a yellow
+  dwarf) and explains each value in a tooltip; it gives the planet's
+  orbital speed (mean, at periapsis and at apoapsis, from vis-viva), and
+  the live distance label gives the speed at that point. The star shows
+  prominences (H-alpha arcs, more on cooler stars, none above F) that can
+  be hidden, and an eruption every nine seconds on animated M, K and G
+  stars.

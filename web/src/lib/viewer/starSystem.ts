@@ -68,6 +68,62 @@ export function periapsisAngle(seed: number): number {
   return ((seed * 0.618_033_988_75) % 1) * 2 * Math.PI;
 }
 
+/** Earth's mean orbital speed, km/s. */
+const EARTH_SPEED_KMS = 29.78;
+
+/**
+ * Orbital speed at `distanceAu` from a star of `mass` (M☉) on an orbit of
+ * semi-major axis `orbitAu`, km/s: the vis-viva equation,
+ * `v = 29.78 km/s × sqrt(M (2/r − 1/a))` (Earth: 29.78 km/s).
+ */
+export function orbitalSpeed(mass: number, orbitAu: number, distanceAu: number): number {
+  return EARTH_SPEED_KMS * Math.sqrt(Math.max(mass * (2 / distanceAu - 1 / orbitAu), 0));
+}
+
+/** Mean orbital speed over a year, km/s: the orbit's length over its period (close to the circular speed). */
+export function meanOrbitalSpeed(mass: number, orbitAu: number): number {
+  return EARTH_SPEED_KMS * Math.sqrt(mass / orbitAu);
+}
+
+/** A prominence: an arc of plasma between two points of the surface (unit vectors), `height` star radii high. */
+export interface Prominence {
+  from: [number, number, number];
+  to: [number, number, number];
+  height: number;
+  /** Thickness of the arc, star radii. */
+  thickness: number;
+}
+
+/** Prominences by spectral class: magnetically active cool stars have many, hot stars none. */
+const PROMINENCES: Record<string, number> = { M: 7, K: 5, G: 4, F: 2 };
+
+/** The prominences of a star of spectral class `klass`, placed from `seed`. */
+export function prominences(klass: string, seed: number): Prominence[] {
+  let state = (seed * 2654435761) >>> 0;
+  const next = () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let z = state;
+    z = Math.imul(z ^ (z >>> 15), z | 1);
+    z ^= z + Math.imul(z ^ (z >>> 7), z | 61);
+    return ((z ^ (z >>> 14)) >>> 0) / 4_294_967_296;
+  };
+  return Array.from({ length: PROMINENCES[klass] ?? 0 }, () => {
+    // A foot anywhere on the sphere, the other 5° to 15° away.
+    const y = 2 * next() - 1;
+    const lon = next() * 2 * Math.PI;
+    const r = Math.sqrt(1 - y * y);
+    const from: [number, number, number] = [r * Math.cos(lon), y, r * Math.sin(lon)];
+    const spread = ((5 + 10 * next()) * Math.PI) / 180;
+    const heading = next() * 2 * Math.PI;
+    // Turn `from` by `spread` towards `heading` on the sphere.
+    const east = [-Math.sin(lon), 0, Math.cos(lon)];
+    const north = [-y * Math.cos(lon), r, -y * Math.sin(lon)];
+    const d = [0, 1, 2].map((k) => Math.cos(heading) * east[k]! + Math.sin(heading) * north[k]!);
+    const to = [0, 1, 2].map((k) => Math.cos(spread) * from[k]! + Math.sin(spread) * d[k]!) as [number, number, number];
+    return { from, to, height: 0.08 + 0.22 * next() ** 2, thickness: 0.012 + 0.014 * next() };
+  });
+}
+
 /**
  * A stored star with the orbit fields of worlds made before eccentric
  * orbits filled in: a circle at the semi-major axis.

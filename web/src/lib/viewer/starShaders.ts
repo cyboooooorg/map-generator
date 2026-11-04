@@ -127,3 +127,36 @@ export const glowFragment = /* glsl */ `
     #include <colorspace_fragment>
   }
 `;
+
+// Prominences: arcs of plasma above the surface, glowing in the red of
+// hydrogen (H-alpha). `uLift` stretches an arc outwards from the star (an
+// eruption), `uOpacity` fades it.
+export const prominenceVertex = /* glsl */ `
+  uniform float uLift;
+  varying float vHeight;
+  varying vec3 vViewNormal;
+  void main() {
+    float r = length(position);
+    vec3 lifted = position / r * (1.0 + (r - 1.0) * uLift);
+    vHeight = r - 1.0;
+    vViewNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(lifted, 1.0);
+  }
+`;
+
+export const prominenceFragment = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  uniform float uTime;
+  uniform float uSeed;
+  varying float vHeight;
+  varying vec3 vViewNormal;
+  void main() {
+    // Brighter along the edges of the tube, as a glowing thread of gas.
+    float rim = 1.0 - abs(normalize(vViewNormal).z);
+    float flicker = 0.85 + 0.15 * sin(uTime * 2.3 + vHeight * 40.0 + uSeed);
+    vec3 colour = uColor * (0.35 + 0.9 * rim) * flicker * uOpacity;
+    gl_FragColor = vec4(colour, 1.0);
+    #include <colorspace_fragment>
+  }
+`;
