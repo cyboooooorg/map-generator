@@ -707,9 +707,19 @@
       orbitsPlaying = false;
     });
   });
-  /** The period the orbit slider spans: of the moon shown, or of the largest moon. */
+  /**
+   * The period the orbit slider spans: of the moon shown, or of the largest
+   * moon; in a giant's system (the world a giant's moon), of the sibling
+   * shown, else of the world's orbit round the giant.
+   */
   const orbitPeriod = $derived.by(() => {
     if (shownMoon) return shownMoon.period_days;
+    const host = world.worldMeta?.host;
+    if (host) {
+      const body = world.body;
+      const sibling = body.kind === 'sibling' ? host.siblings?.[body.n - 1] : undefined;
+      return sibling?.period_days ?? host.period_days;
+    }
     const largest = moons.reduce<(typeof moons)[number] | null>(
       (best, m) => (m.migration !== 'locked' && (!best || m.radius_km > best.radius_km) ? m : best),
       null,
