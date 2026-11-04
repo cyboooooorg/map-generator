@@ -1,5 +1,5 @@
 //! The world library: generated worlds on disk, one directory each.
-use crate::api::WorldSummary;
+use crate::api::{GivenNames, MoonNames, WorldNames, WorldSummary};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -178,6 +178,38 @@ struct Meta {
     format_version: u32,
     preset: MetaPreset,
     star: Option<MetaStar>,
+    giants: Option<MetaGiants>,
+    moons: Option<MetaMoons>,
+    host: Option<MetaHost>,
+}
+
+/// The giants of `world.json`, as far as names need them.
+#[derive(Deserialize)]
+struct MetaGiants {
+    giants: Vec<MetaOrbit>,
+}
+
+#[derive(Deserialize)]
+struct MetaOrbit {
+    orbit_au: f32,
+}
+
+/// The moons of `world.json`: names need their number only.
+#[derive(Deserialize)]
+struct MetaMoons {
+    moons: Vec<serde::de::IgnoredAny>,
+}
+
+/// The giant whose moon the world is.
+#[derive(Deserialize)]
+struct MetaHost {
+    distance_km: f32,
+    siblings: Vec<MetaDistance>,
+}
+
+#[derive(Deserialize)]
+struct MetaDistance {
+    distance_km: f32,
 }
 
 /// The part of the stored preset a summary needs.
@@ -221,6 +253,58 @@ impl Meta {
 struct MetaStar {
     #[serde(rename = "type")]
     kind: String,
+    #[serde(default = "one_au")]
+    orbit_au: f32,
+}
+
+fn one_au() -> f32 {
+    1.0
+}
+
+impl Meta {
+    /// The names of the world's system, with those given in `given`.
+    fn names(&self, given: GivenNames) -> WorldNames {
+        let star = self.star.as_ref();
+        let names = mapgen::naming::names(&mapgen::naming::Layout {
+            seed: self.seed as u32,
+            // Worlds made before stars orbit the Sun at 1 AU.
+            star: star.map_or("G2V", |s| s.kind.as_str()),
+            orbit_au: star.map_or(1.0, |s| s.orbit_au),
+            giant_orbits_au: self
+                .giants
+                .iter()
+                .flat_map(|g| g.giants.iter().map(|o| o.orbit_au))
+                .collect(),
+            moons: self.moons.as_ref().map_or(0, |m| m.moons.len()),
+            host: self.host.as_ref().map(|h| mapgen::naming::HostLayout {
+                distance_km: h.distance_km,
+                sibling_distances_km: h.siblings.iter().map(|s| s.distance_km).collect(),
+            }),
+        });
+        let GivenNames { name, mut moons } = given;
+        WorldNames {
+            star: names.star,
+            designation: names.world,
+            name,
+            giants: names.giants,
+            moons: names
+                .moons
+                .into_iter()
+                .enumerate()
+                .map(|(k, designation)| MoonNames {
+                    designation,
+                    name: moons.remove(&(k + 1).to_string()),
+                })
+                .collect(),
+            host: names.host,
+            siblings: names.siblings,
+        }
+    }
+
+    /// The number of the world's moons.
+    fn moon_count(&self) -> usize {
+        self.moons.as_ref().map_or(0, |m| m.moons.len())
+    }
 }
 
 impl Default for Meta {
@@ -244,16 +328,98 @@ impl Default for Meta {
             preset: MetaPreset::default(),
             // Nor a star: they orbit the Sun.
             star: None,
+            giants: None,
+            moons: None,
+            host: None,
         }
     }
 }
 
-/// Reads one world's summary from its `raw_data/world.json`.
-pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
+/// File of the names given to a world, next to `raw_data/`.
+pub const NAMES_FILE: &str = "names.json";
+
+/// Longest name a world or a moon can be given, in characters.
+pub const MAX_NAME_CHARS: usize = 60;
+
+/// The names given to world `id`: none when it has no `names.json`, or
+/// one that cannot be read.
+fn given_names(dir: &Path, id: &str) -> GivenNames {
+    std::fs::read(dir.join(id).join(NAMES_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Why names could not be given.
+#[derive(Debug, PartialEq)]
+pub enum NamingError {
+    /// No such world.
+    NotFound,
+    /// A name is empty once trimmed, too long, or holds control characters.
+    InvalidName(String),
+    /// A moon number the world does not have.
+    NoSuchMoon(String),
+    Io(String),
+}
+
+/// A name trimmed of its surrounding spaces, if it can be given.
+fn checked_name(name: &str) -> Result<String, NamingError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty()
+        || trimmed.chars().count() > MAX_NAME_CHARS
+        || trimmed.chars().any(char::is_control)
+    {
+        return Err(NamingError::InvalidName(name.to_string()));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Gives world `id` and its moons the names `given`, replacing those it
+/// had, and returns its summary. No names at all removes `names.json`.
+pub fn give_names(dir: &Path, id: &str, given: GivenNames) -> Result<WorldSummary, NamingError> {
+    let meta = read_meta(dir, id).ok_or(NamingError::NotFound)?;
+    let name = given.name.as_deref().map(checked_name).transpose()?;
+    let mut moons = std::collections::BTreeMap::new();
+    for (number, moon_name) in &given.moons {
+        let n: usize = number
+            .parse()
+            .map_err(|_| NamingError::NoSuchMoon(number.clone()))?;
+        if n == 0 || n > meta.moon_count() || number != &n.to_string() {
+            return Err(NamingError::NoSuchMoon(number.clone()));
+        }
+        moons.insert(number.clone(), checked_name(moon_name)?);
+    }
+    let names = GivenNames { name, moons };
+    let path = dir.join(id).join(NAMES_FILE);
+    if names == GivenNames::default() {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(NamingError::Io(e.to_string())),
+        }
+    } else {
+        // Written aside, then renamed: a reader never sees half a file.
+        let temp = dir.join(id).join(format!(".{NAMES_FILE}.tmp"));
+        let json = serde_json::to_vec_pretty(&names).map_err(|e| NamingError::Io(e.to_string()))?;
+        std::fs::write(&temp, json).map_err(|e| NamingError::Io(e.to_string()))?;
+        std::fs::rename(&temp, &path).map_err(|e| NamingError::Io(e.to_string()))?;
+    }
+    summary(dir, id).ok_or(NamingError::NotFound)
+}
+
+/// The `raw_data/world.json` of world `id`, as far as summaries need it.
+fn read_meta(dir: &Path, id: &str) -> Option<Meta> {
     let path = dir.join(id).join("raw_data").join("world.json");
-    let meta: Meta = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
+    serde_json::from_slice(&std::fs::read(&path).ok()?).ok()
+}
+
+/// Reads one world's summary from its `raw_data/world.json`, and the
+/// names given to it from its `names.json`.
+pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
+    let meta = read_meta(dir, id)?;
     let modified_ms = revision(dir, id).unwrap_or(0);
     let epochs_ma = meta.epochs_ma();
+    let names = meta.names(given_names(dir, id));
     Some(WorldSummary {
         id: id.to_string(),
         planet: meta.planet_type,
@@ -269,6 +435,7 @@ pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
         pressure_bar: meta.pressure_bar,
         surface_age_ga: meta.surface_age_ga,
         epochs_ma,
+        names,
         star: meta.star.map(|s| s.kind),
         modified_ms,
     })

@@ -47,12 +47,16 @@
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
+  import type { WorldNames } from '../lib/api/types/WorldNames';
+  import { moonName, worldName } from '../lib/names';
   import LoadingBar from './LoadingBar.svelte';
 
   interface Props {
     world: LoadedWorld;
     /** Its revision (modification time), which keys the cached detail tiles. */
     revision: number | null;
+    /** The names of the world's system, from its summary. */
+    names?: WorldNames | null;
     /** Measured path to draw. */
     path: readonly LonLat[];
     measuring: boolean;
@@ -83,6 +87,7 @@
   let {
     world,
     revision,
+    names = null,
     path,
     measuring,
     keyboard,
@@ -190,6 +195,10 @@
   let playing = $state(false);
   /** Days the moons have moved on along their orbits past the season. */
   let orbitDays = $state(0);
+  /** The orbit time of a link being opened, for its world (see applyView). */
+  let orbitLink: number | null = null;
+  /** The world the orbit time belongs to: another one starts its moons over. */
+  let orbitWorld: string | null = null;
   let orbitsPlaying = $state(false);
   /** Whether the canvas has a size: hidden (narrow screens showing the list), nothing animates. */
   let canvasVisible = $state(true);
@@ -628,6 +637,15 @@
       longitude: ((planetLocked ? 180 : sunLongitude) * Math.PI) / 180,
     };
   });
+  $effect(() => {
+    const id = world.worldId;
+    untrack(() => {
+      if (id === orbitWorld) return;
+      orbitWorld = id;
+      orbitDays = orbitLink ?? 0;
+      orbitsPlaying = false;
+    });
+  });
   /** The period the orbit slider spans: of the moon shown, or of the largest moon. */
   const orbitPeriod = $derived.by(() => {
     if (shownMoon) return shownMoon.period_days;
@@ -772,14 +790,14 @@
     const planet = world.worldMeta;
     if (!planet || !sky) return [];
     const km = (v: number) => withUnit(formatInt(v), 'km');
-    const moonLabel = (m: (typeof moons)[number]): SkyLabel => ({
-      name: t.viewer.skyMoon({ name: m.name }),
+    const moonLabel = (m: (typeof moons)[number], k: number): SkyLabel => ({
+      name: (names && moonName(names, k + 1)) ?? t.viewer.skyMoon({ name: m.name }),
       detail: t.viewer.skyOrbitFacts({ radius: km(m.radius_km), orbit: km(m.semi_major_axis_km) }),
     });
     if (shownMoon && world.moon !== null) {
       const self = shownMoon;
       const planetLabel: SkyLabel = {
-        name: presetName(planet.preset),
+        name: names ? worldName(names) : presetName(planet.preset),
         detail: t.viewer.skyFacts({
           radius: km(planet.circumference_km / (2 * Math.PI)),
           distance: km(self.semi_major_axis_km),
@@ -787,32 +805,39 @@
       };
       return [
         planetLabel,
-        ...moons.filter((m) => m !== self).map(moonLabel),
+        ...moons.flatMap((m, k) => (m === self ? [] : [moonLabel(m, k)])),
       ];
     }
     if (world.moon === null && planet.host) {
       const host = planet.host;
       return [
         {
-          name: t.starView.giantKinds[host.giant.kind] ?? '',
+          name: names?.host ?? t.starView.giantKinds[host.giant.kind] ?? '',
           detail: t.viewer.skyFacts({
             radius: withUnit(formatUpTo(host.giant.mass_earth / 317.8, 2), 'MJ'),
             distance: km(host.distance_km),
           }),
         },
         ...(host.siblings ?? []).map((s, k) => ({
-          name: t.viewer.skySibling({ index: k + 1 }),
+          name: names?.siblings[k] ?? t.viewer.skySibling({ index: k + 1 }),
           detail: t.viewer.skyOrbitFacts({ radius: km(s.radius_km), orbit: km(s.distance_km) }),
         })),
       ];
     }
     return moons.map(moonLabel);
   });
+  /** The heading of the moon panel: the moon's name, and its designation beside a given one. */
+  const moonTitle = $derived.by((): string | null => {
+    const n = world.moon;
+    const moon = n === null ? undefined : names?.moons[n - 1];
+    if (!moon) return null;
+    return moon.name ? `${moon.name} · ${moon.designation}` : moon.designation;
+  });
   const starLabel = $derived.by((): SkyLabel | null => {
     const star = world.worldMeta?.star;
     if (!star) return null;
     return {
-      name: t.viewer.skyStar({ type: star.type }),
+      name: names ? `${names.star} · ${star.type}` : t.viewer.skyStar({ type: star.type }),
       detail: t.viewer.skyStarFacts({ distance: withUnit(formatUpTo(star.orbit_au, 2), t.viewer.au) }),
     };
   });
@@ -925,6 +950,7 @@
       layer: shown,
       relief,
       sun: sun ? { on: true, season, longitudeDeg: sunLongitude } : { on: false },
+      ...(orbitDays === 0 || orbitPeriod === null ? {} : { orbitDays: orbitDays % orbitPeriod }),
       ...(epoch === 0 ? {} : { epoch }),
     };
   }
@@ -945,6 +971,12 @@
       }
     }
     if (link.epoch !== undefined) epochChoice = link.epoch;
+    if (link.orbitDays !== undefined) {
+      orbitDays = link.orbitDays;
+      // Kept for the world the link opens, which may load just after.
+      orbitLink = link.orbitDays;
+      setTimeout(() => (orbitLink = null));
+    }
     if (link.camera) {
       applyCamera(link.camera);
     }
@@ -1129,12 +1161,13 @@
     <SkyLabels positions={skyPositions.bodies} labels={skyLabelList} star={skyPositions.star} {starLabel} />
   {/if}
   {#if subject === 'planet' && shownMoon && moonSystem}
-    <MoonPane moon={shownMoon} system={moonSystem} world={world.worldId ?? ''} />
+    <MoonPane moon={shownMoon} system={moonSystem} world={world.worldId ?? ''} title={moonTitle} />
   {/if}
   {#if subject === 'star' && worldId}
     <StarPane
       bind:this={starPane}
       star={system.star}
+      {names}
       omega={system.omega}
       {moons}
       binary={moonSystem?.binary ?? false}
@@ -1182,7 +1215,7 @@
         onchange={(e) => showMoon(Number(e.currentTarget.value))}
       >
         {#each moons as moon, i (moon.name)}
-          <option value={i + 1}>{t.moons.option({ name: moon.name, size: `${formatUpTo(moon.radius_km, moon.radius_km < 100 ? 1 : 0)}${t.format.unitSpace}km` })}</option>
+          <option value={i + 1}>{t.moons.option({ name: (names && moonName(names, i + 1)) ?? moon.name, size: `${formatUpTo(moon.radius_km, moon.radius_km < 100 ? 1 : 0)}${t.format.unitSpace}km` })}</option>
         {/each}
       </select>
     {/if}

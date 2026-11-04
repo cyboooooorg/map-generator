@@ -70,15 +70,19 @@ describe('encodeView / decodeView', () => {
       layer: 'temperature',
       relief: 0.35,
       sun: { on: true, season: 0.25, longitudeDeg: 90 },
+      orbitDays: 3.25,
       epoch: 3800,
     };
     const hash = encodeView(view).join('&');
-    expect(hash).toBe('view=g,10,20,0.5&layer=temperature&relief=0.35&sun=0.25,90&epoch=3800');
+    expect(hash).toBe('view=g,10,20,0.5&layer=temperature&relief=0.35&sun=0.25,90&orbit=3.25&epoch=3800');
     const back = decodeView(params(hash));
     expect(back.layer).toBe('temperature');
     expect(back.relief).toBe(0.35);
     expect(back.sun).toEqual({ on: true, season: 0.25, longitudeDeg: 90 });
     expect(back.epoch).toBe(3800);
+    expect(back.orbitDays).toBe(3.25);
+    // No days past the season is the default: not written.
+    expect(encodeView({ orbitDays: 0 })).toEqual([]);
     // The present is the default: not written.
     expect(encodeView({ epoch: 0 })).toEqual([]);
     expect(decodeView(params('epoch=-500'))).toEqual({ epoch: -500 });
@@ -94,6 +98,8 @@ describe('encodeView / decodeView', () => {
     expect(decodeView(params('layer=toString&layer2=x'))).toEqual({});
     expect(decodeView(params('epoch=12.5'))).toEqual({});
     expect(decodeView(params('epoch=-2000'))).toEqual({});
+    expect(decodeView(params('orbit=-1'))).toEqual({});
+    expect(decodeView(params('orbit=abc'))).toEqual({});
     expect(decodeView(params('sun=1,0'))).toEqual({ sun: { on: true, season: 0, longitudeDeg: 0 } });
   });
 

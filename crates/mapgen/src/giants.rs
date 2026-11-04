@@ -407,7 +407,11 @@ impl GiantSystem {
         let giants: Vec<Giant> = placed
             .iter()
             .enumerate()
-            .map(|(i, &(track, kind, _, seed))| describe(&star, track, kind, seed, i))
+            .map(|(i, &(track, kind, _, seed))| {
+                // Lettered among the planets, the world's orbit included.
+                let rank = i + usize::from(track.orbit > world.orbit);
+                describe(&star, track, kind, seed, rank)
+            })
             .collect();
         let forced = giants
             .iter()
@@ -439,8 +443,9 @@ impl GiantSystem {
     }
 }
 
-/// The stored description of a placed giant, the `index`-th from the star.
-fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, index: usize) -> Giant {
+/// The stored description of a placed giant, the `rank`-th planet from the
+/// star (see [`crate::naming`]).
+fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: usize) -> Giant {
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
     let mass_earth = (track.mass * SUN_EARTH_MASSES) as f32;
     let orbit_au = track.orbit as f32;
@@ -470,7 +475,7 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, index: 
         }
     };
     Giant {
-        name: char::from(b'b' + index as u8).to_string(),
+        name: crate::naming::planet_letter(rank),
         kind,
         mass_earth,
         radius_earth: giant_radius(mass_earth, equilibrium),

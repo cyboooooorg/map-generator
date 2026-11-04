@@ -26,6 +26,7 @@ pub mod giants;
 pub mod hex;
 pub mod hydrology;
 pub mod moons;
+pub mod naming;
 pub mod noise;
 pub mod plates;
 pub mod preset;
