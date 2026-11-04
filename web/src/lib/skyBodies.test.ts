@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Moon } from './api/types/Moon';
-import { eclipse, joinSkies, MAX_CASTERS, moonDirection, moonSky, planetSky, siblingSky } from './skyBodies';
+import {
+  eclipse,
+  joinSkies,
+  MAX_CASTERS,
+  moonDirection,
+  moonSky,
+  moonSystemSky,
+  planetSky,
+  siblingSky,
+} from './skyBodies';
 
 const moon = (overrides: Partial<Moon> = {}): Moon =>
   ({
@@ -50,6 +59,50 @@ describe('sky bodies', () => {
     const many = planetSky(Array.from({ length: 6 }, (_, i) => moon({ radius_km: 10 + i })), 6371, 0, 365.25, 0);
     expect(many.casters).toHaveLength(MAX_CASTERS);
     expect(many.casters[0]!.radius).toBeCloseTo(15 / 6371, 9);
+  });
+
+  it('maps each moon in its planet sky, its far side away', () => {
+    const moons = [moon(), moon({ name: 'II', composition: 'ice', semi_major_axis_km: 600_000, period_days: 52 })];
+    const { bodies } = planetSky(moons, 6371, 0, 365.25, 0, (k) => `moons/${k + 1}.png`);
+    expect(bodies.map((b) => b.texture)).toEqual(['moons/1.png', 'moons/2.png']);
+    expect(bodies.every((b) => b.faceLonDeg === 180)).toBe(true);
+  });
+
+  it('shows the planet and the other moons from a moon, where they are', () => {
+    const inner = moon({ name: 'I', semi_major_axis_km: 200_000, period_days: 10, radius_km: 1000 });
+    const outer = moon({ name: 'II', semi_major_axis_km: 400_000, period_days: 28, radius_km: 2000 });
+    const textures = (k: number) => `moons/${k + 1}.png`;
+    const sky = moonSystemSky([inner, outer], 0, 6371, 'planet.png', textures, 0, 365.25, 0);
+    expect(sky.bodies).toHaveLength(2);
+    const [planet, other] = sky.bodies;
+    expect(planet!.direction).toEqual([0, 0, -1]);
+    expect(planet!.texture).toBe('planet.png');
+    expect(other!.texture).toBe('moons/2.png');
+    // The outer moon where planetSky puts it, seen from the inner one.
+    const d0 = moonDirection(inner, 0, 0, 365.25, 0);
+    const d1 = moonDirection(outer, 1, 0, 365.25, 0);
+    const v = d1.map((c, i) => 400_000 * c - 200_000 * d0[i]!);
+    const distance = Math.hypot(...v);
+    expect(other!.direction[2]).toBeCloseTo(v.reduce((sum, c, i) => sum + c * d0[i]!, 0) / distance, 6);
+    expect(other!.angularDiameterDeg).toBeCloseTo((2 * Math.atan(2000 / distance) * 180) / Math.PI, 6);
+    // The planet's shadow first, then the other moon's.
+    expect(sky.casters[0]!.radius).toBeCloseTo(6371 / 1000, 6);
+    expect(Math.hypot(...sky.casters[1]!.position)).toBeCloseTo(distance / 1000, 6);
+  });
+
+  it('shows each other the faces two lined-up moons turn to each other', () => {
+    // Two moons hanging over the same point of their planet (as a binary's).
+    const inner = moon({ migration: 'locked', semi_major_axis_km: 200_000 });
+    const outer = moon({ migration: 'locked', semi_major_axis_km: 400_000 });
+    const none = () => null;
+    // From the inner one, the outer is straight up, its planet side down.
+    const up = moonSystemSky([inner, outer], 0, 6371, null, none, 0, 365.25, 0).bodies[1]!;
+    expect(up.direction[2]).toBeCloseTo(1, 9);
+    expect(Math.abs(up.faceLonDeg!)).toBeCloseTo(180, 9);
+    // From the outer one, the inner is in front of the planet, its far side out.
+    const down = moonSystemSky([inner, outer], 1, 6371, null, none, 0, 365.25, 0).bodies[1]!;
+    expect(down.direction[2]).toBeCloseTo(-1, 9);
+    expect(down.faceLonDeg).toBeCloseTo(0, 9);
   });
 
   it('shows the planet from its moon, large and towards its long axis', () => {

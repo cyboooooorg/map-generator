@@ -1654,6 +1654,8 @@ export class PlanetView {
             uHasMap: { value: 0 },
             uMap: { value: emptyTexture() },
             uOpacity: { value: 1 },
+            uFace: { value: 0 },
+            uHasFace: { value: 0 },
           },
           // Drawn with the star field and the host star (transparent ones
           // come after the surface), over them: a body hides the stars
@@ -1732,6 +1734,8 @@ export class PlanetView {
       const half = ((body.angularDiameterDeg / 2) * Math.PI) / 180;
       u['uHalf']!.value = Math.max(Math.tan(Math.min(half, 1.4)), smallest);
       u['uOpacity']!.value = this.morph ** 3;
+      u['uHasFace']!.value = body.faceLonDeg === null ? 0 : 1;
+      u['uFace']!.value = ((body.faceLonDeg ?? 0) * Math.PI) / 180;
     }
   }
 

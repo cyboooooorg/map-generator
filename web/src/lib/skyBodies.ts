@@ -21,6 +21,12 @@ export interface SkyBody {
   colour: Vec3;
   /** Its surface map (`surface.png`), or null for a plain colour. */
   texture: string | null;
+  /**
+   * Longitude of its map facing the body shown, degrees (a moon keeps
+   * 180° towards its planet), or null to map it in the frame of the body
+   * shown (the planet seen from a moon: it spins under it).
+   */
+  faceLonDeg: number | null;
 }
 
 /** A body whose shadow can fall on the body shown (an eclipse). */
@@ -63,13 +69,51 @@ export function moonDirection(
   return [Math.sin(theta), -Math.cos(theta) * Math.sin(tilt), Math.cos(theta) * Math.cos(tilt)];
 }
 
-/** The moons in the sky of their planet, and their shadows on it. */
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const scale = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
+const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const unit = (a: Vec3): Vec3 => scale(a, 1 / Math.max(Math.hypot(...a), 1e-12));
+
+/**
+ * The frame of moon `k` in its planet's frame: `z` away from the planet
+ * (the planet at longitude 180°, as a moon keeps it), `y` along its orbit's
+ * normal (its spin axis), `x` completing it; and its centre, in km.
+ */
+function moonFrame(
+  moon: Pick<Moon, 'inclination_deg' | 'period_days' | 'migration' | 'semi_major_axis_km'>,
+  k: number,
+  season: number,
+  yearDays: number,
+  sunLongitudeRad: number,
+): { x: Vec3; y: Vec3; z: Vec3; centre: Vec3 } {
+  const z = moonDirection(moon, k, season, yearDays, sunLongitudeRad);
+  const tilt = (moon.inclination_deg * Math.PI) / 180;
+  // The normal of the orbit of moonDirection, made orthogonal to z (a
+  // binary's moon hangs at [0, 0, -1] whatever its inclination).
+  const normal: Vec3 = [0, Math.cos(tilt), Math.sin(tilt)];
+  const y = unit(sub(normal, scale(z, dot(normal, z))));
+  return { x: cross(y, z), y, z, centre: scale(z, moon.semi_major_axis_km) };
+}
+
+/** Longitude (degrees) of a moon's map facing `from` (a point, km, in its planet's frame). */
+function faceLongitude(frame: ReturnType<typeof moonFrame>, from: Vec3): number {
+  const u = sub(from, frame.centre);
+  return (Math.atan2(dot(u, frame.x), dot(u, frame.z)) * 180) / Math.PI;
+}
+
+/**
+ * The moons in the sky of their planet, and their shadows on it; each
+ * mapped with its surface (`textures(k)`, null for a plain colour), its
+ * face towards the planet.
+ */
 export function planetSky(
   moons: readonly Moon[],
   planetRadiusKm: number,
   season: number,
   yearDays: number,
   sunLongitudeRad: number,
+  textures: (k: number) => string | null = () => null,
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
   const bodies: SkyBody[] = [];
   const casters: ShadowCaster[] = [];
@@ -79,7 +123,8 @@ export function planetSky(
       direction,
       angularDiameterDeg: moon.angular_diameter_deg,
       colour: moon.composition === 'ice' ? ICE : ROCK,
-      texture: null,
+      texture: textures(k),
+      faceLonDeg: 180,
     });
     const distance = moon.semi_major_axis_km / planetRadiusKm;
     casters.push({ position: direction.map((c) => c * distance) as Vec3, radius: moon.radius_km / planetRadiusKm });
@@ -100,9 +145,51 @@ export function moonSky(
   const angle = 2 * Math.atan(planetRadiusKm / Math.max(moon.semi_major_axis_km - moon.radius_km, 1));
   const distance = moon.semi_major_axis_km / moon.radius_km;
   return {
-    bodies: [{ direction, angularDiameterDeg: (angle * 180) / Math.PI, colour: PLANET, texture: planetTexture }],
+    bodies: [
+      { direction, angularDiameterDeg: (angle * 180) / Math.PI, colour: PLANET, texture: planetTexture, faceLonDeg: null },
+    ],
     casters: [{ position: [0, 0, -distance], radius: planetRadiusKm / moon.radius_km }],
   };
+}
+
+/**
+ * The sky of moon `shown` (from 0) of a planet: the planet (see moonSky)
+ * and the planet's other moons, where they are on their orbits as the
+ * seasons play (as planetSky places them), at their size from the moon,
+ * mapped with their surfaces (`textures(k)`), and the largest shadows.
+ */
+export function moonSystemSky(
+  moons: readonly Moon[],
+  shown: number,
+  planetRadiusKm: number,
+  planetTexture: string | null,
+  textures: (k: number) => string | null,
+  season: number,
+  yearDays: number,
+  sunLongitudeRad: number,
+): { bodies: SkyBody[]; casters: ShadowCaster[] } {
+  const self = moons[shown];
+  if (!self) return { bodies: [], casters: [] };
+  const sky = moonSky(self, planetRadiusKm, planetTexture);
+  const here = moonFrame(self, shown, season, yearDays, sunLongitudeRad);
+  // Planet frame to the shown moon's.
+  const local = (v: Vec3): Vec3 => [dot(v, here.x), dot(v, here.y), dot(v, here.z)];
+  moons.forEach((moon, k) => {
+    if (k === shown) return;
+    const there = moonFrame(moon, k, season, yearDays, sunLongitudeRad);
+    const v = local(sub(there.centre, here.centre));
+    const distance = Math.max(Math.hypot(...v), moon.radius_km + self.radius_km);
+    sky.bodies.push({
+      direction: unit(v),
+      angularDiameterDeg: (2 * Math.atan(moon.radius_km / distance) * 180) / Math.PI,
+      colour: moon.composition === 'ice' ? ICE : ROCK,
+      texture: textures(k),
+      faceLonDeg: faceLongitude(there, here.centre),
+    });
+    sky.casters.push({ position: scale(v, 1 / self.radius_km), radius: moon.radius_km / self.radius_km });
+  });
+  const casters = sky.casters.sort((a, b) => b.radius - a.radius).slice(0, MAX_CASTERS);
+  return { bodies: sky.bodies, casters };
 }
 
 /**
@@ -161,6 +248,7 @@ export function siblingSky(
       angularDiameterDeg: (2 * Math.atan(sibling.radius_km / distance) * 180) / Math.PI,
       colour: sibling.icy ? ICE : ROCK,
       texture: null,
+      faceLonDeg: null,
     });
     casters.push({ position: v.map((c) => c / worldRadiusKm) as Vec3, radius: sibling.radius_km / worldRadiusKm });
   });
