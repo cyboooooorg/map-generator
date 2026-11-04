@@ -1068,6 +1068,8 @@ mod tests {
             erosion: 0.0,
             pressure_bar: 0.0,
             surface_age_ga,
+            star: crate::star::SUN,
+            orbit_au: 1.0,
         }
     }
 

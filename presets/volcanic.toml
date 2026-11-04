@@ -7,6 +7,10 @@ description = "Fire world: extreme heat, near-zero moisture"
 name = "Volcanique"
 description = "Monde de feu : chaleur extrême, humidité presque nulle"
 
+[star]                                 # host star and orbit (see `mapgen::star`)
+# Drawn like the stars nearby, anywhere: the heat comes from within.
+position = [-0.5, 4.0]
+
 [climate]
 moisture = -0.55
 volcanic = 0.50

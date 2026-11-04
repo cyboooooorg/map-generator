@@ -4,7 +4,7 @@
 import { t } from './i18n/index.svelte';
 
 /** Units explained to the user, in the order of the help panel. */
-export const UNITS = ['Ga', 'Ma', 'bar', 'g'] as const;
+export const UNITS = ['Ga', 'Ma', 'bar', 'g', 'AU', 'L☉'] as const;
 export type Unit = (typeof UNITS)[number];
 
 /** Tooltip explaining `units`, one line each: what the unit is, then reference values. */

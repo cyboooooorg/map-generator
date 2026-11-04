@@ -177,6 +177,7 @@ struct Meta {
     surface_age_ga: Option<f32>,
     format_version: u32,
     preset: MetaPreset,
+    star: Option<MetaStar>,
 }
 
 /// The part of the stored preset a summary needs.
@@ -215,6 +216,13 @@ impl Meta {
     }
 }
 
+/// The star of `world.json`, as far as the summary needs it.
+#[derive(Deserialize)]
+struct MetaStar {
+    #[serde(rename = "type")]
+    kind: String,
+}
+
 impl Default for Meta {
     fn default() -> Self {
         Self {
@@ -234,6 +242,8 @@ impl Default for Meta {
             surface_age_ga: None,
             format_version: 1,
             preset: MetaPreset::default(),
+            // Nor a star: they orbit the Sun.
+            star: None,
         }
     }
 }
@@ -259,6 +269,7 @@ pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
         pressure_bar: meta.pressure_bar,
         surface_age_ga: meta.surface_age_ga,
         epochs_ma,
+        star: meta.star.map(|s| s.kind),
         modified_ms,
     })
 }

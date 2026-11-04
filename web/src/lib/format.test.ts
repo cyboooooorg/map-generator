@@ -12,6 +12,7 @@ const meta = {
   erosion: 1,
   pressure_bar: 0.41237,
   surface_age_ga: 1.23456,
+  star: { type: 'M4.5V', orbit_au: 0.0812345 },
   width: 1920,
   height: 1080,
 } as WorldMetadata;
@@ -28,17 +29,23 @@ describe('format', () => {
       erosion: 1,
       pressure_bar: 0.4124,
       surface_age_ga: 1.235,
+      star: 'M4.5V',
+      orbit_au: 0.08123,
       width: 1920,
       height: 1080,
     });
     expect(cliCommand(meta)).toBe(
       'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
-        '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 --width 1920 --height 1080',
+        '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 ' +
+        '--star M4.5V --orbit-au 0.08123 --width 1920 --height 1080',
     );
     // Worlds made before the surface age leave it to the preset.
     const old = { ...meta, surface_age_ga: undefined } as unknown as WorldMetadata;
     expect(requestFromWorld(old)).not.toHaveProperty('surface_age_ga');
     expect(cliCommand(old)).not.toContain('--surface-age');
+    // Worlds made before stars orbit the Sun at 1 AU.
+    const sunlit = { ...meta, star: undefined } as unknown as WorldMetadata;
+    expect(cliCommand(sunlit)).toContain('--star G2V --orbit-au 1 ');
   });
 
   it('rerolls a world with a new seed and every other parameter kept', () => {

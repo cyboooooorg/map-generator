@@ -5,6 +5,7 @@ import type { BiomeRules } from "./BiomeRules";
 import type { ClimateShift } from "./ClimateShift";
 import type { Defaults } from "./Defaults";
 import type { Geology } from "./Geology";
+import type { StarSpec } from "./StarSpec";
 
 /**
  * A planet type. See the module documentation for the file format.
@@ -26,6 +27,11 @@ atmosphere: Atmosphere,
  * `[geology]` table.
  */
 geology: Geology, 
+/**
+ * The host star and the planet's orbit: drawn when left out (see
+ * `crate::star`).
+ */
+star: StarSpec, 
 /**
  * Target biome → biomes replaced by it.
  */

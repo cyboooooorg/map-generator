@@ -50,6 +50,16 @@ pub const PRESSURE_BAR: Limits = Limits {
 /// Age of the oldest surviving surface, in Ga (the Solar System is 4.57 Ga
 /// old).
 pub const SURFACE_AGE_GA: Limits = Limits { min: 0.0, max: 4.6 };
+/// Semi-major axis of the planet's orbit, AU.
+pub const ORBIT_AU: Limits = Limits {
+    min: 0.005,
+    max: 1000.0,
+};
+/// Position in the host star's habitable zone: 0 inner edge, 1 outer edge.
+pub const HZ_POSITION: Limits = Limits {
+    min: -2.0,
+    max: 6.0,
+};
 /// Hydraulic erosion strength (droplets per erosion-grid pixel).
 pub const EROSION: Limits = Limits { min: 0.0, max: 5.0 };
 /// Map width and height in pixels.
@@ -70,6 +80,8 @@ pub mod fallback {
     pub const PRESSURE_BAR: ParamDefault = ParamDefault::Range([0.7, 1.5]);
     /// Earth's: erosion and subduction keep few craters older than this.
     pub const SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.2, 0.6]);
+    /// Inside the habitable zone of the star.
+    pub const HZ_POSITION: ParamDefault = ParamDefault::Range([0.1, 0.9]);
     pub const WIDTH: u32 = 1920;
     pub const HEIGHT: u32 = 1080;
 }
@@ -95,6 +107,13 @@ pub struct WorldRequest {
     pub pressure_bar: Option<f32>,
     /// Age of the oldest surviving surface, in Ga.
     pub surface_age_ga: Option<f32>,
+    /// Spectral type of the host star (`G2V`).
+    pub star: Option<String>,
+    /// Semi-major axis of the orbit in AU. Exclusive with `hz_position`.
+    pub orbit_au: Option<f32>,
+    /// Position of the orbit in the star's habitable zone (0 inner edge, 1
+    /// outer edge). Exclusive with `orbit_au`.
+    pub hz_position: Option<f32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -114,6 +133,10 @@ pub enum RequestError {
     },
     /// Both `sea_level` and `land_fraction` are set.
     SeaLevelAndLandFraction,
+    /// The star is not a spectral type the model knows.
+    BadStar(String),
+    /// Both `orbit_au` and `hz_position` are set.
+    OrbitAndPosition,
     Preset(PresetError),
 }
 
@@ -134,6 +157,10 @@ impl fmt::Display for RequestError {
             ),
             RequestError::SeaLevelAndLandFraction => {
                 write!(f, "set sea_level or land_fraction, not both")
+            }
+            RequestError::BadStar(e) => write!(f, "star: {e}"),
+            RequestError::OrbitAndPosition => {
+                write!(f, "set orbit_au or hz_position, not both")
             }
             RequestError::Preset(e) => e.fmt(f),
         }
@@ -161,6 +188,12 @@ impl WorldRequest {
         if self.sea_level.is_some() && self.land_fraction.is_some() {
             return Err(RequestError::SeaLevelAndLandFraction);
         }
+        if self.orbit_au.is_some() && self.hz_position.is_some() {
+            return Err(RequestError::OrbitAndPosition);
+        }
+        if let Some(star) = &self.star {
+            crate::star::parse_type(star).map_err(RequestError::BadStar)?;
+        }
         for (field, value, limits) in [
             ("sea_level", self.sea_level, SEA_LEVEL),
             ("land_fraction", self.land_fraction, LAND_FRACTION),
@@ -170,6 +203,8 @@ impl WorldRequest {
             ("erosion", self.erosion, EROSION),
             ("pressure_bar", self.pressure_bar, PRESSURE_BAR),
             ("surface_age_ga", self.surface_age_ga, SURFACE_AGE_GA),
+            ("orbit_au", self.orbit_au, ORBIT_AU),
+            ("hz_position", self.hz_position, HZ_POSITION),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -249,6 +284,20 @@ impl WorldRequest {
         let surface_age_ga = self
             .surface_age_ga
             .unwrap_or_else(|| d.surface_age.unwrap_or(fallback::SURFACE_AGE_GA).pick(rng));
+        // The star, then the orbit, drawn after everything else (above).
+        let s = &planet.star;
+        let star = match self.star.as_deref().or(s.kind.as_deref()) {
+            Some(kind) => crate::star::parse_type(kind).map_err(RequestError::BadStar)?,
+            None => crate::star::draw_type(rng),
+        };
+        let orbit_au = match (self.orbit_au, self.hz_position, s.orbit_au) {
+            (Some(au), _, _) => au,
+            (None, Some(position), _) => crate::star::orbit_at(star, position),
+            (None, None, Some(au)) => au,
+            (None, None, None) => {
+                crate::star::orbit_at(star, s.position.unwrap_or(fallback::HZ_POSITION).pick(rng))
+            }
+        };
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
             height: self.height.unwrap_or(fallback::HEIGHT),
@@ -261,6 +310,8 @@ impl WorldRequest {
             erosion,
             pressure_bar,
             surface_age_ga,
+            star,
+            orbit_au,
         };
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
@@ -275,6 +326,65 @@ impl WorldRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_star_and_orbit_come_from_the_request_then_the_preset() {
+        use crate::star::{SUN, StarInfo, parse_type};
+        let resolve = |request: WorldRequest| request.resolve(&mut rand::rng()).unwrap().params;
+        // The preset's star and distance (Mars around the Sun).
+        let mars = resolve(WorldRequest {
+            planet: Some(
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../presets/examples/mars-like.toml"
+                )
+                .into(),
+            ),
+            ..Default::default()
+        });
+        assert_eq!((mars.star, mars.orbit_au), (SUN, 1.524));
+        // A request's star and position win; the position gives the distance.
+        let red = resolve(WorldRequest {
+            planet: Some("terran".into()),
+            star: Some("M4V".into()),
+            hz_position: Some(0.5),
+            ..Default::default()
+        });
+        assert_eq!(red.star, parse_type("M4V").unwrap());
+        let info = StarInfo::new(red.star, red.orbit_au);
+        assert!(
+            (info.hz_position - 0.5).abs() < 1e-3,
+            "{}",
+            info.hz_position
+        );
+        // A terran world lands inside the habitable zone of whatever star.
+        for _ in 0..20 {
+            let p = resolve(WorldRequest {
+                planet: Some("terran".into()),
+                ..Default::default()
+            });
+            let position = StarInfo::new(p.star, p.orbit_au).hz_position;
+            assert!((0.09..0.91).contains(&position), "{position}");
+        }
+        // Bad stars and both orbits at once are refused.
+        let bad = WorldRequest {
+            star: Some("Q1".into()),
+            ..Default::default()
+        };
+        assert!(matches!(
+            bad.resolve(&mut rand::rng()),
+            Err(RequestError::BadStar(_))
+        ));
+        let both = WorldRequest {
+            orbit_au: Some(1.0),
+            hz_position: Some(0.5),
+            ..Default::default()
+        };
+        assert!(matches!(
+            both.validate(),
+            Err(RequestError::OrbitAndPosition)
+        ));
+    }
 
     #[test]
     fn explicit_values_are_kept() {

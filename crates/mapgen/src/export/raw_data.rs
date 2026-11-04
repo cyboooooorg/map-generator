@@ -23,6 +23,7 @@ use crate::climate::{TEMPERATURE_RANGE, celsius};
 use crate::generation::{COAST_DISTANCE_CAP_KM, Sampler};
 use crate::preset::Preset;
 use crate::rivers::{RiverLine, RiversFile};
+use crate::star::StarInfo;
 use crate::world::WorldParams;
 use crate::world::{Biome, World, biome_name};
 use image::{GrayImage, ImageBuffer, Luma};
@@ -77,6 +78,10 @@ pub struct WorldMetadata {
     /// existed have none (and no craters).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface_age_ga: Option<f32>,
+    /// The host star and the orbit. Worlds made before it existed orbit
+    /// the Sun at 1 AU.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub star: Option<StarInfo>,
     pub layers: Layers,
     /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -339,6 +344,7 @@ pub fn export_raw_data(
         erosion: world.params.erosion,
         pressure_bar: world.params.pressure_bar,
         surface_age_ga: Some(world.params.surface_age_ga),
+        star: Some(StarInfo::new(world.params.star, world.params.orbit_au)),
         layers: Layers {
             elevation,
             elevation_base,
@@ -669,6 +675,8 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         pressure_bar: meta.pressure_bar,
         // Worlds made before the surface age have no craters: a fresh surface.
         surface_age_ga: meta.surface_age_ga.unwrap_or(0.0),
+        star: meta.star.as_ref().map_or(crate::star::SUN, StarInfo::code),
+        orbit_au: meta.star.as_ref().map_or(1.0, |s| s.orbit_au),
     };
     let l = &meta.layers;
     let infos = [
@@ -831,6 +839,8 @@ mod tests {
             erosion: 1.0,
             pressure_bar: 1.0,
             surface_age_ga: 0.4,
+            star: 64.5,
+            orbit_au: 0.1,
         })
         .world;
         let world_dir =
@@ -857,6 +867,10 @@ mod tests {
         assert_eq!(meta.preset.name, "caustic");
         assert_eq!(meta.biomes.len(), Biome::ALL.len());
         assert_eq!(meta.layers.flow.encoding, "gray16-log10");
+        // The star round-trips: a red dwarf at 0.1 AU.
+        let star = meta.star.as_ref().unwrap();
+        assert_eq!(star.kind, "M4.5V");
+        assert_eq!((star.code(), star.orbit_au), (64.5, 0.1));
 
         // The world reloads with every layer, and its preset can remap.
         // The stored layers are exactly the quantised world, and decode to

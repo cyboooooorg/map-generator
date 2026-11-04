@@ -14,7 +14,10 @@
 //! outer edge (maximum greenhouse), below 0 closer in, above 1 farther
 //! out; the flux varies geometrically with the position, so it extends
 //! smoothly beyond the edges.
-use rand::{Rng, RngExt};
+use crate::preset::ParamDefault;
+use crate::request::{HZ_POSITION, ORBIT_AU};
+use rand::RngExt;
+use serde::{Deserialize, Serialize};
 
 /// Spectral classes, hottest first.
 pub const CLASSES: [char; 7] = ['O', 'B', 'A', 'F', 'G', 'K', 'M'];
@@ -169,6 +172,17 @@ pub fn values(code: f32) -> StarValues {
         .unwrap_or(SEQUENCE.len() - 2);
     let (a, b) = (&SEQUENCE[i], &SEQUENCE[i + 1]);
     let f = ((code - a.code) / (b.code - a.code)).clamp(0.0, 1.0);
+    // On a row, its own values, unrounded by the interpolation.
+    for row in [a, b] {
+        if code == row.code {
+            return StarValues {
+                teff_k: row.teff_k,
+                luminosity: 10f32.powf(row.log_l),
+                radius: row.radius,
+                mass: row.mass,
+            };
+        }
+    }
     let log_mix = |x: f32, y: f32| (x.ln() + (y.ln() - x.ln()) * f).exp();
     StarValues {
         teff_k: log_mix(a.teff_k, b.teff_k),
@@ -211,11 +225,11 @@ pub fn parse_type(text: &str) -> Result<f32, String> {
     }
 }
 
-/// The name of a spectral type, rounded to half subtypes: `G2V`, `M4.5V`.
+/// The name of a spectral type, to a tenth of a subtype: `G2V`, `M4.5V`.
 pub fn type_name(code: f32) -> String {
-    let half = (code.clamp(TYPE_RANGE.0, TYPE_RANGE.1) * 2.0).round() / 2.0;
-    let class = ((half / 10.0).floor() as usize).min(CLASSES.len() - 1);
-    let subtype = half - class as f32 * 10.0;
+    let tenth = (code.clamp(TYPE_RANGE.0, TYPE_RANGE.1) * 10.0).round() / 10.0;
+    let class = ((tenth / 10.0).floor() as usize).min(CLASSES.len() - 1);
+    let subtype = ((tenth - class as f32 * 10.0) * 10.0).round() / 10.0;
     if subtype.fract() == 0.0 {
         format!("{}{}V", CLASSES[class], subtype as u32)
     } else {
@@ -231,7 +245,7 @@ const CLASS_SHARES: [f64; 7] = [3e-7, 0.0013, 0.006, 0.03, 0.076, 0.121, 0.7657]
 /// A spectral type drawn with the frequencies of the solar neighbourhood,
 /// to a half subtype. Within a class the subtype is uniform, except for O
 /// and M, which start at O3 and stop at M9.5.
-pub fn draw_type(rng: &mut impl Rng) -> f32 {
+pub fn draw_type(rng: &mut impl RngExt) -> f32 {
     let total: f64 = CLASS_SHARES.iter().sum();
     let mut pick = rng.random::<f64>() * total;
     let mut class = CLASS_SHARES.len() - 1;
@@ -360,6 +374,141 @@ pub fn light_colour(teff_k: f32) -> [f32; 3] {
     rgb.map(|c| (c / max) as f32)
 }
 
+/// Age assumed for a star when deciding whether its planet is locked: the
+/// Sun's, or the star's whole main-sequence life if shorter.
+pub const AGE_GYR: f32 = 4.6;
+
+/// A preset's `[star]` table:
+///
+/// ```toml
+/// [star]
+/// type = "G2V"                       # left out: drawn with the frequencies of the solar neighbourhood
+/// position = [0.1, 0.9]              # in the habitable zone: 0 inner edge, 1 outer edge
+/// # orbit_au = 1.524                 # or a distance, instead of the position
+/// ```
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields))]
+pub struct StarSpec {
+    /// Spectral type (`G2V`); `None` draws one.
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Position in the habitable zone, a fixed value or a range.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<ParamDefault>,
+    /// Semi-major axis in AU, instead of the position.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orbit_au: Option<f32>,
+}
+
+impl StarSpec {
+    /// Checks the type parses and the orbit is within its limits.
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(kind) = &self.kind {
+            parse_type(kind).map_err(|e| format!("star.type: {e}"))?;
+        }
+        if self.position.is_some() && self.orbit_au.is_some() {
+            return Err("star: set position or orbit_au, not both".into());
+        }
+        if let Some(position) = self.position {
+            position
+                .check("position", HZ_POSITION.min, HZ_POSITION.max)
+                .map_err(|e| e.replacen("defaults.", "star.", 1))?;
+        }
+        if let Some(au) = self.orbit_au
+            && !ORBIT_AU.contains(au)
+        {
+            return Err(format!(
+                "star.orbit_au: must stay within [{}, {}]",
+                ORBIT_AU.min, ORBIT_AU.max
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// The star of a world and the planet's orbit, with what they imply, as
+/// `world.json` stores them.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct StarInfo {
+    /// Spectral type, `G2V`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Effective temperature, K.
+    pub teff_k: f32,
+    /// Luminosity, mass and radius in solar units.
+    pub luminosity: f32,
+    pub mass: f32,
+    pub radius: f32,
+    /// Semi-major axis of the planet's orbit, AU.
+    pub orbit_au: f32,
+    /// Flux the planet receives, relative to Earth's.
+    pub insolation: f32,
+    /// Position in the habitable zone (0 inner edge, 1 outer edge).
+    pub hz_position: f32,
+    /// Edges of the habitable zone, AU.
+    pub hz_inner_au: f32,
+    pub hz_outer_au: f32,
+    /// Equilibrium temperature with Earth's albedo, K.
+    pub equilibrium_k: f32,
+    /// Orbital period, Earth days.
+    pub year_days: f32,
+    /// Apparent diameter of the star from the planet, degrees.
+    pub angular_diameter_deg: f32,
+    /// Main-sequence lifetime of the star, Gyr.
+    pub lifetime_gyr: f32,
+    /// Time for the star's tides to lock the planet's spin, Gyr.
+    pub locking_gyr: f32,
+    /// Whether the planet is tidally locked: its locking time is shorter
+    /// than the star's age ([`AGE_GYR`] or the star's lifetime).
+    pub tidally_locked: bool,
+    /// Colour of the star's light, linear RGB, the Sun white.
+    pub light: [f32; 3],
+}
+
+impl StarInfo {
+    /// The star of type `code` with a planet at `orbit_au`.
+    pub fn new(code: f32, orbit_au: f32) -> Self {
+        let v = values(code);
+        let insolation = v.luminosity / (orbit_au * orbit_au);
+        let (inner, outer) = habitable_fluxes(v.teff_k);
+        let lifetime = lifetime_gyr(v.mass, v.luminosity);
+        let locking = locking_gyr(orbit_au, v.mass);
+        Self {
+            kind: type_name(code),
+            teff_k: v.teff_k,
+            luminosity: v.luminosity,
+            mass: v.mass,
+            radius: v.radius,
+            orbit_au,
+            insolation,
+            hz_position: position_of(v.teff_k, insolation),
+            hz_inner_au: distance_au(v.luminosity, inner),
+            hz_outer_au: distance_au(v.luminosity, outer),
+            equilibrium_k: equilibrium_k(insolation),
+            year_days: year_days(orbit_au, v.mass),
+            angular_diameter_deg: angular_diameter_deg(v.radius, orbit_au),
+            lifetime_gyr: lifetime,
+            locking_gyr: locking,
+            tidally_locked: locking < AGE_GYR.min(lifetime),
+            light: light_colour(v.teff_k),
+        }
+    }
+
+    /// The spectral type of a stored star, the Sun's if it does not parse.
+    pub fn code(&self) -> f32 {
+        parse_type(&self.kind).unwrap_or(SUN)
+    }
+}
+
+/// The orbit of a planet at `position` in the habitable zone of a star of
+/// type `code`, AU.
+pub fn orbit_at(code: f32, position: f32) -> f32 {
+    let v = values(code);
+    distance_au(v.luminosity, flux_at(v.teff_k, position))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,6 +529,7 @@ mod tests {
         assert_eq!(parse_type("m4.5").unwrap(), 64.5);
         assert_eq!(parse_type("K").unwrap(), 55.0);
         assert_eq!(type_name(64.5), "M4.5V");
+        assert_eq!(type_name(42.3), "G2.3V");
         assert!(parse_type("X2").is_err());
         assert!(parse_type("G12").is_err());
         assert!(parse_type("O1").is_err());
@@ -431,6 +581,17 @@ mod tests {
         assert!(red[0] == 1.0 && red[2] < 0.5 * red[0], "{red:?}");
         let blue = light_colour(10000.0);
         assert!(blue[2] == 1.0 && blue[0] < blue[2], "{blue:?}");
+    }
+
+    #[test]
+    fn earth_reads_as_earth() {
+        let earth = StarInfo::new(SUN, 1.0);
+        assert_eq!(earth.kind, "G2V");
+        assert!((earth.insolation - 1.0).abs() < 0.03);
+        assert!(!earth.tidally_locked);
+        assert!(StarInfo::new(parse_type("M5V").unwrap(), orbit_at(65.0, 0.5)).tidally_locked);
+        let back = StarInfo::new(earth.code(), earth.orbit_au);
+        assert_eq!(back, earth);
     }
 
     #[test]

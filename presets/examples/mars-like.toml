@@ -8,6 +8,10 @@ description = "Small cold desert world with polar caps"
 name = "Type Mars"
 description = "Petit désert froid aux calottes polaires"
 
+[star]                                 # host star and orbit (see `mapgen::star`)
+type = "G2V"                           # the Sun
+orbit_au = 1.524
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.
 #

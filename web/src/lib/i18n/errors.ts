@@ -25,6 +25,10 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.worldExists({ world: detail.world });
     case 'busy':
       return t.errors.busy;
+    case 'unknown_star':
+      return t.errors.unknownStar({ star: detail.star });
+    case 'orbit_and_position':
+      return t.errors.orbitAndPosition;
   }
 }
 

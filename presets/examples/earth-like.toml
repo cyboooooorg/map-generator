@@ -8,6 +8,10 @@ description = "Earth's size, tilt and land share, full biome spectrum"
 name = "Type Terre"
 description = "Taille, inclinaison et part des terres de la Terre, tous les biomes"
 
+[star]                                 # host star and orbit (see `mapgen::star`)
+type = "G2V"                           # the Sun
+orbit_au = 1.0
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.
 [defaults]

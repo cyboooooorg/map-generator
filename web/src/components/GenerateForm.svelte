@@ -10,12 +10,13 @@
   import type { ParamDefault } from '../lib/api/types/ParamDefault';
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
-  import { formatInt, MAX_SEED, randomSeed } from '../lib/format';
+  import { formatInt, formatUpTo, MAX_SEED, randomSeed } from '../lib/format';
   import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
   import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
   import { type Unit, unitTooltip } from '../lib/units';
   import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
+  import { applyStarChoice, initialStarChoice, STAR_CLASSES, type StarChoice } from '../lib/starForm';
 
   interface Props {
     presets: PresetInfo[];
@@ -207,6 +208,15 @@
   let seaBy = $state<SeaBy>(memory?.seaBy ?? (startLand ? 'land' : 'level'));
   /** Land share in percent, used when `seaBy` is 'land'. */
   let landPercent = $state(memory?.landPercent ?? startLand?.percent ?? 29);
+  /** The star and the orbit (see starForm.ts). */
+  let star = $state<StarChoice>(
+    untrack(() => memory?.star ?? initialStarChoice(start.preset, start.initial, spec.hz_position.fallback)),
+  );
+  /** Subtypes of a class, by half steps: O starts at O3, the sequence ends at M9.5. */
+  function subtypes(klass: string): number[] {
+    const first = klass === 'O' ? 6 : 0;
+    return Array.from({ length: 20 - first }, (_, i) => (first + i) / 2);
+  }
   let submitting = $state(false);
   let error = $state<string | null>(null);
   let replace = $state(false);
@@ -223,10 +233,11 @@
     return list;
   });
 
-  function choosePreset(spec: string): void {
-    planet = spec;
-    const preset = presets.find((p) => p.spec === spec);
+  function choosePreset(presetSpec: string): void {
+    planet = presetSpec;
+    const preset = presets.find((p) => p.spec === presetSpec);
     fields = initialState(preset, null);
+    star = initialStarChoice(preset, null, spec.hz_position.fallback);
     const land = landDefault(preset, null);
     seaBy = land ? 'land' : 'level';
     landPercent = land?.percent ?? 29;
@@ -244,6 +255,7 @@
     choosePreset(preset?.spec ?? '');
     if (start.initial) {
       fields = initialState(preset, start.initial);
+      star = initialStarChoice(preset, start.initial, spec.hz_position.fallback);
       const land = landDefault(preset, start.initial);
       seaBy = land ? 'land' : 'level';
       landPercent = land?.percent ?? 29;
@@ -279,6 +291,7 @@
         request[field] = fields[field].value;
       }
     }
+    applyStarChoice(request, star);
     if (!fields.sea_level.random) {
       if (seaBy === 'level') {
         request.sea_level = fields.sea_level.value;
@@ -318,7 +331,7 @@
       // The server swaps the new world in once it is complete: a failed or
       // cancelled generation keeps the old one.
       const job = await api.createWorld(request, { replace: conflict && replace });
-      saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields });
+      saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields, star });
       onSubmitted(job, request);
     } catch (e) {
       error = errorText(e);
@@ -441,6 +454,64 @@
     </fieldset>
   {/each}
 
+  <fieldset>
+    <legend>{t.form.star}</legend>
+    <div class="star">
+      <select
+        bind:value={star.klass}
+        onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}
+        aria-label={t.form.starClass}
+      >
+        <option value="">{t.form.starAuto}</option>
+        {#each STAR_CLASSES as klass (klass)}
+          <option value={klass}>{klass}</option>
+        {/each}
+      </select>
+      <select bind:value={star.subtype} disabled={star.klass === ''} aria-label={t.form.starSubtype}>
+        {#each subtypes(star.klass) as subtype (subtype)}
+          <option value={subtype}>{formatUpTo(subtype, 1)}</option>
+        {/each}
+      </select>
+    </div>
+    <p class="help">{star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass]}</p>
+  </fieldset>
+  <fieldset>
+    <legend>
+      <select class="mode" bind:value={star.orbitBy} aria-label={t.form.orbitBy}>
+        <option value="position">{t.form.orbitPosition}</option>
+        <option value="au">{t.form.orbitAu}</option>
+      </select>
+      <label class="check inline">
+        <input type="checkbox" bind:checked={star.orbitRandom} />
+        {t.form.random}
+      </label>
+    </legend>
+    {#if !star.orbitRandom}
+      <div class="slider">
+        {#if star.orbitBy === 'position'}
+          <input type="range" min={-1} max={4} step={0.05} bind:value={star.position} />
+          <input
+            type="number"
+            min={spec.hz_position.limits.min}
+            max={spec.hz_position.limits.max}
+            step="any"
+            bind:value={star.position}
+          />
+        {:else}
+          <input
+            type="number"
+            min={spec.orbit_au.min}
+            max={spec.orbit_au.max}
+            step="any"
+            bind:value={star.au}
+            aria-label={t.form.orbitAu}
+          />
+        {/if}
+      </div>
+    {/if}
+    <p class="help">{star.orbitBy === 'position' ? t.form.orbitPositionHelp : t.form.orbitAuHelp}</p>
+  </fieldset>
+
   <div class="row">
     <label for="seed">{t.form.seed}</label>
     <div class="seed">
@@ -559,6 +630,10 @@
   legend {
     padding: 0 4px;
     font-weight: 600;
+  }
+  .star {
+    display: flex;
+    gap: 6px;
   }
   legend .mode {
     font-weight: 600;

@@ -1,6 +1,7 @@
 // Formatting shared by the components, and the requests and commands that
 // reproduce a world.
 import type { BiomeInfo } from './api/types/BiomeInfo';
+import type { StarInfo } from './api/types/StarInfo';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import type { WorldRequest } from './api/types/WorldRequest';
 import { getLocale, t } from './i18n/index.svelte';
@@ -134,6 +135,9 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     pressure_bar: round(meta.pressure_bar ?? 1, 4),
     // Worlds made before the surface age leave it to the preset.
     ...(meta.surface_age_ga == null ? {} : { surface_age_ga: round(meta.surface_age_ga, 3) }),
+    // Worlds made before stars orbit the Sun at 1 AU.
+    star: meta.star?.type ?? 'G2V',
+    orbit_au: round(meta.star?.orbit_au ?? 1, 5),
     width: meta.width,
     height: meta.height,
   };
@@ -156,6 +160,8 @@ export function cliCommand(meta: WorldMetadata): string {
     `--erosion ${r.erosion}`,
     `--pressure ${r.pressure_bar}`,
     ...(r.surface_age_ga === undefined ? [] : [`--surface-age ${r.surface_age_ga}`]),
+    `--star ${r.star}`,
+    `--orbit-au ${r.orbit_au}`,
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];
@@ -210,6 +216,44 @@ export function formatGeology(meta: WorldMetadata): string {
   }
   const shown = age >= 1 ? withUnit(formatNumber(age, 1), 'Ga') : withUnit(formatNumber(age * 1000), 'Ma');
   return t.worldInfo.geologySurface({ regime, age: shown });
+}
+
+/** The star line of the world card: type, temperature and luminosity. */
+export function formatStar(star: StarInfo): string {
+  const luminosity = star.luminosity < 0.01 ? formatUpTo(star.luminosity, 4) : formatUpTo(star.luminosity, 2);
+  return t.worldInfo.starValue({
+    type: star.type,
+    teff: withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K'),
+    luminosity: withUnit(luminosity, 'L☉'),
+  });
+}
+
+/** A distance in AU, to three significant digits. */
+export function formatAu(au: number): string {
+  return withUnit(numberFormat({ maximumSignificantDigits: 3 }).format(au), t.format.au);
+}
+
+/** The orbit line: distance and place relative to the habitable zone. */
+export function formatOrbit(star: StarInfo): string {
+  const p = star.hz_position;
+  const zone =
+    p < 0 ? t.worldInfo.hzInner : p > 1 ? t.worldInfo.hzOuter : t.worldInfo.hzInside({ position: formatNumber(p, 2) });
+  return t.worldInfo.orbitValue({ distance: formatAu(star.orbit_au), zone });
+}
+
+/** The light line: flux relative to Earth's and equilibrium temperature. */
+export function formatStarlight(star: StarInfo): string {
+  return t.worldInfo.lightValue({
+    flux: `${formatUpTo(star.insolation, star.insolation < 0.1 ? 3 : 2)}×`,
+    equilibrium: withUnit(formatInt(star.equilibrium_k - 273.15), '°C'),
+  });
+}
+
+/** The year: in days under two Earth years, in Earth years above. */
+export function formatYear(days: number): string {
+  return days < 730
+    ? t.worldInfo.yearDays({ days: formatUpTo(days, days < 10 ? 1 : 0) })
+    : t.worldInfo.yearYears({ years: formatUpTo(days / 365.25, 1) });
 }
 
 /**

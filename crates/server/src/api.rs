@@ -3,6 +3,7 @@
 use mapgen::generation::Stage;
 use mapgen::preset::{Defaults, ParamDefault, PresetLocale};
 use mapgen::request::{Limits, WorldRequest};
+use mapgen::star::StarSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -18,6 +19,8 @@ pub struct PresetInfo {
     /// Whether the preset is embedded in the generator or read from a file.
     pub built_in: bool,
     pub defaults: Defaults,
+    /// The preset's host star and orbit (`[star]`).
+    pub star: StarSpec,
     /// Translated name and description, by language code (`fr`).
     pub locales: BTreeMap<String, PresetLocale>,
 }
@@ -45,6 +48,10 @@ pub struct FormSpec {
     pub erosion: ParamSpec,
     pub pressure_bar: ParamSpec,
     pub surface_age_ga: ParamSpec,
+    /// Position of the orbit in the star's habitable zone.
+    pub hz_position: ParamSpec,
+    /// Limits of `orbit_au`, the alternative to `hz_position`.
+    pub orbit_au: Limits,
     pub default_width: u32,
     pub default_height: u32,
     /// Largest width or height the server accepts.
@@ -80,6 +87,9 @@ pub struct WorldSummary {
     /// `null` when it offers none (liquid water today, no craters, or made
     /// before format version 7). See `GET /api/worlds/{id}/epoch/...`.
     pub epochs_ma: Option<[i32; 2]>,
+    /// Spectral type of the host star; `null` for worlds made before stars
+    /// (the Sun).
+    pub star: Option<String>,
     /// Last modification time, in milliseconds since the Unix epoch.
     #[ts(type = "number")]
     pub modified_ms: u64,
@@ -193,6 +203,10 @@ pub enum ErrorDetail {
     WorldExists { world: String },
     /// A generation is running: tiles and hex grids are paused.
     Busy,
+    /// The star is not a spectral type from O3V to M9.5V.
+    UnknownStar { star: String },
+    /// Both `orbit_au` and `hz_position` are set.
+    OrbitAndPosition,
 }
 
 impl ErrorDetail {
@@ -213,6 +227,8 @@ impl ErrorDetail {
                 max: MAP_SIZE.1,
             }),
             RequestError::SeaLevelAndLandFraction => Some(Self::SeaLevelAndLandFraction),
+            RequestError::BadStar(e) => Some(Self::UnknownStar { star: e.clone() }),
+            RequestError::OrbitAndPosition => Some(Self::OrbitAndPosition),
             RequestError::Preset(_) => None,
         }
     }

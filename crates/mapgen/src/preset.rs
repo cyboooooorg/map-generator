@@ -29,6 +29,10 @@
 //! regime = "stagnant"
 //! wet_until = 3.5                    # Ga
 //!
+//! [star]                             # see the star module
+//! type = "G2V"                       # left out: drawn like the stars nearby
+//! orbit_au = 1.524                   # or position = [0.1, 0.9] in the habitable zone
+//!
 //! [rules]                            # any BiomeRules field
 //! polar = -5.0                       # °C
 //!
@@ -39,6 +43,7 @@ use crate::atmosphere::Atmosphere;
 use crate::biome::{Biome, BiomeRules};
 use crate::geology::Geology;
 use crate::request;
+use crate::star::StarSpec;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -73,7 +78,7 @@ impl ParamDefault {
         }
     }
 
-    fn check(self, field: &str, min: f32, max: f32) -> Result<(), String> {
+    pub(crate) fn check(self, field: &str, min: f32, max: f32) -> Result<(), String> {
         let (lo, hi) = match self {
             ParamDefault::Fixed(v) => (v, v),
             ParamDefault::Range([lo, hi]) => (lo, hi),
@@ -145,6 +150,10 @@ pub struct Preset {
     /// `[geology]` table.
     #[serde(default)]
     pub geology: Geology,
+    /// The host star and the planet's orbit: drawn when left out (see
+    /// `crate::star`).
+    #[serde(default)]
+    pub star: StarSpec,
     /// Target biome → biomes replaced by it.
     #[serde(default)]
     pub remap: BTreeMap<Biome, Vec<Biome>>,
@@ -189,6 +198,8 @@ struct PresetSpec {
     atmosphere: Atmosphere,
     #[serde(default)]
     geology: Geology,
+    #[serde(default)]
+    star: StarSpec,
     #[serde(default)]
     remap: BTreeMap<Biome, Vec<Biome>>,
 }
@@ -246,6 +257,7 @@ impl TryFrom<PresetSpec> for Preset {
         }
         spec.atmosphere.validate()?;
         spec.geology.validate()?;
+        spec.star.validate()?;
 
         let mut lookup = Biome::ALL.to_vec();
         let mut seen = BTreeMap::new();
@@ -267,6 +279,7 @@ impl TryFrom<PresetSpec> for Preset {
             rules: spec.rules,
             atmosphere: spec.atmosphere,
             geology: spec.geology,
+            star: spec.star,
             remap: spec.remap,
             locales: spec.locales,
             lookup,

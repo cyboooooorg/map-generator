@@ -8,6 +8,10 @@ description = "Small airless grey world, cratered highlands and dark plains"
 name = "Type Mercure"
 description = "Petit monde gris sans atmosphère, hauts plateaux cratérisés et plaines sombres"
 
+[star]                                 # host star and orbit (see `mapgen::star`)
+type = "G2V"                           # the Sun
+orbit_au = 0.387
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these. No water ever flowed: no erosion. The sea level only
 # sets how much of the surface the smooth basins cover.
