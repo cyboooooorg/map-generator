@@ -52,6 +52,8 @@ pub struct FormSpec {
     pub hz_position: ParamSpec,
     /// Limits of `orbit_au`, the alternative to `hz_position`.
     pub orbit_au: Limits,
+    /// Limits of the orbit's eccentricity.
+    pub eccentricity: Limits,
     pub default_width: u32,
     pub default_height: u32,
     /// Largest width or height the server accepts.

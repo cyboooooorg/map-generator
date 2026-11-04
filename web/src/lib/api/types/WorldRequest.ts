@@ -34,4 +34,8 @@ orbit_au?: number,
  * Position of the orbit in the star's habitable zone (0 inner edge, 1
  * outer edge). Exclusive with `orbit_au`.
  */
-hz_position?: number, width?: number, height?: number, };
+hz_position?: number, 
+/**
+ * Eccentricity of the orbit, in `[0, 0.9]`.
+ */
+eccentricity?: number, width?: number, height?: number, };

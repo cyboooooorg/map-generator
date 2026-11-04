@@ -332,6 +332,21 @@ keeping their luminance; Sun-like stars leave them as they are. The
 exported maps keep Earth's colours. Under an M4V dwarf, the green
 continents of a locked planet turn dark brown in the orange light.
 
+### Eccentric orbits (follow-up)
+
+Orbits were circles; they are now ellipses of eccentricity `e`, the star
+at a focus. Solar System values: Venus 0.007, Earth 0.017, Mars 0.093,
+Mercury 0.206 (the example presets use them). Without a value, `e` is
+drawn from the beta distribution fitted by Kipping (2013) to
+radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.16),
+capped at 0.9; tidally locked planets get 0, their orbits circularised
+by the same tides. Over a year an elliptical orbit receives
+`1 / sqrt(1 − e²)` times the light of a circular one of the same
+semi-major axis: the climate uses that mean, so seasons stay annual
+means (the uneven seasons of an eccentric orbit would need a seasonal
+climate). `world.json` stores `e`, the periapsis and apoapsis and the
+light at each.
+
 ## 4. Open points
 
 - Locked planets keep latitude winds, rain and clouds; a substellar
@@ -360,6 +375,8 @@ continents of a locked planet turn dark brown in the orange light.
 - Kiang et al. 2007, "Spectral Signatures of Photosynthesis II:
   Coevolution with Other Stars and the Atmosphere on Extrasolar
   Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701382>.
+- Kipping 2013, "Parametrizing the exoplanet eccentricity distribution
+  with the Beta distribution", MNRAS 434, L51.
 - Kiang & Hoehler 2021, photon absorption of photosynthetic organisms
   by stellar type (Frontiers in Astronomy and Space Sciences): peak
   absorption in the blue around F stars, in the red or just beyond

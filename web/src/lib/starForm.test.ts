@@ -26,10 +26,10 @@ describe('star form', () => {
 
   it('puts only what is fixed into the request', () => {
     const request: WorldRequest = {};
-    applyStarChoice(request, { klass: '', subtype: 2, orbitBy: 'position', orbitRandom: true, position: 0.5, au: 1 });
+    applyStarChoice(request, { klass: '', subtype: 2, orbitBy: 'position', orbitRandom: true, position: 0.5, au: 1, eccentricityRandom: true, eccentricity: 0.1 });
     expect(request).toEqual({});
-    applyStarChoice(request, { klass: 'M', subtype: 3, orbitBy: 'position', orbitRandom: false, position: 0.4, au: 1 });
-    expect(request).toEqual({ star: 'M3V', hz_position: 0.4 });
+    applyStarChoice(request, { klass: 'M', subtype: 3, orbitBy: 'position', orbitRandom: false, position: 0.4, au: 1, eccentricityRandom: false, eccentricity: 0.2 });
+    expect(request).toEqual({ star: 'M3V', hz_position: 0.4, eccentricity: 0.2 });
   });
 
   it('refuses malformed remembered choices', () => {

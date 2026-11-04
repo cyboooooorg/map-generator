@@ -364,7 +364,11 @@ pub fn export_raw_data(
         erosion: world.params.erosion,
         pressure_bar: world.params.pressure_bar,
         surface_age_ga: Some(world.params.surface_age_ga),
-        star: Some(StarInfo::new(world.params.star, world.params.orbit_au)),
+        star: Some(StarInfo::new(
+            world.params.star,
+            world.params.orbit_au,
+            world.params.eccentricity,
+        )),
         layers: Layers {
             elevation,
             elevation_base,
@@ -721,6 +725,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         surface_age_ga: meta.surface_age_ga.unwrap_or(0.0),
         star: meta.star.as_ref().map_or(crate::star::SUN, StarInfo::code),
         orbit_au: meta.star.as_ref().map_or(1.0, |s| s.orbit_au),
+        eccentricity: meta.star.as_ref().map_or(0.0, |s| s.eccentricity),
     };
     let l = &meta.layers;
     let infos = [
@@ -896,6 +901,7 @@ mod tests {
             surface_age_ga: 0.4,
             star: 64.5,
             orbit_au: 0.1,
+            eccentricity: 0.0,
         })
         .world;
         let world_dir =

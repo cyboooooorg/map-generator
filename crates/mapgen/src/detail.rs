@@ -793,6 +793,7 @@ mod tests {
             height: Some(256),
             star: Some("G2V".into()),
             orbit_au: Some(1.0),
+            eccentricity: Some(0.0),
             ..Default::default()
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
@@ -814,6 +815,7 @@ mod tests {
             height: Some(256),
             star: Some("G2V".into()),
             orbit_au: Some(1.0),
+            eccentricity: Some(0.0),
             ..Default::default()
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;

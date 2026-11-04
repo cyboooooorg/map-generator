@@ -24,6 +24,10 @@ export interface StarChoice {
   position: number;
   /** Distance, AU. */
   au: number;
+  /** Whether the eccentricity is left to the preset or the server. */
+  eccentricityRandom: boolean;
+  /** Eccentricity of the orbit, 0 to 0.9. */
+  eccentricity: number;
 }
 
 /** A spectral type split into its class and subtype (`G2V`, `m4.5`, `K`), or null. */
@@ -66,6 +70,7 @@ export function initialStarChoice(
     orbitRandom: true,
     position: middle(preset?.star.position ?? fallbackPosition),
     au: 1,
+    ...initialEccentricity(preset, from),
   };
   if (from?.orbit_au != null) {
     return { ...choice, orbitBy: 'au', orbitRandom: false, au: from.orbit_au };
@@ -85,8 +90,26 @@ export function initialStarChoice(
   return choice;
 }
 
+/** The eccentricity the form starts from: the varied world's, else the preset's (fixed or the middle of its range). */
+function initialEccentricity(
+  preset: PresetInfo | undefined,
+  from: WorldRequest | null,
+): Pick<StarChoice, 'eccentricityRandom' | 'eccentricity'> {
+  if (from?.eccentricity != null) {
+    return { eccentricityRandom: false, eccentricity: from.eccentricity };
+  }
+  const d = preset?.star.eccentricity;
+  if (typeof d === 'number') {
+    return { eccentricityRandom: false, eccentricity: d };
+  }
+  return { eccentricityRandom: true, eccentricity: d ? middle(d) : 0.1 };
+}
+
 /** Adds the star and orbit the user fixed to a request. */
 export function applyStarChoice(request: WorldRequest, choice: StarChoice): void {
+  if (!choice.eccentricityRandom) {
+    request.eccentricity = choice.eccentricity;
+  }
   if (choice.klass !== '') {
     request.star = starType(choice.klass, choice.subtype);
   }
@@ -124,5 +147,8 @@ export function parseStarChoice(raw: unknown): StarChoice | null {
     orbitRandom: r.orbitRandom,
     position: r.position,
     au: r.au,
+    // Forms remembered before eccentricities leave it random.
+    eccentricityRandom: typeof r.eccentricityRandom === 'boolean' ? r.eccentricityRandom : true,
+    eccentricity: finite(r.eccentricity) ? r.eccentricity : 0.1,
   };
 }

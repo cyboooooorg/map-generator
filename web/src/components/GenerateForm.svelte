@@ -511,6 +511,29 @@
     {/if}
     <p class="help">{star.orbitBy === 'position' ? t.form.orbitPositionHelp : t.form.orbitAuHelp}</p>
   </fieldset>
+  <fieldset>
+    <legend>
+      {t.form.eccentricity}
+      <label class="check inline">
+        <input type="checkbox" bind:checked={star.eccentricityRandom} />
+        {t.form.random}
+      </label>
+    </legend>
+    {#if !star.eccentricityRandom}
+      <div class="slider">
+        <input type="range" min={0} max={0.9} step={0.005} bind:value={star.eccentricity} />
+        <input
+          type="number"
+          min={spec.eccentricity.min}
+          max={spec.eccentricity.max}
+          step="any"
+          bind:value={star.eccentricity}
+          aria-label={t.form.eccentricity}
+        />
+      </div>
+    {/if}
+    <p class="help">{t.form.eccentricityHelp}</p>
+  </fieldset>
 
   <div class="row">
     <label for="seed">{t.form.seed}</label>

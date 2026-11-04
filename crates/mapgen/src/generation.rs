@@ -688,13 +688,14 @@ pub fn generate_with_progress(
     let star_climate = StarClimate {
         star: params.star,
         orbit_au: params.orbit_au,
+        eccentricity: params.eccentricity,
         regulated: planet.geology.regime == Regime::Plates
             && params.pressure_bar >= LIQUID_WATER_BAR,
         internal_heat_k: planet.climate.internal_heat,
     };
     // A tidally locked planet's climate follows the angle from the point
     // under its star instead of the latitude.
-    let locked = StarInfo::new(params.star, params.orbit_au)
+    let locked = StarInfo::new(params.star, params.orbit_au, params.eccentricity)
         .tidally_locked
         .then(|| {
             let mut locked = LockedClimate::new();
@@ -1021,6 +1022,7 @@ mod tests {
             surface_age_ga: 0.4,
             star: crate::star::SUN,
             orbit_au: 1.0,
+            eccentricity: 0.0,
         }
     }
 

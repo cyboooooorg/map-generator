@@ -288,6 +288,7 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         surface_age_ga: spec(request::SURFACE_AGE_GA, fallback::SURFACE_AGE_GA),
         hz_position: spec(request::HZ_POSITION, fallback::HZ_POSITION),
         orbit_au: request::ORBIT_AU,
+        eccentricity: request::ECCENTRICITY,
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,
         max_size: MAX_SIZE,
