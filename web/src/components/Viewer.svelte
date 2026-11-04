@@ -29,6 +29,7 @@
   import { bodyFileName, bodyKey, moonsOf, parseBodyKey, systemBodies, type Body } from '../lib/moons';
   import {
     bodyTurn,
+    giantSystemSky,
     halo,
     joinSkies,
     moonSky,
@@ -732,10 +733,39 @@
   // The other bodies of the system in the sky, with their phases, and
   // their shadows on the ground (eclipses): the moons from their planet,
   // the planet and its other moons from one of them, each with its map.
+  // The sky of the giant a world orbits, or of one of its other moons:
+  // the world and the giant's moons round it, and their orbits.
+  const giantSky = $derived.by(() => {
+    const planet = world.worldMeta;
+    const host = planet?.host;
+    const id = world.worldId;
+    const body = world.body;
+    if (!planet || !host || !id || (body.kind !== 'host' && body.kind !== 'sibling')) return null;
+    return giantSystemSky(
+      host,
+      planet.circumference_km / (2 * Math.PI),
+      (host.giant.radius_earth * 40075) / (2 * Math.PI),
+      body.kind === 'host' ? 'host' : body.n - 1,
+      moonClock.season,
+      moonClock.yearDays,
+      bodyTurn(orbitDays, host.giant.rotation_hours, host.period_days),
+      (k) =>
+        worldFile(
+          id,
+          k === 'world'
+            ? 'raw_data/surface.png'
+            : k === 'host'
+              ? 'host/raw_data/surface.png'
+              : `host/siblings/${k + 1}/raw_data/surface.png`,
+          revision,
+        ),
+      { show: hostShow, axialTiltDeg: planet.axial_tilt_deg },
+    );
+  });
   const sky = $derived.by(() => {
     const planet = world.worldMeta;
-    // The giant's and its other moons' skies are not drawn yet.
-    if (!planet || onHostSystem) return null;
+    if (onHostSystem) return giantSky;
+    if (!planet) return null;
     const planetRadiusKm = planet.circumference_km / (2 * Math.PI);
     const planetId = world.worldId;
     const moonMap = (k: number) =>
@@ -799,12 +829,19 @@
   const starsTurn = $derived.by(() => {
     const { yearDays, season: moonSeason } = moonClock;
     const spin = shownMoon && world.moon !== null ? moonSpinHours(shownMoon) : null;
+    const host = world.worldMeta?.host;
+    const body = world.body;
+    // The giant turns once per day of its own, its other moons once per orbit.
     const period =
-      spin !== null
-        ? spin / 24
-        : shownMoon && world.moon !== null
-          ? shownMoon.period_days
-          : (world.worldMeta?.host?.period_days ?? null);
+      body.kind === 'host'
+        ? (host?.giant.rotation_hours ?? 0) / 24
+        : body.kind === 'sibling'
+          ? (host?.siblings?.[body.n - 1]?.period_days ?? null)
+          : spin !== null
+            ? spin / 24
+            : shownMoon && world.moon !== null
+              ? shownMoon.period_days
+              : (host?.period_days ?? null);
     if (period === null || period <= 0) return 0;
     const turns = (moonSeason * yearDays) / period;
     return -2 * Math.PI * (turns - Math.floor(turns));
@@ -819,7 +856,8 @@
   // The moons' orbits in the sky, seen from the body shown.
   const skyOrbitLoops = $derived.by(() => {
     const planet = world.worldMeta;
-    if (!orbitLines || !planet || onHostSystem) return [];
+    if (!orbitLines || !planet) return [];
+    if (onHostSystem) return giantSky?.orbits ?? [];
     if (world.moon === null && planet.host) {
       return siblingOrbitLoops(
         planet.host.siblings ?? [],
@@ -873,6 +911,34 @@
         planetLabel,
         ...moons.flatMap((m, k) => (m === self ? [] : [moonLabel(m, k)])),
       ];
+    }
+    // From the giant or one of its other moons, in giantSystemSky's
+    // order: the giant (from a moon), the world, then the siblings.
+    const body = world.body;
+    if (planet.host && (body.kind === 'host' || body.kind === 'sibling')) {
+      const host = planet.host;
+      const giantLabel: SkyLabel = {
+        name: names?.host ?? t.starView.giantKinds[host.giant.kind] ?? '',
+        detail: t.viewer.skyFacts({
+          radius: withUnit(formatUpTo(host.giant.mass_earth / 317.8, 2), 'MJ'),
+          distance: km(body.kind === 'sibling' ? (host.siblings?.[body.n - 1]?.distance_km ?? 0) : 0),
+        }),
+      };
+      const worldLabel: SkyLabel = {
+        name: names ? worldName(names) : presetName(planet.preset),
+        detail: t.viewer.skyOrbitFacts({ radius: km(planet.circumference_km / (2 * Math.PI)), orbit: km(host.distance_km) }),
+      };
+      const siblingLabels = (host.siblings ?? []).flatMap((s, k) =>
+        body.kind === 'sibling' && body.n - 1 === k
+          ? []
+          : [
+              {
+                name: names?.siblings[k] ?? t.viewer.skySibling({ index: k + 1 }),
+                detail: t.viewer.skyOrbitFacts({ radius: km(s.radius_km), orbit: km(s.distance_km) }),
+              },
+            ],
+      );
+      return [...(body.kind === 'sibling' ? [giantLabel] : []), worldLabel, ...siblingLabels];
     }
     if (world.moon === null && planet.host) {
       const host = planet.host;
@@ -1409,7 +1475,7 @@
         <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> {t.viewer.elevationContours}
       </label>
       <label class="check" title={t.viewer.skyLabelsHelp}><input type="checkbox" bind:checked={skyLabels} /> {t.viewer.skyLabels}</label>
-      {#if (shownMoon && world.moon !== null) || world.worldMeta?.host}
+      {#if (shownMoon && world.moon !== null) || (world.worldMeta?.host && world.body.kind !== 'host')}
         <!-- The planet in this body's sky has switches of its own. -->
         <fieldset class="host" title={t.viewer.hostHelp}>
           <legend>{t.viewer.host}</legend>
@@ -1419,7 +1485,7 @@
           <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
         </fieldset>
       {/if}
-      {#if moons.length > 0 || (world.moon === null && (world.worldMeta?.host?.siblings?.length ?? 0) > 0)}
+      {#if moons.length > 0 || onHostSystem || (world.moon === null && (world.worldMeta?.host?.siblings?.length ?? 0) > 0)}
         <label class="check" title={t.viewer.orbitLinesHelp}>
           <input type="checkbox" bind:checked={orbitLines} /> {t.viewer.orbitLines}
         </label>

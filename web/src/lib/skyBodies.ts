@@ -660,7 +660,8 @@ interface GiantMoon {
  * giant (its longitude 180° towards it); the giant turns on itself by
  * `giantTurn` (radians, see bodyTurn) against that frame. Positions and
  * orbit loops are in radii of the body shown. `textures` maps the world
- * (`'world'`), the giant (`'host'`) and each sibling (its index).
+ * (`'world'`), the giant (`'host'`) and each sibling (its index);
+ * `giantLook` is how the giant looks from one of its moons.
  */
 export function giantSystemSky(
   host: { distance_km: number; period_days: number; siblings?: readonly Sibling[] },
@@ -671,6 +672,7 @@ export function giantSystemSky(
   yearDays: number,
   giantTurn: number,
   textures: (body: 'world' | 'host' | number) => string | null,
+  giantLook: PlanetLook = {},
 ): { bodies: SkyBody[]; casters: ShadowCaster[]; orbits: Vec3[][] } {
   const days = season * yearDays;
   const siblings = host.siblings ?? [];
@@ -731,6 +733,7 @@ export function giantSystemSky(
       colour: PLANET,
       texture: textures('host'),
       axes: [local(gx), local(gy), local(gz)],
+      ...giantLook,
     });
   }
   for (const moon of moons) {
