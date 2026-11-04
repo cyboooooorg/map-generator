@@ -601,13 +601,200 @@ continents is found. What was studied:
   (credible continents, an emerging supercontinent cycle) is the bulk of
   the work, every `terran` seed changes, and each epoch would need its
   own climate, rivers and biomes.
-- **Cheaper directions to evaluate later:** a kinematic-only model,
-  where the position at time `t` is the plate's rotation applied to the
-  present noise (no collision simulation; orogens read from the relative
-  speed at the boundaries); or drift shown only as land outlines and
-  plate boundaries, without regenerating the climate.
 
 The `[geology] regime` of section 4 is where this work will hook in.
+
+### Cheaper approaches (research, 2026-11-04)
+
+Asked by the user: how procedural world generators get plates and
+drift at a lower cost than a simulation.
+
+**What others do.**
+
+- **Simulations step by step** (Cortial et al. 2019; PlaTec and
+  WorldEngine on a flat map; Tectonics.js): the cost of the approach
+  above, and hard to control. Frozenfractal's *Around The World*
+  simulated about 43 000 Poisson discs on the sphere in 12 plates (move,
+  detect overlaps, subduct, slow colliding plates, raise mountains,
+  spawn crust at divergent boundaries) and dropped it: "too slow, and
+  gave me too little control over the output". WorldEngine reports
+  thresholds hard to pick for PlaTec; Tectonics.js reports oceanic crust
+  that grows implausibly old, since it is not destroyed.
+- **Static plates** (frozenfractal's current generator, Hex Planets on
+  Roblox, Almost Hex Planet on Unreal, Fusek 2020): jagged Voronoi
+  "subplates" grouped into about 15 plates, each split into continental
+  and oceanic parts, one velocity per plate (frozenfractal derives it
+  from the neighbours: "oceanic crust is pulled under continental
+  crust"), the boundary type from the relative motion of adjacent plates
+  (converging or diverging; transform boundaries ignored, since "it's
+  always sections of the boundary either converging or diverging"), and
+  relief features drawn along the boundaries as curves, with noise on
+  their width and height:
+
+  | Boundary                        | Feature                                  |
+  | ------------------------------- | ---------------------------------------- |
+  | Continent–continent, converging | Mountains and plateaus                   |
+  | Continent–continent, diverging  | Rift valley                              |
+  | Ocean–ocean, diverging          | Mid-ocean ridge                          |
+  | Ocean–ocean, converging         | Island arc                               |
+  | Ocean–continent, converging     | Trench on the oceanic side, volcanic arc |
+
+  Cheap and controllable, and it ties mountains to plates, but nothing
+  moves: there is no drift.
+- **Rigid reconstructions** (GPlates, the geologists' tool): a plate's
+  position at any time is a rotation about an Euler pole, constant over
+  a stage (stage poles) and changing from one stage to the next (total
+  poles chain them back to the present). Any epoch is computed
+  directly, with no steps before it.
+
+**Proposal: kinematic drift, without simulation.** The static plates of
+the second approach, moved by the rotations of the third. Each epoch is
+a function of `t`, as the crater epochs are:
+
+- **Plates fixed at the present:** Voronoi subplates on the sphere,
+  grouped into about 12–15 plates, each with an Euler pole and an angular
+  speed, constant over stages of 50–100 Ma, smoothed from one stage to
+  the next by quaternion interpolation (slerp).
+- **Continents at `t`:** each pixel finds the plate whose region,
+  rotated to `t`, covers it, and reads the present continental relief
+  (today's noise) at its point of origin `R(t)⁻¹ · p`. Continents move
+  rigidly; rotations invert, so going back and going ahead cost the
+  same.
+- **Boundaries without memory:** everything follows from the geometry
+  at `t`.
+  - Collision: how deep a plate's region reaches into its neighbour's
+    gives the convergence accumulated since contact, and so the height
+    and width of the range.
+  - Opening: the distance to the edge of a gap, divided by the spreading
+    speed, gives the age of the new sea floor, and its depth through the
+    cooling law of section 2 (about 2.5 km + 0.35 km × √(age in Ma)).
+  - Subduction: a trench on the sinking side, an arc on the other.
+- **Cost (estimate):** finding the plate of each pixel among a few
+  hundred rotated seeds, with a spatial index, at 512 × 256: a few
+  milliseconds to a few tens of milliseconds per epoch. Then, as for the
+  craters, a preview (the whole pipeline at 512 × 256, about 0.1–0.2 s
+  per slider stop) and "generate at this epoch" for a full world.
+- **Limits:** continents do not deform; crust is not conserved exactly
+  (subducted crust disappears, new crust fills the gaps); the range of
+  epochs stays bounded (±200–300 Ma), beyond which constant poles give
+  absurd overlaps unless stages are chained.
+
+**Order:**
+
+1. Static plates at the present on `plates` worlds: mountains and
+   volcanic arcs follow plate boundaries instead of noise. The best gain
+   in realism for the least cost, but every `terran` seed changes.
+2. Kinematic drift: Euler poles, the plate of each pixel at `t`, and
+   boundary relief without memory.
+3. The time slider of the craters, reused, with the low-resolution
+   preview and "generate at this epoch". Unlike craters, the climate,
+   rivers and biomes are recomputed at each epoch: on a world with water,
+   moving the continents changes everything.
+
+**Sources:**
+
+- Cortial, Y., Peytavie, A., Galin, É. & Guérin, É. (2019). [Procedural
+  tectonic planets](https://diglib.eg.org/handle/10.1111/cgf13614).
+  *Computer Graphics Forum* 38(2).
+- Frozenfractal, [Around The World, Part 2: Plate
+  tectonics](https://frozenfractal.com/blog/2023/11/13/around-the-world-2-plate-tectonics/)
+  (2023) and [Part 29: One year
+  in](https://frozenfractal.com/blog/2026/2/14/around-the-world-29-one-year-in/)
+  (2026).
+- [Ignite the core: plate tectonics in Roblox, Hex Planets dev blog
+  II](https://devforum.roblox.com/t/ignite-the-core-plate-tectonics-in-roblox-hex-planets-dev-blog-ii/881011).
+- [Almost Hex Planet procedural
+  generation](https://forums.unrealengine.com/t/almost-hex-planet-procedural-generation/72326/2),
+  Unreal Engine forums.
+- r/proceduralgeneration: [first iteration of a tectonic plate
+  simulation](https://nyc1.lr.ggtyler.dev/r/proceduralgeneration/comments/1jhiznp/first_iteration_of_my_tectonic_plate_simulation)
+  and [reducing a tectonic plate
+  simulation](https://reddit.birdcat.cafe/r/proceduralgeneration/comments/1jqese5/reducing_my_tectonic_plate_simulation_algorithms)
+  (informal).
+- Michel, É., Emilien, A. & Cani, M.-P. [Generation of folded terrains
+  from simple vector
+  maps](https://diglib7.eg.org/bitstream/handle/10.2312/egsh.20151019.077-080/077-080.pdf?sequence=1).
+  Eurographics short papers 2015.
+- Fusek, [Procedurální generování
+  planet](https://dspace.vut.cz/items/2cb341e2-b6a0-4b4c-a02f-7a7d3d39e836),
+  bachelor's thesis, Brno University of Technology, 2020.
+- Davidson, [Tectonics.js](https://davidson16807.github.io/tectonics.js/blog).
+- Viitanen, L. (2012), PlaTec: [PyPlatec](https://pypi.python.org/pypi/PyPlatec/1.1)
+  and [WorldEngine issue #140](https://github.com/Mindwerks/worldengine/issues/140).
+- [Plate reconstruction](https://en.wikipedia.org/wiki/Plate_reconstruction),
+  Wikipedia, and [GPlates: Euler pole and
+  angle](https://gwsdoc.gplates.org/rotation/euler-pole-and-angle).
+
+### Tidally locked worlds (2026-11-04)
+
+Since the host star (backlog item 11, `docs/analysis/10-stars.md`), a
+planet whose tidal locking time (`star::locking_gyr`, about
+`166 Gyr × a⁶ / M²`) is shorter than its star's age keeps one face to
+its star: an "eyeball" climate around the substellar point, at the
+centre of the map. What it changes for geology:
+
+- **Impact craters: a leading hemisphere.** A synchronously rotating
+  body keeps one hemisphere facing its orbital motion, the apex: it
+  sweeps up more impactors, at higher speeds and more head-on, so it
+  gets more and larger craters than the trailing hemisphere (Zahnle et
+  al. 2001 on the satellites of the giant planets; Le Feuvre & Wieczorek
+  2008, 2011 and Wieczorek & Le Feuvre 2009 on the Moon). The Moon's
+  apex is at 0° N, 90° W of the sub-Earth point; for a planet locked to
+  its star, the substellar point takes that place, so the apex lies on
+  the equator 90° west of it (longitude 90° on our map, the substellar
+  point being at 180°). The strength depends on the impactors' encounter
+  speed against the orbital speed (slower impactors, stronger
+  asymmetry): models of near-Earth objects give a leading-to-trailing
+  ratio of about 1.14 to 1.32 for the Moon, observations more, an
+  unresolved gap. A planet close to an M dwarf orbits fast, which would
+  strengthen it, but its impactor population is unknown. Cheap to add:
+  a crater density modulated by `1 + k cos γ` (γ the angle to the apex),
+  for the craters younger than the locking (the planet locked
+  `age − locking_gyr` Ga ago; older craters formed while it rotated),
+  with `k` for a leading-to-trailing ratio of about 1.3 by default.
+- **Rays.** Space weathering darkens them faster under a stronger
+  stellar wind and flares (M dwarfs), and on the day side; no
+  quantitative model was found: kept uniform.
+- **Plate tectonics: hemispheres.** A strong day-to-night contrast of
+  surface temperature can organise mantle convection by hemisphere:
+  upwelling under one, subduction under the other ("hemispheric
+  tectonics", Meier et al. 2021 for the hot super-Earth LHS 3844b, with
+  either direction depending on the lithosphere's strength and the
+  internal heating). For the kinematic drift above: on a locked world
+  the Euler poles could be drawn so that plates converge towards one
+  hemisphere, instead of at random.
+- **Drift moves the climate.** A locked world's climate depends on the
+  longitude, around a substellar point fixed to the planet's figure by
+  its tidal bulge: drifting continents move into or out of the warm
+  "eye", so the climate must be recomputed at each epoch (step 3 of the
+  order above), and the time slider would show it. A reorientation of
+  the whole shell (true polar wander, moving the substellar point
+  itself) is out of scope.
+- **Tidal heating** comes from an eccentric orbit, flexed at every turn:
+  around M dwarfs it can be strong enough for global volcanism, or to
+  dry a planet through a runaway greenhouse ("tidal Venuses", Barnes et
+  al. 2013), until the orbit circularises. Orbits are circular here,
+  so there is none; an eccentricity would be the hook for a heat-pipe
+  regime on locked worlds.
+
+**Sources:**
+
+- Le Feuvre, M. & Wieczorek, M. A. (2008, 2011), and Wieczorek, M. A.
+  & Le Feuvre, M. (2009), [Did a large impact reorient the
+  Moon?](https://www.mso.anu.edu.au/PSI/PSI_Meetings/Entries/2009/4/16_Special_Seminar__Did_a_large_impact_reorient_the_Moon_files/Wieczorek2009.pdf)
+  *Icarus* 200; see also [Analytical formulation of lunar cratering
+  asymmetries](https://arxiv.org/pdf/1608.03853) and
+  [Lunar cratering asymmetries with high orbital obliquity and
+  inclination of the Moon](https://arxiv.org/pdf/2101.11776).
+- Zahnle, K. et al. (2001). Differential cratering of synchronously
+  rotating satellites by ecliptic comets. *Icarus* 153.
+- Meier, T. G., Bower, D. J., Lichtenberg, T., Tackley, P. J. &
+  Demory, B.-O. (2021). [Hemispheric tectonics on LHS
+  3844b](https://boris.unibe.ch/153279/). *ApJL* 908, L48
+  ([arXiv:2103.02374](https://arxiv.org/abs/2103.02374)).
+- Barnes, R. et al. (2013). [Tidal Venuses: triggering a climate
+  catastrophe via tidal heating](https://arxiv.org/pdf/1203.5104).
+  *Astrobiology* 13.
 
 ## 9. Open points
 
