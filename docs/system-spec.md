@@ -203,26 +203,208 @@ planet as today.
 
 ## Storage
 
-TODO (the other session): `systems/<id>/system.json`, `bodies/<id>/`,
-body ids, names.
+A system is one directory under `systems/` (`MAPGEN_SYSTEMS_DIR`, in place
+of `MAPGEN_WORLDS_DIR`):
+
+```text
+systems/<system-id>/
+├── system.json      ← the system as drawn: star, bodies, orbits, previews
+├── names.json       ← names given by the user, by body id (optional)
+└── bodies/
+    ├── c/           ← a generated body: the files a world has today
+    │   ├── world.png, world.svg, legend.png, thumb.png
+    │   └── raw_data/   ← world.json, layers, rivers…
+    ├── c-1/
+    └── e/
+```
+
+- **System id**: the star's designation and the seed, lowercase with
+  dashes: `mgs-48213-42`. It reads as `<anything>-<digits>`, as world ids
+  do today, so the same id check applies. The same request gives the
+  same system and id (see [Model](#model)): creating it again is refused
+  (409) unless the request asks to replace it, as worlds are today.
+- **Body id**: derived from the body's place, path-safe and stable once
+  the system is drawn:
+  - `star`;
+  - a planet: its letter from the star, `b` to `p` (15 planets at most);
+  - a moon: its planet's id and its number from the planet outwards,
+    `c-1` (designated `MGS 48213 c I`).
+
+  Moons of moons are not modelled. Ids are not names: the designation and
+  a given name are kept apart (below).
+- **`system.json`** is written once, when the system is drawn, and holds
+  everything a card, a sphere, the sky and the star view need:
+  - `format_version` (1), the request, the seed and the map size;
+  - `star`: today's `StarInfo` and its designation;
+  - `bodies`: one entry per planet and moon, with the fields of
+    [Model](#model): id, designation, kind, type, parent, orbit, physical
+    facts, spin, surroundings, preview, `WorldParams`, and `generated`.
+
+  The server rewrites it (temporary file, then rename) only to set a
+  body's `generated` once its directory is complete.
+- **A body's directory** holds what a world's holds today. Its
+  `world.json` keeps its format with two more fields, `system` and
+  `body`. Its `moons`, `giants` and `host` blocks go: the system file
+  describes the neighbours, and the generator reads them from it.
+- **Writes** keep today's safety: a body is generated into
+  `bodies/.tmp-<id>/` and renamed into place once complete, and the
+  startup sweep removes what a killed server left.
+- **`names.json`** keeps the format of the names given today, keyed by
+  body id (`{"c": "Gaia", "c-1": "Séléné", "star": "Helia"}`). Every body
+  can be named, the star included.
 
 ## API
 
-TODO (the other session): systems, bodies, tiles and epochs per body, the
-generate-body job and its progress events.
+The world routes give way to system and body routes. A body is
+addressed as `<system-id>/<body-id>` everywhere.
+
+- `GET /api/systems`: the systems, most recent first. Each gives its id,
+  star, body count per type, the bodies generated, names, map size and
+  date.
+- `POST /api/systems`: draw a system and queue its first generation.
+  The body is a `SystemRequest`:
+  - mode 1, `{"system": {"star": "K1V", "planets": {"terran": 2,
+    "gas-giant": 1}, "seed": 42, "width": 4096, "height": 2048}}`;
+  - mode 2, `{"around": WorldRequest}`, today's request.
+
+  The answer is `{system_id, job_id}`. The system file exists by then,
+  since the draw takes milliseconds, so the library and the viewer show
+  the spheres at once. In mode 2 the job generates the planet asked and
+  its neighbourhood; in mode 1 there is no job (`job_id` null) until a
+  body is opened.
+- `GET /api/systems/{id}`: its `system.json`, with the names given.
+- `DELETE /api/systems/{id}`: delete a system; 409 while one of its
+  bodies is being generated.
+- `PUT /api/systems/{id}/names`: replace the names given
+  (`{"names": {"c": "Gaia"}}`), with today's rules (1 to 60 characters,
+  422 otherwise).
+- `POST /api/systems/{id}/bodies/{body}/generate`: queue the body and its
+  neighbourhood (see [Generating on demand](#generating-on-demand)) as
+  one job. Asking for a body already queued answers that job; asking for
+  one generated with all its neighbours answers 200 with no job, so a
+  double click costs nothing.
+- Per generated body, as today per world:
+  - `GET /api/systems/{id}/bodies/{body}/tiles/{z}/{x}/{y}?rev=&epoch=`;
+  - `GET /api/systems/{id}/bodies/{body}/epoch/{ma}/{file}`;
+  - `GET /api/systems/{id}/bodies/{body}/thumb?rev=`;
+  - `POST /api/systems/{id}/bodies/{body}/hex`.
+- `GET /systems/{id}/...`: the files, `system.json` and
+  `bodies/<body>/...`.
+- `GET /api/jobs`, `DELETE /api/jobs/{id}` and
+  `GET /api/jobs/{id}/events` stay. A job names its system and the bodies
+  it generates, in order. `JobStatus::Running` gains the body being made
+  and its place in the job:
+
+  ```json
+  {"status": "running", "body": "c-1", "body_step": 2, "bodies": 3,
+   "stage": "erosion", "step": 3, "steps": 8}
+  ```
+
+  `Done` lists the bodies made; `Failed` names the body that failed (the
+  ones before it stay generated).
+- **Errors** keep `ErrorDetail` codes, so that the web words them in its
+  language: those of the draw (`too_many_planets`, `zone_full`,
+  `type_impossible`) and the planet's own in mode 2.
+- **Revisions** stay per body (the modification time of its
+  `world.json`), so a body's tiles survive the generation of another.
 
 ## Interface
 
-TODO (the other session): the form (whole system or around a planet),
-the library, the body picker, the property cards, the progress bar.
+- **Library.** The world list becomes a system list. Each row shows the
+  star's designation (or given name), a strip of small spheres (one per
+  planet, in order, coloured as their previews, the generated ones
+  marked), the count per type and the date. Search matches designations,
+  names and seeds; selecting several and deleting work as today. A row's
+  thumbnail is the first generated planet's map, or the strip alone.
+- **Form.** **New system** asks for a mode first:
+  - *A whole system*: the star (type or drawn), a number per planet type
+    (their sum at most 15, each one checked against the star's zones as
+    it is typed), metallicity, seed, map size;
+  - *Around a planet*: today's form, unchanged, plus the map size.
+
+  The form remembers its last mode and fields, as it does today.
+- **Body picker.** The **Body** list lists the whole system: the star,
+  then each planet in order, each followed by its moons, under their
+  names, with a mark on those not generated yet. `U` steps through the
+  shown body's family (a planet and its moons). The star view becomes a
+  **system view**: today's, with every planet drawn as its sphere on its
+  orbit, a click on one picking it.
+- **A body not generated.** Picking it shows its sphere in the planet
+  view (lit, with its axis and its sky) and its card, with **Generate**.
+  Pressing it, or picking a body whose neighbourhood is not complete,
+  queues the job; the view switches to the maps when it ends.
+- **Progress bar.** While a job runs, the viewer shows a bar over the
+  canvas, in the style of the loading bar, with the message of
+  [Generating on demand](#generating-on-demand) and **Cancel**. Its share
+  is `(body_step − 1 + step / steps) / bodies`. The job list keeps every
+  job, named by system and body.
+- **Property cards.** One card component for every body, fed by its entry
+  in `system.json`, and by its `world.json` and statistics once
+  generated:
+  - the star: today's star section;
+  - a rocky planet: today's world card;
+  - a giant: today's giant rows;
+  - a moon: today's moon panel.
+
+  A sphere's card gives what the draw fixed (orbit, size, mass, type,
+  temperature, spin) and says that its maps are not made yet. The card
+  follows the body picker, under a short system summary (star, planet
+  strip). **Rename** moves into the card and names any body.
 
 ## Removing the old worlds
 
-TODO (the other session): deleting `worlds/` and the old routes.
+No migration, as decided: the worlds made before systems are deleted.
+
+- The server stops reading `worlds/`. On its first start with systems,
+  if `worlds/` holds anything, it logs once that the directory is no
+  longer used. It never deletes it: `mise run clean-worlds` does, when
+  the user chooses to.
+- The routes under `/api/worlds` and `/worlds/` are removed in the same
+  release, with no compatibility layer: nothing else calls them.
+- The code that only served the old layout goes:
+  - the world library (`worlds.rs`, in favour of `systems.rs`);
+  - the `moons/<n>` and `host/siblings/<n>` paths;
+  - the separate moon and host exports, replaced by the generation of a
+    body and its neighbourhood;
+  - a world's `names.json`.
+- The CLI draws a system (mode 1 or 2) into `systems/<id>/`, generates
+  the planet asked in mode 2 or `--body <id>`, and prints the system's
+  bodies. `mise run gen` and the README examples follow.
+- Browser state naming worlds (view links with `#world=`, the remembered
+  form) is read once and dropped: an old link opens the library with a
+  notice.
 
 ## Delivery
 
-TODO (the other session): the phases, each one shippable.
+One PR or a few per phase, each merged on green with its tests and docs,
+the app usable after each:
+
+1. **The draw** (generator): `SystemRequest`, zones, types and spacing,
+   moons, ids and designations, previews, errors; `system.json` written
+   by the CLI (`--draw-only`). Tests: determinism, order and spacing, the
+   limits and errors, mode 2 keeping its planet exactly. This phase
+   freezes the shared types (exported with ts-rs).
+2. **Generating from a system** (generator): a body and its
+   neighbourhood generated from `system.json` into `bodies/<id>/`, their
+   moons, giant and siblings read from the system instead of drawn again;
+   the CLI's `--body`.
+3. **The server**: the `systems/` library, every route above, jobs per
+   neighbourhood with the new progress, per-body revisions; the old
+   routes and `worlds/` dropped.
+4. **The library and the form** (web): the system list and its planet
+   strip, the two-mode form, the API client.
+5. **The viewer** (web): the body picker over the system, spheres from
+   previews, **Generate** and the progress bar, the system view, the
+   skies built from `system.json`.
+6. **The cards** (web): one card for every body, renaming any body, the
+   system summary.
+7. **Clean-up**: dead code, READMEs, backlog, analysis docs,
+   `clean-worlds`.
+
+Phase 4 can start once phase 1 has frozen the types, beside phases 2 and
+3; phases 5 and 6 need phase 3. The two sessions can split as before:
+the generator and the server (1 to 3) on one side, the web (4 to 6) on
+the other.
 
 ## Open points
 
