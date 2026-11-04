@@ -458,6 +458,40 @@ export const starsFragment = /* glsl */ `
   }
 `;
 
+// The host star: one point at infinity in the sun's direction, like the
+// star field, sized in drawing-buffer pixels. A disk of the star's apparent
+// diameter, slightly darker at its limb, inside a glow.
+export const hostStarVertex = /* glsl */ `
+  uniform float uSize;
+  void main() {
+    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position * 10.0, 1.0);
+    gl_Position = clip.xyww;
+    gl_PointSize = uSize;
+  }
+`;
+
+export const hostStarFragment = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uSize;     // point size, px
+  uniform float uDisk;     // disk diameter, px
+  uniform float uGlow;     // glow strength
+  uniform float uOpacity;
+  void main() {
+    // Distance from the centre in px.
+    float r = length(gl_PointCoord - 0.5) * uSize;
+    float radius = 0.5 * uDisk;
+    float inside = 1.0 - smoothstep(radius - 0.75, radius + 0.75, r);
+    float limb = 1.0 - 0.35 * pow(clamp(r / max(radius, 1e-3), 0.0, 1.0), 2.0);
+    // Fades to nothing before the edge of the square point.
+    float fade = 1.0 - smoothstep(0.25 * uSize, 0.5 * uSize, r);
+    float glow = uGlow * exp(-max(r - radius, 0.0) / max(0.08 * uSize, 1.0)) * fade;
+    vec3 colour = uColor * (inside * limb * 1.4 + glow * (1.0 - inside));
+    if (max(colour.r, max(colour.g, colour.b)) < 0.002) discard;
+    gl_FragColor = vec4(colour * uOpacity, 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+
 export const atmosphereVertex = /* glsl */ `
   varying vec3 vWorld;
   void main() {

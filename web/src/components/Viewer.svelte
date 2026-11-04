@@ -21,7 +21,7 @@
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
-  import { type CameraState, PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
+  import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
   import LoadingBar from './LoadingBar.svelte';
@@ -457,6 +457,14 @@
   $effect(() => view?.setLandContours(landContours));
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setStars(stars));
+  $effect(() => {
+    const star = meta?.star;
+    view?.setHostStar(
+      star
+        ? { colour: star.light, angularDiameterDeg: star.angular_diameter_deg, insolation: star.insolation }
+        : SUN_STAR,
+    );
+  });
   $effect(() => view?.setSky(meta ? skyFromWorld(meta) : null));
   $effect(() => view?.setHighlight(dataReady ? highlight : null));
   $effect(() => view?.setPath(path));

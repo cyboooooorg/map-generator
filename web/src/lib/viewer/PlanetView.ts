@@ -86,6 +86,8 @@ import {
   type Layer,
   lineFragment,
   RELIEF_SCALE,
+  hostStarFragment,
+  hostStarVertex,
   starsFragment,
   starsVertex,
   surfaceFragment,
@@ -318,6 +320,19 @@ function balanceTileBudgets(): void {
   }
 }
 
+/** The host star as the view draws it (see `setHostStar`). */
+export interface HostStar {
+  /** Linear RGB of its light, the Sun white. */
+  colour: [number, number, number];
+  /** Apparent diameter from the planet, degrees. */
+  angularDiameterDeg: number;
+  /** Light the planet gets, relative to Earth's. */
+  insolation: number;
+}
+
+/** The Sun from Earth: worlds made before stars. */
+export const SUN_STAR: HostStar = { colour: [1, 1, 1], angularDiameterDeg: 0.533, insolation: 1 };
+
 export class PlanetView {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
@@ -327,6 +342,8 @@ export class PlanetView {
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
   /** The star field (see stars.ts). */
   private readonly stars: Points<BufferGeometry, ShaderMaterial>;
+  /** The host star, drawn with Sunlight at the sun's direction. */
+  private readonly hostStar: Points<BufferGeometry, ShaderMaterial>;
   /** The atmosphere's ground (veil) and sky passes. */
   private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>[];
   private readonly resizeObserver: ResizeObserver;
@@ -403,6 +420,8 @@ export class PlanetView {
   private atmosphereOn = true;
   /** Whether the star field is shown. */
   private starsOn = true;
+  /** The host star (see setHostStar); the Sun until a world sets it. */
+  private host: HostStar = SUN_STAR;
   /** Whether the world has an atmosphere to draw. */
   private hasSky = true;
   private cloudRequest = 0;
@@ -528,6 +547,31 @@ export class PlanetView {
     this.stars.frustumCulled = false;
     this.stars.renderOrder = -1;
     this.scene.add(this.stars);
+
+    // The host star, at the sun's direction (see hostStarVertex).
+    const hostGeometry = new BufferGeometry();
+    hostGeometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 1]), 3));
+    this.hostStar = new Points(
+      hostGeometry,
+      new ShaderMaterial({
+        vertexShader: hostStarVertex,
+        fragmentShader: hostStarFragment,
+        uniforms: {
+          uColor: { value: new Vector3(1, 1, 1) },
+          uSize: { value: 64 },
+          uDisk: { value: 8 },
+          uGlow: { value: 0.5 },
+          uOpacity: { value: 1 },
+        },
+        blending: AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    this.hostStar.frustumCulled = false;
+    this.hostStar.renderOrder = -1;
+    this.hostStar.visible = false;
+    this.scene.add(this.hostStar);
 
     this.surface = new Mesh(
       // 2 vertices per degree: enough for the relief to follow the data.
@@ -972,6 +1016,18 @@ export class PlanetView {
     }
   }
 
+  /**
+   * The world's star as seen from the planet: its colour (linear RGB, the
+   * Sun white), apparent diameter in degrees and the light the planet gets
+   * relative to Earth's. Drawn with **Sunlight**, at the sun's direction.
+   */
+  setHostStar(star: HostStar): void {
+    this.requestRender();
+    this.host = star;
+    const u = this.hostStar.material.uniforms;
+    (u['uColor']!.value as Vector3).set(...star.colour);
+  }
+
   /** Shows or hides the star field around the globe. */
   setStars(visible: boolean): void {
     this.requestRender();
@@ -1245,7 +1301,7 @@ export class PlanetView {
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
     this.sky.uSunDepth.value.dispose();
-    for (const object of [this.surface, this.grid, this.stars, ...this.atmosphere, this.path]) {
+    for (const object of [this.surface, this.grid, this.stars, this.hostStar, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -1356,6 +1412,31 @@ export class PlanetView {
     }
   };
 
+  /**
+   * Places and sizes the host star: at the sun's direction, its true
+   * apparent diameter in pixels (at least a few), in a glow growing with
+   * the light the planet gets. Shown with Sunlight on the globe only.
+   */
+  private drawHostStar(): void {
+    const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
+    this.hostStar.visible = visible;
+    if (!visible) {
+      return;
+    }
+    const position = this.hostStar.geometry.getAttribute('position') as BufferAttribute;
+    position.setXYZ(0, ...this.u.uSunDir.value.toArray());
+    position.needsUpdate = true;
+    const pixelsPerDegree = this.renderer.domElement.height / this.camera.fov;
+    const ratio = this.renderer.getPixelRatio();
+    const disk = Math.max(this.host.angularDiameterDeg * pixelsPerDegree, 3 * ratio);
+    const glow = Math.min(1.2, 0.55 * this.host.insolation ** 0.25);
+    const u = this.hostStar.material.uniforms;
+    u['uDisk']!.value = disk;
+    u['uSize']!.value = Math.min(disk * 6 + 24 * ratio, 512);
+    u['uGlow']!.value = glow;
+    u['uOpacity']!.value = this.morph ** 3;
+  }
+
   private draw(): void {
     this.shared.uMorph.value = this.morph;
     // The atmosphere only makes sense around the globe: fade it with the morph.
@@ -1366,6 +1447,7 @@ export class PlanetView {
     this.atmosphereOpacity.value = this.morph ** 3;
     // The stars belong to the globe's sky, like the atmosphere.
     this.stars.visible = this.starsOn && this.morph > 0.01;
+    this.drawHostStar();
     this.stars.material.uniforms['uOpacity']!.value = this.morph ** 3;
     this.stars.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
     const altitude = this.altitude();
