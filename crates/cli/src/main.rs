@@ -93,7 +93,8 @@ struct Args {
     /// Epoch of the plates in Ma from the present, in [-300, 300], negative
     /// in the past: on worlds with plate tectonics, the continents as the
     /// plates have carried them by then (or will have). The world is written
-    /// to `<planet>-<seed>_<drift>Ma` [default: 0, the present]
+    /// to `<planet>-past<N>ma-<seed>` or `<planet>-future<N>ma-<seed>`
+    /// [default: 0, the present]
     #[arg(long, allow_hyphen_values = true, value_parser = parse_in(request::DRIFT_MA))]
     drift: Option<f32>,
 
@@ -294,12 +295,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     if let Some(system) = GiantSystem::draw(p) {
         println!("Giants → {}", giants_summary(&system, p.metallicity));
     }
-    let name = world_dir_name(p);
-    let dir = args.out_dir.join(if p.drift_ma == 0.0 {
-        name
-    } else {
-        format!("{name}_{}Ma", p.drift_ma)
-    });
+    let dir = args.out_dir.join(world_dir_name(p));
     // Generating into an existing world directory: the parts the export
     // writes only when they apply (raw data, moons, host giant, noise maps)
     // are cleared first, so none is left from the previous generation.
