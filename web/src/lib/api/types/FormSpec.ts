@@ -31,7 +31,11 @@ moon_count: Limits,
 /**
  * Limits of the star's metallicity (dex).
  */
-metallicity: Limits, default_width: number, default_height: number, 
+metallicity: Limits, 
+/**
+ * Limits of a giant planet's mass (Earth masses).
+ */
+giant_mass: Limits, default_width: number, default_height: number, 
 /**
  * Largest width or height the server accepts.
  */

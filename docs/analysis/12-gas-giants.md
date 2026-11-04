@@ -484,6 +484,9 @@ Rocky worlds orbiting a giant (`src/exomoon.rs`):
 - **Viewer:** the giant in the sky at its true size with its bands,
   phases and eclipses (the moon sky of item 13, roles reversed); the
   world card; the star view.
+- **Form:** the star's metallicity, the giant neighbours (drawn or
+  none), a giant's moon (as drawn, never, always) and, for a giant type,
+  its mass, the fields a giant has no use for hidden.
 - **Not done:** the giant's other moons in the sky; the tilt steadied by
   the giant; the giant's reflected and thermal light on the night side.
 

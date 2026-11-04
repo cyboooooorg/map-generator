@@ -1,7 +1,7 @@
 //! Types exchanged with the web front-end. `cargo test` regenerates their
 //! TypeScript definitions in `web/src/lib/api/types/` (see `.cargo/config.toml`).
 use mapgen::generation::Stage;
-use mapgen::preset::{Defaults, ParamDefault, PresetLocale};
+use mapgen::preset::{Defaults, GiantSpec, ParamDefault, PresetLocale};
 use mapgen::request::{Limits, WorldRequest};
 use mapgen::star::StarSpec;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,10 @@ pub struct PresetInfo {
     pub defaults: Defaults,
     /// The preset's host star and orbit (`[star]`).
     pub star: StarSpec,
+    /// A giant planet's `[giant]` table; absent for a rocky world.
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub giant: Option<GiantSpec>,
     /// Translated name and description, by language code (`fr`).
     pub locales: BTreeMap<String, PresetLocale>,
 }
@@ -59,6 +63,8 @@ pub struct FormSpec {
     pub moon_count: Limits,
     /// Limits of the star's metallicity (dex).
     pub metallicity: Limits,
+    /// Limits of a giant planet's mass (Earth masses).
+    pub giant_mass: Limits,
     pub default_width: u32,
     pub default_height: u32,
     /// Largest width or height the server accepts.

@@ -394,6 +394,22 @@ export const en = {
     eccentricityHelp:
       '0: a circle · Venus: 0.007 · Earth: 0.017 · Mars: 0.09 · Mercury: 0.21. More gives more light over a year. Random: drawn like the planets known, circular for tidally locked ones',
     moons: 'Moons',
+    metallicity: 'Star metallicity [Fe/H]',
+    metallicityHelp:
+      "Iron relative to hydrogen, in dex against the Sun's (0); drawn like the stars nearby (around −0.1). Metal-rich stars have many more giant planets: about 1.6 times more per 0.1 dex",
+    giantMass: 'Mass (Earth masses)',
+    giantMassHelp: 'Neptune 17, Saturn 95, Jupiter 318; up to 13 Jupiter masses (4 131), the deuterium-burning limit. Sets the radius, spin flattening and band count',
+    giants: 'Giant planets',
+    giantsAuto: 'Drawn by the seed',
+    giantsNone: 'None (not modelled)',
+    giantsHelp:
+      "The gas and ice giants of the system, drawn with the odds observed for the star and its metallicity: they force an eccentricity on the world and set its impact rate. None keeps the Solar System's impact rate",
+    host: "A giant's moon",
+    hostAuto: 'As the seed draws (1 in 50)',
+    hostNone: 'Never',
+    hostGiant: 'Always',
+    hostHelp:
+      'The world orbits a giant planet that orbits the star: the giant hangs in its sky, its tides heat it (a watery world is kept beyond the habitable edge), its day is its orbit',
     moonsAuto: 'Drawn by the seed',
     moonsNone: 'None',
     moonsCount: (p: { count: number }) => (p.count === 1 ? '1 moon' : `${p.count} moons`),

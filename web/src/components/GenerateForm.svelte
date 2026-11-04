@@ -18,6 +18,7 @@
   import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
   import { applyStarChoice, initialStarChoice, STAR_CLASSES, type StarChoice } from '../lib/starForm';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
+  import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
 
   interface Props {
     presets: PresetInfo[];
@@ -211,6 +212,8 @@
   let landPercent = $state(memory?.landPercent ?? startLand?.percent ?? 29);
   /** The moons asked for: drawn by the seed, none, or a number. */
   let moons = $state<MoonChoice>(untrack(() => memory?.moons ?? moonChoiceOf(start.initial?.moons)));
+  /** Metallicity, giant neighbours, a giant's moon, a giant's mass (see giantForm.ts). */
+  let giantChoice = $state<GiantChoice>(untrack(() => initialGiantChoice(start.initial)));
   /** The star and the orbit (see starForm.ts). */
   let star = $state<StarChoice>(
     untrack(() => memory?.star ?? initialStarChoice(start.preset, start.initial, spec.hz_position.fallback)),
@@ -225,6 +228,10 @@
   let replace = $state(false);
 
   const selectedPreset = $derived(presets.find((p) => p.spec === planet));
+  /** A giant planet: no ground, so no sea, volcanoes, erosion, air pressure, craters or moons to set. */
+  const giantWorld = $derived(!randomPlanet && selectedPreset?.giant !== undefined);
+  /** The fields a world of the chosen kind has. */
+  const shownFields = $derived(giantWorld ? OTHER_FIELDS.filter((f) => f === 'axial_tilt_deg') : OTHER_FIELDS);
   const sizes = $derived.by(() => {
     const list = [...SIZES];
     for (const extra of [size, `${spec.default_width}x${spec.default_height}`]) {
@@ -289,17 +296,18 @@
       request.width = width;
       request.height = height;
     }
-    for (const field of OTHER_FIELDS) {
+    for (const field of shownFields) {
       if (!fields[field].random) {
         request[field] = fields[field].value;
       }
     }
     applyStarChoice(request, star);
     const asked = moonsRequest(moons);
-    if (asked !== undefined) {
+    if (asked !== undefined && !giantWorld) {
       request.moons = asked;
     }
-    if (!fields.sea_level.random) {
+    applyGiantChoice(request, giantChoice, giantWorld);
+    if (!fields.sea_level.random && !giantWorld) {
       if (seaBy === 'level') {
         request.sea_level = fields.sea_level.value;
       } else {
@@ -375,6 +383,7 @@
     <p class="help">{presetDescription(selectedPreset)}</p>
   {/if}
 
+  {#if !giantWorld}
   <fieldset>
     <legend>
       <select class="mode" bind:value={seaBy} aria-label={t.form.seaBy}>
@@ -413,8 +422,9 @@
       {seaBy === 'level' ? t.form.seaLevelHelp : t.form.landShareHelp}
     </p>
   </fieldset>
+  {/if}
 
-  {#each OTHER_FIELDS as field (field)}
+  {#each shownFields as field (field)}
     {@const info = FIELDS[field]}
     {@const limits = spec[field].limits}
     <fieldset>
@@ -541,6 +551,7 @@
     {/if}
     <p class="help">{t.form.eccentricityHelp}</p>
   </fieldset>
+  {#if !giantWorld}
   <fieldset>
     <legend>{t.form.moons}</legend>
     <select bind:value={moons} aria-label={t.form.moons}>
@@ -552,6 +563,75 @@
     </select>
     <p class="help">{t.form.moonsHelp}</p>
   </fieldset>
+  {/if}
+  <fieldset>
+    <legend>
+      {t.form.metallicity}
+      <label class="check inline">
+        <input type="checkbox" bind:checked={giantChoice.metallicityRandom} />
+        {t.form.random}
+      </label>
+    </legend>
+    {#if !giantChoice.metallicityRandom}
+      <div class="slider">
+        <input type="range" min={spec.metallicity.min} max={spec.metallicity.max} step={0.01} bind:value={giantChoice.metallicity} />
+        <input
+          type="number"
+          min={spec.metallicity.min}
+          max={spec.metallicity.max}
+          step="any"
+          bind:value={giantChoice.metallicity}
+          aria-label={t.form.metallicity}
+        />
+      </div>
+    {/if}
+    <p class="help">{t.form.metallicityHelp}</p>
+  </fieldset>
+  {#if giantWorld}
+    <fieldset>
+      <legend>
+        {t.form.giantMass}
+        <label class="check inline">
+          <input type="checkbox" bind:checked={giantChoice.massRandom} />
+          {t.form.random}
+        </label>
+      </legend>
+      {#if !giantChoice.massRandom}
+        <div class="slider">
+          <!-- Logarithmic: from a small ice giant to 13 Jupiter masses. -->
+          <input
+            type="range"
+            min={Math.log10(spec.giant_mass.min)}
+            max={Math.log10(spec.giant_mass.max)}
+            step={0.01}
+            value={Math.log10(giantChoice.mass)}
+            oninput={(e) => (giantChoice.mass = Math.round(10 ** Number(e.currentTarget.value)))}
+            aria-label={t.form.giantMass}
+          />
+          <input type="number" min={spec.giant_mass.min} max={spec.giant_mass.max} step="any" bind:value={giantChoice.mass} />
+        </div>
+      {/if}
+      <p class="help">{t.form.giantMassHelp}</p>
+    </fieldset>
+  {:else}
+    <fieldset>
+      <legend>{t.form.giants}</legend>
+      <select bind:value={giantChoice.giants} aria-label={t.form.giants}>
+        <option value="auto">{t.form.giantsAuto}</option>
+        <option value="none">{t.form.giantsNone}</option>
+      </select>
+      <p class="help">{t.form.giantsHelp}</p>
+    </fieldset>
+    <fieldset>
+      <legend>{t.form.host}</legend>
+      <select bind:value={giantChoice.host} aria-label={t.form.host}>
+        <option value="auto">{t.form.hostAuto}</option>
+        <option value="none">{t.form.hostNone}</option>
+        <option value="giant">{t.form.hostGiant}</option>
+      </select>
+      <p class="help">{t.form.hostHelp}</p>
+    </fieldset>
+  {/if}
 
   <div class="row">
     <label for="seed">{t.form.seed}</label>
