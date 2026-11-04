@@ -44,6 +44,9 @@ pub struct Sample {
     pub variability_m: f32,
     /// Highland line jitter noise, roughly in `[-1, 1]`.
     pub highland_jitter: f32,
+    /// Height added by plate boundaries (ranges, trenches, arcs, ridges,
+    /// rifts), elevation units; 0 on worlds without plate tectonics.
+    pub tectonic_uplift: f32,
 }
 
 impl Sample {
@@ -115,9 +118,33 @@ const CONE_KM: (f64, f64) = (50.0, 120.0);
 /// Height of a cone above the terrain at its vent, in a fully volcanic zone.
 const CONE_HEIGHT: f32 = 0.25;
 
+/// Depth below the waterline down to which the crust counts as
+/// continental (the continental shelf), elevation units.
+const CONTINENTAL_SHELF: f32 = 0.05;
+/// Share of the noise's mountain weight kept on worlds with plate
+/// tectonics: the rest of their ranges follow the plate boundaries.
+const NOISE_MOUNTAINS_WITH_PLATES: f32 = 0.5;
+/// Weight of volcanic arcs in the volcanic zone, on a world without
+/// volcanism and on a fully volcanic one.
+const ARC_VOLCANISM: (f32, f32) = (0.8, 1.0);
+/// Volcanoes of an arc: one per cell of this size (km) at most, present in
+/// this share of the cells (arcs on Earth have one every 50–100 km; at the
+/// base map's resolution, about 20 km per pixel, they would merge).
+const ARC_CONE_CELL_KM: f64 = 200.0;
+const ARC_CONE_PRESENCE: f64 = 0.8;
+/// Below this arc weight, no arc volcano.
+const ARC_MIN: f32 = 0.02;
+
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
     grid: Grid,
+    /// The plates and their boundaries, on worlds with plate tectonics.
+    tectonics: Option<crate::plates::PlateMap>,
+    /// Share of the noise's mountain weight kept on such worlds: their
+    /// ranges follow the plate boundaries.
+    noise_mountains: f32,
+    /// Weight of volcanic arcs in the volcanic zone.
+    arc_volcanism: f32,
     sea_level: f32,
     /// Absolute elevation of the sea surface.
     waterline: f32,
@@ -126,6 +153,7 @@ pub struct Sampler {
     coast_noise: Perlin,
     plate_seed: u32,
     cone_seed: u32,
+    arc_cone_seed: u32,
     mountain_blend: f32,
     volcanic_threshold: f32,
     elevation_noise: Perlin,
@@ -149,7 +177,11 @@ impl Sampler {
         // Earth (40 075 km) ≡ scale 1.0.
         let noise_scale = (EARTH_CIRCUMFERENCE_KM / p.circumference_km.max(1.0)) as f64;
         let grid = p.grid();
-        Self {
+        let mut sampler = Self {
+            tectonics: None,
+            noise_mountains: 1.0,
+            arc_volcanism: ARC_VOLCANISM.0
+                + (ARC_VOLCANISM.1 - ARC_VOLCANISM.0) * p.volcanic_intensity.clamp(0.0, 1.0),
             coast_octaves: coast_octaves(noise_scale, &grid),
             grid,
             sea_level: p.sea_level,
@@ -158,6 +190,7 @@ impl Sampler {
             coast_noise: Perlin::new(stream_seed(seed, stream::COAST)),
             plate_seed: stream_seed(seed, stream::PLATES),
             cone_seed: stream_seed(seed, stream::CONES),
+            arc_cone_seed: stream_seed(seed, stream::ARC_CONES),
             // Stronger gravity suppresses mountain relief; sqrt dampens the effect
             // for extreme values. Baseline 0.35 at Earth gravity.
             mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
@@ -174,7 +207,34 @@ impl Sampler {
             anomaly_noise: Perlin::new(stream_seed(seed, stream::ANOMALY)),
             variability_noise: Perlin::new(stream_seed(seed, stream::VARIABILITY)),
             highland_noise: Perlin::new(stream_seed(seed, stream::HIGHLAND)),
+        };
+        if p.planet.geology.regime == crate::geology::Regime::Plates {
+            // The crust of each side of a boundary: continental above the
+            // edge of the shelf, from the continents' shape alone.
+            let shelf = sampler.waterline - CONTINENTAL_SHELF;
+            let map = crate::plates::PlateMap::with_crust(p, |q| {
+                let (coarse, fine) = sampler.continent_shape(q);
+                coarse + fine > shelf
+            });
+            sampler.tectonics = Some(map);
+            sampler.noise_mountains = NOISE_MOUNTAINS_WITH_PLATES;
         }
+        sampler
+    }
+
+    /// The continents' shape at a unit vector: its coarse octaves and its
+    /// fine ones (see [`Self::sample`]).
+    fn continent_shape(&self, p: [f64; 3]) -> (f32, f32) {
+        let c = 0.8 * self.noise_scale;
+        let norm = 1.0 + 0.5 + 0.25 + 0.125 + 0.0625;
+        let octave = |k: u32| {
+            let f = c * f64::from(1u32 << k);
+            self.continent_noise.get([p[0] * f, p[1] * f, p[2] * f]) as f32 / (1u32 << k) as f32
+        };
+        (
+            (octave(0) + octave(1)) / norm,
+            (octave(2) + octave(3) + octave(4)) / norm,
+        )
     }
 
     /// Volcanic cone profile at a point of the unit sphere: 1 at a cone's
@@ -182,11 +242,15 @@ impl Sampler {
     /// flows. Cones are one per [`CONE_CELL_KM`] cell at most, sized in km,
     /// so their size does not depend on the planet's.
     fn cone(&self, p: [f64; 3]) -> f32 {
+        self.cone_on(p, self.cone_seed, CONE_CELL_KM, CONE_PRESENCE)
+    }
+
+    /// Like [`Self::cone`], on a lattice of its own: one point per
+    /// `cell_km` cell, present with probability `presence`.
+    fn cone_on(&self, p: [f64; 3], seed: u32, cell_km: f64, presence: f64) -> f32 {
         let radius_km = self.grid.circumference_km as f64 / (2.0 * PI);
-        let f = radius_km / CONE_CELL_KM;
-        let Some((d, h)) =
-            nearest_point(self.cone_seed, p[0] * f, p[1] * f, p[2] * f, CONE_PRESENCE)
-        else {
+        let f = radius_km / cell_km;
+        let Some((d, h)) = nearest_point(seed, p[0] * f, p[1] * f, p[2] * f, presence) else {
             return 0.0;
         };
         let size = CONE_KM.0 + (CONE_KM.1 - CONE_KM.0) * ((h >> 8) & 0xFF) as f64 / 255.0;
@@ -195,7 +259,7 @@ impl Sampler {
         let lobe = self
             .volcano_noise
             .get([p[0] * g + 71.0, p[1] * g - 13.0, p[2] * g + 29.0]);
-        let r = d * CONE_CELL_KM / size * (1.0 + 0.4 * lobe);
+        let r = d * cell_km / size * (1.0 + 0.4 * lobe);
         (-0.5 * r * r).exp() as f32
     }
 
@@ -304,15 +368,39 @@ impl Sampler {
         // rise above the terrain (islands at sea). Away from a cone the zone
         // stays below the ash threshold.
         let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
-        let broad = ((volcanic_raw - self.volcanic_threshold) * 4.0).clamp(0.0, 1.0);
+        // Plate boundaries: their own relief, ranges where they close, and
+        // volcanic arcs over subducting plates.
+        let plates = self
+            .tectonics
+            .as_ref()
+            .map_or(crate::plates::Relief::default(), |t| t.relief(lon, lat));
+        // Relief scales with gravity as the mountains do.
+        let tectonic_uplift = plates.uplift * self.mountain_blend / 0.35;
+        let mountain_weight = (mountain_weight * self.noise_mountains).max(plates.orogeny);
+        let broad = ((volcanic_raw - self.volcanic_threshold) * 4.0)
+            .clamp(0.0, 1.0)
+            .max(plates.arc * self.arc_volcanism);
         let cone = if broad > 0.0 {
             self.cone([nx, ny, nz])
         } else {
             0.0
         };
+        // Volcanic arcs: a chain of volcanoes, much closer together than
+        // the cones of volcanic provinces.
+        let cone = if plates.arc > ARC_MIN {
+            cone.max(self.cone_on(
+                [nx, ny, nz],
+                self.arc_cone_seed,
+                ARC_CONE_CELL_KM,
+                ARC_CONE_PRESENCE,
+            ))
+        } else {
+            cone
+        };
         let volcanic_zone = broad * (VOLCANIC_BACKGROUND + (1.0 - VOLCANIC_BACKGROUND) * cone);
 
         let elevation = (continent
+            + tectonic_uplift
             + mountain * mountain_weight * self.mountain_blend
             + CONE_HEIGHT * broad * cone)
             .clamp(-1.0, 1.0);
@@ -366,6 +454,7 @@ impl Sampler {
             variability_t,
             variability_m,
             highland_jitter,
+            tectonic_uplift,
         }
     }
 }
@@ -428,6 +517,7 @@ const NOISE_LAYERS: &[NoiseLayer] = &[
     ("noise_variability_t", Ramp::Signed, |s| s.variability_t),
     ("noise_variability_m", Ramp::Signed, |s| s.variability_m),
     ("noise_highland_jitter", Ramp::Signed, |s| s.highland_jitter),
+    ("noise_tectonic", Ramp::Signed, |s| s.tectonic_uplift * 4.0),
 ];
 
 /// Coast distances are computed up to this value; further pixels get the cap.
@@ -1061,11 +1151,11 @@ mod tests {
         // Without erosion, which only runs where it thaws, so the relief
         // (and its lapse rate) is the same on both.
         let world = |planet: &str| {
-            generate(&WorldParams {
-                erosion: 0.0,
-                ..params(5, planet)
-            })
-            .world
+            let mut p = params(5, planet);
+            // Without plate tectonics on either, which would add relief to
+            // the terran world only.
+            p.planet.geology.regime = crate::geology::Regime::Episodic;
+            generate(&WorldParams { erosion: 0.0, ..p }).world
         };
         // Both around the Sun at 1 AU, where the star changes nothing.
         let (caustic, terran) = (world("caustic"), world("terran"));

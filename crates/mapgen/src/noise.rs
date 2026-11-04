@@ -133,6 +133,8 @@ pub mod stream {
     /// jagged subplates they are made of.
     pub const PLATE_MOTION: u32 = 23;
     pub const SUBPLATES: u32 = 24;
+    /// Volcanoes of the volcanic arcs over subducting plates.
+    pub const ARC_CONES: u32 = 25;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.
@@ -167,7 +169,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in stream::ELEVATION..=stream::SUBPLATES {
+            for s in stream::ELEVATION..=stream::ARC_CONES {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }

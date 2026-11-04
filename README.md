@@ -265,7 +265,7 @@ To make a dry world, remap its oceans rather than lowering `sea_level`: biome el
 - **`[defaults]`**: command-line options always win; parameters set neither on the command line nor here use the generator defaults listed under [Options](#options).
 - **`[rules]`**: accepts any field of `BiomeRules` in `src/biome.rs` (`waterline`, `polar`, `forest_moisture`, `shore_width_km`…), each documented there. Fields left out keep their default.
 - **`[atmosphere]`**: `rayleigh` (relative scattering per red, green, blue channel: the clear-sky colour; Earth's air is about `[0.17, 0.41, 1.0]`), `haze` and `haze_colour` (aerosols), `greenhouse` (°C added to every temperature), `clouds` (`water`, `sulfuric`, `dust` or `none`) and `cloud_cover` (−1 to 1). Each field is optional and defaults to Earth's. See `src/atmosphere.rs`.
-- **`[geology]`**: `regime` (`plates`, `stagnant`, `episodic` or `heat_pipe`: how the planet loses its heat, from Earth's plates to the single rigid lid of Mars and the Moon, Venus's global overturns and Io's lava) and `wet_until` (Ga before present when liquid water disappeared: `0` for a world still wet, a value at or above the surface age for one never wet, like Mercury; a world with liquid water today counts as still wet whatever the preset says). Both default to Earth's (`plates`, `0`). `maria` (`[start, end]` in Ga, start the older) is when lava flooded large impact basins, as the Moon's maria from 3.9 to 3.1 Ga; without it, none are. `wet_until` sets which [impact craters](#impact-craters) are worn by water, `maria` where they are buried by lava; `regime` is recorded and shown, and does not shape the relief yet. See `src/geology.rs`.
+- **`[geology]`**: `regime` (`plates`, `stagnant`, `episodic` or `heat_pipe`: how the planet loses its heat, from Earth's plates to the single rigid lid of Mars and the Moon, Venus's global overturns and Io's lava) and `wet_until` (Ga before present when liquid water disappeared: `0` for a world still wet, a value at or above the surface age for one never wet, like Mercury; a world with liquid water today counts as still wet whatever the preset says). Both default to Earth's (`plates`, `0`). `maria` (`[start, end]` in Ga, start the older) is when lava flooded large impact basins, as the Moon's maria from 3.9 to 3.1 Ga; without it, none are. `wet_until` sets which [impact craters](#impact-craters) are worn by water, `maria` where they are buried by lava; `regime = "plates"` gives a world tectonic plates whose boundaries shape its relief (see [Elevation](#elevation--continents-coasts-and-mountains)); the other regimes are recorded and shown. See `src/geology.rs`.
 - **`[star]`**: `type` (a spectral type such as `G2V`; left out, drawn like the stars nearby) and either `position` (in the habitable zone, a value or a `[min, max]` range) or `orbit_au` (a distance), and `eccentricity` (a value or a range; left out, drawn). The built-in types: `terran` at `[0.05, 0.75]`, `frozen` at `[1.0, 1.35]`, just beyond the zone (its cold comes from the distance), `volcanic` at `[-0.5, 4.0]` (its heat comes from within), `caustic` at `[-0.25, 0.1]`, `barren` at `[-1.0, 4.0]`; the examples orbit the Sun at the distances and eccentricities of Earth, Mars, Venus and Mercury. Without the table, the star is drawn and the planet sits at `[0.1, 0.9]`. See `src/star.rs`.
 - **`[remap]`**: runs after biome selection; biome names are the keys of the biome table (`DeepOcean`, `SeaIce`, `LavaField`…). A biome listed under two targets is an error, and so is an unknown field or biome name.
 
@@ -312,6 +312,7 @@ worlds/<planet>-<seed>/
     ├── noise_variability_t.png
     ├── noise_variability_m.png
     ├── noise_highland_jitter.png
+    ├── noise_tectonic.png
     ├── erosion.png
     ├── elevation.png
     ├── temperature.png
@@ -440,6 +441,7 @@ Signed maps (range `[-1, 1]`) are centred so that `0.0` maps to green, negative 
 | `noise_variability_t.png`       | `[-1, 1]` | Regional variability noise added to temperature                                                                                      |
 | `noise_variability_m.png`       | `[-1, 1]` | Regional variability noise added to moisture                                                                                         |
 | `noise_highland_jitter.png`     | `[-1, 1]` | Noise shifting the mountain line (× 0.5 gives `highland_offset`)                                                                     |
+| `noise_tectonic.png`            | `[-1, 1]` | Relief of plate boundaries, × 4 (red: ranges, arcs and ridges; blue: trenches and rifts)                                             |
 | `erosion.png`                   | `[-1, 1]` | Height change from erosion, ×10 (blue = carved, red = deposited)                                                                     |
 | `craters.png`                   | `[-1, 1]` | Height change from impact craters, ×5 (blue = cavities, red = rims and ejecta), before and after erosion                             |
 | `plates.png`                    | `[0, 1]`  | The tectonic plates (one value per plate), not yet used by the relief (see `src/plates.rs`)                                          |
@@ -565,11 +567,23 @@ A tile takes about 4 ms on 10 cores; on a heavily cratered world (a 4 Ga `mercur
 
 ### Elevation — continents, coasts and mountains
 
-Elevation before erosion is `continent + mountain × mountain_weight × mountain_blend`.
+Elevation before erosion is `continent + plates + mountain × mountain_weight × mountain_blend`, `plates` being the relief of plate boundaries (zero without plate tectonics).
 
 - **Continents.** A 5-octave FBM on the unit sphere. Its 2 coarse octaves shape continents and basins; its 3 fine ones add hills. Away from the coast (more than about 0.03–0.2 above or below the waterline) only 30 % of the fine octaves remain, so plains, deserts and the abyssal plains of the sea floor are smooth (visible where seas have dried up); coasts keep them all, and so does high ground, with the mountain weight.
 - **Coastlines.** Near the waterline the FBM is sampled at a position displaced sideways by every octave finer than its own, down to about two map pixels, each by half its wavelength and 0.8× less at each finer octave. A low "plate" step is added there too: a Voronoi cell noise (±0.06, borders softened over about 1/20 of a cell) that gives coasts straight stretches and angular corners. Both fade out between 0.02 and 0.08 from the waterline, where they would only wrinkle the relief. Coasts are fractal instead of smooth contours. The finest outline octaves follow the map resolution, so a larger map adds detail to the same continents.
 - **Mountains.** A ridged noise on a domain-warped position, with two finer ridged octaves concentrated on its ridges (35 % of its height), weighted from continent height 0.2 upwards.
+- **Plates.** Worlds with plate tectonics (`[geology] regime = "plates"`: `terran`, `frozen`, `earth-like`) have 10 to 15 plates made of jagged Voronoi subplates, each turning about an Euler pole at 2 to 10 cm/yr (see `src/plates.rs`). On a fixed 1024 × 512 grid, whatever the map's size, each point gets the relief of its nearest boundary, from the boundary's convergence (full from 5 cm/yr) and the crust on each side (continental above the edge of the shelf, 0.05 under the waterline, from the continents' shape alone), interpolated between the grid's pixels:
+
+  | Boundary                                 | Relief                                                                      |
+  | ---------------------------------------- | --------------------------------------------------------------------------- |
+  | Continent–continent, closing             | A range on both sides, 350 km wide: 0.12 of uplift and full mountain ridges |
+  | Continent over ocean, closing            | A coastal range 150 km inland (0.08) and a volcanic arc 220 km inland       |
+  | Ocean under a continent or another ocean | A trench along the boundary, 0.16 deep                                      |
+  | Ocean over ocean, closing                | An island arc 120 km from the boundary (0.12)                               |
+  | Ocean–ocean, parting                     | A mid-ocean ridge, 450 km wide (0.1)                                        |
+  | Continent–continent, parting             | A rift valley and its shoulders                                             |
+
+  Relief scales with gravity as the mountains do, and fades out between 70° and 85° of latitude, where the grid stretches boundaries into streaks. Arcs need subduction more than its speed (full from 2 cm/yr) and carry volcanoes of their own, one per 200 km cell in 80 % of the cells. The noise's mountains keep half their weight: the other ranges follow the boundaries. About 0.13 s per world to build the plates.
 - **Volcanoes.** The volcanic noise, above the threshold set by `--volcanic`, outlines broad volcanic provinces. Volcanoes are cones within them: at most one per 900 km cell (half the cells), 50–120 km in radius whatever the planet's size, rising up to `0.25` above the terrain (volcanic islands at sea). The volcanic zone peaks on each cone and falls to 12 % of the province away from it, below the ash threshold, so a province is ordinary land dotted with volcanoes, each with its vent (about 1.2 radii), lava flows (1.8, lobed by a noise) and an ash halo (2.6). Presets that shift the volcanic zone (`volcanic` worlds, +0.5) still cover whole provinces with lava.
 
 ### Hydraulic erosion
