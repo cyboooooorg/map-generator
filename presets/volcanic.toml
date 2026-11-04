@@ -30,6 +30,11 @@ greenhouse = 20.0                  # °C
 clouds = "sulfuric"
 cloud_cover = -0.2
 
+# Its volcanic shift alone (0.5) would turn every lowland into lava: only
+# the cones on it reach their vents.
+[rules]
+vent_zone = 0.9
+
 # Like Io: lava resurfaces the planet faster than craters form.
 [geology]
 regime = "heat_pipe"

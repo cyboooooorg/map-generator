@@ -99,4 +99,11 @@ ash_elevation: number,
 /**
  * Volcanic zone needed for ash land.
  */
-ash_zone: number, };
+ash_zone: number, 
+/**
+ * Volcanic zone needed to turn dry land below the highland (forest,
+ * plain, desert…) into lava fields, and into a volcano halfway from it
+ * to 1: the flanks and vent of a cone rising out of the lowland. Above
+ * the background of a volcanic province, so only the cones reach it.
+ */
+vent_zone: number, };
