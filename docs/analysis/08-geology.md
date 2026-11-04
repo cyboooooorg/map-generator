@@ -413,6 +413,38 @@ Implemented in `craters.rs`, with these changes from the plan:
   resolution, as the generation does, then let the tiles add the small
   ones of that epoch. `RENDER_VERSION` is 3.
 
+### Outcome (step 4)
+
+- **Module `epoch.rs`:** `range_ga` (the epochs a world offers) and
+  `loaded_at`, which draws the young craters formed by the epoch on
+  `elevation_base` with the generation's own `CraterField::apply`, then
+  recomputes the temperature (lapse rate) and the biomes. It works on the
+  loaded world (16 bits per value) and consumes it, so computing an epoch
+  holds only the elevation and temperature in full precision besides it.
+  Epoch 0 gives `elevation.png` back within two 16-bit steps: the base is
+  the final elevation minus the young craters' change, in floating point.
+- **Craters still to come:** a second population with a seed stream of
+  its own (`FUTURE_CRATERS`), at the constant late flux, ages uniform over
+  the next 1 Ga. A crater exists at `t` when its age is `t` or more, and
+  diffuses for `age − t`.
+- **Server:**
+  - `GET /api/worlds/{id}/epoch/{ma}/{surface|elevation|biomes}.png`
+    with `scale` 1, 2 or 4, and `epoch=` on the tiles. A world at an
+    epoch is an entry of its own in the tile cache (keyed by id,
+    revision and epoch), within the same budget.
+  - `epochs_ma` in the world summaries.
+  - Errors: 404 for a world without epochs, 400 out of its range.
+- **Rounding is the client's:** the server accepts any whole Ma in the
+  range; the slider of step 5 rounds to its steps, so that cached URLs
+  repeat.
+- **Cost:** 0.17 s to compute an epoch and 0.11 s to render its surface
+  at 1920 × 1080 (4 Ga `mercury-like`), 2.9 s and 1.8 s at 8192 × 4096.
+  The reduced layers are averaged from the full render, so `scale` saves
+  transfer, not time; rendering them directly at the lower resolution
+  would, if the slider needs it.
+- **Not done:** structured error details (`ErrorDetail`) for the epoch
+  errors, for translated messages in step 5.
+
 ## 6. Time slider
 
 ### What it shows

@@ -175,6 +175,44 @@ struct Meta {
     gravity_modifier: f32,
     pressure_bar: f32,
     surface_age_ga: Option<f32>,
+    format_version: u32,
+    preset: MetaPreset,
+}
+
+/// The part of the stored preset a summary needs.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct MetaPreset {
+    geology: MetaGeology,
+}
+
+/// Earth's when absent: still wet.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct MetaGeology {
+    wet_until: f32,
+}
+
+/// First format version with `elevation_base`, which epochs are drawn on.
+const EPOCHS_VERSION: u32 = 7;
+
+impl Meta {
+    /// The epochs the world offers, in Ma (see [`WorldSummary::epochs_ma`]).
+    fn epochs_ma(&self) -> Option<[i32; 2]> {
+        if self.format_version < EPOCHS_VERSION {
+            return None;
+        }
+        let (future, past) = mapgen::epoch::range_ga(
+            self.pressure_bar,
+            self.surface_age_ga?,
+            self.preset.geology.wet_until,
+        )?;
+        // Whole Ma, within the range.
+        Some([
+            (future * 1000.0).ceil() as i32,
+            (past * 1000.0).floor() as i32,
+        ])
+    }
 }
 
 impl Default for Meta {
@@ -194,6 +232,8 @@ impl Default for Meta {
             pressure_bar: 1.0,
             // Worlds made before the surface age have none.
             surface_age_ga: None,
+            format_version: 1,
+            preset: MetaPreset::default(),
         }
     }
 }
@@ -203,6 +243,7 @@ pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
     let path = dir.join(id).join("raw_data").join("world.json");
     let meta: Meta = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
     let modified_ms = revision(dir, id).unwrap_or(0);
+    let epochs_ma = meta.epochs_ma();
     Some(WorldSummary {
         id: id.to_string(),
         planet: meta.planet_type,
@@ -217,6 +258,7 @@ pub fn summary(dir: &Path, id: &str) -> Option<WorldSummary> {
         gravity_modifier: meta.gravity_modifier,
         pressure_bar: meta.pressure_bar,
         surface_age_ga: meta.surface_age_ga,
+        epochs_ma,
         modified_ms,
     })
 }
@@ -304,6 +346,13 @@ mod tests {
             ),
             // Before the atmosphere: Earth's pressure.
             ("frozen-2", r#"{"planet_type": "frozen", "seed": 2}"#),
+            // Airless, of format version 7: epochs back to its surface age.
+            (
+                "mercury-like-3",
+                r#"{"planet_type": "mercury-like", "seed": 3, "format_version": 7,
+                    "pressure_bar": 0.0, "surface_age_ga": 4.0,
+                    "preset": {"geology": {"regime": "stagnant", "wet_until": 4.6}}}"#,
+            ),
         ] {
             std::fs::create_dir_all(root.join(id).join("raw_data")).unwrap();
             std::fs::write(root.join(id).join("raw_data/world.json"), json).unwrap();
@@ -315,6 +364,9 @@ mod tests {
         let frozen = summary(&root, "frozen-2").unwrap();
         assert_eq!((frozen.seed, frozen.pressure_bar), (2, 1.0));
         assert_eq!(frozen.surface_age_ga, None);
+        assert_eq!((terran.epochs_ma, frozen.epochs_ma), (None, None));
+        let mercury = summary(&root, "mercury-like-3").unwrap();
+        assert_eq!(mercury.epochs_ma, Some([-1000, 4000]));
         assert!(summary(&root, "barren-3").is_none());
         std::fs::remove_dir_all(root).unwrap();
     }

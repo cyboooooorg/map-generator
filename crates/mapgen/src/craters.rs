@@ -205,6 +205,22 @@ fn cube_cell(p: [f64; 3]) -> (u32, f64, f64) {
     }
 }
 
+/// Craters per km² of an octave of a population: `N(>D) − N(>2D)`.
+fn per_km2(population: Population, octave: i32) -> f64 {
+    let low = 2f64.powi(octave);
+    0.75 * population.density / (low * low)
+}
+
+/// Cells per face edge of an octave's grid on a planet of `radius_km`:
+/// about two craters per cell, at least one cell per face.
+fn cells(population: Population, radius_km: f64, octave: i32) -> u32 {
+    let face_area = 4.0 * PI * radius_km * radius_km / 6.0;
+    ((per_km2(population, octave) * face_area / 2.0)
+        .sqrt()
+        .ceil() as u32)
+        .max(1)
+}
+
 /// Sorts craters oldest first; the shape hash breaks ties, so the order is
 /// total.
 fn sort_oldest_first(craters: &mut [Crater]) {
@@ -236,13 +252,39 @@ pub struct CraterField {
     /// End of the wet era, Ga before present.
     wet_until_ga: f64,
     erosion: f64,
-    /// Where craters come from: the seed of the crater stream, the density
-    /// of craters of 1 km or more (per km²), the surface age (Ga) and the
-    /// smallest crater the atmosphere lets through (km).
-    seed: u32,
-    density: f64,
-    surface_age_ga: f64,
+    /// The craters formed so far, and those still to come.
+    past: Population,
+    future: Population,
+    /// Smallest crater the atmosphere lets through, km.
     air_km: f64,
+    /// The epoch shown, Ga before present (negative in the future): only
+    /// the craters formed by then exist, worn for the time since.
+    epoch_ga: f64,
+}
+
+/// How far ahead the craters still to come are drawn, Ga.
+pub const FUTURE_GA: f64 = 1.0;
+
+/// Craters of 1 km or more formed per km² and per Ga at today's flux: the
+/// constant term of the chronology ([`crater_density`]).
+const FLUX_PER_GA: f64 = 8.38e-4;
+
+/// One population of craters, with its own lattice and seed: those formed
+/// so far, or those still to come.
+#[derive(Clone, Copy, Debug)]
+struct Population {
+    seed: u32,
+    /// Craters of 1 km or more per km².
+    density: f64,
+    ages: Ages,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Ages {
+    /// Drawn from the chronology over a surface this old (Ga).
+    Past { surface_age_ga: f64 },
+    /// Uniform over the next `span_ga` (negative ages), at today's flux.
+    Future { span_ga: f64 },
 }
 
 /// A latitude-longitude grid of pixel centres, as a detail tile's: row `y`
@@ -278,6 +320,12 @@ impl CraterField {
     /// The crater field of the world `p` without any crater yet: what
     /// drawing and finding them needs (see [`Self::near`]).
     pub fn context(p: &WorldParams) -> Self {
+        Self::context_at(p, 0.0)
+    }
+
+    /// Like [`Self::context`], for the surface at `epoch_ga` (Ga before
+    /// present, negative in the future, down to [`FUTURE_GA`]).
+    pub fn context_at(p: &WorldParams, epoch_ga: f64) -> Self {
         let radius_km = p.circumference_km as f64 / (2.0 * PI);
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
@@ -290,34 +338,72 @@ impl CraterField {
                 .any(|&b| p.planet.remap(b).is_water()),
             wet_until_ga: p.planet.geology.wet_until_ga(p.pressure_bar) as f64,
             erosion: p.erosion as f64,
-            seed: stream_seed(p.seed, stream::CRATERS),
-            density: crater_density(p.surface_age_ga as f64).min(SATURATION),
-            surface_age_ga: p.surface_age_ga as f64,
+            past: Population {
+                seed: stream_seed(p.seed, stream::CRATERS),
+                density: crater_density(p.surface_age_ga as f64).min(SATURATION),
+                ages: Ages::Past {
+                    surface_age_ga: p.surface_age_ga as f64,
+                },
+            },
+            // A world without craters (surface age 0, or made before them)
+            // gets none in the future either.
+            future: Population {
+                seed: stream_seed(p.seed, stream::FUTURE_CRATERS),
+                density: if p.surface_age_ga > 0.0 {
+                    FLUX_PER_GA * FUTURE_GA
+                } else {
+                    0.0
+                },
+                ages: Ages::Future { span_ga: FUTURE_GA },
+            },
             air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
+            epoch_ga: epoch_ga.max(-FUTURE_GA),
         }
+    }
+
+    /// The populations whose craters may exist at the epoch: the future
+    /// only before the present.
+    fn populations(&self) -> impl Iterator<Item = Population> {
+        let future = (self.epoch_ga < 0.0).then_some(self.future);
+        std::iter::once(self.past)
+            .chain(future)
+            .filter(|p| p.density > 0.0)
+    }
+
+    /// Whether a crater has formed by the epoch.
+    fn formed(&self, crater: &Crater) -> bool {
+        crater.age_ga >= self.epoch_ga
     }
 
     /// Every crater of the world `p` of `min_diameter_km` or more that has
     /// survived to the present, oldest first.
     pub fn new(p: &WorldParams, min_diameter_km: f64) -> Self {
-        let mut field = Self::context(p);
-        if field.density <= 0.0 {
-            return field;
+        Self::new_at(p, min_diameter_km, 0.0)
+    }
+
+    /// Like [`Self::new`], with the craters formed by `epoch_ga` (see
+    /// [`Self::context_at`]).
+    pub fn new_at(p: &WorldParams, min_diameter_km: f64, epoch_ga: f64) -> Self {
+        let mut field = Self::context_at(p, epoch_ga);
+        let mut craters = Vec::new();
+        for population in field.populations() {
+            for octave in field.octaves(min_diameter_km, f64::INFINITY) {
+                let cells = cells(population, field.radius_km, octave);
+                let found: Vec<Crater> = (0..6 * cells)
+                    .into_par_iter()
+                    .flat_map_iter(|row| {
+                        let (face, i) = (row / cells, row % cells);
+                        let field = &field;
+                        (0..cells)
+                            .flat_map(move |j| field.cell_craters(population, octave, face, i, j))
+                    })
+                    .filter(|c| c.diameter_km >= min_diameter_km && field.formed(c))
+                    .collect();
+                craters.extend(found);
+            }
         }
-        for octave in field.octaves(min_diameter_km, f64::INFINITY) {
-            let cells = field.cells(octave);
-            let found: Vec<Crater> = (0..6 * cells)
-                .into_par_iter()
-                .flat_map_iter(|row| {
-                    let (face, i) = (row / cells, row % cells);
-                    let field = &field;
-                    (0..cells).flat_map(move |j| field.cell_craters(octave, face, i, j))
-                })
-                .filter(|c| c.diameter_km >= min_diameter_km)
-                .collect();
-            field.craters.extend(found);
-        }
-        sort_oldest_first(&mut field.craters);
+        sort_oldest_first(&mut craters);
+        field.craters = craters;
         field
     }
 
@@ -326,12 +412,15 @@ impl CraterField {
     /// the same craters as [`Self::new`], found from the lattice cells
     /// around the cap only.
     pub fn near(&self, centre: [f64; 3], angle: f64, min_km: f64, max_km: f64) -> Vec<Crater> {
-        if self.density <= 0.0 || min_km >= max_km {
+        if min_km >= max_km {
             return Vec::new();
         }
         let mut found = Vec::new();
-        for octave in self.octaves(min_km, max_km) {
-            let cells = self.cells(octave);
+        for (population, octave) in self
+            .populations()
+            .flat_map(|p| self.octaves(min_km, max_km).map(move |o| (p, o)))
+        {
+            let cells = cells(population, self.radius_km, octave);
             // Widest reach of the octave's craters.
             let reach =
                 EJECTA_RADII * (1.0 + 2.0 * RIM_JITTER) * 2f64.powi(octave) / self.radius_km;
@@ -367,8 +456,8 @@ impl CraterField {
             let (cos_angle, sin_angle) = (angle.cos(), angle.sin());
             found.extend(
                 keys.into_iter()
-                    .flat_map(|(face, i, j)| self.cell_craters(octave, face, i, j))
-                    .filter(|c| (min_km..max_km).contains(&c.diameter_km))
+                    .flat_map(|(face, i, j)| self.cell_craters(population, octave, face, i, j))
+                    .filter(|c| (min_km..max_km).contains(&c.diameter_km) && self.formed(c))
                     .filter(|c| {
                         let reach = self.reach(c);
                         let dot = c.centre[0] * centre[0]
@@ -399,34 +488,33 @@ impl CraterField {
         first..=largest.min(below_max)
     }
 
-    /// Craters per km² of an octave: `N(>D) − N(>2D)`.
-    fn per_km2(&self, octave: i32) -> f64 {
-        let low = 2f64.powi(octave);
-        0.75 * self.density / (low * low)
-    }
-
-    /// Cells per face edge of an octave's grid: about two craters per cell,
-    /// at least one cell per face.
-    fn cells(&self, octave: i32) -> u32 {
-        let face_area = 4.0 * PI * self.radius_km * self.radius_km / 6.0;
-        ((self.per_km2(octave) * face_area / 2.0).sqrt().ceil() as u32).max(1)
-    }
-
-    /// The craters of one lattice cell that survived the atmosphere,
-    /// whatever their size within the octave.
-    fn cell_craters(&self, octave: i32, face: u32, i: u32, j: u32) -> impl Iterator<Item = Crater> {
-        let cells = self.cells(octave);
+    /// The craters of one lattice cell of a population that survived the
+    /// atmosphere, whatever their size within the octave and their age.
+    fn cell_craters(
+        &self,
+        population: Population,
+        octave: i32,
+        face: u32,
+        i: u32,
+        j: u32,
+    ) -> impl Iterator<Item = Crater> {
+        let cells = cells(population, self.radius_km, octave);
         let step = 2.0 / f64::from(cells);
         let (a0, b0) = (-1.0 + step * f64::from(i), -1.0 + step * f64::from(j));
         let omega = solid_angle(a0, a0 + step, b0, b0 + step);
-        let mut rng = Rng::cell(self.seed, octave, face, i, j);
-        let count = rng.poisson(self.per_km2(octave) * omega * self.radius_km * self.radius_km);
-        let (low, surface_age, air_km) = (2f64.powi(octave), self.surface_age_ga, self.air_km);
+        let mut rng = Rng::cell(population.seed, octave, face, i, j);
+        let area = self.radius_km * self.radius_km;
+        let count = rng.poisson(per_km2(population, octave) * omega * area);
+        let (low, air_km) = (2f64.powi(octave), self.air_km);
         (0..count).filter_map(move |_| {
             let centre = cube_point(face, a0 + step * rng.unit(), b0 + step * rng.unit());
             // Power law within the octave: N(>D) ∝ D⁻².
             let diameter_km = low / (1.0 - 0.75 * rng.unit()).sqrt();
-            let age_ga = age_at(rng.unit(), surface_age);
+            let age_ga = match population.ages {
+                Ages::Past { surface_age_ga } => age_at(rng.unit(), surface_age_ga),
+                // In [-span, 0): none forms at the present itself.
+                Ages::Future { span_ga } => -span_ga * (1.0 - rng.unit()),
+            };
             let survives = air_km <= 0.0
                 || rng.unit()
                     < f64::from(smoothstep(
@@ -449,7 +537,9 @@ impl CraterField {
     /// diffusion of small impacts since it formed.
     fn wear(&self, crater: &Crater) -> f64 {
         let radius_m = 500.0 * crater.diameter_km;
-        let diffused = DIFFUSIVITY_M2_PER_MA * crater.age_ga * 1000.0;
+        // Diffused since it formed, until the epoch shown.
+        let since_ga = (crater.age_ga - self.epoch_ga).max(0.0);
+        let diffused = DIFFUSIVITY_M2_PER_MA * since_ga * 1000.0;
         let mut wear = (-diffused / (DIFFUSION_SHARE * radius_m * radius_m)).exp();
         let exposure = (crater.age_ga - self.wet_until_ga).max(0.0);
         if exposure > 0.0 && self.erosion > 0.0 {
@@ -1182,6 +1272,49 @@ mod tests {
                 .len()
                 > 1
         );
+    }
+
+    #[test]
+    fn epochs_show_the_craters_formed_by_then() {
+        let p = moon(4.0);
+        let present = CraterField::new(&p, 20.0).craters;
+        // In the past: the craters at least that old, and no others.
+        let past = CraterField::new_at(&p, 20.0, 3.8).craters;
+        let expected: Vec<Crater> = present
+            .iter()
+            .filter(|c| c.age_ga >= 3.8)
+            .copied()
+            .collect();
+        assert!(!past.is_empty() && past.len() < present.len());
+        assert_eq!(past, expected);
+        // In the future: every present crater, and new ones at today's flux.
+        let future = CraterField::new_at(&p, 20.0, -1.0).craters;
+        let new: Vec<&Crater> = future.iter().filter(|c| c.age_ga < 0.0).collect();
+        assert!(new.iter().all(|c| c.age_ga >= -1.0));
+        assert_eq!(future.len() - new.len(), present.len());
+        let radius = 10_917.0 / (2.0 * PI);
+        let expected = FLUX_PER_GA / 400.0 * 4.0 * PI * radius * radius;
+        let n = new.len() as f64;
+        assert!((n / expected - 1.0).abs() < 0.3, "{n} vs {expected}");
+        // Halfway, half of them.
+        let half = CraterField::new_at(&p, 20.0, -0.5).craters;
+        assert!(half.iter().all(|c| c.age_ga >= -0.5));
+        // The present has none of the future's.
+        assert!(present.iter().all(|c| c.age_ga >= 0.0));
+    }
+
+    #[test]
+    fn going_back_in_time_freshens_craters() {
+        let p = moon(4.0);
+        let crater = Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km: 0.6,
+            age_ga: 3.0,
+            shape: 0,
+        };
+        let now = CraterField::context(&p).wear(&crater);
+        let then = CraterField::context_at(&p, 2.9).wear(&crater);
+        assert!(then > 0.8 && now < 0.1, "{then} {now}");
     }
 
     #[test]

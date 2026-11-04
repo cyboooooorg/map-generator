@@ -18,6 +18,13 @@ pressure_bar: number,
  */
 surface_age_ga: number | null, 
 /**
+ * The epochs the world can be shown at, in Ma before present
+ * (negative in the future): `[future, past]`, both included, or
+ * `null` when it offers none (liquid water today, no craters, or made
+ * before format version 7). See `GET /api/worlds/{id}/epoch/...`.
+ */
+epochs_ma: [number, number] | null, 
+/**
  * Last modification time, in milliseconds since the Unix epoch.
  */
 modified_ms: number, };

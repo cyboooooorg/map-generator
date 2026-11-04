@@ -576,6 +576,15 @@ Craters follow the planet's surface age (`--surface-age`), gravity, atmosphere a
 - **Air.** A thick atmosphere breaks up small impactors: no crater below `0.1 km × p^0.75` (3 km on Venus), fewer below ten times that.
 - **Cost.** Craters are drawn in waves of craters that share no pixel, each crater after every older one it overlaps, so a wave runs in parallel and the result is the same as drawing them one at a time. On a 4 Ga Mercury-sized world, the most cratered of the examples, generations with and without craters take the same time within run-to-run variation (about 1 s at 1920 × 1080, 18 s at 8192 × 4096).
 
+### Epochs — a surface through time
+
+A world without liquid water today can be shown at another epoch: its young impact craters (those of the dry era, drawn after the erosion) are drawn again on `raw_data/elevation_base.png` as they were then, or will be. See `src/epoch.rs` and [docs/analysis/08-geology.md](docs/analysis/08-geology.md).
+
+- **Range.** Epochs are in Ma before present (negative in the future): from 1 Ga ahead back to the surface age, or to the end of the wet era if more recent, since erosion reshaped the craters before (`mercury-like`: −1 000 to 4 000 Ma, `mars-like`: −1 000 to 3 500 Ma). Worlds with liquid water today offer none: their lakes, rivers and erosion would move with the relief, and are not recomputed. Neither do worlds made before format version 7, which have no `elevation_base`. The server lists the range of each world (`epochs_ma` in `GET /api/worlds`).
+- **Craters at an epoch.** A crater exists at epoch `t` when it is at least `t` old. It is worn for the time between its formation and `t` (diffusion), so going back in time freshens it. Craters still to come form at today's constant flux (8.38 × 10⁻⁴ craters of 1 km or more per km² and per Ga), from a lattice of their own: the present craters never move. Epoch 0 is the world as generated, within two 16-bit steps of `elevation.png`.
+- **What follows.** The biomes, the hillshading and the temperature follow the relief through the lapse rate; moisture and the other layers keep their present values.
+- **Serving.** The server computes a world at an epoch once and keeps it in the tile cache like a world of its own (same memory, same budget). It serves `GET /api/worlds/{id}/epoch/{ma}/surface.png`, `elevation.png` and `biomes.png` at the base resolution, optionally reduced (`scale=2` or `4`), and the detail tiles at that epoch (`epoch=` on the tile URL). About 0.17 s to compute an epoch and 0.11 s to render its surface at 1920 × 1080; 2.9 s and 1.8 s at 8192 × 4096.
+
 The two parameters derived from `--circumference` are computed as follows.
 
 ### Noise scale — continent & feature size

@@ -13,6 +13,7 @@ pub mod clouds;
 pub mod craters;
 pub mod delta;
 pub mod detail;
+pub mod epoch;
 pub mod erosion;
 pub mod export;
 pub mod generation;

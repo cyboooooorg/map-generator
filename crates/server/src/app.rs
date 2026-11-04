@@ -10,7 +10,8 @@
 //! | `POST /api/worlds?replace=true` | same, replacing the world of that id once done    |
 //! | `DELETE /api/worlds/{id}`       | delete a world (409 while it is being generated)  |
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
-//! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=` | deep-zoom detail tile (PNG) |
+//! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=&epoch=` | deep-zoom detail tile (PNG), at an epoch in Ma when set |
+//! | `GET /api/worlds/{id}/epoch/{ma}/{file}?rev=&scale=` | `surface.png`, `elevation.png` or `biomes.png` of a world at an epoch (see [`mapgen::epoch`]) |
 //! | `GET /api/worlds/{id}/thumb?rev=` | thumbnail (PNG), made for older worlds (see [`thumbs`]) |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
@@ -239,6 +240,7 @@ pub fn router(config: Config) -> Router {
         .route("/api/worlds/{id}", delete(delete_world))
         .route("/api/worlds/{id}/hex", post(hex_grid))
         .route("/api/worlds/{id}/tiles/{z}/{x}/{y}", get(tile))
+        .route("/api/worlds/{id}/epoch/{epoch}/{file}", get(epoch_layer))
         .route("/api/worlds/{id}/thumb", get(thumbnail))
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
@@ -328,11 +330,48 @@ async fn delete_world(
 }
 
 /// Query of a tile request: the world revision and the renderer version
-/// the client knows.
+/// the client knows, and the epoch shown (Ma before present, negative in
+/// the future; the world as generated without it).
 #[derive(serde::Deserialize)]
 struct TileQuery {
     rev: Option<u64>,
     render: Option<u32>,
+    epoch: Option<i32>,
+}
+
+/// Checks that world `id` offers `epoch_ma` (see
+/// [`crate::api::WorldSummary::epochs_ma`]): 404 when it offers none, 400
+/// out of its range. Epoch 0 is the world as generated (`None`).
+async fn checked_epoch(
+    state: &AppState,
+    id: &str,
+    epoch_ma: Option<i32>,
+) -> Result<Option<i32>, Failure> {
+    let Some(epoch_ma) = epoch_ma.filter(|&e| e != 0) else {
+        return Ok(None);
+    };
+    let worlds_dir = state.config.worlds_dir.clone();
+    let owned = id.to_string();
+    let summary = tokio::task::spawn_blocking(move || worlds::summary(&worlds_dir, &owned))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no world {id}")))?;
+    let Some([future, past]) = summary.epochs_ma else {
+        return Err(Failure(
+            StatusCode::NOT_FOUND,
+            format!(
+                "world {id} offers no other epoch: it has liquid water, no craters, \
+                 or was made before format version 7"
+            ),
+        ));
+    };
+    if !(future..=past).contains(&epoch_ma) {
+        return Err(Failure(
+            StatusCode::BAD_REQUEST,
+            format!("epoch {epoch_ma} Ma is outside the epochs of {id}, {future} to {past} Ma"),
+        ));
+    }
+    Ok(Some(epoch_ma))
 }
 
 async fn tile(
@@ -345,8 +384,9 @@ async fn tile(
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
     }
     let revision = world_revision(&state, &id).await?;
+    let epoch = checked_epoch(&state, &id, query.epoch).await?;
     let dir = state.config.worlds_dir.join(&id);
-    let world = match state.tiles.world(&dir, &id, revision).await {
+    let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
         Ok(world) => world,
         Err(e) => return Ok(world_failure(e, "tiles")),
     };
@@ -363,6 +403,73 @@ async fn tile(
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     // A URL naming the current revision and renderer never changes: cache
     // it for good.
+    let cache = if query.rev == Some(revision) && query.render == Some(RENDER_VERSION) {
+        IMMUTABLE
+    } else {
+        "no-cache"
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, cache),
+        ],
+        png,
+    )
+        .into_response())
+}
+
+/// Query of an epoch layer request: the world revision and the renderer
+/// version the client knows, and a reduction factor (1, 2 or 4) for the
+/// lighter layers shown while the time slider moves.
+#[derive(serde::Deserialize)]
+struct EpochQuery {
+    rev: Option<u64>,
+    render: Option<u32>,
+    scale: Option<u32>,
+}
+
+/// A base-resolution layer of a world shown at an epoch (Ma before
+/// present, negative in the future): `surface.png` (the hillshaded render,
+/// as `raw_data/surface.png`), `elevation.png` (16-bit, encoded as
+/// `raw_data/elevation.png`) or `biomes.png` (8-bit biome ids). Computed
+/// from the world loaded for the tiles at that epoch.
+async fn epoch_layer(
+    State(state): State<Shared>,
+    UrlPath((id, epoch_ma, file)): UrlPath<(String, i32, String)>,
+    Query(query): Query<EpochQuery>,
+) -> Result<Response, Failure> {
+    if !worlds::is_valid_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
+    }
+    let layer = tiles::EpochLayer::from_file(&file).ok_or_else(|| {
+        Failure(
+            StatusCode::NOT_FOUND,
+            format!("no layer {file}: surface.png, elevation.png or biomes.png"),
+        )
+    })?;
+    let scale = query.scale.unwrap_or(1);
+    if ![1, 2, 4].contains(&scale) {
+        return Err(Failure(
+            StatusCode::BAD_REQUEST,
+            "scale must be 1, 2 or 4".into(),
+        ));
+    }
+    let revision = world_revision(&state, &id).await?;
+    let epoch = checked_epoch(&state, &id, Some(epoch_ma)).await?;
+    let dir = state.config.worlds_dir.join(&id);
+    let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
+        Ok(world) => world,
+        Err(e) => return Ok(world_failure(e, "epochs")),
+    };
+    let _turn = state
+        .renders
+        .acquire()
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let png = tokio::task::spawn_blocking(move || tiles::epoch_png(&world, layer, scale))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     let cache = if query.rev == Some(revision) && query.render == Some(RENDER_VERSION) {
         IMMUTABLE
     } else {
@@ -860,6 +967,117 @@ mod tests {
                 "no-cache",
                 "{uri}"
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn serves_worlds_at_other_epochs() {
+        use mapgen::export::{ExportOptions, export_world};
+        let config = temp_config("epochs");
+        let planet = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/mercury-like.toml"
+        );
+        for (planet, id) in [(planet, "mercury-like-3"), ("terran", "terran-3")] {
+            let request = WorldRequest {
+                planet: Some(planet.into()),
+                seed: Some(3),
+                surface_age_ga: Some(4.0),
+                width: Some(256),
+                height: Some(128),
+                ..Default::default()
+            };
+            let params = request.resolve(&mut rand::rng()).unwrap().params;
+            let generated = mapgen::generation::generate(&params);
+            export_world(
+                generated,
+                &config.worlds_dir.join(id),
+                ExportOptions { raw_data: true },
+            )
+            .unwrap();
+        }
+        let app = router(config.clone());
+        let (_, list) = call(&app, "GET", "/api/worlds", None).await;
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        let epochs = |id: &str| {
+            list.as_array()
+                .unwrap()
+                .iter()
+                .find(|w| w["id"] == id)
+                .unwrap()["epochs_ma"]
+                .clone()
+        };
+        assert_eq!(epochs("mercury-like-3"), serde_json::json!([-1000, 4000]));
+        assert_eq!(epochs("terran-3"), serde_json::Value::Null);
+
+        let png = |uri: String| {
+            let app = app.clone();
+            async move {
+                let request = Request::get(&uri).body(Body::empty()).unwrap();
+                let response = app.oneshot(request).await.unwrap();
+                let status = response.status();
+                let bytes = response.into_body().collect().await.unwrap().to_bytes();
+                (status, bytes)
+            }
+        };
+        let base = "/api/worlds/mercury-like-3/epoch";
+        // The present epoch is the world as generated.
+        let (status, now) = png(format!("{base}/0/elevation.png")).await;
+        assert_eq!(status, StatusCode::OK);
+        let now = image::load_from_memory(&now).unwrap().into_luma16();
+        let stored = image::open(
+            config
+                .worlds_dir
+                .join("mercury-like-3/raw_data/elevation.png"),
+        )
+        .unwrap()
+        .into_luma16();
+        assert_eq!(now, stored);
+        // Back in time and ahead, the relief changes.
+        for epoch in [3900, -1000] {
+            let (status, then) = png(format!("{base}/{epoch}/elevation.png")).await;
+            assert_eq!(status, StatusCode::OK, "{epoch}");
+            assert_ne!(
+                image::load_from_memory(&then).unwrap().into_luma16(),
+                stored
+            );
+        }
+        // Every layer, reduced for the slider.
+        for file in ["surface.png", "elevation.png", "biomes.png"] {
+            let (status, bytes) = png(format!("{base}/2000/{file}?scale=4")).await;
+            assert_eq!(status, StatusCode::OK, "{file}");
+            let image = image::load_from_memory(&bytes).unwrap();
+            assert_eq!((image.width(), image.height()), (64, 32), "{file}");
+        }
+        // Tiles at an epoch.
+        let (status, _) = call(
+            &app,
+            "GET",
+            "/api/worlds/mercury-like-3/tiles/3/2/1?epoch=-500",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        // Refused: outside the range, a world without epochs, unknown layer, bad scale.
+        for (uri, expected) in [
+            (format!("{base}/4100/surface.png"), StatusCode::BAD_REQUEST),
+            (format!("{base}/-1001/surface.png"), StatusCode::BAD_REQUEST),
+            (
+                "/api/worlds/terran-3/epoch/100/surface.png".into(),
+                StatusCode::NOT_FOUND,
+            ),
+            (format!("{base}/100/flow.png"), StatusCode::NOT_FOUND),
+            (
+                format!("{base}/100/surface.png?scale=3"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "/api/worlds/terran-3/tiles/1/0/0?epoch=100".into(),
+                StatusCode::NOT_FOUND,
+            ),
+        ] {
+            let (status, _) = call(&app, "GET", &uri, None).await;
+            assert_eq!(status, expected, "{uri}");
         }
     }
 
