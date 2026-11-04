@@ -1,14 +1,16 @@
 // Links to a view: the worlds shown, and optionally the camera, the layer,
 // the relief and the sun, in the address's fragment:
 //
-//   #world=<id>&compare=<id>&view=g,<lon>,<lat>,<altitude>&layer=<id>&relief=<0..1>&sun=<season>,<lon>
+//   #world=<id>&compare=<id>&view=g,<lon>,<lat>,<altitude>&layer=<id>&relief=<0..1>&sun=<season>,<lon>&epoch=<Ma>
 //
 // `view` is the camera: `g` on the globe (the point under the camera in
 // degrees, and its altitude in planet radii), `m` on the flat map (the
 // point at the centre of the screen, and the camera's height above the
 // map, in the map's units: the map is 2π × π). `sun` is `off`, or the
 // season (fraction of the year) and the longitude under the sun in
-// degrees. Reading is defensive: a missing, malformed or out-of-range value
+// degrees. `epoch` is the epoch of the time slider, in whole Ma before
+// present (negative in the future), absent at the present; each world
+// shows it within its own range. Reading is defensive: a missing, malformed or out-of-range value
 // is ignored, and the rest of the link still applies.
 import { lonLatToSphere, sphereToLonLat } from './geo';
 import type { CameraState } from './viewer/PlanetView';
@@ -21,7 +23,12 @@ export interface ViewLink {
   layer?: Layer;
   relief?: number;
   sun?: { on: false } | { on: true; season: number; longitudeDeg: number };
+  /** Epoch of the time slider, Ma before present. */
+  epoch?: number;
 }
+
+/** Epochs a link may name, Ma: 1 Ga ahead to the age of the Solar System. */
+const EPOCHS = [-1000, 4600] as const;
 
 /** Limits a link's camera is kept within (those of the viewer's controls). */
 const GLOBE_ALTITUDE = [0.0003, 7] as const;
@@ -101,6 +108,7 @@ export function encodeView(view: ViewLink): string[] {
   if (view.sun) {
     parts.push(view.sun.on ? `sun=${fixed(view.sun.season, 3)},${fixed(view.sun.longitudeDeg, 1)}` : 'sun=off');
   }
+  if (view.epoch) parts.push(`epoch=${Math.round(view.epoch)}`);
   return parts;
 }
 
@@ -130,6 +138,10 @@ export function decodeView(params: URLSearchParams): ViewLink {
     if (extra === undefined && s !== null && l !== null && s >= 0 && s <= 1 && l >= 0 && l <= 360) {
       view.sun = { on: true, season: s % 1, longitudeDeg: l };
     }
+  }
+  const epoch = number(params.get('epoch') ?? undefined);
+  if (epoch !== null && Number.isInteger(epoch) && epoch >= EPOCHS[0] && epoch <= EPOCHS[1]) {
+    view.epoch = epoch;
   }
   return view;
 }

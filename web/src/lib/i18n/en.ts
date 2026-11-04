@@ -411,6 +411,8 @@ export const en = {
     layer: 'Layer',
     relief: 'More / less relief',
     world: 'Previous / next world of the list',
+    epoch: 'Older / younger epoch (time slider)',
+    epochFar: 'Ten steps older / younger',
     reset: 'Reset the view',
     hexes: 'Hexes',
     sunlight: 'Sunlight',
@@ -427,6 +429,18 @@ export const en = {
     screenshot: 'Screenshot',
     escape: 'Close this help or the point panel, stop measuring',
     help: 'This help',
+  },
+  /** The time slider. */
+  epochs: {
+    slider: 'Epoch',
+    sliderHelp: 'Moves the surface through time: back to its oldest craters, or a billion years ahead',
+    present: 'present',
+    backToPresent: 'Present',
+    ago: (p: { time: string }) => `${p.time} ago`,
+    ahead: (p: { time: string }) => `in ${p.time}`,
+    loading: 'Loading the epoch…',
+    failed: (p: { error: string }) => `Could not load the epoch: ${p.error}`,
+    presentOnly: 'The biome statistics and the hex grid show the present.',
   },
   /** The less common units, explained in tooltips and in the help panel. */
   units: {

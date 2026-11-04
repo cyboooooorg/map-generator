@@ -190,6 +190,39 @@ export function decodeLayers(
   };
 }
 
+/** The elevation and biomes of a world at an epoch, as served (`GET /api/worlds/{id}/epoch/{ma}/...`). */
+export interface EpochFiles {
+  /** 16-bit, encoded as `raw_data/elevation.png`. */
+  elevation: Uint16Array;
+  biomes: Uint8Array;
+}
+
+/** Decodes the elevation and biome PNGs of a world at an epoch, of its base size. */
+export function decodeEpochFiles(meta: WorldMetadata, elevation: ArrayBuffer, biomes: ArrayBuffer): EpochFiles {
+  const ids = decodeGrey(biomes, meta.width, meta.height, 8);
+  return {
+    elevation: owned(decode16(elevation, meta.width, meta.height), (a) => a.slice()),
+    biomes: ids instanceof Uint8Array ? owned(ids, (a) => a.slice()) : Uint8Array.from(ids),
+  };
+}
+
+/**
+ * The layers of a world at an epoch: its elevation and biomes in place of
+ * the present ones (`present` is left as it is); the other layers are the
+ * present's, which the epoch does not change (temperature aside, which
+ * follows the relief by a fraction of a degree: kept).
+ */
+export function epochLayers(present: WorldLayers, meta: WorldMetadata, epoch: EpochFiles): WorldLayers {
+  const surface = present.surface.slice();
+  packChannel(surface, SURFACE.elevation, epoch.elevation, meta.layers.elevation);
+  return {
+    ...present,
+    elevation: { ...present.elevation, data: epoch.elevation },
+    biomes: epoch.biomes,
+    surface,
+  };
+}
+
 /** The value of one channel of a half-float pack at pixel `i`. */
 export function halfAt(packed: Uint16Array, i: number, channel: number): number {
   return DataUtils.fromHalfFloat(packed[i * 4 + channel] ?? 0);

@@ -133,7 +133,7 @@ export class TileLayer {
   private readonly failed = new Map<number, Failure>();
   /** Timers that wake the view up when failed tiles can be retried. */
   private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>();
-  private world: { id: string; revision: number; firstLevel: number } | null = null;
+  private world: { id: string; revision: number; epochMa: number; firstLevel: number } | null = null;
   private enabled = true;
   private maxTextures = MAX_TEXTURES;
   private frame = 0;
@@ -166,10 +166,18 @@ export class TileLayer {
     private readonly onChange: () => void,
   ) {}
 
-  /** Shows the detail of a world (`revision` keys the browser cache), or none. */
-  setWorld(world: { id: string; revision: number; baseWidth: number } | null): void {
+  /**
+   * Shows the detail of a world (`revision` keys the browser cache) at an
+   * epoch in Ma (0, the default, for the present; see lib/epochs.ts), or none.
+   */
+  setWorld(world: { id: string; revision: number; baseWidth: number; epochMa?: number } | null): void {
     this.clear();
-    this.world = world && { id: world.id, revision: world.revision, firstLevel: firstDetailLevel(world.baseWidth) };
+    this.world = world && {
+      id: world.id,
+      revision: world.revision,
+      epochMa: world.epochMa ?? 0,
+      firstLevel: firstDetailLevel(world.baseWidth),
+    };
   }
 
   /**
@@ -346,7 +354,8 @@ export class TileLayer {
     this.loading.set(index, { controller, started: performance.now() });
     let status: number | null = null;
     try {
-      const url = `/api/worlds/${encodeURIComponent(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}`;
+      const epoch = world.epochMa === 0 ? '' : `&epoch=${world.epochMa}`;
+      const url = `/api/worlds/${encodeURIComponent(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}${epoch}`;
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
         status = response.status;
