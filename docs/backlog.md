@@ -314,3 +314,15 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 4    | Viewer: "Star light", the planet and its sky lit by the star's colour          | Same   | done   |
 | 5    | Tidal locking of close-in planets                                              | Change | done   |
 | 6    | Vegetation colours adapted to the star, in the "Star light" view               | Same   | done   |
+
+## 12. The star view
+
+- **Status:** done
+- **Problem:** the star of a world is only seen as a disk in the planet's
+  sky and as numbers on the world card.
+- **Decision (2026-11-04):** a Planet / Star switch in the viewer; the
+  star view shows the star as a globe (colour, limb darkening,
+  granulation, spots and faculae by type, corona glow, flares on red
+  dwarfs) with its system around it (habitable zone, orbit, planet, not
+  to scale), drawn procedurally in the browser from `world.json`, and an
+  optional animation (ten frames a second, off by default).
