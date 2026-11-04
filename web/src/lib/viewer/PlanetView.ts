@@ -22,6 +22,7 @@ import {
   LinearFilter,
   LinearMipmapLinearFilter,
   LessEqualDepth,
+  LineBasicMaterial,
   LineSegments,
   Mesh,
   NoColorSpace,
@@ -134,6 +135,11 @@ export type Lighting =
 const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodplain']);
 
 const MORPH_MS = 1200;
+/** How far the spin axes reach out of a body, in its radii (see setSpinAxes). */
+const SPIN_AXIS_LENGTH = 1.5;
+/** Colours of their north and south ends, linear. */
+const SPIN_AXIS_NORTH: [number, number, number] = [0.9, 0.9, 0.85];
+const SPIN_AXIS_SOUTH: [number, number, number] = [0.3, 0.45, 0.85];
 /** Pointer moves larger than this (px) are drags, not clicks. */
 const CLICK_TOLERANCE = 5;
 /** Altitudes (planet radii, or map units) over which clouds fade in when zooming out. */
@@ -481,6 +487,12 @@ export class PlanetView {
   private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; maps: Texture[] }[] = [];
   /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
   private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  /**
+   * The globe's spin axis (see setSpinAxes): out of its poles, the north
+   * end light, the south end blue.
+   */
+  private spinAxis: LineSegments<BufferGeometry, LineBasicMaterial> | null = null;
+  private spinAxesOn = false;
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
   private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
@@ -1528,6 +1540,8 @@ export class PlanetView {
     this.skyOrbits?.geometry.dispose();
     this.skyOrbits?.material.dispose();
     this.skyOrbitsNear?.material.dispose();
+    this.spinAxis?.geometry.dispose();
+    this.spinAxis?.material.dispose();
     for (const object of [this.surface, this.grid, this.stars, this.hostStar, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
@@ -1690,6 +1704,7 @@ export class PlanetView {
             uHaloStrength: { value: 0 },
             uGrow: { value: 1 },
             uRing: { value: 0 },
+            uSpinAxis: { value: 0 },
             uOpacity: { value: 1 },
             uAxisX: { value: new Vector3(1, 0, 0) },
             uAxisY: { value: new Vector3(0, 1, 0) },
@@ -1820,6 +1835,29 @@ export class PlanetView {
 
   private skyOrbitsOn = false;
 
+  /**
+   * Draws the spin axes, on the globe: the body shown's out of its poles,
+   * and each sky body's out of its disk, along its own axis (see
+   * SkyBody.axes), so that their tilts show against their orbits.
+   */
+  setSpinAxes(on: boolean): void {
+    this.spinAxesOn = on;
+    if (on && !this.spinAxis) {
+      const geometry = new BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new Float32BufferAttribute([0, 1, 0, 0, SPIN_AXIS_LENGTH, 0, 0, -1, 0, 0, -SPIN_AXIS_LENGTH, 0], 3),
+      );
+      const [n, s] = [SPIN_AXIS_NORTH, SPIN_AXIS_SOUTH];
+      geometry.setAttribute('color', new Float32BufferAttribute([...n, ...n, ...s, ...s], 3));
+      this.spinAxis = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true }));
+      this.spinAxis.frustumCulled = false;
+      this.spinAxis.renderOrder = 2;
+      this.scene.add(this.spinAxis);
+    }
+    this.requestRender();
+  }
+
   private disposeSkyBodies(): void {
     for (const { mesh, maps } of this.skyBodies) {
       this.scene.remove(mesh);
@@ -1922,7 +1960,8 @@ export class PlanetView {
       (u['uHaloColor']!.value as Vector3).set(...(halo?.colour ?? [0, 0, 0]));
       u['uHaloHeight']!.value = height;
       u['uHaloStrength']!.value = halo?.strength ?? 0;
-      u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1);
+      u['uSpinAxis']!.value = this.spinAxesOn ? 1 : 0;
+      u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, this.spinAxesOn ? SPIN_AXIS_LENGTH + 0.1 : 1);
     }
   }
 
@@ -1968,6 +2007,10 @@ export class PlanetView {
     this.stars.visible = this.starsOn && this.morph > 0.01;
     this.drawHostStar();
     this.drawSkyBodies();
+    if (this.spinAxis) {
+      this.spinAxis.visible = this.spinAxesOn && this.morph > 0.01;
+      this.spinAxis.material.opacity = this.morph ** 3;
+    }
     for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
       if (!orbits) continue;
       orbits.visible = this.skyOrbitsOn && this.morph > 0.01;

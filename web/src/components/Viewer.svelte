@@ -140,6 +140,8 @@
     hostGrid: false,
     hostTropics: false,
     orbitLines: false,
+    // The spin axes of the globe and the bodies of the sky.
+    spinAxes: false,
     // Names tied to the bodies of the sky.
     skyLabels: true,
     starLight: false,
@@ -184,6 +186,8 @@
   let hostTropics = $state(saved.hostTropics);
   /** The orbits of the moons (or of a giant's other moons) drawn in the sky. */
   let orbitLines = $state(saved.orbitLines);
+  let axesShown = $state(saved.spinAxes);
+  $effect(() => view?.setSpinAxes(axesShown));
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
   /** Labels on the bodies of the sky, and where those are on the screen. */
   let skyLabels = $state(saved.skyLabels);
@@ -387,6 +391,7 @@
       hostGrid,
       hostTropics,
       orbitLines,
+      spinAxes: axesShown,
       skyLabels,
       sun,
       season,
@@ -1419,6 +1424,9 @@
           <input type="checkbox" bind:checked={orbitLines} /> {t.viewer.orbitLines}
         </label>
       {/if}
+      <label class="check" title={t.viewer.spinAxesHelp}>
+        <input type="checkbox" bind:checked={axesShown} /> {t.viewer.spinAxes}
+      </label>
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.body.kind !== 'world'} />
         {t.viewer.hexes}

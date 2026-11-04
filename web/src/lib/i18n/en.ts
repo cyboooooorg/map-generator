@@ -519,6 +519,9 @@ export const en = {
     orbits: 'Moon orbits',
     orbitLines: 'Orbits',
     orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
+    spinAxes: 'Spin axes',
+    spinAxesHelp:
+      'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
     orbitsHelp: 'Moves the moons along their orbits, as many days after the season (their phases, their eclipses)',
     playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds',
     orbitDay: (p: { days: string; period: string }) => `Day ${p.days} of a ${p.period}-day orbit`,

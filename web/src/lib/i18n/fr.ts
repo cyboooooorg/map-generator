@@ -487,6 +487,9 @@ export const fr: Messages = {
     orbits: 'Orbites des lunes',
     orbitLines: 'Orbites',
     orbitLinesHelp: 'Trace les orbites des lunes dans le ciel (sur le globe), vues depuis le corps affiché',
+    spinAxes: 'Axes de rotation',
+    spinAxesHelp:
+      `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite`,
     orbitsHelp: 'Avance les lunes sur leurs orbites, d’autant de jours après la saison (leurs phases, leurs éclipses)',
     playOrbitsHelp: `Faire défiler les orbites${S}: une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
     orbitDay: (p) => `Jour ${p.days} d’une orbite de ${p.period}${S}jours`,

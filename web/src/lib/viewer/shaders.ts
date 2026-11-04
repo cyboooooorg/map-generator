@@ -686,6 +686,8 @@ export const skyBodyFragment = /* glsl */ `
   // 1 for a body drawn larger than it is (a few pixels): a faint ring
   // around it tells it from the stars.
   uniform float uRing;
+  // 1 to draw its spin axis out of its poles (see PlanetView.setSpinAxes).
+  uniform float uSpinAxis;
   uniform float uOpacity;
   // The body's own axes (its x, its spin axis, its z) in the viewer's
   // frame: its map turns and tilts with them.
@@ -718,8 +720,37 @@ export const skyBodyFragment = /* glsl */ `
     return mix(colour, lineColour * shade, core);
   }
 
+  // Its spin axis out of its poles, as the globe's (light north, blue
+  // south): how much of it covers this point of the quad, and its colour.
+  // An end pointing away is hidden behind the disk.
+  vec4 spinAxis(vec2 p, float r2) {
+    if (uSpinAxis < 0.5) return vec4(0.0);
+    vec2 axis = vec2(dot(uAxisY, uRight), dot(uAxisY, uUp));
+    float towards = dot(uAxisY, -uDir);
+    vec4 mark = vec4(0.0);
+    for (int i = 0; i < 2; i++) {
+      float side = i == 0 ? 1.0 : -1.0;
+      // The end seen behind the disk is hidden by it.
+      if (r2 < 1.0 && side * towards < 0.0) continue;
+      vec2 a = side * axis;
+      vec2 b = side * axis * 1.5;
+      vec2 ab = b - a;
+      float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+      float d = length(p - a - ab * t) / max(length(fwidth(p)), 1e-6);
+      float cover = 1.0 - smoothstep(0.5, 1.5, d);
+      if (cover > mark.a) mark = vec4(i == 0 ? vec3(0.9, 0.9, 0.85) : vec3(0.3, 0.45, 0.85), cover);
+    }
+    return mark;
+  }
+
   void main() {
     float r2 = dot(vP, vP);
+    vec4 axisMark = spinAxis(vP, r2);
+    if (r2 > 1.0 && axisMark.a > 0.0) {
+      gl_FragColor = vec4(axisMark.rgb, axisMark.a * uOpacity);
+      #include <colorspace_fragment>
+      return;
+    }
     if (r2 > 1.0) {
       if (uRing > 0.5) {
         float r = sqrt(r2);
@@ -814,6 +845,7 @@ export const skyBodyFragment = /* glsl */ `
       colour = parallel(colour, latDeg, 90.0 - uTilt, vec3(0.0, 0.58, 0.87), marks, shade);
       colour = parallel(colour, latDeg, uTilt - 90.0, vec3(0.0, 0.58, 0.87), marks, shade);
     }
+    colour = mix(colour, axisMark.rgb, axisMark.a);
     gl_FragColor = vec4(colour, edge * uOpacity);
     #include <colorspace_fragment>
   }
