@@ -365,3 +365,32 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   glow and the prominences are drawn in a fixed order: both centred on
   the star, their distance sort was a tie that flipped as the view
   turned, and the glow, drawn second, washed the strands out to white.
+
+## 13. Moons
+
+- **Status:** decided
+- **Analysis:** [11-moons.md](analysis/11-moons.md)
+- **Problem:** worlds have a star and an orbit but no satellites: no
+  moon in the star view or the sky, and nothing ties the axial tilt or
+  the tides to a moon.
+- **Studied (2026-11-04):** moons drawn from the seed with realistic odds
+  (about 1 rocky planet in 12 with a large moon, after Elser et al. 2011;
+  small debris or captured moons; companions frequent on small worlds),
+  kept between the Roche limit and a third of the Hill radius, none
+  lasting on planets locked to their star; Pluto–Charon binaries (mass
+  ratio up to about 0.15, around the barycentre, locked face to face);
+  irregular moons below about 900 km across for rock and 400 km for ice,
+  drawn as deformed meshes in the viewer only.
+- **Plan (2026-11-04):** every moon is a body of its world, generated
+  with the planet as a small world of its own (`barren` or a new
+  `icy-moon` preset, irregular ones with a `shape` layer) under
+  `worlds/<id>/moons/<n>/`, and opened in the planet view like the
+  planet, from a Planet / Star / Moon switch. See the analysis, section 8.
+
+| Step | Change                                                                                                           | Seeds  | Status |
+| ---- | ---------------------------------------------------------------------------------------------------------------- | ------ | ------ |
+| 1    | `moons` module: channels and odds, orbits, stability, shapes, migration; `world.json` `moons`; `--moons`         | Same   | todo   |
+| 2    | Moon surfaces: each moon generated as a world (`barren`, `icy-moon`, `shape` layer), server routes for its tiles | Same   | todo   |
+| 3    | Moon view: Planet / Star / Moon switch, the planet view on any body, moon panel, moons in the star view          | Same   | todo   |
+| 4    | Skies: the planet in each moon's sky, the moons in the planet's sky, eclipses (optional)                         | Same   | todo   |
+| 5    | Effects on the planet: axial tilt stabilised, tidal flats, binary rotation                                       | Change | todo   |
