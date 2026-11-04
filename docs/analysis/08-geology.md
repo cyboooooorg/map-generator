@@ -445,6 +445,30 @@ Implemented in `craters.rs`, with these changes from the plan:
 - **Not done:** structured error details (`ErrorDetail`) for the epoch
   errors, for translated messages in step 5.
 
+### Outcome (step 5)
+
+- **Slider** under the tools, in their row (they move and wrap with the
+  pane's width; a slider floating at the top centre covered them on
+  narrow panes). The past is on the left, the future on the right; the
+  label ("3.8 Ga ago", "present", "in 250 Ma") explains Ma and Ga in its
+  tooltip. Stops as planned, both ends kept.
+- **Dragging** shows the base map of the epoch at a quarter of its
+  resolution after a pause of 120 ms, detail tiles hidden; releasing
+  loads the full map, the tiles at the epoch, and the elevation and
+  biomes (a Web Worker decodes them; the relief, the contours, hovering
+  and the point panel follow). The other layers, the biome statistics,
+  the hex grid and the comparison stay at the present.
+- **The epoch chosen is kept from world to world**, each showing its
+  nearest stop. Resetting it on a world change raced with a link
+  opening a world at an epoch; keeping it avoids that, and compares
+  worlds at the same epoch.
+- **Keys:** `,` / `.` one stop older / younger, `<` / `>` ten stops.
+  **Link:** `epoch=<Ma>` when not at the present.
+- **Checked in a browser** on `mercury-like` and `mars-like` worlds:
+  4 Ga ago shows an almost smooth surface, 2 Ga ago nearly the present
+  (most craters are older than 3.5 Ga), the future adds a few; no console
+  error.
+
 ## 6. Time slider
 
 ### What it shows

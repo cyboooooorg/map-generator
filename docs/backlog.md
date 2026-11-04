@@ -247,7 +247,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`     | Change | done   |
 | 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                   | Same   | done   |
 | 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                      | Same   | done   |
-| 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                             | Same   | todo   |
+| 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                             | Same   | done   |
 | 6    | Optional: ray systems and ejecta albedo fading with age; lava flooding of basins (maria) at given epochs       | Change | todo   |
 
 ## 9. Plate tectonics and continental drift

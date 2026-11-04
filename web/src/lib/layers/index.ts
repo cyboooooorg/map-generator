@@ -3,7 +3,8 @@ import type { WorldMetadata } from '../api/types/WorldMetadata';
 import { worldFile } from '../api/client';
 import type { LoadProgress } from '../progress';
 import type { WorldStats } from '../stats';
-import type { Grey8, WorldLayers } from './decode';
+import { epochLayers, type Grey8, type WorldLayers } from './decode';
+import type { EpochRequest, EpochResponse } from './epochWorker';
 import type { GreyRequest, GreyResponse } from './greyWorker';
 import type { WorkerRequest, WorkerResponse } from './worker';
 
@@ -90,4 +91,22 @@ export async function loadGrey8(url: string, maxSize: number, signal?: AbortSign
   const worker = new Worker(new URL('./greyWorker.ts', import.meta.url), { type: 'module' });
   const { image } = await runOnce<GreyRequest, GreyResponse>(worker, { url, maxSize }, signal);
   return image;
+}
+
+/**
+ * The layers of a world at an epoch: its elevation and biomes, fetched from
+ * `elevation` and `biomes` and decoded in a Web Worker, in place of those
+ * of `present`. Aborting `signal` terminates the worker and rejects with
+ * the abort reason.
+ */
+export async function loadEpochLayers(
+  urls: { elevation: string; biomes: string },
+  meta: WorldMetadata,
+  present: WorldLayers,
+  signal?: AbortSignal,
+): Promise<WorldLayers> {
+  signal?.throwIfAborted();
+  const worker = new Worker(new URL('./epochWorker.ts', import.meta.url), { type: 'module' });
+  const { epoch } = await runOnce<EpochRequest, EpochResponse>(worker, { ...urls, meta }, signal);
+  return epochLayers(present, meta, epoch);
 }

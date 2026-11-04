@@ -4,7 +4,8 @@
 import { t } from './i18n/index.svelte';
 import { api } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { loadLayers, type WorldLayers } from './layers';
+import { epochFile } from './epochs';
+import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
 import type { WorldStats } from './stats';
@@ -19,8 +20,22 @@ export class LoadedWorld {
   error = $state<string | null>(null);
   /** How far the download and decoding of the layers have got, while they load. */
   progress = $state.raw<LoadProgress | null>(null);
+  /**
+   * The epoch the layers show, in Ma before present (negative in the
+   * future; see lib/epochs.ts): `layers` holds its elevation and biomes
+   * once they have loaded, the present's other layers, and `stats` stay
+   * the present's.
+   */
+  epochMa = $state(0);
+  /** Whether the layers of the epoch asked for are loading. */
+  epochLoading = $state(false);
+  epochError = $state<string | null>(null);
+  /** The layers as loaded, at the present. */
+  private present: WorldLayers | null = null;
+  private revision: number | null = null;
   /** Aborts the current load: its downloads and its decoding worker. */
   private controller: AbortController | null = null;
+  private epochController: AbortController | null = null;
 
   /**
    * Loads a world, or clears the pane with null. Earlier loads are aborted.
@@ -28,6 +43,10 @@ export class LoadedWorld {
    */
   load(id: string | null): void {
     this.controller?.abort();
+    this.epochController?.abort();
+    this.present = null;
+    this.epochLoading = false;
+    this.epochError = null;
     const controller = new AbortController();
     this.controller = controller;
     const { signal } = controller;
@@ -51,8 +70,11 @@ export class LoadedWorld {
       });
       if (!current()) return;
       this.progress = null;
+      this.present = layers;
       this.layers = layers;
       this.stats = stats;
+      // An epoch asked for before the layers arrived.
+      this.showEpoch();
       if (meta.rivers) {
         const file = await api.rivers(id, meta.rivers, signal);
         if (!current()) return;
@@ -64,5 +86,55 @@ export class LoadedWorld {
         this.error = t.world.loadFailed({ id, error: String(e) });
       }
     });
+  }
+
+  /**
+   * Shows the layers at `epochMa` (0: the present), loaded from the server
+   * for world revision `revision`. Called before the layers have loaded,
+   * it applies once they arrive. A newer call cancels this one.
+   */
+  setEpoch(epochMa: number, revision: number | null): void {
+    if (epochMa === this.epochMa && revision === this.revision && !this.epochError) {
+      return;
+    }
+    this.epochMa = epochMa;
+    this.revision = revision;
+    this.showEpoch();
+  }
+
+  private showEpoch(): void {
+    this.epochController?.abort();
+    this.epochController = null;
+    this.epochError = null;
+    const { id, meta, present } = this;
+    const epochMa = this.epochMa;
+    if (!id || !meta || !present) {
+      this.epochLoading = false;
+      return;
+    }
+    if (epochMa === 0) {
+      this.epochLoading = false;
+      this.layers = present;
+      return;
+    }
+    const controller = new AbortController();
+    this.epochController = controller;
+    this.epochLoading = true;
+    const urls = {
+      elevation: epochFile(id, epochMa, 'elevation.png', this.revision),
+      biomes: epochFile(id, epochMa, 'biomes.png', this.revision),
+    };
+    loadEpochLayers(urls, meta, present, controller.signal)
+      .then((layers) => {
+        if (controller.signal.aborted) return;
+        this.layers = layers;
+      })
+      .catch((e: unknown) => {
+        if (controller.signal.aborted) return;
+        this.epochError = t.epochs.failed({ error: String(e) });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) this.epochLoading = false;
+      });
   }
 }

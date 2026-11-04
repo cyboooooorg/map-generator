@@ -15,7 +15,8 @@
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
-  import { UNITS } from '../lib/units';
+  import { UNITS, unitTooltip } from '../lib/units';
+  import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
@@ -167,8 +168,22 @@
     return () => wideQuery.removeEventListener('change', change);
   });
 
+  /**
+   * The epoch chosen on the time slider, Ma before present (negative in the
+   * future): kept from world to world, each one showing the nearest of its
+   * own epochs (the present for a world without any).
+   */
+  let epochChoice = $state(0);
+  /** The epoch under the slider while it is dragged, previewed at a quarter of the resolution. */
+  let epochPreview = $state<number | null>(null);
+
   const worldId = $derived(world.id);
   const meta = $derived(world.meta);
+  const epochs = $derived(meta ? epochRange(meta) : null);
+  /** The slider's stops, from the past (left) to the future (right). */
+  const epochStops = $derived(epochs ? epochSteps(epochs).reverse() : []);
+  const epoch = $derived(epochs ? nearestStep(epochStops, epochChoice) : 0);
+  const epochShown = $derived(epochPreview ?? epoch);
   const layers = $derived(world.layers);
   const dataReady = $derived(layers !== null);
   function available(needs: Needs): boolean {
@@ -311,9 +326,13 @@
     };
     // The render without lines (format version 6), which the reference
     // lines and contours are drawn over; world.png, which has them baked
-    // in, for older worlds.
+    // in, for older worlds. At another epoch, its render (a world shown at
+    // the same epoch as the one before).
+    const epochMa = untrack(() => epoch);
+    textureEpoch = { id, epochMa, scale: 1 };
+    const surface = epochMa === 0 ? worldFile(id, 'raw_data/surface.png', rev) : epochSurface(id, epochMa, rev, 1);
     current
-      .setTexture(worldFile(id, 'raw_data/surface.png', rev), controller.signal, progress)
+      .setTexture(surface, controller.signal, progress)
       .catch((e: unknown) => {
         if (controller.signal.aborted) throw e;
         return current.setTexture(worldFile(id, 'world.png', rev), controller.signal, progress);
@@ -333,6 +352,74 @@
   $effect(() => {
     view?.setData(layers, meta ? coastline(meta) : 0, meta ? seaIsLiquid(meta) : true);
   });
+  // The layers (relief, contours, picking) follow the epoch once the slider is released.
+  $effect(() => {
+    const epochMa = epoch;
+    const rev = revision;
+    // Untracked: the world's own epoch state must not re-run this (a failed
+    // load would be retried at once, again and again).
+    untrack(() => world.setEpoch(epochMa, rev));
+  });
+  $effect(() => {
+    if (world.epochError) toasts.error(world.epochError);
+  });
+
+  /** The base map shown: world, epoch and reduction. */
+  let textureEpoch = { id: null as string | null, epochMa: 0, scale: 1 };
+  /** Whether the base map of another epoch is loading. */
+  let epochMapLoading = $state(false);
+
+  /** URL of the base map of a world at an epoch (the render without lines, as raw_data/surface.png). */
+  function epochSurface(id: string, epochMa: number, rev: number | null, scale: 1 | 4): string {
+    return epochFile(id, epochMa, 'surface.png', rev, scale);
+  }
+
+  // The base map of another epoch of the world shown: reduced while the
+  // slider moves (after a short pause), full once it is released.
+  $effect(() => {
+    const current = view;
+    const id = worldId;
+    const rev = revision;
+    const epochMa = epochShown;
+    const scale: 1 | 4 = epochPreview === null ? 1 : 4;
+    if (!current || !id || id !== textureOf || loading) {
+      return;
+    }
+    if (textureEpoch.id === id && textureEpoch.epochMa === epochMa && textureEpoch.scale === scale) {
+      return;
+    }
+    const controller = new AbortController();
+    const show = () => {
+      epochMapLoading = true;
+      const url =
+        epochMa === 0 ? worldFile(id, 'raw_data/surface.png', rev) : epochSurface(id, epochMa, rev, scale);
+      current
+        .setTexture(url, controller.signal)
+        .then(() => {
+          textureEpoch = { id, epochMa, scale };
+        })
+        .catch((e: unknown) => {
+          if (!controller.signal.aborted) toasts.error(t.epochs.failed({ error: String(e) }));
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) epochMapLoading = false;
+        });
+    };
+    const timer = setTimeout(show, scale === 4 ? 120 : 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  });
+
+  /** Moves the time slider `steps` stops towards the past (negative: the future). */
+  function stepEpoch(steps: number): void {
+    if (!epochs) return;
+    const i = epochStops.indexOf(epoch);
+    // The stops run from the past to the future.
+    const next = Math.min(epochStops.length - 1, Math.max(0, i - steps));
+    epochChoice = epochStops[next] ?? 0;
+  }
   // The cloud layer of worlds that have one (format version 5 and later).
   $effect(() => {
     const current = view;
@@ -353,8 +440,11 @@
   $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => view?.setCloudsDrifting(cloudDrift));
   $effect(() => {
+    // No detail while the slider moves: the reduced preview shows through.
     view?.setDetail(
-      worldId && meta && revision !== null ? { id: worldId, revision, baseWidth: meta.width } : null,
+      worldId && meta && revision !== null && epochPreview === null
+        ? { id: worldId, revision, baseWidth: meta.width, epochMa: epoch }
+        : null,
     );
   });
   $effect(() => view?.setMode(mode));
@@ -466,6 +556,7 @@
       layer: shown,
       relief,
       sun: sun ? { on: true, season, longitudeDeg: sunLongitude } : { on: false },
+      ...(epoch === 0 ? {} : { epoch }),
     };
   }
 
@@ -484,6 +575,7 @@
         sunLongitude = link.sun.longitudeDeg;
       }
     }
+    if (link.epoch !== undefined) epochChoice = link.epoch;
     if (link.camera) {
       applyCamera(link.camera);
     }
@@ -609,6 +701,18 @@
       case 'reliefUp':
         if (dataReady) relief = stepRelief(relief, 1);
         break;
+      case 'epochOlder':
+        stepEpoch(1);
+        break;
+      case 'epochYounger':
+        stepEpoch(-1);
+        break;
+      case 'epochOlderFar':
+        stepEpoch(10);
+        break;
+      case 'epochYoungerFar':
+        stepEpoch(-10);
+        break;
       case 'reliefDown':
         if (dataReady) relief = stepRelief(relief, -1);
         break;
@@ -657,6 +761,29 @@
     >
     <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
     <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
+    {#if epochs && epochStops.length > 1}
+      <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
+        <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
+        <input
+          type="range"
+          min={0}
+          max={epochStops.length - 1}
+          step={1}
+          value={epochStops.indexOf(epochShown)}
+          oninput={(e) => (epochPreview = epochStops[Number(e.currentTarget.value)] ?? 0)}
+          onchange={(e) => {
+            epochChoice = epochStops[Number(e.currentTarget.value)] ?? 0;
+            epochPreview = null;
+          }}
+          aria-label={t.epochs.slider}
+          aria-valuetext={formatEpoch(epochShown)}
+        />
+        <button onclick={() => (epochChoice = 0)} disabled={epoch === 0 && epochPreview === null}>{t.epochs.backToPresent}</button>
+        {#if epochMapLoading || world.epochLoading}
+          <span class="epoch-busy" title={t.epochs.loading}>…</span>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div class="panel" role="region" aria-label={t.viewer.display}>
@@ -1083,6 +1210,30 @@
     color: var(--danger);
     padding: 0 24px;
     text-align: center;
+  }
+  /* The time slider: a row of its own under the tools, wherever they are. */
+  .epoch {
+    flex-basis: 100%;
+    max-width: 460px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .epoch input[type='range'] {
+    flex: 1;
+    min-width: 0;
+  }
+  .epoch-label {
+    min-width: 8em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .epoch-busy {
+    color: var(--muted);
   }
   .chip {
     position: absolute;

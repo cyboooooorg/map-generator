@@ -2,7 +2,7 @@ import { encode } from 'fast-png';
 import { DataUtils } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
-import { decodeGrey8, decodeLayers, EXTRA, halfAt, quantizedAt, SURFACE } from './decode';
+import { decodeEpochFiles, decodeGrey8, decodeLayers, epochLayers, EXTRA, halfAt, quantizedAt, SURFACE } from './decode';
 
 const width = 2;
 const height = 1;
@@ -154,5 +154,28 @@ describe('decodeGrey8', () => {
 
   it('refuses 16-bit images', () => {
     expect(() => decodeGrey8(png16([0, 1]), 4096)).toThrow(/16-bit/);
+  });
+});
+
+describe('epochLayers', () => {
+  it('replaces the elevation and biomes, and keeps the present', () => {
+    const files = {
+      elevation: png16([0, 65535]),
+      moisture: png16([32768, 0]),
+      temperature: png16([65535, 0]),
+      flow: png16([0, 0]),
+      biomes: png8([1, 29]),
+    };
+    const present = decodeLayers(meta, files);
+    const epoch = decodeEpochFiles(meta, png16([65535, 0]), png8([7, 8]));
+    const then = epochLayers(present, meta, epoch);
+    expect(quantizedAt(then.elevation, 0)).toBe(1);
+    expect(halfAt(then.surface, 0, SURFACE.elevation)).toBe(1);
+    expect(Array.from(then.biomes)).toEqual([7, 8]);
+    // The other layers are the present's; the present is untouched.
+    expect(halfAt(then.surface, 0, SURFACE.temperature)).toBe(1);
+    expect(quantizedAt(present.elevation, 0)).toBe(-1);
+    expect(halfAt(present.surface, 0, SURFACE.elevation)).toBe(-1);
+    expect(Array.from(present.biomes)).toEqual([1, 29]);
   });
 });

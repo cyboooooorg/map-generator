@@ -29,7 +29,11 @@ export type Shortcut =
         | 'previousWorld'
         | 'nextWorld'
         | 'reliefUp'
-        | 'reliefDown';
+        | 'reliefDown'
+        | 'epochOlder'
+        | 'epochYounger'
+        | 'epochOlderFar'
+        | 'epochYoungerFar';
     };
 
 type Simple = Exclude<Shortcut, { action: 'layer' }>['action'];
@@ -63,6 +67,11 @@ const KEYS: Record<string, Simple> = {
   '=': 'reliefUp',
   '-': 'reliefDown',
   _: 'reliefDown',
+  // `<` and `>` are Shift + `,` and `.` on US keyboards.
+  ',': 'epochOlder',
+  '.': 'epochYounger',
+  '<': 'epochOlderFar',
+  '>': 'epochYoungerFar',
 };
 
 /**
@@ -94,6 +103,8 @@ export function shortcutHelp(): readonly [string, string][] {
     [`1 – ${LAYER_KEYS}`, t.shortcuts.layer],
     ['+ / −', t.shortcuts.relief],
     ['[ / ]', t.shortcuts.world],
+    [', / .', t.shortcuts.epoch],
+    ['< / >', t.shortcuts.epochFar],
     ['R', t.shortcuts.reset],
     ['H', t.shortcuts.hexes],
     ['L', t.shortcuts.sunlight],
