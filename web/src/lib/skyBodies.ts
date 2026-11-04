@@ -9,6 +9,7 @@
 // long axis towards its planet, at longitude 180°.
 import type { Moon } from './api/types/Moon';
 import type { Sibling } from './api/types/Sibling';
+import type { Sky } from './sky';
 
 export type Vec3 = [number, number, number];
 
@@ -27,6 +28,39 @@ export interface SkyBody {
    * shown (the planet seen from a moon: it spins under it).
    */
   faceLonDeg: number | null;
+  /** Its cloud map (`clouds.png`, grey), or null for none. */
+  clouds?: string | null;
+  /** Linear colour of its clouds. */
+  cloudTint?: Vec3;
+  /** Its atmosphere, seen from afar: a halo at the limb (see `halo`). */
+  halo?: Halo | null;
+}
+
+/** An atmosphere seen from afar. */
+export interface Halo {
+  /** Linear colour of the light it scatters, brightest channel 1. */
+  colour: Vec3;
+  /** Height of the halo, in radii of the body. */
+  thickness: number;
+  /** Brightness of the halo at the limb, 0 to 1. */
+  strength: number;
+}
+
+/**
+ * The halo of an atmosphere (see sky.ts), null for an airless body: the
+ * colour of the light its gas and aerosols scatter (their columns), and a
+ * brightness growing with their optical depth.
+ */
+export function halo(sky: Sky | null): Halo | null {
+  if (!sky) return null;
+  const column = sky.betaR.map((b, i) => b * sky.heightR + sky.betaM * sky.heightM * sky.mieAlbedo[i]!) as Vec3;
+  const brightest = Math.max(...column, 1e-9);
+  const depth = (column[0] + column[1] + column[2]) / 3;
+  return {
+    colour: column.map((c) => c / brightest) as Vec3,
+    thickness: sky.top - 1,
+    strength: Math.min(1, 0.9 * (1 - Math.exp(-4 * depth))),
+  };
 }
 
 /** A body whose shadow can fall on the body shown (an eclipse). */
@@ -139,6 +173,7 @@ export function moonSky(
   moon: Pick<Moon, 'radius_km' | 'semi_major_axis_km'>,
   planetRadiusKm: number,
   planetTexture: string | null,
+  look: Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo'> = {},
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
   // Longitude 180°: the face the moon keeps towards its planet.
   const direction: Vec3 = [0, 0, -1];
@@ -146,7 +181,14 @@ export function moonSky(
   const distance = moon.semi_major_axis_km / moon.radius_km;
   return {
     bodies: [
-      { direction, angularDiameterDeg: (angle * 180) / Math.PI, colour: PLANET, texture: planetTexture, faceLonDeg: null },
+      {
+        direction,
+        angularDiameterDeg: (angle * 180) / Math.PI,
+        colour: PLANET,
+        texture: planetTexture,
+        faceLonDeg: null,
+        ...look,
+      },
     ],
     casters: [{ position: [0, 0, -distance], radius: planetRadiusKm / moon.radius_km }],
   };
@@ -157,6 +199,7 @@ export function moonSky(
  * and the planet's other moons, where they are on their orbits as the
  * seasons play (as planetSky places them), at their size from the moon,
  * mapped with their surfaces (`textures(k)`), and the largest shadows.
+ * `look` is the planet's clouds and atmosphere.
  */
 export function moonSystemSky(
   moons: readonly Moon[],
@@ -167,10 +210,11 @@ export function moonSystemSky(
   season: number,
   yearDays: number,
   sunLongitudeRad: number,
+  look: Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo'> = {},
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
   const self = moons[shown];
   if (!self) return { bodies: [], casters: [] };
-  const sky = moonSky(self, planetRadiusKm, planetTexture);
+  const sky = moonSky(self, planetRadiusKm, planetTexture, look);
   const here = moonFrame(self, shown, season, yearDays, sunLongitudeRad);
   // Planet frame to the shown moon's.
   const local = (v: Vec3): Vec3 => [dot(v, here.x), dot(v, here.y), dot(v, here.z)];

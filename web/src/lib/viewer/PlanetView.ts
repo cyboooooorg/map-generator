@@ -24,6 +24,7 @@ import {
   LessEqualDepth,
   LineSegments,
   Mesh,
+  NoColorSpace,
   MOUSE,
   NotEqualStencilFunc,
   NearestFilter,
@@ -473,7 +474,7 @@ export class PlanetView {
   /** Whether the star field is shown. */
   private starsOn = true;
   /** The other bodies drawn in the sky (see setSkyBodies), with their maps. */
-  private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; map: Texture | null }[] = [];
+  private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; maps: Texture[] }[] = [];
   private skyRequest = 0;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
@@ -1627,7 +1628,11 @@ export class PlanetView {
     const request = this.skyRequest;
     // The same bodies at new places keep their meshes and maps.
     const same =
-      bodies.length === this.skyBodies.length && bodies.every((b, i) => b.texture === this.skyBodies[i]?.body.texture);
+      bodies.length === this.skyBodies.length &&
+      bodies.every((b, i) => {
+        const old = this.skyBodies[i]?.body;
+        return b.texture === old?.texture && (b.clouds ?? null) === (old?.clouds ?? null);
+      });
     if (same) {
       bodies.forEach((body, i) => {
         const entry = this.skyBodies[i]!;
@@ -1653,6 +1658,13 @@ export class PlanetView {
             uColor: { value: new Vector3(...body.colour) },
             uHasMap: { value: 0 },
             uMap: { value: emptyTexture() },
+            uHasClouds: { value: 0 },
+            uClouds: { value: emptyTexture() },
+            uCloudTint: { value: new Vector3(1, 1, 1) },
+            uHaloColor: { value: new Vector3() },
+            uHaloHeight: { value: 0 },
+            uHaloStrength: { value: 0 },
+            uGrow: { value: 1 },
             uOpacity: { value: 1 },
             uFace: { value: 0 },
             uHasFace: { value: 0 },
@@ -1668,28 +1680,30 @@ export class PlanetView {
       mesh.renderOrder = -1;
       mesh.visible = false;
       this.scene.add(mesh);
-      const entry = { mesh, body, map: null as Texture | null };
-      if (body.texture) {
-        void this.decodeImage(body.texture, signal)
+      const entry = { mesh, body, maps: [] as Texture[] };
+      const load = (url: string, map: string, has: string) => {
+        void this.decodeImage(url, signal)
           .then((bitmap) => {
             if (this.disposed || request !== this.skyRequest) {
               bitmap.close();
               return;
             }
-            const map = new Texture(bitmap);
-            map.flipY = false;
-            map.colorSpace = SRGBColorSpace;
-            map.needsUpdate = true;
-            releaseOnUpload(map);
-            entry.map = map;
-            mesh.material.uniforms['uMap']!.value = map;
-            mesh.material.uniforms['uHasMap']!.value = 1;
+            const texture = new Texture(bitmap);
+            texture.flipY = false;
+            texture.colorSpace = map === 'uMap' ? SRGBColorSpace : NoColorSpace;
+            texture.needsUpdate = true;
+            releaseOnUpload(texture);
+            entry.maps.push(texture);
+            mesh.material.uniforms[map]!.value = texture;
+            mesh.material.uniforms[has]!.value = 1;
             this.requestRender();
           })
           .catch((e: unknown) => {
             if (!signal?.aborted) console.warn('Could not load a body of the sky', e);
           });
-      }
+      };
+      if (body.texture) load(body.texture, 'uMap', 'uHasMap');
+      if (body.clouds) load(body.clouds, 'uClouds', 'uHasClouds');
       return entry;
     });
     this.requestRender();
@@ -1707,11 +1721,11 @@ export class PlanetView {
   }
 
   private disposeSkyBodies(): void {
-    for (const { mesh, map } of this.skyBodies) {
+    for (const { mesh, maps } of this.skyBodies) {
       this.scene.remove(mesh);
       mesh.geometry.dispose();
       mesh.material.dispose();
-      map?.dispose();
+      for (const map of maps) map.dispose();
     }
     this.skyBodies = [];
   }
@@ -1736,6 +1750,14 @@ export class PlanetView {
       u['uOpacity']!.value = this.morph ** 3;
       u['uHasFace']!.value = body.faceLonDeg === null ? 0 : 1;
       u['uFace']!.value = ((body.faceLonDeg ?? 0) * Math.PI) / 180;
+      (u['uCloudTint']!.value as Vector3).set(...(body.cloudTint ?? [1, 1, 1]));
+      // The halo a few pixels high at least, so that it shows on a small disk.
+      const halo = body.halo ?? null;
+      const height = halo ? Math.max(halo.thickness, (1.5 * smallest) / Math.max(u['uHalf']!.value as number, 1e-9)) : 0;
+      (u['uHaloColor']!.value as Vector3).set(...(halo?.colour ?? [0, 0, 0]));
+      u['uHaloHeight']!.value = height;
+      u['uHaloStrength']!.value = halo?.strength ?? 0;
+      u['uGrow']!.value = 1 + 3 * height;
     }
   }
 
