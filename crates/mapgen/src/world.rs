@@ -95,6 +95,11 @@ pub struct World {
     pub biomes: Vec<Biome>,
     /// Smoothed, meandering river polylines (see `rivers`).
     pub rivers: Vec<RiverLine>,
+    /// Brightness shift of the ground in `[-1, 1]` (0: none), from fresh
+    /// impact craters, their ejecta and rays (see
+    /// [`crate::craters::CraterField::albedo`]); empty for a world reloaded
+    /// from a format older than 8.
+    pub albedo: Vec<f32>,
     /// Cloud cover in `[0, 1]`, empty for a world without clouds (or
     /// reloaded from `raw_data`, where the viewer reads it).
     pub clouds: Vec<f32>,

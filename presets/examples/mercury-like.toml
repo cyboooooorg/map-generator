@@ -33,6 +33,7 @@ clouds = "none"
 [geology]
 regime = "stagnant"
 wet_until = 4.6                        # Ga: end of the era of liquid water
+maria = [4.0, 3.6]                     # Ga: its smooth plains, as inside Caloris
 
 # target = [biomes replaced by it]
 [remap]

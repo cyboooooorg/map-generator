@@ -469,6 +469,34 @@ Implemented in `craters.rs`, with these changes from the plan:
   (most craters are older than 3.5 Ga), the future adds a few; no console
   error.
 
+### Outcome (step 6)
+
+- **Rays and ejecta:** a fresh crater lights its floor, its ejecta
+  (`(r/R)⁻³`) and 6 to 14 rays of its own, 8 to 30 radii long and
+  narrowing with distance, all darkened by space weathering (`1/e` in
+  250 Ma, gone in about 1 Ga). Drawn on worlds without liquid water,
+  from craters one pixel wide, into a new 8-bit layer `albedo.png`
+  (format version 8). Multiplying the shaded colour, as first tried,
+  barely showed on the dark ground of `mercury-like`; a positive shift
+  now takes the colour part of the way to white, and rays read like the
+  Moon's. The tiles read the layer at the base resolution (no rays for
+  their own small craters); at an epoch the rays are those of the
+  craters fresh then. About 0.1 s at 1920 × 1080 on a 4 Ga
+  `mercury-like`.
+- **Maria:** `[geology] maria = [start, end]`. A share of the large
+  basins (30 % to 90 % with the volcanism) is flooded at a date of the
+  window after it formed, the floor filled flat up to a level between
+  its lowest point and its rim mean, and darkened (albedo −0.35). Floods
+  are events in the age order of the impacts, drawn by the same waves
+  (a flood keeps within its basin's reach). They are all drawn in the
+  dry pass, after the erosion, even those older than the end of the wet
+  era: the mask of flooded pixels then comes out of the same pass at any
+  epoch, which a flood baked into `elevation_base` would not give. Lava
+  plains wear little, so the cost is small.
+- **Presets:** `barren` 3.9–3.1 Ga (the Moon), `mars-like` 3.7–3.0 (the
+  Hesperian plains), `mercury-like` 4.0–3.6 (its smooth plains). Their
+  worlds change.
+
 ## 6. Time slider
 
 ### What it shows

@@ -15,4 +15,9 @@ regime: Regime,
  * liquid water (Mercury). Craters older than it will be worn by the
  * hydraulic erosion, younger ones stay fresh.
  */
-wet_until: number, };
+wet_until: number, 
+/**
+ * When lava flooded large impact basins, `[start, end]` in Ga before
+ * present (the Moon's maria: 3.9 to 3.1), or none.
+ */
+maria: [number, number] | null, };

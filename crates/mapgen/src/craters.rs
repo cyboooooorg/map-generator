@@ -80,6 +80,22 @@ const RIM_JITTER: f64 = 0.06;
 const EJECTA_LOBES: f64 = 0.4;
 /// Craters spanning more rows than this compute their rows in parallel.
 const PARALLEL_ROWS: usize = 32;
+/// Brightness of fresh craters (see [`CraterField::albedo`]): space
+/// weathering darkens their ejecta and rays, `1/e` in this time (Ga), so
+/// that they are all but gone in 1 Ga (the Moon's Copernican craters).
+const RAY_FADE_GA: f64 = 0.25;
+/// Below this share of its brightness left, a crater has none.
+const RAY_GONE: f64 = 0.02;
+/// Smallest crater whose ejecta and rays the base map draws, in pixels
+/// across: its rays reach far beyond its rim.
+pub const RAY_MIN_PIXELS: f64 = 1.0;
+/// Brightness of a fresh crater's floor, of its ejecta at the rim, and of
+/// its rays near the rim (albedo shift, see [`CraterField::albedo`]).
+const FRESH_FLOOR: f32 = 0.25;
+const FRESH_EJECTA: f32 = 0.5;
+const FRESH_RAYS: f32 = 0.5;
+/// Ray lengths, in crater radii (Tycho's reach about 35).
+const RAY_LENGTH: (f64, f64) = (8.0, 30.0);
 /// Smallest crater a 1 bar atmosphere lets through, km; it scales as
 /// `p^0.75` (Venus: about 3 km at 92 bar).
 const AIR_FILTER_KM: f64 = 0.1;
@@ -240,6 +256,8 @@ fn solid_angle(a0: f64, a1: f64, b0: f64, b1: f64) -> f64 {
 /// The craters of a world, oldest first, with what drawing them needs.
 pub struct CraterField {
     pub craters: Vec<Crater>,
+    /// The lava floods of large basins formed by the epoch, oldest first.
+    pub floods: Vec<Flood>,
     radius_km: f64,
     /// Simple-to-complex transition diameter, km.
     transition_km: f64,
@@ -257,10 +275,51 @@ pub struct CraterField {
     future: Population,
     /// Smallest crater the atmosphere lets through, km.
     air_km: f64,
+    /// Whether fresh craters keep bright rays: worlds without liquid water
+    /// today, where only space weathering darkens them (wind, rain and air
+    /// erase them elsewhere).
+    rays: bool,
     /// The epoch shown, Ga before present (negative in the future): only
     /// the craters formed by then exist, worn for the time since.
     epoch_ga: f64,
 }
+
+/// Lava flooding the floor of a large basin (a lunar mare): the floor is
+/// filled flat up to a level between the floor and the rim.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Flood {
+    pub basin: Crater,
+    /// When the lava came, Ga before present.
+    pub age_ga: f64,
+    /// Fill level, as a share of the way from the floor to the rim.
+    fill: f32,
+}
+
+/// Basins smaller than this, km, or than [`MARE_TRANSITIONS`] times the
+/// simple-to-complex transition, are not flooded (the Moon's maria fill
+/// basins of 300 km and more, and a few craters of about 100 km).
+const MARE_MIN_KM: f64 = 100.0;
+const MARE_TRANSITIONS: f64 = 6.0;
+/// Share of the large basins flooded on a world without volcanism, and
+/// on a fully volcanic one.
+const MARE_SHARE: (f64, f64) = (0.3, 0.9);
+/// Fill level range, from the floor (0) to the rim (1).
+const MARE_FILL: (f64, f64) = (0.4, 0.75);
+/// Albedo shift of the basalt plains: dark (see [`CraterField::albedo`]).
+pub const MARE_ALBEDO: f32 = -0.35;
+/// Darkens the albedo shift of the pixels flooded by lava (`mare`, from
+/// [`CraterField::apply`]; empty for none): basalt plains, with the rays
+/// of younger craters still bright over them.
+pub fn darken_maria(albedo: &mut [f32], mare: &[bool]) {
+    for (a, &m) in albedo.iter_mut().zip(mare) {
+        if m {
+            *a = (*a + MARE_ALBEDO).clamp(-1.0, 1.0);
+        }
+    }
+}
+
+/// Lava fills the basin out to this share of its radius.
+const MARE_EXTENT: f64 = 0.9;
 
 /// How far ahead the craters still to come are drawn, Ga.
 pub const FUTURE_GA: f64 = 1.0;
@@ -330,6 +389,7 @@ impl CraterField {
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
             craters: Vec::new(),
+            floods: Vec::new(),
             radius_km,
             transition_km: MOON_TRANSITION_KM * MOON_GRAVITY / gravity,
             waterline: p.sea_level + p.planet.rules.waterline,
@@ -357,6 +417,7 @@ impl CraterField {
                 ages: Ages::Future { span_ga: FUTURE_GA },
             },
             air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
+            rays: p.pressure_bar < crate::atmosphere::LIQUID_WATER_BAR,
             epoch_ga: epoch_ga.max(-FUTURE_GA),
         }
     }
@@ -403,8 +464,45 @@ impl CraterField {
             }
         }
         sort_oldest_first(&mut craters);
+        field.floods = field.floods_of(p, &craters);
         field.craters = craters;
         field
+    }
+
+    /// The lava floods of the large basins among `craters` (oldest first),
+    /// formed by the epoch: within the preset's window of maria
+    /// (`[geology] maria`), after the basin itself, for a share of the
+    /// basins that grows with the volcanism.
+    fn floods_of(&self, p: &WorldParams, craters: &[Crater]) -> Vec<Flood> {
+        let Some([start, end]) = p.planet.geology.maria else {
+            return Vec::new();
+        };
+        let (start, end) = (f64::from(start), f64::from(end));
+        let share = MARE_SHARE.0
+            + (MARE_SHARE.1 - MARE_SHARE.0) * f64::from(p.volcanic_intensity.clamp(0.0, 1.0));
+        let smallest = MARE_MIN_KM.max(MARE_TRANSITIONS * self.transition_km);
+        let mut floods: Vec<Flood> = craters
+            .iter()
+            .filter(|c| c.diameter_km >= smallest && c.age_ga > end)
+            .filter_map(|&basin| {
+                // A stream of its own, apart from the crater's other draws.
+                let mut rng = Rng(mix(basin.shape ^ 0x4D41_5245));
+                if rng.unit() >= share {
+                    return None;
+                }
+                let latest = start.min(basin.age_ga);
+                let age_ga = end + (latest - end) * rng.unit();
+                let fill = (MARE_FILL.0 + (MARE_FILL.1 - MARE_FILL.0) * rng.unit()) as f32;
+                Some(Flood {
+                    basin,
+                    age_ga,
+                    fill,
+                })
+            })
+            .filter(|f| f.age_ga >= self.epoch_ga)
+            .collect();
+        floods.sort_by(|a, b| b.age_ga.total_cmp(&a.age_ga));
+        floods
     }
 
     /// The craters with a diameter in `[min_km, max_km)` whose ejecta reach
@@ -665,6 +763,65 @@ impl CraterField {
         (crater.age_ga > self.wet_until_ga) == (era == Era::Wet)
     }
 
+    /// The brightness of the fresh craters (and their ejecta and rays) on
+    /// the base map: an albedo shift per pixel, 0 for none, up to 1 at the
+    /// rim of a crater just formed, fading with the time since it formed
+    /// until the epoch. Profiles add up, in any order. Empty of craters
+    /// (all zeros) on worlds with air enough for liquid water.
+    ///
+    /// The field holds the craters to light: [`Self::new_at`] down to
+    /// [`RAY_MIN_PIXELS`], since even a pixel-wide crater has rays many
+    /// pixels long.
+    pub fn albedo(&self, grid: &Grid) -> Vec<f32> {
+        let (w, h) = (grid.width as usize, grid.height as usize);
+        let mut albedo = vec![0.0f32; w * h];
+        if !self.rays {
+            return albedo;
+        }
+        let columns: Vec<(f64, f64)> = (0..w)
+            .map(|x| {
+                let lon = (x as f64 + 0.5) / w as f64 * 2.0 * PI;
+                (lon.cos(), lon.sin())
+            })
+            .collect();
+        let lit: Vec<Fresh> = self
+            .craters
+            .iter()
+            .filter(|crater| self.formed(crater))
+            .filter_map(|crater| {
+                let since = crater.age_ga - self.epoch_ga;
+                let fresh = (-since / RAY_FADE_GA).exp();
+                (fresh >= RAY_GONE).then(|| Fresh::new(crater, fresh as f32, self.radius_km, h))
+            })
+            .collect();
+        albedo.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            let lat = grid.latitude(y as u32);
+            let (cos_lat, sin_lat) = (lat.cos(), lat.sin());
+            for f in lit.iter().filter(|f| (f.rows.0..=f.rows.1).contains(&y)) {
+                let columns_of = if lat.abs() + f.reach >= PI / 2.0 {
+                    None
+                } else {
+                    let half = (f.reach.sin() / cos_lat).min(1.0).asin();
+                    let to_col = |lon: f64| lon / (2.0 * PI) * w as f64 - 0.5;
+                    let x0 = to_col(f.lon - half).floor() as i64;
+                    let x1 = to_col(f.lon + half).ceil() as i64;
+                    (x1 - x0 + 1 < w as i64).then_some((x0, x1))
+                };
+                let (x0, x1) = columns_of.unwrap_or((0, w as i64 - 1));
+                for xi in x0..=x1 {
+                    let x = xi.rem_euclid(w as i64) as usize;
+                    let (cos_lon, sin_lon) = columns[x];
+                    let v = [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat];
+                    row[x] += f.at(v);
+                }
+            }
+        });
+        for a in &mut albedo {
+            *a = a.clamp(-1.0, 1.0);
+        }
+        albedo
+    }
+
     /// Angular reach of a crater's ejecta, radians: no pixel farther from
     /// its centre changes.
     fn reach(&self, crater: &Crater) -> f64 {
@@ -678,7 +835,7 @@ impl CraterField {
     /// older crater it overlaps, so the craters of a wave share no pixel and
     /// read only their own. A wave is computed in parallel, then written:
     /// the result is the same as drawing every crater in turn.
-    pub fn apply(&self, elevation: &mut [f32], grid: &Grid, era: Era) {
+    pub fn apply(&self, elevation: &mut [f32], grid: &Grid, era: Era) -> Vec<bool> {
         let (w, h) = (grid.width as usize, grid.height as usize);
         let rows: Vec<(f64, f64)> = (0..grid.height)
             .map(|y| {
@@ -698,27 +855,117 @@ impl CraterField {
             rows: &rows,
             columns: &columns,
         };
-        let drawn: Vec<(&Crater, f32)> = self
+        // Impacts and lava floods, in the order they happened. Floods are
+        // all drawn after the erosion: lava plains wear little, and their
+        // extent can then be found again at any epoch.
+        let mut events: Vec<(f64, Event)> = self
             .craters
             .iter()
             .filter(|c| self.in_era(c, era))
             .filter_map(|c| {
                 let wear = self.wear(c);
-                (wear >= WORN_OUT).then_some((c, wear as f32))
+                (wear >= WORN_OUT).then_some((c.age_ga, Event::Impact(c, wear as f32)))
             })
             .collect();
+        if era == Era::Dry {
+            events.extend(self.floods.iter().map(|f| (f.age_ga, Event::Flood(f))));
+        }
+        events.sort_by(|a, b| b.0.total_cmp(&a.0));
+        // A flood covers less than its basin's ejecta: the basin's reach
+        // keeps waves apart for it too.
+        let drawn: Vec<(&Crater, f32)> = events
+            .iter()
+            .map(|(_, e)| match *e {
+                Event::Impact(c, wear) => (c, wear),
+                Event::Flood(f) => (&f.basin, 1.0),
+            })
+            .collect();
+        let mut mare = Vec::new();
         for wave in self.waves(&drawn) {
-            let updates: Vec<Vec<(u32, f32)>> = wave
+            let updates: Vec<(bool, Vec<(u32, f32)>)> = wave
                 .par_iter()
-                .map(|&i| {
-                    let (crater, wear) = drawn[i];
-                    self.draw(crater, wear, elevation, &pixels)
+                .map(|&i| match events[i].1 {
+                    Event::Impact(crater, wear) => {
+                        (false, self.draw(crater, wear, elevation, &pixels))
+                    }
+                    Event::Flood(flood) => (true, self.flood(flood, elevation, &pixels)),
                 })
                 .collect();
-            for (i, value) in updates.into_iter().flatten() {
-                elevation[i as usize] = value;
+            for (flooded, changes) in updates {
+                if flooded && mare.is_empty() {
+                    mare = vec![false; w * h];
+                }
+                for (i, value) in changes {
+                    elevation[i as usize] = value;
+                    if flooded {
+                        mare[i as usize] = true;
+                    }
+                }
             }
         }
+        mare
+    }
+
+    /// The pixels a lava flood raises, and their new elevation: the floor
+    /// of its basin filled flat up to its level, between the lowest of the
+    /// floor and the mean of the rim, as they are when the lava comes.
+    fn flood(&self, flood: &Flood, elevation: &[f32], px: &Pixels) -> Vec<(u32, f32)> {
+        let c = flood.basin.centre;
+        let radius = 0.5 * flood.basin.diameter_km / self.radius_km;
+        let (east, north) = tangent_basis(c);
+        let ring = |r: f64, n: u32| {
+            let (s, k) = ((r * radius).sin(), (r * radius).cos());
+            (0..n).map(move |i| {
+                let phi = f64::from(i) * 2.0 * PI / f64::from(n);
+                let (sp, cp) = phi.sin_cos();
+                [
+                    k * c[0] + s * (cp * east[0] + sp * north[0]),
+                    k * c[1] + s * (cp * east[1] + sp * north[1]),
+                    k * c[2] + s * (cp * east[2] + sp * north[2]),
+                ]
+            })
+        };
+        let floor = ring(0.3, 8)
+            .chain(std::iter::once(c))
+            .map(|p| px.sample(elevation, p))
+            .fold(f32::MAX, f32::min);
+        let rim = ring(1.0, 12).map(|p| px.sample(elevation, p)).sum::<f32>() / 12.0;
+        if rim <= floor {
+            return Vec::new();
+        }
+        let level = floor + flood.fill * (rim - floor);
+        let reach = MARE_EXTENT * radius;
+        let cos_reach = reach.cos();
+        let lat = c[2].clamp(-1.0, 1.0).asin();
+        let lon = c[1].atan2(c[0]).rem_euclid(2.0 * PI);
+        let to_row = |lat: f64| (PI / 2.0 - lat) / PI * px.h as f64 - 0.5;
+        let y0 = to_row(lat + reach).floor().max(0.0) as usize;
+        let y1 = (to_row(lat - reach).ceil().max(0.0) as usize).min(px.h - 1);
+        let mut out = Vec::new();
+        for y in y0..=y1 {
+            let (cos_lat, sin_lat) = px.rows[y];
+            let row_lat = sin_lat.atan2(cos_lat);
+            let columns = if row_lat.abs() + reach >= PI / 2.0 {
+                None
+            } else {
+                let half = (reach.sin() / cos_lat).min(1.0).asin();
+                let to_col = |lon: f64| lon / (2.0 * PI) * px.w as f64 - 0.5;
+                let x0 = to_col(lon - half).floor() as i64;
+                let x1 = to_col(lon + half).ceil() as i64;
+                (x1 - x0 + 1 < px.w as i64).then_some((x0, x1))
+            };
+            let (x0, x1) = columns.unwrap_or((0, px.w as i64 - 1));
+            for xi in x0..=x1 {
+                let x = xi.rem_euclid(px.w as i64) as usize;
+                let (cos_lon, sin_lon) = px.columns[x];
+                let dot = cos_lat * cos_lon * c[0] + cos_lat * sin_lon * c[1] + sin_lat * c[2];
+                let i = y * px.w + x;
+                if dot >= cos_reach && elevation[i] < level {
+                    out.push((i as u32, level));
+                }
+            }
+        }
+        out
     }
 
     /// Groups `drawn` (oldest first) in waves of craters that share no
@@ -902,6 +1149,108 @@ impl CraterField {
     }
 }
 
+/// A fresh crater's brightness, prepared once: its floor, ejecta and rays.
+struct Fresh {
+    c: [f64; 3],
+    east: [f64; 3],
+    north: [f64; 3],
+    /// Crater radius, radians.
+    radius: f64,
+    /// Farthest reach of its rays, radians.
+    reach: f64,
+    cos_reach: f64,
+    /// Longitude of its centre, in [0, 2π).
+    lon: f64,
+    /// Rows of the map it lights.
+    rows: (usize, usize),
+    fresh: f32,
+    /// Each ray: its direction in the tangent plane (cos, sin), its width
+    /// at the rim (radians of azimuth) and its length (crater radii).
+    rays: Vec<((f64, f64), f64, f64)>,
+}
+
+impl Fresh {
+    fn new(crater: &Crater, fresh: f32, planet_radius_km: f64, height: usize) -> Self {
+        let c = crater.centre;
+        let (east, north) = tangent_basis(c);
+        let radius = 0.5 * crater.diameter_km / planet_radius_km;
+        // A stream of its own: the rim and ejecta draws are not disturbed.
+        let mut rng = Rng(mix(crater.shape ^ 0x5241_5953));
+        let count = 6 + (rng.next() % 9) as usize;
+        let rays: Vec<_> = (0..count)
+            .map(|_| {
+                let phi = 2.0 * PI * rng.unit();
+                let width = 0.04 + 0.08 * rng.unit();
+                let length = RAY_LENGTH.0 + (RAY_LENGTH.1 - RAY_LENGTH.0) * rng.unit();
+                ((phi.cos(), phi.sin()), width, length)
+            })
+            .collect();
+        let longest = rays.iter().map(|r| r.2).fold(3.0, f64::max);
+        let reach = (longest * radius).min(PI);
+        let lat = c[2].clamp(-1.0, 1.0).asin();
+        let to_row = |lat: f64| (PI / 2.0 - lat) / PI * height as f64 - 0.5;
+        let y0 = to_row(lat + reach).floor().max(0.0) as usize;
+        let y1 = (to_row(lat - reach).ceil().max(0.0) as usize).min(height - 1);
+        Fresh {
+            c,
+            east,
+            north,
+            radius,
+            reach,
+            cos_reach: reach.cos(),
+            lon: c[1].atan2(c[0]).rem_euclid(2.0 * PI),
+            rows: (y0, y1),
+            fresh,
+            rays,
+        }
+    }
+
+    /// The brightness it adds at the unit vector `v`.
+    fn at(&self, v: [f64; 3]) -> f32 {
+        let c = self.c;
+        let dot = (v[0] * c[0] + v[1] * c[1] + v[2] * c[2]).clamp(-1.0, 1.0);
+        if dot < self.cos_reach {
+            return 0.0;
+        }
+        let r = dot.acos() / self.radius;
+        if r < 1.0 {
+            return self.fresh * FRESH_FLOOR;
+        }
+        // The continuous blanket, thinning as the ejecta.
+        let mut a = FRESH_EJECTA * (r.powi(-3) as f32);
+        let along = |b: [f64; 3]| v[0] * b[0] + v[1] * b[1] + v[2] * b[2];
+        let (e, n) = (along(self.east), along(self.north));
+        let len = (e * e + n * n).sqrt();
+        if len > 1e-12 {
+            let (ce, cn) = (e / len, n / len);
+            for &((rc, rs), width, length) in &self.rays {
+                // cos of the angle to the ray: 1 − cos ≈ Δ² / 2, no trigonometry.
+                let cos = ce * rc + cn * rs;
+                if cos <= 0.0 || r > length {
+                    continue;
+                }
+                // Streaks of about constant width: narrower in azimuth farther out.
+                let w = width / r.sqrt();
+                let across = 2.0 * (1.0 - cos) / (w * w);
+                if across > 9.0 {
+                    continue;
+                }
+                let fade = 1.0 - smoothstep(0.5 * length as f32, length as f32, r as f32);
+                a += FRESH_RAYS * ((-across).exp() * r.powf(-0.5)) as f32 * fade;
+            }
+        }
+        self.fresh * a.min(1.0)
+    }
+}
+
+/// Something that changes the surface, in the order of [`CraterField::apply`].
+#[derive(Clone, Copy)]
+enum Event<'a> {
+    /// An impact, keeping this share of its relief.
+    Impact(&'a Crater, f32),
+    Flood(&'a Flood),
+}
+
 /// Row and column trigonometry of the map, for unit vectors of pixels.
 struct Pixels<'a> {
     w: usize,
@@ -1055,12 +1404,16 @@ mod tests {
     use super::*;
     use crate::preset::Preset;
 
+    /// A Moon-sized barren world, without the preset's maria (the tests
+    /// of floods set them).
     fn moon(surface_age_ga: f32) -> WorldParams {
+        let mut planet = Preset::load("barren").unwrap();
+        planet.geology.maria = None;
         WorldParams {
             width: 512,
             height: 256,
             seed: 11,
-            planet: Preset::load("barren").unwrap(),
+            planet,
             sea_level: 0.2,
             volcanic_intensity: 0.0,
             circumference_km: 10_917.0,
@@ -1315,6 +1668,105 @@ mod tests {
         let now = CraterField::context(&p).wear(&crater);
         let then = CraterField::context_at(&p, 2.9).wear(&crater);
         assert!(then > 0.8 && now < 0.1, "{then} {now}");
+    }
+
+    #[test]
+    fn fresh_craters_have_bright_ejecta_and_rays_that_fade() {
+        let p = moon(4.0);
+        let grid = p.grid();
+        let crater = Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km: 150.0,
+            age_ga: 0.05,
+            shape: 9,
+        };
+        let lit = |field: CraterField| {
+            CraterField {
+                craters: vec![crater],
+                ..field
+            }
+            .albedo(&grid)
+        };
+        let fresh = lit(CraterField::context(&p));
+        let brightest = fresh.iter().fold(0.0f32, |m, &v| m.max(v));
+        assert!(brightest > 0.4, "{brightest}");
+        // Rays: some pixels well beyond the ejecta are lit.
+        let lit_pixels = fresh.iter().filter(|&&v| v > 0.02).count();
+        let crater_px = PI * (75.0f64 / (10_917.0 / 512.0)).powi(2);
+        assert!(
+            lit_pixels as f64 > 10.0 * crater_px,
+            "{lit_pixels} vs {crater_px}"
+        );
+        // 1 Ga later the rays are gone; before it formed, nothing.
+        let old = lit(CraterField::context_at(&p, -1.0));
+        assert!(old.iter().all(|&v| v < 0.03));
+        assert!(
+            lit(CraterField::context_at(&p, 0.1))
+                .iter()
+                .all(|&v| v == 0.0)
+        );
+        // Air erases them.
+        let venus = CraterField::context(&WorldParams {
+            pressure_bar: 92.0,
+            ..moon(4.0)
+        });
+        assert!(lit(venus).iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn lava_floods_large_basins_within_the_window() {
+        let mut p = moon(4.0);
+        p.planet.geology.maria = Some([3.9, 3.1]);
+        p.volcanic_intensity = 1.0;
+        let field = CraterField::new(&p, 50.0);
+        assert!(!field.floods.is_empty());
+        for f in &field.floods {
+            assert!((3.1..=3.9).contains(&f.age_ga) && f.age_ga <= f.basin.age_ga);
+            assert!(f.basin.diameter_km >= MARE_MIN_KM);
+        }
+        // Before the lava came, no flood; without a window, none at all.
+        assert!(CraterField::new_at(&p, 50.0, 3.95).floods.is_empty());
+        assert!(CraterField::new(&moon(4.0), 50.0).floods.is_empty());
+    }
+
+    #[test]
+    fn a_flood_fills_its_basin_flat_and_dark() {
+        let p = moon(4.0);
+        let grid = p.grid();
+        let basin = Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km: 600.0,
+            age_ga: 3.95,
+            shape: 4,
+        };
+        let field = CraterField {
+            craters: vec![basin],
+            floods: vec![Flood {
+                basin,
+                age_ga: 3.5,
+                fill: 0.6,
+            }],
+            wet_until_ga: 4.6,
+            ..CraterField::context(&p)
+        };
+        let mut e = vec![0.3; grid.width as usize * grid.height as usize];
+        let mare = field.apply(&mut e, &grid, Era::Dry);
+        let flooded: Vec<f32> = e
+            .iter()
+            .zip(&mare)
+            .filter(|(_, m)| **m)
+            .map(|(v, _)| *v)
+            .collect();
+        assert!(flooded.len() > 100, "{}", flooded.len());
+        // One flat level, between the floor and the ground around.
+        let level = flooded[0];
+        assert!(flooded.iter().all(|&v| v == level));
+        let floor = e.iter().fold(f32::MAX, |m, &v| m.min(v));
+        assert!(level > floor && level < 0.3 + 0.05, "{floor} {level}");
+        // Dark, with no rays of its own.
+        let mut albedo = vec![0.0; e.len()];
+        darken_maria(&mut albedo, &mare);
+        assert!(albedo.iter().zip(&mare).all(|(a, m)| (*a < 0.0) == *m));
     }
 
     #[test]

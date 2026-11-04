@@ -33,6 +33,12 @@ highland_offset?: ScalarLayerInfo | null,
  */
 floodplain?: ScalarLayerInfo | null, 
 /**
+ * Brightness shift of the ground in `[-1, 1]`, 8 bits (`gray8`, as
+ * `clouds`): fresh impact craters, their ejecta and rays (format
+ * version 8 and later).
+ */
+albedo?: ScalarLayerInfo | null, 
+/**
  * Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
  * (max − min)`); format version 5 and later, absent on worlds without
  * clouds.
