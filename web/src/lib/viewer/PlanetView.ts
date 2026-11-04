@@ -481,6 +481,8 @@ export class PlanetView {
   private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; maps: Texture[] }[] = [];
   /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
   private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  /** Their near parts, drawn after the globe (see skyOrbitFragment). */
+  private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
@@ -1525,6 +1527,7 @@ export class PlanetView {
     this.disposeSkyBodies();
     this.skyOrbits?.geometry.dispose();
     this.skyOrbits?.material.dispose();
+    this.skyOrbitsNear?.material.dispose();
     for (const object of [this.surface, this.grid, this.stars, this.hostStar, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
@@ -1750,13 +1753,15 @@ export class PlanetView {
 
   /**
    * Draws orbits in the sky, at infinity like the sky bodies (on the
-   * globe): each loop a closed line through directions seen from the body
-   * shown, in its frame (see lib/skyBodies `orbitLoops`). Empty to clear.
+   * globe): each loop a closed line through points in radii of the body
+   * shown, in its frame (see lib/skyBodies `orbitLoops`), each drawn in its
+   * direction from the camera. Empty to clear.
    */
   setSkyOrbits(loops: readonly (readonly Vec3[])[]): void {
     const count = loops.reduce((sum, loop) => sum + loop.length, 0);
     if (count === 0) {
       if (this.skyOrbits) this.skyOrbits.visible = false;
+      if (this.skyOrbitsNear) this.skyOrbitsNear.visible = false;
       this.skyOrbitsOn = false;
       this.requestRender();
       return;
@@ -1778,7 +1783,11 @@ export class PlanetView {
         new ShaderMaterial({
           vertexShader: skyOrbitVertex,
           fragmentShader: skyOrbitFragment,
-          uniforms: { uColor: { value: new Color(0.55, 0.62, 0.75) }, uOpacity: { value: 0.45 } },
+          uniforms: {
+            uColor: { value: new Color(0.55, 0.62, 0.75) },
+            uOpacity: { value: 0.45 },
+            uNear: { value: 0 },
+          },
           transparent: true,
           depthWrite: false,
         }),
@@ -1787,14 +1796,21 @@ export class PlanetView {
       // Over the stars and the host star, under the bodies.
       this.skyOrbits.renderOrder = -1.5;
       this.scene.add(this.skyOrbits);
+      const near = this.skyOrbits.material.clone();
+      near.uniforms['uNear']!.value = 1;
+      this.skyOrbitsNear = new LineSegments(this.skyOrbits.geometry, near);
+      this.skyOrbitsNear.frustumCulled = false;
+      // After the globe and its air.
+      this.skyOrbitsNear.renderOrder = 10;
+      this.scene.add(this.skyOrbitsNear);
     }
     const geometry = this.skyOrbits.geometry;
-    const old = geometry.getAttribute('direction') as BufferAttribute | undefined;
+    const old = geometry.getAttribute('point') as BufferAttribute | undefined;
     if (old && old.array.length === directions.length) {
       (old.array as Float32Array).set(directions);
       old.needsUpdate = true;
     } else {
-      geometry.setAttribute('direction', new BufferAttribute(directions, 3));
+      geometry.setAttribute('point', new BufferAttribute(directions, 3));
       // three.js needs a position attribute to count the vertices.
       geometry.setAttribute('position', new BufferAttribute(directions, 3));
     }
@@ -1841,13 +1857,30 @@ export class PlanetView {
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
     return {
-      bodies: this.skyBodies.map(({ body }) => at(new Vector3(...body.direction))),
+      bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction)),
       star: at(this.u.uSunDir.value),
     };
   }
 
   /** Receives the sky's screen positions after each frame (see skyScreenPositions); null stops it. */
   onSkyPositions: ((positions: ReturnType<PlanetView['skyScreenPositions']>) => void) | null = null;
+
+  /**
+   * A sky body's direction from the camera and its angular radius: from
+   * its position when it has one (see SkyBody.position), so that it stays
+   * on its orbit line wherever the camera is; else at infinity.
+   */
+  private skyPlace(body: SkyBody): { direction: Vector3; half: number } {
+    if (body.position && body.radius !== undefined) {
+      const d = new Vector3(...body.position).sub(this.camera.position);
+      const distance = Math.max(d.length(), 1e-9);
+      return { direction: d.divideScalar(distance), half: Math.asin(Math.min(body.radius / distance, 0.999)) };
+    }
+    return {
+      direction: new Vector3(...body.direction).normalize(),
+      half: ((body.angularDiameterDeg / 2) * Math.PI) / 180,
+    };
+  }
 
   private drawSkyBodies(): void {
     const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
@@ -1858,14 +1891,14 @@ export class PlanetView {
       mesh.visible = visible;
       if (!visible) continue;
       const u = mesh.material.uniforms;
-      const dir = (u['uDir']!.value as Vector3).set(...body.direction).normalize();
+      const place = this.skyPlace(body);
+      const dir = (u['uDir']!.value as Vector3).copy(place.direction);
       // North (the spin axis) up on the disk.
       const right = (u['uRight']!.value as Vector3).set(0, 1, 0).cross(dir).negate();
       if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
       right.normalize();
       (u['uUp']!.value as Vector3).copy(right).cross(dir).normalize();
-      const half = ((body.angularDiameterDeg / 2) * Math.PI) / 180;
-      const tan = Math.tan(Math.min(half, 1.4));
+      const tan = Math.tan(Math.min(place.half, 1.4));
       u['uHalf']!.value = Math.max(tan, smallest);
       // A body smaller than its few pixels gets a faint ring, so that it
       // is not taken for a star.
@@ -1935,9 +1968,10 @@ export class PlanetView {
     this.stars.visible = this.starsOn && this.morph > 0.01;
     this.drawHostStar();
     this.drawSkyBodies();
-    if (this.skyOrbits) {
-      this.skyOrbits.visible = this.skyOrbitsOn && this.morph > 0.01;
-      this.skyOrbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
+    for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
+      if (!orbits) continue;
+      orbits.visible = this.skyOrbitsOn && this.morph > 0.01;
+      orbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
     }
     this.stars.material.uniforms['uOpacity']!.value = this.morph ** 3;
     this.stars.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();

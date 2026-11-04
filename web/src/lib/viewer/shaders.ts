@@ -819,20 +819,32 @@ export const skyBodyFragment = /* glsl */ `
   }
 `;
 
-// Orbit lines of the bodies in the sky: directions at infinity, as the
-// sky bodies are (behind everything, hidden by the globe by depth).
+// Orbit lines of the bodies in the sky: points in radii of the body
+// shown, drawn where they are, so that the near side of an orbit passes
+// in front of the globe and its far side behind it; beyond the far plane,
+// held on it, behind everything but the sky.
 export const skyOrbitVertex = /* glsl */ `
-  attribute vec3 direction;
+  attribute vec3 point;
+  // 1 where the point is beyond the far plane (held on it).
+  varying float vFar;
   void main() {
-    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * direction * 10.0, 1.0);
-    gl_Position = clip.xyww;
+    vec4 clip = projectionMatrix * viewMatrix * vec4(point, 1.0);
+    vFar = step(clip.w, clip.z);
+    clip.z = min(clip.z, clip.w);
+    gl_Position = clip;
   }
 `;
 
+// Drawn twice: the far parts (uNear 0) under the sky bodies and before
+// the globe, the near ones (uNear 1) after the globe, which hides those
+// behind it by depth.
 export const skyOrbitFragment = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
+  uniform float uNear;
+  varying float vFar;
   void main() {
+    if ((uNear > 0.5) == (vFar > 0.5)) discard;
     gl_FragColor = vec4(uColor, uOpacity);
     #include <colorspace_fragment>
   }

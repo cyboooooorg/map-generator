@@ -52,8 +52,16 @@ export function moonSpinHours(moon: Pick<Moon, 'tidally_locked' | 'migration' | 
 /** A body drawn in the sky of the body shown. */
 export interface SkyBody {
   direction: Vec3;
-  /** Apparent diameter, degrees. */
+  /** Apparent diameter from the centre of the body shown, degrees. */
   angularDiameterDeg: number;
+  /**
+   * Its centre and radius, in radii of the body shown, when it is near
+   * enough for the view to place it from the camera rather than at
+   * infinity from the centre (where it would slip off its orbit line as
+   * the camera turns round the globe).
+   */
+  position?: Vec3;
+  radius?: number;
   /** Colour of its surface, linear RGB, when it has no map. */
   colour: Vec3;
   /** Its surface map (`surface.png`), or null for a plain colour. */
@@ -195,11 +203,11 @@ export function moonPlace(
   season: number,
   yearDays: number,
   sunLongitudeRad: number,
-): { direction: Vec3; distanceKm: number } {
+): { direction: Vec3; distanceKm: number; trueAnomaly: number } {
   // A binary: the planet turns with its moon, which hangs over the same
   // point, at longitude 180° (as a moon keeps its planet there).
   if (moon.migration === 'locked') {
-    return { direction: [0, 0, -1], distanceKm: moon.semi_major_axis_km };
+    return { direction: [0, 0, -1], distanceKm: moon.semi_major_axis_km, trueAnomaly: 0 };
   }
   const turns = (season * yearDays) / Math.max(moon.period_days, 1e-3);
   const meanLongitude = sunLongitudeRad + Math.PI + index * 2.4 + 2 * Math.PI * (turns - Math.floor(turns));
@@ -217,6 +225,7 @@ export function moonPlace(
   return {
     direction: onOrbit(periapsis + trueAnomaly, tilt, node),
     distanceKm: moon.semi_major_axis_km * (1 - e * Math.cos(eccentric)),
+    trueAnomaly,
   };
 }
 
@@ -330,21 +339,31 @@ export function sunLongitudeOnMoon(
 /** Points sampled round each orbit line. */
 const ORBIT_SAMPLES = 160;
 
-/** The great circle of a frame's x-z plane, as an orbit line. */
-function circle(): Vec3[] {
-  return Array.from({ length: ORBIT_SAMPLES }, (_, i) => {
-    const a = (2 * Math.PI * i) / ORBIT_SAMPLES;
-    return [Math.sin(a), 0, Math.cos(a)] as Vec3;
-  });
+/**
+ * True anomalies to sample an orbit at: evenly round it, and, with
+ * `near` (the place of a body on it and its radius, as a share of the
+ * orbit's size), ever closer towards that place, so that the line passes
+ * through the body however close the camera is to it.
+ */
+function anomalies(near: { at: number; size: number } | null): number[] {
+  const even = Array.from({ length: ORBIT_SAMPLES }, (_, i) => (2 * Math.PI * i) / ORBIT_SAMPLES);
+  if (!near) return even;
+  const close: number[] = [near.at];
+  for (let step = 0.2 * near.size; step < (2 * Math.PI) / ORBIT_SAMPLES; step *= 1.4) {
+    close.push(near.at + step, near.at - step);
+  }
+  const wrap = (a: number) => a - 2 * Math.PI * Math.floor(a / (2 * Math.PI));
+  return [...even, ...close].map(wrap).sort((a, b) => a - b);
 }
 
 /**
- * The orbits of a planet's moons as lines in the sky, at infinity: for
- * each moon, directions to points of its orbit seen from the planet's
- * centre, or, with `shown` (from 0), from that moon's centre in its frame
- * (as moonSystemSky places the bodies). A binary's moon, which does not
- * move in its planet's sky, has none from the planet. The moon shown sees
- * its own orbit as a great circle through its planet, the way it goes.
+ * The orbits of a planet's moons as lines in the sky: for each moon,
+ * points of its orbit in radii of the body shown, round the planet's
+ * centre, or, with `shown` (from 0), round that moon's centre in its
+ * frame (as moonSystemSky places the bodies); the view draws them from
+ * the camera. A binary's moon, which does not move in its planet's sky,
+ * has none from the planet. The moon shown has its own, which passes
+ * through it (sampled ever closer to it).
  */
 export function orbitLoops(
   moons: readonly Moon[],
@@ -352,39 +371,39 @@ export function orbitLoops(
   season: number,
   yearDays: number,
   sunLongitudeRad: number,
+  bodyRadiusKm: number,
 ): Vec3[][] {
   const self = shown === null ? null : moons[shown];
   const here =
     self && shown !== null
       ? moonFrame(self, shown, season, yearDays, sunLongitudeRad)
       : null;
+  const unitKm = Math.max(here && self ? self.radius_km : bodyRadiusKm, 1e-6);
   const loops: Vec3[][] = [];
   moons.forEach((moon, k) => {
-    if (k === shown && here) {
-      // Its orbit's plane, through the moon's centre, is its frame's x-z
-      // plane (y is the orbit's normal).
-      loops.push(circle());
-      return;
-    }
-    if (moon.migration === "locked") return;
+    const own = k === shown && here !== null;
+    if (moon.migration === "locked" && !own) return;
     const tilt = (moon.inclination_deg * Math.PI) / 180;
     const e = Math.min(Math.max(moon.eccentricity, 0), 0.95);
     const { node, periapsis } = orbitOrientation(moon, season, sunLongitudeRad);
-    const loop: Vec3[] = [];
-    for (let i = 0; i < ORBIT_SAMPLES; i += 1) {
-      const nu = (2 * Math.PI * i) / ORBIT_SAMPLES;
+    const at = own ? moonPlace(moon, k, season, yearDays, sunLongitudeRad) : null;
+    // A binary's moon hangs at [0, 0, -1]: its orbit is drawn through it.
+    const locked = moon.migration === "locked";
+    const nus = anomalies(
+      at ? { at: at.trueAnomaly, size: moon.radius_km / moon.semi_major_axis_km } : null,
+    );
+    const loop = nus.map((nu): Vec3 => {
       // moonPlace's ellipse, in km.
-      const p = scale(
-        onOrbit(periapsis + nu, tilt, node),
-        (moon.semi_major_axis_km * (1 - e * e)) / (1 + e * Math.cos(nu)),
-      );
-      if (!here) {
-        loop.push(unit(p));
-      } else {
-        const v = sub(p, here.centre);
-        loop.push(unit([dot(v, here.x), dot(v, here.y), dot(v, here.z)]));
-      }
-    }
+      const p = locked
+        ? scale(turnY([0, 0, -1], nu), moon.semi_major_axis_km)
+        : scale(
+            onOrbit(periapsis + nu, tilt, node),
+            (moon.semi_major_axis_km * (1 - e * e)) / (1 + e * Math.cos(nu)),
+          );
+      if (!here) return scale(p, 1 / unitKm);
+      const v = sub(p, here.centre);
+      return scale([dot(v, here.x), dot(v, here.y), dot(v, here.z)], 1 / unitKm);
+    });
     loops.push(loop);
   });
   return loops;
@@ -392,27 +411,27 @@ export function orbitLoops(
 
 /**
  * The orbits of a giant's other regular moons in the sky of one of them
- * (see siblingSky): circles in the giant's equatorial plane round the
- * giant, at longitude 180°, `worldDistanceKm` away.
+ * (see siblingSky), and the world's own: circles in the giant's
+ * equatorial plane round the giant, at longitude 180°, `worldDistanceKm`
+ * away, in radii of the world (`worldRadiusKm`); the world's own passes
+ * through it.
  */
 export function siblingOrbitLoops(
   siblings: readonly Pick<Sibling, "distance_km">[],
   worldDistanceKm: number,
+  worldRadiusKm: number,
 ): Vec3[][] {
-  return siblings.map((sibling) => {
-    const loop: Vec3[] = [];
-    for (let i = 0; i < ORBIT_SAMPLES; i += 1) {
-      const angle = (2 * Math.PI * i) / ORBIT_SAMPLES;
-      loop.push(
-        unit([
-          sibling.distance_km * Math.sin(angle),
-          0,
-          -worldDistanceKm + sibling.distance_km * Math.cos(angle),
-        ]),
-      );
-    }
-    return loop;
-  });
+  const r = Math.max(worldRadiusKm, 1e-6);
+  const circle = (distanceKm: number, nus: number[]) =>
+    nus.map(
+      (a): Vec3 => [
+        (distanceKm * Math.sin(a)) / r,
+        0,
+        (-worldDistanceKm + distanceKm * Math.cos(a)) / r,
+      ],
+    );
+  const own = circle(worldDistanceKm, anomalies({ at: 0, size: worldRadiusKm / worldDistanceKm }));
+  return [...siblings.map((sibling) => circle(sibling.distance_km, anomalies(null))), own];
 }
 
 /**
@@ -436,6 +455,8 @@ export function planetSky(
       direction,
       // Its apparent size at its mean distance, larger near periapsis.
       angularDiameterDeg: (moon.angular_diameter_deg * moon.semi_major_axis_km) / distanceKm,
+      position: scale(direction, distanceKm / planetRadiusKm),
+      radius: moon.radius_km / planetRadiusKm,
       colour: moon.composition === 'ice' ? ICE : ROCK,
       texture: textures(k),
       axes: axesIn(moonFrame(moon, k, season, yearDays, sunLongitudeRad), (v) => v),
@@ -468,6 +489,8 @@ export function moonSky(
       {
         direction,
         angularDiameterDeg: (angle * 180) / Math.PI,
+        position: scale(direction, distance),
+        radius: planetRadiusKm / moon.radius_km,
         colour: PLANET,
         texture: planetTexture,
         axes,
@@ -522,6 +545,8 @@ export function moonSystemSky(
     sky.bodies.push({
       direction: unit(v),
       angularDiameterDeg: (2 * Math.atan(moon.radius_km / distance) * 180) / Math.PI,
+      position: scale(v, 1 / self.radius_km),
+      radius: moon.radius_km / self.radius_km,
       colour: moon.composition === 'ice' ? ICE : ROCK,
       texture: textures(k),
       axes: axesIn(there, local),
@@ -589,6 +614,8 @@ export function siblingSky(
     bodies.push({
       direction: v.map((c) => c / distance) as Vec3,
       angularDiameterDeg: (2 * Math.atan(sibling.radius_km / distance) * 180) / Math.PI,
+      position: scale(v, 1 / worldRadiusKm),
+      radius: sibling.radius_km / worldRadiusKm,
       colour: sibling.icy ? ICE : ROCK,
       texture: textures(k),
       // Locked to the giant: its z away from it, its spin axis the giant's.

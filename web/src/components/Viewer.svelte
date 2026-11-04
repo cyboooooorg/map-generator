@@ -816,7 +816,11 @@
     const planet = world.worldMeta;
     if (!orbitLines || !planet || onHostSystem) return [];
     if (world.moon === null && planet.host) {
-      return siblingOrbitLoops(planet.host.siblings ?? [], planet.host.distance_km);
+      return siblingOrbitLoops(
+        planet.host.siblings ?? [],
+        planet.host.distance_km,
+        planet.circumference_km / (2 * Math.PI),
+      );
     }
     return orbitLoops(
       moons,
@@ -824,6 +828,7 @@
       moonClock.season,
       moonClock.yearDays,
       moonClock.longitude,
+      planet.circumference_km / (2 * Math.PI),
     );
   });
   $effect(() => view?.setSkyOrbits(skyOrbitLoops));

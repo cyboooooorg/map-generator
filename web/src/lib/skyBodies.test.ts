@@ -168,26 +168,31 @@ describe('sky bodies', () => {
     const inner = moon({ semi_major_axis_km: 200_000, inclination_deg: 0 });
     const outer = moon({ semi_major_axis_km: 400_000, inclination_deg: 30 });
     const binary = moon({ migration: 'locked' });
-    // From the planet: great circles, in their planes; none for the binary.
-    const fromPlanet = orbitLoops([inner, outer, binary], null, 0, 365.25, 0);
+    const length = (d: Vec3) => Math.hypot(...d);
+    // From the planet, in its radii: circles in their planes; none for the binary.
+    const fromPlanet = orbitLoops([inner, outer, binary], null, 0, 365.25, 0, 6371);
     expect(fromPlanet).toHaveLength(2);
-    expect(fromPlanet[0]!.every((d) => Math.abs(d[1]) < 1e-9 && Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
-    expect(Math.max(...fromPlanet[1]!.map((d) => d[1]))).toBeCloseTo(Math.sin(Math.PI / 6), 2);
-    // From the inner moon: its own orbit, a great circle through its
-    // planet; the outer one's goes round its sky, through the zenith of its
-    // far side and its planet side.
+    expect(fromPlanet[0]!.every((d) => Math.abs(d[1]) < 1e-9 && Math.abs(length(d) - 200_000 / 6371) < 1e-6)).toBe(true);
+    expect(Math.max(...fromPlanet[1]!.map((d) => d[1] / length(d)))).toBeCloseTo(Math.sin(Math.PI / 6), 2);
+    // From the inner moon, in its radii: its own orbit, through it (ever
+    // closer to it) and round its planet; the outer one's goes round its
+    // sky, through the zenith of its far side and its planet side.
     const level = moon({ semi_major_axis_km: 400_000 });
-    const fromMoon = orbitLoops([inner, level], 0, 0, 365.25, 0);
+    const fromMoon = orbitLoops([inner, level], 0, 0, 365.25, 0, 6371);
     expect(fromMoon).toHaveLength(2);
     const [own, other] = fromMoon;
-    expect(own!.every((d) => Math.abs(d[1]) < 1e-9 && Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
-    expect(Math.min(...own!.map((d) => d[2]))).toBeCloseTo(-1, 9);
-    expect(other!.every((d) => Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
+    expect(own!.every((d) => Math.abs(d[1]) < 1e-6)).toBe(true);
+    expect(Math.min(...own!.map(length))).toBeLessThan(1);
+    // Its planet, 200 000 km away, at the centre of its circle.
+    const centre = own!.reduce((sum, d) => sum.map((c, i) => c + d[i]!) as Vec3, [0, 0, 0] as Vec3);
+    expect(Math.max(...own!.map((d) => d[2]))).toBeLessThan(1);
+    expect(Math.min(...own!.map((d) => d[2]))).toBeCloseTo(-2 * 200_000 / 1737, 0);
+    expect(centre[2]).toBeLessThan(0);
     // A loop of the outer orbit seen from inside it spans the whole sky.
-    expect(Math.max(...other!.map((d) => d[2]))).toBeGreaterThan(0.9);
-    expect(Math.min(...other!.map((d) => d[2]))).toBeLessThan(-0.9);
+    expect(Math.max(...other!.map((d) => d[2] / length(d)))).toBeGreaterThan(0.9);
+    expect(Math.min(...other!.map((d) => d[2] / length(d)))).toBeLessThan(-0.9);
     // A binary's moon sees its own orbit too.
-    expect(orbitLoops([binary], 0, 0, 365.25, 0)).toHaveLength(1);
+    expect(orbitLoops([binary], 0, 0, 365.25, 0, 6371)).toHaveLength(1);
   });
 
   it("puts the sun over a moon's latitude from its planet's season and its orbit", () => {
@@ -241,7 +246,11 @@ describe('sky bodies', () => {
   });
 
   it("circles a giant's other moons round it", () => {
-    const [loop] = siblingOrbitLoops([{ distance_km: 100 }], 1000);
+    const loops = siblingOrbitLoops([{ distance_km: 100 }], 1000, 10);
+    expect(loops).toHaveLength(2);
+    const [loop, own] = loops;
+    // The world's own orbit passes through it.
+    expect(Math.min(...own!.map((d) => Math.hypot(...d)))).toBeLessThan(1e-9);
     // Seen from 1000 km off, a 100 km circle spans about ±5.7° round the giant.
     const spread = Math.max(...loop!.map((d) => Math.atan2(d[0], -d[2])));
     expect(spread).toBeCloseTo(Math.asin(0.1), 3);
