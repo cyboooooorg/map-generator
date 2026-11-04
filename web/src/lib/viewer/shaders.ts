@@ -647,9 +647,11 @@ export const skyBodyVertex = /* glsl */ `
   uniform vec3 uRight;
   uniform vec3 uUp;
   uniform float uHalf;
+  // The quad's half-size over the disk's: room for the halo.
+  uniform float uGrow;
   varying vec2 vP;
   void main() {
-    vP = position.xy * 2.0;
+    vP = position.xy * 2.0 * uGrow;
     vec3 d = uDir + (vP.x * uRight + vP.y * uUp) * uHalf;
     vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * d * 10.0, 1.0);
     gl_Position = clip.xyww;
@@ -657,7 +659,10 @@ export const skyBodyVertex = /* glsl */ `
 `;
 
 // The body as a lit sphere: its visible hemisphere faces the viewer, its
-// day side the sun (phases), mapped with its surface when it has one.
+// day side the sun (phases), mapped with its surface when it has one, its
+// clouds over it, and its atmosphere: brighter towards the limb on the
+// day side, and a halo around it, lit on the sunny side and brightest when
+// the sun is behind the body.
 export const skyBodyFragment = /* glsl */ `
   const float PI = 3.141592653589793;
   uniform vec3 uDir;
@@ -667,6 +672,13 @@ export const skyBodyFragment = /* glsl */ `
   uniform vec3 uColor;
   uniform float uHasMap;
   uniform sampler2D uMap;
+  uniform float uHasClouds;
+  uniform sampler2D uClouds;
+  uniform vec3 uCloudTint;
+  // Halo: its colour, its height in disk radii, its strength (0: none).
+  uniform vec3 uHaloColor;
+  uniform float uHaloHeight;
+  uniform float uHaloStrength;
   uniform float uOpacity;
   // Longitude of the map facing the viewer, radians, when uHasFace is 1
   // (a moon's face towards its planet); else the map is in the viewer's
@@ -676,20 +688,41 @@ export const skyBodyFragment = /* glsl */ `
   varying vec2 vP;
   void main() {
     float r2 = dot(vP, vP);
-    if (r2 > 1.0) discard;
+    if (r2 > 1.0) {
+      if (uHaloStrength <= 0.0) discard;
+      float r = sqrt(r2);
+      float fall = exp(-(r - 1.0) / max(uHaloHeight * 0.35, 1e-4));
+      if (fall < 0.004) discard;
+      // The limb under this point of the halo, and how much sun it gets.
+      vec3 limb = normalize(vP.x * uRight + vP.y * uUp);
+      float day = smoothstep(-0.25, 0.35, dot(limb, uSunDir));
+      // Forward scattering, the sun behind the body: a bright ring.
+      float behind = pow(max(dot(uDir, uSunDir), 0.0), 6.0);
+      float glow = uHaloStrength * fall * min(day + 2.0 * behind, 1.5);
+      gl_FragColor = vec4(uHaloColor, min(glow, 1.0) * uOpacity);
+      #include <colorspace_fragment>
+      return;
+    }
     vec3 n = normalize(vP.x * uRight + vP.y * uUp - sqrt(1.0 - r2) * uDir);
     vec3 colour = uColor;
+    // Turned about the spin axis so that the centre of the disk shows
+    // the face's longitude.
+    float lon = atan(n.x, n.z) + uHasFace * (uFace - atan(-uDir.x, -uDir.z));
+    float lat = asin(clamp(n.y, -1.0, 1.0));
+    vec2 uv = vec2(fract(lon / (2.0 * PI)), lat / PI + 0.5);
     if (uHasMap > 0.5) {
-      // Turned about the spin axis so that the centre of the disk shows
-      // the face's longitude.
-      float lon = atan(n.x, n.z) + uHasFace * (uFace - atan(-uDir.x, -uDir.z));
-      float lat = asin(clamp(n.y, -1.0, 1.0));
-      colour = texture2D(uMap, vec2(fract(lon / (2.0 * PI)), lat / PI + 0.5)).rgb;
+      colour = texture2D(uMap, uv).rgb;
+    }
+    if (uHasClouds > 0.5) {
+      colour = mix(colour, uCloudTint, texture2D(uClouds, uv).r);
     }
     float lit = max(dot(n, uSunDir), 0.0);
-    // A soft edge, and a faint night side; opaque inside, so the stars
-    // and the host star behind it are hidden.
-    float edge = 1.0 - smoothstep(0.96, 1.0, r2);
+    // Through more air towards the limb: the scattered light takes over.
+    float mu = sqrt(1.0 - r2);
+    colour = mix(colour, uHaloColor, uHaloStrength * 0.6 * pow(1.0 - mu, 2.0));
+    // A soft edge (none under a halo), and a faint night side; opaque
+    // inside, so the stars and the host star behind it are hidden.
+    float edge = uHaloStrength > 0.0 ? 1.0 : 1.0 - smoothstep(0.96, 1.0, r2);
     gl_FragColor = vec4(colour * (0.015 + 0.985 * lit), edge * uOpacity);
     #include <colorspace_fragment>
   }

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Moon } from './api/types/Moon';
+import type { WorldMetadata } from './api/types/WorldMetadata';
+import { skyFromWorld } from './sky';
 import {
   eclipse,
+  halo,
   joinSkies,
   MAX_CASTERS,
   moonDirection,
@@ -150,3 +153,28 @@ describe('sky bodies', () => {
   });
 });
 
+
+describe('halo', () => {
+  const world = (pressure: number, atmosphere?: object) =>
+    ({ pressure_bar: pressure, preset: { atmosphere } }) as unknown as WorldMetadata;
+
+  it('gives an airless planet no halo', () => {
+    expect(halo(skyFromWorld(world(0, { haze: 0 })))).toBeNull();
+  });
+
+  it("gives Earth's air a blue halo, a thin one", () => {
+    const earth = halo(skyFromWorld(world(1)))!;
+    expect(earth.colour[2]).toBe(1);
+    expect(earth.colour[0]).toBeLessThan(0.7);
+    expect(earth.thickness).toBeGreaterThan(0.02);
+    expect(earth.thickness).toBeLessThan(0.06);
+    expect(earth.strength).toBeGreaterThan(0.1);
+    expect(earth.strength).toBeLessThanOrEqual(1);
+  });
+
+  it('brightens the halo of a denser air', () => {
+    const thin = halo(skyFromWorld(world(0.006)))!;
+    const dense = halo(skyFromWorld(world(92)))!;
+    expect(dense.strength).toBeGreaterThan(thin.strength);
+  });
+});

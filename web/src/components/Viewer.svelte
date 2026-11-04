@@ -25,7 +25,7 @@
   import StarPane from './StarPane.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
-  import { joinSkies, moonSky, moonSystemSky, planetSky, siblingSky } from '../lib/skyBodies';
+  import { halo, joinSkies, moonSky, moonSystemSky, planetSky, siblingSky } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -595,7 +595,15 @@
     const longitude = ((planetLocked ? 180 : sunLongitude) * Math.PI) / 180;
     if (shownMoon && world.moon !== null) {
       const map = planetId ? worldFile(planetId, 'raw_data/surface.png', revision) : null;
-      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude);
+      // The planet as its own view shows it: its clouds and its air, by
+      // the Clouds and Atmosphere switches.
+      const cloudFile = planet.layers.clouds?.file;
+      const look = {
+        clouds: clouds && planetId && cloudFile ? worldFile(planetId, `raw_data/${cloudFile}`, revision) : null,
+        cloudTint: cloudTint(planet),
+        halo: atmosphere ? halo(skyFromWorld(planet)) : null,
+      };
+      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude, look);
     }
     // The moon of a giant: the giant hangs over the face the world keeps
     // towards it (longitude 180°), its bands from its own world in host/.
