@@ -740,6 +740,37 @@ export const skyBodyFragment = /* glsl */ `
       float cover = 1.0 - smoothstep(0.5, 1.5, d);
       if (cover > mark.a) mark = vec4(i == 0 ? vec3(0.9, 0.9, 0.85) : vec3(0.3, 0.45, 0.85), cover);
     }
+    // The sense of rotation: an arrow bent round the axis near its north
+    // end, as on the globe (1.3 radii up, 0.3 round, three quarters of a
+    // turn, prograde from z towards x), hidden behind the disk.
+    vec3 centre = uAxisY * 1.3;
+    float arrow = 0.0;
+    vec3 prev = centre + 0.3 * uAxisZ;
+    for (int i = 1; i <= 21; i++) {
+      float angle = 1.5 * PI * min(float(i), 18.0) / 18.0;
+      vec3 q;
+      vec3 from = prev;
+      if (i <= 18) {
+        q = centre + 0.3 * (sin(angle) * uAxisX + cos(angle) * uAxisZ);
+        prev = q;
+      } else {
+        // Its head: two strokes back from the tip.
+        float back = 1.5 * PI - 0.45;
+        float radius = i == 19 ? 0.225 : 0.375;
+        from = centre + 0.3 * (sin(1.5 * PI) * uAxisX + cos(1.5 * PI) * uAxisZ);
+        q = centre + radius * (sin(back) * uAxisX + cos(back) * uAxisZ);
+        if (i == 21) continue;
+      }
+      // Hidden where it passes behind the disk.
+      float depth = dot(0.5 * (from + q), -uDir);
+      if (r2 < 1.0 && depth < 0.0) continue;
+      vec2 a = vec2(dot(from, uRight), dot(from, uUp));
+      vec2 ab = vec2(dot(q, uRight), dot(q, uUp)) - a;
+      float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+      float d = length(p - a - ab * t) / max(length(fwidth(p)), 1e-6);
+      arrow = max(arrow, 1.0 - smoothstep(0.5, 1.5, d));
+    }
+    if (arrow > mark.a) mark = vec4(0.9, 0.9, 0.85, arrow);
     return mark;
   }
 
