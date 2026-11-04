@@ -742,18 +742,36 @@ export const skyBodyFragment = /* glsl */ `
     if (uHasClouds > 0.5) {
       colour = mix(colour, uCloudTint, texture2D(uClouds, uv).r);
     }
-    float lit = max(dot(n, uSunDir), 0.0);
-    // Through more air towards the limb: the scattered light takes over.
+    // Cosines of the sun's and of the viewer's angles from the vertical.
+    float sunCos = dot(n, uSunDir);
     float mu = sqrt(1.0 - r2);
-    colour = mix(colour, uHaloColor, uHaloStrength * 0.6 * pow(1.0 - mu, 2.0));
+    float lit;
+    if (uHaloStrength > 0.0) {
+      // Under air: Lambert, the terminator softened by twilight (light
+      // bent and scattered a few degrees past it), and the limb darkened,
+      // as thick atmospheres and giants show it (seen through more haze).
+      float twilight = smoothstep(-0.08, 0.12, sunCos);
+      lit = max(sunCos, 0.0) * 0.92 + 0.08 * twilight;
+      lit *= mix(0.55, 1.0, pow(mu, 0.4));
+      // Through more air towards the limb: the scattered light takes over.
+      colour = mix(colour, uHaloColor, uHaloStrength * 0.6 * pow(1.0 - mu, 2.0));
+    } else {
+      // Airless: half Lambert, half Lommel-Seeliger (the dusty regolith of
+      // the Moon, which hardly darkens at the limb), so the disk keeps
+      // some roundness without looking like a lit ball of plaster.
+      float s = max(sunCos, 0.0);
+      lit = 0.5 * s + s / (s + mu + 1e-4);
+    }
     // A soft edge (none under a halo), and a faint night side; opaque
     // inside, so the stars and the host star behind it are hidden.
     float edge = uHaloStrength > 0.0 ? 1.0 : 1.0 - smoothstep(0.96, 1.0, r2);
-    colour *= 0.015 + 0.985 * lit;
-    // Map marks last, unshaded, as on the planet view; faded at the limb,
+    // (0.4 % of the day: about 5 % once encoded, a hint of earthshine.)
+    colour *= 0.004 + 0.996 * min(lit, 1.0);
+    // Map marks last, as on the planet view, but half shaded so that they
+    // follow the sphere (dimmer on the night side), and faded at the limb,
     // where they crowd into a fringe.
     float latDeg = degrees(lat);
-    float marks = smoothstep(0.05, 0.25, mu);
+    float marks = smoothstep(0.05, 0.25, mu) * (0.35 + 0.65 * smoothstep(-0.1, 0.3, sunCos));
     if (uGrid > 0.5) {
       float line = max(lineNear(latDeg, 30.0, 1.0), lineNear(uv.x * 360.0, 30.0, 1.0));
       colour = mix(colour, vec3(1.0), 0.25 * line * marks);
