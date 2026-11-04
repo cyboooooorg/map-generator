@@ -64,6 +64,14 @@ pub const GIANT_MASS: Limits = Limits {
     min: 5.0,
     max: 4_131.0,
 };
+/// Number of moons a request can ask for.
+pub const MOON_COUNT: Limits = Limits {
+    min: 1.0,
+    max: crate::moons::MAX_MOON_COUNT as f32,
+};
+/// Star and orbit draws tried for a planet with room for the moons asked
+/// for.
+const MOON_ORBIT_ATTEMPTS: usize = 64;
 /// Metallicity of the star, dex (see `crate::giants`).
 pub const METALLICITY: Limits = Limits {
     min: crate::giants::METALLICITY.0,
@@ -171,6 +179,12 @@ pub enum RequestError {
     BadStar(String),
     /// Both `orbit_au` and `hz_position` are set.
     OrbitAndPosition,
+    /// The moons asked for find no stable orbits around the planet: it is
+    /// locked to its star or too close to it, and its star and orbit were
+    /// set (otherwise they are drawn again).
+    NoRoomForMoons {
+        count: u8,
+    },
     Preset(PresetError),
 }
 
@@ -193,6 +207,11 @@ impl fmt::Display for RequestError {
                 write!(f, "set sea_level or land_fraction, not both")
             }
             RequestError::BadStar(e) => write!(f, "star: {e}"),
+            RequestError::NoRoomForMoons { count } => write!(
+                f,
+                "no stable orbits for {count} moon(s) around this planet: it is tidally \
+                 locked to its star or too close to it (pick a farther orbit or a hotter star)"
+            ),
             RequestError::OrbitAndPosition => {
                 write!(f, "set orbit_au or hz_position, not both")
             }
@@ -224,6 +243,14 @@ impl WorldRequest {
         }
         if self.orbit_au.is_some() && self.hz_position.is_some() {
             return Err(RequestError::OrbitAndPosition);
+        }
+        if let Some(crate::moons::MoonsMode::Count(n)) = self.moons
+            && !(1..=crate::moons::MAX_MOON_COUNT).contains(&n)
+        {
+            return Err(RequestError::OutOfRange {
+                field: "moons",
+                limits: MOON_COUNT,
+            });
         }
         if let Some(star) = &self.star {
             crate::star::parse_type(star).map_err(RequestError::BadStar)?;
@@ -324,51 +351,65 @@ impl WorldRequest {
             .surface_age_ga
             .unwrap_or_else(|| d.surface_age.unwrap_or(fallback::SURFACE_AGE_GA).pick(rng));
         // The star, then the orbit, drawn after everything else (above).
-        let s = &planet.star;
-        let star = match self.star.as_deref().or(s.kind.as_deref()) {
-            Some(kind) => crate::star::parse_type(kind).map_err(RequestError::BadStar)?,
-            None => crate::star::draw_type(rng),
-        };
-        let orbit_au = match (self.orbit_au, self.hz_position, s.orbit_au) {
-            (Some(au), _, _) => au,
-            (None, Some(position), _) => crate::star::orbit_at(star, position),
-            (None, None, Some(au)) => au,
-            (None, None, None) => match planet.giant.as_ref().and_then(|g| g.period_days) {
-                // A hot giant is placed by its period (Kepler's third law).
-                Some(period) => {
-                    let years = period.pick(rng) / 365.25;
-                    (crate::star::values(star).mass * years * years).cbrt()
+        // A giant's mass, before the star and orbit (which the moons may
+        // draw again).
+        let giant_mass_earth = planet
+            .giant
+            .as_ref()
+            .map(|g| self.mass_earth.unwrap_or_else(|| g.mass.pick(rng)));
+        let star_spec = planet.star.clone();
+        let s = &star_spec;
+        let period_days = planet.giant.as_ref().and_then(|g| g.period_days);
+        let star_set = self.star.is_some() || s.kind.is_some();
+        let orbit_set =
+            self.orbit_au.is_some() || self.hz_position.is_some() || s.orbit_au.is_some();
+        let mut draw_orbit = || -> Result<(f32, f32, f32), RequestError> {
+            let star = match self.star.as_deref().or(s.kind.as_deref()) {
+                Some(kind) => crate::star::parse_type(kind).map_err(RequestError::BadStar)?,
+                None => crate::star::draw_type(rng),
+            };
+            let orbit_au = match (self.orbit_au, self.hz_position, s.orbit_au) {
+                (Some(au), _, _) => au,
+                (None, Some(position), _) => crate::star::orbit_at(star, position),
+                (None, None, Some(au)) => au,
+                (None, None, None) => match period_days {
+                    // A hot giant is placed by its period (Kepler's third law).
+                    Some(period) => {
+                        let years = period.pick(rng) / 365.25;
+                        (crate::star::values(star).mass * years * years).cbrt()
+                    }
+                    None => crate::star::orbit_at(
+                        star,
+                        s.position.unwrap_or(fallback::HZ_POSITION).pick(rng),
+                    ),
+                },
+            };
+            // The eccentricity last; tides circularise the orbits of the
+            // planets they lock.
+            let eccentricity = match (self.eccentricity, s.eccentricity) {
+                (Some(e), _) => e,
+                (None, Some(e)) => e.pick(rng),
+                (None, None) => {
+                    let drawn = crate::star::draw_eccentricity(rng);
+                    if crate::star::StarInfo::new(star, orbit_au, 0.0).tidally_locked {
+                        0.0
+                    } else {
+                        drawn
+                    }
                 }
-                None => crate::star::orbit_at(
-                    star,
-                    s.position.unwrap_or(fallback::HZ_POSITION).pick(rng),
-                ),
-            },
+            };
+            Ok((star, orbit_au, eccentricity))
         };
+        let (star, orbit_au, eccentricity) = draw_orbit()?;
         // Not drawn from the main stream: the values above keep their draws.
         let metallicity = self
             .metallicity
             .or(s.metallicity)
             .unwrap_or_else(|| crate::giants::draw_metallicity(seed));
-        let locked = crate::star::StarInfo::new(star, orbit_au, 0.0).tidally_locked;
         let eccentricity_drawn = self.eccentricity.is_none() && s.eccentricity.is_none();
-        // The eccentricity last; tides circularise the orbits of the planets
-        // they lock.
-        let eccentricity = match (self.eccentricity, s.eccentricity) {
-            (Some(e), _) => e,
-            (None, Some(e)) => e.pick(rng),
-            (None, None) => {
-                let drawn = crate::star::draw_eccentricity(rng);
-                if locked { 0.0 } else { drawn }
-            }
-        };
-        // A giant: its mass (drawn last), its radius from the mass and the
-        // heat it gets; no ground, so no erosion, volcanoes, moons of the
-        // rocky kind or giant neighbours (not modelled for a giant).
-        let giant_mass_earth = planet
-            .giant
-            .as_ref()
-            .map(|g| self.mass_earth.unwrap_or_else(|| g.mass.pick(rng)));
+        // A giant: its radius from its mass and the heat it gets; no ground,
+        // so no erosion, volcanoes, moons of the rocky kind or giant
+        // neighbours (not modelled for a giant).
         let giant = giant_mass_earth.is_some();
         let circumference_km = match giant_mass_earth {
             Some(mass) => {
@@ -412,6 +453,26 @@ impl WorldRequest {
         // (moons and star) widen or narrow the tidal flats. Applied to the
         // parameters, so `world.json` (its tilt, its preset's shore width)
         // explains the world as generated.
+        // Moons asked for need room: a planet free of its star's tides and
+        // far enough from it. A drawn star and orbit are drawn again until
+        // they leave it (the generation stays coherent); set ones that do
+        // not are an error.
+        if let Some(n) = params.moons.count() {
+            let room = |p: &WorldParams| {
+                crate::moons::MoonSystem::draw(p).is_some_and(|m| m.moons.len() >= usize::from(n))
+            };
+            let mut attempts = 0;
+            while !room(&params) {
+                if (star_set && orbit_set) || attempts >= MOON_ORBIT_ATTEMPTS {
+                    return Err(RequestError::NoRoomForMoons { count: n });
+                }
+                let (star, orbit_au, eccentricity) = draw_orbit()?;
+                params.star = star;
+                params.orbit_au = orbit_au;
+                params.eccentricity = eccentricity;
+                attempts += 1;
+            }
+        }
         let system = crate::moons::MoonSystem::draw(&params);
         let effects = crate::moons::PlanetEffects::of(&params, system.as_ref());
         if tilt_drawn && let ParamDefault::Range(range) = fallback::AXIAL_TILT_DEG {
@@ -419,7 +480,9 @@ impl WorldRequest {
         }
         params.planet.rules.shore_width_km *= effects.shore_factor;
         // Eccentric giants force an eccentricity on the world: a drawn one is
-        // at least that (the giants are placed around the final orbit).
+        // at least that (the giants are placed around the final orbit, which
+        // the moons may have drawn again).
+        let locked = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0).tidally_locked;
         if eccentricity_drawn && !locked {
             for _ in 0..3 {
                 let forced = crate::giants::GiantSystem::draw(&params)
@@ -694,5 +757,46 @@ mod tests {
                 .axial_tilt_deg,
             55.0
         );
+    }
+
+    #[test]
+    fn moons_asked_for_get_a_star_and_orbit_with_room_for_them() {
+        for seed in 0..40 {
+            let request = WorldRequest {
+                planet: Some("terran".into()),
+                seed: Some(seed),
+                moons: Some(crate::moons::MoonsMode::Count(3)),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            };
+            let p = request.resolve(&mut rand::rng()).unwrap().params;
+            let system = crate::moons::MoonSystem::draw(&p).unwrap();
+            assert_eq!(system.moons.len(), 3);
+            assert!(!crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity).tidally_locked);
+        }
+        // A star and orbit set by the request that lock the planet: no room.
+        let locked = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(1),
+            star: Some("M5V".into()),
+            hz_position: Some(0.5),
+            moons: Some(crate::moons::MoonsMode::Count(1)),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        };
+        assert!(matches!(
+            locked.resolve(&mut rand::rng()),
+            Err(RequestError::NoRoomForMoons { count: 1 })
+        ));
+        let too_many = WorldRequest {
+            moons: Some(crate::moons::MoonsMode::Count(9)),
+            ..Default::default()
+        };
+        assert!(matches!(
+            too_many.resolve(&mut rand::rng()),
+            Err(RequestError::OutOfRange { field: "moons", .. })
+        ));
     }
 }

@@ -54,6 +54,9 @@ pub struct FormSpec {
     pub orbit_au: Limits,
     /// Limits of the orbit's eccentricity.
     pub eccentricity: Limits,
+    /// Limits of the number of moons a request can ask for (`moons:
+    /// {"count": n}`); without one, the seed draws them.
+    pub moon_count: Limits,
     /// Limits of the star's metallicity (dex).
     pub metallicity: Limits,
     pub default_width: u32,
@@ -211,6 +214,9 @@ pub enum ErrorDetail {
     UnknownStar { star: String },
     /// Both `orbit_au` and `hz_position` are set.
     OrbitAndPosition,
+    /// The moons asked for find no stable orbits around the planet (locked
+    /// to its star or too close to it, with its star and orbit set).
+    NoRoomForMoons { count: u8 },
 }
 
 impl ErrorDetail {
@@ -233,6 +239,7 @@ impl ErrorDetail {
             RequestError::SeaLevelAndLandFraction => Some(Self::SeaLevelAndLandFraction),
             RequestError::BadStar(e) => Some(Self::UnknownStar { star: e.clone() }),
             RequestError::OrbitAndPosition => Some(Self::OrbitAndPosition),
+            RequestError::NoRoomForMoons { count } => Some(Self::NoRoomForMoons { count: *count }),
             RequestError::Preset(_) => None,
         }
     }

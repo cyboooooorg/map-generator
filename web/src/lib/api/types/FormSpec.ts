@@ -24,6 +24,11 @@ orbit_au: Limits,
  */
 eccentricity: Limits, 
 /**
+ * Limits of the number of moons a request can ask for (`moons:
+ * {"count": n}`); without one, the seed draws them.
+ */
+moon_count: Limits, 
+/**
  * Limits of the star's metallicity (dex).
  */
 metallicity: Limits, default_width: number, default_height: number, 

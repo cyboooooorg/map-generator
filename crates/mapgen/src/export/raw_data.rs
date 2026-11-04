@@ -805,10 +805,12 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         orbit_au: meta.star.as_ref().map_or(1.0, |s| s.orbit_au),
         eccentricity: meta.star.as_ref().map_or(0.0, |s| s.eccentricity),
         drift_ma: meta.drift_ma,
-        moons: if meta.moons.is_some() {
-            crate::moons::MoonsMode::Auto
-        } else {
-            crate::moons::MoonsMode::None
+        moons: match &meta.moons {
+            Some(system) => system.count_asked.map_or(
+                crate::moons::MoonsMode::Auto,
+                crate::moons::MoonsMode::Count,
+            ),
+            None => crate::moons::MoonsMode::None,
         },
         shape: meta.shape,
         metallicity: meta.star.as_ref().map_or(0.0, |s| s.metallicity),

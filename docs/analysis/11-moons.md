@@ -338,6 +338,28 @@ generated:
   viewer's sky, at longitude 180°; the planet's day already equals the
   moon's month (step 1).
 
+**Follow-up (moon count, 2026-11-04).** The user found moons rare and
+asked for their number in the form, the rest of the world following:
+
+- **Request:** `moons` is `auto`, `none` or `{"count": n}` (1 to 6;
+  `--moons n`). The seed's own moons come first, the largest kept when
+  there are too many; more come from a draw sequence of their own (a
+  giant-impact moon if none, debris moonlets, then captured moons).
+- **Room:** the spacing of eight mutual Hill radii, made for orbits of
+  comparable masses, left no room beside a large moon (a Moon at 43
+  Earth radii excluded 0 to 106); added moons keep out of the chaotic
+  zone of each heavier one instead, `1.5 a q^(2/7)` from periapsis to
+  apoapsis (Wisdom 1980). Captured ones range from 0.03 to 0.45 Hill
+  radii, retrograde beyond a third of it (where only retrograde orbits
+  last), half as eccentric: over 1 200 Earth systems of 1 to 6 moons,
+  fewer than 10 fall short.
+- **Coherence:** a drawn star and orbit that leave no room (a planet
+  locked to its star, a Hill sphere too small) are drawn again, up to 64
+  times; set ones are refused (`no_room_for_moons`, worded by the web
+  app). The tilt and tides then follow the moons as in step 5.
+- The seed's draws in `auto` are unchanged: a hash of 6 000 systems
+  matches before and after.
+
 ### Choices (confirmed by the user, 2026-11-04)
 
 - Moons are generated with the planet (not on demand when first

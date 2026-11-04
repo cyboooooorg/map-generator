@@ -51,7 +51,6 @@ import {
   WebGLRenderer,
   type IUniform,
 } from 'three';
-import { decode as decodePng } from 'fast-png';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { HexMap } from '../api/types/HexMap';
 import {
@@ -66,6 +65,7 @@ import {
   type Vec3,
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
+import { decodePng } from '../layers/png';
 import { MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
@@ -857,7 +857,7 @@ export class PlanetView {
     if (!response.ok) {
       throw new Error(`${response.status}`);
     }
-    const image = decodePng(new Uint8Array(await response.arrayBuffer()));
+    const image = decodePng(await response.arrayBuffer());
     if (this.disposed || request !== this.shapeRequest) {
       return;
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bodyPath } from './api/client';
-import { bodyFileName, moonBody, moonsOf, parseBody } from './moons';
+import { bodyFileName, moonBody, moonChoiceOf, moonsOf, moonsRequest, parseBody, parseMoonChoice } from './moons';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 
 describe('moons', () => {
@@ -16,5 +16,16 @@ describe('moons', () => {
   it('lists no moons for a world made before them', () => {
     expect(moonsOf(null)).toEqual([]);
     expect(moonsOf({} as WorldMetadata)).toEqual([]);
+  });
+
+  it('turns the form choice into a request and back', () => {
+    expect(moonsRequest('auto')).toBeUndefined();
+    expect(moonsRequest('none')).toBe('none');
+    expect(moonsRequest(3)).toEqual({ count: 3 });
+    expect(moonChoiceOf(undefined)).toBe('auto');
+    expect(moonChoiceOf('none')).toBe('none');
+    expect(moonChoiceOf({ count: 2 })).toBe(2);
+    expect(parseMoonChoice(4, 6)).toBe(4);
+    expect(parseMoonChoice(0, 6)).toBe('auto');
   });
 });

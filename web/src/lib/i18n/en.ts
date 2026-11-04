@@ -384,6 +384,12 @@ export const en = {
     eccentricity: 'Eccentricity',
     eccentricityHelp:
       '0: a circle · Venus: 0.007 · Earth: 0.017 · Mars: 0.09 · Mercury: 0.21. More gives more light over a year. Random: drawn like the planets known, circular for tidally locked ones',
+    moons: 'Moons',
+    moonsAuto: 'Drawn by the seed',
+    moonsNone: 'None',
+    moonsCount: (p: { count: number }) => (p.count === 1 ? '1 moon' : `${p.count} moons`),
+    moonsHelp:
+      'Drawn by the seed: about one rocky planet in 12 has a large moon, small worlds often a companion, others small debris or captured moons, planets locked to their star none. A number gets that many stable moons: a random star and orbit are drawn again until the planet is free of its star’s tides and has room for them; a large moon steadies the axial tilt, and the moons raise the tides',
     seed: 'Seed',
     seedPlaceholder: 'random',
     roll: 'Roll',
@@ -768,6 +774,8 @@ export const en = {
     seaLevelAndLandFraction: 'Set the sea level or the land share, not both.',
     unknownStar: (p: { star: string }) => `Unknown star: ${p.star}`,
     orbitAndPosition: 'Set the orbit by its distance or by its position in the habitable zone, not both.',
+    noRoomForMoons: (p: { count: number }) =>
+      `No stable orbits for ${p.count === 1 ? 'a moon' : `${p.count} moons`}: the star and orbit chosen lock the planet to its star or keep it too close. Leave them random, or pick a farther orbit or a hotter star.`,
     unknownPreset: (p: { preset: string }) => `There is no planet preset named ${p.preset}.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,

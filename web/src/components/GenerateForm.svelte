@@ -17,6 +17,7 @@
   import { type Unit, unitTooltip } from '../lib/units';
   import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
   import { applyStarChoice, initialStarChoice, STAR_CLASSES, type StarChoice } from '../lib/starForm';
+  import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
 
   interface Props {
     presets: PresetInfo[];
@@ -208,6 +209,8 @@
   let seaBy = $state<SeaBy>(memory?.seaBy ?? (startLand ? 'land' : 'level'));
   /** Land share in percent, used when `seaBy` is 'land'. */
   let landPercent = $state(memory?.landPercent ?? startLand?.percent ?? 29);
+  /** The moons asked for: drawn by the seed, none, or a number. */
+  let moons = $state<MoonChoice>(untrack(() => memory?.moons ?? moonChoiceOf(start.initial?.moons)));
   /** The star and the orbit (see starForm.ts). */
   let star = $state<StarChoice>(
     untrack(() => memory?.star ?? initialStarChoice(start.preset, start.initial, spec.hz_position.fallback)),
@@ -292,6 +295,10 @@
       }
     }
     applyStarChoice(request, star);
+    const asked = moonsRequest(moons);
+    if (asked !== undefined) {
+      request.moons = asked;
+    }
     if (!fields.sea_level.random) {
       if (seaBy === 'level') {
         request.sea_level = fields.sea_level.value;
@@ -331,7 +338,7 @@
       // The server swaps the new world in once it is complete: a failed or
       // cancelled generation keeps the old one.
       const job = await api.createWorld(request, { replace: conflict && replace });
-      saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields, star });
+      saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields, star, moons });
       onSubmitted(job, request);
     } catch (e) {
       error = errorText(e);
@@ -533,6 +540,17 @@
       </div>
     {/if}
     <p class="help">{t.form.eccentricityHelp}</p>
+  </fieldset>
+  <fieldset>
+    <legend>{t.form.moons}</legend>
+    <select bind:value={moons} aria-label={t.form.moons}>
+      <option value="auto">{t.form.moonsAuto}</option>
+      <option value="none">{t.form.moonsNone}</option>
+      {#each Array.from({ length: spec.moon_count.max - spec.moon_count.min + 1 }, (_, i) => spec.moon_count.min + i) as count (count)}
+        <option value={count}>{t.form.moonsCount({ count })}</option>
+      {/each}
+    </select>
+    <p class="help">{t.form.moonsHelp}</p>
   </fieldset>
 
   <div class="row">
