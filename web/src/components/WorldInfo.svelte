@@ -132,8 +132,14 @@
                   outer: formatUpTo(g.rings.outer, 2),
                 })
               : (t.starView.rings['none'] ?? '')}{#if g.great_spot}
-              · {g.kind === 'ice' ? t.worldInfo.darkSpot : t.worldInfo.greatSpot}{/if}{#if g.hexagon}
-              · {t.worldInfo.hexagon}{/if}
+              · {g.kind === 'ice' ? t.worldInfo.darkSpot : t.worldInfo.greatSpot}{/if}
+          </dd>
+          <dt title={t.worldInfo.polesHelp}>{t.worldInfo.poles}</dt>
+          <dd>
+            {t.worldInfo.polesValue({
+              north: t.worldInfo.pole({ style: g.poles[0], cyclones: g.polar_cyclones[0] }),
+              south: t.worldInfo.pole({ style: g.poles[1], cyclones: g.polar_cyclones[1] }),
+            })}
           </dd>
         {:else}
           <dt>{t.worldInfo.seaLevel}</dt>

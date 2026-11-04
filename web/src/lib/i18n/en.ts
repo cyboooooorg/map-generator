@@ -234,6 +234,18 @@ export const en = {
     giantHeat: 'Internal heat',
     giantHeatHelp: 'Heat it radiates over what it gets from its star: Jupiter 1.7, Neptune 2.6, Uranus about 1',
     giantHeatValue: (p: { ratio: string }) => `${p.ratio}× the starlight it absorbs`,
+    poles: 'Poles',
+    polesHelp:
+      "Poleward of about 64° the bands break down. Jupiter's poles hold a cyclone ringed by eight others (north) or five (south), on folded filaments (Juno, Adriani et al. 2018); Saturn's north, a hexagonal jet round a polar vortex; the ice giants, a haze",
+    polesValue: (p: { north: string; south: string }) => `north: ${p.north} · south: ${p.south}`,
+    pole: (p: { style: string; cyclones: number }) =>
+      p.style === 'hexagon'
+        ? 'a hexagon'
+        : p.style === 'cyclones'
+          ? p.cyclones > 0
+            ? `a cyclone ringed by ${p.cyclones}`
+            : 'a polar cyclone'
+          : 'a haze',
     giantRings: 'Rings · storms',
     giantRingsValue: (p: { kind: string; inner: string; outer: string }) => `${p.kind}, ${p.inner} to ${p.outer} radii`,
     greatSpot: 'a great spot',
