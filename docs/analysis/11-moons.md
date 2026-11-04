@@ -360,6 +360,20 @@ asked for their number in the form, the rest of the world following:
 - The seed's draws in `auto` are unchanged: a hash of 6 000 systems
   matches before and after.
 
+**Follow-up (a giant's moon, 2026-11-04).** With the rocky moons of
+giants (item 14, step C), `PlanetEffects` covers a world with a host:
+
+- **Tilt:** a moon locked to its giant has its equator in the giant's
+  equatorial plane (a Cassini state, as the Galilean moons'); its seasons
+  follow the giant's own tilt, drawn in the usual `[5, 40]`, so the tilt
+  counts as steadied.
+- **Tides:** the star's come and go with the moon's month, whether or not
+  the giant is locked to the star. The giant's bulge, `mass ratio ×
+  (radius / distance)³`, is huge but still on a locked moon; only the part
+  an eccentric orbit swings, about `3e` of it, comes and goes: 1.5 to 18
+  times Earth's tides around a Jupiter at 20 of its radii (eccentricities
+  of 0.001 to 0.012), so the shores reach their widest (×2).
+
 ### Choices (confirmed by the user, 2026-11-04)
 
 - Moons are generated with the planet (not on demand when first

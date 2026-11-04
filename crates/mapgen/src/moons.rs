@@ -644,6 +644,9 @@ const STABILISING_MASS_RATIO: f64 = 0.005;
 /// radii`): the Sun's is 0.46 of the Moon's.
 const EARTH_MOON_TIDE: f64 = 0.0123 / (60.27 * 60.27 * 60.27);
 const EARTH_SUN_TIDE: f64 = 0.46 * EARTH_MOON_TIDE;
+/// Share of a giant's still tidal bulge that an eccentric orbit swings,
+/// per unit of eccentricity (the radial tide varies as `3e`).
+const GIANT_TIDE_SWING: f64 = 3.0;
 /// Range of the shore width, as a share of the preset's: no tides (a
 /// planet locked to its star) to strong ones. It follows the fourth root of
 /// the tides: flats widen with their range, but far more with the slope of
@@ -657,7 +660,8 @@ pub const UNSTABLE_TILT_DEG: (f32, f32) = (0.0, 60.0);
 /// What a world's moons do to it (step 5 of backlog item 13).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlanetEffects {
-    /// A large moon keeps the axial tilt steady.
+    /// A large moon (or, for a giant's moon, the giant) keeps the axial
+    /// tilt steady.
     pub stabilised: bool,
     /// The range of the tides (moons and star), relative to Earth's.
     pub tide: f32,
@@ -697,13 +701,27 @@ impl PlanetEffects {
                 )
             })
             .sum();
-        let from_star = if star.tidally_locked {
+        // The moon of a giant (step C of item 14) turns with the giant, not
+        // the star: the star's tide comes and goes with its month. Locked to
+        // the giant, it feels the giant's huge bulge as a still one; only
+        // the part its eccentric orbit swings (about `3e` of it, as Io's
+        // flexes) comes and goes. Its equator lies in the giant's equatorial
+        // plane, the giant holding its spin axis: its seasons follow the
+        // giant's tilt, drawn in the usual range, never left free.
+        let host = crate::exomoon::HostGiant::draw(p);
+        let from_star = if star.tidally_locked && host.is_none() {
             0.0
         } else {
             let star_ratio = f64::from(star.mass) * SUN_MASS_KG / m_p;
             tidal_height(star_ratio, f64::from(star.orbit_au) * AU_KM / r_p, size)
         };
-        let tide = (from_moons + from_star) / (EARTH_MOON_TIDE + EARTH_SUN_TIDE);
+        let from_giant = host.as_ref().map_or(0.0, |h| {
+            let giant_ratio = f64::from(h.giant.mass_earth) * EARTH_MASS_KG / m_p;
+            let still = tidal_height(giant_ratio, f64::from(h.distance_km) / r_p, size);
+            GIANT_TIDE_SWING * f64::from(h.eccentricity) * still
+        });
+        let stabilised = stabilised || host.is_some();
+        let tide = (from_moons + from_star + from_giant) / (EARTH_MOON_TIDE + EARTH_SUN_TIDE);
         Self {
             stabilised,
             tide: tide as f32,
@@ -971,6 +989,30 @@ mod tests {
         red.orbit_au = crate::star::orbit_at(red.star, 0.5);
         let still = PlanetEffects::of(&red, None);
         assert_eq!((still.tide, still.shore_factor), (0.0, 0.5));
+    }
+
+    #[test]
+    fn a_giants_moon_keeps_its_tilt_and_feels_the_swing_of_the_giants_tide() {
+        let mut p = params(4, 40_075.0);
+        p.moons = MoonsMode::None;
+        let alone = PlanetEffects::of(&p, None);
+        p.host = crate::exomoon::HostMode::Giant;
+        let host = crate::exomoon::HostGiant::draw(&p).unwrap();
+        let moon = PlanetEffects::of(&p, None);
+        // Its tilt follows the giant's, in the usual range.
+        assert!(moon.stabilised && !alone.stabilised);
+        assert_eq!(moon.tilt(37.0, (5.0, 40.0)), 37.0);
+        // The giant's bulge is still; its eccentric swing is tide enough.
+        let giant_ratio = f64::from(host.giant.mass_earth) / 1.0;
+        let still = giant_ratio / (f64::from(host.distance_km) / 6378.0).powi(3);
+        let swing = 3.0 * f64::from(host.eccentricity) * still / (EARTH_MOON_TIDE + EARTH_SUN_TIDE);
+        assert!(
+            (f64::from(moon.tide - alone.tide) - swing).abs() < 0.05 * swing.max(1e-3),
+            "{moon:?} {alone:?} {swing}"
+        );
+        assert!(moon.tide > alone.tide && moon.shore_factor >= alone.shore_factor);
+        // Nearly circular, it stays far below the still bulge.
+        assert!(f64::from(moon.tide) < still / (EARTH_MOON_TIDE + EARTH_SUN_TIDE));
     }
 
     #[test]
