@@ -502,6 +502,89 @@ impl StarInfo {
     }
 }
 
+/// Flux a planet at `orbit_au` gets from a star of type `code`, relative to
+/// what Earth gets from the Sun of the model (G2V at 1 AU): exactly 1 for
+/// it, so worlds around the Sun at 1 AU keep their climate.
+pub fn relative_flux(code: f32, orbit_au: f32) -> f32 {
+    let sun = values(SUN).luminosity;
+    values(code).luminosity / (orbit_au * orbit_au) / sun
+}
+
+/// Temperature change at the outer edge of the habitable zone for a
+/// regulated planet, °C: the edge is where the strongest CO₂ greenhouse
+/// still keeps water liquid, a mean about 15 °C below Earth's.
+const REGULATED_OUTER: f32 = -15.0;
+/// Temperature change at the inner edge, °C: the runaway greenhouse sets in.
+const REGULATED_INNER: f32 = 30.0;
+
+/// How the star sets a planet's temperatures (see [`star_temperatures`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StarClimate {
+    /// Spectral type and orbit.
+    pub star: f32,
+    pub orbit_au: f32,
+    /// Whether a carbonate-silicate cycle (plate tectonics and liquid
+    /// water) regulates the greenhouse, as on Earth.
+    pub regulated: bool,
+    /// Internal heat, K (see `ClimateShift::internal_heat`).
+    pub internal_heat_k: f32,
+}
+
+/// Applies the star to rows of sea-level temperature (°C, Earth's profile
+/// around the Sun):
+///
+/// - **unregulated** planets scale in kelvin with the flux: `T × S^(1/4)`,
+///   which also narrows the equator-to-pole difference around a dim star;
+/// - **regulated** planets keep a temperate climate across the habitable
+///   zone, as their greenhouse grows when the light weakens: from +30 °C at
+///   the inner edge through Earth's climate at Earth's place to −15 °C at
+///   the outer edge; beyond the edges they follow the flux like the others;
+/// - **internal heat** adds as radiated power: `T = (T⁴ + T_int⁴)^(1/4)`.
+///
+/// The Sun at 1 AU leaves the rows unchanged.
+pub fn star_temperatures(rows: &mut [f32], climate: StarClimate) {
+    const K: f32 = 273.15;
+    let s = relative_flux(climate.star, climate.orbit_au);
+    let scale = |rows: &mut [f32], flux: f32| {
+        let f = flux.powf(0.25);
+        for t in rows.iter_mut() {
+            *t = (*t + K) * f - K;
+        }
+    };
+    if climate.regulated {
+        let teff = values(climate.star).teff_k;
+        let (inner, outer) = habitable_fluxes(teff);
+        // Positions relative to the model Sun's: Earth's place is exactly
+        // Earth's climate.
+        let flux = s * values(SUN).luminosity;
+        let position = position_of(teff, flux);
+        let earth = position_of(values(SUN).teff_k, values(SUN).luminosity);
+        let (shift, beyond) = if position < 0.0 {
+            (REGULATED_INNER, Some(flux / inner))
+        } else if position <= earth {
+            (REGULATED_INNER * (earth - position) / earth, None)
+        } else if position <= 1.0 {
+            (REGULATED_OUTER * (position - earth) / (1.0 - earth), None)
+        } else {
+            (REGULATED_OUTER, Some(flux / outer))
+        };
+        for t in rows.iter_mut() {
+            *t += shift;
+        }
+        if let Some(beyond) = beyond {
+            scale(rows, beyond);
+        }
+    } else if s != 1.0 {
+        scale(rows, s);
+    }
+    if climate.internal_heat_k > 0.0 {
+        let inner4 = climate.internal_heat_k.powi(4);
+        for t in rows.iter_mut() {
+            *t = ((*t + K).max(0.0).powi(4) + inner4).powf(0.25) - K;
+        }
+    }
+}
+
 /// The orbit of a planet at `position` in the habitable zone of a star of
 /// type `code`, AU.
 pub fn orbit_at(code: f32, position: f32) -> f32 {
@@ -592,6 +675,63 @@ mod tests {
         assert!(StarInfo::new(parse_type("M5V").unwrap(), orbit_at(65.0, 0.5)).tidally_locked);
         let back = StarInfo::new(earth.code(), earth.orbit_au);
         assert_eq!(back, earth);
+    }
+
+    #[test]
+    fn the_sun_at_one_au_keeps_the_climate() {
+        let rows = vec![-18.0, 12.0, 27.0];
+        for regulated in [false, true] {
+            let mut same = rows.clone();
+            star_temperatures(
+                &mut same,
+                StarClimate {
+                    star: SUN,
+                    orbit_au: 1.0,
+                    regulated,
+                    internal_heat_k: 0.0,
+                },
+            );
+            for (a, b) in same.iter().zip(&rows) {
+                assert!((a - b).abs() < 1e-3, "{same:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_star_warms_and_cools_planets() {
+        let at = |orbit_au: f32, regulated: bool, internal_heat_k: f32| {
+            let mut rows = vec![14.0];
+            star_temperatures(
+                &mut rows,
+                StarClimate {
+                    star: SUN,
+                    orbit_au,
+                    regulated,
+                    internal_heat_k,
+                },
+            );
+            rows[0]
+        };
+        // Mars, unregulated: 0.81 × 287 K.
+        assert!(
+            (at(1.524, false, 0.0) - -40.5).abs() < 1.0,
+            "{}",
+            at(1.524, false, 0.0)
+        );
+        // Venus before its greenhouse.
+        assert!(
+            (at(0.723, false, 0.0) - 64.5).abs() < 1.0,
+            "{}",
+            at(0.723, false, 0.0)
+        );
+        // A regulated planet stays temperate across the zone: −15 °C at most
+        // at its outer edge, then cools.
+        let outer_au = orbit_at(SUN, 1.0);
+        assert!((at(outer_au, true, 0.0) - -1.0).abs() < 0.1);
+        assert!(at(outer_au * 1.5, true, 0.0) < -30.0);
+        // Internal heat keeps a far world warm.
+        assert!(at(30.0, false, 0.0) < -200.0);
+        assert!(at(30.0, false, 290.0) > 10.0);
     }
 
     #[test]

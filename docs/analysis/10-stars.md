@@ -254,6 +254,50 @@ by the recalibration error for the others; step 5 changes locked worlds.
   under F), applied by the "Star light" view only, so the usual maps and
   the exported files stay Earth-coloured.
 
+## Outcome
+
+### Steps 0 and 1
+
+The star model (`crates/mapgen/src/star.rs`) and the star and orbit as
+generation parameters: `--star`, `--orbit-au`, `--hz-position`, the
+presets' `[star]` tables, `star` in `world.json`, the form and the world
+card. Both are drawn after every other parameter, so every output but
+`world.json` is unchanged.
+
+### Step 2: climate
+
+The insolation is taken relative to the model Sun at 1 AU (G2V, 1.023
+L☉ in the table), so `earth-like` worlds are unchanged to the byte.
+Planets with plate tectonics and liquid water are regulated across the
+habitable zone (a carbonate-silicate cycle): +30 °C at its inner edge,
+Earth's climate at Earth's position (0.068), −15 °C at its outer edge,
+then the flux law beyond the edges; the others follow `T × S^(1/4)` in
+kelvin; `internal_heat` adds as `T⁴`. Presets recalibrated, mean
+temperature and the main biome shares on three seeds (512 × 256, same
+parameters, before → after):
+
+| Preset (place)                 | Mean T (°C)      | Biomes (%)                                     |
+| ------------------------------ | ---------------- | ---------------------------------------------- |
+| `earth-like` (Sun, 1 AU)       | 14.0 → 14.0      | identical                                      |
+| `terran` (position 0.05)       | 14.0 → 22.0      | jungle 19 → 24, ocean 45 → 48                  |
+| `terran` (0.4, any star)       | 14.0 → 8.6       | jungle 19 → 15, sea ice 3 → 5, ice cap 3 → 5   |
+| `terran` (0.75)                | 14.0 → 3.0       | jungle 19 → 10, sea ice 3 → 8, ice cap 3 → 6   |
+| `frozen` (1.0 to 1.4)          | −13 → −1 to −32  | ice cap 16 → 8 to 35, taiga 21 → 25 to 0       |
+| `caustic` (−0.25 to 0.1)       | 18 → 45 to 15    | unchanged within 1                             |
+| `volcanic` (−0.5 to 4)         | 34 → 116 to 31   | unchanged within 2                             |
+| `barren` (−1 to 4)             | 14 → 113 to −191 | dust plain 39 → 35 to 39, mountain 7 → 6 to 10 |
+| `mars-like` (Sun, 1.524 AU)    | −46 → −51        | identical                                      |
+| `venus-like` (Sun, 0.723 AU)   | 464 → 460        | identical                                      |
+| `mercury-like` (Sun, 0.387 AU) | 14 → 169         | identical (no water, no ice)                   |
+
+A regulated planet gets the same climate at the same position around
+any star (M3V and G2V at 0.4 give the same world). Ranges kept:
+`terran` 0.05–0.75, `frozen` 1.0–1.35 (its cold now comes from the
+distance, its −27 °C shift is gone), `caustic` −0.25–0.1, `volcanic`
+−0.5–4 with `internal_heat = 285`, `barren` −1–4. Mars keeps a −10 °C
+shift (thin air, no greenhouse), Venus's greenhouse drops from 450 to
+395 °C, Mercury gets −20 °C.
+
 ## 4. Open points
 
 - Eyeball climates of locked planets need their own tuning (heat

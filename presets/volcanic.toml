@@ -12,6 +12,7 @@ description = "Monde de feu : chaleur extrême, humidité presque nulle"
 position = [-0.5, 4.0]
 
 [climate]
+internal_heat = 285.0                  # K: the heat from within keeps it scorching far from its star
 moisture = -0.55
 volcanic = 0.50
 

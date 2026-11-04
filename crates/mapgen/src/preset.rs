@@ -21,7 +21,8 @@
 //! surface_age = [3.0, 4.2]           # Ga
 //!
 //! [climate]                          # added to every pixel before biome selection
-//! temperature = -15.0                # °C
+//! temperature = -15.0                # °C, after the star
+//! internal_heat = 0.0                # K: the planet's own heat
 //! moisture = -0.6
 //! volcanic = 0.0
 //!
@@ -124,6 +125,11 @@ pub struct ClimateShift {
     pub moisture: f32,
     /// Added to the volcanic zone (`[0, 1]` scale).
     pub volcanic: f32,
+    /// Heat from within the planet, as the temperature (K) it would keep
+    /// the surface at without any starlight: combined with the star's
+    /// heating as radiated power (`T⁴` adds up), so a world far from its
+    /// star stays warm. 0: none (Earth's is negligible).
+    pub internal_heat: f32,
 }
 
 /// A planet type. See the module documentation for the file format.

@@ -770,6 +770,8 @@ mod tests {
             surface_age_ga: Some(0.4),
             width: Some(512),
             height: Some(256),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.0),
             ..Default::default()
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
@@ -789,6 +791,8 @@ mod tests {
             surface_age_ga: Some(4.0),
             width: Some(512),
             height: Some(256),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.0),
             ..Default::default()
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;

@@ -309,7 +309,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | ---- | ------------------------------------------------------------------------------ | ------ | ------ |
 | 0    | Star model: spectral table, black-body colour, habitable zone, derived values  | Same   | done   |
 | 1    | `[star]` in presets, `--star` and the orbit, `world.json`, form and world card | Same   | done   |
-| 2    | Climate driven by the insolation, internal heat, presets recalibrated          | Change | todo   |
+| 2    | Climate driven by the insolation, internal heat, presets recalibrated          | Change | done   |
 | 3    | Viewer: the star at the sunlight direction, with the star field                | Same   | todo   |
 | 4    | Viewer: "Star light", the planet and its sky lit by the star's colour          | Same   | todo   |
 | 5    | Tidal locking of close-in planets                                              | Change | todo   |

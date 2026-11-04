@@ -364,7 +364,7 @@ mod tests {
                 ..Default::default()
             });
             let position = StarInfo::new(p.star, p.orbit_au).hz_position;
-            assert!((0.09..0.91).contains(&position), "{position}");
+            assert!((0.04..0.76).contains(&position), "{position}");
         }
         // Bad stars and both orbits at once are refused.
         let bad = WorldRequest {

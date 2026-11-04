@@ -349,6 +349,8 @@ mod tests {
             seed: Some(5),
             width: Some(256),
             height: Some(128),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.0),
             ..Default::default()
         };
         let params = request.resolve(&mut rand::rng()).unwrap().params;
@@ -377,6 +379,8 @@ mod tests {
             sea_level: Some(0.1),
             width: Some(512),
             height: Some(256),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.0),
             ..Default::default()
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;

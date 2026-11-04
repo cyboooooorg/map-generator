@@ -9,7 +9,7 @@ description = "Monde acide : atmosphère corrosive, marais toxiques"
 
 [star]                                 # host star and orbit (see `mapgen::star`)
 # Drawn like the stars nearby, warm, near the inner edge of the habitable zone.
-position = [-0.4, 0.4]
+position = [-0.25, 0.1]
 
 [climate]
 temperature = 4.5

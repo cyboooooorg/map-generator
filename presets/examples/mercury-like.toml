@@ -25,6 +25,7 @@ volcanic = 0.0
 erosion = 0.0
 
 [climate]
+temperature = -20.0                # °C: with its distance, about 170 °C on average, like Mercury
 moisture = -0.9
 volcanic = -0.4
 

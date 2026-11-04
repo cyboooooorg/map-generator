@@ -75,7 +75,7 @@ struct Args {
     /// Position of the orbit in the star's habitable zone, in [-2, 6]: 0 at
     /// its inner edge, 1 at its outer edge (Earth: about 0.09)
     /// [default: from the preset, else random in 0.1..0.9]
-    #[arg(long, value_parser = parse_in(request::HZ_POSITION))]
+    #[arg(long, allow_negative_numbers = true, value_parser = parse_in(request::HZ_POSITION))]
     hz_position: Option<f32>,
 
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]

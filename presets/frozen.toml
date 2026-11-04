@@ -8,11 +8,10 @@ name = "Glacée"
 description = "Monde de glace : gelé pour toujours"
 
 [star]                                 # host star and orbit (see `mapgen::star`)
-# Drawn like the stars nearby, far beyond the habitable zone: the cold comes from the distance.
-position = [1.5, 4.0]
+# Drawn like the stars nearby, beyond the outer edge of the habitable zone: the cold comes from the distance.
+position = [1.0, 1.35]
 
 [climate]
-temperature = -27.0
 moisture = 0.15
 volcanic = -0.30
 
