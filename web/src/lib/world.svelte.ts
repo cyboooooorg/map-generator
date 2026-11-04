@@ -5,7 +5,7 @@ import { t } from './i18n/index.svelte';
 import { api } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
-import { moonBody } from './moons';
+import { bodyId, sameBody, WORLD_BODY, type Body } from './moons';
 import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
@@ -19,8 +19,10 @@ export class LoadedWorld {
   id = $state<string | null>(null);
   /** The world loaded, whichever body is shown. */
   worldId = $state<string | null>(null);
-  /** The moon shown (from 1, nearest first), or null for the world itself. */
-  moon = $state<number | null>(null);
+  /** The body of the world's system shown (see lib/moons.ts). */
+  body = $state.raw<Body>(WORLD_BODY);
+  /** The moon shown (from 1, nearest first), or null for any other body. */
+  moon = $derived(this.body.kind === 'moon' ? this.body.n : null);
   /** The world's metadata (its star and moons), whichever body is shown. */
   worldMeta = $state.raw<WorldMetadata | null>(null);
   /** The world's biome statistics and rivers, whichever body is shown. */
@@ -57,7 +59,7 @@ export class LoadedWorld {
    */
   load(id: string | null): void {
     this.worldId = id;
-    this.moon = null;
+    this.body = WORLD_BODY;
     this.worldMeta = null;
     this.worldStats = null;
     this.worldRivers = null;
@@ -69,11 +71,16 @@ export class LoadedWorld {
    * null. The world's metadata stays.
    */
   showMoon(n: number | null): void {
-    if (n === this.moon || !this.worldId) {
+    this.showBody(n === null ? WORLD_BODY : { kind: 'moon', n });
+  }
+
+  /** Shows a body of the world's system (see lib/moons.ts). The world's metadata stays. */
+  showBody(body: Body): void {
+    if (sameBody(body, this.body) || !this.worldId) {
       return;
     }
-    this.moon = n;
-    this.loadBody(n === null ? this.worldId : moonBody(this.worldId, n));
+    this.body = body;
+    this.loadBody(bodyId(this.worldId, body));
   }
 
   private loadBody(id: string | null): void {

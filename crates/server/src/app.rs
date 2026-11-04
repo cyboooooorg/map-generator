@@ -13,6 +13,7 @@
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
 //! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=&epoch=` | deep-zoom detail tile (PNG), at an epoch in Ma when set |
 //! | `GET /api/worlds/{id}/epoch/{ma}/{file}?rev=&scale=` | `surface.png`, `elevation.png` or `biomes.png` of a world at an epoch (see [`mapgen::epoch`]) |
+//! | `GET /api/worlds/{id}/host/siblings/{n}/tiles/…`, `…/epoch/…` | the same for the other moons of a giant whose moon the world is |
 //! | `GET /api/worlds/{id}/thumb?rev=` | thumbnail (PNG), made for older worlds (see [`thumbs`]) |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
@@ -255,6 +256,14 @@ pub fn router(config: Config) -> Router {
             "/api/worlds/{id}/moons/{moon}/epoch/{epoch}/{file}",
             get(moon_epoch_layer),
         )
+        .route(
+            "/api/worlds/{id}/host/siblings/{sibling}/tiles/{z}/{x}/{y}",
+            get(sibling_tile),
+        )
+        .route(
+            "/api/worlds/{id}/host/siblings/{sibling}/epoch/{epoch}/{file}",
+            get(sibling_epoch_layer),
+        )
         .route("/api/worlds/{id}/thumb", get(thumbnail))
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
@@ -460,6 +469,37 @@ fn moon_body(id: &str, moon: u32) -> Result<String, Failure> {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid moon".into()));
     }
     Ok(format!("{id}/moons/{moon}"))
+}
+
+/// A detail tile of sibling `sibling` (from 1) of a giant's moon world:
+/// another moon of its giant, as [`tile`].
+async fn sibling_tile(
+    State(state): State<Shared>,
+    UrlPath((id, sibling, z, x, y)): UrlPath<(String, u32, u32, u32, u32)>,
+    Query(query): Query<TileQuery>,
+) -> Result<Response, Failure> {
+    let body = sibling_body(&id, sibling)?;
+    body_tile(state, body, TileId { z, x, y }, query).await
+}
+
+/// A layer of sibling `sibling` (from 1) of a world at an epoch, as
+/// [`epoch_layer`].
+async fn sibling_epoch_layer(
+    State(state): State<Shared>,
+    UrlPath((id, sibling, epoch_ma, file)): UrlPath<(String, u32, i32, String)>,
+    Query(query): Query<EpochQuery>,
+) -> Result<Response, Failure> {
+    let body = sibling_body(&id, sibling)?;
+    body_epoch_layer(state, body, epoch_ma, file, query).await
+}
+
+/// The body path of sibling `sibling` (from 1) of world `id`, the moon of
+/// a giant: `<id>/host/siblings/<sibling>` (see `mapgen::export::export_host`).
+fn sibling_body(id: &str, sibling: u32) -> Result<String, Failure> {
+    if !worlds::is_valid_id(id) || !(1..=MAX_MOONS).contains(&sibling) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid sibling".into()));
+    }
+    Ok(format!("{id}/host/siblings/{sibling}"))
 }
 
 /// The world id of a body path: the world itself, or a moon's world.
@@ -1049,6 +1089,12 @@ mod tests {
         assert!(moon_body("../etc", 1).is_err());
         assert_eq!(world_of("terran-42/moons/1"), "terran-42");
         assert_eq!(world_of("terran-42"), "terran-42");
+        assert_eq!(
+            sibling_body("terran-5", 2).ok().as_deref(),
+            Some("terran-5/host/siblings/2")
+        );
+        assert!(sibling_body("terran-5", 0).is_err());
+        assert_eq!(world_of("terran-5/host/siblings/2"), "terran-5");
     }
 
     #[test]

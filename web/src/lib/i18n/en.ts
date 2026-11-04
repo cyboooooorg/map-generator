@@ -464,6 +464,12 @@ export const en = {
   /** The viewer: toolbar, display panel, legends, overlays. */
   viewer: {
     tools: 'Tools',
+    body: 'Body',
+    bodyHelp: "The body of the system shown: the star (O), the world and its moons; for a giant's moon, the giant and its other moons (U: the next one)",
+    bodyOption: (p: { name: string; role: string }) => `${p.name} (${p.role})`,
+    roleStar: 'star',
+    roleGiant: 'giant',
+    roleWorld: 'this world',
     target: 'Show the planet or its star',
     planetView: 'Planet',
     planetViewHelp: 'The planet (O)',
@@ -608,7 +614,7 @@ export const en = {
     atmosphere: 'Atmosphere',
     stars: 'Stars',
     starView: 'Planet / its star',
-    moonView: 'Planet / its moons, one after the other',
+    moonView: 'Next body of the system (the world, its moons, or a giant and its moons)',
     clouds: 'Clouds',
     drift: 'Cloud drift (turns clouds on)',
     grid: 'Grid',
