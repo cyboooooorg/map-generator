@@ -743,6 +743,8 @@
         // The orbit slider moves them too.
         moonClock.season,
         planet.star?.year_days ?? 365.25,
+        // Each a world of its own (none in worlds made before them: plain disks).
+        (k) => (world.worldId ? worldFile(world.worldId, `host/siblings/${k + 1}/raw_data/surface.png`, revision) : null),
       );
       return joinSkies(giant, siblings);
     }

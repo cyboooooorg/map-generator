@@ -254,6 +254,21 @@ impl HostGiant {
     }
 }
 
+/// The parameters of sibling `k` (from 0, nearest first) of the world `p`
+/// orbiting `host`, as a world of its own (`host/siblings/<k + 1>/`): a
+/// rocky or icy moon of its size, seeded from the giant's seed, on the
+/// world's scale.
+pub fn sibling_params(p: &WorldParams, host: &HostGiant, k: usize) -> WorldParams {
+    let sibling = &host.siblings[k];
+    let composition = if sibling.icy {
+        crate::moons::Composition::Ice
+    } else {
+        crate::moons::Composition::Rock
+    };
+    let seed = stream_seed(host.seed, stream::SIBLINGS + k as u32);
+    crate::moons::small_body_params(p, composition, sibling.radius_km, seed, None)
+}
+
 /// The parameters of the giant a world orbits, as a giant world of its own
 /// (its kind from its mass: an ice giant below 50 Earth masses).
 pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
@@ -369,6 +384,36 @@ mod tests {
             10.5 * K2_OVER_Q * G * m * m * r.powi(5) * n * e * e / a.powi(6) / (4.0 * PI * r * r)
         };
         assert!((1.0..4.0).contains(&io_flux), "{io_flux}");
+    }
+
+    #[test]
+    fn each_sibling_is_a_world_of_its_own_size_and_seed() {
+        let (p, host) = (0..400)
+            .map(|s| params(s, HostMode::Giant, 1.0))
+            .find_map(|p| {
+                let host = HostGiant::draw(&p)?;
+                (host.siblings.len() >= 2).then_some((p, host))
+            })
+            .expect("a giant with two siblings");
+        let bodies: Vec<_> = (0..host.siblings.len())
+            .map(|k| sibling_params(&p, &host, k))
+            .collect();
+        for (body, sibling) in bodies.iter().zip(&host.siblings) {
+            let radius = f64::from(body.circumference_km) / (2.0 * std::f64::consts::PI);
+            assert!((radius - f64::from(sibling.radius_km)).abs() < 1.0);
+            assert_eq!(body.pressure_bar, 0.0);
+            assert_eq!(body.height * 2, body.width);
+            let preset = if sibling.icy {
+                "icy-moon"
+            } else {
+                "rocky-moon"
+            };
+            assert_eq!(body.planet.name, preset);
+        }
+        assert_ne!(bodies[0].seed, bodies[1].seed);
+        assert_ne!(bodies[0].seed, host.seed);
+        // The same world draws the same siblings.
+        assert_eq!(sibling_params(&p, &host, 0).seed, bodies[0].seed);
     }
 
     #[test]

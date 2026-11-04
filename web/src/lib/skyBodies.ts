@@ -560,7 +560,9 @@ export function eclipse(point: Vec3, sun: Vec3, caster: ShadowCaster, sunRadius:
  * their phases and shadows. In the world's frame the giant hangs at
  * longitude 180°; each sibling turns around it at its period relative to
  * the world's (both prograde, in the giant's equatorial plane), from a
- * phase of its own, as the seasons play.
+ * phase of its own, as the seasons play; each mapped with its surface
+ * (`textures(k)`: its own world in `host/siblings/`), the face it keeps
+ * towards the giant (longitude 180°) turned to it.
  */
 export function siblingSky(
   siblings: readonly Pick<Sibling, 'radius_km' | 'distance_km' | 'period_days' | 'icy'>[],
@@ -569,6 +571,7 @@ export function siblingSky(
   worldPeriodDays: number,
   season: number,
   yearDays: number,
+  textures: (k: number) => string | null = () => null,
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
   const days = season * yearDays;
   const bodies: SkyBody[] = [];
@@ -587,8 +590,13 @@ export function siblingSky(
       direction: v.map((c) => c / distance) as Vec3,
       angularDiameterDeg: (2 * Math.atan(sibling.radius_km / distance) * 180) / Math.PI,
       colour: sibling.icy ? ICE : ROCK,
-      texture: null,
-      axes: null,
+      texture: textures(k),
+      // Locked to the giant: its z away from it, its spin axis the giant's.
+      axes: (() => {
+        const z = unit(sub(v, [0, 0, -worldDistanceKm]));
+        const y: Vec3 = [0, 1, 0];
+        return [cross(y, z), y, z] as Axes;
+      })(),
     });
     casters.push({ position: v.map((c) => c / worldRadiusKm) as Vec3, radius: sibling.radius_km / worldRadiusKm });
   });
