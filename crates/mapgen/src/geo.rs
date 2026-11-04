@@ -39,6 +39,33 @@ impl Grid {
         self.circumference_km / 2.0 / self.height as f32
     }
 
+    /// The row-major indices of the same neighbours as
+    /// [`Grid::neighbours`] (8, wrapping in longitude, none off the poles),
+    /// without their distances: for the passes that only need which pixels
+    /// touch.
+    #[inline]
+    pub fn neighbour_indices(&self, i: usize) -> impl Iterator<Item = usize> {
+        let (w, h) = (self.width as usize, self.height as usize);
+        let (x, y) = (i % w, i / w);
+        let (west, east) = (
+            if x == 0 { w - 1 } else { x - 1 },
+            if x + 1 == w { 0 } else { x + 1 },
+        );
+        let rows = [
+            (y > 0).then(|| y - 1),
+            Some(y),
+            (y + 1 < h).then_some(y + 1),
+        ];
+        rows.into_iter().enumerate().flat_map(move |(k, row)| {
+            row.into_iter().flat_map(move |ny| {
+                let base = ny * w;
+                // The centre of the middle row is the pixel itself.
+                let columns: &[usize] = if k == 1 { &[0, 2] } else { &[0, 1, 2] };
+                columns.iter().map(move |&c| base + [west, x, east][c])
+            })
+        })
+    }
+
     /// The 8 neighbours of `(x, y)` with their distance in km. Longitude
     /// wraps around; rows beyond the poles are skipped.
     pub fn neighbours(&self, x: u32, y: u32) -> impl Iterator<Item = (u32, u32, f32)> + '_ {
@@ -144,6 +171,22 @@ mod tests {
         assert!((g.dx_km(9) - 1000.0).abs() < 10.0);
         assert!(g.dx_km(0) < g.dx_km(5));
         assert_eq!(g.dy_km(), 1000.0);
+    }
+
+    #[test]
+    fn neighbour_indices_match_neighbours() {
+        let g = grid();
+        for i in 0..g.pixel_count() {
+            let (x, y) = ((i as u32) % g.width, (i as u32) / g.width);
+            let mut a: Vec<usize> = g
+                .neighbours(x, y)
+                .map(|(nx, ny, _)| g.index(nx, ny))
+                .collect();
+            let mut b: Vec<usize> = g.neighbour_indices(i).collect();
+            a.sort_unstable();
+            b.sort_unstable();
+            assert_eq!(a, b, "pixel {i}");
+        }
     }
 
     #[test]

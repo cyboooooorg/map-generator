@@ -143,15 +143,15 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 4. Smaller items
 
-| Item                                                                                        | Status |
-| ------------------------------------------------------------------------------------------- | ------ |
-| Hydrology is sequential: the depression filling takes about 1 s of the 1.8 s run            | todo   |
-| Picking on the globe ignores the relief displacement (error under a degree)                 | todo   |
-| Night side lighting is a fixed 7 % floor, not physically calibrated                         | todo   |
-| Volcanoes are rare on non-volcanic presets: the volcanic zone seldom exceeds its thresholds | todo   |
-| The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents  | done   |
-| Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)   | todo   |
-| Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed       | done   |
+| Item                                                                                                                 | Status |
+| -------------------------------------------------------------------------------------------------------------------- | ------ |
+| Depression filling: neighbours by index (4.2 → 2.4 s at 8192 × 4096, same worlds); parallel land masses gave no gain | done   |
+| Picking on the globe ignores the relief displacement (error under a degree)                                          | todo   |
+| Night side lighting is a fixed 7 % floor, not physically calibrated                                                  | todo   |
+| Volcanoes are rare on non-volcanic presets: the volcanic zone seldom exceeds its thresholds                          | todo   |
+| The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
+| Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
+| Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
 
 ## 5. Terrain realism, second round
 
