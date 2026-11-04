@@ -355,3 +355,25 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   factor and the day of the year; a test checks that the animated motion
   and the vis-viva speed agree. Switching worlds no longer flashes the
   Sun's system while the next world loads.
+
+## 13. Moons
+
+- **Status:** analysis
+- **Analysis:** [11-moons.md](analysis/11-moons.md)
+- **Problem:** worlds have a star and an orbit but no satellites: no
+  moon in the star view or the sky, and nothing ties the axial tilt or
+  the tides to a moon.
+- **Studied (2026-11-04):** moons drawn from the seed with realistic odds
+  (about 1 rocky planet in 12 with a large moon, after Elser et al. 2011;
+  small debris or captured moons; companions frequent on small worlds),
+  kept between the Roche limit and a third of the Hill radius, none
+  lasting on planets locked to their star; Pluto–Charon binaries (mass
+  ratio up to about 0.15, around the barycentre, locked face to face);
+  irregular moons below about 900 km across for rock and 400 km for ice,
+  drawn as deformed meshes in the viewer only. Not decided yet.
+
+| Step | Change                                                                                   | Seeds  | Status |
+| ---- | ---------------------------------------------------------------------------------------- | ------ | ------ |
+| 1    | `moons` module: drawing, orbits, shapes, migration; `world.json`; moons in the star view | Same   | todo   |
+| 2    | Rendering: round moons as small `barren` worlds, misshapen ones as deformed meshes       | Same   | todo   |
+| 3    | Effects on the planet: axial tilt stabilised, tidal flats, binary rotation               | Change | todo   |
