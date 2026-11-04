@@ -378,6 +378,11 @@ pub struct BiomeRules {
     pub ash_elevation: f32,
     /// Volcanic zone needed for ash land.
     pub ash_zone: f32,
+    /// Volcanic zone needed to turn dry land below the highland (forest,
+    /// plain, desert…) into lava fields, and into a volcano halfway from it
+    /// to 1: the flanks and vent of a cone rising out of the lowland. Above
+    /// the background of a volcanic province, so only the cones reach it.
+    pub vent_zone: f32,
 }
 
 impl Default for BiomeRules {
@@ -405,6 +410,7 @@ impl Default for BiomeRules {
             lava_zone: 0.30,
             ash_elevation: 0.0,
             ash_zone: 0.15,
+            vent_zone: 0.45,
         }
     }
 }
@@ -541,11 +547,29 @@ impl BiomeRules {
     /// - **Volcano**   — summit/caldera: highland above `volcano_elevation`
     /// - **LavaField** — flanks: highland in a `lava_zone`
     /// - **AshLand**   — lower slopes: open land above `ash_elevation`
+    ///
+    /// Other dry land in a `vent_zone` becomes a volcano or a lava field too.
     fn apply_volcanic(&self, biome: Biome, e: f32, vz: f32) -> Biome {
         if vz <= 0.0 {
             return biome;
         }
         match biome {
+            Biome::Tundra
+            | Biome::Taiga
+            | Biome::Shrubland
+            | Biome::Plain
+            | Biome::Forest
+            | Biome::Savanna
+            | Biome::Desert
+            | Biome::Jungle
+                if vz > self.vent_zone =>
+            {
+                if vz > 0.5 * (1.0 + self.vent_zone) {
+                    Biome::Volcano
+                } else {
+                    Biome::LavaField
+                }
+            }
             Biome::Mountain | Biome::Snow
                 if e > self.volcano_elevation && vz > self.volcano_zone =>
             {
@@ -587,6 +611,28 @@ mod tests {
         assert_eq!(rules.choose(input(true, false, 0.0)), Biome::Lake);
         assert_eq!(rules.choose(input(false, true, 0.0)), Biome::River);
     }
+    #[test]
+    fn cones_rise_out_of_the_lowland() {
+        let rules = crate::preset::Preset::load("terran").unwrap().rules;
+        let forest = |volcanic_zone: f32| {
+            rules.choose(BiomeInput {
+                elevation: 0.05,
+                moisture: 0.5,
+                temperature: 8.0,
+                volcanic_zone,
+                coast_distance_km: 1000.0,
+                lake: false,
+                river: false,
+                highland_offset: 0.0,
+            })
+        };
+        // The background of a volcanic province leaves the forest alone…
+        assert_eq!(forest(0.12), Biome::Forest);
+        // …its cones turn it into lava flows around a vent.
+        assert_eq!(forest(rules.vent_zone + 0.05), Biome::LavaField);
+        assert_eq!(forest(0.95), Biome::Volcano);
+    }
+
     use crate::preset::Preset;
 
     /// Every biome a planet preset can produce, over a coarse grid of inputs.

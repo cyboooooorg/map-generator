@@ -47,6 +47,10 @@ pub struct Sample {
     /// Height added by plate boundaries (ranges, trenches, arcs, ridges,
     /// rifts), elevation units; 0 on worlds without plate tectonics.
     pub tectonic_uplift: f32,
+    /// Height of the volcanic cones included in `elevation`: the generation
+    /// adds it after the hydraulic erosion, which would wear the young
+    /// cones down to their base.
+    pub cone_relief: f32,
 }
 
 impl Sample {
@@ -132,8 +136,37 @@ const ARC_VOLCANISM: (f32, f32) = (0.8, 1.0);
 /// base map's resolution, about 20 km per pixel, they would merge).
 const ARC_CONE_CELL_KM: f64 = 200.0;
 const ARC_CONE_PRESENCE: f64 = 0.8;
+/// Height of an arc volcano above the terrain at its vent, at full arc
+/// weight (the cones of volcanic provinces: [`CONE_HEIGHT`]).
+const ARC_CONE_HEIGHT: f32 = 0.4;
 /// Below this arc weight, no arc volcano.
 const ARC_MIN: f32 = 0.02;
+
+/// Share of the surface in volcanic provinces at a volcanic intensity of 1;
+/// it is proportional to the intensity.
+const VOLCANIC_PROVINCE_SHARE: f32 = 0.3;
+/// Spread of the volcanic noise (a 3-octave fbm): roughly normal with this
+/// standard deviation, measured on terran worlds (its 80, 95 and 99 %
+/// quantiles about 0.18, 0.34 and 0.44).
+const VOLCANIC_NOISE_SIGMA: f32 = 0.21;
+
+/// The threshold of the volcanic noise above which the ground is a volcanic
+/// province: its quantile for a share of the surface
+/// [`VOLCANIC_PROVINCE_SHARE`] × `intensity` (12 % at 0.4, 30 % at 1, none
+/// at 0). A threshold of `1 − intensity` gave no province at all up to an
+/// intensity of about 0.5, the noise seldom exceeding 0.5, and half the
+/// surface at 1.
+fn volcanic_threshold(intensity: f32) -> f32 {
+    let share = VOLCANIC_PROVINCE_SHARE * intensity.clamp(0.0, 1.0);
+    if share <= 0.0 {
+        return f32::INFINITY;
+    }
+    // Inverse of the normal distribution (Tukey's lambda approximation,
+    // within about 1 %).
+    let p = 1.0 - share;
+    let z = 4.91 * (p.powf(0.14) - (1.0 - p).powf(0.14));
+    VOLCANIC_NOISE_SIGMA * z
+}
 
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
@@ -194,8 +227,9 @@ impl Sampler {
             // Stronger gravity suppresses mountain relief; sqrt dampens the effect
             // for extreme values. Baseline 0.35 at Earth gravity.
             mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
-            // Higher intensity lowers the threshold, making more terrain volcanic.
-            volcanic_threshold: 1.0 - p.volcanic_intensity.clamp(0.0, 1.0),
+            // The noise's quantile for the share of the surface the
+            // intensity asks for (see `volcanic_threshold`).
+            volcanic_threshold: volcanic_threshold(p.volcanic_intensity),
             // wrapping_add: a random seed close to u32::MAX must not overflow.
             elevation_noise: Perlin::new(stream_seed(seed, stream::ELEVATION)),
             moisture_noise: Perlin::new(stream_seed(seed, stream::MOISTURE)),
@@ -387,23 +421,35 @@ impl Sampler {
         };
         // Volcanic arcs: a chain of volcanoes, much closer together than
         // the cones of volcanic provinces.
-        let cone = if plates.arc > ARC_MIN {
-            cone.max(self.cone_on(
+        let arc_cone = if plates.arc > ARC_MIN {
+            self.cone_on(
                 [nx, ny, nz],
                 self.arc_cone_seed,
                 ARC_CONE_CELL_KM,
                 ARC_CONE_PRESENCE,
-            ))
+            )
         } else {
-            cone
+            0.0
         };
+        // Arc volcanoes are stratovolcanoes, standing higher than the
+        // cones of volcanic provinces: their summits reach the highland,
+        // and become volcanoes and lava fields.
+        let cone_height = if arc_cone > cone {
+            ARC_CONE_HEIGHT
+        } else {
+            CONE_HEIGHT
+        };
+        let cone = cone.max(arc_cone);
         let volcanic_zone = broad * (VOLCANIC_BACKGROUND + (1.0 - VOLCANIC_BACKGROUND) * cone);
 
         let elevation = (continent
             + tectonic_uplift
             + mountain * mountain_weight * self.mountain_blend
-            + CONE_HEIGHT * broad * cone)
+            + cone_height * broad * cone)
             .clamp(-1.0, 1.0);
+        let cone_relief = elevation
+            - (continent + tectonic_uplift + mountain * mountain_weight * self.mountain_blend)
+                .clamp(-1.0, 1.0);
 
         // Positive sea_level raises the waterline (more ocean); negative lowers it.
         let biome_elevation = (elevation - self.sea_level).clamp(-1.0, 1.0);
@@ -455,6 +501,7 @@ impl Sampler {
             variability_m,
             highland_jitter,
             tectonic_uplift,
+            cone_relief,
         }
     }
 }
@@ -569,7 +616,9 @@ pub struct GenerateOptions<'a> {
 /// The noise fields later passes need, one value per pixel (much smaller
 /// than keeping every [`Sample`]).
 struct NoiseFields {
+    /// Without the volcanic cones, which come in `cones`.
     elevation: Vec<f32>,
+    cones: Vec<f32>,
     moisture: Vec<f32>,
     volcanic_zone: Vec<f32>,
     temperature_anomaly: Vec<f32>,
@@ -593,6 +642,7 @@ impl NoiseFields {
         let w = width as usize;
         let mut f = Self {
             elevation: vec![0.0; n],
+            cones: vec![0.0; n],
             moisture: vec![0.0; n],
             volcanic_zone: vec![0.0; n],
             temperature_anomaly: vec![0.0; n],
@@ -616,7 +666,8 @@ impl NoiseFields {
                     .zip(band.par_iter())
                     .for_each(|(v, s)| *v = value(s));
             };
-            fill(&mut f.elevation, |s| s.elevation);
+            fill(&mut f.elevation, |s| s.elevation - s.cone_relief);
+            fill(&mut f.cones, |s| s.cone_relief);
             fill(&mut f.moisture, |s| s.moisture);
             fill(&mut f.volcanic_zone, |s| s.volcanic_zone);
             fill(&mut f.temperature_anomaly, |s| s.temperature_anomaly);
@@ -765,6 +816,7 @@ pub fn generate_with_progress(
     progress(Stage::Erosion);
     let NoiseFields {
         mut elevation,
+        cones,
         moisture: moisture_noise,
         volcanic_zone: raw_volcanic_zone,
         temperature_anomaly: anomaly,
@@ -839,6 +891,14 @@ pub fn generate_with_progress(
             values,
         });
     }
+    // Volcanic cones are young: they stand on the worn relief instead of
+    // being worn down with it (eroded, they no longer reached the highland
+    // where volcano and lava field biomes are drawn).
+    elevation
+        .par_iter_mut()
+        .zip(&cones)
+        .for_each(|(e, c)| *e = (*e + c).clamp(-1.0, 1.0));
+    drop(cones);
     // The young craters' height change, kept to export the elevation
     // without them (the surface the time slider draws them on).
     let mut young_craters = elevation.clone();
