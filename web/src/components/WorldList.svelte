@@ -4,6 +4,8 @@
   import { formatAgo, formatNumber } from '../lib/format';
   import { loadSetting, saveSetting } from '../lib/settings';
   import Thumbnail from './Thumbnail.svelte';
+  import { presetName } from '../lib/i18n/names.svelte';
+  import { worldName } from '../lib/names';
 
   interface Props {
     worlds: WorldSummary[];
@@ -46,7 +48,7 @@
   const shown = $derived.by(() => {
     const q = query.trim().toLowerCase();
     return worlds
-      .filter((w) => (planet === '' || w.planet === planet) && (q === '' || w.id.toLowerCase().includes(q)))
+      .filter((w) => (planet === '' || w.planet === planet) && (q === '' || [w.id, w.names.designation, w.names.name ?? ''].some((text) => text.toLowerCase().includes(q))))
       .sort(COMPARE[sort]);
   });
   $effect(() => {
@@ -138,7 +140,8 @@
         <button class="pick" onclick={() => (selecting ? toggle(world.id) : onSelect(world.id))}>
           <Thumbnail id={world.id} revision={world.modified_ms} width={72} height={40} />
           <span class="text">
-            <strong>{world.planet}</strong>
+            <strong>{worldName(world.names)}</strong>
+            <small>{presetName({ name: world.planet })}</small>
             <small
               >{t.worldList.seedSize({
                 seed: world.seed,

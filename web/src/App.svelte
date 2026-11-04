@@ -26,6 +26,7 @@
   import type { LinkedDisplay } from './lib/display';
   import type { CameraState } from './lib/viewer/PlanetView';
   import { LoadedWorld } from './lib/world.svelte';
+  import { worldName } from './lib/names';
 
   /** How long a deleted world can be restored, in ms. */
   const UNDO_MS = 6000;
@@ -71,6 +72,12 @@
   const visible = $derived(worlds.filter((w) => !hidden.includes(w.id)));
   const existing = $derived(new Set(worlds.map((w) => w.id)));
   const revision = (id: string | null) => worlds.find((w) => w.id === id)?.modified_ms ?? null;
+  const namesOf = (id: string | null) => worlds.find((w) => w.id === id)?.names ?? null;
+  /** A world's name in the compare bar: its own, else its id. */
+  const titleOf = (id: string | null) => {
+    const names = namesOf(id);
+    return names ? worldName(names) : id;
+  };
 
   /** When the list was last asked for (ms), to throttle the focus refreshes. */
   let lastRefresh = 0;
@@ -398,6 +405,7 @@
           onCompare={(id) => (compareId = id)}
           link={shareLink}
           onDelete={() => selectedId && removeWorlds([selectedId])}
+          onRenamed={(renamed) => (worlds = worlds.map((w) => (w.id === renamed.id ? renamed : w)))}
         />
         <WorldList
           worlds={visible}
@@ -417,10 +425,10 @@
       <div class="compare-bar">
         <span class="names">
           <Thumbnail id={selectedId ?? ''} revision={revision(selectedId)} width={36} height={20} radius={3} />
-          <strong>{selectedId}</strong>
+          <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
           <span class="muted">{t.app.versus}</span>
           <Thumbnail id={compareId} revision={revision(compareId)} width={36} height={20} radius={3} />
-          <strong>{compareId}</strong>
+          <strong title={compareId}>{titleOf(compareId)}</strong>
         </span>
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> {t.app.linkCameras}</label>
         <label
@@ -437,8 +445,9 @@
         bind:this={primaryPane}
         world={primary}
         revision={revision(selectedId)}
+        names={namesOf(selectedId)}
         keyboard={true}
-        label={compareId ? selectedId : null}
+        label={compareId ? titleOf(selectedId) : null}
         onStepWorld={step}
         onDisplayChange={(display) => (mainDisplay = display)}
         onCameraChange={cameraFrom(() => secondaryPane)}
@@ -448,10 +457,11 @@
           bind:this={secondaryPane}
           world={secondary}
           revision={revision(compareId)}
+          names={namesOf(compareId)}
           keyboard={false}
           persistDisplay={false}
           linkedDisplay={linkDisplay ? mainDisplay : null}
-          label={compareId}
+          label={titleOf(compareId)}
           onCameraChange={cameraFrom(() => primaryPane)}
         />
       {/if}

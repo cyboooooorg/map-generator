@@ -106,6 +106,57 @@ pub struct WorldSummary {
     /// Last modification time, in milliseconds since the Unix epoch.
     #[ts(type = "number")]
     pub modified_ms: u64,
+    /// The scientific names of its system, and the names given to it and
+    /// its moons.
+    pub names: WorldNames,
+}
+
+/// The names of a world's system. Designations follow the IAU's style for
+/// exoplanets (see `mapgen::naming`): the star's catalogue number
+/// (`MGS 48213`), a letter for each planet by its distance to the star
+/// (`MGS 48213 c`), a Roman numeral for each moon by its distance to its
+/// planet (`MGS 48213 c II`).
+#[derive(Clone, Debug, Serialize, TS, PartialEq)]
+#[ts(export)]
+pub struct WorldNames {
+    pub star: String,
+    /// The world's designation.
+    pub designation: String,
+    /// The name given to the world, if any.
+    pub name: Option<String>,
+    /// Designations of the system's other giants, in the order of
+    /// `giants.giants` in `world.json`.
+    pub giants: Vec<String>,
+    /// The world's moons, in the order of `moons.moons` in `world.json`.
+    pub moons: Vec<MoonNames>,
+    /// Designation of the giant whose moon the world is, if it is one.
+    pub host: Option<String>,
+    /// Designations of that giant's other moons, in the order of
+    /// `host.siblings`.
+    pub siblings: Vec<String>,
+}
+
+/// A moon's designation and the name given to it, if any.
+#[derive(Clone, Debug, Serialize, TS, PartialEq)]
+#[ts(export)]
+pub struct MoonNames {
+    pub designation: String,
+    pub name: Option<String>,
+}
+
+/// The names given to a world and its moons (`PUT /api/worlds/{id}/names`,
+/// stored in the world's `names.json`). The request replaces every given
+/// name: a name left out goes back to its designation.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+#[ts(export, optional_fields)]
+pub struct GivenNames {
+    /// The world's name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Names of its moons, by their number (`"1"` is the closest).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub moons: BTreeMap<String, String>,
 }
 
 /// Query of a generation request (`POST /api/worlds?replace=true`).

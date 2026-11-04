@@ -5,6 +5,7 @@ import type { ErrorDetail } from './types/ErrorDetail';
 import type { ApiError } from './types/ApiError';
 import type { CreateQuery } from './types/CreateQuery';
 import type { FormSpec } from './types/FormSpec';
+import type { GivenNames } from './types/GivenNames';
 import type { HexMap } from './types/HexMap';
 import type { HexRequest } from './types/HexRequest';
 import type { JobCreated } from './types/JobCreated';
@@ -68,6 +69,13 @@ export const api = {
       body: JSON.stringify(request),
     }),
   deleteWorld: (id: string) => call<void>(`/api/worlds/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Gives a world and its moons names, replacing those they had; answers its summary. */
+  renameWorld: (id: string, names: GivenNames) =>
+    call<WorldSummary>(`/api/worlds/${encodeURIComponent(id)}/names`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(names),
+    }),
   // World files keep their URL when a world is regenerated under the same
   // id: revalidate them ('no-cache', a 304 when unchanged).
   metadata: (id: string, signal?: AbortSignal) =>

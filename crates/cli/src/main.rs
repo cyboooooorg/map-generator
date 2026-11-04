@@ -247,6 +247,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         star.insolation,
     );
 
+    let names = mapgen::naming::of_params(p);
+    println!("Name → {} (star {})", names.world, names.star);
     if let Some(system) = MoonSystem::draw(p) {
         println!("Moons → {}", moons_summary(&system));
     }

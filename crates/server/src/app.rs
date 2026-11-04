@@ -9,6 +9,7 @@
 //! | `POST /api/worlds`              | queue a generation (`WorldRequest` body)          |
 //! | `POST /api/worlds?replace=true` | same, replacing the world of that id once done    |
 //! | `DELETE /api/worlds/{id}`       | delete a world (409 while it is being generated)  |
+//! | `PUT /api/worlds/{id}/names`    | name a world and its moons (`GivenNames` body)    |
 //! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
 //! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=&epoch=` | deep-zoom detail tile (PNG), at an epoch in Ma when set |
 //! | `GET /api/worlds/{id}/epoch/{ma}/{file}?rev=&scale=` | `surface.png`, `elevation.png` or `biomes.png` of a world at an epoch (see [`mapgen::epoch`]) |
@@ -27,8 +28,8 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, CreateQuery, ErrorDetail, FormSpec, HexRequest, JobCreated, JobInfo, JobStatus,
-    ParamSpec, PresetInfo, WorldSummary,
+    ApiError, CreateQuery, ErrorDetail, FormSpec, GivenNames, HexRequest, JobCreated, JobInfo,
+    JobStatus, ParamSpec, PresetInfo, WorldSummary,
 };
 use crate::catalog::Catalog;
 use crate::memory;
@@ -39,7 +40,7 @@ use axum::extract::{Path as UrlPath, Query, State};
 use axum::http::{Extensions, HeaderMap, HeaderValue, StatusCode, Version, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use mapgen::detail::{RENDER_VERSION, TileId};
 use mapgen::export::{ExportOptions, export_host, export_moons, export_world, world_dir_name};
@@ -238,6 +239,7 @@ pub fn router(config: Config) -> Router {
         .route("/api/form", get(form))
         .route("/api/worlds", get(list_worlds).post(create_world))
         .route("/api/worlds/{id}", delete(delete_world))
+        .route("/api/worlds/{id}/names", put(rename_world))
         .route("/api/worlds/{id}/hex", post(hex_grid))
         .route("/api/worlds/{id}/tiles/{z}/{x}/{y}", get(tile))
         .route("/api/worlds/{id}/epoch/{epoch}/{file}", get(epoch_layer))
@@ -314,6 +316,44 @@ async fn list_worlds(State(state): State<Shared>) -> Json<Vec<WorldSummary>> {
             .await
             .unwrap_or_default(),
     )
+}
+
+/// Gives a world and its moons names (`PUT /api/worlds/{id}/names`), and
+/// answers its summary.
+async fn rename_world(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    Json(given): Json<GivenNames>,
+) -> Result<Json<WorldSummary>, Failure> {
+    if !worlds::is_valid_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
+    }
+    if state.pending.lock().expect("pending lock").contains(&id) {
+        return Err(Failure(
+            StatusCode::CONFLICT,
+            format!("world {id} is being generated: wait for its job"),
+        ));
+    }
+    let dir = state.config.worlds_dir.clone();
+    let world = id.clone();
+    let result = tokio::task::spawn_blocking(move || worlds::give_names(&dir, &world, given))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    result.map(Json).map_err(|e| match e {
+        worlds::NamingError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no world {id}")),
+        worlds::NamingError::InvalidName(name) => Failure(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!(
+                "invalid name {name:?}: 1 to {} characters, without control characters",
+                worlds::MAX_NAME_CHARS
+            ),
+        ),
+        worlds::NamingError::NoSuchMoon(n) => Failure(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!("world {id} has no moon {n}"),
+        ),
+        worlds::NamingError::Io(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
+    })
 }
 
 async fn delete_world(
@@ -1033,6 +1073,66 @@ mod tests {
         let status = response.status();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         (status, String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    #[tokio::test]
+    async fn names_a_world_and_its_moons() {
+        let config = temp_config("names");
+        let world = config.worlds_dir.join("terran-42");
+        std::fs::create_dir_all(world.join("raw_data")).unwrap();
+        std::fs::write(
+            world.join("raw_data/world.json"),
+            r#"{"planet_type":"terran","seed":42,"format_version":10,
+                "star":{"type":"G2V","orbit_au":1.0},
+                "giants":{"giants":[{"orbit_au":5.2},{"orbit_au":0.1}]},
+                "moons":{"moons":[{},{}]}}"#,
+        )
+        .unwrap();
+        let app = router(config);
+        let star = mapgen::naming::star_name(42, "G2V");
+
+        let (_, body) = call(&app, "GET", "/api/worlds", None).await;
+        let listed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let names = &listed[0]["names"];
+        assert_eq!(names["designation"], format!("{star} c"));
+        assert_eq!(
+            names["giants"],
+            serde_json::json!([format!("{star} d"), format!("{star} b")])
+        );
+        assert_eq!(names["moons"][1]["designation"], format!("{star} c II"));
+        assert!(names["name"].is_null());
+
+        let (status, body) = call(
+            &app,
+            "PUT",
+            "/api/worlds/terran-42/names",
+            Some(r#"{"name":"  Gaia ","moons":{"2":"Séléné"}}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let summary: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(summary["names"]["name"], "Gaia");
+        assert_eq!(summary["names"]["moons"][1]["name"], "Séléné");
+        assert!(summary["names"]["moons"][0]["name"].is_null());
+        assert!(world.join("names.json").exists());
+
+        for bad in [
+            r#"{"name":"   "}"#,
+            r#"{"moons":{"3":"Nyx"}}"#,
+            r#"{"moons":{"01":"Nyx"}}"#,
+        ] {
+            let (status, body) = call(&app, "PUT", "/api/worlds/terran-42/names", Some(bad)).await;
+            assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}: {body}");
+        }
+        let (status, _) = call(&app, "PUT", "/api/worlds/terran-7/names", Some("{}")).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        // No names at all: back to the designations, and no file.
+        let (status, body) = call(&app, "PUT", "/api/worlds/terran-42/names", Some("{}")).await;
+        assert_eq!(status, StatusCode::OK);
+        let summary: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(summary["names"]["name"].is_null());
+        assert!(!world.join("names.json").exists());
     }
 
     async fn get_gzip(app: &Router, uri: &str) -> Response {

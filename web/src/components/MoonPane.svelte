@@ -12,9 +12,11 @@
     system: MoonSystem;
     /** The world the moon orbits, for the heading. */
     world: string;
+    /** The heading instead, when the moon has a name or a designation (`MGS 48213 c I`). */
+    title?: string | null;
   }
 
-  let { moon, system, world }: Props = $props();
+  let { moon, system, world, title = null }: Props = $props();
 
   /** A size in km with three significant digits (small moons keep their decimals). */
   const km = (value: number) => (value < 100 ? withUnit(formatUpTo(value, 1), 'km') : formatKm(value));
@@ -47,7 +49,7 @@
 </script>
 
 <details class="moon-panel" role="region" aria-label={t.moons.title} open>
-  <summary><strong>{t.moons.heading({ name: moon.name, world })}</strong></summary>
+  <summary><strong>{title ?? t.moons.heading({ name: moon.name, world })}</strong></summary>
   <h4>{t.moons.moonSection}</h4>
   <dl>
     <dt title={t.moons.originHelp}>{t.moons.origin}</dt>
