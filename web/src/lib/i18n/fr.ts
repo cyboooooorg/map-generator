@@ -481,6 +481,8 @@ export const fr: Messages = {
     starsHelp: `Étoiles autour du globe, fixes dans l’espace${S}: elles tournent avec la planète quand vous déplacez la caméra`,
     clouds: 'Nuages',
     drift: 'Dérive',
+    host: 'Planète hôte',
+    hostHelp: `La planète vue dans le ciel de cet astre (ou la géante autour de laquelle tourne ce monde), dessinée selon ses propres réglages${S}: ceux du dessus s’appliquent à l’astre regardé`,
     bandDrift: 'Dérive des bandes',
     bandDriftHelp: `Les bandes tournent chacune avec son vent, plus vite ou moins vite que la planète, certaines à rebours${S}: la plus rapide fait le tour en deux minutes (pas au vrai rythme)`,
     cloudTops: 'Sommet des nuages',

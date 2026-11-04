@@ -34,6 +34,21 @@ export interface SkyBody {
   cloudTint?: Vec3;
   /** Its atmosphere, seen from afar: a halo at the limb (see `halo`). */
   halo?: Halo | null;
+  /** Axial tilt, degrees, for its tropics and polar circles. */
+  axialTiltDeg?: number;
+  /** What is drawn of it: all of it when absent; its grid and tropics only when asked. */
+  show?: SkyBodyShow;
+}
+
+/** How the planet looks in a moon's sky: its clouds, its air, its marks and their switches. */
+export type PlanetLook = Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo' | 'axialTiltDeg' | 'show'>;
+
+/** The display switches of a body in the sky (its own, not the body shown's). */
+export interface SkyBodyShow {
+  atmosphere: boolean;
+  clouds: boolean;
+  grid: boolean;
+  tropics: boolean;
 }
 
 /** An atmosphere seen from afar. */
@@ -192,7 +207,7 @@ export function moonSky(
   moon: Pick<Moon, 'radius_km' | 'semi_major_axis_km'>,
   planetRadiusKm: number,
   planetTexture: string | null,
-  look: Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo'> = {},
+  look: PlanetLook = {},
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
   // Longitude 180°: the face the moon keeps towards its planet.
   const direction: Vec3 = [0, 0, -1];
@@ -229,7 +244,7 @@ export function moonSystemSky(
   season: number,
   yearDays: number,
   sunLongitudeRad: number,
-  look: Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo'> = {},
+  look: PlanetLook = {},
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
   const self = moons[shown];
   if (!self) return { bodies: [], casters: [] };

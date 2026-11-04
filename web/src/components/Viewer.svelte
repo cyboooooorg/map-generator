@@ -114,6 +114,11 @@
     landContours: true,
     atmosphere: true,
     stars: true,
+    // The planet in a moon's sky, by its own switches.
+    hostAtmosphere: true,
+    hostClouds: true,
+    hostGrid: false,
+    hostTropics: false,
     starLight: false,
     clouds: true,
     cloudDrift: false,
@@ -149,6 +154,12 @@
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
+  /** The planet seen in a moon's sky (or the giant in its moon world's), drawn by its own switches. */
+  let hostAtmosphere = $state(saved.hostAtmosphere);
+  let hostClouds = $state(saved.hostClouds);
+  let hostGrid = $state(saved.hostGrid);
+  let hostTropics = $state(saved.hostTropics);
+  const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
   let season = $state(saved.season);
@@ -306,6 +317,10 @@
       starLight,
       clouds,
       cloudDrift,
+      hostAtmosphere,
+      hostClouds,
+      hostGrid,
+      hostTropics,
       sun,
       season,
       sunLongitude,
@@ -626,13 +641,15 @@
     const { yearDays, season: moonSeason, longitude } = moonClock;
     if (shownMoon && world.moon !== null) {
       const map = planetId ? worldFile(planetId, 'raw_data/surface.png', revision) : null;
-      // The planet as its own view shows it: its clouds and its air, by
-      // the Clouds and Atmosphere switches.
+      // The planet with its clouds and its air, a grid and its tropics,
+      // by its own switches (Host planet), not the moon's.
       const cloudFile = planet.layers.clouds?.file;
       const look = {
-        clouds: clouds && planetId && cloudFile ? worldFile(planetId, `raw_data/${cloudFile}`, revision) : null,
+        clouds: planetId && cloudFile ? worldFile(planetId, `raw_data/${cloudFile}`, revision) : null,
         cloudTint: cloudTint(planet),
-        halo: atmosphere ? halo(skyFromWorld(planet)) : null,
+        halo: halo(skyFromWorld(planet)),
+        show: hostShow,
+        axialTiltDeg: planet.axial_tilt_deg,
       };
       return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude, look);
     }
@@ -645,6 +662,7 @@
         { radius_km: planetRadiusKm, semi_major_axis_km: host.distance_km },
         (host.giant.radius_earth * 40075) / (2 * Math.PI),
         map,
+        { show: hostShow, axialTiltDeg: planet.axial_tilt_deg },
       );
       // The giant's other regular moons beside it, with their phases.
       const siblings = siblingSky(
@@ -652,7 +670,8 @@
         planetRadiusKm,
         host.distance_km,
         host.period_days,
-        season,
+        // The orbit slider moves them too.
+        moonClock.season,
         planet.star?.year_days ?? 365.25,
       );
       return joinSkies(giant, siblings);
@@ -660,6 +679,18 @@
     if (world.moon !== null || moons.length === 0) return null;
     return planetSky(moons, planetRadiusKm, moonSeason, yearDays, longitude, moonMap);
   });
+  // A moon locked to its planet (or a world locked to its giant) turns
+  // once per orbit against the stars, its planet fixed in its sky: the star
+  // field turns with its orbit, so the other bodies are seen to move against
+  // the stars, not to circle the moon.
+  const starsTurn = $derived.by(() => {
+    const { yearDays, season: moonSeason } = moonClock;
+    const period = shownMoon && world.moon !== null ? shownMoon.period_days : (world.worldMeta?.host?.period_days ?? null);
+    if (period === null || period <= 0) return 0;
+    const turns = (moonSeason * yearDays) / period;
+    return -2 * Math.PI * (turns - Math.floor(turns));
+  });
+  $effect(() => view?.setStarsTurn(starsTurn));
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   $effect(() => {
@@ -1173,6 +1204,16 @@
       <label class="check" title={t.viewer.elevationContoursHelp}>
         <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> {t.viewer.elevationContours}
       </label>
+      {#if (shownMoon && world.moon !== null) || world.worldMeta?.host}
+        <!-- The planet in this body's sky has switches of its own. -->
+        <fieldset class="host" title={t.viewer.hostHelp}>
+          <legend>{t.viewer.host}</legend>
+          <label class="check"><input type="checkbox" bind:checked={hostAtmosphere} /> {t.viewer.atmosphere}</label>
+          <label class="check"><input type="checkbox" bind:checked={hostClouds} /> {t.viewer.clouds}</label>
+          <label class="check"><input type="checkbox" bind:checked={hostGrid} /> {t.viewer.grid}</label>
+          <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
+        </fieldset>
+      {/if}
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.moon !== null} />
         {t.viewer.hexes}
@@ -1307,6 +1348,19 @@
 </div>
 
 <style>
+  fieldset.host {
+    margin: 4px 0 0;
+    padding: 4px 8px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: grid;
+    gap: 2px;
+  }
+  fieldset.host legend {
+    font-size: 0.8rem;
+    color: var(--muted);
+    padding: 0 4px;
+  }
   .viewer {
     position: relative;
     height: 100%;
