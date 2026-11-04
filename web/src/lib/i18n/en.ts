@@ -513,6 +513,8 @@ export const en = {
     starsHelp: 'Stars around the globe, fixed in space: they turn with the planet when you move the camera',
     clouds: 'Clouds',
     drift: 'Drift',
+    host: 'Host planet',
+    hostHelp: "The planet seen in this body's sky (or the giant this world orbits), drawn by its own switches: those above apply to the body you are looking at",
     bandDrift: 'Band drift',
     bandDriftHelp:
       "The bands turn each with its own wind, faster or slower than the planet's spin, some backwards: the fastest goes round in two minutes (not the true pace)",

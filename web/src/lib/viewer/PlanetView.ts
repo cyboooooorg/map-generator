@@ -1234,6 +1234,16 @@ export class PlanetView {
     this.starsOn = visible;
   }
 
+  /**
+   * Turns the star field about the spin axis by `radians`: a moon locked to
+   * its planet turns once per orbit against the stars, its planet fixed in
+   * its sky.
+   */
+  setStarsTurn(radians: number): void {
+    this.stars.rotation.y = radians;
+    this.requestRender();
+  }
+
   setAtmosphere(visible: boolean): void {
     this.requestRender();
     this.atmosphereOn = visible;
