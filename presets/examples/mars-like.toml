@@ -52,6 +52,7 @@ clouds = "dust"
 [geology]
 regime = "stagnant"
 wet_until = 3.5                        # Ga: end of the era of liquid water
+maria = [3.7, 3.0]                     # Ga: the volcanic plains of the Hesperian
 
 # target = [biomes replaced by it]
 [remap]

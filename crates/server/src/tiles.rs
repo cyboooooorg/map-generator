@@ -1,8 +1,8 @@
 //! Worlds loaded for the deep zoom tiles and the hex grid, rendered on demand
 //! from the world's raw data.
 //!
-//! A loaded world ([`DetailWorld`]) takes about 22 bytes per base pixel
-//! ([`LOADED_BYTES_PER_PIXEL`]): 0.2 GB at 4096 × 2048, 0.75 GB at
+//! A loaded world ([`DetailWorld`]) takes about 23 bytes per base pixel
+//! ([`LOADED_BYTES_PER_PIXEL`]): 0.2 GB at 4096 × 2048, 0.8 GB at
 //! 8192 × 4096. The most recently used worlds stay in memory within a byte
 //! budget (`MAPGEN_TILE_CACHE_MB`); the last one used is kept even when it
 //! alone exceeds it. The memory of evicted worlds is given back to the
@@ -37,9 +37,10 @@ use tokio::sync::{OnceCell, Semaphore, SemaphorePermit};
 pub const DEFAULT_BUDGET_BYTES: usize = 1 << 30;
 
 /// Bytes a loaded world holds per base pixel (see [`DetailWorld::bytes`]):
-/// eight 16-bit layers, the biome, the lake and river flags and the 32-bit
-/// water depth. Worlds of older formats, with fewer layers, take less.
-pub const LOADED_BYTES_PER_PIXEL: usize = 8 * 2 + 1 + 1 + 4;
+/// eight 16-bit layers, the biome, the 8-bit albedo, the lake and river
+/// flags and the 32-bit water depth. Worlds of older formats, with fewer
+/// layers, take less.
+pub const LOADED_BYTES_PER_PIXEL: usize = 8 * 2 + 1 + 1 + 1 + 4;
 
 /// A loaded world, keyed by id, revision (the modification time of its
 /// raw data: regenerating a world changes it) and the epoch shown, in Ma

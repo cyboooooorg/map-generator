@@ -45,8 +45,9 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// version 4 stores temperatures in °C instead of the former `[0, 1]`
 /// scale; version 5 adds the cloud cover; version 6 the surface render
 /// without overlaid lines; version 7 the elevation without the young
-/// impact craters, and its worlds have craters.
-pub const FORMAT_VERSION: u32 = 7;
+/// impact craters, and its worlds have craters; version 8 the albedo of
+/// fresh craters.
+pub const FORMAT_VERSION: u32 = 8;
 
 /// First format version whose temperatures are in °C.
 const CELSIUS_VERSION: u32 = 4;
@@ -115,6 +116,11 @@ pub struct Layers {
     /// Floodplain weight of the river valleys (format version 3 and later).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub floodplain: Option<ScalarLayerInfo>,
+    /// Brightness shift of the ground in `[-1, 1]`, 8 bits (`gray8`, as
+    /// `clouds`): fresh impact craters, their ejecta and rays (format
+    /// version 8 and later).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub albedo: Option<ScalarLayerInfo>,
     /// Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
     /// (max − min)`); format version 5 and later, absent on worlds without
     /// clouds.
@@ -271,6 +277,20 @@ pub fn export_raw_data(
         None => None,
     };
 
+    let albedo = if world.albedo.is_empty() {
+        None
+    } else {
+        GrayImage::from_raw(w, h, albedo_bytes(&world.albedo))
+            .ok_or("layer size does not match the world size")?
+            .save(dir.join("albedo.png"))?;
+        Some(ScalarLayerInfo {
+            file: "albedo.png".into(),
+            encoding: "gray8".into(),
+            min: ALBEDO.0,
+            max: ALBEDO.1,
+        })
+    };
+
     let ids: Vec<u8> = world.biomes.iter().map(|b| b.id()).collect();
     GrayImage::from_raw(w, h, ids)
         .ok_or("layer size does not match the world size")?
@@ -356,6 +376,7 @@ pub fn export_raw_data(
             highland_offset: Some(highland_offset),
             floodplain: Some(floodplain),
             clouds,
+            albedo,
             surface,
             biomes: BiomeLayerInfo {
                 file: "biomes.png".into(),
@@ -435,6 +456,23 @@ pub(crate) fn read_biome_ids(raw_dir: &Path, meta: &WorldMetadata) -> Result<Gra
         .into_luma8();
     check_size(file, img.dimensions(), meta)?;
     Ok(img)
+}
+
+/// Range of the albedo layer.
+const ALBEDO: (f32, f32) = (-1.0, 1.0);
+
+/// The albedo shift quantised to 8 bits, as `albedo.png` stores it.
+pub fn albedo_bytes(values: &[f32]) -> Vec<u8> {
+    values
+        .iter()
+        .map(|&v| ((v.clamp(-1.0, 1.0) + 1.0) / 2.0 * 255.0).round() as u8)
+        .collect()
+}
+
+/// An albedo byte of `albedo.png`, decoded.
+#[inline]
+pub fn albedo_of(byte: u8) -> f32 {
+    f32::from(byte) / 255.0 * 2.0 - 1.0
 }
 
 /// A 16-bit layer as stored in `raw_data/`, decoded on access: about half
@@ -540,6 +578,9 @@ pub struct LoadedWorld {
     pub highland_offset: Layer16,
     pub floodplain: Layer16,
     pub biomes: Vec<Biome>,
+    /// Albedo shift as stored (see [`albedo_of`]), empty for worlds of
+    /// format version 7 and older.
+    pub albedo: Vec<u8>,
     pub rivers: Vec<RiverLine>,
 }
 
@@ -563,6 +604,7 @@ impl LoadedWorld {
             highland_offset: Layer16::quantise(&world.highland_offset, HIGHLAND_OFFSET),
             floodplain: Layer16::quantise(&world.floodplain, FLOODPLAIN),
             biomes: world.biomes.clone(),
+            albedo: albedo_bytes(&world.albedo),
             rivers: world.rivers.clone(),
         }
     }
@@ -589,6 +631,7 @@ impl LoadedWorld {
         .map(|l| l.bytes())
         .sum::<usize>()
             + self.biomes.len() * size_of::<Biome>()
+            + self.albedo.len()
     }
 
     /// Decodes every layer into a [`World`], keeping this one.
@@ -632,6 +675,7 @@ impl LoadedWorld {
             floodplain,
             highland_offset,
             elevation_base: None,
+            albedo: self.albedo.iter().map(|&b| albedo_of(b)).collect(),
             biomes: self.biomes,
             rivers: self.rivers,
             clouds: Vec::new(),
@@ -785,6 +829,16 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
     if meta.format_version < CELSIUS_VERSION {
         params.planet.to_celsius();
     }
+    let albedo = match &meta.layers.albedo {
+        Some(layer) => {
+            let img = image::open(raw.join(&layer.file))
+                .map_err(|e| format!("{}: {e}", layer.file))?
+                .into_luma8();
+            check_size(&layer.file, img.dimensions(), &meta)?;
+            img.into_raw()
+        }
+        None => Vec::new(),
+    };
 
     Ok(LoadedWorld {
         width: meta.width,
@@ -799,6 +853,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         highland_offset,
         floodplain,
         biomes: biomes?,
+        albedo,
         rivers: rivers?,
     })
 }
@@ -892,7 +947,7 @@ mod tests {
                 (decoded.flow_km2[i] - world.flow_km2[i]).abs() <= world.flow_km2[i] * 1e-3 + 1e-2
             );
         }
-        assert!(layers.bytes() < world.elevation.len() * 18);
+        assert!(layers.bytes() < world.elevation.len() * 19);
 
         let back = load_world(&world_dir).unwrap();
         assert_eq!(back.biomes, world.biomes);

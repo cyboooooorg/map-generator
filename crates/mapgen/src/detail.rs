@@ -26,16 +26,20 @@
 //!
 //! A [`DetailWorld`] keeps the base layers as stored in `raw_data/` (16 bits
 //! per value, see [`Layer16`]), decoded as they are sampled, plus a byte of
+//! albedo (fresh craters' ejecta and rays, format version 8), a byte of
 //! flags and the water depth per pixel: about 23 bytes per base pixel
-//! (0.75 GB at 8192 × 4096).
+//! (0.8 GB at 8192 × 4096).
 use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
 use crate::craters::{CraterField, Window, base_min_diameter_km};
 use crate::export::colour::{linear_of, to_srgb};
 use crate::export::ecotone::ecotone_colour_for;
+use crate::export::raw_data::albedo_of;
 use crate::export::raw_data::{Layer16, LoadedWorld};
 use crate::export::variation::{SurfaceVariation, sphere};
-use crate::export::{LIGHT, RELIEF_KM, blend_river, shade, water_colour, water_depths_of};
+use crate::export::{
+    LIGHT, RELIEF_KM, blend_river, shade, water_colour, water_depths_of, with_albedo,
+};
 use crate::hex;
 use crate::rivers;
 use image::{Rgb, RgbImage};
@@ -50,7 +54,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 3;
+pub const RENDER_VERSION: u32 = 4;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -170,6 +174,16 @@ impl Samples for Layer16 {
     #[inline]
     fn value(&self, i: usize) -> f32 {
         self.get(i)
+    }
+}
+
+/// The albedo shift of the base map (see [`crate::world::World::albedo`]).
+struct Albedo<'a>(&'a [u8]);
+
+impl Samples for Albedo<'_> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        albedo_of(self.0[i])
     }
 }
 
@@ -590,8 +604,15 @@ impl DetailWorld {
                     }
                     let colour = self
                         .variation
-                        .apply(ecotone_colour_for(planet, input), lon, lat);
-                    colour.map(|c| c * shade)
+                        .apply(ecotone_colour_for(planet, input), lon, lat)
+                        .map(|c| c * shade);
+                    if dry.is_lava() || w.albedo.is_empty() {
+                        colour
+                    } else {
+                        // Fresh craters' ejecta and rays, at the base resolution.
+                        let a = bilinear(&Albedo(&w.albedo), w.width, w.height, bx, by);
+                        with_albedo(colour, a)
+                    }
                 };
                 let c = coverage[i];
                 if c > 0.0

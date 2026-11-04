@@ -31,6 +31,7 @@ clouds = "none"
 [geology]
 regime = "stagnant"
 wet_until = 3.5                        # Ga: end of the era of liquid water
+maria = [3.9, 3.1]                     # Ga: lava floods large basins, as the Moon's
 
 # target = [biomes replaced by it]; unlisted biomes stay as they are
 # (Mountain, Volcano).

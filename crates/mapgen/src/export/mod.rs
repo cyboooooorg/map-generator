@@ -416,6 +416,21 @@ pub fn draw_contours(world: &World, layers: &MapLayers, pixels: &mut [[u8; 3]]) 
         });
 }
 
+/// How much an albedo shift brightens the ground (see [`World::albedo`]):
+/// a shift of 1 takes a colour this share of the way to white, so fresh
+/// crater rims and rays stand out on dark ground too, as on the Moon; a
+/// negative shift darkens it by the same share.
+pub(crate) const ALBEDO_GAIN: f32 = 0.6;
+
+/// A shaded colour (0–255 per channel) under an albedo shift `a` in `[-1, 1]`.
+pub(crate) fn with_albedo(colour: [f32; 3], a: f32) -> [f32; 3] {
+    if a >= 0.0 {
+        colour.map(|c| c + (255.0 - c).max(0.0) * ALBEDO_GAIN * a)
+    } else {
+        colour.map(|c| c * (1.0 + ALBEDO_GAIN * a))
+    }
+}
+
 /// Computes the final colour of every pixel, in the same row-major order as
 /// the world layers, without contour lines (see [`draw_contours`]).
 pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8; 3]> {
@@ -476,6 +491,12 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
                 f = 1.0 + (f - 1.0) * crate::detail::LAVA_SHADE;
             }
             color = color.map(|c| c * f);
+            // Fresh craters: bright ejecta and rays, on rock (not on lava).
+            if let Some(&a) = world.albedo.get(i)
+                && !dry.is_lava()
+            {
+                color = with_albedo(color, a);
+            }
             // Anti-aliased river on top, except where it is frozen or under
             // lava.
             let c = coverage[i];

@@ -227,7 +227,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 8. Impact craters and geological time
 
-- **Status:** in progress
+- **Status:** done
 - **Analysis:** [08-geology.md](analysis/08-geology.md)
 - **Problem:** no world has impact craters, so dead worlds (`barren`,
   `mars-like`, `mercury-like`) look like dry Earths; the surface has no
@@ -248,7 +248,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                   | Same   | done   |
 | 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                      | Same   | done   |
 | 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                             | Same   | done   |
-| 6    | Optional: ray systems and ejecta albedo fading with age; lava flooding of basins (maria) at given epochs       | Change | todo   |
+| 6    | Optional: ray systems and ejecta albedo fading with age; lava flooding of basins (maria) at given epochs       | Change | done   |
 
 ## 9. Plate tectonics and continental drift
 

@@ -10,7 +10,8 @@
 //! today offer epochs: on others the relief would also move lakes, rivers
 //! and erosion, which are not recomputed. Moisture and the other layers
 //! keep their present values; temperature follows the relief through the
-//! lapse rate.
+//! lapse rate, the bright rays are those of the craters fresh at the
+//! epoch, and the dark maria those of the lava floods that came by then.
 //!
 //! The world is kept as loaded (16 bits per value, see [`LoadedWorld`]):
 //! besides it, only the elevation and temperature are held in full
@@ -18,8 +19,10 @@
 use crate::atmosphere::LIQUID_WATER_BAR;
 use crate::biome::BiomeInput;
 use crate::climate::temperature;
-use crate::craters::{CraterField, Era, FUTURE_GA, base_min_diameter_km};
-use crate::export::raw_data::{ELEVATION, Layer16, LoadedWorld, TEMPERATURE};
+use crate::craters::{
+    CraterField, Era, FUTURE_GA, RAY_MIN_PIXELS, base_min_diameter_km, darken_maria,
+};
+use crate::export::raw_data::{ELEVATION, Layer16, LoadedWorld, TEMPERATURE, albedo_bytes};
 use crate::world::WorldParams;
 use rayon::prelude::*;
 
@@ -54,7 +57,7 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
     let p = &world.params;
     let grid = p.grid();
     let mut elevation = base.to_vec();
-    CraterField::new_at(p, base_min_diameter_km(&grid), epoch_ga).apply(
+    let mare = CraterField::new_at(p, base_min_diameter_km(&grid), epoch_ga).apply(
         &mut elevation,
         &grid,
         Era::Dry,
@@ -85,10 +88,15 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
             p.planet.remap(rules.choose(input))
         })
         .collect();
+    // The rays of the craters fresh at the epoch.
+    let pixel_km = f64::from(grid.circumference_km) / f64::from(grid.width);
+    let mut albedo = CraterField::new_at(p, RAY_MIN_PIXELS * pixel_km, epoch_ga).albedo(&grid);
+    darken_maria(&mut albedo, &mare);
     LoadedWorld {
         elevation: Layer16::quantise(&elevation, ELEVATION),
         temperature: Layer16::quantise(&temperature, TEMPERATURE),
         biomes,
+        albedo: albedo_bytes(&albedo),
         ..world
     }
 }

@@ -10,6 +10,7 @@
 //! [geology]
 //! regime = "stagnant"                # plates | stagnant | episodic | heat_pipe
 //! wet_until = 3.5                    # Ga: end of the era of liquid water
+//! maria = [3.9, 3.1]                 # Ga: when lava flooded large basins
 //! ```
 //!
 //! Every field is optional; a preset without the table gets Earth's.
@@ -59,6 +60,10 @@ pub struct Geology {
     /// liquid water (Mercury). Craters older than it will be worn by the
     /// hydraulic erosion, younger ones stay fresh.
     pub wet_until: f32,
+    /// When lava flooded large impact basins, `[start, end]` in Ga before
+    /// present (the Moon's maria: 3.9 to 3.1), or none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub maria: Option<[f32; 2]>,
 }
 
 impl Default for Geology {
@@ -67,6 +72,7 @@ impl Default for Geology {
         Self {
             regime: Regime::Plates,
             wet_until: 0.0,
+            maria: None,
         }
     }
 }
@@ -75,13 +81,21 @@ impl Geology {
     /// Checks every field is within its range.
     pub fn validate(&self) -> Result<(), String> {
         let (min, max) = (SURFACE_AGE_GA.min, SURFACE_AGE_GA.max);
-        if self.wet_until.is_finite() && (min..=max).contains(&self.wet_until) {
-            Ok(())
-        } else {
-            Err(format!(
+        let within = |v: f32| v.is_finite() && (min..=max).contains(&v);
+        if !within(self.wet_until) {
+            return Err(format!(
                 "geology.wet_until: must stay within [{min}, {max}]"
-            ))
+            ));
         }
+        if let Some([start, end]) = self.maria {
+            if !within(start) || !within(end) {
+                return Err(format!("geology.maria: must stay within [{min}, {max}]"));
+            }
+            if start < end {
+                return Err("geology.maria: [start, end] with start the older (larger)".into());
+            }
+        }
+        Ok(())
     }
 
     /// End of the wet era of a world of this surface pressure, in Ga: 0 for
@@ -104,6 +118,7 @@ mod tests {
         let mars = Geology {
             regime: Regime::Stagnant,
             wet_until: 3.5,
+            maria: None,
         };
         assert_eq!(mars.wet_until_ga(0.006), 3.5);
         assert_eq!(mars.wet_until_ga(1.0), 0.0);
@@ -118,6 +133,13 @@ mod tests {
                 ..Geology::default()
             };
             assert!(g.validate().is_err(), "{bad}");
+        }
+        for (maria, ok) in [([3.9, 3.1], true), ([3.1, 3.9], false), ([5.0, 3.0], false)] {
+            let g = Geology {
+                maria: Some(maria),
+                ..Geology::default()
+            };
+            assert_eq!(g.validate().is_ok(), ok, "{maria:?}");
         }
     }
 }
