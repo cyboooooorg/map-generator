@@ -188,6 +188,9 @@ pub enum RequestError {
     NoRoomForMoons {
         count: u8,
     },
+    /// Moons asked for on the moon of a giant (`host: giant`), which keeps
+    /// none of its own: its Hill sphere is too small.
+    MoonsOfAMoon,
     Preset(PresetError),
 }
 
@@ -218,6 +221,11 @@ impl fmt::Display for RequestError {
             RequestError::OrbitAndPosition => {
                 write!(f, "set orbit_au or hz_position, not both")
             }
+            RequestError::MoonsOfAMoon => write!(
+                f,
+                "the moon of a giant keeps no moons of its own (its Hill sphere is too small): \
+                 ask for moons or for host giant, not both"
+            ),
             RequestError::Preset(e) => e.fmt(f),
         }
     }
@@ -456,6 +464,15 @@ impl WorldRequest {
                 self.host.unwrap_or_default()
             },
         };
+        // Moons asked for: the world is not a giant's moon, which keeps none
+        // (an error when that is asked for too).
+        if params.moons.count().is_some() {
+            match params.host {
+                crate::exomoon::HostMode::Giant => return Err(RequestError::MoonsOfAMoon),
+                crate::exomoon::HostMode::Auto => params.host = crate::exomoon::HostMode::None,
+                crate::exomoon::HostMode::None => {}
+            }
+        }
         // The moon of a giant: no moons of its own (the giant's tides take
         // them), and tidal heat raises a drawn volcanism.
         if let Some(host) = crate::exomoon::HostGiant::draw(&params) {
@@ -816,5 +833,32 @@ mod tests {
             too_many.resolve(&mut rand::rng()),
             Err(RequestError::OutOfRange { field: "moons", .. })
         ));
+        // Moons and a giant's moon cannot both be asked for; moons asked for
+        // keep a drawn world from becoming one.
+        let both = WorldRequest {
+            moons: Some(crate::moons::MoonsMode::Count(2)),
+            host: Some(crate::exomoon::HostMode::Giant),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        };
+        assert!(matches!(
+            both.resolve(&mut rand::rng()),
+            Err(RequestError::MoonsOfAMoon)
+        ));
+        for seed in 0..300 {
+            let p = WorldRequest {
+                planet: Some("terran".into()),
+                seed: Some(seed),
+                moons: Some(crate::moons::MoonsMode::Count(1)),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            }
+            .resolve(&mut rand::rng())
+            .unwrap()
+            .params;
+            assert_eq!(p.host, crate::exomoon::HostMode::None);
+        }
     }
 }
