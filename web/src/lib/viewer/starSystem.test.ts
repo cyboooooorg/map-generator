@@ -78,16 +78,21 @@ describe('star view', () => {
 
   it('places the planet smoothly however long the animation runs, even on very eccentric orbits', () => {
     for (const e of [0, 0.2, 0.79, 0.85, 0.9]) {
-      let previous = keplerPosition(e, 0);
-      for (let m = 0.01; m < 2000; m += 0.01) {
-        const next = keplerPosition(e, m);
-        const step = Math.hypot(
-          next.distance * Math.cos(next.trueAnomaly) - previous.distance * Math.cos(previous.trueAnomaly),
-          next.distance * Math.sin(next.trueAnomaly) - previous.distance * Math.sin(previous.trueAnomaly),
-        );
+      // A few turns early on, and after a long run (an hour at a turn a minute).
+      for (const start of [0, 2000]) {
+        let previous = keplerPosition(e, start);
+        let largest = 0;
+        for (let m = start + 0.01; m < start + 20; m += 0.01) {
+          const next = keplerPosition(e, m);
+          const step = Math.hypot(
+            next.distance * Math.cos(next.trueAnomaly) - previous.distance * Math.cos(previous.trueAnomaly),
+            next.distance * Math.sin(next.trueAnomaly) - previous.distance * Math.sin(previous.trueAnomaly),
+          );
+          largest = Math.max(largest, step);
+          previous = next;
+        }
         // A hundredth of a radian of mean anomaly never moves the planet far.
-        expect(step).toBeLessThan(0.1);
-        previous = next;
+        expect(largest).toBeLessThan(0.1);
       }
     }
   });
