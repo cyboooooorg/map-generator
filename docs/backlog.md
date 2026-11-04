@@ -261,16 +261,21 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   (Cortial et al. 2019) replacing the coarse continent octaves, with a
   time slider over keyframes of the simulation.
 - **Deferred (2026-11-03):** too costly for now (a new subsystem, heavy
-  tuning, a full climate per epoch). It waits for a cheaper way of
-  drifting continents; candidates are listed in the analysis.
-| Step | Change                                                                                                        | Seeds  | Status |
-| ---- | ------------------------------------------------------------------------------------------------------------- | ------ | ------ |
-| 1    | `[geology]` in presets and `world.json`, `--surface-age`, form field, regime in the world info; no effect yet | Same   | todo   |
-| 2    | Crater field in the generation: chronology, morphology, superposition, atmosphere, wet era; `ELEVATION_KM`    | Change | todo   |
-| 3    | `elevation_base.png`, `format_version` 7; craters in the detail tiles down to the tile pixel                  | Same   | todo   |
-| 4    | Epoch: server routes and tile parameter, rendering of a world at an epoch                                     | Same   | todo   |
-| 5    | Viewer: time slider, reduced layers while dragging, epoch in picking and URL state                            | Same   | todo   |
-| 6    | Optional: ray systems and ejecta albedo fading with age; lava flooding of basins (maria) at given epochs      | Change | todo   |
+  tuning, a full climate per epoch).
+- **Cheaper approach (research, 2026-11-04):** kinematic drift without
+  simulation. Static Voronoi plates (as in frozenfractal's generator)
+  turned by Euler poles constant per stage (as in GPlates): each pixel
+  reads the present relief at its point of origin, and boundary relief
+  (ranges, rifts, ridges, trenches, arcs) follows from the geometry at
+  the epoch, with no memory of earlier steps. A few milliseconds to a
+  few tens of milliseconds per epoch at 512 × 256 (estimate); bounded
+  to about ±200–300 Ma. Not decided yet.
+
+| Step | Change                                                                                                 | Seeds  | Status |
+| ---- | ------------------------------------------------------------------------------------------------------ | ------ | ------ |
+| 1    | Static plates on `plates` worlds: Voronoi subplates, velocities, boundary features (ranges, arcs)      | Change | todo   |
+| 2    | Kinematic drift: Euler poles per stage, plate of each pixel at an epoch, boundary relief from geometry | Same   | todo   |
+| 3    | Time slider for drift: low-resolution preview of the whole pipeline, "generate at this epoch"          | Same   | todo   |
 
 ## 10. Internationalisation of the web app
 
