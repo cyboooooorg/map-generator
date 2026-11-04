@@ -98,7 +98,35 @@ pub struct HostGiant {
     pub inside_edge: bool,
     /// Hill radius of the giant, in its radii: the world stays within a third.
     pub hill_radii: f32,
+    /// The giant's other regular moons, nearest first (see [`Sibling`]);
+    /// none in the worlds made before them.
+    #[serde(default)]
+    pub siblings: Vec<Sibling>,
 }
+
+/// One of the giant's other regular moons, born in its disk as the
+/// Galilean moons were: their masses share about 10⁻⁴ of the giant's
+/// (Canup & Ward 2006), their orbits spaced like Io, Europa and Ganymede
+/// (each period twice the last, semi-major axes `2^(2/3)` apart).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Sibling {
+    pub radius_km: f32,
+    /// Semi-major axis around the giant, km and giant radii.
+    pub distance_km: f32,
+    pub distance_radii: f32,
+    /// Orbital period around the giant, Earth days.
+    pub period_days: f32,
+    /// Rock (inner, warm) or ice and rock (beyond the giant's snow line).
+    pub icy: bool,
+}
+
+/// Share of the giant's mass its regular moons hold together (Canup &
+/// Ward 2006).
+const SATELLITE_MASS_SHARE: f64 = 1e-4;
+/// Ratio of the semi-major axes of neighbouring regular moons (periods in
+/// a 1:2 chain, as Io, Europa and Ganymede).
+const SIBLING_SPACING: f64 = 1.587_401;
 
 impl HostGiant {
     /// The giant the world `p` orbits, or `None` when it orbits its star.
@@ -131,6 +159,13 @@ impl HostGiant {
             (closest.ln() + rng.random::<f64>() * (widest / closest).ln()).exp();
         let eccentricity = 0.001 + 0.011 * rng.random::<f64>().powi(2);
         let seed = rng.random::<u32>();
+        // The giant's other regular moons, drawn after the values above so
+        // that they keep their draws: two to four orbits of the resonant
+        // chain around the world's, inside a third of the Hill radius and
+        // outside 3 radii (the Roche limit).
+        let count = 2 + (rng.random::<f64>() * 3.0) as usize;
+        let shares: Vec<f64> = (0..count).map(|_| 0.3 + rng.random::<f64>()).collect();
+        let offset = (rng.random::<f64>() * 3.0) as i32;
 
         let world_radius = f64::from(p.circumference_km) * 1000.0 / (2.0 * PI);
         // Tidal heating at `radii` giant radii, W/m².
@@ -166,6 +201,35 @@ impl HostGiant {
         let n = (G * mass_kg / a.powi(3)).sqrt();
         let giant =
             crate::giant_world::Look::draw(&host_params(p, mass_earth, seed), mass_earth).info;
+        // Slots of the chain, the world's at 0, from inside out; the
+        // siblings fill the others the offset leaves, as far as they fit.
+        let total: f64 = shares.iter().sum();
+        let mut siblings = Vec::new();
+        let mut slot = -offset;
+        for share in &shares {
+            if slot == 0 {
+                slot += 1;
+            }
+            let radii = distance_radii * SIBLING_SPACING.powi(slot);
+            slot += 1;
+            if radii < 3.0 || radii > hill / 3.0 {
+                continue;
+            }
+            // Icy beyond the giant's snow line, as Ganymede and Callisto.
+            let icy = star.equilibrium_k < 150.0 || radii > 12.0;
+            let density = if icy { 1.9e3 } else { 3.3e3 };
+            let mass = SATELLITE_MASS_SHARE * mass_kg * share / total;
+            let radius = (3.0 * mass / (4.0 * PI * density)).cbrt();
+            let a_m = radii * radius_m;
+            siblings.push(Sibling {
+                radius_km: (radius / 1000.0) as f32,
+                distance_km: (a_m / 1000.0) as f32,
+                distance_radii: radii as f32,
+                period_days: (2.0 * PI * (a_m.powi(3) / (G * mass_kg)).sqrt() / 86_400.0) as f32,
+                icy,
+            });
+        }
+        siblings.sort_by(|a, b| a.distance_km.total_cmp(&b.distance_km));
         Some(HostGiant {
             giant,
             seed,
@@ -179,6 +243,7 @@ impl HostGiant {
             tidal_heat_k: (flux / SIGMA).powf(0.25) as f32,
             inside_edge: starlight + flux > RUNAWAY_W_M2,
             hill_radii: hill as f32,
+            siblings,
         })
     }
 
@@ -304,5 +369,39 @@ mod tests {
             10.5 * K2_OVER_Q * G * m * m * r.powi(5) * n * e * e / a.powi(6) / (4.0 * PI * r * r)
         };
         assert!((1.0..4.0).contains(&io_flux), "{io_flux}");
+    }
+
+    #[test]
+    fn the_giant_has_other_regular_moons_in_a_resonant_chain() {
+        let mut with = 0;
+        for s in 0..200 {
+            let host = HostGiant::draw(&params(s, HostMode::Giant, 1.0)).unwrap();
+            with += usize::from(!host.siblings.is_empty());
+            assert!(host.siblings.len() <= 4);
+            let giant_kg = f64::from(host.giant.mass_earth) * EARTH_KG;
+            let mut mass = 0.0;
+            for sib in &host.siblings {
+                // Inside the stable zone, apart from the world's own orbit.
+                assert!(sib.distance_radii >= 3.0 && sib.distance_radii <= host.hill_radii / 3.0);
+                let ratio = f64::from(sib.distance_radii / host.distance_radii);
+                assert!((ratio.ln() / SIBLING_SPACING.ln()).round().abs() >= 1.0);
+                let density = if sib.icy { 1.9e3 } else { 3.3e3 };
+                mass += 4.0 / 3.0 * PI * (f64::from(sib.radius_km) * 1000.0).powi(3) * density;
+            }
+            assert!(mass <= 1.01 * SATELLITE_MASS_SHARE * giant_kg);
+        }
+        assert!(with > 150, "{with}");
+        // A Jupiter's: moons of the size of the Galilean ones.
+        let host = (0..400)
+            .filter_map(|s| HostGiant::draw(&params(s, HostMode::Giant, 5.2)))
+            .find(|h| (0.8..1.3).contains(&(h.giant.mass_earth / 318.0)) && !h.siblings.is_empty())
+            .unwrap();
+        assert!(
+            host.siblings
+                .iter()
+                .all(|s| (500.0..4000.0).contains(&s.radius_km)),
+            "{:?}",
+            host.siblings
+        );
     }
 }

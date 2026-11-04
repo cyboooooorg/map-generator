@@ -374,6 +374,18 @@ giants (item 14, step C), `PlanetEffects` covers a world with a host:
   times Earth's tides around a Jupiter at 20 of its radii (eccentricities
   of 0.001 to 0.012), so the shores reach their widest (×2).
 
+**Follow-up (the giant's other moons, 2026-11-04).** `HostGiant` gains
+`siblings`, drawn from the host stream after its other values (so none
+of them moves): two to four regular moons sharing about 10⁻⁴ of the
+giant's mass (Canup & Ward 2006), on the slots of a resonant chain
+(semi-major axes `2^(2/3)` apart, periods doubling, as Io, Europa and
+Ganymede) around the world's, inside a third of the Hill radius and
+outside 3 giant radii; icy beyond 12 radii or a cold star. Around a
+Jupiter they come out 500 to 4 000 km in radius. The viewer draws them in
+the world's sky beside the giant (`siblingSky`), their direction and size
+from the world as they turn at their period relative to the world's,
+and casts their shadows, the four largest of all bodies kept.
+
 ### Choices (confirmed by the user, 2026-11-04)
 
 - Moons are generated with the planet (not on demand when first
