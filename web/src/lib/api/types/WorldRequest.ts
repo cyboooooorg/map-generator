@@ -38,4 +38,9 @@ hz_position?: number,
 /**
  * Eccentricity of the orbit, in `[0, 0.9]`.
  */
-eccentricity?: number, width?: number, height?: number, };
+eccentricity?: number, 
+/**
+ * Epoch of the plates, Ma from the present (negative in the past), in
+ * `[-300, 300]`; the present when left out (never drawn).
+ */
+drift_ma?: number, width?: number, height?: number, };

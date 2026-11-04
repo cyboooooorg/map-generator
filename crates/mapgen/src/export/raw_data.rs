@@ -83,6 +83,10 @@ pub struct WorldMetadata {
     /// the Sun at 1 AU.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub star: Option<StarInfo>,
+    /// Epoch of the plates, Ma from the present (negative in the past).
+    /// Left out at the present, as in the worlds made before it existed.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub drift_ma: f32,
     pub layers: Layers,
     /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -369,6 +373,7 @@ pub fn export_raw_data(
             world.params.orbit_au,
             world.params.eccentricity,
         )),
+        drift_ma: world.params.drift_ma,
         layers: Layers {
             elevation,
             elevation_base,
@@ -699,6 +704,10 @@ pub fn read_elevation_base(world_dir: &Path) -> Result<Option<Vec<f32>>, String>
     }
 }
 
+fn is_zero(v: &f32) -> bool {
+    *v == 0.0
+}
+
 /// Reloads a generated world from its directory (the one holding `raw_data/`),
 /// keeping its layers as stored (see [`LoadedWorld`]). The layer files are
 /// decoded in parallel.
@@ -726,6 +735,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         star: meta.star.as_ref().map_or(crate::star::SUN, StarInfo::code),
         orbit_au: meta.star.as_ref().map_or(1.0, |s| s.orbit_au),
         eccentricity: meta.star.as_ref().map_or(0.0, |s| s.eccentricity),
+        drift_ma: meta.drift_ma,
     };
     let l = &meta.layers;
     let infos = [
@@ -902,6 +912,7 @@ mod tests {
             star: 64.5,
             orbit_au: 0.1,
             eccentricity: 0.0,
+            drift_ma: 0.0,
         })
         .world;
         let world_dir =

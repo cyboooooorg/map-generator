@@ -85,6 +85,13 @@ struct Args {
     #[arg(long, value_parser = parse_in(request::ECCENTRICITY))]
     eccentricity: Option<f32>,
 
+    /// Epoch of the plates in Ma from the present, in [-300, 300], negative
+    /// in the past: on worlds with plate tectonics, the continents as the
+    /// plates have carried them by then (or will have). The world is written
+    /// to `<planet>-<seed>_<drift>Ma` [default: 0, the present]
+    #[arg(long, allow_hyphen_values = true, value_parser = parse_in(request::DRIFT_MA))]
+    drift: Option<f32>,
+
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]
     #[arg(long, value_parser = parse_in(request::EROSION))]
     erosion: Option<f32>,
@@ -164,6 +171,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         orbit_au: args.orbit_au,
         hz_position: args.hz_position,
         eccentricity: args.eccentricity,
+        drift_ma: args.drift,
         width: Some(args.width),
         height: Some(args.height),
     };
@@ -173,7 +181,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     println!(
         "Parameters → planet={} seed={} sea_level={:.2} volcanic={:.2} \
          circumference={:.0} km tilt={:.1}° gravity≈{:.2}g pressure={:.3} bar \
-         surface_age={:.2} Ga ({}) star={} orbit={:.3} AU e={:.3} ({:.2} in the habitable zone, \
+         surface_age={:.2} Ga ({}){} star={} orbit={:.3} AU e={:.3} ({:.2} in the habitable zone, \
          {:.2}× Earth's light)",
         p.planet.name,
         p.seed,
@@ -185,6 +193,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.pressure_bar,
         p.surface_age_ga,
         p.planet.geology.regime.label(),
+        if p.drift_ma == 0.0 {
+            String::new()
+        } else {
+            format!(" drift={} Ma", p.drift_ma)
+        },
         star.kind,
         star.orbit_au,
         star.eccentricity,
@@ -192,7 +205,12 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         star.insolation,
     );
 
-    let dir = args.out_dir.join(world_dir_name(p));
+    let name = world_dir_name(p);
+    let dir = args.out_dir.join(if p.drift_ma == 0.0 {
+        name
+    } else {
+        format!("{name}_{}Ma", p.drift_ma)
+    });
     // The noise maps are written as the generation computes their layers,
     // each one freed once encoded: they are never all kept in memory.
     let noise_maps = if args.no_noise_maps {
@@ -225,7 +243,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
          --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
-         --star {} --orbit-au {} --eccentricity {} --width {} --height {}",
+         --star {} --orbit-au {} --eccentricity {}{} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -238,6 +256,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         star.kind,
         p.orbit_au,
         p.eccentricity,
+        if p.drift_ma == 0.0 {
+            String::new()
+        } else {
+            format!(" --drift {}", p.drift_ma)
+        },
         p.width,
         p.height
     );

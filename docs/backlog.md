@@ -254,7 +254,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 ## 9. Plate tectonics and continental drift
 
 - **Status:** in progress (step 1 done: static plates shape the relief,
-  on a cube-sphere grid that reaches the poles)
+  on a cube-sphere grid that reaches the poles; step 2 done: `--drift`)
 - **Analysis:** [08-geology.md](analysis/08-geology.md), section 8
 - **Problem:** continents come from noise, not from plates: mountains
   and volcanoes are not tied to plate boundaries, and continents cannot
@@ -282,7 +282,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Step | Change                                                                                                 | Seeds  | Status |
 | ---- | ------------------------------------------------------------------------------------------------------ | ------ | ------ |
 | 1    | Static plates on `plates` worlds: Voronoi subplates, velocities, boundary features (ranges, arcs)      | Change | done   |
-| 2    | Kinematic drift: Euler poles per stage, plate of each pixel at an epoch, boundary relief from geometry | Same   | todo   |
+| 2    | Kinematic drift: Euler poles per stage, plate of each pixel at an epoch, boundary relief from geometry | Same   | done   |
 | 3    | Time slider for drift: low-resolution preview of the whole pipeline, "generate at this epoch"          | Same   | todo   |
 
 ## 10. Internationalisation of the web app
