@@ -641,6 +641,124 @@ export function bodyTurn(days: number, dayHours: number, framePeriodDays: number
   return 2 * Math.PI * (turns - Math.floor(turns));
 }
 
+/** Where a giant's regular moons are, round it (see giantSystemSky). */
+interface GiantMoon {
+  /** Centre, km, in the frame turning with the world's orbit (the world on +z). */
+  centre: Vec3;
+  radiusKm: number;
+  distanceKm: number;
+  icy: boolean;
+  texture: string | null;
+}
+
+/**
+ * The sky of the giant a world orbits, or of one of its other regular
+ * moons: `from` 'host' for the giant, a sibling's index (from 0)
+ * otherwise. The giant's moons are the world and its siblings, where
+ * siblingSky has them as the seasons play (in the giant's equatorial
+ * plane, in a frame turning with the world's orbit), each locked to the
+ * giant (its longitude 180° towards it); the giant turns on itself by
+ * `giantTurn` (radians, see bodyTurn) against that frame. Positions and
+ * orbit loops are in radii of the body shown. `textures` maps the world
+ * (`'world'`), the giant (`'host'`) and each sibling (its index);
+ * `giantLook` is how the giant looks from one of its moons.
+ */
+export function giantSystemSky(
+  host: { distance_km: number; period_days: number; siblings?: readonly Sibling[] },
+  worldRadiusKm: number,
+  giantRadiusKm: number,
+  from: 'host' | number,
+  season: number,
+  yearDays: number,
+  giantTurn: number,
+  textures: (body: 'world' | 'host' | number) => string | null,
+  giantLook: PlanetLook = {},
+): { bodies: SkyBody[]; casters: ShadowCaster[]; orbits: Vec3[][] } {
+  const days = season * yearDays;
+  const siblings = host.siblings ?? [];
+  const moons: GiantMoon[] = [
+    {
+      centre: [0, 0, host.distance_km],
+      radiusKm: worldRadiusKm,
+      distanceKm: host.distance_km,
+      icy: false,
+      texture: textures('world'),
+    },
+    ...siblings.map((sibling, k): GiantMoon => {
+      // As siblingSky turns them, from the world's side of the giant.
+      const angle =
+        k * 2.1 +
+        1.3 +
+        2 * Math.PI * days * (1 / Math.max(sibling.period_days, 1e-3) - 1 / Math.max(host.period_days, 1e-3));
+      return {
+        centre: [sibling.distance_km * Math.sin(angle), 0, sibling.distance_km * Math.cos(angle)],
+        radiusKm: sibling.radius_km,
+        distanceKm: sibling.distance_km,
+        icy: sibling.icy,
+        texture: textures(k),
+      };
+    }),
+  ];
+  const self = from === 'host' ? null : moons[from + 1]!;
+  const unitKm = Math.max(self ? self.radiusKm : giantRadiusKm, 1e-6);
+  const origin: Vec3 = self ? self.centre : [0, 0, 0];
+  // The frame of the body shown: the giant's, turned on itself; a moon's,
+  // its z away from the giant.
+  const giantAxes = spinAxes(giantTurn);
+  const lockedAxes = (centre: Vec3): Axes => {
+    const z = unit(centre);
+    const y: Vec3 = [0, 1, 0];
+    return [cross(y, z), y, z];
+  };
+  const [ax, ay, az] = self ? lockedAxes(self.centre) : giantAxes;
+  const local = (v: Vec3): Vec3 => [dot(v, ax), dot(v, ay), dot(v, az)];
+  const place = (centre: Vec3) => scale(local(sub(centre, origin)), 1 / unitKm);
+  const bodies: SkyBody[] = [];
+  const casters: ShadowCaster[] = [];
+  const add = (centre: Vec3, radiusKm: number, body: Omit<SkyBody, 'direction' | 'angularDiameterDeg'>) => {
+    const position = place(centre);
+    const distance = Math.max(Math.hypot(...position), (radiusKm / unitKm) * 1.001);
+    bodies.push({
+      ...body,
+      direction: unit(position),
+      angularDiameterDeg: (2 * Math.asin(Math.min(radiusKm / unitKm / distance, 1)) * 180) / Math.PI,
+      position,
+      radius: radiusKm / unitKm,
+    });
+    casters.push({ position, radius: radiusKm / unitKm });
+  };
+  if (self) {
+    const [gx, gy, gz] = giantAxes;
+    add([0, 0, 0], giantRadiusKm, {
+      colour: PLANET,
+      texture: textures('host'),
+      axes: [local(gx), local(gy), local(gz)],
+      ...giantLook,
+    });
+  }
+  for (const moon of moons) {
+    if (moon === self) continue;
+    const [mx, my, mz] = lockedAxes(moon.centre);
+    add(moon.centre, moon.radiusKm, {
+      colour: moon.icy ? ICE : ROCK,
+      texture: moon.texture,
+      axes: [local(mx), local(my), local(mz)],
+    });
+  }
+  // Their orbits round the giant, in the giant's equatorial plane; the
+  // shown moon's own passes through it.
+  const orbits = moons.map((moon) => {
+    const at = Math.atan2(moon.centre[0], moon.centre[2]);
+    const nus = anomalies(moon === self ? { at, size: moon.radiusKm / moon.distanceKm } : null);
+    return nus.map((a) => place([moon.distanceKm * Math.sin(a), 0, moon.distanceKm * Math.cos(a)]));
+  });
+  return {
+    bodies,
+    casters: casters.sort((a, b) => b.radius - a.radius).slice(0, MAX_CASTERS),
+    orbits,
+  };
+}
+
 /** Two skies together (the giant and its other moons), the largest shadows kept. */
 export function joinSkies(
   ...skies: { bodies: SkyBody[]; casters: ShadowCaster[] }[]
