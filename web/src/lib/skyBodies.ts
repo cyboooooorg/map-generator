@@ -164,6 +164,81 @@ export function sunLongitudeOnMoon(
   return (degrees + 360) % 360;
 }
 
+/** Points sampled round each orbit line. */
+const ORBIT_SAMPLES = 160;
+
+/**
+ * The orbits of a planet's moons as lines in the sky, at infinity: for
+ * each moon, directions to points of its orbit seen from the planet's
+ * centre, or, with `shown` (from 0), from that moon's centre in its frame
+ * (as moonSystemSky places the bodies). A binary's moon, which does not
+ * move in its planet's sky, and the moon shown have none.
+ */
+export function orbitLoops(
+  moons: readonly Moon[],
+  shown: number | null,
+  season: number,
+  yearDays: number,
+  sunLongitudeRad: number,
+): Vec3[][] {
+  const self = shown === null ? null : moons[shown];
+  const here =
+    self && shown !== null
+      ? moonFrame(self, shown, season, yearDays, sunLongitudeRad)
+      : null;
+  const loops: Vec3[][] = [];
+  moons.forEach((moon, k) => {
+    if (k === shown || moon.migration === "locked") return;
+    const tilt = (moon.inclination_deg * Math.PI) / 180;
+    const loop: Vec3[] = [];
+    for (let i = 0; i < ORBIT_SAMPLES; i += 1) {
+      const theta = (2 * Math.PI * i) / ORBIT_SAMPLES;
+      // moonDirection's orbit, in km.
+      const p = scale(
+        [
+          Math.sin(theta),
+          -Math.cos(theta) * Math.sin(tilt),
+          Math.cos(theta) * Math.cos(tilt),
+        ],
+        moon.semi_major_axis_km,
+      );
+      if (!here) {
+        loop.push(unit(p));
+      } else {
+        const v = sub(p, here.centre);
+        loop.push(unit([dot(v, here.x), dot(v, here.y), dot(v, here.z)]));
+      }
+    }
+    loops.push(loop);
+  });
+  return loops;
+}
+
+/**
+ * The orbits of a giant's other regular moons in the sky of one of them
+ * (see siblingSky): circles in the giant's equatorial plane round the
+ * giant, at longitude 180°, `worldDistanceKm` away.
+ */
+export function siblingOrbitLoops(
+  siblings: readonly Pick<Sibling, "distance_km">[],
+  worldDistanceKm: number,
+): Vec3[][] {
+  return siblings.map((sibling) => {
+    const loop: Vec3[] = [];
+    for (let i = 0; i < ORBIT_SAMPLES; i += 1) {
+      const angle = (2 * Math.PI * i) / ORBIT_SAMPLES;
+      loop.push(
+        unit([
+          sibling.distance_km * Math.sin(angle),
+          0,
+          -worldDistanceKm + sibling.distance_km * Math.cos(angle),
+        ]),
+      );
+    }
+    return loop;
+  });
+}
+
 /** Longitude (degrees) of a moon's map facing `from` (a point, km, in its planet's frame). */
 function faceLongitude(frame: ReturnType<typeof moonFrame>, from: Vec3): number {
   const u = sub(from, frame.centre);

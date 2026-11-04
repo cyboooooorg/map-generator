@@ -500,6 +500,8 @@ export const en = {
       `${p.season} · sun over ${p.latitude}° ${p.north ? 'N' : 'S'}`,
     sunLongitude: 'Sun longitude',
     orbits: 'Moon orbits',
+    orbitLines: 'Orbits',
+    orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
     orbitsHelp: 'Moves the moons along their orbits, as many days after the season (their phases, their eclipses)',
     playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds',
     orbitDay: (p: { days: string; period: string }) => `Day ${p.days} of a ${p.period}-day orbit`,

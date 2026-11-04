@@ -27,7 +27,7 @@
   import { presetName } from '../lib/i18n/names.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
-  import { halo, joinSkies, moonSky, moonSystemSky, planetSky, siblingSky, sunLongitudeOnMoon } from '../lib/skyBodies';
+  import { halo, joinSkies, orbitLoops, siblingOrbitLoops, moonSky, moonSystemSky, planetSky, siblingSky, sunLongitudeOnMoon } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -121,6 +121,7 @@
     hostClouds: true,
     hostGrid: false,
     hostTropics: false,
+    orbitLines: false,
     // Names tied to the bodies of the sky.
     skyLabels: true,
     starLight: false,
@@ -163,6 +164,8 @@
   let hostClouds = $state(saved.hostClouds);
   let hostGrid = $state(saved.hostGrid);
   let hostTropics = $state(saved.hostTropics);
+  /** The orbits of the moons (or of a giant's other moons) drawn in the sky. */
+  let orbitLines = $state(saved.orbitLines);
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
   /** Labels on the bodies of the sky, and where those are on the screen. */
   let skyLabels = $state(saved.skyLabels);
@@ -328,6 +331,7 @@
       hostClouds,
       hostGrid,
       hostTropics,
+      orbitLines,
       skyLabels,
       sun,
       season,
@@ -705,6 +709,22 @@
     view?.setSkyBodies(sky?.bodies ?? []);
     view?.setShadowCasters(sky?.casters ?? []);
   });
+  // The moons' orbits in the sky, seen from the body shown.
+  const skyOrbitLoops = $derived.by(() => {
+    const planet = world.worldMeta;
+    if (!orbitLines || !planet) return [];
+    if (world.moon === null && planet.host) {
+      return siblingOrbitLoops(planet.host.siblings ?? [], planet.host.distance_km);
+    }
+    return orbitLoops(
+      moons,
+      world.moon === null ? null : world.moon - 1,
+      moonClock.season,
+      moonClock.yearDays,
+      moonClock.longitude,
+    );
+  });
+  $effect(() => view?.setSkyOrbits(skyOrbitLoops));
   // Follow the bodies of the sky on the screen while their labels show.
   $effect(() => {
     const current = view;
@@ -1288,6 +1308,11 @@
           <label class="check"><input type="checkbox" bind:checked={hostGrid} /> {t.viewer.grid}</label>
           <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
         </fieldset>
+      {/if}
+      {#if moons.length > 0 || (world.moon === null && (world.worldMeta?.host?.siblings?.length ?? 0) > 0)}
+        <label class="check" title={t.viewer.orbitLinesHelp}>
+          <input type="checkbox" bind:checked={orbitLines} /> {t.viewer.orbitLines}
+        </label>
       {/if}
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.moon !== null} />
