@@ -25,7 +25,7 @@
   import StarPane from './StarPane.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
-  import { joinSkies, moonSky, planetSky, siblingSky } from '../lib/skyBodies';
+  import { joinSkies, moonSky, moonSystemSky, planetSky, siblingSky } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -579,14 +579,23 @@
   });
   // The other bodies of the system in the sky, with their phases, and
   // their shadows on the ground (eclipses): the moons from their planet,
-  // the planet from one of its moons.
+  // the planet and its other moons from one of them, each with its map.
   const sky = $derived.by(() => {
     const planet = world.worldMeta;
     if (!planet) return null;
     const planetRadiusKm = planet.circumference_km / (2 * Math.PI);
-    if (shownMoon) {
-      const map = world.worldId ? worldFile(world.worldId, 'raw_data/surface.png', revision) : null;
-      return moonSky(shownMoon, planetRadiusKm, map);
+    const planetId = world.worldId;
+    const moonMap = (k: number) =>
+      planetId ? worldFile(planetId, `moons/${k + 1}/raw_data/surface.png`, revision) : null;
+    const yearDays = planet.star?.year_days ?? 365.25;
+    // The moons go round as the planet's seasons play (its star's place
+    // in its sky as the planet view has it).
+    const planetLocked = planet.star?.tidally_locked ?? false;
+    const moonSeason = planetLocked ? 0 : season;
+    const longitude = ((planetLocked ? 180 : sunLongitude) * Math.PI) / 180;
+    if (shownMoon && world.moon !== null) {
+      const map = planetId ? worldFile(planetId, 'raw_data/surface.png', revision) : null;
+      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude);
     }
     // The moon of a giant: the giant hangs over the face the world keeps
     // towards it (longitude 180°), its bands from its own world in host/.
@@ -610,8 +619,7 @@
       return joinSkies(giant, siblings);
     }
     if (world.moon !== null || moons.length === 0) return null;
-    const longitude = ((locked ? 180 : sunLongitude) * Math.PI) / 180;
-    return planetSky(moons, planetRadiusKm, locked ? 0 : season, planet.star?.year_days ?? 365.25, longitude);
+    return planetSky(moons, planetRadiusKm, moonSeason, yearDays, longitude, moonMap);
   });
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.

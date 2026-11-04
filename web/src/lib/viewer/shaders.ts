@@ -668,6 +668,11 @@ export const skyBodyFragment = /* glsl */ `
   uniform float uHasMap;
   uniform sampler2D uMap;
   uniform float uOpacity;
+  // Longitude of the map facing the viewer, radians, when uHasFace is 1
+  // (a moon's face towards its planet); else the map is in the viewer's
+  // frame.
+  uniform float uFace;
+  uniform float uHasFace;
   varying vec2 vP;
   void main() {
     float r2 = dot(vP, vP);
@@ -675,7 +680,9 @@ export const skyBodyFragment = /* glsl */ `
     vec3 n = normalize(vP.x * uRight + vP.y * uUp - sqrt(1.0 - r2) * uDir);
     vec3 colour = uColor;
     if (uHasMap > 0.5) {
-      float lon = atan(n.x, n.z);
+      // Turned about the spin axis so that the centre of the disk shows
+      // the face's longitude.
+      float lon = atan(n.x, n.z) + uHasFace * (uFace - atan(-uDir.x, -uDir.z));
       float lat = asin(clamp(n.y, -1.0, 1.0));
       colour = texture2D(uMap, vec2(fract(lon / (2.0 * PI)), lat / PI + 0.5)).rgb;
     }
