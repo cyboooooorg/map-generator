@@ -1477,6 +1477,7 @@ mod tests {
             eccentricity: 0.0,
             drift_ma: 0.0,
             moons: crate::moons::MoonsMode::Auto,
+            shape: None,
         }
     }
 

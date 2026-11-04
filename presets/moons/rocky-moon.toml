@@ -1,0 +1,41 @@
+# Rocky moon: airless grey rock, cratered since it formed. Not a planet
+# type: the generator gives it to the rocky moons of a world.
+name = "rocky-moon"
+description = "Rocky moon: airless, cratered rock"
+
+[locales.fr]
+name = "Lune rocheuse"
+description = "Lune rocheuse : roche sans air, criblée de cratères"
+
+[climate]
+moisture = -1.0
+volcanic = -1.0
+
+[defaults]
+pressure = 0.0
+surface_age = 4.0                      # Ga: impacts since it formed
+erosion = 0.0
+
+[atmosphere]
+haze = 0.0
+clouds = "none"
+
+# Never wet; lava flooded the large basins of large moons, as the Moon's
+# (the generator drops the maria of moons under 500 km in radius).
+[geology]
+regime = "stagnant"
+wet_until = 4.5
+maria = [3.9, 3.1]
+
+# target = [biomes replaced by it]: bare grey rock everywhere, the relief
+# and the craters drawn by the shading, the maria by their dark albedo.
+[remap]
+RockyWaste = [
+  "DeepOcean", "Ocean", "SeaIce", "River", "CausticLake", "FrozenOcean",
+  "AcidSea", "DeepAcidSea", "AcidRiver", "AcidShore",
+  "Beach", "Wetland", "ToxicSwamp",
+  "LavaField", "AshLand", "ScorchedWaste", "Volcano", "MagmaSea",
+  "Plain", "Shrubland", "Savanna", "Desert", "Tundra", "IceCap", "GlacialPlain",
+  "AcidFlatland", "Forest", "Jungle", "Taiga", "Lake", "FrozenLake",
+  "Mountain", "Snow", "DustPlain",
+]

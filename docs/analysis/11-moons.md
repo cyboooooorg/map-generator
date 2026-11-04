@@ -215,6 +215,27 @@ it off. Over 4 000 seeds:
 - **Budget:** moons are smaller than their planet, so the generation
   should grow by 10–30 %; to measure.
 
+**Outcome (step 2, 2026-11-04).** Moons are written as planned, with
+three changes found on the way:
+
+- **Presets in `presets/moons/`:** `rocky-moon` is bare rock everywhere
+  (every biome remapped to `RockyWaste`), so the shading draws the
+  craters and the albedo the maria; `icy-moon` is ice plains, older ice
+  in basins and bare ice ridges. The server's preset catalog skips the
+  directory: they are not planet types.
+- **Small bodies:** the noise relief kept a planet's amplitude (several
+  km) and buried the craters of a 10 km moon; it is now flattened towards
+  the datum to 1.5 % of the body's radius over the noise's typical
+  amplitude (bodies under about 830 km in radius), and the noise is no
+  finer than at 5 000 km around (`MAX_NOISE_SCALE`; on a 70 km moon it
+  turned into grain). The hillshade exaggerated relief 1 500 km per
+  elevation unit, set for planetary pixels of 20 km: on a moon's pixels
+  of 0.3 km every slope saturated; it now falls with the body's size
+  towards the true relief (25 km per unit) under 300 km in radius. Worlds
+  that small change; planets do not.
+- **Cost:** a moon is a small world (256 to about 1 000 pixels wide):
+  0.05 to 0.5 s each.
+
 ### Step 3: the moon view (viewer)
 
 - **Subject switch:** Planet / Star / Moon, with a selector of the moons

@@ -60,6 +60,19 @@ const BUILT_IN: [(&str, &str); 5] = [
     ("barren", include_str!("../../../presets/barren.toml")),
 ];
 
+/// The presets of moons: not planet types (neither listed nor drawn for
+/// a planet), given by the generator to the moons of a world.
+const MOON_PRESETS: [(&str, &str); 2] = [
+    (
+        "rocky-moon",
+        include_str!("../../../presets/moons/rocky-moon.toml"),
+    ),
+    (
+        "icy-moon",
+        include_str!("../../../presets/moons/icy-moon.toml"),
+    ),
+];
+
 /// A generation parameter given by a preset: a fixed value or a range to draw from.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
@@ -348,6 +361,16 @@ impl Preset {
                     built_in_names().join(", ")
                 )))
             })
+    }
+
+    /// The preset of a moon, `rocky-moon` or `icy-moon` (see
+    /// `crate::moons`).
+    pub fn moon(name: &str) -> Result<Self, PresetError> {
+        MOON_PRESETS
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(n, text)| Preset::from_toml(text, &format!("moon preset {n}")))
+            .unwrap_or_else(|| Err(PresetError(format!("unknown moon preset {name:?}"))))
     }
 
     /// Every built-in preset.

@@ -38,7 +38,7 @@ use crate::export::raw_data::albedo_of;
 use crate::export::raw_data::{Layer16, LoadedWorld};
 use crate::export::variation::{SurfaceVariation, sphere};
 use crate::export::{
-    LIGHT, RELIEF_KM, blend_river, shade, water_colour, water_depths_of, with_albedo,
+    LIGHT, blend_river, relief_km, shade, water_colour, water_depths_of, with_albedo,
 };
 use crate::hex;
 use crate::rivers;
@@ -641,7 +641,8 @@ impl DetailWorld {
         pixel_km: f64,
         lat: f64,
     ) -> f32 {
-        let at = |x: usize, y: usize| elevation[y * side + x] * RELIEF_KM;
+        let relief = relief_km(self.world().params.circumference_km);
+        let at = |x: usize, y: usize| elevation[y * side + x] * relief;
         let dx_km = (pixel_km * lat.cos().max(0.05)) as f32;
         let dz_east = (at(x + 1, y) - at(x - 1, y)) / (2.0 * dx_km);
         let dz_north = (at(x, y - 1) - at(x, y + 1)) / (2.0 * pixel_km as f32);

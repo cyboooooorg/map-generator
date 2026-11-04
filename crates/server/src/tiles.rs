@@ -251,12 +251,16 @@ impl TileCache {
         guard
     }
 
-    /// Forgets a world (deleted or regenerated).
+    /// Forgets a world (deleted or regenerated) and its moons.
     /// Returns whether a loaded world was dropped.
     pub fn forget(&self, id: &str) -> bool {
         let mut state = self.lock();
         let before: usize = state.entries.iter().map(Entry::bytes).sum();
-        state.entries.retain(|e| e.id != id);
+        // Its moons too (`id/moons/n`).
+        let moons = format!("{id}/");
+        state
+            .entries
+            .retain(|e| e.id != id && !e.id.starts_with(&moons));
         state.entries.iter().map(Entry::bytes).sum::<usize>() < before
     }
 

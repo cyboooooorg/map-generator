@@ -346,6 +346,7 @@ impl WorldRequest {
             eccentricity,
             drift_ma: self.drift_ma.unwrap_or(0.0),
             moons: self.moons.unwrap_or_default(),
+            shape: None,
         };
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);

@@ -510,6 +510,96 @@ impl MoonSystem {
     }
 }
 
+/// Radius under which a rocky moon has no maria, km: only large moons kept
+/// enough heat for lava to flood their basins (the Moon: 1 737 km).
+const MARIA_MIN_RADIUS_KM: f32 = 500.0;
+/// Narrowest map of a moon, pixels.
+const MOON_MIN_WIDTH: u32 = 256;
+/// Axial tilt of a moon, degrees: tides keep it small (the Moon: 1.5°).
+const MOON_TILT_DEG: f32 = 1.5;
+/// Low-frequency bumps of an irregular body, as a share of its radius at
+/// full irregularity (equal axes add none).
+const SHAPE_BUMPS: f64 = 0.12;
+
+/// The world of `moon`, one of the moons of the world `planet`: a body of
+/// the `rocky-moon` or `icy-moon` preset, airless and never wet, cratered
+/// for 4 Ga, under the planet's star, its map as many pixels per km as the
+/// planet's (at least [`MOON_MIN_WIDTH`] wide, at most the planet's
+/// width). The long axis of an irregular moon points at longitude 180°,
+/// the centre of its map: towards its planet, which tides lock it to.
+pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
+    let name = match moon.composition {
+        Composition::Rock => "rocky-moon",
+        Composition::Ice => "icy-moon",
+    };
+    let mut preset = crate::preset::Preset::moon(name).expect("moon presets are valid");
+    if moon.radius_km < MARIA_MIN_RADIUS_KM {
+        preset.geology.maria = None;
+    }
+    let ratio = f64::from(moon.radius_km) * 2.0 * PI / f64::from(planet.circumference_km);
+    let widest = planet.width.max(MOON_MIN_WIDTH);
+    let width =
+        ((f64::from(planet.width) * ratio).round() as u32).clamp(MOON_MIN_WIDTH, widest) & !1;
+    let surface_age_ga = preset.defaults.surface_age.map_or(4.0, |d| match d {
+        crate::preset::ParamDefault::Fixed(v) => v,
+        crate::preset::ParamDefault::Range([lo, _]) => lo,
+    });
+    WorldParams {
+        width,
+        height: width / 2,
+        seed: moon.seed,
+        planet: preset,
+        sea_level: 0.0,
+        volcanic_intensity: 0.0,
+        circumference_km: (f64::from(moon.radius_km) * 2.0 * PI) as f32,
+        axial_tilt_deg: MOON_TILT_DEG,
+        erosion: 0.0,
+        pressure_bar: 0.0,
+        surface_age_ga,
+        star: planet.star,
+        orbit_au: planet.orbit_au,
+        eccentricity: planet.eccentricity,
+        drift_ma: 0.0,
+        moons: MoonsMode::None,
+        shape: (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
+    }
+}
+
+/// The radius of the body `p` at a unit vector, as a share of its mean
+/// radius: its ellipsoid, the first axis along `-x` (longitude 180°),
+/// with low-frequency bumps, the more so the more unequal its axes.
+/// `None` for a round body.
+pub fn shape_at(p: &WorldParams, noise: &noise::Perlin, v: [f64; 3]) -> Option<f32> {
+    use noise::NoiseFn;
+    let [a, b, c] = p.shape?.map(f64::from);
+    let ellipsoid = 1.0 / ((v[0] / a).powi(2) + (v[1] / b).powi(2) + (v[2] / c).powi(2)).sqrt();
+    let irregular = 1.0 - c / a;
+    let bumps = noise.get([v[0] * 1.5, v[1] * 1.5, v[2] * 1.5])
+        + 0.5 * noise.get([v[0] * 3.0 + 7.0, v[1] * 3.0, v[2] * 3.0]);
+    Some((ellipsoid * (1.0 + SHAPE_BUMPS * irregular * bumps)) as f32)
+}
+
+/// The shape of body `p` at every pixel (see [`shape_at`]), `None` for a
+/// round body.
+pub fn shape_layer(p: &WorldParams) -> Option<Vec<f32>> {
+    use rayon::prelude::*;
+    p.shape?;
+    let noise = noise::Perlin::new(stream_seed(p.seed, stream::MOONS));
+    let grid = p.grid();
+    Some(
+        (0..p.pixel_count())
+            .into_par_iter()
+            .map(|i| {
+                let (x, y) = (i as u32 % p.width, i as u32 / p.width);
+                let lon = (f64::from(x) + 0.5) / f64::from(p.width) * 2.0 * PI;
+                let lat = grid.latitude(y);
+                let v = [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()];
+                shape_at(p, &noise, v).unwrap_or(1.0)
+            })
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,6 +623,7 @@ mod tests {
             eccentricity: 0.0,
             drift_ma: 0.0,
             moons: MoonsMode::Auto,
+            shape: None,
         }
     }
 
@@ -622,6 +713,29 @@ mod tests {
         // Turned off.
         p.moons = MoonsMode::None;
         assert!(MoonSystem::draw(&p).is_none());
+        // Each moon is a world of its own: a small airless one, its map
+        // sized like the planet's in km, irregular ones shaped.
+        let mut planet = params(5, 21_300.0);
+        planet.width = 2048;
+        planet.height = 1024;
+        let moons = (0..200)
+            .filter_map(|seed| MoonSystem::draw(&params(seed, 21_300.0)))
+            .flat_map(|s| s.moons)
+            .collect::<Vec<_>>();
+        let small = moons.iter().find(|m| !m.round).unwrap();
+        let body = body_params(&planet, small);
+        assert_eq!((body.width, body.height), (256, 128));
+        assert_eq!(body.pressure_bar, 0.0);
+        assert!(body.planet.geology.maria.is_none());
+        let shape = shape_layer(&body).unwrap();
+        assert_eq!(shape.len(), body.pixel_count());
+        let (lo, hi) = shape
+            .iter()
+            .fold((f32::MAX, 0.0f32), |(a, b), &v| (a.min(v), b.max(v)));
+        assert!(lo > 0.3 && hi < 1.8 && hi - lo > 0.05, "{lo} {hi}");
+        // The long axis at the centre of the map, the short one at the pole.
+        let centre = shape[(body.height / 2 * body.width + body.width / 2) as usize];
+        assert!(centre > shape[(body.width / 2) as usize], "{centre}");
         // Deterministic.
         assert_eq!(
             MoonSystem::draw(&params(9, 21_300.0)),

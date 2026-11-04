@@ -1,5 +1,5 @@
 use clap::Parser;
-use mapgen::export::{ExportOptions, NoiseMapWriter, export_world, world_dir_name};
+use mapgen::export::{ExportOptions, NoiseMapWriter, export_moons, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, generate_with_progress};
 use mapgen::moons::{MoonOrigin, MoonSystem, MoonsMode};
 use mapgen::preset::Preset;
@@ -248,8 +248,12 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         raw_data: !args.no_raw_data,
     };
     export_world(generated, &dir, options)?;
+    let moons = export_moons(p, &dir, options)?;
 
     println!("World generated → {}/", dir.display());
+    if moons > 0 {
+        println!("Moons generated → {}/moons/", dir.display());
+    }
     // Exact values (the summary above is rounded) so the world can be
     // regenerated; the size too, since the relief depends on the resolution.
     println!(

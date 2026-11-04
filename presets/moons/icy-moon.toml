@@ -1,0 +1,41 @@
+# Icy moon: airless water ice and rock, cratered since it formed, like
+# Charon. Not a planet type: the generator gives it to the icy moons of a
+# world (beyond an equilibrium temperature of 150 K).
+name = "icy-moon"
+description = "Icy moon: airless, cratered ice"
+
+[locales.fr]
+name = "Lune glacée"
+description = "Lune glacée : glace sans air, criblée de cratères"
+
+[climate]
+moisture = -1.0
+volcanic = -1.0
+
+[defaults]
+pressure = 0.0
+surface_age = 4.0                      # Ga: impacts since it formed
+erosion = 0.0
+
+[atmosphere]
+haze = 0.0
+clouds = "none"
+
+[geology]
+regime = "stagnant"
+wet_until = 4.5
+
+# target = [biomes replaced by it]: ice plains everywhere, older and
+# darker ice in the basins, bare ice ridges on high ground.
+[remap]
+IceCap = [
+  "DeepOcean", "Ocean", "SeaIce", "River", "CausticLake", "FrozenOcean",
+  "AcidSea", "DeepAcidSea", "AcidRiver", "AcidShore",
+  "Beach", "Wetland", "ToxicSwamp", "Lake", "FrozenLake", "MagmaSea",
+]
+GlacialPlain = [
+  "Plain", "Shrubland", "Savanna", "Desert", "Tundra",
+  "AcidFlatland", "Forest", "Jungle", "Taiga",
+  "LavaField", "AshLand", "ScorchedWaste", "Volcano",
+]
+Snow = ["Mountain"]

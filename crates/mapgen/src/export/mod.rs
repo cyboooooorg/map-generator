@@ -95,6 +95,31 @@ pub fn export_world(
     exports.par_iter().try_for_each(|export| export())
 }
 
+/// Directory of moon `n` (from 1, nearest first) of the world written in
+/// `dir`.
+pub fn moon_dir(dir: &Path, n: usize) -> std::path::PathBuf {
+    dir.join("moons").join(n.to_string())
+}
+
+/// Generates the moons of the world `params` (see `crate::moons`) one by
+/// one and writes each, like a world, into [`moon_dir`] of `dir`; returns
+/// how many were written.
+pub fn export_moons(
+    params: &WorldParams,
+    dir: &Path,
+    options: ExportOptions,
+) -> Result<usize, String> {
+    let Some(system) = crate::moons::MoonSystem::draw(params) else {
+        return Ok(0);
+    };
+    for (k, moon) in system.moons.iter().enumerate() {
+        let body = crate::moons::body_params(params, moon);
+        let generated = crate::generation::generate(&body);
+        export_world(generated, &moon_dir(dir, k + 1), options)?;
+    }
+    Ok(system.moons.len())
+}
+
 /// Contour lines are drawn whenever a tile and a neighbour straddle one of these levels.
 const CONTOUR_LEVELS: &[f32] = &[-0.45, -0.15, 0.0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90];
 /// Fraction to darken a pixel by when it sits on a contour line (0.0 = no change, 1.0 = black).
@@ -126,6 +151,18 @@ pub fn latitude_row(height: u32, latitude_deg: f64) -> f64 {
 /// `RELIEF_KM` kilometres. Planet-scale slopes are tiny, so this is far above
 /// real relief on purpose.
 pub(crate) const RELIEF_KM: f32 = 1500.0;
+
+/// The hillshade's [`RELIEF_KM`] on a body of `circumference_km`: on small
+/// bodies (moons below about 300 km in radius), whose pixels are a fraction
+/// of a km, it falls with their size towards the true relief
+/// (`craters::ELEVATION_KM`), or every slope would saturate.
+pub(crate) fn relief_km(circumference_km: f32) -> f32 {
+    let small = 2.0 * std::f32::consts::PI * SMALL_BODY_RADIUS_KM;
+    (RELIEF_KM * (circumference_km / small).min(1.0)).max(crate::craters::ELEVATION_KM)
+}
+
+/// Radius under which a body's hillshade exaggerates less, km.
+const SMALL_BODY_RADIUS_KM: f32 = 300.0;
 /// Light direction (east, north, up), from the north-west at 45° altitude.
 pub(crate) const LIGHT: [f32; 3] = [-0.5, 0.5, std::f32::consts::FRAC_1_SQRT_2];
 
@@ -133,7 +170,8 @@ pub(crate) const LIGHT: [f32; 3] = [-0.5, 0.5, std::f32::consts::FRAC_1_SQRT_2];
 /// ground, darker on slopes facing south-east, brighter facing north-west.
 fn hillshade(world: &World, grid: &Grid, x: u32, y: u32) -> f32 {
     let (w, h) = (world.width, world.height);
-    let elev = |x: u32, y: u32| world.elevation[world.index(x, y)] * RELIEF_KM;
+    let relief = relief_km(world.params.circumference_km);
+    let elev = |x: u32, y: u32| world.elevation[world.index(x, y)] * relief;
     // Central differences; longitude wraps, latitude clamps at the poles.
     let (west, east) = ((x + w - 1) % w, (x + 1) % w);
     let (north, south) = (y.saturating_sub(1), (y + 1).min(h - 1));
@@ -532,6 +570,44 @@ mod tests {
         let deep = to_srgb(water_colour(Biome::Ocean, 0.6));
         assert!(shelf[1] > deep[1] && shelf[2] > deep[2]);
         assert!(shelf[0] < shelf[2]);
+    }
+
+    #[test]
+    fn moons_are_written_as_worlds_of_their_own() {
+        use crate::export::raw_data::{WorldMetadata, read_metadata};
+        // A Pluto-sized world far from its star: two small icy moons.
+        let request = crate::request::WorldRequest {
+            planet: Some("barren".into()),
+            seed: Some(3),
+            circumference_km: Some(7_460.0),
+            star: Some("G2V".into()),
+            orbit_au: Some(30.0),
+            eccentricity: Some(0.0),
+            width: Some(128),
+            height: Some(64),
+            ..Default::default()
+        };
+        let params = request.resolve(&mut rand::rng()).unwrap().params;
+        let system = crate::moons::MoonSystem::draw(&params).unwrap();
+        assert_eq!(system.moons.len(), 2);
+        let dir = std::env::temp_dir().join(format!("mapgen-moons-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let options = super::ExportOptions { raw_data: true };
+        assert_eq!(super::export_moons(&params, &dir, options), Ok(2));
+        for (k, moon) in system.moons.iter().enumerate() {
+            let raw = super::moon_dir(&dir, k + 1).join("raw_data");
+            let meta: WorldMetadata = read_metadata(&raw).unwrap();
+            assert_eq!(meta.planet_type, "icy-moon");
+            assert_eq!(meta.seed, moon.seed);
+            assert!(
+                (meta.circumference_km / (2.0 * std::f32::consts::PI) - moon.radius_km).abs()
+                    < 0.01
+            );
+            // Irregular: a shape layer, and no moons of its own.
+            assert!(meta.shape.is_some() && meta.layers.shape.is_some() && meta.moons.is_none());
+            assert!(raw.join("shape.png").exists());
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

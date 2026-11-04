@@ -41,7 +41,12 @@ drift_ma?: number,
  * The moons and what bounds them; left out when the request turned
  * them off, and in the worlds made before them.
  */
-moons?: MoonSystem | null, layers: Layers, 
+moons?: MoonSystem | null, 
+/**
+ * The semi-axes of an irregular body, as shares of its mean radius
+ * (see `WorldParams::shape`); left out for a round one.
+ */
+shape?: [number, number, number] | null, layers: Layers, 
 /**
  * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
  */
