@@ -6,7 +6,7 @@ use crate::climate::{
     temperature, temperature_anomaly,
 };
 use crate::clouds::CloudInput;
-use crate::craters::{CraterField, Era, RAY_MIN_PIXELS, base_min_diameter_km};
+use crate::craters::{CraterField, Era, RAY_MIN_PIXELS, base_min_diameter_km, darken_maria};
 use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
@@ -690,11 +690,13 @@ pub fn generate_with_progress(
     // The young craters' height change, kept to export the elevation
     // without them (the surface the time slider draws them on).
     let mut young_craters = elevation.clone();
-    craters.apply(&mut elevation, &grid, Era::Dry);
+    let mare = craters.apply(&mut elevation, &grid, Era::Dry);
     drop(craters);
-    // The bright ejecta and rays of fresh craters, down to the pixel.
+    // The bright ejecta and rays of fresh craters, down to the pixel, over
+    // the dark lava of the maria.
     let pixel_km = f64::from(grid.circumference_km) / f64::from(width);
-    let albedo = CraterField::new(params, RAY_MIN_PIXELS * pixel_km).albedo(&grid);
+    let mut albedo = CraterField::new(params, RAY_MIN_PIXELS * pixel_km).albedo(&grid);
+    darken_maria(&mut albedo, &mare);
     young_craters
         .par_iter_mut()
         .zip(&elevation)
