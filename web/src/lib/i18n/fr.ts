@@ -382,6 +382,7 @@ export const fr: Messages = {
     hostNone: 'Jamais',
     hostGiant: 'Toujours',
     hostHelp: `Le monde tourne autour d’une planète géante qui tourne autour de l’étoile${S}: la géante occupe son ciel, ses marées le chauffent (un monde d’eau est gardé au-delà de la limite habitable), son jour est son orbite`,
+    moonsOfAMoon: `Lunes${S}: aucune, pour la lune d’une géante (sa sphère de Hill est trop petite pour en garder)`,
     moonsAuto: 'Tirées par la graine',
     moonsNone: 'Aucune',
     moonsCount: (p) => (p.count === 1 ? '1 lune' : `${p.count} lunes`),

@@ -303,7 +303,8 @@
     }
     applyStarChoice(request, star);
     const asked = moonsRequest(moons);
-    if (asked !== undefined && !giantWorld) {
+    // A giant's moon keeps no moons of its own (its Hill sphere is too small).
+    if (asked !== undefined && !giantWorld && giantChoice.host !== 'giant') {
       request.moons = asked;
     }
     applyGiantChoice(request, giantChoice, giantWorld);
@@ -346,7 +347,16 @@
       // The server swaps the new world in once it is complete: a failed or
       // cancelled generation keeps the old one.
       const job = await api.createWorld(request, { replace: conflict && replace });
-      saveFormMemory({ planet, randomPlanet, size, seaBy, landPercent, fields, star, moons });
+      saveFormMemory({
+        planet,
+        randomPlanet,
+        size,
+        seaBy,
+        landPercent,
+        fields,
+        star,
+        moons: giantChoice.host === 'giant' ? 'auto' : moons,
+      });
       onSubmitted(job, request);
     } catch (e) {
       error = errorText(e);
@@ -551,7 +561,9 @@
     {/if}
     <p class="help">{t.form.eccentricityHelp}</p>
   </fieldset>
-  {#if !giantWorld}
+  {#if !giantWorld && giantChoice.host === 'giant'}
+    <p class="help">{t.form.moonsOfAMoon}</p>
+  {:else if !giantWorld}
   <fieldset>
     <legend>{t.form.moons}</legend>
     <select bind:value={moons} aria-label={t.form.moons}>

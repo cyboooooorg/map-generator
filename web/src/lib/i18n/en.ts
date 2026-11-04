@@ -410,6 +410,7 @@ export const en = {
     hostGiant: 'Always',
     hostHelp:
       'The world orbits a giant planet that orbits the star: the giant hangs in its sky, its tides heat it (a watery world is kept beyond the habitable edge), its day is its orbit',
+    moonsOfAMoon: "Moons: none, as the moon of a giant (its Hill sphere is too small to keep any)",
     moonsAuto: 'Drawn by the seed',
     moonsNone: 'None',
     moonsCount: (p: { count: number }) => (p.count === 1 ? '1 moon' : `${p.count} moons`),
