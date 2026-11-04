@@ -9,7 +9,8 @@
   import type { Giant } from '../lib/api/types/Giant';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { GiantInfo } from '../lib/api/types/GiantInfo';
-  import { compressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed } from '../lib/viewer/starSystem';
+  import type { HostGiant } from '../lib/api/types/HostGiant';
+  import { compressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
 
@@ -35,8 +36,10 @@
     giantSystem?: GiantSystem | null;
     /** Whether the giants are drawn. */
     giants: boolean;
-    /** The world itself when it is a giant planet. */
+    /** The world itself when it is a giant planet, or the giant it orbits. */
     worldGiant?: GiantInfo | null;
+    /** The giant the world orbits, as its moon. */
+    host?: HostGiant | null;
   }
 
   let {
@@ -53,6 +56,7 @@
     giantSystem = null,
     giants = $bindable(),
     worldGiant = null,
+    host = null,
   }: Props = $props();
   const giantList = $derived(giantSystem?.giants ?? []);
   /** Whether some giant lies where the view compresses distances. */
@@ -110,7 +114,24 @@
   $effect(() => view?.setOrbitVisible(orbit));
   $effect(() => view?.setZoneVisible(zone));
   $effect(() => view?.setProminences(prominences));
-  $effect(() => view?.setMoons(moonOrbits(moons, planetRadiusKm, star.year_days, YEAR_S, binary)));
+  // A giant's moon: the marker on the orbit is the giant, the world goes
+  // round it at its pace relative to the year.
+  $effect(() =>
+    view?.setMoons(
+      host
+        ? [
+            {
+              radius: giantMarkerSize(host.giant.radius_earth) * 1.9,
+              size: PLANET_MARKER * 0.55,
+              inclination: 0,
+              speed: (2 * Math.PI) / Math.max(2, (host.period_days / Math.max(star.year_days, 1e-3)) * YEAR_S),
+              phase: 0,
+              swing: 0,
+            },
+          ]
+        : moonOrbits(moons, planetRadiusKm, star.year_days, YEAR_S, binary),
+    ),
+  );
 
   const kms = (v: number) => withUnit(formatUpTo(v, 1), 'km/s');
   /** Mean speed, and its range on an eccentric orbit. */

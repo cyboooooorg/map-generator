@@ -16,6 +16,7 @@ pub mod delta;
 pub mod detail;
 pub mod epoch;
 pub mod erosion;
+pub mod exomoon;
 pub mod export;
 pub mod generation;
 pub mod geo;

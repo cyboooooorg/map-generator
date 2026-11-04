@@ -205,6 +205,25 @@
             <span title={t.worldInfo.tiltHelp}>{meta.moons.tilt_steadied ? t.worldInfo.tiltSteady : t.worldInfo.tiltFree}</span>
           </dd>
         {/if}
+        {#if meta.host}
+          {@const h = meta.host}
+          <dt title={t.worldInfo.hostHelp}>{t.worldInfo.host}</dt>
+          <dd>
+            {t.worldInfo.hostValue({
+              kind: t.starView.giantKinds[h.giant.kind] ?? '',
+              mass: withUnit(formatUpTo(h.giant.mass_earth / 317.8, 2), 'MJ'),
+              radii: formatUpTo(h.distance_radii, 1),
+              km: withUnit(formatInt(h.distance_km), 'km'),
+            })}
+          </dd>
+          <dt title={t.worldInfo.hostDayHelp}>{t.worldInfo.hostDay}</dt>
+          <dd>{formatYear(h.period_days)} · {t.worldInfo.hostSky({ size: `${formatUpTo(h.angular_diameter_deg, 1)}°` })}</dd>
+          <dt title={t.worldInfo.tidalHelp}>{t.worldInfo.tidal}</dt>
+          <dd>
+            {withUnit(formatUpTo(h.tidal_flux, h.tidal_flux < 1 ? 2 : 0), 'W/m²')}{#if h.inside_edge}
+              · <strong>{t.worldInfo.insideEdge}</strong>{/if}
+          </dd>
+        {/if}
         {#if meta.giants}
           <dt title={t.worldInfo.giantsHelp}>{t.worldInfo.giants}</dt>
           <dd>

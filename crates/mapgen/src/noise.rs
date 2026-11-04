@@ -143,6 +143,8 @@ pub mod stream {
     pub const GIANTS: u32 = 28;
     /// The bands, storms, spin and rings of a giant world.
     pub const GIANT_LOOK: u32 = 29;
+    /// Whether a world orbits a giant, and that giant and orbit.
+    pub const HOST: u32 = 30;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.

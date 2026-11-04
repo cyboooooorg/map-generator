@@ -1,0 +1,308 @@
+//! Rocky worlds orbiting a giant planet (backlog item 14, step C;
+//! `docs/analysis/12-gas-giants.md`): the world is the moon of a giant
+//! that orbits the star where the world would.
+//!
+//! **How often.** Moons that form around a giant hold about 10⁻⁴ of its
+//! mass (Canup & Ward 2006): a Jupiter's largest are Mercury- to Mars-sized.
+//! An Earth-sized moon needs a capture (as Triton was captured) or a
+//! super-Jupiter, so a drawn world is a giant's moon rarely
+//! ([`DRAWN_ODDS`]); a request can ask for one.
+//!
+//! **The giant.** Its mass is drawn log-uniformly from 0.3 to 10 Jupiter
+//! masses, its kind and look by the giant world pipeline (it is generated
+//! in `host/`, to be seen in the world's sky). The world orbits it between
+//! 6 and 40 of its radii, within a third of its Hill radius, on a nearly
+//! circular orbit (kept slightly eccentric by resonances with other
+//! moons, as Io is by Europa and Ganymede), locked to it: its day is its
+//! orbit, the giant fixed over one hemisphere.
+//!
+//! **Tidal heating.** `Ė = (21/2)(k₂/Q) G M² R⁵ n e² / a⁶` (Peale et al.
+//! 1979), with Io's `k₂/Q` of 0.015: Io gets about 2 W/m². Spread over the
+//! world it is an internal heat, added to the climate as radiated power
+//! (`T⁴` adds up) and raising the volcanism; close in, it drives a runaway
+//! greenhouse: Heller & Barnes (2013)'s habitable edge, about 10 giant
+//! radii for typical cases. A world of liquid water is kept beyond it (its
+//! orbit moved out until starlight and tides stay under the limit); a dry or
+//! volcanic one may be kneaded like Io.
+use crate::giant_world::GiantInfo;
+use crate::giants::{GiantKind, JUPITER_EARTH_MASSES, giant_radius};
+use crate::noise::{stream, stream_seed};
+use crate::star::StarInfo;
+use crate::world::WorldParams;
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
+use serde::{Deserialize, Serialize};
+use std::f64::consts::PI;
+
+/// Share of drawn rocky worlds that are the moon of a giant.
+pub const DRAWN_ODDS: f32 = 0.02;
+/// Gravitational constant, SI.
+const G: f64 = 6.674e-11;
+/// Earth's mass (kg) and radius (m); Jupiter's radius (m).
+const EARTH_KG: f64 = 5.972e24;
+const EARTH_M: f64 = 6.371e6;
+/// Tidal response of a rocky moon, `k₂/Q` (Io's, Lainey et al. 2009).
+const K2_OVER_Q: f64 = 0.015;
+/// Stefan–Boltzmann constant.
+const SIGMA: f64 = 5.670e-8;
+/// Absorbed flux above which water runs away into a steam atmosphere,
+/// W/m² (about 300 for an Earth-like world, Kopparapu et al. 2013).
+const RUNAWAY_W_M2: f64 = 300.0;
+
+/// Whether a world is the moon of a giant: as its seed draws (rarely), always, or never.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum HostMode {
+    #[default]
+    Auto,
+    None,
+    Giant,
+}
+
+impl std::str::FromStr for HostMode {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "auto" => Ok(Self::Auto),
+            "none" => Ok(Self::None),
+            "giant" => Ok(Self::Giant),
+            other => Err(format!("unknown host mode {other:?} (auto, none or giant)")),
+        }
+    }
+}
+
+/// The giant a world orbits, as `world.json` stores it (under `host`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct HostGiant {
+    /// The giant itself, as its own world (`host/` beside the world).
+    pub giant: GiantInfo,
+    /// Seed of the giant's world.
+    pub seed: u32,
+    /// The world's orbit around it: semi-major axis in km and in giant
+    /// radii, eccentricity, period (the world's day, as it is locked), in
+    /// Earth days.
+    pub distance_km: f32,
+    pub distance_radii: f32,
+    pub eccentricity: f32,
+    pub period_days: f32,
+    /// Apparent diameter of the giant in the world's sky, degrees.
+    pub angular_diameter_deg: f32,
+    /// Tidal heating of the world, W/m², and the temperature it would keep
+    /// the surface at alone, K.
+    pub tidal_flux: f32,
+    pub tidal_heat_k: f32,
+    /// Whether the world lies inside the habitable edge: starlight and
+    /// tidal heat together run away into a steam atmosphere.
+    pub inside_edge: bool,
+    /// Hill radius of the giant, in its radii: the world stays within a third.
+    pub hill_radii: f32,
+}
+
+impl HostGiant {
+    /// The giant the world `p` orbits, or `None` when it orbits its star.
+    pub fn draw(p: &WorldParams) -> Option<Self> {
+        if p.giant_mass_earth.is_some() || p.shape.is_some() {
+            return None;
+        }
+        let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(p.seed, stream::HOST)));
+        let roll: f32 = rng.random();
+        match p.host {
+            HostMode::None => return None,
+            HostMode::Auto if roll >= DRAWN_ODDS => return None,
+            _ => {}
+        }
+        let mass_earth = (0.3f64.ln() + rng.random::<f64>() * (10.0f64 / 0.3).ln()).exp() as f32
+            * JUPITER_EARTH_MASSES;
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let radius_earth = giant_radius(mass_earth, star.equilibrium_k);
+        let radius_m = f64::from(radius_earth) * EARTH_M;
+        let mass_kg = f64::from(mass_earth) * EARTH_KG;
+        // Hill radius at the giant's periapsis, in its radii.
+        let hill = f64::from(p.orbit_au)
+            * (1.0 - f64::from(p.eccentricity))
+            * 1.496e11
+            * (mass_kg / (3.0 * f64::from(star.mass) * 1.989e30)).cbrt()
+            / radius_m;
+        let widest = (hill / 3.0).clamp(4.0, 40.0);
+        let closest = 6.0f64.min(widest);
+        let mut distance_radii =
+            (closest.ln() + rng.random::<f64>() * (widest / closest).ln()).exp();
+        let eccentricity = 0.001 + 0.011 * rng.random::<f64>().powi(2);
+        let seed = rng.random::<u32>();
+
+        let world_radius = f64::from(p.circumference_km) * 1000.0 / (2.0 * PI);
+        // Tidal heating at `radii` giant radii, W/m².
+        let flux_at = |radii: f64| {
+            let a = radii * radius_m;
+            let n = (G * mass_kg / a.powi(3)).sqrt();
+            10.5 * K2_OVER_Q
+                * G
+                * mass_kg
+                * mass_kg
+                * world_radius.powi(5)
+                * n
+                * eccentricity
+                * eccentricity
+                / a.powi(6)
+                / (4.0 * PI * world_radius * world_radius)
+        };
+        // Absorbed starlight (Earth's albedo), to weigh against the runaway
+        // limit.
+        let starlight = 0.25 * 0.7 * 1361.0 * f64::from(star.insolation);
+        // A world of liquid water orbits beyond the habitable edge (the
+        // others, volcanic or dry, may be kneaded like Io): the heating
+        // falls as `a^−7.5`, so move it out until it stays under the limit.
+        let watery = p.pressure_bar >= crate::atmosphere::LIQUID_WATER_BAR
+            && p.planet.remap(crate::biome::Biome::Ocean) == crate::biome::Biome::Ocean;
+        let allowed = (0.8 * RUNAWAY_W_M2 - starlight).max(0.05);
+        if watery && flux_at(distance_radii) > allowed {
+            distance_radii = (distance_radii * (flux_at(distance_radii) / allowed).powf(1.0 / 7.5))
+                .min(widest.max(closest));
+        }
+        let flux = flux_at(distance_radii);
+        let a = distance_radii * radius_m;
+        let n = (G * mass_kg / a.powi(3)).sqrt();
+        let giant =
+            crate::giant_world::Look::draw(&host_params(p, mass_earth, seed), mass_earth).info;
+        Some(HostGiant {
+            giant,
+            seed,
+            distance_km: (a / 1000.0) as f32,
+            distance_radii: distance_radii as f32,
+            eccentricity: eccentricity as f32,
+            period_days: (2.0 * PI / n / 86_400.0) as f32,
+            angular_diameter_deg: (2.0 * (radius_m / (a - world_radius)).atan()).to_degrees()
+                as f32,
+            tidal_flux: flux as f32,
+            tidal_heat_k: (flux / SIGMA).powf(0.25) as f32,
+            inside_edge: starlight + flux > RUNAWAY_W_M2,
+            hill_radii: hill as f32,
+        })
+    }
+
+    /// Volcanism the tides raise: none below 0.05 W/m², Io's 2 W/m² a
+    /// little over half, all at 50 W/m².
+    pub fn volcanism(&self) -> f32 {
+        ((f64::from(self.tidal_flux) / 0.05).log10() / 3.0).clamp(0.0, 1.0) as f32
+    }
+}
+
+/// The parameters of the giant a world orbits, as a giant world of its own
+/// (its kind from its mass: an ice giant below 50 Earth masses).
+pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
+    let kind = if mass_earth < 50.0 {
+        "ice-giant"
+    } else {
+        "gas-giant"
+    };
+    let mut planet = crate::preset::Preset::load(kind).expect("giant presets are built in");
+    if let Some(giant) = planet.giant.as_mut() {
+        giant.kind = if mass_earth < 50.0 {
+            GiantKind::Ice
+        } else {
+            GiantKind::Gas
+        };
+    }
+    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    let width = 512;
+    WorldParams {
+        width,
+        height: width / 2,
+        seed,
+        planet,
+        sea_level: 0.0,
+        volcanic_intensity: 0.0,
+        circumference_km: giant_radius(mass_earth, star.equilibrium_k) * 40_075.0,
+        axial_tilt_deg: p.axial_tilt_deg,
+        erosion: 0.0,
+        pressure_bar: 0.3,
+        surface_age_ga: 0.0,
+        star: p.star,
+        orbit_au: p.orbit_au,
+        eccentricity: p.eccentricity,
+        drift_ma: 0.0,
+        moons: crate::moons::MoonsMode::None,
+        shape: None,
+        metallicity: p.metallicity,
+        giants: crate::giants::GiantsMode::None,
+        giant_mass_earth: Some(mass_earth),
+        host: HostMode::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::preset::Preset;
+
+    fn params(seed: u32, host: HostMode, orbit_au: f32) -> WorldParams {
+        WorldParams {
+            width: 64,
+            height: 32,
+            seed,
+            planet: Preset::load("terran").unwrap(),
+            sea_level: 0.0,
+            volcanic_intensity: 0.0,
+            circumference_km: 40_075.0,
+            axial_tilt_deg: 23.44,
+            erosion: 0.0,
+            pressure_bar: 1.0,
+            surface_age_ga: 4.0,
+            star: crate::star::SUN,
+            orbit_au,
+            eccentricity: 0.0,
+            drift_ma: 0.0,
+            moons: crate::moons::MoonsMode::None,
+            shape: None,
+            metallicity: 0.0,
+            giants: crate::giants::GiantsMode::None,
+            giant_mass_earth: None,
+            host,
+        }
+    }
+
+    #[test]
+    fn a_world_is_rarely_a_giants_moon_unless_asked() {
+        let drawn = (0..5000)
+            .filter(|&s| HostGiant::draw(&params(s, HostMode::Auto, 1.0)).is_some())
+            .count();
+        assert!((60..140).contains(&drawn), "{drawn}");
+        assert!((0..50).all(|s| HostGiant::draw(&params(s, HostMode::Giant, 1.0)).is_some()));
+        assert!((0..50).all(|s| HostGiant::draw(&params(s, HostMode::None, 1.0)).is_none()));
+    }
+
+    #[test]
+    fn orbits_stay_within_the_hill_sphere_and_tides_heat_closer_moons_more() {
+        for s in 0..200 {
+            let host = HostGiant::draw(&params(s, HostMode::Giant, 1.0)).unwrap();
+            assert!(host.distance_radii <= host.hill_radii / 3.0 + 1e-3);
+            assert!((4.0..=40.0).contains(&host.distance_radii));
+            assert!(
+                host.period_days > 0.3 && host.period_days < 60.0,
+                "{}",
+                host.period_days
+            );
+            // A world of liquid water stays beyond the habitable edge.
+            assert!(!host.inside_edge, "{host:?}");
+        }
+        // A dry, volcanic world may be kneaded like Io.
+        let hot = (0..400)
+            .filter_map(|s| {
+                let mut p = params(s, HostMode::Giant, 1.0);
+                p.planet = Preset::load("volcanic").unwrap();
+                HostGiant::draw(&p)
+            })
+            .filter(|h| h.tidal_flux > 2.0)
+            .count();
+        assert!(hot > 10, "{hot}");
+        // Io's numbers: Jupiter's mass, 5.9 radii, e = 0.0041, Io's size.
+        let io_flux = {
+            let (m, r, a, e) = (1.898e27f64, 1.8216e6f64, 4.217e8f64, 0.0041f64);
+            let n = (G * m / a.powi(3)).sqrt();
+            10.5 * K2_OVER_Q * G * m * m * r.powi(5) * n * e * e / a.powi(6) / (4.0 * PI * r * r)
+        };
+        assert!((1.0..4.0).contains(&io_flux), "{io_flux}");
+    }
+}

@@ -588,6 +588,17 @@
       const map = world.worldId ? worldFile(world.worldId, 'raw_data/surface.png', revision) : null;
       return moonSky(shownMoon, planetRadiusKm, map);
     }
+    // The moon of a giant: the giant hangs over the face the world keeps
+    // towards it (longitude 180°), its bands from its own world in host/.
+    if (world.moon === null && planet.host && world.worldId) {
+      const host = planet.host;
+      const map = worldFile(world.worldId, 'host/raw_data/surface.png', revision);
+      return moonSky(
+        { radius_km: planetRadiusKm, semi_major_axis_km: host.distance_km },
+        (host.giant.radius_earth * 40075) / (2 * Math.PI),
+        map,
+      );
+    }
     if (world.moon !== null || moons.length === 0) return null;
     const longitude = ((locked ? 180 : sunLongitude) * Math.PI) / 180;
     return planetSky(moons, planetRadiusKm, locked ? 0 : season, planet.star?.year_days ?? 365.25, longitude);
@@ -908,7 +919,8 @@
       bind:zone={starZone}
       bind:prominences={starProminences}
       giantSystem={system.giants}
-      worldGiant={world.worldMeta?.giant ?? null}
+      worldGiant={world.worldMeta?.giant ?? world.worldMeta?.host?.giant ?? null}
+      host={world.worldMeta?.host ?? null}
       bind:giants={starGiants}
     />
   {/if}

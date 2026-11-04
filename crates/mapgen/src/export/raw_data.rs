@@ -106,6 +106,10 @@ pub struct WorldMetadata {
     /// rings); left out for a rocky world.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub giant: Option<crate::giant_world::GiantInfo>,
+    /// The giant the world orbits, as a moon of it (its world in `host/`);
+    /// left out for a world orbiting its star.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<crate::exomoon::HostGiant>,
     /// The semi-axes of an irregular body, as shares of its mean radius
     /// (see `WorldParams::shape`); left out for a round one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -425,6 +429,7 @@ pub fn export_raw_data(
         moons: crate::moons::MoonSystem::draw(&world.params),
         giants: crate::giants::GiantSystem::draw(&world.params),
         giant: crate::giant_world::info(&world.params),
+        host: crate::exomoon::HostGiant::draw(&world.params),
         shape: world.params.shape,
         layers: Layers {
             elevation,
@@ -821,6 +826,11 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             crate::giants::GiantsMode::None
         },
         giant_mass_earth: meta.giant.as_ref().map(|g| g.mass_earth),
+        host: if meta.host.is_some() {
+            crate::exomoon::HostMode::Giant
+        } else {
+            crate::exomoon::HostMode::None
+        },
     };
     let l = &meta.layers;
     let infos = [
@@ -1003,6 +1013,7 @@ mod tests {
             metallicity: 0.0,
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: None,
+            host: crate::exomoon::HostMode::None,
         })
         .world;
         let world_dir =

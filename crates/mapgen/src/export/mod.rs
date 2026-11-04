@@ -129,6 +129,26 @@ pub fn export_moons(
     Ok(system.moons.len())
 }
 
+/// Generates the giant the world `params` orbits, if it is a giant's moon
+/// (see `crate::exomoon`), as a giant world of its own into `dir/host/`, for
+/// the world's sky; returns whether it did.
+pub fn export_host(
+    params: &WorldParams,
+    dir: &Path,
+    options: ExportOptions,
+) -> Result<bool, String> {
+    let Some(host) = crate::exomoon::HostGiant::draw(params) else {
+        return Ok(false);
+    };
+    let body = crate::exomoon::host_params(params, host.giant.mass_earth, host.seed);
+    export_world(
+        crate::generation::generate(&body),
+        &dir.join("host"),
+        options,
+    )?;
+    Ok(true)
+}
+
 /// Contour lines are drawn whenever a tile and a neighbour straddle one of these levels.
 const CONTOUR_LEVELS: &[f32] = &[-0.45, -0.15, 0.0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90];
 /// Fraction to darken a pixel by when it sits on a contour line (0.0 = no change, 1.0 = black).

@@ -909,7 +909,11 @@ pub fn generate_with_progress(
         eccentricity: params.eccentricity,
         regulated: planet.geology.regime == Regime::Plates
             && params.pressure_bar >= LIQUID_WATER_BAR,
-        internal_heat_k: planet.climate.internal_heat,
+        // A giant's moon: its tidal heat adds to its own, as radiated power.
+        internal_heat_k: crate::exomoon::HostGiant::draw(params)
+            .map_or(planet.climate.internal_heat, |h| {
+                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
+            }),
     };
     // A tidally locked planet's climate follows the angle from the point
     // under its star instead of the latitude.
@@ -1256,6 +1260,7 @@ mod tests {
             metallicity: 0.0,
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: None,
+            host: crate::exomoon::HostMode::None,
         }
     }
 

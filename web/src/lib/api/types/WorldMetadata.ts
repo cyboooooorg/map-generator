@@ -2,6 +2,7 @@
 import type { BiomeInfo } from "./BiomeInfo";
 import type { GiantInfo } from "./GiantInfo";
 import type { GiantSystem } from "./GiantSystem";
+import type { HostGiant } from "./HostGiant";
 import type { Layers } from "./Layers";
 import type { MoonSystem } from "./MoonSystem";
 import type { Preset } from "./Preset";
@@ -55,6 +56,11 @@ giants?: GiantSystem | null,
  * rings); left out for a rocky world.
  */
 giant?: GiantInfo | null, 
+/**
+ * The giant the world orbits, as a moon of it (its world in `host/`);
+ * left out for a world orbiting its star.
+ */
+host?: HostGiant | null, 
 /**
  * The semi-axes of an irregular body, as shares of its mean radius
  * (see `WorldParams::shape`); left out for a round one.

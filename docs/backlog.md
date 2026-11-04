@@ -400,7 +400,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 14. Giant planets
 
-- **Status:** steps A and B done
+- **Status:** done
 - **Analysis:** [12-gas-giants.md](analysis/12-gas-giants.md)
 - **Problem:** every world is a rocky or icy body alone around its star:
   no giant planet in its system, no giant world to generate, and no
@@ -428,3 +428,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   jets, storms, polar hazes, Sudarsky colours) in the format of a world;
   the viewer flattens the globe, draws rings, drifts the bands with their
   winds and shows winds and cloud-top temperatures on their own ranges.
+- **Step C (2026-11-04):** rocky worlds as moons of a giant: rare when
+  drawn, or asked for; the giant generated beside the world and hanging
+  in its sky with its phases and eclipses; tidal heating warming the
+  climate and raising volcanism, watery worlds kept beyond the habitable
+  edge.
