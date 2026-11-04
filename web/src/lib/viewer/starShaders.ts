@@ -59,7 +59,7 @@ export const starSurfaceVertex = /* glsl */ `
 
 // The photosphere: limb darkening (I = 1 − a(1 − μ) − b(1 − μ)²), convective
 // granulation (none on hot stars, whose outer layers do not convect), spots
-// in belts on either side of the equator with bright faculae around them,
+// anywhere on the surface with bright faculae around them,
 // and on red dwarfs an occasional flare. `uTime` turns and boils it.
 export const starSurfaceFragment = /* glsl */ `
   uniform vec3 uColor;
@@ -84,9 +84,8 @@ export const starSurfaceFragment = /* glsl */ `
     vec3 p = vec3(cos(a) * vObject.x + sin(a) * vObject.z, vObject.y, -sin(a) * vObject.x + cos(a) * vObject.z);
     float granules = snoise(p * 28.0 + vec3(0.0, 0.0, uTime * 0.25)) * 0.6 + snoise(p * 61.0 - vec3(uTime * 0.4)) * 0.4;
     float brightness = 1.0 + uGranulation * granules;
-    // Spots, mostly within 40° of the equator.
-    float belt = 1.0 - smoothstep(0.45, 0.75, abs(p.y));
-    float field = fbm(p * 3.2 + uSeed) * belt;
+    // Spots, scattered over the whole surface.
+    float field = fbm(p * 3.2 + uSeed);
     float threshold = 0.42 - 0.9 * uSpots;
     float penumbra = smoothstep(threshold, threshold + 0.06, field);
     float umbra = smoothstep(threshold + 0.07, threshold + 0.12, field);

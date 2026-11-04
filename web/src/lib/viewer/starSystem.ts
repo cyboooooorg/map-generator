@@ -68,6 +68,22 @@ export function periapsisAngle(seed: number): number {
   return ((seed * 0.618_033_988_75) % 1) * 2 * Math.PI;
 }
 
+/**
+ * A stored star with the orbit fields of worlds made before eccentric
+ * orbits filled in: a circle at the semi-major axis.
+ */
+export function withOrbitDefaults(star: StarInfo): StarInfo {
+  const e = star.eccentricity ?? 0;
+  return {
+    ...star,
+    eccentricity: e,
+    periapsis_au: star.periapsis_au || star.orbit_au * (1 - e),
+    apoapsis_au: star.apoapsis_au || star.orbit_au * (1 + e),
+    insolation_periapsis: star.insolation_periapsis || star.insolation,
+    insolation_apoapsis: star.insolation_apoapsis || star.insolation,
+  };
+}
+
 /** The Sun and Earth, for worlds made before stars. */
 export const SUN_SYSTEM: StarInfo = {
   type: 'G2V',
