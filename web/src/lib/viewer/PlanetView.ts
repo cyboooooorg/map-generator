@@ -1678,6 +1678,9 @@ export class PlanetView {
             uOpacity: { value: 1 },
             uFace: { value: 0 },
             uHasFace: { value: 0 },
+            uGrid: { value: 0 },
+            uTropics: { value: 0 },
+            uTilt: { value: 0 },
           },
           // Drawn with the star field and the host star (transparent ones
           // come after the surface), over them: a body hides the stars
@@ -1701,6 +1704,8 @@ export class PlanetView {
             const texture = new Texture(bitmap);
             texture.flipY = false;
             texture.colorSpace = map === 'uMap' ? SRGBColorSpace : NoColorSpace;
+            // Repeated across longitudes: the shader's u runs past the seam.
+            texture.wrapS = RepeatWrapping;
             texture.needsUpdate = true;
             releaseOnUpload(texture);
             entry.maps.push(texture);
@@ -1745,7 +1750,8 @@ export class PlanetView {
     const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
     const radiansPerPixel = ((this.camera.fov * Math.PI) / 180) / Math.max(this.renderer.domElement.height, 1);
     const smallest = 2.5 * this.renderer.getPixelRatio() * radiansPerPixel;
-    for (const { mesh, body } of this.skyBodies) {
+    for (const entry of this.skyBodies) {
+      const { mesh, body } = entry;
       mesh.visible = visible;
       if (!visible) continue;
       const u = mesh.material.uniforms;
@@ -1761,8 +1767,14 @@ export class PlanetView {
       u['uHasFace']!.value = body.faceLonDeg === null ? 0 : 1;
       u['uFace']!.value = ((body.faceLonDeg ?? 0) * Math.PI) / 180;
       (u['uCloudTint']!.value as Vector3).set(...(body.cloudTint ?? [1, 1, 1]));
+      const show = body.show;
+      u['uGrid']!.value = show?.grid ? 1 : 0;
+      u['uTropics']!.value = show?.tropics ? 1 : 0;
+      u['uTilt']!.value = body.axialTiltDeg ?? 0;
+      // Clouds loaded once, shown by the switch.
+      u['uHasClouds']!.value = entry.maps.some((m) => m === u['uClouds']!.value) && show?.clouds !== false ? 1 : 0;
       // The halo a few pixels high at least, so that it shows on a small disk.
-      const halo = body.halo ?? null;
+      const halo = show?.atmosphere === false ? null : (body.halo ?? null);
       const height = halo ? Math.max(halo.thickness, (1.5 * smallest) / Math.max(u['uHalf']!.value as number, 1e-9)) : 0;
       (u['uHaloColor']!.value as Vector3).set(...(halo?.colour ?? [0, 0, 0]));
       u['uHaloHeight']!.value = height;

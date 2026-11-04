@@ -685,7 +685,27 @@ export const skyBodyFragment = /* glsl */ `
   // frame.
   uniform float uFace;
   uniform float uHasFace;
+  // Map marks on its disk: a 30° grid, and the equator, tropics and polar
+  // circles of its axial tilt uTilt (degrees), as the planet view draws them.
+  uniform float uGrid;
+  uniform float uTropics;
+  uniform float uTilt;
   varying vec2 vP;
+
+  // How close to a line (0 to 1) a point is, value h against lines every
+  // spacing, width in pixels, from its screen derivative.
+  float lineNear(float h, float spacing, float width) {
+    float offset = abs(fract(h / spacing + 0.5) - 0.5) * spacing;
+    return 1.0 - smoothstep(0.5 * width - 0.5, 0.5 * width + 0.5, offset / max(fwidth(h), 1e-6));
+  }
+  vec3 parallel(vec3 colour, float latDeg, float at, vec3 lineColour, float marks) {
+    float pixels = abs(latDeg - at) / max(fwidth(latDeg), 1e-6);
+    float core = marks * (1.0 - smoothstep(0.5, 1.5, pixels));
+    float edge = marks * (1.0 - smoothstep(1.5, 2.5, pixels));
+    colour = mix(colour, colour * 0.25, 0.8 * edge);
+    return mix(colour, lineColour, core);
+  }
+
   void main() {
     float r2 = dot(vP, vP);
     if (r2 > 1.0) {
@@ -709,7 +729,13 @@ export const skyBodyFragment = /* glsl */ `
     // the face's longitude.
     float lon = atan(n.x, n.z) + uHasFace * (uFace - atan(-uDir.x, -uDir.z));
     float lat = asin(clamp(n.y, -1.0, 1.0));
-    vec2 uv = vec2(fract(lon / (2.0 * PI)), lat / PI + 0.5);
+    // Two longitudes, wrapping on opposite meridians; the one that does
+    // not jump here keeps the screen derivatives (hence the mip level)
+    // smooth across the map's seam, which would show as a grey line
+    // (Tarini 2012). The maps repeat across u.
+    float u1 = fract(lon / (2.0 * PI));
+    float u2 = fract(lon / (2.0 * PI) + 0.5) - 0.5;
+    vec2 uv = vec2(fwidth(u1) <= fwidth(u2) + 1e-6 ? u1 : u2, lat / PI + 0.5);
     if (uHasMap > 0.5) {
       colour = texture2D(uMap, uv).rgb;
     }
@@ -723,7 +749,23 @@ export const skyBodyFragment = /* glsl */ `
     // A soft edge (none under a halo), and a faint night side; opaque
     // inside, so the stars and the host star behind it are hidden.
     float edge = uHaloStrength > 0.0 ? 1.0 : 1.0 - smoothstep(0.96, 1.0, r2);
-    gl_FragColor = vec4(colour * (0.015 + 0.985 * lit), edge * uOpacity);
+    colour *= 0.015 + 0.985 * lit;
+    // Map marks last, unshaded, as on the planet view; faded at the limb,
+    // where they crowd into a fringe.
+    float latDeg = degrees(lat);
+    float marks = smoothstep(0.05, 0.25, mu);
+    if (uGrid > 0.5) {
+      float line = max(lineNear(latDeg, 30.0, 1.0), lineNear(uv.x * 360.0, 30.0, 1.0));
+      colour = mix(colour, vec3(1.0), 0.25 * line * marks);
+    }
+    if (uTropics > 0.5) {
+      colour = parallel(colour, latDeg, 0.0, vec3(0.72, 0.03, 0.03), marks);
+      colour = parallel(colour, latDeg, uTilt, vec3(0.72, 0.30, 0.0), marks);
+      colour = parallel(colour, latDeg, -uTilt, vec3(0.72, 0.30, 0.0), marks);
+      colour = parallel(colour, latDeg, 90.0 - uTilt, vec3(0.0, 0.58, 0.87), marks);
+      colour = parallel(colour, latDeg, uTilt - 90.0, vec3(0.0, 0.58, 0.87), marks);
+    }
+    gl_FragColor = vec4(colour, edge * uOpacity);
     #include <colorspace_fragment>
   }
 `;
