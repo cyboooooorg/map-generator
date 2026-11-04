@@ -215,6 +215,11 @@ export const en = {
     moonsHelp: 'Each one a world of its own: open it with Moon above the viewer (U)',
     noMoon: 'none',
     moonsValue: (p: { count: number; names: string }) => `${p.count} (${p.names})`,
+    giants: 'Giant planets',
+    giantsHelp: 'The giants of its system, and how often impactors reach it: see them in the star view (O)',
+    giantsValue: (p: { count: number; names: string }) => `${p.count} (${p.names})`,
+    noGiants: 'none',
+    impactsValue: (p: { factor: string }) => `impacts ${p.factor}`,
     binary: 'a binary planet',
     tides: 'Tides',
     tidesHelp: 'Their range from the moons and the star, relative to Earth’s: tidal flats widen with it; a planet locked to its star has none',
@@ -614,6 +619,40 @@ export const en = {
       'Arcs of plasma held above the surface by magnetic fields, glowing in the red of hydrogen; on active stars, an eruption now and then while animated',
     size: 'Radius · mass',
     sizeValue: (p: { radius: string; mass: string }) => `${p.radius} · ${p.mass}`,
+    metallicity: 'Metallicity',
+    metallicityHelp:
+      "Iron relative to hydrogen, [Fe/H] in dex, against the Sun's (0). Metal-rich stars have many more giant planets: about 1.6 times more per 0.1 dex",
+    metallicityValue: (p: { dex: string; ratio: string }) => `[Fe/H] ${p.dex} · ${p.ratio} the Sun's metals`,
+    giantsSection: 'Giant planets',
+    giantsHelp:
+      'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
+    giantsOff: 'Not modelled (a world made before giant planets, or generated without them)',
+    noGiants: 'None: no giant in this system, like most red dwarfs',
+    giantLine: (p: { name: string; kind: string; mass: string; orbit: string; year: string }) =>
+      `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
+    hotGiant: 'hot Jupiter',
+    giantKinds: { gas: 'gas giant', ice: 'ice giant' } as Record<string, string>,
+    giantHelp: (p: { clouds: string; radius: string; temperature: string; eccentricity: string; rings: string }) =>
+      `${p.clouds} · radius ${p.radius} · ${p.temperature} · eccentricity ${p.eccentricity} · ${p.rings}`,
+    cloudClasses: {
+      1: 'ammonia clouds, banded cream and brown (or blue methane, for an ice giant)',
+      2: 'water clouds, bright white',
+      3: 'no clouds, deep azure',
+      4: 'alkali metals absorb the light: very dark',
+      5: 'silicate clouds, dark grey, glowing red at night',
+    } as Record<number, string>,
+    rings: { none: 'no rings', faint: 'faint rings', bright: 'bright rings' } as Record<string, string>,
+    forced: 'Forced eccentricity',
+    forcedHelp:
+      "Eccentricity the giants impose on this world's orbit (secular theory, Heppenheimer 1978): its own is at least this, and swings around it over tens of thousands of years, as Jupiter and Venus drive Earth's Milankovitch cycles",
+    impacts: 'Impacts',
+    impactsHelp:
+      "Rate of asteroid and comet impacts, against the Solar System's, from the giant just outside the orbit (Horner & Jones 2008): low without one, highest for about a fifth of Jupiter's mass. It sets how cratered the surface is",
+    impactsValue: (p: { factor: string }) => `${p.factor} the Solar System's`,
+    showGiants: 'Giants',
+    showGiantsHelp: 'Shows the giant planets, their orbits and their rings',
+    compressed: (p: { distance: string }) =>
+      `Beyond the dashed circle (${p.distance}), distances are compressed to fit the giants in.`,
     lifetime: 'Lifetime',
     gyr: 'billion years',
     zone: 'Habitable zone',

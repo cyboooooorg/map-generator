@@ -22,7 +22,11 @@ orbit_au: Limits,
 /**
  * Limits of the orbit's eccentricity.
  */
-eccentricity: Limits, default_width: number, default_height: number, 
+eccentricity: Limits, 
+/**
+ * Limits of the star's metallicity (dex).
+ */
+metallicity: Limits, default_width: number, default_height: number, 
 /**
  * Largest width or height the server accepts.
  */

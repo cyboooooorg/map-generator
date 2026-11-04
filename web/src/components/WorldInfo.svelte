@@ -154,6 +154,17 @@
             <span title={t.worldInfo.tiltHelp}>{meta.moons.tilt_steadied ? t.worldInfo.tiltSteady : t.worldInfo.tiltFree}</span>
           </dd>
         {/if}
+        {#if meta.giants}
+          <dt title={t.worldInfo.giantsHelp}>{t.worldInfo.giants}</dt>
+          <dd>
+            {meta.giants.giants.length === 0
+              ? t.worldInfo.noGiants
+              : t.worldInfo.giantsValue({
+                  count: meta.giants.giants.length,
+                  names: meta.giants.giants.map((g) => g.name).join(', '),
+                })} · {t.worldInfo.impactsValue({ factor: `${formatUpTo(meta.giants.impact_factor, 2)}×` })}
+          </dd>
+        {/if}
         {#if stats}
           <dt>{t.worldInfo.surface}</dt>
           <dd>{formatArea(stats.surfaceKm2)}</dd>

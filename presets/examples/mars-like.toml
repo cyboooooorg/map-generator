@@ -12,6 +12,7 @@ description = "Petit désert froid aux calottes polaires"
 type = "G2V"                           # the Sun
 orbit_au = 1.524
 eccentricity = 0.0934                    # like Mars
+metallicity = 0.0                      # the Sun's
 
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.

@@ -48,8 +48,9 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// impact craters, and its worlds have craters; version 8 the albedo of
 /// fresh craters; version 9 the moons (under `moons` in `world.json`, each
 /// one a world of its own in `moons/<n>/`) and the shape of irregular
-/// bodies.
-pub const FORMAT_VERSION: u32 = 9;
+/// bodies; version 10 the star's metallicity and the giant planets of the
+/// system (under `giants`), whose mass sets the crater rate.
+pub const FORMAT_VERSION: u32 = 10;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
@@ -96,6 +97,11 @@ pub struct WorldMetadata {
     /// them off, and in the worlds made before them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moons: Option<crate::moons::MoonSystem>,
+    /// The giant planets of the system and what they do to the world; left
+    /// out when the request turned them off, and in the worlds made before
+    /// them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub giants: Option<crate::giants::GiantSystem>,
     /// The semi-axes of an irregular body, as shares of its mean radius
     /// (see `WorldParams::shape`); left out for a round one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -403,13 +409,17 @@ pub fn export_raw_data(
         erosion: world.params.erosion,
         pressure_bar: world.params.pressure_bar,
         surface_age_ga: Some(world.params.surface_age_ga),
-        star: Some(StarInfo::new(
-            world.params.star,
-            world.params.orbit_au,
-            world.params.eccentricity,
-        )),
+        star: Some(StarInfo {
+            metallicity: world.params.metallicity,
+            ..StarInfo::new(
+                world.params.star,
+                world.params.orbit_au,
+                world.params.eccentricity,
+            )
+        }),
         drift_ma: world.params.drift_ma,
         moons: crate::moons::MoonSystem::draw(&world.params),
+        giants: crate::giants::GiantSystem::draw(&world.params),
         shape: world.params.shape,
         layers: Layers {
             elevation,
@@ -780,6 +790,13 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             crate::moons::MoonsMode::None
         },
         shape: meta.shape,
+        metallicity: meta.star.as_ref().map_or(0.0, |s| s.metallicity),
+        // Worlds made before giants keep the Solar System's impact rate.
+        giants: if meta.giants.is_some() {
+            crate::giants::GiantsMode::Auto
+        } else {
+            crate::giants::GiantsMode::None
+        },
     };
     let l = &meta.layers;
     let infos = [
@@ -959,6 +976,8 @@ mod tests {
             drift_ma: 0.0,
             moons: crate::moons::MoonsMode::Auto,
             shape: None,
+            metallicity: 0.0,
+            giants: crate::giants::GiantsMode::None,
         })
         .world;
         let world_dir =

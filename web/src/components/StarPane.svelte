@@ -6,7 +6,9 @@
   import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import type { Moon } from '../lib/api/types/Moon';
-  import { meanOrbitalSpeed, moonOrbits, orbitalSpeed } from '../lib/viewer/starSystem';
+  import type { Giant } from '../lib/api/types/Giant';
+  import type { GiantSystem } from '../lib/api/types/GiantSystem';
+  import { compressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
 
@@ -28,6 +30,10 @@
     /** Whether the planet and its largest moon are a binary. */
     binary?: boolean;
     planetRadiusKm?: number;
+    /** The giant planets of the system and their effects; null when not modelled (worlds made before them). */
+    giantSystem?: GiantSystem | null;
+    /** Whether the giants are drawn. */
+    giants: boolean;
   }
 
   let {
@@ -41,7 +47,12 @@
     moons = [],
     binary = false,
     planetRadiusKm = 6371,
+    giantSystem = null,
+    giants = $bindable(),
   }: Props = $props();
+  const giantList = $derived(giantSystem?.giants ?? []);
+  /** Whether some giant lies where the view compresses distances. */
+  const compressed = $derived(giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressedFrom(star)));
   let labels = $state<SystemLabels | null>(null);
   /** Share of the year elapsed since the periapsis, while animated. */
   let yearFraction = $state(0);
@@ -66,7 +77,29 @@
     };
   });
 
-  $effect(() => view?.setStar(star, omega));
+  $effect(() => view?.setStar(star, omega, giantList));
+  $effect(() => view?.setGiantsVisible(giants));
+
+  /** Jupiter masses, from Earth masses. */
+  const jupiters = (earth: number) => earth / 317.8;
+  /** One line on a giant: its letter, kind, mass, orbit and year. */
+  const giantText = (g: Giant) =>
+    t.starView.giantLine({
+      name: g.name,
+      kind: g.hot ? t.starView.hotGiant : (t.starView.giantKinds[g.kind] ?? ''),
+      mass: jupiters(g.mass_earth) < 0.3 ? withUnit(formatUpTo(g.mass_earth, 0), 'M⊕') : withUnit(formatUpTo(jupiters(g.mass_earth), 2), 'MJ'),
+      orbit: formatAu(g.orbit_au),
+      year: formatYear(g.year_days),
+    });
+  /** Its clouds, radius, temperature and rings, in a tooltip. */
+  const giantHelp = (g: Giant) =>
+    t.starView.giantHelp({
+      clouds: t.starView.cloudClasses[g.class] ?? '',
+      radius: withUnit(formatUpTo(g.radius_earth / 11.21, 2), 'RJ'),
+      temperature: withUnit(formatInt(Math.round(g.effective_k)), 'K'),
+      eccentricity: formatUpTo(g.eccentricity, 2),
+      rings: t.starView.rings[g.rings] ?? '',
+    });
   $effect(() => view?.setAnimated(animated));
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
@@ -107,7 +140,7 @@
 </script>
 
 <canvas bind:this={canvas} class="star-canvas"></canvas>
-{#if distances && labels}
+{#if labels}
   <div class="labels" aria-hidden="true" bind:clientWidth={width}>
     {#if labels.planet}
       <span class="label planet" class:left={labels.planet.x > width * 0.6} style:left={`${labels.planet.x}px`} style:top={`${labels.planet.y}px`}
@@ -139,6 +172,9 @@
         >{formatAu(star.hz_outer_au)}</span
       >
     {/if}
+    {#each labels.giants as giant (giant.name)}
+      <span class="label giant" style:left={`${giant.x}px`} style:top={`${giant.y}px`}>{giant.name}</span>
+    {/each}
   </div>
 {/if}
 <details class="star-panel" role="region" aria-label={t.starView.title} open>
@@ -154,6 +190,13 @@
       {t.starView.sizeValue({
         radius: withUnit(formatUpTo(star.radius, 2), 'R☉'),
         mass: withUnit(formatUpTo(star.mass, 2), 'M☉'),
+      })}
+    </dd>
+    <dt title={t.starView.metallicityHelp}>{t.starView.metallicity}</dt>
+    <dd>
+      {t.starView.metallicityValue({
+        dex: `${star.metallicity >= 0 ? '+' : ''}${formatUpTo(star.metallicity, 2)}`,
+        ratio: `${formatUpTo(10 ** star.metallicity, 2)}×`,
       })}
     </dd>
     <dt title={t.starView.lifetimeHelp}>{t.starView.lifetime}</dt>
@@ -179,6 +222,28 @@
     <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
     <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
   </dl>
+  <h4 title={t.starView.giantsHelp}>{t.starView.giantsSection}</h4>
+  {#if giantSystem === null}
+    <small class="muted">{t.starView.giantsOff}</small>
+  {:else}
+    {#if giantList.length === 0}
+      <small class="muted">{t.starView.noGiants}</small>
+    {:else}
+      <ul class="giants">
+        {#each giantList as giant (giant.name)}
+          <li title={giantHelp(giant)}>
+            <span class="swatch" style:background={`rgb(${giant.colour.map((c) => Math.round(c * 255)).join(' ')})`}></span>{giantText(giant)}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <dl>
+      <dt title={t.starView.forcedHelp}>{t.starView.forced}</dt>
+      <dd>{formatUpTo(giantSystem.forced_eccentricity, 3)}</dd>
+      <dt title={t.starView.impactsHelp}>{t.starView.impacts}</dt>
+      <dd>{t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })}</dd>
+    </dl>
+  {/if}
   <h4>{t.starView.displaySection}</h4>
   <div class="checks">
     <label class="check">
@@ -193,6 +258,12 @@
       <input type="checkbox" bind:checked={prominences} />
       {t.starView.prominences}
     </label>
+    {#if giantList.length > 0}
+      <label class="check" title={t.starView.showGiantsHelp}>
+        <input type="checkbox" bind:checked={giants} />
+        {t.starView.showGiants}
+      </label>
+    {/if}
     <label class="check" title={t.starView.distancesHelp}>
       <input type="checkbox" bind:checked={distances} />
       {t.starView.distances}
@@ -210,6 +281,9 @@
     <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
   {/if}
   <small class="muted">{t.starView.schematic}</small>
+  {#if compressed && giants}
+    <small class="muted">{t.starView.compressed({ distance: formatAu(compressedFrom(star)) })}</small>
+  {/if}
 </details>
 
 <style>
@@ -250,6 +324,20 @@
   }
   .label.apsis {
     color: #ffe3a8;
+  }
+  .label.giant {
+    color: #e8dcc4;
+    transform: translate(10px, -110%);
+  }
+  .giants {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 2px;
+  }
+  .giants li {
+    cursor: help;
   }
   .label.zone {
     color: #8fe0aa;

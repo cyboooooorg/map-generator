@@ -137,6 +137,10 @@ pub mod stream {
     pub const ARC_CONES: u32 = 25;
     /// Moons: their number, origins, sizes and orbits.
     pub const MOONS: u32 = 26;
+    /// The star's metallicity, when drawn.
+    pub const METALLICITY: u32 = 27;
+    /// Giant planets: their number, masses, orbits and looks.
+    pub const GIANTS: u32 = 28;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.

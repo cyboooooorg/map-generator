@@ -403,6 +403,10 @@ pub struct StarSpec {
     /// the planets known (see [`draw_eccentricity`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub eccentricity: Option<ParamDefault>,
+    /// Metallicity of the star, `[Fe/H]` in dex; left out, drawn like the
+    /// stars nearby (see `crate::giants`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metallicity: Option<f32>,
 }
 
 impl StarSpec {
@@ -422,6 +426,15 @@ impl StarSpec {
         if let Some(e) = self.eccentricity {
             e.check("eccentricity", ECCENTRICITY.min, ECCENTRICITY.max)
                 .map_err(|e| e.replacen("defaults.", "star.", 1))?;
+        }
+        if let Some(m) = self.metallicity
+            && !crate::request::METALLICITY.contains(m)
+        {
+            return Err(format!(
+                "star.metallicity: must stay within [{}, {}]",
+                crate::request::METALLICITY.min,
+                crate::request::METALLICITY.max
+            ));
         }
         if let Some(au) = self.orbit_au
             && !ORBIT_AU.contains(au)
@@ -489,6 +502,10 @@ pub struct StarInfo {
     pub tidally_locked: bool,
     /// Colour of the star's light, linear RGB, the Sun white.
     pub light: [f32; 3],
+    /// Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
+    /// have the Sun's.
+    #[serde(default)]
+    pub metallicity: f32,
 }
 
 impl StarInfo {
@@ -528,6 +545,7 @@ impl StarInfo {
             locking_gyr: locking,
             tidally_locked: locking < AGE_GYR.min(lifetime),
             light: light_colour(v.teff_k),
+            metallicity: 0.0,
         }
     }
 

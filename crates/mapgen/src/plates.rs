@@ -810,6 +810,8 @@ mod tests {
             drift_ma: 0.0,
             moons: crate::moons::MoonsMode::Auto,
             shape: None,
+            metallicity: 0.0,
+            giants: crate::giants::GiantsMode::None,
         }
     }
 

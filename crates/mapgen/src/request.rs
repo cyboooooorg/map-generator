@@ -58,6 +58,11 @@ pub const ORBIT_AU: Limits = Limits {
 /// Eccentricity of the planet's orbit: 0 circular; beyond 0.9 the planet
 /// would graze its star or leave its habitable zone for most of its year.
 pub const ECCENTRICITY: Limits = Limits { min: 0.0, max: 0.9 };
+/// Metallicity of the star, dex (see `crate::giants`).
+pub const METALLICITY: Limits = Limits {
+    min: crate::giants::METALLICITY.0,
+    max: crate::giants::METALLICITY.1,
+};
 /// Epoch of the plates, Ma from the present (see `crate::plates`).
 pub const DRIFT_MA: Limits = Limits {
     min: -crate::plates::DRIFT_LIMIT_MA as f32,
@@ -129,6 +134,11 @@ pub struct WorldRequest {
     pub drift_ma: Option<f32>,
     /// `auto` (the moons the seed draws, the default) or `none`.
     pub moons: Option<crate::moons::MoonsMode>,
+    /// Metallicity of the star, `[Fe/H]` in dex, in `[-1, 0.5]`; drawn like
+    /// the stars nearby when left out.
+    pub metallicity: Option<f32>,
+    /// `auto` (the giant planets the seed draws, the default) or `none`.
+    pub giants: Option<crate::giants::GiantsMode>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -222,6 +232,7 @@ impl WorldRequest {
             ("hz_position", self.hz_position, HZ_POSITION),
             ("eccentricity", self.eccentricity, ECCENTRICITY),
             ("drift_ma", self.drift_ma, DRIFT_MA),
+            ("metallicity", self.metallicity, METALLICITY),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -316,6 +327,13 @@ impl WorldRequest {
                 crate::star::orbit_at(star, s.position.unwrap_or(fallback::HZ_POSITION).pick(rng))
             }
         };
+        // Not drawn from the main stream: the values above keep their draws.
+        let metallicity = self
+            .metallicity
+            .or(s.metallicity)
+            .unwrap_or_else(|| crate::giants::draw_metallicity(seed));
+        let locked = crate::star::StarInfo::new(star, orbit_au, 0.0).tidally_locked;
+        let eccentricity_drawn = self.eccentricity.is_none() && s.eccentricity.is_none();
         // The eccentricity last; tides circularise the orbits of the planets
         // they lock.
         let eccentricity = match (self.eccentricity, s.eccentricity) {
@@ -323,11 +341,7 @@ impl WorldRequest {
             (None, Some(e)) => e.pick(rng),
             (None, None) => {
                 let drawn = crate::star::draw_eccentricity(rng);
-                if crate::star::StarInfo::new(star, orbit_au, 0.0).tidally_locked {
-                    0.0
-                } else {
-                    drawn
-                }
+                if locked { 0.0 } else { drawn }
             }
         };
         let mut params = WorldParams {
@@ -348,6 +362,8 @@ impl WorldRequest {
             drift_ma: self.drift_ma.unwrap_or(0.0),
             moons: self.moons.unwrap_or_default(),
             shape: None,
+            metallicity,
+            giants: self.giants.unwrap_or_default(),
         };
         // What the moons do to their planet: a large one keeps a drawn tilt
         // in the usual range (a free one ranges wider), and the tides
@@ -360,6 +376,18 @@ impl WorldRequest {
             params.axial_tilt_deg = effects.tilt(params.axial_tilt_deg, (range[0], range[1]));
         }
         params.planet.rules.shore_width_km *= effects.shore_factor;
+        // Eccentric giants force an eccentricity on the world: a drawn one is
+        // at least that (the giants are placed around the final orbit).
+        if eccentricity_drawn && !locked {
+            for _ in 0..3 {
+                let forced = crate::giants::GiantSystem::draw(&params)
+                    .map_or(0.0, |g| g.forced_eccentricity);
+                if forced <= params.eccentricity {
+                    break;
+                }
+                params.eccentricity = forced.min(ECCENTRICITY.max);
+            }
+        }
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
         }
