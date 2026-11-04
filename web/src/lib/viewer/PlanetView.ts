@@ -126,6 +126,8 @@ export type Lighting =
       /** Longitude under the sun, in degrees. */
       longitudeDeg: number;
       axialTiltDeg: number;
+      /** Latitude under the sun, degrees, when given (on a moon); else from the season and the tilt. */
+      latitudeDeg?: number;
     };
 
 /** Layers drawn from uExtra, uploaded the first time one of them is shown. */
@@ -1187,7 +1189,10 @@ export class PlanetView {
     this.requestRender();
     this.u.uLightMode.value = lighting.kind === 'sun' ? 1 : 0;
     if (lighting.kind === 'sun') {
-      const declination = ((lighting.axialTiltDeg * Math.PI) / 180) * Math.sin(2 * Math.PI * lighting.season);
+      const declination =
+        lighting.latitudeDeg !== undefined
+          ? (lighting.latitudeDeg * Math.PI) / 180
+          : ((lighting.axialTiltDeg * Math.PI) / 180) * Math.sin(2 * Math.PI * lighting.season);
       const [x, y, z] = lonLatToSphere({ lon: (lighting.longitudeDeg * Math.PI) / 180, lat: declination });
       this.u.uSunDir.value.set(x, y, z);
     }

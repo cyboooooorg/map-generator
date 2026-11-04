@@ -137,16 +137,48 @@ type OrbitingMoon = Pick<
 >;
 
 /**
- * Longitude of a moon's periapsis on its orbit, radians: world.json does
- * not store it, so its seed draws it.
+ * Angle of a moon's periapsis past its orbit's node, radians: world.json
+ * does not store it, so its seed draws it.
  */
 export function periapsisLongitude(moon: Pick<Moon, 'seed'>): number {
   return ((Math.abs(Math.trunc(moon.seed)) % 7919) / 7919) * 2 * Math.PI;
 }
 
-/** A point of an orbit at longitude `angle` (radians) on it, as a unit vector of the planet's frame. */
-function onOrbit(angle: number, tilt: number): Vec3 {
-  return [Math.sin(angle), -Math.cos(angle) * Math.sin(tilt), Math.cos(angle) * Math.cos(tilt)];
+/**
+ * Where a moon's orbit lies in its planet's frame: the turn of its node
+ * line (radians, 0 along the frame's x axis) and the longitude of its
+ * periapsis. Both are fixed among the stars, the node drawn by the seed
+ * as the periapsis is: the planet's frame is the planet at the hour of
+ * its view (its star at `sunLongitudeRad`), which turns against the stars
+ * once a year, so they turn back in it as the seasons go (and with the
+ * hour). An inclined moon thus sees the sun climb and fall over its
+ * equator through the year.
+ */
+function orbitOrientation(
+  moon: Pick<Moon, 'seed'>,
+  season: number,
+  sunLongitudeRad: number,
+): { node: number; periapsis: number } {
+  const node = ((Math.abs(Math.trunc(moon.seed)) % 6421) / 6421) * 2 * Math.PI;
+  const turned = node - 2 * Math.PI * season + sunLongitudeRad;
+  return { node: turned, periapsis: turned + periapsisLongitude(moon) };
+}
+
+/** A vector turned by `angle` (radians) about the frame's y axis, from z towards x. */
+function turnY(v: Vec3, angle: number): Vec3 {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [v[0] * c + v[2] * s, v[1], v[2] * c - v[0] * s];
+}
+
+/**
+ * A point of an orbit tilted by `tilt` about its node line (turned by
+ * `node`) at longitude `angle` (radians) on it, as a unit vector of the
+ * planet's frame.
+ */
+function onOrbit(angle: number, tilt: number, node: number): Vec3 {
+  const a = angle - node;
+  return turnY([Math.sin(a), -Math.cos(a) * Math.sin(tilt), Math.cos(a) * Math.cos(tilt)], node);
 }
 
 /**
@@ -172,7 +204,7 @@ export function moonPlace(
   const turns = (season * yearDays) / Math.max(moon.period_days, 1e-3);
   const meanLongitude = sunLongitudeRad + Math.PI + index * 2.4 + 2 * Math.PI * (turns - Math.floor(turns));
   const e = Math.min(Math.max(moon.eccentricity, 0), 0.95);
-  const periapsis = periapsisLongitude(moon);
+  const { node, periapsis } = orbitOrientation(moon, season, sunLongitudeRad);
   // Kepler's equation, E - e sin E = M, by Newton's method.
   const mean = meanLongitude - periapsis;
   let eccentric = e < 0.8 ? mean : Math.PI;
@@ -183,7 +215,7 @@ export function moonPlace(
     2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(eccentric / 2), Math.sqrt(1 - e) * Math.cos(eccentric / 2));
   const tilt = (moon.inclination_deg * Math.PI) / 180;
   return {
-    direction: onOrbit(periapsis + trueAnomaly, tilt),
+    direction: onOrbit(periapsis + trueAnomaly, tilt, node),
     distanceKm: moon.semi_major_axis_km * (1 - e * Math.cos(eccentric)),
   };
 }
@@ -226,7 +258,7 @@ function moonFrame(
   const tilt = (moon.inclination_deg * Math.PI) / 180;
   // The normal of the orbit of moonDirection, made orthogonal to z (a
   // binary's moon hangs at [0, 0, -1] whatever its inclination).
-  const normal: Vec3 = [0, Math.cos(tilt), Math.sin(tilt)];
+  const normal = turnY([0, Math.cos(tilt), Math.sin(tilt)], orbitOrientation(moon, season, sunLongitudeRad).node);
   const y = unit(sub(normal, scale(z, dot(normal, z))));
   const x = cross(y, z);
   const centre = scale(z, distanceKm);
@@ -252,12 +284,39 @@ function axesIn(frame: { x: Vec3; y: Vec3; z: Vec3 }, local: (v: Vec3) => Vec3):
 }
 
 /**
- * Longitude (degrees, 0 to 360) over which the sun stands on moon `k`
- * (from 0), as its planet's sky places the moons (see moonDirection): it
- * turns once per orbit on a moon keeping its face to its planet, once per
- * day of its own on one that does not (see moonSpinHours). The sun
- * is taken in its planet's equatorial plane.
+ * Where the sun stands over moon `k` (from 0): the longitude (degrees, 0
+ * to 360) and latitude (degrees) under it, as its planet's sky places the
+ * moons (see moonPlace). The longitude turns once per orbit on a moon
+ * keeping its face to its planet, once per day of its own on one that
+ * does not (see moonSpinHours). The sun is where the planet's view has
+ * it: at longitude `sunLongitudeRad` over the planet, its latitude from
+ * the planet's axial tilt `planetTiltDeg` and the season, as the planet
+ * view lights it; the moon's orbit, inclined to the planet's equator,
+ * adds or takes off its inclination.
  */
+export function sunOnMoon(
+  moon: PlacedMoon,
+  k: number,
+  season: number,
+  yearDays: number,
+  sunLongitudeRad: number,
+  planetTiltDeg = 0,
+): { longitudeDeg: number; latitudeDeg: number } {
+  const frame = moonFrame(moon, k, season, yearDays, sunLongitudeRad);
+  const declination = ((planetTiltDeg * Math.PI) / 180) * Math.sin(2 * Math.PI * season);
+  const sun: Vec3 = [
+    Math.cos(declination) * Math.sin(sunLongitudeRad),
+    Math.sin(declination),
+    Math.cos(declination) * Math.cos(sunLongitudeRad),
+  ];
+  const degrees = (Math.atan2(dot(sun, frame.x), dot(sun, frame.z)) * 180) / Math.PI;
+  return {
+    longitudeDeg: (degrees + 360) % 360,
+    latitudeDeg: (Math.asin(Math.min(Math.max(dot(sun, frame.y), -1), 1)) * 180) / Math.PI,
+  };
+}
+
+/** The longitude under the sun on moon `k`, degrees (see sunOnMoon). */
 export function sunLongitudeOnMoon(
   moon: PlacedMoon,
   k: number,
@@ -265,10 +324,7 @@ export function sunLongitudeOnMoon(
   yearDays: number,
   sunLongitudeRad: number,
 ): number {
-  const frame = moonFrame(moon, k, season, yearDays, sunLongitudeRad);
-  const sun: Vec3 = [Math.sin(sunLongitudeRad), 0, Math.cos(sunLongitudeRad)];
-  const degrees = (Math.atan2(dot(sun, frame.x), dot(sun, frame.z)) * 180) / Math.PI;
-  return (degrees + 360) % 360;
+  return sunOnMoon(moon, k, season, yearDays, sunLongitudeRad).longitudeDeg;
 }
 
 /** Points sampled round each orbit line. */
@@ -313,13 +369,13 @@ export function orbitLoops(
     if (moon.migration === "locked") return;
     const tilt = (moon.inclination_deg * Math.PI) / 180;
     const e = Math.min(Math.max(moon.eccentricity, 0), 0.95);
-    const periapsis = periapsisLongitude(moon);
+    const { node, periapsis } = orbitOrientation(moon, season, sunLongitudeRad);
     const loop: Vec3[] = [];
     for (let i = 0; i < ORBIT_SAMPLES; i += 1) {
       const nu = (2 * Math.PI * i) / ORBIT_SAMPLES;
       // moonPlace's ellipse, in km.
       const p = scale(
-        onOrbit(periapsis + nu, tilt),
+        onOrbit(periapsis + nu, tilt, node),
         (moon.semi_major_axis_km * (1 - e * e)) / (1 + e * Math.cos(nu)),
       );
       if (!here) {

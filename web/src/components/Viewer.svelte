@@ -39,7 +39,7 @@
     siblingOrbitLoops,
     siblingSky,
     spinAxes,
-    sunLongitudeOnMoon,
+    sunOnMoon,
   } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
@@ -316,7 +316,6 @@
     const option = LAYERS.find((l) => l.id === layer);
     return dataReady && option && available(option.needs, option.id) ? layer : 'biomes';
   });
-  const declination = $derived((meta?.axial_tilt_deg ?? 23.44) * Math.sin(2 * Math.PI * season));
   const seasonLabel = $derived.by(() => {
     const quarter = season * 4;
     const nearest = Math.round(quarter) % 4;
@@ -655,17 +654,37 @@
     );
     return largest?.period_days ?? null;
   });
+  // On a moon, the sun stands where the moon's place on its orbit puts it,
+  // at the latitude the planet's season and tilt give it (the moon's orbit
+  // inclined to the planet's equator), not the moon's own tilt.
+  const moonSun = $derived(
+    shownMoon && world.moon !== null
+      ? sunOnMoon(
+          shownMoon,
+          world.moon - 1,
+          moonClock.season,
+          moonClock.yearDays,
+          moonClock.longitude,
+          world.worldMeta?.star?.tidally_locked ? 0 : (world.worldMeta?.axial_tilt_deg ?? 0),
+        )
+      : null,
+  );
+  // The latitude under the sun: on a moon, where its orbit puts it (see moonSun).
+  const declination = $derived(
+    moonSun?.latitudeDeg ?? (meta?.axial_tilt_deg ?? 23.44) * Math.sin(2 * Math.PI * season),
+  );
   $effect(() => {
-    // On a moon, the sun stands where the moon's place on its orbit puts it.
-    const moonSun =
-      shownMoon && world.moon !== null
-        ? sunLongitudeOnMoon(shownMoon, world.moon - 1, moonClock.season, moonClock.yearDays, moonClock.longitude)
-        : null;
     view?.setLighting(
       !sun
         ? { kind: 'headlight' }
         : moonSun !== null
-          ? { kind: 'sun', season, longitudeDeg: moonSun, axialTiltDeg: meta?.axial_tilt_deg ?? 0 }
+          ? {
+              kind: 'sun',
+              season,
+              longitudeDeg: moonSun.longitudeDeg,
+              axialTiltDeg: 0,
+              latitudeDeg: moonSun.latitudeDeg,
+            }
           : locked
             ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
             : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
