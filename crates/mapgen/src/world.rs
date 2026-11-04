@@ -39,6 +39,8 @@ pub struct WorldParams {
     pub star: f32,
     /// Semi-major axis of the planet's orbit, AU.
     pub orbit_au: f32,
+    /// Eccentricity of the orbit (0 circular).
+    pub eccentricity: f32,
 }
 
 impl WorldParams {

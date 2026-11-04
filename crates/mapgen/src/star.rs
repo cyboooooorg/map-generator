@@ -15,7 +15,7 @@
 //! out; the flux varies geometrically with the position, so it extends
 //! smoothly beyond the edges.
 use crate::preset::ParamDefault;
-use crate::request::{HZ_POSITION, ORBIT_AU};
+use crate::request::{ECCENTRICITY, HZ_POSITION, ORBIT_AU};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
@@ -399,6 +399,10 @@ pub struct StarSpec {
     /// Semi-major axis in AU, instead of the position.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub orbit_au: Option<f32>,
+    /// Eccentricity of the orbit, a value or a range; left out, drawn like
+    /// the planets known (see [`draw_eccentricity`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eccentricity: Option<ParamDefault>,
 }
 
 impl StarSpec {
@@ -413,6 +417,10 @@ impl StarSpec {
         if let Some(position) = self.position {
             position
                 .check("position", HZ_POSITION.min, HZ_POSITION.max)
+                .map_err(|e| e.replacen("defaults.", "star.", 1))?;
+        }
+        if let Some(e) = self.eccentricity {
+            e.check("eccentricity", ECCENTRICITY.min, ECCENTRICITY.max)
                 .map_err(|e| e.replacen("defaults.", "star.", 1))?;
         }
         if let Some(au) = self.orbit_au
@@ -443,8 +451,24 @@ pub struct StarInfo {
     pub radius: f32,
     /// Semi-major axis of the planet's orbit, AU.
     pub orbit_au: f32,
-    /// Flux the planet receives, relative to Earth's.
+    /// Eccentricity of the orbit (0 circular). Worlds made before it had
+    /// circular orbits.
+    #[serde(default)]
+    pub eccentricity: f32,
+    /// Closest and farthest distances to the star, AU.
+    #[serde(default)]
+    pub periapsis_au: f32,
+    #[serde(default)]
+    pub apoapsis_au: f32,
+    /// Flux the planet receives over its year, relative to Earth's: an
+    /// elliptical orbit receives `1 / sqrt(1 − e²)` times more than a
+    /// circular one of the same semi-major axis.
     pub insolation: f32,
+    /// Flux at the closest and farthest points, relative to Earth's.
+    #[serde(default)]
+    pub insolation_periapsis: f32,
+    #[serde(default)]
+    pub insolation_apoapsis: f32,
     /// Position in the habitable zone (0 inner edge, 1 outer edge).
     pub hz_position: f32,
     /// Edges of the habitable zone, AU.
@@ -468,10 +492,16 @@ pub struct StarInfo {
 }
 
 impl StarInfo {
-    /// The star of type `code` with a planet at `orbit_au`.
-    pub fn new(code: f32, orbit_au: f32) -> Self {
+    /// The star of type `code` with a planet on an orbit of semi-major axis
+    /// `orbit_au` and `eccentricity`.
+    pub fn new(code: f32, orbit_au: f32, eccentricity: f32) -> Self {
         let v = values(code);
-        let insolation = v.luminosity / (orbit_au * orbit_au);
+        let at = |au: f32| v.luminosity / (au * au);
+        let insolation = at(orbit_au) * mean_flux_factor(eccentricity);
+        let (periapsis, apoapsis) = (
+            orbit_au * (1.0 - eccentricity),
+            orbit_au * (1.0 + eccentricity),
+        );
         let (inner, outer) = habitable_fluxes(v.teff_k);
         let lifetime = lifetime_gyr(v.mass, v.luminosity);
         let locking = locking_gyr(orbit_au, v.mass);
@@ -482,7 +512,12 @@ impl StarInfo {
             mass: v.mass,
             radius: v.radius,
             orbit_au,
+            eccentricity,
+            periapsis_au: periapsis,
+            apoapsis_au: apoapsis,
             insolation,
+            insolation_periapsis: at(periapsis),
+            insolation_apoapsis: at(apoapsis),
             hz_position: position_of(v.teff_k, insolation),
             hz_inner_au: distance_au(v.luminosity, inner),
             hz_outer_au: distance_au(v.luminosity, outer),
@@ -502,12 +537,53 @@ impl StarInfo {
     }
 }
 
-/// Flux a planet at `orbit_au` gets from a star of type `code`, relative to
-/// what Earth gets from the Sun of the model (G2V at 1 AU): exactly 1 for
-/// it, so worlds around the Sun at 1 AU keep their climate.
-pub fn relative_flux(code: f32, orbit_au: f32) -> f32 {
+/// Flux a planet on an orbit of semi-major axis `orbit_au` and
+/// `eccentricity` gets over its year from a star of type `code`, relative to
+/// what Earth gets from the Sun of the model (G2V at 1 AU, circular):
+/// exactly 1 for it, so worlds around the Sun at 1 AU keep their climate.
+pub fn relative_flux(code: f32, orbit_au: f32, eccentricity: f32) -> f32 {
     let sun = values(SUN).luminosity;
-    values(code).luminosity / (orbit_au * orbit_au) / sun
+    values(code).luminosity / (orbit_au * orbit_au) / sun * mean_flux_factor(eccentricity)
+}
+
+/// How much more light an orbit of `eccentricity` gets over a year than a
+/// circular one of the same semi-major axis: `1 / sqrt(1 − e²)` (1.0001 for
+/// Earth, 1.02 for Mercury, 1.25 at e = 0.6).
+pub fn mean_flux_factor(eccentricity: f32) -> f32 {
+    1.0 / (1.0 - eccentricity * eccentricity).max(1e-6).sqrt()
+}
+
+/// A gamma variate of `shape` (scale 1), Marsaglia & Tsang (2000), boosted
+/// for shapes below 1.
+fn gamma(shape: f64, rng: &mut impl RngExt) -> f64 {
+    if shape < 1.0 {
+        let u: f64 = rng.random::<f64>().max(1e-12);
+        return gamma(shape + 1.0, rng) * u.powf(1.0 / shape);
+    }
+    let d = shape - 1.0 / 3.0;
+    let c = 1.0 / (9.0 * d).sqrt();
+    loop {
+        // A standard normal by Box-Muller.
+        let (u1, u2): (f64, f64) = (rng.random::<f64>().max(1e-12), rng.random());
+        let x = (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos();
+        let v = (1.0 + c * x).powi(3);
+        if v <= 0.0 {
+            continue;
+        }
+        let u: f64 = rng.random::<f64>().max(1e-12);
+        if u.ln() < 0.5 * x * x + d - d * v + d * v.ln() {
+            return d * v;
+        }
+    }
+}
+
+/// An orbital eccentricity drawn like those of the planets known: the beta
+/// distribution fitted by Kipping (2013) to radial-velocity planets
+/// (a = 0.867, b = 3.03; mean 0.22, median 0.16), kept within
+/// [`ECCENTRICITY`].
+pub fn draw_eccentricity(rng: &mut impl RngExt) -> f32 {
+    let (x, y) = (gamma(0.867, rng), gamma(3.03, rng));
+    ((x / (x + y)) as f32).min(ECCENTRICITY.max)
 }
 
 /// Temperature change at the outer edge of the habitable zone for a
@@ -523,6 +599,7 @@ pub struct StarClimate {
     /// Spectral type and orbit.
     pub star: f32,
     pub orbit_au: f32,
+    pub eccentricity: f32,
     /// Whether a carbonate-silicate cycle (plate tectonics and liquid
     /// water) regulates the greenhouse, as on Earth.
     pub regulated: bool,
@@ -544,7 +621,7 @@ pub struct StarClimate {
 /// The Sun at 1 AU leaves the rows unchanged.
 pub fn star_temperatures(rows: &mut [f32], climate: StarClimate) {
     const K: f32 = 273.15;
-    let s = relative_flux(climate.star, climate.orbit_au);
+    let s = relative_flux(climate.star, climate.orbit_au, climate.eccentricity);
     let scale = |rows: &mut [f32], flux: f32| {
         let f = flux.powf(0.25);
         for t in rows.iter_mut() {
@@ -668,12 +745,12 @@ mod tests {
 
     #[test]
     fn earth_reads_as_earth() {
-        let earth = StarInfo::new(SUN, 1.0);
+        let earth = StarInfo::new(SUN, 1.0, 0.0);
         assert_eq!(earth.kind, "G2V");
         assert!((earth.insolation - 1.0).abs() < 0.03);
         assert!(!earth.tidally_locked);
-        assert!(StarInfo::new(parse_type("M5V").unwrap(), orbit_at(65.0, 0.5)).tidally_locked);
-        let back = StarInfo::new(earth.code(), earth.orbit_au);
+        assert!(StarInfo::new(parse_type("M5V").unwrap(), orbit_at(65.0, 0.5), 0.0).tidally_locked);
+        let back = StarInfo::new(earth.code(), earth.orbit_au, earth.eccentricity);
         assert_eq!(back, earth);
     }
 
@@ -687,6 +764,7 @@ mod tests {
                 StarClimate {
                     star: SUN,
                     orbit_au: 1.0,
+                    eccentricity: 0.0,
                     regulated,
                     internal_heat_k: 0.0,
                 },
@@ -706,6 +784,7 @@ mod tests {
                 StarClimate {
                     star: SUN,
                     orbit_au,
+                    eccentricity: 0.0,
                     regulated,
                     internal_heat_k,
                 },
@@ -732,6 +811,20 @@ mod tests {
         // Internal heat keeps a far world warm.
         assert!(at(30.0, false, 0.0) < -200.0);
         assert!(at(30.0, false, 290.0) > 10.0);
+    }
+
+    #[test]
+    fn eccentric_orbits_get_more_light_and_draw_like_known_planets() {
+        let mercury = StarInfo::new(SUN, 0.387, 0.2056);
+        assert!((mercury.periapsis_au - 0.307).abs() < 1e-3);
+        assert!((mercury.apoapsis_au - 0.467).abs() < 1e-3);
+        assert!(mercury.insolation_periapsis > 2.0 * mercury.insolation_apoapsis);
+        assert!((mean_flux_factor(0.6) - 1.25).abs() < 1e-4);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(5);
+        let draws: Vec<f32> = (0..20_000).map(|_| draw_eccentricity(&mut rng)).collect();
+        let mean = draws.iter().sum::<f32>() / draws.len() as f32;
+        assert!((0.19..0.25).contains(&mean), "mean eccentricity {mean}");
+        assert!(draws.iter().all(|e| (0.0..=ECCENTRICITY.max).contains(e)));
     }
 
     #[test]

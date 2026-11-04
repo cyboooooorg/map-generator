@@ -210,6 +210,10 @@ export const en = {
     starSizeValue: (p: { size: string; sun: string }) => `${p.size} (the Sun from Earth: ${p.sun})`,
     locked: 'tidally locked',
     lockedHelp: 'One face always lit: the star does not move in its sky',
+    eccentricity: 'Eccentricity',
+    eccentricityValue: (p: { e: string; periapsis: string; apoapsis: string }) =>
+      `${p.e} · ${p.periapsis} to ${p.apoapsis}`,
+    circular: 'circular',
     geologySurface: (p: { regime: string; age: string }) => `${p.regime}, surface ${p.age}`,
     surface: 'Surface',
     landWater: 'Land / water',
@@ -336,6 +340,9 @@ export const en = {
     orbitAu: 'Distance (AU)',
     orbitPositionHelp: '0: inner edge of the habitable zone · 1: outer edge · Earth: about 0.1',
     orbitAuHelp: 'Earth: 1 · Mars: 1.52 · Venus: 0.72',
+    eccentricity: 'Eccentricity',
+    eccentricityHelp:
+      '0: a circle · Venus: 0.007 · Earth: 0.017 · Mars: 0.09 · Mercury: 0.21. More gives more light over a year. Random: drawn like the planets known, circular for tidally locked ones',
     seed: 'Seed',
     seedPlaceholder: 'random',
     roll: 'Roll',
@@ -361,6 +368,11 @@ export const en = {
   /** The viewer: toolbar, display panel, legends, overlays. */
   viewer: {
     tools: 'Tools',
+    target: 'Show the planet or its star',
+    planetView: 'Planet',
+    planetViewHelp: 'The planet (O)',
+    starView: 'Star',
+    starViewHelp: 'Its star and its system: the habitable zone and the orbit (O)',
     resetView: 'Reset view',
     resetViewHelp: 'Reset the view (R)',
     measure: 'Measure',
@@ -464,6 +476,7 @@ export const en = {
     seasons: 'Play / pause the seasons (turns sunlight on)',
     atmosphere: 'Atmosphere',
     stars: 'Stars',
+    starView: 'Planet / its star',
     clouds: 'Clouds',
     drift: 'Cloud drift (turns clouds on)',
     grid: 'Grid',
@@ -488,6 +501,28 @@ export const en = {
     presentOnly: 'The biome statistics and the hex grid show the present.',
   },
   /** The less common units, explained in tooltips and in the help panel. */
+  /** The star view. */
+  starView: {
+    title: 'The star and its system',
+    size: 'Size',
+    sizeValue: (p: { radius: string; mass: string }) => `${p.radius} · ${p.mass}`,
+    lifetime: 'Lifetime',
+    gyr: 'billion years',
+    zone: 'Habitable zone',
+    range: (p: { inner: string; outer: string }) => `${p.inner} to ${p.outer}`,
+    equilibrium: 'Equilibrium',
+    animate: 'Animate',
+    distances: 'Distances',
+    distancesHelp:
+      'The distance from the star to the planet and the light it gets now, the closest and farthest points of its orbit, the edges of the habitable zone',
+    now: (p: { distance: string; light: string; zone: string }) => `${p.distance} · ${p.light} Earth's light · ${p.zone}`,
+    inZone: 'in the habitable zone',
+    outOfZone: 'outside the habitable zone',
+    periapsis: (p: { distance: string }) => `periapsis ${p.distance}`,
+    apoapsis: (p: { distance: string }) => `apoapsis ${p.distance}`,
+    animateHelp: 'The star turns and boils, red dwarfs flare, the planet goes round its orbit (ten frames a second)',
+    schematic: 'Schematic: the star is not to scale; distances are in proportion.',
+  },
   units: {
     title: 'Units',
     Ga: {

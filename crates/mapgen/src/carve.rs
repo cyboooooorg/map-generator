@@ -338,6 +338,7 @@ mod tests {
             star: Some("G2V".into()),
             orbit_au: Some(1.0),
             hz_position: None,
+            eccentricity: Some(0.0),
             width: Some(480),
             height: Some(240),
         };

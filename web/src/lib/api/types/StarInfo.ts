@@ -22,9 +22,24 @@ luminosity: number, mass: number, radius: number,
  */
 orbit_au: number, 
 /**
- * Flux the planet receives, relative to Earth's.
+ * Eccentricity of the orbit (0 circular). Worlds made before it had
+ * circular orbits.
+ */
+eccentricity: number, 
+/**
+ * Closest and farthest distances to the star, AU.
+ */
+periapsis_au: number, apoapsis_au: number, 
+/**
+ * Flux the planet receives over its year, relative to Earth's: an
+ * elliptical orbit receives `1 / sqrt(1 − e²)` times more than a
+ * circular one of the same semi-major axis.
  */
 insolation: number, 
+/**
+ * Flux at the closest and farthest points, relative to Earth's.
+ */
+insolation_periapsis: number, insolation_apoapsis: number, 
 /**
  * Position in the habitable zone (0 inner edge, 1 outer edge).
  */

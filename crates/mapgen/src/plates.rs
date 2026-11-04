@@ -558,6 +558,7 @@ mod tests {
             surface_age_ga: 0.4,
             star: crate::star::SUN,
             orbit_au: 1.0,
+            eccentricity: 0.0,
         }
     }
 

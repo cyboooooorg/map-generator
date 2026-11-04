@@ -55,6 +55,9 @@ pub const ORBIT_AU: Limits = Limits {
     min: 0.005,
     max: 1000.0,
 };
+/// Eccentricity of the planet's orbit: 0 circular; beyond 0.9 the planet
+/// would graze its star or leave its habitable zone for most of its year.
+pub const ECCENTRICITY: Limits = Limits { min: 0.0, max: 0.9 };
 /// Position in the host star's habitable zone: 0 inner edge, 1 outer edge.
 pub const HZ_POSITION: Limits = Limits {
     min: -2.0,
@@ -114,6 +117,8 @@ pub struct WorldRequest {
     /// Position of the orbit in the star's habitable zone (0 inner edge, 1
     /// outer edge). Exclusive with `orbit_au`.
     pub hz_position: Option<f32>,
+    /// Eccentricity of the orbit, in `[0, 0.9]`.
+    pub eccentricity: Option<f32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -205,6 +210,7 @@ impl WorldRequest {
             ("surface_age_ga", self.surface_age_ga, SURFACE_AGE_GA),
             ("orbit_au", self.orbit_au, ORBIT_AU),
             ("hz_position", self.hz_position, HZ_POSITION),
+            ("eccentricity", self.eccentricity, ECCENTRICITY),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -298,6 +304,20 @@ impl WorldRequest {
                 crate::star::orbit_at(star, s.position.unwrap_or(fallback::HZ_POSITION).pick(rng))
             }
         };
+        // The eccentricity last; tides circularise the orbits of the planets
+        // they lock.
+        let eccentricity = match (self.eccentricity, s.eccentricity) {
+            (Some(e), _) => e,
+            (None, Some(e)) => e.pick(rng),
+            (None, None) => {
+                let drawn = crate::star::draw_eccentricity(rng);
+                if crate::star::StarInfo::new(star, orbit_au, 0.0).tidally_locked {
+                    0.0
+                } else {
+                    drawn
+                }
+            }
+        };
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
             height: self.height.unwrap_or(fallback::HEIGHT),
@@ -312,6 +332,7 @@ impl WorldRequest {
             surface_age_ga,
             star,
             orbit_au,
+            eccentricity,
         };
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
@@ -351,7 +372,7 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(red.star, parse_type("M4V").unwrap());
-        let info = StarInfo::new(red.star, red.orbit_au);
+        let info = StarInfo::new(red.star, red.orbit_au, red.eccentricity);
         assert!(
             (info.hz_position - 0.5).abs() < 1e-3,
             "{}",
@@ -363,7 +384,7 @@ mod tests {
                 planet: Some("terran".into()),
                 ..Default::default()
             });
-            let position = StarInfo::new(p.star, p.orbit_au).hz_position;
+            let position = StarInfo::new(p.star, p.orbit_au, 0.0).hz_position;
             assert!((0.04..0.76).contains(&position), "{position}");
         }
         // Bad stars and both orbits at once are refused.

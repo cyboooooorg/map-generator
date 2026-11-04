@@ -138,6 +138,7 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     // Worlds made before stars orbit the Sun at 1 AU.
     star: meta.star?.type ?? 'G2V',
     orbit_au: round(meta.star?.orbit_au ?? 1, 5),
+    eccentricity: round(meta.star?.eccentricity ?? 0, 4),
     width: meta.width,
     height: meta.height,
   };
@@ -162,6 +163,7 @@ export function cliCommand(meta: WorldMetadata): string {
     ...(r.surface_age_ga === undefined ? [] : [`--surface-age ${r.surface_age_ga}`]),
     `--star ${r.star}`,
     `--orbit-au ${r.orbit_au}`,
+    `--eccentricity ${r.eccentricity}`,
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];
@@ -239,6 +241,19 @@ export function formatOrbit(star: StarInfo): string {
   const zone =
     p < 0 ? t.worldInfo.hzInner : p > 1 ? t.worldInfo.hzOuter : t.worldInfo.hzInside({ position: formatNumber(p, 2) });
   return t.worldInfo.orbitValue({ distance: formatAu(star.orbit_au), zone });
+}
+
+/** The eccentricity line: its value and the closest and farthest distances. */
+export function formatEccentricity(star: StarInfo): string {
+  const e = star.eccentricity ?? 0;
+  if (e < 0.0005) {
+    return t.worldInfo.circular;
+  }
+  return t.worldInfo.eccentricityValue({
+    e: formatUpTo(e, 3),
+    periapsis: formatAu(star.periapsis_au),
+    apoapsis: formatAu(star.apoapsis_au),
+  });
 }
 
 /** The light line: flux relative to Earth's and equilibrium temperature. */

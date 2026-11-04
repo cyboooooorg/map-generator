@@ -11,6 +11,7 @@ description = "Fournaise de la taille de la Terre : plaines volcaniques, conti
 [star]                                 # host star and orbit (see `mapgen::star`)
 type = "G2V"                           # the Sun
 orbit_au = 0.723
+eccentricity = 0.0068                    # like Venus
 
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these. Venus spins backwards with a tilt of 177.4 degrees,
