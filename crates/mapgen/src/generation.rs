@@ -407,7 +407,7 @@ impl Sampler {
         let plates = self
             .tectonics
             .as_ref()
-            .map_or(crate::plates::Relief::default(), |t| t.relief(lon, lat));
+            .map_or(crate::plates::Relief::default(), |t| t.relief([nx, ny, nz]));
         // Relief scales with gravity as the mountains do.
         let tectonic_uplift = plates.uplift * self.mountain_blend / 0.35;
         let mountain_weight = (mountain_weight * self.noise_mountains).max(plates.orogeny);
@@ -786,7 +786,8 @@ pub fn generate_with_progress(
         let at = |i: usize| {
             let (x, y) = (i as u32 % width, i as u32 / width);
             let lon = (f64::from(x) + 0.5) / f64::from(width) * 2.0 * PI;
-            map.index_at(lon, grid.latitude(y))
+            let lat = grid.latitude(y);
+            map.index_at([lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()])
         };
         sink.layer(DebugLayer {
             name: "plates",

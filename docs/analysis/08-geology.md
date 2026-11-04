@@ -729,7 +729,7 @@ relief of worlds with plate tectonics (`regime = "plates"`: `terran`,
 - **Poles:** the latitude-longitude grid stretches boundaries near the
   poles into streaks; relief fades out between 70° and 85°, as erosion
   does between 60° and 75°. A grid even over the sphere (a cube map)
-  would lift this.
+  would lift this (done below).
 - **One grid for every map size** (1024 × 512): the boundaries, and so
   the relief, do not depend on the resolution, and the land fraction
   estimate (sampled at 512 × 256) sees the same relief.
@@ -737,6 +737,21 @@ relief of worlds with plate tectonics (`regime = "plates"`: `terran`,
   land to 8.4, 5.2 and 5.5 %, the land share gains 1.5 points (arcs and
   ridges). Building the plates takes about 0.13 s per world, which also
   makes the test suite slower (about 10 s instead of 3.5 s for `mapgen`).
+
+**Outcome (uniform grid, 2026-11-04).** The plates and their boundaries
+now lie on an equi-angular cube map (`src/cube.rs`): six faces of
+256 × 256 cells, about 39 km at a face's centre, cells within 30 % of one
+another in size, against the latitude-longitude grid whose cells shrink
+to nothing at the poles. Cells across a face edge are found through the
+sphere (a cell past the edge is a point of the face's plane extended),
+so the 7 × 7 window of the boundary normal, the Dijkstra and the
+bilinear interpolation of the relief cross the edges unchanged; the
+Dijkstra steps by the great-circle distance between cell centres. The
+polar fade is gone: ranges, arcs and ridges reach the poles. 393 216
+cells instead of 524 288, generation time unchanged. The new relief
+exposed a river case: a tributary crossing its own parent upstream of
+its tributaries' mouths was never cut; it now is, and those tributaries
+take its course on to its mouth.
 
 **Order:**
 

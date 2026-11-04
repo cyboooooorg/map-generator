@@ -11,6 +11,7 @@ pub mod carve;
 pub mod climate;
 pub mod clouds;
 pub mod craters;
+pub mod cube;
 pub mod delta;
 pub mod detail;
 pub mod epoch;
