@@ -7,4 +7,10 @@ export type JobCreated = { job_id: string,
 /**
  * Id the world will have once generated.
  */
-world_id: string, };
+world_id: string, 
+/**
+ * Fields of the request the planet has no use for, ignored (a giant's
+ * `circumference_km`, `erosion`, `volcanic`, `land_fraction`, `giants`
+ * and `host`; a rocky world's `mass_earth`).
+ */
+ignored: Array<string>, };

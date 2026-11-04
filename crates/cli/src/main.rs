@@ -219,6 +219,12 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         height: Some(args.height),
     };
     let resolved = request.resolve(&mut rand::rng())?;
+    if !resolved.ignored.is_empty() {
+        eprintln!(
+            "warning: ignored, this planet has no use for: {}",
+            resolved.ignored.join(", ")
+        );
+    }
     let p = &resolved.params;
     let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
     println!(
@@ -337,48 +343,51 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     }
     // Exact values (the summary above is rounded) so the world can be
     // regenerated; the size too, since the relief depends on the resolution.
-    println!(
-        "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
-         --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
-         --star {} --orbit-au {} --eccentricity {} --metallicity {}{}{}{}{}{} --width {} --height {}",
-        resolved.planet_spec,
-        p.seed,
-        p.sea_level,
-        p.volcanic_intensity,
-        p.circumference_km,
-        p.axial_tilt_deg,
-        p.erosion,
-        p.pressure_bar,
-        p.surface_age_ga,
-        star.kind,
-        p.orbit_au,
-        p.eccentricity,
-        p.metallicity,
-        if p.drift_ma == 0.0 {
-            String::new()
-        } else {
-            format!(" --drift {}", p.drift_ma)
-        },
-        if p.giants == GiantsMode::None {
-            " --giants none"
-        } else {
-            ""
-        },
-        p.giant_mass_earth
-            .map_or(String::new(), |m| format!(" --mass {m}")),
-        match p.host {
-            HostMode::Giant => " --host giant",
-            HostMode::None if p.giant_mass_earth.is_none() => " --host none",
-            _ => "",
-        },
-        match p.moons {
-            MoonsMode::Auto => String::new(),
-            MoonsMode::None => " --moons none".into(),
-            MoonsMode::Count(n) => format!(" --moons {n}"),
-        },
-        p.width,
-        p.height
-    );
+    let giant = p.giant_mass_earth.is_some();
+    let mut reproduce = vec![
+        format!("--planet {}", resolved.planet_spec),
+        format!("--seed {}", p.seed),
+        format!("--sea-level {}", p.sea_level),
+    ];
+    // A giant has no ground: no volcanism, circumference or erosion to set.
+    if !giant {
+        reproduce.push(format!("--volcanic {}", p.volcanic_intensity));
+        reproduce.push(format!("--circumference {}", p.circumference_km));
+    }
+    reproduce.push(format!("--axial-tilt {}", p.axial_tilt_deg));
+    if !giant {
+        reproduce.push(format!("--erosion {}", p.erosion));
+    }
+    reproduce.extend([
+        format!("--pressure {}", p.pressure_bar),
+        format!("--surface-age {}", p.surface_age_ga),
+        format!("--star {}", star.kind),
+        format!("--orbit-au {}", p.orbit_au),
+        format!("--eccentricity {}", p.eccentricity),
+        format!("--metallicity {}", p.metallicity),
+    ]);
+    if p.drift_ma != 0.0 {
+        reproduce.push(format!("--drift {}", p.drift_ma));
+    }
+    if p.giants == GiantsMode::None && !giant {
+        reproduce.push("--giants none".into());
+    }
+    if let Some(m) = p.giant_mass_earth {
+        reproduce.push(format!("--mass {m}"));
+    }
+    match p.host {
+        HostMode::Giant => reproduce.push("--host giant".into()),
+        HostMode::None if !giant => reproduce.push("--host none".into()),
+        _ => {}
+    }
+    match p.moons {
+        MoonsMode::Auto => {}
+        MoonsMode::None => reproduce.push("--moons none".into()),
+        MoonsMode::Count(n) => reproduce.push(format!("--moons {n}")),
+    }
+    reproduce.push(format!("--width {}", p.width));
+    reproduce.push(format!("--height {}", p.height));
+    println!("Reproduce with: {}", reproduce.join(" "));
     Ok(())
 }
 

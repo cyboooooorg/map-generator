@@ -29,6 +29,7 @@ export const en = {
   },
   /** Page frame: header, errors, notifications, compare bar. */
   app: {
+    ignored: (p: { fields: string }) => `Ignored, as this planet has no use for them: ${p.fields}.`,
     title: 'Planets',
     tabWorlds: 'Worlds',
     tabViewer: 'Viewer',
@@ -846,6 +847,8 @@ export const en = {
     noRoomForMoons: (p: { count: number }) =>
       `No stable orbits for ${p.count === 1 ? 'a moon' : `${p.count} moons`}: the star and orbit chosen lock the planet to its star or keep it too close. Leave them random, or pick a farther orbit or a hotter star.`,
     moonsOfAMoon: "The moon of a giant keeps no moons of its own (its Hill sphere is too small): ask for moons or for a giant's moon, not both.",
+    hotGiantMoons: (p: { count: number }) =>
+      `A hot giant keeps no moons (${p.count} asked for): so close to its star, its Hill sphere is too small. Pick a cooler orbit or no moons.`,
     unknownPreset: (p: { preset: string }) => `There is no planet preset named ${p.preset}.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,
