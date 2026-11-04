@@ -777,6 +777,7 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
         metallicity: planet.metallicity,
         giants: crate::giants::GiantsMode::None,
         giant_mass_earth: None,
+        host: crate::exomoon::HostMode::None,
     }
 }
 
@@ -842,6 +843,7 @@ mod tests {
             metallicity: 0.0,
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: None,
+            host: crate::exomoon::HostMode::None,
         }
     }
 

@@ -1,5 +1,8 @@
 use clap::Parser;
-use mapgen::export::{ExportOptions, NoiseMapWriter, export_moons, export_world, world_dir_name};
+use mapgen::exomoon::{HostGiant, HostMode};
+use mapgen::export::{
+    ExportOptions, NoiseMapWriter, export_host, export_moons, export_world, world_dir_name,
+};
 use mapgen::generation::{GenerateOptions, generate_with_progress};
 use mapgen::giants::{GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES};
 use mapgen::moons::{MoonOrigin, MoonSystem, MoonsMode};
@@ -114,6 +117,12 @@ struct Args {
     #[arg(long)]
     giants: Option<GiantsMode>,
 
+    /// The moon of a giant: `auto`, as the seed draws (one rocky world in
+    /// 50), `giant` (always: an Earth-sized moon of a 0.3 to 10 Jupiter-mass
+    /// giant, heated by its tides) or `none` [default: auto]
+    #[arg(long)]
+    host: Option<HostMode>,
+
     /// Mass of a giant planet in Earth masses, in [5, 4131] (Jupiter: 318,
     /// Saturn: 95, Neptune: 17); giant presets only [default: drawn in the
     /// preset's range]
@@ -204,6 +213,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         metallicity: args.metallicity,
         giants: args.giants,
         mass_earth: args.mass,
+        host: args.host,
         width: Some(args.width),
         height: Some(args.height),
     };
@@ -262,6 +272,23 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
             }
         );
     }
+    if let Some(host) = HostGiant::draw(p) {
+        println!(
+            "Host → the moon of a {:.2} MJ giant, {:.1} of its radii out ({:.0} km), day {:.2} days, \
+             tides {:.2} W/m², the giant {:.1}° wide in the sky{}",
+            host.giant.mass_earth / JUPITER_EARTH_MASSES,
+            host.distance_radii,
+            host.distance_km,
+            host.period_days,
+            host.tidal_flux,
+            host.angular_diameter_deg,
+            if host.inside_edge {
+                ", inside the habitable edge (runaway greenhouse)"
+            } else {
+                ""
+            }
+        );
+    }
     if let Some(system) = GiantSystem::draw(p) {
         println!("Giants → {}", giants_summary(&system, p.metallicity));
     }
@@ -297,17 +324,21 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     };
     export_world(generated, &dir, options)?;
     let moons = export_moons(p, &dir, options)?;
+    let host = export_host(p, &dir, options)?;
 
     println!("World generated → {}/", dir.display());
     if moons > 0 {
         println!("Moons generated → {}/moons/", dir.display());
+    }
+    if host {
+        println!("Host giant generated → {}/host/", dir.display());
     }
     // Exact values (the summary above is rounded) so the world can be
     // regenerated; the size too, since the relief depends on the resolution.
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
          --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
-         --star {} --orbit-au {} --eccentricity {} --metallicity {}{}{}{}{} --width {} --height {}",
+         --star {} --orbit-au {} --eccentricity {} --metallicity {}{}{}{}{}{} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -333,6 +364,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         },
         p.giant_mass_earth
             .map_or(String::new(), |m| format!(" --mass {m}")),
+        match p.host {
+            HostMode::Giant => " --host giant",
+            HostMode::None if p.giant_mass_earth.is_none() => " --host none",
+            _ => "",
+        },
         match p.moons {
             MoonsMode::Auto => String::new(),
             MoonsMode::None => " --moons none".into(),

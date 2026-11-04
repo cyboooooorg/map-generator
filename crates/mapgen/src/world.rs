@@ -60,6 +60,9 @@ pub struct WorldParams {
     /// Mass of a giant planet, Earth masses: `Some` for a giant (its preset
     /// has a `[giant]` table, see `crate::giant_world`), `None` otherwise.
     pub giant_mass_earth: Option<f32>,
+    /// Whether the world is the moon of a giant planet (see
+    /// `crate::exomoon`): as its seed draws, always, or never.
+    pub host: crate::exomoon::HostMode,
 }
 
 impl WorldParams {

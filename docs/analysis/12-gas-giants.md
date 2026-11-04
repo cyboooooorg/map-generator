@@ -469,6 +469,24 @@ Giant worlds of their own (`src/giant_world.rs`), as presets
 - **Not done yet:** the form's giant fields (mass), after the form
   rework of #120; the shadow of the rings on the planet.
 
+### Step C (2026-11-04)
+
+Rocky worlds orbiting a giant (`src/exomoon.rs`):
+
+- **Odds:** one drawn rocky world in 50; always or never on request.
+- **The giant** (0.3 to 10 MJ) and the orbit (6 to 40 radii, within a
+  third of the Hill radius, `e` 0.001 to 0.012) on their own noise
+  stream; the giant generated in `host/` with the giant pipeline.
+- **Tidal heating** after Peale et al. (1979), Io's `k₂/Q`: an internal
+  heat for the climate and a volcanism. Watery worlds are kept beyond
+  the habitable edge (80 % of the runaway limit with starlight); dry
+  ones may become lava worlds.
+- **Viewer:** the giant in the sky at its true size with its bands,
+  phases and eclipses (the moon sky of item 13, roles reversed); the
+  world card; the star view.
+- **Not done:** the giant's other moons in the sky; the tilt steadied by
+  the giant; the giant's reflected and thermal light on the night side.
+
 ## Sources
 
 - NASA Goddard, planetary fact sheets (Jupiter, Saturn, Uranus,
@@ -523,6 +541,8 @@ Giant worlds of their own (`src/giant_world.rs`), as presets
 - Raymond & Izidoro 2017, "Origin of water in the inner Solar System:
   Planetesimals scattered inward during Jupiter and Saturn's rapid gas
   accretion", Icarus 297, 134.
+- Peale, Cassen & Reynolds 1979, "Melting of Io by Tidal Dissipation",
+  Science 203, 892; Lainey et al. 2009, Nature 459, 957 (Io's `k₂/Q`).
 - Canup & Ward 2006, "A common mass scaling for satellite systems of
   gaseous planets", Nature 441, 834; Williams 2013, "Terrestrial
   Exomoons", Astrobiology 13, 315.

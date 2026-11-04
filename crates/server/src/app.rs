@@ -42,7 +42,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use mapgen::detail::{RENDER_VERSION, TileId};
-use mapgen::export::{ExportOptions, export_moons, export_world, world_dir_name};
+use mapgen::export::{ExportOptions, export_host, export_moons, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, Stage, generate_with_progress};
 use mapgen::hex::{self, DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
@@ -844,6 +844,8 @@ async fn create_world(
             // The planet's memory is freed by now: its moons, one by one.
             report(Stage::Moons);
             export_moons(&params, temp.path(), ExportOptions { raw_data: true })?;
+            // A giant's moon: the giant, for its sky.
+            export_host(&params, temp.path(), ExportOptions { raw_data: true })?;
             // The export cannot be interrupted: a cancel that arrived
             // meanwhile drops it here.
             if thread_cancel.is_requested() {

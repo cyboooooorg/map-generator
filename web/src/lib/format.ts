@@ -149,7 +149,10 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     // The star's metallicity, and giants turned off (worlds made before
     // them have neither; regenerated, they get those their seed draws).
     ...(meta.format_version >= 10 ? { metallicity: round(meta.star?.metallicity ?? 0, 4) } : {}),
-    ...(meta.giants == null && meta.format_version >= 10 ? { giants: 'none' as const } : {}),
+    ...(meta.giants == null && meta.format_version >= 10 && !meta.giant ? { giants: 'none' as const } : {}),
+    // A giant's moon stays one; a giant keeps its mass.
+    ...(meta.host ? { host: 'giant' as const } : {}),
+    ...(meta.giant ? { mass_earth: round(meta.giant.mass_earth, 2) } : {}),
     width: meta.width,
     height: meta.height,
   };
@@ -179,6 +182,8 @@ export function cliCommand(meta: WorldMetadata): string {
     ...(r.moons === undefined ? [] : [`--moons ${typeof r.moons === 'object' ? r.moons.count : r.moons}`]),
     ...(r.metallicity === undefined ? [] : [`--metallicity=${r.metallicity}`]),
     ...(r.giants === undefined ? [] : [`--giants ${r.giants}`]),
+    ...(r.host === undefined ? [] : [`--host ${r.host}`]),
+    ...(r.mass_earth === undefined ? [] : [`--mass ${r.mass_earth}`]),
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];

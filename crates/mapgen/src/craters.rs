@@ -1485,6 +1485,7 @@ mod tests {
             metallicity: 0.0,
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: None,
+            host: crate::exomoon::HostMode::None,
         }
     }
 

@@ -193,9 +193,13 @@ fn poisson(mean: f64, rng: &mut impl RngExt) -> usize {
     k
 }
 
-/// Mass of a world in Earth masses: Earth's density, from its circumference.
+/// Mass of a world in Earth masses: Earth's density, from its circumference;
+/// for the moon of a giant, its giant's (they share the orbit).
 fn world_mass_earth(p: &WorldParams) -> f64 {
-    (f64::from(p.circumference_km) / 40_075.0).powi(3)
+    match crate::exomoon::HostGiant::draw(p) {
+        Some(host) => f64::from(host.giant.mass_earth),
+        None => (f64::from(p.circumference_km) / 40_075.0).powi(3),
+    }
 }
 
 /// Radius of a giant, Earth radii, from its mass (Earth masses): through
@@ -512,6 +516,7 @@ mod tests {
             metallicity,
             giants: GiantsMode::Auto,
             giant_mass_earth: None,
+            host: crate::exomoon::HostMode::None,
         }
     }
 

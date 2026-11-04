@@ -344,6 +344,7 @@ mod tests {
             metallicity: None,
             giants: None,
             mass_earth: None,
+            host: None,
             width: Some(480),
             height: Some(240),
         };

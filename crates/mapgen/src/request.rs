@@ -156,6 +156,9 @@ pub struct WorldRequest {
     /// Mass of a giant planet (giant presets only), Earth masses, in
     /// `[5, 4131]`; drawn in the preset's range when left out.
     pub mass_earth: Option<f32>,
+    /// `auto` (rarely the moon of a giant, as the seed draws, the default),
+    /// `giant` (always) or `none`.
+    pub host: Option<crate::exomoon::HostMode>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -447,7 +450,20 @@ impl WorldRequest {
                 self.giants.unwrap_or_default()
             },
             giant_mass_earth,
+            host: if giant {
+                crate::exomoon::HostMode::None
+            } else {
+                self.host.unwrap_or_default()
+            },
         };
+        // The moon of a giant: no moons of its own (the giant's tides take
+        // them), and tidal heat raises a drawn volcanism.
+        if let Some(host) = crate::exomoon::HostGiant::draw(&params) {
+            params.moons = crate::moons::MoonsMode::None;
+            if self.volcanic.is_none() {
+                params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
+            }
+        }
         // What the moons do to their planet: a large one keeps a drawn tilt
         // in the usual range (a free one ranges wider), and the tides
         // (moons and star) widen or narrow the tidal flats. Applied to the
@@ -719,6 +735,8 @@ mod tests {
                 star: Some("G2V".into()),
                 orbit_au: Some(1.0),
                 eccentricity: Some(0.0),
+                // Not the moon of a giant (which has no moons of its own).
+                host: Some(crate::exomoon::HostMode::None),
                 width: Some(64),
                 height: Some(32),
                 ..Default::default()
