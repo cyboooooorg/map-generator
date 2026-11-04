@@ -195,6 +195,10 @@
   let playing = $state(false);
   /** Days the moons have moved on along their orbits past the season. */
   let orbitDays = $state(0);
+  /** The orbit time of a link being opened, for its world (see applyView). */
+  let orbitLink: number | null = null;
+  /** The world the orbit time belongs to: another one starts its moons over. */
+  let orbitWorld: string | null = null;
   let orbitsPlaying = $state(false);
   /** Whether the canvas has a size: hidden (narrow screens showing the list), nothing animates. */
   let canvasVisible = $state(true);
@@ -633,6 +637,15 @@
       longitude: ((planetLocked ? 180 : sunLongitude) * Math.PI) / 180,
     };
   });
+  $effect(() => {
+    const id = world.worldId;
+    untrack(() => {
+      if (id === orbitWorld) return;
+      orbitWorld = id;
+      orbitDays = orbitLink ?? 0;
+      orbitsPlaying = false;
+    });
+  });
   /** The period the orbit slider spans: of the moon shown, or of the largest moon. */
   const orbitPeriod = $derived.by(() => {
     if (shownMoon) return shownMoon.period_days;
@@ -937,6 +950,7 @@
       layer: shown,
       relief,
       sun: sun ? { on: true, season, longitudeDeg: sunLongitude } : { on: false },
+      ...(orbitDays === 0 || orbitPeriod === null ? {} : { orbitDays: orbitDays % orbitPeriod }),
       ...(epoch === 0 ? {} : { epoch }),
     };
   }
@@ -957,6 +971,12 @@
       }
     }
     if (link.epoch !== undefined) epochChoice = link.epoch;
+    if (link.orbitDays !== undefined) {
+      orbitDays = link.orbitDays;
+      // Kept for the world the link opens, which may load just after.
+      orbitLink = link.orbitDays;
+      setTimeout(() => (orbitLink = null));
+    }
     if (link.camera) {
       applyCamera(link.camera);
     }
