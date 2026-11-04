@@ -152,6 +152,14 @@ pub struct MoonSystem {
     pub hill_radius_km: f32,
     /// The planet and its largest moon orbit a point outside the planet.
     pub binary: bool,
+    /// The range of the tides on the planet (moons and star), relative to
+    /// Earth's; it sets the width of the tidal flats (see
+    /// [`PlanetEffects`]). Missing on worlds made before it: 0.
+    #[serde(default)]
+    pub tide: f32,
+    /// A large moon keeps the planet's axial tilt steady.
+    #[serde(default)]
+    pub tilt_steadied: bool,
     /// Nearest first.
     pub moons: Vec<Moon>,
 }
@@ -287,13 +295,18 @@ impl MoonSystem {
         let drawn_day = rng.log_uniform(12.0, 36.0);
         if star.tidally_locked {
             let day = f64::from(star.year_days) * 24.0;
-            return Some(Self {
-                planet_day_hours: day as f32,
-                synchronous_orbit_km: synchronous(day) as f32,
-                hill_radius_km: hill as f32,
-                binary: false,
-                moons: Vec::new(),
-            });
+            return Some(
+                Self {
+                    planet_day_hours: day as f32,
+                    synchronous_orbit_km: synchronous(day) as f32,
+                    hill_radius_km: hill as f32,
+                    binary: false,
+                    tide: 0.0,
+                    tilt_steadied: false,
+                    moons: Vec::new(),
+                }
+                .with_effects(p),
+            );
         }
 
         let mut candidates = Vec::new();
@@ -500,13 +513,112 @@ impl MoonSystem {
                 }
             })
             .collect();
-        Some(Self {
-            planet_day_hours: day_hours as f32,
-            synchronous_orbit_km: sync_km as f32,
-            hill_radius_km: hill as f32,
-            binary,
-            moons,
-        })
+        Some(
+            Self {
+                planet_day_hours: day_hours as f32,
+                synchronous_orbit_km: sync_km as f32,
+                hill_radius_km: hill as f32,
+                binary,
+                tide: 0.0,
+                tilt_steadied: false,
+                moons,
+            }
+            .with_effects(p),
+        )
+    }
+
+    /// The system with what it does to its planet filled in.
+    fn with_effects(mut self, p: &WorldParams) -> Self {
+        let effects = PlanetEffects::of(p, Some(&self));
+        self.tide = effects.tide;
+        self.tilt_steadied = effects.stabilised;
+        self
+    }
+}
+
+/// Mass ratio from which a moon stabilises its planet's axial tilt (the
+/// Moon: 0.0123; Laskar et al. 1993).
+const STABILISING_MASS_RATIO: f64 = 0.005;
+/// Tidal height of the Moon and of the Sun on Earth, in the units of
+/// [`tidal_height`] (`mass ratio × (radius / distance)³ × radius in Earth
+/// radii`): the Sun's is 0.46 of the Moon's.
+const EARTH_MOON_TIDE: f64 = 0.0123 / (60.27 * 60.27 * 60.27);
+const EARTH_SUN_TIDE: f64 = 0.46 * EARTH_MOON_TIDE;
+/// Range of the shore width, as a share of the preset's: no tides (a
+/// planet locked to its star) to strong ones. It follows the fourth root of
+/// the tides: flats widen with their range, but far more with the slope of
+/// the coast, which the tides do not change.
+const SHORE_FACTOR: (f64, f64) = (0.5, 2.0);
+/// Axial tilt range drawn without a stabilising moon, degrees, in place of
+/// the usual `[5, 40]`: Mars, without one, ranges up to 60° (Laskar &
+/// Robutel 1993).
+pub const UNSTABLE_TILT_DEG: (f32, f32) = (0.0, 60.0);
+
+/// What a world's moons do to it (step 5 of backlog item 13).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlanetEffects {
+    /// A large moon keeps the axial tilt steady.
+    pub stabilised: bool,
+    /// The range of the tides (moons and star), relative to Earth's.
+    pub tide: f32,
+    /// The preset's shore width is multiplied by this: tidal flats widen
+    /// with the tides.
+    pub shore_factor: f32,
+}
+
+/// The tidal height a body of mass `mass_ratio` (relative to the planet's)
+/// raises at `distance_radii` planet radii on a planet of `size` Earth radii.
+fn tidal_height(mass_ratio: f64, distance_radii: f64, size: f64) -> f64 {
+    mass_ratio / distance_radii.powi(3) * size
+}
+
+impl PlanetEffects {
+    /// The effects of `system` (none when moons were turned off) on world
+    /// `p`. Tides only reshape coasts where they come and go: a planet
+    /// locked to its star feels none from it, and a binary's moon, locked
+    /// face to face with it, raises a bulge that never moves.
+    pub fn of(p: &WorldParams, system: Option<&MoonSystem>) -> Self {
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let r_p = f64::from(p.circumference_km) / (2.0 * PI);
+        let size = r_p / EARTH_RADIUS_KM;
+        let m_p = EARTH_MASS_KG * size.powi(3);
+        let moons = system.map_or(&[][..], |s| &s.moons[..]);
+        let stabilised = moons
+            .iter()
+            .any(|m| f64::from(m.mass_ratio) >= STABILISING_MASS_RATIO);
+        let from_moons: f64 = moons
+            .iter()
+            .filter(|m| m.migration != Migration::Locked)
+            .map(|m| {
+                tidal_height(
+                    f64::from(m.mass_ratio),
+                    f64::from(m.semi_major_axis_radii),
+                    size,
+                )
+            })
+            .sum();
+        let from_star = if star.tidally_locked {
+            0.0
+        } else {
+            let star_ratio = f64::from(star.mass) * SUN_MASS_KG / m_p;
+            tidal_height(star_ratio, f64::from(star.orbit_au) * AU_KM / r_p, size)
+        };
+        let tide = (from_moons + from_star) / (EARTH_MOON_TIDE + EARTH_SUN_TIDE);
+        Self {
+            stabilised,
+            tide: tide as f32,
+            shore_factor: tide.powf(0.25).clamp(SHORE_FACTOR.0, SHORE_FACTOR.1) as f32,
+        }
+    }
+
+    /// An axial tilt drawn from `[lo, hi]` (the usual range), moved to
+    /// [`UNSTABLE_TILT_DEG`] when no moon stabilises it.
+    pub fn tilt(&self, drawn: f32, (lo, hi): (f32, f32)) -> f32 {
+        if self.stabilised || hi <= lo {
+            return drawn;
+        }
+        let share = ((drawn - lo) / (hi - lo)).clamp(0.0, 1.0);
+        UNSTABLE_TILT_DEG.0 + share * (UNSTABLE_TILT_DEG.1 - UNSTABLE_TILT_DEG.0)
     }
 }
 
@@ -689,6 +801,67 @@ mod tests {
         }
         assert!(companions > 350, "{companions}");
         assert!(binaries > 50, "{binaries}");
+    }
+
+    #[test]
+    fn moons_steady_the_tilt_and_raise_the_tides() {
+        // Earth with the Moon: Earth's tides, Earth's shores.
+        let earth = params(1, 40_075.0);
+        let moon = Moon {
+            name: "I".into(),
+            origin: MoonOrigin::GiantImpact,
+            composition: Composition::Rock,
+            radius_km: 1737.0,
+            axes_km: [1737.0; 3],
+            round: true,
+            mass_ratio: 0.0123,
+            density: 3.3,
+            gravity: 0.17,
+            semi_major_axis_km: 384_400.0,
+            semi_major_axis_radii: 60.27,
+            eccentricity: 0.05,
+            inclination_deg: 5.0,
+            period_days: 27.3,
+            tidally_locked: true,
+            migration: Migration::Receding,
+            angular_diameter_deg: 0.52,
+            barycentre_km: 4670.0,
+            seed: 0,
+        };
+        let system = |moons: Vec<Moon>| MoonSystem {
+            planet_day_hours: 24.0,
+            synchronous_orbit_km: 42_164.0,
+            hill_radius_km: 1.5e6,
+            binary: false,
+            tide: 0.0,
+            tilt_steadied: false,
+            moons,
+        };
+        let with = PlanetEffects::of(&earth, Some(&system(vec![moon.clone()])));
+        assert!(with.stabilised);
+        assert!((with.tide - 1.0).abs() < 0.05, "{with:?}");
+        assert!((with.shore_factor - 1.0).abs() < 0.03);
+        // Without it: the Sun's tides only, narrower shores, a free tilt.
+        let without = PlanetEffects::of(&earth, Some(&system(Vec::new())));
+        assert!(!without.stabilised);
+        assert!((without.tide - 0.315).abs() < 0.02, "{without:?}");
+        assert!((without.shore_factor - 0.75).abs() < 0.02, "{without:?}");
+        assert_eq!(without.tilt(5.0, (5.0, 40.0)), 0.0);
+        assert_eq!(without.tilt(40.0, (5.0, 40.0)), 60.0);
+        assert_eq!(with.tilt(23.0, (5.0, 40.0)), 23.0);
+        // A binary's moon raises a bulge that never moves.
+        let locked = Moon {
+            migration: Migration::Locked,
+            ..moon
+        };
+        let binary = PlanetEffects::of(&earth, Some(&system(vec![locked])));
+        assert!(binary.stabilised && (binary.tide - without.tide).abs() < 1e-6);
+        // A planet locked to its star has no tides at all.
+        let mut red = params(1, 40_075.0);
+        red.star = crate::star::parse_type("M5V").unwrap();
+        red.orbit_au = crate::star::orbit_at(red.star, 0.5);
+        let still = PlanetEffects::of(&red, None);
+        assert_eq!((still.tide, still.shore_factor), (0.0, 0.5));
     }
 
     #[test]

@@ -284,6 +284,7 @@ impl WorldRequest {
             d.circumference,
             fallback::CIRCUMFERENCE_KM,
         );
+        let tilt_drawn = self.axial_tilt_deg.is_none() && d.axial_tilt.is_none();
         let axial_tilt_deg = pick(self.axial_tilt_deg, d.axial_tilt, fallback::AXIAL_TILT_DEG);
         let erosion_set = self.erosion.is_some() || d.erosion.is_some();
         let erosion = pick(self.erosion, d.erosion, fallback::EROSION);
@@ -348,6 +349,17 @@ impl WorldRequest {
             moons: self.moons.unwrap_or_default(),
             shape: None,
         };
+        // What the moons do to their planet: a large one keeps a drawn tilt
+        // in the usual range (a free one ranges wider), and the tides
+        // (moons and star) widen or narrow the tidal flats. Applied to the
+        // parameters, so `world.json` (its tilt, its preset's shore width)
+        // explains the world as generated.
+        let system = crate::moons::MoonSystem::draw(&params);
+        let effects = crate::moons::PlanetEffects::of(&params, system.as_ref());
+        if tilt_drawn && let ParamDefault::Range(range) = fallback::AXIAL_TILT_DEG {
+            params.axial_tilt_deg = effects.tilt(params.axial_tilt_deg, (range[0], range[1]));
+        }
+        params.planet.rules.shore_width_km *= effects.shore_factor;
         if let Some(fraction) = land_fraction {
             params.sea_level = crate::generation::sea_level_for_land_fraction(&params, fraction);
         }
@@ -531,7 +543,8 @@ mod tests {
         let resolved = WorldRequest::default().resolve(&mut rand::rng()).unwrap();
         let p = resolved.params;
         assert!((0.10..0.40).contains(&p.sea_level));
-        assert!((5.0..40.0).contains(&p.axial_tilt_deg));
+        // 5 to 40°, or 0 to 60° without a moon to steady it.
+        assert!((0.0..=60.0).contains(&p.axial_tilt_deg));
         // The planet is random: its preset may set its own range.
         assert!(SURFACE_AGE_GA.contains(p.surface_age_ga));
         assert_eq!((p.width, p.height), (1920, 1080));
@@ -560,5 +573,56 @@ mod tests {
         for request in bad {
             assert!(request.resolve(&mut rand::rng()).is_err(), "{request:?}");
         }
+    }
+
+    #[test]
+    fn moons_steady_the_drawn_tilt_and_set_the_shores() {
+        let (mut free, mut steady) = (0, 0);
+        for seed in 0..400 {
+            let request = WorldRequest {
+                planet: Some("terran".into()),
+                seed: Some(seed),
+                circumference_km: Some(40_075.0),
+                star: Some("G2V".into()),
+                orbit_au: Some(1.0),
+                eccentricity: Some(0.0),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            };
+            let p = request.resolve(&mut rand::rng()).unwrap().params;
+            let system = crate::moons::MoonSystem::draw(&p).unwrap();
+            let effects = crate::moons::PlanetEffects::of(&p, Some(&system));
+            assert!((p.planet.rules.shore_width_km - 40.0 * effects.shore_factor).abs() < 1e-3);
+            if effects.stabilised {
+                steady += 1;
+                assert!(
+                    (5.0..=40.0).contains(&p.axial_tilt_deg),
+                    "{}",
+                    p.axial_tilt_deg
+                );
+            } else {
+                free += usize::from(!(5.0..=40.0).contains(&p.axial_tilt_deg));
+            }
+        }
+        // Most Earths have no large moon: their tilt ranges from 0 to 60°.
+        assert!(steady > 10 && free > 100, "{steady} {free}");
+        // A tilt asked for stays.
+        let asked = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(1),
+            axial_tilt_deg: Some(55.0),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        };
+        assert_eq!(
+            asked
+                .resolve(&mut rand::rng())
+                .unwrap()
+                .params
+                .axial_tilt_deg,
+            55.0
+        );
     }
 }

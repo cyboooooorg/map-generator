@@ -42,15 +42,20 @@ const PLANET: Vec3 = [0.35, 0.45, 0.6];
  * Direction of a moon from its planet's centre, in the planet's frame:
  * full when the season starts (opposite the sun's longitude), the next
  * ones spread around the orbit, each going round at its period relative
- * to the year as the seasons turn.
+ * to the year as the seasons turn; a binary's moon stays put.
  */
 export function moonDirection(
-  moon: Pick<Moon, 'inclination_deg' | 'period_days'>,
+  moon: Pick<Moon, 'inclination_deg' | 'period_days' | 'migration'>,
   index: number,
   season: number,
   yearDays: number,
   sunLongitudeRad: number,
 ): Vec3 {
+  // A binary: the planet turns with its moon, which hangs over the same
+  // point, at longitude 180° (as a moon keeps its planet there).
+  if (moon.migration === 'locked') {
+    return [0, 0, -1];
+  }
   const turns = (season * yearDays) / Math.max(moon.period_days, 1e-3);
   const theta = sunLongitudeRad + Math.PI + index * 2.4 + 2 * Math.PI * turns;
   const tilt = (moon.inclination_deg * Math.PI) / 180;
