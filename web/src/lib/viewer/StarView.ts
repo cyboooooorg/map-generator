@@ -28,7 +28,17 @@ import { fullPixelRatio } from './pixelRatio';
 import { starsFragment, starsVertex } from './shaders';
 import { glowFragment, glowVertex, starSurfaceFragment, starSurfaceVertex } from './starShaders';
 import { starField } from './stars';
-import { STAR_RADIUS, starSurface, systemScale } from './starSystem';
+import { keplerPosition, orbitDistance, STAR_RADIUS, starSurface, systemScale } from './starSystem';
+
+/** Screen positions (CSS px) of the points the distances option labels, null when off screen. */
+export interface SystemLabels {
+  /** The planet now, and its distance from the star (AU). */
+  planet: { x: number; y: number; au: number } | null;
+  periapsis: { x: number; y: number } | null;
+  apoapsis: { x: number; y: number } | null;
+  inner: { x: number; y: number } | null;
+  outer: { x: number; y: number } | null;
+}
 
 /** Redraw interval while the star is animated, ms. */
 const FRAME_MS = 100;
@@ -50,7 +60,15 @@ export class StarView {
   private frame: number | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private time = 0;
-  private orbitRadius = 3;
+  private info: StarInfo | null = null;
+  /** Orientation of the periapsis in the orbital plane, radians. */
+  private omega = 0;
+  private at: (au: number) => number = (au) => au;
+  private distancesOn = false;
+  private readonly link: Line<BufferGeometry, LineBasicMaterial>;
+  private readonly apsides: Mesh<SphereGeometry, MeshBasicMaterial>[];
+  /** Called after each frame with the labelled points, while distances are shown. */
+  onLabels: (labels: SystemLabels | null) => void = () => {};
   private disposed = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -136,6 +154,19 @@ export class StarView {
     this.scene.add(this.orbit);
     this.planet = new Mesh(new SphereGeometry(0.11, 32, 16), new MeshBasicMaterial({ color: '#7fb2ff' }));
     this.scene.add(this.planet);
+    // Distances: the star–planet line and the periapsis and apoapsis.
+    this.link = new Line(
+      new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]),
+      new LineBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.85 }),
+    );
+    this.link.visible = false;
+    this.scene.add(this.link);
+    this.apsides = [0, 1].map(() => {
+      const marker = new Mesh(new SphereGeometry(0.05, 16, 8), new MeshBasicMaterial({ color: '#ffd27a' }));
+      marker.visible = false;
+      this.scene.add(marker);
+      return marker;
+    });
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
@@ -143,8 +174,10 @@ export class StarView {
     this.resetView();
   }
 
-  /** Shows a world's star and system. */
-  setStar(info: StarInfo): void {
+  /** Shows a world's star and system; `omega` orients the orbit's periapsis (radians). */
+  setStar(info: StarInfo, omega = 0): void {
+    this.info = info;
+    this.omega = omega;
     const u = this.star.material.uniforms;
     (u['uColor']!.value as Vector3).set(...info.light);
     (this.glow.material.uniforms['uColor']!.value as Vector3).set(...info.light);
@@ -158,11 +191,27 @@ export class StarView {
     this.glow.material.uniforms['uStrength']!.value = Math.min(1.4, 0.6 + 0.12 * Math.log10(info.luminosity + 1e-4) + 0.5);
 
     const at = systemScale(info);
+    this.at = at;
     this.zone.geometry.dispose();
     this.zone.geometry = new RingGeometry(at(info.hz_inner_au), at(info.hz_outer_au), 128);
-    this.orbitRadius = at(info.orbit_au);
-    this.orbit.scale.setScalar(this.orbitRadius);
+    // The ellipse, the star at a focus.
+    const e = info.eccentricity ?? 0;
+    this.orbit.geometry.dispose();
+    this.orbit.geometry = new BufferGeometry().setFromPoints(
+      Array.from({ length: 361 }, (_, i) => this.inPlane((i / 360) * 2 * Math.PI, info.orbit_au * orbitDistance(e, (i / 360) * 2 * Math.PI))),
+    );
+    this.apsides[0]!.position.copy(this.inPlane(0, info.orbit_au * (1 - e)));
+    this.apsides[1]!.position.copy(this.inPlane(Math.PI, info.orbit_au * (1 + e)));
     this.placePlanet();
+    this.requestRender();
+  }
+
+  /** Shows the star–planet line, the periapsis and apoapsis, and reports their places (see onLabels). */
+  setDistances(on: boolean): void {
+    this.distancesOn = on;
+    this.link.visible = on;
+    for (const marker of this.apsides) marker.visible = on;
+    if (!on) this.onLabels(null);
     this.requestRender();
   }
 
@@ -199,7 +248,7 @@ export class StarView {
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.controls.dispose();
-    for (const object of [this.star, this.glow, this.zone, this.orbit, this.planet, this.sky]) {
+    for (const object of [this.star, this.glow, this.zone, this.orbit, this.planet, this.sky, this.link, ...this.apsides]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -207,10 +256,34 @@ export class StarView {
     this.renderer.forceContextLoss();
   }
 
+  /** A point of the orbital plane at a true anomaly and distance (AU), in view units. */
+  private inPlane(trueAnomaly: number, au: number): Vector3 {
+    const angle = trueAnomaly + this.omega;
+    const r = this.at(au);
+    return new Vector3(Math.cos(angle) * r, 0, -Math.sin(angle) * r);
+  }
+
+  /** Distance of the planet from the star now, AU. */
+  private planetAu = 1;
+
   private placePlanet(): void {
-    // A turn in a minute when animated: not the real year.
-    const angle = 0.6 + this.time * ((2 * Math.PI) / 60);
-    this.planet.position.set(Math.cos(angle) * this.orbitRadius, 0, -Math.sin(angle) * this.orbitRadius);
+    if (!this.info) return;
+    // A turn in a minute when animated (not the real year), at Kepler's
+    // pace: faster near the star.
+    const e = this.info.eccentricity ?? 0;
+    const { trueAnomaly, distance } = keplerPosition(e, 0.6 + this.time * ((2 * Math.PI) / 60));
+    this.planetAu = this.info.orbit_au * distance;
+    this.planet.position.copy(this.inPlane(trueAnomaly, this.planetAu));
+    const points = this.link.geometry.getAttribute('position') as BufferAttribute;
+    points.setXYZ(1, this.planet.position.x, this.planet.position.y, this.planet.position.z);
+    points.needsUpdate = true;
+  }
+
+  /** Screen position of a point of the scene, CSS px, or null behind the camera. */
+  private screen(point: Vector3): { x: number; y: number } | null {
+    const p = point.clone().project(this.camera);
+    if (p.z > 1) return null;
+    return { x: ((p.x + 1) / 2) * this.canvas.clientWidth, y: ((1 - p.y) / 2) * this.canvas.clientHeight };
   }
 
   private resize(): void {
@@ -237,6 +310,19 @@ export class StarView {
     // The glow faces the camera.
     this.glow.quaternion.copy(this.camera.quaternion);
     this.renderer.render(this.scene, this.camera);
+    if (this.distancesOn && this.info) {
+      // The zone's edges are labelled across the apsides line, away from
+      // the periapsis and apoapsis labels.
+      const edge = (au: number) => this.screen(this.inPlane(Math.PI / 2, au));
+      const planet = this.screen(this.planet.position);
+      this.onLabels({
+        planet: planet && { ...planet, au: this.planetAu },
+        periapsis: this.screen(this.apsides[0]!.position),
+        apoapsis: this.screen(this.apsides[1]!.position),
+        inner: edge(this.info.hz_inner_au),
+        outer: edge(this.info.hz_outer_au),
+      });
+    }
     if (moving) {
       this.requestRender();
     }

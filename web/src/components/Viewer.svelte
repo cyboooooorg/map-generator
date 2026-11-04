@@ -23,7 +23,7 @@
   import { cssGradient } from '../lib/viewer/colormaps';
   import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
-  import { SUN_SYSTEM } from '../lib/viewer/starSystem';
+  import { periapsisAngle, SUN_SYSTEM } from '../lib/viewer/starSystem';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -134,6 +134,7 @@
   /** What the viewer shows: the planet, or its star and system. */
   let subject = $state<'planet' | 'star'>('planet');
   let starAnimated = $state(false);
+  let starDistances = $state(false);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
@@ -791,7 +792,13 @@
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={subject === 'star'}></canvas>
   {#if subject === 'star' && worldId}
-    <StarPane bind:this={starPane} star={meta?.star ?? SUN_SYSTEM} bind:animated={starAnimated} />
+    <StarPane
+      bind:this={starPane}
+      star={meta?.star ?? SUN_SYSTEM}
+      omega={periapsisAngle(meta?.seed ?? 0)}
+      bind:animated={starAnimated}
+      bind:distances={starDistances}
+    />
   {/if}
 
   <div class="toolbar" role="toolbar" aria-label={t.viewer.tools}>

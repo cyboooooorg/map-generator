@@ -35,9 +35,37 @@ export const STAR_RADIUS = 1;
  * just outside the star (which is not to scale) and fitting the farthest of
  * the orbit and the zone's outer edge within `span`.
  */
-export function systemScale(star: Pick<StarInfo, 'orbit_au' | 'hz_outer_au'>, span = 6): (au: number) => number {
-  const farthest = Math.max(star.orbit_au, star.hz_outer_au) * 1.15;
+export function systemScale(star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>, span = 6): (au: number) => number {
+  const farthest = Math.max(star.apoapsis_au, star.hz_outer_au) * 1.15;
   return (au) => STAR_RADIUS * 1.6 + (span * au) / farthest;
+}
+
+/**
+ * Where a planet is on its orbit at `meanAnomaly` (radians, growing evenly
+ * with time): its true anomaly (the angle from the periapsis, seen from the
+ * star) and its distance as a share of the semi-major axis, from Kepler's
+ * equation `M = E − e sin E`, solved by Newton's method. Faster near the
+ * star, slower far from it.
+ */
+export function keplerPosition(eccentricity: number, meanAnomaly: number): { trueAnomaly: number; distance: number } {
+  const e = eccentricity;
+  let anomaly = e < 0.8 ? meanAnomaly : Math.PI;
+  for (let i = 0; i < 12; i += 1) {
+    anomaly -= (anomaly - e * Math.sin(anomaly) - meanAnomaly) / (1 - e * Math.cos(anomaly));
+  }
+  const trueAnomaly =
+    2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(anomaly / 2), Math.sqrt(1 - e) * Math.cos(anomaly / 2));
+  return { trueAnomaly, distance: 1 - e * Math.cos(anomaly) };
+}
+
+/** Distance from the star at a true anomaly, as a share of the semi-major axis: `(1 − e²) / (1 + e cos ν)`. */
+export function orbitDistance(eccentricity: number, trueAnomaly: number): number {
+  return (1 - eccentricity ** 2) / (1 + eccentricity * Math.cos(trueAnomaly));
+}
+
+/** Orientation of a world's orbit in the view (its periapsis), radians, from its seed: only a look. */
+export function periapsisAngle(seed: number): number {
+  return ((seed * 0.618_033_988_75) % 1) * 2 * Math.PI;
 }
 
 /** The Sun and Earth, for worlds made before stars. */

@@ -4,7 +4,7 @@
   import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatAu, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
@@ -118,6 +118,8 @@
           >
             {formatOrbit(star)}
           </dd>
+          <dt>{t.worldInfo.eccentricity}</dt>
+          <dd class="unit-help" title={unitTooltip('AU')}>{formatEccentricity(star)}</dd>
           <dt>{t.worldInfo.light}</dt>
           <dd>{formatStarlight(star)}</dd>
           <dt>{t.worldInfo.year}</dt>

@@ -18,7 +18,11 @@ hz_position: ParamSpec,
 /**
  * Limits of `orbit_au`, the alternative to `hz_position`.
  */
-orbit_au: Limits, default_width: number, default_height: number, 
+orbit_au: Limits, 
+/**
+ * Limits of the orbit's eccentricity.
+ */
+eccentricity: Limits, default_width: number, default_height: number, 
 /**
  * Largest width or height the server accepts.
  */
