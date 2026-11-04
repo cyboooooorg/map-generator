@@ -299,6 +299,7 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         eccentricity: request::ECCENTRICITY,
         moon_count: request::MOON_COUNT,
         metallicity: request::METALLICITY,
+        giant_mass: request::GIANT_MASS,
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,
         max_size: MAX_SIZE,
