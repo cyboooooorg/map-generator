@@ -418,6 +418,35 @@ A world could be a moon of a giant rather than a planet of the star:
 Planned in detail once A is in, from what it settles (the giant's data,
 the system scale of the star view).
 
+## Outcome
+
+### Step A (2026-11-04)
+
+Built as planned, with these choices:
+
+- **Impact rate:** the curve of Horner & Jones is moderated (0.7 without a
+  giant, 1.8 at its peak, rather than their wider range), so crater
+  counts stay close to today's calibration; worlds with `--giants none`
+  and worlds made before giants keep the Solar System's rate exactly,
+  so their detail tiles and epochs match their base maps.
+- **Forced eccentricity:** only a drawn eccentricity is raised to it
+  (a value set by the request or the preset is kept); a locked planet
+  keeps its circular orbit. The giants are placed around the final
+  orbit (the request redraws them after raising it, a few times at
+  most).
+- **Star view:** the world's system keeps its scale; beyond it, behind a
+  dashed circle, distances grow logarithmically, the farthest giant 3.5
+  view units further out. Hot Jupiters sit just outside the star's
+  disk, which is not to scale.
+- **Sky:** the giants are not drawn in the planet view's sky yet. Seen
+  from a rocky neighbour a giant is a point of light; drawing one needs
+  the ecliptic in the planet's frame, which step C (the giant in the sky
+  of its moon) brings anyway.
+- **Measured** (4 000 seeds, Sun-like star, the Sun's metallicity): about
+  0.2 gas giants per star, over three quarters beyond 1 AU, a hot
+  Jupiter around about 1 % of stars; around an M4 dwarf less than half
+  as many; at `[Fe/H] = +0.3`, more than twice as many.
+
 ## Sources
 
 - NASA Goddard, planetary fact sheets (Jupiter, Saturn, Uranus,

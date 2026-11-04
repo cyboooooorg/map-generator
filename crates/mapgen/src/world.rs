@@ -51,6 +51,12 @@ pub struct WorldParams {
     /// round) as shares of its mean radius, the first towards longitude
     /// 180°, the last along the axis of rotation; `None` for a round one.
     pub shape: Option<[f32; 3]>,
+    /// Metallicity of the star, `[Fe/H]` in dex (0 the Sun's): sets how
+    /// likely giant planets are.
+    pub metallicity: f32,
+    /// Whether the world has the giant planets its seed draws (see
+    /// `crate::giants`).
+    pub giants: crate::giants::GiantsMode,
 }
 
 impl WorldParams {

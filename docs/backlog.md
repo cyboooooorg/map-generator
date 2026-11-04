@@ -397,7 +397,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 14. Giant planets
 
-- **Status:** studied
+- **Status:** step A done
 - **Analysis:** [12-gas-giants.md](analysis/12-gas-giants.md)
 - **Problem:** every world is a rocky or icy body alone around its star:
   no giant planet in its system, no giant world to generate, and no
@@ -414,3 +414,9 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   each; giant worlds of every kind (cold Jupiters and Saturns, ice
   giants, hot Jupiters, rings); a star metallicity, drawn and settable;
   Earth-sized moons of giants rare when drawn, free in the form.
+- **Step A (2026-11-04):** giant neighbours drawn in each world's system
+  (`src/giants.rs`): a star metallicity (drawn, or set), gas and ice
+  giants and hot Jupiters at the observed odds, kept clear of the world
+  by Hill spacing; they raise a drawn eccentricity to the one they force
+  and set the crater rate; shown in the star view (compressed beyond the
+  world's system), its panel and the world card; `world.json` format 10.

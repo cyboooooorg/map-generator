@@ -1,6 +1,7 @@
 use clap::Parser;
 use mapgen::export::{ExportOptions, NoiseMapWriter, export_moons, export_world, world_dir_name};
 use mapgen::generation::{GenerateOptions, generate_with_progress};
+use mapgen::giants::{GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES};
 use mapgen::moons::{MoonOrigin, MoonSystem, MoonsMode};
 use mapgen::preset::Preset;
 use mapgen::request::{self, Limits, WorldRequest};
@@ -100,6 +101,18 @@ struct Args {
     #[arg(long)]
     moons: Option<MoonsMode>,
 
+    /// Metallicity of the star, [Fe/H] in dex, in [-1, 0.5]: 0 the Sun's;
+    /// every 0.1 dex more makes gas giants about 1.6 times more likely
+    /// [default: from the preset, else drawn like the stars nearby]
+    #[arg(long, allow_hyphen_values = true, value_parser = parse_in(request::METALLICITY))]
+    metallicity: Option<f32>,
+
+    /// Giant planets in the system: `auto`, those the seed draws (about one
+    /// Sun-like star in four has a gas giant, fewer around red dwarfs, more
+    /// around metal-rich stars), or `none`, not modelled [default: auto]
+    #[arg(long)]
+    giants: Option<GiantsMode>,
+
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]
     #[arg(long, value_parser = parse_in(request::EROSION))]
     erosion: Option<f32>,
@@ -181,6 +194,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         eccentricity: args.eccentricity,
         drift_ma: args.drift,
         moons: args.moons,
+        metallicity: args.metallicity,
+        giants: args.giants,
         width: Some(args.width),
         height: Some(args.height),
     };
@@ -216,6 +231,9 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
 
     if let Some(system) = MoonSystem::draw(p) {
         println!("Moons → {}", moons_summary(&system));
+    }
+    if let Some(system) = GiantSystem::draw(p) {
+        println!("Giants → {}", giants_summary(&system, p.metallicity));
     }
     let name = world_dir_name(p);
     let dir = args.out_dir.join(if p.drift_ma == 0.0 {
@@ -259,7 +277,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
          --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
-         --star {} --orbit-au {} --eccentricity {}{}{} --width {} --height {}",
+         --star {} --orbit-au {} --eccentricity {} --metallicity {}{}{}{} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -272,10 +290,16 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         star.kind,
         p.orbit_au,
         p.eccentricity,
+        p.metallicity,
         if p.drift_ma == 0.0 {
             String::new()
         } else {
             format!(" --drift {}", p.drift_ma)
+        },
+        if p.giants == GiantsMode::None {
+            " --giants none"
+        } else {
+            ""
         },
         if p.moons == MoonsMode::None {
             " --moons none"
@@ -286,6 +310,38 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.height
     );
     Ok(())
+}
+
+/// One line on a system's giants: each one's letter, kind, mass and orbit,
+/// and what they do to the world.
+fn giants_summary(system: &GiantSystem, metallicity: f32) -> String {
+    let giants = if system.giants.is_empty() {
+        "none".to_string()
+    } else {
+        system
+            .giants
+            .iter()
+            .map(|g| {
+                format!(
+                    "{} ({}{}, {:.2} MJ, {:.2} AU, e={:.2})",
+                    g.name,
+                    if g.hot { "hot " } else { "" },
+                    match g.kind {
+                        GiantKind::Gas => "gas giant",
+                        GiantKind::Ice => "ice giant",
+                    },
+                    g.mass_earth / JUPITER_EARTH_MASSES,
+                    g.orbit_au,
+                    g.eccentricity,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!(
+        "{giants}; [Fe/H]={metallicity:+.2}, forced e={:.3}, impacts ×{:.2}",
+        system.forced_eccentricity, system.impact_factor
+    )
 }
 
 /// One line on a world's moons: each one's name, origin, size and orbit.

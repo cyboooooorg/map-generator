@@ -54,6 +54,8 @@ pub struct FormSpec {
     pub orbit_au: Limits,
     /// Limits of the orbit's eccentricity.
     pub eccentricity: Limits,
+    /// Limits of the star's metallicity (dex).
+    pub metallicity: Limits,
     pub default_width: u32,
     pub default_height: u32,
     /// Largest width or height the server accepts.

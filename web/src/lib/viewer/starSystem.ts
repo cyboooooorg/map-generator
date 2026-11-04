@@ -1,6 +1,7 @@
 // What the star view draws, from a world's star: the look of its surface
 // and the layout of its system.
 import type { Moon } from '../api/types/Moon';
+import type { Giant } from '../api/types/Giant';
 import type { StarInfo } from '../api/types/StarInfo';
 
 /** The surface of a star as the star view draws it (see starSurfaceFragment). */
@@ -36,9 +37,37 @@ export const STAR_RADIUS = 1;
  * just outside the star (which is not to scale) and fitting the farthest of
  * the orbit and the zone's outer edge within `span`.
  */
-export function systemScale(star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>, span = 6): (au: number) => number {
-  const farthest = Math.max(star.apoapsis_au, star.hz_outer_au) * 1.15;
-  return (au) => STAR_RADIUS * 1.6 + (span * au) / farthest;
+export function systemScale(
+  star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>,
+  giants: Pick<Giant, 'orbit_au' | 'eccentricity'>[] = [],
+  span = 6,
+): (au: number) => number {
+  const farthest = compressedFrom(star);
+  const linear = (au: number) => STAR_RADIUS * 1.6 + (span * au) / farthest;
+  const outer = Math.max(farthest, ...giants.map((g) => g.orbit_au * (1 + g.eccentricity)));
+  if (outer <= farthest) return linear;
+  // Beyond the world's system, giants far out (tens of AU) would squash it
+  // to a dot: their distances are compressed logarithmically, the farthest
+  // GIANT_REACH further out, never growing faster than the linear part.
+  const k = Math.min(span, GIANT_REACH / Math.log(outer / farthest));
+  return (au) => (au <= farthest ? linear(au) : linear(farthest) + k * Math.log(au / farthest));
+}
+
+/** Where the star view starts compressing distances, AU: just beyond the world's orbit and the habitable zone. */
+export function compressedFrom(star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>): number {
+  return Math.max(star.apoapsis_au, star.hz_outer_au) * 1.15;
+}
+
+/** View units the farthest giant lies beyond the start of the compression. */
+const GIANT_REACH = 3.5;
+
+/**
+ * Size of a giant's marker in the star view (view units), from its radius
+ * in Earth radii: larger than the world's, growing slowly (Neptune about
+ * 1.3 times the world's marker, Jupiter about 1.6 times).
+ */
+export function giantMarkerSize(radiusEarth: number): number {
+  return PLANET_MARKER * Math.min(2.2, Math.max(1, 0.8 + 0.35 * Math.log(radiusEarth)));
 }
 
 /**
@@ -169,6 +198,7 @@ export const SUN_SYSTEM: StarInfo = {
   locking_gyr: 166,
   tidally_locked: false,
   light: [1, 1, 1],
+  metallicity: 0,
 };
 
 /** A moon as the star view draws it around its planet (not to scale). */

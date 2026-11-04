@@ -144,6 +144,10 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     // A world whose moons were turned off (one made before moons has none
     // either; regenerated, it gets those its seed draws).
     ...(meta.moons == null && meta.format_version >= 9 ? { moons: 'none' as const } : {}),
+    // The star's metallicity, and giants turned off (worlds made before
+    // them have neither; regenerated, they get those their seed draws).
+    ...(meta.format_version >= 10 ? { metallicity: round(meta.star?.metallicity ?? 0, 4) } : {}),
+    ...(meta.giants == null && meta.format_version >= 10 ? { giants: 'none' as const } : {}),
     width: meta.width,
     height: meta.height,
   };
@@ -171,6 +175,8 @@ export function cliCommand(meta: WorldMetadata): string {
     `--eccentricity ${r.eccentricity}`,
     ...(r.drift_ma === undefined ? [] : [`--drift=${r.drift_ma}`]),
     ...(r.moons === undefined ? [] : [`--moons ${r.moons}`]),
+    ...(r.metallicity === undefined ? [] : [`--metallicity=${r.metallicity}`]),
+    ...(r.giants === undefined ? [] : [`--giants ${r.giants}`]),
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
+import { compressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -47,6 +47,22 @@ describe('star view', () => {
     const old = { ...SUN_SYSTEM, eccentricity: undefined, periapsis_au: undefined, apoapsis_au: undefined } as unknown as typeof SUN_SYSTEM;
     const star = withOrbitDefaults({ ...old, orbit_au: 0.5 });
     expect([star.eccentricity, star.periapsis_au, star.apoapsis_au]).toEqual([0, 0.5, 0.5]);
+  });
+
+  it('compresses distances beyond the world only when giants lie there', () => {
+    const star = { apoapsis_au: 1.1, hz_outer_au: 1.7 };
+    const plain = systemScale(star);
+    const far = systemScale(star, [{ orbit_au: 30, eccentricity: 0.1 }]);
+    // The world's system keeps its scale.
+    for (const au of [0.1, 1, 1.9]) expect(far(au)).toBeCloseTo(plain(au), 10);
+    // Beyond, the farthest giant lands 3.5 units further, and order is kept.
+    const from = compressedFrom(star);
+    expect(far(33) - far(from)).toBeCloseTo(3.5, 5);
+    expect(far(5)).toBeLessThan(far(10));
+    expect(far(10)).toBeLessThan(plain(10));
+    // A close giant leaves the scale linear.
+    expect(systemScale(star, [{ orbit_au: 0.05, eccentricity: 0 }])(1)).toBeCloseTo(plain(1), 10);
+    expect(giantMarkerSize(11.2)).toBeGreaterThan(giantMarkerSize(3.9));
   });
 
   it('gives orbital speeds by the vis-viva equation', () => {
