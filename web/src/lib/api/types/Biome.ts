@@ -6,4 +6,4 @@
  * The discriminant is the biome id written to `raw_data/biomes.png`: never
  * reorder or remove variants, only append new ones.
  */
-export type Biome = "DeepOcean" | "Ocean" | "Beach" | "Wetland" | "IceCap" | "Tundra" | "Taiga" | "Shrubland" | "Plain" | "Forest" | "Savanna" | "Desert" | "Jungle" | "Mountain" | "Snow" | "Volcano" | "LavaField" | "AshLand" | "MagmaSea" | "ScorchedWaste" | "FrozenOcean" | "GlacialPlain" | "CausticLake" | "ToxicSwamp" | "AcidFlatland" | "RockyWaste" | "DustPlain" | "SeaIce" | "Lake" | "River" | "AcidSea" | "DeepAcidSea" | "AcidRiver" | "AcidShore" | "FrozenLake";
+export type Biome = "DeepOcean" | "Ocean" | "Beach" | "Wetland" | "IceCap" | "Tundra" | "Taiga" | "Shrubland" | "Plain" | "Forest" | "Savanna" | "Desert" | "Jungle" | "Mountain" | "Snow" | "Volcano" | "LavaField" | "AshLand" | "MagmaSea" | "ScorchedWaste" | "FrozenOcean" | "GlacialPlain" | "CausticLake" | "ToxicSwamp" | "AcidFlatland" | "RockyWaste" | "DustPlain" | "SeaIce" | "Lake" | "River" | "AcidSea" | "DeepAcidSea" | "AcidRiver" | "AcidShore" | "FrozenLake" | "GiantZone" | "GiantBelt" | "GiantStorm" | "GiantPolar";

@@ -676,6 +676,7 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
         shape: (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
         metallicity: planet.metallicity,
         giants: crate::giants::GiantsMode::None,
+        giant_mass_earth: None,
     }
 }
 
@@ -740,6 +741,7 @@ mod tests {
             shape: None,
             metallicity: 0.0,
             giants: crate::giants::GiantsMode::None,
+            giant_mass_earth: None,
         }
     }
 

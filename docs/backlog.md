@@ -397,7 +397,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 14. Giant planets
 
-- **Status:** step A done
+- **Status:** steps A and B done
 - **Analysis:** [12-gas-giants.md](analysis/12-gas-giants.md)
 - **Problem:** every world is a rocky or icy body alone around its star:
   no giant planet in its system, no giant world to generate, and no
@@ -420,3 +420,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   by Hill spacing; they raise a drawn eccentricity to the one they force
   and set the crater rate; shown in the star view (compressed beyond the
   world's system), its panel and the world card; `world.json` format 10.
+- **Step B (2026-11-04):** giant worlds of their own: `gas-giant`,
+  `ice-giant` and `hot-jupiter` presets generating cloud bands (Rhines
+  jets, storms, polar hazes, Sudarsky colours) in the format of a world;
+  the viewer flattens the globe, draws rings, drifts the bands with their
+  winds and shows winds and cloud-top temperatures on their own ranges.

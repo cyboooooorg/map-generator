@@ -4,7 +4,7 @@
 /** A colour stop: position in [0, 1] and an sRGB colour. */
 type Stop = readonly [number, readonly [number, number, number]];
 
-export type DataLayer = 'elevation' | 'temperature' | 'moisture' | 'flow' | 'volcanic' | 'coast' | 'floodplain';
+export type DataLayer = 'elevation' | 'temperature' | 'moisture' | 'flow' | 'volcanic' | 'coast' | 'floodplain' | 'wind';
 
 /** A ramp's stops; its legend texts are in the i18n catalog (`legends`). */
 export interface Ramp {
@@ -68,6 +68,17 @@ export const RAMPS: Record<DataLayer, Ramp> = {
       [0.25, [110, 200, 190]],
       [0.6, [60, 110, 160]],
       [1.0, [40, 25, 70]],
+    ],
+  },
+  // A giant's wind, t = (share of the strongest + 1) / 2: westward blue,
+  // calm white, eastward red.
+  wind: {
+    stops: [
+      [0.0, [40, 70, 170]],
+      [0.3, [120, 170, 225]],
+      [0.5, [240, 240, 235]],
+      [0.7, [235, 150, 100]],
+      [1.0, [170, 35, 40]],
     ],
   },
   // Raw_data format version 3 and later.

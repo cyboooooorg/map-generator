@@ -57,6 +57,9 @@ pub struct WorldParams {
     /// Whether the world has the giant planets its seed draws (see
     /// `crate::giants`).
     pub giants: crate::giants::GiantsMode,
+    /// Mass of a giant planet, Earth masses: `Some` for a giant (its preset
+    /// has a `[giant]` table, see `crate::giant_world`), `None` otherwise.
+    pub giant_mass_earth: Option<f32>,
 }
 
 impl WorldParams {
@@ -65,6 +68,11 @@ impl WorldParams {
     /// Assumes constant density, so gravity scales linearly with radius (and
     /// thus circumference). Clamped to a plausible range for rocky planets.
     pub fn gravity_modifier(&self) -> f32 {
+        // A giant: its own mass over its radius squared.
+        if let Some(mass) = self.giant_mass_earth {
+            let radius = self.circumference_km / EARTH_CIRCUMFERENCE_KM;
+            return mass / (radius * radius);
+        }
         (self.circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0)
     }
 
@@ -126,6 +134,10 @@ pub struct World {
     /// Cloud cover in `[0, 1]`, empty for a world without clouds (or
     /// reloaded from `raw_data`, where the viewer reads it).
     pub clouds: Vec<f32>,
+    /// The rendered colours, sRGB: a giant world's cloud bands (see
+    /// `crate::giant_world`); empty for a rocky world, whose render comes
+    /// from its biomes and relief.
+    pub surface: Vec<[u8; 3]>,
 }
 
 impl World {

@@ -102,6 +102,10 @@ pub struct WorldMetadata {
     /// them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub giants: Option<crate::giants::GiantSystem>,
+    /// What a giant world is (its mass, radius, spin, winds, colours and
+    /// rings); left out for a rocky world.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub giant: Option<crate::giant_world::GiantInfo>,
     /// The semi-axes of an irregular body, as shares of its mean radius
     /// (see `WorldParams::shape`); left out for a round one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -420,6 +424,7 @@ pub fn export_raw_data(
         drift_ma: world.params.drift_ma,
         moons: crate::moons::MoonSystem::draw(&world.params),
         giants: crate::giants::GiantSystem::draw(&world.params),
+        giant: crate::giant_world::info(&world.params),
         shape: world.params.shape,
         layers: Layers {
             elevation,
@@ -441,7 +446,7 @@ pub fn export_raw_data(
             },
         },
         rivers: Some(RIVERS_FILE.into()),
-        biomes: biome_table(),
+        biomes: biome_table_for(&world.params),
     };
     let rivers = RiversFile::from_lines(&world.rivers, w, h);
     std::fs::write(dir.join(RIVERS_FILE), serde_json::to_string(&rivers)?)?;
@@ -450,6 +455,21 @@ pub fn export_raw_data(
         serde_json::to_string_pretty(&metadata)?,
     )?;
     Ok(())
+}
+
+/// The biome table of the world `p`: [`biome_table`], with a giant's own
+/// colours for its band biomes.
+pub fn biome_table_for(p: &WorldParams) -> Vec<BiomeInfo> {
+    let mut table = biome_table();
+    if let Some(colours) = crate::giant_world::biome_colours(p) {
+        let hex = |[r, g, b]: [u8; 3]| format!("#{r:02X}{g:02X}{b:02X}");
+        for (biome, colour) in colours {
+            let entry = &mut table[biome.id() as usize];
+            entry.color = hex(colour);
+            entry.surface_color = hex(colour);
+        }
+    }
+    table
 }
 
 /// Every biome, in id order: the `biomes` table of `world.json`.
@@ -736,6 +756,7 @@ impl LoadedWorld {
             biomes: self.biomes,
             rivers: self.rivers,
             clouds: Vec::new(),
+            surface: Vec::new(),
         }
     }
 }
@@ -797,6 +818,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         } else {
             crate::giants::GiantsMode::None
         },
+        giant_mass_earth: meta.giant.as_ref().map(|g| g.mass_earth),
     };
     let l = &meta.layers;
     let infos = [
@@ -978,6 +1000,7 @@ mod tests {
             shape: None,
             metallicity: 0.0,
             giants: crate::giants::GiantsMode::None,
+            giant_mass_earth: None,
         })
         .world;
         let world_dir =

@@ -88,29 +88,80 @@
         <dd>{meta.seed}</dd>
         <dt>{t.worldInfo.map}</dt>
         <dd>{meta.width} × {meta.height} px</dd>
-        <dt>{t.worldInfo.seaLevel}</dt>
-        <dd>{formatNumber(meta.sea_level, 3)}</dd>
-        <dt>{t.worldInfo.volcanism}</dt>
-        <dd>{formatNumber(meta.volcanic_intensity, 2)}</dd>
-        <dt>{t.worldInfo.erosion}</dt>
-        <dd>{formatNumber(meta.erosion, 2)}</dd>
+        {#if meta.giant}
+          {@const g = meta.giant}
+          <dt title={t.worldInfo.giantMassHelp}>{t.worldInfo.giantMass}</dt>
+          <dd>
+            {t.worldInfo.giantMassValue({
+              jupiter: withUnit(formatUpTo(g.mass_earth / 317.8, 2), 'MJ'),
+              earth: withUnit(formatInt(g.mass_earth), 'M⊕'),
+            })}
+          </dd>
+          <dt>{t.worldInfo.giantRadius}</dt>
+          <dd>
+            {t.worldInfo.giantMassValue({
+              jupiter: withUnit(formatUpTo(g.radius_earth / 11.21, 2), 'RJ'),
+              earth: withUnit(formatUpTo(g.radius_earth, 1), 'R⊕'),
+            })} · {withUnit(formatUpTo(g.density, 2), 'g/cm³')}
+          </dd>
+          <dt title={t.worldInfo.giantDayHelp}>{t.worldInfo.giantDay}</dt>
+          <dd>
+            {g.rotation_hours < 48
+              ? withUnit(formatUpTo(g.rotation_hours, 1), 'h')
+              : formatYear(g.rotation_hours / 24)}{#if g.hot}
+              · {t.worldInfo.locked}{/if} · {t.worldInfo.flatteningValue({ value: formatUpTo(g.flattening, 3) })}
+          </dd>
+          <dt title={t.worldInfo.giantCloudsHelp}>{t.worldInfo.giantClouds}</dt>
+          <dd>{t.starView.cloudClasses[g.class] ?? ''} · {withUnit(formatInt(g.effective_k), 'K')}</dd>
+          <dt title={t.worldInfo.giantWindsHelp}>{t.worldInfo.giantWinds}</dt>
+          <dd>
+            {t.worldInfo.giantWindsValue({
+              jets: g.jets,
+              west: withUnit(formatInt(g.wind_west), 'm/s'),
+              east: withUnit(formatInt(g.wind_east), 'm/s'),
+            })}
+          </dd>
+          <dt title={t.worldInfo.giantHeatHelp}>{t.worldInfo.giantHeat}</dt>
+          <dd>{t.worldInfo.giantHeatValue({ ratio: formatUpTo(g.heat_ratio, 1) })}</dd>
+          <dt>{t.worldInfo.giantRings}</dt>
+          <dd>
+            {g.rings
+              ? t.worldInfo.giantRingsValue({
+                  kind: (g.rings.bright ? t.starView.rings['bright'] : t.starView.rings['faint']) ?? '',
+                  inner: formatUpTo(g.rings.inner, 2),
+                  outer: formatUpTo(g.rings.outer, 2),
+                })
+              : (t.starView.rings['none'] ?? '')}{#if g.great_spot}
+              · {g.kind === 'ice' ? t.worldInfo.darkSpot : t.worldInfo.greatSpot}{/if}{#if g.hexagon}
+              · {t.worldInfo.hexagon}{/if}
+          </dd>
+        {:else}
+          <dt>{t.worldInfo.seaLevel}</dt>
+          <dd>{formatNumber(meta.sea_level, 3)}</dd>
+          <dt>{t.worldInfo.volcanism}</dt>
+          <dd>{formatNumber(meta.volcanic_intensity, 2)}</dd>
+          <dt>{t.worldInfo.erosion}</dt>
+          <dd>{formatNumber(meta.erosion, 2)}</dd>
+        {/if}
         <dt>{t.worldInfo.circumference}</dt>
         <dd>{withUnit(formatInt(meta.circumference_km), 'km')}</dd>
         <dt>{t.worldInfo.axialTilt}</dt>
         <dd>{formatNumber(meta.axial_tilt_deg, 1)}°</dd>
         <dt>{t.worldInfo.gravity}</dt>
         <dd class="unit-help" title={unitTooltip('g')}>{withUnit(formatNumber(meta.gravity_modifier, 2), 'g')}</dd>
-        <dt>{t.worldInfo.atmosphere}</dt>
-        {#if (meta.pressure_bar ?? 1) > 0}
-          <dd class="unit-help" title={unitTooltip('bar')}>{formatAtmosphere(meta)}</dd>
-        {:else}
-          <dd>{formatAtmosphere(meta)}</dd>
-        {/if}
-        <dt>{t.worldInfo.geology}</dt>
-        {#if meta.surface_age_ga != null}
-          <dd class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatGeology(meta)}</dd>
-        {:else}
-          <dd>{formatGeology(meta)}</dd>
+        {#if !meta.giant}
+          <dt>{t.worldInfo.atmosphere}</dt>
+          {#if (meta.pressure_bar ?? 1) > 0}
+            <dd class="unit-help" title={unitTooltip('bar')}>{formatAtmosphere(meta)}</dd>
+          {:else}
+            <dd>{formatAtmosphere(meta)}</dd>
+          {/if}
+          <dt>{t.worldInfo.geology}</dt>
+          {#if meta.surface_age_ga != null}
+            <dd class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatGeology(meta)}</dd>
+          {:else}
+            <dd>{formatGeology(meta)}</dd>
+          {/if}
         {/if}
         <dt>{t.worldInfo.star}</dt>
         {#if meta.star}
@@ -165,13 +216,13 @@
                 })} · {t.worldInfo.impactsValue({ factor: `${formatUpTo(meta.giants.impact_factor, 2)}×` })}
           </dd>
         {/if}
-        {#if stats}
+        {#if stats && !meta.giant}
           <dt>{t.worldInfo.surface}</dt>
           <dd>{formatArea(stats.surfaceKm2)}</dd>
           <dt>{t.worldInfo.landWater}</dt>
           <dd>{formatShare(stats.land)} / {formatShare(stats.water)}</dd>
         {/if}
-        {#if rivers}
+        {#if rivers && !meta.giant}
           <dt>{t.worldInfo.rivers}</dt>
           <dd>{formatInt(rivers.file.rivers.length)}</dd>
         {/if}

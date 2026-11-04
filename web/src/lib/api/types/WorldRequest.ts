@@ -58,4 +58,9 @@ metallicity?: number,
 /**
  * `auto` (the giant planets the seed draws, the default) or `none`.
  */
-giants?: GiantsMode, width?: number, height?: number, };
+giants?: GiantsMode, 
+/**
+ * Mass of a giant planet (giant presets only), Earth masses, in
+ * `[5, 4131]`; drawn in the preset's range when left out.
+ */
+mass_earth?: number, width?: number, height?: number, };

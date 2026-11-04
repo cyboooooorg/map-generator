@@ -8,6 +8,7 @@
   import type { Moon } from '../lib/api/types/Moon';
   import type { Giant } from '../lib/api/types/Giant';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
+  import type { GiantInfo } from '../lib/api/types/GiantInfo';
   import { compressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
@@ -34,6 +35,8 @@
     giantSystem?: GiantSystem | null;
     /** Whether the giants are drawn. */
     giants: boolean;
+    /** The world itself when it is a giant planet. */
+    worldGiant?: GiantInfo | null;
   }
 
   let {
@@ -49,6 +52,7 @@
     planetRadiusKm = 6371,
     giantSystem = null,
     giants = $bindable(),
+    worldGiant = null,
   }: Props = $props();
   const giantList = $derived(giantSystem?.giants ?? []);
   /** Whether some giant lies where the view compresses distances. */
@@ -79,6 +83,7 @@
 
   $effect(() => view?.setStar(star, omega, giantList));
   $effect(() => view?.setGiantsVisible(giants));
+  $effect(() => view?.setWorldGiant(worldGiant));
 
   /** Jupiter masses, from Earth masses. */
   const jupiters = (earth: number) => earth / 317.8;
@@ -222,6 +227,7 @@
     <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
     <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
   </dl>
+  {#if !worldGiant}
   <h4 title={t.starView.giantsHelp}>{t.starView.giantsSection}</h4>
   {#if giantSystem === null}
     <small class="muted">{t.starView.giantsOff}</small>
@@ -243,6 +249,7 @@
       <dt title={t.starView.impactsHelp}>{t.starView.impacts}</dt>
       <dd>{t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })}</dd>
     </dl>
+  {/if}
   {/if}
   <h4>{t.starView.displaySection}</h4>
   <div class="checks">

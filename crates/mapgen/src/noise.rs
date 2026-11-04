@@ -141,6 +141,8 @@ pub mod stream {
     pub const METALLICITY: u32 = 27;
     /// Giant planets: their number, masses, orbits and looks.
     pub const GIANTS: u32 = 28;
+    /// The bands, storms, spin and rings of a giant world.
+    pub const GIANT_LOOK: u32 = 29;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.

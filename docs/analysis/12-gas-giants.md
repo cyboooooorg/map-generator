@@ -447,6 +447,28 @@ Built as planned, with these choices:
   Jupiter around about 1 % of stars; around an M4 dwarf less than half
   as many; at `[Fe/H] = +0.3`, more than twice as many.
 
+### Step B (2026-11-04)
+
+Giant worlds of their own (`src/giant_world.rs`), as presets
+(`gas-giant`, `ice-giant`, `hot-jupiter`) with a `[giant]` table:
+
+- **Kept in the format of a world**, so the viewer, the hex grid and the
+  biome statistics work unchanged: four band biomes (zone, belt, storm,
+  polar region) in the giant's own colours, the cloud-top height as the
+  elevation (above a deck at 0.3, never read as sea), the cloud-top
+  temperature, and the wind in the moisture layer (a share of the
+  strongest). `surface.png` comes rendered from the pipeline.
+- **Bands** from the Rhines count (Jupiter five jets a hemisphere,
+  Neptune one), noise stretched along them and stronger at the jets,
+  vortices swirling them, hazy poles and an optional hexagon; colours
+  by Sudarsky class and kind.
+- **Viewer:** the globe flattened, rings (ringlets, gaps, the planet's
+  shadow), the bands drifting with their winds, a hot giant's night side
+  glowing red, temperature and wind on ranges of their own; no detail
+  tiles (the server refuses them), no contours.
+- **Not done yet:** the form's giant fields (mass), after the form
+  rework of #120; the shadow of the rings on the planet.
+
 ## Sources
 
 - NASA Goddard, planetary fact sheets (Jupiter, Saturn, Uranus,

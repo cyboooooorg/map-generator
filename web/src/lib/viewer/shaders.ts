@@ -51,9 +51,18 @@ const common = /* glsl */ `
   }
 `;
 
+/**
+ * Seconds for the fastest band of a giant to drift once round the planet
+ * (its strongest wind), the others in proportion, backwards for westward
+ * winds: a sight, not the true pace.
+ */
+export const BAND_PERIOD_S = 120;
+
 export const surfaceVertex = /* glsl */ `
   ${common}
   uniform float uLift;
+  // Flattening of a giant's globe by its spin (0 for a rocky world).
+  uniform float uFlattening;
   // Part of the planet this mesh covers (u0, v0, du, dv): the whole planet
   // for the base surface, one quadtree tile for a detail patch.
   uniform vec4 uTileRect;
@@ -102,7 +111,15 @@ export const surfaceVertex = /* glsl */ `
       }
       height = above * uRelief * ${RELIEF_SCALE.toFixed(4)};
     }
+    // A spinning giant is flattened at the poles: an ellipsoid, whose normal
+    // leans towards the poles.
+    if (uFlattening > 0.0) {
+      float squash = 1.0 - uFlattening;
+      vec3 ellipsoid = normalize(vec3(sphere.x, sphere.y / (squash * squash), sphere.z));
+      normal = normalize(mix(vec3(0.0, 0.0, 1.0), ellipsoid, uMorph));
+    }
     vec3 position = mix(plane, sphere * radius, uMorph) + normal * (height + uLift);
+    position.y *= 1.0 - uFlattening * uMorph;
 
     vSphere = sphere;
     vNormal = normal;
@@ -151,6 +168,15 @@ export const surfaceFragment = /* glsl */ `
   uniform vec3 uCloudTint;     // linear colour of the clouds
   uniform vec3 uLightTint;     // colour of the light ("Star light"), white otherwise
   uniform float uCloudShift;   // eastward drift of the cloud layer, in turns
+  // A giant: its moisture layer holds the wind (a share of the strongest),
+  // its temperature range is its own, and its bands drift each at its own
+  // speed (uWind: the wind every 10° from the south pole, a share of the
+  // strongest; uBandTime: seconds of drift).
+  uniform float uGiant;
+  uniform vec2 uTempRange;     // °C at the bottom of the ramp, and its span
+  uniform float uWind[19];
+  uniform float uBandTime;
+  uniform float uHotGlow;      // a hot giant's night-side glow, 0 to 1
   varying vec2 vUv;
   varying vec2 vLocalUv;
   varying vec3 vNormal;
@@ -166,6 +192,21 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('volcanic')}
   ${glslRamp('coast')}
   ${glslRamp('floodplain')}
+  ${glslRamp('wind')}
+
+  // The wind of a giant at the latitude of map row v (0 south, 1 north).
+  float bandWind(float v) {
+    float at = clamp(v, 0.0, 1.0) * 18.0;
+    int i = int(floor(min(at, 17.999)));
+    float f = at - float(i);
+    float a = 0.0;
+    float b = 0.0;
+    for (int k = 0; k < 19; k++) {
+      if (k == i) a = uWind[k];
+      if (k == i + 1) b = uWind[k];
+    }
+    return mix(a, b, f);
+  }
 
   // Depth contours: a pale blue mixed over the sea (linear colour, share).
   // world.png darkens its contours instead, which barely shows on the dark
@@ -318,16 +359,18 @@ export const surfaceFragment = /* glsl */ `
     // Detail tiles are drawn on the biome layer only.
     vec3 surface = uTileOn > 0.5
       ? texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb
-      : texture2D(uMap, vUv).rgb;
+      : texture2D(uMap, uGiant > 0.5 ? vec2(fract(vUv.x - uBandTime * bandWind(vUv.y) / ${BAND_PERIOD_S.toFixed(1)}), vUv.y) : vUv).rgb;
     vec3 colour;
     if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
       colour = surface;
     } else if (uLayer == 1) {
       colour = toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));
     } else if (uLayer == 2) {
-      colour = toLinear(ramp_temperature((data.g + 30.0) / 70.0));
+      colour = toLinear(ramp_temperature((data.g - uTempRange.x) / uTempRange.y));
     } else if (uLayer == 3) {
-      colour = toLinear(ramp_moisture((data.b + 1.0) * 0.5));
+      colour = uGiant > 0.5
+        ? toLinear(ramp_wind((data.b + 1.0) * 0.5))
+        : toLinear(ramp_moisture((data.b + 1.0) * 0.5));
     } else if (uLayer == 4) {
       colour = toLinear(ramp_flow(data.a / 7.0));
     } else if (uHasExtra < 0.5) {
@@ -407,6 +450,11 @@ export const surfaceFragment = /* glsl */ `
       glow = LAVA_GLOW * lava * night;
     }
     vec3 emitted = colour * glow;
+    // A hot giant's clouds glow deep red on its night side, as hot coals.
+    if (uHotGlow > 0.0 && uLightMode == 1 && uHexOn < 0.5) {
+      float dark = 1.0 - smoothstep(-0.08, 0.15, dot(normalize(vSphere), uSunDir));
+      emitted += vec3(0.9, 0.2, 0.05) * uHotGlow * dark;
+    }
 
     // Relief shading: tilt the normal by the elevation slope (land only).
     // The biome map and the detail tiles are hillshaded already: shading

@@ -31,6 +31,7 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   Points,
+  RingGeometry,
   Quaternion,
   Raycaster,
   RedFormat,
@@ -98,6 +99,8 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
+import { ringFragment, ringVertex } from './ringShaders';
+import type { GiantInfo } from '../api/types/GiantInfo';
 import { starField } from './stars';
 
 export type ViewMode = 'globe' | 'map';
@@ -350,6 +353,16 @@ export function vegetationShift(teffK: number): [number, number] {
 /** The Sun from Earth: worlds made before stars. */
 export const SUN_STAR: HostStar = { colour: [1, 1, 1], angularDiameterDeg: 0.533, insolation: 1, teffK: 5772 };
 
+/**
+ * Temperatures of a giant's cloud tops on the temperature layer, °C: a
+ * cold giant's within 25 K of its effective temperature, a hot one's from
+ * its night to its day side.
+ */
+export function giantTemperatureRange(info: Pick<GiantInfo, 'effective_k' | 'hot'>): [number, number] {
+  const t = info.effective_k - 273.15;
+  return info.hot ? [info.effective_k * 0.65 - 273.15, info.effective_k * 1.35 - 273.15] : [t - 25, t + 25];
+}
+
 export class PlanetView {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
@@ -378,6 +391,7 @@ export class PlanetView {
     uHasShape: { value: 0 } as IUniform<number>,
     uShape: { value: emptyTexture() } as IUniform<Texture>,
     uShapeTexel: { value: new Vector2(1 / 256, 1 / 128) } as IUniform<Vector2>,
+    uFlattening: { value: 0 } as IUniform<number>,
   };
   /** Counts the shape requests: a load answering after a newer one is dropped. */
   private shapeRequest = 0;
@@ -390,6 +404,11 @@ export class PlanetView {
     uCloudTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
     uLightTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
     uCloudShift: { value: 0 } as IUniform<number>,
+    uGiant: { value: 0 } as IUniform<number>,
+    uTempRange: { value: new Vector2(-30, 70) } as IUniform<Vector2>,
+    uWind: { value: new Array<number>(19).fill(0) } as IUniform<number[]>,
+    uBandTime: { value: 0 } as IUniform<number>,
+    uHotGlow: { value: 0 } as IUniform<number>,
     uLayer: { value: LAYER_IDS.biomes as number } as IUniform<number>,
     uTexel: { value: new Vector2(1 / 1024, 1 / 512) } as IUniform<Vector2>,
     uLightMode: { value: 0 } as IUniform<number>,
@@ -475,6 +494,8 @@ export class PlanetView {
   /** Whether the cloud layer drifts, the last drift update, and its redraw timer. */
   private cloudsDrifting = false;
   private cloudDriftAt: number | null = null;
+  /** The rings of the giant shown, if any. */
+  private rings: Mesh<RingGeometry, ShaderMaterial> | null = null;
   private cloudDriftTimer: ReturnType<typeof setTimeout> | null = null;
   /** The world's sky before the lift over the relief, Earth's until a world sets it. */
   private worldSky: Sky = {
@@ -872,6 +893,65 @@ export class PlanetView {
     }
   }
 
+  /**
+   * Shows a giant planet (null for a rocky world): its globe flattened by
+   * its spin, its temperatures on a range of their own, its wind on the
+   * moisture layer, its bands drifting each with its wind (with the cloud
+   * drift), and its rings.
+   */
+  setGiant(info: GiantInfo | null): void {
+    this.shared.uFlattening.value = info?.flattening ?? 0;
+    this.u.uGiant.value = info ? 1 : 0;
+    // Clouds above about 1 100 K glow red, brighter the hotter.
+    const t = info ? Math.min(Math.max((info.effective_k - 1100) / 1100, 0), 1) : 0;
+    this.u.uHotGlow.value = 0.6 * t * t * (3 - 2 * t);
+    const [low, high] = info ? giantTemperatureRange(info) : [-30, 40];
+    this.u.uTempRange.value.set(low, high - low);
+    const reach = info ? Math.max(info.wind_east, info.wind_west, 1) : 1;
+    // The wind every 10° (the profile has a value every 2°).
+    this.u.uWind.value = Array.from({ length: 19 }, (_, k) => (info?.wind_profile[k * 5] ?? 0) / reach);
+    for (const pass of this.atmosphere) {
+      pass.scale.y = pass.scale.x * (1 - (info?.flattening ?? 0));
+    }
+    if (this.rings) {
+      this.scene.remove(this.rings);
+      this.rings.geometry.dispose();
+      this.rings.material.dispose();
+      this.rings = null;
+    }
+    const r = info?.rings;
+    if (r) {
+      const gaps = Array.from({ length: 4 }, (_, k) => new Vector2(...(r.gaps[k] ?? [0, 0])));
+      this.rings = new Mesh(
+        new RingGeometry(r.inner, r.outer, 256, 4),
+        new ShaderMaterial({
+          vertexShader: ringVertex,
+          fragmentShader: ringFragment,
+          uniforms: {
+            uColour: { value: new Color().setRGB(...r.colour, SRGBColorSpace) },
+            uInner: { value: r.inner },
+            uOuter: { value: r.outer },
+            uOpacity: { value: r.opacity },
+            uGaps: { value: gaps },
+            uGapCount: { value: Math.min(r.gaps.length, 4) },
+            uSeed: { value: (info.mass_earth * 7.31) % 13 },
+            uLightMode: this.u.uLightMode,
+            uSunDir: this.u.uSunDir,
+            uFade: { value: 1 },
+          },
+          transparent: true,
+          depthWrite: false,
+          side: DoubleSide,
+        }),
+      );
+      // In the equatorial plane (y is the spin axis).
+      this.rings.rotation.x = -Math.PI / 2;
+      this.rings.renderOrder = 1;
+      this.scene.add(this.rings);
+    }
+    this.requestRender();
+  }
+
   /** Lets the cloud layer drift slowly eastwards around the planet, or stops it where it is. */
   setCloudsDrifting(drifting: boolean): void {
     this.cloudsDrifting = drifting;
@@ -883,7 +963,8 @@ export class PlanetView {
    * schedules the next redraw; stops the clock otherwise.
    */
   private driftClouds(): void {
-    const visible = this.u.uCloudsOn.value > 0;
+    // A giant's bands drift too, each with its own wind.
+    const visible = this.u.uCloudsOn.value > 0 || this.u.uGiant.value > 0;
     if (!this.cloudsDrifting || !visible) {
       this.cloudDriftAt = null;
       return;
@@ -893,6 +974,7 @@ export class PlanetView {
       // A hidden tab draws no frames: resume where the clouds were.
       const seconds = Math.min(now - this.cloudDriftAt, 1000) / 1000;
       this.u.uCloudShift.value = (this.u.uCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
+      this.u.uBandTime.value += seconds;
     }
     this.cloudDriftAt = now;
     if (this.cloudDriftTimer === null) {
@@ -1156,6 +1238,7 @@ export class PlanetView {
     const sky = liftSky(this.worldSky, this.shared.uRelief.value * RELIEF_SCALE);
     for (const pass of this.atmosphere) {
       pass.scale.setScalar(sky.top);
+      pass.scale.y *= 1 - this.shared.uFlattening.value;
     }
     const s = this.sky;
     if (s.uTop.value !== sky.top || s.uHeightR.value !== sky.heightR || s.uHeightM.value !== sky.heightM) {
@@ -1409,6 +1492,8 @@ export class PlanetView {
       object.geometry.dispose();
       object.material.dispose();
     }
+    this.rings?.geometry.dispose();
+    this.rings?.material.dispose();
     this.renderer.dispose();
     // Free the WebGL context now: browsers cap live contexts (about 16), and
     // compare panes come and go.
@@ -1665,6 +1750,11 @@ export class PlanetView {
       pass.visible = skyVisible;
     }
     this.atmosphereOpacity.value = this.morph ** 3;
+    // Rings belong to the globe, like the atmosphere.
+    if (this.rings) {
+      this.rings.visible = this.morph > 0.01;
+      this.rings.material.uniforms['uFade']!.value = this.morph ** 3;
+    }
     // The stars belong to the globe's sky, like the atmosphere.
     this.stars.visible = this.starsOn && this.morph > 0.01;
     this.drawHostStar();

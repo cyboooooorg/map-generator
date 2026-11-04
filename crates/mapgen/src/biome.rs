@@ -88,11 +88,20 @@ pub enum Biome {
     // ── Appended after id 33 (frozen worlds) ──────────────────────────────────
     /// A lake sealed under ice; replaces lakes on frozen worlds.
     FrozenLake,
+    // ── Appended after id 34 (giant planets: cloud bands, not ground) ───────
+    /// A pale zone of a giant planet: rising air, high clouds.
+    GiantZone,
+    /// A dark belt of a giant planet: sinking air, deeper clouds.
+    GiantBelt,
+    /// A long-lived vortex (a great spot, a white oval, a dark spot).
+    GiantStorm,
+    /// The polar region of a giant: hazes, cyclones, sometimes a hexagon.
+    GiantPolar,
 }
 
 impl Biome {
     /// Every biome, in id order.
-    pub const ALL: [Biome; 35] = [
+    pub const ALL: [Biome; 39] = [
         Biome::DeepOcean,
         Biome::Ocean,
         Biome::Beach,
@@ -128,6 +137,10 @@ impl Biome {
         Biome::AcidRiver,
         Biome::AcidShore,
         Biome::FrozenLake,
+        Biome::GiantZone,
+        Biome::GiantBelt,
+        Biome::GiantStorm,
+        Biome::GiantPolar,
     ];
 
     /// Whether the biome is a water surface, liquid or frozen (flat, not hillshaded).
@@ -203,6 +216,11 @@ pub fn surface_color(b: Biome) -> [u8; 3] {
         Biome::GlacialPlain => [214, 224, 232],
         Biome::SeaIce => [200, 214, 226],
         Biome::FrozenLake => [190, 208, 222],
+        // Giants: a Jovian palette; a giant world's own replaces it.
+        Biome::GiantZone => [236, 224, 198],
+        Biome::GiantBelt => [174, 124, 84],
+        Biome::GiantStorm => [192, 98, 64],
+        Biome::GiantPolar => [140, 132, 128],
         // Caustic: sickly greens and yellows.
         Biome::CausticLake => [92, 140, 60],
         Biome::AcidSea => [52, 104, 58],
@@ -260,6 +278,10 @@ pub fn biome_color(b: Biome) -> [u8; 3] {
         Biome::AcidRiver => [64, 196, 136],
         Biome::AcidShore => [214, 220, 150],
         Biome::FrozenLake => [185, 215, 240],
+        Biome::GiantZone => [240, 226, 190],
+        Biome::GiantBelt => [176, 116, 70],
+        Biome::GiantStorm => [204, 84, 52],
+        Biome::GiantPolar => [128, 124, 136],
         Biome::ToxicSwamp => [45, 100, 20],
         Biome::AcidFlatland => [165, 185, 60],
         // Barren world exclusives
@@ -309,6 +331,10 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::AcidRiver => "Acid River",
         Biome::AcidShore => "Acid Shore",
         Biome::FrozenLake => "Frozen Lake",
+        Biome::GiantZone => "Zone",
+        Biome::GiantBelt => "Belt",
+        Biome::GiantStorm => "Storm",
+        Biome::GiantPolar => "Polar Region",
     }
 }
 

@@ -68,14 +68,23 @@ pub fn export_world(
     let layers = &layers;
     // The detailed render, shared by world.png (which adds the reference
     // lines) and raw_data/surface.png (without them, for the viewer).
-    let surface = render_pixels(world, layers, Style::Detailed);
+    // A giant's cloud bands come rendered from its own pipeline.
+    let giant = !world.surface.is_empty();
+    let surface = if giant {
+        world.surface.clone()
+    } else {
+        render_pixels(world, layers, Style::Detailed)
+    };
     let surface = &surface;
     type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
     let mut exports: Vec<Export> = vec![
         Box::new(|| {
             // raw_data/surface.png needs the render without contours.
             let mut map = surface.clone();
-            draw_contours(world, layers, &mut map);
+            // Cloud tops have no contour lines.
+            if !giant {
+                draw_contours(world, layers, &mut map);
+            }
             // The thumbnail is downscaled from the image itself: no other
             // full-size copy.
             let image = world_image(world, map);

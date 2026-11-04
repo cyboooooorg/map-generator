@@ -343,6 +343,7 @@ mod tests {
             moons: None,
             metallicity: None,
             giants: None,
+            mass_earth: None,
             width: Some(480),
             height: Some(240),
         };
