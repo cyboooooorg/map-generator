@@ -12,6 +12,7 @@ import {
   moonSystemSky,
   planetSky,
   siblingSky,
+  sunLongitudeOnMoon,
 } from './skyBodies';
 
 const moon = (overrides: Partial<Moon> = {}): Moon =>
@@ -106,6 +107,17 @@ describe('sky bodies', () => {
     const down = moonSystemSky([inner, outer], 1, 6371, null, none, 0, 365.25, 0).bodies[1]!;
     expect(down.direction[2]).toBeCloseTo(-1, 9);
     expect(down.faceLonDeg).toBeCloseTo(0, 9);
+  });
+
+  it('turns the sun round a moon once an orbit, over its planet side when full', () => {
+    // Full at the season's start: the sun over the face towards the planet.
+    expect(sunLongitudeOnMoon(moon(), 0, 0, 365.25, 0)).toBeCloseTo(180, 6);
+    // A quarter of an orbit on, a quarter of a turn of the sun.
+    const quarter = sunLongitudeOnMoon(moon(), 0, 27.3 / 4 / 365.25, 365.25, 0);
+    expect(Math.abs(quarter - 180)).toBeCloseTo(90, 4);
+    // New moon: the sun over the far side.
+    const fresh = sunLongitudeOnMoon(moon(), 0, 27.3 / 2 / 365.25, 365.25, 0);
+    expect(Math.cos((fresh * Math.PI) / 180)).toBeCloseTo(1, 6);
   });
 
   it('shows the planet from its moon, large and towards its long axis', () => {

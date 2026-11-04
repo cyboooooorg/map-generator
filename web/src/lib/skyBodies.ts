@@ -130,6 +130,25 @@ function moonFrame(
   return { x: cross(y, z), y, z, centre: scale(z, moon.semi_major_axis_km) };
 }
 
+/**
+ * Longitude (degrees, 0 to 360) over which the sun stands on moon `k`
+ * (from 0), as its planet's sky places the moons (see moonDirection): it
+ * turns once per orbit, the moon keeping its face to its planet. The sun
+ * is taken in its planet's equatorial plane.
+ */
+export function sunLongitudeOnMoon(
+  moon: Pick<Moon, 'inclination_deg' | 'period_days' | 'migration' | 'semi_major_axis_km'>,
+  k: number,
+  season: number,
+  yearDays: number,
+  sunLongitudeRad: number,
+): number {
+  const frame = moonFrame(moon, k, season, yearDays, sunLongitudeRad);
+  const sun: Vec3 = [Math.sin(sunLongitudeRad), 0, Math.cos(sunLongitudeRad)];
+  const degrees = (Math.atan2(dot(sun, frame.x), dot(sun, frame.z)) * 180) / Math.PI;
+  return (degrees + 360) % 360;
+}
+
 /** Longitude (degrees) of a moon's map facing `from` (a point, km, in its planet's frame). */
 function faceLongitude(frame: ReturnType<typeof moonFrame>, from: Vec3): number {
   const u = sub(from, frame.centre);
