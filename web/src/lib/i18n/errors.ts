@@ -33,6 +33,8 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.noRoomForMoons({ count: detail.count });
     case 'moons_of_a_moon':
       return t.errors.moonsOfAMoon;
+    case 'hot_giant_moons':
+      return t.errors.hotGiantMoons({ count: detail.count });
   }
 }
 

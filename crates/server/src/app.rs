@@ -773,6 +773,7 @@ async fn create_world(
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map_err(|e| Rejection(bad(e.to_string()), ErrorDetail::of_request(&e)))?;
     let params = resolved.params;
+    let ignored: Vec<String> = resolved.ignored.iter().map(|f| (*f).to_owned()).collect();
     let pixels = params.width as u64 * params.height as u64;
     if pixels > state.config.max_pixels {
         return Err(rejected(
@@ -937,7 +938,14 @@ async fn create_world(
         finish(status);
     });
 
-    Ok((StatusCode::ACCEPTED, Json(JobCreated { job_id, world_id })))
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(JobCreated {
+            job_id,
+            world_id,
+            ignored,
+        }),
+    ))
 }
 
 /// Drops the oldest finished jobs beyond [`FINISHED_JOBS_KEPT`].
@@ -1490,6 +1498,31 @@ mod tests {
     }
 
     /// Waits for the end of a job and returns its event stream.
+    #[tokio::test]
+    async fn an_epoch_of_a_world_is_a_world_of_its_own() {
+        let app = router(temp_config("drift"));
+        let request = |drift: &str| {
+            format!(r#"{{"planet":"barren","seed":7,"width":64,"height":32{drift}}}"#)
+        };
+        let (status, present) = call(&app, "POST", "/api/worlds", Some(&request(""))).await;
+        assert_eq!(status, StatusCode::ACCEPTED, "{present}");
+        wait_job(&app, &present).await;
+        let (status, past) = call(
+            &app,
+            "POST",
+            "/api/worlds",
+            Some(&request(r#","drift_ma":-40"#)),
+        )
+        .await;
+        // Not a conflict with the present: an id of its own, listed.
+        assert_eq!(status, StatusCode::ACCEPTED, "{past}");
+        let created: serde_json::Value = serde_json::from_str(&past).unwrap();
+        assert_eq!(created["world_id"], "barren-past40ma-7");
+        wait_job(&app, &past).await;
+        assert_eq!(world_width(&app, "barren-past40ma-7").await, Some(64));
+        assert_eq!(world_width(&app, "barren-7").await, Some(64));
+    }
+
     async fn wait_job(app: &Router, created: &str) -> String {
         let created: serde_json::Value = serde_json::from_str(created).unwrap();
         let uri = format!("/api/jobs/{}/events", created["job_id"].as_str().unwrap());

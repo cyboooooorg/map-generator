@@ -177,6 +177,10 @@ pub struct JobCreated {
     pub job_id: String,
     /// Id the world will have once generated.
     pub world_id: String,
+    /// Fields of the request the planet has no use for, ignored (a giant's
+    /// `circumference_km`, `erosion`, `volcanic`, `land_fraction`, `giants`
+    /// and `host`; a rocky world's `mass_earth`).
+    pub ignored: Vec<String>,
 }
 
 /// State of a generation job, streamed as server-sent events.
@@ -276,6 +280,8 @@ pub enum ErrorDetail {
     NoRoomForMoons { count: u8 },
     /// Moons asked for on the moon of a giant, which keeps none.
     MoonsOfAMoon,
+    /// Moons asked for on a hot giant, which keeps none.
+    HotGiantMoons { count: u8 },
 }
 
 impl ErrorDetail {
@@ -300,6 +306,7 @@ impl ErrorDetail {
             RequestError::OrbitAndPosition => Some(Self::OrbitAndPosition),
             RequestError::NoRoomForMoons { count } => Some(Self::NoRoomForMoons { count: *count }),
             RequestError::MoonsOfAMoon => Some(Self::MoonsOfAMoon),
+            RequestError::HotGiantMoons { count } => Some(Self::HotGiantMoons { count: *count }),
             RequestError::Preset(_) => None,
         }
     }

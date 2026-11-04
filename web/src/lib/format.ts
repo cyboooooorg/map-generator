@@ -127,10 +127,16 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     planet: meta.planet_type,
     seed: meta.seed,
     sea_level: round(meta.sea_level, 4),
-    volcanic: round(meta.volcanic_intensity, 4),
-    circumference_km: round(meta.circumference_km, 1),
+    // A giant has no ground: its volcanism, circumference and erosion are
+    // not asked for (the server ignores them).
+    ...(meta.giant
+      ? {}
+      : {
+          volcanic: round(meta.volcanic_intensity, 4),
+          circumference_km: round(meta.circumference_km, 1),
+          erosion: round(meta.erosion, 2),
+        }),
     axial_tilt_deg: round(meta.axial_tilt_deg, 2),
-    erosion: round(meta.erosion, 2),
     // Worlds made before the atmosphere had Earth's pressure.
     pressure_bar: round(meta.pressure_bar ?? 1, 4),
     // Worlds made before the surface age leave it to the preset.
@@ -169,10 +175,10 @@ export function cliCommand(meta: WorldMetadata): string {
     `--planet ${r.planet}`,
     `--seed ${r.seed}`,
     `--sea-level ${r.sea_level}`,
-    `--volcanic ${r.volcanic}`,
-    `--circumference ${r.circumference_km}`,
+    ...(r.volcanic === undefined ? [] : [`--volcanic ${r.volcanic}`]),
+    ...(r.circumference_km === undefined ? [] : [`--circumference ${r.circumference_km}`]),
     `--axial-tilt ${r.axial_tilt_deg}`,
-    `--erosion ${r.erosion}`,
+    ...(r.erosion === undefined ? [] : [`--erosion ${r.erosion}`]),
     `--pressure ${r.pressure_bar}`,
     ...(r.surface_age_ga === undefined ? [] : [`--surface-age ${r.surface_age_ga}`]),
     `--star ${r.star}`,
