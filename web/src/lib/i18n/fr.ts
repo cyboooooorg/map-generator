@@ -558,7 +558,7 @@ export const fr: Messages = {
     orbitSection: 'Son orbite',
     origin: 'Origine',
     originHelp: `Comment elle s’est formée${S}: des débris d’un impact géant sur sa planète, du disque de débris d’un impact moindre, ou capturée à son passage`,
-    origins: { giant_impact: 'Impact géant', debris: 'Débris d’impact', captured: 'Capturée' },
+    origins: { giant_impact: 'Impact géant', debris: 'Débris d’impact', captured: 'Capturée', disk: 'Disque circumplanétaire' },
     composition: 'Composition',
     compositions: { rock: 'Roche', ice: 'Glace et roche' },
     size: 'Taille',

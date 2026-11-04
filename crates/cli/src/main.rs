@@ -423,6 +423,7 @@ fn moons_summary(system: &MoonSystem) -> String {
         .map(|m| {
             let origin = match m.origin {
                 MoonOrigin::GiantImpact => "giant impact",
+                MoonOrigin::Disk => "disk",
                 MoonOrigin::Debris => "debris",
                 MoonOrigin::Captured => "captured",
             };

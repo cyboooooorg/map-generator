@@ -489,6 +489,16 @@ Rocky worlds orbiting a giant (`src/exomoon.rs`):
 - **Not done:** the giant's other moons in the sky; the tilt steadied by
   the giant; the giant's reflected and thermal light on the night side.
 
+### Follow-up: the moons of giant worlds (2026-11-04)
+
+Giant worlds had no moons. They now get regular moons grown in their
+disk (`MoonSystem::draw`, origin `disk`): 10⁻⁴ of the giant's mass
+together, two to five of them on a near-resonant chain (periods about
+doubling) from 4 to 8 radii, rock inside 8 to 11 radii and ice beyond;
+a captured retrograde Triton on 35 % of ice giants; none on hot giants.
+Around a Jupiter they come out 800 to 2 000 km in radius, around an ice
+giant 500 to 950 km (Uranus's large moons: 580 to 790 km).
+
 ## Sources
 
 - NASA Goddard, planetary fact sheets (Jupiter, Saturn, Uranus,

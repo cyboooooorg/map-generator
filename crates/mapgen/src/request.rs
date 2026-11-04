@@ -445,11 +445,8 @@ impl WorldRequest {
             orbit_au,
             eccentricity,
             drift_ma: self.drift_ma.unwrap_or(0.0),
-            moons: if giant {
-                crate::moons::MoonsMode::None
-            } else {
-                self.moons.unwrap_or_default()
-            },
+            // A giant has moons of its own kind (see `MoonSystem::draw`).
+            moons: self.moons.unwrap_or_default(),
             shape: None,
             metallicity,
             giants: if giant {
