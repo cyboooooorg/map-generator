@@ -8,6 +8,7 @@
 // planet's equatorial plane tilted by their inclination; a moon keeps its
 // long axis towards its planet, at longitude 180°.
 import type { Moon } from './api/types/Moon';
+import type { Sibling } from './api/types/Sibling';
 
 export type Vec3 = [number, number, number];
 
@@ -124,4 +125,52 @@ export function eclipse(point: Vec3, sun: Vec3, caster: ShadowCaster, sunRadius:
   // An annular eclipse never hides the whole sun.
   const most = caster.radius >= spread ? 1 : (caster.radius / spread) ** 2;
   return covered * most;
+}
+
+/**
+ * The giant's other regular moons in the sky of one of them (the world
+ * shown, `worldRadiusKm` in radius, at `worldDistanceKm` from the giant):
+ * their phases and shadows. In the world's frame the giant hangs at
+ * longitude 180°; each sibling turns around it at its period relative to
+ * the world's (both prograde, in the giant's equatorial plane), from a
+ * phase of its own, as the seasons play.
+ */
+export function siblingSky(
+  siblings: readonly Pick<Sibling, 'radius_km' | 'distance_km' | 'period_days' | 'icy'>[],
+  worldRadiusKm: number,
+  worldDistanceKm: number,
+  worldPeriodDays: number,
+  season: number,
+  yearDays: number,
+): { bodies: SkyBody[]; casters: ShadowCaster[] } {
+  const days = season * yearDays;
+  const bodies: SkyBody[] = [];
+  const casters: ShadowCaster[] = [];
+  siblings.forEach((sibling, k) => {
+    // Angle from the world's side of the giant.
+    const angle =
+      k * 2.1 + 1.3 + 2 * Math.PI * days * (1 / Math.max(sibling.period_days, 1e-3) - 1 / Math.max(worldPeriodDays, 1e-3));
+    const v: Vec3 = [
+      sibling.distance_km * Math.sin(angle),
+      0,
+      -worldDistanceKm + sibling.distance_km * Math.cos(angle),
+    ];
+    const distance = Math.hypot(...v);
+    bodies.push({
+      direction: v.map((c) => c / distance) as Vec3,
+      angularDiameterDeg: (2 * Math.atan(sibling.radius_km / distance) * 180) / Math.PI,
+      colour: sibling.icy ? ICE : ROCK,
+      texture: null,
+    });
+    casters.push({ position: v.map((c) => c / worldRadiusKm) as Vec3, radius: sibling.radius_km / worldRadiusKm });
+  });
+  return { bodies, casters };
+}
+
+/** Two skies together (the giant and its other moons), the largest shadows kept. */
+export function joinSkies(
+  ...skies: { bodies: SkyBody[]; casters: ShadowCaster[] }[]
+): { bodies: SkyBody[]; casters: ShadowCaster[] } {
+  const casters = skies.flatMap((s) => s.casters).sort((a, b) => b.radius - a.radius);
+  return { bodies: skies.flatMap((s) => s.bodies), casters: casters.slice(0, MAX_CASTERS) };
 }

@@ -25,7 +25,7 @@
   import StarPane from './StarPane.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
-  import { moonSky, planetSky } from '../lib/skyBodies';
+  import { joinSkies, moonSky, planetSky, siblingSky } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -593,11 +593,21 @@
     if (world.moon === null && planet.host && world.worldId) {
       const host = planet.host;
       const map = worldFile(world.worldId, 'host/raw_data/surface.png', revision);
-      return moonSky(
+      const giant = moonSky(
         { radius_km: planetRadiusKm, semi_major_axis_km: host.distance_km },
         (host.giant.radius_earth * 40075) / (2 * Math.PI),
         map,
       );
+      // The giant's other regular moons beside it, with their phases.
+      const siblings = siblingSky(
+        host.siblings ?? [],
+        planetRadiusKm,
+        host.distance_km,
+        host.period_days,
+        season,
+        planet.star?.year_days ?? 365.25,
+      );
+      return joinSkies(giant, siblings);
     }
     if (world.moon !== null || moons.length === 0) return null;
     const longitude = ((locked ? 180 : sunLongitude) * Math.PI) / 180;

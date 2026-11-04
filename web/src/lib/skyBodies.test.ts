@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Moon } from './api/types/Moon';
-import { eclipse, MAX_CASTERS, moonDirection, moonSky, planetSky } from './skyBodies';
+import { eclipse, joinSkies, MAX_CASTERS, moonDirection, moonSky, planetSky, siblingSky } from './skyBodies';
 
 const moon = (overrides: Partial<Moon> = {}): Moon =>
   ({
@@ -76,4 +76,24 @@ describe('sky bodies', () => {
     // Behind the planet, the moon casts no shadow on the day side.
     expect(eclipse([0, 0, 1], sun, { ...caster, position: [0, 0, -56] }, sunRadius)).toBe(0);
   });
+
+  it('shows the other moons of the giant beside it, the largest shadows kept', () => {
+    // Europa (1 561 km, 671 000 km, 3.55 d) seen from Io (1 822 km, 421 700 km, 1.77 d).
+    const europa = { radius_km: 1561, distance_km: 671_000, period_days: 3.55, icy: true };
+    const sky = siblingSky([europa], 1822, 421_700, 1.77, 0, 4333);
+    const direction = sky.bodies[0]!.direction;
+    expect(Math.hypot(...direction)).toBeCloseTo(1, 9);
+    // At most the two orbits apart, at least their difference.
+    const size = sky.bodies[0]!.angularDiameterDeg;
+    const at = (d: number) => (2 * Math.atan(1561 / d) * 180) / Math.PI;
+    expect(size).toBeGreaterThanOrEqual(at(671_000 + 421_700) - 1e-9);
+    expect(size).toBeLessThanOrEqual(at(671_000 - 421_700) + 1e-9);
+    expect(sky.casters[0]!.radius).toBeCloseTo(1561 / 1822, 9);
+    // Joined with the giant: every body, and the giant's shadow first.
+    const giant = moonSky({ radius_km: 1822, semi_major_axis_km: 421_700 }, 69_911, null);
+    const joined = joinSkies(giant, sky);
+    expect(joined.bodies).toHaveLength(2);
+    expect(joined.casters[0]!.radius).toBeCloseTo(69_911 / 1822, 6);
+  });
 });
+
