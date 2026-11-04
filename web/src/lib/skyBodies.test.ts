@@ -17,6 +17,7 @@ import {
   siblingOrbitLoops,
   siblingSky,
   sunLongitudeOnMoon,
+  sunOnMoon,
   type SkyBody,
   type Vec3,
 } from './skyBodies';
@@ -71,9 +72,12 @@ describe('sky bodies', () => {
 
   it('moves an eccentric moon on its ellipse, nearer and faster at periapsis', () => {
     const eccentric = moon({ eccentricity: 0.3, seed: 0 });
-    // Seed 0: the periapsis at longitude 0, where the mean longitude is half
-    // an orbit after the season starts (the sun at longitude 0).
-    const at = (days: number) => moonPlace(eccentric, 0, days / 365.25, 365.25, 0);
+    // Seed 0: the node and the periapsis at longitude 0, where the mean
+    // longitude is half an orbit after the season starts (the sun at
+    // longitude 0); over so long a year that the planet's frame does not
+    // turn against the stars meanwhile.
+    const year = 1e9;
+    const at = (days: number) => moonPlace(eccentric, 0, days / year, year, 0);
     const peri = at(27.3 / 2);
     const apo = at(0);
     expect(peri.distanceKm).toBeCloseTo(384_400 * 0.7, 3);
@@ -85,7 +89,7 @@ describe('sky bodies', () => {
     const nearApo = angle(at(-0.1).direction, at(0.1).direction);
     expect(nearPeri / nearApo).toBeCloseTo((1.3 / 0.7) ** 2, 1);
     // Larger in the sky and its orbit line nearer there.
-    const sky = (days: number) => planetSky([eccentric], 6371, days / 365.25, 365.25, 0).bodies[0]!;
+    const sky = (days: number) => planetSky([eccentric], 6371, days / year, year, 0).bodies[0]!;
     expect(sky(27.3 / 2).angularDiameterDeg / sky(0).angularDiameterDeg).toBeCloseTo(1.3 / 0.7, 6);
   });
 
@@ -184,6 +188,19 @@ describe('sky bodies', () => {
     expect(Math.min(...other!.map((d) => d[2]))).toBeLessThan(-0.9);
     // A binary's moon sees its own orbit too.
     expect(orbitLoops([binary], 0, 0, 365.25, 0)).toHaveLength(1);
+  });
+
+  it("puts the sun over a moon's latitude from its planet's season and its orbit", () => {
+    // In the planet's equator: the planet's tropic at the solstice.
+    const level = sunOnMoon(moon(), 0, 0.25, 365.25, 0, 23.44);
+    expect(level.latitudeDeg).toBeCloseTo(23.44, 6);
+    // Round its planet's year, an inclined moon of an upright planet sees
+    // the sun climb and fall by its inclination over its equator, its
+    // orbit's node fixed among the stars.
+    const tilted = moon({ inclination_deg: 10 });
+    const latitudes = Array.from({ length: 48 }, (_, i) => sunOnMoon(tilted, 0, i / 48, 365.25, 0, 0).latitudeDeg);
+    expect(Math.max(...latitudes)).toBeCloseTo(10, 0);
+    expect(Math.min(...latitudes)).toBeCloseTo(-10, 0);
   });
 
   it('turns the planet on itself in the sky of its moon', () => {
