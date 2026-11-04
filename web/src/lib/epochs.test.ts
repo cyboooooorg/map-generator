@@ -54,7 +54,7 @@ describe('epochs', () => {
 
   it('name their layers', () => {
     expect(epochFile('mercury-like-3', 2000, 'surface.png', 17, 4)).toBe(
-      '/api/worlds/mercury-like-3/epoch/2000/surface.png?rev=17&render=3&scale=4',
+      '/api/worlds/mercury-like-3/epoch/2000/surface.png?rev=17&render=4&scale=4',
     );
   });
 });

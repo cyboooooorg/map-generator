@@ -6,7 +6,7 @@ use crate::climate::{
     temperature, temperature_anomaly,
 };
 use crate::clouds::CloudInput;
-use crate::craters::{CraterField, Era, base_min_diameter_km};
+use crate::craters::{CraterField, Era, RAY_MIN_PIXELS, base_min_diameter_km};
 use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
@@ -692,6 +692,9 @@ pub fn generate_with_progress(
     let mut young_craters = elevation.clone();
     craters.apply(&mut elevation, &grid, Era::Dry);
     drop(craters);
+    // The bright ejecta and rays of fresh craters, down to the pixel.
+    let pixel_km = f64::from(grid.circumference_km) / f64::from(width);
+    let albedo = CraterField::new(params, RAY_MIN_PIXELS * pixel_km).albedo(&grid);
     young_craters
         .par_iter_mut()
         .zip(&elevation)
@@ -919,6 +922,7 @@ pub fn generate_with_progress(
             highland_offset,
             biomes,
             rivers: river_lines,
+            albedo,
             clouds,
         },
         river_coverage,

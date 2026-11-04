@@ -80,6 +80,22 @@ const RIM_JITTER: f64 = 0.06;
 const EJECTA_LOBES: f64 = 0.4;
 /// Craters spanning more rows than this compute their rows in parallel.
 const PARALLEL_ROWS: usize = 32;
+/// Brightness of fresh craters (see [`CraterField::albedo`]): space
+/// weathering darkens their ejecta and rays, `1/e` in this time (Ga), so
+/// that they are all but gone in 1 Ga (the Moon's Copernican craters).
+const RAY_FADE_GA: f64 = 0.25;
+/// Below this share of its brightness left, a crater has none.
+const RAY_GONE: f64 = 0.02;
+/// Smallest crater whose ejecta and rays the base map draws, in pixels
+/// across: its rays reach far beyond its rim.
+pub const RAY_MIN_PIXELS: f64 = 1.0;
+/// Brightness of a fresh crater's floor, of its ejecta at the rim, and of
+/// its rays near the rim (albedo shift, see [`CraterField::albedo`]).
+const FRESH_FLOOR: f32 = 0.25;
+const FRESH_EJECTA: f32 = 0.5;
+const FRESH_RAYS: f32 = 0.5;
+/// Ray lengths, in crater radii (Tycho's reach about 35).
+const RAY_LENGTH: (f64, f64) = (8.0, 30.0);
 /// Smallest crater a 1 bar atmosphere lets through, km; it scales as
 /// `p^0.75` (Venus: about 3 km at 92 bar).
 const AIR_FILTER_KM: f64 = 0.1;
@@ -257,6 +273,10 @@ pub struct CraterField {
     future: Population,
     /// Smallest crater the atmosphere lets through, km.
     air_km: f64,
+    /// Whether fresh craters keep bright rays: worlds without liquid water
+    /// today, where only space weathering darkens them (wind, rain and air
+    /// erase them elsewhere).
+    rays: bool,
     /// The epoch shown, Ga before present (negative in the future): only
     /// the craters formed by then exist, worn for the time since.
     epoch_ga: f64,
@@ -357,6 +377,7 @@ impl CraterField {
                 ages: Ages::Future { span_ga: FUTURE_GA },
             },
             air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
+            rays: p.pressure_bar < crate::atmosphere::LIQUID_WATER_BAR,
             epoch_ga: epoch_ga.max(-FUTURE_GA),
         }
     }
@@ -665,6 +686,65 @@ impl CraterField {
         (crater.age_ga > self.wet_until_ga) == (era == Era::Wet)
     }
 
+    /// The brightness of the fresh craters (and their ejecta and rays) on
+    /// the base map: an albedo shift per pixel, 0 for none, up to 1 at the
+    /// rim of a crater just formed, fading with the time since it formed
+    /// until the epoch. Profiles add up, in any order. Empty of craters
+    /// (all zeros) on worlds with air enough for liquid water.
+    ///
+    /// The field holds the craters to light: [`Self::new_at`] down to
+    /// [`RAY_MIN_PIXELS`], since even a pixel-wide crater has rays many
+    /// pixels long.
+    pub fn albedo(&self, grid: &Grid) -> Vec<f32> {
+        let (w, h) = (grid.width as usize, grid.height as usize);
+        let mut albedo = vec![0.0f32; w * h];
+        if !self.rays {
+            return albedo;
+        }
+        let columns: Vec<(f64, f64)> = (0..w)
+            .map(|x| {
+                let lon = (x as f64 + 0.5) / w as f64 * 2.0 * PI;
+                (lon.cos(), lon.sin())
+            })
+            .collect();
+        let lit: Vec<Fresh> = self
+            .craters
+            .iter()
+            .filter(|crater| self.formed(crater))
+            .filter_map(|crater| {
+                let since = crater.age_ga - self.epoch_ga;
+                let fresh = (-since / RAY_FADE_GA).exp();
+                (fresh >= RAY_GONE).then(|| Fresh::new(crater, fresh as f32, self.radius_km, h))
+            })
+            .collect();
+        albedo.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            let lat = grid.latitude(y as u32);
+            let (cos_lat, sin_lat) = (lat.cos(), lat.sin());
+            for f in lit.iter().filter(|f| (f.rows.0..=f.rows.1).contains(&y)) {
+                let columns_of = if lat.abs() + f.reach >= PI / 2.0 {
+                    None
+                } else {
+                    let half = (f.reach.sin() / cos_lat).min(1.0).asin();
+                    let to_col = |lon: f64| lon / (2.0 * PI) * w as f64 - 0.5;
+                    let x0 = to_col(f.lon - half).floor() as i64;
+                    let x1 = to_col(f.lon + half).ceil() as i64;
+                    (x1 - x0 + 1 < w as i64).then_some((x0, x1))
+                };
+                let (x0, x1) = columns_of.unwrap_or((0, w as i64 - 1));
+                for xi in x0..=x1 {
+                    let x = xi.rem_euclid(w as i64) as usize;
+                    let (cos_lon, sin_lon) = columns[x];
+                    let v = [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat];
+                    row[x] += f.at(v);
+                }
+            }
+        });
+        for a in &mut albedo {
+            *a = a.clamp(-1.0, 1.0);
+        }
+        albedo
+    }
+
     /// Angular reach of a crater's ejecta, radians: no pixel farther from
     /// its centre changes.
     fn reach(&self, crater: &Crater) -> f64 {
@@ -899,6 +979,100 @@ impl CraterField {
             sum += px.sample(elevation, p);
         }
         sum / 7.0
+    }
+}
+
+/// A fresh crater's brightness, prepared once: its floor, ejecta and rays.
+struct Fresh {
+    c: [f64; 3],
+    east: [f64; 3],
+    north: [f64; 3],
+    /// Crater radius, radians.
+    radius: f64,
+    /// Farthest reach of its rays, radians.
+    reach: f64,
+    cos_reach: f64,
+    /// Longitude of its centre, in [0, 2π).
+    lon: f64,
+    /// Rows of the map it lights.
+    rows: (usize, usize),
+    fresh: f32,
+    /// Each ray: its direction in the tangent plane (cos, sin), its width
+    /// at the rim (radians of azimuth) and its length (crater radii).
+    rays: Vec<((f64, f64), f64, f64)>,
+}
+
+impl Fresh {
+    fn new(crater: &Crater, fresh: f32, planet_radius_km: f64, height: usize) -> Self {
+        let c = crater.centre;
+        let (east, north) = tangent_basis(c);
+        let radius = 0.5 * crater.diameter_km / planet_radius_km;
+        // A stream of its own: the rim and ejecta draws are not disturbed.
+        let mut rng = Rng(mix(crater.shape ^ 0x5241_5953));
+        let count = 6 + (rng.next() % 9) as usize;
+        let rays: Vec<_> = (0..count)
+            .map(|_| {
+                let phi = 2.0 * PI * rng.unit();
+                let width = 0.04 + 0.08 * rng.unit();
+                let length = RAY_LENGTH.0 + (RAY_LENGTH.1 - RAY_LENGTH.0) * rng.unit();
+                ((phi.cos(), phi.sin()), width, length)
+            })
+            .collect();
+        let longest = rays.iter().map(|r| r.2).fold(3.0, f64::max);
+        let reach = (longest * radius).min(PI);
+        let lat = c[2].clamp(-1.0, 1.0).asin();
+        let to_row = |lat: f64| (PI / 2.0 - lat) / PI * height as f64 - 0.5;
+        let y0 = to_row(lat + reach).floor().max(0.0) as usize;
+        let y1 = (to_row(lat - reach).ceil().max(0.0) as usize).min(height - 1);
+        Fresh {
+            c,
+            east,
+            north,
+            radius,
+            reach,
+            cos_reach: reach.cos(),
+            lon: c[1].atan2(c[0]).rem_euclid(2.0 * PI),
+            rows: (y0, y1),
+            fresh,
+            rays,
+        }
+    }
+
+    /// The brightness it adds at the unit vector `v`.
+    fn at(&self, v: [f64; 3]) -> f32 {
+        let c = self.c;
+        let dot = (v[0] * c[0] + v[1] * c[1] + v[2] * c[2]).clamp(-1.0, 1.0);
+        if dot < self.cos_reach {
+            return 0.0;
+        }
+        let r = dot.acos() / self.radius;
+        if r < 1.0 {
+            return self.fresh * FRESH_FLOOR;
+        }
+        // The continuous blanket, thinning as the ejecta.
+        let mut a = FRESH_EJECTA * (r.powi(-3) as f32);
+        let along = |b: [f64; 3]| v[0] * b[0] + v[1] * b[1] + v[2] * b[2];
+        let (e, n) = (along(self.east), along(self.north));
+        let len = (e * e + n * n).sqrt();
+        if len > 1e-12 {
+            let (ce, cn) = (e / len, n / len);
+            for &((rc, rs), width, length) in &self.rays {
+                // cos of the angle to the ray: 1 − cos ≈ Δ² / 2, no trigonometry.
+                let cos = ce * rc + cn * rs;
+                if cos <= 0.0 || r > length {
+                    continue;
+                }
+                // Streaks of about constant width: narrower in azimuth farther out.
+                let w = width / r.sqrt();
+                let across = 2.0 * (1.0 - cos) / (w * w);
+                if across > 9.0 {
+                    continue;
+                }
+                let fade = 1.0 - smoothstep(0.5 * length as f32, length as f32, r as f32);
+                a += FRESH_RAYS * ((-across).exp() * r.powf(-0.5)) as f32 * fade;
+            }
+        }
+        self.fresh * a.min(1.0)
     }
 }
 
@@ -1315,6 +1489,49 @@ mod tests {
         let now = CraterField::context(&p).wear(&crater);
         let then = CraterField::context_at(&p, 2.9).wear(&crater);
         assert!(then > 0.8 && now < 0.1, "{then} {now}");
+    }
+
+    #[test]
+    fn fresh_craters_have_bright_ejecta_and_rays_that_fade() {
+        let p = moon(4.0);
+        let grid = p.grid();
+        let crater = Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km: 150.0,
+            age_ga: 0.05,
+            shape: 9,
+        };
+        let lit = |field: CraterField| {
+            CraterField {
+                craters: vec![crater],
+                ..field
+            }
+            .albedo(&grid)
+        };
+        let fresh = lit(CraterField::context(&p));
+        let brightest = fresh.iter().fold(0.0f32, |m, &v| m.max(v));
+        assert!(brightest > 0.4, "{brightest}");
+        // Rays: some pixels well beyond the ejecta are lit.
+        let lit_pixels = fresh.iter().filter(|&&v| v > 0.02).count();
+        let crater_px = PI * (75.0f64 / (10_917.0 / 512.0)).powi(2);
+        assert!(
+            lit_pixels as f64 > 10.0 * crater_px,
+            "{lit_pixels} vs {crater_px}"
+        );
+        // 1 Ga later the rays are gone; before it formed, nothing.
+        let old = lit(CraterField::context_at(&p, -1.0));
+        assert!(old.iter().all(|&v| v < 0.03));
+        assert!(
+            lit(CraterField::context_at(&p, 0.1))
+                .iter()
+                .all(|&v| v == 0.0)
+        );
+        // Air erases them.
+        let venus = CraterField::context(&WorldParams {
+            pressure_bar: 92.0,
+            ..moon(4.0)
+        });
+        assert!(lit(venus).iter().all(|&v| v == 0.0));
     }
 
     #[test]
