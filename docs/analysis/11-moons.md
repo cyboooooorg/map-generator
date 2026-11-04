@@ -130,12 +130,116 @@ keep their worlds.
 | Misshapen moons                            | The pipeline is equirectangular on a sphere: deform the mesh in the viewer only, a triaxial ellipsoid with low-frequency noise and large craters, outside the generation.                                                                                                                                                              | medium |
 | Effects on the planet                      | Axial tilt, tidal flats, sub-moon point for binaries: they change existing worlds, so a separate step.                                                                                                                                                                                                                                 | medium |
 
-## 8. Proposed steps
+## 8. Implementation plan (2026-11-04)
 
-1. Drawing the moons, their data and the star view; no seed changes.
-2. Rendering the moons, round then misshapen, in the sky and in a panel.
-3. Effects on the planet (axial tilt, tides, binary rotation); seeds
-   change.
+Goal set by the user: every moon can be viewed on its own in the viewer.
+Each moon is therefore a **body** of its world: a small world generated
+with the planet, with its own maps and data, opened in the planet view
+like the planet itself (globe and map, layers, detail tiles, measure,
+screenshot). Moons draw from a noise stream of their own, so the planet
+of a seed does not change until step 5.
+
+### Step 1: the moon system (Rust)
+
+- **Module `src/moons.rs`:** `MoonSystem::draw(params, star)` from a new
+  noise stream (`stream::MOONS`, 26). The planet's mass follows from its
+  size at Earth's density (as `gravity_modifier` does), icy bodies
+  lighter.
+- **Channels and odds** (constants to calibrate, see section 2):
+  - giant impact: 1 in 12 for planets above about 0.3 Earth radii, mass
+    ratio 0.005–0.03 (the Moon: 0.0123); on small worlds (below about
+    0.25 Earth radii) one in two, mass ratio up to 0.15;
+  - debris moonlets: one or two moons of a few to some tens of km, close
+    in, often below the synchronous orbit;
+  - captured: one to three small irregular moons far out (0.05–0.3
+    `r_H`), eccentric and inclined, some retrograde;
+  - none on planets locked to their star.
+- **Each moon:** a name by distance (I, II, …), radius (three axes when
+  irregular), mass ratio, density and composition (ice beyond the snow
+  line, from the planet's equilibrium temperature, rock otherwise),
+  orbit (semi-major axis between the Roche limit and a third of `r_H`,
+  eccentricity, inclination, period from Kepler's law), the synchronous
+  orbit and the migration it implies (receding, or falling in like
+  Phobos), tidally locked to its planet or not.
+- **Binaries:** above a mass ratio of about 0.05 the barycentre is given,
+  and whether it lies outside the planet (Pluto–Charon: yes).
+- **Data:** `world.json` gains `moons` (format version 9; older worlds
+  have none). The CLI and requests take `--moons auto|none` (default
+  `auto`); the parameter line counts the moons.
+- **Tests:** over a few thousand seeds, the share of large moons near
+  1/12, no moon on locked planets, every orbit inside the stable zone,
+  binaries only on small worlds, determinism, and the planet unchanged
+  to the bit.
+
+### Step 2: moon surfaces (Rust and server)
+
+- **Each moon generated as a world:** preset `barren` for rock, a new
+  built-in `icy-moon` preset for ice (bright ice, craters, no maria);
+  circumference from its mean radius; no air, no erosion; a surface age
+  from its origin (old for impact moons); the planet's star and orbit,
+  so it gets their light. Its seed derives from the world's and its
+  index.
+- **Resolution:** the planet's width times the ratio of the radii,
+  between 256 and the planet's width (a Moon around an Earth at 4096
+  pixels: about 1024), so pixels have a similar size in km.
+- **Irregular moons:** a new `shape` layer, the radius as a factor of the
+  mean one (a triaxial ellipsoid plus low-frequency noise), exported as
+  `shape.png` (16-bit); the elevation, craters included, stays the
+  surface detail over it.
+- **Files:** `worlds/<id>/moons/<n>/` with the layout of a world
+  (`world.json`, `world.png`, `thumb.png`, `raw_data/`); a "Moons"
+  stage in the job progress. Static files are already served under
+  `/worlds/`.
+- **Server:** detail tiles and crater epochs of a moon at
+  `/api/worlds/{id}/moons/{n}/tiles/…` and `…/epoch/…`, the tile cache
+  keyed by body; deleting or replacing a world takes its moons with it
+  (they live in its directory).
+- **Budget:** moons are smaller than their planet, so the generation
+  should grow by 10–30 %; to measure.
+
+### Step 3: the moon view (viewer)
+
+- **Subject switch:** Planet / Star / Moon, with a selector of the moons
+  (and a shortcut to step through them); the button is disabled on a
+  world without moons.
+- **The planet view loads a body:** a base URL for files and tiles
+  instead of the world id, so every tool works on a moon as on the
+  planet, the crater epoch slider included.
+- **Irregular moons:** the globe mesh is displaced by the `shape` layer
+  (in the vertex shader, as the relief is); the map stays
+  equirectangular, as the maps of Phobos are.
+- **Moon panel** (like the star panel): origin, size (and axes),
+  mass ratio, density, surface gravity, orbit (semi-major axis in km and
+  planet radii, period, eccentricity, inclination, prograde or
+  retrograde), synchronous orbit and migration, tidal locking, apparent
+  size seen from the planet, and the barycentre for binaries. Every
+  value explained in a tooltip; English and French catalogs.
+- **Star view:** the planet with its moons in an inset (not to scale),
+  on Kepler orbits; a binary turns around its barycentre.
+- **World card and list:** the number of moons.
+
+### Step 4: skies (optional)
+
+The planet in the sky of each moon (with its phase), the moons in the
+planet's sky; eclipses.
+
+### Step 5: effects on the planet (seeds change)
+
+- The axial tilt drawn in a narrow range with a large moon, over a wide
+  one without (Laskar et al. 1993).
+- Tidal flats widened by the tidal range of the moons.
+- Binaries: the planet's day equals the moon's month, with a sub-moon
+  point.
+
+### Choices taken by default (to confirm)
+
+- Moons are generated with the planet (not on demand when first
+  opened): simpler, and the viewer opens them at once.
+- Moon surfaces come from the generator, not from a procedural shader in
+  the browser: they get craters, maria, detail tiles and data layers
+  like any world.
+- The user can turn moons off (`none`), not choose their number: they
+  follow from the seed and the physics.
 
 ## Sources
 
