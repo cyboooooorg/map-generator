@@ -13,6 +13,42 @@ import type { Sky } from './sky';
 
 export type Vec3 = [number, number, number];
 
+/** A body's own x, y (spin axis) and z axes, in another body's frame. */
+export type Axes = [Vec3, Vec3, Vec3];
+
+/** The axes of the frame itself. */
+export const IDENTITY_AXES: Axes = [
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, 1],
+];
+
+/**
+ * A body's axes turned by `angle` (radians) on its spin axis `y`, from
+ * the frame's: the longitude facing a fixed direction decreases as the
+ * body turns (prograde, from z towards x).
+ */
+export function spinAxes(angle: number): Axes {
+  return [
+    [Math.cos(angle), 0, -Math.sin(angle)],
+    [0, 1, 0],
+    [Math.sin(angle), 0, Math.cos(angle)],
+  ];
+}
+
+/**
+ * Rotation period of a moon, hours, or null for one locked to its planet
+ * (it turns once per orbit). A captured moon keeps the spin it came with:
+ * world.json does not store it, so its seed draws one, from 6 to 24 hours,
+ * as the irregular moons of the giants (Himalia 7.8 h, Phoebe 9.3 h,
+ * Nereid 11.6 h).
+ */
+export function moonSpinHours(moon: Pick<Moon, 'tidally_locked' | 'migration' | 'seed'>): number | null {
+  if (moon.tidally_locked || moon.migration === 'locked') return null;
+  const share = (Math.abs(Math.trunc(moon.seed)) % 9973) / 9973;
+  return 6 + 18 * share;
+}
+
 /** A body drawn in the sky of the body shown. */
 export interface SkyBody {
   direction: Vec3;
@@ -23,11 +59,11 @@ export interface SkyBody {
   /** Its surface map (`surface.png`), or null for a plain colour. */
   texture: string | null;
   /**
-   * Longitude of its map facing the body shown, degrees (a moon keeps
-   * 180° towards its planet), or null to map it in the frame of the body
-   * shown (the planet seen from a moon: it spins under it).
+   * Its own axes (its x, its spin axis, its z: its map's frame) in the
+   * frame of the body shown, as it turns on itself; null for the frame of
+   * the body shown.
    */
-  faceLonDeg: number | null;
+  axes: Axes | null;
   /** Its cloud map (`clouds.png`, grey), or null for none. */
   clouds?: string | null;
   /** Linear colour of its clouds. */
@@ -124,13 +160,21 @@ const scale = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
 const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const unit = (a: Vec3): Vec3 => scale(a, 1 / Math.max(Math.hypot(...a), 1e-12));
 
+/** What places a moon and turns it on itself. */
+type PlacedMoon = Pick<
+  Moon,
+  'inclination_deg' | 'period_days' | 'migration' | 'semi_major_axis_km' | 'tidally_locked' | 'seed'
+>;
+
 /**
- * The frame of moon `k` in its planet's frame: `z` away from the planet
- * (the planet at longitude 180°, as a moon keeps it), `y` along its orbit's
- * normal (its spin axis), `x` completing it; and its centre, in km.
+ * The frame of moon `k` in its planet's frame, its own (its map's): `y`
+ * along its orbit's normal (its spin axis); `z` away from the planet (the
+ * planet at longitude 180°, as a locked moon keeps it), or, on a moon that
+ * is not locked, turned from there as it spins (see moonSpinHours); `x`
+ * completing it; and its centre, in km.
  */
 function moonFrame(
-  moon: Pick<Moon, 'inclination_deg' | 'period_days' | 'migration' | 'semi_major_axis_km'>,
+  moon: PlacedMoon,
   k: number,
   season: number,
   yearDays: number,
@@ -142,17 +186,38 @@ function moonFrame(
   // binary's moon hangs at [0, 0, -1] whatever its inclination).
   const normal: Vec3 = [0, Math.cos(tilt), Math.sin(tilt)];
   const y = unit(sub(normal, scale(z, dot(normal, z))));
-  return { x: cross(y, z), y, z, centre: scale(z, moon.semi_major_axis_km) };
+  const x = cross(y, z);
+  const centre = scale(z, moon.semi_major_axis_km);
+  const spin = moonSpinHours(moon);
+  if (spin === null) return { x, y, z, centre };
+  // Turned on itself against the orbit's frame, which turns once per orbit.
+  const days = season * yearDays;
+  const turns = days * (24 / spin - 1 / Math.max(moon.period_days, 1e-3));
+  const a = 2 * Math.PI * (turns - Math.floor(turns));
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return {
+    x: sub(scale(x, c), scale(z, s)),
+    y,
+    z: [z[0] * c + x[0] * s, z[1] * c + x[1] * s, z[2] * c + x[2] * s],
+    centre,
+  };
+}
+
+/** A frame's axes in the frame given by `local`. */
+function axesIn(frame: { x: Vec3; y: Vec3; z: Vec3 }, local: (v: Vec3) => Vec3): Axes {
+  return [local(frame.x), local(frame.y), local(frame.z)];
 }
 
 /**
  * Longitude (degrees, 0 to 360) over which the sun stands on moon `k`
  * (from 0), as its planet's sky places the moons (see moonDirection): it
- * turns once per orbit, the moon keeping its face to its planet. The sun
+ * turns once per orbit on a moon keeping its face to its planet, once per
+ * day of its own on one that does not (see moonSpinHours). The sun
  * is taken in its planet's equatorial plane.
  */
 export function sunLongitudeOnMoon(
-  moon: Pick<Moon, 'inclination_deg' | 'period_days' | 'migration' | 'semi_major_axis_km'>,
+  moon: PlacedMoon,
   k: number,
   season: number,
   yearDays: number,
@@ -167,12 +232,21 @@ export function sunLongitudeOnMoon(
 /** Points sampled round each orbit line. */
 const ORBIT_SAMPLES = 160;
 
+/** The great circle of a frame's x-z plane, as an orbit line. */
+function circle(): Vec3[] {
+  return Array.from({ length: ORBIT_SAMPLES }, (_, i) => {
+    const a = (2 * Math.PI * i) / ORBIT_SAMPLES;
+    return [Math.sin(a), 0, Math.cos(a)] as Vec3;
+  });
+}
+
 /**
  * The orbits of a planet's moons as lines in the sky, at infinity: for
  * each moon, directions to points of its orbit seen from the planet's
  * centre, or, with `shown` (from 0), from that moon's centre in its frame
  * (as moonSystemSky places the bodies). A binary's moon, which does not
- * move in its planet's sky, and the moon shown have none.
+ * move in its planet's sky, has none from the planet. The moon shown sees
+ * its own orbit as a great circle through its planet, the way it goes.
  */
 export function orbitLoops(
   moons: readonly Moon[],
@@ -188,7 +262,13 @@ export function orbitLoops(
       : null;
   const loops: Vec3[][] = [];
   moons.forEach((moon, k) => {
-    if (k === shown || moon.migration === "locked") return;
+    if (k === shown && here) {
+      // Its orbit's plane, through the moon's centre, is its frame's x-z
+      // plane (y is the orbit's normal).
+      loops.push(circle());
+      return;
+    }
+    if (moon.migration === "locked") return;
     const tilt = (moon.inclination_deg * Math.PI) / 180;
     const loop: Vec3[] = [];
     for (let i = 0; i < ORBIT_SAMPLES; i += 1) {
@@ -239,12 +319,6 @@ export function siblingOrbitLoops(
   });
 }
 
-/** Longitude (degrees) of a moon's map facing `from` (a point, km, in its planet's frame). */
-function faceLongitude(frame: ReturnType<typeof moonFrame>, from: Vec3): number {
-  const u = sub(from, frame.centre);
-  return (Math.atan2(dot(u, frame.x), dot(u, frame.z)) * 180) / Math.PI;
-}
-
 /**
  * The moons in the sky of their planet, and their shadows on it; each
  * mapped with its surface (`textures(k)`, null for a plain colour), its
@@ -267,7 +341,7 @@ export function planetSky(
       angularDiameterDeg: moon.angular_diameter_deg,
       colour: moon.composition === 'ice' ? ICE : ROCK,
       texture: textures(k),
-      faceLonDeg: 180,
+      axes: axesIn(moonFrame(moon, k, season, yearDays, sunLongitudeRad), (v) => v),
     });
     const distance = moon.semi_major_axis_km / planetRadiusKm;
     casters.push({ position: direction.map((c) => c * distance) as Vec3, radius: moon.radius_km / planetRadiusKm });
@@ -277,15 +351,19 @@ export function planetSky(
   return { bodies, casters: casters.slice(0, MAX_CASTERS) };
 }
 
-/** The planet in the sky of one of its moons, and its shadow on the moon. */
+/**
+ * The planet in the sky of one of its moons, and its shadow on the moon:
+ * towards `direction` (by default longitude 180°, the face a locked moon
+ * keeps towards its planet), its own axes `axes` as it turns.
+ */
 export function moonSky(
   moon: Pick<Moon, 'radius_km' | 'semi_major_axis_km'>,
   planetRadiusKm: number,
   planetTexture: string | null,
   look: PlanetLook = {},
+  direction: Vec3 = [0, 0, -1],
+  axes: Axes = IDENTITY_AXES,
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
-  // Longitude 180°: the face the moon keeps towards its planet.
-  const direction: Vec3 = [0, 0, -1];
   const angle = 2 * Math.atan(planetRadiusKm / Math.max(moon.semi_major_axis_km - moon.radius_km, 1));
   const distance = moon.semi_major_axis_km / moon.radius_km;
   return {
@@ -295,11 +373,11 @@ export function moonSky(
         angularDiameterDeg: (angle * 180) / Math.PI,
         colour: PLANET,
         texture: planetTexture,
-        faceLonDeg: null,
+        axes,
         ...look,
       },
     ],
-    casters: [{ position: [0, 0, -distance], radius: planetRadiusKm / moon.radius_km }],
+    casters: [{ position: scale(direction, distance), radius: planetRadiusKm / moon.radius_km }],
   };
 }
 
@@ -308,7 +386,9 @@ export function moonSky(
  * and the planet's other moons, where they are on their orbits as the
  * seasons play (as planetSky places them), at their size from the moon,
  * mapped with their surfaces (`textures(k)`), and the largest shadows.
- * `look` is the planet's clouds and atmosphere.
+ * `look` is the planet's clouds and atmosphere; `planetTurn` (radians) how
+ * far the planet has turned on itself since the hour of its own view (see
+ * bodyTurn), which shows it spinning in the sky.
  */
 export function moonSystemSky(
   moons: readonly Moon[],
@@ -320,13 +400,22 @@ export function moonSystemSky(
   yearDays: number,
   sunLongitudeRad: number,
   look: PlanetLook = {},
+  planetTurn = 0,
 ): { bodies: SkyBody[]; casters: ShadowCaster[] } {
   const self = moons[shown];
   if (!self) return { bodies: [], casters: [] };
-  const sky = moonSky(self, planetRadiusKm, planetTexture, look);
   const here = moonFrame(self, shown, season, yearDays, sunLongitudeRad);
   // Planet frame to the shown moon's.
   const local = (v: Vec3): Vec3 => [dot(v, here.x), dot(v, here.y), dot(v, here.z)];
+  const [px, py, pz] = spinAxes(planetTurn);
+  const sky = moonSky(
+    self,
+    planetRadiusKm,
+    planetTexture,
+    look,
+    unit(local(scale(here.centre, -1))),
+    axesIn({ x: px, y: py, z: pz }, local),
+  );
   moons.forEach((moon, k) => {
     if (k === shown) return;
     const there = moonFrame(moon, k, season, yearDays, sunLongitudeRad);
@@ -337,7 +426,7 @@ export function moonSystemSky(
       angularDiameterDeg: (2 * Math.atan(moon.radius_km / distance) * 180) / Math.PI,
       colour: moon.composition === 'ice' ? ICE : ROCK,
       texture: textures(k),
-      faceLonDeg: faceLongitude(there, here.centre),
+      axes: axesIn(there, local),
     });
     sky.casters.push({ position: scale(v, 1 / self.radius_km), radius: moon.radius_km / self.radius_km });
   });
@@ -401,11 +490,22 @@ export function siblingSky(
       angularDiameterDeg: (2 * Math.atan(sibling.radius_km / distance) * 180) / Math.PI,
       colour: sibling.icy ? ICE : ROCK,
       texture: null,
-      faceLonDeg: null,
+      axes: null,
     });
     casters.push({ position: v.map((c) => c / worldRadiusKm) as Vec3, radius: sibling.radius_km / worldRadiusKm });
   });
   return { bodies, casters };
+}
+
+/**
+ * How far a body has turned on itself, radians, after `days` against a
+ * frame that turns once per `framePeriodDays` (its orbit round its star,
+ * as the sun stands still in its own view, or its moon's orbit), at one
+ * turn per `dayHours`; 0 for a body locked to that frame.
+ */
+export function bodyTurn(days: number, dayHours: number, framePeriodDays: number): number {
+  const turns = days * (24 / Math.max(dayHours, 1e-3) - 1 / Math.max(framePeriodDays, 1e-3));
+  return 2 * Math.PI * (turns - Math.floor(turns));
 }
 
 /** Two skies together (the giant and its other moons), the largest shadows kept. */
