@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyGiantChoice, initialGiantChoice } from './giantForm';
+import { applyGiantChoice, initialGiantChoice, parseGiantChoice } from './giantForm';
 import type { WorldRequest } from './api/types/WorldRequest';
 
 describe('giant form fields', () => {
@@ -21,5 +21,26 @@ describe('giant form fields', () => {
   it('starts from a varied world', () => {
     const choice = initialGiantChoice({ metallicity: -0.2, host: 'giant', mass_earth: 17 });
     expect(choice).toMatchObject({ metallicityRandom: false, metallicity: -0.2, host: 'giant', massRandom: false, mass: 17 });
+  });
+
+  it('draws a field left empty', () => {
+    const request: WorldRequest = {};
+    // An emptied number input binds null.
+    const emptied = { ...initialGiantChoice(null), massRandom: false, mass: null as unknown as number };
+    applyGiantChoice(request, emptied, true);
+    expect(request).toEqual({});
+  });
+
+  it('reads a remembered choice, drawing what is malformed', () => {
+    expect(parseGiantChoice({ metallicityRandom: false, metallicity: -0.2, giants: 'none', host: 'giant', massRandom: false, mass: 17 })).toEqual({
+      metallicityRandom: false,
+      metallicity: -0.2,
+      giants: 'none',
+      host: 'giant',
+      massRandom: false,
+      mass: 17,
+    });
+    expect(parseGiantChoice({ metallicity: 'high', giants: 'many', host: 'moon', mass: -3 })).toEqual(initialGiantChoice(null));
+    expect(parseGiantChoice(undefined)).toEqual(initialGiantChoice(null));
   });
 });
