@@ -290,3 +290,27 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 3    | Server: structured request errors, `[locales.*]` in presets                          | Same  | done   |
 | 4    | French catalog, French built-in presets, layout checked with longer strings          | Same  | done   |
 | 5    | Guard against literal text in templates, in CI                                       | Same  | done   |
+
+## 11. The host star
+
+- **Status:** decided
+- **Analysis:** [10-stars.md](analysis/10-stars.md)
+- **Problem:** every world orbits an implicit Sun at 1 AU: temperatures
+  come from Earth's profile and preset shifts, the light is white, and
+  no star is drawn in the viewer.
+- **Decision (2026-11-04):** a star (spectral type, drawn with realistic
+  frequencies or chosen) and an orbit given by a position in its
+  habitable zone (each planet type in its logical range, volcanic worlds
+  heated from within) or a distance in AU; the climate follows the
+  insolation; the viewer draws the star at the sunlight direction, with
+  the star field, and can light the planet with the star's colour.
+
+| Step | Change                                                                         | Seeds  | Status |
+| ---- | ------------------------------------------------------------------------------ | ------ | ------ |
+| 0    | Star model: spectral table, black-body colour, habitable zone, derived values  | Same   | todo   |
+| 1    | `[star]` in presets, `--star` and the orbit, `world.json`, form and world card | Same   | todo   |
+| 2    | Climate driven by the insolation, internal heat, presets recalibrated          | Change | todo   |
+| 3    | Viewer: the star at the sunlight direction, with the star field                | Same   | todo   |
+| 4    | Viewer: "Star light", the planet and its sky lit by the star's colour          | Same   | todo   |
+| 5    | Tidal locking of close-in planets                                              | Change | todo   |
+| 6    | Vegetation colours adapted to the star, in the "Star light" view               | Same   | todo   |
