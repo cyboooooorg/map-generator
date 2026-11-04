@@ -6,6 +6,10 @@ description = "Dead rock: arid and lifeless, no water"
 name = "Stérile"
 description = "Roche morte : aride et sans vie, sans eau"
 
+[star]                                 # host star and orbit (see `mapgen::star`)
+# Drawn like the stars nearby, anywhere: there is no water to care about.
+position = [-1.0, 4.0]
+
 [climate]
 moisture = -0.65
 volcanic = -0.40

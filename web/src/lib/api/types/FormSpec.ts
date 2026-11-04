@@ -10,7 +10,15 @@ export type FormSpec = { sea_level: ParamSpec,
  * Limits of `land_fraction`, the alternative to `sea_level`; without
  * it, the sea level falls back as usual.
  */
-land_fraction: Limits, volcanic: ParamSpec, circumference_km: ParamSpec, axial_tilt_deg: ParamSpec, erosion: ParamSpec, pressure_bar: ParamSpec, surface_age_ga: ParamSpec, default_width: number, default_height: number, 
+land_fraction: Limits, volcanic: ParamSpec, circumference_km: ParamSpec, axial_tilt_deg: ParamSpec, erosion: ParamSpec, pressure_bar: ParamSpec, surface_age_ga: ParamSpec, 
+/**
+ * Position of the orbit in the star's habitable zone.
+ */
+hz_position: ParamSpec, 
+/**
+ * Limits of `orbit_au`, the alternative to `hz_position`.
+ */
+orbit_au: Limits, default_width: number, default_height: number, 
 /**
  * Largest width or height the server accepts.
  */

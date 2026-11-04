@@ -21,7 +21,8 @@
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
-  import { type CameraState, PlanetView, type ViewMode } from '../lib/viewer/PlanetView';
+  import { vegetationShares } from '../lib/vegetation';
+  import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
   import LoadingBar from './LoadingBar.svelte';
@@ -104,6 +105,7 @@
     landContours: true,
     atmosphere: true,
     stars: true,
+    starLight: false,
     clouds: true,
     cloudDrift: false,
     sun: false,
@@ -127,6 +129,7 @@
   let landContours = $state(saved.landContours);
   let atmosphere = $state(saved.atmosphere);
   let stars = $state(saved.stars);
+  let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
@@ -228,6 +231,7 @@
       landContours,
       atmosphere,
       stars,
+      starLight,
       clouds,
       cloudDrift,
       sun,
@@ -241,7 +245,7 @@
 
   /** The settings "Link display" mirrors, as this pane has them. */
   function currentLinked(): LinkedDisplay {
-    return { layer, relief, sun, season, sunLongitude, atmosphere, stars, clouds, graticule };
+    return { layer, relief, sun, season, sunLongitude, atmosphere, stars, starLight, clouds, graticule };
   }
 
   $effect(() => {
@@ -263,6 +267,7 @@
     if (changes.sunLongitude !== undefined) sunLongitude = changes.sunLongitude;
     if (changes.atmosphere !== undefined) atmosphere = changes.atmosphere;
     if (changes.stars !== undefined) stars = changes.stars;
+    if (changes.starLight !== undefined) starLight = changes.starLight;
     if (changes.clouds !== undefined) clouds = changes.clouds;
     if (changes.graticule !== undefined) graticule = changes.graticule;
   });
@@ -457,21 +462,43 @@
   $effect(() => view?.setLandContours(landContours));
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setStars(stars));
+  $effect(() => view?.setStarLight(starLight));
+  $effect(() => {
+    const biomes = meta?.biomes;
+    if (biomes) view?.setVegetation(vegetationShares(biomes));
+  });
+  $effect(() => {
+    const star = meta?.star;
+    view?.setHostStar(
+      star
+        ? {
+            colour: star.light,
+            angularDiameterDeg: star.angular_diameter_deg,
+            insolation: star.insolation,
+            teffK: star.teff_k,
+          }
+        : SUN_STAR,
+    );
+  });
   $effect(() => view?.setSky(meta ? skyFromWorld(meta) : null));
   $effect(() => view?.setHighlight(dataReady ? highlight : null));
   $effect(() => view?.setPath(path));
+  /** A tidally locked world: its star stays above the map's centre (longitude 180°, the equator). */
+  const locked = $derived(meta?.star?.tidally_locked ?? false);
   $effect(() => {
     view?.setLighting(
-      sun
-        ? { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 }
-        : { kind: 'headlight' },
+      !sun
+        ? { kind: 'headlight' }
+        : locked
+          ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
+          : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
     );
   });
 
   // The season animation: one year every YEAR_SECONDS, paused while the
   // canvas is hidden (it resumes from the same day).
   $effect(() => {
-    if (!playing || !sun || !canvasVisible) {
+    if (!playing || !sun || !canvasVisible || locked) {
       return;
     }
     let last = performance.now();
@@ -814,7 +841,12 @@
       </label>
 
       <label class="check"><input type="checkbox" bind:checked={sun} /> {t.viewer.sunlight}</label>
-      {#if sun}
+      <label class="check" title={t.viewer.starLightHelp}
+        ><input type="checkbox" bind:checked={starLight} /> {t.viewer.starLight}</label
+      >
+      {#if sun && locked}
+        <p class="muted">{t.viewer.lockedSun}</p>
+      {:else if sun}
         <label>
           <span title={t.viewer.seasonHelp}>{t.viewer.season}</span>
           <input type="range" min="0" max="1" step="0.005" bind:value={season} />

@@ -5,3 +5,8 @@ description = "Earth-like, full biome spectrum"
 [locales.fr]
 name = "Tellurique"
 description = "Comme la Terre, tous les biomes"
+
+[star]                                 # host star and orbit (see `mapgen::star`)
+# Drawn like the stars nearby (three quarters M dwarfs), inside the habitable zone.
+position = [0.05, 0.75]                # in the habitable zone: 0 inner edge, 1 outer edge (Earth: 0.07)
+

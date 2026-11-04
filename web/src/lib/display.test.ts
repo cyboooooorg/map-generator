@@ -9,6 +9,7 @@ const main: LinkedDisplay = {
   sunLongitude: 90,
   atmosphere: false,
   stars: true,
+  starLight: false,
   clouds: true,
   graticule: true,
 };

@@ -2,6 +2,7 @@
 // world" starts where the previous generation left off. The seed is not
 // kept: the same planet and seed would name an existing world.
 import { loadSetting, removeSetting, saveSetting } from './settings';
+import { parseStarChoice, type StarChoice } from './starForm';
 
 const KEY = 'generateForm';
 
@@ -22,6 +23,8 @@ export interface FormMemory {
   landPercent: number;
   /** By parameter name; parameters missing here take their defaults. */
   fields: Record<string, FieldMemory>;
+  /** The star and orbit; null takes the preset's. */
+  star: StarChoice | null;
 }
 
 function isField(value: unknown): value is FieldMemory {
@@ -60,6 +63,7 @@ export function parseFormMemory(raw: unknown, fieldNames: readonly string[]): Fo
     seaBy: r.seaBy === 'land' ? 'land' : 'level',
     landPercent: typeof r.landPercent === 'number' && Number.isFinite(r.landPercent) ? r.landPercent : 29,
     fields,
+    star: parseStarChoice(r.star),
   };
 }
 

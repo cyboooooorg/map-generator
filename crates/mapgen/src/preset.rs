@@ -21,13 +21,18 @@
 //! surface_age = [3.0, 4.2]           # Ga
 //!
 //! [climate]                          # added to every pixel before biome selection
-//! temperature = -15.0                # °C
+//! temperature = -15.0                # °C, after the star
+//! internal_heat = 0.0                # K: the planet's own heat
 //! moisture = -0.6
 //! volcanic = 0.0
 //!
 //! [geology]                          # see the geology module
 //! regime = "stagnant"
 //! wet_until = 3.5                    # Ga
+//!
+//! [star]                             # see the star module
+//! type = "G2V"                       # left out: drawn like the stars nearby
+//! orbit_au = 1.524                   # or position = [0.1, 0.9] in the habitable zone
 //!
 //! [rules]                            # any BiomeRules field
 //! polar = -5.0                       # °C
@@ -39,6 +44,7 @@ use crate::atmosphere::Atmosphere;
 use crate::biome::{Biome, BiomeRules};
 use crate::geology::Geology;
 use crate::request;
+use crate::star::StarSpec;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -73,7 +79,7 @@ impl ParamDefault {
         }
     }
 
-    fn check(self, field: &str, min: f32, max: f32) -> Result<(), String> {
+    pub(crate) fn check(self, field: &str, min: f32, max: f32) -> Result<(), String> {
         let (lo, hi) = match self {
             ParamDefault::Fixed(v) => (v, v),
             ParamDefault::Range([lo, hi]) => (lo, hi),
@@ -119,6 +125,11 @@ pub struct ClimateShift {
     pub moisture: f32,
     /// Added to the volcanic zone (`[0, 1]` scale).
     pub volcanic: f32,
+    /// Heat from within the planet, as the temperature (K) it would keep
+    /// the surface at without any starlight: combined with the star's
+    /// heating as radiated power (`T⁴` adds up), so a world far from its
+    /// star stays warm. 0: none (Earth's is negligible).
+    pub internal_heat: f32,
 }
 
 /// A planet type. See the module documentation for the file format.
@@ -145,6 +156,10 @@ pub struct Preset {
     /// `[geology]` table.
     #[serde(default)]
     pub geology: Geology,
+    /// The host star and the planet's orbit: drawn when left out (see
+    /// `crate::star`).
+    #[serde(default)]
+    pub star: StarSpec,
     /// Target biome → biomes replaced by it.
     #[serde(default)]
     pub remap: BTreeMap<Biome, Vec<Biome>>,
@@ -189,6 +204,8 @@ struct PresetSpec {
     atmosphere: Atmosphere,
     #[serde(default)]
     geology: Geology,
+    #[serde(default)]
+    star: StarSpec,
     #[serde(default)]
     remap: BTreeMap<Biome, Vec<Biome>>,
 }
@@ -246,6 +263,7 @@ impl TryFrom<PresetSpec> for Preset {
         }
         spec.atmosphere.validate()?;
         spec.geology.validate()?;
+        spec.star.validate()?;
 
         let mut lookup = Biome::ALL.to_vec();
         let mut seen = BTreeMap::new();
@@ -267,6 +285,7 @@ impl TryFrom<PresetSpec> for Preset {
             rules: spec.rules,
             atmosphere: spec.atmosphere,
             geology: spec.geology,
+            star: spec.star,
             remap: spec.remap,
             locales: spec.locales,
             lookup,

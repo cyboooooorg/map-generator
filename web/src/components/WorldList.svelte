@@ -139,7 +139,14 @@
           <Thumbnail id={world.id} revision={world.modified_ms} width={72} height={40} />
           <span class="text">
             <strong>{world.planet}</strong>
-            <small>{t.worldList.seedSize({ seed: world.seed, width: world.width, height: world.height })}</small>
+            <small
+              >{t.worldList.seedSize({
+                seed: world.seed,
+                width: world.width,
+                height: world.height,
+                star: world.star ?? '',
+              })}</small
+            >
             <small title={new Date(world.modified_ms).toLocaleString(getLocale())}
               >{t.worldList.details({
                 ago: formatAgo(world.modified_ms),

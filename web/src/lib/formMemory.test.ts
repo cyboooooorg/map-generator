@@ -12,6 +12,7 @@ describe('parseFormMemory', () => {
       seaBy: 'land',
       landPercent: 40,
       fields: { sea_level: { random: true, value: 0 }, pressure_bar: { random: false, value: 0.006 } },
+      star: { klass: 'M', subtype: 4.5, orbitBy: 'position', orbitRandom: false, position: 0.4, au: 1 },
     };
     expect(parseFormMemory(stored, FIELDS)).toEqual(stored);
   });
@@ -24,6 +25,7 @@ describe('parseFormMemory', () => {
         seaBy: 'sideways',
         landPercent: 'many',
         fields: { sea_level: { random: 'no', value: 1 }, pressure_bar: { random: false, value: 2 }, gone: {} },
+        star: { klass: 'Q' },
       },
       FIELDS,
     );
@@ -34,6 +36,7 @@ describe('parseFormMemory', () => {
       seaBy: 'level',
       landPercent: 29,
       fields: { pressure_bar: { random: false, value: 2 } },
+      star: null,
     });
   });
 

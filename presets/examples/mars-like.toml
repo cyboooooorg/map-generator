@@ -8,6 +8,10 @@ description = "Small cold desert world with polar caps"
 name = "Type Mars"
 description = "Petit désert froid aux calottes polaires"
 
+[star]                                 # host star and orbit (see `mapgen::star`)
+type = "G2V"                           # the Sun
+orbit_au = 1.524
+
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these.
 #
@@ -25,7 +29,7 @@ volcanic = [0.0, 0.3]
 erosion = 1.0
 
 [climate]
-temperature = -60.0                # °C: about −60 °C on average, like Mars
+temperature = -10.0                # °C: with its distance (×0.81 in kelvin), about −50 °C on average
 moisture = -0.7
 
 # Any BiomeRules field; the others keep their default. Ice only near the

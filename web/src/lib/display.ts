@@ -11,6 +11,7 @@ export interface LinkedDisplay {
   sunLongitude: number;
   atmosphere: boolean;
   stars: boolean;
+  starLight: boolean;
   clouds: boolean;
   graticule: boolean;
 }
@@ -23,6 +24,7 @@ export const LINKED_KEYS: readonly (keyof LinkedDisplay)[] = [
   'sunLongitude',
   'atmosphere',
   'stars',
+  'starLight',
   'clouds',
   'graticule',
 ];

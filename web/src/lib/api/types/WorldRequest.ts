@@ -21,4 +21,17 @@ pressure_bar?: number,
 /**
  * Age of the oldest surviving surface, in Ga.
  */
-surface_age_ga?: number, width?: number, height?: number, };
+surface_age_ga?: number, 
+/**
+ * Spectral type of the host star (`G2V`).
+ */
+star?: string, 
+/**
+ * Semi-major axis of the orbit in AU. Exclusive with `hz_position`.
+ */
+orbit_au?: number, 
+/**
+ * Position of the orbit in the star's habitable zone (0 inner edge, 1
+ * outer edge). Exclusive with `orbit_au`.
+ */
+hz_position?: number, width?: number, height?: number, };
