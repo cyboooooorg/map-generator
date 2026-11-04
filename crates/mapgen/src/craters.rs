@@ -100,6 +100,13 @@ const RAY_LENGTH: (f64, f64) = (8.0, 30.0);
 /// `p^0.75` (Venus: about 3 km at 92 bar).
 const AIR_FILTER_KM: f64 = 0.1;
 
+/// Density of the craters a surface `age_ga` old has kept, its impact rate
+/// raised `impact` times by the giants: more craters build up faster, but
+/// never past saturation, where each new crater erases as many as it adds.
+fn past_density(age_ga: f64, impact: f64) -> f64 {
+    (crater_density(age_ga) * impact).min(SATURATION)
+}
+
 /// Cumulative density of craters of 1 km or more on a surface `age_ga`
 /// old, per km² (Neukum, Ivanov & Hartmann 2001): a steep decline until
 /// about 3.5 Ga, then a constant flux. 0.063 at 4 Ga.
@@ -414,15 +421,16 @@ impl CraterField {
         });
         // A locked planet draws more craters, and keeps a share of them by
         // their angle to its apex (see `leading_share`): the same mean.
-        let raise = if locked_since_ga.is_some() {
+        let locked_raise = if locked_since_ga.is_some() {
             1.0 + (LEADING_RATIO - 1.0) / (LEADING_RATIO + 1.0)
         } else {
             1.0
         };
         // Giants stir the impactors: their mass sets the rate (see
         // `giants::impact_factor`; 1 without giants modelled).
-        let raise =
-            raise * crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor));
+        let impact =
+            crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor));
+        let raise = locked_raise * impact;
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
             craters: Vec::new(),
@@ -437,7 +445,7 @@ impl CraterField {
             erosion: p.erosion as f64,
             past: Population {
                 seed: stream_seed(p.seed, stream::CRATERS),
-                density: crater_density(p.surface_age_ga as f64).min(SATURATION) * raise,
+                density: past_density(p.surface_age_ga as f64, impact) * locked_raise,
                 ages: Ages::Past {
                     surface_age_ga: p.surface_age_ga as f64,
                 },
@@ -1487,6 +1495,22 @@ mod tests {
             giant_mass_earth: None,
             host: crate::exomoon::HostMode::None,
         }
+    }
+
+    #[test]
+    fn giants_raise_the_craters_up_to_saturation_only() {
+        // An old surface is saturated whatever the giants: the cap applies
+        // after their impact factor, never scaling saturation itself.
+        let old = (1..100)
+            .map(|k| f64::from(k) * 0.1)
+            .find(|&age| crater_density(age) >= SATURATION / 0.7)
+            .expect("a surface old enough to saturate at the lowest factor");
+        for impact in [0.7, 1.0, 1.8] {
+            assert_eq!(past_density(old, impact), SATURATION, "{impact}");
+        }
+        // A young surface scales with the impact rate.
+        let young = past_density(1.0, 1.8) / past_density(1.0, 0.7);
+        assert!((young - 1.8 / 0.7).abs() < 1e-9, "{young}");
     }
 
     #[test]
