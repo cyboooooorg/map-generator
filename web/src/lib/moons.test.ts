@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bodyPath } from './api/client';
-import { bodyFileName, moonBody, moonChoiceOf, moonsOf, moonsRequest, parseBody, parseMoonChoice } from './moons';
+import { bodyFileName, bodyId, bodyKey, moonBody, moonChoiceOf, moonsOf, moonsRequest, parseBody, parseBodyKey, parseMoonChoice, systemBodies } from './moons';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 
 describe('moons', () => {
@@ -27,5 +27,23 @@ describe('moons', () => {
     expect(moonChoiceOf({ count: 2 })).toBe(2);
     expect(parseMoonChoice(4, 6)).toBe(4);
     expect(parseMoonChoice(0, 6)).toBe('auto');
+  });
+
+  it('names the bodies of a system and lists them in its order', () => {
+    expect(bodyId('terran-5', { kind: 'world' })).toBe('terran-5');
+    expect(bodyId('terran-5', { kind: 'moon', n: 2 })).toBe('terran-5/moons/2');
+    expect(bodyId('terran-5', { kind: 'host' })).toBe('terran-5/host');
+    expect(bodyId('terran-5', { kind: 'sibling', n: 1 })).toBe('terran-5/host/siblings/1');
+    for (const key of ['world', 'host', 'moon:3', 'sibling:1']) {
+      expect(bodyKey(parseBodyKey(key)!)).toBe(key);
+    }
+    expect(parseBodyKey('moon:0')).toBeNull();
+    expect(parseBodyKey('star')).toBeNull();
+    // A giant's moon: the giant, then its moons by distance, the world among them.
+    const exomoon = { host: { distance_km: 600_000, siblings: [{ distance_km: 1_000_000 }, { distance_km: 400_000 }] } } as unknown as WorldMetadata;
+    expect(systemBodies(exomoon).map(bodyKey)).toEqual(['host', 'sibling:2', 'world', 'sibling:1']);
+    const planet = { moons: { moons: [{}, {}] } } as unknown as WorldMetadata;
+    expect(systemBodies(planet).map(bodyKey)).toEqual(['world', 'moon:1', 'moon:2']);
+    expect(systemBodies(null).map(bodyKey)).toEqual(['world']);
   });
 });
