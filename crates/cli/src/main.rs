@@ -114,6 +114,12 @@ struct Args {
     #[arg(long)]
     giants: Option<GiantsMode>,
 
+    /// Mass of a giant planet in Earth masses, in [5, 4131] (Jupiter: 318,
+    /// Saturn: 95, Neptune: 17); giant presets only [default: drawn in the
+    /// preset's range]
+    #[arg(long, value_parser = parse_in(request::GIANT_MASS))]
+    mass: Option<f32>,
+
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]
     #[arg(long, value_parser = parse_in(request::EROSION))]
     erosion: Option<f32>,
@@ -197,6 +203,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         moons: args.moons,
         metallicity: args.metallicity,
         giants: args.giants,
+        mass_earth: args.mass,
         width: Some(args.width),
         height: Some(args.height),
     };
@@ -232,6 +239,28 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
 
     if let Some(system) = MoonSystem::draw(p) {
         println!("Moons → {}", moons_summary(&system));
+    }
+    if let Some(giant) = mapgen::giant_world::info(p) {
+        println!(
+            "Giant → {:.1} Earth masses ({:.2} MJ), {:.1} Earth radii, {:.2} g/cm³, day {:.1} h, \
+             flattening {:.3}, Teff {:.0} K (class {}), {} jets per hemisphere, winds {:.0} to {:.0} m/s{}",
+            giant.mass_earth,
+            giant.mass_earth / JUPITER_EARTH_MASSES,
+            giant.radius_earth,
+            giant.density,
+            giant.rotation_hours,
+            giant.flattening,
+            giant.effective_k,
+            giant.class,
+            giant.jets,
+            -giant.wind_west,
+            giant.wind_east,
+            match &giant.rings {
+                Some(r) if r.bright => ", bright rings",
+                Some(_) => ", faint rings",
+                None => "",
+            }
+        );
     }
     if let Some(system) = GiantSystem::draw(p) {
         println!("Giants → {}", giants_summary(&system, p.metallicity));
@@ -278,7 +307,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
          --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
-         --star {} --orbit-au {} --eccentricity {} --metallicity {}{}{}{} --width {} --height {}",
+         --star {} --orbit-au {} --eccentricity {} --metallicity {}{}{}{}{} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -302,6 +331,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         } else {
             ""
         },
+        p.giant_mass_earth
+            .map_or(String::new(), |m| format!(" --mass {m}")),
         match p.moons {
             MoonsMode::Auto => String::new(),
             MoonsMode::None => " --moons none".into(),

@@ -283,6 +283,12 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 }
 
 impl DetailWorld {
+    /// Whether the world is a giant planet: cloud bands, no ground to
+    /// detail (it has no detail tiles).
+    pub fn is_giant(&self) -> bool {
+        self.world.params.giant_mass_earth.is_some()
+    }
+
     pub fn new(world: LoadedWorld) -> Self {
         Self::at_epoch(world, 0.0)
     }

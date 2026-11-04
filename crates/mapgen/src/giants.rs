@@ -511,6 +511,7 @@ mod tests {
             shape: None,
             metallicity,
             giants: GiantsMode::Auto,
+            giant_mass_earth: None,
         }
     }
 

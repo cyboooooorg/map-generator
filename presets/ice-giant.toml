@@ -1,0 +1,28 @@
+# An ice giant like Uranus or Neptune: water, ammonia and methane under a
+# thin envelope; methane makes it blue, three broad jets band it.
+name = "ice-giant"
+description = "Ice giant like Uranus or Neptune: blue methane, broad bands"
+
+[locales.fr]
+name = "Géante de glaces"
+description = "Comme Uranus ou Neptune : méthane bleu, larges bandes"
+
+[star]                                 # host star and orbit (see `mapgen::star`)
+# Far beyond the ice line (about 12 to 30 AU around the Sun).
+position = [4.4, 6.0]
+
+[giant]                                # see `mapgen::giant_world`
+kind = "ice"
+mass = [10.0, 50.0]                    # Earth masses: Uranus 14.5, Neptune 17.1
+rings = [0.0, 0.7]                     # narrow, dark rings
+
+[defaults]
+pressure = 0.3                         # bar: a thin sky above the cloud tops, so the bands show
+surface_age = 0.0                      # no ground: no craters
+axial_tilt = [0.0, 90.0]               # degrees: Uranus lies on its side (97.8°, or 82° spinning backwards)
+
+[atmosphere]
+rayleigh = [0.3, 0.6, 1.0]             # the gas scatters little blue: the bands keep their colours
+haze = 0.12
+haze_colour = [0.75, 0.88, 0.95]
+clouds = "none"                        # the bands are the clouds

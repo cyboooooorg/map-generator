@@ -58,6 +58,12 @@ pub const ORBIT_AU: Limits = Limits {
 /// Eccentricity of the planet's orbit: 0 circular; beyond 0.9 the planet
 /// would graze its star or leave its habitable zone for most of its year.
 pub const ECCENTRICITY: Limits = Limits { min: 0.0, max: 0.9 };
+/// Mass of a giant planet, Earth masses: from a small ice giant to the
+/// deuterium-burning limit (13 Jupiter masses).
+pub const GIANT_MASS: Limits = Limits {
+    min: 5.0,
+    max: 4_131.0,
+};
 /// Number of moons a request can ask for.
 pub const MOON_COUNT: Limits = Limits {
     min: 1.0,
@@ -147,6 +153,9 @@ pub struct WorldRequest {
     pub metallicity: Option<f32>,
     /// `auto` (the giant planets the seed draws, the default) or `none`.
     pub giants: Option<crate::giants::GiantsMode>,
+    /// Mass of a giant planet (giant presets only), Earth masses, in
+    /// `[5, 4131]`; drawn in the preset's range when left out.
+    pub mass_earth: Option<f32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -260,6 +269,7 @@ impl WorldRequest {
             ("eccentricity", self.eccentricity, ECCENTRICITY),
             ("drift_ma", self.drift_ma, DRIFT_MA),
             ("metallicity", self.metallicity, METALLICITY),
+            ("mass_earth", self.mass_earth, GIANT_MASS),
         ] {
             if let Some(v) = value
                 && !limits.contains(v)
@@ -285,7 +295,7 @@ impl WorldRequest {
             Some(spec) => spec.clone(),
             None => {
                 let names = built_in_names();
-                names[rng.random_range(0..names.len())].to_string()
+                names[rng.random_range(0..crate::preset::DRAWN)].to_string()
             }
         };
         let planet = Preset::load(&planet_spec)?;
@@ -341,8 +351,15 @@ impl WorldRequest {
             .surface_age_ga
             .unwrap_or_else(|| d.surface_age.unwrap_or(fallback::SURFACE_AGE_GA).pick(rng));
         // The star, then the orbit, drawn after everything else (above).
+        // A giant's mass, before the star and orbit (which the moons may
+        // draw again).
+        let giant_mass_earth = planet
+            .giant
+            .as_ref()
+            .map(|g| self.mass_earth.unwrap_or_else(|| g.mass.pick(rng)));
         let star_spec = planet.star.clone();
         let s = &star_spec;
+        let period_days = planet.giant.as_ref().and_then(|g| g.period_days);
         let star_set = self.star.is_some() || s.kind.is_some();
         let orbit_set =
             self.orbit_au.is_some() || self.hz_position.is_some() || s.orbit_au.is_some();
@@ -355,10 +372,17 @@ impl WorldRequest {
                 (Some(au), _, _) => au,
                 (None, Some(position), _) => crate::star::orbit_at(star, position),
                 (None, None, Some(au)) => au,
-                (None, None, None) => crate::star::orbit_at(
-                    star,
-                    s.position.unwrap_or(fallback::HZ_POSITION).pick(rng),
-                ),
+                (None, None, None) => match period_days {
+                    // A hot giant is placed by its period (Kepler's third law).
+                    Some(period) => {
+                        let years = period.pick(rng) / 365.25;
+                        (crate::star::values(star).mass * years * years).cbrt()
+                    }
+                    None => crate::star::orbit_at(
+                        star,
+                        s.position.unwrap_or(fallback::HZ_POSITION).pick(rng),
+                    ),
+                },
             };
             // The eccentricity last; tides circularise the orbits of the
             // planets they lock.
@@ -383,26 +407,46 @@ impl WorldRequest {
             .or(s.metallicity)
             .unwrap_or_else(|| crate::giants::draw_metallicity(seed));
         let eccentricity_drawn = self.eccentricity.is_none() && s.eccentricity.is_none();
+        // A giant: its radius from its mass and the heat it gets; no ground,
+        // so no erosion, volcanoes, moons of the rocky kind or giant
+        // neighbours (not modelled for a giant).
+        let giant = giant_mass_earth.is_some();
+        let circumference_km = match giant_mass_earth {
+            Some(mass) => {
+                let at = crate::star::StarInfo::new(star, orbit_au, eccentricity).equilibrium_k;
+                crate::giants::giant_radius(mass, at) * 40_075.0
+            }
+            None => circumference_km,
+        };
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
             height: self.height.unwrap_or(fallback::HEIGHT),
             seed,
             planet,
             sea_level,
-            volcanic_intensity,
+            volcanic_intensity: if giant { 0.0 } else { volcanic_intensity },
             circumference_km,
             axial_tilt_deg,
-            erosion,
+            erosion: if giant { 0.0 } else { erosion },
             pressure_bar,
             surface_age_ga,
             star,
             orbit_au,
             eccentricity,
             drift_ma: self.drift_ma.unwrap_or(0.0),
-            moons: self.moons.unwrap_or_default(),
+            moons: if giant {
+                crate::moons::MoonsMode::None
+            } else {
+                self.moons.unwrap_or_default()
+            },
             shape: None,
             metallicity,
-            giants: self.giants.unwrap_or_default(),
+            giants: if giant {
+                crate::giants::GiantsMode::None
+            } else {
+                self.giants.unwrap_or_default()
+            },
+            giant_mass_earth,
         };
         // What the moons do to their planet: a large one keeps a drawn tilt
         // in the usual range (a free one ranges wider), and the tides

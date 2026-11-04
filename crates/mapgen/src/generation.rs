@@ -807,6 +807,10 @@ pub fn generate_with_progress(
     options: GenerateOptions,
     progress: impl Fn(Stage),
 ) -> Generated {
+    // A giant has no ground: its cloud bands have a pipeline of their own.
+    if params.giant_mass_earth.is_some() {
+        return crate::giant_world::generate(params, &progress);
+    }
     let (width, height) = (params.width, params.height);
     let planet = &params.planet;
     let sink = options.debug;
@@ -1218,6 +1222,7 @@ pub fn generate_with_progress(
             rivers: river_lines,
             albedo,
             clouds,
+            surface: Vec::new(),
         },
         river_coverage,
     }
@@ -1250,6 +1255,7 @@ mod tests {
             shape: None,
             metallicity: 0.0,
             giants: crate::giants::GiantsMode::None,
+            giant_mass_earth: None,
         }
     }
 

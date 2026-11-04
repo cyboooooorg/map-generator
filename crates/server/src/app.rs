@@ -444,6 +444,12 @@ async fn body_tile(
         Ok(world) => world,
         Err(e) => return Ok(world_failure(e, "tiles")),
     };
+    if world.is_giant() {
+        return Err(Failure(
+            StatusCode::NOT_FOUND,
+            "a giant planet has no ground to detail: no detail tiles".into(),
+        ));
+    }
     // Wait for a turn here, not on a blocking thread: a request the viewer
     // abandons meanwhile is dropped without rendering.
     let _turn = state

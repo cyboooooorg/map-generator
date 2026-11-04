@@ -27,6 +27,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Giant } from '../api/types/Giant';
+import type { GiantInfo } from '../api/types/GiantInfo';
 import type { StarInfo } from '../api/types/StarInfo';
 import { fullPixelRatio } from './pixelRatio';
 import { starsFragment, starsVertex } from './shaders';
@@ -343,6 +344,44 @@ export class StarView {
   setDistances(on: boolean): void {
     this.distancesOn = on;
     this.applyVisibility();
+    this.requestRender();
+  }
+
+  /**
+   * Draws the world itself as the giant it is (its colour, size and
+   * rings), or as the usual blue marker of a rocky world (null).
+   */
+  setWorldGiant(info: GiantInfo | null): void {
+    for (const child of [...this.planet.children]) {
+      const mesh = child as Mesh<RingGeometry, MeshBasicMaterial>;
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+      this.planet.remove(child);
+    }
+    if (!info) {
+      this.planet.scale.setScalar(1);
+      this.planet.material.color.set('#7fb2ff');
+      this.requestRender();
+      return;
+    }
+    const colour = new Color().setRGB(...info.palette.zone, SRGBColorSpace);
+    this.planet.material.color.copy(colour);
+    this.planet.scale.setScalar(giantMarkerSize(info.radius_earth) / PLANET_MARKER);
+    if (info.rings) {
+      const ring = new Mesh(
+        new RingGeometry(PLANET_MARKER * 1.35, PLANET_MARKER * 2.3, 64),
+        new MeshBasicMaterial({
+          color: new Color().setRGB(...info.rings.colour, SRGBColorSpace),
+          transparent: true,
+          opacity: info.rings.bright ? 0.6 : 0.22,
+          side: DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      ring.rotation.x = -Math.PI / 2 + 0.45;
+      ring.renderOrder = 3;
+      this.planet.add(ring);
+    }
     this.requestRender();
   }
 

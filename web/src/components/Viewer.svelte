@@ -7,7 +7,7 @@
   import type { HexMap } from '../lib/api/types/HexMap';
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
-  import { formatArea, formatKm, formatNumber, formatShare, formatUpTo, saveBlob, surfaceColour } from '../lib/format';
+  import { formatArea, formatInt, formatKm, formatNumber, formatShare, formatUpTo, saveBlob, surfaceColour, withUnit } from '../lib/format';
   import type { LonLat } from '../lib/geo';
   import type { ViewLink } from '../lib/link';
   import type { LoadProgress } from '../lib/progress';
@@ -29,7 +29,7 @@
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
-  import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
+  import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
   import LoadingBar from './LoadingBar.svelte';
@@ -245,7 +245,18 @@
   const epochShown = $derived(epochPreview ?? epoch);
   const layers = $derived(world.layers);
   const dataReady = $derived(layers !== null);
-  function available(needs: Needs): boolean {
+  /** A giant planet: cloud bands, no ground (see GiantInfo). */
+  const giant = $derived(meta?.giant ?? null);
+  /** The layers a giant has: its bands, cloud tops, temperatures and winds (on the moisture layer). */
+  const GIANT_LAYERS: readonly Layer[] = ['biomes', 'elevation', 'temperature', 'moisture'];
+  /** A layer's name: a giant's cloud tops and winds are named as such. */
+  function layerName(id: Layer): string {
+    if (giant && id === 'elevation') return t.viewer.cloudTops;
+    if (giant && id === 'moisture') return t.viewer.windLayer;
+    return t.viewer.layers[id];
+  }
+  function available(needs: Needs, id?: Layer): boolean {
+    if (giant && id !== undefined && !GIANT_LAYERS.includes(id)) return false;
     return (
       needs === 'none' ||
       (needs === 'extra' && layers?.extra != null) ||
@@ -255,7 +266,7 @@
   /** The layer drawn: the chosen one when this world has it, the biomes otherwise. */
   const shown = $derived.by((): Layer => {
     const option = LAYERS.find((l) => l.id === layer);
-    return dataReady && option && available(option.needs) ? layer : 'biomes';
+    return dataReady && option && available(option.needs, option.id) ? layer : 'biomes';
   });
   const declination = $derived((meta?.axial_tilt_deg ?? 23.44) * Math.sin(2 * Math.PI * season));
   const seasonLabel = $derived.by(() => {
@@ -513,10 +524,12 @@
   });
   $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => view?.setCloudsDrifting(cloudDrift));
+  $effect(() => view?.setGiant(giant));
   $effect(() => {
     // No detail while the slider moves: the reduced preview shows through.
+    // A giant has no ground to detail.
     view?.setDetail(
-      worldId && meta && revision !== null && epochPreview === null
+      worldId && meta && !giant && revision !== null && epochPreview === null
         ? { id: worldId, revision, baseWidth: meta.width, epochMa: epoch }
         : null,
     );
@@ -527,8 +540,9 @@
   $effect(() => view?.setGraticule(graticule));
   $effect(() => view?.setReferenceTilt(meta ? meta.axial_tilt_deg : null));
   $effect(() => view?.setReferenceLines(referenceLines));
-  $effect(() => view?.setSeaContours(seaContours));
-  $effect(() => view?.setLandContours(landContours));
+  // Cloud tops have no sea and no altitude contours.
+  $effect(() => view?.setSeaContours(seaContours && !giant));
+  $effect(() => view?.setLandContours(landContours && !giant));
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setStars(stars));
   $effect(() => view?.setStarLight(starLight));
@@ -720,7 +734,7 @@
 
   function selectLayer(index: number): void {
     const option = LAYERS[index];
-    if (option && available(option.needs)) {
+    if (option && available(option.needs, option.id)) {
       layer = option.id;
     }
   }
@@ -894,6 +908,7 @@
       bind:zone={starZone}
       bind:prominences={starProminences}
       giantSystem={system.giants}
+      worldGiant={world.worldMeta?.giant ?? null}
       bind:giants={starGiants}
     />
   {/if}
@@ -987,8 +1002,8 @@
         <span>{t.viewer.layer}</span>
         <select bind:value={layer} disabled={!dataReady}>
           {#each LAYERS as option, i (option.id)}
-            <option value={option.id} disabled={dataReady && !available(option.needs)}
-              >{i + 1}. {t.viewer.layers[option.id]}{!dataReady || available(option.needs) ? '' : t.viewer.notInWorld}</option
+            <option value={option.id} disabled={dataReady && !available(option.needs, option.id)}
+              >{i + 1}. {layerName(option.id)}{!dataReady || available(option.needs, option.id) ? '' : t.viewer.notInWorld}</option
             >
           {/each}
         </select>
@@ -1027,9 +1042,13 @@
       {/if}
       <label class="check"><input type="checkbox" bind:checked={atmosphere} /> {t.viewer.atmosphere}</label>
       <label class="check" title={t.viewer.starsHelp}><input type="checkbox" bind:checked={stars} /> {t.viewer.stars}</label>
-      <label class="check"><input type="checkbox" bind:checked={clouds} /> {t.viewer.clouds}</label>
-      {#if clouds}
-        <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> {t.viewer.drift}</label>
+      {#if giant}
+        <label class="check" title={t.viewer.bandDriftHelp}><input type="checkbox" bind:checked={cloudDrift} /> {t.viewer.bandDrift}</label>
+      {:else}
+        <label class="check"><input type="checkbox" bind:checked={clouds} /> {t.viewer.clouds}</label>
+        {#if clouds}
+          <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> {t.viewer.drift}</label>
+        {/if}
       {/if}
       <label class="check"><input type="checkbox" bind:checked={graticule} /> {t.viewer.grid}</label>
       <label class="check" title={t.viewer.tropicsHelp}>
@@ -1069,13 +1088,29 @@
   </div>
 
   {#if dataReady && shown !== 'biomes'}
-    {@const ramp = t.legends[shown]}
+    {@const windShown = giant !== null && shown === 'moisture'}
+    {@const ramp = windShown ? t.legends.wind : t.legends[shown]}
+    {@const range = giant && shown === 'temperature' ? giantTemperatureRange(giant) : null}
     <div class="legend" role="region" aria-label={t.viewer.legend}>
-      <strong>{ramp.label}</strong>
-      <div class="bar" style:background={cssGradient(shown)}></div>
+      <strong>{giant ? layerName(shown) : ramp.label}</strong>
+      <div class="bar" style:background={cssGradient(windShown ? 'wind' : shown)}></div>
       <div class="ends">
-        <span>{ramp.min}</span>
-        <span>{shown === 'coast' && layers?.extra ? t.viewer.coastCap({ km: formatKm(layers.extra.coastMaxKm) }) : ramp.max}</span>
+        <span
+          >{windShown && giant
+            ? t.viewer.windEnd({ speed: formatInt(Math.max(giant.wind_east, giant.wind_west)), side: ramp.min })
+            : range
+              ? withUnit(formatInt(range[0]), '°C')
+              : ramp.min}</span
+        >
+        <span
+          >{windShown && giant
+            ? t.viewer.windEnd({ speed: formatInt(Math.max(giant.wind_east, giant.wind_west)), side: ramp.max })
+            : range
+              ? withUnit(formatInt(range[1]), '°C')
+              : shown === 'coast' && layers?.extra
+                ? t.viewer.coastCap({ km: formatKm(layers.extra.coastMaxKm) })
+                : ramp.max}</span
+        >
       </div>
     </div>
   {:else if shown === 'biomes' && world.stats}

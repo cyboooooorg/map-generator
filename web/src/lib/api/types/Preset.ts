@@ -5,6 +5,7 @@ import type { BiomeRules } from "./BiomeRules";
 import type { ClimateShift } from "./ClimateShift";
 import type { Defaults } from "./Defaults";
 import type { Geology } from "./Geology";
+import type { GiantSpec } from "./GiantSpec";
 import type { StarSpec } from "./StarSpec";
 
 /**
@@ -32,6 +33,11 @@ geology: Geology,
  * `crate::star`).
  */
 star: StarSpec, 
+/**
+ * A giant planet: cloud bands instead of a surface (see
+ * `crate::giant_world`); `None` for a rocky or icy world.
+ */
+giant?: GiantSpec | null, 
 /**
  * Target biome → biomes replaced by it.
  */

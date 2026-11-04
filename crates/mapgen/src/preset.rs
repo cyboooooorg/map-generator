@@ -51,14 +51,26 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 
-/// The built-in presets, in the order `--planet` lists them.
-const BUILT_IN: [(&str, &str); 5] = [
+/// The built-in presets, in the order `--planet` lists them: the rocky
+/// worlds first (the first [`DRAWN`] are drawn when no planet is asked
+/// for), then the giants.
+const BUILT_IN: [(&str, &str); 8] = [
     ("terran", include_str!("../../../presets/terran.toml")),
     ("volcanic", include_str!("../../../presets/volcanic.toml")),
     ("frozen", include_str!("../../../presets/frozen.toml")),
     ("caustic", include_str!("../../../presets/caustic.toml")),
     ("barren", include_str!("../../../presets/barren.toml")),
+    ("gas-giant", include_str!("../../../presets/gas-giant.toml")),
+    ("ice-giant", include_str!("../../../presets/ice-giant.toml")),
+    (
+        "hot-jupiter",
+        include_str!("../../../presets/hot-jupiter.toml"),
+    ),
 ];
+
+/// How many of the built-in presets a request without a planet draws
+/// from: the rocky ones (a giant is asked for by name).
+pub const DRAWN: usize = 5;
 
 /// The presets of moons: not planet types (neither listed nor drawn for
 /// a planet), given by the generator to the moons of a world.
@@ -173,6 +185,10 @@ pub struct Preset {
     /// `crate::star`).
     #[serde(default)]
     pub star: StarSpec,
+    /// A giant planet: cloud bands instead of a surface (see
+    /// `crate::giant_world`); `None` for a rocky or icy world.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub giant: Option<GiantSpec>,
     /// Target biome → biomes replaced by it.
     #[serde(default)]
     pub remap: BTreeMap<Biome, Vec<Biome>>,
@@ -220,7 +236,49 @@ struct PresetSpec {
     #[serde(default)]
     star: StarSpec,
     #[serde(default)]
+    giant: Option<GiantSpec>,
+    #[serde(default)]
     remap: BTreeMap<Biome, Vec<Biome>>,
+}
+
+/// The `[giant]` table of a giant planet's preset.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct GiantSpec {
+    /// Gas (Jupiter, Saturn) or ice (Uranus, Neptune).
+    pub kind: crate::giants::GiantKind,
+    /// Mass in Earth masses, a value or a `[min, max]` range (drawn
+    /// log-uniformly would favour none: drawn uniformly in it).
+    pub mass: ParamDefault,
+    /// Orbital period in days, a value or a range: places a hot giant
+    /// close to its star instead of the `[star]` position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period_days: Option<ParamDefault>,
+    /// Odds of bright rings (Saturn's) and of faint ones; the rest have
+    /// none.
+    #[serde(default)]
+    pub rings: [f32; 2],
+}
+
+impl GiantSpec {
+    fn validate(&self) -> Result<(), String> {
+        let (lo, hi) = (request::GIANT_MASS.min, request::GIANT_MASS.max);
+        self.mass
+            .check("mass", lo, hi)
+            .map_err(|e| e.replacen("defaults.", "giant.", 1))?;
+        if let Some(period) = self.period_days {
+            period
+                .check("period_days", 0.2, 1000.0)
+                .map_err(|e| e.replacen("defaults.", "giant.", 1))?;
+        }
+        if self.rings.iter().any(|r| !(0.0..=1.0).contains(r))
+            || self.rings[0] + self.rings[1] > 1.0
+        {
+            return Err("giant.rings: two odds in [0, 1] adding up to 1 at most".into());
+        }
+        Ok(())
+    }
 }
 
 impl<'de> Deserialize<'de> for Preset {
@@ -277,6 +335,9 @@ impl TryFrom<PresetSpec> for Preset {
         spec.atmosphere.validate()?;
         spec.geology.validate()?;
         spec.star.validate()?;
+        if let Some(giant) = &spec.giant {
+            giant.validate()?;
+        }
 
         let mut lookup = Biome::ALL.to_vec();
         let mut seen = BTreeMap::new();
@@ -299,6 +360,7 @@ impl TryFrom<PresetSpec> for Preset {
             atmosphere: spec.atmosphere,
             geology: spec.geology,
             star: spec.star,
+            giant: spec.giant,
             remap: spec.remap,
             locales: spec.locales,
             lookup,
@@ -399,7 +461,9 @@ mod tests {
     #[test]
     fn built_in_presets_load() {
         let presets = Preset::built_in();
-        assert_eq!(presets.len(), 5);
+        assert_eq!(presets.len(), 8);
+        assert!(presets[..DRAWN].iter().all(|p| p.giant.is_none()));
+        assert!(presets[DRAWN..].iter().all(|p| p.giant.is_some()));
         for (preset, name) in presets.iter().zip(built_in_names()) {
             assert_eq!(preset.name, name);
         }
