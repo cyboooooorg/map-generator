@@ -75,6 +75,11 @@ pub struct WorldSummary {
     /// Age of the oldest surviving surface in Ga; `null` for worlds made
     /// before it existed.
     pub surface_age_ga: Option<f32>,
+    /// The epochs the world can be shown at, in Ma before present
+    /// (negative in the future): `[future, past]`, both included, or
+    /// `null` when it offers none (liquid water today, no craters, or made
+    /// before format version 7). See `GET /api/worlds/{id}/epoch/...`.
+    pub epochs_ma: Option<[i32; 2]>,
     /// Last modification time, in milliseconds since the Unix epoch.
     #[ts(type = "number")]
     pub modified_ms: u64,

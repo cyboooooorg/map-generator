@@ -20,9 +20,15 @@
 //! [`TileCache::world`] refuses to load worlds until it ends
 //! ([`TileError::Busy`]); tile and hex grid requests then answer 503 with
 //! `Retry-After`, and the viewer retries them later.
+//!
+//! A world shown at another epoch (see [`mapgen::epoch`]) is a world of
+//! its own in the cache, keyed by its epoch too, and takes the same memory:
+//! the viewer moving the time slider keeps the epochs it shows within the
+//! budget like other worlds. Computing one also holds its elevation and
+//! temperature in full precision for a moment (about 12 bytes per pixel).
 use crate::memory;
 use mapgen::detail::{DetailWorld, TileId};
-use mapgen::export::raw_data::load_layers;
+use mapgen::export::raw_data::{load_layers, read_elevation_base};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{OnceCell, Semaphore, SemaphorePermit};
@@ -35,11 +41,13 @@ pub const DEFAULT_BUDGET_BYTES: usize = 1 << 30;
 /// water depth. Worlds of older formats, with fewer layers, take less.
 pub const LOADED_BYTES_PER_PIXEL: usize = 8 * 2 + 1 + 1 + 4;
 
-/// A loaded world, keyed by id and revision (the modification time of its
-/// raw data): regenerating a world changes its revision.
+/// A loaded world, keyed by id, revision (the modification time of its
+/// raw data: regenerating a world changes it) and the epoch shown, in Ma
+/// (`None` for the world as generated).
 struct Entry {
     id: String,
     revision: u64,
+    epoch_ma: Option<i32>,
     world: Arc<OnceCell<Arc<DetailWorld>>>,
 }
 
@@ -109,6 +117,19 @@ impl TileCache {
         id: &str,
         revision: u64,
     ) -> Result<Arc<DetailWorld>, TileError> {
+        self.world_at(dir, id, revision, None).await
+    }
+
+    /// Like [`Self::world`], shown at `epoch_ma` (Ma before present,
+    /// negative in the future) when set. The caller checks that the world
+    /// offers that epoch.
+    pub async fn world_at(
+        &self,
+        dir: &Path,
+        id: &str,
+        revision: u64,
+        epoch_ma: Option<i32>,
+    ) -> Result<Arc<DetailWorld>, TileError> {
         let cell = {
             let mut state = self.lock();
             if state.suspended > 0 {
@@ -117,15 +138,17 @@ impl TileCache {
             let entries = &mut state.entries;
             let cell = match entries
                 .iter()
-                .position(|e| e.id == id && e.revision == revision)
+                .position(|e| e.id == id && e.revision == revision && e.epoch_ma == epoch_ma)
             {
                 Some(i) => entries.remove(i).world,
                 None => Arc::new(OnceCell::new()),
             };
-            entries.retain(|e| e.id != id);
+            // Other revisions of the world are stale; its other epochs stay.
+            entries.retain(|e| e.id != id || e.revision == revision);
             entries.push(Entry {
                 id: id.to_string(),
                 revision,
+                epoch_ma,
                 world: cell.clone(),
             });
             cell
@@ -152,7 +175,7 @@ impl TileCache {
                         drop(evicted);
                         memory::release();
                     }
-                    load(&dir)
+                    load(&dir, epoch_ma)
                 })
                 .await
                 .map_err(|e| TileError::Failed(e.to_string()))?
@@ -257,8 +280,98 @@ fn expected_bytes(dir: &Path) -> usize {
         .map_or(0, |s| s.width * s.height * LOADED_BYTES_PER_PIXEL)
 }
 
-fn load(dir: &Path) -> Result<Arc<DetailWorld>, String> {
-    load_layers(dir).map(|w| Arc::new(DetailWorld::new(w)))
+fn load(dir: &Path, epoch_ma: Option<i32>) -> Result<Arc<DetailWorld>, String> {
+    let world = load_layers(dir)?;
+    let Some(epoch_ma) = epoch_ma else {
+        return Ok(Arc::new(DetailWorld::new(world)));
+    };
+    let base = read_elevation_base(dir)?
+        .ok_or("the world has no elevation_base layer (made before format version 7)")?;
+    let epoch_ga = f64::from(epoch_ma) / 1000.0;
+    let world = mapgen::epoch::loaded_at(world, &base, epoch_ga);
+    Ok(Arc::new(DetailWorld::at_epoch(world, epoch_ga)))
+}
+
+/// A layer of a world shown at an epoch (see `GET
+/// /api/worlds/{id}/epoch/{ma}/{file}`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EpochLayer {
+    /// The hillshaded render, as `raw_data/surface.png`.
+    Surface,
+    /// 16-bit elevation, as `raw_data/elevation.png`.
+    Elevation,
+    /// 8-bit biome ids, as `raw_data/biomes.png`.
+    Biomes,
+}
+
+impl EpochLayer {
+    pub fn from_file(file: &str) -> Option<Self> {
+        match file {
+            "surface.png" => Some(Self::Surface),
+            "elevation.png" => Some(Self::Elevation),
+            "biomes.png" => Some(Self::Biomes),
+            _ => None,
+        }
+    }
+}
+
+/// A layer of `world` (loaded at its epoch) as PNG bytes, reduced `scale`
+/// times in each direction: averaged for the elevation and the render, the
+/// biome at the centre of each block for the biomes.
+pub fn epoch_png(world: &DetailWorld, layer: EpochLayer, scale: u32) -> Result<Vec<u8>, String> {
+    use image::{GrayImage, ImageBuffer, Luma, RgbImage};
+    use mapgen::export::{MapLayers, Style, render_pixels};
+    let w = world.world();
+    let (width, height) = (w.width, w.height);
+    let (sw, sh) = ((width / scale).max(1), (height / scale).max(1));
+    let s = scale as usize;
+    // Pixels of the block of reduced pixel (x, y).
+    let block = |x: u32, y: u32| {
+        let (x0, y0) = (x as usize * s, y as usize * s);
+        (y0..(y0 + s).min(height as usize)).flat_map(move |yy| {
+            (x0..(x0 + s).min(width as usize)).map(move |xx| yy * width as usize + xx)
+        })
+    };
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    let png = image::ImageFormat::Png;
+    match layer {
+        EpochLayer::Elevation => {
+            let raw = w.elevation.raw();
+            let image = ImageBuffer::<Luma<u16>, _>::from_fn(sw, sh, |x, y| {
+                let (sum, n) =
+                    block(x, y).fold((0u64, 0u64), |(s, n), i| (s + u64::from(raw[i]), n + 1));
+                Luma([(sum / n.max(1)) as u16])
+            });
+            image.write_to(&mut bytes, png)
+        }
+        EpochLayer::Biomes => {
+            let centre = |x: u32, y: u32| {
+                let cx = (x * scale + scale / 2).min(width - 1);
+                let cy = (y * scale + scale / 2).min(height - 1);
+                w.biomes[w.index(cx, cy)].id()
+            };
+            GrayImage::from_fn(sw, sh, |x, y| Luma([centre(x, y)])).write_to(&mut bytes, png)
+        }
+        EpochLayer::Surface => {
+            let decoded = w.to_world();
+            let pixels = render_pixels(&decoded, &MapLayers::new(&decoded), Style::Detailed);
+            drop(decoded);
+            let image = RgbImage::from_fn(sw, sh, |x, y| {
+                let mut sum = [0u32; 3];
+                let mut n = 0;
+                for i in block(x, y) {
+                    for (c, v) in sum.iter_mut().zip(pixels[i]) {
+                        *c += u32::from(v);
+                    }
+                    n += 1;
+                }
+                image::Rgb(sum.map(|c| (c / n.max(1)) as u8))
+            });
+            image.write_to(&mut bytes, png)
+        }
+    }
+    .map_err(|e| e.to_string())?;
+    Ok(bytes.into_inner())
 }
 
 /// Renders a tile as PNG bytes.
@@ -305,7 +418,7 @@ mod tests {
     #[tokio::test]
     async fn keeps_worlds_within_the_budget() {
         let root = worlds("budget", &[("barren", 1), ("barren", 2), ("barren", 3)]);
-        let one = load(&root.join("barren-1")).unwrap().bytes();
+        let one = load(&root.join("barren-1"), None).unwrap().bytes();
         // Room for two worlds.
         let cache = TileCache::new(2 * one + one / 2);
         for id in ["barren-1", "barren-2", "barren-3"] {
@@ -344,7 +457,7 @@ mod tests {
     async fn estimates_the_size_of_a_world_before_loading_it() {
         let root = worlds("estimate", &[("terran", 5)]);
         let dir = root.join("terran-5");
-        let world = load(&dir).unwrap();
+        let world = load(&dir, None).unwrap();
         // River bounds aside (negligible next to the layers on full-size
         // maps), the estimate is exact for the current format.
         let rivers = world.world().rivers.len() * size_of::<[f64; 4]>();
@@ -355,7 +468,7 @@ mod tests {
     #[tokio::test]
     async fn evicts_worlds_before_loading_one() {
         let root = worlds("room", &[("barren", 5), ("barren", 6), ("barren", 7)]);
-        let one = load(&root.join("barren-5")).unwrap().bytes();
+        let one = load(&root.join("barren-5"), None).unwrap().bytes();
         let cache = TileCache::new(2 * one + one / 2);
         for id in ["barren-5", "barren-6"] {
             cache.world(&root.join(id), id, 1).await.unwrap();

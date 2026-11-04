@@ -182,9 +182,9 @@ struct ScalarLayer<'a> {
 }
 
 /// Ranges the 16-bit layers are quantised over.
-const ELEVATION: (f32, f32) = (-1.0, 1.0);
+pub(crate) const ELEVATION: (f32, f32) = (-1.0, 1.0);
 const MOISTURE: (f32, f32) = (-1.0, 1.0);
-const TEMPERATURE: (f32, f32) = TEMPERATURE_RANGE;
+pub(crate) const TEMPERATURE: (f32, f32) = TEMPERATURE_RANGE;
 /// `log10(1 + km²)`: drainage areas span 0 to millions of km².
 const FLOW_LOG10: (f32, f32) = (0.0, 8.0);
 const VOLCANIC_ZONE: (f32, f32) = (0.0, 1.0);
@@ -491,6 +491,11 @@ impl Layer16 {
     pub fn bytes(&self) -> usize {
         self.raw.len() * size_of::<u16>()
     }
+
+    /// The stored 16-bit values, as in the layer's PNG.
+    pub fn raw(&self) -> &[u16] {
+        &self.raw
+    }
 }
 
 /// Decodes one 16-bit layer of a `raw_data/` directory.
@@ -514,6 +519,7 @@ fn read_layer(
 /// A world reloaded from `raw_data/`, its continuous layers kept as stored
 /// (16 bits per value, see [`Layer16`]). [`LoadedWorld::into_world`] decodes
 /// them into a [`World`].
+#[derive(Clone)]
 pub struct LoadedWorld {
     pub params: WorldParams,
     pub width: u32,
@@ -579,6 +585,11 @@ impl LoadedWorld {
             + self.biomes.len() * size_of::<Biome>()
     }
 
+    /// Decodes every layer into a [`World`], keeping this one.
+    pub fn to_world(&self) -> World {
+        self.clone().into_world()
+    }
+
     /// Decodes every layer into a [`World`].
     pub fn into_world(self) -> World {
         let layers = [
@@ -619,6 +630,18 @@ impl LoadedWorld {
             rivers: self.rivers,
             clouds: Vec::new(),
         }
+    }
+}
+
+/// The elevation without the young impact craters of a world (see
+/// [`World::elevation_base`]), decoded from its `raw_data/`: `None` for a
+/// world of format version 6 or older, which has no such layer.
+pub fn read_elevation_base(world_dir: &Path) -> Result<Option<Vec<f32>>, String> {
+    let raw = world_dir.join("raw_data");
+    let meta = read_metadata(&raw)?;
+    match &meta.layers.elevation_base {
+        Some(layer) => Ok(Some(read_layer(&raw, layer, &meta)?.decode())),
+        None => Ok(None),
     }
 }
 

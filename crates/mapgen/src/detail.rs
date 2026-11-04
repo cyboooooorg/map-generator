@@ -270,6 +270,13 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 
 impl DetailWorld {
     pub fn new(world: LoadedWorld) -> Self {
+        Self::at_epoch(world, 0.0)
+    }
+
+    /// A world shown at `epoch_ga` (see [`crate::epoch`]): `world` holds
+    /// its layers at that epoch, and the tiles draw the small craters
+    /// formed by then.
+    pub fn at_epoch(world: LoadedWorld, epoch_ga: f64) -> Self {
         let river_bounds = world
             .rivers
             .iter()
@@ -313,7 +320,7 @@ impl DetailWorld {
         drop(coverage);
         let depths = water_depths_of(&world.params, |i| world.elevation.get(i), &world.biomes);
         Self {
-            craters: CraterField::context(&world.params),
+            craters: CraterField::context_at(&world.params, epoch_ga),
             flags,
             depths,
             noise: Perlin::new(seed.wrapping_add(1000)),

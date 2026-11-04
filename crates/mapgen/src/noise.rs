@@ -127,6 +127,8 @@ pub mod stream {
     pub const SURFACE: u32 = 20;
     /// Impact craters: positions, sizes, ages and rim shapes.
     pub const CRATERS: u32 = 21;
+    /// Impact craters still to come, for the time slider.
+    pub const FUTURE_CRATERS: u32 = 22;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.
@@ -161,7 +163,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in stream::ELEVATION..=stream::CRATERS {
+            for s in stream::ELEVATION..=stream::FUTURE_CRATERS {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }
