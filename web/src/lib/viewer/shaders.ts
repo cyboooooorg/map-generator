@@ -9,7 +9,7 @@
 // `uExtra` packs the layers of raw_data format version 2 and later:
 //   r = volcanic zone, g = distance to the sea (km), b = floodplain, a = highland offset.
 // `uBiomes` holds the biome id of each pixel (r × 255), for highlighting one biome.
-import { glslRamp } from './colormaps';
+import { CLOUD_TOPS, glslRamp } from './colormaps';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH } from './sunDepth';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
@@ -201,6 +201,7 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('coast')}
   ${glslRamp('floodplain')}
   ${glslRamp('wind')}
+  ${glslRamp('cloudTops')}
 
   // The wind of a giant at the latitude of map row v (0 south, 1 north).
   float bandWind(float v) {
@@ -390,7 +391,9 @@ export const surfaceFragment = /* glsl */ `
     if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
       colour = surface;
     } else if (uLayer == 1) {
-      colour = toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));
+      colour = uGiant > 0.5
+        ? toLinear(ramp_cloudTops((data.r - ${CLOUD_TOPS[0].toFixed(3)}) / ${CLOUD_TOPS[1].toFixed(3)}))
+        : toLinear(ramp_elevation((aboveCoast + 1.0) * 0.5));
     } else if (uLayer == 2) {
       colour = toLinear(ramp_temperature((data.g - uTempRange.x) / uTempRange.y));
     } else if (uLayer == 3) {

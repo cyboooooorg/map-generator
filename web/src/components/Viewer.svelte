@@ -1406,11 +1406,12 @@
 
   {#if dataReady && shown !== 'biomes'}
     {@const windShown = giant !== null && shown === 'moisture'}
-    {@const ramp = windShown ? t.legends.wind : t.legends[shown]}
+    {@const topsShown = giant !== null && shown === 'elevation'}
+    {@const ramp = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown]}
     {@const range = giant && shown === 'temperature' ? giantTemperatureRange(giant) : null}
     <div class="legend" role="region" aria-label={t.viewer.legend}>
       <strong>{giant ? layerName(shown) : ramp.label}</strong>
-      <div class="bar" style:background={cssGradient(windShown ? 'wind' : shown)}></div>
+      <div class="bar" style:background={cssGradient(windShown ? 'wind' : topsShown ? 'cloudTops' : shown)}></div>
       <div class="ends">
         <span
           >{windShown && giant
