@@ -638,6 +638,38 @@ pub fn generate_with_progress(
     let rules = &planet.rules;
     let grid = params.grid();
     let n = params.pixel_count();
+    // The tectonic plates, as diagnostic maps only for now (see `plates`).
+    if let Some(sink) = sink {
+        let map = crate::plates::PlateMap::new(params);
+        let count = map.plate.iter().copied().max().unwrap_or(0).max(1);
+        let at = |i: usize| {
+            let (x, y) = (i as u32 % width, i as u32 / width);
+            let lon = (f64::from(x) + 0.5) / f64::from(width) * 2.0 * PI;
+            map.index_at(lon, grid.latitude(y))
+        };
+        sink.layer(DebugLayer {
+            name: "plates",
+            ramp: Ramp::Unsigned,
+            values: (0..n)
+                .into_par_iter()
+                .map(|i| f32::from(map.plate[at(i)]) / f32::from(count))
+                .collect(),
+        });
+        sink.layer(DebugLayer {
+            name: "plate_boundaries",
+            ramp: Ramp::Signed,
+            // Convergence (10 cm/yr full scale), fading 400 km from the
+            // boundary: red where plates close, blue where they part.
+            values: (0..n)
+                .into_par_iter()
+                .map(|i| {
+                    let k = at(i);
+                    let fade = (-map.boundary_km[k] / 400.0).exp();
+                    (map.convergence[k] / 10.0 * fade).clamp(-1.0, 1.0)
+                })
+                .collect(),
+        });
+    }
 
     // ── Pass 2: hydraulic erosion ─────────────────────────────────────────────
     progress(Stage::Erosion);
@@ -1094,7 +1126,7 @@ mod tests {
         let p = params(13, "volcanic");
         let (full, debug) = generate_with_debug(&p);
         let lean = generate(&p);
-        assert_eq!(debug.len(), NOISE_LAYERS.len() + 10);
+        assert_eq!(debug.len(), NOISE_LAYERS.len() + 12);
         assert_eq!(full.world.biomes, lean.world.biomes);
         assert_eq!(full.world.elevation, lean.world.elevation);
         assert_eq!(full.world.moisture, lean.world.moisture);
