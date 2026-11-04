@@ -134,6 +134,9 @@ pub struct AppState {
     renders: Semaphore,
     /// Hex grids resampled at once: each one holds a histogram per hex.
     hex_grids: Semaphore,
+    /// Epoch surfaces rendered at once: each one decodes its whole world
+    /// and renders it at full size, outside the tile cache's budget.
+    epoch_surfaces: Semaphore,
     thumbnails: Thumbnails,
 }
 
@@ -205,6 +208,7 @@ pub fn router(config: Config) -> Router {
         tiles: TileCache::new(config.tile_cache_bytes),
         renders: Semaphore::new(CONCURRENT_RENDERS),
         hex_grids: Semaphore::new(1),
+        epoch_surfaces: Semaphore::new(1),
         thumbnails: Thumbnails::default(),
         config: config.clone(),
     });
@@ -585,8 +589,15 @@ async fn body_epoch_layer(
         Ok(world) => world,
         Err(e) => return Ok(world_failure(e, "epochs")),
     };
-    let _turn = state
-        .renders
+    // The surface decodes the whole world and renders it at full size,
+    // outside the tile cache's budget (several GB at 8192 x 4096 if four
+    // ran together): one at a time. The other layers read the cached world.
+    let semaphore = if layer == tiles::EpochLayer::Surface {
+        &state.epoch_surfaces
+    } else {
+        &state.renders
+    };
+    let _turn = semaphore
         .acquire()
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
