@@ -145,6 +145,9 @@ pub mod stream {
     pub const GIANT_LOOK: u32 = 29;
     /// Whether a world orbits a giant, and that giant and orbit.
     pub const HOST: u32 = 30;
+    /// The seeds of a giant's other regular moons (see
+    /// `crate::exomoon::sibling_params`), one stream past this per moon.
+    pub const SIBLINGS: u32 = 31;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.

@@ -130,8 +130,9 @@ pub fn export_moons(
 }
 
 /// Generates the giant the world `params` orbits, if it is a giant's moon
-/// (see `crate::exomoon`), as a giant world of its own into `dir/host/`, for
-/// the world's sky; returns whether it did.
+/// (see `crate::exomoon`), as a giant world of its own into `dir/host/`,
+/// and its other regular moons into [`sibling_dir`], for the world's sky;
+/// returns whether it did.
 pub fn export_host(
     params: &WorldParams,
     dir: &Path,
@@ -146,7 +147,22 @@ pub fn export_host(
         &dir.join("host"),
         options,
     )?;
+    // Its other regular moons, one by one, each a world of its own.
+    for k in 0..host.siblings.len() {
+        let body = crate::exomoon::sibling_params(params, &host, k);
+        export_world(
+            crate::generation::generate(&body),
+            &sibling_dir(dir, k + 1),
+            options,
+        )?;
+    }
     Ok(true)
+}
+
+/// Directory of sibling `n` (from 1, nearest first) of the world written
+/// in `dir`, a giant's other regular moon (see [`export_host`]).
+pub fn sibling_dir(dir: &Path, n: usize) -> std::path::PathBuf {
+    dir.join("host").join("siblings").join(n.to_string())
 }
 
 /// Contour lines are drawn whenever a tile and a neighbour straddle one of these levels.

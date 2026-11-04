@@ -845,15 +845,35 @@ const SHAPE_BUMPS: f64 = 0.12;
 /// width). The long axis of an irregular moon points at longitude 180°,
 /// the centre of its map: towards its planet, which tides lock it to.
 pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
-    let name = match moon.composition {
+    small_body_params(
+        planet,
+        moon.composition,
+        moon.radius_km,
+        moon.seed,
+        (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
+    )
+}
+
+/// The parameters of a small airless body near the world `planet`, as a
+/// world of its own: a rocky or icy moon of `radius_km` (its map as wide
+/// as its size makes it on the planet's scale, within limits), its seed,
+/// and its shape (semi-axes over the mean radius) when it is not round.
+pub fn small_body_params(
+    planet: &WorldParams,
+    composition: Composition,
+    radius_km: f32,
+    seed: u32,
+    shape: Option<[f32; 3]>,
+) -> WorldParams {
+    let name = match composition {
         Composition::Rock => "rocky-moon",
         Composition::Ice => "icy-moon",
     };
     let mut preset = crate::preset::Preset::moon(name).expect("moon presets are valid");
-    if moon.radius_km < MARIA_MIN_RADIUS_KM {
+    if radius_km < MARIA_MIN_RADIUS_KM {
         preset.geology.maria = None;
     }
-    let ratio = f64::from(moon.radius_km) * 2.0 * PI / f64::from(planet.circumference_km);
+    let ratio = f64::from(radius_km) * 2.0 * PI / f64::from(planet.circumference_km);
     let widest = planet.width.max(MOON_MIN_WIDTH);
     let width =
         ((f64::from(planet.width) * ratio).round() as u32).clamp(MOON_MIN_WIDTH, widest) & !1;
@@ -864,11 +884,11 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
     WorldParams {
         width,
         height: width / 2,
-        seed: moon.seed,
+        seed,
         planet: preset,
         sea_level: 0.0,
         volcanic_intensity: 0.0,
-        circumference_km: (f64::from(moon.radius_km) * 2.0 * PI) as f32,
+        circumference_km: (f64::from(radius_km) * 2.0 * PI) as f32,
         axial_tilt_deg: MOON_TILT_DEG,
         erosion: 0.0,
         pressure_bar: 0.0,
@@ -878,7 +898,7 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
         eccentricity: planet.eccentricity,
         drift_ma: 0.0,
         moons: MoonsMode::None,
-        shape: (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
+        shape,
         metallicity: planet.metallicity,
         giants: crate::giants::GiantsMode::None,
         giant_mass_earth: None,
