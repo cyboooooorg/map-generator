@@ -12,6 +12,20 @@ world is alone around its star: no other planet, and no giant anywhere.
 The moons study left the moons of giants out of scope for that reason
 (`11-moons.md`).
 
+## Decisions (2026-11-04)
+
+Taken with the user:
+
+- **All three ways, in order, one pull request each:** A (giant
+  neighbours in each world's system), then B (giant worlds), then C
+  (rocky worlds orbiting a giant).
+- **Giant worlds (B):** cold Jupiters and Saturns, ice giants, hot
+  Jupiters (ultra-hot ones included), and rings on a share of them.
+- **Metallicity:** a new star parameter, drawn like the stars nearby
+  and settable in the form.
+- **Exomoons (C):** an Earth-sized moon of a giant is rare at realistic
+  odds when a world is drawn, and free to choose in the form.
+
 ## 1. What a giant planet is
 
 A giant planet is mostly hydrogen and helium held by its own gravity,
@@ -358,15 +372,51 @@ A world could be a moon of a giant rather than a planet of the star:
 3. **C, exomoons:** builds on A (the parent giant) and on the moon
    views; the most original result (a habitable moon under a giant).
 
-### Decisions to take
+## 7. Implementation plan
 
-- Which of A, B and C to do, and in which order.
-- For B: which kinds of giants (cold Jupiters and Saturns, ice giants,
-  hot Jupiters), rings or not, the layers wanted beyond colour.
-- A metallicity for stars (it changes the odds of giants about
-  fivefold): drawn, a form parameter, or left out.
-- For C: whether a habitable Earth-sized moon is allowed at realistic
-  odds (rare) or freely in the form.
+### Step A: giant neighbours
+
+- **Metallicity** (`[Fe/H]`, dex): drawn from the solar neighbourhood
+  (a normal law of mean −0.1 and spread 0.2, within −1 and 0.5,
+  Casagrande et al. 2011), on its own random stream so the other drawn
+  values of a seed do not change; a `metallicity` request and form
+  parameter and a `[star] metallicity` preset key.
+- **Module `src/giants.rs`:** `GiantSystem::draw(params)` on a new
+  random stream. A Poisson number of gas giants (0.1 to 13 Jupiter
+  masses) of mean 0.25 for a Sun-like star at the Sun's metallicity,
+  times `10^(2 [Fe/H])` and the star's mass (capped), and of ice giants
+  (10 to 50 Earth masses) of mean 0.3, times `10^(0.5 [Fe/H])`; masses
+  from `M^−0.31` (gas) or log-uniform (ice); orbits log-normal around
+  two (gas) and five (ice) times the ice line `2.7 √L` AU; about 1 % of
+  Sun-like stars with a hot Jupiter (periods of 1 to 10 days), fewer
+  when the world orbits nearby (hot Jupiters are lonely);
+  eccentricities from Kipping's law, none for hot Jupiters.
+- **Spacing:** a giant closer than `2√3` mutual Hill radii (apoapsis to
+  periapsis) to the world or to another giant is redrawn a few times,
+  then dropped; at most four giants.
+- **Each giant:** a letter (b, c, … by distance, the world being the
+  system's planet of interest), mass, radius (power laws through
+  Neptune, Saturn and Jupiter, `M^−0.04` above; inflated when
+  `Teq > 1 000 K`), orbit, eccentricity, year, equilibrium temperature,
+  Sudarsky class (ice giants apart), a colour for the views, rings
+  (none, faint or bright).
+- **Effects on the world:**
+  - **eccentricity:** when drawn, at least the forced eccentricity of
+    the giants (secular theory), with its range of swing stored;
+  - **craters:** the impact rate scaled by the mass of the giant
+    outside its orbit (Horner & Jones 2008): low without one, highest
+    for a fifth of Jupiter's mass, Jupiter's as calibrated today.
+- **Data:** `world.json` gains `star.metallicity` and `giants` (format
+  version 10; older worlds have none and a metallicity of 0).
+- **Viewer:** the star view draws the giants on their orbits (beyond the
+  world's system, distances compressed and said so) and animates them
+  at Kepler's pace; the panel lists them; a **Giants** checkbox; the
+  world card counts them; the form gets the metallicity.
+
+### Steps B and C
+
+Planned in detail once A is in, from what it settles (the giant's data,
+the system scale of the star view).
 
 ## Sources
 
@@ -430,3 +480,6 @@ A world could be a moon of a giant rather than a planet of the star:
   <https://arxiv.org/abs/1209.5323>.
 - Kipping 2013, MNRAS 434, L51 (eccentricity distribution, as for the
   world's orbit).
+- Casagrande et al. 2011, "New constraints on the chemical evolution of
+  the solar neighbourhood and Galactic disc(s)", A&A 530, A138 (the
+  metallicity of nearby stars).

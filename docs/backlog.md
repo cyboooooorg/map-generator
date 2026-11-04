@@ -410,3 +410,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   exomoons). Three ways in, to choose from: giant neighbours in the
   system, giant worlds with their own pipeline, rocky worlds orbiting a
   giant.
+- **Decided (2026-11-04):** all three, in that order, one pull request
+  each; giant worlds of every kind (cold Jupiters and Saturns, ice
+  giants, hot Jupiters, rings); a star metallicity, drawn and settable;
+  Earth-sized moons of giants rare when drawn, free in the form.
