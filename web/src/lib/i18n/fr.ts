@@ -481,6 +481,9 @@ export const fr: Messages = {
     equilibrium: 'Équilibre',
     animate: 'Animer',
     distances: 'Distances',
+    showOrbit: 'Orbite',
+    showZone: 'Zone habitable',
+    circular: (p) => `orbite circulaire${S}: ${p.distance} toute l’année, ni périastre ni apoastre`,
     distancesHelp:
       'La distance de l’étoile à la planète et la lumière qu’elle reçoit en ce moment, les points le plus proche et le plus lointain de son orbite, les bords de la zone habitable',
     now: (p) => `${p.distance} · ${p.light} la lumière terrestre · ${p.zone}`,

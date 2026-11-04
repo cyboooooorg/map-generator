@@ -15,9 +15,12 @@
     animated: boolean;
     /** Whether the live distances are shown. */
     distances: boolean;
+    /** Whether the orbit line and the habitable zone are drawn. */
+    orbit: boolean;
+    zone: boolean;
   }
 
-  let { star, omega, animated = $bindable(), distances = $bindable() }: Props = $props();
+  let { star, omega, animated = $bindable(), distances = $bindable(), orbit = $bindable(), zone = $bindable() }: Props = $props();
   let labels = $state<SystemLabels | null>(null);
   /** Width of the view, to keep the labels near its right edge on screen. */
   let width = $state(0);
@@ -42,6 +45,8 @@
   $effect(() => view?.setStar(star, omega));
   $effect(() => view?.setAnimated(animated));
   $effect(() => view?.setDistances(distances));
+  $effect(() => view?.setOrbitVisible(orbit));
+  $effect(() => view?.setZoneVisible(zone));
 
   /** Back to the starting view of the system. */
   export function resetView(): void {
@@ -111,10 +116,22 @@
     <dt>{t.starView.equilibrium}</dt>
     <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
   </dl>
+  <label class="check">
+    <input type="checkbox" bind:checked={orbit} />
+    {t.starView.showOrbit}
+  </label>
+  <label class="check">
+    <input type="checkbox" bind:checked={zone} />
+    {t.starView.showZone}
+  </label>
   <label class="check" title={t.starView.distancesHelp}>
     <input type="checkbox" bind:checked={distances} />
     {t.starView.distances}
   </label>
+  {#if distances && star.eccentricity <= 0.001}
+    <!-- A circle has no closest or farthest point: say why none is marked. -->
+    <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
+  {/if}
   <label class="check" title={t.starView.animateHelp}>
     <input type="checkbox" bind:checked={animated} />
     {t.starView.animate}

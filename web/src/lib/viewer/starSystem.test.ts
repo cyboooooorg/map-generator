@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
+import { withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -41,5 +41,11 @@ describe('star view', () => {
     const omega = periapsisAngle(1234);
     expect(omega).toBeGreaterThanOrEqual(0);
     expect(omega).toBeLessThan(2 * Math.PI);
+  });
+
+  it('reads the stars of worlds made before eccentric orbits as circles', () => {
+    const old = { ...SUN_SYSTEM, eccentricity: undefined, periapsis_au: undefined, apoapsis_au: undefined } as unknown as typeof SUN_SYSTEM;
+    const star = withOrbitDefaults({ ...old, orbit_au: 0.5 });
+    expect([star.eccentricity, star.periapsis_au, star.apoapsis_au]).toEqual([0, 0.5, 0.5]);
   });
 });

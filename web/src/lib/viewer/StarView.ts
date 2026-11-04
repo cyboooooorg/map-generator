@@ -65,6 +65,8 @@ export class StarView {
   private omega = 0;
   private at: (au: number) => number = (au) => au;
   private distancesOn = false;
+  private orbitOn = true;
+  private zoneOn = true;
   private readonly link: Line<BufferGeometry, LineBasicMaterial>;
   private readonly apsides: Mesh<SphereGeometry, MeshBasicMaterial>[];
   /** Called after each frame with the labelled points, while distances are shown. */
@@ -209,10 +211,30 @@ export class StarView {
   /** Shows the star–planet line, the periapsis and apoapsis, and reports their places (see onLabels). */
   setDistances(on: boolean): void {
     this.distancesOn = on;
-    this.link.visible = on;
-    for (const marker of this.apsides) marker.visible = on;
+    this.applyVisibility();
     if (!on) this.onLabels(null);
     this.requestRender();
+  }
+
+  /** Shows or hides the orbit line (and its periapsis and apoapsis). */
+  setOrbitVisible(on: boolean): void {
+    this.orbitOn = on;
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  /** Shows or hides the habitable zone. */
+  setZoneVisible(on: boolean): void {
+    this.zoneOn = on;
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  private applyVisibility(): void {
+    this.orbit.visible = this.orbitOn;
+    this.zone.visible = this.zoneOn;
+    this.link.visible = this.distancesOn;
+    for (const marker of this.apsides) marker.visible = this.distancesOn && this.orbitOn;
   }
 
   /** Turns and boils the star, moves the planet along its orbit (ten frames a second), or stops them. */
@@ -317,10 +339,10 @@ export class StarView {
       const planet = this.screen(this.planet.position);
       this.onLabels({
         planet: planet && { ...planet, au: this.planetAu },
-        periapsis: this.screen(this.apsides[0]!.position),
-        apoapsis: this.screen(this.apsides[1]!.position),
-        inner: edge(this.info.hz_inner_au),
-        outer: edge(this.info.hz_outer_au),
+        periapsis: this.orbitOn ? this.screen(this.apsides[0]!.position) : null,
+        apoapsis: this.orbitOn ? this.screen(this.apsides[1]!.position) : null,
+        inner: this.zoneOn ? edge(this.info.hz_inner_au) : null,
+        outer: this.zoneOn ? edge(this.info.hz_outer_au) : null,
       });
     }
     if (moving) {

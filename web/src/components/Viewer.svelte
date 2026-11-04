@@ -23,7 +23,7 @@
   import { cssGradient } from '../lib/viewer/colormaps';
   import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
-  import { periapsisAngle, SUN_SYSTEM } from '../lib/viewer/starSystem';
+  import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -135,6 +135,8 @@
   let subject = $state<'planet' | 'star'>('planet');
   let starAnimated = $state(false);
   let starDistances = $state(false);
+  let starOrbit = $state(true);
+  let starZone = $state(true);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
@@ -794,10 +796,12 @@
   {#if subject === 'star' && worldId}
     <StarPane
       bind:this={starPane}
-      star={meta?.star ?? SUN_SYSTEM}
+      star={withOrbitDefaults(meta?.star ?? SUN_SYSTEM)}
       omega={periapsisAngle(meta?.seed ?? 0)}
       bind:animated={starAnimated}
       bind:distances={starDistances}
+      bind:orbit={starOrbit}
+      bind:zone={starZone}
     />
   {/if}
 

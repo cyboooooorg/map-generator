@@ -513,6 +513,9 @@ export const en = {
     equilibrium: 'Equilibrium',
     animate: 'Animate',
     distances: 'Distances',
+    showOrbit: 'Orbit',
+    showZone: 'Habitable zone',
+    circular: (p: { distance: string }) => `circular orbit: ${p.distance} all year, no periapsis or apoapsis`,
     distancesHelp:
       'The distance from the star to the planet and the light it gets now, the closest and farthest points of its orbit, the edges of the habitable zone',
     now: (p: { distance: string; light: string; zone: string }) => `${p.distance} · ${p.light} Earth's light · ${p.zone}`,
