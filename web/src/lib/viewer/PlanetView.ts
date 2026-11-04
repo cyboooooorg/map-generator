@@ -94,6 +94,8 @@ import {
   hostStarFragment,
   skyBodyFragment,
   skyBodyVertex,
+  skyOrbitFragment,
+  skyOrbitVertex,
   hostStarVertex,
   starsFragment,
   starsVertex,
@@ -475,6 +477,8 @@ export class PlanetView {
   private starsOn = true;
   /** The other bodies drawn in the sky (see setSkyBodies), with their maps. */
   private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; maps: Texture[] }[] = [];
+  /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
+  private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
@@ -1514,6 +1518,8 @@ export class PlanetView {
     this.u.uBiomes.value.dispose();
     this.sky.uSunDepth.value.dispose();
     this.disposeSkyBodies();
+    this.skyOrbits?.geometry.dispose();
+    this.skyOrbits?.material.dispose();
     for (const object of [this.surface, this.grid, this.stars, this.hostStar, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
@@ -1735,6 +1741,62 @@ export class PlanetView {
     this.requestRender();
   }
 
+  /**
+   * Draws orbits in the sky, at infinity like the sky bodies (on the
+   * globe): each loop a closed line through directions seen from the body
+   * shown, in its frame (see lib/skyBodies `orbitLoops`). Empty to clear.
+   */
+  setSkyOrbits(loops: readonly (readonly Vec3[])[]): void {
+    const count = loops.reduce((sum, loop) => sum + loop.length, 0);
+    if (count === 0) {
+      if (this.skyOrbits) this.skyOrbits.visible = false;
+      this.skyOrbitsOn = false;
+      this.requestRender();
+      return;
+    }
+    // Segments from each point to the next, round each loop.
+    const directions = new Float32Array(count * 6);
+    let at = 0;
+    for (const loop of loops) {
+      loop.forEach((point, i) => {
+        const next = loop[(i + 1) % loop.length]!;
+        directions.set(point, at);
+        directions.set(next, at + 3);
+        at += 6;
+      });
+    }
+    if (!this.skyOrbits) {
+      this.skyOrbits = new LineSegments(
+        new BufferGeometry(),
+        new ShaderMaterial({
+          vertexShader: skyOrbitVertex,
+          fragmentShader: skyOrbitFragment,
+          uniforms: { uColor: { value: new Color(0.55, 0.62, 0.75) }, uOpacity: { value: 0.45 } },
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      this.skyOrbits.frustumCulled = false;
+      // Over the stars and the host star, under the bodies.
+      this.skyOrbits.renderOrder = -1.5;
+      this.scene.add(this.skyOrbits);
+    }
+    const geometry = this.skyOrbits.geometry;
+    const old = geometry.getAttribute('direction') as BufferAttribute | undefined;
+    if (old && old.array.length === directions.length) {
+      (old.array as Float32Array).set(directions);
+      old.needsUpdate = true;
+    } else {
+      geometry.setAttribute('direction', new BufferAttribute(directions, 3));
+      // three.js needs a position attribute to count the vertices.
+      geometry.setAttribute('position', new BufferAttribute(directions, 3));
+    }
+    this.skyOrbitsOn = true;
+    this.requestRender();
+  }
+
+  private skyOrbitsOn = false;
+
   private disposeSkyBodies(): void {
     for (const { mesh, maps } of this.skyBodies) {
       this.scene.remove(mesh);
@@ -1825,6 +1887,10 @@ export class PlanetView {
     this.stars.visible = this.starsOn && this.morph > 0.01;
     this.drawHostStar();
     this.drawSkyBodies();
+    if (this.skyOrbits) {
+      this.skyOrbits.visible = this.skyOrbitsOn && this.morph > 0.01;
+      this.skyOrbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
+    }
     this.stars.material.uniforms['uOpacity']!.value = this.morph ** 3;
     this.stars.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
     const altitude = this.altitude();

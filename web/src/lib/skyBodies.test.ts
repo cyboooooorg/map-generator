@@ -10,7 +10,9 @@ import {
   moonDirection,
   moonSky,
   moonSystemSky,
+  orbitLoops,
   planetSky,
+  siblingOrbitLoops,
   siblingSky,
   sunLongitudeOnMoon,
 } from './skyBodies';
@@ -118,6 +120,33 @@ describe('sky bodies', () => {
     // New moon: the sun over the far side.
     const fresh = sunLongitudeOnMoon(moon(), 0, 27.3 / 2 / 365.25, 365.25, 0);
     expect(Math.cos((fresh * Math.PI) / 180)).toBeCloseTo(1, 6);
+  });
+
+  it('draws each moving moon orbit, from the planet or from another moon', () => {
+    const inner = moon({ semi_major_axis_km: 200_000, inclination_deg: 0 });
+    const outer = moon({ semi_major_axis_km: 400_000, inclination_deg: 30 });
+    const binary = moon({ migration: 'locked' });
+    // From the planet: great circles, in their planes; none for the binary.
+    const fromPlanet = orbitLoops([inner, outer, binary], null, 0, 365.25, 0);
+    expect(fromPlanet).toHaveLength(2);
+    expect(fromPlanet[0]!.every((d) => Math.abs(d[1]) < 1e-9 && Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
+    expect(Math.max(...fromPlanet[1]!.map((d) => d[1]))).toBeCloseTo(Math.sin(Math.PI / 6), 2);
+    // From the inner moon: no orbit of its own; the outer one's orbit goes
+    // round its sky, through the zenith of its far side and its planet side.
+    const level = moon({ semi_major_axis_km: 400_000 });
+    const fromMoon = orbitLoops([inner, level], 0, 0, 365.25, 0);
+    expect(fromMoon).toHaveLength(1);
+    expect(fromMoon[0]!.every((d) => Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
+    // A loop of the outer orbit seen from inside it spans the whole sky.
+    expect(Math.max(...fromMoon[0]!.map((d) => d[2]))).toBeGreaterThan(0.9);
+    expect(Math.min(...fromMoon[0]!.map((d) => d[2]))).toBeLessThan(-0.9);
+  });
+
+  it("circles a giant's other moons round it", () => {
+    const [loop] = siblingOrbitLoops([{ distance_km: 100 }], 1000);
+    // Seen from 1000 km off, a 100 km circle spans about ±5.7° round the giant.
+    const spread = Math.max(...loop!.map((d) => Math.atan2(d[0], -d[2])));
+    expect(spread).toBeCloseTo(Math.asin(0.1), 3);
   });
 
   it('shows the planet from its moon, large and towards its long axis', () => {

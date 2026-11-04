@@ -468,6 +468,8 @@ export const fr: Messages = {
     sunOver: (p) => `${p.season} · soleil au-dessus de ${p.latitude}°${S}${p.north ? 'N' : 'S'}`,
     sunLongitude: 'Longitude du soleil',
     orbits: 'Orbites des lunes',
+    orbitLines: 'Orbites',
+    orbitLinesHelp: 'Trace les orbites des lunes dans le ciel (sur le globe), vues depuis le corps affiché',
     orbitsHelp: 'Avance les lunes sur leurs orbites, d’autant de jours après la saison (leurs phases, leurs éclipses)',
     playOrbitsHelp: `Faire défiler les orbites${S}: une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
     orbitDay: (p) => `Jour ${p.days} d’une orbite de ${p.period}${S}jours`,

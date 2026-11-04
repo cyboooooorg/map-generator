@@ -25,7 +25,7 @@
   import StarPane from './StarPane.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
-  import { halo, joinSkies, moonSky, moonSystemSky, planetSky, siblingSky, sunLongitudeOnMoon } from '../lib/skyBodies';
+  import { halo, joinSkies, orbitLoops, siblingOrbitLoops, moonSky, moonSystemSky, planetSky, siblingSky, sunLongitudeOnMoon } from '../lib/skyBodies';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -119,6 +119,7 @@
     hostClouds: true,
     hostGrid: false,
     hostTropics: false,
+    orbitLines: false,
     starLight: false,
     clouds: true,
     cloudDrift: false,
@@ -159,6 +160,8 @@
   let hostClouds = $state(saved.hostClouds);
   let hostGrid = $state(saved.hostGrid);
   let hostTropics = $state(saved.hostTropics);
+  /** The orbits of the moons (or of a giant's other moons) drawn in the sky. */
+  let orbitLines = $state(saved.orbitLines);
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
@@ -321,6 +324,7 @@
       hostClouds,
       hostGrid,
       hostTropics,
+      orbitLines,
       sun,
       season,
       sunLongitude,
@@ -697,6 +701,22 @@
     view?.setSkyBodies(sky?.bodies ?? []);
     view?.setShadowCasters(sky?.casters ?? []);
   });
+  // The moons' orbits in the sky, seen from the body shown.
+  const skyOrbitLoops = $derived.by(() => {
+    const planet = world.worldMeta;
+    if (!orbitLines || !planet) return [];
+    if (world.moon === null && planet.host) {
+      return siblingOrbitLoops(planet.host.siblings ?? [], planet.host.distance_km);
+    }
+    return orbitLoops(
+      moons,
+      world.moon === null ? null : world.moon - 1,
+      moonClock.season,
+      moonClock.yearDays,
+      moonClock.longitude,
+    );
+  });
+  $effect(() => view?.setSkyOrbits(skyOrbitLoops));
 
   // The orbit animation: one orbit of the slider's period every
   // ORBIT_SECONDS, paused while the canvas is hidden.
@@ -1213,6 +1233,11 @@
           <label class="check"><input type="checkbox" bind:checked={hostGrid} /> {t.viewer.grid}</label>
           <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
         </fieldset>
+      {/if}
+      {#if moons.length > 0 || (world.moon === null && (world.worldMeta?.host?.siblings?.length ?? 0) > 0)}
+        <label class="check" title={t.viewer.orbitLinesHelp}>
+          <input type="checkbox" bind:checked={orbitLines} /> {t.viewer.orbitLines}
+        </label>
       {/if}
       <label class="check">
         <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.moon !== null} />

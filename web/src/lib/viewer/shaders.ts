@@ -770,6 +770,25 @@ export const skyBodyFragment = /* glsl */ `
   }
 `;
 
+// Orbit lines of the bodies in the sky: directions at infinity, as the
+// sky bodies are (behind everything, hidden by the globe by depth).
+export const skyOrbitVertex = /* glsl */ `
+  attribute vec3 direction;
+  void main() {
+    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * direction * 10.0, 1.0);
+    gl_Position = clip.xyww;
+  }
+`;
+
+export const skyOrbitFragment = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  void main() {
+    gl_FragColor = vec4(uColor, uOpacity);
+    #include <colorspace_fragment>
+  }
+`;
+
 export const atmosphereVertex = /* glsl */ `
   varying vec3 vWorld;
   void main() {
