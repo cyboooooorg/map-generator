@@ -13,6 +13,7 @@ import {
   Color,
   CustomBlending,
   DataTexture,
+  DataUtils,
   DoubleSide,
   FrontSide,
   GreaterDepth,
@@ -49,6 +50,7 @@ import {
   WebGLRenderer,
   type IUniform,
 } from 'three';
+import { decode as decodePng } from 'fast-png';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { HexMap } from '../api/types/HexMap';
 import {
@@ -370,7 +372,12 @@ export class PlanetView {
     uLiquidSea: { value: 1 } as IUniform<number>,
     uHasData: { value: 0 } as IUniform<number>,
     uData: { value: emptyTexture() } as IUniform<Texture>,
+    uHasShape: { value: 0 } as IUniform<number>,
+    uShape: { value: emptyTexture() } as IUniform<Texture>,
+    uShapeTexel: { value: new Vector2(1 / 256, 1 / 128) } as IUniform<Vector2>,
   };
+  /** Counts the shape requests: a load answering after a newer one is dropped. */
+  private shapeRequest = 0;
   /** Surface-only uniforms. */
   private readonly u = {
     uLift: { value: 0 } as IUniform<number>,
@@ -799,6 +806,47 @@ export class PlanetView {
       }
     })();
     return source.loading;
+  }
+
+  /**
+   * Gives the globe the shape of an irregular body (a small moon): its
+   * 16-bit `shape.png` at `url`, the radius as a share of the mean one
+   * between `min` and `max`; null for a round body.
+   */
+  async setShape(shape: { url: string; min: number; max: number } | null, signal?: AbortSignal): Promise<void> {
+    this.shapeRequest += 1;
+    const request = this.shapeRequest;
+    this.shared.uHasShape.value = 0;
+    this.shared.uShape.value.dispose();
+    this.shared.uShape.value = emptyTexture();
+    this.requestRender();
+    if (!shape) {
+      return;
+    }
+    const response = await fetch(shape.url, signal ? { signal } : {});
+    if (!response.ok) {
+      throw new Error(`${response.status}`);
+    }
+    const image = decodePng(new Uint8Array(await response.arrayBuffer()));
+    if (this.disposed || request !== this.shapeRequest) {
+      return;
+    }
+    const scale = (shape.max - shape.min) / 65535;
+    const values = new Uint16Array(image.width * image.height);
+    for (let i = 0; i < values.length; i++) {
+      values[i] = DataUtils.toHalfFloat(shape.min + (image.data[i] ?? 0) * scale);
+    }
+    const texture = new DataTexture(values, image.width, image.height, RedFormat, HalfFloatType);
+    texture.magFilter = LinearFilter;
+    texture.minFilter = LinearFilter;
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = ClampToEdgeWrapping;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    this.shared.uShape.value = texture;
+    this.shared.uShapeTexel.value.set(1 / image.width, 1 / image.height);
+    this.shared.uHasShape.value = 1;
+    this.requestRender();
   }
 
   /** Shows or hides the cloud layer; the first time it shows, it is downloaded. */
@@ -1340,6 +1388,7 @@ export class PlanetView {
     if (this.cloudDriftTimer !== null) {
       clearTimeout(this.cloudDriftTimer);
     }
+    this.shared.uShape.value.dispose();
     this.shared.uData.value.dispose();
     this.u.uHex.value.dispose();
     this.u.uExtra.value.dispose();

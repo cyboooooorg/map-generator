@@ -37,7 +37,17 @@ import {
 } from './starShaders';
 import { starField } from './stars';
 import { prominenceGeometry } from './prominenceGeometry';
-import { keplerPosition, orbitDistance, type Prominence, prominences, STAR_RADIUS, starSurface, systemScale } from './starSystem';
+import {
+  keplerPosition,
+  type MoonOrbit,
+  orbitDistance,
+  PLANET_MARKER,
+  type Prominence,
+  prominences,
+  STAR_RADIUS,
+  starSurface,
+  systemScale,
+} from './starSystem';
 
 /** Seconds between two eruptions, while animated. */
 const ERUPTION_S = 9;
@@ -100,6 +110,10 @@ export class StarView {
   /** Called on each animated frame with the share of the year elapsed since the periapsis (0 to 1). */
   onClock: (yearFraction: number) => void = () => {};
   private disposed = false;
+  /** The planet's moons around it (see setMoons), centred on the barycentre. */
+  private readonly moonGroup = new Group();
+  private moonOrbits: MoonOrbit[] = [];
+  private moonMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true });
@@ -188,8 +202,9 @@ export class StarView {
     );
     this.orbit = new Line(circle, new LineBasicMaterial({ color: '#c8d2e6', transparent: true, opacity: 0.7 }));
     this.scene.add(this.orbit);
-    this.planet = new Mesh(new SphereGeometry(0.11, 32, 16), new MeshBasicMaterial({ color: '#7fb2ff' }));
+    this.planet = new Mesh(new SphereGeometry(PLANET_MARKER, 32, 16), new MeshBasicMaterial({ color: '#7fb2ff' }));
     this.scene.add(this.planet);
+    this.scene.add(this.moonGroup);
     // Distances: the star–planet line and the periapsis and apoapsis.
     this.link = new Line(
       new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]),
@@ -247,6 +262,60 @@ export class StarView {
     this.apsides[1]!.position.copy(this.inPlane(Math.PI, info.orbit_au * (1 + e)));
     this.placePlanet();
     this.requestRender();
+  }
+
+  /**
+   * Draws the planet's moons around it, on the orbits `moonOrbits` gives
+   * (not to scale), moving with the animation; none with an empty list.
+   */
+  setMoons(orbits: MoonOrbit[]): void {
+    this.disposeMoons();
+    this.moonOrbits = orbits;
+    for (const orbit of orbits) {
+      const ring = new Line(
+        new BufferGeometry().setFromPoints(
+          Array.from({ length: 97 }, (_, i) => {
+            const a = (i / 96) * 2 * Math.PI;
+            return new Vector3(Math.cos(a) * orbit.radius, 0, -Math.sin(a) * orbit.radius);
+          }),
+        ),
+        new LineBasicMaterial({ color: '#c8d2e6', transparent: true, opacity: 0.35 }),
+      );
+      ring.rotation.x = orbit.inclination;
+      // Transparent: drawn in a fixed order with the glow and prominences.
+      ring.renderOrder = 3;
+      this.moonGroup.add(ring);
+      const marker = new Mesh(new SphereGeometry(orbit.size, 16, 8), new MeshBasicMaterial({ color: '#d9d4c8' }));
+      this.moonMarkers.push(marker);
+      this.moonGroup.add(marker);
+    }
+    this.placePlanet();
+    this.requestRender();
+  }
+
+  private disposeMoons(): void {
+    for (const child of [...this.moonGroup.children]) {
+      const object = child as Mesh<BufferGeometry, MeshBasicMaterial>;
+      object.geometry.dispose();
+      object.material.dispose();
+      this.moonGroup.remove(child);
+    }
+    this.moonMarkers = [];
+    this.moonOrbits = [];
+  }
+
+  /** Places the moons at the animation's time, and the planet around the barycentre of a binary. */
+  private placeMoons(): void {
+    this.moonGroup.position.copy(this.planet.position);
+    this.moonOrbits.forEach((orbit, k) => {
+      const angle = orbit.phase + this.time * orbit.speed;
+      const local = new Vector3(Math.cos(angle) * orbit.radius, 0, -Math.sin(angle) * orbit.radius);
+      local.applyAxisAngle(new Vector3(1, 0, 0), orbit.inclination);
+      this.moonMarkers[k]?.position.copy(local);
+      if (orbit.swing > 0) {
+        this.planet.position.addScaledVector(local, -orbit.swing);
+      }
+    });
   }
 
   /** Shows the star–planet line, the periapsis and apoapsis, and reports their places (see onLabels). */
@@ -338,6 +407,7 @@ export class StarView {
       mesh.material.dispose();
     }
     this.setAnimated(false);
+    this.disposeMoons();
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.controls.dispose();
@@ -436,6 +506,7 @@ export class StarView {
     const { trueAnomaly, distance } = keplerPosition(e, this.meanAnomaly());
     this.planetAu = this.info.orbit_au * distance;
     this.planet.position.copy(this.inPlane(trueAnomaly, this.planetAu));
+    this.placeMoons();
     const points = this.link.geometry.getAttribute('position') as BufferAttribute;
     points.setXYZ(1, this.planet.position.x, this.planet.position.y, this.planet.position.z);
     points.needsUpdate = true;

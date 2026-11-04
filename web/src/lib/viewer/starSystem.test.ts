@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { meanOrbitalSpeed, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
+import { meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -108,4 +108,29 @@ describe('star view', () => {
     }
     expect(prominences('M', 7)).toEqual(arcs);
   });
+
+  it('draws moons around their planet at their pace, binaries swinging', () => {
+    const moon = (period_days: number, inclination_deg: number, barycentre_km = 0) => ({
+      radius_km: 1737,
+      inclination_deg,
+      period_days,
+      barycentre_km,
+      semi_major_axis_km: 384_400,
+    });
+    const [near, far, back] = moonOrbits([moon(27.3, 5), moon(0.3, 1), moon(10, 150)], 6371, 365.25, 60, false);
+    // Nearest first, farther out one after the other.
+    expect(near!.radius).toBeLessThan(far!.radius);
+    expect(far!.radius).toBeLessThan(back!.radius);
+    // The Moon goes round in 27.3 / 365.25 of the animated year; a close
+    // moonlet no faster than once in two seconds; a retrograde moon backwards.
+    expect(near!.speed).toBeCloseTo((2 * Math.PI) / ((27.3 / 365.25) * 60), 6);
+    expect(far!.speed).toBeCloseTo(Math.PI, 6);
+    expect(back!.speed).toBeLessThan(0);
+    expect(back!.inclination).toBeCloseTo((30 * Math.PI) / 180, 6);
+    expect(near!.swing).toBe(0);
+    // A binary's planet swings around the barycentre outside it.
+    const [charon] = moonOrbits([{ ...moon(6.4, 0, 2100), semi_major_axis_km: 19_600 }], 1188, 90_000, 60, true);
+    expect(charon!.swing).toBeCloseTo(2100 / 19_600, 6);
+  });
 });
+

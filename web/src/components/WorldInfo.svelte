@@ -9,6 +9,7 @@
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
+  import { moonsOf } from '../lib/moons';
 
   interface Props {
     world: LoadedWorld;
@@ -33,9 +34,13 @@
   let rerolling = $state(false);
   $effect(() => saveSetting('worldInfoOpen', open));
 
-  const meta = $derived(world.meta);
-  const stats = $derived(world.stats);
-  const others = $derived(worlds.filter((w) => w.id !== world.id));
+  // The world's, also while the viewer shows one of its moons.
+  const meta = $derived(world.worldMeta);
+  const stats = $derived(world.worldStats);
+  const rivers = $derived(world.worldRivers);
+  const worldId = $derived(world.worldId);
+  const others = $derived(worlds.filter((w) => w.id !== worldId));
+  const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
 
   async function copy(text: string, what: string): Promise<void> {
@@ -53,12 +58,12 @@
   }
 
   async function zip(): Promise<void> {
-    if (!world.id || !meta) {
+    if (!worldId || !meta) {
       return;
     }
     zipping = true;
     try {
-      await downloadRawData(world.id, meta);
+      await downloadRawData(worldId, meta);
     } catch (e) {
       toasts.error(t.worldInfo.archiveFailed({ error: String(e) }));
     } finally {
@@ -67,12 +72,12 @@
   }
 </script>
 
-{#if world.id}
+{#if worldId}
   <details class="card" bind:open>
     <summary>
       <span class="title">
-        <strong>{meta ? presetName(meta.preset) : (summary?.planet ?? world.id)}</strong>
-        <small>{world.id}</small>
+        <strong>{meta ? presetName(meta.preset) : (summary?.planet ?? worldId)}</strong>
+        <small>{worldId}</small>
       </span>
     </summary>
 
@@ -135,15 +140,24 @@
         {:else}
           <dd>{t.worldInfo.theSun}</dd>
         {/if}
+        {#if meta.moons}
+          <dt title={t.worldInfo.moonsHelp}>{t.worldInfo.moons}</dt>
+          <dd>
+            {moons.length === 0
+              ? t.worldInfo.noMoon
+              : t.worldInfo.moonsValue({ count: moons.length, names: moons.map((m) => m.name).join(', ') })}{#if meta.moons.binary}
+              · {t.worldInfo.binary}{/if}
+          </dd>
+        {/if}
         {#if stats}
           <dt>{t.worldInfo.surface}</dt>
           <dd>{formatArea(stats.surfaceKm2)}</dd>
           <dt>{t.worldInfo.landWater}</dt>
           <dd>{formatShare(stats.land)} / {formatShare(stats.water)}</dd>
         {/if}
-        {#if world.rivers}
+        {#if rivers}
           <dt>{t.worldInfo.rivers}</dt>
-          <dd>{formatInt(world.rivers.file.rivers.length)}</dd>
+          <dd>{formatInt(rivers.file.rivers.length)}</dd>
         {/if}
         {#if summary}
           <dt>{t.worldInfo.generated}</dt>
@@ -204,9 +218,9 @@
 
       <div class="downloads">
         <span>{t.worldInfo.download}</span>
-        <a href={worldFile(world.id, 'world.png', summary?.modified_ms)} download={`${world.id}.png`}>{t.worldInfo.mapPng}</a>
-        <a href={worldFile(world.id, 'world.svg', summary?.modified_ms)} download={`${world.id}.svg`}>{t.worldInfo.svg}</a>
-        <a href={worldFile(world.id, 'legend.png', summary?.modified_ms)} download={`${world.id}-legend.png`}>{t.worldInfo.legend}</a>
+        <a href={worldFile(worldId, 'world.png', summary?.modified_ms)} download={`${worldId}.png`}>{t.worldInfo.mapPng}</a>
+        <a href={worldFile(worldId, 'world.svg', summary?.modified_ms)} download={`${worldId}.svg`}>{t.worldInfo.svg}</a>
+        <a href={worldFile(worldId, 'legend.png', summary?.modified_ms)} download={`${worldId}-legend.png`}>{t.worldInfo.legend}</a>
         <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
       </div>
     {:else if world.error}

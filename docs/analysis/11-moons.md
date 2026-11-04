@@ -225,15 +225,16 @@ three changes found on the way:
   directory: they are not planet types.
 - **Small bodies:** the noise relief kept a planet's amplitude (several
   km) and buried the craters of a 10 km moon; it is now flattened towards
-  the datum to 1.5 % of the body's radius over the noise's typical
-  amplitude (bodies under about 830 km in radius), and the noise is no
+  the datum to 0.6 % of the body's radius over the noise's typical
+  amplitude (bodies under about 2 100 km in radius; the Moon keeps 83 %),
+  and the noise is no
   finer than at 5 000 km around (`MAX_NOISE_SCALE`; on a 70 km moon it
   turned into grain). The hillshade exaggerated relief 1 500 km per
   elevation unit, set for planetary pixels of 20 km: on a moon's pixels
   of 0.3 km every slope saturated; it now falls with the body's size
   towards the true relief (25 km per unit) under 300 km in radius. Worlds
   that small change; planets do not.
-- **Cost:** a moon is a small world (256 to about 1 000 pixels wide):
+- **Cost:** a moon is a small world (512 to about 1 000 pixels wide):
   0.05 to 0.5 s each.
 
 ### Step 3: the moon view (viewer)
@@ -256,6 +257,31 @@ three changes found on the way:
 - **Star view:** the planet with its moons in an inset (not to scale),
   on Kepler orbits; a binary turns around its barycentre.
 - **World card and list:** the number of moons.
+
+**Outcome (step 3, 2026-11-04).** The viewer shows each moon:
+
+- **Bodies:** a moon is named `<world>/moons/<n>` wherever a world id
+  goes; URLs encode it segment by segment (`bodyPath`), so files, detail
+  tiles and crater epochs reach `moons/<n>/` and the server's moon
+  routes, which take the world's revision. `LoadedWorld` keeps the
+  world's metadata, statistics and rivers while it shows one of its
+  moons, for the world card and the star view.
+- **Switch:** Planet / Moon / Star, a selector of the moons, `U` to step
+  through them; the hex grid is off on moons (the server resamples worlds
+  only).
+- **Shape:** the globe's vertex shader scales the sphere by the
+  `shape` layer (16 bits, uploaded as a half-float texture) and tilts the
+  normal by its slopes, so the light shows the shape; the map stays
+  equirectangular.
+- **Panel and star view** as planned; in the star view the moons are
+  drawn on orbits not to scale, at their real pace relative to the year
+  (two seconds a turn at the fastest).
+- **Found on the way:** a moon's base map, 256 pixels wide, stretched
+  over the globe turned the hillshaded grain of its noise relief into
+  blotches; moons now get at least 512 pixels, their relief is flattened
+  to 0.6 % of their radius instead of 1.5 %, and the detail tiles' octaves
+  are flattened with it (`RENDER_VERSION` 5). The reproduce request and
+  command of a world now carry its plate epoch and its moons turned off.
 
 ### Step 4: skies (optional)
 

@@ -26,6 +26,7 @@ import {
   Vector3,
   Vector4,
 } from 'three';
+import { bodyPath } from '../api/client';
 import {
   ancestor,
   ancestorIndex,
@@ -70,7 +71,7 @@ export const DETAIL_STENCIL = 1;
  * part of the tile URL so that tiles cached for good are dropped when the
  * renderer changes. A server test checks both values agree.
  */
-export const TILE_RENDER_VERSION = 4;
+export const TILE_RENDER_VERSION = 5;
 
 /** Creates the material of a patch; uniforms come from the base surface. */
 export type PatchMaterialFactory = () => ShaderMaterial;
@@ -355,7 +356,7 @@ export class TileLayer {
     let status: number | null = null;
     try {
       const epoch = world.epochMa === 0 ? '' : `&epoch=${world.epochMa}`;
-      const url = `/api/worlds/${encodeURIComponent(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}${epoch}`;
+      const url = `/api/worlds/${bodyPath(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}${epoch}`;
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
         status = response.status;

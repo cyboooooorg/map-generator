@@ -7,7 +7,7 @@
   import type { HexMap } from '../lib/api/types/HexMap';
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
-  import { formatArea, formatKm, formatNumber, formatShare, saveBlob, surfaceColour } from '../lib/format';
+  import { formatArea, formatKm, formatNumber, formatShare, formatUpTo, saveBlob, surfaceColour } from '../lib/format';
   import type { LonLat } from '../lib/geo';
   import type { ViewLink } from '../lib/link';
   import type { LoadProgress } from '../lib/progress';
@@ -23,6 +23,8 @@
   import { cssGradient } from '../lib/viewer/colormaps';
   import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
+  import MoonPane from './MoonPane.svelte';
+  import { bodyFileName, moonsOf } from '../lib/moons';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -193,14 +195,39 @@
 
   const worldId = $derived(world.id);
   const meta = $derived(world.meta);
+  /** The moons of the world loaded (whichever body is shown), nearest first. */
+  const moons = $derived(moonsOf(world.worldMeta));
+  const moonSystem = $derived(world.worldMeta?.moons ?? null);
+  /** The moon shown, or null for the world itself. */
+  const shownMoon = $derived(world.moon === null ? null : (moons[world.moon - 1] ?? null));
+  /** The moon last shown, which the Moon button opens again. */
+  let lastMoon = 1;
+  /** Shows moon `n` (from 1) of the world, or the world itself with null. */
+  function showMoon(n: number | null): void {
+    subject = 'planet';
+    if (n !== null) lastMoon = n;
+    world.showMoon(n);
+  }
+  /** `U`: the planet, then each of its moons in turn. */
+  function stepMoon(): void {
+    if (moons.length === 0) return;
+    const current = world.moon ?? 0;
+    showMoon(current >= moons.length ? null : current + 1);
+  }
+  // Moons have no hex grid (the server resamples worlds only).
+  $effect(() => {
+    if (world.moon !== null) hexOn = false;
+  });
   /**
    * The system the star view shows: the previous world's while the next
    * one's metadata loads, so the view does not flash the Sun's in between.
    */
   let shownSystem: { star: StarInfo; omega: number } | null = null;
   const system = $derived.by(() => {
-    if (meta) {
-      shownSystem = { star: withOrbitDefaults(meta.star ?? SUN_SYSTEM), omega: periapsisAngle(meta.seed) };
+    // The world's, also while one of its moons is shown.
+    const planet = world.worldMeta ?? (world.moon === null ? meta : null);
+    if (planet) {
+      shownSystem = { star: withOrbitDefaults(planet.star ?? SUN_SYSTEM), omega: periapsisAngle(planet.seed) };
     }
     return shownSystem ?? { star: withOrbitDefaults(SUN_SYSTEM), omega: 0 };
   });
@@ -464,6 +491,19 @@
       });
     return () => controller.abort();
   });
+  // An irregular moon's shape, once per body.
+  $effect(() => {
+    const id = worldId;
+    const shape = meta?.layers.shape;
+    if (!view) return;
+    const controller = new AbortController();
+    view
+      .setShape(id && shape ? { url: worldFile(id, `raw_data/${shape.file}`, revision), min: shape.min, max: shape.max } : null, controller.signal)
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) console.warn('Could not load the shape', e);
+      });
+    return () => controller.abort();
+  });
   $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => view?.setCloudsDrifting(cloudDrift));
   $effect(() => {
@@ -638,7 +678,7 @@
   export async function screenshot(): Promise<void> {
     const blob = await view?.screenshot();
     if (blob && worldId) {
-      saveBlob(blob, `${worldId}-${shown}-${mode}.png`);
+      saveBlob(blob, `${bodyFileName(worldId)}-${shown}-${mode}.png`);
     } else {
       toasts.error(t.viewer.screenshotFailed);
     }
@@ -646,7 +686,7 @@
 
   function downloadHex(): void {
     if (hexMap && worldId) {
-      downloadJson(hexMap, `${worldId}-hex-${hexMap.columns}.json`);
+      downloadJson(hexMap, `${bodyFileName(worldId)}-hex-${hexMap.columns}.json`);
     }
   }
 
@@ -706,6 +746,9 @@
         break;
       case 'starView':
         if (worldId) subject = subject === 'star' ? 'planet' : 'star';
+        break;
+      case 'moonView':
+        stepMoon();
         break;
       case 'clouds':
         clouds = !clouds;
@@ -806,11 +849,17 @@
 <div class="viewer">
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={subject === 'star'}></canvas>
+  {#if subject === 'planet' && shownMoon && moonSystem}
+    <MoonPane moon={shownMoon} system={moonSystem} world={world.worldId ?? ''} />
+  {/if}
   {#if subject === 'star' && worldId}
     <StarPane
       bind:this={starPane}
       star={system.star}
       omega={system.omega}
+      {moons}
+      binary={moonSystem?.binary ?? false}
+      planetRadiusKm={(world.worldMeta?.circumference_km ?? 40075) / (2 * Math.PI)}
       bind:animated={starAnimated}
       bind:distances={starDistances}
       bind:orbit={starOrbit}
@@ -822,10 +871,17 @@
   <div class="toolbar" role="toolbar" aria-label={t.viewer.tools}>
     <div class="segmented" role="group" aria-label={t.viewer.target}>
       <button
-        class:active={subject === 'planet'}
-        aria-pressed={subject === 'planet'}
-        onclick={() => (subject = 'planet')}
+        class:active={subject === 'planet' && world.moon === null}
+        aria-pressed={subject === 'planet' && world.moon === null}
+        onclick={() => showMoon(null)}
         title={t.viewer.planetViewHelp}>{t.viewer.planetView}</button
+      >
+      <button
+        class:active={subject === 'planet' && world.moon !== null}
+        aria-pressed={subject === 'planet' && world.moon !== null}
+        onclick={() => showMoon(world.moon ?? Math.min(lastMoon, moons.length))}
+        disabled={moons.length === 0}
+        title={moons.length === 0 ? t.viewer.noMoons : t.viewer.moonViewHelp}>{t.viewer.moonView}</button
       >
       <button
         class:active={subject === 'star'}
@@ -835,6 +891,18 @@
         title={t.viewer.starViewHelp}>{t.viewer.starView}</button
       >
     </div>
+    {#if subject === 'planet' && world.moon !== null && moons.length > 1}
+      <select
+        aria-label={t.viewer.moonPick}
+        title={t.viewer.moonPick}
+        value={world.moon}
+        onchange={(e) => showMoon(Number(e.currentTarget.value))}
+      >
+        {#each moons as moon, i (moon.name)}
+          <option value={i + 1}>{t.moons.option({ name: moon.name, size: `${formatUpTo(moon.radius_km, moon.radius_km < 100 ? 1 : 0)}${t.format.unitSpace}km` })}</option>
+        {/each}
+      </select>
+    {/if}
     <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
     {#if subject === 'planet'}
       <button
@@ -944,7 +1012,7 @@
         <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> {t.viewer.elevationContours}
       </label>
       <label class="check">
-        <input type="checkbox" bind:checked={hexOn} disabled={!worldId} />
+        <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.moon !== null} />
         {t.viewer.hexes}
         {#if hexServerBusy}
           <small class="muted" title={t.viewer.serverBusyHelp}

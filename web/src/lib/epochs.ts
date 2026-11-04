@@ -4,6 +4,7 @@
 // to their surface age, or to the end of their wet era if more recent.
 // Epochs are whole Ma before present; negative ones are in the future.
 
+import { bodyPath } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { formatInt, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
@@ -76,5 +77,5 @@ export function epochFile(
   const query = [`render=${TILE_RENDER_VERSION}`];
   if (revision !== null) query.unshift(`rev=${revision}`);
   if (scale !== 1) query.push(`scale=${scale}`);
-  return `/api/worlds/${encodeURIComponent(id)}/epoch/${ma}/${file}?${query.join('&')}`;
+  return `/api/worlds/${bodyPath(id)}/epoch/${ma}/${file}?${query.join('&')}`;
 }

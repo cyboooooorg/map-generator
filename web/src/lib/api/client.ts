@@ -86,12 +86,20 @@ export const api = {
 };
 
 /**
+ * A body id as a URL path: a world id, or a moon's `<world>/moons/<n>`
+ * (see lib/moons.ts), each segment encoded.
+ */
+export function bodyPath(id: string): string {
+  return id.split('/').map(encodeURIComponent).join('/');
+}
+
+/**
  * URL of a file of a generated world. `revision` (the world's modification
  * time) makes the URL change when the world is regenerated under the same id,
  * so the browser never shows a cached file of the replaced world.
  */
 export function worldFile(id: string, path: string, revision?: number | null): string {
-  const url = `/worlds/${encodeURIComponent(id)}/${path}`;
+  const url = `/worlds/${bodyPath(id)}/${path}`;
   return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
 }
 

@@ -514,7 +514,7 @@ impl MoonSystem {
 /// enough heat for lava to flood their basins (the Moon: 1 737 km).
 const MARIA_MIN_RADIUS_KM: f32 = 500.0;
 /// Narrowest map of a moon, pixels.
-const MOON_MIN_WIDTH: u32 = 256;
+const MOON_MIN_WIDTH: u32 = 512;
 /// Axial tilt of a moon, degrees: tides keep it small (the Moon: 1.5°).
 const MOON_TILT_DEG: f32 = 1.5;
 /// Low-frequency bumps of an irregular body, as a share of its radius at
@@ -724,7 +724,7 @@ mod tests {
             .collect::<Vec<_>>();
         let small = moons.iter().find(|m| !m.round).unwrap();
         let body = body_params(&planet, small);
-        assert_eq!((body.width, body.height), (256, 128));
+        assert_eq!((body.width, body.height), (512, 256));
         assert_eq!(body.pressure_bar, 0.0);
         assert!(body.planet.geology.maria.is_none());
         let shape = shape_layer(&body).unwrap();
