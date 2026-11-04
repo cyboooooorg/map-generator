@@ -716,13 +716,25 @@ impl LoadedWorld {
             + self.albedo.len()
     }
 
-    /// Decodes every layer into a [`World`], keeping this one.
+    /// Decodes every layer into a [`World`], keeping this one. The stored
+    /// layers are read in place, not copied first: only the decoded world
+    /// (and the biomes and rivers it owns) is added to this one's memory.
     pub fn to_world(&self) -> World {
-        self.clone().into_world()
+        let biomes = self.biomes.clone();
+        let rivers = self.rivers.clone();
+        self.decoded(biomes, rivers)
     }
 
     /// Decodes every layer into a [`World`].
-    pub fn into_world(self) -> World {
+    pub fn into_world(mut self) -> World {
+        let biomes = std::mem::take(&mut self.biomes);
+        let rivers = std::mem::take(&mut self.rivers);
+        self.decoded(biomes, rivers)
+    }
+
+    /// The [`World`] of these layers, decoded in parallel, with `biomes`
+    /// and `rivers`.
+    fn decoded(&self, biomes: Vec<Biome>, rivers: Vec<RiverLine>) -> World {
         let layers = [
             &self.elevation,
             &self.moisture,
@@ -745,7 +757,7 @@ impl LoadedWorld {
             floodplain,
         ]: [Vec<f32>; 8] = decoded.try_into().expect("eight layers");
         World {
-            params: self.params,
+            params: self.params.clone(),
             width: self.width,
             height: self.height,
             elevation,
@@ -758,8 +770,8 @@ impl LoadedWorld {
             highland_offset,
             elevation_base: None,
             albedo: self.albedo.iter().map(|&b| albedo_of(b)).collect(),
-            biomes: self.biomes,
-            rivers: self.rivers,
+            biomes,
+            rivers,
             clouds: Vec::new(),
             surface: Vec::new(),
         }
