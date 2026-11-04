@@ -725,6 +725,77 @@ a function of `t`, as the crater epochs are:
   Wikipedia, and [GPlates: Euler pole and
   angle](https://gwsdoc.gplates.org/rotation/euler-pole-and-angle).
 
+### Tidally locked worlds (2026-11-04)
+
+Since the host star (backlog item 11, `docs/analysis/10-stars.md`), a
+planet whose tidal locking time (`star::locking_gyr`, about
+`166 Gyr × a⁶ / M²`) is shorter than its star's age keeps one face to
+its star: an "eyeball" climate around the substellar point, at the
+centre of the map. What it changes for geology:
+
+- **Impact craters: a leading hemisphere.** A synchronously rotating
+  body keeps one hemisphere facing its orbital motion, the apex: it
+  sweeps up more impactors, at higher speeds and more head-on, so it
+  gets more and larger craters than the trailing hemisphere (Zahnle et
+  al. 2001 on the satellites of the giant planets; Le Feuvre & Wieczorek
+  2008, 2011 and Wieczorek & Le Feuvre 2009 on the Moon). The Moon's
+  apex is at 0° N, 90° W of the sub-Earth point; for a planet locked to
+  its star, the substellar point takes that place, so the apex lies on
+  the equator 90° west of it (longitude 90° on our map, the substellar
+  point being at 180°). The strength depends on the impactors' encounter
+  speed against the orbital speed (slower impactors, stronger
+  asymmetry): models of near-Earth objects give a leading-to-trailing
+  ratio of about 1.14 to 1.32 for the Moon, observations more, an
+  unresolved gap. A planet close to an M dwarf orbits fast, which would
+  strengthen it, but its impactor population is unknown. Cheap to add:
+  a crater density modulated by `1 + k cos γ` (γ the angle to the apex),
+  for the craters younger than the locking (the planet locked
+  `age − locking_gyr` Ga ago; older craters formed while it rotated),
+  with `k` for a leading-to-trailing ratio of about 1.3 by default.
+- **Rays.** Space weathering darkens them faster under a stronger
+  stellar wind and flares (M dwarfs), and on the day side; no
+  quantitative model was found: kept uniform.
+- **Plate tectonics: hemispheres.** A strong day-to-night contrast of
+  surface temperature can organise mantle convection by hemisphere:
+  upwelling under one, subduction under the other ("hemispheric
+  tectonics", Meier et al. 2021 for the hot super-Earth LHS 3844b, with
+  either direction depending on the lithosphere's strength and the
+  internal heating). For the kinematic drift above: on a locked world
+  the Euler poles could be drawn so that plates converge towards one
+  hemisphere, instead of at random.
+- **Drift moves the climate.** A locked world's climate depends on the
+  longitude, around a substellar point fixed to the planet's figure by
+  its tidal bulge: drifting continents move into or out of the warm
+  "eye", so the climate must be recomputed at each epoch (step 3 of the
+  order above), and the time slider would show it. A reorientation of
+  the whole shell (true polar wander, moving the substellar point
+  itself) is out of scope.
+- **Tidal heating** comes from an eccentric orbit, flexed at every turn:
+  around M dwarfs it can be strong enough for global volcanism, or to
+  dry a planet through a runaway greenhouse ("tidal Venuses", Barnes et
+  al. 2013), until the orbit circularises. Orbits are circular here,
+  so there is none; an eccentricity would be the hook for a heat-pipe
+  regime on locked worlds.
+
+**Sources:**
+
+- Le Feuvre, M. & Wieczorek, M. A. (2008, 2011), and Wieczorek, M. A.
+  & Le Feuvre, M. (2009), [Did a large impact reorient the
+  Moon?](https://www.mso.anu.edu.au/PSI/PSI_Meetings/Entries/2009/4/16_Special_Seminar__Did_a_large_impact_reorient_the_Moon_files/Wieczorek2009.pdf)
+  *Icarus* 200; see also [Analytical formulation of lunar cratering
+  asymmetries](https://arxiv.org/pdf/1608.03853) and
+  [Lunar cratering asymmetries with high orbital obliquity and
+  inclination of the Moon](https://arxiv.org/pdf/2101.11776).
+- Zahnle, K. et al. (2001). Differential cratering of synchronously
+  rotating satellites by ecliptic comets. *Icarus* 153.
+- Meier, T. G., Bower, D. J., Lichtenberg, T., Tackley, P. J. &
+  Demory, B.-O. (2021). [Hemispheric tectonics on LHS
+  3844b](https://boris.unibe.ch/153279/). *ApJL* 908, L48
+  ([arXiv:2103.02374](https://arxiv.org/abs/2103.02374)).
+- Barnes, R. et al. (2013). [Tidal Venuses: triggering a climate
+  catastrophe via tidal heating](https://arxiv.org/pdf/1203.5104).
+  *Astrobiology* 13.
+
 ## 9. Open points
 
 - Elevation units: `ELEVATION_KM` is introduced for craters only; the
