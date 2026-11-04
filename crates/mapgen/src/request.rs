@@ -966,7 +966,9 @@ mod tests {
         let hot = WorldRequest {
             planet: Some("hot-jupiter".into()),
             seed: Some(2),
+            // Set, so the giant is hot whatever the draws (about 1 400 K).
             star: Some("G2V".into()),
+            orbit_au: Some(0.04),
             moons: Some(crate::moons::MoonsMode::Count(2)),
             width: Some(64),
             height: Some(32),
