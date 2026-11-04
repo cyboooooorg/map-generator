@@ -12,7 +12,7 @@
 // (19 with the layers of format version 2), instead of 4-byte floats per
 // layer next to the GPU copies.
 import { CELSIUS_VERSION, celsius } from '../climate';
-import { decode } from 'fast-png';
+import { decodePng } from './png';
 import { DataUtils } from 'three';
 import type { ScalarLayerInfo } from '../api/types/ScalarLayerInfo';
 import type { WorldMetadata } from '../api/types/WorldMetadata';
@@ -79,7 +79,7 @@ export interface LayerFiles {
 export const EXTRA_FILES = ['volcanic_zone', 'coast_distance', 'highland_offset', 'floodplain'] as const;
 
 function decodeGrey(file: ArrayBuffer, width: number, height: number, depth: 8 | 16) {
-  const png = decode(file);
+  const png = decodePng(file);
   if (png.width !== width || png.height !== height) {
     throw new Error(`layer is ${png.width}×${png.height}, expected ${width}×${height}`);
   }
@@ -245,7 +245,7 @@ export interface Grey8 {
  * pixels per side. Only the first channel of an image with more is kept.
  */
 export function decodeGrey8(file: ArrayBuffer, maxSize: number): Grey8 {
-  const png = decode(file);
+  const png = decodePng(file);
   if (png.depth !== 8) {
     throw new Error(`image has ${png.depth}-bit channels, expected 8`);
   }
