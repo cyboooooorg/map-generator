@@ -802,6 +802,7 @@ export const en = {
     orbitAndPosition: 'Set the orbit by its distance or by its position in the habitable zone, not both.',
     noRoomForMoons: (p: { count: number }) =>
       `No stable orbits for ${p.count === 1 ? 'a moon' : `${p.count} moons`}: the star and orbit chosen lock the planet to its star or keep it too close. Leave them random, or pick a farther orbit or a hotter star.`,
+    moonsOfAMoon: "The moon of a giant keeps no moons of its own (its Hill sphere is too small): ask for moons or for a giant's moon, not both.",
     unknownPreset: (p: { preset: string }) => `There is no planet preset named ${p.preset}.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,

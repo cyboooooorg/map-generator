@@ -223,6 +223,8 @@ pub enum ErrorDetail {
     /// The moons asked for find no stable orbits around the planet (locked
     /// to its star or too close to it, with its star and orbit set).
     NoRoomForMoons { count: u8 },
+    /// Moons asked for on the moon of a giant, which keeps none.
+    MoonsOfAMoon,
 }
 
 impl ErrorDetail {
@@ -246,6 +248,7 @@ impl ErrorDetail {
             RequestError::BadStar(e) => Some(Self::UnknownStar { star: e.clone() }),
             RequestError::OrbitAndPosition => Some(Self::OrbitAndPosition),
             RequestError::NoRoomForMoons { count } => Some(Self::NoRoomForMoons { count: *count }),
+            RequestError::MoonsOfAMoon => Some(Self::MoonsOfAMoon),
             RequestError::Preset(_) => None,
         }
     }
