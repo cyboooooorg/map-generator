@@ -288,6 +288,25 @@ three changes found on the way:
 The planet in the sky of each moon (with its phase), the moons in the
 planet's sky; eclipses.
 
+**Outcome (step 4, 2026-11-04).** With Sunlight on, the viewer draws
+the other bodies of the system in the sky and their shadows:
+
+- **Sky bodies:** a disk at infinity behind the surface, like the host
+  star, but a quad rather than a point (the planet seen from a Phobos
+  spans about 40°, beyond the largest point size), lit as a sphere by the
+  sun, so phases follow; the planet seen from a moon is mapped with its
+  `surface.png`, towards longitude 180° of the moon; the moons seen from
+  their planet are plain rock or ice, full at the start of the season and
+  turning at their period relative to the year as the seasons play.
+- **Eclipses:** up to four shadow casters (the largest moons, or the
+  planet seen from its moon), their centres and radii in radii of the
+  body shown; the surface shader dims the sunlight by the share of the
+  sun each one hides (umbra, penumbra widening with the distance behind
+  the caster, annular when the umbra falls short): the Moon at 60 Earth
+  radii, as in the real sky, gives annular eclipses at apogee.
+- The geometry lives in `lib/skyBodies.ts`, tested against the Moon and
+  Phobos; the shader repeats its eclipse formula.
+
 ### Step 5: effects on the planet (seeds change)
 
 - The axial tilt drawn in a narrow range with a large moon, over a wide

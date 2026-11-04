@@ -141,6 +141,11 @@ export const surfaceFragment = /* glsl */ `
   uniform float uLandContours; // 1 draws the altitude contours on land
   uniform float uTropics;      // 1 draws the equator, tropics and polar circles
   uniform float uTilt;         // axial tilt, degrees
+  // Bodies whose shadow can fall on this one (eclipses): centre (xyz) and
+  // radius (w) in radii of this body; the sun's angular radius, radians.
+  uniform vec4 uCasters[4];
+  uniform float uCasterCount;
+  uniform float uSunRadius;
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
   uniform sampler2D uClouds;   // cloud cover in r, row 0 = north (sampled at 1 - v)
   uniform vec3 uCloudTint;     // linear colour of the clouds
@@ -281,6 +286,27 @@ export const surfaceFragment = /* glsl */ `
     return mix(colour * 0.55, colour, smoothstep(0.0, line, edge));
   }
 
+  // Share of the sunlight hidden at a point of the unit sphere (see
+  // lib/skyBodies.ts, eclipse).
+  float eclipse(vec3 point) {
+    float hidden = 0.0;
+    for (int i = 0; i < 4; i++) {
+      if (float(i) >= uCasterCount) break;
+      vec3 c = uCasters[i].xyz - point;
+      float t = dot(c, uSunDir);
+      if (t <= 0.0) continue;
+      float d = length(c - t * uSunDir);
+      float spread = t * tan(uSunRadius);
+      float radius = uCasters[i].w;
+      float umbra = max(radius - spread, 0.0);
+      float penumbra = radius + spread;
+      float x = clamp((penumbra - d) / max(penumbra - umbra, 1e-6), 0.0, 1.0);
+      float most = radius >= spread ? 1.0 : (radius / spread) * (radius / spread);
+      hidden = max(hidden, x * x * (3.0 - 2.0 * x) * most);
+    }
+    return hidden;
+  }
+
   void main() {
     vec4 data = dataAt(vUv);
     float aboveCoast = data.r - uCoast;
@@ -405,7 +431,9 @@ export const surfaceFragment = /* glsl */ `
       float day = smoothstep(-0.08, 0.15, sunHeight);
       // Low sun is dimmer than high sun.
       float strength = 0.55 + 0.45 * clamp(sunHeight, 0.0, 1.0);
-      shade = (0.07 + 0.93 * day * strength) * relief;
+      // A moon's shadow on its planet, the planet's on its moon.
+      float sunlit = uCasterCount > 0.0 ? 1.0 - eclipse(normalize(vSphere)) : 1.0;
+      shade = (0.07 + 0.93 * day * strength * sunlit) * relief;
     } else {
       float globe = 0.35 + 0.75 * lambert;
       shade = mix(relief, globe, uMorph);
@@ -531,6 +559,54 @@ export const hostStarFragment = /* glsl */ `
     vec3 colour = uColor * (inside * limb * 1.4 + glow * (1.0 - inside));
     if (max(colour.r, max(colour.g, colour.b)) < 0.002) discard;
     gl_FragColor = vec4(colour * uOpacity, 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+
+// A body in the sky (the planet seen from its moon, a moon from its
+// planet): a disk facing the view at infinity, `uHalf` (the tangent of its
+// angular radius) across, drawn behind everything like the host star.
+export const skyBodyVertex = /* glsl */ `
+  uniform vec3 uDir;
+  uniform vec3 uRight;
+  uniform vec3 uUp;
+  uniform float uHalf;
+  varying vec2 vP;
+  void main() {
+    vP = position.xy * 2.0;
+    vec3 d = uDir + (vP.x * uRight + vP.y * uUp) * uHalf;
+    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * d * 10.0, 1.0);
+    gl_Position = clip.xyww;
+  }
+`;
+
+// The body as a lit sphere: its visible hemisphere faces the viewer, its
+// day side the sun (phases), mapped with its surface when it has one.
+export const skyBodyFragment = /* glsl */ `
+  const float PI = 3.141592653589793;
+  uniform vec3 uDir;
+  uniform vec3 uRight;
+  uniform vec3 uUp;
+  uniform vec3 uSunDir;
+  uniform vec3 uColor;
+  uniform float uHasMap;
+  uniform sampler2D uMap;
+  uniform float uOpacity;
+  varying vec2 vP;
+  void main() {
+    float r2 = dot(vP, vP);
+    if (r2 > 1.0) discard;
+    vec3 n = normalize(vP.x * uRight + vP.y * uUp - sqrt(1.0 - r2) * uDir);
+    vec3 colour = uColor;
+    if (uHasMap > 0.5) {
+      float lon = atan(n.x, n.z);
+      float lat = asin(clamp(n.y, -1.0, 1.0));
+      colour = texture2D(uMap, vec2(fract(lon / (2.0 * PI)), lat / PI + 0.5)).rgb;
+    }
+    float lit = max(dot(n, uSunDir), 0.0);
+    // A soft edge, and a faint night side.
+    float edge = 1.0 - smoothstep(0.96, 1.0, r2);
+    gl_FragColor = vec4(colour * (0.015 + 0.985 * lit) * uOpacity * edge, 1.0);
     #include <colorspace_fragment>
   }
 `;

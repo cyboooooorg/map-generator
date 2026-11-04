@@ -65,6 +65,7 @@ import {
   type Vec3,
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
+import { MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
@@ -89,6 +90,8 @@ import {
   lineFragment,
   RELIEF_SCALE,
   hostStarFragment,
+  skyBodyFragment,
+  skyBodyVertex,
   hostStarVertex,
   starsFragment,
   starsVertex,
@@ -413,6 +416,9 @@ export class PlanetView {
     uLandContours: { value: 0 } as IUniform<number>,
     uTropics: { value: 0 } as IUniform<number>,
     uTilt: { value: 23.5 } as IUniform<number>,
+    uCasters: { value: Array.from({ length: MAX_CASTERS }, () => new Vector4()) } as IUniform<Vector4[]>,
+    uCasterCount: { value: 0 } as IUniform<number>,
+    uSunRadius: { value: (0.533 / 2) * (Math.PI / 180) } as IUniform<number>,
   };
   private readonly path: LineSegments<BufferGeometry, ShaderMaterial>;
   /** Axial tilt the reference lines are drawn for, or null for none. */
@@ -442,6 +448,9 @@ export class PlanetView {
   private atmosphereOn = true;
   /** Whether the star field is shown. */
   private starsOn = true;
+  /** The other bodies drawn in the sky (see setSkyBodies), with their maps. */
+  private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; map: Texture | null }[] = [];
+  private skyRequest = 0;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
   /** Whether the planet is lit with its star's colour. */
@@ -1090,6 +1099,7 @@ export class PlanetView {
   setHostStar(star: HostStar): void {
     this.requestRender();
     this.host = star;
+    this.u.uSunRadius.value = ((star.angularDiameterDeg / 2) * Math.PI) / 180;
     const u = this.hostStar.material.uniforms;
     (u['uColor']!.value as Vector3).set(...star.colour);
     this.applyLightTint();
@@ -1394,6 +1404,7 @@ export class PlanetView {
     this.u.uExtra.value.dispose();
     this.u.uBiomes.value.dispose();
     this.sky.uSunDepth.value.dispose();
+    this.disposeSkyBodies();
     for (const object of [this.surface, this.grid, this.stars, this.hostStar, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
@@ -1506,6 +1517,122 @@ export class PlanetView {
   };
 
   /**
+   * Draws other bodies in the sky (with Sunlight, on the globe): the planet
+   * seen from one of its moons, the moons seen from their planet, each lit
+   * by the sun, so it shows its phase; at their true apparent size, at
+   * least a few pixels. Their maps load in the background.
+   */
+  setSkyBodies(bodies: readonly SkyBody[], signal?: AbortSignal): void {
+    this.skyRequest += 1;
+    const request = this.skyRequest;
+    // The same bodies at new places keep their meshes and maps.
+    const same =
+      bodies.length === this.skyBodies.length && bodies.every((b, i) => b.texture === this.skyBodies[i]?.body.texture);
+    if (same) {
+      bodies.forEach((body, i) => {
+        const entry = this.skyBodies[i]!;
+        entry.body = body;
+        (entry.mesh.material.uniforms['uColor']!.value as Vector3).set(...body.colour);
+      });
+      this.requestRender();
+      return;
+    }
+    this.disposeSkyBodies();
+    this.skyBodies = bodies.map((body) => {
+      const mesh = new Mesh(
+        new PlaneGeometry(1, 1),
+        new ShaderMaterial({
+          vertexShader: skyBodyVertex,
+          fragmentShader: skyBodyFragment,
+          uniforms: {
+            uDir: { value: new Vector3() },
+            uRight: { value: new Vector3() },
+            uUp: { value: new Vector3() },
+            uHalf: { value: 0.01 },
+            uSunDir: this.u.uSunDir,
+            uColor: { value: new Vector3(...body.colour) },
+            uHasMap: { value: 0 },
+            uMap: { value: emptyTexture() },
+            uOpacity: { value: 1 },
+          },
+          depthWrite: false,
+        }),
+      );
+      mesh.frustumCulled = false;
+      // Behind the surface, with the host star.
+      mesh.renderOrder = -1;
+      mesh.visible = false;
+      this.scene.add(mesh);
+      const entry = { mesh, body, map: null as Texture | null };
+      if (body.texture) {
+        void this.decodeImage(body.texture, signal)
+          .then((bitmap) => {
+            if (this.disposed || request !== this.skyRequest) {
+              bitmap.close();
+              return;
+            }
+            const map = new Texture(bitmap);
+            map.flipY = false;
+            map.colorSpace = SRGBColorSpace;
+            map.needsUpdate = true;
+            releaseOnUpload(map);
+            entry.map = map;
+            mesh.material.uniforms['uMap']!.value = map;
+            mesh.material.uniforms['uHasMap']!.value = 1;
+            this.requestRender();
+          })
+          .catch((e: unknown) => {
+            if (!signal?.aborted) console.warn('Could not load a body of the sky', e);
+          });
+      }
+      return entry;
+    });
+    this.requestRender();
+  }
+
+  /**
+   * Bodies whose shadow can fall on the surface with Sunlight (eclipses):
+   * their centres and radii in radii of the body shown (see lib/skyBodies).
+   */
+  setShadowCasters(casters: readonly ShadowCaster[]): void {
+    const slots = this.u.uCasters.value;
+    casters.slice(0, MAX_CASTERS).forEach((c, i) => slots[i]!.set(...c.position, c.radius));
+    this.u.uCasterCount.value = Math.min(casters.length, MAX_CASTERS);
+    this.requestRender();
+  }
+
+  private disposeSkyBodies(): void {
+    for (const { mesh, map } of this.skyBodies) {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+      map?.dispose();
+    }
+    this.skyBodies = [];
+  }
+
+  /** Places the sky bodies for the current camera (see setSkyBodies). */
+  private drawSkyBodies(): void {
+    const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
+    const radiansPerPixel = ((this.camera.fov * Math.PI) / 180) / Math.max(this.renderer.domElement.height, 1);
+    const smallest = 2.5 * this.renderer.getPixelRatio() * radiansPerPixel;
+    for (const { mesh, body } of this.skyBodies) {
+      mesh.visible = visible;
+      if (!visible) continue;
+      const u = mesh.material.uniforms;
+      const dir = (u['uDir']!.value as Vector3).set(...body.direction).normalize();
+      // North (the spin axis) up on the disk.
+      const right = (u['uRight']!.value as Vector3).set(0, 1, 0).cross(dir).negate();
+      if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
+      right.normalize();
+      (u['uUp']!.value as Vector3).copy(right).cross(dir).normalize();
+      const half = ((body.angularDiameterDeg / 2) * Math.PI) / 180;
+      u['uHalf']!.value = Math.max(Math.tan(Math.min(half, 1.4)), smallest);
+      u['uOpacity']!.value = this.morph ** 3;
+    }
+  }
+
+  /**
    * Places and sizes the host star: at the sun's direction, its true
    * apparent diameter in pixels (at least a few), in a glow growing with
    * the light the planet gets. Shown with Sunlight on the globe only.
@@ -1541,6 +1668,7 @@ export class PlanetView {
     // The stars belong to the globe's sky, like the atmosphere.
     this.stars.visible = this.starsOn && this.morph > 0.01;
     this.drawHostStar();
+    this.drawSkyBodies();
     this.stars.material.uniforms['uOpacity']!.value = this.morph ** 3;
     this.stars.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
     const altitude = this.altitude();
