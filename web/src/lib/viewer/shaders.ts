@@ -680,9 +680,10 @@ export const skyBodyFragment = /* glsl */ `
       colour = texture2D(uMap, vec2(fract(lon / (2.0 * PI)), lat / PI + 0.5)).rgb;
     }
     float lit = max(dot(n, uSunDir), 0.0);
-    // A soft edge, and a faint night side.
+    // A soft edge, and a faint night side; opaque inside, so the stars
+    // and the host star behind it are hidden.
     float edge = 1.0 - smoothstep(0.96, 1.0, r2);
-    gl_FragColor = vec4(colour * (0.015 + 0.985 * lit) * uOpacity * edge, 1.0);
+    gl_FragColor = vec4(colour * (0.015 + 0.985 * lit), edge * uOpacity);
     #include <colorspace_fragment>
   }
 `;

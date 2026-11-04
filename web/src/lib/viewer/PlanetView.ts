@@ -604,7 +604,10 @@ export class PlanetView {
     );
     // Directions, not positions: the geometry bounds are meaningless.
     this.stars.frustumCulled = false;
-    this.stars.renderOrder = -1;
+    // The sky, farthest first: the star field, the host star, then the
+    // bodies of the system, which hide both (all at infinity, drawn in
+    // this order after the surface, which hides them by depth).
+    this.stars.renderOrder = -3;
     this.scene.add(this.stars);
 
     // The host star, at the sun's direction (see hostStarVertex).
@@ -628,7 +631,7 @@ export class PlanetView {
       }),
     );
     this.hostStar.frustumCulled = false;
-    this.hostStar.renderOrder = -1;
+    this.hostStar.renderOrder = -2;
     this.hostStar.visible = false;
     this.scene.add(this.hostStar);
 
@@ -1652,11 +1655,14 @@ export class PlanetView {
             uMap: { value: emptyTexture() },
             uOpacity: { value: 1 },
           },
+          // Drawn with the star field and the host star (transparent ones
+          // come after the surface), over them: a body hides the stars
+          // and its star behind it.
+          transparent: true,
           depthWrite: false,
         }),
       );
       mesh.frustumCulled = false;
-      // Behind the surface, with the host star.
       mesh.renderOrder = -1;
       mesh.visible = false;
       this.scene.add(mesh);
