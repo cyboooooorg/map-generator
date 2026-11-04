@@ -399,6 +399,9 @@ export const en = {
       `${p.season} · sun over ${p.latitude}° ${p.north ? 'N' : 'S'}`,
     sunLongitude: 'Sun longitude',
     atmosphere: 'Atmosphere',
+    starLight: 'Star light',
+    starLightHelp:
+      "The planet and its sky lit by the colour of their star's light, as an eye used to the Sun would see them; off, a white light",
     stars: 'Stars',
     starsHelp: 'Stars around the globe, fixed in space: they turn with the planet when you move the camera',
     clouds: 'Clouds',

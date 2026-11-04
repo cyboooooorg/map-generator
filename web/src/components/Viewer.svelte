@@ -104,6 +104,7 @@
     landContours: true,
     atmosphere: true,
     stars: true,
+    starLight: false,
     clouds: true,
     cloudDrift: false,
     sun: false,
@@ -127,6 +128,7 @@
   let landContours = $state(saved.landContours);
   let atmosphere = $state(saved.atmosphere);
   let stars = $state(saved.stars);
+  let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
@@ -228,6 +230,7 @@
       landContours,
       atmosphere,
       stars,
+      starLight,
       clouds,
       cloudDrift,
       sun,
@@ -241,7 +244,7 @@
 
   /** The settings "Link display" mirrors, as this pane has them. */
   function currentLinked(): LinkedDisplay {
-    return { layer, relief, sun, season, sunLongitude, atmosphere, stars, clouds, graticule };
+    return { layer, relief, sun, season, sunLongitude, atmosphere, stars, starLight, clouds, graticule };
   }
 
   $effect(() => {
@@ -263,6 +266,7 @@
     if (changes.sunLongitude !== undefined) sunLongitude = changes.sunLongitude;
     if (changes.atmosphere !== undefined) atmosphere = changes.atmosphere;
     if (changes.stars !== undefined) stars = changes.stars;
+    if (changes.starLight !== undefined) starLight = changes.starLight;
     if (changes.clouds !== undefined) clouds = changes.clouds;
     if (changes.graticule !== undefined) graticule = changes.graticule;
   });
@@ -457,6 +461,7 @@
   $effect(() => view?.setLandContours(landContours));
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setStars(stars));
+  $effect(() => view?.setStarLight(starLight));
   $effect(() => {
     const star = meta?.star;
     view?.setHostStar(
@@ -822,6 +827,9 @@
       </label>
 
       <label class="check"><input type="checkbox" bind:checked={sun} /> {t.viewer.sunlight}</label>
+      <label class="check" title={t.viewer.starLightHelp}
+        ><input type="checkbox" bind:checked={starLight} /> {t.viewer.starLight}</label
+      >
       {#if sun}
         <label>
           <span title={t.viewer.seasonHelp}>{t.viewer.season}</span>

@@ -366,6 +366,7 @@ export class PlanetView {
     uCloudsOn: { value: 0 } as IUniform<number>,
     uClouds: { value: emptyTexture() } as IUniform<Texture>,
     uCloudTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
+    uLightTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
     uCloudShift: { value: 0 } as IUniform<number>,
     uLayer: { value: LAYER_IDS.biomes as number } as IUniform<number>,
     uTexel: { value: new Vector2(1 / 1024, 1 / 512) } as IUniform<Vector2>,
@@ -422,6 +423,8 @@ export class PlanetView {
   private starsOn = true;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
+  /** Whether the planet is lit with its star's colour. */
+  private starLightOn = false;
   /** Whether the world has an atmosphere to draw. */
   private hasSky = true;
   private cloudRequest = 0;
@@ -631,6 +634,7 @@ export class PlanetView {
             uLightMode: this.u.uLightMode,
             uSunDir: this.u.uSunDir,
             uLightDir: this.u.uLightDir,
+            uLightTint: this.u.uLightTint,
             ...this.sky,
             uGround: { value: ground ? 1 : 0 },
           },
@@ -1026,6 +1030,22 @@ export class PlanetView {
     this.host = star;
     const u = this.hostStar.material.uniforms;
     (u['uColor']!.value as Vector3).set(...star.colour);
+    this.applyLightTint();
+  }
+
+  /**
+   * Lights the planet and its sky with its star's light ("Star light"),
+   * white-balanced on the Sun, or with white light.
+   */
+  setStarLight(on: boolean): void {
+    this.requestRender();
+    this.starLightOn = on;
+    this.applyLightTint();
+  }
+
+  private applyLightTint(): void {
+    const [r, g, b] = this.starLightOn ? this.host.colour : [1, 1, 1];
+    this.u.uLightTint.value.set(r, g, b);
   }
 
   /** Shows or hides the star field around the globe. */

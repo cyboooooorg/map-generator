@@ -117,6 +117,7 @@ export const surfaceFragment = /* glsl */ `
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
   uniform sampler2D uClouds;   // cloud cover in r, row 0 = north (sampled at 1 - v)
   uniform vec3 uCloudTint;     // linear colour of the clouds
+  uniform vec3 uLightTint;     // colour of the light ("Star light"), white otherwise
   uniform float uCloudShift;   // eastward drift of the cloud layer, in turns
   varying vec2 vUv;
   varying vec2 vLocalUv;
@@ -381,7 +382,7 @@ export const surfaceFragment = /* glsl */ `
       float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + vec2(1.0, -1.0) * towardsLight * 0.004 * uMorph).r) * uCloudsOn;
       colour *= 1.0 - 0.45 * shadow;
     }
-    colour *= shade;
+    colour *= shade * uLightTint;
     colour += emitted;
 
     // Sun glint on the sea, on the globe only, dimmed under clouds. Waves
@@ -392,7 +393,7 @@ export const surfaceFragment = /* glsl */ `
       vec3 view = normalize(cameraPosition - vWorld);
       float glint = pow(max(dot(reflect(-light, normal), view), 0.0), GLINT_SHARPNESS);
       float strength = GLINT_STRENGTH * (1.0 - 0.9 * lava);
-      colour += vec3(strength) * glint * uMorph * (1.0 - cover);
+      colour += uLightTint * strength * glint * uMorph * (1.0 - cover);
     }
 
     if (cover > 0.0) {
@@ -403,7 +404,7 @@ export const surfaceFragment = /* glsl */ `
       } else {
         cloudShade = mix(1.0, 0.35 + 0.75 * max(dot(normalize(vNormal), uLightDir), 0.0), uMorph);
       }
-      colour = mix(colour, uCloudTint * cloudShade, cover);
+      colour = mix(colour, uCloudTint * cloudShade * uLightTint, cover);
     }
 
     // Reference parallels last, over the clouds, unshaded: they are map
@@ -533,6 +534,7 @@ export const atmosphereFragment = /* glsl */ `
   uniform float uHeightR;
   uniform float uHeightM;
   uniform float uG;
+  uniform vec3 uLightTint;     // colour of the sunlight entering the shell
   uniform float uGround;       // 1: the surface pass, 0: the sky pass
   uniform sampler2D uSunDepth; // optical depth towards the sun over density (sunDepth.ts)
   varying vec3 vWorld;
@@ -602,7 +604,7 @@ export const atmosphereFragment = /* glsl */ `
     float g2 = uG * uG;
     float phaseM = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) /
       ((2.0 + g2) * pow(1.0 + g2 - 2.0 * uG * mu, 1.5));
-    vec3 light = sumR * uBetaR * phaseR + sumM * uBetaM * uMieAlbedo * phaseM;
+    vec3 light = (sumR * uBetaR * phaseR + sumM * uBetaM * uMieAlbedo * phaseM) * uLightTint;
     // Soft exposure: bright skies saturate instead of clipping.
     vec3 colour = 1.0 - exp(-EXPOSURE * 4.0 * PI * light);
     vec3 transmittance = exp(-(uBetaR * depthR + uBetaM * depthM));

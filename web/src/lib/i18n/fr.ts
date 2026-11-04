@@ -374,6 +374,9 @@ export const fr: Messages = {
     sunOver: (p) => `${p.season} · soleil au-dessus de ${p.latitude}°${S}${p.north ? 'N' : 'S'}`,
     sunLongitude: 'Longitude du soleil',
     atmosphere: 'Atmosphère',
+    starLight: 'Lumière de l’étoile',
+    starLightHelp:
+      `La planète et son ciel éclairés de la couleur de la lumière de leur étoile, comme les verrait un œil habitué au Soleil${S}; décoché, une lumière blanche`,
     stars: 'Étoiles',
     starsHelp: `Étoiles autour du globe, fixes dans l’espace${S}: elles tournent avec la planète quand vous déplacez la caméra`,
     clouds: 'Nuages',
