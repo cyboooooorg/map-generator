@@ -1746,6 +1746,40 @@ export class PlanetView {
   }
 
   /** Places the sky bodies for the current camera (see setSkyBodies). */
+  /**
+   * Where the bodies of the sky (in the order setSkyBodies got them) and the
+   * host star are on the screen, CSS px from the canvas' top left; null for
+   * one not drawn, behind the camera or hidden by the globe. Called back
+   * through onSkyPositions after each frame while it is set.
+   */
+  skyScreenPositions(): { bodies: ({ x: number; y: number } | null)[]; star: { x: number; y: number } | null } {
+    const shown = this.u.uLightMode.value === 1 && this.morph > 0.99;
+    const camera = this.camera.position;
+    const forward = new Vector3();
+    this.camera.getWorldDirection(forward);
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    const at = (direction: Vector3): { x: number; y: number } | null => {
+      if (!shown) return null;
+      const d = direction.clone().normalize();
+      if (d.dot(forward) <= 0) return null;
+      // Hidden by the globe (radius 1 at the origin) along the ray?
+      const b = camera.dot(d);
+      const disc = b * b - (camera.lengthSq() - 1);
+      if (disc > 0 && -b - Math.sqrt(disc) > 0) return null;
+      const p = camera.clone().addScaledVector(d, 1e3).project(this.camera);
+      if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
+      return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
+    };
+    return {
+      bodies: this.skyBodies.map(({ body }) => at(new Vector3(...body.direction))),
+      star: at(this.u.uSunDir.value),
+    };
+  }
+
+  /** Receives the sky's screen positions after each frame (see skyScreenPositions); null stops it. */
+  onSkyPositions: ((positions: ReturnType<PlanetView['skyScreenPositions']>) => void) | null = null;
+
   private drawSkyBodies(): void {
     const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
     const radiansPerPixel = ((this.camera.fov * Math.PI) / 180) / Math.max(this.renderer.domElement.height, 1);
@@ -1843,6 +1877,7 @@ export class PlanetView {
       this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio));
     }
     this.renderer.render(this.scene, this.camera);
+    this.onSkyPositions?.(this.skyScreenPositions());
   }
 
   /** Height of the camera above the surface (globe) or the map plane. */

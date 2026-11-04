@@ -23,6 +23,8 @@
   import { cssGradient } from '../lib/viewer/colormaps';
   import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
+  import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
+  import { presetName } from '../lib/i18n/names.svelte';
   import MoonPane from './MoonPane.svelte';
   import { bodyFileName, moonsOf } from '../lib/moons';
   import { halo, joinSkies, moonSky, moonSystemSky, planetSky, siblingSky, sunLongitudeOnMoon } from '../lib/skyBodies';
@@ -119,6 +121,8 @@
     hostClouds: true,
     hostGrid: false,
     hostTropics: false,
+    // Names tied to the bodies of the sky.
+    skyLabels: true,
     starLight: false,
     clouds: true,
     cloudDrift: false,
@@ -160,6 +164,9 @@
   let hostGrid = $state(saved.hostGrid);
   let hostTropics = $state(saved.hostTropics);
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
+  /** Labels on the bodies of the sky, and where those are on the screen. */
+  let skyLabels = $state(saved.skyLabels);
+  let skyPositions = $state<{ bodies: ({ x: number; y: number } | null)[]; star: { x: number; y: number } | null } | null>(null);
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
   let season = $state(saved.season);
@@ -321,6 +328,7 @@
       hostClouds,
       hostGrid,
       hostTropics,
+      skyLabels,
       sun,
       season,
       sunLongitude,
@@ -697,6 +705,69 @@
     view?.setSkyBodies(sky?.bodies ?? []);
     view?.setShadowCasters(sky?.casters ?? []);
   });
+  // Follow the bodies of the sky on the screen while their labels show.
+  $effect(() => {
+    const current = view;
+    if (!current) return;
+    current.onSkyPositions = skyLabels ? (positions) => (skyPositions = positions) : null;
+    if (!skyLabels) skyPositions = null;
+    return () => {
+      current.onSkyPositions = null;
+    };
+  });
+  /**
+   * The names and facts of the bodies of the sky, in the order `sky` gives
+   * them: the moons from their planet; from a moon, its planet then the
+   * other moons; from a giant's moon world, the giant then its other moons.
+   */
+  const skyLabelList = $derived.by((): (SkyLabel | null)[] => {
+    const planet = world.worldMeta;
+    if (!planet || !sky) return [];
+    const km = (v: number) => withUnit(formatInt(v), 'km');
+    const moonLabel = (m: (typeof moons)[number]): SkyLabel => ({
+      name: t.viewer.skyMoon({ name: m.name }),
+      detail: t.viewer.skyOrbitFacts({ radius: km(m.radius_km), orbit: km(m.semi_major_axis_km) }),
+    });
+    if (shownMoon && world.moon !== null) {
+      const self = shownMoon;
+      const planetLabel: SkyLabel = {
+        name: presetName(planet.preset),
+        detail: t.viewer.skyFacts({
+          radius: km(planet.circumference_km / (2 * Math.PI)),
+          distance: km(self.semi_major_axis_km),
+        }),
+      };
+      return [
+        planetLabel,
+        ...moons.filter((m) => m !== self).map(moonLabel),
+      ];
+    }
+    if (world.moon === null && planet.host) {
+      const host = planet.host;
+      return [
+        {
+          name: t.starView.giantKinds[host.giant.kind] ?? '',
+          detail: t.viewer.skyFacts({
+            radius: withUnit(formatUpTo(host.giant.mass_earth / 317.8, 2), 'MJ'),
+            distance: km(host.distance_km),
+          }),
+        },
+        ...(host.siblings ?? []).map((s, k) => ({
+          name: t.viewer.skySibling({ index: k + 1 }),
+          detail: t.viewer.skyOrbitFacts({ radius: km(s.radius_km), orbit: km(s.distance_km) }),
+        })),
+      ];
+    }
+    return moons.map(moonLabel);
+  });
+  const starLabel = $derived.by((): SkyLabel | null => {
+    const star = world.worldMeta?.star;
+    if (!star) return null;
+    return {
+      name: t.viewer.skyStar({ type: star.type }),
+      detail: t.viewer.skyStarFacts({ distance: withUnit(formatUpTo(star.orbit_au, 2), t.viewer.au) }),
+    };
+  });
 
   // The orbit animation: one orbit of the slider's period every
   // ORBIT_SECONDS, paused while the canvas is hidden.
@@ -1006,6 +1077,9 @@
 <div class="viewer">
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={subject === 'star'}></canvas>
+  {#if subject === 'planet' && skyLabels && skyPositions}
+    <SkyLabels positions={skyPositions.bodies} labels={skyLabelList} star={skyPositions.star} {starLabel} />
+  {/if}
   {#if subject === 'planet' && shownMoon && moonSystem}
     <MoonPane moon={shownMoon} system={moonSystem} world={world.worldId ?? ''} />
   {/if}
@@ -1204,6 +1278,7 @@
       <label class="check" title={t.viewer.elevationContoursHelp}>
         <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> {t.viewer.elevationContours}
       </label>
+      <label class="check" title={t.viewer.skyLabelsHelp}><input type="checkbox" bind:checked={skyLabels} /> {t.viewer.skyLabels}</label>
       {#if (shownMoon && world.moon !== null) || world.worldMeta?.host}
         <!-- The planet in this body's sky has switches of its own. -->
         <fieldset class="host" title={t.viewer.hostHelp}>
