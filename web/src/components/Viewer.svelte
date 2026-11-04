@@ -26,7 +26,7 @@
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
   import { presetName } from '../lib/i18n/names.svelte';
   import MoonPane from './MoonPane.svelte';
-  import { bodyFileName, moonsOf } from '../lib/moons';
+  import { bodyFileName, bodyKey, moonsOf, parseBodyKey, systemBodies, type Body } from '../lib/moons';
   import {
     bodyTurn,
     halo,
@@ -251,23 +251,57 @@
   const moonSystem = $derived(world.worldMeta?.moons ?? null);
   /** The moon shown, or null for the world itself. */
   const shownMoon = $derived(world.moon === null ? null : (moons[world.moon - 1] ?? null));
-  /** The moon last shown, which the Moon button opens again. */
-  let lastMoon = 1;
-  /** Shows moon `n` (from 1) of the world, or the world itself with null. */
-  function showMoon(n: number | null): void {
+  /** The bodies of the world's system the planet view can show, in the system's order. */
+  const bodies = $derived(systemBodies(world.worldMeta));
+  /** Whether the body shown is the giant or one of its other moons, not the world's own system. */
+  const onHostSystem = $derived(world.body.kind === 'host' || world.body.kind === 'sibling');
+  /** Shows a body of the world's system in the planet view. */
+  function showBody(body: Body): void {
     subject = 'planet';
-    if (n !== null) lastMoon = n;
-    world.showMoon(n);
+    world.showBody(body);
   }
-  /** `U`: the planet, then each of its moons in turn. */
-  function stepMoon(): void {
-    if (moons.length === 0) return;
-    const current = world.moon ?? 0;
-    showMoon(current >= moons.length ? null : current + 1);
+  /** `U`: each body of the system in turn (the star aside, on `O`). */
+  function stepBody(): void {
+    if (bodies.length < 2) return;
+    const at = bodies.findIndex((b) => bodyKey(b) === bodyKey(world.body));
+    showBody(bodies[(at + 1) % bodies.length]!);
   }
-  // Moons have no hex grid (the server resamples worlds only).
+  /** The body picker's choice: the star, or a body of the system. */
+  function pickBody(key: string): void {
+    if (key === 'star') {
+      if (worldId) subject = 'star';
+      return;
+    }
+    const body = parseBodyKey(key);
+    if (body) showBody(body);
+  }
+  /** A body's line in the picker: its name, its role, and a moon's size. */
+  function bodyOption(body: Body): string {
+    const km = (r: number) => `${formatUpTo(r, r < 100 ? 1 : 0)}${t.format.unitSpace}km`;
+    const host = world.worldMeta?.host;
+    switch (body.kind) {
+      case 'world':
+        return t.viewer.bodyOption({ name: names ? worldName(names) : (world.worldId ?? ''), role: t.viewer.roleWorld });
+      case 'moon': {
+        const moon = moons[body.n - 1];
+        const name = (names && moonName(names, body.n)) ?? moon?.name ?? '';
+        return moon ? t.moons.option({ name, size: km(moon.radius_km) }) : name;
+      }
+      case 'host':
+        return t.viewer.bodyOption({
+          name: names?.host ?? t.starView.giantKinds[host?.giant.kind ?? 'gas'] ?? '',
+          role: t.viewer.roleGiant,
+        });
+      case 'sibling': {
+        const sibling = host?.siblings?.[body.n - 1];
+        const name = names?.siblings[body.n - 1] ?? t.viewer.skySibling({ index: body.n });
+        return sibling ? t.moons.option({ name, size: km(sibling.radius_km) }) : name;
+      }
+    }
+  }
+  // Only the world has a hex grid (the server resamples worlds only).
   $effect(() => {
-    if (world.moon !== null) hexOn = false;
+    if (world.body.kind !== 'world') hexOn = false;
   });
   /**
    * The system the star view shows: the previous world's while the next
@@ -276,7 +310,7 @@
   let shownSystem: { star: StarInfo; omega: number; giants: GiantSystem | null } | null = null;
   const system = $derived.by(() => {
     // The world's, also while one of its moons is shown.
-    const planet = world.worldMeta ?? (world.moon === null ? meta : null);
+    const planet = world.worldMeta ?? (world.body.kind === 'world' ? meta : null);
     if (planet) {
       shownSystem = {
         star: withOrbitDefaults(planet.star ?? SUN_SYSTEM),
@@ -695,7 +729,8 @@
   // the planet and its other moons from one of them, each with its map.
   const sky = $derived.by(() => {
     const planet = world.worldMeta;
-    if (!planet) return null;
+    // The giant's and its other moons' skies are not drawn yet.
+    if (!planet || onHostSystem) return null;
     const planetRadiusKm = planet.circumference_km / (2 * Math.PI);
     const planetId = world.worldId;
     const moonMap = (k: number) =>
@@ -779,7 +814,7 @@
   // The moons' orbits in the sky, seen from the body shown.
   const skyOrbitLoops = $derived.by(() => {
     const planet = world.worldMeta;
-    if (!orbitLines || !planet) return [];
+    if (!orbitLines || !planet || onHostSystem) return [];
     if (world.moon === null && planet.host) {
       return siblingOrbitLoops(planet.host.siblings ?? [], planet.host.distance_km);
     }
@@ -1077,7 +1112,7 @@
         if (worldId) subject = subject === 'star' ? 'planet' : 'star';
         break;
       case 'moonView':
-        stepMoon();
+        stepBody();
         break;
       case 'clouds':
         clouds = !clouds;
@@ -1206,40 +1241,21 @@
   {/if}
 
   <div class="toolbar" role="toolbar" aria-label={t.viewer.tools}>
-    <div class="segmented" role="group" aria-label={t.viewer.target}>
-      <button
-        class:active={subject === 'planet' && world.moon === null}
-        aria-pressed={subject === 'planet' && world.moon === null}
-        onclick={() => showMoon(null)}
-        title={t.viewer.planetViewHelp}>{t.viewer.planetView}</button
+    <select
+      class="body-pick"
+      aria-label={t.viewer.body}
+      title={t.viewer.bodyHelp}
+      value={subject === 'star' ? 'star' : bodyKey(world.body)}
+      onchange={(e) => pickBody(e.currentTarget.value)}
+      disabled={!worldId}
+    >
+      <option value="star"
+        >{t.viewer.bodyOption({ name: names?.star ?? system.star.type, role: t.viewer.roleStar })}</option
       >
-      <button
-        class:active={subject === 'planet' && world.moon !== null}
-        aria-pressed={subject === 'planet' && world.moon !== null}
-        onclick={() => showMoon(world.moon ?? Math.min(lastMoon, moons.length))}
-        disabled={moons.length === 0}
-        title={moons.length === 0 ? t.viewer.noMoons : t.viewer.moonViewHelp}>{t.viewer.moonView}</button
-      >
-      <button
-        class:active={subject === 'star'}
-        aria-pressed={subject === 'star'}
-        onclick={() => (subject = 'star')}
-        disabled={!worldId}
-        title={t.viewer.starViewHelp}>{t.viewer.starView}</button
-      >
-    </div>
-    {#if subject === 'planet' && world.moon !== null && moons.length > 1}
-      <select
-        aria-label={t.viewer.moonPick}
-        title={t.viewer.moonPick}
-        value={world.moon}
-        onchange={(e) => showMoon(Number(e.currentTarget.value))}
-      >
-        {#each moons as moon, i (moon.name)}
-          <option value={i + 1}>{t.moons.option({ name: (names && moonName(names, i + 1)) ?? moon.name, size: `${formatUpTo(moon.radius_km, moon.radius_km < 100 ? 1 : 0)}${t.format.unitSpace}km` })}</option>
-        {/each}
-      </select>
-    {/if}
+      {#each bodies as body (bodyKey(body))}
+        <option value={bodyKey(body)}>{bodyOption(body)}</option>
+      {/each}
+    </select>
     <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
     {#if subject === 'planet'}
       <button
@@ -1399,7 +1415,7 @@
         </label>
       {/if}
       <label class="check">
-        <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.moon !== null} />
+        <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.body.kind !== 'world'} />
         {t.viewer.hexes}
         {#if hexServerBusy}
           <small class="muted" title={t.viewer.serverBusyHelp}
