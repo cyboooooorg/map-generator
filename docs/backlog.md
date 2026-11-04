@@ -307,7 +307,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 | Step | Change                                                                         | Seeds  | Status |
 | ---- | ------------------------------------------------------------------------------ | ------ | ------ |
-| 0    | Star model: spectral table, black-body colour, habitable zone, derived values  | Same   | todo   |
+| 0    | Star model: spectral table, black-body colour, habitable zone, derived values  | Same   | done   |
 | 1    | `[star]` in presets, `--star` and the orbit, `world.json`, form and world card | Same   | todo   |
 | 2    | Climate driven by the insolation, internal heat, presets recalibrated          | Change | todo   |
 | 3    | Viewer: the star at the sunlight direction, with the star field                | Same   | todo   |

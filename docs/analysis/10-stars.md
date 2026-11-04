@@ -78,6 +78,29 @@ fifth, OBA under 1 %.
   early A stars live too briefly for surfaces billions of years old (the
   geology's `surface_age`).
 
+### Reference values (the star model)
+
+From the star model (`crates/mapgen/src/star.rs`, step 0): the Pecaut &
+Mamajek sequence, the Kopparapu zone and a planet in the middle of it
+(position 0.5).
+
+| Type | Teff (K) | L (L☉) | M (M☉) | Zone (AU)   | Middle (AU) | Year (days) | Star seen (°) | Locking (Gyr) | Light (RGB, Sun = 1) |
+| ---- | -------- | ------ | ------ | ----------- | ----------- | ----------- | ------------- | ------------- | -------------------- |
+| M5V  | 3 060    | 0.0030 | 0.162  | 0.057–0.113 | 0.081       | 21          | 1.30          | 0.002         | 1.00, 0.56, 0.20     |
+| M3V  | 3 430    | 0.016  | 0.370  | 0.132–0.257 | 0.184       | 48          | 1.04          | 0.05          | 1.00, 0.64, 0.30     |
+| M0V  | 3 850    | 0.069  | 0.570  | 0.271–0.517 | 0.374       | 111         | 0.84          | 1.4           | 1.00, 0.72, 0.42     |
+| K5V  | 4 440    | 0.17   | 0.700  | 0.423–0.785 | 0.576       | 191         | 0.65          | 12            | 1.00, 0.82, 0.59     |
+| K2V  | 5 100    | 0.37   | 0.820  | 0.602–1.085 | 0.808       | 293         | 0.52          | 69            | 1.00, 0.92, 0.80     |
+| G2V  | 5 770    | 1.02   | 1.000  | 0.962–1.697 | 1.278       | 528         | 0.42          | 720           | 1.00, 1.00, 1.00     |
+| F5V  | 6 550    | 3.6    | 1.330  | 1.729–3.002 | 2.278       | 1 089       | 0.34          | 13 000        | 0.82, 0.88, 1.00     |
+| A0V  | 9 700    | 38     | 2.180  | 5.415–9.342 | 7.113       | 4 693       | 0.16          | huge          | 0.52, 0.66, 1.00     |
+
+The light colour is the black body's, through the CIE 1931 colour
+matching functions (the analytic fit of Wyman, Sloan & Shirley 2013)
+into linear sRGB, divided by the Sun's: an eye adapted to sunlight sees
+the Sun white. Planets of M dwarfs (and of early K dwarfs over billions
+of years) lock; those of G and hotter stars do not.
+
 ### Habitable zone
 
 The flux a planet receives, relative to Earth's, is `S = L / a²` (`L`
@@ -259,3 +282,12 @@ by the recalibration error for the others; step 5 changes locked worlds.
 - Kiang et al. 2007, "Spectral Signatures of Photosynthesis II:
   Coevolution with Other Stars and the Atmosphere on Extrasolar
   Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701382>.
+- Kiang & Hoehler 2021, photon absorption of photosynthetic organisms
+  by stellar type (Frontiers in Astronomy and Space Sciences): peak
+  absorption in the blue around F stars, in the red or just beyond
+  around G, K and early M stars.
+- Gladman et al. 1996, "Synchronous Locking of Tidally Evolving
+  Satellites", Icarus 122, 166 (the locking time scaling).
+- Wyman, Sloan & Shirley 2013, "Simple Analytic Approximations to the
+  CIE XYZ Color Matching Functions", JCGT 2(2).
+- IAU 2015 Resolution B3 (nominal solar values: Teff = 5 772 K).
