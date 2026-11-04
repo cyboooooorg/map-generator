@@ -1214,6 +1214,7 @@ mod tests {
             orbit_au: 1.0,
             eccentricity: 0.0,
             drift_ma: 0.0,
+            moons: crate::moons::MoonsMode::Auto,
         }
     }
 

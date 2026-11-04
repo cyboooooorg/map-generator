@@ -87,6 +87,10 @@ pub struct WorldMetadata {
     /// Left out at the present, as in the worlds made before it existed.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub drift_ma: f32,
+    /// The moons and what bounds them; left out when the request turned
+    /// them off, and in the worlds made before them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moons: Option<crate::moons::MoonSystem>,
     pub layers: Layers,
     /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -374,6 +378,7 @@ pub fn export_raw_data(
             world.params.eccentricity,
         )),
         drift_ma: world.params.drift_ma,
+        moons: crate::moons::MoonSystem::draw(&world.params),
         layers: Layers {
             elevation,
             elevation_base,
@@ -736,6 +741,11 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         orbit_au: meta.star.as_ref().map_or(1.0, |s| s.orbit_au),
         eccentricity: meta.star.as_ref().map_or(0.0, |s| s.eccentricity),
         drift_ma: meta.drift_ma,
+        moons: if meta.moons.is_some() {
+            crate::moons::MoonsMode::Auto
+        } else {
+            crate::moons::MoonsMode::None
+        },
     };
     let l = &meta.layers;
     let infos = [
@@ -913,6 +923,7 @@ mod tests {
             orbit_au: 0.1,
             eccentricity: 0.0,
             drift_ma: 0.0,
+            moons: crate::moons::MoonsMode::Auto,
         })
         .world;
         let world_dir =

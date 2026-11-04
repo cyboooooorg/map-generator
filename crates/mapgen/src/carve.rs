@@ -340,6 +340,7 @@ mod tests {
             hz_position: None,
             eccentricity: Some(0.0),
             drift_ma: None,
+            moons: None,
             width: Some(480),
             height: Some(240),
         };
