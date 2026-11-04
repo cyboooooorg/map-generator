@@ -67,7 +67,7 @@ import {
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
-import { MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
+import { IDENTITY_AXES, MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
@@ -1682,8 +1682,9 @@ export class PlanetView {
             uHaloStrength: { value: 0 },
             uGrow: { value: 1 },
             uOpacity: { value: 1 },
-            uFace: { value: 0 },
-            uHasFace: { value: 0 },
+            uAxisX: { value: new Vector3(1, 0, 0) },
+            uAxisY: { value: new Vector3(0, 1, 0) },
+            uAxisZ: { value: new Vector3(0, 0, 1) },
             uGrid: { value: 0 },
             uTropics: { value: 0 },
             uTilt: { value: 0 },
@@ -1860,8 +1861,10 @@ export class PlanetView {
       const half = ((body.angularDiameterDeg / 2) * Math.PI) / 180;
       u['uHalf']!.value = Math.max(Math.tan(Math.min(half, 1.4)), smallest);
       u['uOpacity']!.value = this.morph ** 3;
-      u['uHasFace']!.value = body.faceLonDeg === null ? 0 : 1;
-      u['uFace']!.value = ((body.faceLonDeg ?? 0) * Math.PI) / 180;
+      const axes = body.axes ?? IDENTITY_AXES;
+      (u['uAxisX']!.value as Vector3).set(...axes[0]);
+      (u['uAxisY']!.value as Vector3).set(...axes[1]);
+      (u['uAxisZ']!.value as Vector3).set(...axes[2]);
       (u['uCloudTint']!.value as Vector3).set(...(body.cloudTint ?? [1, 1, 1]));
       const show = body.show;
       u['uGrid']!.value = show?.grid ? 1 : 0;

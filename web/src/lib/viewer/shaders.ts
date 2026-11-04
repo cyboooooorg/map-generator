@@ -669,6 +669,7 @@ export const skyBodyFragment = /* glsl */ `
   uniform vec3 uRight;
   uniform vec3 uUp;
   uniform vec3 uSunDir;
+  uniform float uHalf;
   uniform vec3 uColor;
   uniform float uHasMap;
   uniform sampler2D uMap;
@@ -680,11 +681,11 @@ export const skyBodyFragment = /* glsl */ `
   uniform float uHaloHeight;
   uniform float uHaloStrength;
   uniform float uOpacity;
-  // Longitude of the map facing the viewer, radians, when uHasFace is 1
-  // (a moon's face towards its planet); else the map is in the viewer's
-  // frame.
-  uniform float uFace;
-  uniform float uHasFace;
+  // The body's own axes (its x, its spin axis, its z) in the viewer's
+  // frame: its map turns and tilts with them.
+  uniform vec3 uAxisX;
+  uniform vec3 uAxisY;
+  uniform vec3 uAxisZ;
   // Map marks on its disk: a 30° grid, and the equator, tropics and polar
   // circles of its axial tilt uTilt (degrees), as the planet view draws them.
   uniform float uGrid;
@@ -698,12 +699,17 @@ export const skyBodyFragment = /* glsl */ `
     float offset = abs(fract(h / spacing + 0.5) - 0.5) * spacing;
     return 1.0 - smoothstep(0.5 * width - 0.5, 0.5 * width + 0.5, offset / max(fwidth(h), 1e-6));
   }
-  vec3 parallel(vec3 colour, float latDeg, float at, vec3 lineColour, float marks) {
-    float pixels = abs(latDeg - at) / max(fwidth(latDeg), 1e-6);
-    float core = marks * (1.0 - smoothstep(0.5, 1.5, pixels));
-    float edge = marks * (1.0 - smoothstep(1.5, 2.5, pixels));
+  // A parallel at latitude at, lit by shade: a band of the sphere 1.5°
+  // either side, so that it thins where the sphere turns away (towards
+  // the limb and the poles), kept 0.6 to 2 pixels wide either side.
+  vec3 parallel(vec3 colour, float latDeg, float at, vec3 lineColour, float marks, float shade) {
+    float perPixel = max(fwidth(latDeg), 1e-6);
+    float halfWidth = clamp(1.5 / perPixel, 0.6, 2.0);
+    float pixels = abs(latDeg - at) / perPixel;
+    float core = marks * (1.0 - smoothstep(halfWidth - 0.5, halfWidth + 0.5, pixels));
+    float edge = marks * (1.0 - smoothstep(halfWidth + 0.5, halfWidth + 1.5, pixels));
     colour = mix(colour, colour * 0.25, 0.8 * edge);
-    return mix(colour, lineColour, core);
+    return mix(colour, lineColour * shade, core);
   }
 
   void main() {
@@ -723,12 +729,20 @@ export const skyBodyFragment = /* glsl */ `
       #include <colorspace_fragment>
       return;
     }
-    vec3 n = normalize(vP.x * uRight + vP.y * uUp - sqrt(1.0 - r2) * uDir);
+    // The sphere where this pixel's ray meets it, seen from where it is
+    // (its distance from its angular radius): in perspective, so that its
+    // parallels bend towards the poles when it is near (the planet from a
+    // close moon), not only from infinity.
+    vec3 ray = normalize(uDir + (vP.x * uRight + vP.y * uUp) * uHalf);
+    float far = sqrt(1.0 + uHalf * uHalf) / max(uHalf, 1e-6);
+    float along = dot(ray, uDir) * far;
+    float hit = along - sqrt(max(along * along - far * far + 1.0, 0.0));
+    vec3 n = normalize(ray * hit - uDir * far);
     vec3 colour = uColor;
-    // Turned about the spin axis so that the centre of the disk shows
-    // the face's longitude.
-    float lon = atan(n.x, n.z) + uHasFace * (uFace - atan(-uDir.x, -uDir.z));
-    float lat = asin(clamp(n.y, -1.0, 1.0));
+    // The normal in the body's own frame, for its map and its marks.
+    vec3 b = vec3(dot(n, uAxisX), dot(n, uAxisY), dot(n, uAxisZ));
+    float lon = atan(b.x, b.z);
+    float lat = asin(clamp(b.y, -1.0, 1.0));
     // Two longitudes, wrapping on opposite meridians; the one that does
     // not jump here keeps the screen derivatives (hence the mip level)
     // smooth across the map's seam, which would show as a grey line
@@ -744,7 +758,7 @@ export const skyBodyFragment = /* glsl */ `
     }
     // Cosines of the sun's and of the viewer's angles from the vertical.
     float sunCos = dot(n, uSunDir);
-    float mu = sqrt(1.0 - r2);
+    float mu = max(dot(n, -ray), 0.0);
     float lit;
     if (uHaloStrength > 0.0) {
       // Under air: Lambert, the terminator softened by twilight (light
@@ -767,21 +781,24 @@ export const skyBodyFragment = /* glsl */ `
     float edge = uHaloStrength > 0.0 ? 1.0 : 1.0 - smoothstep(0.96, 1.0, r2);
     // (0.4 % of the day: about 5 % once encoded, a hint of earthshine.)
     colour *= 0.004 + 0.996 * min(lit, 1.0);
-    // Map marks last, as on the planet view, but half shaded so that they
-    // follow the sphere (dimmer on the night side), and faded at the limb,
-    // where they crowd into a fringe.
+    // Map marks last, as on the planet view, but painted on the sphere:
+    // lit as its ground is (Lambert, a faint trace on the night side, so
+    // that they round with it), thinning towards the limb, and faded at
+    // it, where they would crowd into a fringe.
     float latDeg = degrees(lat);
-    float marks = smoothstep(0.05, 0.25, mu) * (0.35 + 0.65 * smoothstep(-0.1, 0.3, sunCos));
+    float marks = smoothstep(0.05, 0.25, mu);
+    // (2 % on the night side: a trace, about 15 % once encoded.)
+    float shade = 0.02 + 0.98 * min(max(sunCos, 0.0) * 0.9 + 0.1 * smoothstep(-0.1, 0.2, sunCos), 1.0);
     if (uGrid > 0.5) {
       float line = max(lineNear(latDeg, 30.0, 1.0), lineNear(uv.x * 360.0, 30.0, 1.0));
-      colour = mix(colour, vec3(1.0), 0.25 * line * marks);
+      colour = mix(colour, vec3(shade), 0.3 * line * marks);
     }
     if (uTropics > 0.5) {
-      colour = parallel(colour, latDeg, 0.0, vec3(0.72, 0.03, 0.03), marks);
-      colour = parallel(colour, latDeg, uTilt, vec3(0.72, 0.30, 0.0), marks);
-      colour = parallel(colour, latDeg, -uTilt, vec3(0.72, 0.30, 0.0), marks);
-      colour = parallel(colour, latDeg, 90.0 - uTilt, vec3(0.0, 0.58, 0.87), marks);
-      colour = parallel(colour, latDeg, uTilt - 90.0, vec3(0.0, 0.58, 0.87), marks);
+      colour = parallel(colour, latDeg, 0.0, vec3(0.72, 0.03, 0.03), marks, shade);
+      colour = parallel(colour, latDeg, uTilt, vec3(0.72, 0.30, 0.0), marks, shade);
+      colour = parallel(colour, latDeg, -uTilt, vec3(0.72, 0.30, 0.0), marks, shade);
+      colour = parallel(colour, latDeg, 90.0 - uTilt, vec3(0.0, 0.58, 0.87), marks, shade);
+      colour = parallel(colour, latDeg, uTilt - 90.0, vec3(0.0, 0.58, 0.87), marks, shade);
     }
     gl_FragColor = vec4(colour, edge * uOpacity);
     #include <colorspace_fragment>

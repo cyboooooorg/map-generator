@@ -9,13 +9,29 @@ import {
   MAX_CASTERS,
   moonDirection,
   moonSky,
+  moonSpinHours,
   moonSystemSky,
   orbitLoops,
   planetSky,
   siblingOrbitLoops,
   siblingSky,
   sunLongitudeOnMoon,
+  type SkyBody,
+  type Vec3,
 } from './skyBodies';
+
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** Longitude (degrees) of a sky body's map facing the body shown. */
+const face = (body: SkyBody): number => {
+  const [x, , z] = body.axes ?? [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ];
+  const back = body.direction.map((c) => -c) as Vec3;
+  return (Math.atan2(dot(back, x), dot(back, z)) * 180) / Math.PI;
+};
 
 const moon = (overrides: Partial<Moon> = {}): Moon =>
   ({
@@ -71,7 +87,7 @@ describe('sky bodies', () => {
     const moons = [moon(), moon({ name: 'II', composition: 'ice', semi_major_axis_km: 600_000, period_days: 52 })];
     const { bodies } = planetSky(moons, 6371, 0, 365.25, 0, (k) => `moons/${k + 1}.png`);
     expect(bodies.map((b) => b.texture)).toEqual(['moons/1.png', 'moons/2.png']);
-    expect(bodies.every((b) => b.faceLonDeg === 180)).toBe(true);
+    expect(bodies.every((b) => Math.abs(Math.abs(face(b)) - 180) < 1e-9)).toBe(true);
   });
 
   it('shows the planet and the other moons from a moon, where they are', () => {
@@ -81,7 +97,7 @@ describe('sky bodies', () => {
     const sky = moonSystemSky([inner, outer], 0, 6371, 'planet.png', textures, 0, 365.25, 0);
     expect(sky.bodies).toHaveLength(2);
     const [planet, other] = sky.bodies;
-    expect(planet!.direction).toEqual([0, 0, -1]);
+    planet!.direction.forEach((c, i) => expect(c).toBeCloseTo([0, 0, -1][i]!, 9));
     expect(planet!.texture).toBe('planet.png');
     expect(other!.texture).toBe('moons/2.png');
     // The outer moon where planetSky puts it, seen from the inner one.
@@ -104,11 +120,11 @@ describe('sky bodies', () => {
     // From the inner one, the outer is straight up, its planet side down.
     const up = moonSystemSky([inner, outer], 0, 6371, null, none, 0, 365.25, 0).bodies[1]!;
     expect(up.direction[2]).toBeCloseTo(1, 9);
-    expect(Math.abs(up.faceLonDeg!)).toBeCloseTo(180, 9);
+    expect(Math.abs(face(up))).toBeCloseTo(180, 9);
     // From the outer one, the inner is in front of the planet, its far side out.
     const down = moonSystemSky([inner, outer], 1, 6371, null, none, 0, 365.25, 0).bodies[1]!;
     expect(down.direction[2]).toBeCloseTo(-1, 9);
-    expect(down.faceLonDeg).toBeCloseTo(0, 9);
+    expect(face(down)).toBeCloseTo(0, 9);
   });
 
   it('turns the sun round a moon once an orbit, over its planet side when full', () => {
@@ -131,15 +147,58 @@ describe('sky bodies', () => {
     expect(fromPlanet).toHaveLength(2);
     expect(fromPlanet[0]!.every((d) => Math.abs(d[1]) < 1e-9 && Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
     expect(Math.max(...fromPlanet[1]!.map((d) => d[1]))).toBeCloseTo(Math.sin(Math.PI / 6), 2);
-    // From the inner moon: no orbit of its own; the outer one's orbit goes
-    // round its sky, through the zenith of its far side and its planet side.
+    // From the inner moon: its own orbit, a great circle through its
+    // planet; the outer one's goes round its sky, through the zenith of its
+    // far side and its planet side.
     const level = moon({ semi_major_axis_km: 400_000 });
     const fromMoon = orbitLoops([inner, level], 0, 0, 365.25, 0);
-    expect(fromMoon).toHaveLength(1);
-    expect(fromMoon[0]!.every((d) => Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
+    expect(fromMoon).toHaveLength(2);
+    const [own, other] = fromMoon;
+    expect(own!.every((d) => Math.abs(d[1]) < 1e-9 && Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
+    expect(Math.min(...own!.map((d) => d[2]))).toBeCloseTo(-1, 9);
+    expect(other!.every((d) => Math.abs(Math.hypot(...d) - 1) < 1e-9)).toBe(true);
     // A loop of the outer orbit seen from inside it spans the whole sky.
-    expect(Math.max(...fromMoon[0]!.map((d) => d[2]))).toBeGreaterThan(0.9);
-    expect(Math.min(...fromMoon[0]!.map((d) => d[2]))).toBeLessThan(-0.9);
+    expect(Math.max(...other!.map((d) => d[2]))).toBeGreaterThan(0.9);
+    expect(Math.min(...other!.map((d) => d[2]))).toBeLessThan(-0.9);
+    // A binary's moon sees its own orbit too.
+    expect(orbitLoops([binary], 0, 0, 365.25, 0)).toHaveLength(1);
+  });
+
+  it('turns the planet on itself in the sky of its moon', () => {
+    const inner = moon({ semi_major_axis_km: 200_000, period_days: 10 });
+    const none = () => null;
+    const at = (turn: number) =>
+      moonSystemSky([inner], 0, 6371, 'planet.png', none, 0, 365.25, 0, {}, turn).bodies[0]!;
+    // Full at the season's start: the planet's longitude 180° under it.
+    expect(Math.abs(face(at(0)))).toBeCloseTo(180, 9);
+    // A quarter of a turn of the planet later, 90° further west.
+    expect(face(at(Math.PI / 2))).toBeCloseTo(90, 9);
+  });
+
+  it("tilts the planet's axis in the sky of an inclined moon", () => {
+    const tilted = moon({ semi_major_axis_km: 200_000, inclination_deg: 30 });
+    const planet = moonSystemSky([tilted], 0, 6371, null, () => null, 0, 365.25, 0).bodies[0]!;
+    const axis = planet.axes![1];
+    // The planet's spin axis, 30° from the moon's (its orbit's normal).
+    expect(axis[1]).toBeCloseTo(Math.cos(Math.PI / 6), 9);
+  });
+
+  it('spins a captured moon on itself, its planet rising and setting', () => {
+    expect(moonSpinHours(moon())).toBeNull();
+    expect(moonSpinHours(moon({ migration: 'locked', tidally_locked: false }))).toBeNull();
+    const captured = moon({ origin: 'captured', tidally_locked: false, seed: 4242 });
+    const spin = moonSpinHours(captured)!;
+    expect(spin).toBeGreaterThanOrEqual(6);
+    expect(spin).toBeLessThanOrEqual(24);
+    // Half a day of its own later, the sun over the opposite longitude
+    // (the orbit moving it a little).
+    const noon = sunLongitudeOnMoon(captured, 0, 0, 365.25, 0);
+    const later = sunLongitudeOnMoon(captured, 0, spin / 2 / 24 / 365.25, 365.25, 0);
+    const turned = (((later - noon) % 360) + 360) % 360;
+    expect(Math.abs(turned - 180)).toBeLessThan(15);
+    // Its face towards its planet changes with it.
+    const faceAt = (season: number) => face(planetSky([captured], 6371, season, 365.25, 0).bodies[0]!);
+    expect(Math.abs(faceAt(0) - faceAt(spin / 4 / 24 / 365.25))).toBeGreaterThan(45);
   });
 
   it("circles a giant's other moons round it", () => {
