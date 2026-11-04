@@ -137,6 +137,7 @@
   let starDistances = $state(false);
   let starOrbit = $state(true);
   let starZone = $state(true);
+  let starProminences = $state(true);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
@@ -802,6 +803,7 @@
       bind:distances={starDistances}
       bind:orbit={starOrbit}
       bind:zone={starZone}
+      bind:prominences={starProminences}
     />
   {/if}
 
