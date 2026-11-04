@@ -4,6 +4,7 @@
 import { loadSetting, removeSetting, saveSetting } from './settings';
 import { type MoonChoice, parseMoonChoice } from './moons';
 import { parseStarChoice, type StarChoice } from './starForm';
+import { type GiantChoice, parseGiantChoice } from './giantForm';
 
 /** Most moons a remembered form may ask for (mapgen's MAX_MOON_COUNT). */
 const MAX_MOONS = 6;
@@ -31,6 +32,8 @@ export interface FormMemory {
   star: StarChoice | null;
   /** The moons asked for (`auto`: drawn by the seed). */
   moons: MoonChoice;
+  /** Metallicity, giant neighbours, a giant's moon, a giant's mass; drawn when absent. */
+  giant: GiantChoice;
 }
 
 function isField(value: unknown): value is FieldMemory {
@@ -71,6 +74,7 @@ export function parseFormMemory(raw: unknown, fieldNames: readonly string[]): Fo
     fields,
     star: parseStarChoice(r.star),
     moons: parseMoonChoice(r.moons, MAX_MOONS),
+    giant: parseGiantChoice(r.giant),
   };
 }
 
