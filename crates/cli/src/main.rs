@@ -78,6 +78,13 @@ struct Args {
     #[arg(long, allow_negative_numbers = true, value_parser = parse_in(request::HZ_POSITION))]
     hz_position: Option<f32>,
 
+    /// Eccentricity of the orbit, in [0, 0.9]: 0 circular (Earth: 0.017,
+    /// Mercury: 0.206); it raises the light received over a year by
+    /// 1/sqrt(1 − e²) [default: from the preset, else drawn like the planets
+    /// known, 0 for tidally locked planets]
+    #[arg(long, value_parser = parse_in(request::ECCENTRICITY))]
+    eccentricity: Option<f32>,
+
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]
     #[arg(long, value_parser = parse_in(request::EROSION))]
     erosion: Option<f32>,
@@ -156,16 +163,17 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         star: args.star,
         orbit_au: args.orbit_au,
         hz_position: args.hz_position,
+        eccentricity: args.eccentricity,
         width: Some(args.width),
         height: Some(args.height),
     };
     let resolved = request.resolve(&mut rand::rng())?;
     let p = &resolved.params;
-    let star = StarInfo::new(p.star, p.orbit_au);
+    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
     println!(
         "Parameters → planet={} seed={} sea_level={:.2} volcanic={:.2} \
          circumference={:.0} km tilt={:.1}° gravity≈{:.2}g pressure={:.3} bar \
-         surface_age={:.2} Ga ({}) star={} orbit={:.3} AU ({:.2} in the habitable zone, \
+         surface_age={:.2} Ga ({}) star={} orbit={:.3} AU e={:.3} ({:.2} in the habitable zone, \
          {:.2}× Earth's light)",
         p.planet.name,
         p.seed,
@@ -179,6 +187,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.planet.geology.regime.label(),
         star.kind,
         star.orbit_au,
+        star.eccentricity,
         star.hz_position,
         star.insolation,
     );
@@ -216,7 +225,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
          --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
-         --star {} --orbit-au {} --width {} --height {}",
+         --star {} --orbit-au {} --eccentricity {} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -228,6 +237,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.surface_age_ga,
         star.kind,
         p.orbit_au,
+        p.eccentricity,
         p.width,
         p.height
     );

@@ -23,4 +23,9 @@ position?: ParamDefault,
 /**
  * Semi-major axis in AU, instead of the position.
  */
-orbit_au?: number, };
+orbit_au?: number, 
+/**
+ * Eccentricity of the orbit, a value or a range; left out, drawn like
+ * the planets known (see [`draw_eccentricity`]).
+ */
+eccentricity?: ParamDefault, };
