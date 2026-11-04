@@ -29,31 +29,34 @@ mise run gen [-- [OPTIONS]]
 All parameters are optional. Any omitted value comes from the planet preset when it sets one, and is otherwise chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
 
 ```text
-Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g pressure=0.412 bar surface_age=1.24 Ga (plate tectonics)
+Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g pressure=0.412 bar surface_age=1.24 Ga (plate tectonics) star=K2V orbit=1.411 AU (2.03 in the habitable zone, 0.19× Earth's light)
 World generated → worlds/frozen-2590618090/
-Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.41237 --surface-age 1.2381 --width 1920 --height 1080
+Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.41237 --surface-age 1.2381 --star K2V --orbit-au 1.4107 --width 1920 --height 1080
 ```
 
 ### Options
 
-| Flag                    | Values                                                                                                                                                 | Default                                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| `--planet <preset>`     | built-in preset name (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or path to a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in                              |
-| `--list-planets`        | list the built-in presets and exit                                                                                                                     | —                                            |
-| `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                            | random                                       |
-| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[0.10, 0.40)`                     |
-| `--land-fraction <f32>` | share of the surface that is land, `[0.0, 1.0]`; sets the sea level to match, so it cannot be combined with `--sea-level`                              | —                                            |
-| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                                                                                                                  | random in `[0.0, 1.0)`                       |
-| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)                                                                                                         | random in `[20 000, 80 000)`                 |
-| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`                          |
-| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it                                                                                                  | `1.0`                                        |
-| `--pressure <bar>`      | surface pressure in bar, `[0, 1000]`; `0` is airless                                                                                                   | from the preset, else random in `[0.7, 1.5)` |
-| `--surface-age <Ga>`    | age of the oldest surviving surface in Ga, `[0, 4.6]`: how long impacts have cratered it                                                               | from the preset, else random in `[0.2, 0.6)` |
-| `--width <px>`          | map width, `2`–`16384`                                                                                                                                 | `1920`                                       |
-| `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                                       |
-| `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                                     |
-| `--no-raw-data`         | skip the `raw_data/` export (about 15 MB at 1920 × 1080)                                                                                               | off                                          |
-| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the time they take; also set by `MAPGEN_NO_NOISE_MAPS` (see [Environment](#environment))                 | off                                          |
+| Flag                    | Values                                                                                                                                                 | Default                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| `--planet <preset>`     | built-in preset name (`terran` · `volcanic` · `frozen` · `caustic` · `barren`) or path to a `.toml` preset file, see [Planet presets](#planet-presets) | random built-in                                   |
+| `--list-planets`        | list the built-in presets and exit                                                                                                                     | —                                                 |
+| `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                            | random                                            |
+| `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                 | random in `[0.10, 0.40)`                          |
+| `--land-fraction <f32>` | share of the surface that is land, `[0.0, 1.0]`; sets the sea level to match, so it cannot be combined with `--sea-level`                              | —                                                 |
+| `--volcanic <f32>`      | float in `[0.0, 1.0]`                                                                                                                                  | random in `[0.0, 1.0)`                            |
+| `--circumference <f32>` | planet equatorial circumference in km (`>= 1`)                                                                                                         | random in `[20 000, 80 000)`                      |
+| `--axial-tilt <deg>`    | axial tilt in degrees, `[0, 90]`                                                                                                                       | random in `[5, 40)`                               |
+| `--erosion <f32>`       | hydraulic erosion strength, `[0, 5]`; `0` disables it                                                                                                  | `1.0`                                             |
+| `--pressure <bar>`      | surface pressure in bar, `[0, 1000]`; `0` is airless                                                                                                   | from the preset, else random in `[0.7, 1.5)`      |
+| `--surface-age <Ga>`    | age of the oldest surviving surface in Ga, `[0, 4.6]`: how long impacts have cratered it                                                               | from the preset, else random in `[0.2, 0.6)`      |
+| `--star <type>`         | spectral type of the host star, `O3V` to `M9.5V` (the Sun: `G2V`)                                                                                      | from the preset, else drawn like the stars nearby |
+| `--orbit-au <AU>`       | semi-major axis of the orbit in AU, `[0.005, 1000]`; cannot be combined with `--hz-position`                                                           | from the preset                                   |
+| `--hz-position <f32>`   | position of the orbit in the star's habitable zone, `[-2, 6]`: `0` its inner edge, `1` its outer edge                                                  | from the preset, else random in `[0.1, 0.9)`      |
+| `--width <px>`          | map width, `2`–`16384`                                                                                                                                 | `1920`                                            |
+| `--height <px>`         | map height, `2`–`16384`                                                                                                                                | `1080`                                            |
+| `--out-dir <path>`      | directory receiving the generated worlds                                                                                                               | `worlds`                                          |
+| `--no-raw-data`         | skip the `raw_data/` export (about 15 MB at 1920 × 1080)                                                                                               | off                                               |
+| `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the time they take; also set by `MAPGEN_NO_NOISE_MAPS` (see [Environment](#environment))                 | off                                               |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
 
@@ -72,6 +75,8 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 **pressure** — surface pressure of the atmosphere, in bar (Earth: 1, Mars: 0.006, Venus: 92, 0 for an airless world). Presets give their own range (`[defaults] pressure`); the sky colour, haze and clouds come from the preset's `[atmosphere]` table. It is stored in `world.json` (`pressure_bar`; worlds made before it had Earth's 1 bar). Dense air evens temperatures out between the equator and the poles, and below 0.01 bar no water stays liquid: no rain, rivers or lakes, and no hydraulic erosion unless the request or the preset sets it (see [Temperature](#temperature--axial-tilt)). The viewer draws the sky from it.
 
 **surface-age** — age of the oldest surviving surface, in Ga (billions of years): how long impacts have been cratering it since it was last renewed. Earth keeps few craters older than about 0.4 Ga (erosion and subduction erase them), Venus was resurfaced about 0.5 Ga ago, the Moon and Mars keep surfaces of 4 Ga or more. Presets give their own range (`[defaults] surface_age`), along with their tectonic regime and the end of their wet era (`[geology]`, see [Planet presets](#planet-presets)). It is stored in `world.json` (`surface_age_ga`; worlds made before it have none). It sets how cratered the world is, see [Impact craters](#impact-craters).
+
+**star** and **orbit** — the host star, a main-sequence dwarf from `O3V` to `M9.5V` (the Sun is `G2V`), and the distance of the planet from it. Without `--star`, the preset's star is taken, else one is drawn with the frequencies of the solar neighbourhood (about three quarters red dwarfs, M; 12 % K, 8 % G, 3 % F, under 1 % A, B and O). The orbit is given either in AU (`--orbit-au`) or as a position in the star's habitable zone (`--hz-position`, Kopparapu et al. 2014: `0` at its inner edge, `1` at its outer edge, below 0 closer in, above 1 farther out), so the same position gives the same light around any star; presets place each planet type where it makes sense (terran inside the zone, frozen just beyond it, volcanic anywhere). The star's temperature, luminosity, mass and radius come from the mean dwarf sequence of Pecaut & Mamajek (2013). `world.json` stores them under `star`, with what they imply: the light the planet gets (`insolation`, relative to Earth's), the habitable zone, the equilibrium temperature, the year, the apparent size of the star, its lifetime, whether the planet is tidally locked and the colour of its light (worlds made before stars have none and orbit the Sun at 1 AU). It sets the planet's temperatures, see [Temperature](#temperature--axial-tilt). The research behind it is in [docs/analysis/10-stars.md](docs/analysis/10-stars.md); see `src/star.rs`.
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -226,9 +231,10 @@ pressure = 0.006                   # bar
 surface_age = 4.0                  # Ga
 
 [climate]                          # added to every pixel before biome selection
-temperature = -60.0                # °C
+temperature = -10.0                # °C, after the star (see Temperature)
 moisture = -0.7                    # [-1, 1] scale
 volcanic = 0.0                     # [0, 1] scale
+internal_heat = 0.0                # K: the planet's own heat (285 on volcanic worlds)
 
 [rules]                            # override any biome selection threshold
 polar = -70.0                      # temperatures in °C
@@ -259,6 +265,7 @@ To make a dry world, remap its oceans rather than lowering `sea_level`: biome el
 - **`[rules]`**: accepts any field of `BiomeRules` in `src/biome.rs` (`waterline`, `polar`, `forest_moisture`, `shore_width_km`…), each documented there. Fields left out keep their default.
 - **`[atmosphere]`**: `rayleigh` (relative scattering per red, green, blue channel: the clear-sky colour; Earth's air is about `[0.17, 0.41, 1.0]`), `haze` and `haze_colour` (aerosols), `greenhouse` (°C added to every temperature), `clouds` (`water`, `sulfuric`, `dust` or `none`) and `cloud_cover` (−1 to 1). Each field is optional and defaults to Earth's. See `src/atmosphere.rs`.
 - **`[geology]`**: `regime` (`plates`, `stagnant`, `episodic` or `heat_pipe`: how the planet loses its heat, from Earth's plates to the single rigid lid of Mars and the Moon, Venus's global overturns and Io's lava) and `wet_until` (Ga before present when liquid water disappeared: `0` for a world still wet, a value at or above the surface age for one never wet, like Mercury; a world with liquid water today counts as still wet whatever the preset says). Both default to Earth's (`plates`, `0`). `maria` (`[start, end]` in Ga, start the older) is when lava flooded large impact basins, as the Moon's maria from 3.9 to 3.1 Ga; without it, none are. `wet_until` sets which [impact craters](#impact-craters) are worn by water, `maria` where they are buried by lava; `regime` is recorded and shown, and does not shape the relief yet. See `src/geology.rs`.
+- **`[star]`**: `type` (a spectral type such as `G2V`; left out, drawn like the stars nearby) and either `position` (in the habitable zone, a value or a `[min, max]` range) or `orbit_au` (a distance). The built-in types: `terran` at `[0.05, 0.75]`, `frozen` at `[1.0, 1.35]`, just beyond the zone (its cold comes from the distance), `volcanic` at `[-0.5, 4.0]` (its heat comes from within), `caustic` at `[-0.25, 0.1]`, `barren` at `[-1.0, 4.0]`; the examples orbit the Sun at the distances of Earth, Mars, Venus and Mercury. Without the table, the star is drawn and the planet sits at `[0.1, 0.9]`. See `src/star.rs`.
 - **`[remap]`**: runs after biome selection; biome names are the keys of the biome table (`DeepOcean`, `SeaIce`, `LavaField`…). A biome listed under two targets is an error, and so is an unknown field or biome name.
 
 `raw_data/world.json` stores the full resolved preset under `preset`, so a world can be regenerated even if its preset file changes.
@@ -366,6 +373,7 @@ A 16-bit pixel `p` decodes to `min + p / 65535 × (max − min)`, with `min` and
   "planet_type": "terran",
   "pressure_bar": 0.93,
   "surface_age_ga": 0.41,
+  "star": { "type": "M3V", "teff_k": 3430.0, "luminosity": 0.0162, "orbit_au": 0.172, "insolation": 0.55, "hz_position": 0.4, "year_days": 43.1, "tidally_locked": true, "...": "..." },
   "layers": {
     "elevation": { "file": "elevation.png", "encoding": "gray16", "min": -1.0, "max": 1.0 },
     "biomes": { "file": "biomes.png", "encoding": "gray8-biome-id" }
@@ -486,9 +494,17 @@ A large-scale anomaly is added on top: `18 °C × fbm` on land and `9 °C × fbm
 | ~54°       | Nearly uniform temperature across latitudes              |
 | 70°+       | Poles receive more sunlight over a year than the equator |
 
-The atmosphere then acts on these rows. **Heat transport:** above 1 bar, dense air carries heat to the poles, so each row is pulled towards the area-weighted mean by `1 / (1 + 0.1 × (pressure − 1))` (0.45 at 13 bar, 0.1 on Venus at 92 bar); the global mean does not move, and thinner atmospheres keep Earth's contrast. **Greenhouse:** the preset's `[atmosphere] greenhouse` is added to every pixel (450 °C on `venus-like`, 20 °C on `volcanic`). **Liquid water:** below 0.01 bar (water's triple point is 0.006 bar) moisture is −1 everywhere, so there is no rain, no river and no lake, and erosion is off unless the request or the preset sets it (`mars-like` and `barren` keep `erosion = 1` for valleys carved when they were wetter).
+The atmosphere then acts on these rows. **Heat transport:** above 1 bar, dense air carries heat to the poles, so each row is pulled towards the area-weighted mean by `1 / (1 + 0.1 × (pressure − 1))` (0.45 at 13 bar, 0.1 on Venus at 92 bar); the global mean does not move, and thinner atmospheres keep Earth's contrast. **Star:** the rows are Earth's around the Sun; the host star and the orbit then move them, through the flux the planet gets relative to Earth's (`S`):
 
-The `[climate]` table of the planet preset then shifts the whole temperature field (for example `−27 °C` on frozen worlds, `−60 °C` on `mars-like`, whose ice thresholds are lowered to `−70 °C` to keep its caps). Biomes use annual mean thresholds: sea ice below −13.5 °C, ice cap below −11.6 °C, boreal (tundra, taiga) below 0 °C, temperate below 12 °C and tropical above; highland is snow below 2.6 °C. They were converted from the former `[0, 1]` scale through the same curve, so each sits at the latitude it had.
+- a planet with plate tectonics and liquid water (≥ 0.01 bar) has a carbonate-silicate cycle that regulates its greenhouse: across the habitable zone it stays temperate, from +30 °C at the inner edge through Earth's climate at Earth's place (position 0.07) to −15 °C at the outer edge; beyond the zone it follows the flux like the others;
+- any other planet follows the flux: temperatures in kelvin are multiplied by `S^(1/4)` (Mars at 1.52 AU: ×0.81; Venus at 0.72 AU: ×1.18), which also narrows the equator-to-pole difference in degrees around a dim star;
+- `[climate] internal_heat` (K) adds the planet's own heat as radiated power, `T = (T⁴ + T_int⁴)^(1/4)`: volcanic worlds (285 K) stay scorching far from their star.
+
+The Sun at 1 AU leaves the rows unchanged, so `earth-like` worlds are exactly as before.
+
+**Tidal locking:** a planet whose tidal locking time (Gladman et al. 1996, about `166 Gyr × a⁶ / M²` for an Earth-like planet) is shorter than its star's age (4.6 Gyr, or the star's whole life if shorter) always shows the same face to its star: the planets in the habitable zone of M dwarfs, and of the coolest K dwarfs. Their temperature follows the angle from the point under the star, at the centre of the map (longitude 180°, on the equator), instead of the latitude: the light is `4 cos θ` times the mean on the day side and none on the night side, turned into °C like the rows (34 °C under the star, −56 °C on the night side around the Sun's light), then evened out by the atmosphere and moved by the star as above. Winds, rain and clouds keep their latitude bands. **Greenhouse:** the preset's `[atmosphere] greenhouse` is added to every pixel (395 °C on `venus-like`, 20 °C on `volcanic`). **Liquid water:** below 0.01 bar (water's triple point is 0.006 bar) moisture is −1 everywhere, so there is no rain, no river and no lake, and erosion is off unless the request or the preset sets it (`mars-like` and `barren` keep `erosion = 1` for valleys carved when they were wetter).
+
+The `[climate]` table of the planet preset then shifts the whole temperature field (for example `+4.5 °C` on caustic worlds, `−10 °C` on `mars-like`, about −50 °C on average with its distance, whose ice thresholds are lowered to `−70 °C` to keep its caps; frozen worlds get their cold from their distance alone). Biomes use annual mean thresholds: sea ice below −13.5 °C, ice cap below −11.6 °C, boreal (tundra, taiga) below 0 °C, temperate below 12 °C and tropical above; highland is snow below 2.6 °C. They were converted from the former `[0, 1]` scale through the same curve, so each sits at the latitude it had.
 
 ### Moisture — winds and rain shadows
 

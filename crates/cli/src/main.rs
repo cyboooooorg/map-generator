@@ -3,6 +3,7 @@ use mapgen::export::{ExportOptions, NoiseMapWriter, export_world, world_dir_name
 use mapgen::generation::{GenerateOptions, generate_with_progress};
 use mapgen::preset::Preset;
 use mapgen::request::{self, Limits, WorldRequest};
+use mapgen::star::StarInfo;
 use std::error::Error;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -59,6 +60,23 @@ struct Args {
     /// [default: from the preset, else random in 0.2..0.6]
     #[arg(long, value_parser = parse_in(request::SURFACE_AGE_GA))]
     surface_age: Option<f32>,
+
+    /// Spectral type of the host star, O3V to M9.5V (the Sun: G2V)
+    /// [default: from the preset, else drawn with the frequencies of the
+    /// solar neighbourhood, three quarters M dwarfs]
+    #[arg(long)]
+    star: Option<String>,
+
+    /// Semi-major axis of the orbit in AU, in [0.005, 1000] (Earth: 1,
+    /// Mars: 1.524) [default: from the preset's habitable zone position]
+    #[arg(long, value_parser = parse_in(request::ORBIT_AU), conflicts_with = "hz_position")]
+    orbit_au: Option<f32>,
+
+    /// Position of the orbit in the star's habitable zone, in [-2, 6]: 0 at
+    /// its inner edge, 1 at its outer edge (Earth: about 0.09)
+    /// [default: from the preset, else random in 0.1..0.9]
+    #[arg(long, allow_negative_numbers = true, value_parser = parse_in(request::HZ_POSITION))]
+    hz_position: Option<f32>,
 
     /// Hydraulic erosion strength in [0, 5]; 0 disables erosion [default: 1]
     #[arg(long, value_parser = parse_in(request::EROSION))]
@@ -135,15 +153,20 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         erosion: args.erosion,
         pressure_bar: args.pressure,
         surface_age_ga: args.surface_age,
+        star: args.star,
+        orbit_au: args.orbit_au,
+        hz_position: args.hz_position,
         width: Some(args.width),
         height: Some(args.height),
     };
     let resolved = request.resolve(&mut rand::rng())?;
     let p = &resolved.params;
+    let star = StarInfo::new(p.star, p.orbit_au);
     println!(
         "Parameters → planet={} seed={} sea_level={:.2} volcanic={:.2} \
          circumference={:.0} km tilt={:.1}° gravity≈{:.2}g pressure={:.3} bar \
-         surface_age={:.2} Ga ({})",
+         surface_age={:.2} Ga ({}) star={} orbit={:.3} AU ({:.2} in the habitable zone, \
+         {:.2}× Earth's light)",
         p.planet.name,
         p.seed,
         p.sea_level,
@@ -153,7 +176,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.gravity_modifier(),
         p.pressure_bar,
         p.surface_age_ga,
-        p.planet.geology.regime.label()
+        p.planet.geology.regime.label(),
+        star.kind,
+        star.orbit_au,
+        star.hz_position,
+        star.insolation,
     );
 
     let dir = args.out_dir.join(world_dir_name(p));
@@ -188,7 +215,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // regenerated; the size too, since the relief depends on the resolution.
     println!(
         "Reproduce with: --planet {} --seed {} --sea-level {} --volcanic {} \
-         --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} --width {} --height {}",
+         --circumference {} --axial-tilt {} --erosion {} --pressure {} --surface-age {} \
+         --star {} --orbit-au {} --width {} --height {}",
         resolved.planet_spec,
         p.seed,
         p.sea_level,
@@ -198,6 +226,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         p.erosion,
         p.pressure_bar,
         p.surface_age_ga,
+        star.kind,
+        p.orbit_au,
         p.width,
         p.height
     );

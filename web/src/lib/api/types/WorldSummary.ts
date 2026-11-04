@@ -25,6 +25,11 @@ surface_age_ga: number | null,
  */
 epochs_ma: [number, number] | null, 
 /**
+ * Spectral type of the host star; `null` for worlds made before stars
+ * (the Sun).
+ */
+star: string | null, 
+/**
  * Last modification time, in milliseconds since the Unix epoch.
  */
 modified_ms: number, };

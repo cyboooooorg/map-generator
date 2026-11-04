@@ -34,6 +34,11 @@ pub struct WorldParams {
     /// Age of the oldest surviving surface, in Ga: how long impacts have
     /// cratered it.
     pub surface_age_ga: f32,
+    /// Spectral type of the host star, `class × 10 + subtype` (see
+    /// `crate::star`; the Sun, G2V, is 42).
+    pub star: f32,
+    /// Semi-major axis of the planet's orbit, AU.
+    pub orbit_au: f32,
 }
 
 impl WorldParams {

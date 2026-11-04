@@ -335,6 +335,9 @@ mod tests {
             circumference_km: Some(40_000.0),
             axial_tilt_deg: Some(23.44),
             erosion: Some(1.0),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.0),
+            hz_position: None,
             width: Some(480),
             height: Some(240),
         };

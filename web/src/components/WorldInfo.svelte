@@ -4,7 +4,7 @@
   import { worldFile } from '../lib/api/client';
   import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatGeology, formatInt, formatNumber, formatShare, surfaceColour, withUnit } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatAu, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
@@ -106,6 +106,32 @@
           <dd class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatGeology(meta)}</dd>
         {:else}
           <dd>{formatGeology(meta)}</dd>
+        {/if}
+        <dt>{t.worldInfo.star}</dt>
+        {#if meta.star}
+          {@const star = meta.star}
+          <dd class="unit-help" title={unitTooltip('L☉')}>{formatStar(star)}</dd>
+          <dt>{t.worldInfo.orbit}</dt>
+          <dd
+            class="unit-help"
+            title={`${t.worldInfo.hzRange({ inner: formatAu(star.hz_inner_au), outer: formatAu(star.hz_outer_au) })}\n${unitTooltip('AU')}`}
+          >
+            {formatOrbit(star)}
+          </dd>
+          <dt>{t.worldInfo.light}</dt>
+          <dd>{formatStarlight(star)}</dd>
+          <dt>{t.worldInfo.year}</dt>
+          <dd>{formatYear(star.year_days)}</dd>
+          <dt>{t.worldInfo.starSize}</dt>
+          <dd>
+            {t.worldInfo.starSizeValue({
+              size: `${formatUpTo(star.angular_diameter_deg, 2)}°`,
+              sun: `${formatUpTo(0.53, 2)}°`,
+            })}{#if star.tidally_locked}
+              · <span class="unit-help" title={t.worldInfo.lockedHelp}>{t.worldInfo.locked}</span>{/if}
+          </dd>
+        {:else}
+          <dd>{t.worldInfo.theSun}</dd>
         {/if}
         {#if stats}
           <dt>{t.worldInfo.surface}</dt>

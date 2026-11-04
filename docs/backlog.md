@@ -298,7 +298,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 11. The host star
 
-- **Status:** decided
+- **Status:** done
 - **Analysis:** [10-stars.md](analysis/10-stars.md)
 - **Problem:** every world orbits an implicit Sun at 1 AU: temperatures
   come from Earth's profile and preset shifts, the light is white, and
@@ -312,10 +312,10 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 | Step | Change                                                                         | Seeds  | Status |
 | ---- | ------------------------------------------------------------------------------ | ------ | ------ |
-| 0    | Star model: spectral table, black-body colour, habitable zone, derived values  | Same   | todo   |
-| 1    | `[star]` in presets, `--star` and the orbit, `world.json`, form and world card | Same   | todo   |
-| 2    | Climate driven by the insolation, internal heat, presets recalibrated          | Change | todo   |
-| 3    | Viewer: the star at the sunlight direction, with the star field                | Same   | todo   |
-| 4    | Viewer: "Star light", the planet and its sky lit by the star's colour          | Same   | todo   |
-| 5    | Tidal locking of close-in planets                                              | Change | todo   |
-| 6    | Vegetation colours adapted to the star, in the "Star light" view               | Same   | todo   |
+| 0    | Star model: spectral table, black-body colour, habitable zone, derived values  | Same   | done   |
+| 1    | `[star]` in presets, `--star` and the orbit, `world.json`, form and world card | Same   | done   |
+| 2    | Climate driven by the insolation, internal heat, presets recalibrated          | Change | done   |
+| 3    | Viewer: the star at the sunlight direction, with the star field                | Same   | done   |
+| 4    | Viewer: "Star light", the planet and its sky lit by the star's colour          | Same   | done   |
+| 5    | Tidal locking of close-in planets                                              | Change | done   |
+| 6    | Vegetation colours adapted to the star, in the "Star light" view               | Same   | done   |

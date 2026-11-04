@@ -15,4 +15,11 @@ moisture: number,
 /**
  * Added to the volcanic zone (`[0, 1]` scale).
  */
-volcanic: number, };
+volcanic: number, 
+/**
+ * Heat from within the planet, as the temperature (K) it would keep
+ * the surface at without any starlight: combined with the star's
+ * heating as radiated power (`T⁴` adds up), so a world far from its
+ * star stays warm. 0: none (Earth's is negligible).
+ */
+internal_heat: number, };

@@ -1,6 +1,7 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
+use crate::climate::LockedClimate;
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
@@ -10,11 +11,13 @@ use crate::craters::{CraterField, Era, RAY_MIN_PIXELS, base_min_diameter_km, dar
 use crate::delta;
 use crate::erosion::erode;
 use crate::geo::Grid;
+use crate::geology::Regime;
 use crate::hydrology::hydrology;
 use crate::noise::{
     EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged, smoothstep, stream, stream_seed,
 };
 use crate::rivers;
+use crate::star::{StarClimate, StarInfo, star_temperatures};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -648,8 +651,34 @@ pub fn generate_with_progress(
         highland_offset,
     } = fields;
     // Rows of sea-level temperature, evened out by dense air.
-    let mut row_temperature = row_temperatures(&grid, params.axial_tilt_deg);
-    transport_heat(&mut row_temperature, &grid, params.pressure_bar);
+    // The host star: its light, regulated by a carbon cycle on wet worlds
+    // with plate tectonics, and the planet's own heat.
+    let star_climate = StarClimate {
+        star: params.star,
+        orbit_au: params.orbit_au,
+        regulated: planet.geology.regime == Regime::Plates
+            && params.pressure_bar >= LIQUID_WATER_BAR,
+        internal_heat_k: planet.climate.internal_heat,
+    };
+    // A tidally locked planet's climate follows the angle from the point
+    // under its star instead of the latitude.
+    let locked = StarInfo::new(params.star, params.orbit_au)
+        .tidally_locked
+        .then(|| {
+            let mut locked = LockedClimate::new();
+            locked.transport_heat(params.pressure_bar);
+            star_temperatures(locked.profile_mut(), star_climate);
+            locked
+        });
+    let row_temperature = match &locked {
+        Some(locked) => locked.rows(&grid),
+        None => {
+            let mut rows = row_temperatures(&grid, params.axial_tilt_deg);
+            transport_heat(&mut rows, &grid, params.pressure_bar);
+            star_temperatures(&mut rows, star_climate);
+            rows
+        }
+    };
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
     let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
@@ -726,7 +755,15 @@ pub fn generate_with_progress(
         .enumerate()
         .map(|(i, &e)| {
             let above_water = relief(e) - rules.waterline;
-            temperature(row_temperature[i / width as usize], above_water)
+            let sea_level = match &locked {
+                Some(locked) => locked.at_angle(LockedClimate::angle_at(
+                    &grid,
+                    (i % width as usize) as u32,
+                    (i / width as usize) as u32,
+                )),
+                None => row_temperature[i / width as usize],
+            };
+            temperature(sea_level, above_water)
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
         .collect();
@@ -950,6 +987,8 @@ mod tests {
             erosion: 1.0,
             pressure_bar: 1.0,
             surface_age_ga: 0.4,
+            star: crate::star::SUN,
+            orbit_au: 1.0,
         }
     }
 
@@ -994,14 +1033,16 @@ mod tests {
             })
             .world
         };
-        let (frozen, terran) = (world("frozen"), world("terran"));
-        // The frozen preset cools every pixel by 27 °C.
-        let shift = frozen.params.planet.climate.temperature;
-        assert_eq!(shift, -27.0);
-        for (f, t) in frozen.temperature.iter().zip(&terran.temperature) {
-            assert!((f - (t + shift)).abs() < 1e-3, "{f} vs {t}");
+        // Both around the Sun at 1 AU, where the star changes nothing.
+        let (caustic, terran) = (world("caustic"), world("terran"));
+        // The caustic preset warms every pixel by its shift and greenhouse.
+        let planet = &caustic.params.planet;
+        let shift = planet.climate.temperature + planet.atmosphere.greenhouse;
+        assert_eq!(planet.climate.temperature, 4.5);
+        for (c, t) in caustic.temperature.iter().zip(&terran.temperature) {
+            assert!((c - (t + shift)).abs() < 1e-3, "{c} vs {t}");
         }
-        assert!(frozen.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
+        assert!(caustic.moisture.iter().all(|m| (-1.0..=1.0).contains(m)));
     }
 
     #[test]

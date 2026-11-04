@@ -78,6 +78,29 @@ fifth, OBA under 1 %.
   early A stars live too briefly for surfaces billions of years old (the
   geology's `surface_age`).
 
+### Reference values (the star model)
+
+From the star model (`crates/mapgen/src/star.rs`, step 0): the Pecaut &
+Mamajek sequence, the Kopparapu zone and a planet in the middle of it
+(position 0.5).
+
+| Type | Teff (K) | L (L☉) | M (M☉) | Zone (AU)   | Middle (AU) | Year (days) | Star seen (°) | Locking (Gyr) | Light (RGB, Sun = 1) |
+| ---- | -------- | ------ | ------ | ----------- | ----------- | ----------- | ------------- | ------------- | -------------------- |
+| M5V  | 3 060    | 0.0030 | 0.162  | 0.057–0.113 | 0.081       | 21          | 1.30          | 0.002         | 1.00, 0.56, 0.20     |
+| M3V  | 3 430    | 0.016  | 0.370  | 0.132–0.257 | 0.184       | 48          | 1.04          | 0.05          | 1.00, 0.64, 0.30     |
+| M0V  | 3 850    | 0.069  | 0.570  | 0.271–0.517 | 0.374       | 111         | 0.84          | 1.4           | 1.00, 0.72, 0.42     |
+| K5V  | 4 440    | 0.17   | 0.700  | 0.423–0.785 | 0.576       | 191         | 0.65          | 12            | 1.00, 0.82, 0.59     |
+| K2V  | 5 100    | 0.37   | 0.820  | 0.602–1.085 | 0.808       | 293         | 0.52          | 69            | 1.00, 0.92, 0.80     |
+| G2V  | 5 770    | 1.02   | 1.000  | 0.962–1.697 | 1.278       | 528         | 0.42          | 720           | 1.00, 1.00, 1.00     |
+| F5V  | 6 550    | 3.6    | 1.330  | 1.729–3.002 | 2.278       | 1 089       | 0.34          | 13 000        | 0.82, 0.88, 1.00     |
+| A0V  | 9 700    | 38     | 2.180  | 5.415–9.342 | 7.113       | 4 693       | 0.16          | huge          | 0.52, 0.66, 1.00     |
+
+The light colour is the black body's, through the CIE 1931 colour
+matching functions (the analytic fit of Wyman, Sloan & Shirley 2013)
+into linear sRGB, divided by the Sun's: an eye adapted to sunlight sees
+the Sun white. Planets of M dwarfs (and of early K dwarfs over billions
+of years) lock; those of G and hotter stars do not.
+
 ### Habitable zone
 
 The flux a planet receives, relative to Earth's, is `S = L / a²` (`L`
@@ -231,11 +254,89 @@ by the recalibration error for the others; step 5 changes locked worlds.
   under F), applied by the "Star light" view only, so the usual maps and
   the exported files stay Earth-coloured.
 
+## Outcome
+
+### Steps 0 and 1
+
+The star model (`crates/mapgen/src/star.rs`) and the star and orbit as
+generation parameters: `--star`, `--orbit-au`, `--hz-position`, the
+presets' `[star]` tables, `star` in `world.json`, the form and the world
+card. Both are drawn after every other parameter, so every output but
+`world.json` is unchanged.
+
+### Step 2: climate
+
+The insolation is taken relative to the model Sun at 1 AU (G2V, 1.023
+L☉ in the table), so `earth-like` worlds are unchanged to the byte.
+Planets with plate tectonics and liquid water are regulated across the
+habitable zone (a carbonate-silicate cycle): +30 °C at its inner edge,
+Earth's climate at Earth's position (0.068), −15 °C at its outer edge,
+then the flux law beyond the edges; the others follow `T × S^(1/4)` in
+kelvin; `internal_heat` adds as `T⁴`. Presets recalibrated, mean
+temperature and the main biome shares on three seeds (512 × 256, same
+parameters, before → after):
+
+| Preset (place)                 | Mean T (°C)      | Biomes (%)                                     |
+| ------------------------------ | ---------------- | ---------------------------------------------- |
+| `earth-like` (Sun, 1 AU)       | 14.0 → 14.0      | identical                                      |
+| `terran` (position 0.05)       | 14.0 → 22.0      | jungle 19 → 24, ocean 45 → 48                  |
+| `terran` (0.4, any star)       | 14.0 → 8.6       | jungle 19 → 15, sea ice 3 → 5, ice cap 3 → 5   |
+| `terran` (0.75)                | 14.0 → 3.0       | jungle 19 → 10, sea ice 3 → 8, ice cap 3 → 6   |
+| `frozen` (1.0 to 1.4)          | −13 → −1 to −32  | ice cap 16 → 8 to 35, taiga 21 → 25 to 0       |
+| `caustic` (−0.25 to 0.1)       | 18 → 45 to 15    | unchanged within 1                             |
+| `volcanic` (−0.5 to 4)         | 34 → 116 to 31   | unchanged within 2                             |
+| `barren` (−1 to 4)             | 14 → 113 to −191 | dust plain 39 → 35 to 39, mountain 7 → 6 to 10 |
+| `mars-like` (Sun, 1.524 AU)    | −46 → −51        | identical                                      |
+| `venus-like` (Sun, 0.723 AU)   | 464 → 460        | identical                                      |
+| `mercury-like` (Sun, 0.387 AU) | 14 → 169         | identical (no water, no ice)                   |
+
+A regulated planet gets the same climate at the same position around
+any star (M3V and G2V at 0.4 give the same world). Ranges kept:
+`terran` 0.05–0.75, `frozen` 1.0–1.35 (its cold now comes from the
+distance, its −27 °C shift is gone), `caustic` −0.25–0.1, `volcanic`
+−0.5–4 with `internal_heat = 285`, `barren` −1–4. Mars keeps a −10 °C
+shift (thin air, no greenhouse), Venus's greenhouse drops from 450 to
+395 °C, Mercury gets −20 °C.
+
+### Steps 3 and 4: the star in the viewer
+
+With Sunlight on, the star is a point at infinity at the sun's
+direction, like the star field: a disk of its apparent diameter (at
+least 3 px), slightly darker at its limb, in its light's colour, in a
+glow growing with the light the planet gets. "Star light" multiplies
+the direct light, the clouds, the sea glint and the light entering the
+sky shell by the star's colour (the Sun white): under an M3 dwarf the
+day side turns ochre and the halo loses its blue.
+
+### Step 5: tidal locking
+
+A planet is locked when its locking time is shorter than its star's age
+(4.6 Gyr or its lifetime): at the middle of their habitable zones, M
+dwarfs' planets lock (M0V: 1.4 Gyr), K5V's do not (12 Gyr). Its
+temperature follows the angle θ from the substellar point, at the map's
+centre: `4 cos θ` times the mean light on the day side (none at night),
+through Earth's scale and curve (34 °C under the star, −56 °C on the
+night side), the atmosphere's heat transport over the sphere, then the
+star. An M4V planet at 0.3 in its zone shows an open ocean and green
+continents around the substellar point inside a frozen night side. The
+viewer keeps its sun above the map's centre. Winds and clouds keep
+their latitude bands: a substellar circulation is left for later.
+
+### Step 6: vegetation under other stars
+
+In the "Star light" view only, the surface shader recolours vegetated
+biomes (by their share of plants: forest and jungle 1 down to tundra
+0.35) towards dark purple-black under stars cooler than the Sun (fully
+at 3 300 K) and towards gold under hotter ones (fully at 7 300 K),
+keeping their luminance; Sun-like stars leave them as they are. The
+exported maps keep Earth's colours. Under an M4V dwarf, the green
+continents of a locked planet turn dark brown in the orange light.
+
 ## 4. Open points
 
-- Eyeball climates of locked planets need their own tuning (heat
-  transport by the atmosphere evens them out); step 5 starts with the
-  atmosphere's existing heat contrast.
+- Locked planets keep latitude winds, rain and clouds; a substellar
+  circulation (rising air and clouds under the star, winds towards it)
+  would make their day sides cloudier and their terminators wetter.
 
 - Multiple stars (binaries are common, especially among massive stars),
   eccentric orbits and their seasons, stellar evolution (a brightening
@@ -259,3 +360,12 @@ by the recalibration error for the others; step 5 changes locked worlds.
 - Kiang et al. 2007, "Spectral Signatures of Photosynthesis II:
   Coevolution with Other Stars and the Atmosphere on Extrasolar
   Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701382>.
+- Kiang & Hoehler 2021, photon absorption of photosynthetic organisms
+  by stellar type (Frontiers in Astronomy and Space Sciences): peak
+  absorption in the blue around F stars, in the red or just beyond
+  around G, K and early M stars.
+- Gladman et al. 1996, "Synchronous Locking of Tidally Evolving
+  Satellites", Icarus 122, 166 (the locking time scaling).
+- Wyman, Sloan & Shirley 2013, "Simple Analytic Approximations to the
+  CIE XYZ Color Matching Functions", JCGT 2(2).
+- IAU 2015 Resolution B3 (nominal solar values: Teff = 5 772 K).

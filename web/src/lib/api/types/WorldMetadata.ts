@@ -2,6 +2,7 @@
 import type { BiomeInfo } from "./BiomeInfo";
 import type { Layers } from "./Layers";
 import type { Preset } from "./Preset";
+import type { StarInfo } from "./StarInfo";
 
 /**
  * Content of `raw_data/world.json`.
@@ -24,7 +25,12 @@ pressure_bar: number,
  * Age of the oldest surviving surface, in Ga. Worlds made before it
  * existed have none (and no craters).
  */
-surface_age_ga?: number | null, layers: Layers, 
+surface_age_ga?: number | null, 
+/**
+ * The host star and the orbit. Worlds made before it existed orbit
+ * the Sun at 1 AU.
+ */
+star?: StarInfo | null, layers: Layers, 
 /**
  * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
  */

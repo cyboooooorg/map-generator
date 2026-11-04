@@ -838,6 +838,8 @@ mod tests {
             axial_tilt_deg: Some(23.44),
             pressure_bar: Some(1.0),
             surface_age_ga: Some(0.4),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.0),
             width: Some(480),
             height: Some(240),
             ..Default::default()
