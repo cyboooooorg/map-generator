@@ -335,6 +335,11 @@ export const fr: Messages = {
     orbitAuHelp: `Terre${S}: 1 · Mars${S}: 1,52 · Vénus${S}: 0,72`,
     eccentricity: 'Excentricité',
     eccentricityHelp: `0${S}: un cercle · Vénus${S}: 0,007 · Terre${S}: 0,017 · Mars${S}: 0,09 · Mercure${S}: 0,21. Plus elle est forte, plus la planète reçoit de lumière sur l’année. Au hasard${S}: tirée comme celles des planètes connues, nulle pour les planètes en rotation synchrone`,
+    moons: 'Lunes',
+    moonsAuto: 'Tirées par la graine',
+    moonsNone: 'Aucune',
+    moonsCount: (p) => (p.count === 1 ? '1 lune' : `${p.count} lunes`),
+    moonsHelp: `Tirées par la graine${S}: environ une planète rocheuse sur 12 a une grosse lune, les petits mondes souvent un compagnon, d’autres de petites lunes de débris ou capturées, les planètes verrouillées sur leur étoile aucune. Un nombre donne autant de lunes stables${S}: une étoile et une orbite au hasard sont tirées de nouveau jusqu’à ce que la planète échappe aux marées de son étoile et ait la place${S}; une grosse lune stabilise l’inclinaison de l’axe, et les lunes lèvent les marées`,
     seed: 'Graine',
     seedPlaceholder: 'au hasard',
     roll: 'Tirer',
@@ -689,6 +694,8 @@ export const fr: Messages = {
     seaLevelAndLandFraction: 'Réglez le niveau de la mer ou la part des terres, pas les deux.',
     unknownStar: (p) => `Étoile inconnue${S}: ${p.star}`,
     orbitAndPosition: 'Réglez l’orbite par sa distance ou par sa position dans la zone habitable, pas les deux.',
+    noRoomForMoons: (p) =>
+      `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies verrouillent la planète sur son étoile ou la gardent trop près. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
     unknownPreset: (p) => `Aucun modèle de planète ne s’appelle ${p.preset}.`,
     tooManyPixels: (p) =>
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,

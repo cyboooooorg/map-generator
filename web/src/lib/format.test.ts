@@ -45,6 +45,9 @@ describe('format', () => {
     expect(requestFromWorld(drifted)).toMatchObject({ drift_ma: -120, moons: 'none' });
     expect(cliCommand(drifted)).toContain('--drift=-120 --moons none --width');
     expect(requestFromWorld({ ...drifted, moons: { planet_day_hours: 24 } } as unknown as WorldMetadata)).not.toHaveProperty('moons');
+    const counted = { ...drifted, moons: { planet_day_hours: 24, count_asked: 3 } } as unknown as WorldMetadata;
+    expect(requestFromWorld(counted).moons).toEqual({ count: 3 });
+    expect(cliCommand(counted)).toContain('--moons 3');
     // Worlds made before the surface age leave it to the preset.
     const old = { ...meta, surface_age_ga: undefined } as unknown as WorldMetadata;
     expect(requestFromWorld(old)).not.toHaveProperty('surface_age_ga');

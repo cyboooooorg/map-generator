@@ -297,6 +297,7 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         hz_position: spec(request::HZ_POSITION, fallback::HZ_POSITION),
         orbit_au: request::ORBIT_AU,
         eccentricity: request::ECCENTRICITY,
+        moon_count: request::MOON_COUNT,
         metallicity: request::METALLICITY,
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,

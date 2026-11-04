@@ -29,6 +29,8 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.unknownStar({ star: detail.star });
     case 'orbit_and_position':
       return t.errors.orbitAndPosition;
+    case 'no_room_for_moons':
+      return t.errors.noRoomForMoons({ count: detail.count });
   }
 }
 

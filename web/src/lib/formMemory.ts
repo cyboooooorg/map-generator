@@ -2,7 +2,11 @@
 // world" starts where the previous generation left off. The seed is not
 // kept: the same planet and seed would name an existing world.
 import { loadSetting, removeSetting, saveSetting } from './settings';
+import { type MoonChoice, parseMoonChoice } from './moons';
 import { parseStarChoice, type StarChoice } from './starForm';
+
+/** Most moons a remembered form may ask for (mapgen's MAX_MOON_COUNT). */
+const MAX_MOONS = 6;
 
 const KEY = 'generateForm';
 
@@ -25,6 +29,8 @@ export interface FormMemory {
   fields: Record<string, FieldMemory>;
   /** The star and orbit; null takes the preset's. */
   star: StarChoice | null;
+  /** The moons asked for (`auto`: drawn by the seed). */
+  moons: MoonChoice;
 }
 
 function isField(value: unknown): value is FieldMemory {
@@ -64,6 +70,7 @@ export function parseFormMemory(raw: unknown, fieldNames: readonly string[]): Fo
     landPercent: typeof r.landPercent === 'number' && Number.isFinite(r.landPercent) ? r.landPercent : 29,
     fields,
     star: parseStarChoice(r.star),
+    moons: parseMoonChoice(r.moons, MAX_MOONS),
   };
 }
 
