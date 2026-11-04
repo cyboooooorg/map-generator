@@ -93,7 +93,8 @@ struct Args {
     /// Epoch of the plates in Ma from the present, in [-300, 300], negative
     /// in the past: on worlds with plate tectonics, the continents as the
     /// plates have carried them by then (or will have). The world is written
-    /// to `<planet>-<seed>_<drift>Ma` [default: 0, the present]
+    /// to `<planet>-past<N>ma-<seed>` or `<planet>-future<N>ma-<seed>`
+    /// [default: 0, the present]
     #[arg(long, allow_hyphen_values = true, value_parser = parse_in(request::DRIFT_MA))]
     drift: Option<f32>,
 
@@ -300,12 +301,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     if let Some(system) = GiantSystem::draw(p) {
         println!("Giants → {}", giants_summary(&system, p.metallicity));
     }
-    let name = world_dir_name(p);
-    let dir = args.out_dir.join(if p.drift_ma == 0.0 {
-        name
-    } else {
-        format!("{name}_{}Ma", p.drift_ma)
-    });
+    let dir = args.out_dir.join(world_dir_name(p));
+    // Generating into an existing world directory: the parts the export
+    // writes only when they apply (raw data, moons, host giant, noise maps)
+    // are cleared first, so none is left from the previous generation.
+    clear_stale_outputs(&dir)?;
     // The noise maps are written as the generation computes their layers,
     // each one freed once encoded: they are never all kept in memory.
     let noise_maps = if args.no_noise_maps {
@@ -457,4 +457,47 @@ fn moons_summary(system: &MoonSystem) -> String {
             ""
         }
     )
+}
+
+/// Directories of a world directory that an export may leave out (see
+/// [`clear_stale_outputs`]).
+const OPTIONAL_OUTPUTS: [&str; 4] = ["raw_data", "moons", "host", "noise_maps"];
+
+/// Removes from `dir`, an existing world directory, the outputs an export
+/// writes only when they apply. Files written by every export are simply
+/// overwritten, and anything else (such as the names given in the web app,
+/// `names.json`) is kept.
+fn clear_stale_outputs(dir: &std::path::Path) -> std::io::Result<()> {
+    for name in OPTIONAL_OUTPUTS {
+        match std::fs::remove_dir_all(dir.join(name)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod stale_tests {
+    use super::*;
+
+    #[test]
+    fn regenerating_clears_the_optional_outputs_only() {
+        let dir = std::env::temp_dir().join(format!("mapgen-cli-stale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for name in OPTIONAL_OUTPUTS {
+            std::fs::create_dir_all(dir.join(name).join("1")).unwrap();
+        }
+        std::fs::write(dir.join("names.json"), "{}").unwrap();
+        std::fs::write(dir.join("world.png"), "old").unwrap();
+        clear_stale_outputs(&dir).unwrap();
+        for name in OPTIONAL_OUTPUTS {
+            assert!(!dir.join(name).exists(), "{name}");
+        }
+        assert!(dir.join("names.json").exists());
+        assert!(dir.join("world.png").exists());
+        // A new directory has nothing to clear.
+        clear_stale_outputs(&dir.join("absent")).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
