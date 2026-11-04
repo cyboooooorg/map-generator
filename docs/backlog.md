@@ -360,6 +360,11 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   braid along the arch, carry knots of gas draining down the legs and
   tear apart when they erupt. They are alpha-blended rather than added,
   so the red of hydrogen stays red over the star's near-white glow.
+- **Follow-up (2026-11-04):** a prominence seen against the disk is a dark
+  filament (its gas absorbs the surface's light), red off the disk. The
+  glow and the prominences are drawn in a fixed order: both centred on
+  the star, their distance sort was a tie that flipped as the view
+  turned, and the glow, drawn second, washed the strands out to white.
 
 ## 13. Moons
 

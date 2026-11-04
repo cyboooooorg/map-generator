@@ -165,6 +165,11 @@ export class StarView {
         depthWrite: false,
       }),
     );
+    // Glow and prominences share the star's centre, so sorting them by
+    // distance is a tie that flips as the view turns: fix their order, the
+    // prominences over the glow (drawn after it, the glow would wash them
+    // out to white).
+    this.glow.renderOrder = 1;
     this.scene.add(this.glow);
     this.scene.add(this.arcs);
 
@@ -346,7 +351,7 @@ export class StarView {
 
   /** A prominence: a bundle of glowing strands along its arc (see prominenceGeometry). */
   private arcMesh(arc: Prominence, index: number): Mesh<BufferGeometry, ShaderMaterial> {
-    return new Mesh(
+    const mesh = new Mesh(
       prominenceGeometry(arc, STAR_RADIUS, this.seed * 13 + index),
       new ShaderMaterial({
         vertexShader: prominenceVertex,
@@ -358,11 +363,14 @@ export class StarView {
           uFray: { value: 0 },
           uTime: { value: this.time },
           uSeed: { value: index * 1.7 },
+          uRadius: { value: STAR_RADIUS },
         },
         transparent: true,
         depthWrite: false,
       }),
     );
+    mesh.renderOrder = 2;
+    return mesh;
   }
 
   private buildProminences(): void {

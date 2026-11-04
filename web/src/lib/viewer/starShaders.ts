@@ -142,6 +142,7 @@ export const prominenceVertex = /* glsl */ `
   varying float vAlong;
   varying float vStrand;
   varying vec3 vViewNormal;
+  varying vec3 vWorld;
   void main() {
     float r = length(position);
     float height = r - 1.0;
@@ -150,6 +151,7 @@ export const prominenceVertex = /* glsl */ `
     vAlong = uv.x;
     vStrand = aStrand;
     vViewNormal = normalize(normalMatrix * normal);
+    vWorld = (modelMatrix * vec4(lifted, 1.0)).xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(lifted, 1.0);
   }
 `;
@@ -163,7 +165,16 @@ export const prominenceFragment = /* glsl */ `
   varying float vAlong;
   varying float vStrand;
   varying vec3 vViewNormal;
+  varying vec3 vWorld;
+  /** Radius of the star, centred on the origin. */
+  uniform float uRadius;
   void main() {
+    // Seen against the disk? The ray from the eye through this point passes
+    // within the star's radius of its centre (beyond the point: the parts
+    // behind the star are hidden by the depth test).
+    vec3 ray = normalize(vWorld - cameraPosition);
+    float closest = length(cameraPosition - ray * dot(cameraPosition, ray));
+    float onDisk = 1.0 - smoothstep(0.97 * uRadius, uRadius, closest);
     // A thin thread: bright along its axis, fading to its edges.
     float core = pow(abs(normalize(vViewNormal).z), 1.5);
     // Knots of brighter gas flowing down both legs to the surface, as the
@@ -178,9 +189,15 @@ export const prominenceFragment = /* glsl */ `
     // disk, brightest in the legs and the arch.
     float density = smoothstep(0.0, 0.08, vHeight) * (1.0 - 0.4 * smoothstep(0.1, 0.5, vHeight));
     float glow = core * knots * strand * flicker * density;
-    // Blended over what is behind rather than added to it: added to the
-    // star's near-white glow, the red of hydrogen would wash out to white.
-    gl_FragColor = vec4(uColor * (0.55 + 0.6 * glow), clamp(glow * uOpacity, 0.0, 1.0));
+    // Off the disk, the gas glows in the red of hydrogen, blended over what
+    // is behind rather than added to it (added to the star's near-white
+    // glow, it would wash out to white). Against the disk it is cooler than
+    // the surface behind and absorbs its light: a dark filament, as H-alpha
+    // images of the Sun show them.
+    vec3 emission = uColor * (0.55 + 0.6 * glow);
+    vec3 absorption = uColor * 0.12;
+    float alpha = clamp(glow * uOpacity * mix(1.0, 1.6, onDisk), 0.0, mix(1.0, 0.8, onDisk));
+    gl_FragColor = vec4(mix(emission, absorption, onDisk), alpha);
     #include <colorspace_fragment>
   }
 `;
