@@ -112,12 +112,12 @@ export function prominences(klass: string, seed: number): Prominence[] {
     return ((z ^ (z >>> 14)) >>> 0) / 4_294_967_296;
   };
   return Array.from({ length: PROMINENCES[klass] ?? 0 }, () => {
-    // A foot anywhere on the sphere, the other 5° to 15° away.
+    // A foot anywhere on the sphere, the other 10° to 30° away.
     const y = 2 * next() - 1;
     const lon = next() * 2 * Math.PI;
     const r = Math.sqrt(1 - y * y);
     const from: [number, number, number] = [r * Math.cos(lon), y, r * Math.sin(lon)];
-    const spread = ((5 + 10 * next()) * Math.PI) / 180;
+    const spread = ((10 + 20 * next()) * Math.PI) / 180;
     const heading = next() * 2 * Math.PI;
     // Turn `from` by `spread` towards `heading` on the sphere.
     const east = [-Math.sin(lon), 0, Math.cos(lon)];

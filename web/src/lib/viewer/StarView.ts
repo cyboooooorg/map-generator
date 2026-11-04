@@ -4,9 +4,7 @@
 // the animation on, thirty frames a second at most.
 import {
   AdditiveBlending,
-  CatmullRomCurve3,
   Group,
-  TubeGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -38,12 +36,13 @@ import {
   starSurfaceVertex,
 } from './starShaders';
 import { starField } from './stars';
+import { prominenceGeometry } from './prominenceGeometry';
 import { keplerPosition, orbitDistance, type Prominence, prominences, STAR_RADIUS, starSurface, systemScale } from './starSystem';
 
 /** Seconds between two eruptions, while animated. */
 const ERUPTION_S = 9;
 /** The red of hydrogen (H-alpha), linear RGB. */
-const H_ALPHA: [number, number, number] = [1, 0.32, 0.28];
+const H_ALPHA: [number, number, number] = [1, 0.2, 0.14];
 
 /** Screen positions (CSS px) of the points the distances option labels, null when off screen. */
 export interface SystemLabels {
@@ -89,7 +88,7 @@ export class StarView {
   private distancesOn = false;
   /** The prominences, turning with the surface; the eruption under way. */
   private readonly arcs = new Group();
-  private eruption: Mesh<TubeGeometry, ShaderMaterial> | null = null;
+  private eruption: Mesh<BufferGeometry, ShaderMaterial> | null = null;
   private klass = 'G';
   private seed = 0;
   private orbitOn = true;
@@ -329,7 +328,7 @@ export class StarView {
   dispose(): void {
     this.disposed = true;
     for (const child of this.arcs.children) {
-      const mesh = child as Mesh<TubeGeometry, ShaderMaterial>;
+      const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
       mesh.geometry.dispose();
       mesh.material.dispose();
     }
@@ -345,18 +344,10 @@ export class StarView {
     this.renderer.forceContextLoss();
   }
 
-  /** A glowing tube along a prominence's arc. */
-  private arcMesh(arc: Prominence, index: number): Mesh<TubeGeometry, ShaderMaterial> {
-    const from = new Vector3(...arc.from);
-    const to = new Vector3(...arc.to);
-    const points = Array.from({ length: 17 }, (_, i) => {
-      const t = i / 16;
-      // Along the great circle between the feet, raised as an arch.
-      const p = from.clone().lerp(to, t).normalize();
-      return p.multiplyScalar(STAR_RADIUS * (1 + arc.height * Math.sin(Math.PI * t)));
-    });
+  /** A prominence: a bundle of glowing strands along its arc (see prominenceGeometry). */
+  private arcMesh(arc: Prominence, index: number): Mesh<BufferGeometry, ShaderMaterial> {
     return new Mesh(
-      new TubeGeometry(new CatmullRomCurve3(points), 48, arc.thickness * STAR_RADIUS, 8),
+      prominenceGeometry(arc, STAR_RADIUS, this.seed * 13 + index),
       new ShaderMaterial({
         vertexShader: prominenceVertex,
         fragmentShader: prominenceFragment,
@@ -364,10 +355,10 @@ export class StarView {
           uColor: { value: new Vector3(...H_ALPHA) },
           uOpacity: { value: 0.9 },
           uLift: { value: 1 },
+          uFray: { value: 0 },
           uTime: { value: this.time },
           uSeed: { value: index * 1.7 },
         },
-        blending: AdditiveBlending,
         transparent: true,
         depthWrite: false,
       }),
@@ -376,7 +367,7 @@ export class StarView {
 
   private buildProminences(): void {
     for (const child of [...this.arcs.children]) {
-      const mesh = child as Mesh<TubeGeometry, ShaderMaterial>;
+      const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
       mesh.geometry.dispose();
       mesh.material.dispose();
       this.arcs.remove(mesh);
@@ -393,7 +384,7 @@ export class StarView {
   private animateProminences(): void {
     this.arcs.rotation.y = -this.time * 0.02;
     for (const child of this.arcs.children) {
-      ((child as Mesh<TubeGeometry, ShaderMaterial>).material.uniforms['uTime']!).value = this.time;
+      ((child as Mesh<BufferGeometry, ShaderMaterial>).material.uniforms['uTime']!).value = this.time;
     }
     const cycle = Math.floor(this.time / ERUPTION_S);
     const phase = (this.time % ERUPTION_S) / ERUPTION_S;
@@ -412,8 +403,11 @@ export class StarView {
     }
     // Rises over the first half of the cycle, gone by its end.
     const u = this.eruption.material.uniforms;
-    u['uLift']!.value = 1 + 9 * Math.min(phase * 1.6, 1) ** 1.5;
-    u['uOpacity']!.value = 1.2 * (1 - phase) ** 2;
+    const rise = Math.min(phase * 1.6, 1) ** 1.5;
+    u['uLift']!.value = 1 + 9 * rise;
+    // The strands come apart as the arc blows off, as torn field lines.
+    u['uFray']!.value = 0.35 * rise;
+    u['uOpacity']!.value = 1.1 * (1 - phase) ** 2;
   }
 
   /** A point of the orbital plane at a true anomaly and distance (AU), in view units. */
