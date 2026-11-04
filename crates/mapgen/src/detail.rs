@@ -919,14 +919,21 @@ mod tests {
     #[test]
     fn detail_only_adds_small_features() {
         // At a deep level the detail moves elevation by a bounded amount.
+        // Within the coastal band the base is read at a displaced position
+        // instead (capes and bays), which moves it by the slope of the
+        // coast: left out.
         let d = detail_world();
         let w = d.world();
+        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
         let mut worst = 0.0f32;
         for k in 0..2000 {
             let lon = (k as f64 * 0.731) % TAU;
             let lat = ((k as f64 * 0.377) % PI) - PI / 2.0;
             let (x, y) = d.base_xy(lon, lat);
             let base = bicubic(&w.elevation, w.width, w.height, x, y);
+            if (base - waterline).abs() < COAST_BAND.1 {
+                continue;
+            }
             worst = worst.max((d.elevation(lon, lat, 0.3) - base).abs());
         }
         assert!(worst < 0.05, "detail moved elevation by {worst}");

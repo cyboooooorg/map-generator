@@ -571,9 +571,11 @@ fn intersection(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> [f64; 2] 
 ///
 /// A line is only cut downstream of its own tributaries' mouths, so none of
 /// them is left dangling; a line joined by a cut protects the joining point in
-/// turn. The very end of a tributary, which lies on its parent, is not a
-/// crossing.
-fn end_at_first_crossing(lines: &mut [RiverLine]) {
+/// turn. A tributary crossing its own parent upstream of them is cut all the
+/// same, and the tributaries joining it below the cut take its course on
+/// (see [`hand_over_tail`]). The very end of a tributary, which lies on its
+/// parent, is not a crossing. `width` is the map's width, in pixels.
+fn end_at_first_crossing(lines: &mut [RiverLine], width: f64) {
     let index = SegmentIndex::new(lines);
     // First segment of each line that may be cut: past its tributaries' mouths.
     let mut protected = vec![0usize; lines.len()];
@@ -586,7 +588,7 @@ fn end_at_first_crossing(lines: &mut [RiverLine]) {
     for id in 0..lines.len() {
         let last = lines[id].points.len().saturating_sub(1);
         let mut cut = None;
-        for s in protected[id]..last {
+        for s in 0..last {
             let (a, b) = (lines[id].points[s], lines[id].points[s + 1]);
             let hit = index
                 .crossings(lines, id, s, a, b)
@@ -595,6 +597,7 @@ fn end_at_first_crossing(lines: &mut [RiverLine]) {
                     other != id
                         && !(lines[id].parent == Some(other) && s + 1 == last)
                         && !flows_into(lines, other, id)
+                        && (s >= protected[id] || lines[id].parent == Some(other))
                 });
             if let Some((other, t, point)) = hit {
                 cut = Some((s, other, t, point));
@@ -602,6 +605,9 @@ fn end_at_first_crossing(lines: &mut [RiverLine]) {
             }
         }
         if let Some((s, other, t, point)) = cut {
+            if s < protected[id] {
+                hand_over_tail(lines, id, s, width);
+            }
             let line = &mut lines[id];
             line.points.truncate(s + 1);
             line.flow_km2.truncate(s + 1);
@@ -611,6 +617,46 @@ fn end_at_first_crossing(lines: &mut [RiverLine]) {
             line.mouth = Mouth::River;
             protected[other] = protected[other].max(t + 1);
         }
+    }
+}
+
+/// Before line `id` is cut at its segment `s`: each of its tributaries
+/// joining it further down takes the rest of its course on, down to its
+/// mouth, instead of being left dangling.
+fn hand_over_tail(lines: &mut [RiverLine], id: usize, s: usize, width: f64) {
+    for j in 0..lines.len() {
+        if j == id || lines[j].parent != Some(id) {
+            continue;
+        }
+        let end = lines[j].points[lines[j].points.len() - 1];
+        let k = nearest_point(&lines[id].points, end);
+        if k <= s {
+            continue;
+        }
+        // The same course in the tributary's unwrapped x.
+        let shift = ((end[0] - lines[id].points[k][0]) / width).round() * width;
+        let (base, below) = (
+            lines[j].flow_km2[lines[j].flow_km2.len() - 1],
+            lines[id].flow_km2[k],
+        );
+        let tail: Vec<([f64; 2], f32)> = (k + 1..lines[id].points.len())
+            .map(|i| {
+                let q = lines[id].points[i];
+                (
+                    [q[0] + shift, q[1]],
+                    base + (lines[id].flow_km2[i] - below).max(0.0),
+                )
+            })
+            .collect();
+        let (parent, mouth, estuary) = (lines[id].parent, lines[id].mouth, lines[id].estuary);
+        let line = &mut lines[j];
+        for (q, f) in tail {
+            line.points.push(q);
+            line.flow_km2.push(f);
+        }
+        line.parent = parent;
+        line.mouth = mouth;
+        line.estuary = estuary;
     }
 }
 
@@ -818,7 +864,7 @@ pub fn shape(lines: &[RiverLine], grid: &Grid, filled: &[f32], seed: u32) -> Vec
             estuary: line.estuary,
         });
     }
-    end_at_first_crossing(&mut out);
+    end_at_first_crossing(&mut out, f64::from(width));
     out
 }
 
