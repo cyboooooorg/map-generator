@@ -406,7 +406,7 @@ export class PlanetView {
     uCloudShift: { value: 0 } as IUniform<number>,
     uGiant: { value: 0 } as IUniform<number>,
     uTempRange: { value: new Vector2(-30, 70) } as IUniform<Vector2>,
-    uWind: { value: new Array<number>(19).fill(0) } as IUniform<number[]>,
+    uWind: { value: new Array<number>(91).fill(0) } as IUniform<number[]>,
     uBandTime: { value: 0 } as IUniform<number>,
     uHotGlow: { value: 0 } as IUniform<number>,
     uRingInner: { value: 0 } as IUniform<number>,
@@ -913,8 +913,9 @@ export class PlanetView {
     const [low, high] = info ? giantTemperatureRange(info) : [-30, 40];
     this.u.uTempRange.value.set(low, high - low);
     const reach = info ? Math.max(info.wind_east, info.wind_west, 1) : 1;
-    // The wind every 10° (the profile has a value every 2°).
-    this.u.uWind.value = Array.from({ length: 19 }, (_, k) => (info?.wind_profile[k * 5] ?? 0) / reach);
+    // The wind every 2°: Jupiter's jets are only 4° to 8° wide, and turn
+    // east and west in turn.
+    this.u.uWind.value = Array.from({ length: 91 }, (_, k) => (info?.wind_profile[k] ?? 0) / reach);
     for (const pass of this.atmosphere) {
       pass.scale.y = pass.scale.x * (1 - (info?.flattening ?? 0));
     }

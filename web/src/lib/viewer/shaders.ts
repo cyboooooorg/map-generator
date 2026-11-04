@@ -170,11 +170,12 @@ export const surfaceFragment = /* glsl */ `
   uniform float uCloudShift;   // eastward drift of the cloud layer, in turns
   // A giant: its moisture layer holds the wind (a share of the strongest),
   // its temperature range is its own, and its bands drift each at its own
-  // speed (uWind: the wind every 10° from the south pole, a share of the
-  // strongest; uBandTime: seconds of drift).
+  // speed (uWind: the wind every 2° from the south pole, a share of the
+  // strongest, so that narrow jets turning either way keep their sign;
+  // uBandTime: seconds of drift).
   uniform float uGiant;
   uniform vec2 uTempRange;     // °C at the bottom of the ramp, and its span
-  uniform float uWind[19];
+  uniform float uWind[91];
   uniform float uBandTime;
   uniform float uHotGlow;      // a hot giant's night-side glow, 0 to 1
   // A giant's rings, for their shadow: edges and gaps in planet radii, in
@@ -203,12 +204,12 @@ export const surfaceFragment = /* glsl */ `
 
   // The wind of a giant at the latitude of map row v (0 south, 1 north).
   float bandWind(float v) {
-    float at = clamp(v, 0.0, 1.0) * 18.0;
-    int i = int(floor(min(at, 17.999)));
+    float at = clamp(v, 0.0, 1.0) * 90.0;
+    int i = int(floor(min(at, 89.999)));
     float f = at - float(i);
     float a = 0.0;
     float b = 0.0;
-    for (int k = 0; k < 19; k++) {
+    for (int k = 0; k < 91; k++) {
       if (k == i) a = uWind[k];
       if (k == i + 1) b = uWind[k];
     }

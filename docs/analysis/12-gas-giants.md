@@ -489,6 +489,17 @@ Rocky worlds orbiting a giant (`src/exomoon.rs`):
 - **Not done:** the giant's other moons in the sky; the tilt steadied by
   the giant; the giant's reflected and thermal light on the night side.
 
+### Follow-up: poles and band directions (2026-11-04)
+
+- **Poles** after Juno's images (Adriani et al. 2018; Orton et al. 2017)
+  and Saturn's hexagon (Godfrey 1988): each pole of a gas giant draws a
+  cluster of cyclones (about 55 %), a hexagonal jet (about 15 %) or a
+  haze; ice giants a haze or a lone cyclone; hot giants a haze. Drawn in
+  an azimuthal frame around the pole, so the cyclones stay round.
+- **Band directions:** the viewer took the wind every 10°, which lost
+  the narrow alternating jets (4° to 8° wide); it now takes the whole
+  2° profile, and neighbouring bands drift east and west in turn.
+
 ### Follow-up: the moons of giant worlds (2026-11-04)
 
 Giant worlds had no moons. They now get regular moons grown in their
@@ -558,6 +569,10 @@ giant 500 to 950 km (Uranus's large moons: 580 to 790 km).
 - Canup & Ward 2006, "A common mass scaling for satellite systems of
   gaseous planets", Nature 441, 834; Williams 2013, "Terrestrial
   Exomoons", Astrobiology 13, 315.
+- Adriani et al. 2018, "Clusters of cyclones encircling Jupiter's
+  poles", Nature 555, 216; Orton et al. 2017, "The first close-up
+  images of Jupiter's polar regions", GRL 44, 4599; Godfrey 1988, "A
+  hexagonal feature around Saturn's north pole", Icarus 76, 335.
 - Heller & Barnes 2013, "Exomoon Habitability Constrained by
   Illumination and Tidal Heating", Astrobiology 13, 18:
   <https://arxiv.org/abs/1209.5323>.

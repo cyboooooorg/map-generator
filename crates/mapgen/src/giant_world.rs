@@ -15,8 +15,16 @@
 //! along the bands, more where neighbouring jets shear (festoons and
 //! wavy edges); long-lived vortices swirl the bands around them (a great
 //! red spot on some gas giants, white ovals, dark spots with bright
-//! companion clouds on ice giants); the poles are hazier and mottled,
-//! with a hexagon on some (Saturn's).
+//! companion clouds on ice giants).
+//!
+//! **Poles.** Poleward of about 64° the bands break down (Orton et al.
+//! 2017). Each pole has its own style: a cluster of cyclones (Juno found a
+//! central cyclone ringed by eight at Jupiter's north pole and five at its
+//! south, each 5 000 to 8 000 km across, Adriani et al. 2018) on a dark,
+//! bluish background of folded filaments and billowing white clouds; a
+//! hexagonal jet around a polar vortex (Saturn's north, Godfrey 1988); or a
+//! smooth haze with a bright cap and sometimes a single polar cyclone (the
+//! ice giants).
 //!
 //! **Layers.** The biome layer holds the zones, belts, storms and polar
 //! regions, in the giant's own colours; the elevation is the height of the
@@ -90,6 +98,35 @@ pub struct Palette {
     pub polar: [f32; 3],
 }
 
+/// The look of a giant's pole.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum PoleStyle {
+    /// A smooth haze, a bright cap and sometimes one polar cyclone (the ice
+    /// giants).
+    #[default]
+    Haze,
+    /// A central cyclone ringed by others (Jupiter's: eight in the north,
+    /// five in the south), on dark folded filaments.
+    Cyclones,
+    /// A hexagonal jet around a polar vortex (Saturn's north).
+    Hexagon,
+}
+
+/// A pole as drawn: its style, its cyclones (count of the ring, their
+/// distance from the pole and size, degrees), the ring's turn, whether a
+/// cyclone sits on the pole itself.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Pole {
+    style: PoleStyle,
+    ring: u8,
+    ring_colat: f32,
+    radius: f32,
+    turn: f32,
+    central: bool,
+}
+
 /// The ring system of a giant, as `world.json` stores it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -143,6 +180,12 @@ pub struct GiantInfo {
     /// hexagon.
     pub great_spot: bool,
     pub hexagon: bool,
+    /// The look of the north and south poles, and the cyclones ringing
+    /// each (0 when none).
+    #[serde(default)]
+    pub poles: [PoleStyle; 2],
+    #[serde(default)]
+    pub polar_cyclones: [u8; 2],
     pub palette: Palette,
     pub rings: Option<RingSystem>,
 }
@@ -156,6 +199,8 @@ pub struct Look {
     storms: Vec<Storm>,
     /// Latitude where the polar regions start, degrees.
     polar: f32,
+    /// The north and south poles.
+    poles: [Pole; 2],
     /// Typical wind speed, m/s, and the equatorial jet (gas giants).
     wind: f32,
     equatorial_jet: f32,
@@ -445,12 +490,22 @@ impl Look {
                 wind_profile: Vec::new(),
                 great_spot,
                 hexagon,
+                poles: [PoleStyle::Haze; 2],
+                polar_cyclones: [0; 2],
                 palette: colours,
                 rings,
             },
             bands,
             storms,
             polar,
+            poles: [Pole {
+                style: PoleStyle::Haze,
+                ring: 0,
+                ring_colat: 0.0,
+                radius: 0.0,
+                turn: 0.0,
+                central: false,
+            }; 2],
             wind: wind as f32,
             equatorial_jet,
             jets_at,
@@ -460,6 +515,63 @@ impl Look {
                 0.0
             },
         };
+        // The poles, drawn last so the rest keeps its draws: each its own
+        // style, the cyclones sized like Juno's (5 000 to 8 000 km across).
+        let radius_km = f64::from(radius_earth) * EARTH_RADIUS_M / 1000.0;
+        for k in 0..2 {
+            let r: f32 = rng.random();
+            let style = match (hot, kind) {
+                (true, _) => PoleStyle::Haze,
+                (_, GiantKind::Ice) => {
+                    if r < 0.3 {
+                        PoleStyle::Cyclones
+                    } else {
+                        PoleStyle::Haze
+                    }
+                }
+                (_, GiantKind::Gas) => {
+                    // About 15 % of poles get a hexagon, 55 % cyclones.
+                    if k == 0 && hexagon && r < 0.4 {
+                        PoleStyle::Hexagon
+                    } else if r < 0.55 {
+                        PoleStyle::Cyclones
+                    } else if r < 0.65 {
+                        PoleStyle::Hexagon
+                    } else {
+                        PoleStyle::Haze
+                    }
+                }
+            };
+            let diameter_km = rng.random_range(5000.0..8000.0);
+            // Their spiral arms reach out about 1.4 times the core seen in
+            // the infrared.
+            let radius =
+                ((1.4 * diameter_km / 2.0 / radius_km).to_degrees() as f32).clamp(2.0, 11.0);
+            // An ice giant's lone polar cyclone; a gas giant's ring of five
+            // to nine, packed edge to edge around the central one.
+            let ring = if kind == GiantKind::Gas && style == PoleStyle::Cyclones {
+                rng.random_range(5u8..10)
+            } else {
+                0
+            };
+            let ring_colat = if ring > 0 {
+                (radius * 2.1 / (std::f32::consts::PI / f32::from(ring)).sin() / 2.0)
+                    .max(radius * 2.2)
+            } else {
+                0.0
+            };
+            look.poles[k] = Pole {
+                style,
+                ring,
+                ring_colat,
+                radius,
+                turn: rng.random::<f32>() * std::f32::consts::TAU,
+                central: style == PoleStyle::Cyclones,
+            };
+            look.info.poles[k] = style;
+            look.info.polar_cyclones[k] = ring;
+        }
+        look.info.hexagon = look.info.poles.contains(&PoleStyle::Hexagon);
         look.info.wind_profile = (0..91)
             .map(|k| look.wind_at(-90.0 + 2.0 * k as f32))
             .collect();
@@ -585,24 +697,20 @@ fn sample(look: &Look, noise: &Perlin, fine: &Perlin, lon: f32, lat: f32) -> Pix
         Biome::GiantBelt
     };
     let mut elevation = if band.zone { 0.06 } else { -0.06 };
-    // Polar regions: mottled haze and small cyclones, fading in.
+    // Polar regions: the bands give way to the pole's own look.
     let haze = smoothstep(look.polar - 10.0, look.polar + 4.0, warped.abs());
     if haze > 0.0 {
-        let mottle = fbm(noise, x * 8.0, y * 8.0, z * 8.0, 4);
-        let polar = palette.polar.map(|c| c * (1.0 + 0.2 * mottle));
+        let pole = &look.poles[usize::from(lat < 0.0)];
+        let (polar, storm, lift) = polar_look(look, pole, lon, lat, noise, fine);
         colour = mix(colour, polar, haze);
-        elevation = elevation * (1.0 - haze) + 0.02 * mottle * haze;
+        elevation = elevation * (1.0 - haze) + lift * haze;
         if haze > 0.5 {
-            biome = Biome::GiantPolar;
+            biome = if storm {
+                Biome::GiantStorm
+            } else {
+                Biome::GiantPolar
+            };
         }
-    }
-    // A hexagonal jet around the north pole.
-    if look.info.hexagon && lat > 70.0 {
-        let angle = (lon.to_radians()).rem_euclid(std::f32::consts::FRAC_PI_3)
-            - std::f32::consts::FRAC_PI_6;
-        let hex = 90.0 - (90.0 - 78.0) * (std::f32::consts::FRAC_PI_6.cos() / angle.cos());
-        let ring = (-((lat - hex) / 1.2).powi(2)).exp();
-        colour = [0, 1, 2].map(|k| colour[k] * (1.0 - 0.35 * ring) + palette.belt[k] * 0.35 * ring);
     }
     elevation += 0.025 * wobble + 0.01 * streak;
 
@@ -643,6 +751,127 @@ fn sample(look: &Look, noise: &Perlin, fine: &Perlin, lon: f32, lat: f32) -> Pix
         temperature: temperature - 273.15,
         wind: look.wind_at(lat),
     }
+}
+
+/// The colour of a giant's polar region at `lon`, `lat` (degrees), whether
+/// it lies in a cyclone's core, and the height of its cloud tops: drawn in
+/// an azimuthal view of the pole (distance from it, `colat`, and longitude).
+fn polar_look(
+    look: &Look,
+    pole: &Pole,
+    lon: f32,
+    lat: f32,
+    noise: &Perlin,
+    fine: &Perlin,
+) -> ([f32; 3], bool, f32) {
+    let palette = &look.info.palette;
+    let mix = |a: [f32; 3], b: [f32; 3], f: f32| {
+        [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * f.clamp(0.0, 1.0))
+    };
+    let colat = 90.0 - lat.abs();
+    let theta = lon.to_radians() * if lat < 0.0 { -1.0 } else { 1.0 };
+    let (px, py) = (colat * theta.cos(), colat * theta.sin());
+    // Noise on the polar plane (a seam-free patch around each pole).
+    let side = if lat < 0.0 { 40.0 } else { 0.0 };
+    let n = |s: f64, octaves| {
+        fbm(
+            noise,
+            f64::from(px) * s + side,
+            f64::from(py) * s,
+            3.7,
+            octaves,
+        )
+    };
+    let mottle = n(0.25, 4);
+    let mut colour = palette.polar.map(|c| c * (1.0 + 0.2 * mottle));
+    let mut lift = 0.02 * mottle;
+    let mut storm = false;
+    match pole.style {
+        PoleStyle::Haze => {
+            // A bright cap of haze over the pole.
+            let cap = 1.0 - smoothstep(6.0, 18.0, colat);
+            colour = mix(colour, [0.97, 0.98, 1.0], 0.3 * cap);
+        }
+        PoleStyle::Hexagon => {
+            // The jet's six straight sides, at about 78° (12° from the pole).
+            let angle = (theta + pole.turn).rem_euclid(std::f32::consts::FRAC_PI_3)
+                - std::f32::consts::FRAC_PI_6;
+            let hex = 12.0 * std::f32::consts::FRAC_PI_6.cos() / angle.cos();
+            let jet = (-((colat - hex) / 1.0).powi(2)).exp();
+            colour = mix(colour, palette.belt, 0.55 * jet);
+            // Inside, a darker cap round the polar vortex's bright-rimmed eye.
+            let inside = 1.0 - smoothstep(hex - 1.0, hex + 0.5, colat);
+            colour = mix(
+                colour,
+                mix(palette.polar, [0.3, 0.42, 0.62], 0.35),
+                0.4 * inside,
+            );
+            let eye = 1.0 - smoothstep(0.8, 1.6, colat);
+            let rim = (-((colat - 1.8) / 0.4).powi(2)).exp();
+            colour = mix(
+                mix(colour, [0.2, 0.22, 0.28], eye),
+                [0.95, 0.9, 0.82],
+                0.6 * rim,
+            );
+            lift += 0.05 * jet;
+        }
+        PoleStyle::Cyclones => {
+            // A dark, bluish background of folded filaments and billowing
+            // white clouds (Juno's JunoCam).
+            let wx = f64::from(px) + 3.0 * f64::from(n(0.15, 3));
+            let wy = f64::from(py) + 3.0 * f64::from(n(0.15, 3) + 0.5);
+            let folds = fbm(fine, wx * 0.7, wy * 0.7, 1.3, 4);
+            let filament = smoothstep(0.6, 0.92, 1.0 - (folds * 3.5).abs());
+            let billow = smoothstep(0.2, 0.55, fbm(fine, wx * 0.3 + 9.0, wy * 0.3, 2.1, 5));
+            let tawny = smoothstep(0.1, 0.45, n(0.09, 3));
+            colour = mix(palette.polar, [0.24, 0.31, 0.44], 0.65);
+            colour = mix(colour, [0.52, 0.43, 0.36], 0.45 * tawny);
+            colour = mix(colour, [0.94, 0.92, 0.86], 0.7 * filament + 0.55 * billow);
+            lift = 0.03 * billow;
+            // The cyclones: one on the pole, the others in a ring.
+            let mut centres: Vec<(f32, f32)> = Vec::new();
+            if pole.central {
+                centres.push((0.0, 0.0));
+            }
+            for k in 0..pole.ring {
+                let a = pole.turn + std::f32::consts::TAU * f32::from(k) / f32::from(pole.ring);
+                centres.push((pole.ring_colat * a.cos(), pole.ring_colat * a.sin()));
+            }
+            for (k, &(cx, cy)) in centres.iter().enumerate() {
+                let (dx, dy) = (px - cx, py - cy);
+                let rho = (dx * dx + dy * dy).sqrt() / pole.radius;
+                if rho >= 1.2 {
+                    continue;
+                }
+                // Spiral arms winding in: cream on a dark core, some
+                // cyclones filled with cloud, others open.
+                let phi = dy.atan2(dx);
+                let wind = (rho + 0.04).ln();
+                let swirl = n(0.9, 3);
+                let arms = (4.0 * phi + 8.0 * wind + 1.5 * swirl).sin() * 0.65
+                    + (9.0 * phi + 14.0 * wind + 2.0 * n(1.7, 2)).sin() * 0.35;
+                let filled = (k as f32 * 1.618 + pole.turn).fract() < 0.4;
+                let bright = if filled {
+                    0.72 + 0.28 * arms
+                } else {
+                    0.45 + 0.55 * arms
+                };
+                let core_colour = mix([0.3, 0.36, 0.47], [0.96, 0.93, 0.86], bright);
+                // A dark eye, and a dark collar where the arms end.
+                let eye = 1.0 - smoothstep(0.04, 0.12, rho);
+                let collar = (-((rho - 1.0) / 0.1).powi(2)).exp();
+                let core_colour = mix(core_colour, [0.36, 0.3, 0.26], 0.7 * eye);
+                let weight = 1.0 - smoothstep(0.8, 1.15, rho);
+                colour = mix(colour, core_colour, weight);
+                colour = mix(colour, [0.18, 0.22, 0.3], 0.35 * collar);
+                lift += 0.08 * weight * (1.0 - rho).max(0.0);
+                if rho < 0.75 {
+                    storm = true;
+                }
+            }
+        }
+    }
+    (colour, storm, lift)
 }
 
 /// Generates the giant world `p`: its cloud bands as the layers of a world.
@@ -811,5 +1040,42 @@ mod tests {
         );
         // The same parameters give the same world.
         assert_eq!(generate(&p, &|_| {}).world.surface, world.surface);
+    }
+
+    #[test]
+    fn poles_vary_and_cyclones_ring_them_like_jupiters() {
+        let mut styles = std::collections::HashMap::new();
+        for seed in 0..300 {
+            let look = Look::draw(&params("gas-giant", seed, 317.8, 5.2), 317.8);
+            for k in 0..2 {
+                *styles.entry(look.info.poles[k]).or_insert(0) += 1;
+                if look.info.poles[k] == PoleStyle::Cyclones {
+                    assert!((5..=9).contains(&look.info.polar_cyclones[k]));
+                    // Packed round the pole, within its polar region.
+                    let pole = look.poles[k];
+                    assert!(pole.ring_colat + pole.radius < 90.0 - look.polar + 10.0);
+                } else {
+                    assert_eq!(look.info.polar_cyclones[k], 0);
+                }
+            }
+            assert_eq!(
+                look.info.hexagon,
+                look.info.poles.contains(&PoleStyle::Hexagon)
+            );
+        }
+        let share = |s: PoleStyle| f64::from(styles.get(&s).copied().unwrap_or(0)) / 600.0;
+        assert!(
+            (0.4..0.7).contains(&share(PoleStyle::Cyclones)),
+            "{styles:?}"
+        );
+        assert!(
+            (0.08..0.3).contains(&share(PoleStyle::Hexagon)),
+            "{styles:?}"
+        );
+        // Ice giants: haze or a lone cyclone, no ring; hot giants: haze.
+        let ice = Look::draw(&params("ice-giant", 4, 17.1, 30.0), 17.1).info;
+        assert_eq!(ice.polar_cyclones, [0, 0]);
+        let hot = Look::draw(&params("hot-jupiter", 4, 300.0, 0.03), 300.0).info;
+        assert_eq!(hot.poles, [PoleStyle::Haze; 2]);
     }
 }
