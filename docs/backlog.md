@@ -338,7 +338,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   granulation, spots and faculae by type, corona glow, flares on red
   dwarfs) with its system around it (habitable zone, orbit, planet, not
   to scale), drawn procedurally in the browser from `world.json`, and an
-  optional animation (ten frames a second, off by default).
+  optional animation (off by default).
 - **Follow-up (2026-11-04):** the panel is split into *The star*, *The
   planet* and *Display*, names the spectral class (a G2V is a yellow
   dwarf) and explains each value in a tooltip; it gives the planet's
@@ -347,3 +347,11 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   prominences (H-alpha arcs, more on cooler stars, none above F) that can
   be hidden, and an eruption every nine seconds on animated M, K and G
   stars.
+- **Follow-up (2026-11-04):** the animation runs on the display's clock
+  (thirty frames a second at most, steps capped at 0.1 s) instead of a
+  ten-a-second timer whose late ticks fired in bursts and made the planet
+  jump; Kepler's equation is solved within one turn, so orbits above an
+  eccentricity of 0.8 no longer jump either. A clock line gives the time
+  factor and the day of the year; a test checks that the animated motion
+  and the vis-viva speed agree. Switching worlds no longer flashes the
+  Sun's system while the next world loads.
