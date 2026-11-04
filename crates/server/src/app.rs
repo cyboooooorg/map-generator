@@ -1479,6 +1479,31 @@ mod tests {
     }
 
     /// Waits for the end of a job and returns its event stream.
+    #[tokio::test]
+    async fn an_epoch_of_a_world_is_a_world_of_its_own() {
+        let app = router(temp_config("drift"));
+        let request = |drift: &str| {
+            format!(r#"{{"planet":"barren","seed":7,"width":64,"height":32{drift}}}"#)
+        };
+        let (status, present) = call(&app, "POST", "/api/worlds", Some(&request(""))).await;
+        assert_eq!(status, StatusCode::ACCEPTED, "{present}");
+        wait_job(&app, &present).await;
+        let (status, past) = call(
+            &app,
+            "POST",
+            "/api/worlds",
+            Some(&request(r#","drift_ma":-40"#)),
+        )
+        .await;
+        // Not a conflict with the present: an id of its own, listed.
+        assert_eq!(status, StatusCode::ACCEPTED, "{past}");
+        let created: serde_json::Value = serde_json::from_str(&past).unwrap();
+        assert_eq!(created["world_id"], "barren-past40ma-7");
+        wait_job(&app, &past).await;
+        assert_eq!(world_width(&app, "barren-past40ma-7").await, Some(64));
+        assert_eq!(world_width(&app, "barren-7").await, Some(64));
+    }
+
     async fn wait_job(app: &Router, created: &str) -> String {
         let created: serde_json::Value = serde_json::from_str(created).unwrap();
         let uri = format!("/api/jobs/{}/events", created["job_id"].as_str().unwrap());

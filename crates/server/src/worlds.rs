@@ -4,7 +4,9 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-/// Whether `id` is a world directory name (`<planet>-<seed>`). Anything else
+/// Whether `id` is a world directory name (`<planet>-<seed>`, or
+/// `<planet>-<epoch>-<seed>` for a world at another epoch of its plates,
+/// see `mapgen::export::world_dir_name`). Anything else
 /// is refused before touching the file system, which rules out path traversal.
 pub fn is_valid_id(id: &str) -> bool {
     let Some((planet, seed)) = id.rsplit_once('-') else {
@@ -553,6 +555,9 @@ mod tests {
     fn ids_follow_the_directory_pattern() {
         assert!(is_valid_id("terran-42"));
         assert!(is_valid_id("mars-like-4"));
+        // Another epoch of its plates (mapgen's `world_dir_name`).
+        assert!(is_valid_id("terran-past250ma-42"));
+        assert!(is_valid_id("terran-future12p5ma-42"));
         for bad in [
             "terran", "-42", "terran-", "../etc-1", "Terran-1", "a/b-1", "x-1a",
         ] {

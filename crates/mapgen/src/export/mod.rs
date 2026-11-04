@@ -39,9 +39,29 @@ impl Default for ExportOptions {
     }
 }
 
-/// Name of a world's output directory: `<planet>-<seed>`.
+/// Name of a world's output directory, its id: `<planet>-<seed>` at the
+/// present, `<planet>-<epoch>-<seed>` with its plates moved to another
+/// epoch (`terran-past250ma-42`, `terran-future12p5ma-42`; see
+/// [`drift_label`]), so that the epochs of one world never collide. The
+/// seed stays last: the server reads an id as `<anything>-<digits>`.
 pub fn world_dir_name(params: &WorldParams) -> String {
-    format!("{}-{}", params.planet.name, params.seed)
+    match drift_label(params.drift_ma) {
+        None => format!("{}-{}", params.planet.name, params.seed),
+        Some(epoch) => format!("{}-{epoch}-{}", params.planet.name, params.seed),
+    }
+}
+
+/// The epoch of a drift in an id: `None` at the present, else `past` or
+/// `future` and the Ma, a decimal point written `p` (ids hold lowercase
+/// letters, digits and dashes only).
+pub fn drift_label(drift_ma: f32) -> Option<String> {
+    if drift_ma == 0.0 {
+        return None;
+    }
+    let side = if drift_ma < 0.0 { "past" } else { "future" };
+    // The shortest decimal that reads back the same f32 (12.5, not 12.50).
+    let ma = format!("{}", drift_ma.abs()).replace('.', "p");
+    Some(format!("{side}{ma}ma"))
 }
 
 /// Writes every output of a generated world into `dir` (created if needed).
@@ -577,8 +597,25 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
 
 #[cfg(test)]
 mod tests {
-    use super::{Biome, latitude_row, water_colour};
+    use super::{Biome, drift_label, latitude_row, water_colour};
     use crate::export::colour::to_srgb;
+
+    #[test]
+    fn epochs_of_a_world_get_ids_of_their_own() {
+        assert_eq!(drift_label(0.0), None);
+        assert_eq!(drift_label(-250.0).as_deref(), Some("past250ma"));
+        assert_eq!(drift_label(12.5).as_deref(), Some("future12p5ma"));
+        assert_eq!(drift_label(-0.1).as_deref(), Some("past0p1ma"));
+        for drift in [-300.0f32, -12.5, 0.1, 300.0] {
+            let label = drift_label(drift).unwrap();
+            assert!(
+                label
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                "{label}"
+            );
+        }
+    }
 
     #[test]
     fn water_darkens_with_depth_without_a_deep_ocean_step() {
