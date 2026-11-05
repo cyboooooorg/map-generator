@@ -17,6 +17,8 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   Points,
+  Raycaster,
+  Vector2,
   RingGeometry,
   SRGBColorSpace,
   Scene,
@@ -117,6 +119,10 @@ export class StarView {
   onLabels: (labels: SystemLabels | null) => void = () => {};
   /** Called on each animated frame with the share of the year elapsed since the periapsis (0 to 1). */
   onClock: (yearFraction: number) => void = () => {};
+  /** Called with a planet's index (in setStar's `giants`) when it is clicked; null ignores clicks. */
+  onPickPlanet: ((index: number) => void) | null = null;
+  /** Where a press started, to tell a click from a drag. */
+  private pressAt: { x: number; y: number } | null = null;
   private disposed = false;
   /** The planet's moons around it (see setMoons), centred on the barycentre. */
   private readonly moonGroup = new Group();
@@ -144,6 +150,15 @@ export class StarView {
     this.controls.addEventListener('change', () => this.requestRender());
     // Only the user's drags and wheels start the controls, not resetView.
     this.controls.addEventListener('start', () => (this.userMoved = true));
+    // A click on a planet's marker picks it (a drag turns the view).
+    canvas.addEventListener('pointerdown', (event) => (this.pressAt = { x: event.clientX, y: event.clientY }));
+    canvas.addEventListener('pointerup', (event) => {
+      const at = this.pressAt;
+      this.pressAt = null;
+      if (!at || !this.onPickPlanet || Math.hypot(event.clientX - at.x, event.clientY - at.y) > 5) return;
+      const index = this.planetAt(event.clientX, event.clientY);
+      if (index !== null) this.onPickPlanet(index);
+    });
 
     const field = starField();
     const skyGeometry = new BufferGeometry();
@@ -552,6 +567,39 @@ export class StarView {
     this.controls.target.set(0, 0, 0);
     this.controls.update();
     this.requestRender();
+  }
+
+  /**
+   * The planet under a point of the screen (client px), by its index in
+   * setStar's `giants`: the nearest marker within a few pixels.
+   */
+  private planetAt(clientX: number, clientY: number): number | null {
+    const rect = this.canvas.getBoundingClientRect();
+    let best: number | null = null;
+    let bestDistance = 12;
+    this.giantMarkers.forEach((marker, i) => {
+      if (!marker.visible) return;
+      const p = marker.getWorldPosition(new Vector3()).project(this.camera);
+      if (p.z > 1) return;
+      const x = rect.left + ((p.x + 1) / 2) * rect.width;
+      const y = rect.top + ((1 - p.y) / 2) * rect.height;
+      const d = Math.hypot(x - clientX, y - clientY);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = i;
+      }
+    });
+    // A marker larger than the tolerance: the ray through it.
+    if (best === null) {
+      const ray = new Raycaster();
+      ray.setFromCamera(
+        new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1),
+        this.camera,
+      );
+      const hit = ray.intersectObjects(this.giantMarkers, false)[0];
+      if (hit) best = this.giantMarkers.indexOf(hit.object as (typeof this.giantMarkers)[number]);
+    }
+    return best;
   }
 
   dispose(): void {
