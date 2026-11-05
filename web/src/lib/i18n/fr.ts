@@ -70,6 +70,9 @@ export const fr: Messages = {
     generate: 'Générer ses cartes',
   },
   systemList: {
+    orreryHelp: (p) => `${p.planets} ${p.planets === 1 ? 'planète' : 'planètes'}${p.zone}`,
+    orreryZone: (p) => ` · zone habitable de ${p.inner} à ${p.outer}`,
+    orreryStub: (p) => `${p.name} (pas encore générée)`,
     empty: `Aucun système pour l’instant${S}: tirez-en un avec Nouveau système.`,
     noMatch: 'Aucun système ne correspond.',
     search: 'Chercher un nom, une désignation ou une graine',

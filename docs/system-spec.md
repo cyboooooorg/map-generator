@@ -319,9 +319,11 @@ addressed as `<system-id>/<body-id>` everywhere.
   names and seeds; selecting several and deleting work as today. A row's
   thumbnail, and the compare bar's, is a small orrery drawn from the
   summary: the star in its light's colour, the habitable zone as a faint
-  green ring, and each planet as a dot on its orbit (a square-root scale
-  of the semi-major axis, filling the box), coloured as its preview,
-  giants larger, those not generated yet outlined.
+  green ring, and each planet as a dot on its orbit (an ellipse with the
+  star at a focus, on a square-root scale of the distance, filling the
+  box), coloured as its preview, giants larger, those not generated yet
+  outlined; hovering it gives the planet count and the zone, and each
+  dot its planet's name.
 - **Form.** **New system** asks for a mode first:
   - *A whole system*: the star (type or drawn), a number per planet type
     (their sum at most 15, each one checked against the star's zones as
