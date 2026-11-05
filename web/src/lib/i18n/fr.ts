@@ -521,7 +521,13 @@ export const fr: Messages = {
     spinAxesHelp:
       `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite`,
     orbitsHelp: 'Avance les lunes sur leurs orbites, d’autant de jours après la saison (leurs phases, leurs éclipses)',
-    playOrbitsHelp: `Faire défiler les orbites${S}: une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
+    playOrbitsHelp: `Faire défiler les orbites${S}: à ×1, une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
+    orbitSpeed: 'Vitesse',
+    orbitSpeedHelp: `Vitesse du défilement des orbites${S}: ×1 fait une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
+    orbitSpeedRate: (p) => `1${S}s de défilement = ${p.time}`,
+    minuteUnit: 'min',
+    hourUnit: 'h',
+    dayUnit: 'j',
     orbitDay: (p) => `Jour ${p.days} d’une orbite de ${p.period}${S}jours`,
     moonSun: `Sur une lune, le soleil suit son orbite${S}: il en fait le tour une fois par mois, la lune gardant sa face vers sa planète`,
     moonSunSpin: ({ hours }: { hours: string }) =>

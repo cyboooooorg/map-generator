@@ -18,6 +18,8 @@ import type { System } from './api/types/System';
 import { IDENTITY_AXES, MAX_CASTERS, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
 
 const AU_KM = 1.495_978_707e8;
+/** The Sun's radius, km. */
+const SUN_RADIUS_KM = 695_700;
 const DEG = Math.PI / 180;
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -141,7 +143,8 @@ const ROCK: Vec3 = [0.32, 0.3, 0.28];
  * shown, with its axes, its map when it is generated (`textures(id)`, null
  * otherwise) or its preview; the largest shadows; the orbits of the planets
  * round the star and of the moons of the shown body's planet; and the
- * star's direction, for the light. `spinOffset` turns the body shown on
+ * star's direction, for the light, and its place and radius (in radii of
+ * the body shown), to draw it there. `spinOffset` turns the body shown on
  * itself (see placeSystem).
  */
 export function systemSky(
@@ -150,11 +153,20 @@ export function systemSky(
   days: number,
   textures: (id: string) => string | null,
   spinOffset = 0,
-): { bodies: SkyBody[]; ids: string[]; casters: ShadowCaster[]; orbits: Vec3[][]; sun: Vec3 } {
+): {
+  bodies: SkyBody[];
+  ids: string[];
+  casters: ShadowCaster[];
+  orbits: Vec3[][];
+  sun: Vec3;
+  star: { position: Vec3; radius: number };
+} {
   const placements = placeSystem(system, days, { id: shown, spinOffset });
   const self = system.bodies.find((b) => b.id === shown);
   const here = placements.get(shown);
-  if (!self || !here) return { bodies: [], ids: [], casters: [], orbits: [], sun: [0, 0, 1] };
+  if (!self || !here) {
+    return { bodies: [], ids: [], casters: [], orbits: [], sun: [0, 0, 1], star: { position: [0, 0, 1e9], radius: 1 } };
+  }
   const [ax, ay, az] = here.axes;
   const unitKm = Math.max(self.physical.radius_km, 1e-6);
   const local = (v: Vec3): Vec3 => [dot(v, ax), dot(v, ay), dot(v, az)];
@@ -223,7 +235,28 @@ export function systemSky(
     casters: casters.sort((p, q) => q.radius - p.radius).slice(0, MAX_CASTERS),
     orbits,
     sun: unit(local(scale(here.centre, -1))),
+    star: { position: place([0, 0, 0]), radius: (system.star.info.radius * SUN_RADIUS_KM) / unitKm },
   };
+}
+
+/**
+ * How far out the camera must be able to go, in radii of body `shown`
+ * from its centre, to see its planet's system of moons whole: three times
+ * the furthest a moon of that planet (or the planet, from a moon) gets
+ * from the body shown, which puts that distance well inside the view's
+ * 40° field. Null for a body with nothing round it to see.
+ */
+export function systemReach(system: System, shown: string): number | null {
+  const self = system.bodies.find((b) => b.id === shown);
+  if (!self) return null;
+  const planet = self.parent ?? self.id;
+  const apo = (o: Orbit) => o.semi_major_axis_km * (1 + Math.min(Math.max(o.eccentricity, 0), 0.95));
+  // From a moon, its own distance to the planet plus the furthest moon's.
+  const own = self.parent ? apo(self.orbit) : 0;
+  const moons = system.bodies.filter((b) => b.parent === planet && b.id !== shown);
+  const furthest = Math.max(own, ...moons.map((b) => own + apo(b.orbit)));
+  if (furthest <= 0) return null;
+  return (3 * furthest) / Math.max(self.physical.radius_km, 1e-6);
 }
 
 /** The shown body's distance from the star, AU (for the light it gets). */

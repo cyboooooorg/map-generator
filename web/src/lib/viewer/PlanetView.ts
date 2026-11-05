@@ -505,6 +505,16 @@ export class PlanetView {
   private skyRequest = 0;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
+  /**
+   * The host star's centre and radius in radii of the body shown, in its
+   * frame (see setStarPlace); null to draw it at infinity, at the sun's
+   * direction.
+   */
+  private starPlace: { position: Vector3; radius: number } | null = null;
+  /** How far out the camera may go on the globe, radii from the centre (see setGlobeReach). */
+  private globeReach = GLOBE_MAX_DISTANCE;
+  /** The last turn of the stars (see setStarsTurn), not wrapped. */
+  private starsTurned = 0;
   /** Whether the planet is lit with its star's colour. */
   private starLightOn = false;
   /** Whether the world has an atmosphere to draw. */
@@ -1234,6 +1244,36 @@ export class PlanetView {
   }
 
   /**
+   * Where the host star is, in radii of the body shown and in its frame,
+   * with its radius: drawn from there, so that the camera moving far out
+   * sees it at the centre of the orbits round it. Null draws it at
+   * infinity, at the sun's direction.
+   */
+  setStarPlace(place: { position: Vec3; radius: number } | null): void {
+    this.starPlace = place ? { position: new Vector3(...place.position), radius: place.radius } : null;
+    this.requestRender();
+  }
+
+  /**
+   * How far out the camera may go on the globe, in radii of the body
+   * from its centre: at least the usual reach, more to see a system of
+   * moons whole. The camera is brought back in if it was further.
+   */
+  setGlobeReach(radii: number): void {
+    const reach = Math.max(GLOBE_MAX_DISTANCE, radii);
+    if (reach === this.globeReach) return;
+    this.globeReach = reach;
+    if (this.mode === 'globe') {
+      this.controls.maxDistance = reach;
+      if (this.camera.position.length() > reach) {
+        this.camera.position.setLength(reach);
+        this.controls.update();
+      }
+    }
+    this.requestRender();
+  }
+
+  /**
    * Lights the planet and its sky with its star's light ("Star light"),
    * white-balanced on the Sun, or with white light.
    */
@@ -1270,13 +1310,19 @@ export class PlanetView {
    * its sky.
    */
   setStarsTurn(radians: number, follow = false): void {
-    const step = radians - this.stars.rotation.y;
-    // The shortest way round (the angle wraps once a turn).
-    const delta = Math.atan2(Math.sin(step), Math.cos(step));
-    this.stars.rotation.y = radians;
+    // Not wrapped: a body turning more than half a turn between two frames
+    // keeps its sense of rotation.
+    const delta = radians - this.starsTurned;
+    this.starsTurned = radians;
+    const wrapped = radians - 2 * Math.PI * Math.floor(radians / (2 * Math.PI));
+    this.stars.rotation.y = wrapped;
+    // The arrow of the sense of rotation is fixed against the stars, not
+    // turning with the globe.
+    if (this.spinAxis) this.spinAxis.rotation.y = wrapped;
     // The camera turned with them about the spin axis, on the globe: the
-    // stars stay still on the screen and the globe turns under them.
-    if (follow && this.mode === 'globe' && !this.animation) {
+    // camera is still against the stars, the sun and the orbits, and the
+    // globe turns under it.
+    if (follow && delta !== 0 && this.mode === 'globe' && !this.animation) {
       const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), delta);
       this.camera.position.applyQuaternion(turn);
       this.camera.up.applyQuaternion(turn);
@@ -1586,7 +1632,7 @@ export class PlanetView {
     this.controls.zoomToCursor = !globe;
     this.controls.screenSpacePanning = true;
     this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : MAP_MIN_DISTANCE;
-    this.controls.maxDistance = globe ? GLOBE_MAX_DISTANCE : MAP_MAX_DISTANCE;
+    this.controls.maxDistance = globe ? this.globeReach : MAP_MAX_DISTANCE;
     this.controls.mouseButtons = globe
       ? { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
       : { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
@@ -1900,6 +1946,7 @@ export class PlanetView {
       this.spinAxis = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true }));
       this.spinAxis.frustumCulled = false;
       this.spinAxis.renderOrder = 2;
+      this.spinAxis.rotation.y = this.stars.rotation.y;
       this.scene.add(this.spinAxis);
     }
     this.requestRender();
@@ -1943,7 +1990,9 @@ export class PlanetView {
     };
     return {
       bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction)),
-      star: at(this.u.uSunDir.value),
+      star: at(
+        this.starPlace ? this.starPlace.position.clone().sub(this.camera.position) : this.u.uSunDir.value,
+      ),
     };
   }
 
@@ -2072,11 +2121,21 @@ export class PlanetView {
       return;
     }
     const position = this.hostStar.geometry.getAttribute('position') as BufferAttribute;
-    position.setXYZ(0, ...this.u.uSunDir.value.toArray());
+    // From its place when it has one, so that it stays at the centre of
+    // the planets' orbits wherever the camera goes; else at infinity.
+    let diameterDeg = this.host.angularDiameterDeg;
+    if (this.starPlace) {
+      const d = this.starPlace.position.clone().sub(this.camera.position);
+      const distance = Math.max(d.length(), 1e-9);
+      position.setXYZ(0, ...d.divideScalar(distance).toArray());
+      diameterDeg = (2 * Math.asin(Math.min(this.starPlace.radius / distance, 0.999)) * 180) / Math.PI;
+    } else {
+      position.setXYZ(0, ...this.u.uSunDir.value.toArray());
+    }
     position.needsUpdate = true;
     const pixelsPerDegree = this.renderer.domElement.height / this.camera.fov;
     const ratio = this.renderer.getPixelRatio();
-    const disk = Math.max(this.host.angularDiameterDeg * pixelsPerDegree, 3 * ratio);
+    const disk = Math.max(diameterDeg * pixelsPerDegree, 3 * ratio);
     const glow = Math.min(1.2, 0.55 * this.host.insolation ** 0.25);
     const u = this.hostStar.material.uniforms;
     u['uDisk']!.value = disk;
@@ -2153,7 +2212,7 @@ export class PlanetView {
     const anchor = this.globePointAt(event.clientX, event.clientY);
     const relief = this.shared.uRelief.value * RELIEF_SCALE;
     const altitude = Math.min(
-      GLOBE_DISTANCE * 2.5,
+      Math.max(GLOBE_DISTANCE * 2.5, this.globeReach - 1),
       Math.max(MIN_ALTITUDE + relief, this.altitude() * Math.exp(event.deltaY * 0.0015)),
     );
     this.camera.position.setLength(1 + altitude);

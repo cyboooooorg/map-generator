@@ -555,7 +555,13 @@ export const en = {
     spinAxesHelp:
       'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
     orbitsHelp: 'Moves the moons along their orbits, as many days after the season (their phases, their eclipses)',
-    playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds',
+    playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds at ×1',
+    orbitSpeed: 'Speed',
+    orbitSpeedHelp: 'How fast the orbits play: ×1 runs one orbit of the moon shown, or of the largest, every 10 seconds',
+    orbitSpeedRate: (p: { time: string }) => `1 s of playback = ${p.time}`,
+    minuteUnit: 'min',
+    hourUnit: 'h',
+    dayUnit: 'd',
     orbitDay: (p: { days: string; period: string }) => `Day ${p.days} of a ${p.period}-day orbit`,
     moonSun: 'On a moon the sun follows its orbit: it turns once a month, the moon keeping its face to its planet',
     moonSunSpin: ({ hours }: { hours: string }) =>
