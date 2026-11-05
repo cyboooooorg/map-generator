@@ -33,4 +33,11 @@ describe('label layout', () => {
     expect(label!.visible).toBe(true);
     expect(label!.dy).not.toBe(0);
   });
+
+  it('moves a tilted label by its step, not by its tall box', () => {
+    const [, tilted] = layoutLabels([box(0, 0, 100, 20), { ...box(0, 10, 20, 60), step: 18 }]);
+    expect(tilted!.visible).toBe(true);
+    expect(Math.abs(tilted!.dy) % 18).toBe(0);
+    expect(Math.abs(tilted!.dy)).toBeLessThanOrEqual(36);
+  });
 });

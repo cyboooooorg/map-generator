@@ -340,12 +340,15 @@ addressed as `<system-id>/<body-id>` everywhere.
   session while the system is shown, the planet view included. A double
   click, or the card's button, opens the planet. The planet picked keeps
   its orbit line, its moons and its apsides; the scale (linear to just
-  beyond the habitable zone, then compressed) and the clock (the
-  innermost planet's year in 10 seconds, faster with **Speed**) are the
+  beyond the habitable zone, then compressed) and the clock (in
+  Earth days per second, a day a second at the slowest) are the
   system's, so picking another planet moves nothing else.
-  Every planet has a dotted line to the star labelled with its distance
-  now, and a velocity arrow along its orbit labelled with its speed now
-  (**Lines to the star** and **Velocities** hide them).
+  Every planet has a dotted line to the star with its distance now
+  written along it, a velocity arrow along its orbit labelled with its
+  speed now, and an arrow of the star's pull towards the star (**Lines to
+  the star**, **Velocities** and **Star's pull** hide them); its name
+  sits on the side away from its velocity. The habitable zone is
+  crossed by a dashed line giving its width and area.
 - **A body not generated.** Picking it shows its sphere in the planet
   view (lit, with its axis and its sky) and its card, with **Generate**.
   Pressing it, or picking a body whose neighbourhood is not complete,
