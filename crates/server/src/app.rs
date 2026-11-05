@@ -15,6 +15,14 @@
 //! | `GET /api/worlds/{id}/epoch/{ma}/{file}?rev=&scale=` | `surface.png`, `elevation.png` or `biomes.png` of a world at an epoch (see [`mapgen::epoch`]) |
 //! | `GET /api/worlds/{id}/host/siblings/{n}/tiles/…`, `…/epoch/…` | the same for the other moons of a giant whose moon the world is |
 //! | `GET /api/worlds/{id}/thumb?rev=` | thumbnail (PNG), made for older worlds (see [`thumbs`]) |
+//! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
+//! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
+//! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
+//! | `DELETE /api/systems/{id}`      | delete a system (409 while it is being generated)  |
+//! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
+//! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
+//! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body |
+//! | `GET /systems/{id}/...`         | system files (`system.json`, `bodies/<body>/…`)   |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
@@ -29,11 +37,13 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, CreateQuery, ErrorDetail, FormSpec, GivenNames, HexRequest, JobCreated, JobInfo,
-    JobStatus, ParamSpec, PresetInfo, WorldSummary,
+    ApiError, CreateQuery, ErrorDetail, FormSpec, GenerateStarted, GivenNames, HexRequest,
+    JobCreated, JobInfo, JobStatus, ParamSpec, PresetInfo, SystemCreated, SystemDetail,
+    SystemNames, SystemQuery, SystemSummary, WorldSummary,
 };
 use crate::catalog::Catalog;
 use crate::memory;
+use crate::systems;
 use crate::thumbs::{ThumbError, Thumbnails};
 use crate::tiles::{self, TileCache, TileError};
 use crate::worlds;
@@ -50,7 +60,7 @@ use mapgen::hex::{self, DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{Notify, Semaphore, watch};
@@ -77,6 +87,8 @@ const FINISHED_JOBS_KEPT: usize = 20;
 /// A generation job: its progress, and how to cancel it.
 struct Job {
     world_id: String,
+    /// A system's job: the system and the body asked for.
+    system: Option<(String, String)>,
     request: WorldRequest,
     status: watch::Receiver<JobStatus>,
     cancel: Arc<Cancel>,
@@ -109,6 +121,8 @@ struct Cancelled;
 #[derive(Clone, Debug)]
 pub struct Config {
     pub worlds_dir: PathBuf,
+    /// Drawn systems (see [`systems`]).
+    pub systems_dir: PathBuf,
     pub presets_dir: PathBuf,
     /// Built front-end (`web/dist`); missing in development, where Vite serves it.
     pub static_dir: PathBuf,
@@ -199,6 +213,7 @@ fn world_failure(error: TileError, what: &str) -> Response {
 pub fn router(config: Config) -> Router {
     // Exports a killed server left unfinished.
     worlds::sweep_temp_dirs(&config.worlds_dir);
+    systems::sweep(&config.systems_dir);
     let catalog = Catalog::load(&config.presets_dir);
     let state = Arc::new(AppState {
         catalog,
@@ -230,6 +245,7 @@ pub fn router(config: Config) -> Router {
         ));
     let files = Router::new()
         .nest_service("/worlds", ServeDir::new(&config.worlds_dir))
+        .nest_service("/systems", ServeDir::new(&config.systems_dir))
         .fallback_service(spa)
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
@@ -265,6 +281,26 @@ pub fn router(config: Config) -> Router {
             get(sibling_epoch_layer),
         )
         .route("/api/worlds/{id}/thumb", get(thumbnail))
+        .route("/api/systems", get(list_systems).post(create_system))
+        .route("/api/systems/{id}", get(get_system).delete(delete_system))
+        .route("/api/systems/{id}/names", put(rename_system))
+        .route(
+            "/api/systems/{id}/bodies/{body}/generate",
+            post(generate_body),
+        )
+        .route(
+            "/api/systems/{id}/bodies/{body}/tiles/{z}/{x}/{y}",
+            get(system_tile),
+        )
+        .route(
+            "/api/systems/{id}/bodies/{body}/epoch/{epoch}/{file}",
+            get(system_epoch_layer),
+        )
+        .route(
+            "/api/systems/{id}/bodies/{body}/thumb",
+            get(system_thumbnail),
+        )
+        .route("/api/systems/{id}/bodies/{body}/hex", post(system_hex))
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
         .route("/api/jobs/{id}/events", get(job_events))
@@ -329,6 +365,268 @@ async fn list_worlds(State(state): State<Shared>) -> Json<Vec<WorldSummary>> {
             .await
             .unwrap_or_default(),
     )
+}
+
+/// The key a system takes in the list of pending generations (beside world
+/// ids): a system cannot be deleted, renamed away or replaced meanwhile.
+/// A failure the client can fix.
+fn bad(message: String) -> Failure {
+    Failure(StatusCode::BAD_REQUEST, message)
+}
+
+fn pending_system(id: &str) -> String {
+    format!("systems/{id}")
+}
+
+async fn list_systems(State(state): State<Shared>) -> Json<Vec<SystemSummary>> {
+    let root = state.config.systems_dir.clone();
+    Json(
+        tokio::task::spawn_blocking(move || systems::list(&root))
+            .await
+            .unwrap_or_default(),
+    )
+}
+
+/// Draws a system and writes its `system.json` (`POST /api/systems`). A
+/// system of the same id is refused with 409 unless the query replaces it.
+async fn create_system(
+    State(state): State<Shared>,
+    Query(query): Query<SystemQuery>,
+    Json(request): Json<mapgen::system::SystemRequest>,
+) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
+    let drawn = request.clone();
+    let system =
+        tokio::task::spawn_blocking(move || mapgen::system::draw(&drawn, &mut rand::rng()))
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .map_err(|e| Rejection(bad(e.to_string()), ErrorDetail::of_request(&e)))?;
+    let pixels = u64::from(system.width) * u64::from(system.height);
+    if pixels > state.config.max_pixels {
+        return Err(Rejection(
+            bad(format!(
+                "{} × {} is more than the {} pixels this server accepts",
+                system.width, system.height, state.config.max_pixels
+            )),
+            Some(ErrorDetail::TooManyPixels {
+                width: system.width,
+                height: system.height,
+                max_pixels: state.config.max_pixels,
+            }),
+        ));
+    }
+    let id = mapgen::system::system_id(&system);
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("invalid system id {id}"),
+        )
+        .into());
+    }
+    let replace = query.replace.unwrap_or(false);
+    if state
+        .pending
+        .lock()
+        .expect("pending lock")
+        .contains(&pending_system(&id))
+    {
+        return Err(Rejection(
+            Failure(
+                StatusCode::CONFLICT,
+                format!("system {id} is being generated"),
+            ),
+            Some(ErrorDetail::BeingGenerated { world: id }),
+        ));
+    }
+    let root = state.config.systems_dir.clone();
+    let target = systems::system_dir(&root, &id);
+    if !replace && target.exists() {
+        return Err(Rejection(
+            Failure(
+                StatusCode::CONFLICT,
+                format!("system {id} already exists: replace it, delete it or pick another seed"),
+            ),
+            Some(ErrorDetail::SystemExists { system: id }),
+        ));
+    }
+    let written = id.clone();
+    tokio::task::spawn_blocking(move || {
+        let temp = crate::staging::TempDir::create(&root, &written)?;
+        mapgen::system::write_system(temp.path(), &system)?;
+        if replace {
+            temp.commit_replacing(&target)
+        } else {
+            temp.commit(&target)
+        }
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    state.tiles.forget(&format!("systems/{id}"));
+    let job_id = match &request {
+        mapgen::system::SystemRequest::Around(_) => first_body_job(&state, &id).await?,
+        mapgen::system::SystemRequest::System(_) => None,
+    };
+    Ok((
+        StatusCode::CREATED,
+        Json(SystemCreated {
+            system_id: id,
+            job_id,
+        }),
+    ))
+}
+
+/// Queues the body a system made around a planet was drawn for (its
+/// `focus`: the planet asked, or the moon of a giant asked) and its
+/// neighbourhood.
+async fn first_body_job(state: &Shared, id: &str) -> Result<Option<String>, Rejection> {
+    let root = state.config.systems_dir.clone();
+    let owned = id.to_string();
+    let focus = tokio::task::spawn_blocking(move || {
+        mapgen::system::read_system(&systems::system_dir(&root, &owned)).map(|s| s.focus)
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    match focus {
+        Some(body) => queue_body(state, id, &body).await,
+        None => Ok(None),
+    }
+}
+
+async fn get_system(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> Result<Json<SystemDetail>, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    let root = state.config.systems_dir.clone();
+    let owned = id.clone();
+    tokio::task::spawn_blocking(move || {
+        let system = mapgen::system::read_system(&systems::system_dir(&root, &owned)).ok()?;
+        Some(SystemDetail {
+            system,
+            names: systems::given_names(&root, &owned),
+        })
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map(Json)
+    .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))
+}
+
+async fn delete_system(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> Result<StatusCode, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    if state
+        .pending
+        .lock()
+        .expect("pending lock")
+        .contains(&pending_system(&id))
+    {
+        return Err(Failure(
+            StatusCode::CONFLICT,
+            format!("system {id} is being generated: cancel its job first"),
+        ));
+    }
+    let dir = systems::system_dir(&state.config.systems_dir, &id);
+    if !dir.is_dir() {
+        return Err(Failure(StatusCode::NOT_FOUND, format!("no system {id}")));
+    }
+    let forgotten = state.tiles.forget(&format!("systems/{id}"));
+    tokio::fs::remove_dir_all(&dir)
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if forgotten {
+        let _ = tokio::task::spawn_blocking(memory::release).await;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Gives names to the bodies of a system (`PUT /api/systems/{id}/names`),
+/// and answers its summary.
+async fn rename_system(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    Json(request): Json<SystemNames>,
+) -> Result<Json<SystemSummary>, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    let root = state.config.systems_dir.clone();
+    let owned = id.clone();
+    let result =
+        tokio::task::spawn_blocking(move || systems::give_names(&root, &owned, &request.names))
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    result.map(Json).map_err(|e| match e {
+        systems::NamingError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no system {id}")),
+        systems::NamingError::InvalidName(name) => Failure(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!(
+                "invalid name {name:?}: 1 to {} characters, without control characters",
+                systems::MAX_NAME_CHARS
+            ),
+        ),
+        systems::NamingError::NoSuchBody(body) => Failure(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!("system {id} has no body {body}"),
+        ),
+        systems::NamingError::Io(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
+    })
+}
+
+async fn system_tile(
+    State(state): State<Shared>,
+    UrlPath((id, body, z, x, y)): UrlPath<(String, String, u32, u32, u32)>,
+    Query(query): Query<TileQuery>,
+) -> Result<Response, Failure> {
+    let loc = system_body_loc(&state, &id, &body).await?;
+    body_tile(state, loc, TileId { z, x, y }, query).await
+}
+
+async fn system_epoch_layer(
+    State(state): State<Shared>,
+    UrlPath((id, body, epoch_ma, file)): UrlPath<(String, String, i32, String)>,
+    Query(query): Query<EpochQuery>,
+) -> Result<Response, Failure> {
+    let loc = system_body_loc(&state, &id, &body).await?;
+    body_epoch_layer(state, loc, epoch_ma, file, query).await
+}
+
+async fn system_thumbnail(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+    Query(query): Query<ThumbQuery>,
+) -> Result<Response, Failure> {
+    let loc = system_body_loc(&state, &id, &body).await?;
+    body_thumbnail(state, loc, query).await
+}
+
+async fn system_hex(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+    Json(request): Json<HexRequest>,
+) -> Result<Response, Failure> {
+    let loc = system_body_loc(&state, &id, &body).await?;
+    body_hex(state, loc, request).await
+}
+
+/// Queues the generation of a body and its neighbourhood
+/// (`POST /api/systems/{id}/bodies/{body}/generate`).
+async fn generate_body(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+) -> Result<Json<GenerateStarted>, Rejection> {
+    if !systems::is_valid_system_id(&id) || !systems::is_valid_body_id(&body) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid body".into()).into());
+    }
+    let job_id = queue_body(&state, &id, &body).await?;
+    Ok(Json(GenerateStarted { job_id }))
 }
 
 /// Gives a world and its moons names (`PUT /api/worlds/{id}/names`), and
@@ -410,20 +708,19 @@ struct TileQuery {
 /// [`crate::api::WorldSummary::epochs_ma`]): 404 when it offers none, 400
 /// out of its range. Epoch 0 is the world as generated (`None`).
 async fn checked_epoch(
-    state: &AppState,
+    dir: &Path,
     id: &str,
     epoch_ma: Option<i32>,
 ) -> Result<Option<i32>, Failure> {
     let Some(epoch_ma) = epoch_ma.filter(|&e| e != 0) else {
         return Ok(None);
     };
-    let worlds_dir = state.config.worlds_dir.clone();
-    let owned = id.to_string();
-    let summary = tokio::task::spawn_blocking(move || worlds::summary(&worlds_dir, &owned))
+    let owned = dir.to_path_buf();
+    let epochs = tokio::task::spawn_blocking(move || worlds::epochs_at(&owned))
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no world {id}")))?;
-    let Some([future, past]) = summary.epochs_ma else {
+    let Some([future, past]) = epochs else {
         return Err(Failure(
             StatusCode::NOT_FOUND,
             format!(
@@ -441,6 +738,50 @@ async fn checked_epoch(
     Ok(Some(epoch_ma))
 }
 
+/// Where a body's files are, the key of its world in the tile cache, and
+/// its revision (which keys its cached tiles in browsers).
+struct BodyLoc {
+    dir: PathBuf,
+    key: String,
+    revision: u64,
+}
+
+/// A world, or a moon of a world (`<id>/moons/<n>`), in `worlds/`: it takes
+/// its world's revision, as it is generated with it.
+async fn world_loc(state: &AppState, id: String) -> Result<BodyLoc, Failure> {
+    let revision = world_revision(state, world_of(&id)).await?;
+    Ok(BodyLoc {
+        dir: state.config.worlds_dir.join(&id),
+        key: id,
+        revision,
+    })
+}
+
+/// A generated body of a system, in `systems/<id>/bodies/<body>/`: its own
+/// revision, so that generating another body keeps its tiles.
+async fn system_body_loc(state: &AppState, id: &str, body: &str) -> Result<BodyLoc, Failure> {
+    if !systems::is_valid_system_id(id) || !systems::is_valid_body_id(body) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid body".into()));
+    }
+    let root = state.config.systems_dir.clone();
+    let (system, owned) = (id.to_string(), body.to_string());
+    let revision =
+        tokio::task::spawn_blocking(move || systems::body_revision(&root, &system, &owned))
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or_else(|| {
+                Failure(
+                    StatusCode::NOT_FOUND,
+                    format!("body {body} of {id} is not generated"),
+                )
+            })?;
+    Ok(BodyLoc {
+        dir: systems::body_dir(&state.config.systems_dir, id, body),
+        key: format!("systems/{id}/{body}"),
+        revision,
+    })
+}
+
 async fn tile(
     State(state): State<Shared>,
     UrlPath((id, z, x, y)): UrlPath<(String, u32, u32, u32)>,
@@ -449,7 +790,13 @@ async fn tile(
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
     }
-    body_tile(state, id, TileId { z, x, y }, query).await
+    body_tile(
+        state.clone(),
+        world_loc(&state, id).await?,
+        TileId { z, x, y },
+        query,
+    )
+    .await
 }
 
 /// A detail tile of moon `moon` (from 1) of a world, as [`tile`].
@@ -459,7 +806,13 @@ async fn moon_tile(
     Query(query): Query<TileQuery>,
 ) -> Result<Response, Failure> {
     let body = moon_body(&id, moon)?;
-    body_tile(state, body, TileId { z, x, y }, query).await
+    body_tile(
+        state.clone(),
+        world_loc(&state, body).await?,
+        TileId { z, x, y },
+        query,
+    )
+    .await
 }
 
 /// The body path of moon `moon` (from 1) of world `id`, as the world
@@ -479,7 +832,13 @@ async fn sibling_tile(
     Query(query): Query<TileQuery>,
 ) -> Result<Response, Failure> {
     let body = sibling_body(&id, sibling)?;
-    body_tile(state, body, TileId { z, x, y }, query).await
+    body_tile(
+        state.clone(),
+        world_loc(&state, body).await?,
+        TileId { z, x, y },
+        query,
+    )
+    .await
 }
 
 /// A layer of sibling `sibling` (from 1) of a world at an epoch, as
@@ -490,7 +849,14 @@ async fn sibling_epoch_layer(
     Query(query): Query<EpochQuery>,
 ) -> Result<Response, Failure> {
     let body = sibling_body(&id, sibling)?;
-    body_epoch_layer(state, body, epoch_ma, file, query).await
+    body_epoch_layer(
+        state.clone(),
+        world_loc(&state, body).await?,
+        epoch_ma,
+        file,
+        query,
+    )
+    .await
 }
 
 /// The body path of sibling `sibling` (from 1) of world `id`, the moon of
@@ -514,17 +880,19 @@ const MAX_MOONS: u32 = 16;
 /// (`id/moons/n`, a world of its own in the world's directory).
 async fn body_tile(
     state: Shared,
-    id: String,
+    loc: BodyLoc,
     tile: TileId,
     query: TileQuery,
 ) -> Result<Response, Failure> {
     if !tile.is_valid() {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
     }
-    // A moon is generated with its world: it takes the world's revision.
-    let revision = world_revision(&state, world_of(&id)).await?;
-    let epoch = checked_epoch(&state, &id, query.epoch).await?;
-    let dir = state.config.worlds_dir.join(&id);
+    let BodyLoc {
+        dir,
+        key: id,
+        revision,
+    } = loc;
+    let epoch = checked_epoch(&dir, &id, query.epoch).await?;
     let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
         Ok(world) => world,
         Err(e) => return Ok(world_failure(e, "tiles")),
@@ -586,7 +954,14 @@ async fn epoch_layer(
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
     }
-    body_epoch_layer(state, id, epoch_ma, file, query).await
+    body_epoch_layer(
+        state.clone(),
+        world_loc(&state, id).await?,
+        epoch_ma,
+        file,
+        query,
+    )
+    .await
 }
 
 /// A layer of moon `moon` (from 1) of a world at an epoch, as
@@ -597,13 +972,20 @@ async fn moon_epoch_layer(
     Query(query): Query<EpochQuery>,
 ) -> Result<Response, Failure> {
     let body = moon_body(&id, moon)?;
-    body_epoch_layer(state, body, epoch_ma, file, query).await
+    body_epoch_layer(
+        state.clone(),
+        world_loc(&state, body).await?,
+        epoch_ma,
+        file,
+        query,
+    )
+    .await
 }
 
 /// A layer of a body (see [`body_tile`]) at an epoch.
 async fn body_epoch_layer(
     state: Shared,
-    id: String,
+    loc: BodyLoc,
     epoch_ma: i32,
     file: String,
     query: EpochQuery,
@@ -621,10 +1003,12 @@ async fn body_epoch_layer(
             "scale must be 1, 2 or 4".into(),
         ));
     }
-    // A moon is generated with its world: it takes the world's revision.
-    let revision = world_revision(&state, world_of(&id)).await?;
-    let epoch = checked_epoch(&state, &id, Some(epoch_ma)).await?;
-    let dir = state.config.worlds_dir.join(&id);
+    let BodyLoc {
+        dir,
+        key: id,
+        revision,
+    } = loc;
+    let epoch = checked_epoch(&dir, &id, Some(epoch_ma)).await?;
     let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
         Ok(world) => world,
         Err(e) => return Ok(world_failure(e, "epochs")),
@@ -676,8 +1060,21 @@ async fn thumbnail(
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
     }
-    let revision = world_revision(&state, &id).await?;
-    let dir = state.config.worlds_dir.join(&id);
+    let loc = world_loc(&state, id).await?;
+    body_thumbnail(state, loc, query).await
+}
+
+/// The thumbnail of a body (see [`thumbnail`]).
+async fn body_thumbnail(
+    state: Shared,
+    loc: BodyLoc,
+    query: ThumbQuery,
+) -> Result<Response, Failure> {
+    let BodyLoc {
+        dir,
+        key: id,
+        revision,
+    } = loc;
     let png = state.thumbnails.get(&dir).await.map_err(|e| match e {
         ThumbError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no map for {id}")),
         ThumbError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
@@ -720,6 +1117,12 @@ async fn hex_grid(
     if !worlds::is_valid_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
     }
+    let loc = world_loc(&state, id).await?;
+    body_hex(state, loc, request).await
+}
+
+/// The hex grid of a body (see [`hex_grid`]).
+async fn body_hex(state: Shared, loc: BodyLoc, request: HexRequest) -> Result<Response, Failure> {
     if !hex::COLUMNS.contains(&request.columns) {
         return Err(Failure(
             StatusCode::BAD_REQUEST,
@@ -730,14 +1133,17 @@ async fn hex_grid(
             ),
         ));
     }
-    let revision = world_revision(&state, &id).await?;
+    let BodyLoc {
+        dir,
+        key: id,
+        revision,
+    } = loc;
     let river_flow = request.river_flow_km2.unwrap_or(DEFAULT_RIVER_FLOW_KM2);
     let _turn = state
         .hex_grids
         .acquire()
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let dir = state.config.worlds_dir.join(&id);
     let world = match state.tiles.world(&dir, &id, revision).await {
         Ok(world) => world,
         Err(e) => return Ok(world_failure(e, "hex grids")),
@@ -758,7 +1164,7 @@ async fn hex_grid(
 /// Queues a generation. A world of the same id is refused with 409, unless
 /// the query asks to replace it: the new world is then generated into its
 /// temporary directory as usual and swapped in place of the old one at the
-/// end (see [`worlds::TempDir::commit_replacing`]), so a generation that
+/// end (see [`crate::staging::TempDir::commit_replacing`]), so a generation that
 /// fails or is cancelled keeps the old world. The old world cannot be
 /// deleted meanwhile (409, like any world being generated).
 async fn create_world(
@@ -873,6 +1279,7 @@ async fn create_world(
             job_id.clone(),
             Job {
                 world_id: world_id.clone(),
+                system: None,
                 request: original,
                 status: rx,
                 cancel: cancel.clone(),
@@ -923,7 +1330,14 @@ async fn create_world(
                     std::panic::resume_unwind(Box::new(Cancelled));
                 }
                 let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
-                progress.send_replace(JobStatus::Running { stage, step, steps });
+                progress.send_replace(JobStatus::Running {
+                    stage,
+                    step,
+                    steps,
+                    body: None,
+                    body_step: None,
+                    bodies: None,
+                });
             };
             // The web app does not show the diagnostic maps: skip them (no
             // debug sink), and the time they take.
@@ -932,7 +1346,7 @@ async fn create_world(
             // Written into a temporary directory, renamed into place once
             // complete: a cancelled, failed or crashed export leaves nothing.
             let id = world_dir_name(&generated.world.params);
-            let temp = worlds::TempDir::create(&worlds_dir, &id)?;
+            let temp = crate::staging::TempDir::create(&worlds_dir, &id)?;
             export_world(generated, temp.path(), ExportOptions { raw_data: true })?;
             // The planet's memory is freed by now: its moons, one by one.
             report(Stage::Moons);
@@ -962,6 +1376,7 @@ async fn create_world(
                 }
                 JobStatus::Done {
                     world_id: task_world.clone(),
+                    bodies: Vec::new(),
                 }
             }
             Ok(Err(e)) => JobStatus::Failed { error: e },
@@ -986,6 +1401,124 @@ async fn create_world(
             ignored,
         }),
     ))
+}
+
+/// Queues the generation of `body` of system `id` and its neighbourhood
+/// (see `mapgen::system::neighbourhood`), and answers the job: none when
+/// they are all generated, the job already queued when the system has one
+/// (a system generates one job at a time).
+async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<String>, Rejection> {
+    let dir = systems::system_dir(&state.config.systems_dir, id);
+    let read = dir.clone();
+    let system = tokio::task::spawn_blocking(move || mapgen::system::read_system(&read))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|_| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))?;
+    if !system.bodies.iter().any(|b| b.id == body) {
+        return Err(Failure(
+            StatusCode::NOT_FOUND,
+            format!("system {id} has no body {body}"),
+        )
+        .into());
+    }
+    let key = pending_system(id);
+    {
+        let mut pending = state.pending.lock().expect("pending lock");
+        if pending.contains(&key) {
+            let jobs = state.jobs.lock().expect("jobs lock");
+            let queued = jobs.iter().find(|(_, job)| {
+                job.system.as_ref().is_some_and(|(s, _)| s == id)
+                    && !job.status.borrow().is_finished()
+            });
+            return Ok(queued.map(|(job_id, _)| job_id.clone()));
+        }
+        if mapgen::system::neighbourhood(&system, body).is_empty() {
+            return Ok(None);
+        }
+        pending.push(key.clone());
+    }
+
+    let job_id = state.next_job.fetch_add(1, Ordering::Relaxed).to_string();
+    let (tx, rx) = watch::channel(JobStatus::Queued);
+    let cancel = Arc::new(Cancel::default());
+    {
+        let mut jobs = state.jobs.lock().expect("jobs lock");
+        forget_old_jobs(&mut jobs);
+        jobs.insert(
+            job_id.clone(),
+            Job {
+                world_id: id.to_string(),
+                system: Some((id.to_string(), body.to_string())),
+                request: WorldRequest::default(),
+                status: rx,
+                cancel: cancel.clone(),
+            },
+        );
+    }
+
+    let task_state = state.clone();
+    let (task_system, task_body) = (id.to_string(), body.to_string());
+    tokio::spawn(async move {
+        let finish = |status: JobStatus| {
+            if let JobStatus::Failed { error } = &status {
+                tracing::error!("generation of {task_system}/{task_body} failed: {error}");
+            }
+            tx.send_replace(status);
+            task_state
+                .pending
+                .lock()
+                .expect("pending lock")
+                .retain(|k| k != &key);
+        };
+        let _permit = tokio::select! {
+            permit = task_state.queue.acquire() => permit,
+            () = cancel.notify.notified() => {
+                finish(JobStatus::Cancelled);
+                return;
+            }
+        };
+        if cancel.is_requested() {
+            finish(JobStatus::Cancelled);
+            return;
+        }
+        let paused_tiles = task_state.tiles.suspend().await;
+        let progress = tx.clone();
+        let thread_cancel = cancel.clone();
+        let body = task_body.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            mapgen::system::generate_neighbourhood(&dir, &body, |p| {
+                // A cancelled job stops when the next stage starts; the
+                // bodies done before it stay generated.
+                if thread_cancel.is_requested() {
+                    std::panic::resume_unwind(Box::new(Cancelled));
+                }
+                progress.send_replace(JobStatus::Running {
+                    stage: p.stage,
+                    step: p.step,
+                    steps: p.steps,
+                    body: Some(p.body),
+                    body_step: Some(p.body_step),
+                    bodies: Some(p.bodies),
+                });
+            })
+        })
+        .await;
+        let status = match result {
+            Ok(Ok(bodies)) => JobStatus::Done {
+                world_id: task_system.clone(),
+                bodies,
+            },
+            Ok(Err(e)) => JobStatus::Failed { error: e },
+            Err(e) if e.is_panic() && cancel.is_requested() => JobStatus::Cancelled,
+            Err(e) => JobStatus::Failed {
+                error: format!("generation crashed: {e}"),
+            },
+        };
+        let _ = tokio::task::spawn_blocking(memory::release).await;
+        drop(paused_tiles);
+        finish(status);
+    });
+    Ok(Some(job_id))
 }
 
 /// Drops the oldest finished jobs beyond [`FINISHED_JOBS_KEPT`].
@@ -1014,6 +1547,8 @@ async fn list_jobs(State(state): State<Shared>) -> Json<Vec<JobInfo>> {
                 JobInfo {
                     job_id: id.clone(),
                     world_id: job.world_id.clone(),
+                    system_id: job.system.as_ref().map(|(s, _)| s.clone()),
+                    body: job.system.as_ref().map(|(_, b)| b.clone()),
                     request: job.request.clone(),
                     status: job.status.borrow().clone(),
                 },
@@ -1114,6 +1649,7 @@ mod tests {
         std::fs::create_dir_all(root.join("worlds")).unwrap();
         Config {
             worlds_dir: root.join("worlds"),
+            systems_dir: root.join("systems"),
             presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets")),
             static_dir: root.join("static"),
             max_pixels: DEFAULT_MAX_PIXELS,
@@ -1567,6 +2103,141 @@ mod tests {
         wait_job(&app, &past).await;
         assert_eq!(world_width(&app, "barren-past40ma-7").await, Some(64));
         assert_eq!(world_width(&app, "barren-7").await, Some(64));
+    }
+
+    #[tokio::test]
+    async fn systems_are_drawn_then_generated_body_by_body() {
+        let config = temp_config("systems");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        let request = r#"{"system": {"star": "K1V", "planets": {"barren": 2}, "seed": 3, "width": 64, "height": 32}}"#;
+        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let id = created["system_id"].as_str().unwrap().to_string();
+        // A whole system generates nothing until a body is opened.
+        assert!(created["job_id"].is_null());
+        assert!(root.join(&id).join("system.json").exists());
+        // Drawn again: 409, unless replaced.
+        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&body).unwrap()["detail"]["code"],
+            "system_exists"
+        );
+        let (status, _) = call(&app, "POST", "/api/systems?replace=true", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED);
+
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        assert_eq!(list[0]["id"], id.as_str());
+        assert_eq!(list[0]["planets"]["barren"], 2);
+        let (status, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::OK);
+        let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
+        let planet = detail["system"]["bodies"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        // Not generated: no tiles yet.
+        let tile = format!("/api/systems/{id}/bodies/{planet}/tiles/0/0/0");
+        assert_eq!(
+            call(&app, "GET", &tile, None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        let (status, started) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{planet}/generate"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{started}");
+        let events = wait_job(&app, &started).await;
+        assert!(
+            events.contains(&format!("\"body\":\"{planet}\"")),
+            "{events}"
+        );
+        assert!(events.contains("\"status\":\"done\""), "{events}");
+        assert!(
+            root.join(&id)
+                .join("bodies")
+                .join(&planet)
+                .join("raw_data/world.json")
+                .exists()
+        );
+        // Generated: nothing left to do, and its files and tiles are served.
+        let (_, again) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{planet}/generate"),
+            None,
+        )
+        .await;
+        assert!(serde_json::from_str::<serde_json::Value>(&again).unwrap()["job_id"].is_null());
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        assert_eq!(list[0]["bodies"][0]["generated"], true);
+        let file = get_gzip(
+            &app,
+            &format!("/systems/{id}/bodies/{planet}/raw_data/world.json"),
+        )
+        .await;
+        assert_eq!(file.status(), StatusCode::OK);
+        let (status, _) = call(
+            &app,
+            "GET",
+            &format!("/api/systems/{id}/bodies/{planet}/thumb"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        // Names by body id; an unknown body is refused.
+        let names = format!(r#"{{"names": {{"{planet}": "Gaia", "star": "Helia"}}}}"#);
+        let (status, renamed) = call(
+            &app,
+            "PUT",
+            &format!("/api/systems/{id}/names"),
+            Some(&names),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{renamed}");
+        let (status, _) = call(
+            &app,
+            "PUT",
+            &format!("/api/systems/{id}/names"),
+            Some(r#"{"names": {"z": "Nyx"}}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        // Bad ids never reach the disk.
+        assert_eq!(
+            call(&app, "GET", "/api/systems/..%2Fetc-1", None).await.0,
+            StatusCode::BAD_REQUEST
+        );
+        let bad = format!("/api/systems/{id}/bodies/..%2Fx/tiles/0/0/0");
+        assert_eq!(
+            call(&app, "GET", &bad, None).await.0,
+            StatusCode::BAD_REQUEST
+        );
+
+        let (status, _) = call(&app, "DELETE", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert!(!root.join(&id).exists());
+    }
+
+    #[tokio::test]
+    async fn a_system_round_a_planet_generates_that_planet_first() {
+        let app = router(temp_config("around"));
+        let request = r#"{"around": {"planet": "barren", "seed": 5, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
+        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(created["job_id"].is_string(), "{body}");
+        let events = wait_job(&app, &body).await;
+        assert!(events.contains("\"status\":\"done\""), "{events}");
     }
 
     async fn wait_job(app: &Router, created: &str) -> String {

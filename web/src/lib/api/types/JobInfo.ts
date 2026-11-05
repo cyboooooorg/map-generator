@@ -7,9 +7,13 @@ import type { WorldRequest } from "./WorldRequest";
  */
 export type JobInfo = { job_id: string, 
 /**
- * Id the world will have once generated.
+ * Id the world will have once generated, or the system's.
  */
 world_id: string, 
+/**
+ * A system's job: the system, and the body it was asked for.
+ */
+system_id: string | null, body: string | null, 
 /**
  * The request, as sent by the client, so a reloaded page can show it.
  */
