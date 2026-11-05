@@ -38,4 +38,17 @@ describe('system star view', () => {
     expect(pc!.name).toBe('Tethys');
     expect(pc!.orbit_au).toBe(system.bodies.find((x) => x.id === 'c')!.orbit.semi_major_axis_au);
   });
+
+  it('gives each planet its tilt and its moons, nearest first', () => {
+    const c = system.bodies.find((x) => x.id === 'c')!;
+    const view = systemStarView(system, c, { 'c-1': 'Io' });
+    const giant = view.giants.giants[1]!;
+    expect(giant.inclination).toBeCloseTo((c.orbit.inclination_deg * Math.PI) / 180, 10);
+    expect(giant.node).toBeCloseTo((c.orbit.node_deg * Math.PI) / 180, 10);
+    expect(giant.moons).toHaveLength(2);
+    const list = view.planets[1]!.moonList;
+    expect(list.map((m) => m.id)).toEqual(['c-1', 'c-2']);
+    expect(list[0]!.name).toBe('Io');
+    expect(list[0]!.semi_major_axis_km).toBeLessThan(list[1]!.semi_major_axis_km);
+  });
 });

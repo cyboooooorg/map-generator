@@ -1193,6 +1193,12 @@
           }
         : null}
       onOpenPlanet={sysStar ? openSystemPlanet : null}
+      onSelectPlanet={sysStar
+        ? (i: number) => {
+            const id = sysStar.ids[i];
+            if (id) world.showSystemBody(id);
+          }
+        : null}
       maps={sysMaps}
       bind:this={starPane}
       planetName={sysPlanet ? (world.systemNames[sysPlanet.id] ?? sysPlanet.designation) : null}

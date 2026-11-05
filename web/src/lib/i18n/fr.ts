@@ -706,6 +706,8 @@ export const fr: Messages = {
     zoneWidth: (p) => `largeur ${p.width} (${p.area}${S}UA²)`,
     compressedLabel: (p) => `distances compressées au-delà de ${p.distance}`,
     daysPerSecond: (p) => `1${S}s = ${p.days}${S}j`,
+    selectPlanetHelp: 'Sélectionne cette planète (son orbite, ses lunes et ses apsides) sans quitter la vue de l’étoile',
+    pinFromListHelp: 'Épingle la carte de cette planète dans la vue, ou la détache',
     showGiants: 'Géantes',
     showGiantsHelp: 'Affiche les planètes géantes, leurs orbites et leurs anneaux',
     compressed: (p) => `Au-delà du cercle pointillé (${p.distance}), les distances sont compressées pour faire tenir les géantes.`,

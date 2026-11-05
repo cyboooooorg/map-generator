@@ -753,6 +753,8 @@ export const en = {
     zoneWidth: (p: { width: string; area: string }) => `width ${p.width} (${p.area} AU²)`,
     compressedLabel: (p: { distance: string }) => `distances compressed beyond ${p.distance}`,
     daysPerSecond: (p: { days: string }) => `1 s = ${p.days} d`,
+    selectPlanetHelp: 'Selects this planet: its orbit, moons and apsides, without leaving the star view',
+    pinFromListHelp: 'Pins this planet\'s card in the view, or unpins it',
     showGiants: 'Giants',
     showGiantsHelp: 'Shows the giant planets, their orbits and their rings',
     compressed: (p: { distance: string }) =>
