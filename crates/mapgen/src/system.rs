@@ -246,7 +246,10 @@ pub struct Preview {
 }
 
 /// The id of the system: its star's designation and its seed, lowercase
-/// with dashes (`mgs-48213-42`).
+/// with dashes (`mgs-48213-42`); a system around a planet whose plates are
+/// moved to another epoch names it too (`mgs-48213-past250ma-42`, see
+/// [`crate::export::drift_label`]), so that the epochs of one planet never
+/// collide. The seed stays last.
 pub fn system_id(system: &System) -> String {
     let slug: String = system
         .star
@@ -255,7 +258,15 @@ pub fn system_id(system: &System) -> String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect();
-    format!("{slug}-{}", system.seed)
+    let drift = system
+        .focus
+        .as_ref()
+        .and_then(|id| system.bodies.iter().find(|b| &b.id == id))
+        .and_then(|b| crate::export::drift_label(b.params.drift_ma));
+    match drift {
+        Some(epoch) => format!("{slug}-{epoch}-{}", system.seed),
+        None => format!("{slug}-{}", system.seed),
+    }
 }
 
 /// Writes `system.json` into `dir` (a temporary file, then renamed).
@@ -1560,6 +1571,22 @@ mod tests {
         assert_eq!(focus.body_type, "terran");
         assert_eq!(system.seed, 1234);
         assert_eq!(system.focus.as_deref(), Some(focus.id.as_str()));
+        // Another epoch of the same planet is another system.
+        let drifted = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(1234),
+            drift_ma: Some(-250.0),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let other = draw(
+            &SystemRequest::Around(drifted),
+            &mut StdRng::seed_from_u64(5),
+        )
+        .unwrap();
+        assert!(system_id(&other).ends_with("-past250ma-1234"));
+        assert_ne!(system_id(&other), system_id(&system));
     }
 
     #[test]

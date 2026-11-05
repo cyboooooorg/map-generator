@@ -3,4 +3,4 @@
 /**
  * A generation step, reported to progress callbacks as it starts.
  */
-export type Stage = "noise" | "erosion" | "temperature" | "coast" | "moisture" | "rivers" | "biomes" | "export" | "moons";
+export type Stage = "noise" | "erosion" | "temperature" | "coast" | "moisture" | "rivers" | "biomes" | "export";
