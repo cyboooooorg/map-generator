@@ -19,11 +19,13 @@ const toSrgb = (c: number) => (c <= 0.003_130_8 ? 12.92 * c : 1.055 * c ** (1 / 
 /**
  * The star view's star and orbit for planet `planet` of a system, its
  * periapsis angle, and the other planets as its giants, with their ids in
- * the same order.
+ * the same order, each under the name given to it in `names` (by body id),
+ * else its designation.
  */
 export function systemStarView(
   system: System,
   planet: Body,
+  names: Readonly<Record<string, string>> = {},
 ): { star: StarInfo; omega: number; giants: GiantSystem; ids: string[] } {
   const base = system.star.info;
   const a = planet.orbit.semi_major_axis_au;
@@ -47,7 +49,7 @@ export function systemStarView(
   const giants: Giant[] = others.map((body) => {
     const colour = (body.preview.colours[0] ?? [0.4, 0.4, 0.4]).map(toSrgb) as [number, number, number];
     return {
-      name: body.designation,
+      name: names[body.id] ?? body.designation,
       kind: body.type === 'ice-giant' ? 'ice' : 'gas',
       mass_earth: body.physical.mass_earth,
       radius_earth: body.physical.radius_km / 6371,

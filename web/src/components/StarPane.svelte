@@ -47,6 +47,8 @@
      */
     kinds?: readonly string[] | null;
     onPickPlanet?: ((index: number) => void) | null;
+    /** The name of the planet whose orbit is drawn, labelling it with its distance. */
+    planetName?: string | null;
   }
 
   let {
@@ -66,6 +68,7 @@
     host = null,
     kinds = null,
     onPickPlanet = null,
+    planetName = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
@@ -213,8 +216,15 @@
         >{formatAu(star.hz_outer_au)}</span
       >
     {/if}
+    {#if labels.self && planetName}
+      <span class="label giant self" style:left={`${labels.self.x}px`} style:top={`${labels.self.y}px`}
+        >{t.starView.orbitLabel({ name: planetName, distance: formatAu(star.orbit_au) })}</span
+      >
+    {/if}
     {#each labels.giants as giant (giant.name)}
-      <span class="label giant" style:left={`${giant.x}px`} style:top={`${giant.y}px`}>{giant.name}</span>
+      <span class="label giant" style:left={`${giant.x}px`} style:top={`${giant.y}px`}
+        >{t.starView.orbitLabel({ name: giant.name, distance: formatAu(giant.au) })}</span
+      >
     {/each}
   </div>
 {/if}
@@ -373,6 +383,9 @@
   .label.giant {
     color: #e8dcc4;
     transform: translate(10px, -110%);
+  }
+  .label.self {
+    color: #ffd27a;
   }
   .giants {
     margin: 0;

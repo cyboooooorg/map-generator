@@ -698,6 +698,7 @@ export const fr: Messages = {
     equilibrium: 'Température d’équilibre',
     animate: 'Animer',
     distances: 'Distances',
+    orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
     showOrbit: 'Orbite',
     showZone: 'Zone habitable',
     circular: (p) => `orbite circulaire${S}: ${p.distance} toute l’année, ni périastre ni apoastre`,

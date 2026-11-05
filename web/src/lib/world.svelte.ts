@@ -52,6 +52,12 @@ export class LoadedWorld {
   systemId = $state<string | null>(null);
   systemNames = $state.raw<Record<string, string>>({});
   systemBody = $state<string | null>(null);
+  /**
+   * What the viewer shows: the body (`planet`), or the star and its system
+   * round the body's planet. A system opens on its star unless a body is
+   * asked for.
+   */
+  subject = $state<'planet' | 'star'>('planet');
   /** The body of the system shown, from its file. */
   shownSystemBody = $derived(this.system?.bodies.find((b) => b.id === this.systemBody) ?? null);
   private systemController: AbortController | null = null;
@@ -72,6 +78,7 @@ export class LoadedWorld {
     this.systemId = null;
     this.systemBody = null;
     this.systemNames = {};
+    this.subject = 'planet';
     this.worldId = id;
     this.worldMeta = null;
     this.worldStats = null;
@@ -89,6 +96,7 @@ export class LoadedWorld {
     const controller = new AbortController();
     this.systemController = controller;
     const again = this.systemId === id;
+    if (!again) this.subject = body ? 'planet' : 'star';
     this.systemId = id;
     this.worldId = null;
     (async () => {

@@ -70,8 +70,10 @@ export interface SystemLabels {
   apoapsis: { x: number; y: number } | null;
   inner: { x: number; y: number } | null;
   outer: { x: number; y: number } | null;
-  /** The giant planets now, by letter (empty when hidden). */
-  giants: { x: number; y: number; name: string }[];
+  /** The planet now, while the live distances are off (its name and mean distance label it). */
+  self: { x: number; y: number } | null;
+  /** The giant planets now, by letter, with their mean distance from the star, AU (empty when hidden). */
+  giants: { x: number; y: number; name: string; au: number }[];
 }
 
 /** Shortest time between two animated frames, ms (thirty frames a second at most). */
@@ -769,6 +771,7 @@ export class StarView {
       const on = this.distancesOn;
       this.onLabels({
         planet: planet && { ...planet, au: this.planetAu },
+        self: on ? null : this.screen(this.planet.position),
         periapsis: on && this.orbitOn ? this.screen(this.apsides[0]!.position) : null,
         apoapsis: on && this.orbitOn ? this.screen(this.apsides[1]!.position) : null,
         inner: on && this.zoneOn ? edge(this.info.hz_inner_au) : null,
@@ -776,7 +779,7 @@ export class StarView {
         giants: giantsShown
           ? this.giants.flatMap((giant, k) => {
               const at = this.screen(this.giantMarkers[k]!.position);
-              return at ? [{ ...at, name: giant.name }] : [];
+              return at ? [{ ...at, name: giant.name, au: giant.orbit_au }] : [];
             })
           : [],
       });
