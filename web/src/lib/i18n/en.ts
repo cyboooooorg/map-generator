@@ -415,6 +415,8 @@ export const en = {
     backHelp: 'Back to the main menu',
   },
   form: {
+    starType: 'Type',
+    systemStarRandomHelp: 'Drawn as the stars nearby are: mostly red dwarfs, some like the Sun',
     stepsLabel: 'Steps',
     steps: { kind: 'Kind', star: 'Star', planets: 'Planets', advanced: 'Advanced', summary: 'Summary' },
     allRandom: 'All random',
