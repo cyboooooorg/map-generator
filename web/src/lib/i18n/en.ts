@@ -856,6 +856,12 @@ export const en = {
     noRoomForMoons: (p: { count: number }) =>
       `No stable orbits for ${p.count === 1 ? 'a moon' : `${p.count} moons`}: the star and orbit chosen lock the planet to its star or keep it too close. Leave them random, or pick a farther orbit or a hotter star.`,
     moonsOfAMoon: "The moon of a giant keeps no moons of its own (its Hill sphere is too small): ask for moons or for a giant's moon, not both.",
+    tooManyPlanets: (p: { asked: number; max: number }) => `${p.asked} planets asked for: a system holds ${p.max} at most.`,
+    zoneFull: (p: { type: string; asked: number; fits: number }) =>
+      `${p.asked} ${p.type} planets asked for, but their band of distances round this star holds ${p.fits}.`,
+    typeImpossible: (p: { type: string }) => `This star leaves no room for a ${p.type} planet.`,
+    unknownType: (p: { type: string }) => `Unknown planet type ${p.type}.`,
+    systemExists: (p: { system: string }) => `System ${p.system} exists already: replace it, delete it or pick another seed.`,
     hotGiantMoons: (p: { count: number }) =>
       `A hot giant keeps no moons (${p.count} asked for): so close to its star, its Hill sphere is too small. Pick a cooler orbit or no moons.`,
     unknownPreset: (p: { preset: string }) => `There is no planet preset named ${p.preset}.`,

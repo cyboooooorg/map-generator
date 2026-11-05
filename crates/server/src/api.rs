@@ -195,9 +195,17 @@ pub enum JobStatus {
         stage: Stage,
         step: u32,
         steps: u32,
+        /// A system's job: the body being generated (`null` for a world),
+        /// its place in the job (from 1) and how many the job generates.
+        body: Option<String>,
+        body_step: Option<u32>,
+        bodies: Option<u32>,
     },
     Done {
+        /// The world, or the system, the job generated.
         world_id: String,
+        /// A system's job: the bodies generated, in order (empty for a world).
+        bodies: Vec<String>,
     },
     Failed {
         error: String,
@@ -220,8 +228,11 @@ impl JobStatus {
 #[ts(export)]
 pub struct JobInfo {
     pub job_id: String,
-    /// Id the world will have once generated.
+    /// Id the world will have once generated, or the system's.
     pub world_id: String,
+    /// A system's job: the system, and the body it was asked for.
+    pub system_id: Option<String>,
+    pub body: Option<String>,
     /// The request, as sent by the client, so a reloaded page can show it.
     pub request: WorldRequest,
     pub status: JobStatus,
@@ -282,6 +293,20 @@ pub enum ErrorDetail {
     MoonsOfAMoon,
     /// Moons asked for on a hot giant, which keeps none.
     HotGiantMoons { count: u8 },
+    /// More planets asked for than a system holds.
+    TooManyPlanets { asked: u32, max: u32 },
+    /// More planets of a type than its band of distances holds.
+    ZoneFull {
+        body_type: String,
+        asked: u32,
+        fits: u32,
+    },
+    /// A planet type the star leaves no room for.
+    TypeImpossible { body_type: String },
+    /// A planet type that is not a preset the draw knows.
+    UnknownType { body_type: String },
+    /// The system exists and the request does not replace it.
+    SystemExists { system: String },
 }
 
 impl ErrorDetail {
@@ -308,11 +333,25 @@ impl ErrorDetail {
             RequestError::MoonsOfAMoon => Some(Self::MoonsOfAMoon),
             RequestError::HotGiantMoons { count } => Some(Self::HotGiantMoons { count: *count }),
             RequestError::Preset(_) => None,
-            // A system's draw: its details come with the system routes.
-            RequestError::TooManyPlanets { .. }
-            | RequestError::ZoneFull { .. }
-            | RequestError::TypeImpossible { .. }
-            | RequestError::UnknownType(_) => None,
+            RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
+                asked: *asked,
+                max: *max,
+            }),
+            RequestError::ZoneFull {
+                body_type,
+                asked,
+                fits,
+            } => Some(Self::ZoneFull {
+                body_type: body_type.clone(),
+                asked: *asked,
+                fits: *fits,
+            }),
+            RequestError::TypeImpossible { body_type } => Some(Self::TypeImpossible {
+                body_type: body_type.clone(),
+            }),
+            RequestError::UnknownType(t) => Some(Self::UnknownType {
+                body_type: t.clone(),
+            }),
         }
     }
 }
@@ -326,4 +365,86 @@ pub struct HexRequest {
     pub columns: u32,
     /// River flag threshold in km² (default: `mapgen::hex::DEFAULT_RIVER_FLOW_KM2`).
     pub river_flow_km2: Option<f32>,
+}
+
+/// A drawn system, as listed in the library (`GET /api/systems`).
+#[derive(Clone, Debug, Serialize, TS, PartialEq)]
+#[ts(export)]
+pub struct SystemSummary {
+    /// Directory name, used in URLs: `/systems/<id>/system.json`.
+    pub id: String,
+    pub seed: u32,
+    /// The map size of every body.
+    pub width: u32,
+    pub height: u32,
+    /// Spectral type of the star.
+    pub star: String,
+    /// The star's designation (`MGS 48213`).
+    pub designation: String,
+    /// How many planets of each type (preset name).
+    pub planets: BTreeMap<String, u32>,
+    pub moons: u32,
+    /// Every body, planets and moons, in the system's order.
+    pub bodies: Vec<BodySummary>,
+    /// Names given, by body id (`star` for the star).
+    pub names: BTreeMap<String, String>,
+    /// When the system was drawn, in milliseconds since the Unix epoch.
+    #[ts(type = "number")]
+    pub modified_ms: u64,
+}
+
+/// A body of a system, as its summary lists it.
+#[derive(Clone, Debug, Serialize, TS, PartialEq)]
+#[ts(export)]
+pub struct BodySummary {
+    pub id: String,
+    pub designation: String,
+    /// Whether its maps are generated.
+    pub generated: bool,
+}
+
+/// Query of a system request (`POST /api/systems?replace=true`).
+#[derive(Clone, Debug, Default, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, optional_fields)]
+pub struct SystemQuery {
+    /// Replace the system of the same id if it exists, instead of refusing
+    /// with 409.
+    pub replace: Option<bool>,
+}
+
+/// Answer to a system request: the system is drawn and written; a job
+/// generates the planet asked for and its neighbourhood (mode `around`).
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct SystemCreated {
+    pub system_id: String,
+    pub job_id: Option<String>,
+}
+
+/// A system as `GET /api/systems/{id}` gives it: its `system.json` and the
+/// names given to its bodies.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct SystemDetail {
+    pub system: mapgen::system::System,
+    pub names: BTreeMap<String, String>,
+}
+
+/// The names given to a system's bodies (`PUT /api/systems/{id}/names`):
+/// every name, by body id (`star` for the star); one left out goes back to
+/// its designation.
+#[derive(Clone, Debug, Default, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct SystemNames {
+    pub names: BTreeMap<String, String>,
+}
+
+/// Answer to `POST /api/systems/{id}/bodies/{body}/generate`: the job, or
+/// none when the body and its neighbourhood are generated already.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct GenerateStarted {
+    pub job_id: Option<String>,
 }

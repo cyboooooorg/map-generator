@@ -4,4 +4,17 @@ import type { Stage } from "./Stage";
 /**
  * State of a generation job, streamed as server-sent events.
  */
-export type JobStatus = { "status": "queued" } | { "status": "running", stage: Stage, step: number, steps: number, } | { "status": "done", world_id: string, } | { "status": "failed", error: string, } | { "status": "cancelled" };
+export type JobStatus = { "status": "queued" } | { "status": "running", stage: Stage, step: number, steps: number, 
+/**
+ * A system's job: the body being generated (`null` for a world),
+ * its place in the job (from 1) and how many the job generates.
+ */
+body: string | null, body_step: number | null, bodies: number | null, } | { "status": "done", 
+/**
+ * The world, or the system, the job generated.
+ */
+world_id: string, 
+/**
+ * A system's job: the bodies generated, in order (empty for a world).
+ */
+bodies: Array<string>, } | { "status": "failed", error: string, } | { "status": "cancelled" };
