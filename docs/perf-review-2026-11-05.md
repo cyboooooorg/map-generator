@@ -42,6 +42,20 @@ seed reproduces the same world) or **changes** (worlds generated before
 and after differ slightly, including bodies of a system generated on
 either side of the change).
 
+## Results
+
+Measured as the minimum of three interleaved runs on the setup above
+(the machine is noisy: other work ran at the same time).
+
+| Item | Status                         | Gain                                  |
+| ---- | ------------------------------ | ------------------------------------- |
+| N1   | Dropped                        | 1.4–1.5× per call in a micro-benchmark, but about 3 % on the Noise stage, within the noise of the measurement: not worth its own Perlin |
+| C2   | Done, bit-identical            | −1.8 s (coast and moisture together)  |
+| L1   | Done, bit-identical            | −0.5 s                                |
+
+N1 shows that the Perlin share of the profile overstates what faster noise
+alone gains: N2 and X3 are to be measured before they are kept.
+
 ## Findings
 
 ### Noise, coast, moisture, clouds
