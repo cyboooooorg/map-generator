@@ -240,6 +240,28 @@ const HIGHLAND_OFFSET: (f32, f32) = (-1.0, 1.0);
 const FLOODPLAIN: (f32, f32) = (0.0, 1.0);
 
 /// Maps `v` from `[min, max]` to the full `u16` range.
+/// One file of `raw_data/` to write.
+type Job<'a> = Box<dyn FnOnce() -> Result<(), String> + Send + 'a>;
+
+/// Files written at once by [`write_jobs`]: enough to hide most of their
+/// encoding behind each other, few enough that their buffers (up to 64 MiB
+/// each at 8192 × 4096) stay a small share of the export's memory.
+const PARALLEL_FILES: usize = 4;
+
+/// Runs `jobs` on [`PARALLEL_FILES`] threads, each taking the next job of
+/// the queue, and returns the first error.
+fn write_jobs(jobs: Vec<Job>) -> Result<(), String> {
+    let queue = std::sync::Mutex::new(jobs.into_iter());
+    (0..PARALLEL_FILES).into_par_iter().try_for_each(|_| {
+        loop {
+            let Some(job) = queue.lock().expect("job queue").next() else {
+                return Ok(());
+            };
+            job()?;
+        }
+    })
+}
+
 fn quantise(v: f32, min: f32, max: f32) -> u16 {
     ((v.clamp(min, max) - min) / (max - min) * u16::MAX as f32).round() as u16
 }
@@ -275,34 +297,53 @@ pub fn export_raw_data(
         layer("floodplain", &world.floodplain, FLOODPLAIN),
     ];
 
-    let mut infos = Vec::with_capacity(scalars.len());
-    for layer in &scalars {
-        let (min, max) = layer.range;
-        // Quantised on the fly: no full-size copy of the transformed values.
-        let pixels: Vec<u16> = layer
-            .values
-            .iter()
-            .map(|&v| quantise(if layer.log { (v + 1.0).log10() } else { v }, min, max))
-            .collect();
-        let file = format!("{}.png", layer.name);
+    // Every PNG below is an independent single-threaded encode of the
+    // whole map (about 0.1 s each at 8192 × 4096): they are queued as jobs
+    // and written by a few threads at once (see `write_jobs`). The layers
+    // are quantised inside their job, so only those being written hold a
+    // buffer.
+    let mut jobs: Vec<Job> = Vec::new();
+    let save16 = move |file: String, pixels: Vec<u16>| -> Result<(), String> {
         ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
             .ok_or("layer size does not match the world size")?
-            .save(dir.join(&file))?;
+            .save(dir.join(file))
+            .map_err(|e| e.to_string())
+    };
+    let save8 = move |file: &str, pixels: Vec<u8>| -> Result<(), String> {
+        GrayImage::from_raw(w, h, pixels)
+            .ok_or("layer size does not match the world size")?
+            .save(dir.join(file))
+            .map_err(|e| e.to_string())
+    };
+
+    let mut infos = Vec::with_capacity(scalars.len());
+    for layer in scalars {
+        let (min, max) = layer.range;
+        let file = format!("{}.png", layer.name);
         infos.push(ScalarLayerInfo {
-            file,
+            file: file.clone(),
             encoding: layer.encoding.to_string(),
             min,
             max,
         });
+        jobs.push(Box::new(move || {
+            // Quantised on the fly: no full-size copy of the transformed values.
+            let pixels: Vec<u16> = layer
+                .values
+                .iter()
+                .map(|&v| quantise(if layer.log { (v + 1.0).log10() } else { v }, min, max))
+                .collect();
+            save16(file, pixels)
+        }));
     }
 
     let elevation_base = match &world.elevation_base {
         Some(values) => {
             let (min, max) = ELEVATION;
-            let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
-            ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
-                .ok_or("layer size does not match the world size")?
-                .save(dir.join("elevation_base.png"))?;
+            jobs.push(Box::new(move || {
+                let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
+                save16("elevation_base.png".into(), pixels)
+            }));
             Some(ScalarLayerInfo {
                 file: "elevation_base.png".into(),
                 encoding: "gray16".into(),
@@ -316,10 +357,10 @@ pub fn export_raw_data(
     let shape = match crate::moons::shape_layer(&world.params) {
         Some(values) => {
             let (min, max) = SHAPE;
-            let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
-            ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
-                .ok_or("layer size does not match the world size")?
-                .save(dir.join("shape.png"))?;
+            jobs.push(Box::new(move || {
+                let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
+                save16("shape.png".into(), pixels)
+            }));
             Some(ScalarLayerInfo {
                 file: "shape.png".into(),
                 encoding: "gray16".into(),
@@ -333,9 +374,9 @@ pub fn export_raw_data(
     let albedo = if world.albedo.is_empty() {
         None
     } else {
-        GrayImage::from_raw(w, h, albedo_bytes(&world.albedo))
-            .ok_or("layer size does not match the world size")?
-            .save(dir.join("albedo.png"))?;
+        jobs.push(Box::new(move || {
+            save8("albedo.png", albedo_bytes(&world.albedo))
+        }));
         Some(ScalarLayerInfo {
             file: "albedo.png".into(),
             encoding: "gray8".into(),
@@ -344,22 +385,21 @@ pub fn export_raw_data(
         })
     };
 
-    let ids: Vec<u8> = world.biomes.iter().map(|b| b.id()).collect();
-    GrayImage::from_raw(w, h, ids)
-        .ok_or("layer size does not match the world size")?
-        .save(dir.join("biomes.png"))?;
+    jobs.push(Box::new(move || {
+        save8("biomes.png", world.biomes.iter().map(|b| b.id()).collect())
+    }));
 
     let clouds = if world.clouds.is_empty() {
         None
     } else {
-        let cover: Vec<u8> = world
-            .clouds
-            .iter()
-            .map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8)
-            .collect();
-        GrayImage::from_raw(w, h, cover)
-            .ok_or("layer size does not match the world size")?
-            .save(dir.join("clouds.png"))?;
+        jobs.push(Box::new(move || {
+            let cover: Vec<u8> = world
+                .clouds
+                .iter()
+                .map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8)
+                .collect();
+            save8("clouds.png", cover)
+        }));
         Some(ScalarLayerInfo {
             file: "clouds.png".into(),
             encoding: "gray8".into(),
@@ -373,14 +413,21 @@ pub fn export_raw_data(
             if pixels.len() != (w * h) as usize {
                 return Err("surface size does not match the world size".into());
             }
-            // Saved from the borrowed pixels: no copy of the render.
-            image::save_buffer(
-                dir.join("surface.png"),
-                pixels.as_flattened(),
-                w,
-                h,
-                image::ExtendedColorType::Rgb8,
-            )?;
+            // Saved from the borrowed pixels: no copy of the render. The
+            // largest file: first in the queue.
+            jobs.insert(
+                0,
+                Box::new(move || {
+                    image::save_buffer(
+                        dir.join("surface.png"),
+                        pixels.as_flattened(),
+                        w,
+                        h,
+                        image::ExtendedColorType::Rgb8,
+                    )
+                    .map_err(|e| e.to_string())
+                }),
+            );
             Some(ImageLayerInfo {
                 file: "surface.png".into(),
                 encoding: "rgb8".into(),
@@ -388,6 +435,7 @@ pub fn export_raw_data(
         }
         None => None,
     };
+    write_jobs(jobs)?;
 
     let [
         elevation,

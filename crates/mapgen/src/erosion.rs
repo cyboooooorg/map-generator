@@ -473,12 +473,19 @@ fn erode_pass(
         z: original.iter().map(|z| z * gain).collect(),
     };
     let droplets = (strength.max(0.0) * (ew * eh) as f32) as usize;
-    simulate(
-        &mut map,
-        waterline * gain,
-        SHORE_BAND * gain,
-        droplets,
-        pass.seed,
+    // The spill levels read only the terrain before erosion: their serial
+    // flood runs beside the droplets instead of after them.
+    let ((), spill) = rayon::join(
+        || {
+            simulate(
+                &mut map,
+                waterline * gain,
+                SHORE_BAND * gain,
+                droplets,
+                pass.seed,
+            )
+        },
+        || spill_levels(&original, ew, eh, waterline),
     );
     // Keep the change where the ground was steep enough to be carved: on
     // flat cells the deposits of droplets slowing down would only roughen
@@ -504,8 +511,8 @@ fn erode_pass(
     // roughen plains and deserts.
     let soft = blur(&raw, ew, eh, FLAT_BLUR);
     // Basins of the terrain before erosion hold lakes: the blurred deposits
-    // of flat ground must not fill them (carving them deeper is fine).
-    let spill = spill_levels(&original, ew, eh, waterline);
+    // of flat ground must not fill them (carving them deeper is fine): see
+    // `spill` above.
     let mut delta: Vec<f32> = (0..ew * eh)
         .into_par_iter()
         .map(|i| {
@@ -657,11 +664,16 @@ fn spill_levels(z: &[f32], w: usize, h: usize, waterline: f32) -> Vec<f32> {
             .map(move |(dx, dy)| ((y + dy) as usize) * w + (x + dx).rem_euclid(w as i64) as usize)
     };
     let mut level = z.to_vec();
-    let mut done: Vec<bool> = z.iter().map(|&v| v < waterline).collect();
+    let done_from_start: Vec<bool> = z.iter().map(|&v| v < waterline).collect();
+    // Every sea cell is done from the start, but only those next to land
+    // seed the flood: the others have no neighbour left to raise. The
+    // level of a cell is the lowest spill over every path to the sea,
+    // whatever the order of the pops, so the result is the same.
     let mut heap: BinaryHeap<Reverse<(Level, usize)>> = (0..w * h)
-        .filter(|&i| done[i])
+        .filter(|&i| done_from_start[i] && neighbours(i).any(|j| !done_from_start[j]))
         .map(|i| Reverse((Level(level[i]), i)))
         .collect();
+    let mut done = done_from_start;
     if heap.is_empty() {
         // No sea: drain everything towards the lowest cell.
         if let Some(lowest) = (0..w * h).min_by(|&a, &b| z[a].total_cmp(&z[b])) {
@@ -684,6 +696,45 @@ fn spill_levels(z: &[f32], w: usize, h: usize, waterline: f32) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spill_levels_match_a_flood_seeded_from_every_sea_cell() {
+        // The flood as first written: every sea cell in the heap.
+        fn reference(z: &[f32], w: usize, h: usize, waterline: f32) -> Vec<f32> {
+            let mut level = z.to_vec();
+            let mut done: Vec<bool> = z.iter().map(|&v| v < waterline).collect();
+            let mut heap: Vec<usize> = (0..w * h).filter(|&i| done[i]).collect();
+            // A plain sorted queue: slow, but obviously in level order.
+            while !heap.is_empty() {
+                let (k, _) = heap
+                    .iter()
+                    .enumerate()
+                    .min_by(|a, b| level[*a.1].total_cmp(&level[*b.1]))
+                    .unwrap();
+                let i = heap.swap_remove(k);
+                let (x, y) = ((i % w) as i64, (i / w) as i64);
+                for dy in -1i64..=1 {
+                    for dx in -1i64..=1 {
+                        let ny = y + dy;
+                        if (dx, dy) == (0, 0) || !(0..h as i64).contains(&ny) {
+                            continue;
+                        }
+                        let j = ny as usize * w + (x + dx).rem_euclid(w as i64) as usize;
+                        if !done[j] {
+                            done[j] = true;
+                            level[j] = level[j].max(level[i]);
+                            heap.push(j);
+                        }
+                    }
+                }
+            }
+            level
+        }
+        let (w, h) = (48, 24);
+        let mut rng = StdRng::seed_from_u64(7);
+        let z: Vec<f32> = (0..w * h).map(|_| rng.random_range(-0.3..0.6)).collect();
+        assert_eq!(spill_levels(&z, w, h, 0.0), reference(&z, w, h, 0.0));
+    }
 
     #[test]
     fn tiled_erosion_does_not_depend_on_the_thread_count() {
