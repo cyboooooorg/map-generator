@@ -18,5 +18,11 @@ describe('system star view', () => {
     // Its preview's colour, in sRGB as the markers take it.
     const linear = system.bodies.find((x) => x.id === 'c')!.preview.colours[0]![0];
     expect(giant.colour[0]).toBeGreaterThan(linear);
+    expect(giant.name).toBe(system.bodies.find((x) => x.id === 'c')!.designation);
+  });
+
+  it('labels the other planets with the names given to them', () => {
+    const b = system.bodies.find((x) => x.id === 'b')!;
+    expect(systemStarView(system, b, { c: 'Tethys' }).giants.giants[0]!.name).toBe('Tethys');
   });
 });

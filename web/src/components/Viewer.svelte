@@ -160,8 +160,6 @@
   let landContours = $state(saved.landContours);
   let atmosphere = $state(saved.atmosphere);
   let stars = $state(saved.stars);
-  /** What the viewer shows: the planet, or its star and system. */
-  let subject = $state<'planet' | 'star'>('planet');
   let starAnimated = $state(false);
   let starDistances = $state(false);
   let starOrbit = $state(true);
@@ -250,16 +248,16 @@
     const planet = sysBody.parent ?? sysBody.id;
     const family = sys.bodies.filter((b) => b.id === planet || b.parent === planet);
     const at = family.findIndex((b) => b.id === sysBody.id);
-    subject = 'planet';
+    world.subject = 'planet';
     world.showSystemBody(family[(at + 1) % family.length]!.id);
   }
   /** The body picker's choice: the star, or a body of the system. */
   function pickBody(key: string): void {
     if (key === 'star') {
-      if (sys) subject = 'star';
+      if (sys) world.subject = 'star';
       return;
     }
-    subject = 'planet';
+    world.subject = 'planet';
     world.showSystemBody(key);
   }
   // Only planets have a hex grid.
@@ -620,7 +618,7 @@
   /** The planet of the body shown (itself, or the planet of a moon). */
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
   /** The star view of a planetary system (lib/systemStar.ts). */
-  const sysStar = $derived(sys && sysPlanet ? systemStarView(sys, sysPlanet) : null);
+  const sysStar = $derived(sys && sysPlanet ? systemStarView(sys, sysPlanet, world.systemNames) : null);
   /** What the star view shows: the system round the planet shown (or the moon's), the Sun's before one loads. */
   const system = $derived(
     sysStar
@@ -697,8 +695,10 @@
     }
   }
   $effect(() => {
+    // Only the body looked at is generated: the star view of a system
+    // (its default) leaves its planets as spheres until one is opened.
     const body = sysBody;
-    if (!body || body.generated) return;
+    if (!body || body.generated || world.subject !== 'planet') return;
     untrack(() => {
       if (generation?.body !== body.id) void generateShown(body.id);
     });
@@ -913,7 +913,7 @@
 
   /** Back to the whole planet, north up (or to the whole system, in the star view). */
   export function resetView(): void {
-    if (subject === 'star') {
+    if (world.subject === 'star') {
       starPane?.resetView();
     } else {
       view?.resetView();
@@ -1043,7 +1043,7 @@
         stars = !stars;
         break;
       case 'starView':
-        if (worldId) subject = subject === 'star' ? 'planet' : 'star';
+        if (worldId) world.subject = world.subject === 'star' ? 'planet' : 'star';
         break;
       case 'moonView':
         stepBody();
@@ -1146,11 +1146,11 @@
 
 <div class="viewer">
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
-  <canvas bind:this={canvas} class:measuring class:hidden={subject === 'star'}></canvas>
-  {#if subject === 'planet' && skyLabels && skyPositions}
+  <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
+  {#if world.subject === 'planet' && skyLabels && skyPositions}
     <SkyLabels positions={skyPositions.bodies} labels={skyLabelList} star={skyPositions.star} {starLabel} />
   {/if}
-  {#if subject === 'star' && (worldId || sys)}
+  {#if world.subject === 'star' && (worldId || sys)}
     <StarPane
       kinds={sysStar && sys
         ? sysStar.ids.map((id) => {
@@ -1162,12 +1162,13 @@
         ? (i: number) => {
             const id = sysStar.ids[i];
             if (id) {
-              subject = 'planet';
+              world.subject = 'planet';
               world.showSystemBody(id);
             }
           }
         : null}
       bind:this={starPane}
+      planetName={sysPlanet ? (world.systemNames[sysPlanet.id] ?? sysPlanet.designation) : null}
       star={system.star}
       omega={system.omega}
       moons={(sysMoons ?? []) as unknown as Moon[]}
@@ -1190,7 +1191,7 @@
       class="body-pick"
       aria-label={t.viewer.body}
       title={t.viewer.bodyHelp}
-      value={subject === 'star' ? 'star' : (world.systemBody ?? '')}
+      value={world.subject === 'star' ? 'star' : (world.systemBody ?? '')}
       onchange={(e) => pickBody(e.currentTarget.value)}
       disabled={!sys}
     >
@@ -1210,7 +1211,7 @@
       {/if}
     </select>
     <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
-    {#if subject === 'planet'}
+    {#if world.subject === 'planet'}
       <button
         onclick={onToggleMeasure}
         disabled={!worldId}
@@ -1221,7 +1222,7 @@
       <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
     {/if}
     <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
-    {#if subject === 'planet' && epochs && epochStops.length > 1}
+    {#if world.subject === 'planet' && epochs && epochStops.length > 1}
       <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
         <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
         <input
@@ -1246,7 +1247,7 @@
     {/if}
   </div>
 
-  {#if subject === 'planet'}
+  {#if world.subject === 'planet'}
   <div class="panel" role="region" aria-label={t.viewer.display}>
     <div class="row">
       <div class="segmented">
@@ -1509,6 +1510,8 @@
   {/if}
   {#if !worldId && !sysBody}
     <p class="overlay">{t.viewer.noWorld}</p>
+  {:else if world.subject === 'star' || sysBody?.generated === false}
+    <!-- The star view, or a body not generated yet: no maps to wait for. -->
   {:else if loading}
     <div class="overlay">
       <div class="loading">

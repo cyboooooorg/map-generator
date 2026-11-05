@@ -752,6 +752,8 @@ export const en = {
     equilibrium: 'Equilibrium temperature',
     animate: 'Animate',
     distances: 'Distances',
+    /** A planet's label in the star view: its name and mean distance from the star. */
+    orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
     showOrbit: 'Orbit',
     showZone: 'Habitable zone',
     circular: (p: { distance: string }) => `circular orbit: ${p.distance} all year, no periapsis or apoapsis`,

@@ -143,7 +143,7 @@
 
   /** A link to the worlds shown and the main pane's view (Copy link). */
   function shareLink(): string {
-    const hash = systemHash({ system: selectedId, body: primary.systemBody, compare: compareId }, primaryPane?.viewState() ?? null);
+    const hash = systemHash({ system: selectedId, body: primary.subject === 'star' ? null : primary.systemBody, compare: compareId }, primaryPane?.viewState() ?? null);
     return `${location.origin}${location.pathname}#${hash}`;
   }
 
@@ -204,7 +204,7 @@
     if (!ready) {
       return;
     }
-    const hash = systemHash({ system: selectedId, body: primary.systemBody, compare: compareId });
+    const hash = systemHash({ system: selectedId, body: primary.subject === 'star' ? null : primary.systemBody, compare: compareId });
     if (location.hash.slice(1) !== hash) {
       history.replaceState(null, '', hash ? `#${hash}` : location.pathname + location.search);
     }
@@ -223,7 +223,15 @@
   });
   $effect(() => {
     const id = selectedId ? compareId : null;
-    untrack(() => (id ? secondary.loadSystem(id) : secondary.load(null)));
+    untrack(() => {
+      if (id) {
+        // The comparison is of maps: its pane opens on a body, not the star.
+        secondary.loadSystem(id);
+        secondary.subject = 'planet';
+      } else {
+        secondary.load(null);
+      }
+    });
   });
 
   jobs.onFinished = (job: TrackedJob) => {

@@ -198,8 +198,10 @@ progress bar with an explicit message: which body is being made, which of
 its neighbours follow, and the current stage (`Generating MGS 48213 c and
 its 2 moons: erosion, 3 of 8`). When it ends, the maps replace the
 sphere. Creating a system generates only its file (milliseconds) and, in
-mode 2, the planet asked and its neighbourhood, so it opens on that
-planet as today.
+mode 2, the planet asked and its neighbourhood. A system opens on its
+star view, whether it was just created or picked in the library, so
+nothing else is generated until a body is opened; a link naming a body
+(`#system=…&body=…`) opens that body.
 
 ## Storage
 
