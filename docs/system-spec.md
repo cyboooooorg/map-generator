@@ -326,25 +326,33 @@ addressed as `<system-id>/<body-id>` everywhere.
   its seasons and moons. Both views show an axes gizmo; the star view's
   right button pans the camera, and opening a planet flies to it (and
   back out on return).
-- **Library.** The world list becomes a system list. Each row shows the
-  star's designation (or given name), a strip of small spheres (one per
-  planet, in order, coloured as their previews, the generated ones
-  marked), the count per type and the date. Search matches designations,
-  names and seeds; selecting several and deleting work as today. A row's
-  thumbnail, and the compare bar's, is a small orrery drawn from the
-  summary: the star in its light's colour, the habitable zone as a faint
-  green ring, and each planet as a dot on its orbit (an ellipse with the
-  star at a focus, on a square-root scale of the distance, filling the
-  box), coloured as its preview, giants larger, those not generated yet
-  outlined; hovering it gives the planet count and the zone, and each
-  dot its planet's name.
-- **Form.** **New system** asks for a mode first:
-  - *A whole system*: the star (type or drawn), a number per planet type
+- **Main menu.** The app opens on a menu, and no viewer starts until a
+  system is opened. The menu shows the systems as a grid of cards, each
+  with its orrery, its star's designation (or given name), the count of
+  planets per type, the star and the date. Search matches designations,
+  names and seeds; selecting several to compare or delete works as
+  before. Opening a card opens its viewer, whose **Menu** button goes
+  back; the address is `#menu` (or empty) on the menu and `#system=…` in
+  a viewer, and the browser's Back returns from a viewer to the menu. A
+  global indicator counts the generations under way and opens their
+  list. A card's thumbnail, and the viewer bar's, is a small orrery
+  drawn from the summary: the star in its light's colour, the habitable
+  zone as a faint green ring, and each planet as a dot on its orbit (an
+  ellipse with the star at a focus, on a square-root scale of the
+  distance, filling the box), coloured as its preview, giants larger,
+  those not generated yet outlined; hovering it gives the planet count
+  and the zone, and each dot its planet's name.
+- **Wizard.** The menu's **Random system** and **Around a planet** open
+  a step-by-step wizard: the kind of creation, the star, the planets (or
+  the planet), the advanced options, folded, and a summary. **All
+  random**, on the first step, creates a whole system at once.
+  - *Random system*: the star (type or drawn), a number per planet type
     (their sum at most 15, each one checked against the star's zones as
     it is typed), metallicity, seed, map size;
-  - *Around a planet*: today's form, unchanged, plus the map size.
+  - *Around a planet*: the planet, as before, plus the map size.
 
-  The form remembers its last mode and fields, as it does today.
+  The wizard remembers its last mode and fields. **Vary…** opens it over
+  the viewer, on its summary.
 - **Body picker.** The **Body** list lists the whole system: the star,
   then each planet in order, each followed by its moons, under their
   names, with a mark on those not generated yet. `U` steps through the

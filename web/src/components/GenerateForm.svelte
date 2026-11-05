@@ -37,9 +37,13 @@
     /** Called once the server drew the system; the form closes. */
     onSubmitted: (created: SystemCreated, request: WorldRequest | null) => void;
     onCancel: () => void;
+    /** The kind of creation the wizard starts on (the menu's two entries); the remembered one without it. */
+    entry?: 'around' | 'system' | null;
+    /** Opens on the summary step (Vary…, prefilled from a world). */
+    atSummary?: boolean;
   }
 
-  let { presets, spec, initial = null, variedFrom = null, onSubmitted, onCancel }: Props = $props();
+  let { presets, spec, initial = null, variedFrom = null, onSubmitted, onCancel, entry = null, atSummary = false }: Props = $props();
 
   /**
    * What the form asks for (docs/system-spec.md): a system around the
@@ -47,7 +51,24 @@
    * world is always a planet.
    */
   type Mode = 'around' | 'system';
-  let mode = $state<Mode>(untrack(() => (initial ? 'around' : loadSetting<Mode>('formMode', 'around') === 'system' ? 'system' : 'around')));
+  let mode = $state<Mode>(
+    untrack(() => (initial ? 'around' : (entry ?? (loadSetting<Mode>('formMode', 'around') === 'system' ? 'system' : 'around')))),
+  );
+  /**
+   * The wizard's steps (docs/system-spec.md, *Interface*): the kind of
+   * creation, the star, the planets (or the planet), the advanced options,
+   * folded, and a summary.
+   */
+  const STEPS = ['kind', 'star', 'planets', 'advanced', 'summary'] as const;
+  type Step = (typeof STEPS)[number];
+  let step = $state<Step>(untrack(() => (atSummary ? 'summary' : 'kind')));
+  const stepIndex = $derived(STEPS.indexOf(step));
+  /** Whether a step's entries are valid, so that the wizard may go past it. */
+  const stepValid = (s: Step) => (s === 'planets' ? planetsValid : s === 'advanced' ? seedValid : true);
+  function go(to: Step): void {
+    error = null;
+    step = to;
+  }
   $effect(() => saveSetting('formMode', mode));
   /** A whole system: its star (a class and subtype, or drawn) and its planets by type (or all drawn). */
   let systemStarRandom = $state(true);
@@ -321,6 +342,54 @@
     seed = String(randomSeed());
   }
 
+  /** All random: a whole system with every choice left to the draw, at the map size chosen, created at once. */
+  async function allRandom(): Promise<void> {
+    error = null;
+    submitting = true;
+    try {
+      const [width, height] = size.split('x').map(Number);
+      const created = await api.createSystem({
+        system: { star: null, metallicity: null, planets: null, seed: null, width: width ?? null, height: height ?? null },
+      });
+      onSubmitted(created, null);
+    } catch (e) {
+      error = errorText(e);
+    } finally {
+      submitting = false;
+    }
+  }
+
+  /** The summary step: each choice as a line, or random. */
+  const summary = $derived.by((): { label: string; value: string }[] => {
+    const random = t.form.random;
+    const lines: { label: string; value: string }[] = [{ label: t.form.mode, value: mode === 'around' ? t.form.modeAround : t.form.modeSystem }];
+    if (mode === 'system') {
+      lines.push({ label: t.form.systemStar, value: systemStarRandom ? random : starType(systemClass, systemSubtype) });
+      lines.push({
+        label: t.form.systemPlanets,
+        value: planetsDrawn
+          ? t.form.systemPlanetsDrawn
+          : Object.entries(planetCounts)
+              .filter(([, n]) => Number.isFinite(n) && n > 0)
+              .map(([type, n]) => `${n} ${presetName({ name: type })}`)
+              .join(' · '),
+      });
+    } else {
+      lines.push({ label: t.form.planet, value: randomPlanet ? random : selectedPreset ? presetName(selectedPreset) : planet });
+      lines.push({ label: t.form.star, value: star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype) });
+      const fixed = shownFields.filter((f) => !fields[f].random).map((f) => fieldText(f).label);
+      if (!giantWorld && !fields.sea_level.random) fixed.unshift(seaBy === 'level' ? t.form.seaLevel : t.form.landShare);
+      lines.push({ label: t.form.summaryFixed, value: fixed.length > 0 ? fixed.join(', ') : t.form.summaryNone });
+    }
+    lines.push({
+      label: t.form.metallicity,
+      value: giantChoice.metallicityRandom ? random : formatUpTo(giantChoice.metallicity, 2),
+    });
+    lines.push({ label: t.form.seed, value: seed.trim() === '' ? random : seed.trim() });
+    lines.push({ label: t.form.size, value: size.replace('x', ' × ') });
+    return lines;
+  });
+
   function buildRequest(): WorldRequest {
     const [width, height] = size.split('x').map(Number);
     const request: WorldRequest = {};
@@ -415,16 +484,15 @@
 
 <form onsubmit={submit}>
   <h2>{variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newSystem}</h2>
-  {#if !variedFrom}
-    <div class="segmented modes" role="group" aria-label={t.form.mode}>
-      <button type="button" class:active={mode === 'around'} aria-pressed={mode === 'around'} onclick={() => (mode = 'around')}
-        title={t.form.modeAroundHelp}>{t.form.modeAround}</button
-      >
-      <button type="button" class:active={mode === 'system'} aria-pressed={mode === 'system'} onclick={() => (mode = 'system')}
-        title={t.form.modeSystemHelp}>{t.form.modeSystem}</button
-      >
-    </div>
-  {/if}
+  <ol class="steps" aria-label={t.form.stepsLabel}>
+    {#each STEPS as s, i (s)}
+      <li class:current={s === step} class:done={i < stepIndex}>
+        <button type="button" onclick={() => go(s)} disabled={i > stepIndex && !STEPS.slice(0, i).every(stepValid)} aria-current={s === step ? 'step' : undefined}
+          ><span class="number">{i + 1}</span> {t.form.steps[s]}</button
+        >
+      </li>
+    {/each}
+  </ol>
   {#if variedFrom}
     <p class="help">{t.form.variedHelp({ id: variedFrom })}</p>
   {:else if memory}
@@ -434,49 +502,157 @@
     <p class="error">{t.form.missingPreset({ preset: start.initial?.planet ?? '' })}</p>
   {/if}
 
-  {#if mode === 'system'}
-    <fieldset>
-      <legend>
-        {t.form.systemStar}
-        <label class="check inline">
-          <input type="checkbox" bind:checked={systemStarRandom} />
-          {t.form.random}
-        </label>
-      </legend>
-      {#if !systemStarRandom}
-        <div class="slider">
-          <select bind:value={systemClass} aria-label={t.form.systemStar}>
-            {#each STAR_CLASSES as klass (klass)}
-              <option value={klass}>{klass}</option>
+  {#if missingPreset}
+    <p class="error">{t.form.missingPreset({ preset: start.initial?.planet ?? '' })}</p>
+  {/if}
+
+  {#if step === 'kind'}
+    {#if !variedFrom}
+      <div class="kinds" role="group" aria-label={t.form.mode}>
+        <button type="button" class="kind" class:active={mode === 'system'} aria-pressed={mode === 'system'} onclick={() => (mode = 'system')}>
+          <strong>{t.form.modeSystem}</strong>
+          <small>{t.form.modeSystemHelp}</small>
+        </button>
+        <button type="button" class="kind" class:active={mode === 'around'} aria-pressed={mode === 'around'} onclick={() => (mode = 'around')}>
+          <strong>{t.form.modeAround}</strong>
+          <small>{t.form.modeAroundHelp}</small>
+        </button>
+      </div>
+      <div class="all-random">
+        <button type="button" onclick={allRandom} disabled={submitting}>{t.form.allRandom}</button>
+        <small class="help">{t.form.allRandomHelp}</small>
+      </div>
+    {:else}
+      <p class="help">{t.form.modeAround}</p>
+    {/if}
+  {:else if step === 'star'}
+    {#if mode === 'system'}
+      <fieldset>
+        <legend>
+          {t.form.systemStar}
+          <label class="check inline">
+            <input type="checkbox" bind:checked={systemStarRandom} />
+            {t.form.random}
+          </label>
+        </legend>
+        {#if !systemStarRandom}
+          <div class="slider">
+            <select bind:value={systemClass} aria-label={t.form.systemStar}>
+              {#each STAR_CLASSES as klass (klass)}
+                <option value={klass}>{klass}</option>
+              {/each}
+            </select>
+            <input type="number" min={systemClass === 'O' ? 3 : 0} max="9.5" step="0.5" bind:value={systemSubtype} aria-label={t.form.systemSubtype} />
+            <small class="value">{starType(systemClass, systemSubtype)}</small>
+          </div>
+        {/if}
+      </fieldset>
+    {:else}
+  <fieldset>
+    <legend>{t.form.star}</legend>
+    <div class="star">
+      <select
+        bind:value={star.klass}
+        onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}
+        aria-label={t.form.starClass}
+      >
+        <option value="">{t.form.starAuto}</option>
+        {#each STAR_CLASSES as klass (klass)}
+          <option value={klass}>{klass}</option>
+        {/each}
+      </select>
+      <select bind:value={star.subtype} disabled={star.klass === ''} aria-label={t.form.starSubtype}>
+        {#each subtypes(star.klass) as subtype (subtype)}
+          <option value={subtype}>{formatUpTo(subtype, 1)}</option>
+        {/each}
+      </select>
+    </div>
+    <p class="help">{star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass]}</p>
+  </fieldset>
+  <fieldset>
+    <legend>
+      <select class="mode" bind:value={star.orbitBy} aria-label={t.form.orbitBy}>
+        <option value="position">{t.form.orbitPosition}</option>
+        <option value="au">{t.form.orbitAu}</option>
+      </select>
+      <label class="check inline">
+        <input type="checkbox" bind:checked={star.orbitRandom} />
+        {t.form.random}
+      </label>
+    </legend>
+    {#if !star.orbitRandom}
+      <div class="slider">
+        {#if star.orbitBy === 'position'}
+          <input type="range" min={-1} max={4} step={0.05} bind:value={star.position} />
+          <input
+            type="number"
+            min={spec.hz_position.limits.min}
+            max={spec.hz_position.limits.max}
+            step="any"
+            bind:value={star.position}
+          />
+        {:else}
+          <input
+            type="number"
+            min={spec.orbit_au.min}
+            max={spec.orbit_au.max}
+            step="any"
+            bind:value={star.au}
+            aria-label={t.form.orbitAu}
+          />
+        {/if}
+      </div>
+    {/if}
+    <p class="help">{star.orbitBy === 'position' ? t.form.orbitPositionHelp : t.form.orbitAuHelp}</p>
+  </fieldset>
+  <fieldset>
+    <legend>
+      {t.form.eccentricity}
+      <label class="check inline">
+        <input type="checkbox" bind:checked={star.eccentricityRandom} />
+        {t.form.random}
+      </label>
+    </legend>
+    {#if !star.eccentricityRandom}
+      <div class="slider">
+        <input type="range" min={0} max={0.9} step={0.005} bind:value={star.eccentricity} />
+        <input
+          type="number"
+          min={spec.eccentricity.min}
+          max={spec.eccentricity.max}
+          step="any"
+          bind:value={star.eccentricity}
+          aria-label={t.form.eccentricity}
+        />
+      </div>
+    {/if}
+    <p class="help">{t.form.eccentricityHelp}</p>
+  </fieldset>
+    {/if}
+  {:else if step === 'planets'}
+    {#if mode === 'system'}
+      <fieldset>
+        <legend>
+          {t.form.systemPlanets}
+          <label class="check inline">
+            <input type="checkbox" bind:checked={planetsDrawn} />
+            {t.form.systemPlanetsDrawn}
+          </label>
+        </legend>
+        {#if !planetsDrawn}
+          <div class="counts">
+            {#each spec.planet_types as type (type)}
+              <label>
+                <span>{presetName({ name: type })}</span>
+                <input type="number" min="0" max={spec.max_planets} step="1" bind:value={planetCounts[type]} />
+              </label>
             {/each}
-          </select>
-          <input type="number" min={systemClass === 'O' ? 3 : 0} max="9.5" step="0.5" bind:value={systemSubtype} aria-label={t.form.systemSubtype} />
-          <small class="value">{starType(systemClass, systemSubtype)}</small>
-        </div>
-      {/if}
-    </fieldset>
-    <fieldset>
-      <legend>
-        {t.form.systemPlanets}
-        <label class="check inline">
-          <input type="checkbox" bind:checked={planetsDrawn} />
-          {t.form.systemPlanetsDrawn}
-        </label>
-      </legend>
-      {#if !planetsDrawn}
-        <div class="counts">
-          {#each spec.planet_types as type (type)}
-            <label>
-              <span>{presetName({ name: type })}</span>
-              <input type="number" min="0" max={spec.max_planets} step="1" bind:value={planetCounts[type]} />
-            </label>
-          {/each}
-        </div>
-        <p class="help" class:error={!planetsValid}>{t.form.systemPlanetsTotal({ count: planetTotal, max: spec.max_planets })}</p>
-      {/if}
-      <p class="help">{t.form.systemPlanetsHelp}</p>
-    </fieldset>
-  {:else}
+          </div>
+          <p class="help" class:error={!planetsValid}>{t.form.systemPlanetsTotal({ count: planetTotal, max: spec.max_planets })}</p>
+        {/if}
+        <p class="help">{t.form.systemPlanetsHelp}</p>
+      </fieldset>
+    {:else}
   <label class="row">
     <span>{t.form.planet}</span>
     <select value={planet} onchange={(e) => choosePreset(e.currentTarget.value)} disabled={randomPlanet}>
@@ -581,86 +757,6 @@
     </fieldset>
   {/each}
 
-  <fieldset>
-    <legend>{t.form.star}</legend>
-    <div class="star">
-      <select
-        bind:value={star.klass}
-        onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}
-        aria-label={t.form.starClass}
-      >
-        <option value="">{t.form.starAuto}</option>
-        {#each STAR_CLASSES as klass (klass)}
-          <option value={klass}>{klass}</option>
-        {/each}
-      </select>
-      <select bind:value={star.subtype} disabled={star.klass === ''} aria-label={t.form.starSubtype}>
-        {#each subtypes(star.klass) as subtype (subtype)}
-          <option value={subtype}>{formatUpTo(subtype, 1)}</option>
-        {/each}
-      </select>
-    </div>
-    <p class="help">{star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass]}</p>
-  </fieldset>
-  <fieldset>
-    <legend>
-      <select class="mode" bind:value={star.orbitBy} aria-label={t.form.orbitBy}>
-        <option value="position">{t.form.orbitPosition}</option>
-        <option value="au">{t.form.orbitAu}</option>
-      </select>
-      <label class="check inline">
-        <input type="checkbox" bind:checked={star.orbitRandom} />
-        {t.form.random}
-      </label>
-    </legend>
-    {#if !star.orbitRandom}
-      <div class="slider">
-        {#if star.orbitBy === 'position'}
-          <input type="range" min={-1} max={4} step={0.05} bind:value={star.position} />
-          <input
-            type="number"
-            min={spec.hz_position.limits.min}
-            max={spec.hz_position.limits.max}
-            step="any"
-            bind:value={star.position}
-          />
-        {:else}
-          <input
-            type="number"
-            min={spec.orbit_au.min}
-            max={spec.orbit_au.max}
-            step="any"
-            bind:value={star.au}
-            aria-label={t.form.orbitAu}
-          />
-        {/if}
-      </div>
-    {/if}
-    <p class="help">{star.orbitBy === 'position' ? t.form.orbitPositionHelp : t.form.orbitAuHelp}</p>
-  </fieldset>
-  <fieldset>
-    <legend>
-      {t.form.eccentricity}
-      <label class="check inline">
-        <input type="checkbox" bind:checked={star.eccentricityRandom} />
-        {t.form.random}
-      </label>
-    </legend>
-    {#if !star.eccentricityRandom}
-      <div class="slider">
-        <input type="range" min={0} max={0.9} step={0.005} bind:value={star.eccentricity} />
-        <input
-          type="number"
-          min={spec.eccentricity.min}
-          max={spec.eccentricity.max}
-          step="any"
-          bind:value={star.eccentricity}
-          aria-label={t.form.eccentricity}
-        />
-      </div>
-    {/if}
-    <p class="help">{t.form.eccentricityHelp}</p>
-  </fieldset>
   {#if !giantWorld && giantChoice.host === 'giant'}
     <p class="help">{t.form.moonsOfAMoon}</p>
   {:else if !giantWorld}
@@ -676,86 +772,125 @@
     <p class="help">{t.form.moonsHelp}</p>
   </fieldset>
   {/if}
-  {/if}
-  <fieldset>
-    <legend>
-      {t.form.metallicity}
-      <label class="check inline">
-        <input type="checkbox" bind:checked={giantChoice.metallicityRandom} />
-        {t.form.random}
-      </label>
-    </legend>
-    {#if !giantChoice.metallicityRandom}
-      <div class="slider">
-        <input type="range" min={spec.metallicity.min} max={spec.metallicity.max} step={0.01} bind:value={giantChoice.metallicity} />
-        <input
-          type="number"
-          min={spec.metallicity.min}
-          max={spec.metallicity.max}
-          step="any"
-          bind:value={giantChoice.metallicity}
-          aria-label={t.form.metallicity}
-        />
-      </div>
     {/if}
-    <p class="help">{t.form.metallicityHelp}</p>
-  </fieldset>
-  {#if giantWorld && mode === 'around'}
-    <fieldset>
-      <legend>
-        {t.form.giantMass}
-        <label class="check inline">
-          <input type="checkbox" bind:checked={giantChoice.massRandom} />
-          {t.form.random}
-        </label>
-      </legend>
-      {#if !giantChoice.massRandom}
-        <div class="slider">
-          <!-- Logarithmic: from a small ice giant to 13 Jupiter masses. -->
-          <input
-            type="range"
-            min={Math.log10(spec.giant_mass.min)}
-            max={Math.log10(spec.giant_mass.max)}
-            step={0.01}
-            value={Math.log10(giantChoice.mass)}
-            oninput={(e) => (giantChoice.mass = Math.round(10 ** Number(e.currentTarget.value)))}
-            aria-label={t.form.giantMass}
-          />
-          <input type="number" min={spec.giant_mass.min} max={spec.giant_mass.max} step="any" bind:value={giantChoice.mass} />
-        </div>
+  {:else if step === 'advanced'}
+    <details class="advanced">
+      <summary>{t.form.advanced}</summary>
+      <div class="advanced-body">
+      <fieldset>
+        <legend>
+          {t.form.metallicity}
+          <label class="check inline">
+            <input type="checkbox" bind:checked={giantChoice.metallicityRandom} />
+            {t.form.random}
+          </label>
+        </legend>
+        {#if !giantChoice.metallicityRandom}
+          <div class="slider">
+            <input type="range" min={spec.metallicity.min} max={spec.metallicity.max} step={0.01} bind:value={giantChoice.metallicity} />
+            <input
+              type="number"
+              min={spec.metallicity.min}
+              max={spec.metallicity.max}
+              step="any"
+              bind:value={giantChoice.metallicity}
+              aria-label={t.form.metallicity}
+            />
+          </div>
+        {/if}
+        <p class="help">{t.form.metallicityHelp}</p>
+      </fieldset>
+      {#if giantWorld && mode === 'around'}
+        <fieldset>
+          <legend>
+            {t.form.giantMass}
+            <label class="check inline">
+              <input type="checkbox" bind:checked={giantChoice.massRandom} />
+              {t.form.random}
+            </label>
+          </legend>
+          {#if !giantChoice.massRandom}
+            <div class="slider">
+              <!-- Logarithmic: from a small ice giant to 13 Jupiter masses. -->
+              <input
+                type="range"
+                min={Math.log10(spec.giant_mass.min)}
+                max={Math.log10(spec.giant_mass.max)}
+                step={0.01}
+                value={Math.log10(giantChoice.mass)}
+                oninput={(e) => (giantChoice.mass = Math.round(10 ** Number(e.currentTarget.value)))}
+                aria-label={t.form.giantMass}
+              />
+              <input type="number" min={spec.giant_mass.min} max={spec.giant_mass.max} step="any" bind:value={giantChoice.mass} />
+            </div>
+          {/if}
+          <p class="help">{t.form.giantMassHelp}</p>
+        </fieldset>
+      {:else if mode === 'around'}
+        <fieldset>
+          <legend>{t.form.giants}</legend>
+          <select bind:value={giantChoice.giants} aria-label={t.form.giants}>
+            <option value="auto">{t.form.giantsAuto}</option>
+            <option value="none">{t.form.giantsNone}</option>
+          </select>
+          <p class="help">{t.form.giantsHelp}</p>
+        </fieldset>
+        <fieldset>
+          <legend>{t.form.host}</legend>
+          <select bind:value={giantChoice.host} aria-label={t.form.host}>
+            <option value="auto">{t.form.hostAuto}</option>
+            <option value="none">{t.form.hostNone}</option>
+            <option value="giant">{t.form.hostGiant}</option>
+          </select>
+          <p class="help">{t.form.hostHelp}</p>
+        </fieldset>
       {/if}
-      <p class="help">{t.form.giantMassHelp}</p>
-    </fieldset>
-  {:else if mode === 'around'}
-    <fieldset>
-      <legend>{t.form.giants}</legend>
-      <select bind:value={giantChoice.giants} aria-label={t.form.giants}>
-        <option value="auto">{t.form.giantsAuto}</option>
-        <option value="none">{t.form.giantsNone}</option>
-      </select>
-      <p class="help">{t.form.giantsHelp}</p>
-    </fieldset>
-    <fieldset>
-      <legend>{t.form.host}</legend>
-      <select bind:value={giantChoice.host} aria-label={t.form.host}>
-        <option value="auto">{t.form.hostAuto}</option>
-        <option value="none">{t.form.hostNone}</option>
-        <option value="giant">{t.form.hostGiant}</option>
-      </select>
-      <p class="help">{t.form.hostHelp}</p>
-    </fieldset>
-  {/if}
 
-  <div class="row">
-    <label for="seed">{t.form.seed}</label>
-    <div class="seed">
-      <input id="seed" type="text" inputmode="numeric" placeholder={t.form.seedPlaceholder} bind:value={seed} />
-      <button type="button" onclick={rollSeed} title={t.form.rollHelp}>{t.form.roll}</button>
-      <button type="button" onclick={() => (seed = '')} disabled={seed === ''} title={t.form.clearHelp}
-        >{t.form.clear}</button
-      >
-    </div>
-  </div>
+      <div class="row">
+        <label for="seed">{t.form.seed}</label>
+        <div class="seed">
+          <input id="seed" type="text" inputmode="numeric" placeholder={t.form.seedPlaceholder} bind:value={seed} />
+          <button type="button" onclick={rollSeed} title={t.form.rollHelp}>{t.form.roll}</button>
+          <button type="button" onclick={() => (seed = '')} disabled={seed === ''} title={t.form.clearHelp}
+            >{t.form.clear}</button
+          >
+        </div>
+      </div>
+      <label class="row">
+        <span>{t.form.size}</span>
+        <select bind:value={size}>
+          {#each sizes as [w, h] (`${w}x${h}`)}
+            <option value={`${w}x${h}`} disabled={w > spec.max_size || h > spec.max_size || w * h > spec.max_pixels}
+              >{w} × {h}{w * h > spec.max_pixels ? t.form.tooLarge : ''}</option
+            >
+          {/each}
+        </select>
+      </label>
+      <p class="help cost">
+        {cost.time ? t.form.takes({ time: cost.time }) : t.form.timeUnknown}{t.form.peaks({
+          server: cost.server,
+          viewer: cost.viewer,
+        })}
+      </p>
+
+      </div>
+    </details>
+    {#if !seedValid}
+      <p class="error">{t.form.seedInvalid({ max: formatInt(MAX_SEED) })}</p>
+    {/if}
+  {:else}
+    <dl class="summary">
+      {#each summary as line (line.label)}
+        <dt>{line.label}</dt>
+        <dd>{line.value}</dd>
+      {/each}
+    </dl>
+    <p class="help cost">
+      {cost.time ? t.form.takes({ time: cost.time }) : t.form.timeUnknown}{t.form.peaks({
+        server: cost.server,
+        viewer: cost.viewer,
+      })}
+    </p>
   {#if !seedValid}
     <p class="error">{t.form.seedInvalid({ max: formatInt(MAX_SEED) })}</p>
   {:else if conflict}
@@ -770,38 +905,32 @@
     </div>
   {/if}
 
-  <label class="row">
-    <span>{t.form.size}</span>
-    <select bind:value={size}>
-      {#each sizes as [w, h] (`${w}x${h}`)}
-        <option value={`${w}x${h}`} disabled={w > spec.max_size || h > spec.max_size || w * h > spec.max_pixels}
-          >{w} × {h}{w * h > spec.max_pixels ? t.form.tooLarge : ''}</option
-        >
-      {/each}
-    </select>
-  </label>
-  <p class="help cost">
-    {cost.time ? t.form.takes({ time: cost.time }) : t.form.timeUnknown}{t.form.peaks({
-      server: cost.server,
-      viewer: cost.viewer,
-    })}
-  </p>
+  {/if}
 
-  <!-- Sticks to the bottom of the screen on narrow layouts, so the buttons
-       stay in view while the parameters scroll. -->
+  <!-- Sticks to the bottom of the wizard, so that the buttons stay in view
+       while a step scrolls. -->
   <div class="footer">
     {#if error}
       <p class="error">{error}</p>
     {/if}
-    <p class="help">{t.form.background}</p>
+    {#if step === 'summary'}
+      <p class="help">{t.form.background}</p>
+    {/if}
     <div class="actions">
       <button type="button" class="reset" onclick={resetForm} title={t.form.defaultsHelp}
         >{t.form.defaults}</button
       >
       <button type="button" onclick={onCancel}>{t.form.close}</button>
-      <button type="submit" class="primary" disabled={submitting || !seedValid || !planetsValid || (conflict && !replace)}>
-        {submitting ? t.form.sending : t.form.generate}
-      </button>
+      {#if stepIndex > 0}
+        <button type="button" onclick={() => go(STEPS[stepIndex - 1]!)}>{t.form.back}</button>
+      {/if}
+      {#if step !== 'summary'}
+        <button type="button" class="primary" disabled={!stepValid(step)} onclick={() => go(STEPS[stepIndex + 1]!)}>{t.form.next}</button>
+      {:else}
+        <button type="submit" class="primary" disabled={submitting || !seedValid || !planetsValid || (conflict && !replace)}>
+          {submitting ? t.form.sending : t.form.generate}
+        </button>
+      {/if}
     </div>
   </div>
 </form>
@@ -815,11 +944,85 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
-  .modes {
+  .steps {
     display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
-  .modes button {
-    flex: 1;
+  .steps button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    color: var(--muted);
+  }
+  .steps .number {
+    display: inline-grid;
+    place-items: center;
+    width: 1.4em;
+    height: 1.4em;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    font-size: 0.8em;
+  }
+  .steps li.done button {
+    color: var(--text);
+  }
+  .steps li.current button {
+    color: var(--accent-text);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .kinds {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr));
+    gap: 10px;
+  }
+  .kind {
+    display: grid;
+    gap: 4px;
+    padding: 12px;
+    text-align: left;
+    white-space: normal;
+  }
+  .kind small {
+    color: var(--muted);
+  }
+  .kind.active {
+    border-color: var(--accent);
+    outline: 1px solid var(--accent);
+  }
+  .all-random {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+  }
+  .advanced summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .advanced-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .summary {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 12px;
+    margin: 0;
+  }
+  .summary dt {
+    color: var(--muted);
+  }
+  .summary dd {
+    margin: 0;
+    overflow-wrap: anywhere;
   }
   .counts {
     display: grid;
@@ -842,7 +1045,7 @@
   }
   .row {
     display: grid;
-    grid-template-columns: 90px minmax(0, 1fr);
+    grid-template-columns: max-content minmax(0, 1fr);
     align-items: center;
     gap: 8px;
   }
@@ -894,7 +1097,7 @@
   }
   .slider {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 90px;
+    grid-template-columns: minmax(0, 1fr) minmax(5em, 7em);
     gap: 8px;
     align-items: center;
   }
@@ -931,15 +1134,14 @@
   .actions .reset {
     margin-right: auto;
   }
-  @media (max-width: 760px) {
-    .footer {
-      position: sticky;
-      bottom: 0;
-      /* Bleed over the sidebar padding so the parameters do not show through. */
-      margin: 0 -14px;
-      padding: 10px 14px 14px;
-      background: var(--bg);
-      border-top: 1px solid var(--border);
-    }
+  .footer {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 0 14px;
+    background: var(--panel-solid);
+    border-top: 1px solid var(--border);
+  }
+  .actions {
+    flex-wrap: wrap;
   }
 </style>
