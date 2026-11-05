@@ -2,7 +2,10 @@
   import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
   import { biomeName } from '../lib/i18n/names.svelte';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
+  import Dock, { type DockPanel } from './dock/Dock.svelte';
+  import PlaybackBar from './dock/PlaybackBar.svelte';
+  import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
   import { ApiFailure, api, followJob, systemBodyId, worldFile, worldThumbnail } from '../lib/api/client';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
@@ -65,6 +68,8 @@
      * overwrite them with its own.
      */
     persistDisplay?: boolean;
+    /** The body's details (its card and world sheet), shown as the dock's first panel. */
+    info?: Snippet | undefined;
   }
 
   let {
@@ -83,6 +88,7 @@
     onDisplayChange,
     linkedDisplay = null,
     persistDisplay = true,
+    info,
   }: Props = $props();
 
   type Needs = 'none' | 'extra' | 'floodplain';
@@ -102,7 +108,8 @@
   const ORBIT_SECONDS = 10;
   /** The orbit animation's slowest and fastest speeds, powers of two (see orbitSpeed). */
   const ORBIT_SPEED_MIN = -8;
-  const ORBIT_SPEED_MAX = 4;
+  // Up to a year of seasons in seconds: the playback bar's one clock moves them too.
+  const ORBIT_SPEED_MAX = 12;
   /** A time in days as the speed's rate shows it: in minutes, hours or days. */
   const simulatedSecond = (days: number): string =>
     days < 1 / 24
@@ -855,6 +862,74 @@
     };
   });
 
+  /**
+   * The playback bar's clock (see docs/superpowers/specs/2026-11-05-
+   * interface-redesign-design.md): in a system, one clock in days moves
+   * the moons and the seasons together (the orbit animation, sysDays); a
+   * body without a system plays its seasons.
+   */
+  const clockPlaying = $derived(sysSky && orbitPeriod ? orbitsPlaying : playing);
+  function setClockPlaying(on: boolean): void {
+    // Time needs the sun.
+    if (on && !sun) sun = true;
+    if (sysSky && orbitPeriod) orbitsPlaying = on;
+    else playing = on;
+  }
+  /** The span of the time bar, days: a year of the planet (the seasons). */
+  const clockYear = $derived(sysPlanet ? sysPlanet.orbit.period_days : null);
+  /** Moves the clock to day `day` of the year: the season there, the orbit time from it. */
+  function setClockDay(day: number): void {
+    if (!clockYear) return;
+    season = ((day % clockYear) + clockYear) % clockYear / clockYear;
+    orbitDays = 0;
+  }
+  /** The display switches, as the icon bar groups them: light, surface, sky. */
+  const toggleGroups = $derived<Toggle[][]>([
+    [
+      { key: 'sun', label: t.viewer.sunlight, icon: 'sun', on: sun, set: (v) => (sun = v) },
+      { key: 'starLight', label: t.viewer.starLight, help: t.viewer.starLightHelp, icon: 'starlight', on: starLight, set: (v) => (starLight = v) },
+      { key: 'atmosphere', label: t.viewer.atmosphere, icon: 'atmosphere', on: atmosphere, set: (v) => (atmosphere = v) },
+      { key: 'stars', label: t.viewer.stars, help: t.viewer.starsHelp, icon: 'sparkles', on: stars, set: (v) => (stars = v) },
+    ],
+    [
+      ...(giant
+        ? [{ key: 'drift', label: t.viewer.bandDrift, help: t.viewer.bandDriftHelp, icon: 'drift' as const, on: cloudDrift, set: (v: boolean) => (cloudDrift = v) }]
+        : [
+            { key: 'clouds', label: t.viewer.clouds, icon: 'clouds' as const, on: clouds, set: (v: boolean) => (clouds = v) },
+            { key: 'drift', label: t.viewer.drift, icon: 'drift' as const, on: cloudDrift, set: (v: boolean) => (cloudDrift = v) },
+          ]),
+      { key: 'grid', label: t.viewer.grid, icon: 'graticule', on: graticule, set: (v) => (graticule = v) },
+      { key: 'tropics', label: t.viewer.tropics, help: t.viewer.tropicsHelp, icon: 'tropics', on: referenceLines, set: (v) => (referenceLines = v) },
+      { key: 'sea', label: t.viewer.depthContours, help: t.viewer.depthContoursHelp, icon: 'depth', on: seaContours, set: (v) => dataReady && (seaContours = v) },
+      { key: 'land', label: t.viewer.elevationContours, help: t.viewer.elevationContoursHelp, icon: 'contours', on: landContours, set: (v) => dataReady && (landContours = v) },
+    ],
+    [
+      { key: 'labels', label: t.viewer.skyLabels, help: t.viewer.skyLabelsHelp, icon: 'tag', on: skyLabels, set: (v) => (skyLabels = v) },
+      ...(sys && sys.bodies.length > 1
+        ? [{ key: 'orbits', label: t.viewer.orbitLines, help: t.viewer.orbitLinesHelp, icon: 'orbit' as const, on: orbitLines, set: (v: boolean) => (orbitLines = v) }]
+        : []),
+      { key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis', on: axesShown, set: (v) => (axesShown = v) },
+      {
+        key: 'hexes',
+        label: t.viewer.hexes,
+        icon: 'hex',
+        on: hexOn,
+        set: (v) => {
+          if (worldId && sysBody?.kind === 'planet') hexOn = v;
+        },
+      },
+    ],
+  ]);
+  /** The panels of the planet's dock. */
+  const dockPanels = $derived<DockPanel[]>([
+    ...(info ? [{ id: 'info', title: t.viewer.infoPanel, icon: 'info' as const, content: info }] : []),
+    { id: 'map', title: t.viewer.mapPanel, icon: 'planet', content: mapPanel },
+    { id: 'light', title: t.viewer.lightPanel, icon: 'sun', content: lightPanel },
+    ...(epochs && epochStops.length > 1 ? [{ id: 'epoch', title: t.epochs.slider, icon: 'clock' as const, content: epochPanel }] : []),
+    ...(sysBody?.parent ? [{ id: 'host', title: t.viewer.host, icon: 'host' as const, content: hostPanel }] : []),
+    { id: 'hex', title: t.viewer.hexes, icon: 'hex', content: hexPanel },
+  ]);
+
   // The orbit animation: one orbit of the slider's period every
   // ORBIT_SECONDS, paused while the canvas is hidden.
   $effect(() => {
@@ -1051,13 +1126,8 @@
         sun = !sun;
         break;
       case 'seasons':
-        // The seasons need the sun: turn it on and play.
-        if (!sun) {
-          sun = true;
-          playing = true;
-        } else {
-          playing = !playing;
-        }
+        // The playback bar's clock (it turns the sun on to play).
+        setClockPlaying(!clockPlaying);
         break;
       case 'atmosphere':
         atmosphere = !atmosphere;
@@ -1167,6 +1237,131 @@
 
 <svelte:window onkeydown={handleKey} />
 
+{#snippet mapPanel()}
+  <div class="panel-body">
+    <div class="segmented">
+        <button class:active={mode === 'globe'} onclick={() => (mode = 'globe')} title={t.viewer.globeHelp}>{t.viewer.globe}</button>
+        <button class:active={mode === 'map'} onclick={() => (mode = 'map')} title={t.viewer.mapHelp}>{t.viewer.map}</button>
+    </div>
+      <label>
+        <span>{t.viewer.layer}</span>
+        <select bind:value={layer} disabled={!dataReady}>
+          {#each LAYERS as option, i (option.id)}
+            <option value={option.id} disabled={dataReady && !available(option.needs, option.id)}
+              >{i + 1}. {layerName(option.id)}{!dataReady || available(option.needs, option.id) ? '' : t.viewer.notInWorld}</option
+            >
+          {/each}
+        </select>
+      </label>
+      <label>
+        <span>{t.viewer.relief}</span>
+        <input type="range" min="0" max="1" step="0.05" bind:value={relief} disabled={!dataReady} />
+      </label>
+
+  </div>
+{/snippet}
+{#snippet lightPanel()}
+  <div class="panel-body">
+    {#if !sun}
+      <p class="muted">{t.viewer.sunlightOff}</p>
+    {/if}
+      {#if sun && locked}
+        <p class="muted">{t.viewer.lockedSun}</p>
+      {:else if sun}
+        <label>
+          <span title={t.viewer.seasonHelp}>{t.viewer.season}</span>
+          <input type="range" min="0" max="1" step="0.005" bind:value={season} />
+        </label>
+        <p class="muted">
+          {t.viewer.sunOver({
+            season: seasonLabel,
+            latitude: formatNumber(Math.abs(declination), 1),
+            north: declination >= 0,
+          })}
+        </p>
+        <label>
+          <span>{t.viewer.sunLongitude}</span>
+          <input type="range" min="0" max="360" step="1" bind:value={sunLongitude} />
+          <small class="value">{sunLongitude}°</small>
+        </label>
+      {/if}
+    {#if sun && orbitPeriod && sysSky}
+        <p class="muted">
+          {t.viewer.orbitDay({
+            days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
+            period: formatNumber(orbitPeriod, orbitPeriod < 10 ? 2 : 1),
+          })}{#if sysBody?.kind === 'moon'}<br />{sysBody.spin.locked
+              ? t.viewer.moonSun
+              : t.viewer.moonSunSpin({ hours: formatNumber(sysBody.spin.period_hours, 1) })}{/if}
+        </p>
+    {/if}
+  </div>
+{/snippet}
+{#snippet hexPanel()}
+  <div class="panel-body">
+    {#if !hexOn}
+      <p class="muted">{t.viewer.hexesOff}</p>
+    {/if}
+        {#if hexServerBusy}
+          <small class="muted" title={t.viewer.serverBusyHelp}
+            >{t.viewer.serverBusy}</small
+          >
+        {:else if hexBusy}
+          <small class="muted">{t.viewer.computing}</small>
+        {/if}
+      {#if hexOn}
+        <label>
+          <span>{t.viewer.columns}</span>
+          <input type="range" min="16" max="256" step="4" bind:value={hexColumns} />
+          <small class="value">{hexColumns}</small>
+        </label>
+        <label>
+          <span title={t.viewer.riverFromHelp}>{t.viewer.riverFrom}</span>
+          <input type="range" min="3" max="7" step="0.1" bind:value={hexRiverLog} />
+          <small class="value">{formatArea(10 ** hexRiverLog)}</small>
+        </label>
+        <button class="small" onclick={downloadHex} disabled={!hexMap}>{t.viewer.downloadHex}</button>
+      {/if}
+  </div>
+{/snippet}
+{#snippet hostPanel()}
+  <div class="panel-body">
+        <!-- The planet in this body's sky has switches of its own. -->
+        <fieldset class="host" title={t.viewer.hostHelp}>
+          <legend>{t.viewer.host}</legend>
+          <label class="check"><input type="checkbox" bind:checked={hostAtmosphere} /> {t.viewer.atmosphere}</label>
+          <label class="check"><input type="checkbox" bind:checked={hostClouds} /> {t.viewer.clouds}</label>
+          <label class="check"><input type="checkbox" bind:checked={hostGrid} /> {t.viewer.grid}</label>
+          <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
+        </fieldset>
+  </div>
+{/snippet}
+{#snippet epochPanel()}
+  <div class="panel-body">
+      <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
+        <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
+        <input
+          type="range"
+          min={0}
+          max={epochStops.length - 1}
+          step={1}
+          value={epochStops.indexOf(epochShown)}
+          oninput={(e) => (epochPreview = epochStops[Number(e.currentTarget.value)] ?? 0)}
+          onchange={(e) => {
+            epochChoice = epochStops[Number(e.currentTarget.value)] ?? 0;
+            epochPreview = null;
+          }}
+          aria-label={t.epochs.slider}
+          aria-valuetext={formatEpoch(epochShown)}
+        />
+        <button onclick={() => (epochChoice = 0)} disabled={epoch === 0 && epochPreview === null}>{t.epochs.backToPresent}</button>
+        {#if epochMapLoading || world.epochLoading}
+          <span class="epoch-busy" title={t.epochs.loading}>…</span>
+        {/if}
+      </div>
+  </div>
+{/snippet}
+
 <div class="viewer">
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
@@ -1264,186 +1459,38 @@
       <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
     {/if}
     <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
-    {#if world.subject === 'planet' && epochs && epochStops.length > 1}
-      <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
-        <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
-        <input
-          type="range"
-          min={0}
-          max={epochStops.length - 1}
-          step={1}
-          value={epochStops.indexOf(epochShown)}
-          oninput={(e) => (epochPreview = epochStops[Number(e.currentTarget.value)] ?? 0)}
-          onchange={(e) => {
-            epochChoice = epochStops[Number(e.currentTarget.value)] ?? 0;
-            epochPreview = null;
-          }}
-          aria-label={t.epochs.slider}
-          aria-valuetext={formatEpoch(epochShown)}
-        />
-        <button onclick={() => (epochChoice = 0)} disabled={epoch === 0 && epochPreview === null}>{t.epochs.backToPresent}</button>
-        {#if epochMapLoading || world.epochLoading}
-          <span class="epoch-busy" title={t.epochs.loading}>…</span>
-        {/if}
-      </div>
-    {/if}
   </div>
 
   {#if world.subject === 'planet'}
-  <div class="panel" role="region" aria-label={t.viewer.display}>
-    <div class="row">
-      <div class="segmented">
-        <button class:active={mode === 'globe'} onclick={() => (mode = 'globe')} title={t.viewer.globeHelp}>{t.viewer.globe}</button>
-        <button class:active={mode === 'map'} onclick={() => (mode = 'map')} title={t.viewer.mapHelp}>{t.viewer.map}</button>
-      </div>
-      <button class="fold" onclick={() => (panelOpen = !panelOpen)} aria-expanded={panelOpen}>
-        {panelOpen ? t.viewer.hide : t.viewer.display}
-      </button>
+  <div class="planet-chrome">
+    <div class="toggles">
+      <ToggleBar label={t.viewer.display} groups={toggleGroups} />
     </div>
-
-    {#if panelOpen}
-      <label>
-        <span>{t.viewer.layer}</span>
-        <select bind:value={layer} disabled={!dataReady}>
-          {#each LAYERS as option, i (option.id)}
-            <option value={option.id} disabled={dataReady && !available(option.needs, option.id)}
-              >{i + 1}. {layerName(option.id)}{!dataReady || available(option.needs, option.id) ? '' : t.viewer.notInWorld}</option
-            >
-          {/each}
-        </select>
-      </label>
-      <label>
-        <span>{t.viewer.relief}</span>
-        <input type="range" min="0" max="1" step="0.05" bind:value={relief} disabled={!dataReady} />
-      </label>
-
-      <label class="check"><input type="checkbox" bind:checked={sun} /> {t.viewer.sunlight}</label>
-      <label class="check" title={t.viewer.starLightHelp}
-        ><input type="checkbox" bind:checked={starLight} /> {t.viewer.starLight}</label
-      >
-      {#if sun && locked}
-        <p class="muted">{t.viewer.lockedSun}</p>
-      {:else if sun}
-        <label>
-          <span title={t.viewer.seasonHelp}>{t.viewer.season}</span>
-          <input type="range" min="0" max="1" step="0.005" bind:value={season} />
-          <button class="small" onclick={() => (playing = !playing)} aria-pressed={playing} title={t.viewer.playHelp}
-            >{playing ? t.viewer.pause : t.viewer.play}</button
-          >
-        </label>
-        <p class="muted">
-          {t.viewer.sunOver({
-            season: seasonLabel,
-            latitude: formatNumber(Math.abs(declination), 1),
-            north: declination >= 0,
-          })}
-        </p>
-        <label>
-          <span>{t.viewer.sunLongitude}</span>
-          <input type="range" min="0" max="360" step="1" bind:value={sunLongitude} />
-          <small class="value">{sunLongitude}°</small>
-        </label>
-      {/if}
-      {#if sun && orbitPeriod && sysSky}
-        <label>
-          <span title={t.viewer.orbitsHelp}>{t.viewer.orbits}</span>
-          <input
-            type="range"
-            min="0"
-            max={orbitPeriod}
-            step={orbitPeriod / 400}
-            value={orbitDays % orbitPeriod}
-            oninput={(e) => {
-              const day = Number(e.currentTarget.value);
-              orbitDays = Math.floor(orbitDays / orbitPeriod) * orbitPeriod + day;
-            }}
-          />
-          <button
-            class="small"
-            onclick={() => (orbitsPlaying = !orbitsPlaying)}
-            aria-pressed={orbitsPlaying}
-            title={t.viewer.playOrbitsHelp}>{orbitsPlaying ? t.viewer.pause : t.viewer.play}</button
-          >
-        </label>
-        <label>
-          <span title={t.viewer.orbitSpeedHelp}>{t.viewer.orbitSpeed}</span>
-          <input type="range" min={ORBIT_SPEED_MIN} max={ORBIT_SPEED_MAX} step="1" bind:value={orbitSpeed} />
-          <small class="value">×{formatUpTo(2 ** orbitSpeed, 3)}</small>
-        </label>
-        <p class="muted">{t.viewer.orbitSpeedRate({ time: simulatedSecond(((orbitPeriod / ORBIT_SECONDS) * 2 ** orbitSpeed)) })}</p>
-        <p class="muted">
-          {t.viewer.orbitDay({
-            days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
-            period: formatNumber(orbitPeriod, orbitPeriod < 10 ? 2 : 1),
-          })}{#if sysBody?.kind === 'moon'}<br />{sysBody.spin.locked
-              ? t.viewer.moonSun
-              : t.viewer.moonSunSpin({ hours: formatNumber(sysBody.spin.period_hours, 1) })}{/if}
-        </p>
-      {/if}
-      <label class="check"><input type="checkbox" bind:checked={atmosphere} /> {t.viewer.atmosphere}</label>
-      <label class="check" title={t.viewer.starsHelp}><input type="checkbox" bind:checked={stars} /> {t.viewer.stars}</label>
-      {#if giant}
-        <label class="check" title={t.viewer.bandDriftHelp}><input type="checkbox" bind:checked={cloudDrift} /> {t.viewer.bandDrift}</label>
-      {:else}
-        <label class="check"><input type="checkbox" bind:checked={clouds} /> {t.viewer.clouds}</label>
-        {#if clouds}
-          <label class="check sub"><input type="checkbox" bind:checked={cloudDrift} /> {t.viewer.drift}</label>
-        {/if}
-      {/if}
-      <label class="check"><input type="checkbox" bind:checked={graticule} /> {t.viewer.grid}</label>
-      <label class="check" title={t.viewer.tropicsHelp}>
-        <input type="checkbox" bind:checked={referenceLines} /> {t.viewer.tropics}
-      </label>
-      <label class="check" title={t.viewer.depthContoursHelp}>
-        <input type="checkbox" bind:checked={seaContours} disabled={!dataReady} /> {t.viewer.depthContours}
-      </label>
-      <label class="check" title={t.viewer.elevationContoursHelp}>
-        <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> {t.viewer.elevationContours}
-      </label>
-      <label class="check" title={t.viewer.skyLabelsHelp}><input type="checkbox" bind:checked={skyLabels} /> {t.viewer.skyLabels}</label>
-      {#if sysBody?.parent}
-        <!-- The planet in this body's sky has switches of its own. -->
-        <fieldset class="host" title={t.viewer.hostHelp}>
-          <legend>{t.viewer.host}</legend>
-          <label class="check"><input type="checkbox" bind:checked={hostAtmosphere} /> {t.viewer.atmosphere}</label>
-          <label class="check"><input type="checkbox" bind:checked={hostClouds} /> {t.viewer.clouds}</label>
-          <label class="check"><input type="checkbox" bind:checked={hostGrid} /> {t.viewer.grid}</label>
-          <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
-        </fieldset>
-      {/if}
-      {#if sys && sys.bodies.length > 1}
-        <label class="check" title={t.viewer.orbitLinesHelp}>
-          <input type="checkbox" bind:checked={orbitLines} /> {t.viewer.orbitLines}
-        </label>
-      {/if}
-      <label class="check" title={t.viewer.spinAxesHelp}>
-        <input type="checkbox" bind:checked={axesShown} /> {t.viewer.spinAxes}
-      </label>
-      <label class="check">
-        <input type="checkbox" bind:checked={hexOn} disabled={!worldId || sysBody?.kind !== 'planet'} />
-        {t.viewer.hexes}
-        {#if hexServerBusy}
-          <small class="muted" title={t.viewer.serverBusyHelp}
-            >{t.viewer.serverBusy}</small
-          >
-        {:else if hexBusy}
-          <small class="muted">{t.viewer.computing}</small>
-        {/if}
-      </label>
-      {#if hexOn}
-        <label>
-          <span>{t.viewer.columns}</span>
-          <input type="range" min="16" max="256" step="4" bind:value={hexColumns} />
-          <small class="value">{hexColumns}</small>
-        </label>
-        <label>
-          <span title={t.viewer.riverFromHelp}>{t.viewer.riverFrom}</span>
-          <input type="range" min="3" max="7" step="0.1" bind:value={hexRiverLog} />
-          <small class="value">{formatArea(10 ** hexRiverLog)}</small>
-        </label>
-        <button class="small" onclick={downloadHex} disabled={!hexMap}>{t.viewer.downloadHex}</button>
-      {/if}
-    {/if}
+    <Dock kind="planet" panels={dockPanels} defaultActive="map" />
+    <PlaybackBar
+      bind:playing={() => clockPlaying, (v) => setClockPlaying(v)}
+      speed={sysSky && orbitPeriod
+        ? {
+            value: orbitSpeed,
+            min: ORBIT_SPEED_MIN,
+            max: ORBIT_SPEED_MAX,
+            text: t.viewer.orbitSpeedRate({ time: simulatedSecond((orbitPeriod / ORBIT_SECONDS) * 2 ** orbitSpeed) }),
+            help: t.viewer.orbitSpeedHelp,
+            set: (v) => (orbitSpeed = v),
+          }
+        : null}
+      time={clockYear
+        ? {
+            value: sysDays % clockYear,
+            max: clockYear,
+            text: t.playback.dayOfYear({ day: formatInt(Math.floor(sysDays % clockYear) + 1), year: formatInt(Math.round(clockYear)) }),
+            help: t.playback.yearHelp,
+            set: setClockDay,
+          }
+        : null}
+      clock={locked ? t.viewer.lockedSun : ''}
+      jumps={clockYear ? [{ key: 'start', label: t.playback.toStart, icon: 'start', run: () => setClockDay(0) }] : []}
+    />
   </div>
 
   {#if dataReady && shown !== 'biomes'}
@@ -1628,47 +1675,37 @@
     border-color: var(--accent);
     color: var(--accent-text);
   }
-  .panel {
+  .planet-chrome {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 240px;
-    /* Scroll inside the panel rather than overflow a short viewer. */
-    max-height: calc(100% - 24px);
-    overflow-y: auto;
-    display: grid;
-    align-content: start;
-    gap: 8px;
-    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
-    background: var(--frame-deco), var(--panel);
-    clip-path: var(--frame-clip);
-    box-shadow: var(--glow);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px;
-    z-index: 1;
+    inset: 0;
+    pointer-events: none;
   }
-  .row {
-    display: flex;
-    justify-content: space-between;
+  .toggles {
+    position: absolute;
+    left: 12px;
+    top: 72px;
+    pointer-events: auto;
+  }
+  .panel-body {
+    display: grid;
     gap: 8px;
   }
-  .panel label {
+
+  .panel-body label {
     display: grid;
-    grid-template-columns: 92px minmax(0, 1fr) auto;
+    /* As wide as the label's words in the language, never more than 40 %. */
+    grid-template-columns: fit-content(40%) minmax(0, 1fr) auto;
     align-items: center;
     gap: 6px;
   }
-  .panel label > select {
+  .panel-body label > select {
     min-width: 0;
   }
-  .panel label.check {
+  .panel-body label.check {
     display: flex;
     gap: 6px;
   }
-  .panel label.check.sub {
-    padding-left: 18px;
-  }
+
   .small {
     padding: 2px 8px;
     font-size: 0.85rem;
@@ -1698,8 +1735,9 @@
   }
   .legend {
     position: absolute;
-    right: 12px;
-    bottom: 12px;
+    /* Bottom left, above the playback bar; the dock holds the right. */
+    left: 12px;
+    bottom: 76px;
     width: 240px;
     /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
     background: var(--frame-deco), var(--panel);
@@ -1710,7 +1748,13 @@
     padding: 8px 10px;
     display: grid;
     gap: 4px;
+  }  /* The playback bar wraps to two lines on narrow views. */
+  @media (max-width: 720px) {
+    .legend {
+      bottom: 132px;
+    }
   }
+
   .legend-title {
     display: flex;
     justify-content: space-between;
@@ -1870,19 +1914,12 @@
   }
   /* The time slider: a row of its own under the tools, wherever they are. */
   .epoch {
-    flex-basis: 100%;
-    max-width: 460px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    padding: 4px 10px;
-    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
-    background: var(--frame-deco), var(--panel);
-    clip-path: var(--frame-clip);
-    box-shadow: var(--glow);
-    border: 1px solid var(--border);
-    border-radius: 8px;
   }
+
   .epoch input[type='range'] {
     flex: 1;
     min-width: 0;

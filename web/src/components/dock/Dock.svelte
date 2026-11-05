@@ -200,6 +200,12 @@
     gap: 8px;
     max-width: calc(100% - 24px);
   }
+  /* The playback bar wraps to two lines on narrow views. */
+  @media (max-width: 720px) {
+    .dock {
+      bottom: 132px;
+    }
+  }
   .tabs {
     display: flex;
     flex-direction: column;

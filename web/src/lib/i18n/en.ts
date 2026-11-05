@@ -16,6 +16,9 @@ import type { Layer } from '../viewer/shaders';
 export const en = {
   /** Language selector. */
   playback: {
+    dayOfYear: (p: { day: string; year: string }) => `day ${p.day} of ${p.year}`,
+    yearHelp: 'The day of the planet\'s year: the seasons, the hour and the moons move with it',
+    toStart: 'Back to day 1',
     label: 'Playback',
     play: 'Play',
     pause: 'Pause',
@@ -509,6 +512,11 @@ export const en = {
   },
   /** The viewer: toolbar, display panel, legends, overlays. */
   viewer: {
+    sunlightOff: 'Turn on Sunlight (in the icon bar) to light the body by its star, with its seasons and its hour.',
+    hexesOff: 'Turn on the hex grid in the icon bar to set it here.',
+    infoPanel: 'Info',
+    mapPanel: 'Map',
+    lightPanel: 'Light and season',
     tools: 'Tools',
     body: 'Body',
     bodyHelp: "The body of the system shown: the star (O), the world and its moons; for a giant's moon, the giant and its other moons (U: the next one)",

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { biomeName } from '../lib/i18n/names.svelte';
   import { t } from '../lib/i18n/index.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -28,6 +29,8 @@
     linkedDisplay?: LinkedDisplay | null;
     /** Whether its display changes are saved as the preferences (the main pane only). */
     persistDisplay?: boolean;
+    /** The body's details, shown as the first panel of the viewer's dock (see Viewer). */
+    info?: Snippet | undefined;
   }
 
   let {
@@ -40,6 +43,7 @@
     onDisplayChange,
     linkedDisplay = null,
     persistDisplay = true,
+    info,
   }: Props = $props();
 
   let viewer = $state<Viewer | null>(null);
@@ -110,6 +114,7 @@
   <Viewer
     bind:this={viewer}
     bind:hexMap
+    {info}
     {world}
     {revision}
     {path}
