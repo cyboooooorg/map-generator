@@ -717,6 +717,7 @@ export const fr: Messages = {
     metallicityHelp: `Fer par rapport à l’hydrogène, [Fe/H] en dex, comparé au Soleil (0). Les étoiles riches en métaux ont bien plus de planètes géantes${S}: environ 1,6 fois plus par 0,1 dex`,
     metallicityValue: (p) => `[Fe/H] ${p.dex} · ${p.ratio} les métaux du Soleil`,
     giantsSection: 'Planètes géantes',
+    otherPlanets: 'Autres planètes',
     giantsHelp:
       'Les autres planètes du système qui comptent pour ce monde, géantes gazeuses et glacées, tirées avec les fréquences observées autour des étoiles de ce type et de cette métallicité',
     giantsOff: 'Non modélisées (un monde créé avant les planètes géantes, ou généré sans elles)',

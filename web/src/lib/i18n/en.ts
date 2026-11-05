@@ -759,6 +759,7 @@ export const en = {
       "Iron relative to hydrogen, [Fe/H] in dex, against the Sun's (0). Metal-rich stars have many more giant planets: about 1.6 times more per 0.1 dex",
     metallicityValue: (p: { dex: string; ratio: string }) => `[Fe/H] ${p.dex} · ${p.ratio} the Sun's metals`,
     giantsSection: 'Giant planets',
+    otherPlanets: 'Other planets',
     giantsHelp:
       'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
     giantsOff: 'Not modelled (a world made before giant planets, or generated without them)',
