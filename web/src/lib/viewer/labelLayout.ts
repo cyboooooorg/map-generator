@@ -8,6 +8,8 @@ export interface LabelBox {
   y: number;
   width: number;
   height: number;
+  /** How far one shift moves it, px: a line of text (its height by default; less for a tilted label, whose box is taller). */
+  step?: number;
 }
 
 /** Where a label goes: shifted down by `dy` px (up when negative), or hidden. */
@@ -24,15 +26,15 @@ const overlaps = (a: LabelBox, b: LabelBox) =>
 
 /**
  * Places labels in their order of importance (the first ones win): each
- * keeps its place when free, else moves up or down by whole label heights
- * (two at most) to a free place, else is hidden. `keepClear` lists boxes
+ * keeps its place when free, else moves up or down by whole steps (a line
+ * of text, two at most) to a free place, else is hidden. `keepClear` lists boxes
  * no label may cover, such as the star.
  */
 export function layoutLabels(labels: readonly LabelBox[], keepClear: readonly LabelBox[] = []): LabelPlace[] {
   const taken: LabelBox[] = [...keepClear];
   return labels.map((label) => {
     for (const shift of SHIFTS) {
-      const dy = shift * label.height;
+      const dy = shift * (label.step ?? label.height);
       const moved = { ...label, y: label.y + dy };
       if (!taken.some((other) => overlaps(moved, other))) {
         taken.push(moved);

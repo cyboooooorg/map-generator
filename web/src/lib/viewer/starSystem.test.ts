@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH } from './starSystem';
+import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -174,5 +174,21 @@ describe('star view', () => {
     expect(orbitalSpeed(1, 0.4, 0.4 * 0.8) * k).toBeCloseTo(VELOCITY_MAX_LENGTH, 10);
     expect(orbitalSpeed(1, 1, 1) * k).toBeLessThan(VELOCITY_MAX_LENGTH);
     expect(velocityScale(1, [])).toBe(0);
+  });
+
+  it('gives the star\'s pull by Newton, the closest planet\'s vector the longest', () => {
+    expect(starGravity(1, 1)).toBeCloseTo(5.93e-3, 6);
+    expect(starGravity(1, 2)).toBeCloseTo(5.93e-3 / 4, 8);
+    const orbits = [
+      { orbit_au: 0.4, eccentricity: 0.2 },
+      { orbit_au: 1, eccentricity: 0 },
+    ];
+    expect(starGravity(1, 0.32) * gravityScale(1, orbits)).toBeCloseTo(GRAVITY_MAX_LENGTH, 10);
+  });
+
+  it('opens a system at a speed of a day a second at least, its innermost year in about ten seconds', () => {
+    expect(defaultSystemSpeed(1.5)).toBe(0);
+    expect(defaultSystemSpeed(88)).toBe(3);
+    expect(defaultSystemSpeed(1e9)).toBe(SYSTEM_SPEED_MAX);
   });
 });
