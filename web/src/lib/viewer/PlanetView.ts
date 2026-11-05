@@ -147,6 +147,9 @@ const SPIN_AXIS_LENGTH = 1.5;
  * its atmosphere, rings, grid and axes, before the near orbit lines (10).
  */
 const SKY_FRONT_ORDER = 5;
+/** Vertices across the base surface (2 per degree) and across a detail patch (see TileLayer). */
+const SURFACE_SEGMENTS = 720;
+const PATCH_SEGMENTS = 16;
 /** The arrow of the sense of rotation round it: its height, radius and arc (radians). */
 /** Colours of their north and south ends, linear. */
 const SPIN_AXIS_NORTH: [number, number, number] = [0.9, 0.9, 0.85];
@@ -283,15 +286,18 @@ function emptyTexture(): DataTexture {
 
 /**
  * An RGBA half-float data layer, filtered, wrapping east-west. `owned`: the
- * array is a copy made for the GPU, dropped once uploaded.
+ * array is a copy made for the GPU, dropped once uploaded. `mipmaps`: with
+ * a mipmap chain (the GPU must render to half floats to build it), so that
+ * a large map seen whole is averaged instead of sampled every few texels,
+ * which made its contours and colours shimmer and stair-step.
  */
-function halfFloatTexture(data: Uint16Array, width: number, height: number, owned: boolean): DataTexture {
+function halfFloatTexture(data: Uint16Array, width: number, height: number, owned: boolean, mipmaps = false): DataTexture {
   const texture = new DataTexture(data, width, height, RGBAFormat, HalfFloatType);
   texture.magFilter = LinearFilter;
-  texture.minFilter = LinearFilter;
+  texture.minFilter = mipmaps ? LinearMipmapLinearFilter : LinearFilter;
   texture.wrapS = RepeatWrapping;
   texture.wrapT = ClampToEdgeWrapping;
-  texture.generateMipmaps = false;
+  texture.generateMipmaps = mipmaps;
   texture.needsUpdate = true;
   releaseOnUpload(texture, owned);
   return texture;
@@ -447,6 +453,8 @@ export class PlanetView {
     uMapSize: { value: new Vector2(1, 1) } as IUniform<Vector2>,
     // The base surface covers the whole planet and draws no detail tile.
     uTileRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
+    // Vertices across the mesh drawn: the base surface's (see surfaceVertex, the relief's level of detail).
+    uMeshSegments: { value: SURFACE_SEGMENTS } as IUniform<number>,
     uTileOn: { value: 0 } as IUniform<number>,
     uTile: { value: emptyTexture() } as IUniform<Texture>,
     uTexRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
@@ -684,7 +692,7 @@ export class PlanetView {
 
     this.surface = new Mesh(
       // 2 vertices per degree: enough for the relief to follow the data.
-      new PlaneGeometry(1, 1, 720, 360),
+      new PlaneGeometry(1, 1, SURFACE_SEGMENTS, SURFACE_SEGMENTS / 2),
       new ShaderMaterial({
         vertexShader: surfaceVertex,
         fragmentShader: surfaceFragment,
@@ -794,6 +802,7 @@ export class PlanetView {
             ...this.shared,
             ...this.u,
             uTileRect: { value: new Vector4(0, 0, 1, 1) },
+            uMeshSegments: { value: PATCH_SEGMENTS },
             uTileOn: { value: 0 },
             uTile: { value: null },
             uTexRect: { value: new Vector4(0, 0, 1, 1) },
@@ -1180,13 +1189,19 @@ export class PlanetView {
     }
     this.uploadExtraIfShown();
     const surface = fit(layers.surface, 4);
-    const texture = halfFloatTexture(surface.data, surface.width, surface.height, factor > 1);
+    const texture = halfFloatTexture(surface.data, surface.width, surface.height, factor > 1, this.halfFloatMipmaps());
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
     this.shared.uCoast.value = coast;
     this.shared.uLiquidSea.value = liquidSea ? 1 : 0;
     this.u.uTexel.value.set(1 / surface.width, 1 / surface.height);
     this.u.uMapSize.value.set(layers.width, layers.height);
+  }
+
+  /** Whether this GPU can build mipmaps of half-float textures (it must render to them). */
+  private halfFloatMipmaps(): boolean {
+    const extensions = this.renderer.extensions;
+    return extensions.has('EXT_color_buffer_half_float') || extensions.has('EXT_color_buffer_float');
   }
 
   /** Uploads the layers of format version 2 when the layer shown needs them and they are not on the GPU yet. */
@@ -1197,7 +1212,7 @@ export class PlanetView {
     }
     const packed = downsample(pending.packed, pending.width, pending.height, 4, pending.factor);
     this.u.uExtra.value.dispose();
-    this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height, pending.factor > 1);
+    this.u.uExtra.value = halfFloatTexture(packed.data, packed.width, packed.height, pending.factor > 1, this.halfFloatMipmaps());
     // Only the GPU copy is needed from now on.
     this.pendingExtra = null;
   }

@@ -66,6 +66,12 @@ export const surfaceVertex = /* glsl */ `
   // Part of the planet this mesh covers (u0, v0, du, dv): the whole planet
   // for the base surface, one quadtree tile for a detail patch.
   uniform vec4 uTileRect;
+  // Texels of uData per uv unit (1 / its size), and vertices across this
+  // mesh: the relief samples the elevation averaged over a vertex's span
+  // (a coarser mipmap level), not one texel every few, which aliased
+  // ridges into spikes and missed narrow mountains between vertices.
+  uniform vec2 uTexel;
+  uniform float uMeshSegments;
   varying vec2 vUv;
   varying vec2 vLocalUv;
   varying vec3 vNormal;
@@ -105,7 +111,8 @@ export const surfaceVertex = /* glsl */ `
     // dried-up basins sink below it.
     float height = 0.0;
     if (uHasData > 0.5) {
-      float above = dataAt(g).r - uCoast;
+      float lod = max(0.0, log2(uTileRect.z / (uTexel.x * uMeshSegments)));
+      float above = textureLod(uData, vec2(g.x, 1.0 - g.y), lod).r - uCoast;
       if (uLiquidSea > 0.5) {
         above = max(above, 0.0);
       }

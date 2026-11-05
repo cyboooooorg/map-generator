@@ -94,6 +94,8 @@ export interface SystemLabels {
   outer: { x: number; y: number } | null;
   /** The star's centre on screen. */
   star: { x: number; y: number } | null;
+  /** To scale, the tip of the star's pin (its label goes there); null otherwise. */
+  starPin: { x: number; y: number } | null;
   /** A point of a planetary system's frost line, with its distance (AU), to label it; null when hidden. */
   frost: { x: number; y: number; au: number } | null;
   /**
@@ -122,6 +124,8 @@ export interface SystemLabels {
     /** The star's pull on it now, m/s², and the middle of its vector on screen (null when hidden or off screen). */
     gravity: number;
     pull: { x: number; y: number } | null;
+    /** To scale, the tip of its pin (its label goes there); null otherwise. */
+    pin: { x: number; y: number } | null;
   }[];
 }
 
@@ -135,6 +139,10 @@ export const YEAR_S = 60;
 const START_ANOMALY = 0.6;
 /** How far out the farthest point of a system drawn to scale lies, view units. */
 const REAL_SPAN = 9;
+/** Kilometres in an AU. */
+const AU_KM = 149_597_870.7;
+/** Height of the pins up from the bodies drawn to scale, view units. */
+const PIN_HEIGHT = 0.9;
 /** The Sun's radius, AU. */
 const SUN_RADIUS_AU = 0.004_65;
 /** Width of the glow quad, in star radii. */
@@ -219,7 +227,11 @@ export class StarView {
   private frostAu = 0;
   private frostOn = true;
   private readonly hillGroup = new Group();
-  private hills: Line<BufferGeometry, LineBasicMaterial>[] = [];
+  private hills: Line<BufferGeometry, LineBasicMaterial | LineDashedMaterial>[] = [];
+  /** To scale, the pins up from the bodies (see buildPins). */
+  private readonly pinGroup = new Group();
+  private pins: Line<BufferGeometry, LineBasicMaterial>[] = [];
+  private starPinLine: Line<BufferGeometry, LineBasicMaterial> | null = null;
   private hillsOn = false;
   /** Whether a planetary system is drawn to scale: distances linear from the star, the star its true size. */
   private realScale = false;
@@ -414,6 +426,7 @@ export class StarView {
     this.scene.add(this.arrowGroup);
     this.scene.add(this.pullGroup);
     this.scene.add(this.hillGroup);
+    this.scene.add(this.pinGroup);
     this.selectedOrbit = new Line2(new LineGeometry(), this.fatMaterial(this.overlay.selected, 2.2, 0.9));
     this.selectedOrbit.renderOrder = 3;
     this.selectedOrbit.frustumCulled = false;
@@ -464,7 +477,9 @@ export class StarView {
    */
   setStar(info: StarInfo, omega = 0, giants: SystemGiant[] = [], selected: number | null = null): void {
     this.lastStar = [info, omega, giants, selected];
-    const system = selected !== null && selected >= 0 && selected < giants.length;
+    // A planetary system, with a planet selected or none (-1).
+    const system = selected !== null && selected < giants.length;
+    const picked = system && selected >= 0;
     const key = system ? `${info.type} ${giants.map((g) => `${g.orbit_au}:${g.eccentricity}:${g.phase}`).join(' ')}` : '';
     if (system) {
       // Another system: its planets start from their drawn places.
@@ -479,7 +494,7 @@ export class StarView {
     this.daysPerSecond = system ? 1 : 0;
     this.planet.visible = !system;
     // The selected planet's moons circle its own marker, as much larger as it is.
-    this.moonGroup.scale.setScalar(system ? giantMarkerSize(giants[selected]!.radius_earth) / PLANET_MARKER : 1);
+    this.moonGroup.scale.setScalar(picked ? giantMarkerSize(giants[selected]!.radius_earth) / PLANET_MARKER : 1);
     this.info = info;
     this.omega = omega;
     const u = this.star.material.uniforms;
@@ -508,7 +523,8 @@ export class StarView {
     this.star.scale.setScalar(this.starScale);
     this.arcs.scale.setScalar(this.starScale);
     // The glow is the light, not the size: it shrinks less, to stay visible.
-    this.glow.scale.setScalar(real ? Math.max(this.starScale, 0.08) : 1);
+    // To scale, the glow shrinks with the star.
+    this.glow.scale.setScalar(real ? this.starScale : 1);
     this.controls.minDistance = STAR_RADIUS * (real ? 0.05 : 1.4);
     this.frostAu = frostLineAu(info.luminosity);
     this.frost.geometry.dispose();
@@ -539,7 +555,7 @@ export class StarView {
     // The ellipse, the star at a focus.
     const e = info.eccentricity ?? 0;
     // In a planetary system, the selected planet's own orbit, tilted as it is.
-    const own = system ? giants[selected] : undefined;
+    const own = picked ? giants[selected] : undefined;
     const point = (nu: number, au: number) => (own ? this.orbitPoint(own, nu, au) : this.inPlane(nu, au));
     this.orbit.geometry.dispose();
     this.orbit.geometry = new BufferGeometry().setFromPoints(
@@ -548,6 +564,15 @@ export class StarView {
     this.apsides[0]!.position.copy(point(0, info.orbit_au * (1 - e)));
     this.apsides[1]!.position.copy(point(Math.PI, info.orbit_au * (1 + e)));
     this.buildSystemMoons();
+    // To scale, the planets are their true size too (most of them under a
+    // pixel: the pins and their labels show where they are), their moons hidden.
+    this.giantMarkers.forEach((marker, k) => {
+      const giant = giants[k]!;
+      const trueSize = (REAL_SPAN * (giant.radius_earth * 6371)) / AU_KM / outer;
+      marker.scale.setScalar(real ? Math.max(trueSize / giantMarkerSize(giant.radius_earth), 1e-4) : 1);
+    });
+    for (const moons of this.systemMoons) moons.group.visible = !real;
+    this.buildPins(real);
     this.selectedOrbit.geometry.setPositions(
       own
         ? Array.from({ length: 361 }, (_, i) => point((i / 360) * 2 * Math.PI, info.orbit_au * orbitDistance(e, (i / 360) * 2 * Math.PI))).flatMap((p) => [p.x, p.y, p.z])
@@ -970,6 +995,34 @@ export class StarView {
     else this.requestRender();
   }
 
+  /**
+   * To scale: a vertical line up from the star and from each planet, at
+   * whose tip its label goes (the bodies themselves are mostly too small to
+   * see); none otherwise.
+   */
+  private buildPins(on: boolean): void {
+    for (const pin of [...this.pins, ...(this.starPinLine ? [this.starPinLine] : [])]) {
+      pin.geometry.dispose();
+      pin.material.dispose();
+      this.pinGroup.remove(pin);
+    }
+    this.pins = [];
+    this.starPinLine = null;
+    if (!on) return;
+    const line = (from: Vector3) => {
+      const pin = new Line(
+        new BufferGeometry().setFromPoints([from, from.clone().setY(from.y + PIN_HEIGHT)]),
+        new LineBasicMaterial({ color: this.overlay.muted, transparent: true, opacity: 0.8 }),
+      );
+      pin.frustumCulled = false;
+      pin.renderOrder = 3;
+      this.pinGroup.add(pin);
+      return pin;
+    };
+    this.starPinLine = line(new Vector3());
+    this.pins = this.giants.map(() => line(new Vector3()));
+  }
+
   /** Shows or hides a planetary system's vectors of the star's pull on its planets. */
   setFrostLine(on: boolean): void {
     this.frostOn = on;
@@ -1042,17 +1095,23 @@ export class StarView {
     for (const giant of this.giants) {
       const a = giant.orbit_au * (1 - giant.eccentricity);
       const hill = hillRadiusAu(giant.orbit_au, giant.eccentricity, giant.mass_earth, this.info.mass);
-      // Its width on the view's scale where the planet is (the scale may be compressed there).
-      const radius = Math.max((this.at(a + hill) - this.at(Math.max(a - hill, 0))) / 2, 0.01);
+      // Its width on the view's scale where the planet is (the scale may be
+      // compressed there). Most are smaller than the planet's marker: those
+      // are drawn just outside it, dashed, as not to scale.
+      const true_ = (this.at(a + hill) - this.at(Math.max(a - hill, 0))) / 2;
+      const floor = giantMarkerSize(giant.radius_earth) * 1.6;
+      const radius = Math.max(true_, floor);
+      const points = Array.from({ length: 97 }, (_, i) => {
+        const t = (i / 96) * 2 * Math.PI;
+        return new Vector3(Math.cos(t) * radius, 0, -Math.sin(t) * radius);
+      });
       const circle = new Line(
-        new BufferGeometry().setFromPoints(
-          Array.from({ length: 65 }, (_, i) => {
-            const t = (i / 64) * 2 * Math.PI;
-            return new Vector3(Math.cos(t) * radius, 0, -Math.sin(t) * radius);
-          }),
-        ),
-        new LineBasicMaterial({ color: '#c9b6ff', transparent: true, opacity: 0.55 }),
+        new BufferGeometry().setFromPoints(points),
+        true_ >= floor
+          ? new LineBasicMaterial({ color: '#c9b6ff', transparent: true, opacity: 0.85 })
+          : new LineDashedMaterial({ color: '#c9b6ff', dashSize: radius * 0.25, gapSize: radius * 0.2, transparent: true, opacity: 0.85 }),
       );
+      circle.computeLineDistances();
       circle.renderOrder = 3;
       this.hills.push(circle);
       this.hillGroup.add(circle);
@@ -1129,6 +1188,13 @@ export class StarView {
       const position = this.orbitPoint(giant, trueAnomaly, giant.orbit_au * distance);
       this.giantMarkers[k]?.position.copy(position);
       this.placeVector(k, giant, position, giant.orbit_au * distance);
+      const pin = this.pins[k];
+      if (pin) {
+        const ends = pin.geometry.getAttribute('position') as BufferAttribute;
+        ends.setXYZ(0, position.x, position.y, position.z);
+        ends.setXYZ(1, position.x, position.y + PIN_HEIGHT, position.z);
+        ends.needsUpdate = true;
+      }
     });
   }
 
@@ -1187,11 +1253,14 @@ export class StarView {
     this.arrowGroup.visible = system && this.velocitiesOn;
     this.pullGroup.visible = system && this.pullsOn;
     this.hillGroup.visible = system && this.hillsOn;
+    this.pinGroup.visible = system && this.giantsOn;
     this.frost.visible = this.selected !== null && this.frostOn;
     // A planetary system's selected orbit is drawn thick.
-    this.selectedOrbit.visible = this.selected !== null && this.orbitOn;
+    this.selectedOrbit.visible = this.picked() && this.orbitOn;
     if (this.selected !== null) this.orbit.visible = false;
-    for (const marker of this.apsides) marker.visible = this.distancesOn && this.orbitOn;
+    // A planetary system with none selected has no apsides to mark.
+    const anyPlanet = this.selected === null || this.selected >= 0;
+    for (const marker of this.apsides) marker.visible = this.distancesOn && this.orbitOn && anyPlanet;
   }
 
   /**
@@ -1228,7 +1297,7 @@ export class StarView {
 
   /** Mean anomaly of the planet now, radians. */
   private meanAnomaly(): number {
-    if (this.selected !== null) return this.giantAnomaly(this.selected);
+    if (this.selected !== null) return this.selected >= 0 ? this.giantAnomaly(this.selected) : 0;
     return START_ANOMALY + this.time * ((2 * Math.PI) / YEAR_S);
   }
 
@@ -1300,6 +1369,11 @@ export class StarView {
       done,
     };
     this.requestRender();
+  }
+
+  /** Whether a planet of the planetary system shown is selected. */
+  private picked(): boolean {
+    return this.selected !== null && this.selected >= 0;
   }
 
   /** Ends the flight under way, the camera where it was going. */
@@ -1377,7 +1451,7 @@ export class StarView {
       object.geometry.dispose();
       object.material.dispose();
     }
-    for (const group of [this.giantGroup, this.linkGroup, this.arrowGroup, this.pullGroup, this.hillGroup]) group.traverse((object) => {
+    for (const group of [this.giantGroup, this.linkGroup, this.arrowGroup, this.pullGroup, this.hillGroup, this.pinGroup]) group.traverse((object) => {
       const mesh = object as Mesh<BufferGeometry, MeshBasicMaterial>;
       mesh.geometry?.dispose();
       mesh.material?.dispose();
@@ -1573,17 +1647,19 @@ export class StarView {
       // The zone's edges are labelled across the apsides line, away from
       // the periapsis and apoapsis labels.
       const edge = (au: number) => this.screen(this.zoneEdge(au));
-      const planet = this.distancesOn ? this.screen(this.planet.position) : null;
+      const anyPlanet = this.selected === null || this.selected >= 0;
+      const planet = this.distancesOn && anyPlanet ? this.screen(this.planet.position) : null;
       const on = this.distancesOn;
       this.onLabels({
         planet: planet && { ...planet, au: this.planetAu },
         // A planetary system labels the selected planet as the others.
         self: on || this.selected !== null ? null : this.screen(this.planet.position),
-        periapsis: on && this.orbitOn ? this.screen(this.apsides[0]!.position) : null,
-        apoapsis: on && this.orbitOn ? this.screen(this.apsides[1]!.position) : null,
+        periapsis: on && this.orbitOn && anyPlanet ? this.screen(this.apsides[0]!.position) : null,
+        apoapsis: on && this.orbitOn && anyPlanet ? this.screen(this.apsides[1]!.position) : null,
         inner: on && this.zoneOn ? edge(this.info.hz_inner_au) : null,
         outer: on && this.zoneOn ? edge(this.info.hz_outer_au) : null,
         star: this.screen(new Vector3()),
+        starPin: this.pins.length > 0 ? this.screen(new Vector3(0, PIN_HEIGHT, 0)) : null,
         frost: this.frost.visible
           ? (() => {
               const at = this.screen(this.inPlaneAt(-Math.PI / 2, this.frostAu));
@@ -1611,6 +1687,7 @@ export class StarView {
                       arrow: this.arrowGroup.visible && this.arrowMids[k] ? this.screen(this.arrowMids[k]) : null,
                       gravity: this.gravities[k] ?? 0,
                       pull: this.pullGroup.visible && this.pullMids[k] ? this.screen(this.pullMids[k]) : null,
+                      pin: this.pins[k] ? this.screen(this.giantMarkers[k]!.position.clone().setY(this.giantMarkers[k]!.position.y + PIN_HEIGHT)) : null,
                     },
                   ] : [];
             })

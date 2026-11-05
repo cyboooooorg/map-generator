@@ -181,13 +181,21 @@
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
     gap: 14px;
   }
+  /* Every card of a row as tall as the tallest, its text at the top. */
+  .grid {
+    grid-auto-rows: 1fr;
+  }
   li {
     position: relative;
     min-width: 0;
+    display: grid;
   }
   .card {
     display: grid;
+    grid-template-rows: auto 1fr;
+    align-content: start;
     width: 100%;
+    height: 100%;
     padding: 0;
     text-align: left;
     overflow: hidden;
@@ -218,6 +226,7 @@
   }
   .text {
     display: grid;
+    align-content: start;
     gap: 2px;
     padding: 8px 10px 10px;
     min-width: 0;
