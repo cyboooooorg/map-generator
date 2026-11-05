@@ -120,6 +120,10 @@ pub struct System {
     /// The planets from the star out, each followed by its moons, nearest
     /// first.
     pub bodies: Vec<Body>,
+    /// The body a request around a planet asked for (a giant's moon for
+    /// `host = giant`), generated with the system; none for a whole system.
+    #[serde(default)]
+    pub focus: Option<String>,
 }
 
 /// The star of a system.
@@ -778,6 +782,7 @@ fn assemble(
     let designation = star_name(seed, &info.kind);
     let ice = 2.7 * info.luminosity.sqrt();
     let mut bodies = Vec::new();
+    let mut focus_id = None;
     for (rank, slot) in slots.iter().enumerate() {
         let id = planet_letter(rank);
         let planet_designation = format!("{designation} {id}");
@@ -795,6 +800,9 @@ fn assemble(
             _ => planet_params(slot, star_code, metallicity, width, height, planet_seed),
         };
         let planet = planet_body(&id, &planet_designation, slot, &params, star_code);
+        if at_focus && focus.as_ref().is_some_and(|f| f.host.is_none()) {
+            focus_id = Some(id.clone());
+        }
         bodies.push(planet);
         // Its moons.
         let moons = if is_giant(&slot.body_type) {
@@ -815,6 +823,13 @@ fn assemble(
         };
         for (k, (moon_type, moon_params, orbit, physical, spin)) in moons.into_iter().enumerate() {
             let moon_id = format!("{id}-{}", k + 1);
+            if at_focus
+                && focus
+                    .as_ref()
+                    .is_some_and(|f| f.host.is_some() && f.params.seed == moon_params.seed)
+            {
+                focus_id = Some(moon_id.clone());
+            }
             let surroundings = surroundings_at(&info, slot.orbit_au, slot.eccentricity);
             bodies.push(Body {
                 id: moon_id,
@@ -846,6 +861,7 @@ fn assemble(
             ice_line_au: ice,
         },
         bodies,
+        focus: focus_id,
     }
 }
 
@@ -1387,6 +1403,7 @@ mod tests {
         let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
         let p = planets(&system);
         assert_eq!(p.len(), 5);
+        assert_eq!(system.focus, None);
         let count = |t: &str| p.iter().filter(|b| b.body_type == t).count();
         assert_eq!(
             (
@@ -1502,6 +1519,7 @@ mod tests {
         assert_eq!(focus.params.circumference_km, asked.circumference_km);
         assert_eq!(focus.body_type, "terran");
         assert_eq!(system.seed, 1234);
+        assert_eq!(system.focus.as_deref(), Some(focus.id.as_str()));
     }
 
     #[test]
@@ -1526,6 +1544,12 @@ mod tests {
             .filter(|b| b.parent.as_deref() == Some(&giant.id))
             .collect();
         assert!(moons.iter().any(|m| m.body_type == "terran"));
+        let focus = system.focus.as_deref().expect("the world asked");
+        assert!(
+            moons
+                .iter()
+                .any(|m| m.id == focus && m.body_type == "terran")
+        );
         assert!(moons.len() >= 2);
     }
 

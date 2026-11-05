@@ -15,4 +15,9 @@ width: number, height: number, star: SystemStar,
  * The planets from the star out, each followed by its moons, nearest
  * first.
  */
-bodies: Array<Body>, };
+bodies: Array<Body>, 
+/**
+ * The body a request around a planet asked for (a giant's moon for
+ * `host = giant`), generated with the system; none for a whole system.
+ */
+focus: string | null, };
