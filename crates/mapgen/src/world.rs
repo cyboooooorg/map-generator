@@ -8,8 +8,10 @@ use crate::rivers::RiverLine;
 pub use crate::biome::{Biome, biome_color, biome_name, surface_color};
 
 /// Everything needed to generate a world. The same parameters always produce
-/// the same world.
-#[derive(Clone, Debug)]
+/// the same world. Stored with each body of a system (see
+/// [`crate::system`]), so that it is generated later as it was drawn.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct WorldParams {
     pub width: u32,
     pub height: u32,

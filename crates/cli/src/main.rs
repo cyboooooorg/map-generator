@@ -162,6 +162,88 @@ struct Args {
     #[arg(long, env = "MAPGEN_NO_NOISE_MAPS",
           value_parser = clap::builder::BoolishValueParser::new())]
     no_noise_maps: bool,
+
+    /// Draws a whole system (see docs/system-spec.md) instead of a world:
+    /// the planets asked by type, `terran=2,gas-giant=1` (types: terran,
+    /// barren, caustic, frozen, volcanic, gas-giant, ice-giant,
+    /// hot-jupiter; 15 at most), or `auto` for a drawn system; with --star,
+    /// --metallicity, --seed and the map size
+    #[arg(long)]
+    system: Option<String>,
+
+    /// Draws the system (the whole system of --system, or the one around
+    /// the planet asked) and writes only its system.json into
+    /// <systems-dir>/<id>/, no maps; prints its bodies
+    #[arg(long)]
+    draw_only: bool,
+
+    /// Directory that receives the drawn systems
+    #[arg(long, default_value = "systems")]
+    systems_dir: PathBuf,
+}
+
+/// The planets of `--system`: `type=count` pairs, or `auto`.
+fn parse_planets(text: &str) -> Result<Option<std::collections::BTreeMap<String, u32>>, String> {
+    if text == "auto" {
+        return Ok(None);
+    }
+    let mut planets = std::collections::BTreeMap::new();
+    for pair in text.split(',').filter(|p| !p.trim().is_empty()) {
+        let (body_type, count) = pair
+            .split_once('=')
+            .ok_or_else(|| format!("{pair:?}: expected type=count"))?;
+        let count: u32 = count.trim().parse().map_err(|e| format!("{pair:?}: {e}"))?;
+        *planets.entry(body_type.trim().to_string()).or_insert(0) += count;
+    }
+    Ok(Some(planets))
+}
+
+/// Draws a system and writes its system.json (see `--draw-only`).
+fn draw_system(
+    request: mapgen::system::SystemRequest,
+    dir: &std::path::Path,
+) -> Result<(), Box<dyn Error>> {
+    use mapgen::system::{BodyKind, draw, system_id, write_system};
+    let system = draw(&request, &mut rand::rng())?;
+    let id = system_id(&system);
+    write_system(&dir.join(&id), &system)?;
+    println!(
+        "System {id}: {} ({}), {} planets, {} moons",
+        system.star.designation,
+        system.star.spectral,
+        system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == BodyKind::Planet)
+            .count(),
+        system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == BodyKind::Moon)
+            .count(),
+    );
+    for body in &system.bodies {
+        let indent = if body.kind == BodyKind::Moon {
+            "    "
+        } else {
+            "  "
+        };
+        let distance = if body.kind == BodyKind::Planet {
+            format!("{:.3} AU", body.orbit.semi_major_axis_au)
+        } else {
+            format!("{:.0} km", body.orbit.semi_major_axis_km)
+        };
+        println!(
+            "{indent}{:5} {:24} {:12} {distance:>11}  r={:.0} km  {:.1} K",
+            body.id,
+            body.designation,
+            body.body_type,
+            body.physical.radius_km,
+            body.surroundings.equilibrium_k
+        );
+    }
+    println!("→ {}", dir.join(&id).join("system.json").display());
+    Ok(())
 }
 
 /// Builds a clap value parser that accepts an `f32` within `limits`.
@@ -194,6 +276,18 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    if let Some(planets) = &args.system {
+        let request = mapgen::system::SystemRequest::System(mapgen::system::WholeSystemRequest {
+            star: args.star.clone(),
+            metallicity: args.metallicity,
+            planets: parse_planets(planets)?,
+            seed: args.seed,
+            width: Some(args.width),
+            height: Some(args.height),
+        });
+        return draw_system(request, &args.systems_dir);
+    }
+
     let request = WorldRequest {
         planet: args.planet,
         seed: args.seed,
@@ -218,6 +312,12 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         width: Some(args.width),
         height: Some(args.height),
     };
+    if args.draw_only {
+        return draw_system(
+            mapgen::system::SystemRequest::Around(request),
+            &args.systems_dir,
+        );
+    }
     let resolved = request.resolve(&mut rand::rng())?;
     if !resolved.ignored.is_empty() {
         eprintln!(

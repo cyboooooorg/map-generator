@@ -148,6 +148,9 @@ pub mod stream {
     /// The seeds of a giant's other regular moons (see
     /// `crate::exomoon::sibling_params`), one stream past this per moon.
     pub const SIBLINGS: u32 = 31;
+    /// A system's draw (see `crate::system`): its planets, and its bodies'
+    /// seeds and orbits.
+    pub const SYSTEM: u32 = 64;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.
