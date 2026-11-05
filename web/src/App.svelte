@@ -3,6 +3,7 @@
   import GenerateForm from './components/GenerateForm.svelte';
   import JobList from './components/JobList.svelte';
   import LanguageSelect from './components/LanguageSelect.svelte';
+  import ThemeSelect from './components/ThemeSelect.svelte';
   import SystemOrrery from './components/SystemOrrery.svelte';
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
@@ -420,6 +421,7 @@
           >{t.app.tabViewer}</button
         >
       </div>
+      <ThemeSelect />
       <LanguageSelect />
       <button class="primary" onclick={() => openForm()} disabled={!spec}>{t.app.newSystem}</button>
     </header>

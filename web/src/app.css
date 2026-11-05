@@ -13,7 +13,19 @@
   /* Links and accent text on the dark background (6:1). */
   --link: #4f8cff;
   --danger: #ff6b6b;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* The theme hooks (see src/lib/themes.ts, which writes every token). */
+  --control-bg: #1b2130;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-ui);
+  --radius: 6px;
+  --frame-clip: none;
+  --frame-deco: none;
+  --glow: 0 0 0 transparent;
+  --label-bg: rgb(5 7 13 / 0.7);
+  --label-text: #e8dcc4;
+  --overlay-line: #ffe3a8;
+  --overlay-muted: #8a93a8;
+  font-family: var(--font-ui);
   font-size: 14px;
   color: var(--text);
   background: var(--bg);
@@ -41,10 +53,18 @@ button,
 select,
 input[type='text'],
 input[type='number'] {
-  background: #1b2130;
+  background: var(--control-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 6px 10px;
+}
+
+h1,
+h2,
+h3,
+h4,
+summary strong {
+  font-family: var(--font-display);
 }
 
 button {
@@ -73,9 +93,67 @@ input[type='range'] {
   accent-color: var(--accent);
 }
 
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+}
+
 /* A value or label with a unit explained in its tooltip (see lib/units.ts). */
 .unit-help {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
   cursor: help;
+}
+
+/*
+ * A panel of the interface, framed as the theme frames it: its corners
+ * cut (--frame-clip), a glow inside (--glow) and decorations drawn over
+ * it (--frame-deco: brackets, stripes, scan lines). Default draws none.
+ */
+.hud {
+  position: relative;
+  clip-path: var(--frame-clip);
+  box-shadow: var(--glow);
+}
+.hud::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--frame-deco);
+}
+
+/* Game-like themes: square, spaced-out headings. */
+:root:not([data-theme='default']) h4,
+:root:not([data-theme='default']) summary strong {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+:root[data-theme='holo'] button:hover:not(:disabled),
+:root[data-theme='station'] button:hover:not(:disabled) {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+/* Cyberpunk: a short glitch when a button is hovered. */
+:root[data-theme='cyberpunk'] button:hover:not(:disabled) {
+  animation: glitch 0.25s steps(2) 1;
+  box-shadow: 3px 3px 0 var(--border);
+}
+@keyframes glitch {
+  0% {
+    text-shadow: 2px 0 #00f0ff, -2px 0 #ff2bd6;
+    transform: translateX(1px);
+  }
+  50% {
+    text-shadow: -2px 0 #00f0ff, 2px 0 #ff2bd6;
+    transform: translateX(-1px);
+  }
+  100% {
+    text-shadow: none;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme='cyberpunk'] button:hover:not(:disabled) {
+    animation: none;
+  }
 }

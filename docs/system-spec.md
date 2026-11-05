@@ -313,6 +313,10 @@ addressed as `<system-id>/<body-id>` everywhere.
 
 ## Interface
 
+- **Themes.** The interface comes in five themes (Default, Holo HUD,
+  Orbital station, Cyberpunk, Military), picked in the header and
+  remembered; the colours that carry meaning (habitable zone, frost line,
+  arrows, map layers) keep their hue in all of them.
 - **Library.** The world list becomes a system list. Each row shows the
   star's designation (or given name), a strip of small spheres (one per
   planet, in order, coloured as their previews, the generated ones
