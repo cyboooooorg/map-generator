@@ -61,7 +61,7 @@
     const size = sizes[id] ?? { width: 320, height: 240 };
     // On the left, beside the icon bar, each new card a step lower than the last.
     const step = 28 * Object.keys(layout.floating).length;
-    layout.floating[id] = clampToView({ x: 64 + step, y: 72 + step }, size.width, size.height, viewWidth, viewHeight);
+    layout.floating[id] = clampToView({ x: 200 + step, y: 76 + step }, size.width, size.height, viewWidth, viewHeight);
     if (layout.active === id) layout.active = null;
     front(id);
   }
@@ -190,8 +190,8 @@
   }
   .dock {
     position: absolute;
-    /* Below the viewer's toolbar, above the playback bar. */
-    top: 64px;
+    /* Below the viewer's toolbar and the axes gizmo, above the playback bar. */
+    top: 76px;
     right: 12px;
     bottom: 76px;
     display: flex;
