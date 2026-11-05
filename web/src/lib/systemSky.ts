@@ -15,7 +15,7 @@
 import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
-import { IDENTITY_AXES, MAX_CASTERS, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
+import { IDENTITY_AXES, pickShadowCasters, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
 
 const AU_KM = 1.495_978_707e8;
 /** The Sun's radius, km. */
@@ -229,10 +229,15 @@ export function systemSky(
           return place(add(parent, pointOnOrbit(there.plane, angle, r)));
         });
     });
+  const sun = unit(local(scale(here.centre, -1)));
+  const starRadius = (system.star.info.radius * SUN_RADIUS_KM) / unitKm;
+  const starDistance = Math.max(Math.hypot(...place([0, 0, 0])), starRadius * 1.001);
   return {
     bodies,
     ids,
-    casters: casters.sort((p, q) => q.radius - p.radius).slice(0, MAX_CASTERS),
+    // Those whose shadow reaches the body shown now: a moon's on its
+    // planet, the planet's on its moon, whatever the far giants' sizes.
+    casters: pickShadowCasters(casters, sun, Math.asin(starRadius / starDistance)),
     orbits,
     sun: unit(local(scale(here.centre, -1))),
     star: { position: place([0, 0, 0]), radius: (system.star.info.radius * SUN_RADIUS_KM) / unitKm },

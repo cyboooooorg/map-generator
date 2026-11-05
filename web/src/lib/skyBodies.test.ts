@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { skyFromWorld } from './sky';
-import { eclipse, halo } from './skyBodies';
+import { eclipse, halo, inFrontOfGlobe, pickShadowCasters } from './skyBodies';
 
 describe('eclipses', () => {
   it('darkens the ground in the umbra, less in the penumbra, not elsewhere', () => {
@@ -43,5 +43,40 @@ describe('halo', () => {
     const thin = halo(skyFromWorld(world(0.006)))!;
     const dense = halo(skyFromWorld(world(92)))!;
     expect(dense.strength).toBeGreaterThan(thin.strength);
+  });
+});
+
+describe('pickShadowCasters', () => {
+  const sun: [number, number, number] = [1, 0, 0];
+
+  it('keeps a small moon between the body and the sun over far giants that cannot shadow it', () => {
+    const moon = { position: [60, 0.5, 0] as [number, number, number], radius: 0.27 };
+    const giants = [1, 2, 3, 4].map((k) => ({ position: [0, 5000 * k, 0] as [number, number, number], radius: 11 }));
+    expect(pickShadowCasters([...giants, moon], sun, 0.0047)).toEqual([moon]);
+  });
+
+  it('leaves out bodies behind the body shown, and keeps the largest in its sky first', () => {
+    const behind = { position: [-60, 0, 0] as [number, number, number], radius: 0.27 };
+    const near = { position: [30, 0, 0] as [number, number, number], radius: 3 };
+    const far = { position: [300, 0, 0] as [number, number, number], radius: 3 };
+    expect(pickShadowCasters([far, behind, near], sun, 0.0047)).toEqual([near, far]);
+  });
+});
+
+describe('inFrontOfGlobe', () => {
+  const camera: [number, number, number] = [0, 0, 5];
+
+  it('puts a moon between the camera and the body shown in front of it', () => {
+    expect(inFrontOfGlobe(camera, [0, 0, 3], 0.2)).toBe(true);
+  });
+
+  it('keeps a moon beyond the body shown behind it', () => {
+    expect(inFrontOfGlobe(camera, [0, 0, -60], 0.27)).toBe(false);
+    // Off to the side, past the horizon's distance.
+    expect(inFrontOfGlobe(camera, [30, 0, -10], 0.27)).toBe(false);
+  });
+
+  it('puts a near body off the line of sight in front, when closer than the horizon', () => {
+    expect(inFrontOfGlobe(camera, [1.2, 0, 3.5], 0.1)).toBe(true);
   });
 });
