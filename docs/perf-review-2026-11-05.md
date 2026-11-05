@@ -1,9 +1,9 @@
 # Engine performance review, 2026-11-05
 
 A review of the generator (`crates/mapgen`) for possible optimisations,
-made by the two sessions, one half of the stages each. **Nothing is
-implemented yet**: this report lists candidates with measured or
-estimated gains, for a decision on which to do.
+made by the two sessions, one half of the stages each. It lists
+candidates with estimated gains; the [Results](#results) section records
+which were done and what they measured.
 
 ## Setup
 
@@ -67,6 +67,18 @@ bit-identical: the same output bytes as before for every test world.
 | P2   | Dropped    | The clone is the `world.png` buffer itself                                                                                              |
 | P3   | Dropped    | Covered by X1's cap of four files at a time                                                                                             |
 | S1   | Not needed | Already in place: moons are sized by their radius (at least 512 × 256, `MOON_MIN_WIDTH`), siblings at 512 × 256                         |
+
+All the items together, `main` at `50aa128` (before) against `6c8acdf`
+(after), same command at 8192 × 4096, minimum of three interleaved runs:
+
+| World                             | Before  | After   | Gain  |
+| --------------------------------- | ------- | ------- | ----- |
+| The setup above (seed 4242)       | 17.09 s | 14.22 s | −17 % |
+| River-heavy (seed 1777467217)     | 22.91 s | 18.90 s | −18 % |
+
+The output files are byte-identical for both worlds. The coast distance
+now runs inside the Moisture stage, and the clouds inside Rivers, so the
+per-stage times shift between those stages.
 
 N1 shows that the Perlin share of the profile overstates what faster noise
 alone gains: N2 and X3 stay to be measured before they are kept. P1, E2
