@@ -36,6 +36,13 @@ export interface SystemPlanet {
   moonList: { id: string; name: string; radius_km: number; semi_major_axis_km: number; period_days: number; inclination_deg: number }[];
   /** Its orbit's tilt to the star's equator, degrees. */
   inclination_deg: number;
+  /** Mean starlight, relative to Earth's. */
+  flux_earth: number;
+  /** Surface gravity (cloud tops for a giant), relative to Earth's. */
+  gravity: number;
+  /** Its day, hours, and whether it is locked to its star (its day its year). */
+  day_hours: number;
+  locked: boolean;
   /** Whether its maps exist. */
   generated: boolean;
 }
@@ -135,6 +142,10 @@ export function systemStarView(
       moons: system.bodies.filter((b) => b.parent === body.id).length,
       moonList: moonsOf(body.id),
       inclination_deg: body.orbit.inclination_deg,
+      flux_earth: body.surroundings.flux_earth,
+      gravity: body.physical.gravity,
+      day_hours: body.spin.period_hours,
+      locked: body.spin.locked,
       generated: body.generated,
     })),
     selected: all.findIndex((b) => b.id === planet.id),

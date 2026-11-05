@@ -1180,6 +1180,11 @@
         if (!world.pinnedPlanets.includes(id)) world.pinnedPlanets = [...world.pinnedPlanets, id];
       }}
       onUnpin={(id: string) => (world.pinnedPlanets = world.pinnedPlanets.filter((p) => p !== id))}
+      onUnpinAll={() => (world.pinnedPlanets = [])}
+      onOpenMoon={(id: string) => {
+        world.subject = 'planet';
+        world.showSystemBody(id);
+      }}
       onPickPlanet={sysStar
         ? (i: number) => {
             // A click opens the planet's card and pins it.
