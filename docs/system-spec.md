@@ -320,7 +320,10 @@ addressed as `<system-id>/<body-id>` everywhere.
 - **Viewer chrome.** The star view's data is in a dock of panels by
   theme (the star, the planet, the planets), each of which can float over
   the view; its display switches are an icon bar, and its time a playback
-  bar at the bottom (play, date, jumps, speed).
+  bar at the bottom (play, date, jumps, speed). The planet viewer has the
+  same chrome: panels (info, map, light and season, epoch, host planet,
+  hexes), an icon bar of its display switches, and one clock in days for
+  its seasons and moons.
 - **Main menu.** The app opens on a menu, and no viewer starts until a
   system is opened. The menu shows the systems as a grid of cards, each
   with its orrery, its star's designation (or given name), the count of

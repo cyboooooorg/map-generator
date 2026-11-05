@@ -11,6 +11,9 @@ const S = ' ';
 
 export const fr: Messages = {
   playback: {
+    dayOfYear: (p) => `jour ${p.day} sur ${p.year}`,
+    yearHelp: `Le jour de l’année de la planète${S}: les saisons, l’heure et les lunes avancent avec lui`,
+    toStart: 'Revenir au jour 1',
     label: 'Lecture',
     play: 'Lecture',
     pause: 'Pause',
@@ -383,8 +386,6 @@ export const fr: Messages = {
     systems: 'Systèmes',
     back: 'Menu',
     backHelp: 'Retour au menu principal',
-    info: 'Infos',
-    infoHelp: `Le système et le corps affichés${S}: leurs fiches`,
   },
   form: {
     stepsLabel: 'Étapes',
@@ -500,6 +501,11 @@ export const fr: Messages = {
     sending: 'Envoi…',
   },
   viewer: {
+    sunlightOff: 'Allumez l’éclairage (dans la barre d’icônes) pour éclairer l’astre par son étoile, avec ses saisons et son heure.',
+    hexesOff: 'Allumez la grille hexagonale dans la barre d’icônes pour la régler ici.',
+    infoPanel: 'Fiche',
+    mapPanel: 'Carte',
+    lightPanel: 'Lumière et saison',
     tools: 'Outils',
     body: 'Astre',
     bodyHelp: `L’astre du système affiché${S}: l’étoile (O), le monde et ses lunes${S}; pour la lune d’une géante, la géante et ses autres lunes (U${S}: le suivant)`,

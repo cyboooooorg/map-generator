@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { biomeName } from '../lib/i18n/names.svelte';
   import { t } from '../lib/i18n/index.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -9,8 +10,6 @@
   import { samplePoint } from '../lib/sample';
   import type { CameraState } from '../lib/viewer/PlanetView';
   import type { LoadedWorld } from '../lib/world.svelte';
-  import type { Snippet } from 'svelte';
-  import { loadSetting, saveSetting } from '../lib/settings';
   import InfoPanel from './InfoPanel.svelte';
   import Viewer from './Viewer.svelte';
 
@@ -30,8 +29,8 @@
     linkedDisplay?: LinkedDisplay | null;
     /** Whether its display changes are saved as the preferences (the main pane only). */
     persistDisplay?: boolean;
-    /** The cards of the system and the body shown, beside the view, folding to a tab. */
-    info?: Snippet;
+    /** The body's details, shown as the first panel of the viewer's dock (see Viewer). */
+    info?: Snippet | undefined;
   }
 
   let {
@@ -46,9 +45,6 @@
     persistDisplay = true,
     info,
   }: Props = $props();
-  /** Whether the info column is open (kept in the browser). */
-  let infoOpen = $state(loadSetting('infoOpen', true));
-  $effect(() => saveSetting('infoOpen', infoOpen));
 
   let viewer = $state<Viewer | null>(null);
   let picked = $state<LonLat | null>(null);
@@ -114,21 +110,11 @@
   }
 </script>
 
-<div class="with-info" class:open={info && infoOpen}>
-{#if info}
-  <aside class="info" aria-label={t.menu.info}>
-    <button class="info-toggle" aria-expanded={infoOpen} title={t.menu.infoHelp} onclick={() => (infoOpen = !infoOpen)}
-      >{infoOpen ? '‹' : '›'} {t.menu.info}</button
-    >
-    {#if infoOpen}
-      <div class="info-body">{@render info()}</div>
-    {/if}
-  </aside>
-{/if}
 <div class="pane">
   <Viewer
     bind:this={viewer}
     bind:hexMap
+    {info}
     {world}
     {revision}
     {path}
@@ -184,53 +170,8 @@
     />
   {/if}
 </div>
-</div>
 
 <style>
-  .with-info {
-    height: 100%;
-    min-height: 0;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .info {
-    min-height: 0;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    border-right: 1px solid var(--border);
-    background: var(--bg);
-  }
-  .with-info.open .info {
-    width: min(340px, 40vw);
-  }
-  .info-toggle {
-    margin: 6px;
-    justify-self: start;
-    padding: 2px 8px;
-    white-space: nowrap;
-  }
-  .info-body {
-    overflow-y: auto;
-    padding: 0 12px 12px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-content: start;
-    gap: 12px;
-  }
-  @media (max-width: 760px) {
-    .with-info {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-    .with-info.open .info {
-      width: auto;
-      max-height: 45vh;
-      border-right: none;
-      border-bottom: 1px solid var(--border);
-    }
-  }
   .pane {
     position: relative;
     height: 100%;

@@ -643,9 +643,11 @@
   }
   .viewer-screen {
     height: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+  }
+  .viewer-screen > .panes {
+    flex: 1;
   }
   .viewer-bar {
     padding: 6px 12px;
