@@ -3,7 +3,7 @@
   import { t } from '../lib/i18n/index.svelte';
   import { biomeName } from '../lib/i18n/names.svelte';
   import { onDestroy, onMount, untrack } from 'svelte';
-  import { ApiFailure, api, followJob, systemBodyId, worldFile } from '../lib/api/client';
+  import { ApiFailure, api, followJob, systemBodyId, worldFile, worldThumbnail } from '../lib/api/client';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -621,6 +621,20 @@
   const sysStar = $derived(
     sys && sysPlanet ? systemStarView(sys, sysPlanet, world.systemNames, t.viewer.bodyTypes as Record<string, string>) : null,
   );
+  /** Opens planet `index` of the star view (in sysStar's order): its maps, or its generation. */
+  const openSystemPlanet = (index: number) => {
+    const id = sysStar?.ids[index];
+    if (id) {
+      world.subject = 'planet';
+      world.showSystemBody(id);
+    }
+  };
+  /** The map of each generated planet of the star view, for its marker: its thumbnail, at the system's revision. */
+  const sysMaps = $derived(
+    sysStar && world.systemId
+      ? sysStar.planets.map((p) => (p.generated ? worldThumbnail(systemBodyId(world.systemId!, p.id), revision) : null))
+      : null,
+  );
   /** What the star view shows: the system round the planet shown (or the moon's), the Sun's before one loads. */
   const system = $derived(
     sysStar
@@ -1156,15 +1170,21 @@
     <StarPane
       kinds={sysStar ? sysStar.planets.map((p) => p.typeLabel) : null}
       selected={sysStar ? sysStar.selected : null}
+      planets={sysStar ? sysStar.planets : null}
+      pinned={world.pinnedPlanets}
+      onPin={(id: string) => {
+        if (!world.pinnedPlanets.includes(id)) world.pinnedPlanets = [...world.pinnedPlanets, id];
+      }}
+      onUnpin={(id: string) => (world.pinnedPlanets = world.pinnedPlanets.filter((p) => p !== id))}
       onPickPlanet={sysStar
         ? (i: number) => {
+            // A click opens the planet's card and pins it.
             const id = sysStar.ids[i];
-            if (id) {
-              world.subject = 'planet';
-              world.showSystemBody(id);
-            }
+            if (id && !world.pinnedPlanets.includes(id)) world.pinnedPlanets = [...world.pinnedPlanets, id];
           }
         : null}
+      onOpenPlanet={sysStar ? openSystemPlanet : null}
+      maps={sysMaps}
       bind:this={starPane}
       planetName={sysPlanet ? (world.systemNames[sysPlanet.id] ?? sysPlanet.designation) : null}
       star={system.star}

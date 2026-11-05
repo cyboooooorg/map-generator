@@ -58,6 +58,13 @@ export class LoadedWorld {
    * asked for.
    */
   subject = $state<'planet' | 'star'>('planet');
+  /**
+   * The planets of the system shown whose cards are pinned in the star
+   * view, by body id, in pinning order. They last for the session while
+   * the same system is shown (opening a planet and coming back keeps
+   * them); another system or a lone world clears them.
+   */
+  pinnedPlanets = $state<string[]>([]);
   /** The body of the system shown, from its file. */
   shownSystemBody = $derived(this.system?.bodies.find((b) => b.id === this.systemBody) ?? null);
   private systemController: AbortController | null = null;
@@ -79,6 +86,7 @@ export class LoadedWorld {
     this.systemBody = null;
     this.systemNames = {};
     this.subject = 'planet';
+    this.pinnedPlanets = [];
     this.worldId = id;
     this.worldMeta = null;
     this.worldStats = null;
@@ -96,7 +104,10 @@ export class LoadedWorld {
     const controller = new AbortController();
     this.systemController = controller;
     const again = this.systemId === id;
-    if (!again) this.subject = body ? 'planet' : 'star';
+    if (!again) {
+      this.subject = body ? 'planet' : 'star';
+      this.pinnedPlanets = [];
+    }
     this.systemId = id;
     this.worldId = null;
     (async () => {
