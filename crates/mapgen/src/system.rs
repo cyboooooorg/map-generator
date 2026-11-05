@@ -120,6 +120,10 @@ pub struct System {
     /// The planets from the star out, each followed by its moons, nearest
     /// first.
     pub bodies: Vec<Body>,
+    /// The body a request around a planet asked for (a giant's moon for
+    /// `host = giant`), generated with the system; none for a whole system.
+    #[serde(default)]
+    pub focus: Option<String>,
 }
 
 /// The star of a system.
@@ -778,6 +782,7 @@ fn assemble(
     let designation = star_name(seed, &info.kind);
     let ice = 2.7 * info.luminosity.sqrt();
     let mut bodies = Vec::new();
+    let mut focus_id = None;
     for (rank, slot) in slots.iter().enumerate() {
         let id = planet_letter(rank);
         let planet_designation = format!("{designation} {id}");
@@ -795,6 +800,9 @@ fn assemble(
             _ => planet_params(slot, star_code, metallicity, width, height, planet_seed),
         };
         let planet = planet_body(&id, &planet_designation, slot, &params, star_code);
+        if at_focus && focus.as_ref().is_some_and(|f| f.host.is_none()) {
+            focus_id = Some(id.clone());
+        }
         bodies.push(planet);
         // Its moons.
         let moons = if is_giant(&slot.body_type) {
@@ -815,6 +823,13 @@ fn assemble(
         };
         for (k, (moon_type, moon_params, orbit, physical, spin)) in moons.into_iter().enumerate() {
             let moon_id = format!("{id}-{}", k + 1);
+            if at_focus
+                && focus
+                    .as_ref()
+                    .is_some_and(|f| f.host.is_some() && f.params.seed == moon_params.seed)
+            {
+                focus_id = Some(moon_id.clone());
+            }
             let surroundings = surroundings_at(&info, slot.orbit_au, slot.eccentricity);
             bodies.push(Body {
                 id: moon_id,
@@ -846,6 +861,7 @@ fn assemble(
             ice_line_au: ice,
         },
         bodies,
+        focus: focus_id,
     }
 }
 
@@ -1236,6 +1252,115 @@ fn preview_of(body_type: &str, params: &WorldParams, _star: f32) -> Preview {
     }
 }
 
+/// Where a job generating a body's neighbourhood is (see
+/// [`generate_neighbourhood`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BodyProgress {
+    /// The body being generated.
+    pub body: String,
+    /// Its place in the job (from 1), and how many the job generates.
+    pub body_step: u32,
+    pub bodies: u32,
+    /// The stage it is at, and its place among a body's stages (from 1).
+    pub stage: crate::generation::Stage,
+    pub step: u32,
+    pub steps: u32,
+}
+
+/// The bodies opening `body_id` generates, not generated yet, the body
+/// first: a planet and its moons; a moon, its planet and the planet's
+/// other moons. Empty when they all are (or the id is unknown).
+pub fn neighbourhood(system: &System, body_id: &str) -> Vec<String> {
+    let Some(body) = system.bodies.iter().find(|b| b.id == body_id) else {
+        return Vec::new();
+    };
+    let planet = body.parent.as_deref().unwrap_or(&body.id);
+    let mut ids = vec![body.id.clone()];
+    for other in &system.bodies {
+        let family = other.id == planet || other.parent.as_deref() == Some(planet);
+        if family && other.id != body.id {
+            ids.push(other.id.clone());
+        }
+    }
+    ids.retain(|id| system.bodies.iter().any(|b| &b.id == id && !b.generated));
+    ids
+}
+
+/// Stages a body's generation reports (the moons are bodies of their own).
+const BODY_STAGES: usize = 8;
+
+/// Generates the bodies opening `body_id` asks for (see [`neighbourhood`])
+/// in the system written in `system_dir`, one by one, each into
+/// `bodies/<id>/` with the layout of a world: written into
+/// `bodies/.tmp-<id>/`, renamed into place once complete, then marked
+/// generated in `system.json`, so a job stopped between two bodies (a
+/// cancelled generation unwinds from `progress`) keeps those done and
+/// leaves no half body. Its `world.json` names its system and body.
+/// Returns the bodies generated, in order.
+pub fn generate_neighbourhood(
+    system_dir: &std::path::Path,
+    body_id: &str,
+    mut progress: impl FnMut(BodyProgress),
+) -> Result<Vec<String>, String> {
+    use crate::generation::{GenerateOptions, Stage, generate_with_progress};
+    let system = read_system(system_dir)?;
+    if !system.bodies.iter().any(|b| b.id == body_id) {
+        return Err(format!("no body {body_id} in this system"));
+    }
+    let ids = neighbourhood(&system, body_id);
+    let system_name = system_id(&system);
+    let bodies_dir = system_dir.join("bodies");
+    std::fs::create_dir_all(&bodies_dir).map_err(|e| e.to_string())?;
+    for (k, id) in ids.iter().enumerate() {
+        let body = system.bodies.iter().find(|b| &b.id == id).expect("listed");
+        let report = std::cell::RefCell::new(&mut progress);
+        let at = |stage: Stage| {
+            let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
+            (report.borrow_mut())(BodyProgress {
+                body: id.clone(),
+                body_step: k as u32 + 1,
+                bodies: ids.len() as u32,
+                stage,
+                step: step.min(BODY_STAGES as u32),
+                steps: BODY_STAGES as u32,
+            });
+        };
+        let generated = generate_with_progress(&body.params, GenerateOptions::default(), at);
+        at(Stage::Export);
+        let temp = bodies_dir.join(format!(".tmp-{id}"));
+        let _ = std::fs::remove_dir_all(&temp);
+        crate::export::export_world(
+            generated,
+            &temp,
+            crate::export::ExportOptions { raw_data: true },
+        )?;
+        name_world(&temp, &system_name, id)?;
+        let target = bodies_dir.join(id);
+        let _ = std::fs::remove_dir_all(&target);
+        std::fs::rename(&temp, &target).map_err(|e| e.to_string())?;
+        // Read again: another job may have marked other bodies meanwhile.
+        let mut current = read_system(system_dir)?;
+        if let Some(entry) = current.bodies.iter_mut().find(|b| &b.id == id) {
+            entry.generated = true;
+        }
+        write_system(system_dir, &current)?;
+    }
+    Ok(ids)
+}
+
+/// Adds the system and the body to a generated body's `world.json`.
+fn name_world(dir: &std::path::Path, system: &str, body: &str) -> Result<(), String> {
+    let path = dir.join("raw_data").join("world.json");
+    let text = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let mut json: serde_json::Value = serde_json::from_slice(&text).map_err(|e| e.to_string())?;
+    if let Some(map) = json.as_object_mut() {
+        map.insert("system".into(), system.into());
+        map.insert("body".into(), body.into());
+    }
+    let out = serde_json::to_vec(&json).map_err(|e| e.to_string())?;
+    std::fs::write(&path, out).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1278,6 +1403,7 @@ mod tests {
         let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
         let p = planets(&system);
         assert_eq!(p.len(), 5);
+        assert_eq!(system.focus, None);
         let count = |t: &str| p.iter().filter(|b| b.body_type == t).count();
         assert_eq!(
             (
@@ -1393,6 +1519,7 @@ mod tests {
         assert_eq!(focus.params.circumference_km, asked.circumference_km);
         assert_eq!(focus.body_type, "terran");
         assert_eq!(system.seed, 1234);
+        assert_eq!(system.focus.as_deref(), Some(focus.id.as_str()));
     }
 
     #[test]
@@ -1417,7 +1544,89 @@ mod tests {
             .filter(|b| b.parent.as_deref() == Some(&giant.id))
             .collect();
         assert!(moons.iter().any(|m| m.body_type == "terran"));
+        let focus = system.focus.as_deref().expect("the world asked");
+        assert!(
+            moons
+                .iter()
+                .any(|m| m.id == focus && m.body_type == "terran")
+        );
         assert!(moons.len() >= 2);
+    }
+
+    #[test]
+    fn opening_a_body_generates_it_and_its_family_once() {
+        // A rocky planet with moons, small maps.
+        let request = SystemRequest::Around(WorldRequest {
+            planet: Some("barren".into()),
+            seed: Some(31),
+            moons: Some(MoonsMode::Count(2)),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        });
+        let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+        let dir = std::env::temp_dir().join(format!("mapgen-system-gen-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        write_system(&dir, &system).unwrap();
+        let planet = system
+            .bodies
+            .iter()
+            .find(|b| {
+                b.kind == BodyKind::Planet
+                    && b.body_type == "barren"
+                    && system
+                        .bodies
+                        .iter()
+                        .any(|m| m.parent.as_ref() == Some(&b.id))
+            })
+            .expect("the barren planet and its moons");
+        let moon = system
+            .bodies
+            .iter()
+            .find(|b| b.parent.as_ref() == Some(&planet.id))
+            .unwrap();
+        // From a moon: the moon first, then its planet and its siblings.
+        let family = neighbourhood(&system, &moon.id);
+        assert_eq!(family[0], moon.id);
+        assert!(family.contains(&planet.id));
+        let mut seen = Vec::new();
+        let done = generate_neighbourhood(&dir, &moon.id, |p| seen.push(p)).unwrap();
+        assert_eq!(done, family);
+        for id in &done {
+            let world = dir
+                .join("bodies")
+                .join(id)
+                .join("raw_data")
+                .join("world.json");
+            let json: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(world).unwrap()).unwrap();
+            assert_eq!(json["body"], serde_json::Value::from(id.as_str()));
+        }
+        let back = read_system(&dir).unwrap();
+        assert!(
+            back.bodies
+                .iter()
+                .filter(|b| done.contains(&b.id))
+                .all(|b| b.generated)
+        );
+        // Every body reported its stages, in order, under its place in the job.
+        let last = seen.last().unwrap();
+        assert_eq!(
+            (last.body_step, last.bodies),
+            (done.len() as u32, done.len() as u32)
+        );
+        assert!(
+            seen.windows(2)
+                .all(|w| (w[0].body_step, w[0].step) <= (w[1].body_step, w[1].step))
+        );
+        // Asked again: nothing left to make.
+        assert!(
+            generate_neighbourhood(&dir, &planet.id, |_| {})
+                .unwrap()
+                .is_empty()
+        );
+        assert!(generate_neighbourhood(&dir, "zz", |_| {}).is_err());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
