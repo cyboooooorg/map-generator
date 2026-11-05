@@ -1,0 +1,233 @@
+// The sky of any body of a planetary system (docs/system-spec.md), from the
+// orbits and spins `system.json` stores: where every other body is, seen
+// from the body shown at a time, in that body's frame (`[cos lat sin lon,
+// sin lat, cos lat cos lon]`, y along its spin axis), as skyBodies places
+// the bodies of a world's sky.
+//
+// The system's frame has the star at its centre, y along the star's spin
+// axis (the plane of the planets near its equator). A planet's orbit is
+// placed by its node, inclination and periapsis, its position by Kepler's
+// equation from its mean anomaly at the system's epoch; a moon's round its
+// planet, in the planet's equatorial plane. A body's spin axis leans from
+// its orbit's normal by its axial tilt, towards a fixed direction (the
+// node line); it turns once per `spin.period_hours`, a locked body keeping
+// its longitude 180° towards what it orbits.
+import type { Body } from './api/types/Body';
+import type { Orbit } from './api/types/Orbit';
+import type { System } from './api/types/System';
+import { IDENTITY_AXES, MAX_CASTERS, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
+
+const AU_KM = 1.495_978_707e8;
+const DEG = Math.PI / 180;
+
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const scale = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
+const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const unit = (a: Vec3): Vec3 => scale(a, 1 / Math.max(Math.hypot(...a), 1e-12));
+
+/** A vector turned by `angle` about `axis` (a unit vector), right-handed. */
+function rotate(v: Vec3, axis: Vec3, angle: number): Vec3 {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return add(add(scale(v, c), scale(cross(axis, v), s)), scale(axis, dot(axis, v) * (1 - c)));
+}
+
+/** The frame an orbit lies in: its node line, its normal, and the third axis. */
+interface Plane {
+  node: Vec3;
+  normal: Vec3;
+  third: Vec3;
+}
+
+/**
+ * The plane of an orbit in its parent's frame `parent` (y the parent's
+ * axis): turned by its node about the axis, tilted by its inclination
+ * about the node line.
+ */
+function orbitPlane(orbit: Orbit, parent: Axes): Plane {
+  const [px, py, pz] = parent;
+  const node = add(scale(pz, Math.cos(orbit.node_deg * DEG)), scale(px, Math.sin(orbit.node_deg * DEG)));
+  const normal = rotate(py, node, orbit.inclination_deg * DEG);
+  return { node, normal, third: cross(normal, node) };
+}
+
+/**
+ * A body's place on its orbit after `days`, km, from its parent's centre:
+ * the true anomaly of Kepler's equation, from the argument of periapsis,
+ * prograde (from the node towards `third`).
+ */
+export function orbitPosition(orbit: Orbit, plane: Plane, days: number): Vec3 {
+  const e = Math.min(Math.max(orbit.eccentricity, 0), 0.95);
+  const mean = orbit.mean_anomaly_deg * DEG + (2 * Math.PI * days) / Math.max(orbit.period_days, 1e-6);
+  let eccentric = e < 0.8 ? mean : Math.PI;
+  for (let i = 0; i < 8; i += 1) {
+    eccentric -= (eccentric - e * Math.sin(eccentric) - mean) / (1 - e * Math.cos(eccentric));
+  }
+  const nu = 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(eccentric / 2), Math.sqrt(1 - e) * Math.cos(eccentric / 2));
+  const r = orbit.semi_major_axis_km * (1 - e * Math.cos(eccentric));
+  return pointOnOrbit(plane, orbit.periapsis_deg * DEG + nu, r);
+}
+
+/** The point of an orbit's plane at angle `angle` from its node, `r` km out. */
+function pointOnOrbit(plane: Plane, angle: number, r: number): Vec3 {
+  return scale(add(scale(plane.node, Math.cos(angle)), scale(plane.third, Math.sin(angle))), r);
+}
+
+/** Where a body is and how it is turned, in the system's frame. */
+export interface Placement {
+  /** Its centre, km from the star. */
+  centre: Vec3;
+  /** Its own axes (its map's frame): x, y (its spin axis), z. */
+  axes: Axes;
+  /** The plane of its orbit. */
+  plane: Plane;
+}
+
+/**
+ * Where every body of the system is after `days` from the system's epoch,
+ * and how it is turned (see the head of this file); `spinOffset` turns the
+ * body `turned` on itself by that much more (radians), as the hour of its
+ * view sets it.
+ */
+export function placeSystem(
+  system: System,
+  days: number,
+  turned: { id: string; spinOffset: number } | null = null,
+): Map<string, Placement> {
+  const placements = new Map<string, Placement>();
+  const byId = new Map(system.bodies.map((b) => [b.id, b]));
+  const place = (body: Body): Placement => {
+    const known = placements.get(body.id);
+    if (known) return known;
+    const parent = body.parent ? byId.get(body.parent) : undefined;
+    const parentPlace = parent ? place(parent) : null;
+    const parentAxes = parentPlace?.axes ?? IDENTITY_AXES;
+    const plane = orbitPlane(body.orbit, parentAxes);
+    const centre = add(parentPlace?.centre ?? [0, 0, 0], orbitPosition(body.orbit, plane, days));
+    // Its axis leans from its orbit's normal by its tilt, about the node line.
+    const y = unit(rotate(plane.normal, plane.node, body.spin.axial_tilt_deg * DEG));
+    // Its longitude 0 at the start, then turning on itself; a locked body
+    // keeps its longitude 180° towards what it orbits.
+    let z: Vec3;
+    const towardsParent = sub(parentPlace?.centre ?? [0, 0, 0], centre);
+    if (body.spin.locked) {
+      z = unit(scale(towardsParent, -1));
+    } else {
+      const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
+      const turns = (days * 24) / Math.max(body.spin.period_hours, 1e-6);
+      const offset = turned && turned.id === body.id ? turned.spinOffset : 0;
+      z = rotate(start, y, 2 * Math.PI * (turns - Math.floor(turns)) + offset);
+    }
+    z = unit(sub(z, scale(y, dot(z, y))));
+    const placement = { centre, axes: [cross(y, z), y, z] as Axes, plane };
+    placements.set(body.id, placement);
+    return placement;
+  };
+  for (const body of system.bodies) place(body);
+  return placements;
+}
+
+/** Points sampled round an orbit line. */
+const ORBIT_SAMPLES = 160;
+
+/** Colours of a body drawn before its map loads (or when it has none). */
+const ROCK: Vec3 = [0.32, 0.3, 0.28];
+
+/**
+ * The sky of body `shown` of a system after `days`: every other body,
+ * placed from the camera by its position and radius in radii of the body
+ * shown, with its axes, its map when it is generated (`textures(id)`, null
+ * otherwise) or its preview; the largest shadows; the orbits of the planets
+ * round the star and of the moons of the shown body's planet; and the
+ * star's direction, for the light. `spinOffset` turns the body shown on
+ * itself (see placeSystem).
+ */
+export function systemSky(
+  system: System,
+  shown: string,
+  days: number,
+  textures: (id: string) => string | null,
+  spinOffset = 0,
+): { bodies: SkyBody[]; ids: string[]; casters: ShadowCaster[]; orbits: Vec3[][]; sun: Vec3 } {
+  const placements = placeSystem(system, days, { id: shown, spinOffset });
+  const self = system.bodies.find((b) => b.id === shown);
+  const here = placements.get(shown);
+  if (!self || !here) return { bodies: [], ids: [], casters: [], orbits: [], sun: [0, 0, 1] };
+  const [ax, ay, az] = here.axes;
+  const unitKm = Math.max(self.physical.radius_km, 1e-6);
+  const local = (v: Vec3): Vec3 => [dot(v, ax), dot(v, ay), dot(v, az)];
+  const place = (centre: Vec3) => scale(local(sub(centre, here.centre)), 1 / unitKm);
+  const bodies: SkyBody[] = [];
+  const ids: string[] = [];
+  const casters: ShadowCaster[] = [];
+  for (const body of system.bodies) {
+    if (body.id === shown) continue;
+    const there = placements.get(body.id)!;
+    const position = place(there.centre);
+    const radius = body.physical.radius_km / unitKm;
+    const distance = Math.max(Math.hypot(...position), radius * 1.001);
+    const [bx, by, bz] = there.axes;
+    const texture = body.generated ? textures(body.id) : null;
+    bodies.push({
+      direction: unit(position),
+      angularDiameterDeg: (2 * Math.asin(Math.min(radius / distance, 1)) * 180) / Math.PI,
+      position,
+      radius,
+      colour: (body.preview.colours[0] as Vec3 | undefined) ?? ROCK,
+      texture,
+      axes: [local(bx), local(by), local(bz)],
+      axialTiltDeg: body.spin.axial_tilt_deg,
+      ...(texture ? {} : { preview: body.preview }),
+    });
+    ids.push(body.id);
+    casters.push({ position, radius });
+  }
+  // The orbits: the planets' round the star, the moons' of the shown
+  // body's planet round it (the shown body's own passing through it).
+  const planet = self.parent ?? self.id;
+  const orbits = system.bodies
+    .filter((b) => b.parent === null || b.parent === planet)
+    .map((body) => {
+      const there = placements.get(body.id)!;
+      const parent = body.parent ? placements.get(body.parent)!.centre : ([0, 0, 0] as Vec3);
+      const e = Math.min(Math.max(body.orbit.eccentricity, 0), 0.95);
+      const a = body.orbit.semi_major_axis_km;
+      // Its true anomaly now, so the body shown's own orbit is sampled
+      // ever closer to it.
+      const rel = sub(there.centre, parent);
+      const now = Math.atan2(dot(rel, there.plane.third), dot(rel, there.plane.node));
+      const angles: number[] = Array.from({ length: ORBIT_SAMPLES }, (_, i) => (2 * Math.PI * i) / ORBIT_SAMPLES);
+      if (body.id === shown) {
+        const size = self.physical.radius_km / a;
+        for (let step = 0.2 * size; step < (2 * Math.PI) / ORBIT_SAMPLES; step *= 1.4) {
+          angles.push(now + step, now - step);
+        }
+        angles.push(now);
+      }
+      const wrap = (x: number) => x - 2 * Math.PI * Math.floor(x / (2 * Math.PI));
+      const periapsis = body.orbit.periapsis_deg * DEG;
+      return angles
+        .map(wrap)
+        .sort((p, q) => p - q)
+        .map((angle) => {
+          const nu = angle - periapsis;
+          const r = (a * (1 - e * e)) / (1 + e * Math.cos(nu));
+          return place(add(parent, pointOnOrbit(there.plane, angle, r)));
+        });
+    });
+  return {
+    bodies,
+    ids,
+    casters: casters.sort((p, q) => q.radius - p.radius).slice(0, MAX_CASTERS),
+    orbits,
+    sun: unit(local(scale(here.centre, -1))),
+  };
+}
+
+/** The shown body's distance from the star, AU (for the light it gets). */
+export function starDistanceAu(system: System, shown: string, days: number): number {
+  const here = placeSystem(system, days).get(shown);
+  return here ? Math.hypot(...here.centre) / AU_KM : 1;
+}

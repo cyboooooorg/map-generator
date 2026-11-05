@@ -3,7 +3,9 @@
   import { t } from '../lib/i18n/index.svelte';
   import { biomeName } from '../lib/i18n/names.svelte';
   import { onDestroy, onMount, untrack } from 'svelte';
-  import { ApiFailure, api, worldFile } from '../lib/api/client';
+  import { ApiFailure, api, followJob, systemBodyId, worldFile } from '../lib/api/client';
+  import type { JobStatus } from '../lib/api/types/JobStatus';
+  import type { Stage } from '../lib/api/types/Stage';
   import type { HexMap } from '../lib/api/types/HexMap';
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
@@ -42,6 +44,7 @@
     spinAxes,
     sunOnMoon,
   } from '../lib/skyBodies';
+  import { systemSky } from '../lib/systemSky';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -267,6 +270,15 @@
   }
   /** `U`: each body of the system in turn (the star aside, on `O`). */
   function stepBody(): void {
+    if (sys && sysBody) {
+      // The family of the planet shown: the planet and its moons.
+      const planet = sysBody.parent ?? sysBody.id;
+      const family = sys.bodies.filter((b) => b.id === planet || b.parent === planet);
+      const at = family.findIndex((b) => b.id === sysBody.id);
+      subject = 'planet';
+      world.showSystemBody(family[(at + 1) % family.length]!.id);
+      return;
+    }
     if (bodies.length < 2) return;
     const at = bodies.findIndex((b) => bodyKey(b) === bodyKey(world.body));
     showBody(bodies[(at + 1) % bodies.length]!);
@@ -274,7 +286,12 @@
   /** The body picker's choice: the star, or a body of the system. */
   function pickBody(key: string): void {
     if (key === 'star') {
-      if (worldId) subject = 'star';
+      if (worldId || sys) subject = 'star';
+      return;
+    }
+    if (sys) {
+      subject = 'planet';
+      world.showSystemBody(key);
       return;
     }
     const body = parseBodyKey(key);
@@ -712,7 +729,111 @@
    * moon; in a giant's system (the world a giant's moon), of the sibling
    * shown, else of the world's orbit round the giant.
    */
+  // A planetary system (docs/system-spec.md): every body placed from the
+  // orbits and spins its file stores (lib/systemSky.ts), on a clock of
+  // days: the season of the shown body's planet and the orbit time past
+  // it; the Sun longitude slider sets the hour of the body shown.
+  const sys = $derived(world.system);
+  const sysBody = $derived(world.shownSystemBody);
+  /** The planet of the body shown (itself, or the planet of a moon). */
+  const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
+  const sysDays = $derived((sysPlanet ? season * sysPlanet.orbit.period_days : 0) + orbitDays);
+  const sysTextures = (id: string) => (world.systemId ? worldFile(systemBodyId(world.systemId, id), 'raw_data/surface.png') : null);
+  const sysSky = $derived.by(() => {
+    if (!sys || !sysBody || !sysPlanet) return null;
+    // The hour: the sun at the slider's longitude over the body shown at
+    // the season's start, then turning on itself as the orbit time goes.
+    const start = systemSky(sys, sysBody.id, sysDays - orbitDays, sysTextures);
+    const longitude = Math.atan2(start.sun[0], start.sun[2]);
+    const offset = longitude - (sunLongitude * Math.PI) / 180;
+    return systemSky(sys, sysBody.id, sysDays, sysTextures, sysBody.spin.locked ? 0 : offset);
+  });
+  // Its preview, while it has no maps.
+  $effect(() => view?.setPreviewBody(sysBody && !sysBody.generated ? sysBody.preview : null));
+  /**
+   * The generation of the body shown and its neighbourhood, when it is not
+   * generated yet (`POST /api/systems/{id}/bodies/{body}/generate`): queued
+   * as soon as it is shown, followed until done, then the system reloaded.
+   */
+  let generation = $state<{ body: string; status: JobStatus | null; error: string | null } | null>(null);
+  /** A running status of a system job: the body being made and its place in the job. */
+  type RunningBody = { body?: string | null; body_step?: number | null; bodies?: number | null; stage: Stage; step: number; steps: number };
+  let stopFollowing: (() => void) | null = null;
+  async function generateShown(body: string): Promise<void> {
+    const systemId = world.systemId;
+    if (!systemId) return;
+    stopFollowing?.();
+    stopFollowing = null;
+    generation = { body, status: null, error: null };
+    try {
+      const response = await fetch(
+        `/api/systems/${encodeURIComponent(systemId)}/bodies/${encodeURIComponent(body)}/generate`,
+        { method: 'POST' },
+      );
+      if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+      const { job_id: jobId } = (await response.json()) as { job_id: string | null };
+      if (jobId === null) {
+        world.loadSystem(systemId);
+        return;
+      }
+      const stream = followJob(jobId, (status) => {
+        if (generation?.body === body) generation = { body, status, error: null };
+      });
+      stopFollowing = stream.cancel;
+      const final = await stream.done;
+      if (generation?.body !== body) return;
+      if (final.status === 'done') {
+        generation = null;
+        world.loadSystem(systemId);
+      } else {
+        generation = { body, status: final, error: final.status === 'failed' ? final.error : null };
+      }
+    } catch (e) {
+      if (generation?.body === body) generation = { body, status: null, error: String(e) };
+    }
+  }
+  $effect(() => {
+    const body = sysBody;
+    if (!body || body.generated) return;
+    untrack(() => {
+      if (generation?.body !== body.id) void generateShown(body.id);
+    });
+  });
+  onDestroy(() => stopFollowing?.());
+  /** The line of the generation in progress. */
+  const generationText = $derived.by(() => {
+    if (!generation || !sys) return null;
+    const name = (id: string) => world.systemNames[id] ?? sys.bodies.find((b) => b.id === id)?.designation ?? id;
+    if (generation.error) return t.viewer.generationFailed({ body: name(generation.body), error: generation.error });
+    const job = generation.status;
+    if (!job || job.status === 'queued') return t.viewer.generationQueued({ body: name(generation.body) });
+    if (job.status !== 'running') return null;
+    const status = job as unknown as RunningBody;
+    return t.viewer.generationRunning({
+      body: name(status.body ?? generation.body),
+      step: status.body_step ?? 1,
+      bodies: status.bodies ?? 1,
+      stage: status.stage ? t.stages[status.stage] : '',
+      stageStep: status.step ?? 0,
+      stageSteps: status.steps ?? 0,
+    });
+  });
+  /** Its share done, 0 to 1. */
+  const generationShare = $derived.by(() => {
+    const job = generation?.status;
+    if (!job || job.status !== 'running') return 0;
+    const status = job as unknown as RunningBody;
+    const bodies = Math.max(status.bodies ?? 1, 1);
+    const within = (status.step ?? 0) / Math.max(status.steps ?? 1, 1);
+    return ((status.body_step ?? 1) - 1 + within) / bodies;
+  });
   const orbitPeriod = $derived.by(() => {
+    if (sys && sysBody) {
+      // A moon's orbit; a planet's innermost moon's, else ten of its days.
+      if (sysBody.parent) return sysBody.orbit.period_days;
+      const moon = sys.bodies.find((b) => b.parent === sysBody.id);
+      return moon?.orbit.period_days ?? (10 * sysBody.spin.period_hours) / 24;
+    }
     if (shownMoon) return shownMoon.period_days;
     const host = world.worldMeta?.host;
     if (host) {
@@ -746,10 +867,19 @@
     moonSun?.latitudeDeg ?? (meta?.axial_tilt_deg ?? 23.44) * Math.sin(2 * Math.PI * season),
   );
   $effect(() => {
+    const sysSun = sysSky?.sun ?? null;
     view?.setLighting(
       !sun
         ? { kind: 'headlight' }
-        : moonSun !== null
+        : sysSun
+          ? {
+              kind: 'sun',
+              season,
+              longitudeDeg: (Math.atan2(sysSun[0], sysSun[2]) * 180) / Math.PI,
+              axialTiltDeg: 0,
+              latitudeDeg: (Math.asin(Math.max(-1, Math.min(1, sysSun[1]))) * 180) / Math.PI,
+            }
+          : moonSun !== null
           ? {
               kind: 'sun',
               season,
@@ -864,6 +994,12 @@
   // the stars, not to circle the moon. A moon that is not locked turns once
   // per day of its own, its planet rising and setting.
   const starsTurn = $derived.by(() => {
+    if (sys && sysBody) {
+      // Once per day of its own against the stars (its orbit, when locked).
+      const period = sysBody.spin.locked ? sysBody.orbit.period_days : sysBody.spin.period_hours / 24;
+      const turns = sysDays / Math.max(period, 1e-6);
+      return -2 * Math.PI * (turns - Math.floor(turns));
+    }
     const { yearDays, season: moonSeason } = moonClock;
     const spin = shownMoon && world.moon !== null ? moonSpinHours(shownMoon) : null;
     const host = world.worldMeta?.host;
@@ -896,11 +1032,13 @@
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   $effect(() => {
-    view?.setSkyBodies(sky?.bodies ?? []);
-    view?.setShadowCasters(sky?.casters ?? []);
+    const shown = sysSky ?? sky;
+    view?.setSkyBodies(shown?.bodies ?? []);
+    view?.setShadowCasters(shown?.casters ?? []);
   });
   // The moons' orbits in the sky, seen from the body shown.
   const skyOrbitLoops = $derived.by(() => {
+    if (sysSky) return orbitLines ? sysSky.orbits : [];
     const planet = world.worldMeta;
     if (!orbitLines || !planet) return [];
     if (onHostSystem) return giantSky?.orbits ?? [];
@@ -937,6 +1075,22 @@
    * other moons; from a giant's moon world, the giant then its other moons.
    */
   const skyLabelList = $derived.by((): (SkyLabel | null)[] => {
+    if (sys && sysSky) {
+      const km = (v: number) => withUnit(formatInt(v), 'km');
+      return sysSky.ids.map((id) => {
+        const body = sys.bodies.find((b) => b.id === id);
+        if (!body) return null;
+        return {
+          name: world.systemNames[id] ?? body.designation,
+          detail: t.viewer.skyOrbitFacts({
+            radius: km(body.physical.radius_km),
+            orbit: body.parent
+              ? km(body.orbit.semi_major_axis_km)
+              : withUnit(formatUpTo(body.orbit.semi_major_axis_au, 2), t.viewer.au),
+          }),
+        };
+      });
+    }
     const planet = world.worldMeta;
     if (!planet || !sky) return [];
     const km = (v: number) => withUnit(formatInt(v), 'km');
@@ -1367,16 +1521,31 @@
       class="body-pick"
       aria-label={t.viewer.body}
       title={t.viewer.bodyHelp}
-      value={subject === 'star' ? 'star' : bodyKey(world.body)}
+      value={subject === 'star' ? 'star' : sys ? (world.systemBody ?? '') : bodyKey(world.body)}
       onchange={(e) => pickBody(e.currentTarget.value)}
-      disabled={!worldId}
+      disabled={!worldId && !sys}
     >
-      <option value="star"
-        >{t.viewer.bodyOption({ name: names?.star ?? system.star.type, role: t.viewer.roleStar })}</option
-      >
-      {#each bodies as body (bodyKey(body))}
-        <option value={bodyKey(body)}>{bodyOption(body)}</option>
-      {/each}
+      {#if sys}
+        <option value="star"
+          >{t.viewer.bodyOption({ name: world.systemNames['star'] ?? sys.star.designation, role: t.viewer.roleStar })}</option
+        >
+        {#each sys.bodies as body (body.id)}
+          <option value={body.id}
+            >{body.parent ? '\u2003' : ''}{t.viewer.systemBodyOption({
+              name: world.systemNames[body.id] ?? body.designation,
+              type: t.viewer.bodyTypes[body.type as keyof typeof t.viewer.bodyTypes] ?? body.type,
+              generated: body.generated,
+            })}</option
+          >
+        {/each}
+      {:else}
+        <option value="star"
+          >{t.viewer.bodyOption({ name: names?.star ?? system.star.type, role: t.viewer.roleStar })}</option
+        >
+        {#each bodies as body (bodyKey(body))}
+          <option value={bodyKey(body)}>{bodyOption(body)}</option>
+        {/each}
+      {/if}
     </select>
     <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
     {#if subject === 'planet'}
@@ -1653,7 +1822,24 @@
     </div>
   {/if}
 
-  {#if !worldId}
+  {#if generationText}
+    <div class="chip generation" role="status">
+      <p>{generationText}</p>
+      <div
+        class="generation-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(generationShare * 100)}
+      >
+        <span style:width={`${generationShare * 100}%`}></span>
+      </div>
+      {#if generation?.error}
+        <button onclick={() => generation && generateShown(generation.body)}>{t.viewer.generationRetry}</button>
+      {/if}
+    </div>
+  {/if}
+  {#if !worldId && !sysBody}
     <p class="overlay">{t.viewer.noWorld}</p>
   {:else if loading}
     <div class="overlay">
@@ -1927,6 +2113,30 @@
   }
   .chip :global(.loading-bar) {
     margin: 4px 0 2px;
+  }
+  .chip.generation {
+    bottom: auto;
+    top: 96px;
+    pointer-events: auto;
+    border-radius: 10px;
+    padding: 6px 12px;
+    text-align: center;
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+  }
+  .generation-bar {
+    width: 240px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .generation-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s;
   }
   .overlay.error {
     color: var(--danger);

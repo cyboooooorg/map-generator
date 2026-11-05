@@ -69,6 +69,7 @@ import {
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
 import { IDENTITY_AXES, MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
+import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
@@ -95,6 +96,8 @@ import {
   hostStarFragment,
   skyBodyFragment,
   skyBodyVertex,
+  previewGlobeFragment,
+  previewGlobeVertex,
   skyOrbitFragment,
   skyOrbitVertex,
   hostStarVertex,
@@ -1558,6 +1561,8 @@ export class PlanetView {
     this.skyOrbits?.material.dispose();
     this.skyOrbitsNear?.material.dispose();
     this.spinAxis?.geometry.dispose();
+    this.previewGlobe?.geometry.dispose();
+    this.previewGlobe?.material.dispose();
     this.spinAxis?.material.dispose();
     for (const object of [this.surface, this.grid, this.stars, this.hostStar, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
@@ -1692,7 +1697,7 @@ export class PlanetView {
       bodies.forEach((body, i) => {
         const entry = this.skyBodies[i]!;
         entry.body = body;
-        (entry.mesh.material.uniforms['uColor']!.value as Vector3).set(...body.colour);
+        applyPreview(entry.mesh.material.uniforms, body);
       });
       this.requestRender();
       return;
@@ -1711,6 +1716,12 @@ export class PlanetView {
             uHalf: { value: 0.01 },
             uSunDir: this.u.uSunDir,
             uColor: { value: new Vector3(...body.colour) },
+            uColor2: { value: new Vector3() },
+            uColor3: { value: new Vector3() },
+            uBands: { value: 0 },
+            uLand: { value: 0 },
+            uPreview: { value: 0 },
+            uGlow: { value: 0 },
             uHasMap: { value: 0 },
             uMap: { value: emptyTexture() },
             uHasClouds: { value: 0 },
@@ -1765,6 +1776,7 @@ export class PlanetView {
             if (!signal?.aborted) console.warn('Could not load a body of the sky', e);
           });
       };
+      applyPreview(mesh.material.uniforms, body);
       if (body.texture) load(body.texture, 'uMap', 'uHasMap');
       if (body.clouds) load(body.clouds, 'uClouds', 'uHasClouds');
       return entry;
@@ -2000,6 +2012,54 @@ export class PlanetView {
     }
   }
 
+  /** The body shown drawn from its preview (see setPreviewBody), null until one is. */
+  private previewGlobe: Mesh<SphereGeometry, ShaderMaterial> | null = null;
+
+  /**
+   * Draws the body shown from its preview, a lit sphere of the colours of
+   * its type, while it has no maps (a body of a system not generated yet);
+   * null hides it.
+   */
+  setPreviewBody(preview: Preview | null): void {
+    if (preview && !this.previewGlobe) {
+      this.previewGlobe = new Mesh(
+        new SphereGeometry(1, 96, 64),
+        new ShaderMaterial({
+          vertexShader: previewGlobeVertex,
+          fragmentShader: previewGlobeFragment,
+          uniforms: {
+            uColor: { value: new Vector3() },
+            uColor2: { value: new Vector3() },
+            uColor3: { value: new Vector3() },
+            uBands: { value: 0 },
+            uLand: { value: 0 },
+            uGlow: { value: 0 },
+            uOpacity: { value: 1 },
+            uSunDir: this.u.uSunDir,
+            uLightMode: this.u.uLightMode,
+          },
+        }),
+      );
+      this.scene.add(this.previewGlobe);
+    }
+    // The maps of the body shown before stay hidden under it.
+    this.surface.visible = preview === null;
+    if (this.previewGlobe) {
+      this.previewGlobe.visible = preview !== null;
+      if (preview) {
+        const u = this.previewGlobe.material.uniforms;
+        const c = preview.colours;
+        (u['uColor']!.value as Vector3).set(...(c[0] ?? [0.4, 0.4, 0.4]));
+        (u['uColor2']!.value as Vector3).set(...(c[1] ?? [0, 0, 0]));
+        (u['uColor3']!.value as Vector3).set(...(c[2] ?? [0, 0, 0]));
+        u['uBands']!.value = preview.bands;
+        u['uLand']!.value = preview.bands === 0 && c.length > 1 ? 1 : 0;
+        u['uGlow']!.value = preview.glow ? 1 : 0;
+      }
+    }
+    this.requestRender();
+  }
+
   /**
    * Places and sizes the host star: at the sun's direction, its true
    * apparent diameter in pixels (at least a few), in a glow growing with
@@ -2218,4 +2278,20 @@ export class PlanetView {
     }
     return planeToLonLat(origin[0] + direction[0] * t, origin[1] + direction[1] * t);
   }
+}
+
+/**
+ * Sets a sky body's colours, and its preview when it has one (a body not
+ * generated yet: its bands, its land and caps, its glow).
+ */
+function applyPreview(u: Record<string, IUniform>, body: SkyBody): void {
+  const preview = body.preview;
+  const colours = preview?.colours ?? [];
+  (u['uColor']!.value as Vector3).set(...(colours[0] ?? body.colour));
+  (u['uColor2']!.value as Vector3).set(...(colours[1] ?? [0, 0, 0]));
+  (u['uColor3']!.value as Vector3).set(...(colours[2] ?? [0, 0, 0]));
+  u['uPreview']!.value = preview ? 1 : 0;
+  u['uBands']!.value = preview?.bands ?? 0;
+  u['uLand']!.value = preview && preview.bands === 0 && colours.length > 1 ? 1 : 0;
+  u['uGlow']!.value = preview?.glow ? 1 : 0;
 }

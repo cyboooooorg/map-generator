@@ -487,6 +487,25 @@ export const fr: Messages = {
     orbits: 'Orbites des lunes',
     orbitLines: 'Orbites',
     orbitLinesHelp: 'Trace les orbites des lunes dans le ciel (sur le globe), vues depuis le corps affiché',
+    generationQueued: ({ body }: { body: string }) => `Génération de ${body}${S}: en attente de son tour`,
+    generationRunning: (p: { body: string; step: number; bodies: number; stage: string; stageStep: number; stageSteps: number }) =>
+      `Génération de ${p.body} (astre ${p.step} sur ${p.bodies})${S}: ${p.stage}, ${p.stageStep} sur ${p.stageSteps}`,
+    generationFailed: ({ body, error }: { body: string; error: string }) => `Impossible de générer ${body}${S}: ${error}`,
+    generationRetry: 'Réessayer',
+    systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
+      `${name} (${type})${generated ? '' : ' · non générée'}`,
+    bodyTypes: {
+      terran: 'tempérée',
+      barren: 'stérile',
+      caustic: 'caustique',
+      frozen: 'glacée',
+      volcanic: 'volcanique',
+      'gas-giant': 'géante gazeuse',
+      'ice-giant': 'géante de glaces',
+      'hot-jupiter': 'Jupiter chaud',
+      'rocky-moon': 'lune rocheuse',
+      'icy-moon': 'lune glacée',
+    },
     spinAxes: 'Axes de rotation',
     spinAxesHelp:
       `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite`,

@@ -2,7 +2,8 @@
 // statistics and rivers, loaded in that order (each step can take a while
 // on large maps, and the earlier ones are useful on their own).
 import { t } from './i18n/index.svelte';
-import { api } from './api/client';
+import { api, systemBodyId } from './api/client';
+import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
 import { bodyId, sameBody, WORLD_BODY, type Body } from './moons';
@@ -46,6 +47,19 @@ export class LoadedWorld {
   /** Whether the layers of the epoch asked for are loading. */
   epochLoading = $state(false);
   epochError = $state<string | null>(null);
+  /**
+   * The planetary system shown (docs/system-spec.md), when one is: its
+   * file, the names given to its bodies, and the body shown (`c`, `c-1`).
+   * A body not generated yet has no metadata nor layers: the view draws
+   * its preview.
+   */
+  system = $state.raw<System | null>(null);
+  systemId = $state<string | null>(null);
+  systemNames = $state.raw<Record<string, string>>({});
+  systemBody = $state<string | null>(null);
+  /** The body of the system shown, from its file. */
+  shownSystemBody = $derived(this.system?.bodies.find((b) => b.id === this.systemBody) ?? null);
+  private systemController: AbortController | null = null;
   /** The layers as loaded, at the present. */
   private present: WorldLayers | null = null;
   private revision: number | null = null;
@@ -58,6 +72,11 @@ export class LoadedWorld {
    * Loading the id shown again reloads it (a world regenerated in place).
    */
   load(id: string | null): void {
+    this.systemController?.abort();
+    this.system = null;
+    this.systemId = null;
+    this.systemBody = null;
+    this.systemNames = {};
     this.worldId = id;
     this.body = WORLD_BODY;
     this.worldMeta = null;
@@ -81,6 +100,59 @@ export class LoadedWorld {
     }
     this.body = body;
     this.loadBody(bodyId(this.worldId, body));
+  }
+
+  /**
+   * Loads system `id` and shows its body `body`, or the body it was asked
+   * around, else its first generated planet, else its first planet.
+   * Loading it again (after a generation or a rename) keeps the body shown.
+   */
+  loadSystem(id: string, body: string | null = null): void {
+    this.systemController?.abort();
+    const controller = new AbortController();
+    this.systemController = controller;
+    const again = this.systemId === id;
+    this.systemId = id;
+    this.worldId = null;
+    (async () => {
+      const { system, names } = await fetchSystem(id, controller.signal);
+      if (controller.signal.aborted) return;
+      this.system = system;
+      this.systemNames = names;
+      const wanted = body ?? (again ? this.systemBody : null);
+      const known = (b: string | null | undefined) => (b && system.bodies.some((x) => x.id === b) ? b : null);
+      const first =
+        known(wanted) ??
+        known(system.focus) ??
+        system.bodies.find((b) => b.kind === 'planet' && b.generated)?.id ??
+        system.bodies.find((b) => b.kind === 'planet')?.id ??
+        null;
+      const shown = this.systemBody;
+      const was = shown ? system.bodies.find((b) => b.id === shown) : undefined;
+      // Kept loaded when it is the same body and still as generated.
+      this.systemBody = null;
+      this.showSystemBody(first, again && shown === first && was?.generated === true && this.meta !== null);
+    })().catch((e: unknown) => {
+      if (!controller.signal.aborted) this.error = t.world.loadFailed({ id, error: String(e) });
+    });
+  }
+
+  /**
+   * Shows body `body` of the system loaded: its maps when it is generated,
+   * its preview otherwise. `keep` leaves its layers as they are.
+   */
+  showSystemBody(body: string | null, keep = false): void {
+    const system = this.system;
+    if (!system || !this.systemId || body === this.systemBody) return;
+    this.systemBody = body;
+    const entry = system.bodies.find((b) => b.id === body);
+    const planet = entry?.parent ?? entry?.id ?? null;
+    this.worldId = planet ? systemBodyId(this.systemId, planet) : null;
+    if (keep) return;
+    this.worldMeta = null;
+    this.worldStats = null;
+    this.worldRivers = null;
+    this.loadBody(entry?.generated ? systemBodyId(this.systemId, entry.id) : null);
   }
 
   private loadBody(id: string | null): void {
@@ -188,4 +260,23 @@ export class LoadedWorld {
         if (!controller.signal.aborted) this.epochLoading = false;
       });
   }
+}
+
+/**
+ * A system and the names given to its bodies (`GET /api/systems/{id}`),
+ * or its file alone (`/systems/{id}/system.json`) when the route is not
+ * there.
+ */
+async function fetchSystem(
+  id: string,
+  signal: AbortSignal,
+): Promise<{ system: System; names: Record<string, string> }> {
+  const response = await fetch(`/api/systems/${encodeURIComponent(id)}`, { signal, cache: 'no-cache' });
+  if (response.ok) {
+    const body = (await response.json()) as { system: System; names?: Record<string, string> };
+    return { system: body.system, names: body.names ?? {} };
+  }
+  const file = await fetch(`/systems/${encodeURIComponent(id)}/system.json`, { signal, cache: 'no-cache' });
+  if (!file.ok) throw new Error(`${file.status} ${file.statusText}`);
+  return { system: (await file.json()) as System, names: {} };
 }

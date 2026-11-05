@@ -519,6 +519,25 @@ export const en = {
     orbits: 'Moon orbits',
     orbitLines: 'Orbits',
     orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
+    generationQueued: ({ body }: { body: string }) => `Generating ${body}: waiting for its turn`,
+    generationRunning: (p: { body: string; step: number; bodies: number; stage: string; stageStep: number; stageSteps: number }) =>
+      `Generating ${p.body} (body ${p.step} of ${p.bodies}): ${p.stage}, ${p.stageStep} of ${p.stageSteps}`,
+    generationFailed: ({ body, error }: { body: string; error: string }) => `Could not generate ${body}: ${error}`,
+    generationRetry: 'Try again',
+    systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
+      `${name} (${type})${generated ? '' : ' · not generated'}`,
+    bodyTypes: {
+      terran: 'temperate',
+      barren: 'barren',
+      caustic: 'caustic',
+      frozen: 'frozen',
+      volcanic: 'volcanic',
+      'gas-giant': 'gas giant',
+      'ice-giant': 'ice giant',
+      'hot-jupiter': 'hot Jupiter',
+      'rocky-moon': 'rocky moon',
+      'icy-moon': 'icy moon',
+    },
     spinAxes: 'Spin axes',
     spinAxesHelp:
       'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
