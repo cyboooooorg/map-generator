@@ -43,6 +43,13 @@
     host?: HostGiant | null;
     /** The names of the system, from the world's summary. */
     names?: WorldNames | null;
+    /**
+     * A planetary system's other planets, drawn as the giants are: their
+     * kinds as the list shows them (in the giants' order), and what a click
+     * on one does.
+     */
+    kinds?: readonly string[] | null;
+    onPickPlanet?: ((index: number) => void) | null;
   }
 
   let {
@@ -61,9 +68,13 @@
     worldGiant = null,
     host = null,
     names = null,
+    kinds = null,
+    onPickPlanet = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
-  const giantList = $derived((giantSystem?.giants ?? []).map((g, i) => ({ ...g, name: names?.giants[i] ?? g.name })));
+  const giantList = $derived(
+    (giantSystem?.giants ?? []).map((g, i) => ({ ...g, name: names?.giants[i] ?? g.name, kindLabel: kinds?.[i] ?? null })),
+  );
   /** Whether some giant lies where the view compresses distances. */
   const compressed = $derived(giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressedFrom(star)));
   let labels = $state<SystemLabels | null>(null);
@@ -91,16 +102,19 @@
   });
 
   $effect(() => view?.setStar(star, omega, giantList));
+  $effect(() => {
+    if (view) view.onPickPlanet = onPickPlanet;
+  });
   $effect(() => view?.setGiantsVisible(giants));
   $effect(() => view?.setWorldGiant(worldGiant));
 
   /** Jupiter masses, from Earth masses. */
   const jupiters = (earth: number) => earth / 317.8;
   /** One line on a giant: its letter, kind, mass, orbit and year. */
-  const giantText = (g: Giant) =>
+  const giantText = (g: Giant & { kindLabel?: string | null }) =>
     t.starView.giantLine({
       name: g.name,
-      kind: g.hot ? t.starView.hotGiant : (t.starView.giantKinds[g.kind] ?? ''),
+      kind: g.kindLabel ?? (g.hot ? t.starView.hotGiant : (t.starView.giantKinds[g.kind] ?? '')),
       mass: jupiters(g.mass_earth) < 0.3 ? withUnit(formatUpTo(g.mass_earth, 0), 'M⊕') : withUnit(formatUpTo(jupiters(g.mass_earth), 2), 'MJ'),
       orbit: formatAu(g.orbit_au),
       year: formatYear(g.year_days),

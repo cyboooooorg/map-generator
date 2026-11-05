@@ -45,6 +45,7 @@
     sunOnMoon,
   } from '../lib/skyBodies';
   import { systemSky } from '../lib/systemSky';
+  import { systemStarView } from '../lib/systemStar';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -331,6 +332,8 @@
    */
   let shownSystem: { star: StarInfo; omega: number; giants: GiantSystem | null } | null = null;
   const system = $derived.by(() => {
+    // A planetary system: the planet shown (or the moon's), the others as giants.
+    if (sysStar) return { star: sysStar.star, omega: sysStar.omega, giants: sysStar.giants };
     // The world's, also while one of its moons is shown.
     const planet = world.worldMeta ?? (world.body.kind === 'world' ? meta : null);
     if (planet) {
@@ -737,6 +740,22 @@
   const sysBody = $derived(world.shownSystemBody);
   /** The planet of the body shown (itself, or the planet of a moon). */
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
+  /** The star view of a planetary system (lib/systemStar.ts). */
+  const sysStar = $derived(sys && sysPlanet ? systemStarView(sys, sysPlanet) : null);
+  /** The moons of the planet shown, for the star view. */
+  const sysMoons = $derived(
+    sys && sysPlanet
+      ? sys.bodies
+          .filter((b) => b.parent === sysPlanet.id)
+          .map((b) => ({
+            radius_km: b.physical.radius_km,
+            inclination_deg: b.orbit.inclination_deg,
+            period_days: b.orbit.period_days,
+            barycentre_km: 0,
+            semi_major_axis_km: b.orbit.semi_major_axis_km,
+          }))
+      : null,
+  );
   const sysDays = $derived((sysPlanet ? season * sysPlanet.orbit.period_days : 0) + orbitDays);
   const sysTextures = (id: string) => (world.systemId ? worldFile(systemBodyId(world.systemId, id), 'raw_data/surface.png') : null);
   const sysSky = $derived.by(() => {
@@ -1495,15 +1514,30 @@
   {#if subject === 'planet' && shownMoon && moonSystem}
     <MoonPane moon={shownMoon} system={moonSystem} world={world.worldId ?? ''} title={moonTitle} />
   {/if}
-  {#if subject === 'star' && worldId}
+  {#if subject === 'star' && (worldId || sys)}
     <StarPane
+      kinds={sysStar && sys
+        ? sysStar.ids.map((id) => {
+            const type = sys.bodies.find((b) => b.id === id)?.type ?? '';
+            return t.viewer.bodyTypes[type as keyof typeof t.viewer.bodyTypes] ?? type;
+          })
+        : null}
+      onPickPlanet={sysStar
+        ? (i: number) => {
+            const id = sysStar.ids[i];
+            if (id) {
+              subject = 'planet';
+              world.showSystemBody(id);
+            }
+          }
+        : null}
       bind:this={starPane}
       star={system.star}
-      {names}
+      names={sys ? null : names}
       omega={system.omega}
-      {moons}
+      moons={sysMoons ? (sysMoons as unknown as typeof moons) : moons}
       binary={moonSystem?.binary ?? false}
-      planetRadiusKm={(world.worldMeta?.circumference_km ?? 40075) / (2 * Math.PI)}
+      planetRadiusKm={sysPlanet ? sysPlanet.physical.radius_km : (world.worldMeta?.circumference_km ?? 40075) / (2 * Math.PI)}
       bind:animated={starAnimated}
       bind:distances={starDistances}
       bind:orbit={starOrbit}
