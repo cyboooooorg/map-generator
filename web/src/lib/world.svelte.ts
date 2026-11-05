@@ -6,7 +6,6 @@ import { api, systemBodyId } from './api/client';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
-import { bodyId, sameBody, WORLD_BODY, type Body } from './moons';
 import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
@@ -14,16 +13,12 @@ import type { WorldStats } from './stats';
 
 export class LoadedWorld {
   /**
-   * The body shown: the world's id, or one of its moons' (`<world>/moons/<n>`,
-   * see lib/moons.ts). `meta` and the layers are this body's.
+   * The body shown, when it is generated: `systems/<system>/bodies/<body>`
+   * (see systemBodyId). `meta` and the layers are this body's.
    */
   id = $state<string | null>(null);
-  /** The world loaded, whichever body is shown. */
+  /** The planet of the body shown (itself, or a moon's planet), as an id like `id`. */
   worldId = $state<string | null>(null);
-  /** The body of the world's system shown (see lib/moons.ts). */
-  body = $state.raw<Body>(WORLD_BODY);
-  /** The moon shown (from 1, nearest first), or null for any other body. */
-  moon = $derived(this.body.kind === 'moon' ? this.body.n : null);
   /** The world's metadata (its star and moons), whichever body is shown. */
   worldMeta = $state.raw<WorldMetadata | null>(null);
   /** The world's biome statistics and rivers, whichever body is shown. */
@@ -78,28 +73,10 @@ export class LoadedWorld {
     this.systemBody = null;
     this.systemNames = {};
     this.worldId = id;
-    this.body = WORLD_BODY;
     this.worldMeta = null;
     this.worldStats = null;
     this.worldRivers = null;
     this.loadBody(id);
-  }
-
-  /**
-   * Shows moon `n` (from 1) of the world loaded, or the world itself with
-   * null. The world's metadata stays.
-   */
-  showMoon(n: number | null): void {
-    this.showBody(n === null ? WORLD_BODY : { kind: 'moon', n });
-  }
-
-  /** Shows a body of the world's system (see lib/moons.ts). The world's metadata stays. */
-  showBody(body: Body): void {
-    if (sameBody(body, this.body) || !this.worldId) {
-      return;
-    }
-    this.body = body;
-    this.loadBody(bodyId(this.worldId, body));
   }
 
   /**
