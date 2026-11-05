@@ -1042,7 +1042,27 @@ pub fn generate_with_progress(
         .par_iter()
         .map(|&e| relief(e) < rules.waterline)
         .collect();
-    let coast_distance_km = grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM);
+    let height_above_water: Vec<f32> = elevation
+        .par_iter()
+        .map(|&e| relief(e) - rules.waterline)
+        .collect();
+    // The distance to the coast runs on one core (a Dijkstra), and only the
+    // biomes read it: the moisture pass runs beside it.
+    progress(Stage::Moisture);
+    // ── Pass 5: moisture ──────────────────────────────────────────────────────
+    // Winds carry ocean evaporation inland; it rains out with distance and on
+    // windward slopes, leaving rain shadows behind mountains.
+    let (coast_distance_km, (raw_moisture, precipitation)) = rayon::join(
+        || grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM),
+        || {
+            moisture(&MoistureInput {
+                grid,
+                height_above_water: &height_above_water,
+                temperature: &raw_temperature,
+                noise: &moisture_noise,
+            })
+        },
+    );
     drop(open_water);
     debug("coast_distance", Ramp::Unsigned, &|| {
         coast_distance_km
@@ -1050,46 +1070,7 @@ pub fn generate_with_progress(
             .map(|d| d / COAST_DISTANCE_CAP_KM)
             .collect()
     });
-
-    // ── Pass 5: moisture ──────────────────────────────────────────────────────
-    progress(Stage::Moisture);
-    // Winds carry ocean evaporation inland; it rains out with distance and on
-    // windward slopes, leaving rain shadows behind mountains.
-    let height_above_water: Vec<f32> = elevation
-        .par_iter()
-        .map(|&e| relief(e) - rules.waterline)
-        .collect();
-    let (raw_moisture, precipitation) = moisture(&MoistureInput {
-        grid,
-        height_above_water: &height_above_water,
-        temperature: &raw_temperature,
-        noise: &moisture_noise,
-    });
     drop(moisture_noise);
-    // Clouds form where air rises and rains (see the clouds module).
-    let clouds = crate::clouds::clouds(&CloudInput {
-        grid,
-        kind: if params.pressure_bar < AIRLESS_BAR {
-            CloudKind::None
-        } else {
-            planet.atmosphere.clouds
-        },
-        cover_shift: planet.atmosphere.cloud_cover,
-        precipitation: &precipitation,
-        seed: params.seed,
-    });
-    if let Some(sink) = sink {
-        sink.layer(DebugLayer {
-            name: "precipitation",
-            ramp: Ramp::Signed,
-            values: precipitation,
-        });
-    } else {
-        drop(precipitation);
-    }
-    if !clouds.is_empty() {
-        debug("clouds", Ramp::Unsigned, &|| clouds.clone());
-    }
     debug("moisture", Ramp::Signed, &|| raw_moisture.clone());
 
     // Planet-type global offsets shift the whole climate before rivers and
@@ -1126,7 +1107,36 @@ pub fn generate_with_progress(
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
-    let mut water = hydrology(&grid, &height_above_water, &moisture, params.seed);
+    // Clouds form where air rises and rains (see the clouds module). They
+    // are computed beside the hydrology, whose priority-flood runs on one
+    // core: the clouds' noise fills the others.
+    let cloud_input = CloudInput {
+        grid,
+        kind: if params.pressure_bar < AIRLESS_BAR {
+            CloudKind::None
+        } else {
+            planet.atmosphere.clouds
+        },
+        cover_shift: planet.atmosphere.cloud_cover,
+        precipitation: &precipitation,
+        seed: params.seed,
+    };
+    let (clouds, mut water) = rayon::join(
+        || crate::clouds::clouds(&cloud_input),
+        || hydrology(&grid, &height_above_water, &moisture, params.seed),
+    );
+    if let Some(sink) = sink {
+        sink.layer(DebugLayer {
+            name: "precipitation",
+            ramp: Ramp::Signed,
+            values: precipitation,
+        });
+    } else {
+        drop(precipitation);
+    }
+    if !clouds.is_empty() {
+        debug("clouds", Ramp::Unsigned, &|| clouds.clone());
+    }
     // Planets without anything liquid to flow (rivers remapped to dry
     // ground) have no rivers to draw, carve or end in deltas: only the
     // drainage flow is kept. Lava rivers of volcanic worlds still flow.

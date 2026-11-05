@@ -189,7 +189,7 @@ The repository is a Cargo workspace:
 | `web/src/lib/api/types/` | TypeScript types of the server API, generated from the Rust types by `cargo test` (ts-rs); do not edit by hand                                                     |
 | `presets/`               | Built-in planet presets (embedded in the binaries) and `examples/`                                                                                                 |
 
-The library also reports generation progress: `generate_with_progress` calls back as each stage starts (noise, erosion, temperature, coast, moisture, rivers, biomes). Its `ts` feature derives TypeScript bindings on the types a web front-end needs.
+The library also reports generation progress: `generate_with_progress` calls back as each stage starts (noise, erosion, temperature, coast, moisture, rivers, biomes). Two serial passes run beside parallel work to keep every core busy: the distance to the coast (a Dijkstra) beside the moisture pass, so the coast stage is reported just before the moisture stage and the two take their time together, and the hydrology's priority-flood beside the clouds, which the rivers stage now computes. Its `ts` feature derives TypeScript bindings on the types a web front-end needs.
 
 ## Web app
 
