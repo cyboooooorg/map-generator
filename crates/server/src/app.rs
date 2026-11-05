@@ -379,7 +379,6 @@ fn bad(message: String) -> Failure {
 
 /// The key a system takes in the list of pending generations (beside world
 /// ids): a system cannot be deleted, renamed away or replaced meanwhile.
-
 fn pending_system(id: &str) -> String {
     format!("systems/{id}")
 }
