@@ -672,7 +672,7 @@ export const fr: Messages = {
     metallicityHelp: `Fer par rapport à l’hydrogène, [Fe/H] en dex, comparé au Soleil (0). Les étoiles riches en métaux ont bien plus de planètes géantes${S}: environ 1,6 fois plus par 0,1 dex`,
     metallicityValue: (p) => `[Fe/H] ${p.dex} · ${p.ratio} les métaux du Soleil`,
     giantsSection: 'Planètes géantes',
-    otherPlanets: 'Autres planètes',
+    planets: 'Planètes',
     giantsHelp:
       'Les autres planètes du système qui comptent pour ce monde, géantes gazeuses et glacées, tirées avec les fréquences observées autour des étoiles de ce type et de cette métallicité',
     giantsOff: 'Non modélisées (un monde créé avant les planètes géantes, ou généré sans elles)',
@@ -719,6 +719,11 @@ export const fr: Messages = {
     clock: (p) => `Temps${S}: 1${S}s = ${p.scale} (×${p.factor}) · jour ${p.day} sur ${p.year} depuis le périastre`,
     clockHelp:
       `L’animation fait passer une année de la planète en une minute${S}: le temps y va plus vite du facteur affiché. Les vitesses affichées restent réelles, en km par seconde réelle${S}: en une seconde d’animation, la planète parcourt sa vitesse multipliée par ce facteur. Les jours se comptent depuis le périastre (depuis un point arbitraire sur une orbite circulaire).`,
+    systemClock: (p) => `Temps${S}: 1${S}s = ${p.days}${S}jours · jour ${p.day}`,
+    systemSpeed: 'Vitesse',
+    systemSpeedHelp: `La vitesse de rotation des planètes${S}: ×1 fait faire son année à la planète la plus proche en 10${S}secondes${S}; plus vite, les planètes lointaines bougent à vue d’œil.`,
+    systemClockHelp:
+      `Tout le système suit une même horloge${S}: sa planète la plus proche de l'étoile en fait le tour en 10${S}secondes, et chaque autre planète tourne à son vrai rythme par rapport à elle. Sélectionner une autre planète n'y change rien. Les jours sont des jours terrestres depuis le début de l'animation.`,
     hours: (p) => `${p.hours}${S}h`,
     schematic: `Schéma${S}: l’étoile n’est pas à l’échelle${S}; les distances sont proportionnelles.`,
   },

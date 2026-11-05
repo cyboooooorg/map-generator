@@ -69,7 +69,8 @@ the system either.
    periapsis and apoapsis markers. Selecting another planet moves those
    extras, and changes nothing else.
 7. **One clock for the system** (the user's choice). The animation runs
-   at one pace for the whole system, set by the existing speed control,
+   at one pace for the whole system, set by a **Speed** control of the
+   star view (×1 to ×1024; the planet view's control is not shown there),
    and the clock text counts Earth days. Selecting a planet no longer
    resets the time or changes any planet's speed. *Our call:* the default
    pace makes the innermost planet's year last about 10 s, keeping the

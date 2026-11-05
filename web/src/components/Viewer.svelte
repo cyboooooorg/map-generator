@@ -618,7 +618,9 @@
   /** The planet of the body shown (itself, or the planet of a moon). */
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
   /** The star view of a planetary system (lib/systemStar.ts). */
-  const sysStar = $derived(sys && sysPlanet ? systemStarView(sys, sysPlanet, world.systemNames) : null);
+  const sysStar = $derived(
+    sys && sysPlanet ? systemStarView(sys, sysPlanet, world.systemNames, t.viewer.bodyTypes as Record<string, string>) : null,
+  );
   /** What the star view shows: the system round the planet shown (or the moon's), the Sun's before one loads. */
   const system = $derived(
     sysStar
@@ -1152,12 +1154,8 @@
   {/if}
   {#if world.subject === 'star' && (worldId || sys)}
     <StarPane
-      kinds={sysStar && sys
-        ? sysStar.ids.map((id) => {
-            const type = sys.bodies.find((b) => b.id === id)?.type ?? '';
-            return t.viewer.bodyTypes[type as keyof typeof t.viewer.bodyTypes] ?? type;
-          })
-        : null}
+      kinds={sysStar ? sysStar.planets.map((p) => p.typeLabel) : null}
+      selected={sysStar ? sysStar.selected : null}
       onPickPlanet={sysStar
         ? (i: number) => {
             const id = sysStar.ids[i];

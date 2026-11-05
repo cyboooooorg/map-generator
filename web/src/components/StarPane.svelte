@@ -10,9 +10,9 @@
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { GiantInfo } from '../lib/api/types/GiantInfo';
   import type { HostGiant } from '../lib/api/types/HostGiant';
-  import { compressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
+  import { compressedFrom, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
-  import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
+  import { type SystemLabels, StarView, SYSTEM_INNER_YEAR_S, YEAR_S } from '../lib/viewer/StarView';
 
   interface Props {
     star: StarInfo;
@@ -49,6 +49,11 @@
     onPickPlanet?: ((index: number) => void) | null;
     /** The name of the planet whose orbit is drawn, labelling it with its distance. */
     planetName?: string | null;
+    /**
+     * In a planetary system, the index among the giants (then every
+     * planet) of the planet `star` describes; null for a lone world.
+     */
+    selected?: number | null;
   }
 
   let {
@@ -69,16 +74,22 @@
     kinds = null,
     onPickPlanet = null,
     planetName = null,
+    selected = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
     (giantSystem?.giants ?? []).map((g, i) => ({ ...g, name: g.name, kindLabel: kinds?.[i] ?? null })),
   );
   /** Whether some giant lies where the view compresses distances. */
-  const compressed = $derived(giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressedFrom(star)));
+  const compressFrom = $derived(selected !== null ? systemCompressedFrom(star) : compressedFrom(star));
+  const compressed = $derived(giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressFrom));
   let labels = $state<SystemLabels | null>(null);
   /** Share of the year elapsed since the periapsis, while animated. */
   let yearFraction = $state(0);
+  /** Earth days simulated since the animation started. */
+  let elapsedDays = $state(0);
+  /** How fast a planetary system's clock runs, a power of two (×1 to ×1024). */
+  let speed = $state(0);
   /** Width of the view, to keep the labels near its right edge on screen. */
   let width = $state(0);
 
@@ -92,7 +103,10 @@
   onMount(() => {
     const created = new StarView(canvas);
     created.onLabels = (next) => (labels = next);
-    created.onClock = (fraction) => (yearFraction = fraction);
+    created.onClock = (fraction, days) => {
+      yearFraction = fraction;
+      elapsedDays = days;
+    };
     view = created;
     return () => {
       created.dispose();
@@ -100,7 +114,7 @@
     };
   });
 
-  $effect(() => view?.setStar(star, omega, giantList));
+  $effect(() => view?.setStar(star, omega, giantList, selected));
   $effect(() => {
     if (view) view.onPickPlanet = onPickPlanet;
   });
@@ -128,6 +142,7 @@
       rings: t.starView.rings[g.rings] ?? '',
     });
   $effect(() => view?.setAnimated(animated));
+  $effect(() => view?.setSpeed(2 ** speed));
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
   $effect(() => view?.setZoneVisible(zone));
@@ -167,6 +182,14 @@
 
   /** How fast time runs in the animation, and the day of the year it shows. */
   const clockText = $derived.by(() => {
+    if (selected !== null && giantList.length > 0) {
+      // A planetary system runs on one clock: its innermost year in SYSTEM_INNER_YEAR_S.
+      const perSecond = (Math.min(...giantList.map((g) => g.year_days)) / SYSTEM_INNER_YEAR_S) * 2 ** speed;
+      return t.starView.systemClock({
+        days: formatUpTo(perSecond, perSecond < 1 ? 2 : perSecond < 10 ? 1 : 0),
+        day: formatInt(Math.floor(elapsedDays) + 1),
+      });
+    }
     const days = star.year_days / YEAR_S;
     const scale = days < 1 ? t.starView.hours({ hours: formatUpTo(days * 24, 1) }) : t.worldInfo.yearDays({ days: formatUpTo(days, 1) });
     return t.starView.clock({
@@ -275,8 +298,8 @@
     <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
     <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
   </dl>
-  {#if !worldGiant}
-  <h4 title={t.starView.giantsHelp}>{kinds ? t.starView.otherPlanets : t.starView.giantsSection}</h4>
+  {#if !worldGiant || selected !== null}
+  <h4 title={t.starView.giantsHelp}>{kinds ? t.starView.planets : t.starView.giantsSection}</h4>
   {#if giantSystem === null}
     <small class="muted">{t.starView.giantsOff}</small>
   {:else}
@@ -284,8 +307,8 @@
       <small class="muted">{t.starView.noGiants}</small>
     {:else}
       <ul class="giants">
-        {#each giantList as giant (giant.name)}
-          <li title={giantHelp(giant)}>
+        {#each giantList as giant, i (giant.name)}
+          <li title={giantHelp(giant)} class:selected={i === selected}>
             <span class="swatch" style:background={`rgb(${giant.colour.map((c) => Math.round(c * 255)).join(' ')})`}></span>{giantText(giant)}
           </li>
         {/each}
@@ -328,8 +351,15 @@
       {t.starView.animate}
     </label>
   </div>
+  {#if animated && selected !== null}
+    <label class="speed" title={t.starView.systemSpeedHelp}>
+      <span>{t.starView.systemSpeed}</span>
+      <input type="range" min="0" max="10" step="1" bind:value={speed} />
+      <small>×{formatInt(2 ** speed)}</small>
+    </label>
+  {/if}
   {#if animated}
-    <small class="clock" title={t.starView.clockHelp}>{clockText}</small>
+    <small class="clock" title={selected !== null ? t.starView.systemClockHelp : t.starView.clockHelp}>{clockText}</small>
   {/if}
   {#if distances && star.eccentricity <= 0.001}
     <!-- A circle has no closest or farthest point: say why none is marked. -->
@@ -337,7 +367,7 @@
   {/if}
   <small class="muted">{t.starView.schematic}</small>
   {#if compressed && giants}
-    <small class="muted">{t.starView.compressed({ distance: formatAu(compressedFrom(star)) })}</small>
+    <small class="muted">{t.starView.compressed({ distance: formatAu(compressFrom) })}</small>
   {/if}
 </details>
 
@@ -397,8 +427,17 @@
   .giants li {
     cursor: help;
   }
+  .giants li.selected {
+    font-weight: 600;
+  }
   .label.zone {
     color: #8fe0aa;
+  }
+  .speed {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
   }
   .clock {
     color: #ffd27a;
