@@ -37,10 +37,10 @@ use std::f64::consts::PI;
 /// Share of drawn rocky worlds that are the moon of a giant.
 pub const DRAWN_ODDS: f32 = 0.02;
 /// Gravitational constant, SI.
-const G: f64 = 6.674e-11;
+pub(crate) const G: f64 = 6.674e-11;
 /// Earth's mass (kg) and radius (m); Jupiter's radius (m).
-const EARTH_KG: f64 = 5.972e24;
-const EARTH_M: f64 = 6.371e6;
+pub(crate) const EARTH_KG: f64 = 5.972e24;
+pub(crate) const EARTH_M: f64 = 6.371e6;
 /// Tidal response of a rocky moon, `k₂/Q` (Io's, Lainey et al. 2009).
 const K2_OVER_Q: f64 = 0.015;
 /// Stefan–Boltzmann constant.
@@ -123,10 +123,10 @@ pub struct Sibling {
 
 /// Share of the giant's mass its regular moons hold together (Canup &
 /// Ward 2006).
-const SATELLITE_MASS_SHARE: f64 = 1e-4;
+pub(crate) const SATELLITE_MASS_SHARE: f64 = 1e-4;
 /// Ratio of the semi-major axes of neighbouring regular moons (periods in
 /// a 1:2 chain, as Io, Europa and Ganymede).
-const SIBLING_SPACING: f64 = 1.587_401;
+pub(crate) const SIBLING_SPACING: f64 = 1.587_401;
 
 impl HostGiant {
     /// The giant the world `p` orbits, or `None` when it orbits its star.

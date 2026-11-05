@@ -196,6 +196,24 @@ pub enum RequestError {
         count: u8,
     },
     Preset(PresetError),
+    /// More planets than a system holds.
+    TooManyPlanets {
+        asked: u32,
+        max: u32,
+    },
+    /// More planets of a type than its band of distances holds at the
+    /// spacing that keeps them stable.
+    ZoneFull {
+        body_type: String,
+        asked: u32,
+        fits: u32,
+    },
+    /// A type the star leaves no room for.
+    TypeImpossible {
+        body_type: String,
+    },
+    /// A planet type that is not one of `system::PLANET_TYPES`.
+    UnknownType(String),
 }
 
 impl fmt::Display for RequestError {
@@ -236,6 +254,22 @@ impl fmt::Display for RequestError {
                  Hill sphere is too small to keep any (pick a cooler orbit or no moons)"
             ),
             RequestError::Preset(e) => e.fmt(f),
+            RequestError::TooManyPlanets { asked, max } => {
+                write!(f, "{asked} planets asked, a system holds at most {max}")
+            }
+            RequestError::ZoneFull {
+                body_type,
+                asked,
+                fits,
+            } => write!(
+                f,
+                "{asked} {body_type} planets asked, but only {fits} fit where they can orbit, \
+                 spaced enough to stay stable"
+            ),
+            RequestError::TypeImpossible { body_type } => {
+                write!(f, "this star leaves no room for a {body_type} planet")
+            }
+            RequestError::UnknownType(t) => write!(f, "unknown planet type {t:?}"),
         }
     }
 }

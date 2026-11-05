@@ -308,6 +308,11 @@ impl ErrorDetail {
             RequestError::MoonsOfAMoon => Some(Self::MoonsOfAMoon),
             RequestError::HotGiantMoons { count } => Some(Self::HotGiantMoons { count: *count }),
             RequestError::Preset(_) => None,
+            // A system's draw: its details come with the system routes.
+            RequestError::TooManyPlanets { .. }
+            | RequestError::ZoneFull { .. }
+            | RequestError::TypeImpossible { .. }
+            | RequestError::UnknownType(_) => None,
         }
     }
 }
