@@ -36,7 +36,7 @@ description = "Format the code"
 run = "cargo fmt"
 
 [tasks.clean-worlds]
-description = "Delete every generated world under worlds/"
+description = "Delete the worlds made before systems, under worlds/ (no longer read)"
 run = "find ./worlds -mindepth 1 -not -name '.gitignore' -delete"
 
 # ---------------------------------------------------------------------------------------------------- #

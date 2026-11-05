@@ -52,16 +52,12 @@
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
-  import type { WorldNames } from '../lib/api/types/WorldNames';
-  import { moonName, worldName } from '../lib/names';
   import LoadingBar from './LoadingBar.svelte';
 
   interface Props {
     world: LoadedWorld;
     /** Its revision (modification time), which keys the cached detail tiles. */
     revision: number | null;
-    /** The names of the world's system, from its summary. */
-    names?: WorldNames | null;
     /** Measured path to draw. */
     path: readonly LonLat[];
     measuring: boolean;
@@ -92,7 +88,6 @@
   let {
     world,
     revision,
-    names = null,
     path,
     measuring,
     keyboard,
@@ -304,20 +299,20 @@
     const host = world.worldMeta?.host;
     switch (body.kind) {
       case 'world':
-        return t.viewer.bodyOption({ name: names ? worldName(names) : (world.worldId ?? ''), role: t.viewer.roleWorld });
+        return t.viewer.bodyOption({ name: world.worldId ?? '', role: t.viewer.roleWorld });
       case 'moon': {
         const moon = moons[body.n - 1];
-        const name = (names && moonName(names, body.n)) ?? moon?.name ?? '';
+        const name = moon?.name ?? '';
         return moon ? t.moons.option({ name, size: km(moon.radius_km) }) : name;
       }
       case 'host':
         return t.viewer.bodyOption({
-          name: names?.host ?? t.starView.giantKinds[host?.giant.kind ?? 'gas'] ?? '',
+          name: t.starView.giantKinds[host?.giant.kind ?? 'gas'] ?? '',
           role: t.viewer.roleGiant,
         });
       case 'sibling': {
         const sibling = host?.siblings?.[body.n - 1];
-        const name = names?.siblings[body.n - 1] ?? t.viewer.skySibling({ index: body.n });
+        const name = t.viewer.skySibling({ index: body.n });
         return sibling ? t.moons.option({ name, size: km(sibling.radius_km) }) : name;
       }
     }
@@ -1113,14 +1108,14 @@
     const planet = world.worldMeta;
     if (!planet || !sky) return [];
     const km = (v: number) => withUnit(formatInt(v), 'km');
-    const moonLabel = (m: (typeof moons)[number], k: number): SkyLabel => ({
-      name: (names && moonName(names, k + 1)) ?? t.viewer.skyMoon({ name: m.name }),
+    const moonLabel = (m: (typeof moons)[number]): SkyLabel => ({
+      name: t.viewer.skyMoon({ name: m.name }),
       detail: t.viewer.skyOrbitFacts({ radius: km(m.radius_km), orbit: km(m.semi_major_axis_km) }),
     });
     if (shownMoon && world.moon !== null) {
       const self = shownMoon;
       const planetLabel: SkyLabel = {
-        name: names ? worldName(names) : presetName(planet.preset),
+        name: presetName(planet.preset),
         detail: t.viewer.skyFacts({
           radius: km(planet.circumference_km / (2 * Math.PI)),
           distance: km(self.semi_major_axis_km),
@@ -1128,7 +1123,7 @@
       };
       return [
         planetLabel,
-        ...moons.flatMap((m, k) => (m === self ? [] : [moonLabel(m, k)])),
+        ...moons.flatMap((m) => (m === self ? [] : [moonLabel(m)])),
       ];
     }
     // From the giant or one of its other moons, in giantSystemSky's
@@ -1137,14 +1132,14 @@
     if (planet.host && (body.kind === 'host' || body.kind === 'sibling')) {
       const host = planet.host;
       const giantLabel: SkyLabel = {
-        name: names?.host ?? t.starView.giantKinds[host.giant.kind] ?? '',
+        name: t.starView.giantKinds[host.giant.kind] ?? '',
         detail: t.viewer.skyFacts({
           radius: withUnit(formatUpTo(host.giant.mass_earth / 317.8, 2), 'MJ'),
           distance: km(body.kind === 'sibling' ? (host.siblings?.[body.n - 1]?.distance_km ?? 0) : 0),
         }),
       };
       const worldLabel: SkyLabel = {
-        name: names ? worldName(names) : presetName(planet.preset),
+        name: presetName(planet.preset),
         detail: t.viewer.skyOrbitFacts({ radius: km(planet.circumference_km / (2 * Math.PI)), orbit: km(host.distance_km) }),
       };
       const siblingLabels = (host.siblings ?? []).flatMap((s, k) =>
@@ -1152,7 +1147,7 @@
           ? []
           : [
               {
-                name: names?.siblings[k] ?? t.viewer.skySibling({ index: k + 1 }),
+                name: t.viewer.skySibling({ index: k + 1 }),
                 detail: t.viewer.skyOrbitFacts({ radius: km(s.radius_km), orbit: km(s.distance_km) }),
               },
             ],
@@ -1163,32 +1158,32 @@
       const host = planet.host;
       return [
         {
-          name: names?.host ?? t.starView.giantKinds[host.giant.kind] ?? '',
+          name: t.starView.giantKinds[host.giant.kind] ?? '',
           detail: t.viewer.skyFacts({
             radius: withUnit(formatUpTo(host.giant.mass_earth / 317.8, 2), 'MJ'),
             distance: km(host.distance_km),
           }),
         },
         ...(host.siblings ?? []).map((s, k) => ({
-          name: names?.siblings[k] ?? t.viewer.skySibling({ index: k + 1 }),
+          name: t.viewer.skySibling({ index: k + 1 }),
           detail: t.viewer.skyOrbitFacts({ radius: km(s.radius_km), orbit: km(s.distance_km) }),
         })),
       ];
     }
     return moons.map(moonLabel);
   });
-  /** The heading of the moon panel: the moon's name, and its designation beside a given one. */
+  /** The heading of the moon panel: a system moon's name, and its designation beside a given one. */
   const moonTitle = $derived.by((): string | null => {
-    const n = world.moon;
-    const moon = n === null ? undefined : names?.moons[n - 1];
-    if (!moon) return null;
-    return moon.name ? `${moon.name} · ${moon.designation}` : moon.designation;
+    const body = world.shownSystemBody;
+    if (!body || body.kind !== 'moon') return null;
+    const name = world.systemNames[body.id];
+    return name ? `${name} · ${body.designation}` : body.designation;
   });
   const starLabel = $derived.by((): SkyLabel | null => {
     const star = world.worldMeta?.star;
     if (!star) return null;
     return {
-      name: names ? `${names.star} · ${star.type}` : t.viewer.skyStar({ type: star.type }),
+      name: t.viewer.skyStar({ type: star.type }),
       detail: t.viewer.skyStarFacts({ distance: withUnit(formatUpTo(star.orbit_au, 2), t.viewer.au) }),
     };
   });
@@ -1533,7 +1528,6 @@
         : null}
       bind:this={starPane}
       star={system.star}
-      names={sys ? null : names}
       omega={system.omega}
       moons={sysMoons ? (sysMoons as unknown as typeof moons) : moons}
       binary={moonSystem?.binary ?? false}
@@ -1574,7 +1568,7 @@
         {/each}
       {:else}
         <option value="star"
-          >{t.viewer.bodyOption({ name: names?.star ?? system.star.type, role: t.viewer.roleStar })}</option
+          >{t.viewer.bodyOption({ name: system.star.type, role: t.viewer.roleStar })}</option
         >
         {#each bodies as body (bodyKey(body))}
           <option value={bodyKey(body)}>{bodyOption(body)}</option>

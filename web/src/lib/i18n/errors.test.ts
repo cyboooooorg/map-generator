@@ -18,7 +18,7 @@ describe('error messages', () => {
 
   it('falls back to the server text, then to the error itself', () => {
     expect(errorText(new ApiFailure(500, 'disk full'))).toBe('disk full');
-    expect(errorText(new ApiFailure(409, 'x', { code: 'world_exists', world: 'terran-1' }))).toMatch(/^terran-1 exists/);
+    expect(errorText(new ApiFailure(409, 'x', { code: 'system_exists', system: 'mgs-1-2' }))).toMatch(/^System mgs-1-2 exists/);
     expect(errorText(new Error('boom'))).toBe('Error: boom');
   });
 });

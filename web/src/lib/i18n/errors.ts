@@ -22,8 +22,6 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.tooManyPixels({ width: detail.width, height: detail.height, max: formatInt(detail.max_pixels) });
     case 'being_generated':
       return t.errors.beingGenerated({ world: detail.world });
-    case 'world_exists':
-      return t.errors.worldExists({ world: detail.world });
     case 'busy':
       return t.errors.busy;
     case 'unknown_star':

@@ -262,6 +262,64 @@ pub fn give_names(root: &Path, id: &str, given: &GivenNames) -> Result<SystemSum
     summary(root, id).ok_or(NamingError::NotFound)
 }
 
+/// The fields of a body's `raw_data/world.json` its epochs need.
+#[derive(Deserialize)]
+#[serde(default)]
+struct BodyMeta {
+    format_version: u32,
+    pressure_bar: f32,
+    surface_age_ga: Option<f32>,
+    preset: BodyPreset,
+}
+
+impl Default for BodyMeta {
+    fn default() -> Self {
+        Self {
+            format_version: 1,
+            pressure_bar: 1.0,
+            surface_age_ga: None,
+            preset: BodyPreset::default(),
+        }
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct BodyPreset {
+    geology: BodyGeology,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct BodyGeology {
+    wet_until: f32,
+}
+
+/// First format version with `elevation_base`, which epochs are drawn on.
+const EPOCHS_VERSION: u32 = 7;
+
+/// The epochs the body in `dir` can be shown at, in Ma before present
+/// (negative in the future), `[future, past]`, or `None` inside when it
+/// offers none (liquid water today, no craters); `None` outside when it
+/// has no `raw_data/world.json`. See `mapgen::epoch`.
+pub fn epochs_at(dir: &Path) -> Option<Option<[i32; 2]>> {
+    let bytes = std::fs::read(dir.join("raw_data").join("world.json")).ok()?;
+    let meta: BodyMeta = serde_json::from_slice(&bytes).ok()?;
+    if meta.format_version < EPOCHS_VERSION {
+        return Some(None);
+    }
+    let range = meta.surface_age_ga.and_then(|age| {
+        mapgen::epoch::range_ga(meta.pressure_bar, age, meta.preset.geology.wet_until)
+    });
+    // Whole Ma, within the range.
+    Some(range.map(|(future, past)| {
+        [
+            (future * 1000.0).ceil() as i32,
+            (past * 1000.0).floor() as i32,
+        ]
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

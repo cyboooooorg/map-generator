@@ -3,7 +3,6 @@
 // front-end does not follow fails `npm run check`.
 import type { ErrorDetail } from './types/ErrorDetail';
 import type { ApiError } from './types/ApiError';
-import type { CreateQuery } from './types/CreateQuery';
 import type { FormSpec } from './types/FormSpec';
 import type { GenerateStarted } from './types/GenerateStarted';
 import type { SystemCreated } from './types/SystemCreated';
@@ -11,17 +10,13 @@ import type { SystemNames } from './types/SystemNames';
 import type { SystemQuery } from './types/SystemQuery';
 import type { SystemRequest } from './types/SystemRequest';
 import type { SystemSummary } from './types/SystemSummary';
-import type { GivenNames } from './types/GivenNames';
 import type { HexMap } from './types/HexMap';
 import type { HexRequest } from './types/HexRequest';
-import type { JobCreated } from './types/JobCreated';
 import type { JobInfo } from './types/JobInfo';
 import type { JobStatus } from './types/JobStatus';
 import type { PresetInfo } from './types/PresetInfo';
 import type { RiversFile } from './types/RiversFile';
 import type { WorldMetadata } from './types/WorldMetadata';
-import type { WorldRequest } from './types/WorldRequest';
-import type { WorldSummary } from './types/WorldSummary';
 
 /** An API call that failed, with the server's message and, when it sent one, the reason as data. */
 export class ApiFailure extends Error {
@@ -62,26 +57,6 @@ function fileInit(signal?: AbortSignal): RequestInit {
 export const api = {
   presets: () => call<PresetInfo[]>('/api/presets'),
   form: () => call<FormSpec>('/api/form'),
-  worlds: () => call<WorldSummary[]>('/api/worlds'),
-  /**
-   * Queues a generation. `replace` swaps out the world of the same id once
-   * the new one is complete (the server refuses an existing id otherwise);
-   * a generation that fails or is cancelled keeps the old world.
-   */
-  createWorld: (request: WorldRequest, query: CreateQuery = {}) =>
-    call<JobCreated>(query.replace ? '/api/worlds?replace=true' : '/api/worlds', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(request),
-    }),
-  deleteWorld: (id: string) => call<void>(`/api/worlds/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  /** Gives a world and its moons names, replacing those they had; answers its summary. */
-  renameWorld: (id: string, names: GivenNames) =>
-    call<WorldSummary>(`/api/worlds/${encodeURIComponent(id)}/names`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(names),
-    }),
   // World files keep their URL when a world is regenerated under the same
   // id: revalidate them ('no-cache', a 304 when unchanged).
   metadata: (id: string, signal?: AbortSignal) =>

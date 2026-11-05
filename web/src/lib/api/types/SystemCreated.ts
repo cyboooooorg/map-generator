@@ -4,4 +4,9 @@
  * Answer to a system request: the system is drawn and written; a job
  * generates the planet asked for and its neighbourhood (mode `around`).
  */
-export type SystemCreated = { system_id: string, job_id: string | null, };
+export type SystemCreated = { system_id: string, job_id: string | null, 
+/**
+ * Fields of an `around` request its planet has no use for, ignored (a
+ * giant's `circumference_km`, `erosion`…; a rocky world's `mass_earth`).
+ */
+ignored: Array<string>, };
