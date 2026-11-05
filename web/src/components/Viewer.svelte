@@ -2115,6 +2115,9 @@
     margin: 4px 0 2px;
   }
   .generation {
+    bottom: auto;
+    top: 96px;
+    pointer-events: auto;
     border-radius: 10px;
     padding: 6px 12px;
     text-align: center;

@@ -2042,6 +2042,8 @@ export class PlanetView {
       );
       this.scene.add(this.previewGlobe);
     }
+    // The maps of the body shown before stay hidden under it.
+    this.surface.visible = preview === null;
     if (this.previewGlobe) {
       this.previewGlobe.visible = preview !== null;
       if (preview) {
