@@ -273,8 +273,15 @@
       if (sys) toStar();
       return;
     }
-    world.subject = 'planet';
-    world.showSystemBody(key);
+    // From the star view, the camera flies to the planet (a moon's planet) first.
+    const body = sys?.bodies.find((b) => b.id === key);
+    const index = sysStar && body ? sysStar.ids.indexOf(body.parent ?? body.id) : -1;
+    const open = () => {
+      world.subject = 'planet';
+      world.showSystemBody(key);
+    };
+    if (world.subject === 'star' && starPane && index >= 0) starPane.flyToPlanet(index, open);
+    else open();
   }
   // Only planets have a hex grid.
   $effect(() => {
@@ -635,9 +642,33 @@
   /** The planet of the body shown (itself, or the planet of a moon). */
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
   /** The star view of a planetary system (lib/systemStar.ts). */
+  /**
+   * The planet picked in the star view (a click on it, or its row), by id:
+   * none when a system opens; a second click on it lets it go.
+   */
+  let starPick = $state<string | null>(null);
+  $effect(() => {
+    void world.systemId;
+    untrack(() => (starPick = null));
+  });
+  const pickedPlanet = $derived(sys && starPick ? (sys.bodies.find((b) => b.id === starPick && b.kind === 'planet') ?? null) : null);
+  /** The planet the star view's orbit facts describe: the one picked, else any (nothing is then selected). */
+  const starBase = $derived(pickedPlanet ?? sysPlanet ?? sys?.bodies.find((b) => b.kind === 'planet') ?? null);
   const sysStar = $derived(
-    sys && sysPlanet ? systemStarView(sys, sysPlanet, world.systemNames, t.viewer.bodyTypes as Record<string, string>) : null,
+    sys && starBase ? systemStarView(sys, starBase, world.systemNames, t.viewer.bodyTypes as Record<string, string>) : null,
   );
+  /** Picks planet `index` of the star view, or lets it go if it is the one picked: its card pinned or unpinned with it. */
+  function togglePick(index: number): void {
+    const id = sysStar?.ids[index];
+    if (!id) return;
+    if (starPick === id) {
+      starPick = null;
+      world.pinnedPlanets = world.pinnedPlanets.filter((p) => p !== id);
+    } else {
+      starPick = id;
+      if (!world.pinnedPlanets.includes(id)) world.pinnedPlanets = [...world.pinnedPlanets, id];
+    }
+  }
   /** Opens planet `index` of the star view (in sysStar's order): its maps, or its generation. */
   const openSystemPlanet = (index: number) => {
     const id = sysStar?.ids[index];
@@ -654,7 +685,10 @@
   let flyBack = $state<number | null>(null);
   /** Shows the star view, flying out from the planet shown. */
   function toStar(): void {
-    flyBack = sysStar ? sysStar.selected : null;
+    // Back from a planet: it is the one picked, and the camera flies out from it.
+    starPick = sysPlanet?.id ?? null;
+    const index = sysStar && sysPlanet ? sysStar.ids.indexOf(sysPlanet.id) : -1;
+    flyBack = index >= 0 ? index : null;
     world.subject = 'star';
   }
   /** The map of each generated planet of the star view, for its marker: its thumbnail, at the system's revision. */
@@ -1390,7 +1424,7 @@
   {#if world.subject === 'star' && (worldId || sys)}
     <StarPane
       kinds={sysStar ? sysStar.planets.map((p) => p.typeLabel) : null}
-      selected={sysStar ? sysStar.selected : null}
+      selected={sysStar ? (pickedPlanet ? sysStar.selected : -1) : null}
       planets={sysStar ? sysStar.planets : null}
       pinned={world.pinnedPlanets}
       onPin={(id: string) => {
@@ -1402,22 +1436,11 @@
         world.subject = 'planet';
         world.showSystemBody(id);
       }}
-      onPickPlanet={sysStar
-        ? (i: number) => {
-            // A click opens the planet's card and pins it.
-            const id = sysStar.ids[i];
-            if (id && !world.pinnedPlanets.includes(id)) world.pinnedPlanets = [...world.pinnedPlanets, id];
-          }
-        : null}
+      onPickPlanet={sysStar ? togglePick : null}
       onOpenPlanet={sysStar ? openSystemPlanet : null}
       flyFrom={flyBack}
       onFlown={() => (flyBack = null)}
-      onSelectPlanet={sysStar
-        ? (i: number) => {
-            const id = sysStar.ids[i];
-            if (id) world.showSystemBody(id);
-          }
-        : null}
+      onSelectPlanet={sysStar ? togglePick : null}
       maps={sysMaps}
       bind:this={starPane}
       planetName={sysPlanet ? (world.systemNames[sysPlanet.id] ?? sysPlanet.designation) : null}
@@ -1836,7 +1859,10 @@
     position: absolute;
     top: 52px;
     left: 12px;
-    width: min(320px, calc(100% - 24px));
+    /* Wide, in columns, rather than tall: it stays above the playback bar. */
+    width: min(860px, calc(100% - 24px));
+    max-height: calc(100% - 140px);
+    overflow-y: auto;
     /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
     background: var(--frame-deco), var(--panel-solid);
     clip-path: var(--frame-clip);
@@ -1857,7 +1883,7 @@
   }
   .help dl {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: repeat(auto-fill, 7em minmax(13em, 1fr));
     gap: 4px 12px;
     margin: 0;
   }

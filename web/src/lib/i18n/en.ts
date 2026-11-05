@@ -15,6 +15,10 @@ import type { Layer } from '../viewer/shaders';
 
 export const en = {
   /** Language selector. */
+  toggleBar: {
+    expand: 'Show the names',
+    collapse: 'Icons only',
+  },
   playback: {
     dayOfYear: (p: { day: string; year: string }) => `day ${p.day} of ${p.year}`,
     yearHelp: 'The day of the planet\'s year: the seasons, the hour and the moons move with it',
@@ -729,6 +733,8 @@ export const en = {
   /** The less common units, explained in tooltips and in the help panel. */
   /** The star view. */
   starView: {
+    selectedSection: 'Selected planet',
+    pickHint: 'Click a planet, or its row in Planets, to select it; click it again to let it go.',
     title: 'The star and its system',
     heading: (p: { type: string; kind: string }) => `${p.type}${p.kind ? ` · ${p.kind}` : ''}`,
     classNames: {
@@ -832,7 +838,7 @@ export const en = {
     distances: 'Distances',
     /** A planet's label in the star view: its name and mean distance from the star. */
     orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
-    showOrbit: 'Orbit',
+    showOrbit: 'Orbits',
     showZone: 'Habitable zone',
     circular: (p: { distance: string }) => `circular orbit: ${p.distance} all year, no periapsis or apoapsis`,
     distancesHelp:
