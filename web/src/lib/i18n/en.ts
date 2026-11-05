@@ -83,6 +83,9 @@ export const en = {
     generate: 'Generate its maps',
   },
   systemList: {
+    orreryHelp: (p: { planets: number; zone: string }) => `${p.planets} ${p.planets === 1 ? 'planet' : 'planets'}${p.zone}`,
+    orreryZone: (p: { inner: string; outer: string }) => ` · habitable zone ${p.inner} to ${p.outer}`,
+    orreryStub: (p: { name: string }) => `${p.name} (not generated yet)`,
     empty: 'No system yet: draw one with New system.',
     noMatch: 'No system matches.',
     search: 'Search a name, designation or seed',

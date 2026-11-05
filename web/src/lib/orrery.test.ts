@@ -11,6 +11,8 @@ const body = (id: string, orbit_au: number, extra: Partial<BodySummary> = {}): B
   colour: [0.2, 0.3, 0.5],
   generated: false,
   orbit_au,
+  eccentricity: 0,
+  periapsis_deg: 0,
   ...extra,
 });
 
@@ -68,6 +70,19 @@ describe('orrery', () => {
     expect(o.zone).not.toBeNull();
     expect(o.zone!.outer[0]).toBeCloseTo(o.planets[0]!.rx);
     expect(o.zone!.inner[0]).toBeLessThan(o.zone!.outer[0]);
+  });
+
+  it('draws an eccentric orbit with the star at a focus, its far point at the edge', () => {
+    const o = orrery(system([body('b', 1, { eccentricity: 0.5, periapsis_deg: 0 })]), 72, 40);
+    const points = o.planets[0]!.orbit
+      .replace(/[MLZ]/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .map(Number);
+    const xs = points.filter((_, i) => i % 2 === 0);
+    // Periapsis to the right of the star, apoapsis to the left at the edge.
+    expect(Math.min(...xs)).toBeCloseTo(3, 1);
+    expect(Math.max(...xs) - 36).toBeLessThan(36 - Math.min(...xs));
   });
 
   it('draws a system the same way every time', () => {
