@@ -18,7 +18,7 @@ use crate::geo::Grid;
 use crate::rivers;
 use crate::world::{Biome, World, WorldParams, biome_color, surface_color};
 use colour::{linear_of, mix, to_linear, to_srgb};
-use ecotone::ecotone_colour;
+use ecotone::ecotone_colour_around;
 use rayon::prelude::*;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -508,7 +508,7 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
             // Lakes are not recomputed without their flag: a pixel whose
             // biome differs from its recomputed one keeps a flat colour.
             let mut color = if land == biome || on_river {
-                ecotone_colour(world, input)
+                ecotone_colour_around(planet, input, Some(land))
             } else {
                 surface_color(biome).map(f32::from)
             };
