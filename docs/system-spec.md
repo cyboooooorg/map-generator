@@ -337,10 +337,12 @@ addressed as `<system-id>/<body-id>` everywhere.
   orbit (a generated planet wrapped in its map, its thumbnail). Hovering
   a planet rings it and opens its card beside it, linked by a line: name
   and type, radius and mass, semi-major axis and eccentricity, current
-  speed and year, equilibrium temperature, place relative to the
-  habitable zone, moons, and whether it is generated, with a button that
-  opens it. A click or a tap pins the card, and several pinned cards can
-  be compared side by side; they follow their planets, and last for the
+  speed, year, day, light, surface gravity, equilibrium temperature,
+  place relative to the habitable zone, moons (links to them), and
+  whether it is generated, with a button that opens it. A click or a tap
+  pins the card, and several pinned cards can be compared side by side,
+  each line's highest and lowest value among them marked, **Unpin all**
+  closing them; they follow their planets, and last for the
   session while the system is shown, the planet view included. A double
   click, or the card's button, opens the planet. The planet picked keeps
   its orbit line, its moons and its apsides; the scale (linear to just

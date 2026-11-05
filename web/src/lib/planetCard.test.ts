@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_GAP, cardBox, layoutCards, linkEnd, shownCards, zonePlace } from './planetCard';
+import { CARD_GAP, TOP_MARGIN, cardBox, extremes, layoutCards, linkEnd, shownCards, zonePlace } from './planetCard';
 
 describe('zonePlace', () => {
   it('places an orbit inside, short of or beyond the habitable zone', () => {
@@ -22,7 +22,7 @@ describe('cardBox', () => {
 
   it('keeps the card inside the view', () => {
     const box = cardBox(50, 5, 200, 120, 1000, 800);
-    expect(box.top).toBe(8);
+    expect(box.top).toBe(TOP_MARGIN);
     const low = cardBox(50, 795, 200, 120, 1000, 800);
     expect(low.top).toBe(800 - 120 - 8);
     // Too narrow for either side: right, pushed back in.
@@ -36,7 +36,7 @@ describe('linkEnd', () => {
   it('ends on the side facing the planet, at its height when it can', () => {
     expect(linkEnd({ left: 128, top: 240, side: 'right' }, 200, 120, 300)).toEqual({ x: 128, y: 300 });
     expect(linkEnd({ left: 672, top: 240, side: 'left' }, 200, 120, 300)).toEqual({ x: 872, y: 300 });
-    expect(linkEnd({ left: 128, top: 8, side: 'right' }, 200, 120, 0)).toEqual({ x: 128, y: 14 });
+    expect(linkEnd({ left: 128, top: 56, side: 'right' }, 200, 120, 0)).toEqual({ x: 128, y: 62 });
   });
 });
 
@@ -88,5 +88,32 @@ describe('layoutCards', () => {
       800,
     );
     expect(b).toEqual({ left: 500 - CARD_GAP - 200, top: 240, side: 'left' });
+  });
+});
+
+describe('extremes', () => {
+  const row = (radius: number, moons: number) => ({
+    radius,
+    mass: 1,
+    orbit: 1,
+    speed: 30,
+    year: 365,
+    day: 24,
+    light: 1,
+    gravity: 1,
+    equilibrium: 255,
+    moons,
+  });
+
+  it('marks nothing on a lone card', () => {
+    expect(extremes([row(1, 1)])).toEqual([{}]);
+  });
+
+  it('marks the highest and lowest of each line, every card that holds it, and skips equal lines', () => {
+    expect(extremes([row(1, 2), row(11, 0), row(1, 2)])).toEqual([
+      { radius: 'min', moons: 'max' },
+      { radius: 'max', moons: 'min' },
+      { radius: 'min', moons: 'max' },
+    ]);
   });
 });

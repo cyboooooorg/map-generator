@@ -27,6 +27,8 @@ export interface CardBox {
 export const CARD_GAP = 28;
 /** Room kept between a card and the edges of the view, CSS px. */
 const MARGIN = 8;
+/** Room kept at the top of the view, CSS px: the viewer's toolbar is there. */
+export const TOP_MARGIN = 56;
 
 /**
  * Where to put a `width` × `height` card for a planet at (`x`, `y`) in a
@@ -51,7 +53,7 @@ export function cardBox(
   const clamp = (v: number, low: number, high: number) => Math.max(low, Math.min(v, Math.max(low, high)));
   return {
     left: clamp(rawLeft, MARGIN, viewWidth - width - MARGIN),
-    top: clamp(y - height / 2, MARGIN, viewHeight - height - MARGIN),
+    top: clamp(y - height / 2, TOP_MARGIN, viewHeight - height - MARGIN),
     side,
   };
 }
@@ -130,4 +132,32 @@ export function layoutCards(spots: readonly CardSpot[], viewWidth: number, viewH
     placed.push({ left: chosen.left, top: chosen.top, width, height });
     return chosen;
   });
+}
+
+/** The lines of a card whose values the pinned cards compare. */
+export const CARD_METRICS = ['radius', 'mass', 'orbit', 'speed', 'year', 'day', 'light', 'gravity', 'equilibrium', 'moons'] as const;
+export type CardMetric = (typeof CARD_METRICS)[number];
+/** The highest or lowest value of a line among the cards compared. */
+export type Extreme = 'max' | 'min';
+
+/**
+ * For each card's values (`rows`), the lines where it holds the highest or
+ * the lowest value of all the cards: every card holding it when several do,
+ * none when a line's values are all the same, and none at all with fewer
+ * than two cards.
+ */
+export function extremes(rows: readonly Readonly<Record<CardMetric, number>>[]): Partial<Record<CardMetric, Extreme>>[] {
+  const marks: Partial<Record<CardMetric, Extreme>>[] = rows.map(() => ({}));
+  if (rows.length < 2) return marks;
+  for (const metric of CARD_METRICS) {
+    const values = rows.map((row) => row[metric]);
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    if (!(max > min)) continue;
+    values.forEach((value, k) => {
+      if (value === max) marks[k]![metric] = 'max';
+      else if (value === min) marks[k]![metric] = 'min';
+    });
+  }
+  return marks;
 }

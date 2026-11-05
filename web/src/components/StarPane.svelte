@@ -3,7 +3,7 @@
   // and the numbers of both (see StarView.ts).
   import { onMount } from 'svelte';
   import PlanetCard from './PlanetCard.svelte';
-  import { layoutCards, shownCards } from '../lib/planetCard';
+  import { extremes, layoutCards, shownCards } from '../lib/planetCard';
   import type { SystemPlanet } from '../lib/systemStar';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
@@ -76,6 +76,10 @@
     pinned?: readonly string[];
     onPin?: (id: string) => void;
     onUnpin?: (id: string) => void;
+    /** Unpins every card. */
+    onUnpinAll?: () => void;
+    /** Opens a moon of a planet (a link on its card), by body id. */
+    onOpenMoon?: (id: string) => void;
     /** Opens a planet (a double click on its marker, or its card's button). */
     onOpenPlanet?: ((index: number) => void) | null;
     /** The map wrapped round each planet's marker, in the giants' order, null for its colour. */
@@ -108,6 +112,8 @@
     pinned = [],
     onPin = () => {},
     onUnpin = () => {},
+    onUnpinAll = () => {},
+    onOpenMoon = () => {},
     onOpenPlanet = null,
     maps = null,
   }: Props = $props();
@@ -216,7 +222,23 @@
       viewWidth,
       viewHeight,
     );
-    return spots.map((s, k) => ({ ...s, box: boxes[k]! }));
+    // The pinned cards compared: each line's highest and lowest marked.
+    const pinnedSpots = spots.filter((s) => s.pinned);
+    const marks = extremes(
+      pinnedSpots.map(({ planet, at }) => ({
+        radius: planet.radius_km,
+        mass: planet.mass_earth,
+        orbit: planet.orbit_au,
+        speed: orbitalSpeed(star.mass, planet.orbit_au, at.distance),
+        year: planet.year_days,
+        day: planet.locked ? planet.year_days * 24 : planet.day_hours,
+        light: planet.flux_earth,
+        gravity: planet.gravity,
+        equilibrium: planet.equilibrium_k,
+        moons: planet.moons,
+      })),
+    );
+    return spots.map((s, k) => ({ ...s, box: boxes[k]!, marks: (s.pinned ? marks[pinnedSpots.indexOf(s)] : undefined) ?? {} }));
   });
   $effect(() => {
     if (view) view.onPickPlanet = onPickPlanet;
@@ -529,6 +551,8 @@
           hovered = null;
         }}
         onOpen={() => onOpenPlanet?.(card.index)}
+        marks={card.marks}
+        {onOpenMoon}
         onEnter={() => {
           overCard = true;
           clearTimeout(closeTimer);
@@ -539,6 +563,9 @@
         }}
       />
     {/each}
+    {#if pinned.length > 1}
+      <button type="button" class="unpin-all" title={t.planetCard.unpinAllHelp} onclick={onUnpinAll}>{t.planetCard.unpinAll}</button>
+    {/if}
   </div>
 {/if}
 <details class="star-panel" role="region" aria-label={t.starView.title} open>
@@ -686,6 +713,13 @@
   }
   .star-canvas:active {
     cursor: grabbing;
+  }
+  .unpin-all {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    pointer-events: auto;
+    font-size: 0.8rem;
   }
   .cards {
     position: absolute;
