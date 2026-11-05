@@ -33,7 +33,7 @@ use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
 use crate::craters::{CraterField, Window, base_min_diameter_km};
 use crate::export::colour::{linear_of, to_srgb};
-use crate::export::ecotone::ecotone_colour_for;
+use crate::export::ecotone::ecotone_colour_around;
 use crate::export::raw_data::albedo_of;
 use crate::export::raw_data::{Layer16, LoadedWorld};
 use crate::export::variation::{SurfaceVariation, sphere};
@@ -612,7 +612,7 @@ impl DetailWorld {
                     }
                     let colour = self
                         .variation
-                        .apply(ecotone_colour_for(planet, input), lon, lat)
+                        .apply(ecotone_colour_around(planet, input, Some(biome)), lon, lat)
                         .map(|c| c * shade);
                     if dry.is_lava() || w.albedo.is_empty() {
                         colour
