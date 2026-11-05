@@ -50,23 +50,23 @@ items were timed on a river-heavy world (25.3 s on `main`), the others on
 the setup above (20.3 s on `main` for that run). Every item kept is
 bit-identical: the same output bytes as before for every test world.
 
-| Item | Status  | Gain                                                                                                                                       |
-| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| N1   | Dropped | 1.4–1.5× per call in a micro-benchmark, but about 3 % on the Noise stage, within the noise of the measurement: not worth its own Perlin |
-| C1   | Done    | Coast 2.32 → 1.55 s (bucket queue)                                                                                                         |
-| C2   | Done    | −1.8 s (coast and moisture together)                                                                                                       |
-| L1   | Done    | −0.5 s                                                                                                                                     |
-| M1   | Dropped | No wall time left to gain: after C2 the moisture pass runs beside the longer coast distance                                                |
-| E1   | Done    | Erosion 1.60 → 1.30 s                                                                                                                      |
-| R1   | Dropped | The flood is bound by random memory accesses: even a hole-based 4-ary heap was no faster than the standard binary heap                    |
-| R2   | Done    | With R3: Rivers 8.68 → 8.04 s                                                                                                              |
-| R3   | Done    | See R2                                                                                                                                     |
-| R4   | Done    | Rivers 8.68 → 7.17 s                                                                                                                       |
-| X1   | Done    | With X2a: Export 5.32 → 4.13 s, four PNGs written at a time at most, peak memory unchanged                                                |
-| X2a  | Done    | See X1                                                                                                                                     |
-| P2   | Dropped | The clone is the `world.png` buffer itself                                                                                                 |
-| P3   | Dropped | Covered by X1's cap of four files at a time                                                                                                |
-| S1   | Not needed | Already in place: moons are sized by their radius (at least 512 × 256, `MOON_MIN_WIDTH`), siblings at 512 × 256                      |
+| Item | Status     | Gain                                                                                                                                    |
+| ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| N1   | Dropped    | 1.4–1.5× per call in a micro-benchmark, but about 3 % on the Noise stage, within the noise of the measurement: not worth its own Perlin |
+| C1   | Done       | Coast 2.32 → 1.55 s (bucket queue)                                                                                                      |
+| C2   | Done       | −1.8 s (coast and moisture together)                                                                                                    |
+| L1   | Done       | −0.5 s                                                                                                                                  |
+| M1   | Dropped    | No wall time left to gain: after C2 the moisture pass runs beside the longer coast distance                                             |
+| E1   | Done       | Erosion 1.60 → 1.30 s                                                                                                                   |
+| R1   | Dropped    | The flood is bound by random memory accesses: even a hole-based 4-ary heap was no faster than the standard binary heap                  |
+| R2   | Done       | With R3: Rivers 8.68 → 8.04 s                                                                                                           |
+| R3   | Done       | See R2                                                                                                                                  |
+| R4   | Done       | Rivers 8.68 → 7.17 s                                                                                                                    |
+| X1   | Done       | With X2a: Export 5.32 → 4.13 s, four PNGs written at a time at most, peak memory unchanged                                              |
+| X2a  | Done       | See X1                                                                                                                                  |
+| P2   | Dropped    | The clone is the `world.png` buffer itself                                                                                              |
+| P3   | Dropped    | Covered by X1's cap of four files at a time                                                                                             |
+| S1   | Not needed | Already in place: moons are sized by their radius (at least 512 × 256, `MOON_MIN_WIDTH`), siblings at 512 × 256                         |
 
 N1 shows that the Perlin share of the profile overstates what faster noise
 alone gains: N2 and X3 stay to be measured before they are kept. P1, E2
