@@ -10,6 +10,10 @@ import type { Messages } from './index.svelte';
 const S = ' ';
 
 export const fr: Messages = {
+  toggleBar: {
+    expand: 'Afficher les noms',
+    collapse: 'Icônes seules',
+  },
   playback: {
     dayOfYear: (p) => `jour ${p.day} sur ${p.year}`,
     yearHelp: `Le jour de l’année de la planète${S}: les saisons, l’heure et les lunes avancent avec lui`,
@@ -388,6 +392,8 @@ export const fr: Messages = {
     backHelp: 'Retour au menu principal',
   },
   form: {
+    starType: 'Type',
+    systemStarRandomHelp: `Tirée comme les étoiles voisines du Soleil${S}: surtout des naines rouges, quelques-unes comme le Soleil`,
     stepsLabel: 'Étapes',
     steps: { kind: 'Type', star: 'Étoile', planets: 'Planètes', advanced: 'Avancé', summary: 'Résumé' },
     allRandom: 'Tout au hasard',
@@ -688,6 +694,8 @@ export const fr: Messages = {
     presentOnly: 'Les statistiques des biomes et la grille hexagonale montrent le présent.',
   },
   starView: {
+    selectedSection: 'Planète sélectionnée',
+    pickHint: `Cliquez sur une planète, ou sur sa ligne dans Planètes, pour la sélectionner${S}; cliquez à nouveau pour la désélectionner.`,
     title: 'L’étoile et son système',
     heading: (p) => `${p.type}${p.kind ? ` · ${p.kind}` : ''}`,
     classNames: {
@@ -782,7 +790,7 @@ export const fr: Messages = {
     animate: 'Animer',
     distances: 'Distances',
     orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
-    showOrbit: 'Orbite',
+    showOrbit: 'Orbites',
     showZone: 'Zone habitable',
     circular: (p) => `orbite circulaire${S}: ${p.distance} toute l’année, ni périastre ni apoastre`,
     distancesHelp:

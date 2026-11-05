@@ -239,7 +239,7 @@
   $effect(() => () => clearTimeout(closeTimer));
   // Rings round the selected planet, the pinned ones and the one hovered.
   $effect(() => {
-    view?.setHighlighted(planets ? [...(selected !== null ? [selected] : []), ...cards.map((c) => c.index)] : []);
+    view?.setHighlighted(planets ? [...(selected !== null && selected >= 0 ? [selected] : []), ...cards.map((c) => c.index)] : []);
   });
   /** The size of the view, for the cards to keep inside it. */
   let viewWidth = $state(0);
@@ -513,14 +513,22 @@
     ];
     const distances = lines.filter((l) => l.kind !== 'pull');
     const pullLabels = lines.filter((l) => l.kind === 'pull');
-    const order = [...names.map((n) => n.box), ...distances.map((l) => l.box), ...speeds.map((v) => v.box), ...pullLabels.map((l) => l.box)];
+    // The speeds come right after the names: they hide last of the numbers.
+    const order = [...names.map((n) => n.box), ...speeds.map((v) => v.box), ...distances.map((l) => l.box), ...pullLabels.map((l) => l.box)];
     const places = layoutLabels(order, keepClear);
     let k = 0;
     const take = () => places[k++]!;
+    // To scale, a name sits slanted at the tip of its planet's pin, always shown.
+    const placedNames = names.map((n) => {
+      const place = take();
+      const pin = labels!.giants.find((g) => g.index === n.index)?.pin ?? null;
+      return pin ? { ...n, box: { ...n.box, x: pin.x, y: pin.y }, dy: 0, visible: true, slanted: true } : { ...n, ...place, slanted: false };
+    });
+    const placedSpeeds = speeds.map((v) => ({ ...v, ...take() }));
     return {
-      names: names.map((n) => ({ ...n, ...take() })),
+      names: placedNames,
       lines: [...distances, ...pullLabels].map((l) => ({ ...l, ...take() })),
-      speeds: speeds.map((v) => ({ ...v, ...take() })),
+      speeds: placedSpeeds,
     };
   });
 
@@ -555,7 +563,7 @@
   /** The panels of the dock: the star, the planet shown, and the system's planets. */
   const dockPanels = $derived<DockPanel[]>([
     { id: 'star', title: t.starView.starSection, icon: 'star', content: starPanel },
-    { id: 'planet', title: t.starView.planetSection, icon: 'planet', content: planetPanel },
+    { id: 'planet', title: selected !== null ? t.starView.selectedSection : t.starView.planetSection, icon: 'planet', content: planetPanel },
     ...(!worldGiant || selected !== null
       ? [{ id: 'planets', title: kinds ? t.starView.planets : t.starView.giantsSection, icon: 'list' as const, content: planetsPanel }]
       : []),
@@ -614,12 +622,18 @@
     {#each placed.names as giant (giant.index)}
       <span
         class="label giant boxed"
+        class:slanted={giant.slanted}
         class:self={giant.index === selected}
         class:hidden={!giant.visible}
         style:left={`${giant.box.x}px`}
         style:top={`${giant.box.y + giant.dy}px`}>{giant.text}</span
       >
     {/each}
+    {#if labels.starPin}
+      <span class="label giant boxed slanted star-pin" style:left={`${labels.starPin.x}px`} style:top={`${labels.starPin.y}px`}
+        >{star.type}</span
+      >
+    {/if}
     {#each placed.lines as line (line.key)}
       <span
         class="label along {line.kind}"
@@ -713,6 +727,9 @@
   {/if}
 {/snippet}
 {#snippet planetPanel()}
+  {#if selected === -1}
+    <p class="muted hint">{t.starView.pickHint}</p>
+  {:else}
   <dl>
     <dt title={t.starView.orbitHelp}><span class="swatch orbit"></span>{t.worldInfo.orbit}</dt>
     <dd class="unit-help" title={unitTooltip('AU')}>{formatOrbit(star)}</dd>
@@ -728,6 +745,7 @@
   {#if distances && star.eccentricity <= 0.001}
     <!-- A circle has no closest or farthest point: say why none is marked. -->
     <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
+  {/if}
   {/if}
 {/snippet}
 {#snippet planetsPanel()}
@@ -808,7 +826,7 @@
         }
       : null}
     clock={clockText}
-    jumps={selected !== null
+    jumps={selected !== null && selected >= 0
       ? [
           { key: 'start', label: t.starView.toStart, icon: 'start', run: () => goToDay(0) },
           {
@@ -822,7 +840,9 @@
             },
           },
         ]
-      : []}
+      : selected !== null
+        ? [{ key: 'start', label: t.starView.toStart, icon: 'start', run: () => goToDay(0) }]
+        : []}
   />
 </div>
 
@@ -895,6 +915,14 @@
   /* Placed by the layout: its box is where it goes. */
   .label.giant.boxed {
     transform: none;
+  }
+  /* To scale: at a pin's tip, slanted up and away from it. */
+  .label.giant.boxed.slanted {
+    transform: translate(0, -100%) rotate(-35deg);
+    transform-origin: left bottom;
+  }
+  .label.star-pin {
+    color: #ffd27a;
   }
   .label.along {
     background: none;
@@ -1000,6 +1028,9 @@
     right: 12px;
   }
   .heading {
+    margin: 0;
+  }
+  .hint {
     margin: 0;
   }
   dl {
