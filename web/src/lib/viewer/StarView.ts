@@ -14,6 +14,7 @@ import {
   LineDashedMaterial,
   Mesh,
   MeshBasicMaterial,
+  MOUSE,
   PerspectiveCamera,
   PlaneGeometry,
   Points,
@@ -38,6 +39,7 @@ import type { Giant } from '../api/types/Giant';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import type { StarInfo } from '../api/types/StarInfo';
 import { fullPixelRatio } from './pixelRatio';
+import { axesOnScreen, type ScreenAxis } from './axes';
 import { starsFragment, starsVertex } from './shaders';
 import {
   glowFragment,
@@ -175,6 +177,10 @@ export class StarView {
    * the periapsis (0 to 1) and the Earth days simulated since the start.
    */
   onClock: (yearFraction: number, days: number) => void = () => {};
+  /** Called after each frame with the world's axes as the camera sees them (the axes gizmo). */
+  onAxes: (axes: ScreenAxis[]) => void = () => {};
+  /** The camera's flight under way (see fly), or none. */
+  private flight: { from: { position: Vector3; target: Vector3 }; to: { position: Vector3; target: Vector3 }; start: number; duration: number; done: () => void } | null = null;
   /** Called with a planet's index (in setStar's `giants`) when it is clicked; null ignores clicks. */
   onPickPlanet: ((index: number) => void) | null = null;
   /** Where a press started, to tell a click from a drag. */
@@ -289,7 +295,15 @@ export class StarView {
     this.scene.background = new Color('#05070d');
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
-    this.controls.enablePan = false;
+    // The right button frees the camera: it pans on the screen's two axes.
+    this.controls.enablePan = true;
+    this.controls.screenSpacePanning = true;
+    this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+    // A press, the wheel or a key ends a flight at once (see fly).
+    canvas.addEventListener('pointerdown', () => this.endFlight(), { capture: true });
+    canvas.addEventListener('wheel', () => this.endFlight(), { capture: true, passive: true });
+    window.addEventListener('keydown', this.endFlightOnKey);
     this.controls.minDistance = STAR_RADIUS * 1.4;
     this.controls.maxDistance = 80;
     this.controls.addEventListener('change', () => this.requestRender());
@@ -1220,17 +1234,103 @@ export class StarView {
 
   /** Back to the starting view: the whole system, seen from above its plane. */
   resetView(): void {
+    this.endFlight();
+    const pose = this.fittedPose();
+    this.userMoved = false;
+    this.camera.position.copy(pose.position);
+    this.controls.target.copy(pose.target);
+    this.controls.update();
+    this.requestRender();
+  }
+
+  /** The starting view: the whole system, seen from above its plane, the target on the star. */
+  private fittedPose(): { position: Vector3; target: Vector3 } {
     // Far enough for the system (out to about 7.6 star radii) to fit the
     // narrower side of the view.
     const halfFov = ((this.camera.fov / 2) * Math.PI) / 180;
     const distance = ((this.reach + 1.4) / Math.tan(halfFov)) / Math.min(1, this.camera.aspect);
     // Room to zoom out past the fitted view, however far the system reaches.
     this.controls.maxDistance = Math.max(80, distance * 2);
-    this.userMoved = false;
-    this.camera.position.set(0, distance * 0.55, distance * 0.83);
-    this.controls.target.set(0, 0, 0);
-    this.controls.update();
+    return { position: new Vector3(0, distance * 0.55, distance * 0.83), target: new Vector3() };
+  }
+
+  /** Where the camera stops close to planet `index`: in front of it, on the side the camera looks from. */
+  private nearPose(index: number): { position: Vector3; target: Vector3 } | null {
+    const marker = this.giantMarkers[index];
+    if (!marker) return null;
+    const target = marker.position.clone();
+    const away = this.camera.position.clone().sub(target);
+    if (away.lengthSq() < 1e-9) away.set(0, 1, 1);
+    const size = giantMarkerSize(this.giants[index]?.radius_earth ?? 1);
+    return { position: target.clone().addScaledVector(away.normalize(), size * 6), target };
+  }
+
+  /**
+   * Flies the camera to planet `index` (about a second, eased), then calls
+   * `done`: the travelling into a body's view. A press, the wheel or a key
+   * ends it at once. With no such planet, `done` runs at once.
+   */
+  flyToPlanet(index: number, done: () => void): void {
+    const to = this.nearPose(index);
+    if (!to) {
+      done();
+      return;
+    }
+    this.fly(to, 1000, done);
+  }
+
+  /** Starts close to planet `index` and flies out to the whole system: the travelling back from a body. */
+  flyOutFrom(index: number): void {
+    const from = this.nearPose(index);
+    if (!from) return;
+    this.endFlight();
+    this.camera.position.copy(from.position);
+    this.controls.target.copy(from.target);
+    this.fly(this.fittedPose(), 1100, () => (this.userMoved = false));
+  }
+
+  private fly(to: { position: Vector3; target: Vector3 }, duration: number, done: () => void): void {
+    this.endFlight();
+    this.controls.enabled = false;
+    this.flight = {
+      from: { position: this.camera.position.clone(), target: this.controls.target.clone() },
+      to,
+      start: performance.now(),
+      duration,
+      done,
+    };
     this.requestRender();
+  }
+
+  /** Ends the flight under way, the camera where it was going. */
+  private endFlight(): void {
+    const flight = this.flight;
+    if (!flight) return;
+    this.flight = null;
+    this.camera.position.copy(flight.to.position);
+    this.controls.target.copy(flight.to.target);
+    this.controls.enabled = true;
+    this.controls.update();
+    flight.done();
+    this.requestRender();
+  }
+
+  private readonly endFlightOnKey = (): void => this.endFlight();
+
+  /** Moves the camera along the flight, eased in and out; true while it goes on. */
+  private stepFlight(now: number): boolean {
+    const flight = this.flight;
+    if (!flight) return false;
+    const u = Math.min(1, (now - flight.start) / flight.duration);
+    const eased = u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2;
+    this.camera.position.lerpVectors(flight.from.position, flight.to.position, eased);
+    this.controls.target.lerpVectors(flight.from.target, flight.to.target, eased);
+    this.camera.lookAt(this.controls.target);
+    if (u >= 1) {
+      this.endFlight();
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -1271,6 +1371,8 @@ export class StarView {
 
   dispose(): void {
     this.disposed = true;
+    window.removeEventListener('keydown', this.endFlightOnKey);
+    this.flight = null;
     for (const object of [this.selectedOrbit, this.frost]) {
       object.geometry.dispose();
       object.material.dispose();
@@ -1458,12 +1560,14 @@ export class StarView {
       this.frame = null;
     }
     if (this.disposed) return;
-    const moving = this.controls.update();
+    const flying = this.stepFlight(performance.now());
+    const moving = flying || (this.flight === null && this.controls.update());
     // The glow faces the camera.
     this.glow.quaternion.copy(this.camera.quaternion);
     // So do the highlights (their markers do not turn).
     for (const halo of this.halos) if (halo.visible) halo.quaternion.copy(this.camera.quaternion);
     this.renderer.render(this.scene, this.camera);
+    this.onAxes(axesOnScreen(this.camera.quaternion));
     const giantsShown = this.giantsOn && this.giants.length > 0;
     if ((this.distancesOn || giantsShown) && this.info) {
       // The zone's edges are labelled across the apsides line, away from

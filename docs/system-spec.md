@@ -323,7 +323,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   bar at the bottom (play, date, jumps, speed). The planet viewer has the
   same chrome: panels (info, map, light and season, epoch, host planet,
   hexes), an icon bar of its display switches, and one clock in days for
-  its seasons and moons.
+  its seasons and moons. Both views show an axes gizmo; the star view's
+  right button pans the camera, and opening a planet flies to it (and
+  back out on return).
 - **Main menu.** The app opens on a menu, and no viewer starts until a
   system is opened. The menu shows the systems as a grid of cards, each
   with its orrery, its star's designation (or given name), the count of

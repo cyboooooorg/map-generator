@@ -535,6 +535,7 @@ export const en = {
   },
   /** The viewer: toolbar, display panel, legends, overlays. */
   viewer: {
+    axesGizmo: 'The world\'s axes, x red, y green, z blue, as the camera sees them',
     sunlightOff: 'Turn on Sunlight (in the icon bar) to light the body by its star, with its seasons and its hour.',
     hexesOff: 'Turn on the hex grid in the icon bar to set it here.',
     infoPanel: 'Info',
