@@ -317,6 +317,10 @@ addressed as `<system-id>/<body-id>` everywhere.
   Orbital station, Cyberpunk, Military), picked in the header and
   remembered; the colours that carry meaning (habitable zone, frost line,
   arrows, map layers) keep their hue in all of them.
+- **Viewer chrome.** The star view's data is in a dock of panels by
+  theme (the star, the planet, the planets), each of which can float over
+  the view; its display switches are an icon bar, and its time a playback
+  bar at the bottom (play, date, jumps, speed).
 - **Library.** The world list becomes a system list. Each row shows the
   star's designation (or given name), a strip of small spheres (one per
   planet, in order, coloured as their previews, the generated ones

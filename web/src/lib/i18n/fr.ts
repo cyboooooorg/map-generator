@@ -10,6 +10,21 @@ import type { Messages } from './index.svelte';
 const S = ' ';
 
 export const fr: Messages = {
+  playback: {
+    label: 'Lecture',
+    play: 'Lecture',
+    pause: 'Pause',
+    time: 'Date',
+    speed: 'Vitesse',
+  },
+  dock: {
+    panels: 'Panneaux',
+    detach: 'Sortir du dock',
+    dockBack: 'Remettre dans le dock',
+    close: 'Fermer',
+    fold: 'Replier le dock',
+    unfold: 'Déplier le dock',
+  },
   theme: {
     label: 'Thème',
     names: { default: 'Par défaut', holo: 'HUD holographique', station: 'Station orbitale', cyberpunk: 'Cyberpunk', military: 'Militaire' },

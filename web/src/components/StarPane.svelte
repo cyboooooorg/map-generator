@@ -16,6 +16,9 @@
   import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { layoutLabels } from '../lib/viewer/labelLayout';
+  import Dock, { type DockPanel } from './dock/Dock.svelte';
+  import PlaybackBar from './dock/PlaybackBar.svelte';
+  import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
 
@@ -429,7 +432,13 @@
         if (links) lines.push({ ...alongLine(labels.star, g, 0.65, formatAu(g.distance)), key: `d${g.index}`, kind: 'distance' });
       }
       for (const g of giants) {
-        if (g.pull) lines.push({ ...alongLine(labels.star, g, 1, pullText(g.gravity)), key: `p${g.index}`, kind: 'pull' });
+        if (!g.pull) continue;
+        // Beside the planet, just past the pull arrow towards the star, not over the planet.
+        const text = pullText(g.gravity);
+        const span = Math.hypot(g.x - labels.star.x, g.y - labels.star.y);
+        const arrow = 2 * Math.hypot(g.x - g.pull.x, g.y - g.pull.y);
+        const share = span > 0 ? 1 - (arrow + labelWidth(text) / 2 + 12) / span : 1;
+        lines.push({ ...alongLine(labels.star, g, Math.min(0.95, Math.max(0.45, share)), text), key: `p${g.index}`, kind: 'pull' });
       }
     }
     if (system && labels.inner && labels.outer) {
@@ -494,6 +503,43 @@
       speeds: speeds.map((v) => ({ ...v, ...take() })),
     };
   });
+
+  /** The display switches, as the icon bar groups them: lines, measures, structure. */
+  const toggleGroups = $derived<Toggle[][]>([
+    [
+      { key: 'orbit', label: t.starView.showOrbit, icon: 'orbit', on: orbit, set: (v) => (orbit = v) },
+      { key: 'zone', label: t.starView.showZone, icon: 'zone', on: zone, set: (v) => (zone = v) },
+      { key: 'prominences', label: t.starView.prominences, help: t.starView.prominencesHelp, icon: 'prominence', on: prominences, set: (v) => (prominences = v) },
+      ...(giantList.length > 0 && selected === null
+        ? [{ key: 'giants', label: t.starView.showGiants, help: t.starView.showGiantsHelp, icon: 'giants' as const, on: giants, set: (v: boolean) => (giants = v) }]
+        : []),
+    ],
+    [
+      { key: 'distances', label: t.starView.distances, help: t.starView.distancesHelp, icon: 'distance', on: distances, set: (v) => (distances = v) },
+      ...(selected !== null
+        ? [
+            { key: 'links', label: t.starView.showLinks, help: t.starView.showLinksHelp, icon: 'links' as const, on: links, set: (v: boolean) => (links = v) },
+            { key: 'velocities', label: t.starView.showVelocities, help: t.starView.showVelocitiesHelp, icon: 'velocity' as const, on: velocities, set: (v: boolean) => (velocities = v) },
+            { key: 'pulls', label: t.starView.showPulls, help: t.starView.showPullsHelp, icon: 'pull' as const, on: pulls, set: (v: boolean) => (pulls = v) },
+          ]
+        : []),
+    ],
+    selected !== null
+      ? [
+          { key: 'frost', label: t.starView.showFrost, help: t.starView.showFrostHelp, icon: 'frost', on: frost, set: (v) => (frost = v) },
+          { key: 'hills', label: t.starView.showHills, help: t.starView.showHillsHelp, icon: 'hills', on: hills, set: (v) => (hills = v) },
+          { key: 'scale', label: t.starView.realScale, help: t.starView.realScaleHelp, icon: 'scale', on: realScale, set: (v) => (realScale = v) },
+        ]
+      : [],
+  ]);
+  /** The panels of the dock: the star, the planet shown, and the system's planets. */
+  const dockPanels = $derived<DockPanel[]>([
+    { id: 'star', title: t.starView.starSection, icon: 'star', content: starPanel },
+    { id: 'planet', title: t.starView.planetSection, icon: 'planet', content: planetPanel },
+    ...(!worldGiant || selected !== null
+      ? [{ id: 'planets', title: kinds ? t.starView.planets : t.starView.giantsSection, icon: 'list' as const, content: planetsPanel }]
+      : []),
+  ]);
 
   /** Back to the starting view of the system. */
   export function resetView(): void {
@@ -604,11 +650,8 @@
     {/if}
   </div>
 {/if}
-<details class="star-panel" role="region" aria-label={t.starView.title} open>
-  <summary
-    ><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></summary
-  >
-  <h4>{t.starView.starSection}</h4>
+{#snippet starPanel()}
+  <p class="heading"><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></p>
   <dl>
     <dt title={t.starView.temperatureHelp}>{t.starView.temperature}</dt>
     <dd>{withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')}</dd>
@@ -638,7 +681,12 @@
       })}
     </dd>
   </dl>
-  <h4>{t.starView.planetSection}</h4>
+  <small class="muted">{t.starView.schematic}</small>
+  {#if compressed && (giants || selected !== null)}
+    <small class="muted">{t.starView.compressed({ distance: formatAu(compressFrom) })}</small>
+  {/if}
+{/snippet}
+{#snippet planetPanel()}
   <dl>
     <dt title={t.starView.orbitHelp}><span class="swatch orbit"></span>{t.worldInfo.orbit}</dt>
     <dd class="unit-help" title={unitTooltip('AU')}>{formatOrbit(star)}</dd>
@@ -651,7 +699,12 @@
     <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
     <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
   </dl>
-  {#if !worldGiant || selected !== null}
+  {#if distances && star.eccentricity <= 0.001}
+    <!-- A circle has no closest or farthest point: say why none is marked. -->
+    <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
+  {/if}
+{/snippet}
+{#snippet planetsPanel()}
   <h4 title={t.starView.giantsHelp}>{kinds ? t.starView.planets : t.starView.giantsSection}</h4>
   {#if giantSystem === null}
     <small class="muted">{t.starView.giantsOff}</small>
@@ -700,108 +753,51 @@
       <dd>{t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })}</dd>
     </dl>
   {/if}
-  {/if}
-  <h4>{t.starView.displaySection}</h4>
-  <div class="checks">
-    <label class="check">
-      <input type="checkbox" bind:checked={orbit} />
-      {t.starView.showOrbit}
-    </label>
-    <label class="check">
-      <input type="checkbox" bind:checked={zone} />
-      {t.starView.showZone}
-    </label>
-    <label class="check" title={t.starView.prominencesHelp}>
-      <input type="checkbox" bind:checked={prominences} />
-      {t.starView.prominences}
-    </label>
-    {#if giantList.length > 0 && selected === null}
-      <label class="check" title={t.starView.showGiantsHelp}>
-        <input type="checkbox" bind:checked={giants} />
-        {t.starView.showGiants}
-      </label>
-    {/if}
-    <label class="check" title={t.starView.distancesHelp}>
-      <input type="checkbox" bind:checked={distances} />
-      {t.starView.distances}
-    </label>
-    {#if selected !== null}
-      <label class="check" title={t.starView.showLinksHelp}>
-        <input type="checkbox" bind:checked={links} />
-        {t.starView.showLinks}
-      </label>
-      <label class="check" title={t.starView.showVelocitiesHelp}>
-        <input type="checkbox" bind:checked={velocities} />
-        {t.starView.showVelocities}
-      </label>
-      <label class="check" title={t.starView.showPullsHelp}>
-        <input type="checkbox" bind:checked={pulls} />
-        {t.starView.showPulls}
-      </label>
-      <label class="check" title={t.starView.showFrostHelp}>
-        <input type="checkbox" bind:checked={frost} />
-        {t.starView.showFrost}
-      </label>
-      <label class="check" title={t.starView.showHillsHelp}>
-        <input type="checkbox" bind:checked={hills} />
-        {t.starView.showHills}
-      </label>
-      <label class="check" title={t.starView.realScaleHelp}>
-        <input type="checkbox" bind:checked={realScale} />
-        {t.starView.realScale}
-      </label>
-    {/if}
-    <label class="check" title={t.starView.animateHelp}>
-      <input type="checkbox" bind:checked={animated} />
-      {t.starView.animate}
-    </label>
+{/snippet}
+<div class="star-chrome">
+  <div class="toggles">
+    <ToggleBar label={t.starView.displaySection} groups={toggleGroups} />
   </div>
-  {#if animated && selected !== null}
-    <label class="speed" title={t.starView.systemSpeedHelp}>
-      <span>{t.starView.systemSpeed}</span>
-      <input type="range" min={SYSTEM_SPEED_MIN} max={SYSTEM_SPEED_MAX} step="1" bind:value={speed} />
-      <small>{t.starView.daysPerSecond({ days: formatInt(2 ** speed) })}</small>
-    </label>
-  {/if}
-  {#if selected !== null && longestYear > 0}
-    <div class="timebar">
-      <label class="speed" title={t.starView.timeBarHelp}>
-        <span>{t.starView.timeBar}</span>
-        <input
-          type="range"
-          min="0"
-          max={Math.ceil(longestYear)}
-          step="any"
-          value={Math.min(elapsedDays, Math.ceil(longestYear))}
-          oninput={(event) => goToDay(Number((event.currentTarget as HTMLInputElement).value))}
-        />
-        <small>{t.starView.dayValue({ day: formatInt(Math.floor(elapsedDays) + 1) })}</small>
-      </label>
-      <div class="jumps">
-        <button type="button" onclick={() => goToDay(0)}>{t.starView.toStart}</button>
-        <button
-          type="button"
-          title={t.starView.toPeriapsisHelp}
-          onclick={() => {
-            const day = view?.nextPeriapsisDay(selected ?? 0);
-            if (day !== null && day !== undefined) goToDay(day);
-          }}>{t.starView.toPeriapsis({ name: giantList[selected]?.name ?? '' })}</button
-        >
-      </div>
-    </div>
-  {/if}
-  {#if animated}
-    <small class="clock" title={selected !== null ? t.starView.systemClockHelp : t.starView.clockHelp}>{clockText}</small>
-  {/if}
-  {#if distances && star.eccentricity <= 0.001}
-    <!-- A circle has no closest or farthest point: say why none is marked. -->
-    <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
-  {/if}
-  <small class="muted">{t.starView.schematic}</small>
-  {#if compressed && (giants || selected !== null)}
-    <small class="muted">{t.starView.compressed({ distance: formatAu(compressFrom) })}</small>
-  {/if}
-</details>
+  <Dock kind="star" panels={dockPanels} defaultActive="star" />
+  <PlaybackBar
+    bind:playing={animated}
+    speed={selected !== null
+      ? {
+          value: speed,
+          min: SYSTEM_SPEED_MIN,
+          max: SYSTEM_SPEED_MAX,
+          text: t.starView.daysPerSecond({ days: formatInt(2 ** speed) }),
+          help: t.starView.systemSpeedHelp,
+          set: (v) => (speed = v),
+        }
+      : null}
+    time={selected !== null && longestYear > 0
+      ? {
+          value: elapsedDays,
+          max: Math.ceil(longestYear),
+          text: t.starView.dayValue({ day: formatInt(Math.floor(elapsedDays) + 1) }),
+          help: t.starView.timeBarHelp,
+          set: goToDay,
+        }
+      : null}
+    clock={clockText}
+    jumps={selected !== null
+      ? [
+          { key: 'start', label: t.starView.toStart, icon: 'start', run: () => goToDay(0) },
+          {
+            key: 'periapsis',
+            label: t.starView.toPeriapsis({ name: giantList[selected]?.name ?? '' }),
+            help: t.starView.toPeriapsisHelp,
+            icon: 'periapsis',
+            run: () => {
+              const day = view?.nextPeriapsisDay(selected ?? 0);
+              if (day !== null && day !== undefined) goToDay(day);
+            },
+          },
+        ]
+      : []}
+  />
+</div>
 
 <style>
   .star-canvas {
@@ -941,30 +937,11 @@
   .label.zone {
     color: #8fe0aa;
   }
-  .timebar {
-    display: grid;
-    gap: 4px;
-  }
-  .jumps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .jumps button {
-    font-size: 0.75rem;
-    padding: 2px 8px;
-  }
-  .speed {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 8px;
-  }
-  .clock {
-    color: #ffd27a;
-    font-variant-numeric: tabular-nums;
-    cursor: help;
-  }
+
+
+
+
+
   h4 {
     margin: 4px 0 0;
     font-size: 0.75rem;
@@ -975,40 +952,28 @@
   dt[title] {
     cursor: help;
   }
-  .checks {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2px 10px;
+
+
+
+
+  .star-chrome {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
   }
-  .star-panel summary {
-    cursor: pointer;
-  }
-  .star-panel[open] summary {
-    margin-bottom: 4px;
-  }
-  .star-panel {
+  .toggles {
     position: absolute;
     left: 12px;
-    bottom: 12px;
-    max-width: min(380px, calc(100% - 24px));
-    /* Leave room for the toolbar above; scroll rather than cover it. */
-    max-height: calc(100% - 72px);
-    overflow-y: auto;
-    display: grid;
-    gap: 6px;
-    padding: 10px 12px;
-    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
-    background: var(--frame-deco), var(--panel);
-    clip-path: var(--frame-clip);
-    box-shadow: var(--glow);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 0.85rem;
+    top: 72px;
+    pointer-events: auto;
+  }
+  .heading {
+    margin: 0;
   }
   dl {
     display: grid;
-    /* A fixed first column lines the sections up with each other. */
-    grid-template-columns: 9.5em 1fr;
+    /* As wide as the longest term in the language, never more than half. */
+    grid-template-columns: fit-content(50%) 1fr;
     gap: 2px 10px;
     margin: 0;
   }
@@ -1033,10 +998,7 @@
   .swatch.orbit {
     background: #c8d2e6;
   }
-  label.check {
-    display: flex;
-    gap: 6px;
-  }
+
   .muted {
     color: var(--muted);
   }
