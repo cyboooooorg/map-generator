@@ -59,6 +59,8 @@ import {
   prominences,
   STAR_RADIUS,
   starSurface,
+  type SystemGiant,
+  moonOrbits,
   gravityScale,
   orbitalSpeed,
   starGravity,
@@ -171,7 +173,9 @@ export class StarView {
   private readonly moonGroup = new Group();
   /** The giant planets of the system, their orbits and rings (see setStar). */
   private readonly giantGroup = new Group();
-  private giants: Giant[] = [];
+  private giants: SystemGiant[] = [];
+  /** A planetary system's moons, round every planet: by planet, its group, orbits and markers. */
+  private systemMoons: { group: Group; orbits: MoonOrbit[]; markers: Mesh<SphereGeometry, MeshBasicMaterial>[] }[] = [];
   private giantMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
   /** The giants' distances from the star now, AU (see placeGiants). */
   private giantDistances: number[] = [];
@@ -401,7 +405,7 @@ export class StarView {
    * its moons, on its own marker, while the scale, the clock and the
    * camera stay as they are when the selection changes.
    */
-  setStar(info: StarInfo, omega = 0, giants: Giant[] = [], selected: number | null = null): void {
+  setStar(info: StarInfo, omega = 0, giants: SystemGiant[] = [], selected: number | null = null): void {
     const system = selected !== null && selected >= 0 && selected < giants.length;
     const key = system ? `${info.type} ${giants.map((g) => `${g.orbit_au}:${g.eccentricity}:${g.phase}`).join(' ')}` : '';
     if (system) {
@@ -460,12 +464,16 @@ export class StarView {
     }
     // The ellipse, the star at a focus.
     const e = info.eccentricity ?? 0;
+    // In a planetary system, the selected planet's own orbit, tilted as it is.
+    const own = system ? giants[selected] : undefined;
+    const point = (nu: number, au: number) => (own ? this.orbitPoint(own, nu, au) : this.inPlane(nu, au));
     this.orbit.geometry.dispose();
     this.orbit.geometry = new BufferGeometry().setFromPoints(
-      Array.from({ length: 361 }, (_, i) => this.inPlane((i / 360) * 2 * Math.PI, info.orbit_au * orbitDistance(e, (i / 360) * 2 * Math.PI))),
+      Array.from({ length: 361 }, (_, i) => point((i / 360) * 2 * Math.PI, info.orbit_au * orbitDistance(e, (i / 360) * 2 * Math.PI))),
     );
-    this.apsides[0]!.position.copy(this.inPlane(0, info.orbit_au * (1 - e)));
-    this.apsides[1]!.position.copy(this.inPlane(Math.PI, info.orbit_au * (1 + e)));
+    this.apsides[0]!.position.copy(point(0, info.orbit_au * (1 - e)));
+    this.apsides[1]!.position.copy(point(Math.PI, info.orbit_au * (1 + e)));
+    this.buildSystemMoons();
     this.placePlanet();
     if (refit) this.resetView();
     this.requestRender();
@@ -477,6 +485,8 @@ export class StarView {
    */
   setMoons(orbits: MoonOrbit[]): void {
     this.disposeMoons();
+    // A planetary system draws the moons of every planet (see buildSystemMoons).
+    if (this.selected !== null) return;
     this.moonOrbits = orbits;
     for (const orbit of orbits) {
       const ring = new Line(
@@ -509,6 +519,64 @@ export class StarView {
     }
     this.moonMarkers = [];
     this.moonOrbits = [];
+  }
+
+  /**
+   * A planetary system's moons, round every planet's marker, scaled to it,
+   * on the orbits `moonOrbits` gives, each at its real pace on the
+   * system's clock.
+   */
+  private buildSystemMoons(): void {
+    for (const moons of this.systemMoons) {
+      for (const child of [...moons.group.children]) {
+        const object = child as Mesh<BufferGeometry, MeshBasicMaterial>;
+        object.geometry.dispose();
+        object.material.dispose();
+      }
+      this.giantGroup.remove(moons.group);
+    }
+    this.systemMoons = [];
+    if (this.selected === null) return;
+    for (const giant of this.giants) {
+      const group = new Group();
+      group.scale.setScalar(giantMarkerSize(giant.radius_earth) / PLANET_MARKER);
+      // A day a second at ×1: a year lasts its days in seconds.
+      const orbits = moonOrbits(giant.moons ?? [], giant.radius_earth * 6371, giant.year_days, giant.year_days, false);
+      const markers = orbits.map((orbit) => {
+        const ring = new Line(
+          new BufferGeometry().setFromPoints(
+            Array.from({ length: 65 }, (_, i) => {
+              const a = (i / 64) * 2 * Math.PI;
+              return new Vector3(Math.cos(a) * orbit.radius, 0, -Math.sin(a) * orbit.radius);
+            }),
+          ),
+          new LineBasicMaterial({ color: '#c8d2e6', transparent: true, opacity: 0.3 }),
+        );
+        ring.rotation.x = orbit.inclination;
+        ring.renderOrder = 3;
+        group.add(ring);
+        const marker = new Mesh(new SphereGeometry(orbit.size, 12, 6), new MeshBasicMaterial({ color: '#d9d4c8' }));
+        group.add(marker);
+        return marker;
+      });
+      this.giantGroup.add(group);
+      this.systemMoons.push({ group, orbits, markers });
+    }
+  }
+
+  /** Places a planetary system's moons round their planets at the system's time. */
+  private placeSystemMoons(): void {
+    this.systemMoons.forEach((moons, k) => {
+      const marker = this.giantMarkers[k];
+      if (!marker) return;
+      moons.group.position.copy(marker.position);
+      moons.orbits.forEach((orbit, m) => {
+        const angle = orbit.phase + this.orbitTime * orbit.speed;
+        const local = new Vector3(Math.cos(angle) * orbit.radius, 0, -Math.sin(angle) * orbit.radius);
+        local.applyAxisAngle(new Vector3(1, 0, 0), orbit.inclination);
+        moons.markers[m]?.position.copy(local);
+      });
+    });
   }
 
   /** Places the moons at the animation's time, and the planet around the barycentre of a binary. */
@@ -618,7 +686,7 @@ export class StarView {
         new BufferGeometry().setFromPoints(
           Array.from({ length: 361 }, (_, i) => {
             const nu = (i / 360) * 2 * Math.PI;
-            return this.inPlaneAt(nu + giant.periapsis_angle, giant.orbit_au * orbitDistance(giant.eccentricity, nu));
+            return this.orbitPoint(giant, nu, giant.orbit_au * orbitDistance(giant.eccentricity, nu));
           }),
         ),
         new LineBasicMaterial({ color: colour.clone().lerp(new Color('#c8d2e6'), 0.5), transparent: true, opacity: 0.45 }),
@@ -851,7 +919,7 @@ export class StarView {
     this.giantSpeeds[k] = speed;
     const at = (mean: number) => {
       const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, mean);
-      return this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance);
+      return this.orbitPoint(giant, trueAnomaly, giant.orbit_au * distance);
     };
     const mean = this.giantAnomaly(k);
     const direction = at(mean + 1e-3).sub(at(mean - 1e-3)).normalize();
@@ -885,7 +953,7 @@ export class StarView {
     this.giants.forEach((giant, k) => {
       const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, this.giantAnomaly(k));
       this.giantDistances[k] = giant.orbit_au * distance;
-      const position = this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance);
+      const position = this.orbitPoint(giant, trueAnomaly, giant.orbit_au * distance);
       this.giantMarkers[k]?.position.copy(position);
       this.placeVector(k, giant, position, giant.orbit_au * distance);
     });
@@ -1139,6 +1207,26 @@ export class StarView {
     return this.inPlaneAt(trueAnomaly + this.omega, au);
   }
 
+  /**
+   * A point of giant `giant`'s orbit at a true anomaly and distance (AU),
+   * in view units: in the reference plane, or tilted by its inclination
+   * about its line of nodes (a planetary system's planets, see
+   * SystemGiant), the distance compressed as the view's.
+   */
+  private orbitPoint(giant: SystemGiant, trueAnomaly: number, au: number): Vector3 {
+    const tilt = giant.inclination ?? 0;
+    if (tilt === 0) return this.inPlaneAt(trueAnomaly + giant.periapsis_angle, au);
+    const node = giant.node ?? 0;
+    // The angle from the ascending node in the orbit's plane.
+    const u = trueAnomaly + giant.periapsis_angle - node;
+    const x = Math.cos(node) * Math.cos(u) - Math.sin(node) * Math.sin(u) * Math.cos(tilt);
+    const y = Math.sin(node) * Math.cos(u) + Math.cos(node) * Math.sin(u) * Math.cos(tilt);
+    const z = Math.sin(u) * Math.sin(tilt);
+    const r = this.at(au);
+    // The reference plane is the view's (x, -z) plane, its north the view's up.
+    return new Vector3(x * r, z * r, -y * r);
+  }
+
   /** A point of the orbital plane at an angle from the reference direction and a distance (AU), in view units. */
   private inPlaneAt(angle: number, au: number): Vector3 {
     const r = this.at(au);
@@ -1160,6 +1248,7 @@ export class StarView {
     const own = this.selected !== null ? this.giantMarkers[this.selected] : undefined;
     this.planet.position.copy(own ? own.position : this.inPlane(trueAnomaly, this.planetAu));
     this.placeMoons();
+    this.placeSystemMoons();
     const points = this.link.geometry.getAttribute('position') as BufferAttribute;
     points.setXYZ(1, this.planet.position.x, this.planet.position.y, this.planet.position.z);
     points.needsUpdate = true;

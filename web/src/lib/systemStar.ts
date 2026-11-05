@@ -5,11 +5,10 @@
 // orbit.
 import type { Body } from './api/types/Body';
 import type { Preview } from './api/types/Preview';
-import type { Giant } from './api/types/Giant';
 import type { GiantSystem } from './api/types/GiantSystem';
 import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
-import { withOrbitDefaults } from './viewer/starSystem';
+import { type SystemGiant, withOrbitDefaults } from './viewer/starSystem';
 
 const DEG = Math.PI / 180;
 /** The Sun's radius, AU. */
@@ -34,8 +33,10 @@ export interface SystemPlanet {
   equilibrium_k: number;
   /** How many moons it has. */
   moons: number;
-  /** Its moons, nearest first: their ids and names (given, else designations). */
-  moonList: { id: string; name: string }[];
+  /** Its moons, nearest first: id, name (given, else designation) and orbit. */
+  moonList: { id: string; name: string; radius_km: number; semi_major_axis_km: number; period_days: number; inclination_deg: number }[];
+  /** Its orbit's tilt to the star's equator, degrees. */
+  inclination_deg: number;
   /** Mean starlight, relative to Earth's. */
   flux_earth: number;
   /** Surface gravity (cloud tops for a giant), relative to Earth's. */
@@ -61,7 +62,14 @@ export function systemStarView(
   planet: Body,
   names: Readonly<Record<string, string>> = {},
   typeLabels: Readonly<Record<string, string>> = {},
-): { star: StarInfo; omega: number; giants: GiantSystem; ids: string[]; planets: SystemPlanet[]; selected: number } {
+): {
+  star: StarInfo;
+  omega: number;
+  giants: Omit<GiantSystem, 'giants'> & { giants: SystemGiant[] };
+  ids: string[];
+  planets: SystemPlanet[];
+  selected: number;
+} {
   const base = system.star.info;
   const a = planet.orbit.semi_major_axis_au;
   const e = planet.orbit.eccentricity;
@@ -81,7 +89,19 @@ export function systemStarView(
     tidally_locked: planet.spin.locked,
   });
   const all = system.bodies.filter((b) => b.kind === 'planet');
-  const giants: Giant[] = all.map((body) => {
+  const moonsOf = (id: string) =>
+    system.bodies
+      .filter((b) => b.parent === id)
+      .sort((x, y) => x.orbit.semi_major_axis_km - y.orbit.semi_major_axis_km)
+      .map((b) => ({
+        id: b.id,
+        name: names[b.id] ?? b.designation,
+        radius_km: b.physical.radius_km,
+        semi_major_axis_km: b.orbit.semi_major_axis_km,
+        period_days: b.orbit.period_days,
+        inclination_deg: b.orbit.inclination_deg,
+      }));
+  const giants: SystemGiant[] = all.map((body) => {
     const colour = (body.preview.colours[0] ?? [0.4, 0.4, 0.4]).map(toSrgb) as [number, number, number];
     return {
       name: names[body.id] ?? body.designation,
@@ -101,6 +121,9 @@ export function systemStarView(
       // The draw does not give rings yet.
       rings: 'none',
       seed: body.params.seed,
+      inclination: body.orbit.inclination_deg * DEG,
+      node: body.orbit.node_deg * DEG,
+      moons: moonsOf(body.id).map((m) => ({ ...m, barycentre_km: 0 })),
     };
   });
   return {
@@ -120,10 +143,8 @@ export function systemStarView(
       year_days: body.orbit.period_days,
       equilibrium_k: body.surroundings.equilibrium_k,
       moons: system.bodies.filter((b) => b.parent === body.id).length,
-      moonList: system.bodies
-        .filter((b) => b.parent === body.id)
-        .sort((a, b) => a.orbit.semi_major_axis_km - b.orbit.semi_major_axis_km)
-        .map((b) => ({ id: b.id, name: names[b.id] ?? b.designation })),
+      moonList: moonsOf(body.id),
+      inclination_deg: body.orbit.inclination_deg,
       flux_earth: body.surroundings.flux_earth,
       gravity: body.physical.gravity,
       day_hours: body.spin.period_hours,
