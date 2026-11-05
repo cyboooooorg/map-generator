@@ -399,6 +399,7 @@ async fn create_system(
     Query(query): Query<SystemQuery>,
     Json(request): Json<mapgen::system::SystemRequest>,
 ) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
+    check_system_request(&request)?;
     let drawn = request.clone();
     let system =
         tokio::task::spawn_blocking(move || mapgen::system::draw(&drawn, &mut rand::rng()))
@@ -478,6 +479,43 @@ async fn create_system(
             job_id,
         }),
     ))
+}
+
+/// Refuses what a system request may not ask of this server before the
+/// draw: a map side beyond [`MAX_SIZE`], and, around a planet, a preset
+/// that is not built in. The draw loads a preset by its spec, and a spec
+/// ending in `.toml` is a path: only names, never a path chosen by the
+/// client.
+fn check_system_request(request: &mapgen::system::SystemRequest) -> Result<(), Rejection> {
+    use mapgen::system::SystemRequest;
+    let (width, height, planet) = match request {
+        SystemRequest::System(whole) => (whole.width, whole.height, None),
+        SystemRequest::Around(world) => (world.width, world.height, world.planet.as_ref()),
+    };
+    for (field, value) in [("width", width), ("height", height)] {
+        if let Some(value) = value.filter(|&v| v > MAX_SIZE) {
+            return Err(Rejection(
+                bad(format!("{field} must be at most {MAX_SIZE}")),
+                Some(ErrorDetail::SizeOutOfRange {
+                    field: field.to_owned(),
+                    value,
+                    min: mapgen::request::MAP_SIZE.0,
+                    max: MAX_SIZE,
+                }),
+            ));
+        }
+    }
+    if let Some(spec) = planet
+        && !mapgen::preset::built_in_names().contains(&spec.as_str())
+    {
+        return Err(Rejection(
+            bad(format!("unknown planet preset {spec:?}")),
+            Some(ErrorDetail::UnknownPreset {
+                preset: spec.clone(),
+            }),
+        ));
+    }
+    Ok(())
 }
 
 /// Queues the body a system made around a planet was drawn for (its
@@ -2231,6 +2269,29 @@ mod tests {
         let (status, _) = call(&app, "DELETE", &format!("/api/systems/{id}"), None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         assert!(!root.join(&id).exists());
+    }
+
+    #[tokio::test]
+    async fn system_requests_never_name_a_file() {
+        let app = router(temp_config("system-paths"));
+        for body in [
+            r#"{"around": {"planet": "/etc/passwd.toml"}}"#,
+            r#"{"around": {"planet": "../presets/terran.toml"}}"#,
+            r#"{"around": {"planet": "nowhere"}}"#,
+            r#"{"system": {"star": null, "metallicity": null, "planets": {"/etc/x.toml": 1}, "seed": 1, "width": 64, "height": 32}}"#,
+        ] {
+            let (status, answer) = call(&app, "POST", "/api/systems", Some(body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}: {answer}");
+        }
+        let (status, answer) = call(
+            &app,
+            "POST",
+            "/api/systems",
+            Some(r#"{"system": {"star": null, "metallicity": null, "planets": null, "seed": 1, "width": 100000, "height": 32}}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+        assert!(answer.contains("size_out_of_range"), "{answer}");
     }
 
     #[tokio::test]
