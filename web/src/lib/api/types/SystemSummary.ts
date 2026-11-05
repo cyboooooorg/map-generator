@@ -22,6 +22,16 @@ star: string,
  */
 designation: string, 
 /**
+ * The colour of the star's light (linear RGB, white-balanced on the
+ * Sun), for the library's orrery.
+ */
+star_light: [number, number, number], 
+/**
+ * The habitable zone's inner and outer edges, AU (0 when the system
+ * file does not give them).
+ */
+hz_inner_au: number, hz_outer_au: number, 
+/**
  * How many planets of each type (preset name).
  */
 planets: { [key in string]: number }, moons: number, 

@@ -274,6 +274,13 @@ pub struct SystemSummary {
     pub star: String,
     /// The star's designation (`MGS 48213`).
     pub designation: String,
+    /// The colour of the star's light (linear RGB, white-balanced on the
+    /// Sun), for the library's orrery.
+    pub star_light: [f32; 3],
+    /// The habitable zone's inner and outer edges, AU (0 when the system
+    /// file does not give them).
+    pub hz_inner_au: f32,
+    pub hz_outer_au: f32,
     /// How many planets of each type (preset name).
     pub planets: BTreeMap<String, u32>,
     pub moons: u32,
@@ -300,6 +307,9 @@ pub struct BodySummary {
     pub colour: [f32; 3],
     /// Whether its maps are generated.
     pub generated: bool,
+    /// Its orbit's semi-major axis, AU: round the star for a planet, round
+    /// its planet for a moon (0 when the system file does not give it).
+    pub orbit_au: f64,
 }
 
 /// Query of a system request (`POST /api/systems?replace=true`).

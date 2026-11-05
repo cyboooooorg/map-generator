@@ -88,6 +88,27 @@ struct MetaStar {
     #[serde(rename = "type")]
     kind: String,
     designation: String,
+    #[serde(default)]
+    info: MetaStarInfo,
+}
+
+/// The star's light and habitable zone, as far as the library's orrery
+/// needs them.
+#[derive(Deserialize, Default)]
+struct MetaStarInfo {
+    #[serde(default)]
+    light: Option<[f32; 3]>,
+    #[serde(default)]
+    hz_inner_au: f32,
+    #[serde(default)]
+    hz_outer_au: f32,
+}
+
+/// A body's orbit, as far as the library's orrery needs it.
+#[derive(Deserialize, Default)]
+struct MetaOrbit {
+    #[serde(default)]
+    semi_major_axis_au: f64,
 }
 
 #[derive(Deserialize)]
@@ -101,6 +122,8 @@ struct MetaBody {
     generated: bool,
     #[serde(default)]
     preview: MetaPreview,
+    #[serde(default)]
+    orbit: MetaOrbit,
 }
 
 /// The preview of a body, as far as the library's strip needs it.
@@ -153,6 +176,9 @@ pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
         height: meta.height,
         star: meta.star.kind,
         designation: meta.star.designation,
+        star_light: meta.star.info.light.unwrap_or([1.0, 1.0, 1.0]),
+        hz_inner_au: meta.star.info.hz_inner_au,
+        hz_outer_au: meta.star.info.hz_outer_au,
         planets,
         moons: meta.bodies.iter().filter(|b| b.kind == "moon").count() as u32,
         bodies: meta
@@ -170,6 +196,7 @@ pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
                     .copied()
                     .unwrap_or([0.5, 0.5, 0.5]),
                 generated: b.generated,
+                orbit_au: b.orbit.semi_major_axis_au,
             })
             .collect(),
         names: given_names(root, id),
@@ -334,10 +361,12 @@ mod tests {
 
     const SYSTEM: &str = r#"{
         "format_version": 1, "seed": 42, "width": 1024, "height": 512,
-        "star": {"type": "K1V", "designation": "MGS 48213"},
+        "star": {"type": "K1V", "designation": "MGS 48213",
+                 "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
             {"id": "b", "kind": "planet", "type": "barren", "parent": null, "designation": "MGS 48213 b", "generated": false},
-            {"id": "c", "kind": "planet", "type": "terran", "parent": null, "designation": "MGS 48213 c", "generated": true},
+            {"id": "c", "kind": "planet", "type": "terran", "parent": null, "designation": "MGS 48213 c", "generated": true,
+             "orbit": {"semi_major_axis_au": 0.9}},
             {"id": "c-1", "kind": "moon", "type": "rocky-moon", "parent": "c", "designation": "MGS 48213 c I", "generated": true},
             {"id": "d", "kind": "planet", "type": "gas-giant", "parent": null, "designation": "MGS 48213 d"}
         ]
@@ -386,6 +415,11 @@ mod tests {
             .map(|b| b.id.as_str())
             .collect();
         assert_eq!(generated, ["c", "c-1"]);
+        // What the library's orrery draws, and its defaults when missing.
+        assert_eq!(s.star_light, [1.0, 0.8, 0.6]);
+        assert_eq!((s.hz_inner_au, s.hz_outer_au), (0.6, 1.1));
+        let orbits: Vec<f64> = s.bodies.iter().map(|b| b.orbit_au).collect();
+        assert_eq!(orbits, [0.0, 0.9, 0.0, 0.0]);
         std::fs::remove_dir_all(root).unwrap();
     }
 
