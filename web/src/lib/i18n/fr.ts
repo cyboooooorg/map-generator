@@ -392,6 +392,8 @@ export const fr: Messages = {
     backHelp: 'Retour au menu principal',
   },
   form: {
+    starType: 'Type',
+    systemStarRandomHelp: `Tirée comme les étoiles voisines du Soleil${S}: surtout des naines rouges, quelques-unes comme le Soleil`,
     stepsLabel: 'Étapes',
     steps: { kind: 'Type', star: 'Étoile', planets: 'Planètes', advanced: 'Avancé', summary: 'Résumé' },
     allRandom: 'Tout au hasard',

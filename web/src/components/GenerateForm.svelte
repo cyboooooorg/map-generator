@@ -377,9 +377,35 @@
     } else {
       lines.push({ label: t.form.planet, value: randomPlanet ? random : selectedPreset ? presetName(selectedPreset) : planet });
       lines.push({ label: t.form.star, value: star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype) });
-      const fixed = shownFields.filter((f) => !fields[f].random).map((f) => fieldText(f).label);
-      if (!giantWorld && !fields.sea_level.random) fixed.unshift(seaBy === 'level' ? t.form.seaLevel : t.form.landShare);
-      lines.push({ label: t.form.summaryFixed, value: fixed.length > 0 ? fixed.join(', ') : t.form.summaryNone });
+      // Each parameter fixed, with its value; the others are drawn.
+      const fixed: { label: string; value: string }[] = [];
+      if (!giantWorld && !fields.sea_level.random) {
+        fixed.push(
+          seaBy === 'level'
+            ? { label: t.form.seaLevel, value: formatUpTo(fields.sea_level.value, 2) }
+            : { label: t.form.landShare, value: formatUpTo(landPercent, 1) },
+        );
+      }
+      for (const f of shownFields) {
+        if (!fields[f].random) fixed.push({ label: fieldText(f).label, value: formatUpTo(fields[f].value, 3) });
+      }
+      if (!star.orbitRandom) {
+        fixed.push(
+          star.orbitBy === 'position'
+            ? { label: t.form.orbitPosition, value: formatUpTo(star.position, 2) }
+            : { label: t.form.orbitAu, value: formatUpTo(star.au, 3) },
+        );
+      }
+      if (!star.eccentricityRandom) fixed.push({ label: t.form.eccentricity, value: formatUpTo(star.eccentricity, 3) });
+      if (!giantWorld && giantChoice.host !== 'giant' && moons !== 'auto') {
+        fixed.push({ label: t.form.moons, value: moons === 'none' ? t.form.moonsNone : t.form.moonsCount({ count: moons }) });
+      }
+      if (giantWorld && !giantChoice.massRandom) fixed.push({ label: t.form.giantMass, value: formatInt(giantChoice.mass) });
+      if (!giantWorld && giantChoice.giants === 'none') fixed.push({ label: t.form.giants, value: t.form.giantsNone });
+      if (!giantWorld && giantChoice.host !== 'auto') {
+        fixed.push({ label: t.form.host, value: giantChoice.host === 'giant' ? t.form.hostGiant : t.form.hostNone });
+      }
+      lines.push(...(fixed.length > 0 ? fixed : [{ label: t.form.summaryFixed, value: t.form.summaryNone }]));
     }
     lines.push({
       label: t.form.metallicity,
@@ -536,36 +562,50 @@
           </label>
         </legend>
         {#if !systemStarRandom}
-          <div class="slider">
-            <select bind:value={systemClass} aria-label={t.form.systemStar}>
-              {#each STAR_CLASSES as klass (klass)}
-                <option value={klass}>{klass}</option>
-              {/each}
-            </select>
-            <input type="number" min={systemClass === 'O' ? 3 : 0} max="9.5" step="0.5" bind:value={systemSubtype} aria-label={t.form.systemSubtype} />
-            <small class="value">{starType(systemClass, systemSubtype)}</small>
+          <div class="star">
+            <label class="labelled">
+              <span>{t.form.starClass}</span>
+              <select bind:value={systemClass}>
+                {#each STAR_CLASSES as klass (klass)}
+                  <option value={klass}>{klass}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="labelled">
+              <span>{t.form.starSubtype}</span>
+              <input type="number" min={systemClass === 'O' ? 3 : 0} max="9.5" step="0.5" bind:value={systemSubtype} />
+            </label>
+            <span class="labelled">
+              <span>{t.form.starType}</span>
+              <strong class="value">{starType(systemClass, systemSubtype)}</strong>
+            </span>
           </div>
+          <p class="help">{t.form.starClasses[systemClass]}</p>
+        {:else}
+          <p class="help">{t.form.systemStarRandomHelp}</p>
         {/if}
       </fieldset>
     {:else}
   <fieldset>
     <legend>{t.form.star}</legend>
     <div class="star">
-      <select
-        bind:value={star.klass}
-        onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}
-        aria-label={t.form.starClass}
-      >
-        <option value="">{t.form.starAuto}</option>
-        {#each STAR_CLASSES as klass (klass)}
-          <option value={klass}>{klass}</option>
-        {/each}
-      </select>
-      <select bind:value={star.subtype} disabled={star.klass === ''} aria-label={t.form.starSubtype}>
-        {#each subtypes(star.klass) as subtype (subtype)}
-          <option value={subtype}>{formatUpTo(subtype, 1)}</option>
-        {/each}
-      </select>
+      <label class="labelled">
+        <span>{t.form.starClass}</span>
+        <select bind:value={star.klass} onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}>
+          <option value="">{t.form.starAuto}</option>
+          {#each STAR_CLASSES as klass (klass)}
+            <option value={klass}>{klass}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="labelled">
+        <span>{t.form.starSubtype}</span>
+        <select bind:value={star.subtype} disabled={star.klass === ''}>
+          {#each subtypes(star.klass) as subtype (subtype)}
+            <option value={subtype}>{formatUpTo(subtype, 1)}</option>
+          {/each}
+        </select>
+      </label>
     </div>
     <p class="help">{star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass]}</p>
   </fieldset>
@@ -1090,7 +1130,20 @@
   }
   .star {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    align-items: end;
+  }
+  .labelled {
+    display: grid;
+    gap: 2px;
+  }
+  .labelled > span:first-child {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .labelled input {
+    width: 6em;
   }
   legend .mode {
     font-weight: 600;
