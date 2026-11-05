@@ -11,7 +11,7 @@ description = "Build the optimized binary"
 run = "cargo build --release"
 
 [tasks.gen]
-description = "Generate a world (pass options after --, e.g. mise run gen -- --planet frozen)"
+description = "Generate a planet and its system into systems/ (pass options after --, e.g. mise run gen -- --planet frozen)"
 depends = ["build"]
 run = "target/release/map-generator"
 

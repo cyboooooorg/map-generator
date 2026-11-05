@@ -26,11 +26,16 @@ mise run build
 mise run gen [-- [OPTIONS]]
 ```
 
-All parameters are optional. Any omitted value comes from the planet preset when it sets one, and is otherwise chosen **randomly** at startup. The chosen values are printed, along with the exact options needed to regenerate the same world:
+All parameters are optional. Any omitted value comes from the planet preset when it sets one, and is otherwise chosen **randomly** at startup. The options describe a planet: the run draws the planetary system around it (see **systems** below), writes it to `systems/<id>/`, and generates the planet and its neighbourhood (its moons; for a giant's moon, the giant and its other moons). The chosen values are printed, then the bodies of the system, the progress of each body generated, and the exact options needed to regenerate the same planet:
 
 ```text
 Parameters → planet=frozen seed=2590618090 sea_level=0.12 volcanic=0.61 circumference=51823 km tilt=18.7° gravity≈1.29g pressure=0.412 bar surface_age=1.24 Ga (plate tectonics) star=K2V orbit=1.411 AU (2.03 in the habitable zone, 0.19× Earth's light)
-World generated → worlds/frozen-2590618090/
+System mgs-41275-2590618090: MGS 41275 (K2V), 4 planets, 3 moons
+  b     MGS 41275 b              barren          0.201 AU  r=3412 km  392.5 K
+  c     MGS 41275 c              frozen          1.411 AU  r=8248 km  143.0 K
+    c-1   MGS 41275 c I            rocky-moon       401220 km  r=1580 km  143.0 K
+…
+Generated: c, c-1 → systems/mgs-41275-2590618090/bodies
 Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 --circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.41237 --surface-age 1.2381 --star K2V --orbit-au 1.4107 --width 1920 --height 1080
 ```
 
@@ -42,8 +47,8 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--list-planets`        | list the built-in presets and exit                                                                                                                                                                 | —                                                                                   |
 | `--system <types>`      | draws a whole system instead of a world, without maps: `terran=2,gas-giant=1` (planet types and counts, 15 planets at most) or `auto` (drawn); with `--star`, `--metallicity`, `--seed` and the map size| —                                                                                   |
 | `--draw-only`           | draws the system around the planet asked and writes only its `system.json`, no maps                                                                                                                | off                                                                                 |
-| `--systems-dir <path>`  | where `--system` and `--draw-only` write the systems                                                                                                                                               | `systems`                                                                           |
-| `--body <id>`           | generates a body of the system and its neighbourhood (with `--system`, `--draw-only` or `--in-system`)                                                                                             | —                                                                                   |
+| `--systems-dir <path>`  | directory receiving the systems (`systems/<id>/`; a system drawn again replaces the one there, keeping the names given in the web app)                                                             | `systems`                                                                           |
+| `--body <id>`           | the body generated with its neighbourhood: the planet asked by default; with `--system` or `--draw-only` none unless given; with `--in-system`, required                                           | the planet asked                                                                    |
 | `--in-system <id>`      | the system, in `--systems-dir`, that `--body` generates in                                                                                                                                         | —                                                                                   |
 | `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                                                                        | random                                                                              |
 | `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                                                             | random in `[0.10, 0.40)`                                                            |
@@ -66,8 +71,6 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--host <mode>`         | the moon of a giant: `auto` (as the seed draws, one rocky world in 50), `giant` (always) or `none`, see **giant moons** below                                                                      | `auto`                                                                              |
 | `--width <px>`          | map width, `2`–`16384`                                                                                                                                                                             | `1920`                                                                              |
 | `--height <px>`         | map height, `2`–`16384`                                                                                                                                                                            | `1080`                                                                              |
-| `--out-dir <path>`      | directory receiving the generated worlds                                                                                                                                                           | `worlds`                                                                            |
-| `--no-raw-data`         | skip the `raw_data/` export (about 15 MB at 1920 × 1080)                                                                                                                                           | off                                                                                 |
 | `--no-noise-maps`       | skip the `noise_maps/` diagnostic images, and the time they take; also set by `MAPGEN_NO_NOISE_MAPS` (see [Environment](#environment))                                                             | off                                                                                 |
 
 Invalid or unknown options are rejected with an error. Run `target/release/map-generator --help` for the full reference.
@@ -104,9 +107,9 @@ The moons shape their planet in two ways. Its drawn axial tilt ranges wider with
 
 **giant worlds** — the `gas-giant`, `ice-giant` and `hot-jupiter` presets generate a giant planet instead of a rocky one (backlog item 14, step B; `src/giant_world.rs`): no ground, but the top of its clouds. A `[giant]` preset table gives its kind (`gas` or `ice`), its mass range in Earth masses (`--mass`), its odds of bright and faint rings, and for hot Jupiters an orbital period in days, which places it by Kepler's third law instead of the `[star]` position. Its radius follows from its mass and the heat it gets (as for the giant neighbours, inflated when hot), so `--circumference` is ignored; it has no erosion, volcanoes, craters or giant neighbours. Its moons are its own kind (`--moons`): regular moons grown in its circumplanetary disk, about 10⁻⁴ of its mass together (Canup & Ward 2006), two to five (or as many as asked) on a near-resonant chain from 4 to 8 of its radii outwards, each period about twice the last as Io's, Europa's and Ganymede's, rocky close in and icy beyond 8 to 11 radii; on 35 % of ice giants a large retrograde moon captured instead (Triton), the regular ones left small and close; a hot giant keeps none. Asking moons of a hot giant is an error (`hot_giant_moons`), its star and orbit kept rather than drawn again, which would make it another kind of giant. A giant has no ground, no giant neighbours and is nobody's moon: `--circumference`, `--erosion`, `--volcanic`, `--land-fraction`, `--giants` and `--host` are ignored, as `--mass` is on a rocky world; the CLI warns, and the server lists them in `ignored` of its answer to `POST /api/worlds`, which the web app shows. The CLI's "Reproduce with" line and the web app's **Copy command** and **Vary** leave them out. Each is generated as a world in `moons/<n>/`, as a rocky planet's are. Its spin is drawn (gas giants 9 to 12 hours, ice giants 14 to 19; a hot giant is locked, its day its year) and flattens it (`0.7 q`, `q = Ω²R³/GM`: Jupiter 0.065, Saturn 0.098). Fast rotation bands it: the number of jets in each hemisphere follows the Rhines scale, `0.45 √(ΩR/U)` with `U` 100 m/s for gas giants, 300 for ice giants (Jupiter five, Neptune one: retrograde at the equator, prograde at high latitudes), 2 000 for hot ones. Pale zones and dark belts alternate from an equatorial zone to the polar regions (58° to 74°), each band with its own width, tint and hue; the latitude a pixel samples is shifted by noise stretched along the bands, more where jets shear; long-lived vortices swirl the bands (a great spot on 45 % of gas giants, white ovals, dark spots with bright companion clouds on half the ice giants). Poleward of the bands (from 58° to 74°), each pole has its own look, drawn in an azimuthal frame around it: on a gas giant, about 55 % of poles hold a cluster of cyclones, a central one ringed by five to nine others packed edge to edge, each 5 000 to 8 000 km across with spiral arms, a dark eye and collar (Jupiter's eight in the north and five in the south, Adriani et al. 2018), on a dark bluish ground of folded filaments, billowing white clouds and tawny patches (Orton et al. 2017); about 15 % a hexagonal jet round a polar vortex with a bright-rimmed eye (Saturn's north, Godfrey 1988); the rest, like ice giants (a lone polar cyclone on 30 % of their poles) and hot giants, a mottled haze with a bright cap. `world.json` gives each pole's style and ring of cyclones (`poles`, `polar_cyclones`). The colours follow the Sudarsky class of its effective temperature (with its internal heat, `100 K × (M/MJ)^0.4` for gas giants): cream and ochre ammonia clouds, cyan to blue methane for cold ice giants, white water clouds, azure clear skies, near-black alkali roasters, grey silicate clouds. A hot Jupiter's day side is far hotter than its night side, its hot spot carried east by superrotation. The layers keep the format of a world: the biomes are `GiantZone`, `GiantBelt`, `GiantStorm` and `GiantPolar` (in the giant's own colours in the biome table of its `world.json`); the elevation is the height of the cloud tops above a deck at 0.3; the temperature is that of the cloud tops; the moisture layer carries the eastward wind, as a share of the strongest; `surface.png` is the rendered clouds. `world.json` stores the giant under `giant`: mass, radius, density, gravity, day, flattening, temperatures, heat ratio, class, jets, strongest winds and the wind profile every 2°, storms, palette and rings (edges and gaps in planet radii, opacity, colour). Detail tiles are refused: there is no ground to detail.
 
-**giant moons** — a rocky world can be the moon of a giant planet that orbits the star where the world would (backlog item 14, step C; `src/exomoon.rs`): rarely when drawn (`--host auto`: one world in 50, as an Earth-sized moon needs a capture or a super-Jupiter, moons formed around a giant holding about 10⁻⁴ of its mass, Canup & Ward 2006), always with `--host giant`, never with `--host none`. The giant is drawn on its own noise stream: 0.3 to 10 Jupiter masses (log-uniform), the world 6 to 40 of its radii out (within a third of its Hill radius), on an orbit of eccentricity 0.001 to 0.012 kept by resonances, locked to it (its day is its orbit). The giant's tides heat the world, `Ė = (21/2)(k₂/Q) G M² R⁵ n e² / a⁶` (Peale et al. 1979, Io's `k₂/Q` = 0.015: Io gets about 2 W/m²), an internal heat added to the climate as radiated power and raising a drawn volcanism (none below 0.05 W/m², all from 50); a world of liquid water is moved out until starlight and tides stay under 80 % of the runaway limit (300 W/m² absorbed, the habitable edge of Heller & Barnes 2013), a dry or volcanic one may be kneaded like Io, up to a world of lava. Such a world has no moons of its own: asking for a number of moons keeps a drawn world from becoming one, and asking for both (`--moons 3 --host giant`) is an error (`moons_of_a_moon`). The giant is generated as a giant world in `host/` beside the world (512 pixels wide), to be seen in its sky, and each of its other regular moons as a rocky or icy moon of its own in `host/siblings/<n>/` (nearest first, sized like the world's moons and seeded from the giant's seed), and `world.json` stores it under `host`: the giant's description, the orbit (km, giant radii, eccentricity, period), its apparent size, the tidal heating (W/m², and the temperature it would keep alone), whether the world lies inside the habitable edge, and the giant's Hill radius. The CLI prints a line on it.
+**giant moons** — a rocky world can be the moon of a giant planet that orbits the star where the world would (backlog item 14, step C; `src/exomoon.rs`): rarely when drawn (`--host auto`: one world in 50, as an Earth-sized moon needs a capture or a super-Jupiter, moons formed around a giant holding about 10⁻⁴ of its mass, Canup & Ward 2006), always with `--host giant`, never with `--host none`. The giant is drawn on its own noise stream: 0.3 to 10 Jupiter masses (log-uniform), the world 6 to 40 of its radii out (within a third of its Hill radius), on an orbit of eccentricity 0.001 to 0.012 kept by resonances, locked to it (its day is its orbit). The giant's tides heat the world, `Ė = (21/2)(k₂/Q) G M² R⁵ n e² / a⁶` (Peale et al. 1979, Io's `k₂/Q` = 0.015: Io gets about 2 W/m²), an internal heat added to the climate as radiated power and raising a drawn volcanism (none below 0.05 W/m², all from 50); a world of liquid water is moved out until starlight and tides stay under 80 % of the runaway limit (300 W/m² absorbed, the habitable edge of Heller & Barnes 2013), a dry or volcanic one may be kneaded like Io, up to a world of lava. Such a world has no moons of its own: asking for a number of moons keeps a drawn world from becoming one, and asking for both (`--moons 3 --host giant`) is an error (`moons_of_a_moon`). The giant is a planet of the world's system, generated as a giant world (512 pixels wide), and its other regular moons as rocky or icy moons of their own (sized like the world's moons and seeded from the giant's seed), the world among them, all bodies of the system, and `world.json` stores it under `host`: the giant's description, the orbit (km, giant radii, eccentricity, period), its apparent size, the tidal heating (W/m², and the temperature it would keep alone), whether the world lies inside the habitable edge, and the giant's Hill radius. The CLI prints a line on it.
 
-Each moon is generated after its planet as a world of its own, written to `moons/<n>/` (nearest first) with the layout of a world: the `rocky-moon` or `icy-moon` preset (`presets/moons/`, not planet types: neither listed nor drawn), no air, no erosion, never wet, 4 Ga of craters, maria only on rocky moons of 500 km in radius or more, the planet's star and orbit, a tilt of 1.5°, and a map as many pixels per km as the planet's (from 512 pixels wide up to the planet's width). The relief of small bodies is flattened towards their datum to 0.6 % of their radius over the noise's typical amplitude (bodies under about 2 100 km in radius, the Moon keeping 83 % of it), the detail tiles' octaves with it, their relief noise is no finer than at 5 000 km around, and their hillshade exaggerates less, down to the true relief (under 300 km in radius): craters shape them, as on Phobos. An irregular moon gets `raw_data/shape.png`, its radius as a share of its mean one (a triaxial ellipsoid, the long axis at longitude 180° where it faces its planet, the short one along its spin, with low-frequency bumps), and `shape` in its `world.json`; the elevation details it. The server writes the moons into the world's temporary directory, so they come and go with it, and reports a "Moons" stage.
+Each moon is generated after its planet as a world of its own, a body of its system (`bodies/<planet>-<n>/`, nearest first) with the layout of a world: the `rocky-moon` or `icy-moon` preset (`presets/moons/`, not planet types: neither listed nor drawn), no air, no erosion, never wet, 4 Ga of craters, maria only on rocky moons of 500 km in radius or more, the planet's star and orbit, a tilt of 1.5°, and a map as many pixels per km as the planet's (from 512 pixels wide up to the planet's width). The relief of small bodies is flattened towards their datum to 0.6 % of their radius over the noise's typical amplitude (bodies under about 2 100 km in radius, the Moon keeping 83 % of it), the detail tiles' octaves with it, their relief noise is no finer than at 5 000 km around, and their hillshade exaggerates less, down to the true relief (under 300 km in radius): craters shape them, as on Phobos. An irregular moon gets `raw_data/shape.png`, its radius as a share of its mean one (a triaxial ellipsoid, the long axis at longitude 180° where it faces its planet, the short one along its spin, with low-frequency bumps), and `shape` in its `world.json`; the elevation details it. The server writes the moons into the world's temporary directory, so they come and go with it, and reports a "Moons" stage.
 
 **circumference** — equatorial circumference of the planet in kilometres. Drives two derived quantities (noise scale and gravity) described in the [Calculations](#calculations) section below.
 
@@ -141,7 +144,13 @@ mise run gen -- --planet terran --sea-level 0.3 --volcanic 0.4
 mise run gen -- --planet barren --sea-level -0.5 --volcanic 0.0
 
 # Quick low-resolution preview, images only
-mise run gen -- --width 480 --height 270 --no-raw-data --no-noise-maps
+mise run gen -- --width 480 --height 270 --no-noise-maps
+
+# A whole system: two temperate planets, a gas giant, the rest drawn around a K star
+mise run gen -- --system terran=2,gas-giant=1 --star K1V
+
+# Then generate one of its bodies (here the giant's first moon)
+mise run gen -- --in-system mgs-12392-11 --body e-1
 ```
 
 ### Hex grid export
@@ -150,12 +159,12 @@ For games and other tile-based uses, an existing world can be resampled onto a h
 
 ```bash
 mise run gen -- --seed 42 --planet terran
-mise run hex -- worlds/terran-42 --columns 96
+mise run hex -- systems/mgs-36196-42/bodies/d --columns 96
 ```
 
 | Option               | Description                                                                | Default  |
 | -------------------- | -------------------------------------------------------------------------- | -------- |
-| `<world>`            | world directory produced by `mise run gen`                                 | required |
+| `<world>`            | a generated body's directory (`systems/<id>/bodies/<body>`)                | required |
 | `--columns <n>`      | hex columns around the planet, `4`–`1024`; rows follow from the map height | `96`     |
 | `--river-flow <km²>` | land hexes whose largest river drains at least this area get a river flag  | `500000` |
 
@@ -192,7 +201,7 @@ mise run logs    # follow its logs
 mise run down    # stop it
 ```
 
-The container reads and writes `worlds/` of this checkout (worlds generated with `mise run gen` show up too, as long as they have `raw_data/`) and reads the preset files of `presets/`: any `.toml` preset added there is offered in the form without a rebuild, once the server restarts (`docker restart map-generator`): it reads the presets at startup. Generated files keep the host owner.
+The container reads and writes `worlds/` and `systems/` of this checkout (systems generated with `mise run gen` show up too) and reads the preset files of `presets/`: any `.toml` preset added there is offered in the form without a rebuild, once the server restarts (`docker restart map-generator`): it reads the presets at startup. Generated files keep the host owner.
 
 | Piece     | Technology                               | Location         |
 | --------- | ---------------------------------------- | ---------------- |
@@ -312,10 +321,18 @@ To make a dry world, remap its oceans rather than lowering `sea_level`: biome el
 
 ### Output
 
-Each run creates a `worlds/<planet>-<seed>/` directory with the following layout. Run again into an existing directory, it first removes the parts a run writes only when they apply (`raw_data/`, `moons/`, `host/`, `noise_maps/`), so none is left from the previous world; the other files are overwritten, and the names given in the web app (`names.json`) are kept.
+Each run writes a system into `systems/<id>/` (`<id>`: the star's designation and the seed, lowercase, `mgs-36196-42`): its `system.json` (the star and every body, see `src/system.rs` and `docs/system-spec.md`) and one directory per body generated, under `bodies/<body>/` (`c`, `c-1`), with the layout of a world below. A system drawn again into the same directory replaces it, keeping the names given in the web app (`names.json`).
 
 ```text
-worlds/<planet>-<seed>/
+systems/<id>/
+├── system.json        ← the system as drawn: star, bodies, orbits, previews, parameters
+├── names.json         ← names given in the web app, by body id (optional)
+└── bodies/
+    └── c/             ← each body generated, with the layout below
+```
+
+```text
+bodies/<body>/
 ├── world.png          ← hillshaded biome map with soft borders, bathymetry and reference lines
 ├── thumb.png          ← world.png scaled down to 512 pixels wide, for lists
 ├── world.svg          ← equivalent vector image
@@ -337,11 +354,6 @@ worlds/<planet>-<seed>/
 │   ├── albedo.png     ← 8-bit greyscale brightness of fresh craters' ejecta and rays
 │   ├── shape.png      ← 16-bit greyscale radius of an irregular moon (moons only)
 │   └── surface.png    ← world.png without its lines, for the viewer
-├── moons/
-│   └── 1/             ← each moon, nearest first: a world of its own, same layout
-├── host/              ← a giant's moon only: the giant, a giant world of its own
-│   └── siblings/
-│       └── 1/         ← the giant's other regular moons, nearest first, same layout
 └── noise_maps/
     ├── noise_warp_x.png
     ├── noise_warp_y.png

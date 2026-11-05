@@ -277,8 +277,21 @@ pub fn read_system(dir: &std::path::Path) -> Result<System, String> {
 pub fn draw(request: &SystemRequest, rng: &mut impl RngExt) -> Result<System, RequestError> {
     match request {
         SystemRequest::System(whole) => draw_whole(request, whole, rng),
-        SystemRequest::Around(world) => draw_around(request, world, rng),
+        SystemRequest::Around(world) => {
+            let params = world.resolve(rng)?.params;
+            Ok(draw_around(request, params))
+        }
     }
+}
+
+/**
+ * The system around a planet already resolved from `world` (its `params`,
+ * as `world.resolve` gave them): the same system [`draw`] gives for
+ * `SystemRequest::Around(world)` with those parameters, for a caller that
+ * shows them first (the CLI).
+ */
+pub fn draw_around_params(world: &WorldRequest, params: WorldParams) -> System {
+    draw_around(&SystemRequest::Around(world.clone()), params)
 }
 
 /// The band of distances a planet type may sit in, and the one it
@@ -667,12 +680,7 @@ struct Focus {
 }
 
 /// A system around one planet.
-fn draw_around(
-    request: &SystemRequest,
-    world: &WorldRequest,
-    rng: &mut impl RngExt,
-) -> Result<System, RequestError> {
-    let params = world.resolve(rng)?.params;
+fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
     let seed = params.seed;
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
     let star = StarInfo::new(params.star, 1.0, 0.0);
@@ -742,7 +750,7 @@ fn draw_around(
     }
     slots.sort_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
     let (width, height) = (params.width, params.height);
-    Ok(assemble(
+    assemble(
         request,
         seed,
         params.star,
@@ -751,7 +759,7 @@ fn draw_around(
         height,
         slots,
         Some(Focus { params, host }),
-    ))
+    )
 }
 
 /// The body seed of `id` in the system of `seed`.
@@ -1300,6 +1308,18 @@ const BODY_STAGES: usize = 8;
 pub fn generate_neighbourhood(
     system_dir: &std::path::Path,
     body_id: &str,
+    progress: impl FnMut(BodyProgress),
+) -> Result<Vec<String>, String> {
+    generate_neighbourhood_with(system_dir, body_id, false, progress)
+}
+
+/// [`generate_neighbourhood`], with the diagnostic noise maps of each body
+/// (`bodies/<id>/noise_maps/`, see [`crate::export::NoiseMapWriter`]) when
+/// `noise_maps` is set.
+pub fn generate_neighbourhood_with(
+    system_dir: &std::path::Path,
+    body_id: &str,
+    noise_maps: bool,
     mut progress: impl FnMut(BodyProgress),
 ) -> Result<Vec<String>, String> {
     use crate::generation::{GenerateOptions, Stage, generate_with_progress};
@@ -1325,10 +1345,30 @@ pub fn generate_neighbourhood(
                 steps: BODY_STAGES as u32,
             });
         };
-        let generated = generate_with_progress(&body.params, GenerateOptions::default(), at);
-        at(Stage::Export);
         let temp = bodies_dir.join(format!(".tmp-{id}"));
         let _ = std::fs::remove_dir_all(&temp);
+        // The noise maps are written as the generation computes their
+        // layers, each one freed once encoded.
+        let writer = if noise_maps {
+            Some(
+                crate::export::NoiseMapWriter::new(
+                    &temp.join("noise_maps"),
+                    body.params.width,
+                    body.params.height,
+                )
+                .map_err(|e| e.to_string())?,
+            )
+        } else {
+            None
+        };
+        let options = GenerateOptions {
+            debug: writer.as_ref().map(|w| w as _),
+        };
+        let generated = generate_with_progress(&body.params, options, at);
+        if let Some(writer) = writer {
+            writer.finish()?;
+        }
+        at(Stage::Export);
         crate::export::export_world(
             generated,
             &temp,
