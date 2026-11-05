@@ -1226,9 +1226,17 @@ mod tests {
 
     /// Draws a system round `planet` (seed 3) and generates its planet:
     /// the system's id and the planet's body id.
-    async fn generated_planet(app: &Router, planet: &str, extra: &str) -> (String, String) {
+    /// Generates `planet` around its own system, with seed `seed`: a system's
+    /// id is its star's designation and its seed, so two planets of one test
+    /// need two seeds, or two stars drawn alike would collide.
+    async fn generated_planet(
+        app: &Router,
+        planet: &str,
+        seed: u64,
+        extra: &str,
+    ) -> (String, String) {
         let request = format!(
-            r#"{{"around": {{"planet": "{planet}", "seed": 3, "width": 256, "height": 128, "moons": "none", "giants": "none"{extra}}}}}"#
+            r#"{{"around": {{"planet": "{planet}", "seed": {seed}, "width": 256, "height": 128, "moons": "none", "giants": "none"{extra}}}}}"#
         );
         let (status, body) = call(app, "POST", "/api/systems", Some(&request)).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
@@ -1250,10 +1258,11 @@ mod tests {
         let (old, rock) = generated_planet(
             &app,
             "examples/mercury-like.toml",
+            3,
             r#", "surface_age_ga": 4.0"#,
         )
         .await;
-        let (wet, sea) = generated_planet(&app, "terran", "").await;
+        let (wet, sea) = generated_planet(&app, "terran", 4, "").await;
 
         let png = |uri: String| {
             let app = app.clone();
