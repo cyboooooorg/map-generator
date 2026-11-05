@@ -355,8 +355,8 @@ addressed as `<system-id>/<body-id>` everywhere.
   planet in place, and pins its card; every planet shows its moons, and
   every orbit its inclination. The view can show the frost line and
   the planets' Hill spheres, be drawn to scale, and be moved to any day
-  with a time bar (or to the selected planet's next periapsis). The habitable zone is
-  crossed by a dashed line giving its width and area.
+  with a time bar (or to the selected planet's next periapsis). The
+  habitable zone is crossed by a dashed line giving its width and area.
 - **A body not generated.** Picking it shows its sphere in the planet
   view (lit, with its axis and its sky) and its card, with **Generate**.
   Pressing it, or picking a body whose neighbourhood is not complete,
