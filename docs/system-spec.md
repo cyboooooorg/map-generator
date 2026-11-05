@@ -323,7 +323,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   bar at the bottom (play, date, jumps, speed). The planet viewer has the
   same chrome: panels (info, map, light and season, epoch, host planet,
   hexes), an icon bar of its display switches, and one clock in days for
-  its seasons and moons.
+  its seasons and moons. Both views show an axes gizmo; the star view's
+  right button pans the camera, and opening a planet flies to it (and
+  back out on return).
 - **Library.** The world list becomes a system list. Each row shows the
   star's designation (or given name), a strip of small spheres (one per
   planet, in order, coloured as their previews, the generated ones

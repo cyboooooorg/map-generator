@@ -3,6 +3,7 @@
 // (headlight or sun), atmosphere, graticule, hex overlay, biome highlight,
 // measured paths, picking and hovering, screenshots and camera sharing.
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
+import { axesOnScreen, type ScreenAxis } from './axes';
 import {
   AddEquation,
   AdditiveBlending,
@@ -611,6 +612,8 @@ export class PlanetView {
   onCameraChange: (state: CameraState) => void = () => {};
   /** Called when the canvas gets a size or loses it (see `visible`). */
   onVisibilityChange: (visible: boolean) => void = () => {};
+  /** Called after each frame with the world's axes as the camera sees them (the axes gizmo). */
+  onAxes: (axes: ScreenAxis[]) => void = () => {};
   /**
    * Whether the canvas has a size. A canvas without one (in an element with
    * `display: none`, such as the viewer of a narrow screen showing the world
@@ -2206,6 +2209,7 @@ export class PlanetView {
     }
     this.renderer.render(this.scene, this.camera);
     this.onSkyPositions?.(this.skyScreenPositions());
+    this.onAxes(axesOnScreen(this.camera.quaternion));
   }
 
   /** Height of the camera above the surface (globe) or the map plane. */

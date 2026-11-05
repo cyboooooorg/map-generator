@@ -6,6 +6,8 @@
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
+  import AxesGizmo from './AxesGizmo.svelte';
+  import type { ScreenAxis } from '../lib/viewer/axes';
   import { ApiFailure, api, followJob, systemBodyId, worldFile, worldThumbnail } from '../lib/api/client';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
@@ -268,7 +270,7 @@
   /** The body picker's choice: the star, or a body of the system. */
   function pickBody(key: string): void {
     if (key === 'star') {
-      if (sys) world.subject = 'star';
+      if (sys) toStar();
       return;
     }
     world.subject = 'planet';
@@ -396,6 +398,7 @@
         pendingCamera = null;
       }
       view.onPick = (point) => onPick(point);
+      view.onAxes = (next) => (planetAxes = next);
       view.onHover = (point) => onHover(point);
       view.onCameraChange = (state) => onCameraChange?.(state);
       canvasVisible = view.visible;
@@ -638,11 +641,22 @@
   /** Opens planet `index` of the star view (in sysStar's order): its maps, or its generation. */
   const openSystemPlanet = (index: number) => {
     const id = sysStar?.ids[index];
-    if (id) {
+    if (!id) return;
+    // The travelling: the camera flies to the planet, then its view opens.
+    const open = () => {
       world.subject = 'planet';
       world.showSystemBody(id);
-    }
+    };
+    if (world.subject === 'star' && starPane) starPane.flyToPlanet(index, open);
+    else open();
   };
+  /** The planet the star view flies out from when it opens again (the travelling back), by index. */
+  let flyBack = $state<number | null>(null);
+  /** Shows the star view, flying out from the planet shown. */
+  function toStar(): void {
+    flyBack = sysStar ? sysStar.selected : null;
+    world.subject = 'star';
+  }
   /** The map of each generated planet of the star view, for its marker: its thumbnail, at the system's revision. */
   const sysMaps = $derived(
     sysStar && world.systemId
@@ -862,6 +876,8 @@
     };
   });
 
+  /** The world's axes on screen, for the planet view's gizmo. */
+  let planetAxes = $state<ScreenAxis[]>([]);
   /**
    * The playback bar's clock (see docs/superpowers/specs/2026-11-05-
    * interface-redesign-design.md): in a system, one clock in days moves
@@ -1136,7 +1152,10 @@
         stars = !stars;
         break;
       case 'starView':
-        if (worldId) world.subject = world.subject === 'star' ? 'planet' : 'star';
+        if (worldId) {
+          if (world.subject === 'star') world.subject = 'planet';
+          else toStar();
+        }
         break;
       case 'moonView':
         stepBody();
@@ -1391,6 +1410,8 @@
           }
         : null}
       onOpenPlanet={sysStar ? openSystemPlanet : null}
+      flyFrom={flyBack}
+      onFlown={() => (flyBack = null)}
       onSelectPlanet={sysStar
         ? (i: number) => {
             const id = sysStar.ids[i];
@@ -1463,6 +1484,7 @@
 
   {#if world.subject === 'planet'}
   <div class="planet-chrome">
+    <div class="gizmo"><AxesGizmo axes={planetAxes} /></div>
     <div class="toggles">
       <ToggleBar label={t.viewer.display} groups={toggleGroups} />
     </div>
@@ -1685,6 +1707,11 @@
     left: 12px;
     top: 72px;
     pointer-events: auto;
+  }
+  .gizmo {
+    position: absolute;
+    top: 4px;
+    right: 12px;
   }
   .panel-body {
     display: grid;

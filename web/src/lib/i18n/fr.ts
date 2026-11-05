@@ -479,6 +479,7 @@ export const fr: Messages = {
     sending: 'Envoi…',
   },
   viewer: {
+    axesGizmo: 'Les axes du monde, x rouge, y vert, z bleu, tels que les voit la caméra',
     sunlightOff: 'Allumez l’éclairage (dans la barre d’icônes) pour éclairer l’astre par son étoile, avec ses saisons et son heure.',
     hexesOff: 'Allumez la grille hexagonale dans la barre d’icônes pour la régler ici.',
     infoPanel: 'Fiche',
