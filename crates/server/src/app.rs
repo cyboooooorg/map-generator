@@ -355,7 +355,10 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         default_height: fallback::HEIGHT,
         max_size: MAX_SIZE,
         max_pixels: state.config.max_pixels,
-        planet_types: mapgen::system::PLANET_TYPES.iter().map(|t| (*t).to_owned()).collect(),
+        planet_types: mapgen::system::PLANET_TYPES
+            .iter()
+            .map(|t| (*t).to_owned())
+            .collect(),
         max_planets: mapgen::system::MAX_PLANETS as u32,
     })
 }

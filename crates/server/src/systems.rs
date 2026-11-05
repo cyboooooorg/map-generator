@@ -163,7 +163,12 @@ pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
                 designation: b.designation.clone(),
                 kind: b.kind.clone(),
                 body_type: b.preset.clone(),
-                colour: b.preview.colours.first().copied().unwrap_or([0.5, 0.5, 0.5]),
+                colour: b
+                    .preview
+                    .colours
+                    .first()
+                    .copied()
+                    .unwrap_or([0.5, 0.5, 0.5]),
                 generated: b.generated,
             })
             .collect(),
