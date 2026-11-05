@@ -13,8 +13,8 @@ HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 export HOST_UID HOST_GID
 
-# Bind mount source: create it as the host user, not as root by Docker
-mkdir -p worlds
+# Bind mount sources: create them as the host user, not as root by Docker
+mkdir -p worlds systems
 
 docker compose up -d --build --wait --remove-orphans
 

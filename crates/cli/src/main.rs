@@ -1,9 +1,5 @@
 use clap::Parser;
 use mapgen::exomoon::{HostGiant, HostMode};
-use mapgen::export::{
-    ExportOptions, NoiseMapWriter, export_host, export_moons, export_world, world_dir_name,
-};
-use mapgen::generation::{GenerateOptions, generate_with_progress};
 use mapgen::giants::{GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES};
 use mapgen::moons::{MoonOrigin, MoonSystem, MoonsMode};
 use mapgen::preset::Preset;
@@ -148,14 +144,6 @@ struct Args {
           value_parser = clap::value_parser!(u32).range(2..=16384))]
     height: u32,
 
-    /// Directory that receives the generated worlds
-    #[arg(long, default_value = "worlds")]
-    out_dir: PathBuf,
-
-    /// Skip the raw_data/ export (world.json and the layer PNGs)
-    #[arg(long)]
-    no_raw_data: bool,
-
     /// Skip the diagnostic noise maps (noise_maps/), and the time and memory
     /// they take. Also set by MAPGEN_NO_NOISE_MAPS: true/false, 1/0, yes/no,
     /// on/off
@@ -210,9 +198,13 @@ fn parse_planets(text: &str) -> Result<Option<std::collections::BTreeMap<String,
 }
 
 /// Generates `body` and its neighbourhood in the system written in `dir`.
-fn generate_body(dir: &std::path::Path, body: &str) -> Result<(), Box<dyn Error>> {
+fn generate_body(
+    dir: &std::path::Path,
+    body: &str,
+    noise_maps: bool,
+) -> Result<(), Box<dyn Error>> {
     let mut last = None;
-    let done = mapgen::system::generate_neighbourhood(dir, body, |p| {
+    let done = mapgen::system::generate_neighbourhood_with(dir, body, noise_maps, |p| {
         if last.as_ref() != Some(&(p.body.clone(), p.step)) {
             eprintln!(
                 "[{}/{}] {} — {:?} ({}/{})",
@@ -239,11 +231,24 @@ fn draw_system(
     request: mapgen::system::SystemRequest,
     dir: &std::path::Path,
     body: Option<&str>,
+    noise_maps: bool,
 ) -> Result<(), Box<dyn Error>> {
-    use mapgen::system::{BodyKind, draw, system_id, write_system};
+    use mapgen::system::{draw, system_id, write_system};
     let system = draw(&request, &mut rand::rng())?;
     let id = system_id(&system);
     write_system(&dir.join(&id), &system)?;
+    print_bodies(&system);
+    println!("→ {}", dir.join(&id).join("system.json").display());
+    match body {
+        Some(body) => generate_body(&dir.join(&id), body, noise_maps),
+        None => Ok(()),
+    }
+}
+
+/// Prints a system's bodies, one line each (moons under their planet).
+fn print_bodies(system: &mapgen::system::System) {
+    use mapgen::system::BodyKind;
+    let id = mapgen::system::system_id(system);
     println!(
         "System {id}: {} ({}), {} planets, {} moons",
         system.star.designation,
@@ -278,11 +283,6 @@ fn draw_system(
             body.physical.radius_km,
             body.surroundings.equilibrium_k
         );
-    }
-    println!("→ {}", dir.join(&id).join("system.json").display());
-    match body {
-        Some(body) => generate_body(&dir.join(&id), body),
-        None => Ok(()),
     }
 }
 
@@ -325,10 +325,15 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
             width: Some(args.width),
             height: Some(args.height),
         });
-        return draw_system(request, &args.systems_dir, args.body.as_deref());
+        return draw_system(
+            request,
+            &args.systems_dir,
+            args.body.as_deref(),
+            !args.no_noise_maps,
+        );
     }
     if let (Some(system), Some(body)) = (&args.in_system, &args.body) {
-        return generate_body(&args.systems_dir.join(system), body);
+        return generate_body(&args.systems_dir.join(system), body, !args.no_noise_maps);
     }
 
     let request = WorldRequest {
@@ -360,6 +365,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
             mapgen::system::SystemRequest::Around(request),
             &args.systems_dir,
             args.body.as_deref(),
+            !args.no_noise_maps,
         );
     }
     let resolved = request.resolve(&mut rand::rng())?;
@@ -445,46 +451,28 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     if let Some(system) = GiantSystem::draw(p) {
         println!("Giants → {}", giants_summary(&system, p.metallicity));
     }
-    let dir = args.out_dir.join(world_dir_name(p));
-    // Generating into an existing world directory: the parts the export
-    // writes only when they apply (raw data, moons, host giant, noise maps)
-    // are cleared first, so none is left from the previous generation.
-    clear_stale_outputs(&dir)?;
-    // The noise maps are written as the generation computes their layers,
-    // each one freed once encoded: they are never all kept in memory.
-    let noise_maps = if args.no_noise_maps {
-        None
-    } else {
-        Some(NoiseMapWriter::new(
-            &dir.join("noise_maps"),
-            p.width,
-            p.height,
-        )?)
-    };
-    let generated = generate_with_progress(
-        p,
-        GenerateOptions {
-            debug: noise_maps.as_ref().map(|w| w as _),
-        },
-        |_| {},
-    );
-    if let Some(writer) = noise_maps {
-        writer.finish()?;
+    // The system around it, the planet as shown above; drawn again into the
+    // same directory, it replaces the one there.
+    let system = mapgen::system::draw_around_params(&request, resolved.params.clone());
+    let id = mapgen::system::system_id(&system);
+    let dir = args.systems_dir.join(&id);
+    // The names given in the web app are kept.
+    let names = std::fs::read(dir.join("names.json")).ok();
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)?;
     }
-    let options = ExportOptions {
-        raw_data: !args.no_raw_data,
-    };
-    export_world(generated, &dir, options)?;
-    let moons = export_moons(p, &dir, options)?;
-    let host = export_host(p, &dir, options)?;
-
-    println!("World generated → {}/", dir.display());
-    if moons > 0 {
-        println!("Moons generated → {}/moons/", dir.display());
+    if let Some(names) = names {
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join("names.json"), names)?;
     }
-    if host {
-        println!("Host giant generated → {}/host/", dir.display());
-    }
+    mapgen::system::write_system(&dir, &system)?;
+    print_bodies(&system);
+    let focus = system
+        .focus
+        .clone()
+        .ok_or("the system has no planet asked for")?;
+    let body = args.body.as_deref().unwrap_or(&focus);
+    generate_body(&dir, body, !args.no_noise_maps)?;
     // Exact values (the summary above is rounded) so the world can be
     // regenerated; the size too, since the relief depends on the resolution.
     let giant = p.giant_mass_earth.is_some();
@@ -601,47 +589,4 @@ fn moons_summary(system: &MoonSystem) -> String {
             ""
         }
     )
-}
-
-/// Directories of a world directory that an export may leave out (see
-/// [`clear_stale_outputs`]).
-const OPTIONAL_OUTPUTS: [&str; 4] = ["raw_data", "moons", "host", "noise_maps"];
-
-/// Removes from `dir`, an existing world directory, the outputs an export
-/// writes only when they apply. Files written by every export are simply
-/// overwritten, and anything else (such as the names given in the web app,
-/// `names.json`) is kept.
-fn clear_stale_outputs(dir: &std::path::Path) -> std::io::Result<()> {
-    for name in OPTIONAL_OUTPUTS {
-        match std::fs::remove_dir_all(dir.join(name)) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod stale_tests {
-    use super::*;
-
-    #[test]
-    fn regenerating_clears_the_optional_outputs_only() {
-        let dir = std::env::temp_dir().join(format!("mapgen-cli-stale-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        for name in OPTIONAL_OUTPUTS {
-            std::fs::create_dir_all(dir.join(name).join("1")).unwrap();
-        }
-        std::fs::write(dir.join("names.json"), "{}").unwrap();
-        std::fs::write(dir.join("world.png"), "old").unwrap();
-        clear_stale_outputs(&dir).unwrap();
-        for name in OPTIONAL_OUTPUTS {
-            assert!(!dir.join(name).exists(), "{name}");
-        }
-        assert!(dir.join("names.json").exists());
-        assert!(dir.join("world.png").exists());
-        // A new directory has nothing to clear.
-        clear_stale_outputs(&dir.join("absent")).unwrap();
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
 }

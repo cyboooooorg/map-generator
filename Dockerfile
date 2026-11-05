@@ -43,6 +43,7 @@ COPY --from=web /web/dist /app/web
 # generation, at no measurable cost in generation time (see
 # crates/server/src/memory.rs)
 ENV MAPGEN_WORLDS_DIR=/data/worlds \
+	MAPGEN_SYSTEMS_DIR=/data/systems \
 	MALLOC_ARENA_MAX=2 \
 	MAPGEN_PRESETS_DIR=/data/presets \
 	MAPGEN_STATIC_DIR=/app/web \

@@ -23,7 +23,7 @@ networks:
 services:
   # ---------------------------------------------------------------------------------------------------- #
   # Planet viewer
-  # Reads and writes the worlds of this checkout; reads its presets (built-in ones are embedded).
+  # Reads and writes the worlds and systems of this checkout; reads its presets (built-in ones are embedded).
   # ---------------------------------------------------------------------------------------------------- #
   planets:
     build: .
@@ -40,6 +40,7 @@ services:
       MAPGEN_MAX_PIXELS: "33554432"
     volumes:
       - ./worlds:/data/worlds
+      - ./systems:/data/systems
       - ./presets:/data/presets:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/healthz"]
