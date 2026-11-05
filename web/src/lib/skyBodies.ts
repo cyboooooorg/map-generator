@@ -8,6 +8,7 @@
 // planet's equatorial plane tilted by their inclination; a moon keeps its
 // long axis towards its planet, at longitude 180°.
 import type { Moon } from './api/types/Moon';
+import type { Preview } from './api/types/Preview';
 import type { Sibling } from './api/types/Sibling';
 import type { Sky } from './sky';
 
@@ -82,6 +83,8 @@ export interface SkyBody {
   axialTiltDeg?: number;
   /** What is drawn of it: all of it when absent; its grid and tropics only when asked. */
   show?: SkyBodyShow;
+  /** How it is drawn while it has no map (a body of a system not generated yet). */
+  preview?: Preview;
 }
 
 /** How the planet looks in a moon's sky: its clouds, its air, its marks and their switches. */

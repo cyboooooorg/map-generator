@@ -642,6 +642,83 @@ export const hostStarFragment = /* glsl */ `
   }
 `;
 
+// A body before its maps exist, drawn from its preview (see
+// lib/skyBodies `Preview`): a giant's bands, a rocky body's land under a
+// cheap noise and its polar caps; `b` its normal in its own frame.
+export const previewGlsl = /* glsl */ `
+  uniform vec3 uColor2;
+  uniform vec3 uColor3;
+  uniform float uBands;
+  uniform float uLand;
+  float previewHash(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+  }
+  float previewNoise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(mix(previewHash(i), previewHash(i + vec3(1, 0, 0)), f.x),
+          mix(previewHash(i + vec3(0, 1, 0)), previewHash(i + vec3(1, 1, 0)), f.x), f.y),
+      mix(mix(previewHash(i + vec3(0, 0, 1)), previewHash(i + vec3(1, 0, 1)), f.x),
+          mix(previewHash(i + vec3(0, 1, 1)), previewHash(i + vec3(1, 1, 1)), f.x), f.y),
+      f.z);
+  }
+  vec3 previewColour(vec3 base, vec3 b) {
+    float lat = asin(clamp(b.y, -1.0, 1.0));
+    if (uBands > 0.5) {
+      // Belts and zones, wavy at their edges, the poles hazed.
+      float wave = 0.08 * sin(atan(b.x, b.z) * 6.0 + lat * 9.0);
+      float band = 0.5 + 0.5 * sin((lat + wave) * uBands);
+      vec3 colour = mix(base, uColor2, smoothstep(0.35, 0.65, band));
+      return mix(colour, uColor3, smoothstep(1.0, 1.25, abs(lat)));
+    }
+    vec3 colour = base;
+    if (uLand > 0.5) {
+      float n = previewNoise(b * 2.5) * 0.65 + previewNoise(b * 6.0) * 0.35;
+      colour = mix(base, uColor2, smoothstep(0.5, 0.56, n));
+    }
+    if (uColor3 != vec3(0.0)) {
+      colour = mix(colour, uColor3, smoothstep(1.15, 1.25, abs(lat)));
+    }
+    return colour;
+  }
+`;
+
+// The body shown before its maps exist: a lit sphere drawn from its
+// preview (see previewGlsl), its night side dim, lava glowing on it.
+export const previewGlobeVertex = /* glsl */ `
+  varying vec3 vNormal;
+  void main() {
+    vNormal = normalize(position);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+export const previewGlobeFragment = /* glsl */ `
+  uniform vec3 uColor;
+  uniform vec3 uSunDir;
+  uniform float uLightMode;
+  uniform float uGlow;
+  uniform float uOpacity;
+  varying vec3 vNormal;
+  ${previewGlsl}
+  void main() {
+    vec3 n = normalize(vNormal);
+    vec3 colour = previewColour(uColor, n);
+    float s = uLightMode > 0.5 ? dot(n, uSunDir) : 0.8;
+    float lit = 0.03 + 0.97 * clamp(s * 0.92 + 0.08 * smoothstep(-0.08, 0.12, s), 0.0, 1.0);
+    colour *= lit;
+    if (uGlow > 0.5) {
+      float night = 1.0 - smoothstep(-0.1, 0.1, s);
+      colour += vec3(0.6, 0.12, 0.02) * night * smoothstep(0.55, 0.75, previewNoise(n * 5.0));
+    }
+    gl_FragColor = vec4(colour, uOpacity);
+    #include <colorspace_fragment>
+  }
+`;
+
 // A body in the sky (the planet seen from its moon, a moon from its
 // planet): a disk facing the view at infinity, `uHalf` (the tangent of its
 // angular radius) across, drawn behind everything like the host star.
@@ -676,6 +753,10 @@ export const skyBodyFragment = /* glsl */ `
   uniform vec3 uColor;
   uniform float uHasMap;
   uniform sampler2D uMap;
+  // 1 to draw it from its preview (no map yet).
+  uniform float uPreview;
+  uniform float uGlow;
+  ${previewGlsl}
   uniform float uHasClouds;
   uniform sampler2D uClouds;
   uniform vec3 uCloudTint;
@@ -826,6 +907,9 @@ export const skyBodyFragment = /* glsl */ `
     float u1 = fract(lon / (2.0 * PI));
     float u2 = fract(lon / (2.0 * PI) + 0.5) - 0.5;
     vec2 uv = vec2(fwidth(u1) <= fwidth(u2) + 1e-6 ? u1 : u2, lat / PI + 0.5);
+    if (uPreview > 0.5 && uHasMap < 0.5) {
+      colour = previewColour(uColor, b);
+    }
     if (uHasMap > 0.5) {
       colour = texture2D(uMap, uv).rgb;
     }
@@ -857,6 +941,11 @@ export const skyBodyFragment = /* glsl */ `
     float edge = uHaloStrength > 0.0 ? 1.0 : 1.0 - smoothstep(0.96, 1.0, r2);
     // (0.4 % of the day: about 5 % once encoded, a hint of earthshine.)
     colour *= 0.004 + 0.996 * min(lit, 1.0);
+    // Lava glowing on the night side of a volcanic body seen from afar.
+    if (uGlow > 0.5 && uHasMap < 0.5) {
+      float night = 1.0 - smoothstep(-0.1, 0.1, dot(n, uSunDir));
+      colour += vec3(0.6, 0.12, 0.02) * night * smoothstep(0.55, 0.75, previewNoise(b * 5.0));
+    }
     // Map marks last, as on the planet view, but painted on the sphere:
     // lit as its ground is (Lambert, a faint trace on the night side, so
     // that they round with it), thinning towards the limb, and faded at

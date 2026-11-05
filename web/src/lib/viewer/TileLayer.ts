@@ -26,7 +26,7 @@ import {
   Vector3,
   Vector4,
 } from 'three';
-import { bodyPath } from '../api/client';
+import { bodyApi } from '../api/client';
 import {
   ancestor,
   ancestorIndex,
@@ -356,7 +356,7 @@ export class TileLayer {
     let status: number | null = null;
     try {
       const epoch = world.epochMa === 0 ? '' : `&epoch=${world.epochMa}`;
-      const url = `/api/worlds/${bodyPath(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}${epoch}`;
+      const url = `${bodyApi(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}${epoch}`;
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
         status = response.status;

@@ -1,0 +1,711 @@
+{
+ "format_version": 1,
+ "request": {
+  "system": {
+   "star": "G2V",
+   "metallicity": null,
+   "planets": {
+    "gas-giant": 1,
+    "terran": 1
+   },
+   "seed": 21,
+   "width": 480,
+   "height": 240
+  }
+ },
+ "seed": 21,
+ "width": 480,
+ "height": 240,
+ "star": {
+  "type": "G2V",
+  "designation": "MGS 48937",
+  "info": {
+   "type": "G2V",
+   "teff_k": 5770.0,
+   "luminosity": 1.023293,
+   "mass": 1.0,
+   "radius": 1.012,
+   "orbit_au": 1.0,
+   "eccentricity": 0.0,
+   "periapsis_au": 1.0,
+   "apoapsis_au": 1.0,
+   "insolation": 1.023293,
+   "insolation_periapsis": 1.023293,
+   "insolation_apoapsis": 1.023293,
+   "hz_position": 0.06821551,
+   "hz_inner_au": 0.96202713,
+   "hz_outer_au": 1.696882,
+   "equilibrium_k": 256.47214,
+   "year_days": 365.25,
+   "angular_diameter_deg": 0.5395984,
+   "lifetime_gyr": 9.772372,
+   "locking_gyr": 166.0,
+   "tidally_locked": false,
+   "light": [
+    1.0,
+    0.9997768,
+    0.9994095
+   ],
+   "metallicity": 0.0
+  },
+  "metallicity": -0.12842736,
+  "ice_line_au": 2.7312648
+ },
+ "bodies": [
+  {
+   "id": "b",
+   "designation": "MGS 48937 b",
+   "kind": "planet",
+   "type": "terran",
+   "parent": null,
+   "orbit": {
+    "semi_major_axis_km": 221497980.11849952,
+    "semi_major_axis_au": 1.4806225455085942,
+    "eccentricity": 0.022972047328948975,
+    "inclination_deg": 2.489652492987042,
+    "node_deg": 253.12372622438642,
+    "periapsis_deg": 125.99266225494947,
+    "mean_anomaly_deg": 311.3138368347944,
+    "period_days": 658.0467529296875
+   },
+   "physical": {
+    "mass_earth": 1.3501910012819422,
+    "radius_km": 7041.6214606059875,
+    "density": 5.513258738589095,
+    "gravity": 1.1052615697074224,
+    "axes_km": null
+   },
+   "spin": {
+    "period_hours": 16.85567283630371,
+    "axial_tilt_deg": 12.696325302124023,
+    "locked": false
+   },
+   "surroundings": {
+    "flux_earth": 0.4669022560119629,
+    "equilibrium_k": 210.78839111328125,
+    "hz_position": 0.7595407962799072
+   },
+   "preview": {
+    "colours": [
+     [
+      0.05,
+      0.18,
+      0.42
+     ],
+     [
+      0.18,
+      0.32,
+      0.12
+     ],
+     [
+      0.9,
+      0.92,
+      0.95
+     ]
+    ],
+    "bands": 0,
+    "glow": false
+   },
+   "params": {
+    "width": 480,
+    "height": 240,
+    "seed": 1915371819,
+    "planet": {
+     "name": "terran",
+     "description": "Earth-like, full biome spectrum",
+     "defaults": {
+      "sea_level": null,
+      "land_fraction": null,
+      "volcanic": null,
+      "circumference": null,
+      "axial_tilt": null,
+      "erosion": null,
+      "pressure": null,
+      "surface_age": null
+     },
+     "climate": {
+      "temperature": 0.0,
+      "moisture": 0.0,
+      "volcanic": 0.0,
+      "internal_heat": 0.0
+     },
+     "rules": {
+      "waterline": -0.15,
+      "deep_ocean": -0.45,
+      "sea_ice_temperature": -13.5,
+      "shore_top": 0.0,
+      "shore_width_km": 22.865997,
+      "highland": 0.1,
+      "snow_line": 0.3,
+      "highland_snow_temperature": 2.6,
+      "polar": -11.6,
+      "boreal": 0.0,
+      "temperate": 12.0,
+      "wetland_moisture": 0.3,
+      "taiga_moisture": 0.05,
+      "shrubland_moisture": -0.1,
+      "forest_moisture": 0.2,
+      "desert_moisture": -0.05,
+      "jungle_moisture": 0.3,
+      "volcano_elevation": 0.15,
+      "volcano_zone": 0.55,
+      "lava_zone": 0.3,
+      "ash_elevation": 0.0,
+      "ash_zone": 0.15,
+      "vent_zone": 0.45
+     },
+     "atmosphere": {
+      "rayleigh": [
+       0.17,
+       0.41,
+       1.0
+      ],
+      "haze": 0.1,
+      "haze_colour": [
+       1.0,
+       1.0,
+       1.0
+      ],
+      "greenhouse": 0.0,
+      "clouds": "water",
+      "cloud_cover": 0.0
+     },
+     "geology": {
+      "regime": "plates",
+      "wet_until": 0.0
+     },
+     "star": {
+      "position": [
+       0.05,
+       0.75
+      ]
+     },
+     "remap": {}
+    },
+    "sea_level": 0.30460492,
+    "volcanic_intensity": 0.111987114,
+    "circumference_km": 44243.812,
+    "axial_tilt_deg": 12.696325,
+    "erosion": 1.0,
+    "pressure_bar": 1.0692831,
+    "surface_age_ga": 0.3476889,
+    "star": 42.0,
+    "orbit_au": 1.4806225,
+    "eccentricity": 0.022972047,
+    "drift_ma": 0.0,
+    "moons": "auto",
+    "shape": null,
+    "metallicity": -0.12842736,
+    "giants": "none",
+    "giant_mass_earth": null,
+    "host": "none"
+   },
+   "generated": true
+  },
+  {
+   "id": "c",
+   "designation": "MGS 48937 c",
+   "kind": "planet",
+   "type": "gas-giant",
+   "parent": null,
+   "orbit": {
+    "semi_major_axis_km": 1477146584.2969458,
+    "semi_major_axis_au": 9.874115035094185,
+    "eccentricity": 0.25608721375465393,
+    "inclination_deg": 1.0669005389567048,
+    "node_deg": 50.254846471187435,
+    "periapsis_deg": 285.19999491775025,
+    "mean_anomaly_deg": 87.13600059135263,
+    "period_days": 11332.806640625
+   },
+   "physical": {
+    "mass_earth": 83.2588119506836,
+    "radius_km": 56168.95966720581,
+    "density": 0.6698418208158311,
+    "gravity": 1.0711558384809163,
+    "axes_km": null
+   },
+   "spin": {
+    "period_hours": 10.396912574768066,
+    "axial_tilt_deg": 7.829023838043213,
+    "locked": false
+   },
+   "surroundings": {
+    "flux_earth": 0.01085757277905941,
+    "equilibrium_k": 82.31393432617188,
+    "hz_position": 4.073393821716309
+   },
+   "preview": {
+    "colours": [
+     [
+      0.9316746,
+      0.8650238,
+      0.6984206
+     ],
+     [
+      0.8076025,
+      0.67966276,
+      0.4885439
+     ],
+     [
+      0.5766508,
+      0.6049286,
+      0.6498573
+     ]
+    ],
+    "bands": 4,
+    "glow": false
+   },
+   "params": {
+    "width": 480,
+    "height": 240,
+    "seed": 1530735286,
+    "planet": {
+     "name": "gas-giant",
+     "description": "Gas giant like Jupiter or Saturn: cloud bands, storms, rings",
+     "defaults": {
+      "sea_level": null,
+      "land_fraction": null,
+      "volcanic": null,
+      "circumference": null,
+      "axial_tilt": null,
+      "erosion": null,
+      "pressure": 0.3,
+      "surface_age": 0.0
+     },
+     "climate": {
+      "temperature": 0.0,
+      "moisture": 0.0,
+      "volcanic": 0.0,
+      "internal_heat": 0.0
+     },
+     "rules": {
+      "waterline": -0.15,
+      "deep_ocean": -0.45,
+      "sea_ice_temperature": -13.5,
+      "shore_top": 0.0,
+      "shore_width_km": 80.0,
+      "highland": 0.1,
+      "snow_line": 0.3,
+      "highland_snow_temperature": 2.6,
+      "polar": -11.6,
+      "boreal": 0.0,
+      "temperate": 12.0,
+      "wetland_moisture": 0.3,
+      "taiga_moisture": 0.05,
+      "shrubland_moisture": -0.1,
+      "forest_moisture": 0.2,
+      "desert_moisture": -0.05,
+      "jungle_moisture": 0.3,
+      "volcano_elevation": 0.15,
+      "volcano_zone": 0.55,
+      "lava_zone": 0.3,
+      "ash_elevation": 0.0,
+      "ash_zone": 0.15,
+      "vent_zone": 0.45
+     },
+     "atmosphere": {
+      "rayleigh": [
+       0.55,
+       0.5,
+       0.42
+      ],
+      "haze": 0.15,
+      "haze_colour": [
+       0.92,
+       0.86,
+       0.74
+      ],
+      "greenhouse": 0.0,
+      "clouds": "none",
+      "cloud_cover": 0.0
+     },
+     "geology": {
+      "regime": "plates",
+      "wet_until": 0.0
+     },
+     "star": {
+      "position": [
+       2.6,
+       4.6
+      ]
+     },
+     "giant": {
+      "kind": "gas",
+      "mass": [
+       30.0,
+       1500.0
+      ],
+      "rings": [
+       0.25,
+       0.5
+      ]
+     },
+     "remap": {}
+    },
+    "sea_level": 0.14953221,
+    "volcanic_intensity": 0.0,
+    "circumference_km": 353315.2,
+    "axial_tilt_deg": 7.829024,
+    "erosion": 0.0,
+    "pressure_bar": 0.3,
+    "surface_age_ga": 0.0,
+    "star": 42.0,
+    "orbit_au": 9.874115,
+    "eccentricity": 0.2560872,
+    "drift_ma": 0.0,
+    "moons": "auto",
+    "shape": null,
+    "metallicity": -0.12842736,
+    "giants": "none",
+    "giant_mass_earth": 83.25881,
+    "host": "none"
+   },
+   "generated": false
+  },
+  {
+   "id": "c-1",
+   "designation": "MGS 48937 c I",
+   "kind": "moon",
+   "type": "icy-moon",
+   "parent": "c",
+   "orbit": {
+    "semi_major_axis_km": 339014.54964496096,
+    "semi_major_axis_au": 0.0022661722928183424,
+    "eccentricity": 0.008522559467734881,
+    "inclination_deg": 0.15085349215998567,
+    "node_deg": 222.0972417838984,
+    "periapsis_deg": 152.1753238523589,
+    "mean_anomaly_deg": 65.51670401158334,
+    "period_days": 2.49187086802762
+   },
+   "physical": {
+    "mass_earth": 0.003952471544018928,
+    "radius_km": 1436.7530030848652,
+    "density": 1.9,
+    "gravity": 0.07779317892198623,
+    "axes_km": null
+   },
+   "spin": {
+    "period_hours": 59.80490083266288,
+    "axial_tilt_deg": 0.0,
+    "locked": true
+   },
+   "surroundings": {
+    "flux_earth": 0.01085757277905941,
+    "equilibrium_k": 82.31393432617188,
+    "hz_position": 4.073393821716309
+   },
+   "preview": {
+    "colours": [
+     [
+      0.72,
+      0.76,
+      0.8
+     ]
+    ],
+    "bands": 0,
+    "glow": false
+   },
+   "params": {
+    "width": 512,
+    "height": 256,
+    "seed": 1279727153,
+    "planet": {
+     "name": "icy-moon",
+     "description": "Icy moon: airless, cratered ice",
+     "defaults": {
+      "sea_level": null,
+      "land_fraction": null,
+      "volcanic": null,
+      "circumference": null,
+      "axial_tilt": null,
+      "erosion": 0.0,
+      "pressure": 0.0,
+      "surface_age": 4.0
+     },
+     "climate": {
+      "temperature": 0.0,
+      "moisture": -1.0,
+      "volcanic": -1.0,
+      "internal_heat": 0.0
+     },
+     "rules": {
+      "waterline": -0.15,
+      "deep_ocean": -0.45,
+      "sea_ice_temperature": -13.5,
+      "shore_top": 0.0,
+      "shore_width_km": 40.0,
+      "highland": 0.1,
+      "snow_line": 0.3,
+      "highland_snow_temperature": 2.6,
+      "polar": -11.6,
+      "boreal": 0.0,
+      "temperate": 12.0,
+      "wetland_moisture": 0.3,
+      "taiga_moisture": 0.05,
+      "shrubland_moisture": -0.1,
+      "forest_moisture": 0.2,
+      "desert_moisture": -0.05,
+      "jungle_moisture": 0.3,
+      "volcano_elevation": 0.15,
+      "volcano_zone": 0.55,
+      "lava_zone": 0.3,
+      "ash_elevation": 0.0,
+      "ash_zone": 0.15,
+      "vent_zone": 0.45
+     },
+     "atmosphere": {
+      "rayleigh": [
+       0.17,
+       0.41,
+       1.0
+      ],
+      "haze": 0.0,
+      "haze_colour": [
+       1.0,
+       1.0,
+       1.0
+      ],
+      "greenhouse": 0.0,
+      "clouds": "none",
+      "cloud_cover": 0.0
+     },
+     "geology": {
+      "regime": "stagnant",
+      "wet_until": 4.5
+     },
+     "star": {},
+     "remap": {
+      "IceCap": [
+       "DeepOcean",
+       "Ocean",
+       "SeaIce",
+       "River",
+       "CausticLake",
+       "FrozenOcean",
+       "AcidSea",
+       "DeepAcidSea",
+       "AcidRiver",
+       "AcidShore",
+       "Beach",
+       "Wetland",
+       "ToxicSwamp",
+       "Lake",
+       "FrozenLake",
+       "MagmaSea"
+      ],
+      "Snow": [
+       "Mountain"
+      ],
+      "GlacialPlain": [
+       "Plain",
+       "Shrubland",
+       "Savanna",
+       "Desert",
+       "Tundra",
+       "AcidFlatland",
+       "Forest",
+       "Jungle",
+       "Taiga",
+       "LavaField",
+       "AshLand",
+       "ScorchedWaste",
+       "Volcano"
+      ]
+     }
+    },
+    "sea_level": 0.0,
+    "volcanic_intensity": 0.0,
+    "circumference_km": 9027.386,
+    "axial_tilt_deg": 1.5,
+    "erosion": 0.0,
+    "pressure_bar": 0.0,
+    "surface_age_ga": 4.0,
+    "star": 42.0,
+    "orbit_au": 9.874115,
+    "eccentricity": 0.2560872,
+    "drift_ma": 0.0,
+    "moons": "none",
+    "shape": null,
+    "metallicity": -0.12842736,
+    "giants": "none",
+    "giant_mass_earth": null,
+    "host": "none"
+   },
+   "generated": false
+  },
+  {
+   "id": "c-2",
+   "designation": "MGS 48937 c II",
+   "kind": "moon",
+   "type": "icy-moon",
+   "parent": "c",
+   "orbit": {
+    "semi_major_axis_km": 538152.0351209607,
+    "semi_major_axis_au": 0.0035973241637921303,
+    "eccentricity": 0.010891191444702152,
+    "inclination_deg": 0.03980763468385967,
+    "node_deg": 155.5608413279622,
+    "periapsis_deg": 180.07501360236154,
+    "mean_anomaly_deg": 247.2455734201553,
+    "period_days": 4.983741491319279
+   },
+   "physical": {
+    "mass_earth": 0.004373409409867863,
+    "radius_km": 1486.047100290266,
+    "density": 1.9,
+    "gravity": 0.08046221425058059,
+    "axes_km": null
+   },
+   "spin": {
+    "period_hours": 119.60979579166269,
+    "axial_tilt_deg": 0.0,
+    "locked": true
+   },
+   "surroundings": {
+    "flux_earth": 0.01085757277905941,
+    "equilibrium_k": 82.31393432617188,
+    "hz_position": 4.073393821716309
+   },
+   "preview": {
+    "colours": [
+     [
+      0.72,
+      0.76,
+      0.8
+     ]
+    ],
+    "bands": 0,
+    "glow": false
+   },
+   "params": {
+    "width": 512,
+    "height": 256,
+    "seed": 50280052,
+    "planet": {
+     "name": "icy-moon",
+     "description": "Icy moon: airless, cratered ice",
+     "defaults": {
+      "sea_level": null,
+      "land_fraction": null,
+      "volcanic": null,
+      "circumference": null,
+      "axial_tilt": null,
+      "erosion": 0.0,
+      "pressure": 0.0,
+      "surface_age": 4.0
+     },
+     "climate": {
+      "temperature": 0.0,
+      "moisture": -1.0,
+      "volcanic": -1.0,
+      "internal_heat": 0.0
+     },
+     "rules": {
+      "waterline": -0.15,
+      "deep_ocean": -0.45,
+      "sea_ice_temperature": -13.5,
+      "shore_top": 0.0,
+      "shore_width_km": 40.0,
+      "highland": 0.1,
+      "snow_line": 0.3,
+      "highland_snow_temperature": 2.6,
+      "polar": -11.6,
+      "boreal": 0.0,
+      "temperate": 12.0,
+      "wetland_moisture": 0.3,
+      "taiga_moisture": 0.05,
+      "shrubland_moisture": -0.1,
+      "forest_moisture": 0.2,
+      "desert_moisture": -0.05,
+      "jungle_moisture": 0.3,
+      "volcano_elevation": 0.15,
+      "volcano_zone": 0.55,
+      "lava_zone": 0.3,
+      "ash_elevation": 0.0,
+      "ash_zone": 0.15,
+      "vent_zone": 0.45
+     },
+     "atmosphere": {
+      "rayleigh": [
+       0.17,
+       0.41,
+       1.0
+      ],
+      "haze": 0.0,
+      "haze_colour": [
+       1.0,
+       1.0,
+       1.0
+      ],
+      "greenhouse": 0.0,
+      "clouds": "none",
+      "cloud_cover": 0.0
+     },
+     "geology": {
+      "regime": "stagnant",
+      "wet_until": 4.5
+     },
+     "star": {},
+     "remap": {
+      "IceCap": [
+       "DeepOcean",
+       "Ocean",
+       "SeaIce",
+       "River",
+       "CausticLake",
+       "FrozenOcean",
+       "AcidSea",
+       "DeepAcidSea",
+       "AcidRiver",
+       "AcidShore",
+       "Beach",
+       "Wetland",
+       "ToxicSwamp",
+       "Lake",
+       "FrozenLake",
+       "MagmaSea"
+      ],
+      "Snow": [
+       "Mountain"
+      ],
+      "GlacialPlain": [
+       "Plain",
+       "Shrubland",
+       "Savanna",
+       "Desert",
+       "Tundra",
+       "AcidFlatland",
+       "Forest",
+       "Jungle",
+       "Taiga",
+       "LavaField",
+       "AshLand",
+       "ScorchedWaste",
+       "Volcano"
+      ]
+     }
+    },
+    "sea_level": 0.0,
+    "volcanic_intensity": 0.0,
+    "circumference_km": 9337.109,
+    "axial_tilt_deg": 1.5,
+    "erosion": 0.0,
+    "pressure_bar": 0.0,
+    "surface_age_ga": 4.0,
+    "star": 42.0,
+    "orbit_au": 9.874115,
+    "eccentricity": 0.2560872,
+    "drift_ma": 0.0,
+    "moons": "none",
+    "shape": null,
+    "metallicity": -0.12842736,
+    "giants": "none",
+    "giant_mass_earth": null,
+    "host": "none"
+   },
+   "generated": false
+  }
+ ]
+}

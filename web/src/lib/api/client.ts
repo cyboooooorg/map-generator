@@ -85,7 +85,7 @@ export const api = {
   jobs: () => call<JobInfo[]>('/api/jobs'),
   cancelJob: (id: string) => call<void>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   hex: (id: string, request: HexRequest, signal?: AbortSignal) =>
-    call<HexMap>(`/api/worlds/${encodeURIComponent(id)}/hex`, {
+    call<HexMap>(`${bodyApi(id)}/hex`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -102,12 +102,37 @@ export function bodyPath(id: string): string {
 }
 
 /**
+ * The id of body `body` of system `system` (docs/system-spec.md), shown as
+ * a world is: `systems/<system>/bodies/<body>`, its files under
+ * `/systems/…` and its routes under `/api/systems/…`.
+ */
+export function systemBodyId(system: string, body: string): string {
+  return `systems/${system}/bodies/${body}`;
+}
+
+/** The system and body of a system body's id (see systemBodyId), or null for a world's. */
+export function parseSystemBody(id: string): { system: string; body: string } | null {
+  const match = /^systems\/([^/]+)\/bodies\/([^/]+)$/.exec(id);
+  return match ? { system: match[1]!, body: match[2]! } : null;
+}
+
+/** Where a body's files are served: a world's under `/worlds/`, a system body's under `/systems/`. */
+export function bodyFiles(id: string): string {
+  return parseSystemBody(id) ? `/${bodyPath(id)}` : `/worlds/${bodyPath(id)}`;
+}
+
+/** Where a body's routes are: `/api/worlds/<id>`, or `/api/systems/<system>/bodies/<body>`. */
+export function bodyApi(id: string): string {
+  return parseSystemBody(id) ? `/api/${bodyPath(id)}` : `/api/worlds/${bodyPath(id)}`;
+}
+
+/**
  * URL of a file of a generated world. `revision` (the world's modification
  * time) makes the URL change when the world is regenerated under the same id,
  * so the browser never shows a cached file of the replaced world.
  */
 export function worldFile(id: string, path: string, revision?: number | null): string {
-  const url = `/worlds/${bodyPath(id)}/${path}`;
+  const url = `${bodyFiles(id)}/${path}`;
   return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
 }
 
@@ -117,7 +142,7 @@ export function worldFile(id: string, path: string, revision?: number | null): s
  * the revision, the browser caches it for good.
  */
 export function worldThumbnail(id: string, revision?: number | null): string {
-  const url = `/api/worlds/${encodeURIComponent(id)}/thumb`;
+  const url = `${bodyApi(id)}/thumb`;
   return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
 }
 
