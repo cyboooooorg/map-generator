@@ -15,6 +15,21 @@ import type { Layer } from '../viewer/shaders';
 
 export const en = {
   /** Language selector. */
+  playback: {
+    label: 'Playback',
+    play: 'Play',
+    pause: 'Pause',
+    time: 'Date',
+    speed: 'Speed',
+  },
+  dock: {
+    panels: 'Panels',
+    detach: 'Take out of the dock',
+    dockBack: 'Back into the dock',
+    close: 'Close',
+    fold: 'Fold the dock',
+    unfold: 'Unfold the dock',
+  },
   theme: {
     label: 'Theme',
     names: { default: 'Default', holo: 'Holo HUD', station: 'Orbital station', cyberpunk: 'Cyberpunk', military: 'Military' },

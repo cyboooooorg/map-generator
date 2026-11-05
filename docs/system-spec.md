@@ -317,6 +317,10 @@ addressed as `<system-id>/<body-id>` everywhere.
   Orbital station, Cyberpunk, Military), picked in the header and
   remembered; the colours that carry meaning (habitable zone, frost line,
   arrows, map layers) keep their hue in all of them.
+- **Viewer chrome.** The star view's data is in a dock of panels by
+  theme (the star, the planet, the planets), each of which can float over
+  the view; its display switches are an icon bar, and its time a playback
+  bar at the bottom (play, date, jumps, speed).
 - **Main menu.** The app opens on a menu, and no viewer starts until a
   system is opened. The menu shows the systems as a grid of cards, each
   with its orrery, its star's designation (or given name), the count of
