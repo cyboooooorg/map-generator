@@ -125,9 +125,16 @@ describe('systemHash / decodeSystems', () => {
   it('names the system, the body shown and the compared system', () => {
     const hash = systemHash({ system: 'mgs-48213-42', body: 'c-1', compare: 'mgs-1-2' }, { layer: 'elevation' });
     expect(hash.startsWith('system=mgs-48213-42&body=c-1&compare=mgs-1-2&')).toBe(true);
-    expect(decodeSystems(new URLSearchParams(hash))).toEqual({ system: 'mgs-48213-42', body: 'c-1', compare: 'mgs-1-2' });
+    expect(decodeSystems(new URLSearchParams(hash))).toEqual({ system: 'mgs-48213-42', body: 'c-1', compare: 'mgs-1-2', pins: [] });
     expect(systemHash({ system: null, body: 'c', compare: 'x' })).toBe('');
-    expect(decodeSystems(new URLSearchParams('world=terran-1'))).toEqual({ system: null, body: null, compare: null });
+    expect(decodeSystems(new URLSearchParams('world=terran-1'))).toEqual({ system: null, body: null, compare: null, pins: [] });
+  });
+
+  it('carries the pinned cards', () => {
+    const hash = systemHash({ system: 'mgs-48213-42', body: null, compare: null, pins: ['c', 'e'] });
+    expect(hash).toBe('system=mgs-48213-42&pins=c,e');
+    expect(decodeSystems(new URLSearchParams(hash)).pins).toEqual(['c', 'e']);
+    expect(systemHash({ system: 'mgs-48213-42', body: null, compare: null, pins: [] })).toBe('system=mgs-48213-42');
   });
 });
 
