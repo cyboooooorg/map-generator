@@ -13,10 +13,10 @@
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { GiantInfo } from '../lib/api/types/GiantInfo';
   import type { HostGiant } from '../lib/api/types/HostGiant';
-  import { compressedFrom, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
+  import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { layoutLabels } from '../lib/viewer/labelLayout';
-  import { type SystemLabels, StarView, SYSTEM_INNER_YEAR_S, YEAR_S } from '../lib/viewer/StarView';
+  import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
 
   interface Props {
     star: StarInfo;
@@ -46,6 +46,8 @@
      */
     links?: boolean;
     velocities?: boolean;
+    /** In a planetary system, whether each planet has a vector of the star's pull on it, along its line to the star. */
+    pulls?: boolean;
     /** The world itself when it is a giant planet, or the giant it orbits. */
     worldGiant?: GiantInfo | null;
     /** The giant the world orbits, as its moon. */
@@ -95,6 +97,7 @@
     giants = $bindable(),
     links = $bindable(true),
     velocities = $bindable(true),
+    pulls = $bindable(true),
     worldGiant = null,
     host = null,
     kinds = null,
@@ -120,8 +123,13 @@
   let yearFraction = $state(0);
   /** Earth days simulated since the animation started. */
   let elapsedDays = $state(0);
-  /** How fast a planetary system's clock runs, a power of two (×1 to ×1024). */
-  let speed = $state(0);
+  /** How fast a planetary system's clock runs, a power of two of Earth days per second (see defaultSystemSpeed). */
+  let speed = $state(SYSTEM_SPEED_MIN);
+  /** The innermost planet's year, days: another system opens at its own speed. */
+  const innermostYear = $derived(giantList.length > 0 ? Math.min(...giantList.map((g) => g.year_days)) : 0);
+  $effect(() => {
+    if (innermostYear > 0) speed = defaultSystemSpeed(innermostYear);
+  });
   /** Width of the view, to keep the labels near its right edge on screen. */
   let width = $state(0);
 
@@ -240,6 +248,7 @@
   $effect(() => view?.setAnimated(animated));
   $effect(() => view?.setPlanetLinks(links));
   $effect(() => view?.setVelocities(velocities));
+  $effect(() => view?.setPulls(pulls));
   $effect(() => view?.setSpeed(2 ** speed));
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
@@ -266,14 +275,11 @@
 
   /**
    * Seconds of animation for one year of the planet whose moons are drawn:
-   * YEAR_S for a lone world, the system's clock at ×1 in a planetary system
-   * (the speed then runs the moons with the planets).
+   * YEAR_S for a lone world; in a planetary system, its year in days, the
+   * system's clock running a day a second at ×1 (the speed then runs the
+   * moons with the planets).
    */
-  const planetYearS = $derived(
-    selected !== null && giantList.length > 0
-      ? (star.year_days / Math.min(...giantList.map((g) => g.year_days))) * SYSTEM_INNER_YEAR_S
-      : YEAR_S,
-  );
+  const planetYearS = $derived(selected !== null && giantList.length > 0 ? star.year_days : YEAR_S);
   const kms = (v: number) => withUnit(formatUpTo(v, 1), 'km/s');
   /** Mean speed, and its range on an eccentric orbit. */
   const speedText = $derived.by(() => {
@@ -291,10 +297,9 @@
   /** How fast time runs in the animation, and the day of the year it shows. */
   const clockText = $derived.by(() => {
     if (selected !== null && giantList.length > 0) {
-      // A planetary system runs on one clock: its innermost year in SYSTEM_INNER_YEAR_S.
-      const perSecond = (Math.min(...giantList.map((g) => g.year_days)) / SYSTEM_INNER_YEAR_S) * 2 ** speed;
+      // A planetary system runs on one clock, in Earth days a second.
       return t.starView.systemClock({
-        days: formatUpTo(perSecond, perSecond < 1 ? 2 : perSecond < 10 ? 1 : 0),
+        days: formatInt(2 ** speed),
         day: formatInt(Math.floor(elapsedDays) + 1),
       });
     }
@@ -311,35 +316,124 @@
   /** A label's height, CSS px (0.75rem text and its padding). */
   const LABEL_H = 18;
   /** A label's width, CSS px, estimated from its text (the layout runs on every frame: no measuring). */
-  const labelWidth = (text: string) => text.length * 6.6 + 10;
+  const labelWidth = (text: string) => text.length * 7 + 10;
+  /** The star's pull, in m/s² or mm/s² (the Sun's on Earth is 5.9 mm/s²). */
+  const pullText = (a: number) =>
+    a >= 0.1 ? withUnit(formatUpTo(a, 2), 'm/s²') : withUnit(formatUpTo(a * 1000, a * 1000 < 0.1 ? 3 : 2), 'mm/s²');
   /**
-   * The planets' labels (name and distance, the selected planet's first)
-   * and their speeds, kept apart (see layoutLabels): each with its text,
-   * where it goes and whether it shows.
+   * A label written along the line from `a` to `b` (CSS px) at the share `at`
+   * of the way, kept upright and just above the line: its centre, its angle
+   * (degrees) and its box for the layout.
+   */
+  const alongLine = (a: { x: number; y: number }, b: { x: number; y: number }, at: number, text: string) => {
+    const w = labelWidth(text);
+    // A line shorter than its text is labelled level, beside it.
+    let angle = Math.hypot(b.x - a.x, b.y - a.y) < w ? 0 : (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+    const rad = (angle * Math.PI) / 180;
+    // Just above the line: the normal pointing up the screen.
+    const x = a.x + (b.x - a.x) * at + Math.sin(rad) * (LABEL_H / 2);
+    const y = a.y + (b.y - a.y) * at - Math.cos(rad) * (LABEL_H / 2);
+    const boxW = Math.abs(w * Math.cos(rad)) + Math.abs(LABEL_H * Math.sin(rad));
+    const boxH = Math.abs(w * Math.sin(rad)) + Math.abs(LABEL_H * Math.cos(rad));
+    // Tilted, it stays on its line or hides (a shifted one would leave it); level, it may move a line.
+    return { x, y, angle, text, box: { x: x - boxW / 2, y: y - boxH / 2, width: boxW, height: boxH, step: angle === 0 ? LABEL_H : 0 } };
+  };
+  /**
+   * The labels of a planetary system's planets, kept apart (see
+   * layoutLabels), the most useful first: the names (the selected planet's
+   * first), each on the side of its planet away from its velocity vector;
+   * the distances, along the lines to the star; the speeds, at the
+   * vectors; the star's pulls, along the lines near the planets; and the
+   * habitable zone's width and the compression circle's meaning.
    */
   const placed = $derived.by(() => {
-    if (!labels) return { names: [], speeds: [] };
+    const none = { names: [], lines: [], speeds: [] };
+    if (!labels) return none;
     // The selected planet's rich label (with Distances) already gives its distance.
     const rich = labels.planet !== null;
+    const system = selected !== null;
     const giants = labels.giants
       .filter((g) => !(rich && g.index === selected))
       .sort((a, b) => Number(b.index === selected) - Number(a.index === selected) || a.index - b.index);
-    const names = giants.map((g) => ({
-      ...g,
-      text: t.starView.orbitLabel({ name: g.name, distance: formatAu(selected !== null && links ? g.distance : g.au) }),
-    }));
-    const speeds = giants.flatMap((g) => (g.arrow ? [{ index: g.index, x: g.arrow.x, y: g.arrow.y, text: kms(g.speed) }] : []));
-    const keepClear = labels.planet ? [{ x: labels.planet.x + 8, y: labels.planet.y - 30, width: 170, height: 60 }] : [];
-    const places = layoutLabels(
-      [
-        ...names.map((n) => ({ x: n.x + 10, y: n.y - 1.1 * LABEL_H, width: labelWidth(n.text), height: LABEL_H })),
-        ...speeds.map((v) => ({ x: v.x - labelWidth(v.text) / 2, y: v.y - 1.3 * LABEL_H, width: labelWidth(v.text), height: LABEL_H })),
-      ],
-      keepClear,
-    );
+    const names = giants.map((g) => {
+      const text = system && links ? g.name : t.starView.orbitLabel({ name: g.name, distance: formatAu(g.au) });
+      const width = labelWidth(text);
+      // Away from the velocity vector, else above and to the right.
+      let ux = 0.7;
+      let uy = -0.7;
+      if (g.arrow) {
+        const dx = g.arrow.x - g.x;
+        const dy = g.arrow.y - g.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 1) {
+          ux = -dx / d;
+          uy = -dy / d;
+        }
+      }
+      const ax = g.x + ux * 12;
+      const ay = g.y + uy * 12;
+      const box = { x: ux >= 0 ? ax : ax - width, y: ay - LABEL_H / 2 + (uy * LABEL_H) / 2, width, height: LABEL_H };
+      return { index: g.index, text, box };
+    });
+    type Along = ReturnType<typeof alongLine> & { key: string; kind: 'distance' | 'pull' | 'zone' | 'boundary' };
+    const lines: Along[] = [];
+    if (system && labels.star) {
+      for (const g of giants) {
+        if (links) lines.push({ ...alongLine(labels.star, g, 0.65, formatAu(g.distance)), key: `d${g.index}`, kind: 'distance' });
+      }
+      for (const g of giants) {
+        if (g.pull) lines.push({ ...alongLine(labels.star, g, 1, pullText(g.gravity)), key: `p${g.index}`, kind: 'pull' });
+      }
+    }
+    if (system && labels.inner && labels.outer) {
+      const area = Math.PI * (star.hz_outer_au ** 2 - star.hz_inner_au ** 2);
+      const text = t.starView.zoneWidth({
+        width: formatAu(star.hz_outer_au - star.hz_inner_au),
+        area: formatUpTo(area, area < 0.01 ? 4 : area < 1 ? 3 : 2),
+      });
+      lines.push({ ...alongLine(labels.inner, labels.outer, 0.5, text), key: 'zone', kind: 'zone' });
+    }
+    if (labels.boundary) {
+      const text = t.starView.compressedLabel({ distance: formatAu(labels.boundary.au) });
+      const w = labelWidth(text);
+      lines.push({
+        x: labels.boundary.x,
+        y: labels.boundary.y - LABEL_H / 2,
+        angle: 0,
+        text,
+        box: { x: labels.boundary.x - w / 2, y: labels.boundary.y - LABEL_H, width: w, height: LABEL_H, step: LABEL_H },
+        key: 'boundary',
+        kind: 'boundary',
+      });
+    }
+    const speeds = giants.flatMap((g) => {
+      if (!g.arrow) return [];
+      const text = kms(g.speed);
+      const w = labelWidth(text);
+      return [{ index: g.index, x: g.arrow.x, y: g.arrow.y, text, box: { x: g.arrow.x - w / 2, y: g.arrow.y - 1.3 * LABEL_H, width: w, height: LABEL_H } }];
+    });
+    // The labels drawn on their own: the planet's rich one, its apsides and the zone's edges.
+    const fixed = (at: { x: number; y: number } | null, text: string) =>
+      at ? [{ x: at.x > width * 0.6 ? at.x - 8 - labelWidth(text) : at.x + 8, y: at.y - LABEL_H / 2, width: labelWidth(text), height: LABEL_H }] : [];
+    const keepClear = [
+      ...(labels.planet ? [{ x: labels.planet.x + 8, y: labels.planet.y - 30, width: 170, height: 60 }] : []),
+      ...fixed(labels.periapsis, t.starView.periapsis({ distance: formatAu(star.periapsis_au) })),
+      ...fixed(labels.apoapsis, t.starView.apoapsis({ distance: formatAu(star.apoapsis_au) })),
+      ...fixed(labels.inner, formatAu(star.hz_inner_au)),
+      ...fixed(labels.outer, formatAu(star.hz_outer_au)),
+    ];
+    const distances = lines.filter((l) => l.kind === 'distance' || l.kind === 'zone' || l.kind === 'boundary');
+    const pullLabels = lines.filter((l) => l.kind === 'pull');
+    const order = [...names.map((n) => n.box), ...distances.map((l) => l.box), ...speeds.map((v) => v.box), ...pullLabels.map((l) => l.box)];
+    const places = layoutLabels(order, keepClear);
+    let k = 0;
+    const take = () => places[k++]!;
     return {
-      names: names.map((n, i) => ({ ...n, ...places[i]! })),
-      speeds: speeds.map((v, i) => ({ ...v, ...places[names.length + i]! })),
+      names: names.map((n) => ({ ...n, ...take() })),
+      lines: [...distances, ...pullLabels].map((l) => ({ ...l, ...take() })),
+      speeds: speeds.map((v) => ({ ...v, ...take() })),
     };
   });
 
@@ -389,11 +483,20 @@
     {/if}
     {#each placed.names as giant (giant.index)}
       <span
-        class="label giant"
+        class="label giant boxed"
         class:self={giant.index === selected}
         class:hidden={!giant.visible}
-        style:left={`${giant.x}px`}
-        style:top={`${giant.y + giant.dy}px`}>{giant.text}</span
+        style:left={`${giant.box.x}px`}
+        style:top={`${giant.box.y + giant.dy}px`}>{giant.text}</span
+      >
+    {/each}
+    {#each placed.lines as line (line.key)}
+      <span
+        class="label along {line.kind}"
+        class:hidden={!line.visible}
+        style:left={`${line.x}px`}
+        style:top={`${line.y + line.dy}px`}
+        style:transform={`translate(-50%, -50%) rotate(${line.angle}deg)`}>{line.text}</span
       >
     {/each}
     {#each placed.speeds as speed (speed.index)}
@@ -542,6 +645,10 @@
         <input type="checkbox" bind:checked={velocities} />
         {t.starView.showVelocities}
       </label>
+      <label class="check" title={t.starView.showPullsHelp}>
+        <input type="checkbox" bind:checked={pulls} />
+        {t.starView.showPulls}
+      </label>
     {/if}
     <label class="check" title={t.starView.animateHelp}>
       <input type="checkbox" bind:checked={animated} />
@@ -551,8 +658,8 @@
   {#if animated && selected !== null}
     <label class="speed" title={t.starView.systemSpeedHelp}>
       <span>{t.starView.systemSpeed}</span>
-      <input type="range" min="0" max="10" step="1" bind:value={speed} />
-      <small>×{formatInt(2 ** speed)}</small>
+      <input type="range" min={SYSTEM_SPEED_MIN} max={SYSTEM_SPEED_MAX} step="1" bind:value={speed} />
+      <small>{t.starView.daysPerSecond({ days: formatInt(2 ** speed) })}</small>
     </label>
   {/if}
   {#if animated}
@@ -626,6 +733,27 @@
   }
   .label.hidden {
     opacity: 0;
+  }
+  /* Placed by the layout: its box is where it goes. */
+  .label.giant.boxed {
+    transform: none;
+  }
+  .label.along {
+    background: none;
+    padding: 0 2px;
+    text-shadow: 0 0 3px #05070d, 0 0 3px #05070d;
+  }
+  .label.along.distance {
+    color: #ffe3a8;
+  }
+  .label.along.pull {
+    color: #ffa07a;
+  }
+  .label.along.zone {
+    color: #8fe0aa;
+  }
+  .label.along.boundary {
+    color: #8a93a8;
   }
   .giants {
     margin: 0;
