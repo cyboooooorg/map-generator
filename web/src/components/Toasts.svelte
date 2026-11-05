@@ -37,11 +37,13 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: var(--panel-solid);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel-solid);
+    clip-path: var(--frame-clip);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 8px 10px 8px 14px;
-    box-shadow: 0 6px 20px #0008;
+    box-shadow: 0 6px 20px #0008, var(--glow);
   }
   .toast.error {
     border-color: var(--danger);

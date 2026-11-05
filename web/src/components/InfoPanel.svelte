@@ -135,7 +135,10 @@
     left: 12px;
     bottom: 12px;
     width: 300px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px 14px;
@@ -152,7 +155,10 @@
       right: 12px;
       width: auto;
       /* Opaque: the legend underneath would show through var(--panel). */
-      background: var(--panel-solid);
+      /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+      background: var(--frame-deco), var(--panel-solid);
+      clip-path: var(--frame-clip);
+      box-shadow: var(--glow);
     }
   }
   header {

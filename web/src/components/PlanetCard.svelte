@@ -191,12 +191,14 @@
     display: grid;
     gap: 6px;
     padding: 8px 10px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
     border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 0.78rem;
     pointer-events: auto;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 0.4);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.4), var(--glow);
   }
   .card.pinned {
     border-color: #ffd27a80;

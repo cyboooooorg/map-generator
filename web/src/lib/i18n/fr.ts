@@ -10,6 +10,10 @@ import type { Messages } from './index.svelte';
 const S = ' ';
 
 export const fr: Messages = {
+  theme: {
+    label: 'Thème',
+    names: { default: 'Par défaut', holo: 'HUD holographique', station: 'Station orbitale', cyberpunk: 'Cyberpunk', military: 'Militaire' },
+  },
   language: {
     label: 'Langue',
   },

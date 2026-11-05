@@ -15,6 +15,10 @@ import type { Layer } from '../viewer/shaders';
 
 export const en = {
   /** Language selector. */
+  theme: {
+    label: 'Theme',
+    names: { default: 'Default', holo: 'Holo HUD', station: 'Orbital station', cyberpunk: 'Cyberpunk', military: 'Military' },
+  },
   language: {
     label: 'Language',
   },
