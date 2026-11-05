@@ -143,6 +143,49 @@ export function velocityScale(
   return fastest > 0 ? maxLength / fastest : 0;
 }
 
+/**
+ * Seconds of animation a planetary system's innermost planet takes to go
+ * round at the default speed (see defaultSystemSpeed).
+ */
+export const SYSTEM_INNER_YEAR_S = 10;
+/** The slowest and fastest speeds of a planetary system's clock, powers of two of Earth days per second. */
+export const SYSTEM_SPEED_MIN = 0;
+export const SYSTEM_SPEED_MAX = 12;
+
+/**
+ * The speed a planetary system opens at, a power of two of Earth days per
+ * second: about its innermost year in SYSTEM_INNER_YEAR_S, a day a second
+ * at the slowest.
+ */
+export function defaultSystemSpeed(innermostYearDays: number): number {
+  const exact = Math.round(Math.log2(Math.max(innermostYearDays, 1e-6) / SYSTEM_INNER_YEAR_S));
+  return Math.min(SYSTEM_SPEED_MAX, Math.max(SYSTEM_SPEED_MIN, exact));
+}
+
+/** The star's pull on a planet `distanceAu` from it, m/s² (G M / r², `mass` in Suns): the Sun's on Earth is 5.93 mm/s². */
+export function starGravity(mass: number, distanceAu: number): number {
+  return (5.93e-3 * mass) / (distanceAu * distanceAu);
+}
+
+/** Length of the strongest pull's vector in the star view, view units. */
+export const GRAVITY_MAX_LENGTH = 0.5;
+
+/**
+ * View units per m/s² of the vectors of the star's pull on a system's
+ * planets: one scale for all, the strongest (the closest planet at its
+ * periapsis) `maxLength` long. The pull falls as the square of the
+ * distance, so far planets get very short vectors: their labels give the
+ * value.
+ */
+export function gravityScale(
+  mass: number,
+  orbits: readonly { orbit_au: number; eccentricity: number }[],
+  maxLength = GRAVITY_MAX_LENGTH,
+): number {
+  const strongest = Math.max(0, ...orbits.map((o) => starGravity(mass, o.orbit_au * (1 - o.eccentricity))));
+  return strongest > 0 ? maxLength / strongest : 0;
+}
+
 /** Mean orbital speed over a year, km/s: the orbit's length over its period (close to the circular speed). */
 export function meanOrbitalSpeed(mass: number, orbitAu: number): number {
   return EARTH_SPEED_KMS * Math.sqrt(mass / orbitAu);

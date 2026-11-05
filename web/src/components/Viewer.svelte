@@ -169,6 +169,7 @@
   /** A planetary system's dotted star–planet lines and velocity vectors in the star view. */
   let starLinks = $state(true);
   let starVelocities = $state(true);
+  let starPulls = $state(true);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
@@ -1179,6 +1180,11 @@
         if (!world.pinnedPlanets.includes(id)) world.pinnedPlanets = [...world.pinnedPlanets, id];
       }}
       onUnpin={(id: string) => (world.pinnedPlanets = world.pinnedPlanets.filter((p) => p !== id))}
+      onUnpinAll={() => (world.pinnedPlanets = [])}
+      onOpenMoon={(id: string) => {
+        world.subject = 'planet';
+        world.showSystemBody(id);
+      }}
       onPickPlanet={sysStar
         ? (i: number) => {
             // A click opens the planet's card and pins it.
@@ -1206,6 +1212,7 @@
       bind:giants={starGiants}
       bind:links={starLinks}
       bind:velocities={starVelocities}
+      bind:pulls={starPulls}
     />
   {/if}
 
