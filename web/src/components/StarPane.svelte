@@ -1,7 +1,7 @@
 <script lang="ts">
   // The star view of a world: its star as a globe, its system around it,
   // and the numbers of both (see StarView.ts).
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import PlanetCard from './PlanetCard.svelte';
   import { extremes, layoutCards, shownCards } from '../lib/planetCard';
   import type { SystemPlanet } from '../lib/systemStar';
@@ -16,6 +16,8 @@
   import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { layoutLabels } from '../lib/viewer/labelLayout';
+  import type { ScreenAxis } from '../lib/viewer/axes';
+  import AxesGizmo from './AxesGizmo.svelte';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
@@ -83,6 +85,9 @@
     /** The planets whose cards are pinned, by id, in pinning order. */
     pinned?: readonly string[];
     onPin?: (id: string) => void;
+    /** A planet to fly out from when the view opens (the travelling back from its view), by index; then `onFlown`. */
+    flyFrom?: number | null;
+    onFlown?: () => void;
     /** Selects a planet of the system by its index, staying in the star view (its row in the list). */
     onSelectPlanet?: ((index: number) => void) | null;
     onUnpin?: (id: string) => void;
@@ -125,6 +130,8 @@
     pinned = [],
     onPin = () => {},
     onSelectPlanet = null,
+    flyFrom = null,
+    onFlown = () => {},
     onUnpin = () => {},
     onUnpinAll = () => {},
     onOpenMoon = () => {},
@@ -163,6 +170,7 @@
   onMount(() => {
     const created = new StarView(canvas);
     created.setOverlayColours(overlayColours());
+    created.onAxes = (next) => (axes = next);
     const stopTheme = onThemeChange(() => created.setOverlayColours(overlayColours()));
     created.onLabels = (next) => (labels = next);
     created.onClock = (fraction, days) => {
@@ -178,6 +186,18 @@
   });
 
   $effect(() => view?.setStar(star, omega, giantList, selected));
+  /** The world's axes on screen, for the gizmo. */
+  let axes = $state<ScreenAxis[]>([]);
+  // Back from a planet's view: out from it to the whole system, once.
+  $effect(() => {
+    if (view && flyFrom !== null && giantList.length > flyFrom) {
+      const from = flyFrom;
+      untrack(() => {
+        view?.flyOutFrom(from);
+        onFlown();
+      });
+    }
+  });
   $effect(() => view?.setPlanetMaps(maps ?? []));
   // Planets not generated yet wear their preview (belts, land, caps).
   $effect(() => view?.setPlanetPreviews(planets?.map((p) => (p.generated ? null : p.preview)) ?? []));
@@ -545,6 +565,12 @@
   export function resetView(): void {
     view?.resetView();
   }
+
+  /** Flies the camera to planet `index`, then calls `done` (the travelling into its view). */
+  export function flyToPlanet(index: number, done: () => void): void {
+    if (view) view.flyToPlanet(index, done);
+    else done();
+  }
 </script>
 
 <canvas bind:this={canvas} class="star-canvas"></canvas>
@@ -755,6 +781,7 @@
   {/if}
 {/snippet}
 <div class="star-chrome">
+  <div class="gizmo"><AxesGizmo {axes} /></div>
   <div class="toggles">
     <ToggleBar label={t.starView.displaySection} groups={toggleGroups} />
   </div>
@@ -966,6 +993,11 @@
     left: 12px;
     top: 72px;
     pointer-events: auto;
+  }
+  .gizmo {
+    position: absolute;
+    top: 4px;
+    right: 12px;
   }
   .heading {
     margin: 0;
