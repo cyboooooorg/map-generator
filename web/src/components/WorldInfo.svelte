@@ -29,9 +29,11 @@
     onDelete: () => void;
     /** Called with the world's summary once its names are saved. */
     onRenamed?: (summary: WorldSummary) => void;
+    /** The title instead of the world's own: a system body's name. */
+    title?: string | null;
   }
 
-  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, link, onDelete, onRenamed }: Props = $props();
+  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, link, onDelete, onRenamed, title: forcedTitle = null }: Props = $props();
 
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
@@ -48,7 +50,7 @@
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
   const names = $derived(summary?.names ?? null);
-  const title = $derived(names ? worldName(names) : meta ? presetName(meta.preset) : (summary?.planet ?? worldId));
+  const title = $derived(forcedTitle ?? (names ? worldName(names) : meta ? presetName(meta.preset) : (summary?.planet ?? worldId)));
   /** A designation without its star's (`c` of `MGS 48213 c`), for short lists. */
   const short = (designation: string) =>
     names && designation.startsWith(`${names.star} `) ? designation.slice(names.star.length + 1) : designation;
@@ -120,7 +122,7 @@
       <span class="title">
         <strong>{title}</strong>
         <small
-          >{[names ? designationBeside(names.name, names.designation) : null, meta ? presetName(meta.preset) : null, worldId]
+          >{[names ? designationBeside(names.name, names.designation) : null, meta ? presetName(meta.preset) : null, forcedTitle ? null : worldId]
             .filter(Boolean)
             .join(' · ')}</small
         >
