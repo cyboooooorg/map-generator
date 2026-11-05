@@ -589,7 +589,9 @@ export const starsVertex = /* glsl */ `
   uniform float uOpacity;
   varying vec3 vColour;
   void main() {
-    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position * 10.0, 1.0);
+    // With the field's own rotation (the sky turning against the body
+    // shown, see setStarsTurn), at infinity.
+    vec4 clip = projectionMatrix * vec4(mat3(modelViewMatrix) * position * 10.0, 1.0);
     gl_Position = clip.xyww;
     gl_PointSize = size * uPixelRatio;
     vColour = colour * uOpacity;

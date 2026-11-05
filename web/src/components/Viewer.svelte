@@ -28,7 +28,7 @@
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { systemSky } from '../lib/systemSky';
+  import { systemReach, systemSky } from '../lib/systemSky';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -100,6 +100,16 @@
   const YEAR_SECONDS = 12;
   /** One orbit of the orbit animation, in seconds. */
   const ORBIT_SECONDS = 10;
+  /** The orbit animation's slowest and fastest speeds, powers of two (see orbitSpeed). */
+  const ORBIT_SPEED_MIN = -8;
+  const ORBIT_SPEED_MAX = 4;
+  /** A time in days as the speed's rate shows it: in minutes, hours or days. */
+  const simulatedSecond = (days: number): string =>
+    days < 1 / 24
+      ? withUnit(formatUpTo(days * 1440, 1), t.viewer.minuteUnit)
+      : days < 1
+        ? withUnit(formatUpTo(days * 24, 1), t.viewer.hourUnit)
+        : withUnit(formatUpTo(days, 1), t.viewer.dayUnit);
   /** mapgen::hex::DEFAULT_RIVER_FLOW_KM2, on the log10 slider. */
   const DEFAULT_RIVER_LOG = Math.log10(500_000);
   /** Wait before asking a server busy generating for the hex grid again, ms. */
@@ -186,6 +196,8 @@
   /** The world the orbit time belongs to: another one starts its moons over. */
   let orbitWorld: string | null = null;
   let orbitsPlaying = $state(false);
+  /** The orbit animation's speed, a power of two of one orbit every ORBIT_SECONDS. */
+  let orbitSpeed = $state(0);
   /** Whether the canvas has a size: hidden (narrow screens showing the list), nothing animates. */
   let canvasVisible = $state(true);
   let hexOn = $state(false);
@@ -753,12 +765,17 @@
   const starsTurn = $derived.by(() => {
     if (!sysBody) return 0;
     const period = sysBody.spin.locked ? sysBody.orbit.period_days : sysBody.spin.period_hours / 24;
-    const turns = sysDays / Math.max(period, 1e-6);
-    return -2 * Math.PI * (turns - Math.floor(turns));
+    // Not wrapped, so that the camera follows a fast turn the right way.
+    return (-2 * Math.PI * sysDays) / Math.max(period, 1e-6);
   });
-  // While the orbits play, the camera turns with the stars, so that the
-  // globe is seen to turn on itself under a still sky.
+  // While the orbits play, the camera turns with the stars: it stays still
+  // against the sky, the star and the orbits, and the globe turns on itself.
   $effect(() => view?.setStarsTurn(starsTurn, orbitsPlaying));
+  // The star drawn at its place, at the centre of the planets' orbits.
+  $effect(() => view?.setStarPlace(sysSky?.star ?? null));
+  // Far enough out to see the moons of the shown body's planet whole.
+  const reach = $derived(sys && sysBody ? systemReach(sys, sysBody.id) : null);
+  $effect(() => view?.setGlobeReach(reach ?? 0));
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   $effect(() => {
@@ -824,7 +841,7 @@
     }
     let last = performance.now();
     let frame = requestAnimationFrame(function step(now) {
-      orbitDays = (orbitDays + ((now - last) / 1000 / ORBIT_SECONDS) * period) % (period * 1000);
+      orbitDays = (orbitDays + ((now - last) / 1000 / ORBIT_SECONDS) * period * 2 ** orbitSpeed) % (period * 1000);
       last = now;
       frame = requestAnimationFrame(step);
     });
@@ -1305,6 +1322,12 @@
             title={t.viewer.playOrbitsHelp}>{orbitsPlaying ? t.viewer.pause : t.viewer.play}</button
           >
         </label>
+        <label>
+          <span title={t.viewer.orbitSpeedHelp}>{t.viewer.orbitSpeed}</span>
+          <input type="range" min={ORBIT_SPEED_MIN} max={ORBIT_SPEED_MAX} step="1" bind:value={orbitSpeed} />
+          <small class="value">×{formatUpTo(2 ** orbitSpeed, 3)}</small>
+        </label>
+        <p class="muted">{t.viewer.orbitSpeedRate({ time: simulatedSecond(((orbitPeriod / ORBIT_SECONDS) * 2 ** orbitSpeed)) })}</p>
         <p class="muted">
           {t.viewer.orbitDay({
             days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
