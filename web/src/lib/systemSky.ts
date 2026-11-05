@@ -158,6 +158,8 @@ export function systemSky(
   ids: string[];
   casters: ShadowCaster[];
   orbits: Vec3[][];
+  /** The index in `orbits` of the body shown's own orbit (dashed, so that the body slides along it), -1 when none. */
+  ownOrbit: number;
   sun: Vec3;
   star: { position: Vec3; radius: number };
 } {
@@ -165,7 +167,7 @@ export function systemSky(
   const self = system.bodies.find((b) => b.id === shown);
   const here = placements.get(shown);
   if (!self || !here) {
-    return { bodies: [], ids: [], casters: [], orbits: [], sun: [0, 0, 1], star: { position: [0, 0, 1e9], radius: 1 } };
+    return { bodies: [], ids: [], casters: [], orbits: [], ownOrbit: -1, sun: [0, 0, 1], star: { position: [0, 0, 1e9], radius: 1 } };
   }
   const [ax, ay, az] = here.axes;
   const unitKm = Math.max(self.physical.radius_km, 1e-6);
@@ -199,8 +201,9 @@ export function systemSky(
   // The orbits: the planets' round the star, the moons' of the shown
   // body's planet round it (the shown body's own passing through it).
   const planet = self.parent ?? self.id;
-  const orbits = system.bodies
-    .filter((b) => b.parent === null || b.parent === planet)
+  const orbiting = system.bodies.filter((b) => b.parent === null || b.parent === planet);
+  const ownOrbit = orbiting.findIndex((b) => b.id === shown);
+  const orbits = orbiting
     .map((body) => {
       const there = placements.get(body.id)!;
       const parent = body.parent ? placements.get(body.parent)!.centre : ([0, 0, 0] as Vec3);
@@ -239,6 +242,7 @@ export function systemSky(
     // planet, the planet's on its moon, whatever the far giants' sizes.
     casters: pickShadowCasters(casters, sun, Math.asin(starRadius / starDistance)),
     orbits,
+    ownOrbit,
     sun: unit(local(scale(here.centre, -1))),
     star: { position: place([0, 0, 0]), radius: (system.star.info.radius * SUN_RADIUS_KM) / unitKm },
   };
