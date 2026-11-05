@@ -13,13 +13,13 @@ use crate::erosion::erode;
 use crate::geo::Grid;
 use crate::geology::Regime;
 use crate::hydrology::hydrology;
-use noise::{NoiseFn, Perlin};
 use crate::noise::{
     EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged, smoothstep, stream, stream_seed,
 };
 use crate::rivers;
 use crate::star::{StarClimate, StarInfo, star_temperatures};
 use crate::world::*;
+use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
 use serde::Serialize;
 use std::f64::consts::PI;
