@@ -173,6 +173,27 @@ export function defaultSystemSpeed(innermostYearDays: number): number {
   return Math.min(SYSTEM_SPEED_MAX, Math.max(SYSTEM_SPEED_MIN, exact));
 }
 
+/**
+ * The frost line of a star, AU: where water ice condensed in the disk the
+ * planets formed from, 2.7 AU for the Sun, as the square root of the
+ * luminosity (L in Suns). Rocky planets form inside it, giants beyond.
+ */
+export function frostLineAu(luminosity: number): number {
+  return 2.7 * Math.sqrt(Math.max(luminosity, 0));
+}
+
+/** Earth masses in a Sun's mass. */
+const EARTH_PER_SUN = 332_946;
+
+/**
+ * A planet's Hill radius, AU: how far round it its own gravity holds moons
+ * against the star's (at its periapsis, `a (1 − e)`, the tightest),
+ * `a (1 − e) ∛(m / 3M)`.
+ */
+export function hillRadiusAu(orbitAu: number, eccentricity: number, massEarth: number, starMass: number): number {
+  return orbitAu * (1 - eccentricity) * Math.cbrt(massEarth / EARTH_PER_SUN / (3 * Math.max(starMass, 1e-6)));
+}
+
 /** The star's pull on a planet `distanceAu` from it, m/s² (G M / r², `mass` in Suns): the Sun's on Earth is 5.93 mm/s². */
 export function starGravity(mass: number, distanceAu: number): number {
   return (5.93e-3 * mass) / (distanceAu * distanceAu);
