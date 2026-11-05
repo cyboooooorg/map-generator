@@ -156,7 +156,103 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     let noise = flat_noise(grid, seed);
     let sea: Vec<bool> = height.par_iter().map(|&z| z < 0.0).collect();
 
-    // ── 1. Priority-flood from the sea ────────────────────────────────────────
+    // The flood below is serial: the routing noise of step 2, which does
+    // not depend on it, is computed beside it by the other threads.
+    let ((filled, flooded, order), route) = rayon::join(
+        || flood(grid, height, &sea, noise),
+        || routing_noise(grid, seed),
+    );
+
+    // ── 2. Receivers on the filled surface ────────────────────────────────────
+    // Always a lower neighbour (so drainage stays acyclic and the filled
+    // surface valid), chosen by steepness and, as a tie-breaker on even
+    // slopes, by the descent of a large-scale routing noise: paths that would
+    // run straight and parallel down a regular slope converge into the
+    // noise's valleys and join, as river networks do.
+    let steps = grid.neighbour_steps();
+    let receivers: Vec<u32> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            if sea[i] {
+                return NO_RECEIVER;
+            }
+            let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
+            let mut lower = [(0usize, 0.0f32, 0.0f32); 8];
+            let mut count = 0;
+            for (nx, ny, d) in steps.around(x, y) {
+                let j = grid.index(nx, ny);
+                let slope = (filled[i] - filled[j]) / d;
+                if slope > 0.0 {
+                    lower[count] = (j, slope, (route[i] - route[j]) / d);
+                    count += 1;
+                }
+            }
+            let lower = &lower[..count];
+            let steepest = lower.iter().fold(0.0f32, |m, l| m.max(l.1));
+            let pull = lower
+                .iter()
+                .fold(0.0f32, |m, l| m.max(l.2.abs()))
+                .max(1e-12);
+            lower
+                .iter()
+                .map(|&(j, slope, down)| (j, slope / steepest + ROUTE_WEIGHT * down / pull))
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .map_or(NO_RECEIVER, |(j, _)| j as u32)
+        })
+        .collect();
+    drop(route);
+
+    // ── 3. Accumulate runoff downstream (highest pixels first) ────────────────
+    // A pixel's area depends only on its row: one cosine per row.
+    let mut flow_km2 = vec![0.0f32; n];
+    flow_km2
+        .par_chunks_mut(grid.width as usize)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let area = grid.dx_km(y as u32) * grid.dy_km();
+            let start = y * grid.width as usize;
+            for (k, f) in row.iter_mut().enumerate() {
+                if !sea[start + k] {
+                    *f = area * runoff(moisture[start + k]);
+                }
+            }
+        });
+    for &i in order.iter().rev() {
+        let i = i as usize;
+        let j = receivers[i];
+        if j != NO_RECEIVER && !sea[j as usize] {
+            flow_km2[j as usize] += flow_km2[i];
+        }
+    }
+
+    // ── 4. Lakes and rivers ───────────────────────────────────────────────────
+    drop(order);
+    let lake = lakes(grid, &flooded, &flow_km2);
+    drop(flooded);
+    let river = (0..n)
+        .into_par_iter()
+        .map(|i| !sea[i] && !lake[i] && flow_km2[i] >= RIVER_MIN_FLOW_KM2)
+        .collect();
+    Hydrology {
+        flow_km2,
+        lake,
+        river,
+        receivers,
+        filled,
+    }
+}
+
+/// Step 1 of [`hydrology`], the priority-flood from the sea: the filled
+/// surface, the pixels deep enough under their water level to hold a lake,
+/// and every land pixel in the order it was reached (ascending filled
+/// height).
+fn flood(
+    grid: &Grid,
+    height: &[f32],
+    sea: &[bool],
+    noise: Vec<f32>,
+) -> (Vec<f32>, Vec<bool>, Vec<u32>) {
+    let n = grid.pixel_count();
     let mut filled = height.to_vec();
     // The water level of each pixel: `filled` without the slope added
     // across flats, which grows with the number of pixels crossed. Lake
@@ -165,7 +261,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
     // Every sea pixel is done from the start, but only those next to land
     // seed the flood: the others have no neighbour left to raise. Pops come
     // out in key order either way, so the result is the same.
-    let mut done = sea.clone();
+    let mut done = sea.to_vec();
     let coast: Vec<u32> = (0..n)
         .into_par_iter()
         .filter(|&i| sea[i] && grid.neighbour_indices(i).any(|j| !sea[j]))
@@ -202,7 +298,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
             }
         }
     }
-    drop((done, heap));
+    drop((done, heap, noise));
     // Only whether each pixel lies deep enough under its water level is
     // needed from `spill`: keep that instead of a whole layer of levels.
     let flooded: Vec<bool> = (0..n)
@@ -211,80 +307,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
         .collect();
     drop(spill);
 
-    // ── 2. Receivers on the filled surface ────────────────────────────────────
-    // Always a lower neighbour (so drainage stays acyclic and the filled
-    // surface valid), chosen by steepness and, as a tie-breaker on even
-    // slopes, by the descent of a large-scale routing noise: paths that would
-    // run straight and parallel down a regular slope converge into the
-    // noise's valleys and join, as river networks do.
-    let route = routing_noise(grid, seed);
-    drop(noise);
-    let receivers: Vec<u32> = (0..n)
-        .into_par_iter()
-        .map(|i| {
-            if sea[i] {
-                return NO_RECEIVER;
-            }
-            let (x, y) = (i as u32 % grid.width, i as u32 / grid.width);
-            let mut lower = [(0usize, 0.0f32, 0.0f32); 8];
-            let mut count = 0;
-            for (nx, ny, d) in grid.neighbours(x, y) {
-                let j = grid.index(nx, ny);
-                let slope = (filled[i] - filled[j]) / d;
-                if slope > 0.0 {
-                    lower[count] = (j, slope, (route[i] - route[j]) / d);
-                    count += 1;
-                }
-            }
-            let lower = &lower[..count];
-            let steepest = lower.iter().fold(0.0f32, |m, l| m.max(l.1));
-            let pull = lower
-                .iter()
-                .fold(0.0f32, |m, l| m.max(l.2.abs()))
-                .max(1e-12);
-            lower
-                .iter()
-                .map(|&(j, slope, down)| (j, slope / steepest + ROUTE_WEIGHT * down / pull))
-                .max_by(|a, b| a.1.total_cmp(&b.1))
-                .map_or(NO_RECEIVER, |(j, _)| j as u32)
-        })
-        .collect();
-    drop(route);
-
-    // ── 3. Accumulate runoff downstream (highest pixels first) ────────────────
-    let mut flow_km2: Vec<f32> = (0..n)
-        .into_par_iter()
-        .map(|i| {
-            if sea[i] {
-                return 0.0;
-            }
-            let y = i as u32 / grid.width;
-            grid.dx_km(y) * grid.dy_km() * runoff(moisture[i])
-        })
-        .collect();
-    for &i in order.iter().rev() {
-        let i = i as usize;
-        let j = receivers[i];
-        if j != NO_RECEIVER && !sea[j as usize] {
-            flow_km2[j as usize] += flow_km2[i];
-        }
-    }
-
-    // ── 4. Lakes and rivers ───────────────────────────────────────────────────
-    drop(order);
-    let lake = lakes(grid, &flooded, &flow_km2);
-    drop(flooded);
-    let river = (0..n)
-        .into_par_iter()
-        .map(|i| !sea[i] && !lake[i] && flow_km2[i] >= RIVER_MIN_FLOW_KM2)
-        .collect();
-    Hydrology {
-        flow_km2,
-        lake,
-        river,
-        receivers,
-        filled,
-    }
+    (filled, flooded, order)
 }
 
 /// Filled pits (connected `flooded` pixels: land whose water level is more
