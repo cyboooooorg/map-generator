@@ -132,11 +132,18 @@ export function shortcutHelp(): readonly [string, string][] {
 
 /** Relief exaggeration change of one `+` or `-` press. */
 export const RELIEF_STEP = 0.1;
+/**
+ * The relief slider's top: an exaggeration of three times the 1 of old
+ * (RELIEF_SCALE), so that mountains show on a whole planet in view.
+ */
+export const RELIEF_MAX = 3;
+/** The relief a viewer starts with: mountains visible, coasts unchanged. */
+export const RELIEF_DEFAULT = 1;
 
 /** The relief after one step up (`direction` 1) or down (-1), within [0, 1]. */
 export function stepRelief(relief: number, direction: 1 | -1): number {
   const next = Math.round((relief + direction * RELIEF_STEP) * 100) / 100;
-  return Math.min(1, Math.max(0, next));
+  return Math.min(RELIEF_MAX, Math.max(0, next));
 }
 
 /**

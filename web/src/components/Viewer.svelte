@@ -24,7 +24,7 @@
   import { debouncedSetting, loadSetting } from '../lib/settings';
   import { UNITS, unitTooltip } from '../lib/units';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
-  import { altAllowed, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
+  import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
@@ -128,7 +128,9 @@
   const saved = loadSetting('display', {
     mode: 'globe' as string,
     layer: 'biomes' as string,
-    relief: 0,
+    relief: RELIEF_DEFAULT as number,
+    /** 2 once the relief slider reached RELIEF_MAX: a 0 saved before was the old default, not a choice. */
+    reliefVersion: 1 as number,
     graticule: false,
     referenceLines: true,
     contours: true,
@@ -161,7 +163,7 @@
   let view = $state<PlanetView | null>(null);
   let mode = $state<ViewMode>(saved.mode === 'map' ? 'map' : 'globe');
   let layer = $state<Layer>(LAYERS.some((l) => l.id === saved.layer) ? (saved.layer as Layer) : 'biomes');
-  let relief = $state(saved.relief);
+  let relief = $state(saved.reliefVersion < 2 && saved.relief === 0 ? RELIEF_DEFAULT : saved.relief);
   let graticule = $state(saved.graticule);
   let referenceLines = $state(saved.referenceLines);
   // `contours` keeps its saved name: it was the only (depth) contour toggle.
@@ -333,6 +335,7 @@
       mode,
       layer,
       relief,
+      reliefVersion: 2,
       graticule,
       referenceLines,
       contours: seaContours,
@@ -1274,7 +1277,7 @@
       </label>
       <label>
         <span>{t.viewer.relief}</span>
-        <input type="range" min="0" max="1" step="0.05" bind:value={relief} disabled={!dataReady} />
+        <input type="range" min="0" max={RELIEF_MAX} step="0.05" bind:value={relief} disabled={!dataReady} />
       </label>
 
   </div>
