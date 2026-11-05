@@ -175,11 +175,14 @@ export interface SystemsLink {
   system: string | null;
   body: string | null;
   compare: string | null;
+  /** The planets whose cards are pinned in the star view, by body id (none when absent). */
+  pins?: readonly string[];
 }
 
-/** `#system=<id>&body=<id>&compare=<id>`: the systems of a link. */
+/** `#system=<id>&body=<id>&compare=<id>&pins=<id>,<id>`: the systems of a link. */
 export function decodeSystems(params: URLSearchParams): SystemsLink {
-  return { system: params.get('system'), body: params.get('body'), compare: params.get('compare') };
+  const pins = (params.get('pins') ?? '').split(',').filter((id) => id !== '');
+  return { system: params.get('system'), body: params.get('body'), compare: params.get('compare'), pins };
 }
 
 /** The fragment (without '#') naming the systems shown, and the view when given. */
@@ -189,6 +192,7 @@ export function systemHash(link: SystemsLink, view: ViewLink | null = null): str
     parts.push(`system=${encodeURIComponent(link.system)}`);
     if (link.body) parts.push(`body=${encodeURIComponent(link.body)}`);
     if (link.compare) parts.push(`compare=${encodeURIComponent(link.compare)}`);
+    if (link.pins?.length) parts.push(`pins=${link.pins.map(encodeURIComponent).join(',')}`);
   }
   if (view) parts.push(...encodeView(view));
   return parts.join('&');

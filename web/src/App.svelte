@@ -106,9 +106,12 @@
    */
   function applyHash(): void {
     const params = new URLSearchParams(location.hash.slice(1));
-    const { system, body, compare } = decodeSystems(params);
+    const { system, body, compare, pins = [] } = decodeSystems(params);
     const known = (id: string | null) => (id && systems.some((s) => s.id === id) ? id : null);
     if (known(system)) {
+      // The system shown already: its pins change at once; another one takes them once it loads.
+      if (system === selectedId) primary.pinnedPlanets = [...pins];
+      else pendingPins = [...pins];
       pendingBody = body;
       selectedId = system;
       compareId = known(compare);
@@ -118,6 +121,8 @@
   }
   /** The body a link names, shown once its system loads. */
   let pendingBody: string | null = null;
+  /** The pinned cards a link names, set once its system loads. */
+  let pendingPins: string[] = [];
 
   /** The view of a link, until the panes can take it (the compared one follows a linked camera). */
   let pendingView = $state.raw<ViewLink | null>(null);
@@ -136,7 +141,10 @@
 
   /** A link to the worlds shown and the main pane's view (Copy link). */
   function shareLink(): string {
-    const hash = systemHash({ system: selectedId, body: primary.subject === 'star' ? null : primary.systemBody, compare: compareId }, primaryPane?.viewState() ?? null);
+    const hash = systemHash(
+      { system: selectedId, body: primary.subject === 'star' ? null : primary.systemBody, compare: compareId, pins: primary.pinnedPlanets },
+      primaryPane?.viewState() ?? null,
+    );
     return `${location.origin}${location.pathname}#${hash}`;
   }
 
@@ -197,7 +205,12 @@
     if (!ready) {
       return;
     }
-    const hash = systemHash({ system: selectedId, body: primary.subject === 'star' ? null : primary.systemBody, compare: compareId });
+    const hash = systemHash({
+      system: selectedId,
+      body: primary.subject === 'star' ? null : primary.systemBody,
+      compare: compareId,
+      pins: primary.pinnedPlanets,
+    });
     if (location.hash.slice(1) !== hash) {
       history.replaceState(null, '', hash ? `#${hash}` : location.pathname + location.search);
     }
@@ -208,7 +221,9 @@
     untrack(() => {
       if (id) {
         primary.loadSystem(id, pendingBody);
+        primary.pinnedPlanets = pendingPins;
         pendingBody = null;
+        pendingPins = [];
       } else {
         primary.load(null);
       }
