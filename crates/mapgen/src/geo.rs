@@ -1,8 +1,6 @@
 //! Geometry of the equirectangular grid: pixel sizes in kilometres,
 //! neighbourhoods that wrap around in longitude, and distance fields.
 use rayon::prelude::*;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
 use std::f64::consts::PI;
 
 /// The pixel grid of a world, with the physical size of each pixel.
@@ -101,29 +99,34 @@ impl Grid {
     /// Distance in km from every pixel to the nearest pixel where `source` is
     /// true (0 for sources), along 8-connected paths. Pixels further than
     /// `max_km` get `max_km`.
+    ///
+    /// A Dijkstra on a bucket queue (Dial's algorithm): buckets narrower
+    /// than the shortest step, so a pixel's neighbours always land in a
+    /// later bucket and every pixel of a bucket is final when the bucket is
+    /// reached. Each pixel thus gets the same minimum over its neighbours as
+    /// with a binary heap, bit for bit, without its log-time pops. Only as
+    /// many buckets as one step spans are kept, reused in turn.
     pub fn distance_to(&self, source: &[bool], max_km: f32) -> Vec<f32> {
-        #[derive(PartialEq)]
-        struct Node(f32, usize);
-        impl Eq for Node {}
-        impl Ord for Node {
-            // Reversed: BinaryHeap is a max-heap, we want the closest first.
-            fn cmp(&self, other: &Self) -> Ordering {
-                other.0.total_cmp(&self.0)
-            }
-        }
-        impl PartialOrd for Node {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                Some(self.cmp(other))
-            }
-        }
-
         let mut dist: Vec<f32> = source
             .par_iter()
             .map(|&s| if s { 0.0 } else { max_km })
             .collect();
+        // The shortest and longest steps: an east-west one on the narrowest
+        // row, a diagonal on the widest.
+        let dy = self.dy_km();
+        let (narrowest, widest) = (0..self.height)
+            .map(|y| self.dx_km(y))
+            .fold((dy, 0.0f32), |(lo, hi), dx| (lo.min(dx), hi.max(dx)));
+        // A little narrower than the shortest step, for the rounding of
+        // the sums.
+        let width = 0.99 * narrowest;
+        let longest = (widest * widest + dy * dy).sqrt();
+        let ring = (longest / width).ceil() as usize + 2;
+        let mut buckets: Vec<Vec<u32>> = vec![Vec::new(); ring];
+        let bucket_of = |d: f32| (d / width) as usize;
         // Only sources next to a non-source seed the search: the others
         // have nothing left to reach.
-        let mut heap: BinaryHeap<Node> = (0..self.pixel_count())
+        buckets[0] = (0..self.pixel_count())
             .into_par_iter()
             .filter(|&i| {
                 source[i] && {
@@ -132,22 +135,36 @@ impl Grid {
                         .any(|(nx, ny, _)| !source[self.index(nx, ny)])
                 }
             })
-            .map(|i| Node(0.0, i))
-            .collect::<Vec<_>>()
-            .into();
-        while let Some(Node(d, i)) = heap.pop() {
-            if d > dist[i] {
-                continue;
-            }
-            let (x, y) = (i as u32 % self.width, i as u32 / self.width);
-            for (nx, ny, step) in self.neighbours(x, y) {
-                let j = self.index(nx, ny);
-                let nd = d + step;
-                if nd < dist[j] {
-                    dist[j] = nd;
-                    heap.push(Node(nd, j));
+            .map(|i| i as u32)
+            .collect();
+        let mut pending = buckets[0].len();
+        let mut current = 0usize;
+        while pending > 0 {
+            let mut bucket = std::mem::take(&mut buckets[current % ring]);
+            pending -= bucket.len();
+            for &i in &bucket {
+                let i = i as usize;
+                let d = dist[i];
+                // A pixel pushed again with a shorter distance is reached
+                // from its later bucket only.
+                if bucket_of(d) != current {
+                    continue;
+                }
+                let (x, y) = (i as u32 % self.width, i as u32 / self.width);
+                for (nx, ny, step) in self.neighbours(x, y) {
+                    let j = self.index(nx, ny);
+                    let nd = d + step;
+                    if nd < dist[j] {
+                        dist[j] = nd;
+                        buckets[bucket_of(nd) % ring].push(j as u32);
+                        pending += 1;
+                    }
                 }
             }
+            // Keep its allocation for the turn of the ring that reuses it.
+            bucket.clear();
+            buckets[current % ring] = bucket;
+            current += 1;
         }
         dist
     }
