@@ -21,6 +21,36 @@ use crate::geo::Grid;
 use crate::rivers::{self, Mouth, RIVER_MIN_FLOW_KM2, RiverLine};
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+
+/// A hasher for pixel indices: one multiply (as rustc's FxHasher), instead
+/// of the default SipHash, whose resistance to chosen keys the carve does
+/// not need. The valleys do not depend on it: the lines are merged with
+/// min and max, whatever the order of their pixels.
+#[derive(Default)]
+struct PixelHasher(u64);
+
+impl Hasher for PixelHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(u64::from(b));
+        }
+    }
+
+    fn write_u64(&mut self, n: u64) {
+        self.0 = (self.0.rotate_left(5) ^ n).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+
+    fn write_usize(&mut self, n: usize) {
+        self.write_u64(n as u64);
+    }
+}
+
+type PixelMap<V> = HashMap<usize, V, BuildHasherDefault<PixelHasher>>;
 
 /// Floodplain width at the smallest river flow (`RIVER_MIN_FLOW_KM2`), in km;
 /// it grows with the square root of the flow (about 80 km at 4 M km²).
@@ -244,7 +274,7 @@ fn carve_line(
             s = e;
         }
         // Pass 1: distance to the axis. Pass 2: blended profile.
-        let mut nearest: HashMap<usize, Nearest> = HashMap::new();
+        let mut nearest: PixelMap<Nearest> = PixelMap::default();
         for pass in 0..2 {
             for &(s, e) in &pieces {
                 let (a, b) = (axis[s], axis[e]);
