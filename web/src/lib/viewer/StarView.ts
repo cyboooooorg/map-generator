@@ -24,6 +24,8 @@ import {
   Scene,
   ShaderMaterial,
   SphereGeometry,
+  type Texture,
+  TextureLoader,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -183,6 +185,25 @@ export class StarView {
   private userMoved = false;
   private moonOrbits: MoonOrbit[] = [];
   private moonMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
+  /** A ring round each giant's marker, facing the camera, shown while it is highlighted. */
+  private halos: Mesh<RingGeometry, MeshBasicMaterial>[] = [];
+  /** The giants highlighted, by index (see setHighlighted). */
+  private highlighted: ReadonlySet<number> = new Set();
+  /** The map wrapped round each giant's marker, by index, or null for its colour (see setPlanetMaps). */
+  private mapUrls: readonly (string | null)[] = [];
+  /** The maps loaded (or loading), by url. */
+  private readonly maps = new Map<string, Texture>();
+  private readonly loader = new TextureLoader();
+  /** The giant under the pointer, by index (see onHoverPlanet). */
+  private hovered: number | null = null;
+  /**
+   * Called with the index of the giant the pointer comes over (in setStar's
+   * `giants`), and with null when it leaves it; null ignores the pointer.
+   * Touch has no hover: a tap is a click.
+   */
+  onHoverPlanet: ((index: number | null) => void) | null = null;
+  /** Called with a giant's index when its marker is double-clicked; null ignores double clicks. */
+  onOpenPlanet: ((index: number) => void) | null = null;
   /**
    * A planetary system's selected planet, by its index in `giants`, or
    * null for a lone world's view. With one, every planet is drawn as a
@@ -214,6 +235,17 @@ export class StarView {
     this.controls.addEventListener('start', () => (this.userMoved = true));
     // A click on a planet's marker picks it (a drag turns the view).
     canvas.addEventListener('pointerdown', (event) => (this.pressAt = { x: event.clientX, y: event.clientY }));
+    canvas.addEventListener('pointermove', (event) => {
+      if (event.pointerType === 'touch' || !this.onHoverPlanet) return;
+      // Not while a drag turns the view.
+      this.hover(event.buttons === 0 ? this.pickPlanet(event.clientX, event.clientY) : null);
+    });
+    canvas.addEventListener('pointerleave', () => this.hover(null));
+    canvas.addEventListener('dblclick', (event) => {
+      if (!this.onOpenPlanet) return;
+      const index = this.pickPlanet(event.clientX, event.clientY);
+      if (index !== null) this.onOpenPlanet(index);
+    });
     canvas.addEventListener('pointerup', (event) => {
       const at = this.pressAt;
       this.pressAt = null;
@@ -516,6 +548,7 @@ export class StarView {
       this.giantGroup.remove(child);
     }
     this.giantMarkers = [];
+    this.halos = [];
     const from = this.from;
     if (this.giants.some((g) => g.orbit_au * (1 + g.eccentricity) > from)) {
       const boundary = new Line(
@@ -559,9 +592,86 @@ export class StarView {
         ring.renderOrder = 3;
         marker.add(ring);
       }
+      // Its highlight: a ring a little wider than the marker (and its rings).
+      const halo = new Mesh(
+        new RingGeometry(size * (giant.rings !== 'none' ? 2.45 : 1.45), size * (giant.rings !== 'none' ? 2.75 : 1.8), 48),
+        new MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.9, side: DoubleSide, depthWrite: false }),
+      );
+      halo.renderOrder = 4;
+      halo.visible = false;
+      marker.add(halo);
+      this.halos.push(halo);
       this.giantMarkers.push(marker);
       this.giantGroup.add(marker);
     }
+    this.applyHighlights();
+    this.applyMaps();
+  }
+
+  /** Highlights the giants of these indices (in setStar's `giants`) with a ring, and only them. */
+  setHighlighted(indices: readonly number[]): void {
+    this.highlighted = new Set(indices);
+    this.applyHighlights();
+    this.requestRender();
+  }
+
+  private applyHighlights(): void {
+    this.halos.forEach((halo, k) => (halo.visible = this.highlighted.has(k)));
+  }
+
+  /**
+   * Wraps a map round giant markers: `urls[k]`, an equirectangular image,
+   * round giant `k`'s, its colour where it is null or still loading.
+   * Maps no longer listed are let go.
+   */
+  setPlanetMaps(urls: readonly (string | null)[]): void {
+    this.mapUrls = urls;
+    const wanted = new Set(urls.filter((url): url is string => url !== null));
+    for (const [url, map] of this.maps) {
+      if (!wanted.has(url)) {
+        map.dispose();
+        this.maps.delete(url);
+      }
+    }
+    for (const url of wanted) {
+      if (this.maps.has(url)) continue;
+      const map = this.loader.load(url, () => {
+        // Loaded: shown, unless let go meanwhile.
+        if (this.maps.get(url) !== map || this.disposed) return;
+        this.applyMaps();
+        this.requestRender();
+      });
+      map.colorSpace = SRGBColorSpace;
+      this.maps.set(url, map);
+    }
+    this.applyMaps();
+    this.requestRender();
+  }
+
+  private applyMaps(): void {
+    this.giantMarkers.forEach((marker, k) => {
+      const url = this.mapUrls[k] ?? null;
+      const map = url ? this.maps.get(url) : undefined;
+      // A texture is ready once its image has loaded.
+      const ready = map && map.image ? map : null;
+      if (marker.material.map === ready) return;
+      marker.material.map = ready;
+      // The map shows its own colours; without one, the planet's colour.
+      if (ready) marker.material.color.set('#ffffff');
+      else {
+        const giant = this.giants[k];
+        if (giant) marker.material.color.setRGB(...giant.colour, SRGBColorSpace);
+      }
+      marker.material.needsUpdate = true;
+    });
+  }
+
+  /** The pointer is over giant `index` now (null: over none). */
+  private hover(index: number | null): void {
+    if (index === this.hovered) return;
+    this.hovered = index;
+    this.canvas.style.cursor = index === null ? '' : 'pointer';
+    this.onHoverPlanet?.(index);
   }
 
   /**
@@ -830,6 +940,8 @@ export class StarView {
       object.geometry.dispose();
       object.material.dispose();
     }
+    for (const map of this.maps.values()) map.dispose();
+    this.maps.clear();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
   }
@@ -968,6 +1080,8 @@ export class StarView {
     const moving = this.controls.update();
     // The glow faces the camera.
     this.glow.quaternion.copy(this.camera.quaternion);
+    // So do the highlights (their markers do not turn).
+    for (const halo of this.halos) if (halo.visible) halo.quaternion.copy(this.camera.quaternion);
     this.renderer.render(this.scene, this.camera);
     const giantsShown = this.giantsOn && this.giants.length > 0;
     if ((this.distancesOn || giantsShown) && this.info) {
