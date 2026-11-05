@@ -12,6 +12,7 @@
   import type { HostGiant } from '../lib/api/types/HostGiant';
   import { compressedFrom, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
+  import { layoutLabels } from '../lib/viewer/labelLayout';
   import { type SystemLabels, StarView, SYSTEM_INNER_YEAR_S, YEAR_S } from '../lib/viewer/StarView';
 
   interface Props {
@@ -36,6 +37,12 @@
     giantSystem?: GiantSystem | null;
     /** Whether the giants are drawn. */
     giants: boolean;
+    /**
+     * In a planetary system, whether each planet has a dotted line to the
+     * star with its distance now, and a velocity vector with its speed now.
+     */
+    links?: boolean;
+    velocities?: boolean;
     /** The world itself when it is a giant planet, or the giant it orbits. */
     worldGiant?: GiantInfo | null;
     /** The giant the world orbits, as its moon. */
@@ -69,6 +76,8 @@
     planetRadiusKm = 6371,
     giantSystem = null,
     giants = $bindable(),
+    links = $bindable(true),
+    velocities = $bindable(true),
     worldGiant = null,
     host = null,
     kinds = null,
@@ -143,6 +152,8 @@
       rings: t.starView.rings[g.rings] ?? '',
     });
   $effect(() => view?.setAnimated(animated));
+  $effect(() => view?.setPlanetLinks(links));
+  $effect(() => view?.setVelocities(velocities));
   $effect(() => view?.setSpeed(2 ** speed));
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
@@ -211,6 +222,41 @@
     });
   });
 
+  /** A label's height, CSS px (0.75rem text and its padding). */
+  const LABEL_H = 18;
+  /** A label's width, CSS px, estimated from its text (the layout runs on every frame: no measuring). */
+  const labelWidth = (text: string) => text.length * 6.6 + 10;
+  /**
+   * The planets' labels (name and distance, the selected planet's first)
+   * and their speeds, kept apart (see layoutLabels): each with its text,
+   * where it goes and whether it shows.
+   */
+  const placed = $derived.by(() => {
+    if (!labels) return { names: [], speeds: [] };
+    // The selected planet's rich label (with Distances) already gives its distance.
+    const rich = labels.planet !== null;
+    const giants = labels.giants
+      .filter((g) => !(rich && g.index === selected))
+      .sort((a, b) => Number(b.index === selected) - Number(a.index === selected) || a.index - b.index);
+    const names = giants.map((g) => ({
+      ...g,
+      text: t.starView.orbitLabel({ name: g.name, distance: formatAu(selected !== null && links ? g.distance : g.au) }),
+    }));
+    const speeds = giants.flatMap((g) => (g.arrow ? [{ index: g.index, x: g.arrow.x, y: g.arrow.y, text: kms(g.speed) }] : []));
+    const keepClear = labels.planet ? [{ x: labels.planet.x + 8, y: labels.planet.y - 30, width: 170, height: 60 }] : [];
+    const places = layoutLabels(
+      [
+        ...names.map((n) => ({ x: n.x + 10, y: n.y - 1.1 * LABEL_H, width: labelWidth(n.text), height: LABEL_H })),
+        ...speeds.map((v) => ({ x: v.x - labelWidth(v.text) / 2, y: v.y - 1.3 * LABEL_H, width: labelWidth(v.text), height: LABEL_H })),
+      ],
+      keepClear,
+    );
+    return {
+      names: names.map((n, i) => ({ ...n, ...places[i]! })),
+      speeds: speeds.map((v, i) => ({ ...v, ...places[names.length + i]! })),
+    };
+  });
+
   /** Back to the starting view of the system. */
   export function resetView(): void {
     view?.resetView();
@@ -255,9 +301,18 @@
         >{t.starView.orbitLabel({ name: planetName, distance: formatAu(star.orbit_au) })}</span
       >
     {/if}
-    {#each labels.giants as giant (giant.index)}
-      <span class="label giant" style:left={`${giant.x}px`} style:top={`${giant.y}px`}
-        >{t.starView.orbitLabel({ name: giant.name, distance: formatAu(giant.au) })}</span
+    {#each placed.names as giant (giant.index)}
+      <span
+        class="label giant"
+        class:self={giant.index === selected}
+        class:hidden={!giant.visible}
+        style:left={`${giant.x}px`}
+        style:top={`${giant.y + giant.dy}px`}>{giant.text}</span
+      >
+    {/each}
+    {#each placed.speeds as speed (speed.index)}
+      <span class="label speed" class:hidden={!speed.visible} style:left={`${speed.x}px`} style:top={`${speed.y + speed.dy}px`}
+        >{speed.text}</span
       >
     {/each}
   </div>
@@ -357,6 +412,16 @@
       <input type="checkbox" bind:checked={distances} />
       {t.starView.distances}
     </label>
+    {#if selected !== null}
+      <label class="check" title={t.starView.showLinksHelp}>
+        <input type="checkbox" bind:checked={links} />
+        {t.starView.showLinks}
+      </label>
+      <label class="check" title={t.starView.showVelocitiesHelp}>
+        <input type="checkbox" bind:checked={velocities} />
+        {t.starView.showVelocities}
+      </label>
+    {/if}
     <label class="check" title={t.starView.animateHelp}>
       <input type="checkbox" bind:checked={animated} />
       {t.starView.animate}
@@ -427,6 +492,13 @@
   }
   .label.self {
     color: #ffd27a;
+  }
+  .label.speed {
+    color: #9fe0ff;
+    transform: translate(-50%, -130%);
+  }
+  .label.hidden {
+    opacity: 0;
   }
   .giants {
     margin: 0;

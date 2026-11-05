@@ -126,6 +126,23 @@ export function orbitalSpeed(mass: number, orbitAu: number, distanceAu: number):
   return EARTH_SPEED_KMS * Math.sqrt(Math.max(mass * (2 / distanceAu - 1 / orbitAu), 0));
 }
 
+/** Length of the fastest planet's velocity vector in the star view, view units. */
+export const VELOCITY_MAX_LENGTH = 0.7;
+
+/**
+ * View units per km/s of the velocity vectors of a system's planets: one
+ * scale for all, so they compare at a glance, the fastest (at its
+ * periapsis) `maxLength` long, short enough not to cross many orbits.
+ */
+export function velocityScale(
+  mass: number,
+  orbits: readonly { orbit_au: number; eccentricity: number }[],
+  maxLength = VELOCITY_MAX_LENGTH,
+): number {
+  const fastest = Math.max(0, ...orbits.map((o) => orbitalSpeed(mass, o.orbit_au, o.orbit_au * (1 - o.eccentricity))));
+  return fastest > 0 ? maxLength / fastest : 0;
+}
+
 /** Mean orbital speed over a year, km/s: the orbit's length over its period (close to the circular speed). */
 export function meanOrbitalSpeed(mass: number, orbitAu: number): number {
   return EARTH_SPEED_KMS * Math.sqrt(mass / orbitAu);

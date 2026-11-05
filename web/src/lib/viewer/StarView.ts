@@ -54,8 +54,10 @@ import {
   prominences,
   STAR_RADIUS,
   starSurface,
+  orbitalSpeed,
   systemCompressedFrom,
   systemScale,
+  velocityScale,
 } from './starSystem';
 
 /** Seconds between two eruptions, while animated. */
@@ -79,7 +81,17 @@ export interface SystemLabels {
    * their distance now (`distance`), AU, and their index in setStar's
    * `giants` (empty when hidden).
    */
-  giants: { x: number; y: number; name: string; au: number; distance: number; index: number }[];
+  giants: {
+    x: number;
+    y: number;
+    name: string;
+    au: number;
+    distance: number;
+    index: number;
+    /** Its speed now, km/s, and the middle of its velocity vector on screen (null when hidden or off screen). */
+    speed: number;
+    arrow: { x: number; y: number } | null;
+  }[];
 }
 
 /** Shortest time between two animated frames, ms (thirty frames a second at most). */
@@ -149,6 +161,21 @@ export class StarView {
   private giantMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
   /** The giants' distances from the star now, AU (see placeGiants). */
   private giantDistances: number[] = [];
+  /**
+   * In a planetary system: a dotted line from the star to each planet and
+   * its velocity vector (see setPlanetLinks, setVelocities), with each
+   * planet's speed now (km/s) and the middle of its vector.
+   */
+  private readonly linkGroup = new Group();
+  private readonly arrowGroup = new Group();
+  private planetLinks: Line<BufferGeometry, LineDashedMaterial>[] = [];
+  private arrows: Line<BufferGeometry, LineBasicMaterial>[] = [];
+  private giantSpeeds: number[] = [];
+  private arrowMids: Vector3[] = [];
+  /** View units per km/s of the velocity vectors (see velocityScale). */
+  private arrowScale = 0;
+  private linksOn = true;
+  private velocitiesOn = true;
   private giantsOn = true;
   /** How far the system reaches from the star, view units (see resetView). */
   private reach = 6.8;
@@ -275,6 +302,8 @@ export class StarView {
     this.scene.add(this.planet);
     this.scene.add(this.moonGroup);
     this.scene.add(this.giantGroup);
+    this.scene.add(this.linkGroup);
+    this.scene.add(this.arrowGroup);
     // Distances: the star–planet line and the periapsis and apoapsis.
     this.link = new Line(
       new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]),
@@ -341,6 +370,7 @@ export class StarView {
     this.at = at;
     this.giants = giants;
     this.buildGiants();
+    this.buildVectors();
     const inner = system ? info.hz_outer_au : compressedFrom(info) / 1.15;
     const reach = Math.max(at(inner), ...giants.map((g) => at(g.orbit_au * (1 + g.eccentricity))));
     // A system that reaches further (or less far) is fitted again, unless
@@ -467,6 +497,7 @@ export class StarView {
   setGiantsVisible(on: boolean): void {
     this.giantsOn = on;
     this.giantGroup.visible = on;
+    this.applyVisibility();
     this.requestRender();
   }
 
@@ -534,6 +565,94 @@ export class StarView {
   }
 
   /**
+   * A planetary system's dotted star–planet lines and velocity vectors,
+   * one each per planet; none for a lone world.
+   */
+  private buildVectors(): void {
+    for (const group of [this.linkGroup, this.arrowGroup]) {
+      for (const child of [...group.children]) {
+        const line = child as Line<BufferGeometry, LineBasicMaterial>;
+        line.geometry.dispose();
+        line.material.dispose();
+        group.remove(child);
+      }
+    }
+    this.planetLinks = [];
+    this.arrows = [];
+    this.giantSpeeds = [];
+    this.arrowMids = [];
+    if (this.selected === null || !this.info) return;
+    this.arrowScale = velocityScale(this.info.mass, this.giants);
+    for (const giant of this.giants) {
+      const colour = new Color().setRGB(...giant.colour, SRGBColorSpace).lerp(new Color('#ffe3a8'), 0.6);
+      const link = new Line(
+        new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]),
+        new LineDashedMaterial({ color: colour, dashSize: 0.06, gapSize: 0.08, transparent: true, opacity: 0.6 }),
+      );
+      link.renderOrder = 3;
+      link.frustumCulled = false;
+      this.planetLinks.push(link);
+      this.linkGroup.add(link);
+      // The shaft, then the two barbs of the head: tip, barb, tip, barb.
+      const arrow = new Line(
+        new BufferGeometry().setFromPoints(Array.from({ length: 5 }, () => new Vector3())),
+        new LineBasicMaterial({ color: '#9fe0ff', transparent: true, opacity: 0.9 }),
+      );
+      arrow.renderOrder = 3;
+      arrow.frustumCulled = false;
+      this.arrows.push(arrow);
+      this.arrowGroup.add(arrow);
+    }
+    this.applyVisibility();
+  }
+
+  /** Shows or hides a planetary system's dotted star–planet lines, labelled with each planet's distance now. */
+  setPlanetLinks(on: boolean): void {
+    this.linksOn = on;
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  /** Shows or hides a planetary system's velocity vectors, labelled with each planet's speed now. */
+  setVelocities(on: boolean): void {
+    this.velocitiesOn = on;
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  /**
+   * Moves giant `k`'s dotted line to its marker, and its velocity vector:
+   * from the marker, along its orbit the way it goes (the tangent of the
+   * drawn ellipse, compression included), as long as its speed.
+   */
+  private placeVector(k: number, giant: Giant, position: Vector3, distanceAu: number): void {
+    const link = this.planetLinks[k];
+    const arrow = this.arrows[k];
+    if (!link || !arrow || !this.info) return;
+    const ends = link.geometry.getAttribute('position') as BufferAttribute;
+    ends.setXYZ(1, position.x, position.y, position.z);
+    ends.needsUpdate = true;
+    link.computeLineDistances();
+    const speed = orbitalSpeed(this.info.mass, giant.orbit_au, distanceAu);
+    this.giantSpeeds[k] = speed;
+    const at = (mean: number) => {
+      const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, mean);
+      return this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance);
+    };
+    const mean = this.giantAnomaly(k);
+    const direction = at(mean + 1e-3).sub(at(mean - 1e-3)).normalize();
+    const length = speed * this.arrowScale;
+    const tip = position.clone().addScaledVector(direction, length);
+    const barb = Math.min(0.06, length * 0.35);
+    const side = new Vector3(-direction.z, 0, direction.x).multiplyScalar(barb * 0.6);
+    const back = tip.clone().addScaledVector(direction, -barb);
+    const points = arrow.geometry.getAttribute('position') as BufferAttribute;
+    [position, tip, back.clone().add(side), tip, back.clone().sub(side)].forEach((p, i) => points.setXYZ(i, p.x, p.y, p.z));
+    points.needsUpdate = true;
+    this.arrowMids[k] = position.clone().addScaledVector(direction, length / 2);
+  }
+
+  /**
    * Places the giants at the animation's time: each at Kepler's pace, its
    * year in proportion to the world's (a Jupiter around a world of Earth's
    * year turns twelve times slower).
@@ -542,7 +661,9 @@ export class StarView {
     this.giants.forEach((giant, k) => {
       const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, this.giantAnomaly(k));
       this.giantDistances[k] = giant.orbit_au * distance;
-      this.giantMarkers[k]?.position.copy(this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance));
+      const position = this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance);
+      this.giantMarkers[k]?.position.copy(position);
+      this.placeVector(k, giant, position, giant.orbit_au * distance);
     });
   }
 
@@ -591,7 +712,11 @@ export class StarView {
   private applyVisibility(): void {
     this.orbit.visible = this.orbitOn;
     this.zone.visible = this.zoneOn;
-    this.link.visible = this.distancesOn;
+    // A planetary system draws a dotted line to every planet instead.
+    this.link.visible = this.distancesOn && this.selected === null;
+    const system = this.selected !== null && this.giantsOn;
+    this.linkGroup.visible = system && this.linksOn;
+    this.arrowGroup.visible = system && this.velocitiesOn;
     for (const marker of this.apsides) marker.visible = this.distancesOn && this.orbitOn;
   }
 
@@ -686,7 +811,7 @@ export class StarView {
 
   dispose(): void {
     this.disposed = true;
-    this.giantGroup.traverse((object) => {
+    for (const group of [this.giantGroup, this.linkGroup, this.arrowGroup]) group.traverse((object) => {
       const mesh = object as Mesh<BufferGeometry, MeshBasicMaterial>;
       mesh.geometry?.dispose();
       mesh.material?.dispose();
@@ -862,7 +987,17 @@ export class StarView {
         giants: giantsShown
           ? this.giants.flatMap((giant, k) => {
               const at = this.screen(this.giantMarkers[k]!.position);
-              return at ? [{ ...at, name: giant.name, au: giant.orbit_au, distance: this.giantDistances[k] ?? giant.orbit_au, index: k }] : [];
+              return at ? [
+                    {
+                      ...at,
+                      name: giant.name,
+                      au: giant.orbit_au,
+                      distance: this.giantDistances[k] ?? giant.orbit_au,
+                      index: k,
+                      speed: this.giantSpeeds[k] ?? 0,
+                      arrow: this.arrowGroup.visible && this.arrowMids[k] ? this.screen(this.arrowMids[k]) : null,
+                    },
+                  ] : [];
             })
           : [],
       });

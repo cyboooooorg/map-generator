@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
+import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -164,5 +164,15 @@ describe('star view', () => {
     const [charon] = moonOrbits([{ ...moon(6.4, 0, 2100), semi_major_axis_km: 19_600 }], 1188, 90_000, 60, true);
     expect(charon!.swing).toBeCloseTo(2100 / 19_600, 6);
   });
-});
 
+  it('scales every velocity vector alike, the fastest planet at its periapsis the longest', () => {
+    const orbits = [
+      { orbit_au: 0.4, eccentricity: 0.2 },
+      { orbit_au: 1, eccentricity: 0 },
+    ];
+    const k = velocityScale(1, orbits);
+    expect(orbitalSpeed(1, 0.4, 0.4 * 0.8) * k).toBeCloseTo(VELOCITY_MAX_LENGTH, 10);
+    expect(orbitalSpeed(1, 1, 1) * k).toBeLessThan(VELOCITY_MAX_LENGTH);
+    expect(velocityScale(1, [])).toBe(0);
+  });
+});
