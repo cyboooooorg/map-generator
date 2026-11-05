@@ -39,18 +39,6 @@ impl Default for ExportOptions {
     }
 }
 
-/// Name of a world's output directory, its id: `<planet>-<seed>` at the
-/// present, `<planet>-<epoch>-<seed>` with its plates moved to another
-/// epoch (`terran-past250ma-42`, `terran-future12p5ma-42`; see
-/// [`drift_label`]), so that the epochs of one world never collide. The
-/// seed stays last: the server reads an id as `<anything>-<digits>`.
-pub fn world_dir_name(params: &WorldParams) -> String {
-    match drift_label(params.drift_ma) {
-        None => format!("{}-{}", params.planet.name, params.seed),
-        Some(epoch) => format!("{}-{epoch}-{}", params.planet.name, params.seed),
-    }
-}
-
 /// The epoch of a drift in an id: `None` at the present, else `past` or
 /// `future` and the Ma, a decimal point written `p` (ids hold lowercase
 /// letters, digits and dashes only).
@@ -122,67 +110,6 @@ pub fn export_world(
         }));
     }
     exports.par_iter().try_for_each(|export| export())
-}
-
-/// Directory of moon `n` (from 1, nearest first) of the world written in
-/// `dir`.
-pub fn moon_dir(dir: &Path, n: usize) -> std::path::PathBuf {
-    dir.join("moons").join(n.to_string())
-}
-
-/// Generates the moons of the world `params` (see `crate::moons`) one by
-/// one and writes each, like a world, into [`moon_dir`] of `dir`; returns
-/// how many were written.
-pub fn export_moons(
-    params: &WorldParams,
-    dir: &Path,
-    options: ExportOptions,
-) -> Result<usize, String> {
-    let Some(system) = crate::moons::MoonSystem::draw(params) else {
-        return Ok(0);
-    };
-    for (k, moon) in system.moons.iter().enumerate() {
-        let body = crate::moons::body_params(params, moon);
-        let generated = crate::generation::generate(&body);
-        export_world(generated, &moon_dir(dir, k + 1), options)?;
-    }
-    Ok(system.moons.len())
-}
-
-/// Generates the giant the world `params` orbits, if it is a giant's moon
-/// (see `crate::exomoon`), as a giant world of its own into `dir/host/`,
-/// and its other regular moons into [`sibling_dir`], for the world's sky;
-/// returns whether it did.
-pub fn export_host(
-    params: &WorldParams,
-    dir: &Path,
-    options: ExportOptions,
-) -> Result<bool, String> {
-    let Some(host) = crate::exomoon::HostGiant::draw(params) else {
-        return Ok(false);
-    };
-    let body = crate::exomoon::host_params(params, host.giant.mass_earth, host.seed);
-    export_world(
-        crate::generation::generate(&body),
-        &dir.join("host"),
-        options,
-    )?;
-    // Its other regular moons, one by one, each a world of its own.
-    for k in 0..host.siblings.len() {
-        let body = crate::exomoon::sibling_params(params, &host, k);
-        export_world(
-            crate::generation::generate(&body),
-            &sibling_dir(dir, k + 1),
-            options,
-        )?;
-    }
-    Ok(true)
-}
-
-/// Directory of sibling `n` (from 1, nearest first) of the world written
-/// in `dir`, a giant's other regular moon (see [`export_host`]).
-pub fn sibling_dir(dir: &Path, n: usize) -> std::path::PathBuf {
-    dir.join("host").join("siblings").join(n.to_string())
 }
 
 /// Contour lines are drawn whenever a tile and a neighbour straddle one of these levels.
@@ -655,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    fn moons_are_written_as_worlds_of_their_own() {
+    fn moons_are_generated_as_bodies_of_their_own() {
         use crate::export::raw_data::{WorldMetadata, read_metadata};
         // A Pluto-sized world far from its star: two small icy moons.
         let request = crate::request::WorldRequest {
@@ -674,10 +601,14 @@ mod tests {
         assert_eq!(system.moons.len(), 2);
         let dir = std::env::temp_dir().join(format!("mapgen-moons-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let options = super::ExportOptions { raw_data: true };
-        assert_eq!(super::export_moons(&params, &dir, options), Ok(2));
+        // Generated as bodies of the planet's system, with it.
+        let drawn = crate::system::draw_around_params(&request, params.clone());
+        crate::system::write_system(&dir, &drawn).unwrap();
+        let planet = drawn.focus.clone().unwrap();
+        let done = crate::system::generate_neighbourhood(&dir, &planet, |_| {}).unwrap();
+        assert_eq!(done.len(), 3);
         for (k, moon) in system.moons.iter().enumerate() {
-            let raw = super::moon_dir(&dir, k + 1).join("raw_data");
+            let raw = dir.join("bodies").join(format!("{planet}-{}", k + 1)).join("raw_data");
             let meta: WorldMetadata = read_metadata(&raw).unwrap();
             assert_eq!(meta.planet_type, "icy-moon");
             assert_eq!(meta.seed, moon.seed);

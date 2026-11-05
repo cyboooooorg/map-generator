@@ -636,14 +636,11 @@ pub enum Stage {
     Biomes,
     /// Writing the output files (reported by the caller of [`export_world`](crate::export::export_world)).
     Export,
-    /// Generating and writing the moons (reported by the caller of
-    /// [`export_moons`](crate::export::export_moons)).
-    Moons,
 }
 
 impl Stage {
     /// Every stage, in the order they run.
-    pub const ALL: [Stage; 9] = [
+    pub const ALL: [Stage; 8] = [
         Stage::Noise,
         Stage::Erosion,
         Stage::Temperature,
@@ -652,7 +649,6 @@ impl Stage {
         Stage::Rivers,
         Stage::Biomes,
         Stage::Export,
-        Stage::Moons,
     ];
 }
 
