@@ -450,3 +450,30 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   (`names.json`), edited from the world card.
 - **Later:** naming the star and the giants too; keeping given names
   across a regeneration with `replace`.
+
+## 16. Planetary systems
+
+- **Status:** in progress
+- **Specification:** [system-spec.md](system-spec.md)
+- **Problem:** the generator made one world, its moons, its giant
+  neighbours described in its `world.json` and the giant it orbits; the
+  other bodies of its system had no card and no map, and several of
+  their properties were drawn in the viewer from seeds.
+- **Decided (2026-11-05):** a whole system (a star and planets by type,
+  15 at most) or one around a planet asked as before; every body drawn
+  at once with its card and a preview, its maps generated on demand with
+  its neighbourhood; the map size chosen at creation; the worlds made
+  before deleted rather than migrated.
+- **Done (2026-11-05):**
+  - phase 1, the draw (`src/system.rs`, `system.json`);
+  - phase 2, generating a body and its neighbourhood (`bodies/<id>/`);
+  - phase 3, the server's system routes and jobs;
+  - phase 4, the system library and the two-mode form;
+  - phase 5, the viewer (spheres from previews, generation on demand
+    with its progress, skies and the star view from `system.json`);
+  - the CLI writing systems (`systems/<id>/`) and the deployment
+    mounting `systems/`.
+- **Next:** phase 6, a card for every body and renaming any of them;
+  phase 7, the clean-up of the world layout (`/api/worlds`, the moon and
+  host exports, `worlds/`).
+

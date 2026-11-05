@@ -204,7 +204,7 @@ it off. Over 4 000 seeds:
   mean one (a triaxial ellipsoid plus low-frequency noise), exported as
   `shape.png` (16-bit); the elevation, craters included, stays the
   surface detail over it.
-- **Files:** `worlds/<id>/moons/<n>/` with the layout of a world
+- **Files** (since replaced by the bodies of a system, `systems/<id>/bodies/<planet>-<n>/`, see [system-spec.md](../system-spec.md)): `worlds/<id>/moons/<n>/` with the layout of a world
   (`world.json`, `world.png`, `thumb.png`, `raw_data/`); a "Moons"
   stage in the job progress. Static files are already served under
   `/worlds/`.
