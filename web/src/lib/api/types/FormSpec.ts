@@ -43,4 +43,12 @@ max_size: number,
 /**
  * Largest map the server accepts, in pixels (width × height).
  */
-max_pixels: number, };
+max_pixels: number, 
+/**
+ * The planet types a whole system can be asked for (preset names).
+ */
+planet_types: Array<string>, 
+/**
+ * Most planets a system holds (moons not counted).
+ */
+max_planets: number, };

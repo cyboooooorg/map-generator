@@ -6,7 +6,10 @@
   import { api } from '../lib/api/client';
   import type { Defaults } from '../lib/api/types/Defaults';
   import type { FormSpec } from '../lib/api/types/FormSpec';
-  import type { JobCreated } from '../lib/api/types/JobCreated';
+  import type { SystemCreated } from '../lib/api/types/SystemCreated';
+  import type { SystemRequest } from '../lib/api/types/SystemRequest';
+  import type { WholeSystemRequest } from '../lib/api/types/WholeSystemRequest';
+  import { ApiFailure } from '../lib/api/client';
   import type { ParamDefault } from '../lib/api/types/ParamDefault';
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
@@ -16,7 +19,8 @@
   import { jobs } from '../lib/jobs.svelte';
   import { type Unit, unitTooltip } from '../lib/units';
   import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
-  import { applyStarChoice, initialStarChoice, STAR_CLASSES, type StarChoice } from '../lib/starForm';
+  import { applyStarChoice, initialStarChoice, STAR_CLASSES, starType, type StarChoice } from '../lib/starForm';
+  import { loadSetting, saveSetting } from '../lib/settings';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
   import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
 
@@ -30,14 +34,31 @@
     initial?: WorldRequest | null;
     /** Id of the world being varied, for the title. */
     variedFrom?: string | null;
-    /** Ids of the existing worlds: the server refuses to overwrite one. */
-    existing: ReadonlySet<string>;
-    /** Called once the server accepted the job; the form closes. */
-    onSubmitted: (job: JobCreated, request: WorldRequest) => void;
+    /** Called once the server drew the system; the form closes. */
+    onSubmitted: (created: SystemCreated, request: WorldRequest | null) => void;
     onCancel: () => void;
   }
 
-  let { presets, spec, initial = null, variedFrom = null, existing, onSubmitted, onCancel }: Props = $props();
+  let { presets, spec, initial = null, variedFrom = null, onSubmitted, onCancel }: Props = $props();
+
+  /**
+   * What the form asks for (docs/system-spec.md): a system around the
+   * planet it describes, or a whole system, its planets by type. A varied
+   * world is always a planet.
+   */
+  type Mode = 'around' | 'system';
+  let mode = $state<Mode>(untrack(() => (initial ? 'around' : loadSetting<Mode>('formMode', 'around') === 'system' ? 'system' : 'around')));
+  $effect(() => saveSetting('formMode', mode));
+  /** A whole system: its star (a class and subtype, or drawn) and its planets by type (or all drawn). */
+  let systemStarRandom = $state(true);
+  let systemClass = $state<string>('G');
+  let systemSubtype = $state(2);
+  let planetsDrawn = $state(true);
+  let planetCounts = $state<Record<string, number>>(untrack(() => Object.fromEntries(spec.planet_types.map((type) => [type, type === 'terran' ? 1 : 0]))));
+  const planetTotal = $derived(Object.values(planetCounts).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0));
+  const planetsValid = $derived(planetsDrawn || (planetTotal >= 1 && planetTotal <= spec.max_planets));
+  /** The system the server said exists already, which the next submission may replace. */
+  let existsId = $state<string | null>(null);
 
   type Field =
     | 'sea_level'
@@ -281,6 +302,21 @@
     error = null;
   }
 
+  /** The request of a whole system. */
+  function buildSystemRequest(): WholeSystemRequest {
+    const [width, height] = size.split('x').map(Number);
+    return {
+      star: systemStarRandom ? null : starType(systemClass, systemSubtype),
+      metallicity: giantChoice.metallicityRandom || !Number.isFinite(giantChoice.metallicity) ? null : giantChoice.metallicity,
+      planets: planetsDrawn
+        ? null
+        : Object.fromEntries(Object.entries(planetCounts).filter(([, n]) => Number.isFinite(n) && n > 0)),
+      seed: seed.trim() === '' ? null : Number(seed),
+      width: width ?? null,
+      height: height ?? null,
+    };
+  }
+
   function rollSeed(): void {
     seed = String(randomSeed());
   }
@@ -332,11 +368,16 @@
     };
   });
 
-  /** Id the world will get (planet-seed), when both are fixed. */
-  const targetId = $derived(
-    !randomPlanet && selectedPreset && /^\d+$/.test(seed.trim()) ? `${selectedPreset.name}-${Number(seed)}` : null,
-  );
-  const conflict = $derived(targetId !== null && existing.has(targetId));
+  const conflict = $derived(existsId !== null);
+  const targetId = $derived(existsId);
+  // Another request is another system: ask again whether to replace it.
+  $effect(() => {
+    void [mode, seed, planet, randomPlanet];
+    untrack(() => {
+      existsId = null;
+      replace = false;
+    });
+  });
 
   const seedValid = $derived(seed.trim() === '' || (/^\d+$/.test(seed.trim()) && Number(seed) <= MAX_SEED));
 
@@ -345,10 +386,9 @@
     error = null;
     submitting = true;
     try {
-      const request = buildRequest();
-      // The server swaps the new world in once it is complete: a failed or
-      // cancelled generation keeps the old one.
-      const job = await api.createWorld(request, { replace: conflict && replace });
+      const request = mode === 'around' ? buildRequest() : null;
+      const asked: SystemRequest = request ? { around: request } : { system: buildSystemRequest() };
+      const created = await api.createSystem(asked, { replace: conflict && replace });
       saveFormMemory({
         planet,
         randomPlanet,
@@ -360,8 +400,12 @@
         moons: giantChoice.host === 'giant' ? 'auto' : moons,
         giant: giantChoice,
       });
-      onSubmitted(job, request);
+      onSubmitted(created, request);
     } catch (e) {
+      if (e instanceof ApiFailure && e.detail?.code === 'system_exists') {
+        existsId = e.detail.system;
+        return;
+      }
       error = errorText(e);
     } finally {
       submitting = false;
@@ -370,7 +414,17 @@
 </script>
 
 <form onsubmit={submit}>
-  <h2>{variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newWorld}</h2>
+  <h2>{variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newSystem}</h2>
+  {#if !variedFrom}
+    <div class="segmented modes" role="group" aria-label={t.form.mode}>
+      <button type="button" class:active={mode === 'around'} aria-pressed={mode === 'around'} onclick={() => (mode = 'around')}
+        title={t.form.modeAroundHelp}>{t.form.modeAround}</button
+      >
+      <button type="button" class:active={mode === 'system'} aria-pressed={mode === 'system'} onclick={() => (mode = 'system')}
+        title={t.form.modeSystemHelp}>{t.form.modeSystem}</button
+      >
+    </div>
+  {/if}
   {#if variedFrom}
     <p class="help">{t.form.variedHelp({ id: variedFrom })}</p>
   {:else if memory}
@@ -380,6 +434,49 @@
     <p class="error">{t.form.missingPreset({ preset: start.initial?.planet ?? '' })}</p>
   {/if}
 
+  {#if mode === 'system'}
+    <fieldset>
+      <legend>
+        {t.form.systemStar}
+        <label class="check inline">
+          <input type="checkbox" bind:checked={systemStarRandom} />
+          {t.form.random}
+        </label>
+      </legend>
+      {#if !systemStarRandom}
+        <div class="slider">
+          <select bind:value={systemClass} aria-label={t.form.systemStar}>
+            {#each STAR_CLASSES as klass (klass)}
+              <option value={klass}>{klass}</option>
+            {/each}
+          </select>
+          <input type="number" min={systemClass === 'O' ? 3 : 0} max="9.5" step="0.5" bind:value={systemSubtype} aria-label={t.form.systemSubtype} />
+          <small class="value">{starType(systemClass, systemSubtype)}</small>
+        </div>
+      {/if}
+    </fieldset>
+    <fieldset>
+      <legend>
+        {t.form.systemPlanets}
+        <label class="check inline">
+          <input type="checkbox" bind:checked={planetsDrawn} />
+          {t.form.systemPlanetsDrawn}
+        </label>
+      </legend>
+      {#if !planetsDrawn}
+        <div class="counts">
+          {#each spec.planet_types as type (type)}
+            <label>
+              <span>{presetName({ name: type })}</span>
+              <input type="number" min="0" max={spec.max_planets} step="1" bind:value={planetCounts[type]} />
+            </label>
+          {/each}
+        </div>
+        <p class="help" class:error={!planetsValid}>{t.form.systemPlanetsTotal({ count: planetTotal, max: spec.max_planets })}</p>
+      {/if}
+      <p class="help">{t.form.systemPlanetsHelp}</p>
+    </fieldset>
+  {:else}
   <label class="row">
     <span>{t.form.planet}</span>
     <select value={planet} onchange={(e) => choosePreset(e.currentTarget.value)} disabled={randomPlanet}>
@@ -579,6 +676,7 @@
     <p class="help">{t.form.moonsHelp}</p>
   </fieldset>
   {/if}
+  {/if}
   <fieldset>
     <legend>
       {t.form.metallicity}
@@ -602,7 +700,7 @@
     {/if}
     <p class="help">{t.form.metallicityHelp}</p>
   </fieldset>
-  {#if giantWorld}
+  {#if giantWorld && mode === 'around'}
     <fieldset>
       <legend>
         {t.form.giantMass}
@@ -628,7 +726,7 @@
       {/if}
       <p class="help">{t.form.giantMassHelp}</p>
     </fieldset>
-  {:else}
+  {:else if mode === 'around'}
     <fieldset>
       <legend>{t.form.giants}</legend>
       <select bind:value={giantChoice.giants} aria-label={t.form.giants}>
@@ -701,7 +799,7 @@
         >{t.form.defaults}</button
       >
       <button type="button" onclick={onCancel}>{t.form.close}</button>
-      <button type="submit" class="primary" disabled={submitting || !seedValid || (conflict && !replace)}>
+      <button type="submit" class="primary" disabled={submitting || !seedValid || !planetsValid || (conflict && !replace)}>
         {submitting ? t.form.sending : t.form.generate}
       </button>
     </div>
@@ -716,6 +814,26 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
+  }
+  .modes {
+    display: flex;
+  }
+  .modes button {
+    flex: 1;
+  }
+  .counts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 10px;
+  }
+  .counts label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+  .counts input {
+    width: 4em;
   }
   h2 {
     margin: 0 0 4px;

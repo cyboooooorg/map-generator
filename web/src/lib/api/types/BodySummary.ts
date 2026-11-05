@@ -5,6 +5,18 @@
  */
 export type BodySummary = { id: string, designation: string, 
 /**
+ * `planet` or `moon`.
+ */
+kind: string, 
+/**
+ * Its type: a preset name.
+ */
+body_type: string, 
+/**
+ * Its main colour in the preview (linear RGB), for the library's strip.
+ */
+colour: [number, number, number], 
+/**
  * Whether its maps are generated.
  */
 generated: boolean, };

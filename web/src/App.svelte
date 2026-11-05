@@ -6,34 +6,34 @@
   import Thumbnail from './components/Thumbnail.svelte';
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
-  import WorldList from './components/WorldList.svelte';
+  import SystemList from './components/SystemList.svelte';
   import WorldPane from './components/WorldPane.svelte';
   import { api } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
-  import type { JobCreated } from './lib/api/types/JobCreated';
+  import type { SystemCreated } from './lib/api/types/SystemCreated';
+  import type { SystemSummary } from './lib/api/types/SystemSummary';
+  import { systemBodyId } from './lib/api/client';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
-  import type { WorldSummary } from './lib/api/types/WorldSummary';
   import { requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
   import { getLocale, t } from './lib/i18n/index.svelte';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
-  import { decodeView, decodeWorlds, linkHash, type ViewLink } from './lib/link';
+  import { decodeSystems, decodeView, systemHash, type ViewLink } from './lib/link';
   import { loadSetting, saveSetting } from './lib/settings';
   import { stepWorld } from './lib/shortcuts';
   import { toasts } from './lib/toasts.svelte';
   import type { LinkedDisplay } from './lib/display';
   import type { CameraState } from './lib/viewer/PlanetView';
   import { LoadedWorld } from './lib/world.svelte';
-  import { worldName } from './lib/names';
 
   /** How long a deleted world can be restored, in ms. */
   const UNDO_MS = 6000;
   /** Shortest wait between two list refreshes on focus, in ms. */
   const REFRESH_EVERY_MS = 5000;
 
-  let worlds = $state<WorldSummary[]>([]);
+  let systems = $state<SystemSummary[]>([]);
   let presets = $state<PresetInfo[]>([]);
   let spec = $state<FormSpec | null>(null);
   let selectedId = $state<string | null>(null);
@@ -43,7 +43,7 @@
   let ready = $state(false);
   /** The generation form, when open: blank, or varying a world. */
   let form = $state<{ initial: WorldRequest | null; variedFrom: string | null } | null>(null);
-  /** Worlds deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
+  /** Systems deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
   let hidden = $state<string[]>([]);
   /** World ids in the order the list shows them (sorted, filtered). */
   let listOrder = $state<string[]>([]);
@@ -69,14 +69,20 @@
   /** Deletions waiting for their undo delay, flushed if the page closes. */
   const pendingDeletes = new Set<string>();
 
-  const visible = $derived(worlds.filter((w) => !hidden.includes(w.id)));
-  const existing = $derived(new Set(worlds.map((w) => w.id)));
-  const revision = (id: string | null) => worlds.find((w) => w.id === id)?.modified_ms ?? null;
-  const namesOf = (id: string | null) => worlds.find((w) => w.id === id)?.names ?? null;
-  /** A world's name in the compare bar: its own, else its id. */
+  const visible = $derived(systems.filter((s) => !hidden.includes(s.id)));
+  const summaryOf = (id: string | null) => systems.find((s) => s.id === id) ?? null;
+  /** A system's revision: when its file last changed (a body generated, its names). */
+  const revision = (id: string | null) => summaryOf(id)?.modified_ms ?? null;
+  /** A system's name in the compare bar: the one given to its star, else its designation. */
   const titleOf = (id: string | null) => {
-    const names = namesOf(id);
-    return names ? worldName(names) : id;
+    const summary = summaryOf(id);
+    return summary ? (summary.names['star'] ?? summary.designation) : id;
+  };
+  /** A system's thumbnail: its first generated planet's, as a body id. */
+  const thumbOf = (id: string | null) => {
+    const summary = summaryOf(id);
+    const planet = summary?.bodies.find((b) => b.kind === 'planet' && b.generated);
+    return summary && planet ? systemBodyId(summary.id, planet.id) : '';
   };
 
   /** When the list was last asked for (ms), to throttle the focus refreshes. */
@@ -84,7 +90,7 @@
 
   async function refresh(): Promise<void> {
     lastRefresh = Date.now();
-    worlds = await api.worlds();
+    systems = await api.systems();
   }
 
   /**
@@ -106,15 +112,18 @@
    */
   function applyHash(): void {
     const params = new URLSearchParams(location.hash.slice(1));
-    const { world, compare } = decodeWorlds(params);
-    const known = (id: string | null) => (id && worlds.some((w) => w.id === id) ? id : null);
-    if (known(world)) {
-      selectedId = world;
+    const { system, body, compare } = decodeSystems(params);
+    const known = (id: string | null) => (id && systems.some((s) => s.id === id) ? id : null);
+    if (known(system)) {
+      pendingBody = body;
+      selectedId = system;
       compareId = known(compare);
       pane = 'viewer';
       pendingView = decodeView(params);
     }
   }
+  /** The body a link names, shown once its system loads. */
+  let pendingBody: string | null = null;
 
   /** The view of a link, until the panes can take it (the compared one follows a linked camera). */
   let pendingView = $state.raw<ViewLink | null>(null);
@@ -133,7 +142,7 @@
 
   /** A link to the worlds shown and the main pane's view (Copy link). */
   function shareLink(): string {
-    const hash = linkHash(selectedId, compareId, primaryPane?.viewState() ?? null);
+    const hash = systemHash({ system: selectedId, body: primary.systemBody, compare: compareId }, primaryPane?.viewState() ?? null);
     return `${location.origin}${location.pathname}#${hash}`;
   }
 
@@ -153,7 +162,7 @@
       if (!ready) {
         applyHash();
         if (!selectedId) {
-          selectedId = worlds[0]?.id ?? null;
+          selectedId = systems[0]?.id ?? null;
           if (selectedId) {
             pane = 'viewer';
           }
@@ -194,10 +203,7 @@
     if (!ready) {
       return;
     }
-    const params = new URLSearchParams();
-    if (selectedId) params.set('world', selectedId);
-    if (selectedId && compareId) params.set('compare', compareId);
-    const hash = params.toString();
+    const hash = systemHash({ system: selectedId, body: primary.systemBody, compare: compareId });
     if (location.hash.slice(1) !== hash) {
       history.replaceState(null, '', hash ? `#${hash}` : location.pathname + location.search);
     }
@@ -205,30 +211,37 @@
 
   $effect(() => {
     const id = selectedId;
-    untrack(() => primary.load(id));
+    untrack(() => {
+      if (id) {
+        primary.loadSystem(id, pendingBody);
+        pendingBody = null;
+      } else {
+        primary.load(null);
+      }
+    });
   });
   $effect(() => {
     const id = selectedId ? compareId : null;
-    untrack(() => secondary.load(id));
+    untrack(() => (id ? secondary.loadSystem(id) : secondary.load(null)));
   });
 
   jobs.onFinished = (job: TrackedJob) => {
     const status = job.status;
     void refresh().then(() => {
       if (status.status === 'done') {
-        // A world replaced in place keeps its id: selecting it again would
-        // change nothing, so reload the panes that show it.
+        // A body generated in the system shown: load the system again,
+        // which keeps the body shown and loads its maps.
         if (status.world_id === selectedId) {
-          primary.load(status.world_id);
+          primary.loadSystem(status.world_id);
         }
         if (selectedId && status.world_id === compareId) {
-          secondary.load(status.world_id);
+          secondary.loadSystem(status.world_id);
         }
         if (autoOpen?.jobId === job.jobId && autoOpen.selection === selectedId) {
           select(status.world_id);
-          toasts.show(t.app.ready({ id: status.world_id }));
+          toasts.show(t.app.ready({ id: titleOf(status.world_id) ?? status.world_id }));
         } else {
-          toasts.show(t.app.ready({ id: status.world_id }), {
+          toasts.show(t.app.ready({ id: titleOf(status.world_id) ?? status.world_id }), {
             action: { label: t.app.open, run: () => select(status.world_id) },
             ms: 8000,
           });
@@ -305,7 +318,7 @@
     const results = await Promise.allSettled(
       ids.map((id) => {
         pendingDeletes.delete(id);
-        return api.deleteWorld(id);
+        return api.deleteSystem(id);
       }),
     );
     for (const result of results) {
@@ -320,7 +333,7 @@
   /** The page is closing: send the deletions still waiting for their undo delay. */
   function flushDeletes(): void {
     for (const id of pendingDeletes) {
-      void fetch(`/api/worlds/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true });
+      void fetch(`/api/systems/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true });
     }
     pendingDeletes.clear();
   }
@@ -330,12 +343,13 @@
     pane = 'sidebar';
   }
 
-  function submitted(job: JobCreated, request: WorldRequest): void {
+  /** A system drawn: shown at once (its bodies as spheres), its planet's maps following its job. */
+  function submitted(created: SystemCreated, request: WorldRequest | null): void {
     form = null;
-    autoOpen = { jobId: job.job_id, selection: selectedId };
-    jobs.track(job.job_id, job.world_id, request, { status: 'queued' }, true);
-    if (job.ignored.length > 0) {
-      toasts.show(t.app.ignored({ fields: job.ignored.join(', ') }));
+    void refresh().then(() => select(created.system_id));
+    if (created.job_id) {
+      autoOpen = { jobId: created.job_id, selection: created.system_id };
+      jobs.track(created.job_id, created.system_id, request ?? {}, { status: 'queued' }, true);
     }
   }
 
@@ -346,8 +360,7 @@
     }
     const request = rerollRequest(primary.meta);
     try {
-      const job = await api.createWorld(request);
-      submitted(job, request);
+      submitted(await api.createSystem({ around: request }), request);
     } catch (e) {
       toasts.error(t.app.rerollFailed({ error: errorText(e) }));
     }
@@ -376,7 +389,7 @@
         >
       </div>
       <LanguageSelect />
-      <button class="primary" onclick={() => openForm()} disabled={!spec}>{t.app.newWorld}</button>
+      <button class="primary" onclick={() => openForm()} disabled={!spec}>{t.app.newSystem}</button>
     </header>
     {#if fatal}
       <p class="error" role="alert">
@@ -391,7 +404,6 @@
         <GenerateForm
           {presets}
           {spec}
-          {existing}
           initial={form.initial}
           variedFrom={form.variedFrom}
           onSubmitted={submitted}
@@ -400,18 +412,17 @@
       {:else}
         <WorldInfo
           world={primary}
-          summary={worlds.find((w) => w.id === selectedId)}
-          worlds={visible}
+          summary={undefined}
+          worlds={[]}
           {compareId}
           onVary={() => primary.meta && openForm(requestFromWorld(primary.meta), primary.id)}
           onReroll={reroll}
           onCompare={(id) => (compareId = id)}
           link={shareLink}
           onDelete={() => selectedId && removeWorlds([selectedId])}
-          onRenamed={(renamed) => (worlds = worlds.map((w) => (w.id === renamed.id ? renamed : w)))}
         />
-        <WorldList
-          worlds={visible}
+        <SystemList
+          systems={visible}
           {selectedId}
           {compareId}
           bind:order={listOrder}
@@ -427,10 +438,10 @@
     {#if compareId}
       <div class="compare-bar">
         <span class="names">
-          <Thumbnail id={selectedId ?? ''} revision={revision(selectedId)} width={36} height={20} radius={3} />
+          <Thumbnail id={thumbOf(selectedId)} revision={revision(selectedId)} width={36} height={20} radius={3} />
           <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
           <span class="muted">{t.app.versus}</span>
-          <Thumbnail id={compareId} revision={revision(compareId)} width={36} height={20} radius={3} />
+          <Thumbnail id={thumbOf(compareId)} revision={revision(compareId)} width={36} height={20} radius={3} />
           <strong title={compareId}>{titleOf(compareId)}</strong>
         </span>
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> {t.app.linkCameras}</label>
@@ -448,7 +459,7 @@
         bind:this={primaryPane}
         world={primary}
         revision={revision(selectedId)}
-        names={namesOf(selectedId)}
+        names={null}
         keyboard={true}
         label={compareId ? titleOf(selectedId) : null}
         onStepWorld={step}
@@ -460,7 +471,7 @@
           bind:this={secondaryPane}
           world={secondary}
           revision={revision(compareId)}
-          names={namesOf(compareId)}
+          names={null}
           keyboard={false}
           persistDisplay={false}
           linkedDisplay={linkDisplay ? mainDisplay : null}

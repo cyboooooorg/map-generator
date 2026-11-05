@@ -33,6 +33,7 @@ export const en = {
     title: 'Planets',
     tabWorlds: 'Worlds',
     tabViewer: 'Viewer',
+    newSystem: 'New system',
     newWorld: 'New world',
     unreachable: (p: { error: string }) => `Cannot reach the server: ${p.error}`,
     retry: 'Retry',
@@ -56,6 +57,19 @@ export const en = {
     close: 'Close',
   },
   /** World list in the sidebar. */
+  /** The library of systems. */
+  systemList: {
+    empty: 'No system yet: draw one with New system.',
+    noMatch: 'No system matches.',
+    search: 'Search a name, designation or seed',
+    searchLabel: 'Search systems',
+    sorts: { newest: 'Newest first', oldest: 'Oldest first', planets: 'Most planets', seed: 'Seed' },
+    compareHelp: 'Select exactly two systems',
+    stripLabel: 'Its planets, from the star outwards',
+    notGenerated: 'not generated yet',
+    details: (p: { star: string; seed: number; moons: number; ago: string }) =>
+      `${p.star} · seed ${p.seed} · ${p.moons} moon${p.moons === 1 ? '' : 's'} · ${p.ago}`,
+  },
   worldList: {
     empty: 'No world yet.',
     noMatch: 'No world matches.',
@@ -363,6 +377,18 @@ export const en = {
   },
   /** The generation form. */
   form: {
+    newSystem: 'New system',
+    mode: 'What to draw',
+    modeAround: 'Around a planet',
+    modeAroundHelp: 'A planet set as you like it, and a system drawn around it: its other planets and their moons',
+    modeSystem: 'A whole system',
+    modeSystemHelp: 'A star and its planets by type, placed by the draw; the maps are made when a body is opened',
+    systemStar: 'Star',
+    systemSubtype: 'Subtype',
+    systemPlanets: 'Planets',
+    systemPlanetsDrawn: 'Drawn',
+    systemPlanetsTotal: (p: { count: number; max: number }) => `${p.count} planets (1 to ${p.max})`,
+    systemPlanetsHelp: 'How many of each type: the draw orders them from the star as real systems are, and draws their moons. Drawn: as many as the star and its metallicity make likely',
     newWorld: 'New world',
     vary: (p: { id: string }) => `Vary ${p.id}`,
     variedHelp: (p: { id: string }) => `Starts from every parameter of ${p.id}: change the ones you want.`,

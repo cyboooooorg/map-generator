@@ -99,6 +99,15 @@ struct MetaBody {
     designation: String,
     #[serde(default)]
     generated: bool,
+    #[serde(default)]
+    preview: MetaPreview,
+}
+
+/// The preview of a body, as far as the library's strip needs it.
+#[derive(Deserialize, Default)]
+struct MetaPreview {
+    #[serde(default)]
+    colours: Vec<[f32; 3]>,
 }
 
 /// The names given to a system's bodies, by body id (`names.json`).
@@ -152,6 +161,14 @@ pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
             .map(|b| crate::api::BodySummary {
                 id: b.id.clone(),
                 designation: b.designation.clone(),
+                kind: b.kind.clone(),
+                body_type: b.preset.clone(),
+                colour: b
+                    .preview
+                    .colours
+                    .first()
+                    .copied()
+                    .unwrap_or([0.5, 0.5, 0.5]),
                 generated: b.generated,
             })
             .collect(),
