@@ -34,6 +34,15 @@ export interface SystemPlanet {
   equilibrium_k: number;
   /** How many moons it has. */
   moons: number;
+  /** Its moons, nearest first: their ids and names (given, else designations). */
+  moonList: { id: string; name: string }[];
+  /** Mean starlight, relative to Earth's. */
+  flux_earth: number;
+  /** Surface gravity (cloud tops for a giant), relative to Earth's. */
+  gravity: number;
+  /** Its day, hours, and whether it is locked to its star (its day its year). */
+  day_hours: number;
+  locked: boolean;
   /** Whether its maps exist. */
   generated: boolean;
   /** What the viewer draws before its maps exist. */
@@ -111,6 +120,14 @@ export function systemStarView(
       year_days: body.orbit.period_days,
       equilibrium_k: body.surroundings.equilibrium_k,
       moons: system.bodies.filter((b) => b.parent === body.id).length,
+      moonList: system.bodies
+        .filter((b) => b.parent === body.id)
+        .sort((a, b) => a.orbit.semi_major_axis_km - b.orbit.semi_major_axis_km)
+        .map((b) => ({ id: b.id, name: names[b.id] ?? b.designation })),
+      flux_earth: body.surroundings.flux_earth,
+      gravity: body.physical.gravity,
+      day_hours: body.spin.period_hours,
+      locked: body.spin.locked,
       generated: body.generated,
       preview: body.preview,
     })),

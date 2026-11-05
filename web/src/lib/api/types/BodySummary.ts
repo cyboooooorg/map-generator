@@ -24,4 +24,10 @@ generated: boolean,
  * Its orbit's semi-major axis, AU: round the star for a planet, round
  * its planet for a moon (0 when the system file does not give it).
  */
-orbit_au: number, };
+orbit_au: number, 
+/**
+ * Its orbit's eccentricity, and the longitude of its periapsis
+ * (the node's longitude plus the argument of periapsis, degrees,
+ * 0 to 360), for the library's orrery (0 when not given).
+ */
+eccentricity: number, periapsis_deg: number, };
