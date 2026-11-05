@@ -4,6 +4,7 @@
 // draws a world's giants, each a sphere of its preview's colour on its
 // orbit.
 import type { Body } from './api/types/Body';
+import type { Preview } from './api/types/Preview';
 import type { GiantSystem } from './api/types/GiantSystem';
 import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
@@ -45,6 +46,8 @@ export interface SystemPlanet {
   locked: boolean;
   /** Whether its maps exist. */
   generated: boolean;
+  /** What the viewer draws before its maps exist. */
+  preview: Preview;
 }
 
 /**
@@ -147,6 +150,7 @@ export function systemStarView(
       day_hours: body.spin.period_hours,
       locked: body.spin.locked,
       generated: body.generated,
+      preview: body.preview,
     })),
     selected: all.findIndex((b) => b.id === planet.id),
   };

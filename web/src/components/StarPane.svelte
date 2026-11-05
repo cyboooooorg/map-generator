@@ -172,6 +172,8 @@
 
   $effect(() => view?.setStar(star, omega, giantList, selected));
   $effect(() => view?.setPlanetMaps(maps ?? []));
+  // Planets not generated yet wear their preview (belts, land, caps).
+  $effect(() => view?.setPlanetPreviews(planets?.map((p) => (p.generated ? null : p.preview)) ?? []));
 
   /** The planet under the pointer, by index, while its card is open unpinned. */
   let hovered = $state<number | null>(null);
