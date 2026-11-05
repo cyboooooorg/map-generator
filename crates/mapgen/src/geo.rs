@@ -13,6 +13,29 @@ pub struct Grid {
     pub circumference_km: f32,
 }
 
+/// The neighbour distances of every row of a grid (see
+/// [`Grid::neighbour_steps`]).
+pub struct NeighbourSteps {
+    grid: Grid,
+    /// Per row, the distances of its neighbours in [`Grid::neighbours`]'
+    /// order (the first 5 only on the polar rows).
+    rows: Vec<[f32; 8]>,
+}
+
+impl NeighbourSteps {
+    /// The same neighbours and distances as [`Grid::neighbours`]`(x, y)`,
+    /// bit for bit: a pixel's distances depend only on its row.
+    #[inline]
+    pub fn around(&self, x: u32, y: u32) -> impl Iterator<Item = (u32, u32, f32)> + '_ {
+        let i = self.grid.index(x, y);
+        let w = self.grid.width as usize;
+        self.grid
+            .neighbour_indices(i)
+            .zip(self.rows[y as usize])
+            .map(move |(j, d)| ((j % w) as u32, (j / w) as u32, d))
+    }
+}
+
 impl Grid {
     pub fn pixel_count(&self) -> usize {
         (self.width * self.height) as usize
@@ -42,7 +65,8 @@ impl Grid {
     /// The row-major indices of the same neighbours as
     /// [`Grid::neighbours`] (8, wrapping in longitude, none off the poles),
     /// without their distances: for the passes that only need which pixels
-    /// touch.
+    /// touch. Unrolled into a fixed array, in the same order (the row
+    /// above west to east, west and east, the row below).
     #[inline]
     pub fn neighbour_indices(&self, i: usize) -> impl Iterator<Item = usize> {
         let (w, h) = (self.width as usize, self.height as usize);
@@ -51,19 +75,40 @@ impl Grid {
             if x == 0 { w - 1 } else { x - 1 },
             if x + 1 == w { 0 } else { x + 1 },
         );
-        let rows = [
-            (y > 0).then(|| y - 1),
-            Some(y),
-            (y + 1 < h).then_some(y + 1),
-        ];
-        rows.into_iter().enumerate().flat_map(move |(k, row)| {
-            row.into_iter().flat_map(move |ny| {
-                let base = ny * w;
-                // The centre of the middle row is the pixel itself.
-                let columns: &[usize] = if k == 1 { &[0, 2] } else { &[0, 1, 2] };
-                columns.iter().map(move |&c| base + [west, x, east][c])
+        let mut out = [0usize; 8];
+        let mut n = 0;
+        if y > 0 {
+            let base = (y - 1) * w;
+            out[..3].copy_from_slice(&[base + west, base + x, base + east]);
+            n = 3;
+        }
+        let base = y * w;
+        out[n] = base + west;
+        out[n + 1] = base + east;
+        n += 2;
+        if y + 1 < h {
+            let base = (y + 1) * w;
+            out[n..n + 3].copy_from_slice(&[base + west, base + x, base + east]);
+            n += 3;
+        }
+        out.into_iter().take(n)
+    }
+
+    /// The distances in km to the 8 neighbours of every pixel of each row,
+    /// as [`Grid::neighbours`] gives them: for the passes that visit every
+    /// pixel, which then compute no cosine or square root per pixel (see
+    /// [`NeighbourSteps::around`]).
+    pub fn neighbour_steps(&self) -> NeighbourSteps {
+        let rows = (0..self.height)
+            .map(|y| {
+                let mut row = [0.0f32; 8];
+                for (k, (_, _, d)) in self.neighbours(0, y).enumerate() {
+                    row[k] = d;
+                }
+                row
             })
-        })
+            .collect();
+        NeighbourSteps { grid: *self, rows }
     }
 
     /// The 8 neighbours of `(x, y)` with their distance in km. Longitude
@@ -210,5 +255,28 @@ mod tests {
         assert!(d[g.index(5, 10)] > d[g.index(2, 10)]);
         let capped = g.distance_to(&source, 1500.0);
         assert_eq!(capped[g.index(20, 10)], 1500.0);
+    }
+
+    #[test]
+    fn neighbour_steps_match_neighbours_bit_for_bit() {
+        let g = Grid {
+            width: 37,
+            height: 19,
+            circumference_km: 40_075.0,
+        };
+        let steps = g.neighbour_steps();
+        for y in 0..g.height {
+            for x in 0..g.width {
+                let a: Vec<_> = g
+                    .neighbours(x, y)
+                    .map(|(nx, ny, d)| (nx, ny, d.to_bits()))
+                    .collect();
+                let b: Vec<_> = steps
+                    .around(x, y)
+                    .map(|(nx, ny, d)| (nx, ny, d.to_bits()))
+                    .collect();
+                assert_eq!(a, b, "({x}, {y})");
+            }
+        }
     }
 }
