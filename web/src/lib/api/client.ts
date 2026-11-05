@@ -119,14 +119,14 @@ export function parseSystemBody(id: string): { system: string; body: string } | 
   return match ? { system: match[1]!, body: match[2]! } : null;
 }
 
-/** Where a body's files are served: a world's under `/worlds/`, a system body's under `/systems/`. */
+/** Where a body's files are served: `/systems/<system>/bodies/<body>` (see systemBodyId). */
 export function bodyFiles(id: string): string {
-  return parseSystemBody(id) ? `/${bodyPath(id)}` : `/worlds/${bodyPath(id)}`;
+  return `/${bodyPath(id)}`;
 }
 
-/** Where a body's routes are: `/api/worlds/<id>`, or `/api/systems/<system>/bodies/<body>`. */
+/** Where a body's routes are: `/api/systems/<system>/bodies/<body>`. */
 export function bodyApi(id: string): string {
-  return parseSystemBody(id) ? `/api/${bodyPath(id)}` : `/api/worlds/${bodyPath(id)}`;
+  return `/api/${bodyPath(id)}`;
 }
 
 /**

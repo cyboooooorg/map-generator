@@ -26,29 +26,11 @@
   import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
-  import { presetName } from '../lib/i18n/names.svelte';
-  import MoonPane from './MoonPane.svelte';
-  import { bodyFileName, bodyKey, moonsOf, parseBodyKey, systemBodies, type Body } from '../lib/moons';
-  import {
-    bodyTurn,
-    giantSystemSky,
-    halo,
-    joinSkies,
-    moonSky,
-    moonSpinHours,
-    moonSystemSky,
-    orbitLoops,
-    planetSky,
-    siblingOrbitLoops,
-    siblingSky,
-    spinAxes,
-    sunOnMoon,
-  } from '../lib/skyBodies';
+  import { bodyFileName } from '../lib/moons';
+  import type { Moon } from '../lib/api/types/Moon';
   import { systemSky } from '../lib/systemSky';
   import { systemStarView } from '../lib/systemStar';
-  import type { GiantSystem } from '../lib/api/types/GiantSystem';
-  import type { StarInfo } from '../lib/api/types/StarInfo';
-  import { periapsisAngle, SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
+  import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -250,95 +232,27 @@
 
   const worldId = $derived(world.id);
   const meta = $derived(world.meta);
-  /** The moons of the world loaded (whichever body is shown), nearest first. */
-  const moons = $derived(moonsOf(world.worldMeta));
-  const moonSystem = $derived(world.worldMeta?.moons ?? null);
-  /** The moon shown, or null for the world itself. */
-  const shownMoon = $derived(world.moon === null ? null : (moons[world.moon - 1] ?? null));
-  /** The bodies of the world's system the planet view can show, in the system's order. */
-  const bodies = $derived(systemBodies(world.worldMeta));
-  /** Whether the body shown is the giant or one of its other moons, not the world's own system. */
-  const onHostSystem = $derived(world.body.kind === 'host' || world.body.kind === 'sibling');
-  /** Shows a body of the world's system in the planet view. */
-  function showBody(body: Body): void {
-    subject = 'planet';
-    world.showBody(body);
-  }
-  /** `U`: each body of the system in turn (the star aside, on `O`). */
+  /** `U`: each body of the family of the planet shown in turn (the star aside, on `O`). */
   function stepBody(): void {
-    if (sys && sysBody) {
-      // The family of the planet shown: the planet and its moons.
-      const planet = sysBody.parent ?? sysBody.id;
-      const family = sys.bodies.filter((b) => b.id === planet || b.parent === planet);
-      const at = family.findIndex((b) => b.id === sysBody.id);
-      subject = 'planet';
-      world.showSystemBody(family[(at + 1) % family.length]!.id);
-      return;
-    }
-    if (bodies.length < 2) return;
-    const at = bodies.findIndex((b) => bodyKey(b) === bodyKey(world.body));
-    showBody(bodies[(at + 1) % bodies.length]!);
+    if (!sys || !sysBody) return;
+    const planet = sysBody.parent ?? sysBody.id;
+    const family = sys.bodies.filter((b) => b.id === planet || b.parent === planet);
+    const at = family.findIndex((b) => b.id === sysBody.id);
+    subject = 'planet';
+    world.showSystemBody(family[(at + 1) % family.length]!.id);
   }
   /** The body picker's choice: the star, or a body of the system. */
   function pickBody(key: string): void {
     if (key === 'star') {
-      if (worldId || sys) subject = 'star';
+      if (sys) subject = 'star';
       return;
     }
-    if (sys) {
-      subject = 'planet';
-      world.showSystemBody(key);
-      return;
-    }
-    const body = parseBodyKey(key);
-    if (body) showBody(body);
+    subject = 'planet';
+    world.showSystemBody(key);
   }
-  /** A body's line in the picker: its name, its role, and a moon's size. */
-  function bodyOption(body: Body): string {
-    const km = (r: number) => `${formatUpTo(r, r < 100 ? 1 : 0)}${t.format.unitSpace}km`;
-    const host = world.worldMeta?.host;
-    switch (body.kind) {
-      case 'world':
-        return t.viewer.bodyOption({ name: world.worldId ?? '', role: t.viewer.roleWorld });
-      case 'moon': {
-        const moon = moons[body.n - 1];
-        const name = moon?.name ?? '';
-        return moon ? t.moons.option({ name, size: km(moon.radius_km) }) : name;
-      }
-      case 'host':
-        return t.viewer.bodyOption({
-          name: t.starView.giantKinds[host?.giant.kind ?? 'gas'] ?? '',
-          role: t.viewer.roleGiant,
-        });
-      case 'sibling': {
-        const sibling = host?.siblings?.[body.n - 1];
-        const name = t.viewer.skySibling({ index: body.n });
-        return sibling ? t.moons.option({ name, size: km(sibling.radius_km) }) : name;
-      }
-    }
-  }
-  // Only the world has a hex grid (the server resamples worlds only).
+  // Only planets have a hex grid.
   $effect(() => {
-    if (world.body.kind !== 'world') hexOn = false;
-  });
-  /**
-   * The system the star view shows: the previous world's while the next
-   * one's metadata loads, so the view does not flash the Sun's in between.
-   */
-  let shownSystem: { star: StarInfo; omega: number; giants: GiantSystem | null } | null = null;
-  const system = $derived.by(() => {
-    // A planetary system: the planet shown (or the moon's), the others as giants.
-    if (sysStar) return { star: sysStar.star, omega: sysStar.omega, giants: sysStar.giants };
-    // The world's, also while one of its moons is shown.
-    const planet = world.worldMeta ?? (world.body.kind === 'world' ? meta : null);
-    if (planet) {
-      shownSystem = {
-        star: withOrbitDefaults(planet.star ?? SUN_SYSTEM),
-        omega: periapsisAngle(planet.seed),
-        giants: planet.giants ?? null,
-      };
-    }
-    return shownSystem ?? { star: withOrbitDefaults(SUN_SYSTEM), omega: 0, giants: null };
+    if (sysBody?.kind !== 'planet') hexOn = false;
   });
   const epochs = $derived(meta ? epochRange(meta) : null);
   /** The slider's stops, from the past (left) to the future (right). */
@@ -676,45 +590,8 @@
   $effect(() => view?.setPath(path));
   /** A tidally locked world: its star stays above the map's centre (longitude 180°, the equator). */
   const locked = $derived(meta?.star?.tidally_locked ?? false);
-  /**
-   * The clock of the moons: their planet's year, the time on their
-   * orbits (the season, its star's place in the planet's sky as the
-   * planet view has it, and the days past it), in moonDirection's terms.
-   */
-  /**
-   * The planet's own day, hours: its rotation, or its orbit round the
-   * giant it is locked to.
-   */
-  const planetDayHours = $derived.by(() => {
-    const planet = world.worldMeta;
-    if (planet?.host) return planet.host.period_days * 24;
-    return planet?.moons?.planet_day_hours ?? 24;
-  });
-  /**
-   * The longitude under the sun on the planet, degrees: the Sun longitude
-   * slider, the planet turning on itself from there at its own day as the
-   * orbit time goes (the sun going west), so that its day passes while the
-   * moons go round; still on a planet locked to its star.
-   */
-  const planetHour = $derived.by(() => {
-    const planet = world.worldMeta;
-    if (planet?.star?.tidally_locked) return 180;
-    const yearDays = planet?.star?.year_days ?? 365.25;
-    const turned = sunLongitude - (bodyTurn(orbitDays, planetDayHours, yearDays) * 180) / Math.PI;
-    return ((turned % 360) + 360) % 360;
-  });
-  const moonClock = $derived.by(() => {
-    const planet = world.worldMeta;
-    const yearDays = planet?.star?.year_days ?? 365.25;
-    const planetLocked = planet?.star?.tidally_locked ?? false;
-    return {
-      yearDays,
-      season: (planetLocked ? 0 : season) + orbitDays / yearDays,
-      longitude: (planetHour * Math.PI) / 180,
-    };
-  });
   $effect(() => {
-    const id = world.worldId;
+    const id = world.systemId;
     untrack(() => {
       if (id === orbitWorld) return;
       orbitWorld = id;
@@ -722,11 +599,6 @@
       orbitsPlaying = false;
     });
   });
-  /**
-   * The period the orbit slider spans: of the moon shown, or of the largest
-   * moon; in a giant's system (the world a giant's moon), of the sibling
-   * shown, else of the world's orbit round the giant.
-   */
   // A planetary system (docs/system-spec.md): every body placed from the
   // orbits and spins its file stores (lib/systemSky.ts), on a clock of
   // days: the season of the shown body's planet and the orbit time past
@@ -737,6 +609,12 @@
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
   /** The star view of a planetary system (lib/systemStar.ts). */
   const sysStar = $derived(sys && sysPlanet ? systemStarView(sys, sysPlanet) : null);
+  /** What the star view shows: the system round the planet shown (or the moon's), the Sun's before one loads. */
+  const system = $derived(
+    sysStar
+      ? { star: sysStar.star, omega: sysStar.omega, giants: sysStar.giants }
+      : { star: withOrbitDefaults(SUN_SYSTEM), omega: 0, giants: null },
+  );
   /** The moons of the planet shown, for the star view. */
   const sysMoons = $derived(
     sys && sysPlanet
@@ -841,203 +719,41 @@
     const within = (status.step ?? 0) / Math.max(status.steps ?? 1, 1);
     return ((status.body_step ?? 1) - 1 + within) / bodies;
   });
+  /** The period the orbit slider spans: a moon's orbit; a planet's innermost moon's, else ten of its days. */
   const orbitPeriod = $derived.by(() => {
-    if (sys && sysBody) {
-      // A moon's orbit; a planet's innermost moon's, else ten of its days.
-      if (sysBody.parent) return sysBody.orbit.period_days;
-      const moon = sys.bodies.find((b) => b.parent === sysBody.id);
-      return moon?.orbit.period_days ?? (10 * sysBody.spin.period_hours) / 24;
-    }
-    if (shownMoon) return shownMoon.period_days;
-    const host = world.worldMeta?.host;
-    if (host) {
-      const body = world.body;
-      const sibling = body.kind === 'sibling' ? host.siblings?.[body.n - 1] : undefined;
-      return sibling?.period_days ?? host.period_days;
-    }
-    const largest = moons.reduce<(typeof moons)[number] | null>(
-      (best, m) => (m.migration !== 'locked' && (!best || m.radius_km > best.radius_km) ? m : best),
-      null,
-    );
-    return largest?.period_days ?? null;
+    if (!sys || !sysBody) return null;
+    if (sysBody.parent) return sysBody.orbit.period_days;
+    const moon = sys.bodies.find((b) => b.parent === sysBody.id);
+    return moon?.orbit.period_days ?? (10 * sysBody.spin.period_hours) / 24;
   });
-  // On a moon, the sun stands where the moon's place on its orbit puts it,
-  // at the latitude the planet's season and tilt give it (the moon's orbit
-  // inclined to the planet's equator), not the moon's own tilt.
-  const moonSun = $derived(
-    shownMoon && world.moon !== null
-      ? sunOnMoon(
-          shownMoon,
-          world.moon - 1,
-          moonClock.season,
-          moonClock.yearDays,
-          moonClock.longitude,
-          world.worldMeta?.star?.tidally_locked ? 0 : (world.worldMeta?.axial_tilt_deg ?? 0),
-        )
-      : null,
-  );
-  // The latitude under the sun: on a moon, where its orbit puts it (see moonSun).
-  const declination = $derived(
-    moonSun?.latitudeDeg ?? (meta?.axial_tilt_deg ?? 23.44) * Math.sin(2 * Math.PI * season),
-  );
+  /** The sun's direction over the body shown, from its system: longitude and latitude, degrees. */
+  const sunPlace = $derived.by(() => {
+    const dir = sysSky?.sun;
+    if (!dir) return null;
+    return {
+      longitudeDeg: (Math.atan2(dir[0], dir[2]) * 180) / Math.PI,
+      latitudeDeg: (Math.asin(Math.max(-1, Math.min(1, dir[1]))) * 180) / Math.PI,
+    };
+  });
+  // The latitude under the sun, as the system places it.
+  const declination = $derived(sunPlace?.latitudeDeg ?? 0);
   $effect(() => {
-    const sysSun = sysSky?.sun ?? null;
     view?.setLighting(
       !sun
         ? { kind: 'headlight' }
-        : sysSun
-          ? {
-              kind: 'sun',
-              season,
-              longitudeDeg: (Math.atan2(sysSun[0], sysSun[2]) * 180) / Math.PI,
-              axialTiltDeg: 0,
-              latitudeDeg: (Math.asin(Math.max(-1, Math.min(1, sysSun[1]))) * 180) / Math.PI,
-            }
-          : moonSun !== null
-          ? {
-              kind: 'sun',
-              season,
-              longitudeDeg: moonSun.longitudeDeg,
-              axialTiltDeg: 0,
-              latitudeDeg: moonSun.latitudeDeg,
-            }
+        : sunPlace
+          ? { kind: 'sun', season, longitudeDeg: sunPlace.longitudeDeg, axialTiltDeg: 0, latitudeDeg: sunPlace.latitudeDeg }
           : locked
             ? { kind: 'sun', season: 0, longitudeDeg: 180, axialTiltDeg: 0 }
-            : {
-                kind: 'sun',
-                season,
-                // On a body of the planet's own: the planet's hour; else (the
-                // giant, its other moons) the slider's.
-                longitudeDeg: onHostSystem ? sunLongitude : planetHour,
-                axialTiltDeg: meta?.axial_tilt_deg ?? 23.44,
-              },
+            : { kind: 'sun', season, longitudeDeg: sunLongitude, axialTiltDeg: meta?.axial_tilt_deg ?? 23.44 },
     );
   });
-  // The other bodies of the system in the sky, with their phases, and
-  // their shadows on the ground (eclipses): the moons from their planet,
-  // the planet and its other moons from one of them, each with its map.
-  // The sky of the giant a world orbits, or of one of its other moons:
-  // the world and the giant's moons round it, and their orbits.
-  const giantSky = $derived.by(() => {
-    const planet = world.worldMeta;
-    const host = planet?.host;
-    const id = world.worldId;
-    const body = world.body;
-    if (!planet || !host || !id || (body.kind !== 'host' && body.kind !== 'sibling')) return null;
-    return giantSystemSky(
-      host,
-      planet.circumference_km / (2 * Math.PI),
-      (host.giant.radius_earth * 40075) / (2 * Math.PI),
-      body.kind === 'host' ? 'host' : body.n - 1,
-      moonClock.season,
-      moonClock.yearDays,
-      bodyTurn(orbitDays, host.giant.rotation_hours, host.period_days),
-      (k) =>
-        worldFile(
-          id,
-          k === 'world'
-            ? 'raw_data/surface.png'
-            : k === 'host'
-              ? 'host/raw_data/surface.png'
-              : `host/siblings/${k + 1}/raw_data/surface.png`,
-          revision,
-        ),
-      { show: hostShow, axialTiltDeg: planet.axial_tilt_deg },
-    );
-  });
-  const sky = $derived.by(() => {
-    const planet = world.worldMeta;
-    if (onHostSystem) return giantSky;
-    if (!planet) return null;
-    const planetRadiusKm = planet.circumference_km / (2 * Math.PI);
-    const planetId = world.worldId;
-    const moonMap = (k: number) =>
-      planetId ? worldFile(planetId, `moons/${k + 1}/raw_data/surface.png`, revision) : null;
-    const { yearDays, season: moonSeason, longitude } = moonClock;
-    if (shownMoon && world.moon !== null) {
-      const map = planetId ? worldFile(planetId, 'raw_data/surface.png', revision) : null;
-      // The planet with its clouds and its air, a grid and its tropics,
-      // by its own switches (Host planet), not the moon's.
-      const cloudFile = planet.layers.clouds?.file;
-      const look = {
-        clouds: planetId && cloudFile ? worldFile(planetId, `raw_data/${cloudFile}`, revision) : null,
-        cloudTint: cloudTint(planet),
-        halo: halo(skyFromWorld(planet)),
-        show: hostShow,
-        axialTiltDeg: planet.axial_tilt_deg,
-      };
-      // The planet turns on itself under its moon as its hour goes (see
-      // planetHour: its frame turns under the moons; a binary's moon turns
-      // with it).
-      return moonSystemSky(moons, world.moon - 1, planetRadiusKm, map, moonMap, moonSeason, yearDays, longitude, look);
-    }
-    // The moon of a giant: the giant hangs over the face the world keeps
-    // towards it (longitude 180°), its bands from its own world in host/.
-    if (world.moon === null && planet.host && world.worldId) {
-      const host = planet.host;
-      const map = worldFile(world.worldId, 'host/raw_data/surface.png', revision);
-      const giant = moonSky(
-        { radius_km: planetRadiusKm, semi_major_axis_km: host.distance_km },
-        (host.giant.radius_earth * 40075) / (2 * Math.PI),
-        map,
-        { show: hostShow, axialTiltDeg: planet.axial_tilt_deg },
-        [0, 0, -1],
-        // It turns on itself (its storms with it) as the orbit slider plays.
-        spinAxes(bodyTurn(orbitDays, host.giant.rotation_hours, host.period_days)),
-      );
-      // The giant's other regular moons beside it, with their phases.
-      const siblings = siblingSky(
-        host.siblings ?? [],
-        planetRadiusKm,
-        host.distance_km,
-        host.period_days,
-        // The orbit slider moves them too.
-        moonClock.season,
-        planet.star?.year_days ?? 365.25,
-        // Each a world of its own (none in worlds made before them: plain disks).
-        (k) => (world.worldId ? worldFile(world.worldId, `host/siblings/${k + 1}/raw_data/surface.png`, revision) : null),
-      );
-      return joinSkies(giant, siblings);
-    }
-    if (world.moon !== null || moons.length === 0) return null;
-    return planetSky(moons, planetRadiusKm, moonSeason, yearDays, longitude, moonMap);
-  });
-  // A moon locked to its planet (or a world locked to its giant) turns
-  // once per orbit against the stars, its planet fixed in its sky: the star
-  // field turns with its orbit, so the other bodies are seen to move against
-  // the stars, not to circle the moon. A moon that is not locked turns once
-  // per day of its own, its planet rising and setting.
+  // The stars turn against the body shown once per day of its own (once
+  // per orbit for a body locked to what it orbits).
   const starsTurn = $derived.by(() => {
-    if (sys && sysBody) {
-      // Once per day of its own against the stars (its orbit, when locked).
-      const period = sysBody.spin.locked ? sysBody.orbit.period_days : sysBody.spin.period_hours / 24;
-      const turns = sysDays / Math.max(period, 1e-6);
-      return -2 * Math.PI * (turns - Math.floor(turns));
-    }
-    const { yearDays, season: moonSeason } = moonClock;
-    const spin = shownMoon && world.moon !== null ? moonSpinHours(shownMoon) : null;
-    const host = world.worldMeta?.host;
-    const body = world.body;
-    // The giant turns once per day of its own, its other moons once per orbit.
-    const period =
-      body.kind === 'host'
-        ? (host?.giant.rotation_hours ?? 0) / 24
-        : body.kind === 'sibling'
-          ? (host?.siblings?.[body.n - 1]?.period_days ?? null)
-          : spin !== null
-            ? spin / 24
-            : shownMoon && world.moon !== null
-              ? shownMoon.period_days
-              : (host?.period_days ?? null);
-    // The planet itself (not a giant's moon): once per day of its own
-    // against the stars, from the hour of its view (see planetHour).
-    if (body.kind === 'world' && !host) {
-      if (world.worldMeta?.star?.tidally_locked) return 0;
-      const turns = (orbitDays * 24) / Math.max(planetDayHours, 1e-3);
-      return -2 * Math.PI * (turns - Math.floor(turns));
-    }
-    if (period === null || period <= 0) return 0;
-    const turns = (moonSeason * yearDays) / period;
+    if (!sysBody) return 0;
+    const period = sysBody.spin.locked ? sysBody.orbit.period_days : sysBody.spin.period_hours / 24;
+    const turns = sysDays / Math.max(period, 1e-6);
     return -2 * Math.PI * (turns - Math.floor(turns));
   });
   // While the orbits play, the camera turns with the stars, so that the
@@ -1046,32 +762,18 @@
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   $effect(() => {
-    const shown = sysSky ?? sky;
-    view?.setSkyBodies(shown?.bodies ?? []);
-    view?.setShadowCasters(shown?.casters ?? []);
+    // The planet in its moon's sky, by its own switches (Host planet).
+    const parent = sysBody?.parent ?? null;
+    const planetTilt = sysPlanet?.spin.axial_tilt_deg ?? 0;
+    view?.setSkyBodies(
+      (sysSky?.bodies ?? []).map((body, k) =>
+        sysSky?.ids[k] === parent ? { ...body, show: hostShow, axialTiltDeg: planetTilt } : body,
+      ),
+    );
+    view?.setShadowCasters(sysSky?.casters ?? []);
   });
   // The moons' orbits in the sky, seen from the body shown.
-  const skyOrbitLoops = $derived.by(() => {
-    if (sysSky) return orbitLines ? sysSky.orbits : [];
-    const planet = world.worldMeta;
-    if (!orbitLines || !planet) return [];
-    if (onHostSystem) return giantSky?.orbits ?? [];
-    if (world.moon === null && planet.host) {
-      return siblingOrbitLoops(
-        planet.host.siblings ?? [],
-        planet.host.distance_km,
-        planet.circumference_km / (2 * Math.PI),
-      );
-    }
-    return orbitLoops(
-      moons,
-      world.moon === null ? null : world.moon - 1,
-      moonClock.season,
-      moonClock.yearDays,
-      moonClock.longitude,
-      planet.circumference_km / (2 * Math.PI),
-    );
-  });
+  const skyOrbitLoops = $derived(orbitLines && sysSky ? sysSky.orbits : []);
   $effect(() => view?.setSkyOrbits(skyOrbitLoops));
   // Follow the bodies of the sky on the screen while their labels show.
   $effect(() => {
@@ -1089,102 +791,27 @@
    * other moons; from a giant's moon world, the giant then its other moons.
    */
   const skyLabelList = $derived.by((): (SkyLabel | null)[] => {
-    if (sys && sysSky) {
-      const km = (v: number) => withUnit(formatInt(v), 'km');
-      return sysSky.ids.map((id) => {
-        const body = sys.bodies.find((b) => b.id === id);
-        if (!body) return null;
-        return {
-          name: world.systemNames[id] ?? body.designation,
-          detail: t.viewer.skyOrbitFacts({
-            radius: km(body.physical.radius_km),
-            orbit: body.parent
-              ? km(body.orbit.semi_major_axis_km)
-              : withUnit(formatUpTo(body.orbit.semi_major_axis_au, 2), t.viewer.au),
-          }),
-        };
-      });
-    }
-    const planet = world.worldMeta;
-    if (!planet || !sky) return [];
+    if (!sys || !sysSky) return [];
     const km = (v: number) => withUnit(formatInt(v), 'km');
-    const moonLabel = (m: (typeof moons)[number]): SkyLabel => ({
-      name: t.viewer.skyMoon({ name: m.name }),
-      detail: t.viewer.skyOrbitFacts({ radius: km(m.radius_km), orbit: km(m.semi_major_axis_km) }),
+    return sysSky.ids.map((id) => {
+      const body = sys.bodies.find((b) => b.id === id);
+      if (!body) return null;
+      return {
+        name: world.systemNames[id] ?? body.designation,
+        detail: t.viewer.skyOrbitFacts({
+          radius: km(body.physical.radius_km),
+          orbit: body.parent
+            ? km(body.orbit.semi_major_axis_km)
+            : withUnit(formatUpTo(body.orbit.semi_major_axis_au, 2), t.viewer.au),
+        }),
+      };
     });
-    if (shownMoon && world.moon !== null) {
-      const self = shownMoon;
-      const planetLabel: SkyLabel = {
-        name: presetName(planet.preset),
-        detail: t.viewer.skyFacts({
-          radius: km(planet.circumference_km / (2 * Math.PI)),
-          distance: km(self.semi_major_axis_km),
-        }),
-      };
-      return [
-        planetLabel,
-        ...moons.flatMap((m) => (m === self ? [] : [moonLabel(m)])),
-      ];
-    }
-    // From the giant or one of its other moons, in giantSystemSky's
-    // order: the giant (from a moon), the world, then the siblings.
-    const body = world.body;
-    if (planet.host && (body.kind === 'host' || body.kind === 'sibling')) {
-      const host = planet.host;
-      const giantLabel: SkyLabel = {
-        name: t.starView.giantKinds[host.giant.kind] ?? '',
-        detail: t.viewer.skyFacts({
-          radius: withUnit(formatUpTo(host.giant.mass_earth / 317.8, 2), 'MJ'),
-          distance: km(body.kind === 'sibling' ? (host.siblings?.[body.n - 1]?.distance_km ?? 0) : 0),
-        }),
-      };
-      const worldLabel: SkyLabel = {
-        name: presetName(planet.preset),
-        detail: t.viewer.skyOrbitFacts({ radius: km(planet.circumference_km / (2 * Math.PI)), orbit: km(host.distance_km) }),
-      };
-      const siblingLabels = (host.siblings ?? []).flatMap((s, k) =>
-        body.kind === 'sibling' && body.n - 1 === k
-          ? []
-          : [
-              {
-                name: t.viewer.skySibling({ index: k + 1 }),
-                detail: t.viewer.skyOrbitFacts({ radius: km(s.radius_km), orbit: km(s.distance_km) }),
-              },
-            ],
-      );
-      return [...(body.kind === 'sibling' ? [giantLabel] : []), worldLabel, ...siblingLabels];
-    }
-    if (world.moon === null && planet.host) {
-      const host = planet.host;
-      return [
-        {
-          name: t.starView.giantKinds[host.giant.kind] ?? '',
-          detail: t.viewer.skyFacts({
-            radius: withUnit(formatUpTo(host.giant.mass_earth / 317.8, 2), 'MJ'),
-            distance: km(host.distance_km),
-          }),
-        },
-        ...(host.siblings ?? []).map((s, k) => ({
-          name: t.viewer.skySibling({ index: k + 1 }),
-          detail: t.viewer.skyOrbitFacts({ radius: km(s.radius_km), orbit: km(s.distance_km) }),
-        })),
-      ];
-    }
-    return moons.map(moonLabel);
-  });
-  /** The heading of the moon panel: a system moon's name, and its designation beside a given one. */
-  const moonTitle = $derived.by((): string | null => {
-    const body = world.shownSystemBody;
-    if (!body || body.kind !== 'moon') return null;
-    const name = world.systemNames[body.id];
-    return name ? `${name} · ${body.designation}` : body.designation;
   });
   const starLabel = $derived.by((): SkyLabel | null => {
-    const star = world.worldMeta?.star;
-    if (!star) return null;
+    if (!sys || !sysPlanet) return null;
     return {
-      name: t.viewer.skyStar({ type: star.type }),
-      detail: t.viewer.skyStarFacts({ distance: withUnit(formatUpTo(star.orbit_au, 2), t.viewer.au) }),
+      name: world.systemNames['star'] ?? `${sys.star.designation} · ${sys.star.type}`,
+      detail: t.viewer.skyStarFacts({ distance: withUnit(formatUpTo(sysPlanet.orbit.semi_major_axis_au, 2), t.viewer.au) }),
     };
   });
 
@@ -1506,9 +1133,6 @@
   {#if subject === 'planet' && skyLabels && skyPositions}
     <SkyLabels positions={skyPositions.bodies} labels={skyLabelList} star={skyPositions.star} {starLabel} />
   {/if}
-  {#if subject === 'planet' && shownMoon && moonSystem}
-    <MoonPane moon={shownMoon} system={moonSystem} world={world.worldId ?? ''} title={moonTitle} />
-  {/if}
   {#if subject === 'star' && (worldId || sys)}
     <StarPane
       kinds={sysStar && sys
@@ -1529,17 +1153,17 @@
       bind:this={starPane}
       star={system.star}
       omega={system.omega}
-      moons={sysMoons ? (sysMoons as unknown as typeof moons) : moons}
-      binary={moonSystem?.binary ?? false}
-      planetRadiusKm={sysPlanet ? sysPlanet.physical.radius_km : (world.worldMeta?.circumference_km ?? 40075) / (2 * Math.PI)}
+      moons={(sysMoons ?? []) as unknown as Moon[]}
+      binary={false}
+      planetRadiusKm={sysPlanet?.physical.radius_km ?? 6371}
       bind:animated={starAnimated}
       bind:distances={starDistances}
       bind:orbit={starOrbit}
       bind:zone={starZone}
       bind:prominences={starProminences}
       giantSystem={system.giants}
-      worldGiant={world.worldMeta?.giant ?? world.worldMeta?.host?.giant ?? null}
-      host={world.worldMeta?.host ?? null}
+      worldGiant={meta?.giant ?? null}
+      host={null}
       bind:giants={starGiants}
     />
   {/if}
@@ -1549,9 +1173,9 @@
       class="body-pick"
       aria-label={t.viewer.body}
       title={t.viewer.bodyHelp}
-      value={subject === 'star' ? 'star' : sys ? (world.systemBody ?? '') : bodyKey(world.body)}
+      value={subject === 'star' ? 'star' : (world.systemBody ?? '')}
       onchange={(e) => pickBody(e.currentTarget.value)}
-      disabled={!worldId && !sys}
+      disabled={!sys}
     >
       {#if sys}
         <option value="star"
@@ -1565,13 +1189,6 @@
               generated: body.generated,
             })}</option
           >
-        {/each}
-      {:else}
-        <option value="star"
-          >{t.viewer.bodyOption({ name: system.star.type, role: t.viewer.roleStar })}</option
-        >
-        {#each bodies as body (bodyKey(body))}
-          <option value={bodyKey(body)}>{bodyOption(body)}</option>
         {/each}
       {/if}
     </select>
@@ -1667,7 +1284,7 @@
           <small class="value">{sunLongitude}°</small>
         </label>
       {/if}
-      {#if sun && orbitPeriod && sky}
+      {#if sun && orbitPeriod && sysSky}
         <label>
           <span title={t.viewer.orbitsHelp}>{t.viewer.orbits}</span>
           <input
@@ -1692,9 +1309,9 @@
           {t.viewer.orbitDay({
             days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
             period: formatNumber(orbitPeriod, orbitPeriod < 10 ? 2 : 1),
-          })}{#if shownMoon}<br />{moonSpinHours(shownMoon) === null
+          })}{#if sysBody?.kind === 'moon'}<br />{sysBody.spin.locked
               ? t.viewer.moonSun
-              : t.viewer.moonSunSpin({ hours: formatNumber(moonSpinHours(shownMoon) ?? 0, 1) })}{/if}
+              : t.viewer.moonSunSpin({ hours: formatNumber(sysBody.spin.period_hours, 1) })}{/if}
         </p>
       {/if}
       <label class="check"><input type="checkbox" bind:checked={atmosphere} /> {t.viewer.atmosphere}</label>
@@ -1718,7 +1335,7 @@
         <input type="checkbox" bind:checked={landContours} disabled={!dataReady} /> {t.viewer.elevationContours}
       </label>
       <label class="check" title={t.viewer.skyLabelsHelp}><input type="checkbox" bind:checked={skyLabels} /> {t.viewer.skyLabels}</label>
-      {#if (shownMoon && world.moon !== null) || (world.worldMeta?.host && world.body.kind !== 'host')}
+      {#if sysBody?.parent}
         <!-- The planet in this body's sky has switches of its own. -->
         <fieldset class="host" title={t.viewer.hostHelp}>
           <legend>{t.viewer.host}</legend>
@@ -1728,7 +1345,7 @@
           <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
         </fieldset>
       {/if}
-      {#if moons.length > 0 || onHostSystem || (world.moon === null && (world.worldMeta?.host?.siblings?.length ?? 0) > 0)}
+      {#if sys && sys.bodies.length > 1}
         <label class="check" title={t.viewer.orbitLinesHelp}>
           <input type="checkbox" bind:checked={orbitLines} /> {t.viewer.orbitLines}
         </label>
@@ -1737,7 +1354,7 @@
         <input type="checkbox" bind:checked={axesShown} /> {t.viewer.spinAxes}
       </label>
       <label class="check">
-        <input type="checkbox" bind:checked={hexOn} disabled={!worldId || world.body.kind !== 'world'} />
+        <input type="checkbox" bind:checked={hexOn} disabled={!worldId || sysBody?.kind !== 'planet'} />
         {t.viewer.hexes}
         {#if hexServerBusy}
           <small class="muted" title={t.viewer.serverBusyHelp}
