@@ -5,11 +5,10 @@
   import { getLocale, t } from '../lib/i18n/index.svelte';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
   import type { BodySummary } from '../lib/api/types/BodySummary';
-  import { systemBodyId } from '../lib/api/client';
   import { formatAgo } from '../lib/format';
   import { presetName } from '../lib/i18n/names.svelte';
   import { loadSetting, saveSetting } from '../lib/settings';
-  import Thumbnail from './Thumbnail.svelte';
+  import SystemOrrery from './SystemOrrery.svelte';
 
   interface Props {
     systems: SystemSummary[];
@@ -85,8 +84,6 @@
       .map(([type, n]) => `${n} ${presetName({ name: type })}`)
       .join(' · ');
   }
-  /** The thumbnail: the first generated planet's map, if any. */
-  const thumbOf = (s: SystemSummary) => s.bodies.find((b) => b.kind === 'planet' && b.generated)?.id ?? null;
 </script>
 
 {#if systems.length === 0}
@@ -137,7 +134,6 @@
   {/if}
   <ul>
     {#each shown as system (system.id)}
-      {@const thumb = thumbOf(system)}
       <li class:selected={system.id === selectedId} class:compared={system.id === compareId}>
         {#if selecting}
           <label class="choose">
@@ -150,11 +146,7 @@
           </label>
         {/if}
         <button class="pick" onclick={() => (selecting ? toggle(system.id) : onSelect(system.id))}>
-          {#if thumb}
-            <Thumbnail id={systemBodyId(system.id, thumb)} revision={system.modified_ms} width={72} height={40} />
-          {:else}
-            <span class="no-thumb" aria-hidden="true"></span>
-          {/if}
+          <SystemOrrery {system} width={72} height={40} />
           <span class="text">
             <strong>{nameOf(system)}</strong>
             <span class="strip" aria-label={t.systemList.stripLabel}>
@@ -199,13 +191,6 @@
     opacity: 0.45;
     outline: 1px dashed var(--muted);
     outline-offset: 1px;
-  }
-  .no-thumb {
-    width: 72px;
-    height: 40px;
-    flex: none;
-    border-radius: 4px;
-    background: radial-gradient(circle at 30% 50%, #fff6d0 0 6px, transparent 7px), #0b0f18;
   }
   .toolbar {
     display: grid;
