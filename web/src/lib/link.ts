@@ -1,7 +1,7 @@
 // Links to a view: the worlds shown, and optionally the camera, the layer,
 // the relief and the sun, in the address's fragment:
 //
-//   #world=<id>&compare=<id>&view=g,<lon>,<lat>,<altitude>&layer=<id>&relief=<0..1>&sun=<season>,<lon>&orbit=<days>&epoch=<Ma>
+//   #world=<id>&compare=<id>&view=g,<lon>,<lat>,<altitude>&layer=<id>&relief=<0..3>&sun=<season>,<lon>&orbit=<days>&epoch=<Ma>
 //
 // `view` is the camera: `g` on the globe (the point under the camera in
 // degrees, and its altitude in planet radii), `m` on the flat map (the
@@ -13,6 +13,7 @@
 // present (negative in the future), absent at the present; each world
 // shows it within its own range. Reading is defensive: a missing, malformed or out-of-range value
 // is ignored, and the rest of the link still applies.
+import { RELIEF_MAX } from './shortcuts';
 import { lonLatToSphere, sphereToLonLat } from './geo';
 import type { CameraState } from './viewer/PlanetView';
 import { LAYER_IDS, type Layer } from './viewer/shaders';
@@ -129,7 +130,7 @@ export function decodeView(params: URLSearchParams): ViewLink {
     view.layer = layer as Layer;
   }
   const relief = number(params.get('relief') ?? undefined);
-  if (relief !== null && relief >= 0 && relief <= 1) {
+  if (relief !== null && relief >= 0 && relief <= RELIEF_MAX) {
     view.relief = relief;
   }
   const sun = params.get('sun');

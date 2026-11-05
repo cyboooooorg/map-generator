@@ -39,11 +39,12 @@ describe('shortcutFor', () => {
 });
 
 describe('stepRelief', () => {
-  it('steps by tenths within [0, 1]', () => {
+  it('steps by tenths within [0, RELIEF_MAX]', () => {
     expect(stepRelief(0, 1)).toBe(0.1);
     expect(stepRelief(0.35, 1)).toBe(0.45);
     expect(stepRelief(0.2, -1)).toBe(0.1);
-    expect(stepRelief(0.95, 1)).toBe(1);
+    expect(stepRelief(0.95, 1)).toBe(1.05);
+    expect(stepRelief(2.95, 1)).toBe(3);
     expect(stepRelief(0.05, -1)).toBe(0);
     expect(stepRelief(0, -1)).toBe(0);
   });
