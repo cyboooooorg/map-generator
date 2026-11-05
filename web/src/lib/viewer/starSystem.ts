@@ -35,14 +35,17 @@ export const STAR_RADIUS = 1;
  * Places distances (AU) on the system schematic, in view units: linear in
  * AU, so the habitable zone and the orbit keep their proportions, starting
  * just outside the star (which is not to scale) and fitting the farthest of
- * the orbit and the zone's outer edge within `span`.
+ * the orbit and the zone's outer edge within `span`. `from` is where the
+ * linear part ends: the world's orbit by default, the habitable zone in a
+ * planetary system (see systemCompressedFrom).
  */
 export function systemScale(
   star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>,
   giants: Pick<Giant, 'orbit_au' | 'eccentricity'>[] = [],
   span = 6,
+  from = compressedFrom(star),
 ): (au: number) => number {
-  const farthest = compressedFrom(star);
+  const farthest = from;
   const linear = (au: number) => STAR_RADIUS * 1.6 + (span * au) / farthest;
   const outer = Math.max(farthest, ...giants.map((g) => g.orbit_au * (1 + g.eccentricity)));
   if (outer <= farthest) return linear;
@@ -56,6 +59,15 @@ export function systemScale(
 /** Where the star view starts compressing distances, AU: just beyond the world's orbit and the habitable zone. */
 export function compressedFrom(star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>): number {
   return Math.max(star.apoapsis_au, star.hz_outer_au) * 1.15;
+}
+
+/**
+ * Where a planetary system's view starts compressing distances, AU: just
+ * beyond the habitable zone. It depends on the star only, so the scale
+ * stays the same whichever planet is selected.
+ */
+export function systemCompressedFrom(star: Pick<StarInfo, 'hz_outer_au'>): number {
+  return star.hz_outer_au * 1.15;
 }
 
 /** View units the farthest giant lies beyond the start of the compression. */
