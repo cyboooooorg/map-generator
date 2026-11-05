@@ -180,6 +180,17 @@ struct Args {
     /// Directory that receives the drawn systems
     #[arg(long, default_value = "systems")]
     systems_dir: PathBuf,
+
+    /// Generates the maps of a body of the system (`c`, `c-1`) and of its
+    /// neighbourhood (a planet and its moons; a moon, its planet and the
+    /// planet's other moons), with --system, --draw-only or --in-system
+    #[arg(long)]
+    body: Option<String>,
+
+    /// The system (its id, in --systems-dir) --body generates in, instead
+    /// of drawing one
+    #[arg(long, requires = "body")]
+    in_system: Option<String>,
 }
 
 /// The planets of `--system`: `type=count` pairs, or `auto`.
@@ -198,10 +209,36 @@ fn parse_planets(text: &str) -> Result<Option<std::collections::BTreeMap<String,
     Ok(Some(planets))
 }
 
-/// Draws a system and writes its system.json (see `--draw-only`).
+/// Generates `body` and its neighbourhood in the system written in `dir`.
+fn generate_body(dir: &std::path::Path, body: &str) -> Result<(), Box<dyn Error>> {
+    let mut last = None;
+    let done = mapgen::system::generate_neighbourhood(dir, body, |p| {
+        if last.as_ref() != Some(&(p.body.clone(), p.step)) {
+            eprintln!(
+                "[{}/{}] {} — {:?} ({}/{})",
+                p.body_step, p.bodies, p.body, p.stage, p.step, p.steps
+            );
+            last = Some((p.body.clone(), p.step));
+        }
+    })?;
+    if done.is_empty() {
+        println!("{body} and its neighbourhood are generated already");
+    } else {
+        println!(
+            "Generated: {} → {}",
+            done.join(", "),
+            dir.join("bodies").display()
+        );
+    }
+    Ok(())
+}
+
+/// Draws a system and writes its system.json (see `--draw-only`); then
+/// generates `body` when given.
 fn draw_system(
     request: mapgen::system::SystemRequest,
     dir: &std::path::Path,
+    body: Option<&str>,
 ) -> Result<(), Box<dyn Error>> {
     use mapgen::system::{BodyKind, draw, system_id, write_system};
     let system = draw(&request, &mut rand::rng())?;
@@ -243,7 +280,10 @@ fn draw_system(
         );
     }
     println!("→ {}", dir.join(&id).join("system.json").display());
-    Ok(())
+    match body {
+        Some(body) => generate_body(&dir.join(&id), body),
+        None => Ok(()),
+    }
 }
 
 /// Builds a clap value parser that accepts an `f32` within `limits`.
@@ -285,7 +325,10 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
             width: Some(args.width),
             height: Some(args.height),
         });
-        return draw_system(request, &args.systems_dir);
+        return draw_system(request, &args.systems_dir, args.body.as_deref());
+    }
+    if let (Some(system), Some(body)) = (&args.in_system, &args.body) {
+        return generate_body(&args.systems_dir.join(system), body);
     }
 
     let request = WorldRequest {
@@ -316,6 +359,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         return draw_system(
             mapgen::system::SystemRequest::Around(request),
             &args.systems_dir,
+            args.body.as_deref(),
         );
     }
     let resolved = request.resolve(&mut rand::rng())?;
