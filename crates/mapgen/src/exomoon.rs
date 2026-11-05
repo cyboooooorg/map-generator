@@ -255,7 +255,8 @@ impl HostGiant {
 }
 
 /// The parameters of sibling `k` (from 0, nearest first) of the world `p`
-/// orbiting `host`, as a world of its own (`host/siblings/<k + 1>/`): a
+/// orbiting `host`, as a world of its own (a moon of the giant in the
+/// world's system, see `crate::system`): a
 /// rocky or icy moon of its size, seeded from the giant's seed, on the
 /// world's scale.
 pub fn sibling_params(p: &WorldParams, host: &HostGiant, k: usize) -> WorldParams {

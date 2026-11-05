@@ -608,7 +608,10 @@ mod tests {
         let done = crate::system::generate_neighbourhood(&dir, &planet, |_| {}).unwrap();
         assert_eq!(done.len(), 3);
         for (k, moon) in system.moons.iter().enumerate() {
-            let raw = dir.join("bodies").join(format!("{planet}-{}", k + 1)).join("raw_data");
+            let raw = dir
+                .join("bodies")
+                .join(format!("{planet}-{}", k + 1))
+                .join("raw_data");
             let meta: WorldMetadata = read_metadata(&raw).unwrap();
             assert_eq!(meta.planet_type, "icy-moon");
             assert_eq!(meta.seed, moon.seed);

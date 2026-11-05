@@ -47,7 +47,7 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// without overlaid lines; version 7 the elevation without the young
 /// impact craters, and its worlds have craters; version 8 the albedo of
 /// fresh craters; version 9 the moons (under `moons` in `world.json`, each
-/// one a world of its own in `moons/<n>/`) and the shape of irregular
+/// one a world of its own, now a body of the system) and the shape of irregular
 /// bodies; version 10 the star's metallicity and the giant planets of the
 /// system (under `giants`), whose mass sets the crater rate.
 pub const FORMAT_VERSION: u32 = 10;
