@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
+import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -63,6 +63,22 @@ describe('star view', () => {
     // A close giant leaves the scale linear.
     expect(systemScale(star, [{ orbit_au: 0.05, eccentricity: 0 }])(1)).toBeCloseTo(plain(1), 10);
     expect(giantMarkerSize(11.2)).toBeGreaterThan(giantMarkerSize(3.9));
+  });
+
+  it('keeps one scale for a planetary system, whichever planet is selected', () => {
+    const planets = [
+      { orbit_au: 0.4, eccentricity: 0.1 },
+      { orbit_au: 1.2, eccentricity: 0.02 },
+      { orbit_au: 30, eccentricity: 0.05 },
+    ];
+    const hz = { hz_outer_au: 1.7 };
+    const from = systemCompressedFrom(hz);
+    const inner = systemScale({ ...hz, apoapsis_au: 0.44 }, planets, 6, from);
+    const outer = systemScale({ ...hz, apoapsis_au: 31.5 }, planets, 6, from);
+    for (const au of [0.1, 0.4, 1, 1.7, 5, 30]) expect(outer(au)).toBeCloseTo(inner(au), 10);
+    // Planets all within the zone: linear, with no compressed part.
+    const close = systemScale({ ...hz, apoapsis_au: 1 }, planets.slice(0, 2), 6, from);
+    expect(close(1) - close(0.5)).toBeCloseTo(close(1.5) - close(1), 10);
   });
 
   it('gives orbital speeds by the vis-viva equation', () => {

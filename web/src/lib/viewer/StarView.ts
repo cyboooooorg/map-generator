@@ -54,6 +54,7 @@ import {
   prominences,
   STAR_RADIUS,
   starSurface,
+  systemCompressedFrom,
   systemScale,
 } from './starSystem';
 
@@ -72,8 +73,13 @@ export interface SystemLabels {
   outer: { x: number; y: number } | null;
   /** The planet now, while the live distances are off (its name and mean distance label it). */
   self: { x: number; y: number } | null;
-  /** The giant planets now, by letter, with their mean distance from the star, AU (empty when hidden). */
-  giants: { x: number; y: number; name: string; au: number }[];
+  /**
+   * The giant planets now (every planet of a planetary system, the
+   * selected one included), with their mean distance from the star and
+   * their distance now (`distance`), AU, and their index in setStar's
+   * `giants` (empty when hidden).
+   */
+  giants: { x: number; y: number; name: string; au: number; distance: number; index: number }[];
 }
 
 /** Shortest time between two animated frames, ms (thirty frames a second at most). */
@@ -82,6 +88,12 @@ const FRAME_MS = 1000 / 30;
 const MAX_STEP_S = 0.1;
 /** Seconds of animation for one orbit of the planet. */
 export const YEAR_S = 60;
+/**
+ * Seconds of animation for one orbit of a planetary system's innermost
+ * planet: the whole system runs on that clock, whichever planet is
+ * selected.
+ */
+export const SYSTEM_INNER_YEAR_S = 10;
 /** Mean anomaly of the planet when the animation clock reads zero, radians. */
 const START_ANOMALY = 0.6;
 /** Width of the glow quad, in star radii. */
@@ -119,8 +131,11 @@ export class StarView {
   private readonly apsides: Mesh<SphereGeometry, MeshBasicMaterial>[];
   /** Called after each frame with the labelled points, while distances are shown. */
   onLabels: (labels: SystemLabels | null) => void = () => {};
-  /** Called on each animated frame with the share of the year elapsed since the periapsis (0 to 1). */
-  onClock: (yearFraction: number) => void = () => {};
+  /**
+   * Called on each animated frame with the share of the year elapsed since
+   * the periapsis (0 to 1) and the Earth days simulated since the start.
+   */
+  onClock: (yearFraction: number, days: number) => void = () => {};
   /** Called with a planet's index (in setStar's `giants`) when it is clicked; null ignores clicks. */
   onPickPlanet: ((index: number) => void) | null = null;
   /** Where a press started, to tell a click from a drag. */
@@ -132,6 +147,8 @@ export class StarView {
   private readonly giantGroup = new Group();
   private giants: Giant[] = [];
   private giantMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
+  /** The giants' distances from the star now, AU (see placeGiants). */
+  private giantDistances: number[] = [];
   private giantsOn = true;
   /** How far the system reaches from the star, view units (see resetView). */
   private reach = 6.8;
@@ -139,6 +156,22 @@ export class StarView {
   private userMoved = false;
   private moonOrbits: MoonOrbit[] = [];
   private moonMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
+  /**
+   * A planetary system's selected planet, by its index in `giants`, or
+   * null for a lone world's view. With one, every planet is drawn as a
+   * giant, on a scale and a clock that do not depend on the selection.
+   */
+  private selected: number | null = null;
+  /** The planets of the system shown, to restart the clock only when they change. */
+  private systemKey = '';
+  /** Earth days per second of animation, in a planetary system, at speed ×1. */
+  private daysPerSecond = 0;
+  /** Seconds of the system's clock (the animation's time times the speed). */
+  private orbitTime = 0;
+  /** How fast a planetary system's clock runs, a factor of its pace (see setSpeed). */
+  private speed = 1;
+  /** Where the distances start being compressed, AU. */
+  private from = 1;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true });
@@ -158,7 +191,7 @@ export class StarView {
       const at = this.pressAt;
       this.pressAt = null;
       if (!at || !this.onPickPlanet || Math.hypot(event.clientX - at.x, event.clientY - at.y) > 5) return;
-      const index = this.planetAt(event.clientX, event.clientY);
+      const index = this.pickPlanet(event.clientX, event.clientY);
       if (index !== null) this.onPickPlanet(index);
     });
 
@@ -264,13 +297,28 @@ export class StarView {
 
   /**
    * Shows a world's star and system; `omega` orients the orbit's periapsis
-   * (radians); `giants` are the other planets of the system.
+   * (radians); `giants` are the other planets of the system. In a
+   * planetary system, `giants` lists every planet and `selected` is the
+   * index of the one `info` describes: it keeps its orbit, its apsides and
+   * its moons, on its own marker, while the scale, the clock and the
+   * camera stay as they are when the selection changes.
    */
-  setStar(info: StarInfo, omega = 0, giants: Giant[] = []): void {
-    // Another system: its planet starts its orbit from the same point.
-    if (this.info && (this.info.type !== info.type || this.info.orbit_au !== info.orbit_au || this.omega !== omega)) {
-      this.time = 0;
+  setStar(info: StarInfo, omega = 0, giants: Giant[] = [], selected: number | null = null): void {
+    const system = selected !== null && selected >= 0 && selected < giants.length;
+    const key = system ? `${info.type} ${giants.map((g) => `${g.orbit_au}:${g.eccentricity}:${g.phase}`).join(' ')}` : '';
+    if (system) {
+      // Another system: its planets start from their drawn places.
+      if (key !== this.systemKey) this.time = this.orbitTime = 0;
+    } else if (this.info && (this.systemKey !== '' || this.info.type !== info.type || this.info.orbit_au !== info.orbit_au || this.omega !== omega)) {
+      // Another system: its planet starts its orbit from the same point.
+      this.time = this.orbitTime = 0;
     }
+    this.systemKey = key;
+    this.selected = system ? selected : null;
+    this.daysPerSecond = system ? Math.min(...giants.map((g) => g.year_days)) / SYSTEM_INNER_YEAR_S : 0;
+    this.planet.visible = !system;
+    // The selected planet's moons circle its own marker, as much larger as it is.
+    this.moonGroup.scale.setScalar(system ? giantMarkerSize(giants[selected]!.radius_earth) / PLANET_MARKER : 1);
     this.info = info;
     this.omega = omega;
     const u = this.star.material.uniforms;
@@ -288,11 +336,13 @@ export class StarView {
     // Brighter stars glow more, within bounds.
     this.glow.material.uniforms['uStrength']!.value = Math.min(1.4, 0.6 + 0.12 * Math.log10(info.luminosity + 1e-4) + 0.5);
 
-    const at = systemScale(info, giants);
+    this.from = system ? systemCompressedFrom(info) : compressedFrom(info);
+    const at = systemScale(info, giants, 6, this.from);
     this.at = at;
     this.giants = giants;
-    this.buildGiants(info);
-    const reach = Math.max(at(compressedFrom(info) / 1.15), ...giants.map((g) => at(g.orbit_au * (1 + g.eccentricity))));
+    this.buildGiants();
+    const inner = system ? info.hz_outer_au : compressedFrom(info) / 1.15;
+    const reach = Math.max(at(inner), ...giants.map((g) => at(g.orbit_au * (1 + g.eccentricity))));
     // A system that reaches further (or less far) is fitted again, unless
     // the user has moved the camera since the last fit.
     const refit = reach !== this.reach && !this.userMoved;
@@ -355,13 +405,15 @@ export class StarView {
   /** Places the moons at the animation's time, and the planet around the barycentre of a binary. */
   private placeMoons(): void {
     this.moonGroup.position.copy(this.planet.position);
+    // In a planetary system, the moons run on the system's clock.
+    const time = this.selected !== null ? this.orbitTime : this.time;
     this.moonOrbits.forEach((orbit, k) => {
-      const angle = orbit.phase + this.time * orbit.speed;
+      const angle = orbit.phase + time * orbit.speed;
       const local = new Vector3(Math.cos(angle) * orbit.radius, 0, -Math.sin(angle) * orbit.radius);
       local.applyAxisAngle(new Vector3(1, 0, 0), orbit.inclination);
       this.moonMarkers[k]?.position.copy(local);
       if (orbit.swing > 0) {
-        this.planet.position.addScaledVector(local, -orbit.swing);
+        this.planet.position.addScaledVector(local, -orbit.swing * this.moonGroup.scale.x);
       }
     });
   }
@@ -423,7 +475,7 @@ export class StarView {
    * own colour), their disks and rings, and a dashed circle where the
    * distances start being compressed.
    */
-  private buildGiants(info: StarInfo): void {
+  private buildGiants(): void {
     for (const child of [...this.giantGroup.children]) {
       child.traverse((object) => {
         const mesh = object as Mesh<BufferGeometry, MeshBasicMaterial>;
@@ -433,7 +485,7 @@ export class StarView {
       this.giantGroup.remove(child);
     }
     this.giantMarkers = [];
-    const from = compressedFrom(info);
+    const from = this.from;
     if (this.giants.some((g) => g.orbit_au * (1 + g.eccentricity) > from)) {
       const boundary = new Line(
         new BufferGeometry().setFromPoints(
@@ -487,12 +539,33 @@ export class StarView {
    * year turns twelve times slower).
    */
   private placeGiants(): void {
-    const year = this.info?.year_days ?? 365.25;
     this.giants.forEach((giant, k) => {
-      const mean = giant.phase + this.time * ((2 * Math.PI) / YEAR_S) * (year / giant.year_days);
-      const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, mean);
+      const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, this.giantAnomaly(k));
+      this.giantDistances[k] = giant.orbit_au * distance;
       this.giantMarkers[k]?.position.copy(this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance));
     });
+  }
+
+  /**
+   * Mean anomaly of giant `k` now, radians. In a planetary system, every
+   * planet starts from its drawn place and runs on the system's clock.
+   */
+  private giantAnomaly(k: number): number {
+    const giant = this.giants[k]!;
+    if (this.selected !== null) {
+      return 2 * Math.PI * (giant.phase + (this.orbitTime * this.daysPerSecond) / giant.year_days);
+    }
+    const year = this.info?.year_days ?? 365.25;
+    return giant.phase + this.time * ((2 * Math.PI) / YEAR_S) * (year / giant.year_days);
+  }
+
+  /**
+   * How fast a planetary system's planets go round, a factor of its pace
+   * (the innermost planet's year in SYSTEM_INNER_YEAR_S at ×1); the star
+   * keeps boiling at its own pace. A lone world's view ignores it.
+   */
+  setSpeed(factor: number): void {
+    this.speed = factor;
   }
 
   /** Shows or hides the orbit line (and its periapsis and apoapsis). */
@@ -542,17 +615,21 @@ export class StarView {
     const elapsed = now - this.lastTick;
     if (elapsed < FRAME_MS - 4) return;
     this.lastTick = now;
-    this.time += Math.min(elapsed / 1000, MAX_STEP_S);
+    const step = Math.min(elapsed / 1000, MAX_STEP_S);
+    this.time += step;
+    this.orbitTime += step * this.speed;
     this.star.material.uniforms['uTime']!.value = this.time;
     this.animateProminences();
     this.placePlanet();
     const turn = this.meanAnomaly() / (2 * Math.PI);
-    this.onClock(turn - Math.floor(turn));
+    const days = this.selected !== null ? this.orbitTime * this.daysPerSecond : (this.time / YEAR_S) * (this.info?.year_days ?? 365.25);
+    this.onClock(turn - Math.floor(turn), days);
     this.render();
   };
 
   /** Mean anomaly of the planet now, radians. */
   private meanAnomaly(): number {
+    if (this.selected !== null) return this.giantAnomaly(this.selected);
     return START_ANOMALY + this.time * ((2 * Math.PI) / YEAR_S);
   }
 
@@ -573,9 +650,12 @@ export class StarView {
 
   /**
    * The planet under a point of the screen (client px), by its index in
-   * setStar's `giants`: the nearest marker within a few pixels.
+   * setStar's `giants` (in a planetary system, every planet, the selected
+   * one included): the nearest marker within a few pixels, null when none
+   * is there or the planets are hidden.
    */
-  private planetAt(clientX: number, clientY: number): number | null {
+  pickPlanet(clientX: number, clientY: number): number | null {
+    if (!this.giantsOn) return null;
     const rect = this.canvas.getBoundingClientRect();
     let best: number | null = null;
     let bestDistance = 12;
@@ -719,9 +799,11 @@ export class StarView {
     const e = this.info.eccentricity ?? 0;
     const { trueAnomaly, distance } = keplerPosition(e, this.meanAnomaly());
     this.planetAu = this.info.orbit_au * distance;
-    this.planet.position.copy(this.inPlane(trueAnomaly, this.planetAu));
-    this.placeMoons();
     this.placeGiants();
+    // In a planetary system, the selected planet is its own giant marker.
+    const own = this.selected !== null ? this.giantMarkers[this.selected] : undefined;
+    this.planet.position.copy(own ? own.position : this.inPlane(trueAnomaly, this.planetAu));
+    this.placeMoons();
     const points = this.link.geometry.getAttribute('position') as BufferAttribute;
     points.setXYZ(1, this.planet.position.x, this.planet.position.y, this.planet.position.z);
     points.needsUpdate = true;
@@ -771,7 +853,8 @@ export class StarView {
       const on = this.distancesOn;
       this.onLabels({
         planet: planet && { ...planet, au: this.planetAu },
-        self: on ? null : this.screen(this.planet.position),
+        // A planetary system labels the selected planet as the others.
+        self: on || this.selected !== null ? null : this.screen(this.planet.position),
         periapsis: on && this.orbitOn ? this.screen(this.apsides[0]!.position) : null,
         apoapsis: on && this.orbitOn ? this.screen(this.apsides[1]!.position) : null,
         inner: on && this.zoneOn ? edge(this.info.hz_inner_au) : null,
@@ -779,7 +862,7 @@ export class StarView {
         giants: giantsShown
           ? this.giants.flatMap((giant, k) => {
               const at = this.screen(this.giantMarkers[k]!.position);
-              return at ? [{ ...at, name: giant.name, au: giant.orbit_au }] : [];
+              return at ? [{ ...at, name: giant.name, au: giant.orbit_au, distance: this.giantDistances[k] ?? giant.orbit_au, index: k }] : [];
             })
           : [],
       });

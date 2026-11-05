@@ -715,7 +715,7 @@ export const en = {
       "Iron relative to hydrogen, [Fe/H] in dex, against the Sun's (0). Metal-rich stars have many more giant planets: about 1.6 times more per 0.1 dex",
     metallicityValue: (p: { dex: string; ratio: string }) => `[Fe/H] ${p.dex} · ${p.ratio} the Sun's metals`,
     giantsSection: 'Giant planets',
-    otherPlanets: 'Other planets',
+    planets: 'Planets',
     giantsHelp:
       'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
     giantsOff: 'Not modelled (a world made before giant planets, or generated without them)',
@@ -770,6 +770,11 @@ export const en = {
       `Time: 1 s = ${p.scale} (×${p.factor}) · day ${p.day} of ${p.year} since periapsis`,
     clockHelp:
       "The animation runs a year of the planet in one minute, so time goes faster by the factor shown. The speeds shown stay real ones, in km per real second: in one second of animation, the planet covers its speed times that factor. The day counts from the periapsis (from an arbitrary point on a circular orbit).",
+    systemClock: (p: { days: string; day: string }) => `Time: 1 s = ${p.days} days · day ${p.day}`,
+    systemSpeed: 'Speed',
+    systemSpeedHelp: 'How fast the planets go round: ×1 runs the innermost planet\'s year in 10 seconds; faster speeds let the outer planets move visibly.',
+    systemClockHelp:
+      'The whole system runs on one clock: its innermost planet goes round in 10 seconds, and every other planet at its real pace relative to it. Selecting another planet does not change it. The days are Earth days since the animation started.',
     hours: (p: { hours: string }) => `${p.hours} h`,
     schematic: 'Schematic: the star is not to scale; distances are in proportion.',
   },
