@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import GenerateForm from './components/GenerateForm.svelte';
-  import JobList from './components/JobList.svelte';
+  import JobsIndicator from './components/JobsIndicator.svelte';
   import LanguageSelect from './components/LanguageSelect.svelte';
   import ThemeSelect from './components/ThemeSelect.svelte';
   import SystemOrrery from './components/SystemOrrery.svelte';
@@ -42,8 +42,16 @@
   let fatal = $state<string | null>(null);
   /** Set once the address has been read: until then, writing it would erase it. */
   let ready = $state(false);
-  /** The generation form, when open: blank, or varying a world. */
-  let form = $state<{ initial: WorldRequest | null; variedFrom: string | null } | null>(null);
+  /**
+   * The creation wizard, when open: from one of the menu's entries, or
+   * varying a world (over the viewer, on its summary).
+   */
+  let form = $state<{
+    initial: WorldRequest | null;
+    variedFrom: string | null;
+    entry: 'around' | 'system' | null;
+    atSummary: boolean;
+  } | null>(null);
   /** Systems deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
   let hidden = $state<string[]>([]);
   /** World ids in the order the list shows them (sorted, filtered). */
@@ -56,10 +64,10 @@
   /** The main pane's linked display settings, as it reports them. */
   let mainDisplay = $state<LinkedDisplay | null>(null);
   /**
-   * Which pane fills the screen on narrow layouts (the CSS ignores it on wide
-   * ones, where the sidebar and the viewer sit side by side).
+   * Set when a system is opened from the menu: the address then gets a new
+   * history entry, so that the browser's Back returns to the menu.
    */
-  let pane = $state<'sidebar' | 'viewer'>('sidebar');
+  let pushNext = false;
 
   const primary = new LoadedWorld();
   const secondary = new LoadedWorld();
@@ -101,9 +109,11 @@
   }
 
   /**
-   * `#world=<id>&compare=<id>`: the worlds shown, so a reload or a shared
-   * link opens them. A copied link also carries the view (see lib/link.ts),
-   * applied once to the main pane; the address then names only the worlds.
+   * The address says what is shown: no hash, or `#menu`, is the menu, and
+   * `#system=<id>&body=<id>&compare=<id>&pins=…` a system's viewer, so a
+   * reload, a shared link or the browser's Back and Forward show it. A
+   * copied link also carries the view (see lib/link.ts), applied once to
+   * the main pane; the address then names only the systems.
    */
   function applyHash(): void {
     const params = new URLSearchParams(location.hash.slice(1));
@@ -116,8 +126,12 @@
       pendingBody = body;
       selectedId = system;
       compareId = known(compare);
-      pane = 'viewer';
       pendingView = decodeView(params);
+    } else {
+      // The menu (or a system that is no more); a world's variation goes with its viewer.
+      selectedId = null;
+      compareId = null;
+      if (form?.variedFrom) form = null;
     }
   }
   /** The body a link names, shown once its system loads. */
@@ -163,13 +177,8 @@
       }
       await refresh();
       if (!ready) {
+        // No system is opened unless the address names one: the app opens on its menu.
         applyHash();
-        if (!selectedId) {
-          selectedId = systems[0]?.id ?? null;
-          if (selectedId) {
-            pane = 'viewer';
-          }
-        }
         ready = true;
       }
       await jobs.reattach();
@@ -190,11 +199,13 @@
   onMount(() => {
     void start();
     window.addEventListener('hashchange', applyHash);
+    window.addEventListener('popstate', applyHash);
     window.addEventListener('pagehide', flushDeletes);
     window.addEventListener('focus', refreshOnReturn);
     document.addEventListener('visibilitychange', refreshOnReturn);
     return () => {
       window.removeEventListener('hashchange', applyHash);
+      window.removeEventListener('popstate', applyHash);
       window.removeEventListener('pagehide', flushDeletes);
       window.removeEventListener('focus', refreshOnReturn);
       document.removeEventListener('visibilitychange', refreshOnReturn);
@@ -206,15 +217,20 @@
     if (!ready) {
       return;
     }
-    const hash = systemHash({
-      system: selectedId,
-      body: primary.subject === 'star' ? null : primary.systemBody,
-      compare: compareId,
-      pins: primary.pinnedPlanets,
-    });
+    const hash =
+      systemHash({
+        system: selectedId,
+        body: primary.subject === 'star' ? null : primary.systemBody,
+        compare: compareId,
+        pins: primary.pinnedPlanets,
+      }) || 'menu';
     if (location.hash.slice(1) !== hash) {
-      history.replaceState(null, '', hash ? `#${hash}` : location.pathname + location.search);
+      // Opening a system from the menu is a step Back undoes; the rest
+      // (a body, a pin) only keeps the address in step.
+      if (untrack(() => pushNext)) history.pushState({ fromMenu: true }, '', `#${hash}`);
+      else history.replaceState(history.state, '', `#${hash}`);
     }
+    pushNext = false;
   });
 
   $effect(() => {
@@ -279,8 +295,19 @@
     if (id === compareId) {
       compareId = null;
     }
+    if (selectedId === null) pushNext = true;
     selectedId = id;
-    pane = 'viewer';
+  }
+
+  /** Back to the menu: the browser's Back when the menu opened the viewer, so that history stays linear. */
+  function toMenu(): void {
+    form = null;
+    if (history.state?.fromMenu) {
+      history.back();
+    } else {
+      selectedId = null;
+      compareId = null;
+    }
   }
 
   /** `[` / `]` in the viewer: the previous or next world of the list. */
@@ -292,9 +319,9 @@
   }
 
   function compare(a: string, b: string): void {
+    if (selectedId === null) pushNext = true;
     selectedId = a;
     compareId = b;
-    pane = 'viewer';
   }
 
   function swap(): void {
@@ -312,8 +339,9 @@
     if (compareId && ids.includes(compareId)) {
       compareId = null;
     }
+    // The system shown deleted: back to the menu.
     if (selectedId && ids.includes(selectedId)) {
-      selectedId = visible[0]?.id ?? null;
+      selectedId = null;
       compareId = null;
     }
     const timer = setTimeout(() => void commitDeletes(ids), UNDO_MS);
@@ -356,9 +384,9 @@
     pendingDeletes.clear();
   }
 
-  function openForm(initial: WorldRequest | null = null, variedFrom: string | null = null): void {
-    form = { initial, variedFrom };
-    pane = 'sidebar';
+  /** Opens the creation wizard: on an entry of the menu, or on the summary of a varied world. */
+  function openForm(entry: 'around' | 'system' | null, initial: WorldRequest | null = null, variedFrom: string | null = null): void {
+    form = { initial, variedFrom, entry, atSummary: variedFrom !== null };
   }
 
   /** A system drawn: shown at once (its bodies as spheres), its planet's maps following its job. */
@@ -408,100 +436,103 @@
   }
 </script>
 
-<div class="layout" class:show-viewer={pane === 'viewer'}>
-  <aside class="sidebar">
-    <header>
+{#snippet info()}
+  {#if primary.system}
+    <BodyCard
+      world={primary}
+      onRenamed={(renamed) => (systems = systems.map((s) => (s.id === renamed.id ? renamed : s)))}
+      onGenerate={generateBody}
+    />
+  {/if}
+  {#if !primary.system || primary.shownSystemBody?.generated}
+    <WorldInfo
+      world={primary}
+      title={primary.shownSystemBody ? (primary.systemNames[primary.shownSystemBody.id] ?? primary.shownSystemBody.designation) : null}
+      revision={revision(selectedId)}
+      onVary={() => primary.meta && openForm('around', requestFromWorld(primary.meta), primary.id)}
+      onReroll={reroll}
+      link={shareLink}
+      onDelete={() => selectedId && removeWorlds([selectedId])}
+    />
+  {/if}
+{/snippet}
+
+{#snippet fatalError()}
+  {#if fatal}
+    <p class="error" role="alert">
+      {t.app.unreachable({ error: fatal })}
+      <button onclick={() => void start()} disabled={starting}>{starting ? t.app.retrying : t.app.retry}</button>
+      <button onclick={() => (fatal = null)}>{t.app.dismiss}</button>
+    </p>
+  {/if}
+{/snippet}
+
+{#if selectedId === null}
+  <!-- The main menu: the systems as cards, and the two ways to create one. -->
+  <div class="menu">
+    <header class="menu-bar">
       <h1>{t.app.title}</h1>
-      <!-- Only shown on narrow screens, where one pane is visible at a time. -->
-      <div class="tabs">
-        <button class:active={pane === 'sidebar'} aria-pressed={pane === 'sidebar'} onclick={() => (pane = 'sidebar')}
-          >{t.app.tabWorlds}</button
-        >
-        <button class:active={pane === 'viewer'} aria-pressed={pane === 'viewer'} onclick={() => (pane = 'viewer')}
-          >{t.app.tabViewer}</button
-        >
-      </div>
+      <span class="spacer"></span>
+      <JobsIndicator onOpen={select} />
       <ThemeSelect />
       <LanguageSelect />
-      <button class="primary" onclick={() => openForm()} disabled={!spec}>{t.app.newSystem}</button>
     </header>
-    {#if fatal}
-      <p class="error" role="alert">
-        {t.app.unreachable({ error: fatal })}
-        <button onclick={() => void start()} disabled={starting}>{starting ? t.app.retrying : t.app.retry}</button>
-        <button onclick={() => (fatal = null)}>{t.app.dismiss}</button>
-      </p>
-    {/if}
-    <div class="content">
-      <JobList onOpen={select} />
-      {#if form && spec}
-        <GenerateForm
-          {presets}
-          {spec}
-          initial={form.initial}
-          variedFrom={form.variedFrom}
-          onSubmitted={submitted}
-          onCancel={() => (form = null)}
-        />
-      {:else}
-        {#if primary.system}
-          <BodyCard
-            world={primary}
-            onRenamed={(renamed) => (systems = systems.map((s) => (s.id === renamed.id ? renamed : s)))}
-            onGenerate={generateBody}
-          />
-        {/if}
-        {#if !primary.system || primary.shownSystemBody?.generated}
-        <WorldInfo
-          world={primary}
-          title={primary.shownSystemBody ? (primary.systemNames[primary.shownSystemBody.id] ?? primary.shownSystemBody.designation) : null}
-          revision={revision(selectedId)}
-          onVary={() => primary.meta && openForm(requestFromWorld(primary.meta), primary.id)}
-          onReroll={reroll}
-          link={shareLink}
-          onDelete={() => selectedId && removeWorlds([selectedId])}
-        />
-        {/if}
-        <SystemList
-          systems={visible}
-          {selectedId}
-          {compareId}
-          bind:order={listOrder}
-          onSelect={select}
-          onDelete={removeWorlds}
-          onCompare={compare}
-        />
-      {/if}
-    </div>
-  </aside>
-
-  <main class:comparing={compareId !== null}>
-    {#if compareId}
-      <div class="compare-bar">
-        <span class="names">
-          {#if summaryOf(selectedId)}<SystemOrrery system={summaryOf(selectedId)!} width={40} height={22} radius={3} />{/if}
-          <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
+    {@render fatalError()}
+    <section class="create" aria-label={t.menu.create}>
+      <button class="entry" onclick={() => openForm('system')} disabled={!spec}>
+        <strong>{t.menu.randomSystem}</strong>
+        <small>{t.menu.randomSystemHelp}</small>
+      </button>
+      <button class="entry" onclick={() => openForm('around')} disabled={!spec}>
+        <strong>{t.menu.aroundPlanet}</strong>
+        <small>{t.menu.aroundPlanetHelp}</small>
+      </button>
+    </section>
+    <section class="systems" aria-label={t.menu.systems}>
+      <h2>{t.menu.systems}</h2>
+      <SystemList
+        systems={visible}
+        {selectedId}
+        {compareId}
+        bind:order={listOrder}
+        onSelect={select}
+        onDelete={removeWorlds}
+        onCompare={compare}
+      />
+    </section>
+  </div>
+{:else}
+  <div class="viewer-screen">
+    <header class="viewer-bar">
+      <button onclick={toMenu} title={t.menu.backHelp}>← {t.menu.back}</button>
+      <span class="names">
+        {#if summaryOf(selectedId)}<SystemOrrery system={summaryOf(selectedId)!} width={40} height={22} radius={3} />{/if}
+        <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
+        {#if compareId}
           <span class="muted">{t.app.versus}</span>
           {#if summaryOf(compareId)}<SystemOrrery system={summaryOf(compareId)!} width={40} height={22} radius={3} />{/if}
           <strong title={compareId}>{titleOf(compareId)}</strong>
-        </span>
+        {/if}
+      </span>
+      {#if compareId}
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> {t.app.linkCameras}</label>
-        <label
-          class="check"
-          title={t.app.linkDisplayHelp}
-          ><input type="checkbox" bind:checked={linkDisplay} /> {t.app.linkDisplay}</label
-        >
+        <label class="check" title={t.app.linkDisplayHelp}><input type="checkbox" bind:checked={linkDisplay} /> {t.app.linkDisplay}</label>
         <button onclick={swap}>{t.app.swap}</button>
         <button onclick={() => (compareId = null)}>{t.app.close}</button>
-      </div>
-    {/if}
-    <div class="panes">
+      {/if}
+      <JobsIndicator onOpen={select} />
+      <ThemeSelect />
+      <LanguageSelect />
+    </header>
+    {@render fatalError()}
+    <main class="panes">
       <WorldPane
         bind:this={primaryPane}
         world={primary}
         revision={revision(selectedId)}
-        keyboard={true}
+        keyboard={form === null}
         label={compareId ? titleOf(selectedId) : null}
+        {info}
         onStepWorld={step}
         onDisplayChange={(display) => (mainDisplay = display)}
         onCameraChange={cameraFrom(() => secondaryPane)}
@@ -511,62 +542,131 @@
           bind:this={secondaryPane}
           world={secondary}
           revision={revision(compareId)}
-            keyboard={false}
+          keyboard={false}
           persistDisplay={false}
           linkedDisplay={linkDisplay ? mainDisplay : null}
           label={titleOf(compareId)}
           onCameraChange={cameraFrom(() => primaryPane)}
         />
       {/if}
+    </main>
+  </div>
+{/if}
+
+<svelte:window
+  onkeydown={(event) => {
+    if (event.key === 'Escape' && form) {
+      form = null;
+      event.stopPropagation();
+    }
+  }}
+/>
+
+{#if form && spec}
+  <!-- The creation wizard, over the menu or the viewer. -->
+  <div class="wizard-backdrop">
+    <div class="wizard" role="dialog" aria-modal="true" aria-label={form.variedFrom ? t.form.vary({ id: form.variedFrom }) : t.form.newSystem}>
+      <GenerateForm
+        {presets}
+        {spec}
+        initial={form.initial}
+        variedFrom={form.variedFrom}
+        entry={form.entry}
+        atSummary={form.atSummary}
+        onSubmitted={submitted}
+        onCancel={() => (form = null)}
+      />
     </div>
-  </main>
-</div>
+  </div>
+{/if}
 
 <Toasts />
 
 <style>
-  .layout {
-    display: grid;
-    grid-template-columns: 340px minmax(0, 1fr);
+  .menu {
     height: 100%;
-  }
-  .sidebar {
-    border-right: 1px solid var(--border);
-    padding: 14px;
     overflow-y: auto;
-    min-width: 0;
-    display: grid;
-    /* Keep wide content (a form control's intrinsic width) inside the column. */
-    grid-template-columns: minmax(0, 1fr);
-    align-content: start;
-    gap: 12px;
-  }
-  .content {
+    padding: 16px clamp(16px, 4vw, 48px) 32px;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
     align-content: start;
+    gap: 20px;
   }
-  header {
+  .menu-bar,
+  .viewer-bar {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 8px 12px;
+  }
+  .spacer {
+    flex: 1;
   }
   h1 {
     margin: 0;
-    font-size: 1.3rem;
+    font-family: var(--font-display);
+    font-size: 1.6rem;
   }
-  main {
-    position: relative;
-    min-width: 0;
-    min-height: 0;
+  h2 {
+    margin: 0 0 10px;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+  }
+  .create {
     display: grid;
-    /* The compare bar's names must not widen the viewer past the screen. */
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18em), 1fr));
+    gap: 14px;
   }
-  main.comparing {
-    grid-template-rows: auto minmax(0, 1fr);
+  .entry {
+    display: grid;
+    gap: 6px;
+    padding: 18px 20px;
+    text-align: left;
+    white-space: normal;
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--glow);
+  }
+  .entry strong {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    color: var(--accent);
+  }
+  .entry small {
+    color: var(--muted);
+  }
+  .entry:hover:not(:disabled),
+  .entry:focus-visible {
+    border-color: var(--accent);
+  }
+  .viewer-screen {
+    height: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .viewer-bar {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .viewer-bar .names {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .viewer-bar .names strong {
+    font-family: var(--font-display);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .viewer-bar button {
+    padding: 3px 10px;
   }
   .panes {
     display: grid;
@@ -576,25 +676,25 @@
     background: var(--border);
     min-height: 0;
   }
-  .compare-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--border);
+  .wizard-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
   }
-  .compare-bar .names {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-  .compare-bar button {
-    padding: 3px 10px;
+  .wizard {
+    width: min(720px, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 16px 18px 0;
+    background: var(--frame-deco), var(--panel-solid);
+    clip-path: var(--frame-clip);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 40px color-mix(in srgb, var(--bg) 80%, transparent), var(--glow);
   }
   .check {
     display: flex;
@@ -608,76 +708,18 @@
     color: var(--danger);
     margin: 0;
   }
-  .tabs {
-    display: none;
-  }
-  /* Narrow screens: one pane at a time, chosen with the tabs in the header,
-     instead of a short sidebar band above the viewer. The sidebar pane is the
-     only scroll area and fills the screen; the viewer pane gets all the height
-     below the header, so dragging the globe never fights a page scroll. */
+  /* A phone: the two compared worlds stack, and the wizard fills the screen. */
   @media (max-width: 760px) {
-    .layout {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: minmax(0, 1fr);
-    }
-    .layout.show-viewer {
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-    .layout:not(.show-viewer) main,
-    .layout.show-viewer .content {
-      display: none;
-    }
-    .sidebar {
-      border-right: none;
-      /* The header pads itself, so that it can stick to the very top. */
-      padding-top: 0;
-      padding-bottom: 0;
-    }
-    .layout.show-viewer .sidebar {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 10px;
-    }
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      gap: 8px;
-      /* The title, the tabs, the language and the button do not fit a phone's
-         width in one row (nor longer translations): wrap rather than clip. */
-      flex-wrap: wrap;
-      padding-top: 10px;
-      background: var(--bg);
-    }
-    .layout:not(.show-viewer) header {
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border);
-      margin: 0 -14px;
-      padding-left: 14px;
-      padding-right: 14px;
-    }
-    .content {
-      padding-bottom: 14px;
-    }
-    .tabs {
-      display: flex;
-      flex-shrink: 0;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      margin-left: auto;
-    }
-    .tabs button {
-      border: none;
-      border-radius: 0;
-    }
-    .tabs button.active {
-      background: var(--accent);
-      color: var(--accent-text);
-    }
-    /* Two worlds stack vertically on a phone. */
     .panes {
       grid-auto-flow: row;
       grid-auto-rows: minmax(0, 1fr);
+    }
+    .wizard-backdrop {
+      padding: 0;
+    }
+    .wizard {
+      height: 100%;
+      border-radius: 0;
     }
   }
 </style>

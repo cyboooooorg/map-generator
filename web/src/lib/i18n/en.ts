@@ -115,6 +115,9 @@ export const en = {
   },
   /** Generation jobs. */
   jobs: {
+    indicatorHelp: 'The generations: their progress, and Cancel',
+    running: (p: { count: number }) => `${p.count} generating`,
+    finished: (p: { count: number }) => `${p.count} finished`,
     title: 'Generations',
     cancel: 'Cancel',
     cancelling: 'Cancelling…',
@@ -382,7 +385,29 @@ export const en = {
     loading: 'Loading the raw data…',
   },
   /** The generation form. */
+  /** The main menu. */
+  menu: {
+    create: 'Create a system',
+    randomSystem: 'Random system',
+    randomSystemHelp: 'A star and its planets by type, or all drawn: the maps are made when a body is opened',
+    aroundPlanet: 'Around a planet',
+    aroundPlanetHelp: 'A planet set as you like it, its maps made at once, and a system drawn around it',
+    systems: 'Systems',
+    back: 'Menu',
+    backHelp: 'Back to the main menu',
+    info: 'Info',
+    infoHelp: 'The system and the body shown: their cards',
+  },
   form: {
+    stepsLabel: 'Steps',
+    steps: { kind: 'Kind', star: 'Star', planets: 'Planets', advanced: 'Advanced', summary: 'Summary' },
+    allRandom: 'All random',
+    allRandomHelp: 'A whole system, every choice left to the draw, created at once',
+    advanced: 'Advanced options',
+    back: 'Back',
+    next: 'Next',
+    summaryFixed: 'Fixed parameters',
+    summaryNone: 'none, all drawn',
     newSystem: 'New system',
     mode: 'What to draw',
     modeAround: 'Around a planet',
