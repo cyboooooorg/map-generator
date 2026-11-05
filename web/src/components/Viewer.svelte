@@ -170,6 +170,9 @@
   let starLinks = $state(true);
   let starVelocities = $state(true);
   let starPulls = $state(true);
+  let starFrost = $state(true);
+  let starHills = $state(false);
+  let starRealScale = $state(false);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
@@ -1214,6 +1217,9 @@
       bind:links={starLinks}
       bind:velocities={starVelocities}
       bind:pulls={starPulls}
+      bind:frost={starFrost}
+      bind:hills={starHills}
+      bind:realScale={starRealScale}
     />
   {/if}
 

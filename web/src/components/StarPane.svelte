@@ -48,6 +48,10 @@
     velocities?: boolean;
     /** In a planetary system, whether each planet has a vector of the star's pull on it, along its line to the star. */
     pulls?: boolean;
+    /** In a planetary system: the frost line, the planets' Hill spheres, and whether it is drawn to scale. */
+    frost?: boolean;
+    hills?: boolean;
+    realScale?: boolean;
     /** The world itself when it is a giant planet, or the giant it orbits. */
     worldGiant?: GiantInfo | null;
     /** The giant the world orbits, as its moon. */
@@ -100,6 +104,9 @@
     links = $bindable(true),
     velocities = $bindable(true),
     pulls = $bindable(true),
+    frost = $bindable(true),
+    hills = $bindable(false),
+    realScale = $bindable(false),
     worldGiant = null,
     host = null,
     kinds = null,
@@ -120,7 +127,7 @@
   );
   /** Whether some giant lies where the view compresses distances. */
   const compressFrom = $derived(selected !== null ? systemCompressedFrom(star) : compressedFrom(star));
-  const compressed = $derived(giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressFrom));
+  const compressed = $derived(!(selected !== null && realScale) && giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressFrom));
   let labels = $state<SystemLabels | null>(null);
   /** Share of the year elapsed since the periapsis, while animated. */
   let yearFraction = $state(0);
@@ -252,6 +259,13 @@
   $effect(() => view?.setPlanetLinks(links));
   $effect(() => view?.setVelocities(velocities));
   $effect(() => view?.setPulls(pulls));
+  $effect(() => view?.setFrostLine(frost));
+  $effect(() => view?.setHillSpheres(hills));
+  $effect(() => view?.setRealScale(realScale));
+  /** The longest year of a planetary system, days: the time bar's span. */
+  const longestYear = $derived(giantList.length > 0 ? Math.max(...giantList.map((g) => g.year_days)) : 0);
+  /** Moves a planetary system's clock to day `days` (the time bar). */
+  const goToDay = (days: number) => view?.setSystemDay(days);
   $effect(() => view?.setSpeed(2 ** speed));
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
@@ -380,7 +394,7 @@
       const box = { x: ux >= 0 ? ax : ax - width, y: ay - LABEL_H / 2 + (uy * LABEL_H) / 2, width, height: LABEL_H };
       return { index: g.index, text, box };
     });
-    type Along = ReturnType<typeof alongLine> & { key: string; kind: 'distance' | 'pull' | 'zone' | 'boundary' };
+    type Along = ReturnType<typeof alongLine> & { key: string; kind: 'distance' | 'pull' | 'zone' | 'boundary' | 'frost' };
     const lines: Along[] = [];
     if (system && labels.star) {
       for (const g of giants) {
@@ -397,6 +411,19 @@
         area: formatUpTo(area, area < 0.01 ? 4 : area < 1 ? 3 : 2),
       });
       lines.push({ ...alongLine(labels.inner, labels.outer, 0.5, text), key: 'zone', kind: 'zone' });
+    }
+    if (labels.frost) {
+      const text = t.starView.frostLabel({ distance: formatAu(labels.frost.au) });
+      const w = labelWidth(text);
+      lines.push({
+        x: labels.frost.x,
+        y: labels.frost.y + LABEL_H / 2,
+        angle: 0,
+        text,
+        box: { x: labels.frost.x - w / 2, y: labels.frost.y, width: w, height: LABEL_H, step: LABEL_H },
+        key: 'frost',
+        kind: 'frost',
+      });
     }
     if (labels.boundary) {
       const text = t.starView.compressedLabel({ distance: formatAu(labels.boundary.au) });
@@ -427,7 +454,7 @@
       ...fixed(labels.inner, formatAu(star.hz_inner_au)),
       ...fixed(labels.outer, formatAu(star.hz_outer_au)),
     ];
-    const distances = lines.filter((l) => l.kind === 'distance' || l.kind === 'zone' || l.kind === 'boundary');
+    const distances = lines.filter((l) => l.kind !== 'pull');
     const pullLabels = lines.filter((l) => l.kind === 'pull');
     const order = [...names.map((n) => n.box), ...distances.map((l) => l.box), ...speeds.map((v) => v.box), ...pullLabels.map((l) => l.box)];
     const places = layoutLabels(order, keepClear);
@@ -678,6 +705,18 @@
         <input type="checkbox" bind:checked={pulls} />
         {t.starView.showPulls}
       </label>
+      <label class="check" title={t.starView.showFrostHelp}>
+        <input type="checkbox" bind:checked={frost} />
+        {t.starView.showFrost}
+      </label>
+      <label class="check" title={t.starView.showHillsHelp}>
+        <input type="checkbox" bind:checked={hills} />
+        {t.starView.showHills}
+      </label>
+      <label class="check" title={t.starView.realScaleHelp}>
+        <input type="checkbox" bind:checked={realScale} />
+        {t.starView.realScale}
+      </label>
     {/if}
     <label class="check" title={t.starView.animateHelp}>
       <input type="checkbox" bind:checked={animated} />
@@ -690,6 +729,33 @@
       <input type="range" min={SYSTEM_SPEED_MIN} max={SYSTEM_SPEED_MAX} step="1" bind:value={speed} />
       <small>{t.starView.daysPerSecond({ days: formatInt(2 ** speed) })}</small>
     </label>
+  {/if}
+  {#if selected !== null && longestYear > 0}
+    <div class="timebar">
+      <label class="speed" title={t.starView.timeBarHelp}>
+        <span>{t.starView.timeBar}</span>
+        <input
+          type="range"
+          min="0"
+          max={Math.ceil(longestYear)}
+          step="any"
+          value={Math.min(elapsedDays, Math.ceil(longestYear))}
+          oninput={(event) => goToDay(Number((event.currentTarget as HTMLInputElement).value))}
+        />
+        <small>{t.starView.dayValue({ day: formatInt(Math.floor(elapsedDays) + 1) })}</small>
+      </label>
+      <div class="jumps">
+        <button type="button" onclick={() => goToDay(0)}>{t.starView.toStart}</button>
+        <button
+          type="button"
+          title={t.starView.toPeriapsisHelp}
+          onclick={() => {
+            const day = view?.nextPeriapsisDay(selected ?? 0);
+            if (day !== null && day !== undefined) goToDay(day);
+          }}>{t.starView.toPeriapsis({ name: giantList[selected]?.name ?? '' })}</button
+        >
+      </div>
+    </div>
   {/if}
   {#if animated}
     <small class="clock" title={selected !== null ? t.starView.systemClockHelp : t.starView.clockHelp}>{clockText}</small>
@@ -784,6 +850,9 @@
   .label.along.boundary {
     color: #8a93a8;
   }
+  .label.along.frost {
+    color: #9cc8ff;
+  }
   .giants {
     margin: 0;
     padding: 0;
@@ -831,6 +900,19 @@
   }
   .label.zone {
     color: #8fe0aa;
+  }
+  .timebar {
+    display: grid;
+    gap: 4px;
+  }
+  .jumps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .jumps button {
+    font-size: 0.75rem;
+    padding: 2px 8px;
   }
   .speed {
     display: grid;

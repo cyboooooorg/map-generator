@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX } from './starSystem';
+import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -190,5 +190,12 @@ describe('star view', () => {
     expect(defaultSystemSpeed(1.5)).toBe(0);
     expect(defaultSystemSpeed(88)).toBe(3);
     expect(defaultSystemSpeed(1e9)).toBe(SYSTEM_SPEED_MAX);
+  });
+
+  it('puts the frost line at 2.7 AU for the Sun, and Jupiter\'s Hill sphere at about 0.34 AU', () => {
+    expect(frostLineAu(1)).toBeCloseTo(2.7, 10);
+    expect(frostLineAu(4)).toBeCloseTo(5.4, 10);
+    expect(hillRadiusAu(5.2, 0.049, 317.8, 1)).toBeCloseTo(0.338, 2);
+    expect(hillRadiusAu(1, 0.0167, 1, 1)).toBeCloseTo(0.0098, 3);
   });
 });
