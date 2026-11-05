@@ -5,6 +5,12 @@ import type { ErrorDetail } from './types/ErrorDetail';
 import type { ApiError } from './types/ApiError';
 import type { CreateQuery } from './types/CreateQuery';
 import type { FormSpec } from './types/FormSpec';
+import type { GenerateStarted } from './types/GenerateStarted';
+import type { SystemCreated } from './types/SystemCreated';
+import type { SystemNames } from './types/SystemNames';
+import type { SystemQuery } from './types/SystemQuery';
+import type { SystemRequest } from './types/SystemRequest';
+import type { SystemSummary } from './types/SystemSummary';
 import type { GivenNames } from './types/GivenNames';
 import type { HexMap } from './types/HexMap';
 import type { HexRequest } from './types/HexRequest';
@@ -84,6 +90,28 @@ export const api = {
     call<RiversFile>(worldFile(id, `raw_data/${file}`), fileInit(signal)),
   jobs: () => call<JobInfo[]>('/api/jobs'),
   cancelJob: (id: string) => call<void>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** The drawn systems, most recent first. */
+  systems: () => call<SystemSummary[]>('/api/systems'),
+  /** Draws a system; in mode `around`, its planet is queued at once (`job_id`). */
+  createSystem: (request: SystemRequest, query: SystemQuery = {}) =>
+    call<SystemCreated>(query.replace ? '/api/systems?replace=true' : '/api/systems', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    }),
+  deleteSystem: (id: string) => call<void>(`/api/systems/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Gives names to a system's bodies (by body id, `star` too), replacing those they had. */
+  renameSystem: (id: string, names: Record<string, string>) =>
+    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/names`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ names } satisfies SystemNames),
+    }),
+  /** Queues a body of a system and its neighbourhood; `job_id` null when they are all generated. */
+  generateBody: (id: string, body: string) =>
+    call<GenerateStarted>(`/api/systems/${encodeURIComponent(id)}/bodies/${encodeURIComponent(body)}/generate`, {
+      method: 'POST',
+    }),
   hex: (id: string, request: HexRequest, signal?: AbortSignal) =>
     call<HexMap>(`${bodyApi(id)}/hex`, {
       method: 'POST',

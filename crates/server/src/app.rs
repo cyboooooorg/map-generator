@@ -355,6 +355,8 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         default_height: fallback::HEIGHT,
         max_size: MAX_SIZE,
         max_pixels: state.config.max_pixels,
+        planet_types: mapgen::system::PLANET_TYPES.iter().map(|t| (*t).to_owned()).collect(),
+        max_planets: mapgen::system::MAX_PLANETS as u32,
     })
 }
 
@@ -367,12 +369,13 @@ async fn list_worlds(State(state): State<Shared>) -> Json<Vec<WorldSummary>> {
     )
 }
 
-/// The key a system takes in the list of pending generations (beside world
-/// ids): a system cannot be deleted, renamed away or replaced meanwhile.
 /// A failure the client can fix.
 fn bad(message: String) -> Failure {
     Failure(StatusCode::BAD_REQUEST, message)
 }
+
+/// The key a system takes in the list of pending generations (beside world
+/// ids): a system cannot be deleted, renamed away or replaced meanwhile.
 
 fn pending_system(id: &str) -> String {
     format!("systems/{id}")

@@ -72,6 +72,10 @@ pub struct FormSpec {
     /// Largest map the server accepts, in pixels (width × height).
     #[ts(type = "number")]
     pub max_pixels: u64,
+    /// The planet types a whole system can be asked for (preset names).
+    pub planet_types: Vec<String>,
+    /// Most planets a system holds (moons not counted).
+    pub max_planets: u32,
 }
 
 /// A generated world, as listed in the library.
@@ -399,6 +403,12 @@ pub struct SystemSummary {
 pub struct BodySummary {
     pub id: String,
     pub designation: String,
+    /// `planet` or `moon`.
+    pub kind: String,
+    /// Its type: a preset name.
+    pub body_type: String,
+    /// Its main colour in the preview (linear RGB), for the library's strip.
+    pub colour: [f32; 3],
     /// Whether its maps are generated.
     pub generated: bool,
 }

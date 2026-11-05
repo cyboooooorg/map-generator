@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lonLatToSphere } from './geo';
-import { decodeCamera, decodeView, decodeWorlds, encodeCamera, encodeView, linkHash, type ViewLink } from './link';
+import { decodeCamera, decodeSystems, decodeView, decodeWorlds, encodeCamera, encodeView, linkHash, systemHash, type ViewLink } from './link';
 import type { CameraState } from './viewer/PlanetView';
 
 const RAD = Math.PI / 180;
@@ -120,3 +120,14 @@ describe('linkHash / decodeWorlds', () => {
     expect(linkHash('a', null)).toBe('world=a');
   });
 });
+
+describe('systemHash / decodeSystems', () => {
+  it('names the system, the body shown and the compared system', () => {
+    const hash = systemHash({ system: 'mgs-48213-42', body: 'c-1', compare: 'mgs-1-2' }, { layer: 'elevation' });
+    expect(hash.startsWith('system=mgs-48213-42&body=c-1&compare=mgs-1-2&')).toBe(true);
+    expect(decodeSystems(new URLSearchParams(hash))).toEqual({ system: 'mgs-48213-42', body: 'c-1', compare: 'mgs-1-2' });
+    expect(systemHash({ system: null, body: 'c', compare: 'x' })).toBe('');
+    expect(decodeSystems(new URLSearchParams('world=terran-1'))).toEqual({ system: null, body: null, compare: null });
+  });
+});
+

@@ -169,3 +169,27 @@ export function linkHash(world: string | null, compare: string | null, view: Vie
   if (view) parts.push(...encodeView(view));
   return parts.join('&');
 }
+
+/** The systems a link names: the one shown, the body shown in it, and the one compared. */
+export interface SystemsLink {
+  system: string | null;
+  body: string | null;
+  compare: string | null;
+}
+
+/** `#system=<id>&body=<id>&compare=<id>`: the systems of a link. */
+export function decodeSystems(params: URLSearchParams): SystemsLink {
+  return { system: params.get('system'), body: params.get('body'), compare: params.get('compare') };
+}
+
+/** The fragment (without '#') naming the systems shown, and the view when given. */
+export function systemHash(link: SystemsLink, view: ViewLink | null = null): string {
+  const parts: string[] = [];
+  if (link.system) {
+    parts.push(`system=${encodeURIComponent(link.system)}`);
+    if (link.body) parts.push(`body=${encodeURIComponent(link.body)}`);
+    if (link.compare) parts.push(`compare=${encodeURIComponent(link.compare)}`);
+  }
+  if (view) parts.push(...encodeView(view));
+  return parts.join('&');
+}
