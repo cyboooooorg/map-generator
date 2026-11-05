@@ -3,7 +3,7 @@
   import GenerateForm from './components/GenerateForm.svelte';
   import JobList from './components/JobList.svelte';
   import LanguageSelect from './components/LanguageSelect.svelte';
-  import Thumbnail from './components/Thumbnail.svelte';
+  import SystemOrrery from './components/SystemOrrery.svelte';
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
   import BodyCard from './components/BodyCard.svelte';
@@ -13,7 +13,6 @@
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { SystemCreated } from './lib/api/types/SystemCreated';
   import type { SystemSummary } from './lib/api/types/SystemSummary';
-  import { systemBodyId } from './lib/api/client';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { requestFromWorld, rerollRequest } from './lib/format';
@@ -78,12 +77,6 @@
   const titleOf = (id: string | null) => {
     const summary = summaryOf(id);
     return summary ? (summary.names['star'] ?? summary.designation) : id;
-  };
-  /** A system's thumbnail: its first generated planet's, as a body id. */
-  const thumbOf = (id: string | null) => {
-    const summary = summaryOf(id);
-    const planet = summary?.bodies.find((b) => b.kind === 'planet' && b.generated);
-    return summary && planet ? systemBodyId(summary.id, planet.id) : '';
   };
 
   /** When the list was last asked for (ms), to throttle the focus refreshes. */
@@ -469,10 +462,10 @@
     {#if compareId}
       <div class="compare-bar">
         <span class="names">
-          <Thumbnail id={thumbOf(selectedId)} revision={revision(selectedId)} width={36} height={20} radius={3} />
+          {#if summaryOf(selectedId)}<SystemOrrery system={summaryOf(selectedId)!} width={40} height={22} radius={3} />{/if}
           <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
           <span class="muted">{t.app.versus}</span>
-          <Thumbnail id={thumbOf(compareId)} revision={revision(compareId)} width={36} height={20} radius={3} />
+          {#if summaryOf(compareId)}<SystemOrrery system={summaryOf(compareId)!} width={40} height={22} radius={3} />{/if}
           <strong title={compareId}>{titleOf(compareId)}</strong>
         </span>
         <label class="check"><input type="checkbox" bind:checked={linkCameras} /> {t.app.linkCameras}</label>

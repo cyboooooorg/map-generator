@@ -317,7 +317,11 @@ addressed as `<system-id>/<body-id>` everywhere.
   planet, in order, coloured as their previews, the generated ones
   marked), the count per type and the date. Search matches designations,
   names and seeds; selecting several and deleting work as today. A row's
-  thumbnail is the first generated planet's map, or the strip alone.
+  thumbnail, and the compare bar's, is a small orrery drawn from the
+  summary: the star in its light's colour, the habitable zone as a faint
+  green ring, and each planet as a dot on its orbit (a square-root scale
+  of the semi-major axis, filling the box), coloured as its preview,
+  giants larger, those not generated yet outlined.
 - **Form.** **New system** asks for a mode first:
   - *A whole system*: the star (type or drawn), a number per planet type
     (their sum at most 15, each one checked against the star's zones as

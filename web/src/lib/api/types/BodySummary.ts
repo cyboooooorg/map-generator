@@ -19,4 +19,9 @@ colour: [number, number, number],
 /**
  * Whether its maps are generated.
  */
-generated: boolean, };
+generated: boolean, 
+/**
+ * Its orbit's semi-major axis, AU: round the star for a planet, round
+ * its planet for a moon (0 when the system file does not give it).
+ */
+orbit_au: number, };
