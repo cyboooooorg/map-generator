@@ -334,7 +334,8 @@ addressed as `<system-id>/<body-id>` everywhere.
   names, with a mark on those not generated yet. `U` steps through the
   shown body's family (a planet and its moons). The star view becomes a
   **system view**: today's, with every planet drawn as its sphere on its
-  orbit (a generated planet wrapped in its map, its thumbnail). Hovering
+  orbit (a generated planet wrapped in its map, its thumbnail, one not
+  generated yet in its preview's belts, land and caps). Hovering
   a planet rings it and opens its card beside it, linked by a line: name
   and type, radius and mass, semi-major axis and eccentricity, current
   speed and year, equilibrium temperature, place relative to the

@@ -25,6 +25,7 @@ import {
   ShaderMaterial,
   SphereGeometry,
   type Texture,
+  DataTexture,
   TextureLoader,
   Vector3,
   WebGLRenderer,
@@ -43,6 +44,8 @@ import {
   starSurfaceFragment,
   starSurfaceVertex,
 } from './starShaders';
+import { previewTexture } from './previewTexture';
+import type { Preview } from '../api/types/Preview';
 import { starField } from './stars';
 import { prominenceGeometry } from './prominenceGeometry';
 import {
@@ -64,6 +67,9 @@ import {
   velocityScale,
 } from './starSystem';
 
+/** Size of a preview's texture on a marker, pixels (a marker is a few pixels to a few dozen wide). */
+const PREVIEW_WIDTH = 64;
+const PREVIEW_HEIGHT = 32;
 /** Seconds between two eruptions, while animated. */
 const ERUPTION_S = 9;
 /** The red of hydrogen (H-alpha), linear RGB. */
@@ -211,6 +217,8 @@ export class StarView {
   private highlighted: ReadonlySet<number> = new Set();
   /** The map wrapped round each giant's marker, by index, or null for its colour (see setPlanetMaps). */
   private mapUrls: readonly (string | null)[] = [];
+  /** Each giant's preview as a texture, by index, or null (see setPlanetPreviews). */
+  private previewTextures: (DataTexture | null)[] = [];
   /** The maps loaded (or loading), by url. */
   private readonly maps = new Map<string, Texture>();
   private readonly loader = new TextureLoader();
@@ -692,12 +700,31 @@ export class StarView {
     this.requestRender();
   }
 
+  /**
+   * Wraps a preview round giant markers: `previews[k]`, giant `k`'s preview
+   * (its belts, land and caps), shown until its map is (see setPlanetMaps);
+   * null leaves its plain colour.
+   */
+  setPlanetPreviews(previews: readonly (Preview | null)[]): void {
+    for (const texture of this.previewTextures) texture?.dispose();
+    this.previewTextures = previews.map((preview) => {
+      if (!preview) return null;
+      const texture = new DataTexture(previewTexture(preview, PREVIEW_WIDTH, PREVIEW_HEIGHT), PREVIEW_WIDTH, PREVIEW_HEIGHT);
+      texture.colorSpace = SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    });
+    this.applyMaps();
+    this.requestRender();
+  }
+
   private applyMaps(): void {
     this.giantMarkers.forEach((marker, k) => {
       const url = this.mapUrls[k] ?? null;
       const map = url ? this.maps.get(url) : undefined;
-      // A texture is ready once its image has loaded.
-      const ready = map && map.image ? map : null;
+      // A texture is ready once its image has loaded; until then, or
+      // without a map, the planet's preview.
+      const ready = (map && map.image ? map : null) ?? this.previewTextures[k] ?? null;
       if (marker.material.map === ready) return;
       marker.material.map = ready;
       // The map shows its own colours; without one, the planet's colour.
@@ -1032,6 +1059,7 @@ export class StarView {
       object.material.dispose();
     }
     for (const map of this.maps.values()) map.dispose();
+    for (const texture of this.previewTextures) texture?.dispose();
     this.maps.clear();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
