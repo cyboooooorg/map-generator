@@ -95,8 +95,25 @@ pub fn ecotone_colour(world: &World, input: BiomeInput) -> [f32; 3] {
 
 /// Like [`ecotone_colour`] for any planet.
 pub fn ecotone_colour_for(planet: &Preset, input: BiomeInput) -> [f32; 3] {
+    ecotone_colour_around(planet, input, None)
+}
+
+/// Like [`ecotone_colour_for`], given the biome the caller already chose
+/// for `input`, `planet.remap(planet.rules.choose(input))`, which is the
+/// centre sample whenever `input` is within the ranges the samples are
+/// clamped to: one choice fewer per pixel, the same colour.
+pub fn ecotone_colour_around(
+    planet: &Preset,
+    input: BiomeInput,
+    chosen: Option<Biome>,
+) -> [f32; 3] {
     let choose = |o: [f32; 4]| planet.remap(planet.rules.choose(nudge(input, o)));
-    let centre = choose([0.0; 4]);
+    let unclamped =
+        (-1.0..=1.0).contains(&input.moisture) && (0.0..=1.0).contains(&input.volcanic_zone);
+    let centre = match chosen {
+        Some(biome) if unclamped => biome,
+        _ => choose([0.0; 4]),
+    };
     // Far from every border (the common case), the colour is flat.
     let far = (0..8).all(|k| {
         let mut o = [0.0; 4];
@@ -156,5 +173,14 @@ mod tests {
             ecotone_colour_for(&planet, input(rules.highland - 0.2)),
             low.map(f32::from)
         );
+        // The centre given by the caller changes nothing.
+        for offset in [-0.2, -0.05, 0.0, 0.2] {
+            let i = input(rules.highland + offset);
+            let chosen = planet.remap(rules.choose(i));
+            assert_eq!(
+                ecotone_colour_around(&planet, i, Some(chosen)),
+                ecotone_colour_for(&planet, i)
+            );
+        }
     }
 }
