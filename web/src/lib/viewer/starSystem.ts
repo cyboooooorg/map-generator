@@ -28,6 +28,17 @@ export function starSurface(teffK: number, klass: string): StarSurface {
   };
 }
 
+/**
+ * A planet of a planetary system as the star view draws it: a giant, with
+ * its orbit's tilt to the star's equator and the longitude of its
+ * ascending node (radians), and its moons. A world's giants have none.
+ */
+export type SystemGiant = Giant & {
+  inclination?: number;
+  node?: number;
+  moons?: readonly Pick<Moon, 'radius_km' | 'inclination_deg' | 'period_days' | 'barycentre_km' | 'semi_major_axis_km'>[];
+};
+
 /** Radius of the star in the view: the system is drawn around it, not to scale. */
 export const STAR_RADIUS = 1;
 

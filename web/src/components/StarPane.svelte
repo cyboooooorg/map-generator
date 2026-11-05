@@ -75,6 +75,8 @@
     /** The planets whose cards are pinned, by id, in pinning order. */
     pinned?: readonly string[];
     onPin?: (id: string) => void;
+    /** Selects a planet of the system by its index, staying in the star view (its row in the list). */
+    onSelectPlanet?: ((index: number) => void) | null;
     onUnpin?: (id: string) => void;
     /** Opens a planet (a double click on its marker, or its card's button). */
     onOpenPlanet?: ((index: number) => void) | null;
@@ -107,6 +109,7 @@
     planets = null,
     pinned = [],
     onPin = () => {},
+    onSelectPlanet = null,
     onUnpin = () => {},
     onOpenPlanet = null,
     maps = null,
@@ -598,8 +601,34 @@
     {:else}
       <ul class="giants">
         {#each giantList as giant, i (i)}
+          {@const id = planets?.[i]?.id}
           <li title={giantHelp(giant)} class:selected={i === selected}>
-            <span class="swatch" style:background={`rgb(${giant.colour.map((c) => Math.round(c * 255)).join(' ')})`}></span>{giantText(giant)}
+            {#if onSelectPlanet}
+              <button
+                type="button"
+                class="pick"
+                aria-current={i === selected}
+                title={t.starView.selectPlanetHelp}
+                onclick={() => onSelectPlanet?.(i)}
+                ><span class="swatch" style:background={`rgb(${giant.colour.map((c) => Math.round(c * 255)).join(' ')})`}></span>{giantText(giant)}</button
+              >
+              {#if id}
+                <button
+                  type="button"
+                  class="pin"
+                  class:on={pinned.includes(id)}
+                  aria-pressed={pinned.includes(id)}
+                  title={t.starView.pinFromListHelp}
+                  aria-label={t.starView.pinFromListHelp}
+                  onclick={() => (pinned.includes(id) ? onUnpin(id) : onPin(id))}
+                  ><svg viewBox="0 0 16 16" aria-hidden="true"
+                    ><path d="M5 1h6l-1 5 3 3H9.5L8 15l-1.5-6H3l3-3z" fill={pinned.includes(id) ? 'currentColor' : 'none'} stroke="currentColor" stroke-linejoin="round" /></svg
+                  ></button
+                >
+              {/if}
+            {:else}
+              <span class="swatch" style:background={`rgb(${giant.colour.map((c) => Math.round(c * 255)).join(' ')})`}></span>{giantText(giant)}
+            {/if}
           </li>
         {/each}
       </ul>
@@ -767,6 +796,38 @@
   }
   .giants li.selected {
     font-weight: 600;
+  }
+  .giants li {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .giants .pick {
+    flex: 1;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .giants .pick:hover {
+    text-decoration: underline;
+  }
+  .giants .pin {
+    background: none;
+    border: none;
+    padding: 0 2px;
+    width: 18px;
+    height: 16px;
+    color: #ffd27a;
+    cursor: pointer;
+    opacity: 0.35;
+  }
+  .giants .pin.on,
+  .giants .pin:hover {
+    opacity: 1;
   }
   .label.zone {
     color: #8fe0aa;
