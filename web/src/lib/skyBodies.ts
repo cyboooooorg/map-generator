@@ -110,6 +110,50 @@ export interface ShadowCaster {
 export const MAX_CASTERS = 4;
 
 /**
+ * Whether a body of the sky at `position` (its centre, `radius`, in radii
+ * of the body shown, the unit sphere at the origin) is nearer the camera
+ * at `camera` than the part of the body shown it covers: then it is drawn
+ * in front of it. Along its centre's line of sight when that line meets
+ * the body shown, else against the horizon's distance (the farthest any
+ * visible point of the body shown can be).
+ */
+export function inFrontOfGlobe(camera: Vec3, position: Vec3, radius: number): boolean {
+  const to: Vec3 = [position[0] - camera[0], position[1] - camera[1], position[2] - camera[2]];
+  const distance = Math.hypot(...to);
+  if (distance < 1e-12) return true;
+  const c2 = camera[0] ** 2 + camera[1] ** 2 + camera[2] ** 2;
+  // The camera inside the body shown sees nothing of it to cover.
+  if (c2 <= 1) return false;
+  const b = (camera[0] * to[0] + camera[1] * to[1] + camera[2] * to[2]) / distance;
+  const disc = b * b - (c2 - 1);
+  if (disc > 0) {
+    const hit = -b - Math.sqrt(disc);
+    if (hit > 0) return distance - radius < hit;
+  }
+  return distance < Math.sqrt(c2 - 1);
+}
+
+/**
+ * The shadow casters the surface shader gets, at most MAX_CASTERS of them:
+ * those whose shadow (its penumbra included) reaches the body shown (the
+ * unit sphere) now, the sun in direction `sun` of angular radius
+ * `sunRadius` (radians), the largest in its sky first. A small moon close
+ * by then wins over a far giant whose shadow cannot reach.
+ */
+export function pickShadowCasters(casters: readonly ShadowCaster[], sun: Vec3, sunRadius: number): ShadowCaster[] {
+  return casters
+    .filter(({ position, radius }) => {
+      // Along the sunward axis through the body shown, and off it.
+      const t = position[0] * sun[0] + position[1] * sun[1] + position[2] * sun[2];
+      if (t <= -1) return false;
+      const off = Math.hypot(position[0] - t * sun[0], position[1] - t * sun[1], position[2] - t * sun[2]);
+      return off < 1 + radius + Math.max(t + 1, 0) * Math.tan(sunRadius);
+    })
+    .sort((p, q) => q.radius / Math.hypot(...q.position) - p.radius / Math.hypot(...p.position))
+    .slice(0, MAX_CASTERS);
+}
+
+/**
  * Share of the sunlight a shadow caster hides at a point of the unit
  * sphere (0 to 1), the sun of angular radius `sunRadius` (radians) in
  * direction `sun`: as the surface shader computes it (umbra inside, a

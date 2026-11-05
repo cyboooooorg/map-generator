@@ -68,7 +68,7 @@ import {
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
-import { IDENTITY_AXES, MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
+import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
@@ -140,6 +140,11 @@ const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodpla
 const MORPH_MS = 1200;
 /** How far the spin axes reach out of a body, in its radii (see setSpinAxes). */
 const SPIN_AXIS_LENGTH = 1.5;
+/**
+ * Draw order of a sky body in front of the body shown: after the globe,
+ * its atmosphere, rings, grid and axes, before the near orbit lines (10).
+ */
+const SKY_FRONT_ORDER = 5;
 /** The arrow of the sense of rotation round it: its height, radius and arc (radians). */
 const SPIN_ARROW_HEIGHT = 1.3;
 const SPIN_ARROW_RADIUS = 0.3;
@@ -1976,20 +1981,20 @@ export class PlanetView {
     this.camera.getWorldDirection(forward);
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
-    const at = (direction: Vector3): { x: number; y: number } | null => {
+    const at = (direction: Vector3, front = false): { x: number; y: number } | null => {
       if (!shown) return null;
       const d = direction.clone().normalize();
       if (d.dot(forward) <= 0) return null;
-      // Hidden by the globe (radius 1 at the origin) along the ray?
+      // Hidden by the globe (radius 1 at the origin) along the ray, unless in front of it?
       const b = camera.dot(d);
       const disc = b * b - (camera.lengthSq() - 1);
-      if (disc > 0 && -b - Math.sqrt(disc) > 0) return null;
+      if (!front && disc > 0 && -b - Math.sqrt(disc) > 0) return null;
       const p = camera.clone().addScaledVector(d, 1e3).project(this.camera);
       if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
     return {
-      bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction)),
+      bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),
       star: at(
         this.starPlace ? this.starPlace.position.clone().sub(this.camera.position) : this.u.uSunDir.value,
       ),
@@ -2016,6 +2021,13 @@ export class PlanetView {
     };
   }
 
+  /** Whether a body of the sky lies between the camera and the body shown (see inFrontOfGlobe). */
+  private inFront(body: SkyBody): boolean {
+    if (!body.position || body.radius === undefined) return false;
+    const c = this.camera.position;
+    return inFrontOfGlobe([c.x, c.y, c.z], body.position, body.radius);
+  }
+
   private drawSkyBodies(): void {
     const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
     const radiansPerPixel = ((this.camera.fov * Math.PI) / 180) / Math.max(this.renderer.domElement.height, 1);
@@ -2024,6 +2036,11 @@ export class PlanetView {
       const { mesh, body } = entry;
       mesh.visible = visible;
       if (!visible) continue;
+      // In front of the body shown: drawn after it, over it; else with the
+      // sky, behind it.
+      const front = this.inFront(body);
+      mesh.renderOrder = front ? SKY_FRONT_ORDER : -1;
+      mesh.material.depthTest = !front;
       const u = mesh.material.uniforms;
       const place = this.skyPlace(body);
       const dir = (u['uDir']!.value as Vector3).copy(place.direction);
