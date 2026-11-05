@@ -166,6 +166,9 @@
   let starZone = $state(true);
   let starProminences = $state(true);
   let starGiants = $state(true);
+  /** A planetary system's dotted star–planet lines and velocity vectors in the star view. */
+  let starLinks = $state(true);
+  let starVelocities = $state(true);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
@@ -1201,6 +1204,8 @@
       worldGiant={meta?.giant ?? null}
       host={null}
       bind:giants={starGiants}
+      bind:links={starLinks}
+      bind:velocities={starVelocities}
     />
   {/if}
 

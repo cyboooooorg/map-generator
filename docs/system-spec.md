@@ -343,6 +343,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   beyond the habitable zone, then compressed) and the clock (the
   innermost planet's year in 10 seconds, faster with **Speed**) are the
   system's, so picking another planet moves nothing else.
+  Every planet has a dotted line to the star labelled with its distance
+  now, and a velocity arrow along its orbit labelled with its speed now
+  (**Lines to the star** and **Velocities** hide them).
 - **A body not generated.** Picking it shows its sphere in the planet
   view (lit, with its axis and its sky) and its card, with **Generate**.
   Pressing it, or picking a body whose neighbourhood is not complete,

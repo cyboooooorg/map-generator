@@ -741,6 +741,10 @@ export const en = {
     impactsHelp:
       "Rate of asteroid and comet impacts, against the Solar System's, from the giant just outside the orbit (Horner & Jones 2008): low without one, highest for about a fifth of Jupiter's mass. It sets how cratered the surface is",
     impactsValue: (p: { factor: string }) => `${p.factor} the Solar System's`,
+    showLinks: 'Lines to the star',
+    showLinksHelp: 'A dotted line from the star to each planet, labelled with its distance now',
+    showVelocities: 'Velocities',
+    showVelocitiesHelp: 'Each planet\'s velocity: an arrow along its orbit, the way it goes, as long as its speed (one scale for all), labelled with its speed now',
     showGiants: 'Giants',
     showGiantsHelp: 'Shows the giant planets, their orbits and their rings',
     compressed: (p: { distance: string }) =>
