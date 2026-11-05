@@ -4,10 +4,12 @@
 // seen a little from above so that the orbits fill a wide box.
 import type { SystemSummary } from './api/types/SystemSummary';
 
-/** A planet of the orrery: its orbit's radii and its dot, in box units. */
+/** A planet of the orrery: its orbit and its dot, in box units. */
 export interface OrreryPlanet {
   id: string;
-  /** The orbit, an ellipse round the box's centre. */
+  /** The orbit, an SVG path: an ellipse with the star at a focus, on the orrery's scale. */
+  orbit: string;
+  /** The orbit's mean radii (its semi-major axis on the scale), across and down the box. */
   rx: number;
   ry: number;
   /** The dot's centre and radius. */
@@ -31,6 +33,10 @@ export interface Orrery {
 }
 
 const GIANTS = new Set(['gas-giant', 'ice-giant', 'hot-jupiter']);
+/** Points along an orbit's path. */
+const ORBIT_POINTS = 48;
+/** A coordinate as the path writes it: two decimals are plenty at thumbnail size. */
+const round = (v: number) => Math.round(v * 100) / 100;
 /** Room kept round the outermost orbit, box units (a giant's dot fits in it). */
 const PAD = 3;
 
@@ -56,7 +62,8 @@ export function orrery(system: SystemSummary, width: number, height: number): Or
   const starR = 2.6 * scale;
   const from = starR + 1.5 * scale;
   const planets = system.bodies.filter((b) => b.kind === 'planet' && b.orbit_au > 0);
-  const maxAu = Math.max(0, ...planets.map((p) => p.orbit_au));
+  // The farthest point of any orbit sits at the edge.
+  const maxAu = Math.max(0, ...planets.map((p) => p.orbit_au * (1 + Math.min(p.eccentricity, 0.99))));
   // The orbits fill the box: as wide as it is, as tall as it is.
   const toX = cx - PAD * scale;
   const toY = cy - PAD * scale;
@@ -72,14 +79,25 @@ export function orrery(system: SystemSummary, width: number, height: number): Or
     zone,
     planets: planets.map((planet, k) => {
       const [rx, ry] = radii(planet.orbit_au);
+      const e = Math.min(Math.max(planet.eccentricity, 0), 0.99);
+      const periapsis = planet.periapsis_deg * (Math.PI / 180);
+      /** The point of the orbit at angle `theta` from the reference direction. */
+      const at = (theta: number): [number, number] => {
+        const au = (planet.orbit_au * (1 - e * e)) / (1 + e * Math.cos(theta - periapsis));
+        const [ax, ay] = radii(au);
+        return [cx + Math.cos(theta) * ax, cy + Math.sin(theta) * ay];
+      };
+      const points = Array.from({ length: ORBIT_POINTS }, (_, i) => at((i / ORBIT_POINTS) * 2 * Math.PI));
+      const orbit = `M ${points.map(([x, y]) => `${round(x)} ${round(y)}`).join(' L ')} Z`;
       // The golden angle apart, from a start the seed sets.
-      const angle = (system.seed % 360) * (Math.PI / 180) + k * 2.399_963;
+      const [x, y] = at((system.seed % 360) * (Math.PI / 180) + k * 2.399_963);
       return {
         id: planet.id,
+        orbit,
         rx,
         ry,
-        x: cx + Math.cos(angle) * rx,
-        y: cy + Math.sin(angle) * ry,
+        x,
+        y,
         r: (GIANTS.has(planet.body_type) ? 2.1 : 1.4) * scale,
         colour: planet.colour,
         generated: planet.generated,

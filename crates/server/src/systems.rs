@@ -109,6 +109,12 @@ struct MetaStarInfo {
 struct MetaOrbit {
     #[serde(default)]
     semi_major_axis_au: f64,
+    #[serde(default)]
+    eccentricity: f64,
+    #[serde(default)]
+    node_deg: f64,
+    #[serde(default)]
+    periapsis_deg: f64,
 }
 
 #[derive(Deserialize)]
@@ -197,6 +203,8 @@ pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
                     .unwrap_or([0.5, 0.5, 0.5]),
                 generated: b.generated,
                 orbit_au: b.orbit.semi_major_axis_au,
+                eccentricity: b.orbit.eccentricity,
+                periapsis_deg: (b.orbit.node_deg + b.orbit.periapsis_deg).rem_euclid(360.0),
             })
             .collect(),
         names: given_names(root, id),
@@ -366,7 +374,7 @@ mod tests {
         "bodies": [
             {"id": "b", "kind": "planet", "type": "barren", "parent": null, "designation": "MGS 48213 b", "generated": false},
             {"id": "c", "kind": "planet", "type": "terran", "parent": null, "designation": "MGS 48213 c", "generated": true,
-             "orbit": {"semi_major_axis_au": 0.9}},
+             "orbit": {"semi_major_axis_au": 0.9, "eccentricity": 0.1, "node_deg": 300, "periapsis_deg": 90}},
             {"id": "c-1", "kind": "moon", "type": "rocky-moon", "parent": "c", "designation": "MGS 48213 c I", "generated": true},
             {"id": "d", "kind": "planet", "type": "gas-giant", "parent": null, "designation": "MGS 48213 d"}
         ]
@@ -420,6 +428,10 @@ mod tests {
         assert_eq!((s.hz_inner_au, s.hz_outer_au), (0.6, 1.1));
         let orbits: Vec<f64> = s.bodies.iter().map(|b| b.orbit_au).collect();
         assert_eq!(orbits, [0.0, 0.9, 0.0, 0.0]);
+        assert_eq!(
+            (s.bodies[1].eccentricity, s.bodies[1].periapsis_deg),
+            (0.1, 30.0)
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 

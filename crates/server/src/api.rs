@@ -310,6 +310,11 @@ pub struct BodySummary {
     /// Its orbit's semi-major axis, AU: round the star for a planet, round
     /// its planet for a moon (0 when the system file does not give it).
     pub orbit_au: f64,
+    /// Its orbit's eccentricity, and the longitude of its periapsis
+    /// (the node's longitude plus the argument of periapsis, degrees,
+    /// 0 to 360), for the library's orrery (0 when not given).
+    pub eccentricity: f64,
+    pub periapsis_deg: f64,
 }
 
 /// Query of a system request (`POST /api/systems?replace=true`).

@@ -6,7 +6,7 @@
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { formatAu, formatInt, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { t } from '../lib/i18n/index.svelte';
-  import { type CardBox, linkEnd, zonePlace } from '../lib/planetCard';
+  import { type CardBox, type CardMetric, type Extreme, linkEnd, zonePlace } from '../lib/planetCard';
   import type { SystemPlanet } from '../lib/systemStar';
   import { orbitalSpeed } from '../lib/viewer/starSystem';
 
@@ -31,9 +31,30 @@
     /** The pointer comes over the card, or leaves it (an unpinned card stays while it is over it). */
     onEnter: () => void;
     onLeave: () => void;
+    /** The lines where this card holds the highest or lowest value of the pinned cards (see extremes). */
+    marks?: Partial<Record<CardMetric, Extreme>>;
+    /** Opens one of its moons, by body id. */
+    onOpenMoon?: (id: string) => void;
   }
 
-  let { planet, star, x, y, distance, box, onSize, selected, pinned, onPin, onUnpin, onOpen, onEnter, onLeave }: Props = $props();
+  let {
+    planet,
+    star,
+    x,
+    y,
+    distance,
+    box,
+    onSize,
+    selected,
+    pinned,
+    onPin,
+    onUnpin,
+    onOpen,
+    onEnter,
+    onLeave,
+    marks = {},
+    onOpenMoon = () => {},
+  }: Props = $props();
 
   let width = $state(220);
   let height = $state(160);
@@ -49,6 +70,13 @@
   );
   const radius = $derived(withUnit(formatUpTo(planet.radius_km / 6371, planet.radius_km < 63_710 ? 2 : 1), 'R⊕'));
   const speed = $derived(withUnit(formatUpTo(orbitalSpeed(star.mass, planet.orbit_au, distance), 1), 'km/s'));
+  const day = $derived(
+    planet.locked
+      ? t.planetCard.dayLocked
+      : planet.day_hours < 48
+        ? withUnit(formatUpTo(planet.day_hours, 1), 'h')
+        : formatYear(planet.day_hours / 24),
+  );
   const zone = $derived.by(() => {
     const place = zonePlace(planet.orbit_au, star.hz_inner_au, star.hz_outer_au);
     if (place.inside) return t.planetCard.zoneInside;
@@ -56,6 +84,15 @@
     return place.side === 'inner' ? t.planetCard.zoneInner({ gap }) : t.planetCard.zoneOuter({ gap });
   });
 </script>
+
+{#snippet value(metric: CardMetric, text: string)}
+  {@const mark = marks[metric]}
+  <span class={mark ?? ''} title={mark === 'max' ? t.planetCard.highest : mark === 'min' ? t.planetCard.lowest : undefined}
+    >{text}{#if mark}<span class="mark" aria-label={mark === 'max' ? t.planetCard.highest : t.planetCard.lowest}
+        >{mark === 'max' ? '▲' : '▼'}</span
+      >{/if}</span
+  >
+{/snippet}
 
 <svg class="link" aria-hidden="true" transition:scale={{ duration: 180, start: 1, opacity: 0 }}>
   <line x1={x} y1={y} x2={end.x} y2={end.y} />
@@ -95,17 +132,31 @@
   </header>
   <dl>
     <dt>{t.planetCard.size}</dt>
-    <dd>{t.planetCard.sizeValue({ radius, mass })}</dd>
+    <dd>{@render value('radius', radius)} · {@render value('mass', mass)}</dd>
     <dt>{t.planetCard.orbit}</dt>
-    <dd>{t.planetCard.orbitValue({ distance: formatAu(planet.orbit_au), e: formatUpTo(planet.eccentricity, 3) })}</dd>
+    <dd>{@render value('orbit', formatAu(planet.orbit_au))} · e {formatUpTo(planet.eccentricity, 3)}</dd>
     <dt>{t.planetCard.motion}</dt>
-    <dd>{t.planetCard.motionValue({ speed, year: formatYear(planet.year_days) })}</dd>
+    <dd>{@render value('speed', t.planetCard.speedNow({ speed }))}</dd>
+    <dt>{t.planetCard.year}</dt>
+    <dd>{@render value('year', formatYear(planet.year_days))}</dd>
+    <dt>{t.planetCard.day}</dt>
+    <dd>{@render value('day', day)}</dd>
+    <dt>{t.planetCard.light}</dt>
+    <dd>{@render value('light', t.planetCard.lightValue({ flux: formatUpTo(planet.flux_earth, planet.flux_earth < 0.1 ? 3 : 2) }))}</dd>
+    <dt>{t.planetCard.gravity}</dt>
+    <dd>{@render value('gravity', withUnit(formatUpTo(planet.gravity, 2), 'g'))}</dd>
     <dt>{t.planetCard.equilibrium}</dt>
-    <dd>{withUnit(formatInt(Math.round(planet.equilibrium_k - 273.15)), '°C')}</dd>
+    <dd>{@render value('equilibrium', withUnit(formatInt(Math.round(planet.equilibrium_k - 273.15)), '°C'))}</dd>
     <dt>{t.planetCard.zone}</dt>
     <dd>{zone}</dd>
     <dt>{t.planetCard.moons}</dt>
-    <dd>{formatInt(planet.moons)}</dd>
+    <dd>
+      {@render value('moons', formatInt(planet.moons))}{#each planet.moonList as moon, i (moon.id)}{i === 0 ? ' · ' : ', '}<button
+          type="button"
+          class="moon"
+          onclick={() => onOpenMoon(moon.id)}>{moon.name}</button
+        >{/each}
+    </dd>
   </dl>
   <footer>
     <small class="muted">{planet.generated ? t.planetCard.generated : t.planetCard.notGenerated}</small>
@@ -190,6 +241,28 @@
   }
   dd {
     margin: 0;
+  }
+  .max {
+    color: #ffd27a;
+  }
+  .min {
+    color: #8fc3ff;
+  }
+  .mark {
+    margin-left: 2px;
+    font-size: 0.6rem;
+    vertical-align: 1px;
+  }
+  button.moon {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent, #6aa8ff);
+    font: inherit;
+    cursor: pointer;
+  }
+  button.moon:hover {
+    text-decoration: underline;
   }
   footer {
     display: flex;
