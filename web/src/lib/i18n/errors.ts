@@ -1,6 +1,7 @@
 // Error messages in the active locale: the server's reasons, translated
 // from their code when it sent one, its English text otherwise.
 import { ApiFailure } from '../api/client';
+import { presetName } from './names.svelte';
 import type { ErrorDetail } from '../api/types/ErrorDetail';
 import { formatInt, formatUpTo } from '../format';
 import { t } from './index.svelte';
@@ -35,6 +36,16 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.moonsOfAMoon;
     case 'hot_giant_moons':
       return t.errors.hotGiantMoons({ count: detail.count });
+    case 'too_many_planets':
+      return t.errors.tooManyPlanets({ asked: detail.asked, max: detail.max });
+    case 'zone_full':
+      return t.errors.zoneFull({ type: presetName({ name: detail.body_type }), asked: detail.asked, fits: detail.fits });
+    case 'type_impossible':
+      return t.errors.typeImpossible({ type: presetName({ name: detail.body_type }) });
+    case 'unknown_type':
+      return t.errors.unknownType({ type: detail.body_type });
+    case 'system_exists':
+      return t.errors.systemExists({ system: detail.system });
   }
 }
 

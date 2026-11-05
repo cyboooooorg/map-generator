@@ -821,6 +821,11 @@ export const fr: Messages = {
     noRoomForMoons: (p) =>
       `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies verrouillent la planète sur son étoile ou la gardent trop près. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
     moonsOfAMoon: `La lune d’une géante ne garde aucune lune (sa sphère de Hill est trop petite)${S}: demandez des lunes ou une lune de géante, pas les deux.`,
+    tooManyPlanets: (p) => `${p.asked} planètes demandées${S}: un système en compte ${p.max} au plus.`,
+    zoneFull: (p) => `${p.asked} planètes de type ${p.type} demandées, mais leur bande de distances autour de cette étoile n’en tient que ${p.fits}.`,
+    typeImpossible: (p) => `Cette étoile ne laisse aucune place à une planète de type ${p.type}.`,
+    unknownType: (p) => `Type de planète inconnu${S}: ${p.type}.`,
+    systemExists: (p) => `Le système ${p.system} existe déjà${S}: remplacez-le, supprimez-le ou choisissez une autre graine.`,
     hotGiantMoons: (p) =>
       `Une géante chaude ne garde aucune lune (${p.count} demandées)${S}: si près de son étoile, sa sphère de Hill est trop petite. Choisissez une orbite plus froide ou aucune lune.`,
     unknownPreset: (p) => `Aucun modèle de planète ne s’appelle ${p.preset}.`,

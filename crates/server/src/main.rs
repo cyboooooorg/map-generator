@@ -5,6 +5,7 @@
 //! | Variable              | Default      | Purpose                                  |
 //! |-----------------------|--------------|------------------------------------------|
 //! | `MAPGEN_WORLDS_DIR`   | `worlds`     | generated worlds, read and written       |
+//! | `MAPGEN_SYSTEMS_DIR`  | `systems`    | drawn systems and their bodies           |
 //! | `MAPGEN_PRESETS_DIR`  | `presets`    | extra planet presets (`*.toml`)          |
 //! | `MAPGEN_STATIC_DIR`   | `web/dist`   | built web front-end                      |
 //! | `MAPGEN_MAX_PIXELS`   | `8388608`    | largest map accepted (width × height)    |
@@ -19,6 +20,8 @@ mod api;
 mod app;
 mod catalog;
 mod memory;
+mod staging;
+mod systems;
 mod thumbs;
 mod tiles;
 mod worlds;
@@ -40,6 +43,7 @@ async fn main() -> std::io::Result<()> {
 
     let config = app::Config {
         worlds_dir: PathBuf::from(env_or("MAPGEN_WORLDS_DIR", "worlds")),
+        systems_dir: PathBuf::from(env_or("MAPGEN_SYSTEMS_DIR", "systems")),
         presets_dir: PathBuf::from(env_or("MAPGEN_PRESETS_DIR", "presets")),
         static_dir: PathBuf::from(env_or("MAPGEN_STATIC_DIR", "web/dist")),
         max_pixels: std::env::var("MAPGEN_MAX_PIXELS")
@@ -52,6 +56,7 @@ async fn main() -> std::io::Result<()> {
             .map_or(tiles::DEFAULT_BUDGET_BYTES, |mb| mb << 20),
     };
     std::fs::create_dir_all(&config.worlds_dir)?;
+    std::fs::create_dir_all(&config.systems_dir)?;
     let address = format!("{}:{}", env_or("HOST", "0.0.0.0"), env_or("PORT", "3000"));
     tracing::info!(?config, "listening on http://{address}");
 
