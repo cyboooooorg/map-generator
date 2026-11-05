@@ -330,11 +330,19 @@ addressed as `<system-id>/<body-id>` everywhere.
   names, with a mark on those not generated yet. `U` steps through the
   shown body's family (a planet and its moons). The star view becomes a
   **system view**: today's, with every planet drawn as its sphere on its
-  orbit, a click on one picking it. The planet picked keeps its orbit
-  line, its moons and its apsides; the scale (linear to just beyond the
-  habitable zone, then compressed) and the clock (the innermost planet's
-  year in 10 seconds, faster with **Speed**) are the system's, so
-  picking another planet moves nothing else.
+  orbit (a generated planet wrapped in its map, its thumbnail). Hovering
+  a planet rings it and opens its card beside it, linked by a line: name
+  and type, radius and mass, semi-major axis and eccentricity, current
+  speed and year, equilibrium temperature, place relative to the
+  habitable zone, moons, and whether it is generated, with a button that
+  opens it. A click or a tap pins the card, and several pinned cards can
+  be compared side by side; they follow their planets, and last for the
+  session while the system is shown, the planet view included. A double
+  click, or the card's button, opens the planet. The planet picked keeps
+  its orbit line, its moons and its apsides; the scale (linear to just
+  beyond the habitable zone, then compressed) and the clock (the
+  innermost planet's year in 10 seconds, faster with **Speed**) are the
+  system's, so picking another planet moves nothing else.
 - **A body not generated.** Picking it shows its sphere in the planet
   view (lit, with its axis and its sky) and its card, with **Generate**.
   Pressing it, or picking a body whose neighbourhood is not complete,

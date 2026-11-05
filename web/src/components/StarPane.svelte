@@ -2,6 +2,9 @@
   // The star view of a world: its star as a globe, its system around it,
   // and the numbers of both (see StarView.ts).
   import { onMount } from 'svelte';
+  import PlanetCard from './PlanetCard.svelte';
+  import { layoutCards, shownCards } from '../lib/planetCard';
+  import type { SystemPlanet } from '../lib/systemStar';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
@@ -54,6 +57,20 @@
      * planet) of the planet `star` describes; null for a lone world.
      */
     selected?: number | null;
+    /**
+     * A planetary system's planets, in the giants' order, for their cards
+     * (hovered, or pinned with a click); null for a lone world, which has
+     * none.
+     */
+    planets?: readonly SystemPlanet[] | null;
+    /** The planets whose cards are pinned, by id, in pinning order. */
+    pinned?: readonly string[];
+    onPin?: (id: string) => void;
+    onUnpin?: (id: string) => void;
+    /** Opens a planet (a double click on its marker, or its card's button). */
+    onOpenPlanet?: ((index: number) => void) | null;
+    /** The map wrapped round each planet's marker, in the giants' order, null for its colour. */
+    maps?: readonly (string | null)[] | null;
   }
 
   let {
@@ -75,6 +92,12 @@
     onPickPlanet = null,
     planetName = null,
     selected = null,
+    planets = null,
+    pinned = [],
+    onPin = () => {},
+    onUnpin = () => {},
+    onOpenPlanet = null,
+    maps = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
@@ -115,6 +138,69 @@
   });
 
   $effect(() => view?.setStar(star, omega, giantList, selected));
+  $effect(() => view?.setPlanetMaps(maps ?? []));
+
+  /** The planet under the pointer, by index, while its card is open unpinned. */
+  let hovered = $state<number | null>(null);
+  /** Whether the pointer is over a card (an unpinned card then stays open). */
+  let overCard = false;
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Leave the time to cross from a marker to its card before closing it. */
+  const CLOSE_MS = 250;
+  const scheduleClose = () => {
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      if (!overCard) hovered = null;
+    }, CLOSE_MS);
+  };
+  const ids = $derived(planets?.map((p) => p.id) ?? []);
+  const cards = $derived(planets ? shownCards(ids, pinned, hovered) : []);
+  // Another system: no card left open from the last one.
+  const idKey = $derived(ids.join(' '));
+  $effect(() => {
+    void idKey;
+    hovered = null;
+  });
+  $effect(() => {
+    if (!view) return;
+    view.onHoverPlanet = planets
+      ? (index) => {
+          if (index === null) scheduleClose();
+          else {
+            clearTimeout(closeTimer);
+            hovered = index;
+          }
+        }
+      : null;
+    view.onOpenPlanet = planets ? onOpenPlanet : null;
+  });
+  $effect(() => () => clearTimeout(closeTimer));
+  // Rings round the selected planet, the pinned ones and the one hovered.
+  $effect(() => {
+    view?.setHighlighted(planets ? [...(selected !== null ? [selected] : []), ...cards.map((c) => c.index)] : []);
+  });
+  /** The size of the view, for the cards to keep inside it. */
+  let viewWidth = $state(0);
+  let viewHeight = $state(0);
+  /** Each card's size once drawn, CSS px, by planet id. */
+  let cardSizes = $state<Record<string, { width: number; height: number }>>({});
+  /** The cards with their planets' places, pinned first so that they keep theirs. */
+  const placedCards = $derived.by(() => {
+    if (!planets) return [];
+    const spots = cards.flatMap((card) => {
+      const planet = planets[card.index];
+      const at = labels?.giants.find((g) => g.index === card.index);
+      if (!planet || !at) return [];
+      const size = cardSizes[planet.id] ?? { width: 220, height: 160 };
+      return [{ ...card, planet, at, ...size }];
+    });
+    const boxes = layoutCards(
+      spots.map((s) => ({ x: s.at.x, y: s.at.y, width: s.width, height: s.height })),
+      viewWidth,
+      viewHeight,
+    );
+    return spots.map((s, k) => ({ ...s, box: boxes[k]! }));
+  });
   $effect(() => {
     if (view) view.onPickPlanet = onPickPlanet;
   });
@@ -262,6 +348,41 @@
     {/each}
   </div>
 {/if}
+{#if planets}
+  <div class="cards" bind:clientWidth={viewWidth} bind:clientHeight={viewHeight}>
+    {#each placedCards as card (card.planet.id)}
+      {@const planet = card.planet}
+      <PlanetCard
+        {planet}
+        {star}
+        x={card.at.x}
+        y={card.at.y}
+        distance={card.at.distance}
+        box={card.box}
+        onSize={(width, height) => {
+          const old = cardSizes[planet.id];
+          if (!old || old.width !== width || old.height !== height) cardSizes[planet.id] = { width, height };
+        }}
+        selected={card.index === selected}
+        pinned={card.pinned}
+        onPin={() => onPin(planet.id)}
+        onUnpin={() => {
+          onUnpin(planet.id);
+          hovered = null;
+        }}
+        onOpen={() => onOpenPlanet?.(card.index)}
+        onEnter={() => {
+          overCard = true;
+          clearTimeout(closeTimer);
+        }}
+        onLeave={() => {
+          overCard = false;
+          scheduleClose();
+        }}
+      />
+    {/each}
+  </div>
+{/if}
 <details class="star-panel" role="region" aria-label={t.starView.title} open>
   <summary
     ><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></summary
@@ -393,6 +514,12 @@
   }
   .star-canvas:active {
     cursor: grabbing;
+  }
+  .cards {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
   }
   .labels {
     position: absolute;
