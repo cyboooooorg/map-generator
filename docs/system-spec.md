@@ -320,7 +320,10 @@ addressed as `<system-id>/<body-id>` everywhere.
 - **Viewer chrome.** The star view's data is in a dock of panels by
   theme (the star, the planet, the planets), each of which can float over
   the view; its display switches are an icon bar, and its time a playback
-  bar at the bottom (play, date, jumps, speed).
+  bar at the bottom (play, date, jumps, speed). The planet viewer has the
+  same chrome: panels (info, map, light and season, epoch, host planet,
+  hexes), an icon bar of its display switches, and one clock in days for
+  its seasons and moons.
 - **Library.** The world list becomes a system list. Each row shows the
   star's designation (or given name), a strip of small spheres (one per
   planet, in order, coloured as their previews, the generated ones
