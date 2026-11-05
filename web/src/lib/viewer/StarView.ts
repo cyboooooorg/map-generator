@@ -204,6 +204,8 @@ export class StarView {
   private pulls: Line2[] = [];
   /** The fat lines' materials, which need the view's size in pixels. */
   private fatMaterials: LineMaterial[] = [];
+  /** The neutral colours of the overlays, from the theme (see setOverlayColours). */
+  private overlay = { orbit: '#c8d2e6', selected: '#e6ecf8', line: '#ffe3a8', muted: '#8a93a8' };
   /** A planetary system's selected orbit, drawn thick over the thin one. */
   private readonly selectedOrbit: Line2;
   /** A planetary system's frost line (see frostLineAu), and its Hill spheres round the planets. */
@@ -388,7 +390,7 @@ export class StarView {
         return new Vector3(Math.cos(a), 0, Math.sin(a));
       }),
     );
-    this.orbit = new Line(circle, new LineBasicMaterial({ color: '#c8d2e6', transparent: true, opacity: 0.7 }));
+    this.orbit = new Line(circle, new LineBasicMaterial({ color: this.overlay.orbit, transparent: true, opacity: 0.7 }));
     this.scene.add(this.orbit);
     this.planet = new Mesh(new SphereGeometry(PLANET_MARKER, 32, 16), new MeshBasicMaterial({ color: '#7fb2ff' }));
     this.scene.add(this.planet);
@@ -398,7 +400,7 @@ export class StarView {
     this.scene.add(this.arrowGroup);
     this.scene.add(this.pullGroup);
     this.scene.add(this.hillGroup);
-    this.selectedOrbit = new Line2(new LineGeometry(), this.fatMaterial('#e6ecf8', 2.2, 0.9));
+    this.selectedOrbit = new Line2(new LineGeometry(), this.fatMaterial(this.overlay.selected, 2.2, 0.9));
     this.selectedOrbit.renderOrder = 3;
     this.selectedOrbit.frustumCulled = false;
     this.selectedOrbit.visible = false;
@@ -560,7 +562,7 @@ export class StarView {
             return new Vector3(Math.cos(a) * orbit.radius, 0, -Math.sin(a) * orbit.radius);
           }),
         ),
-        new LineBasicMaterial({ color: '#c8d2e6', transparent: true, opacity: 0.35 }),
+        new LineBasicMaterial({ color: this.overlay.orbit, transparent: true, opacity: 0.35 }),
       );
       ring.rotation.x = orbit.inclination;
       // Transparent: drawn in a fixed order with the glow and prominences.
@@ -614,7 +616,7 @@ export class StarView {
               return new Vector3(Math.cos(a) * orbit.radius, 0, -Math.sin(a) * orbit.radius);
             }),
           ),
-          new LineBasicMaterial({ color: '#c8d2e6', transparent: true, opacity: 0.3 }),
+          new LineBasicMaterial({ color: this.overlay.orbit, transparent: true, opacity: 0.3 }),
         );
         ring.rotation.x = orbit.inclination;
         ring.renderOrder = 3;
@@ -736,7 +738,7 @@ export class StarView {
         new BufferGeometry().setFromPoints(
           Array.from({ length: 193 }, (_, i) => this.inPlaneAt((i / 192) * 2 * Math.PI, from)),
         ),
-        new LineDashedMaterial({ color: '#8a93a8', dashSize: 0.12, gapSize: 0.12, transparent: true, opacity: 0.5 }),
+        new LineDashedMaterial({ color: this.overlay.muted, dashSize: 0.12, gapSize: 0.12, transparent: true, opacity: 0.5 }),
       );
       boundary.computeLineDistances();
       // Labelled on the far side of the star, where the view sees it best.
@@ -753,7 +755,7 @@ export class StarView {
             return this.orbitPoint(giant, nu, giant.orbit_au * orbitDistance(giant.eccentricity, nu));
           }),
         ),
-        new LineBasicMaterial({ color: colour.clone().lerp(new Color('#c8d2e6'), 0.5), transparent: true, opacity: 0.45 }),
+        new LineBasicMaterial({ color: colour.clone().lerp(new Color(this.overlay.orbit), 0.5), transparent: true, opacity: 0.45 }),
       );
       orbit.renderOrder = 3;
       this.giantOrbits.push(orbit);
@@ -902,7 +904,7 @@ export class StarView {
     this.arrowScale = velocityScale(this.info.mass, this.giants);
     this.pullScale = gravityScale(this.info.mass, this.giants);
     for (const giant of this.giants) {
-      const colour = new Color().setRGB(...giant.colour, SRGBColorSpace).lerp(new Color('#ffe3a8'), 0.6);
+      const colour = new Color().setRGB(...giant.colour, SRGBColorSpace).lerp(new Color(this.overlay.line), 0.6);
       const link = new Line(
         new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]),
         new LineDashedMaterial({ color: colour, dashSize: 0.06, gapSize: 0.08, transparent: true, opacity: 0.6 }),
@@ -938,6 +940,20 @@ export class StarView {
     this.velocitiesOn = on;
     this.applyVisibility();
     this.requestRender();
+  }
+
+  /**
+   * Recolours the neutral overlays (orbit lines, the selected orbit, the
+   * dotted lines, moon rings, the compression circle) with a theme's
+   * colours; the colours that carry meaning (zone, frost line, arrows)
+   * stay as they are.
+   */
+  setOverlayColours(colours: { orbit: string; selected: string; line: string; muted: string }): void {
+    this.overlay = { ...colours };
+    this.orbit.material.color.set(colours.orbit);
+    this.selectedOrbit.material.color.set(colours.selected);
+    if (this.lastStar) this.setStar(...this.lastStar);
+    else this.requestRender();
   }
 
   /** Shows or hides a planetary system's vectors of the star's pull on its planets. */

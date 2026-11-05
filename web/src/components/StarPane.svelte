@@ -16,6 +16,7 @@
   import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { layoutLabels } from '../lib/viewer/labelLayout';
+  import { onThemeChange, overlayColours } from '../lib/themes';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
 
   interface Props {
@@ -158,6 +159,8 @@
 
   onMount(() => {
     const created = new StarView(canvas);
+    created.setOverlayColours(overlayColours());
+    const stopTheme = onThemeChange(() => created.setOverlayColours(overlayColours()));
     created.onLabels = (next) => (labels = next);
     created.onClock = (fraction, days) => {
       yearFraction = fraction;
@@ -165,6 +168,7 @@
     };
     view = created;
     return () => {
+      stopTheme();
       created.dispose();
       view = null;
     };
@@ -835,7 +839,7 @@
     transform: translate(8px, -50%);
     padding: 1px 5px;
     border-radius: 4px;
-    background: rgb(5 7 13 / 0.7);
+    background: var(--label-bg);
     font-size: 0.75rem;
     white-space: nowrap;
   }
@@ -852,7 +856,7 @@
     color: #ffe3a8;
   }
   .label.giant {
-    color: #e8dcc4;
+    color: var(--label-text);
     transform: translate(10px, -110%);
   }
   .label.self {
@@ -875,7 +879,7 @@
     text-shadow: 0 0 3px #05070d, 0 0 3px #05070d;
   }
   .label.along.distance {
-    color: #ffe3a8;
+    color: var(--overlay-line);
   }
   .label.along.pull {
     color: #ffa07a;
@@ -884,7 +888,7 @@
     color: #8fe0aa;
   }
   .label.along.boundary {
-    color: #8a93a8;
+    color: var(--overlay-muted);
   }
   .label.along.frost {
     color: #9cc8ff;
@@ -993,7 +997,10 @@
     display: grid;
     gap: 6px;
     padding: 10px 12px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 0.85rem;

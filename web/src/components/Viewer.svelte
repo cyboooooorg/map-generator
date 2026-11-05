@@ -1617,7 +1617,10 @@
     max-width: calc(100% - 280px);
   }
   .toolbar button {
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     padding: 4px 10px;
   }
   .toolbar button.active {
@@ -1636,7 +1639,10 @@
     display: grid;
     align-content: start;
     gap: 8px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px;
@@ -1695,7 +1701,10 @@
     right: 12px;
     bottom: 12px;
     width: 240px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 8px 10px;
@@ -1757,7 +1766,10 @@
     top: 52px;
     left: 12px;
     width: min(320px, calc(100% - 24px));
-    background: var(--panel-solid);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel-solid);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px 14px;
@@ -1864,7 +1876,10 @@
     align-items: center;
     gap: 8px;
     padding: 4px 10px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     border-radius: 8px;
   }
@@ -1888,7 +1903,10 @@
     margin: 0;
     padding: 4px 12px;
     border-radius: 999px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     color: var(--muted);
     font-size: 0.85rem;

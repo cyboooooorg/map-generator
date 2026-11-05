@@ -188,7 +188,10 @@
     margin: 0;
     padding: 2px 10px;
     border-radius: 6px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     font-weight: 600;
     pointer-events: none;
@@ -201,7 +204,10 @@
     margin: 0;
     padding: 3px 10px;
     border-radius: 6px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--border);
     font-size: 0.85rem;
     font-variant-numeric: tabular-nums;
@@ -215,7 +221,10 @@
     display: grid;
     gap: 6px;
     min-width: 220px;
-    background: var(--panel);
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
     border: 1px solid var(--accent);
     border-radius: 8px;
     padding: 10px 12px;
@@ -242,7 +251,10 @@
   @container (max-width: 580px) {
     .measure {
       right: 12px;
-      background: var(--panel-solid);
+      /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+      background: var(--frame-deco), var(--panel-solid);
+      clip-path: var(--frame-clip);
+      box-shadow: var(--glow);
     }
   }
 </style>
