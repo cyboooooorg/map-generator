@@ -190,7 +190,7 @@ export function decodeLayers(
   };
 }
 
-/** The elevation and biomes of a world at an epoch, as served (`GET /api/worlds/{id}/epoch/{ma}/...`). */
+/** The elevation and biomes of a world at an epoch, as served (`GET /api/systems/{id}/bodies/{body}/epoch/{ma}/...`). */
 export interface EpochFiles {
   /** 16-bit, encoded as `raw_data/elevation.png`. */
   elevation: Uint16Array;

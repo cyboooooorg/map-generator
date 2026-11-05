@@ -5,16 +5,6 @@
 //! | `GET /healthz`                  | liveness probe                                    |
 //! | `GET /api/presets`              | planet presets the form can offer                 |
 //! | `GET /api/form`                 | parameter limits and defaults                     |
-//! | `GET /api/worlds`               | generated worlds, most recent first               |
-//! | `POST /api/worlds`              | queue a generation (`WorldRequest` body)          |
-//! | `POST /api/worlds?replace=true` | same, replacing the world of that id once done    |
-//! | `DELETE /api/worlds/{id}`       | delete a world (409 while it is being generated)  |
-//! | `PUT /api/worlds/{id}/names`    | name a world and its moons (`GivenNames` body)    |
-//! | `POST /api/worlds/{id}/hex`     | resample a world onto a hex grid (`HexRequest`)   |
-//! | `GET /api/worlds/{id}/tiles/{z}/{x}/{y}?rev=&epoch=` | deep-zoom detail tile (PNG), at an epoch in Ma when set |
-//! | `GET /api/worlds/{id}/epoch/{ma}/{file}?rev=&scale=` | `surface.png`, `elevation.png` or `biomes.png` of a world at an epoch (see [`mapgen::epoch`]) |
-//! | `GET /api/worlds/{id}/host/siblings/{n}/tiles/…`, `…/epoch/…` | the same for the other moons of a giant whose moon the world is |
-//! | `GET /api/worlds/{id}/thumb?rev=` | thumbnail (PNG), made for older worlds (see [`thumbs`]) |
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
 //! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
@@ -26,7 +16,6 @@
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
-//! | `GET /worlds/{id}/...`          | world files (maps, raw data, diagnostic maps)     |
 //! | anything else                   | the web front-end (single-page app)               |
 //!
 //! World files and the front-end's `index.html` are sent with
@@ -37,16 +26,14 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, CreateQuery, ErrorDetail, FormSpec, GenerateStarted, GivenNames, HexRequest,
-    JobCreated, JobInfo, JobStatus, ParamSpec, PresetInfo, SystemCreated, SystemDetail,
-    SystemNames, SystemQuery, SystemSummary, WorldSummary,
+    ApiError, ErrorDetail, FormSpec, GenerateStarted, HexRequest, JobInfo, JobStatus, ParamSpec,
+    PresetInfo, SystemCreated, SystemDetail, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::memory;
 use crate::systems;
 use crate::thumbs::{ThumbError, Thumbnails};
 use crate::tiles::{self, TileCache, TileError};
-use crate::worlds;
 use axum::extract::{Path as UrlPath, Query, State};
 use axum::http::{Extensions, HeaderMap, HeaderValue, StatusCode, Version, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -54,8 +41,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use mapgen::detail::{RENDER_VERSION, TileId};
-use mapgen::export::{ExportOptions, export_host, export_moons, export_world, world_dir_name};
-use mapgen::generation::{GenerateOptions, Stage, generate_with_progress};
 use mapgen::hex::{self, DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
 use std::collections::HashMap;
@@ -120,7 +105,6 @@ struct Cancelled;
 /// Where the server reads and writes its files.
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub worlds_dir: PathBuf,
     /// Drawn systems (see [`systems`]).
     pub systems_dir: PathBuf,
     pub presets_dir: PathBuf,
@@ -212,7 +196,6 @@ fn world_failure(error: TileError, what: &str) -> Response {
 
 pub fn router(config: Config) -> Router {
     // Exports a killed server left unfinished.
-    worlds::sweep_temp_dirs(&config.worlds_dir);
     systems::sweep(&config.systems_dir);
     let catalog = Catalog::load(&config.presets_dir);
     let state = Arc::new(AppState {
@@ -244,7 +227,6 @@ pub fn router(config: Config) -> Router {
             },
         ));
     let files = Router::new()
-        .nest_service("/worlds", ServeDir::new(&config.worlds_dir))
         .nest_service("/systems", ServeDir::new(&config.systems_dir))
         .fallback_service(spa)
         .layer(SetResponseHeaderLayer::overriding(
@@ -258,29 +240,6 @@ pub fn router(config: Config) -> Router {
         .route("/healthz", get(|| async { "ok" }))
         .route("/api/presets", get(presets))
         .route("/api/form", get(form))
-        .route("/api/worlds", get(list_worlds).post(create_world))
-        .route("/api/worlds/{id}", delete(delete_world))
-        .route("/api/worlds/{id}/names", put(rename_world))
-        .route("/api/worlds/{id}/hex", post(hex_grid))
-        .route("/api/worlds/{id}/tiles/{z}/{x}/{y}", get(tile))
-        .route("/api/worlds/{id}/epoch/{epoch}/{file}", get(epoch_layer))
-        .route(
-            "/api/worlds/{id}/moons/{moon}/tiles/{z}/{x}/{y}",
-            get(moon_tile),
-        )
-        .route(
-            "/api/worlds/{id}/moons/{moon}/epoch/{epoch}/{file}",
-            get(moon_epoch_layer),
-        )
-        .route(
-            "/api/worlds/{id}/host/siblings/{sibling}/tiles/{z}/{x}/{y}",
-            get(sibling_tile),
-        )
-        .route(
-            "/api/worlds/{id}/host/siblings/{sibling}/epoch/{epoch}/{file}",
-            get(sibling_epoch_layer),
-        )
-        .route("/api/worlds/{id}/thumb", get(thumbnail))
         .route("/api/systems", get(list_systems).post(create_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
         .route("/api/systems/{id}/names", put(rename_system))
@@ -363,15 +322,6 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
     })
 }
 
-async fn list_worlds(State(state): State<Shared>) -> Json<Vec<WorldSummary>> {
-    let dir = state.config.worlds_dir.clone();
-    Json(
-        tokio::task::spawn_blocking(move || worlds::list(&dir))
-            .await
-            .unwrap_or_default(),
-    )
-}
-
 /// A failure the client can fix.
 fn bad(message: String) -> Failure {
     Failure(StatusCode::BAD_REQUEST, message)
@@ -400,18 +350,61 @@ async fn create_system(
     Json(request): Json<mapgen::system::SystemRequest>,
 ) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
     check_system_request(&request)?;
+    // Around a planet: its preset from the catalog only (never a path
+    // chosen by the client), its parameters resolved here, the system drawn
+    // around them.
+    let preset = match &request {
+        mapgen::system::SystemRequest::Around(world) => match &world.planet {
+            Some(spec) => Some((
+                state.catalog.resolve(spec).ok_or_else(|| {
+                    Rejection(
+                        bad(format!("unknown planet preset {spec:?}")),
+                        Some(ErrorDetail::UnknownPreset {
+                            preset: spec.clone(),
+                        }),
+                    )
+                })?,
+                spec.clone(),
+            )),
+            None => None,
+        },
+        mapgen::system::SystemRequest::System(_) => None,
+    };
     let drawn = request.clone();
-    let system =
-        tokio::task::spawn_blocking(move || mapgen::system::draw(&drawn, &mut rand::rng()))
-            .await
-            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-            .map_err(|e| Rejection(bad(e.to_string()), ErrorDetail::of_request(&e)))?;
+    let (system, ignored) = tokio::task::spawn_blocking(move || {
+        let rng = &mut rand::rng();
+        match &drawn {
+            mapgen::system::SystemRequest::Around(world) => {
+                let resolved = match preset {
+                    Some((preset, spec)) => world.resolve_with_preset(preset, spec, rng)?,
+                    None => world.resolve(rng)?,
+                };
+                let ignored = resolved.ignored.iter().map(|f| (*f).to_owned()).collect();
+                Ok((
+                    mapgen::system::draw_around_params(world, resolved.params),
+                    ignored,
+                ))
+            }
+            mapgen::system::SystemRequest::System(_) => {
+                mapgen::system::draw(&drawn, rng).map(|s| (s, Vec::new()))
+            }
+        }
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e: mapgen::request::RequestError| {
+        Rejection(bad(e.to_string()), ErrorDetail::of_request(&e))
+    })?;
     let pixels = u64::from(system.width) * u64::from(system.height);
     if pixels > state.config.max_pixels {
         return Err(Rejection(
             bad(format!(
-                "{} × {} is more than the {} pixels this server accepts",
-                system.width, system.height, state.config.max_pixels
+                "{} × {} needs about {:.1} GB of memory; this server accepts up to {} pixels \
+                 (MAPGEN_MAX_PIXELS)",
+                system.width,
+                system.height,
+                (pixels * BYTES_PER_PIXEL) as f64 / 1e9,
+                state.config.max_pixels
             )),
             Some(ErrorDetail::TooManyPixels {
                 width: system.width,
@@ -477,20 +470,18 @@ async fn create_system(
         Json(SystemCreated {
             system_id: id,
             job_id,
+            ignored,
         }),
     ))
 }
 
-/// Refuses what a system request may not ask of this server before the
-/// draw: a map side beyond [`MAX_SIZE`], and, around a planet, a preset
-/// that is not built in. The draw loads a preset by its spec, and a spec
-/// ending in `.toml` is a path: only names, never a path chosen by the
-/// client.
+/// Refuses a map side beyond [`MAX_SIZE`] before the draw (the preset of a
+/// planet asked for is checked against the catalog by [`create_system`]).
 fn check_system_request(request: &mapgen::system::SystemRequest) -> Result<(), Rejection> {
     use mapgen::system::SystemRequest;
-    let (width, height, planet) = match request {
-        SystemRequest::System(whole) => (whole.width, whole.height, None),
-        SystemRequest::Around(world) => (world.width, world.height, world.planet.as_ref()),
+    let (width, height) = match request {
+        SystemRequest::System(whole) => (whole.width, whole.height),
+        SystemRequest::Around(world) => (world.width, world.height),
     };
     for (field, value) in [("width", width), ("height", height)] {
         if let Some(value) = value.filter(|&v| v > MAX_SIZE) {
@@ -504,16 +495,6 @@ fn check_system_request(request: &mapgen::system::SystemRequest) -> Result<(), R
                 }),
             ));
         }
-    }
-    if let Some(spec) = planet
-        && !mapgen::preset::built_in_names().contains(&spec.as_str())
-    {
-        return Err(Rejection(
-            bad(format!("unknown planet preset {spec:?}")),
-            Some(ErrorDetail::UnknownPreset {
-                preset: spec.clone(),
-            }),
-        ));
     }
     Ok(())
 }
@@ -672,71 +653,6 @@ async fn generate_body(
     Ok(Json(GenerateStarted { job_id }))
 }
 
-/// Gives a world and its moons names (`PUT /api/worlds/{id}/names`), and
-/// answers its summary.
-async fn rename_world(
-    State(state): State<Shared>,
-    UrlPath(id): UrlPath<String>,
-    Json(given): Json<GivenNames>,
-) -> Result<Json<WorldSummary>, Failure> {
-    if !worlds::is_valid_id(&id) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
-    }
-    if state.pending.lock().expect("pending lock").contains(&id) {
-        return Err(Failure(
-            StatusCode::CONFLICT,
-            format!("world {id} is being generated: wait for its job"),
-        ));
-    }
-    let dir = state.config.worlds_dir.clone();
-    let world = id.clone();
-    let result = tokio::task::spawn_blocking(move || worlds::give_names(&dir, &world, given))
-        .await
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    result.map(Json).map_err(|e| match e {
-        worlds::NamingError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no world {id}")),
-        worlds::NamingError::InvalidName(name) => Failure(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            format!(
-                "invalid name {name:?}: 1 to {} characters, without control characters",
-                worlds::MAX_NAME_CHARS
-            ),
-        ),
-        worlds::NamingError::NoSuchMoon(n) => Failure(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            format!("world {id} has no moon {n}"),
-        ),
-        worlds::NamingError::Io(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
-    })
-}
-
-async fn delete_world(
-    State(state): State<Shared>,
-    UrlPath(id): UrlPath<String>,
-) -> Result<StatusCode, Failure> {
-    if !worlds::is_valid_id(&id) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
-    }
-    if state.pending.lock().expect("pending lock").contains(&id) {
-        return Err(Failure(
-            StatusCode::CONFLICT,
-            format!("world {id} is being generated: cancel its job first"),
-        ));
-    }
-    let dir = state.config.worlds_dir.join(&id);
-    if !dir.is_dir() {
-        return Err(Failure(StatusCode::NOT_FOUND, format!("no world {id}")));
-    }
-    let forgotten = state.tiles.forget(&id);
-    tokio::fs::remove_dir_all(&dir)
-        .await
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if forgotten {
-        let _ = tokio::task::spawn_blocking(memory::release).await;
-    }
-    Ok(StatusCode::NO_CONTENT)
-}
-
 /// Query of a tile request: the world revision and the renderer version
 /// the client knows, and the epoch shown (Ma before present, negative in
 /// the future; the world as generated without it).
@@ -759,7 +675,7 @@ async fn checked_epoch(
         return Ok(None);
     };
     let owned = dir.to_path_buf();
-    let epochs = tokio::task::spawn_blocking(move || worlds::epochs_at(&owned))
+    let epochs = tokio::task::spawn_blocking(move || systems::epochs_at(&owned))
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no world {id}")))?;
@@ -789,17 +705,6 @@ struct BodyLoc {
     revision: u64,
 }
 
-/// A world, or a moon of a world (`<id>/moons/<n>`), in `worlds/`: it takes
-/// its world's revision, as it is generated with it.
-async fn world_loc(state: &AppState, id: String) -> Result<BodyLoc, Failure> {
-    let revision = world_revision(state, world_of(&id)).await?;
-    Ok(BodyLoc {
-        dir: state.config.worlds_dir.join(&id),
-        key: id,
-        revision,
-    })
-}
-
 /// A generated body of a system, in `systems/<id>/bodies/<body>/`: its own
 /// revision, so that generating another body keeps its tiles.
 async fn system_body_loc(state: &AppState, id: &str, body: &str) -> Result<BodyLoc, Failure> {
@@ -824,100 +729,6 @@ async fn system_body_loc(state: &AppState, id: &str, body: &str) -> Result<BodyL
         revision,
     })
 }
-
-async fn tile(
-    State(state): State<Shared>,
-    UrlPath((id, z, x, y)): UrlPath<(String, u32, u32, u32)>,
-    Query(query): Query<TileQuery>,
-) -> Result<Response, Failure> {
-    if !worlds::is_valid_id(&id) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid tile".into()));
-    }
-    body_tile(
-        state.clone(),
-        world_loc(&state, id).await?,
-        TileId { z, x, y },
-        query,
-    )
-    .await
-}
-
-/// A detail tile of moon `moon` (from 1) of a world, as [`tile`].
-async fn moon_tile(
-    State(state): State<Shared>,
-    UrlPath((id, moon, z, x, y)): UrlPath<(String, u32, u32, u32, u32)>,
-    Query(query): Query<TileQuery>,
-) -> Result<Response, Failure> {
-    let body = moon_body(&id, moon)?;
-    body_tile(
-        state.clone(),
-        world_loc(&state, body).await?,
-        TileId { z, x, y },
-        query,
-    )
-    .await
-}
-
-/// The body path of moon `moon` (from 1) of world `id`, as the world
-/// directory holds it: `<id>/moons/<moon>`.
-fn moon_body(id: &str, moon: u32) -> Result<String, Failure> {
-    if !worlds::is_valid_id(id) || !(1..=MAX_MOONS).contains(&moon) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid moon".into()));
-    }
-    Ok(format!("{id}/moons/{moon}"))
-}
-
-/// A detail tile of sibling `sibling` (from 1) of a giant's moon world:
-/// another moon of its giant, as [`tile`].
-async fn sibling_tile(
-    State(state): State<Shared>,
-    UrlPath((id, sibling, z, x, y)): UrlPath<(String, u32, u32, u32, u32)>,
-    Query(query): Query<TileQuery>,
-) -> Result<Response, Failure> {
-    let body = sibling_body(&id, sibling)?;
-    body_tile(
-        state.clone(),
-        world_loc(&state, body).await?,
-        TileId { z, x, y },
-        query,
-    )
-    .await
-}
-
-/// A layer of sibling `sibling` (from 1) of a world at an epoch, as
-/// [`epoch_layer`].
-async fn sibling_epoch_layer(
-    State(state): State<Shared>,
-    UrlPath((id, sibling, epoch_ma, file)): UrlPath<(String, u32, i32, String)>,
-    Query(query): Query<EpochQuery>,
-) -> Result<Response, Failure> {
-    let body = sibling_body(&id, sibling)?;
-    body_epoch_layer(
-        state.clone(),
-        world_loc(&state, body).await?,
-        epoch_ma,
-        file,
-        query,
-    )
-    .await
-}
-
-/// The body path of sibling `sibling` (from 1) of world `id`, the moon of
-/// a giant: `<id>/host/siblings/<sibling>` (see `mapgen::export::export_host`).
-fn sibling_body(id: &str, sibling: u32) -> Result<String, Failure> {
-    if !worlds::is_valid_id(id) || !(1..=MAX_MOONS).contains(&sibling) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid sibling".into()));
-    }
-    Ok(format!("{id}/host/siblings/{sibling}"))
-}
-
-/// The world id of a body path: the world itself, or a moon's world.
-fn world_of(body: &str) -> &str {
-    body.split('/').next().unwrap_or(body)
-}
-
-/// More moons than a world can have.
-const MAX_MOONS: u32 = 16;
 
 /// A detail tile of a body: a world (`id`) or one of its moons
 /// (`id/moons/n`, a world of its own in the world's directory).
@@ -982,47 +793,6 @@ struct EpochQuery {
     rev: Option<u64>,
     render: Option<u32>,
     scale: Option<u32>,
-}
-
-/// A base-resolution layer of a world shown at an epoch (Ma before
-/// present, negative in the future): `surface.png` (the hillshaded render,
-/// as `raw_data/surface.png`), `elevation.png` (16-bit, encoded as
-/// `raw_data/elevation.png`) or `biomes.png` (8-bit biome ids). Computed
-/// from the world loaded for the tiles at that epoch.
-async fn epoch_layer(
-    State(state): State<Shared>,
-    UrlPath((id, epoch_ma, file)): UrlPath<(String, i32, String)>,
-    Query(query): Query<EpochQuery>,
-) -> Result<Response, Failure> {
-    if !worlds::is_valid_id(&id) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
-    }
-    body_epoch_layer(
-        state.clone(),
-        world_loc(&state, id).await?,
-        epoch_ma,
-        file,
-        query,
-    )
-    .await
-}
-
-/// A layer of moon `moon` (from 1) of a world at an epoch, as
-/// [`epoch_layer`].
-async fn moon_epoch_layer(
-    State(state): State<Shared>,
-    UrlPath((id, moon, epoch_ma, file)): UrlPath<(String, u32, i32, String)>,
-    Query(query): Query<EpochQuery>,
-) -> Result<Response, Failure> {
-    let body = moon_body(&id, moon)?;
-    body_epoch_layer(
-        state.clone(),
-        world_loc(&state, body).await?,
-        epoch_ma,
-        file,
-        query,
-    )
-    .await
 }
 
 /// A layer of a body (see [`body_tile`]) at an epoch.
@@ -1093,20 +863,6 @@ struct ThumbQuery {
     rev: Option<u64>,
 }
 
-/// The thumbnail of a world, made from its `world.png` if it has none
-/// (see [`crate::thumbs`]).
-async fn thumbnail(
-    State(state): State<Shared>,
-    UrlPath(id): UrlPath<String>,
-    Query(query): Query<ThumbQuery>,
-) -> Result<Response, Failure> {
-    if !worlds::is_valid_id(&id) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
-    }
-    let loc = world_loc(&state, id).await?;
-    body_thumbnail(state, loc, query).await
-}
-
 /// The thumbnail of a body (see [`thumbnail`]).
 async fn body_thumbnail(
     state: Shared,
@@ -1136,32 +892,6 @@ async fn body_thumbnail(
         png,
     )
         .into_response())
-}
-
-/// The revision of a world (see [`worlds::revision`]), or 404.
-async fn world_revision(state: &AppState, id: &str) -> Result<u64, Failure> {
-    let worlds_dir = state.config.worlds_dir.clone();
-    let owned = id.to_string();
-    tokio::task::spawn_blocking(move || worlds::revision(&worlds_dir, &owned))
-        .await
-        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no raw data for {id}")))
-}
-
-/// Resamples a world onto a hex grid from the world loaded for the tiles
-/// (loading it if needed). Nothing is written: the `hexgrid` tool writes
-/// `hex/hex.json` and `hex/hex.png`. While a generation runs, answers 503
-/// like the tiles: loading a world then would add to the generation's peak.
-async fn hex_grid(
-    State(state): State<Shared>,
-    UrlPath(id): UrlPath<String>,
-    Json(request): Json<HexRequest>,
-) -> Result<Response, Failure> {
-    if !worlds::is_valid_id(&id) {
-        return Err(Failure(StatusCode::BAD_REQUEST, "invalid world id".into()));
-    }
-    let loc = world_loc(&state, id).await?;
-    body_hex(state, loc, request).await
 }
 
 /// The hex grid of a body (see [`hex_grid`]).
@@ -1202,248 +932,6 @@ async fn body_hex(state: Shared, loc: BodyLoc, request: HexRequest) -> Result<Re
     .await
     .map(|map: HexMap| Json(map).into_response())
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
-}
-
-/// Queues a generation. A world of the same id is refused with 409, unless
-/// the query asks to replace it: the new world is then generated into its
-/// temporary directory as usual and swapped in place of the old one at the
-/// end (see [`crate::staging::TempDir::commit_replacing`]), so a generation that
-/// fails or is cancelled keeps the old world. The old world cannot be
-/// deleted meanwhile (409, like any world being generated).
-async fn create_world(
-    State(state): State<Shared>,
-    Query(query): Query<CreateQuery>,
-    Json(request): Json<WorldRequest>,
-) -> Result<(StatusCode, Json<JobCreated>), Rejection> {
-    let replace = query.replace.unwrap_or(false);
-    let original = request.clone();
-    let bad = |msg: String| Failure(StatusCode::BAD_REQUEST, msg);
-    let rejected = |msg: String, detail: ErrorDetail| {
-        Rejection(Failure(StatusCode::BAD_REQUEST, msg), Some(detail))
-    };
-    for (field, value) in [("width", request.width), ("height", request.height)] {
-        if let Some(value) = value.filter(|&v| v > MAX_SIZE) {
-            return Err(rejected(
-                format!("{field} must be at most {MAX_SIZE}"),
-                ErrorDetail::SizeOutOfRange {
-                    field: field.to_owned(),
-                    value,
-                    min: mapgen::request::MAP_SIZE.0,
-                    max: MAX_SIZE,
-                },
-            ));
-        }
-    }
-    // Only catalog presets: never a path chosen by the client.
-    let preset = match &request.planet {
-        Some(spec) => Some((
-            state.catalog.resolve(spec).ok_or_else(|| {
-                rejected(
-                    format!("unknown planet preset {spec:?}"),
-                    ErrorDetail::UnknownPreset {
-                        preset: spec.clone(),
-                    },
-                )
-            })?,
-            spec.clone(),
-        )),
-        None => None,
-    };
-    // A land fraction samples the relief to find its sea level (50-100 ms
-    // of parallel work): off the async workers.
-    let resolved = tokio::task::spawn_blocking(move || {
-        let rng = &mut rand::rng();
-        match preset {
-            Some((preset, spec)) => request.resolve_with_preset(preset, spec, rng),
-            None => request.resolve(rng),
-        }
-    })
-    .await
-    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .map_err(|e| Rejection(bad(e.to_string()), ErrorDetail::of_request(&e)))?;
-    let params = resolved.params;
-    let ignored: Vec<String> = resolved.ignored.iter().map(|f| (*f).to_owned()).collect();
-    let pixels = params.width as u64 * params.height as u64;
-    if pixels > state.config.max_pixels {
-        return Err(rejected(
-            format!(
-                "{} × {} needs about {:.1} GB of memory; this server accepts up to {} pixels \
-                 (MAPGEN_MAX_PIXELS)",
-                params.width,
-                params.height,
-                (pixels * BYTES_PER_PIXEL) as f64 / 1e9,
-                state.config.max_pixels
-            ),
-            ErrorDetail::TooManyPixels {
-                width: params.width,
-                height: params.height,
-                max_pixels: state.config.max_pixels,
-            },
-        ));
-    }
-
-    let world_id = world_dir_name(&params);
-    {
-        let mut pending = state.pending.lock().expect("pending lock");
-        if pending.contains(&world_id) {
-            return Err(Rejection(
-                Failure(
-                    StatusCode::CONFLICT,
-                    format!("world {world_id} is being generated already"),
-                ),
-                Some(ErrorDetail::BeingGenerated {
-                    world: world_id.clone(),
-                }),
-            ));
-        }
-        if !replace && state.config.worlds_dir.join(&world_id).exists() {
-            return Err(Rejection(
-                Failure(
-                    StatusCode::CONFLICT,
-                    format!(
-                        "world {world_id} already exists: replace it, delete it or pick another seed"
-                    ),
-                ),
-                Some(ErrorDetail::WorldExists {
-                    world: world_id.clone(),
-                }),
-            ));
-        }
-        pending.push(world_id.clone());
-    }
-
-    let job_id = state.next_job.fetch_add(1, Ordering::Relaxed).to_string();
-    let (tx, rx) = watch::channel(JobStatus::Queued);
-    let cancel = Arc::new(Cancel::default());
-    {
-        let mut jobs = state.jobs.lock().expect("jobs lock");
-        forget_old_jobs(&mut jobs);
-        jobs.insert(
-            job_id.clone(),
-            Job {
-                world_id: world_id.clone(),
-                system: None,
-                request: original,
-                status: rx,
-                cancel: cancel.clone(),
-            },
-        );
-    }
-
-    let task_state = state.clone();
-    let task_world = world_id.clone();
-    tokio::spawn(async move {
-        let finish = |status: JobStatus| {
-            if let JobStatus::Failed { error } = &status {
-                tracing::error!("generation of {task_world} failed: {error}");
-            }
-            tx.send_replace(status);
-            task_state
-                .pending
-                .lock()
-                .expect("pending lock")
-                .retain(|id| id != &task_world);
-        };
-        // A job cancelled while it waits for its turn never starts.
-        let _permit = tokio::select! {
-            permit = task_state.queue.acquire() => permit,
-            () = cancel.notify.notified() => {
-                finish(JobStatus::Cancelled);
-                return;
-            }
-        };
-        if cancel.is_requested() {
-            finish(JobStatus::Cancelled);
-            return;
-        }
-        // Worlds loaded for the tiles would add to the generation's peak:
-        // free them, wait for a load in progress, and load none until it
-        // ends.
-        let paused_tiles = task_state.tiles.suspend().await;
-        let worlds_dir = task_state.config.worlds_dir.clone();
-        let progress = tx.clone();
-        let thread_cancel = cancel.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let steps = Stage::ALL.len() as u32;
-            let report = |stage: Stage| {
-                // Stages cannot be interrupted: a cancelled generation stops
-                // when the next one starts. `resume_unwind` skips the panic
-                // hook, so nothing is logged as a crash.
-                if thread_cancel.is_requested() {
-                    std::panic::resume_unwind(Box::new(Cancelled));
-                }
-                let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
-                progress.send_replace(JobStatus::Running {
-                    stage,
-                    step,
-                    steps,
-                    body: None,
-                    body_step: None,
-                    bodies: None,
-                });
-            };
-            // The web app does not show the diagnostic maps: skip them (no
-            // debug sink), and the time they take.
-            let generated = generate_with_progress(&params, GenerateOptions::default(), report);
-            report(Stage::Export);
-            // Written into a temporary directory, renamed into place once
-            // complete: a cancelled, failed or crashed export leaves nothing.
-            let id = world_dir_name(&generated.world.params);
-            let temp = crate::staging::TempDir::create(&worlds_dir, &id)?;
-            export_world(generated, temp.path(), ExportOptions { raw_data: true })?;
-            // The planet's memory is freed by now: its moons, one by one.
-            report(Stage::Moons);
-            export_moons(&params, temp.path(), ExportOptions { raw_data: true })?;
-            // A giant's moon: the giant, for its sky.
-            export_host(&params, temp.path(), ExportOptions { raw_data: true })?;
-            // The export cannot be interrupted: a cancel that arrived
-            // meanwhile drops it here.
-            if thread_cancel.is_requested() {
-                std::panic::resume_unwind(Box::new(Cancelled));
-            }
-            let target = worlds_dir.join(&id);
-            if replace {
-                temp.commit_replacing(&target)
-            } else {
-                temp.commit(&target)
-            }
-        })
-        .await;
-        let status = match result {
-            Ok(Ok(())) => {
-                // Drop any cached copy of the replaced world: the cache is
-                // emptied while a generation runs, but the swap must never
-                // leave the old revision behind.
-                if replace {
-                    task_state.tiles.forget(&task_world);
-                }
-                JobStatus::Done {
-                    world_id: task_world.clone(),
-                    bodies: Vec::new(),
-                }
-            }
-            Ok(Err(e)) => JobStatus::Failed { error: e },
-            Err(e) if e.is_panic() && cancel.is_requested() => JobStatus::Cancelled,
-            Err(e) => JobStatus::Failed {
-                error: format!("generation crashed: {e}"),
-            },
-        };
-        // The generation's memory, freed by now, goes back to the system
-        // (a few milliseconds), then tiles resume before the job reports its
-        // end, so a viewer opening the new world is served at once.
-        let _ = tokio::task::spawn_blocking(memory::release).await;
-        drop(paused_tiles);
-        finish(status);
-    });
-
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(JobCreated {
-            job_id,
-            world_id,
-            ignored,
-        }),
-    ))
 }
 
 /// Queues the generation of `body` of system `id` and its neighbourhood
@@ -1657,25 +1145,6 @@ mod tests {
     use tower::ServiceExt;
 
     #[test]
-    fn moons_are_bodies_in_their_world_directory() {
-        assert_eq!(
-            moon_body("terran-42", 1).ok().as_deref(),
-            Some("terran-42/moons/1")
-        );
-        assert!(moon_body("terran-42", 0).is_err());
-        assert!(moon_body("terran-42", MAX_MOONS + 1).is_err());
-        assert!(moon_body("../etc", 1).is_err());
-        assert_eq!(world_of("terran-42/moons/1"), "terran-42");
-        assert_eq!(world_of("terran-42"), "terran-42");
-        assert_eq!(
-            sibling_body("terran-5", 2).ok().as_deref(),
-            Some("terran-5/host/siblings/2")
-        );
-        assert!(sibling_body("terran-5", 0).is_err());
-        assert_eq!(world_of("terran-5/host/siblings/2"), "terran-5");
-    }
-
-    #[test]
     fn viewer_and_server_agree_on_the_tile_renderer_version() {
         let viewer = include_str!("../../../web/src/lib/viewer/TileLayer.ts");
         let expected = format!("export const TILE_RENDER_VERSION = {RENDER_VERSION};");
@@ -1689,9 +1158,8 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("mapgen-server-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join("worlds")).unwrap();
+        std::fs::create_dir_all(root.join("systems")).unwrap();
         Config {
-            worlds_dir: root.join("worlds"),
             systems_dir: root.join("systems"),
             presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets")),
             static_dir: root.join("static"),
@@ -1717,66 +1185,6 @@ mod tests {
         let status = response.status();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         (status, String::from_utf8_lossy(&bytes).into_owned())
-    }
-
-    #[tokio::test]
-    async fn names_a_world_and_its_moons() {
-        let config = temp_config("names");
-        let world = config.worlds_dir.join("terran-42");
-        std::fs::create_dir_all(world.join("raw_data")).unwrap();
-        std::fs::write(
-            world.join("raw_data/world.json"),
-            r#"{"planet_type":"terran","seed":42,"format_version":10,
-                "star":{"type":"G2V","orbit_au":1.0},
-                "giants":{"giants":[{"orbit_au":5.2},{"orbit_au":0.1}]},
-                "moons":{"moons":[{},{}]}}"#,
-        )
-        .unwrap();
-        let app = router(config);
-        let star = mapgen::naming::star_name(42, "G2V");
-
-        let (_, body) = call(&app, "GET", "/api/worlds", None).await;
-        let listed: serde_json::Value = serde_json::from_str(&body).unwrap();
-        let names = &listed[0]["names"];
-        assert_eq!(names["designation"], format!("{star} c"));
-        assert_eq!(
-            names["giants"],
-            serde_json::json!([format!("{star} d"), format!("{star} b")])
-        );
-        assert_eq!(names["moons"][1]["designation"], format!("{star} c II"));
-        assert!(names["name"].is_null());
-
-        let (status, body) = call(
-            &app,
-            "PUT",
-            "/api/worlds/terran-42/names",
-            Some(r#"{"name":"  Gaia ","moons":{"2":"Séléné"}}"#),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK, "{body}");
-        let summary: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(summary["names"]["name"], "Gaia");
-        assert_eq!(summary["names"]["moons"][1]["name"], "Séléné");
-        assert!(summary["names"]["moons"][0]["name"].is_null());
-        assert!(world.join("names.json").exists());
-
-        for bad in [
-            r#"{"name":"   "}"#,
-            r#"{"moons":{"3":"Nyx"}}"#,
-            r#"{"moons":{"01":"Nyx"}}"#,
-        ] {
-            let (status, body) = call(&app, "PUT", "/api/worlds/terran-42/names", Some(bad)).await;
-            assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}: {body}");
-        }
-        let (status, _) = call(&app, "PUT", "/api/worlds/terran-7/names", Some("{}")).await;
-        assert_eq!(status, StatusCode::NOT_FOUND);
-
-        // No names at all: back to the designations, and no file.
-        let (status, body) = call(&app, "PUT", "/api/worlds/terran-42/names", Some("{}")).await;
-        assert_eq!(status, StatusCode::OK);
-        let summary: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert!(summary["names"]["name"].is_null());
-        assert!(!world.join("names.json").exists());
     }
 
     async fn get_gzip(app: &Router, uri: &str) -> Response {
@@ -1816,45 +1224,36 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn serves_worlds_at_other_epochs() {
-        use mapgen::export::{ExportOptions, export_world};
-        let config = temp_config("epochs");
-        let planet = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../presets/examples/mercury-like.toml"
+    /// Draws a system round `planet` (seed 3) and generates its planet:
+    /// the system's id and the planet's body id.
+    async fn generated_planet(app: &Router, planet: &str, extra: &str) -> (String, String) {
+        let request = format!(
+            r#"{{"around": {{"planet": "{planet}", "seed": 3, "width": 256, "height": 128, "moons": "none", "giants": "none"{extra}}}}}"#
         );
-        for (planet, id) in [(planet, "mercury-like-3"), ("terran", "terran-3")] {
-            let request = WorldRequest {
-                planet: Some(planet.into()),
-                seed: Some(3),
-                surface_age_ga: Some(4.0),
-                width: Some(256),
-                height: Some(128),
-                ..Default::default()
-            };
-            let params = request.resolve(&mut rand::rng()).unwrap().params;
-            let generated = mapgen::generation::generate(&params);
-            export_world(
-                generated,
-                &config.worlds_dir.join(id),
-                ExportOptions { raw_data: true },
-            )
-            .unwrap();
-        }
-        let app = router(config.clone());
-        let (_, list) = call(&app, "GET", "/api/worlds", None).await;
-        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
-        let epochs = |id: &str| {
-            list.as_array()
-                .unwrap()
-                .iter()
-                .find(|w| w["id"] == id)
-                .unwrap()["epochs_ma"]
-                .clone()
-        };
-        assert_eq!(epochs("mercury-like-3"), serde_json::json!([-1000, 4000]));
-        assert_eq!(epochs("terran-3"), serde_json::Value::Null);
+        let (status, body) = call(app, "POST", "/api/systems", Some(&request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        wait_job(app, &body).await;
+        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let id = created["system_id"].as_str().unwrap().to_string();
+        let (_, detail) = call(app, "GET", &format!("/api/systems/{id}"), None).await;
+        let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
+        let focus = detail["system"]["focus"].as_str().unwrap().to_string();
+        (id, focus)
+    }
+
+    #[tokio::test]
+    async fn serves_bodies_at_other_epochs() {
+        let config = temp_config("epochs");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        // A catalog example preset, airless and cratered; a wet terran.
+        let (old, rock) = generated_planet(
+            &app,
+            "examples/mercury-like.toml",
+            r#", "surface_age_ga": 4.0"#,
+        )
+        .await;
+        let (wet, sea) = generated_planet(&app, "terran", "").await;
 
         let png = |uri: String| {
             let app = app.clone();
@@ -1866,18 +1265,15 @@ mod tests {
                 (status, bytes)
             }
         };
-        let base = "/api/worlds/mercury-like-3/epoch";
-        // The present epoch is the world as generated.
+        let base = format!("/api/systems/{old}/bodies/{rock}/epoch");
+        // The present epoch is the body as generated.
         let (status, now) = png(format!("{base}/0/elevation.png")).await;
         assert_eq!(status, StatusCode::OK);
         let now = image::load_from_memory(&now).unwrap().into_luma16();
-        let stored = image::open(
-            config
-                .worlds_dir
-                .join("mercury-like-3/raw_data/elevation.png"),
-        )
-        .unwrap()
-        .into_luma16();
+        let stored =
+            image::open(systems::body_dir(&root, &old, &rock).join("raw_data/elevation.png"))
+                .unwrap()
+                .into_luma16();
         assert_eq!(now, stored);
         // Back in time and ahead, the relief changes.
         for epoch in [3900, -1000] {
@@ -1896,20 +1292,15 @@ mod tests {
             assert_eq!((image.width(), image.height()), (64, 32), "{file}");
         }
         // Tiles at an epoch.
-        let (status, _) = call(
-            &app,
-            "GET",
-            "/api/worlds/mercury-like-3/tiles/3/2/1?epoch=-500",
-            None,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        // Refused: outside the range, a world without epochs, unknown layer, bad scale.
+        let tile = format!("/api/systems/{old}/bodies/{rock}/tiles/3/2/1?epoch=-500");
+        assert_eq!(call(&app, "GET", &tile, None).await.0, StatusCode::OK);
+        // Refused: outside the range, a body without epochs, unknown layer, bad scale.
+        let wet_base = format!("/api/systems/{wet}/bodies/{sea}");
         for (uri, expected) in [
             (format!("{base}/4100/surface.png"), StatusCode::BAD_REQUEST),
             (format!("{base}/-1001/surface.png"), StatusCode::BAD_REQUEST),
             (
-                "/api/worlds/terran-3/epoch/100/surface.png".into(),
+                format!("{wet_base}/epoch/100/surface.png"),
                 StatusCode::NOT_FOUND,
             ),
             (format!("{base}/100/flow.png"), StatusCode::NOT_FOUND),
@@ -1918,7 +1309,7 @@ mod tests {
                 StatusCode::BAD_REQUEST,
             ),
             (
-                "/api/worlds/terran-3/tiles/1/0/0?epoch=100".into(),
+                format!("{wet_base}/tiles/1/0/0?epoch=100"),
                 StatusCode::NOT_FOUND,
             ),
         ] {
@@ -1940,16 +1331,17 @@ mod tests {
     async fn rejects_invalid_requests() {
         let app = router(temp_config("invalid"));
         for body in [
-            r#"{"sea_level": 3.0}"#,
-            r#"{"planet": "/etc/passwd.toml"}"#,
-            r#"{"width": 100000}"#,
-            r#"{"width": 8192, "height": 4096}"#,
-            r#"{"unknown": 1}"#,
+            r#"{"around": {"sea_level": 3.0}}"#,
+            r#"{"around": {"planet": "/etc/passwd.toml"}}"#,
+            r#"{"around": {"width": 100000}}"#,
+            r#"{"around": {"width": 8192, "height": 4096}}"#,
+            r#"{"around": {"unknown": 1}}"#,
+            r#"{"elsewhere": {}}"#,
         ] {
-            let (status, _) = call(&app, "POST", "/api/worlds", Some(body)).await;
+            let (status, _) = call(&app, "POST", "/api/systems", Some(body)).await;
             assert!(status.is_client_error(), "{body} gave {status}");
         }
-        let (status, _) = call(&app, "DELETE", "/api/worlds/..%2Fetc-1", None).await;
+        let (status, _) = call(&app, "DELETE", "/api/systems/..%2Fetc-1", None).await;
         assert!(status.is_client_error());
     }
 
@@ -1959,193 +1351,30 @@ mod tests {
         let detail = |body: &str| -> serde_json::Value {
             serde_json::from_str::<serde_json::Value>(body).unwrap()["detail"].clone()
         };
-        let (status, body) = call(&app, "POST", "/api/worlds", Some(r#"{"sea_level": 3.0}"#)).await;
+        let post = |body: &'static str| {
+            let app = app.clone();
+            async move { call(&app, "POST", "/api/systems", Some(body)).await }
+        };
+        let (status, body) = post(r#"{"around": {"sea_level": 3.0}}"#).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let out_of_range = detail(&body);
         assert_eq!(out_of_range["code"], "out_of_range");
         assert_eq!(out_of_range["field"], "sea_level");
         assert!(out_of_range["min"].is_number() && out_of_range["max"].is_number());
-        let (_, body) = call(&app, "POST", "/api/worlds", Some(r#"{"width": 100000}"#)).await;
+        let (_, body) = post(r#"{"around": {"width": 100000}}"#).await;
         assert_eq!(detail(&body)["code"], "size_out_of_range");
-        let (_, body) = call(
-            &app,
-            "POST",
-            "/api/worlds",
-            Some(r#"{"planet": "nowhere"}"#),
-        )
-        .await;
+        let (_, body) = post(r#"{"around": {"planet": "nowhere"}}"#).await;
         assert_eq!(detail(&body)["code"], "unknown_preset");
-        let (_, body) = call(
-            &app,
-            "POST",
-            "/api/worlds",
-            Some(r#"{"sea_level": 0.1, "land_fraction": 0.3}"#),
-        )
-        .await;
+        let (_, body) = post(r#"{"around": {"sea_level": 0.1, "land_fraction": 0.3}}"#).await;
         assert_eq!(detail(&body)["code"], "sea_level_and_land_fraction");
+        let (_, body) = post(
+            r#"{"system": {"star": null, "metallicity": null, "planets": {"terran": 16}, "seed": 1, "width": 64, "height": 32}}"#,
+        )
+        .await;
+        assert_eq!(detail(&body)["code"], "too_many_planets");
         // Errors without a detail send none.
-        let (_, body) = call(&app, "DELETE", "/api/worlds/..%2Fetc-1", None).await;
+        let (_, body) = call(&app, "DELETE", "/api/systems/..%2Fetc-1", None).await;
         assert!(detail(&body).is_null());
-    }
-
-    #[tokio::test]
-    async fn generates_lists_and_deletes_a_world() {
-        let config = temp_config("generate");
-        // An export a killed server left unfinished is swept at startup.
-        let leftover = config.worlds_dir.join(".tmp-frozen-3");
-        std::fs::create_dir_all(leftover.join("raw_data")).unwrap();
-        let app = router(config.clone());
-        assert!(!leftover.exists());
-        let request = r#"{"planet": "frozen", "seed": 3, "width": 64, "height": 32}"#;
-        let (status, body) = call(&app, "POST", "/api/worlds", Some(request)).await;
-        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
-        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(created["world_id"], "frozen-3");
-
-        // The event stream ends with the final status.
-        let uri = format!("/api/jobs/{}/events", created["job_id"].as_str().unwrap());
-        let (_, events) = call(&app, "GET", &uri, None).await;
-        assert!(events.contains("\"status\":\"done\""), "{events}");
-
-        let (_, list) = call(&app, "GET", "/api/worlds", None).await;
-        assert!(list.contains("\"id\":\"frozen-3\""));
-        // World files are revalidated, PNG images never compressed.
-        let response = get_gzip(&app, "/worlds/frozen-3/world.png").await;
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
-        assert!(!response.headers().contains_key(header::CONTENT_ENCODING));
-        let response = get_gzip(&app, "/worlds/frozen-3/raw_data/world.json").await;
-        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
-        assert_eq!(response.headers()[header::CONTENT_ENCODING], "gzip");
-
-        // The thumbnail: exported with the world, made again when missing
-        // (a world from before thumbnails), cached for good under the
-        // current revision.
-        let list_json: serde_json::Value = serde_json::from_str(&list).unwrap();
-        let rev = list_json[0]["modified_ms"].as_u64().unwrap();
-        let thumb_file = config.worlds_dir.join("frozen-3/thumb.png");
-        let exported = std::fs::read(&thumb_file).unwrap();
-        std::fs::remove_file(&thumb_file).unwrap();
-        let uri = format!("/api/worlds/frozen-3/thumb?rev={rev}");
-        let response = get_gzip(&app, &uri).await;
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
-        assert_eq!(response.headers()[header::CACHE_CONTROL], IMMUTABLE);
-        assert!(!response.headers().contains_key(header::CONTENT_ENCODING));
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        assert_eq!(body, exported);
-        assert_eq!(std::fs::read(&thumb_file).unwrap(), exported);
-        let response = get_gzip(&app, "/api/worlds/frozen-3/thumb?rev=1").await;
-        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
-        for (bad, expected) in [
-            ("/api/worlds/nope-1/thumb", StatusCode::NOT_FOUND),
-            ("/api/worlds/..%2Fetc-1/thumb", StatusCode::BAD_REQUEST),
-        ] {
-            let (status, _) = call(&app, "GET", bad, None).await;
-            assert_eq!(status, expected, "{bad}");
-        }
-
-        // Same planet and seed again: the directory exists.
-        let (status, _) = call(&app, "POST", "/api/worlds", Some(request)).await;
-        assert_eq!(status, StatusCode::CONFLICT);
-
-        let (status, hex) = call(
-            &app,
-            "POST",
-            "/api/worlds/frozen-3/hex",
-            Some(r#"{"columns": 8}"#),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK, "{hex}");
-        assert!(hex.contains("\"columns\":8"));
-        for columns in [1, 1025] {
-            let body = format!(r#"{{"columns": {columns}}}"#);
-            let (status, _) = call(&app, "POST", "/api/worlds/frozen-3/hex", Some(&body)).await;
-            assert_eq!(status, StatusCode::BAD_REQUEST, "{columns} columns");
-        }
-
-        // Detail tiles: valid ones render as PNG, others are rejected.
-        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
-        let rev = list[0]["modified_ms"].as_u64().unwrap();
-        let (status, _) = call(
-            &app,
-            "GET",
-            &format!("/api/worlds/frozen-3/tiles/2/3/1?rev={rev}"),
-            None,
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        for bad in [
-            "/api/worlds/frozen-3/tiles/2/8/0",
-            "/api/worlds/frozen-3/tiles/9/0/0",
-            "/api/worlds/frozen-3/tiles/40/0/0",
-            "/api/worlds/nope-1/tiles/0/0/0",
-        ] {
-            let (status, _) = call(&app, "GET", bad, None).await;
-            assert!(status.is_client_error(), "{bad} gave {status}");
-        }
-
-        // While a generation runs, tiles and hex grids are refused for later.
-        let big = r#"{"planet": "barren", "seed": 9, "width": 512, "height": 256}"#;
-        let (_, body) = call(&app, "POST", "/api/worlds", Some(big)).await;
-        let big: serde_json::Value = serde_json::from_str(&body).unwrap();
-        loop {
-            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
-            if list.contains("\"status\":\"running\"") {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-        let request = Request::get("/api/worlds/frozen-3/tiles/1/0/0")
-            .body(Body::empty())
-            .unwrap();
-        let response = app.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-        assert!(response.headers().contains_key(header::RETRY_AFTER));
-        let request = Request::post("/api/worlds/frozen-3/hex")
-            .header("content-type", "application/json")
-            .body(Body::from(r#"{"columns": 8}"#))
-            .unwrap();
-        let response = app.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-        assert!(response.headers().contains_key(header::RETRY_AFTER));
-        let job = big["job_id"].as_str().unwrap();
-        call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
-        call(&app, "GET", &format!("/api/jobs/{job}/events"), None).await;
-        let (status, _) = call(&app, "GET", "/api/worlds/frozen-3/tiles/1/0/0", None).await;
-        assert_eq!(status, StatusCode::OK);
-        // The server resamples without writing hex/ into the world.
-        assert!(!config.worlds_dir.join("frozen-3/hex").exists());
-
-        let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-3", None).await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
-        assert!(!config.worlds_dir.join("frozen-3").exists());
-    }
-
-    /// Waits for the end of a job and returns its event stream.
-    #[tokio::test]
-    async fn an_epoch_of_a_world_is_a_world_of_its_own() {
-        let app = router(temp_config("drift"));
-        let request = |drift: &str| {
-            format!(r#"{{"planet":"barren","seed":7,"width":64,"height":32{drift}}}"#)
-        };
-        let (status, present) = call(&app, "POST", "/api/worlds", Some(&request(""))).await;
-        assert_eq!(status, StatusCode::ACCEPTED, "{present}");
-        wait_job(&app, &present).await;
-        let (status, past) = call(
-            &app,
-            "POST",
-            "/api/worlds",
-            Some(&request(r#","drift_ma":-40"#)),
-        )
-        .await;
-        // Not a conflict with the present: an id of its own, listed.
-        assert_eq!(status, StatusCode::ACCEPTED, "{past}");
-        let created: serde_json::Value = serde_json::from_str(&past).unwrap();
-        assert_eq!(created["world_id"], "barren-past40ma-7");
-        wait_job(&app, &past).await;
-        assert_eq!(world_width(&app, "barren-past40ma-7").await, Some(64));
-        assert_eq!(world_width(&app, "barren-7").await, Some(64));
     }
 
     #[tokio::test]
@@ -2312,116 +1541,46 @@ mod tests {
         call(app, "GET", &uri, None).await.1
     }
 
-    async fn world_width(app: &Router, id: &str) -> Option<u64> {
-        let (_, list) = call(app, "GET", "/api/worlds", None).await;
-        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
-        list.as_array()
-            .unwrap()
-            .iter()
-            .find(|w| w["id"] == id)
-            .map(|w| w["width"].as_u64().unwrap())
-    }
-
-    #[tokio::test]
-    async fn replaces_a_world_once_the_new_one_is_complete() {
-        let config = temp_config("replace");
-        let app = router(config.clone());
-        let old = r#"{"planet": "frozen", "seed": 5, "width": 64, "height": 32}"#;
-        let (status, body) = call(&app, "POST", "/api/worlds", Some(old)).await;
-        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
-        assert!(wait_job(&app, &body).await.contains("\"status\":\"done\""));
-        // Loaded for the tiles, so the cache holds the old revision.
-        let (status, _) = call(&app, "GET", "/api/worlds/frozen-5/tiles/0/0/0", None).await;
-        assert_eq!(status, StatusCode::OK);
-
-        // Without the flag, the existing world is refused.
-        let new = r#"{"planet": "frozen", "seed": 5, "width": 128, "height": 64}"#;
-        let (status, _) = call(&app, "POST", "/api/worlds", Some(new)).await;
-        assert_eq!(status, StatusCode::CONFLICT);
-        let (status, _) = call(&app, "POST", "/api/worlds?replace=maybe", Some(new)).await;
-        assert!(status.is_client_error());
-
-        // Cancelled mid-generation: the old world stays, untouched.
-        let slow = r#"{"planet": "frozen", "seed": 5, "width": 512, "height": 256}"#;
-        let (status, body) = call(&app, "POST", "/api/worlds?replace=true", Some(slow)).await;
-        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
-        // Being generated: neither deleted nor queued twice.
-        let (status, _) = call(&app, "DELETE", "/api/worlds/frozen-5", None).await;
-        assert_eq!(status, StatusCode::CONFLICT);
-        let (status, _) = call(&app, "POST", "/api/worlds?replace=true", Some(new)).await;
-        assert_eq!(status, StatusCode::CONFLICT);
-        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
-        let job = created["job_id"].as_str().unwrap();
-        loop {
-            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
-            if list.contains("\"status\":\"running\"") {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-        assert_eq!(
-            world_width(&app, "frozen-5").await,
-            Some(64),
-            "kept while it runs"
-        );
-        call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
-        assert!(
-            wait_job(&app, &body)
-                .await
-                .contains("\"status\":\"cancelled\"")
-        );
-        assert_eq!(world_width(&app, "frozen-5").await, Some(64));
-        assert!(!config.worlds_dir.join(".tmp-frozen-5").exists());
-        assert!(!config.worlds_dir.join(".old-frozen-5").exists());
-
-        // Completed: the new world takes the place (and id) of the old one,
-        // and its tiles come from the new revision.
-        let (status, body) = call(&app, "POST", "/api/worlds?replace=true", Some(new)).await;
-        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
-        assert!(wait_job(&app, &body).await.contains("\"status\":\"done\""));
-        assert_eq!(world_width(&app, "frozen-5").await, Some(128));
-        assert!(!config.worlds_dir.join(".old-frozen-5").exists());
-        let (status, _) = call(&app, "GET", "/api/worlds/frozen-5/tiles/0/0/0", None).await;
-        assert_eq!(status, StatusCode::OK);
-
-        // Nothing to replace: the flag generates as usual.
-        let other = r#"{"planet": "frozen", "seed": 6, "width": 64, "height": 32}"#;
-        let (status, body) = call(&app, "POST", "/api/worlds?replace=true", Some(other)).await;
-        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
-        assert!(wait_job(&app, &body).await.contains("\"status\":\"done\""));
-        assert_eq!(world_width(&app, "frozen-6").await, Some(64));
-    }
-
     #[tokio::test]
     async fn lists_and_cancels_jobs() {
         let config = temp_config("cancel");
-        let app = router(config.clone());
+        let root = config.systems_dir.clone();
+        let app = router(config);
         // The first job holds the queue; the second waits behind it.
-        let first = r#"{"planet": "barren", "seed": 1, "width": 512, "height": 256}"#;
-        let small = r#"{"planet": "barren", "seed": 2, "width": 64, "height": 32}"#;
-        let (_, body) = call(&app, "POST", "/api/worlds", Some(first)).await;
+        let first = r#"{"around": {"planet": "barren", "seed": 1, "width": 512, "height": 256, "moons": "none", "giants": "none"}}"#;
+        let small = r#"{"around": {"planet": "barren", "seed": 2, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
+        let (_, body) = call(&app, "POST", "/api/systems", Some(first)).await;
         let first: serde_json::Value = serde_json::from_str(&body).unwrap();
-        let (_, body) = call(&app, "POST", "/api/worlds", Some(small)).await;
+        let (_, body) = call(&app, "POST", "/api/systems", Some(small)).await;
         let second: serde_json::Value = serde_json::from_str(&body).unwrap();
         let second_id = second["job_id"].as_str().unwrap();
+        let (first_system, second_system) = (
+            first["system_id"].as_str().unwrap(),
+            second["system_id"].as_str().unwrap(),
+        );
 
-        // A world being generated cannot be deleted.
-        let (status, _) = call(&app, "DELETE", "/api/worlds/barren-1", None).await;
+        // A system being generated cannot be deleted.
+        let (status, _) = call(
+            &app,
+            "DELETE",
+            &format!("/api/systems/{first_system}"),
+            None,
+        )
+        .await;
         assert_eq!(status, StatusCode::CONFLICT);
 
         let (status, list) = call(&app, "GET", "/api/jobs", None).await;
         assert_eq!(status, StatusCode::OK);
         let list: serde_json::Value = serde_json::from_str(&list).unwrap();
         assert_eq!(list[0]["job_id"], second_id, "most recent first");
-        assert_eq!(list[0]["world_id"], "barren-2");
-        assert_eq!(list[0]["request"]["seed"], 2);
+        assert_eq!(list[0]["system_id"], second_system);
 
         let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{second_id}"), None).await;
         assert_eq!(status, StatusCode::ACCEPTED);
         let uri = format!("/api/jobs/{second_id}/events");
         let (_, events) = call(&app, "GET", &uri, None).await;
         assert!(events.contains("\"status\":\"cancelled\""), "{events}");
-        assert!(!config.worlds_dir.join("barren-2").exists());
+        assert!(!root.join(second_system).join("bodies").join("b").exists());
 
         // A finished job cannot be cancelled; an unknown one does not exist.
         let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{second_id}"), None).await;
@@ -2442,10 +1601,10 @@ mod tests {
         assert_eq!(status, StatusCode::ACCEPTED);
         let (_, events) = call(&app, "GET", &format!("/api/jobs/{first_id}/events"), None).await;
         assert!(events.contains("\"status\":\"cancelled\""), "{events}");
-        assert!(!config.worlds_dir.join("barren-1").exists());
 
         // The queue is free again.
-        let (status, _) = call(&app, "POST", "/api/worlds", Some(small)).await;
-        assert_eq!(status, StatusCode::ACCEPTED);
+        let generate = format!("/api/systems/{second_system}/bodies/b/generate");
+        let (status, body) = call(&app, "POST", &generate, None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
     }
 }

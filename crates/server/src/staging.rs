@@ -139,7 +139,7 @@ mod tests {
 
         // Hidden from the library, removed by the sweep.
         std::fs::create_dir_all(root.join(".tmp-terran-3/raw_data")).unwrap();
-        sweep(&root, crate::worlds::is_valid_id);
+        sweep(&root, crate::systems::is_valid_system_id);
         assert!(!root.join(".tmp-terran-3").exists());
         assert!(root.join("terran-2").exists());
         std::fs::remove_dir_all(root).unwrap();
@@ -177,7 +177,7 @@ mod tests {
         // removes it when its replacement made it into place.
         std::fs::rename(&target, root.join(".old-terran-1")).unwrap();
         std::fs::create_dir_all(root.join(".old-terran-2")).unwrap();
-        sweep(&root, crate::worlds::is_valid_id);
+        sweep(&root, crate::systems::is_valid_system_id);
         assert_eq!(std::fs::read(target.join("world.png")).unwrap(), b"new");
         assert!(!root.join(".old-terran-1").exists());
         assert!(!root.join(".old-terran-2").exists());

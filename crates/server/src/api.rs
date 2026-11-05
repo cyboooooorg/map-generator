@@ -78,115 +78,6 @@ pub struct FormSpec {
     pub max_planets: u32,
 }
 
-/// A generated world, as listed in the library.
-#[derive(Clone, Debug, Serialize, TS)]
-#[ts(export)]
-pub struct WorldSummary {
-    /// Directory name, used in URLs: `/worlds/<id>/world.png`.
-    pub id: String,
-    pub planet: String,
-    pub seed: u32,
-    pub width: u32,
-    pub height: u32,
-    pub sea_level: f32,
-    pub volcanic_intensity: f32,
-    pub circumference_km: f32,
-    pub axial_tilt_deg: f32,
-    pub erosion: f32,
-    pub gravity_modifier: f32,
-    /// Surface pressure in bar.
-    pub pressure_bar: f32,
-    /// Age of the oldest surviving surface in Ga; `null` for worlds made
-    /// before it existed.
-    pub surface_age_ga: Option<f32>,
-    /// The epochs the world can be shown at, in Ma before present
-    /// (negative in the future): `[future, past]`, both included, or
-    /// `null` when it offers none (liquid water today, no craters, or made
-    /// before format version 7). See `GET /api/worlds/{id}/epoch/...`.
-    pub epochs_ma: Option<[i32; 2]>,
-    /// Spectral type of the host star; `null` for worlds made before stars
-    /// (the Sun).
-    pub star: Option<String>,
-    /// Last modification time, in milliseconds since the Unix epoch.
-    #[ts(type = "number")]
-    pub modified_ms: u64,
-    /// The scientific names of its system, and the names given to it and
-    /// its moons.
-    pub names: WorldNames,
-}
-
-/// The names of a world's system. Designations follow the IAU's style for
-/// exoplanets (see `mapgen::naming`): the star's catalogue number
-/// (`MGS 48213`), a letter for each planet by its distance to the star
-/// (`MGS 48213 c`), a Roman numeral for each moon by its distance to its
-/// planet (`MGS 48213 c II`).
-#[derive(Clone, Debug, Serialize, TS, PartialEq)]
-#[ts(export)]
-pub struct WorldNames {
-    pub star: String,
-    /// The world's designation.
-    pub designation: String,
-    /// The name given to the world, if any.
-    pub name: Option<String>,
-    /// Designations of the system's other giants, in the order of
-    /// `giants.giants` in `world.json`.
-    pub giants: Vec<String>,
-    /// The world's moons, in the order of `moons.moons` in `world.json`.
-    pub moons: Vec<MoonNames>,
-    /// Designation of the giant whose moon the world is, if it is one.
-    pub host: Option<String>,
-    /// Designations of that giant's other moons, in the order of
-    /// `host.siblings`.
-    pub siblings: Vec<String>,
-}
-
-/// A moon's designation and the name given to it, if any.
-#[derive(Clone, Debug, Serialize, TS, PartialEq)]
-#[ts(export)]
-pub struct MoonNames {
-    pub designation: String,
-    pub name: Option<String>,
-}
-
-/// The names given to a world and its moons (`PUT /api/worlds/{id}/names`,
-/// stored in the world's `names.json`). The request replaces every given
-/// name: a name left out goes back to its designation.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-#[ts(export, optional_fields)]
-pub struct GivenNames {
-    /// The world's name.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    /// Names of its moons, by their number (`"1"` is the closest).
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub moons: BTreeMap<String, String>,
-}
-
-/// Query of a generation request (`POST /api/worlds?replace=true`).
-#[derive(Clone, Debug, Default, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
-pub struct CreateQuery {
-    /// Replace the world of the same id if it exists, instead of refusing
-    /// with 409. The old world stays until the new one is complete: a
-    /// generation that fails or is cancelled keeps it.
-    pub replace: Option<bool>,
-}
-
-/// Answer to a generation request.
-#[derive(Clone, Debug, Serialize, TS)]
-#[ts(export)]
-pub struct JobCreated {
-    pub job_id: String,
-    /// Id the world will have once generated.
-    pub world_id: String,
-    /// Fields of the request the planet has no use for, ignored (a giant's
-    /// `circumference_km`, `erosion`, `volcanic`, `land_fraction`, `giants`
-    /// and `host`; a rocky world's `mass_earth`).
-    pub ignored: Vec<String>,
-}
-
 /// State of a generation job, streamed as server-sent events.
 #[derive(Clone, Debug, Serialize, TS, PartialEq)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -282,8 +173,6 @@ pub enum ErrorDetail {
     },
     /// The world is being generated already.
     BeingGenerated { world: String },
-    /// The world exists and the request does not replace it.
-    WorldExists { world: String },
     /// A generation is running: tiles and hex grids are paused.
     Busy,
     /// The star is not a spectral type from O3V to M9.5V.
@@ -430,6 +319,9 @@ pub struct SystemQuery {
 pub struct SystemCreated {
     pub system_id: String,
     pub job_id: Option<String>,
+    /// Fields of an `around` request its planet has no use for, ignored (a
+    /// giant's `circumference_km`, `erosion`…; a rocky world's `mass_earth`).
+    pub ignored: Vec<String>,
 }
 
 /// A system as `GET /api/systems/{id}` gives it: its `system.json` and the

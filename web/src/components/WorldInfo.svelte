@@ -2,7 +2,6 @@
   import { getLocale, t } from '../lib/i18n/index.svelte';
   import { biomeName, presetDescription, presetName } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
-  import type { WorldSummary } from '../lib/api/types/WorldSummary';
   import { downloadRawData } from '../lib/download';
   import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
@@ -10,30 +9,22 @@
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
   import { moonsOf } from '../lib/moons';
-  import { api } from '../lib/api/client';
-  import { errorText } from '../lib/i18n/errors';
-  import { designationBeside, givenNames, MAX_NAME_CHARS, worldName } from '../lib/names';
 
   interface Props {
     world: LoadedWorld;
-    summary: WorldSummary | undefined;
-    /** Other worlds, to compare with. */
-    worlds: WorldSummary[];
-    compareId: string | null;
+    /** When the body's maps were made (ms), for the card and the download links. */
+    revision?: number | null;
     onVary: () => void;
     /** Generates the same world again with a new random seed. */
     onReroll: () => Promise<void>;
-    onCompare: (id: string | null) => void;
     /** The link Copy link copies: the worlds shown and the view. */
     link: () => string;
     onDelete: () => void;
-    /** Called with the world's summary once its names are saved. */
-    onRenamed?: (summary: WorldSummary) => void;
     /** The title instead of the world's own: a system body's name. */
     title?: string | null;
   }
 
-  let { world, summary, worlds, compareId, onVary, onReroll, onCompare, link, onDelete, onRenamed, title: forcedTitle = null }: Props = $props();
+  let { world, revision = null, onVary, onReroll, link, onDelete, title: forcedTitle = null }: Props = $props();
 
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
@@ -46,52 +37,14 @@
   const stats = $derived(world.worldStats);
   const rivers = $derived(world.worldRivers);
   const worldId = $derived(world.worldId);
-  const others = $derived(worlds.filter((w) => w.id !== worldId));
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
-  const names = $derived(summary?.names ?? null);
-  const title = $derived(forcedTitle ?? (names ? worldName(names) : meta ? presetName(meta.preset) : (summary?.planet ?? worldId)));
-  /** A designation without its star's (`c` of `MGS 48213 c`), for short lists. */
-  const short = (designation: string) =>
-    names && designation.startsWith(`${names.star} `) ? designation.slice(names.star.length + 1) : designation;
-
-  // Renaming: the fields hold the names given, empty for a designation.
-  let renaming = $state(false);
-  let saving = $state(false);
-  let worldField = $state('');
-  let moonFields = $state<string[]>([]);
-  function startRenaming(): void {
-    if (!names) return;
-    worldField = names.name ?? '';
-    moonFields = names.moons.map((m) => m.name ?? '');
-    renaming = true;
-  }
-  // A world change closes the editor.
-  $effect(() => {
-    void worldId;
-    renaming = false;
-  });
-  async function saveNames(event: SubmitEvent): Promise<void> {
-    event.preventDefault();
-    if (!names || !worldId) return;
-    saving = true;
-    try {
-      const renamed = await api.renameWorld(worldId, givenNames(names, worldField, moonFields));
-      onRenamed?.(renamed);
-      renaming = false;
-      toasts.show(t.worldInfo.renamed({ name: worldName(renamed.names) }));
-    } catch (e) {
-      toasts.error(t.worldInfo.renameFailed({ error: errorText(e) }));
-    } finally {
-      saving = false;
-    }
-  }
+  const title = $derived(forcedTitle ?? (meta ? presetName(meta.preset) : worldId));
 
   async function copy(text: string, what: string): Promise<void> {
     const ok = await copyText(text);
     toasts.show(ok ? t.worldInfo.copied({ what }) : t.worldInfo.copyRefused, { kind: ok ? 'info' : 'error' });
   }
-
   async function reroll(): Promise<void> {
     rerolling = true;
     try {
@@ -100,7 +53,6 @@
       rerolling = false;
     }
   }
-
   async function zip(): Promise<void> {
     if (!worldId || !meta) {
       return;
@@ -122,7 +74,7 @@
       <span class="title">
         <strong>{title}</strong>
         <small
-          >{[names ? designationBeside(names.name, names.designation) : null, meta ? presetName(meta.preset) : null, forcedTitle ? null : worldId]
+          >{[meta ? presetName(meta.preset) : null, forcedTitle ? null : worldId]
             .filter(Boolean)
             .join(' · ')}</small
         >
@@ -252,7 +204,7 @@
               ? t.worldInfo.noMoon
               : t.worldInfo.moonsValue({
                   count: moons.length,
-                  names: moons.map((m, k) => names?.moons[k]?.name ?? m.name).join(', '),
+                  names: moons.map((m) => m.name).join(', '),
                 })}{#if meta.moons.binary}
               · {t.worldInfo.binary}{/if}
           </dd>
@@ -290,7 +242,7 @@
               ? t.worldInfo.noGiants
               : t.worldInfo.giantsValue({
                   count: meta.giants.giants.length,
-                  names: meta.giants.giants.map((g, i) => (names?.giants[i] ? short(names.giants[i]) : g.name)).join(', '),
+                  names: meta.giants.giants.map((g) => g.name).join(', '),
                 })} · {t.worldInfo.impactsValue({ factor: `${formatUpTo(meta.giants.impact_factor, 2)}×` })}
           </dd>
         {/if}
@@ -304,9 +256,9 @@
           <dt>{t.worldInfo.rivers}</dt>
           <dd>{formatInt(rivers.file.rivers.length)}</dd>
         {/if}
-        {#if summary}
+        {#if revision}
           <dt>{t.worldInfo.generated}</dt>
-          <dd title={new Date(summary.modified_ms).toLocaleString(getLocale())}>{formatAgo(summary.modified_ms)}</dd>
+          <dd title={new Date(revision).toLocaleString(getLocale())}>{formatAgo(revision)}</dd>
         {/if}
       </dl>
 
@@ -348,47 +300,16 @@
           >{t.worldInfo.copyCommand}</button
         >
         <button onclick={() => copy(link(), t.worldInfo.link)} title={t.worldInfo.copyLinkHelp}>{t.worldInfo.copyLink}</button>
-        <button onclick={() => (renaming ? (renaming = false) : startRenaming())} disabled={!names} title={t.worldInfo.renameHelp}
-          >{t.worldInfo.rename}</button
-        >
         <button class="danger" onclick={onDelete}>{t.worldInfo.delete}</button>
       </div>
 
-      {#if renaming && names}
-        <form class="rename" onsubmit={saveNames}>
-          <label>
-            <span>{t.worldInfo.renameWorld}</span>
-            <input bind:value={worldField} placeholder={names.designation} maxlength={MAX_NAME_CHARS} />
-          </label>
-          {#each names.moons as moon, k (moon.designation)}
-            <label>
-              <span>{t.worldInfo.renameMoon({ designation: short(moon.designation) })}</span>
-              <input bind:value={moonFields[k]} placeholder={moon.designation} maxlength={MAX_NAME_CHARS} />
-            </label>
-          {/each}
-          <small class="muted">{t.worldInfo.renameNote({ star: names.star })}</small>
-          <div class="actions">
-            <button type="submit" disabled={saving}>{saving ? t.worldInfo.sending : t.worldInfo.renameSave}</button>
-            <button type="button" onclick={() => (renaming = false)}>{t.worldInfo.renameCancel}</button>
-          </div>
-        </form>
-      {/if}
 
-      <label class="compare">
-        <span>{t.worldInfo.compareWith}</span>
-        <select value={compareId ?? ''} onchange={(e) => onCompare(e.currentTarget.value || null)}>
-          <option value="">{t.worldInfo.nothing}</option>
-          {#each others as other (other.id)}
-            <option value={other.id}>{worldName(other.names)} · {other.id}</option>
-          {/each}
-        </select>
-      </label>
 
       <div class="downloads">
         <span>{t.worldInfo.download}</span>
-        <a href={worldFile(worldId, 'world.png', summary?.modified_ms)} download={`${worldId}.png`}>{t.worldInfo.mapPng}</a>
-        <a href={worldFile(worldId, 'world.svg', summary?.modified_ms)} download={`${worldId}.svg`}>{t.worldInfo.svg}</a>
-        <a href={worldFile(worldId, 'legend.png', summary?.modified_ms)} download={`${worldId}-legend.png`}>{t.worldInfo.legend}</a>
+        <a href={worldFile(worldId, 'world.png', revision)} download={`${worldId}.png`}>{t.worldInfo.mapPng}</a>
+        <a href={worldFile(worldId, 'world.svg', revision)} download={`${worldId}.svg`}>{t.worldInfo.svg}</a>
+        <a href={worldFile(worldId, 'legend.png', revision)} download={`${worldId}-legend.png`}>{t.worldInfo.legend}</a>
         <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
       </div>
     {:else if world.error}
@@ -400,19 +321,6 @@
 {/if}
 
 <style>
-  .rename {
-    display: grid;
-    gap: 6px;
-    margin: 8px 0;
-  }
-  .rename label {
-    display: grid;
-    gap: 2px;
-  }
-  .rename label span {
-    font-size: 0.85em;
-    color: var(--muted);
-  }
   .card {
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -513,16 +421,6 @@
   .danger:hover:not(:disabled) {
     border-color: var(--danger);
     color: var(--danger);
-  }
-  .compare {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .compare select {
-    min-width: 0;
   }
   .downloads {
     display: flex;

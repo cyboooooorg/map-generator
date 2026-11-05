@@ -1,7 +1,6 @@
 <script lang="ts">
   // The star view of a world: its star as a globe, its system around it,
   // and the numbers of both (see StarView.ts).
-  import type { WorldNames } from '../lib/api/types/WorldNames';
   import { onMount } from 'svelte';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
@@ -41,8 +40,6 @@
     worldGiant?: GiantInfo | null;
     /** The giant the world orbits, as its moon. */
     host?: HostGiant | null;
-    /** The names of the system, from the world's summary. */
-    names?: WorldNames | null;
     /**
      * A planetary system's other planets, drawn as the giants are: their
      * kinds as the list shows them (in the giants' order), and what a click
@@ -67,13 +64,12 @@
     giants = $bindable(),
     worldGiant = null,
     host = null,
-    names = null,
     kinds = null,
     onPickPlanet = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
-    (giantSystem?.giants ?? []).map((g, i) => ({ ...g, name: names?.giants[i] ?? g.name, kindLabel: kinds?.[i] ?? null })),
+    (giantSystem?.giants ?? []).map((g, i) => ({ ...g, name: g.name, kindLabel: kinds?.[i] ?? null })),
   );
   /** Whether some giant lies where the view compresses distances. */
   const compressed = $derived(giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressedFrom(star)));
@@ -224,7 +220,7 @@
 {/if}
 <details class="star-panel" role="region" aria-label={t.starView.title} open>
   <summary
-    ><strong>{names ? `${names.star} · ` : ''}{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></summary
+    ><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></summary
   >
   <h4>{t.starView.starSection}</h4>
   <dl>

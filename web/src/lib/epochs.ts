@@ -66,7 +66,7 @@ export function formatEpoch(ma: number): string {
   return ma > 0 ? t.epochs.ago({ time }) : t.epochs.ahead({ time });
 }
 
-/** URL of a layer of a world at an epoch (`GET /api/worlds/{id}/epoch/{ma}/{file}`). */
+/** URL of a layer of a world at an epoch (`GET /api/systems/{id}/bodies/{body}/epoch/{ma}/{file}`). */
 export function epochFile(
   id: string,
   ma: number,

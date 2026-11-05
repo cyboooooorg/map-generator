@@ -348,6 +348,9 @@
   function submitted(created: SystemCreated, request: WorldRequest | null): void {
     form = null;
     void refresh().then(() => select(created.system_id));
+    if (created.ignored.length > 0) {
+      toasts.show(t.app.ignored({ fields: created.ignored.join(', ') }));
+    }
     if (created.job_id) {
       autoOpen = { jobId: created.job_id, selection: created.system_id };
       jobs.track(created.job_id, created.system_id, request ?? {}, { status: 'queued' }, true);
@@ -434,12 +437,9 @@
         <WorldInfo
           world={primary}
           title={primary.shownSystemBody ? (primary.systemNames[primary.shownSystemBody.id] ?? primary.shownSystemBody.designation) : null}
-          summary={undefined}
-          worlds={[]}
-          {compareId}
+          revision={revision(selectedId)}
           onVary={() => primary.meta && openForm(requestFromWorld(primary.meta), primary.id)}
           onReroll={reroll}
-          onCompare={(id) => (compareId = id)}
           link={shareLink}
           onDelete={() => selectedId && removeWorlds([selectedId])}
         />
@@ -482,7 +482,6 @@
         bind:this={primaryPane}
         world={primary}
         revision={revision(selectedId)}
-        names={null}
         keyboard={true}
         label={compareId ? titleOf(selectedId) : null}
         onStepWorld={step}
@@ -494,8 +493,7 @@
           bind:this={secondaryPane}
           world={secondary}
           revision={revision(compareId)}
-          names={null}
-          keyboard={false}
+            keyboard={false}
           persistDisplay={false}
           linkedDisplay={linkDisplay ? mainDisplay : null}
           label={titleOf(compareId)}
