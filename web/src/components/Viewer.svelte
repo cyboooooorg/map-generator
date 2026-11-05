@@ -4,6 +4,7 @@
   import { biomeName } from '../lib/i18n/names.svelte';
   import { onDestroy, onMount, untrack } from 'svelte';
   import { ApiFailure, api, followJob, systemBodyId, worldFile } from '../lib/api/client';
+  import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
   import type { HexMap } from '../lib/api/types/HexMap';
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
@@ -754,11 +755,9 @@
    * generated yet (`POST /api/systems/{id}/bodies/{body}/generate`): queued
    * as soon as it is shown, followed until done, then the system reloaded.
    */
-  let generation = $state<{
-    body: string;
-    status: { status: string; body?: string | null; body_step?: number | null; bodies?: number | null; stage?: Stage; step?: number; steps?: number } | null;
-    error: string | null;
-  } | null>(null);
+  let generation = $state<{ body: string; status: JobStatus | null; error: string | null } | null>(null);
+  /** A running status of a system job: the body being made and its place in the job. */
+  type RunningBody = { body?: string | null; body_step?: number | null; bodies?: number | null; stage: Stage; step: number; steps: number };
   let stopFollowing: (() => void) | null = null;
   async function generateShown(body: string): Promise<void> {
     const systemId = world.systemId;
@@ -806,9 +805,10 @@
     if (!generation || !sys) return null;
     const name = (id: string) => world.systemNames[id] ?? sys.bodies.find((b) => b.id === id)?.designation ?? id;
     if (generation.error) return t.viewer.generationFailed({ body: name(generation.body), error: generation.error });
-    const status = generation.status;
-    if (!status || status.status === 'queued') return t.viewer.generationQueued({ body: name(generation.body) });
-    if (status.status !== 'running') return null;
+    const job = generation.status;
+    if (!job || job.status === 'queued') return t.viewer.generationQueued({ body: name(generation.body) });
+    if (job.status !== 'running') return null;
+    const status = job as unknown as RunningBody;
     return t.viewer.generationRunning({
       body: name(status.body ?? generation.body),
       step: status.body_step ?? 1,
@@ -820,8 +820,9 @@
   });
   /** Its share done, 0 to 1. */
   const generationShare = $derived.by(() => {
-    const status = generation?.status;
-    if (!status || status.status !== 'running') return 0;
+    const job = generation?.status;
+    if (!job || job.status !== 'running') return 0;
+    const status = job as unknown as RunningBody;
     const bodies = Math.max(status.bodies ?? 1, 1);
     const within = (status.step ?? 0) / Math.max(status.steps ?? 1, 1);
     return ((status.body_step ?? 1) - 1 + within) / bodies;
