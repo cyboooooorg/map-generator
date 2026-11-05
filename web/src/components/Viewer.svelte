@@ -2114,7 +2114,7 @@
   .chip :global(.loading-bar) {
     margin: 4px 0 2px;
   }
-  .generation {
+  .chip.generation {
     bottom: auto;
     top: 96px;
     pointer-events: auto;
