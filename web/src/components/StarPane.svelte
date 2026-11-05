@@ -118,7 +118,8 @@
   $effect(() => {
     if (view) view.onPickPlanet = onPickPlanet;
   });
-  $effect(() => view?.setGiantsVisible(giants));
+  // A planetary system's planets are the system itself: always drawn.
+  $effect(() => view?.setGiantsVisible(giants || selected !== null));
   $effect(() => view?.setWorldGiant(worldGiant));
 
   /** Jupiter masses, from Earth masses. */
@@ -162,10 +163,20 @@
               swing: 0,
             },
           ]
-        : moonOrbits(moons, planetRadiusKm, star.year_days, YEAR_S, binary),
+        : moonOrbits(moons, planetRadiusKm, star.year_days, planetYearS, binary),
     ),
   );
 
+  /**
+   * Seconds of animation for one year of the planet whose moons are drawn:
+   * YEAR_S for a lone world, the system's clock at ×1 in a planetary system
+   * (the speed then runs the moons with the planets).
+   */
+  const planetYearS = $derived(
+    selected !== null && giantList.length > 0
+      ? (star.year_days / Math.min(...giantList.map((g) => g.year_days))) * SYSTEM_INNER_YEAR_S
+      : YEAR_S,
+  );
   const kms = (v: number) => withUnit(formatUpTo(v, 1), 'km/s');
   /** Mean speed, and its range on an eccentric orbit. */
   const speedText = $derived.by(() => {
@@ -244,7 +255,7 @@
         >{t.starView.orbitLabel({ name: planetName, distance: formatAu(star.orbit_au) })}</span
       >
     {/if}
-    {#each labels.giants as giant (giant.name)}
+    {#each labels.giants as giant (giant.index)}
       <span class="label giant" style:left={`${giant.x}px`} style:top={`${giant.y}px`}
         >{t.starView.orbitLabel({ name: giant.name, distance: formatAu(giant.au) })}</span
       >
@@ -307,7 +318,7 @@
       <small class="muted">{t.starView.noGiants}</small>
     {:else}
       <ul class="giants">
-        {#each giantList as giant, i (giant.name)}
+        {#each giantList as giant, i (i)}
           <li title={giantHelp(giant)} class:selected={i === selected}>
             <span class="swatch" style:background={`rgb(${giant.colour.map((c) => Math.round(c * 255)).join(' ')})`}></span>{giantText(giant)}
           </li>
@@ -336,7 +347,7 @@
       <input type="checkbox" bind:checked={prominences} />
       {t.starView.prominences}
     </label>
-    {#if giantList.length > 0}
+    {#if giantList.length > 0 && selected === null}
       <label class="check" title={t.starView.showGiantsHelp}>
         <input type="checkbox" bind:checked={giants} />
         {t.starView.showGiants}
@@ -366,7 +377,7 @@
     <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
   {/if}
   <small class="muted">{t.starView.schematic}</small>
-  {#if compressed && giants}
+  {#if compressed && (giants || selected !== null)}
     <small class="muted">{t.starView.compressed({ distance: formatAu(compressFrom) })}</small>
   {/if}
 </details>

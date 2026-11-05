@@ -75,10 +75,11 @@ export interface SystemLabels {
   self: { x: number; y: number } | null;
   /**
    * The giant planets now (every planet of a planetary system, the
-   * selected one included), with their mean distance from the star, AU,
-   * and their index in setStar's `giants` (empty when hidden).
+   * selected one included), with their mean distance from the star and
+   * their distance now (`distance`), AU, and their index in setStar's
+   * `giants` (empty when hidden).
    */
-  giants: { x: number; y: number; name: string; au: number; index: number }[];
+  giants: { x: number; y: number; name: string; au: number; distance: number; index: number }[];
 }
 
 /** Shortest time between two animated frames, ms (thirty frames a second at most). */
@@ -146,6 +147,8 @@ export class StarView {
   private readonly giantGroup = new Group();
   private giants: Giant[] = [];
   private giantMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
+  /** The giants' distances from the star now, AU (see placeGiants). */
+  private giantDistances: number[] = [];
   private giantsOn = true;
   /** How far the system reaches from the star, view units (see resetView). */
   private reach = 6.8;
@@ -314,6 +317,8 @@ export class StarView {
     this.selected = system ? selected : null;
     this.daysPerSecond = system ? Math.min(...giants.map((g) => g.year_days)) / SYSTEM_INNER_YEAR_S : 0;
     this.planet.visible = !system;
+    // The selected planet's moons circle its own marker, as much larger as it is.
+    this.moonGroup.scale.setScalar(system ? giantMarkerSize(giants[selected]!.radius_earth) / PLANET_MARKER : 1);
     this.info = info;
     this.omega = omega;
     const u = this.star.material.uniforms;
@@ -400,13 +405,15 @@ export class StarView {
   /** Places the moons at the animation's time, and the planet around the barycentre of a binary. */
   private placeMoons(): void {
     this.moonGroup.position.copy(this.planet.position);
+    // In a planetary system, the moons run on the system's clock.
+    const time = this.selected !== null ? this.orbitTime : this.time;
     this.moonOrbits.forEach((orbit, k) => {
-      const angle = orbit.phase + this.time * orbit.speed;
+      const angle = orbit.phase + time * orbit.speed;
       const local = new Vector3(Math.cos(angle) * orbit.radius, 0, -Math.sin(angle) * orbit.radius);
       local.applyAxisAngle(new Vector3(1, 0, 0), orbit.inclination);
       this.moonMarkers[k]?.position.copy(local);
       if (orbit.swing > 0) {
-        this.planet.position.addScaledVector(local, -orbit.swing);
+        this.planet.position.addScaledVector(local, -orbit.swing * this.moonGroup.scale.x);
       }
     });
   }
@@ -534,6 +541,7 @@ export class StarView {
   private placeGiants(): void {
     this.giants.forEach((giant, k) => {
       const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, this.giantAnomaly(k));
+      this.giantDistances[k] = giant.orbit_au * distance;
       this.giantMarkers[k]?.position.copy(this.inPlaneAt(trueAnomaly + giant.periapsis_angle, giant.orbit_au * distance));
     });
   }
@@ -854,7 +862,7 @@ export class StarView {
         giants: giantsShown
           ? this.giants.flatMap((giant, k) => {
               const at = this.screen(this.giantMarkers[k]!.position);
-              return at ? [{ ...at, name: giant.name, au: giant.orbit_au, index: k }] : [];
+              return at ? [{ ...at, name: giant.name, au: giant.orbit_au, distance: this.giantDistances[k] ?? giant.orbit_au, index: k }] : [];
             })
           : [],
       });
