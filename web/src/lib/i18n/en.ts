@@ -58,6 +58,30 @@ export const en = {
   },
   /** World list in the sidebar. */
   /** The library of systems. */
+  /** The property card of a system's body. */
+  card: {
+    system: 'The system',
+    body: 'The body shown',
+    planets: 'Its planets, from the star outwards: pick one',
+    starFacts: (p: { temperature: string; luminosity: string }) => `${p.temperature} · ${p.luminosity}`,
+    systemFacts: (p: { planets: number; moons: number; ice: string; metallicity: string }) =>
+      `${p.planets} planet${p.planets === 1 ? '' : 's'}, ${p.moons} moon${p.moons === 1 ? '' : 's'} · ice line ${p.ice} · [Fe/H] ${p.metallicity}`,
+    moonOf: (p: { planet: string }) => `moon of ${p.planet}`,
+    planetOf: (p: { star: string }) => `planet of ${p.star}`,
+    orbit: 'Orbit',
+    orbitValue: (p: { distance: string; eccentricity: string; period: string }) => `${p.distance} · e ${p.eccentricity} · ${p.period}`,
+    size: 'Size',
+    lunarMasses: 'lunar masses',
+    spin: 'Day',
+    locked: 'locked to its parent',
+    tilt: (p: { tilt: string }) => `tilt ${p.tilt}`,
+    light: 'Light',
+    lightValue: (p: { flux: string; temperature: string }) => `${p.flux}× Earth's · equilibrium ${p.temperature}`,
+    moons: 'Moons',
+    notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
+    generating: 'Its maps are being made: see the progress over the view.',
+    generate: 'Generate its maps',
+  },
   systemList: {
     empty: 'No system yet: draw one with New system.',
     noMatch: 'No system matches.',

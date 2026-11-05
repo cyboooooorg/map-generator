@@ -6,6 +6,7 @@
   import Thumbnail from './components/Thumbnail.svelte';
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
+  import BodyCard from './components/BodyCard.svelte';
   import SystemList from './components/SystemList.svelte';
   import WorldPane from './components/WorldPane.svelte';
   import { api } from './lib/api/client';
@@ -353,6 +354,18 @@
     }
   }
 
+  /** Queues a body of a system and its neighbourhood, from its card. */
+  async function generateBody(system: string, body: string): Promise<void> {
+    try {
+      const started = await api.generateBody(system, body);
+      if (started.job_id) {
+        jobs.track(started.job_id, system, {}, { status: 'queued' }, true);
+      }
+    } catch (e) {
+      toasts.error(t.app.failed({ id: titleOf(system) ?? system, error: errorText(e) }));
+    }
+  }
+
   /** Queues the selected world again with a new random seed. */
   async function reroll(): Promise<void> {
     if (!primary.meta) {
@@ -410,8 +423,17 @@
           onCancel={() => (form = null)}
         />
       {:else}
+        {#if primary.system}
+          <BodyCard
+            world={primary}
+            onRenamed={(renamed) => (systems = systems.map((s) => (s.id === renamed.id ? renamed : s)))}
+            onGenerate={generateBody}
+          />
+        {/if}
+        {#if !primary.system || primary.shownSystemBody?.generated}
         <WorldInfo
           world={primary}
+          title={primary.shownSystemBody ? (primary.systemNames[primary.shownSystemBody.id] ?? primary.shownSystemBody.designation) : null}
           summary={undefined}
           worlds={[]}
           {compareId}
@@ -421,6 +443,7 @@
           link={shareLink}
           onDelete={() => selectedId && removeWorlds([selectedId])}
         />
+        {/if}
         <SystemList
           systems={visible}
           {selectedId}
