@@ -476,4 +476,3 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Next:** phase 6, a card for every body and renaming any of them;
   phase 7, the clean-up of the world layout (`/api/worlds`, the moon and
   host exports, `worlds/`).
-
