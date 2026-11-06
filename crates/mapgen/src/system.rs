@@ -1318,6 +1318,21 @@ fn ring_moon_inclination_deg(role: crate::rings::RingRole) -> f64 {
     }
 }
 
+/// The eccentricity of a ring moon of `role`, from `frac` in `[0, 1)`. A
+/// moon swings `a e` in and out of its circle: a moonlet must stay in its
+/// gap, a few tens of km wide (Pan 1.4e-5, Daphnis 3.3e-5, about ±4 km,
+/// which raises the waves on the Keeler gap's edges), so it draws up to
+/// 5e-5; an edge moon up to 1.5e-3 (Atlas 1.2e-3); shepherds and resonant
+/// moons, outside the rings, 2e-4 to 2.2e-3 (Prometheus 2.2e-3).
+fn ring_moon_eccentricity(role: crate::rings::RingRole, frac: f64) -> f64 {
+    use crate::rings::RingRole;
+    match role {
+        RingRole::Embedded => 5e-5 * frac,
+        RingRole::Edge => 1.5e-3 * frac,
+        RingRole::Shepherd | RingRole::Resonant => 0.0002 + 0.002 * frac,
+    }
+}
+
 /// The fields of a ring moon of the giant of `giant` (`giant_kg`, of
 /// radius `giant_radius_km` as its body gives it): a small icy body on a
 /// circular orbit in the giant's equatorial plane, locked to it, its
@@ -1352,7 +1367,7 @@ fn ring_moon_parts(
         Orbit {
             semi_major_axis_km: a_km,
             semi_major_axis_au: a_km / 1.495_978_707e8,
-            eccentricity: 0.0002 + 0.002 * (seed % 7907.0) / 7907.0,
+            eccentricity: ring_moon_eccentricity(moon.role, (seed % 7907.0) / 7907.0),
             inclination_deg: ring_moon_inclination_deg(moon.role) * (seed % 6067.0) / 6067.0,
             node_deg: (seed % 6421.0) / 6421.0 * 360.0,
             periapsis_deg: (seed % 7919.0) / 7919.0 * 360.0,
@@ -1988,10 +2003,15 @@ mod tests {
                     // In the rings' plane, within a few km of it.
                     let role = m.ring_role.unwrap();
                     assert!(m.orbit.inclination_deg <= ring_moon_inclination_deg(role));
+                    // Its swing in and out stays within the rings' scale.
+                    assert!(m.orbit.eccentricity < ring_moon_eccentricity(role, 1.0));
                     if matches!(role, RingRole::Embedded) {
                         let off_km =
                             m.orbit.semi_major_axis_km * m.orbit.inclination_deg.to_radians();
                         assert!(off_km < 5.0, "{off_km}");
+                        // Well inside its gap.
+                        let swing_km = m.orbit.semi_major_axis_km * m.orbit.eccentricity;
+                        assert!(swing_km < 10.0, "{swing_km}");
                     }
                     match m.ring_role.unwrap() {
                         RingRole::Embedded => {
