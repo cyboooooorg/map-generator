@@ -12,6 +12,7 @@ import {
   Line,
   LineBasicMaterial,
   LineDashedMaterial,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   MOUSE,
@@ -66,6 +67,8 @@ import {
   starSurface,
   frostLineAu,
   hillRadiusAu,
+  hillShownRadius,
+  sphereGrid,
   type SystemGiant,
   moonOrbits,
   gravityScale,
@@ -227,7 +230,7 @@ export class StarView {
   private frostAu = 0;
   private frostOn = true;
   private readonly hillGroup = new Group();
-  private hills: Line<BufferGeometry, LineBasicMaterial | LineDashedMaterial>[] = [];
+  private hills: LineSegments<BufferGeometry, LineBasicMaterial | LineDashedMaterial>[] = [];
   /** To scale, the pins up from the bodies (see buildPins). */
   private readonly pinGroup = new Group();
   private pins: Line<BufferGeometry, LineBasicMaterial>[] = [];
@@ -246,6 +249,8 @@ export class StarView {
   private pullsOn = true;
   /** The giants' orbit lines, which Orbit hides in a planetary system. */
   private giantOrbits: Line<BufferGeometry, LineBasicMaterial>[] = [];
+  /** Each planet's orbit drawn thick and bright, shown in place of its thin line while the planet is highlighted (see setHighlighted). */
+  private orbitHighlights: Line2[] = [];
   /** The dashed circle where distances start being compressed, if any. */
   private boundaryAt: Vector3 | null = null;
   /** A planetary system's dashed line across the habitable zone, between its edges. */
@@ -769,6 +774,8 @@ export class StarView {
     }
     this.giantMarkers = [];
     this.giantOrbits = [];
+    this.fatMaterials = this.fatMaterials.filter((m) => !this.orbitHighlights.some((h) => h.material === m));
+    this.orbitHighlights = [];
     this.boundaryAt = null;
     this.halos = [];
     const from = this.from;
@@ -799,6 +806,15 @@ export class StarView {
       orbit.renderOrder = 3;
       this.giantOrbits.push(orbit);
       this.giantGroup.add(orbit);
+      const bright = new Line2(
+        new LineGeometry().setPositions(Array.from(orbit.geometry.getAttribute('position').array)),
+        this.fatMaterial(`#${colour.clone().lerp(new Color('#ffffff'), 0.35).getHexString()}`, 2.2, 0.95),
+      );
+      bright.renderOrder = 3;
+      bright.frustumCulled = false;
+      bright.visible = false;
+      this.orbitHighlights.push(bright);
+      this.giantGroup.add(bright);
       const size = giantMarkerSize(giant.radius_earth);
       const marker = new Mesh(new SphereGeometry(size, 32, 16), new MeshBasicMaterial({ color: colour }));
       if (giant.rings !== 'none') {
@@ -833,7 +849,7 @@ export class StarView {
     this.applyMaps();
   }
 
-  /** Highlights the giants of these indices (in setStar's `giants`) with a ring, and only them. */
+  /** Highlights the giants of these indices (in setStar's `giants`) with a ring and their orbit drawn bright, and only them. */
   setHighlighted(indices: readonly number[]): void {
     this.highlighted = new Set(indices);
     this.applyHighlights();
@@ -842,6 +858,7 @@ export class StarView {
 
   private applyHighlights(): void {
     this.halos.forEach((halo, k) => (halo.visible = this.highlighted.has(k)));
+    this.applyVisibility();
   }
 
   /**
@@ -938,7 +955,7 @@ export class StarView {
     this.pulls = [];
     this.gravities = [];
     this.pullMids = [];
-    this.fatMaterials = this.fatMaterials.filter((m) => m === this.selectedOrbit.material);
+    this.fatMaterials = this.fatMaterials.filter((m) => m === this.selectedOrbit.material || this.orbitHighlights.some((h) => h.material === m));
     if (this.selected === null || !this.info) return;
     this.arrowScale = velocityScale(this.info.mass, this.giants);
     this.pullScale = gravityScale(this.info.mass, this.giants);
@@ -1083,7 +1100,12 @@ export class StarView {
     return material;
   }
 
-  /** A circle round each planet of a planetary system, as wide as its Hill sphere on the view's scale. */
+  /**
+   * A grid sphere round each planet of a planetary system, as wide as its
+   * Hill sphere on the view's scale, or dashed just outside its marker and
+   * its moons' rings where those are drawn larger than that (see
+   * hillShownRadius).
+   */
   private buildHills(): void {
     for (const hill of this.hills) {
       hill.geometry.dispose();
@@ -1092,30 +1114,29 @@ export class StarView {
     }
     this.hills = [];
     if (this.selected === null || !this.info) return;
-    for (const giant of this.giants) {
+    this.giants.forEach((giant, k) => {
       const a = giant.orbit_au * (1 - giant.eccentricity);
-      const hill = hillRadiusAu(giant.orbit_au, giant.eccentricity, giant.mass_earth, this.info.mass);
+      const hill = hillRadiusAu(giant.orbit_au, giant.eccentricity, giant.mass_earth, this.info!.mass);
       // Its width on the view's scale where the planet is (the scale may be
-      // compressed there). Most are smaller than the planet's marker: those
-      // are drawn just outside it, dashed, as not to scale.
+      // compressed there).
       const true_ = (this.at(a + hill) - this.at(Math.max(a - hill, 0))) / 2;
-      const floor = giantMarkerSize(giant.radius_earth) * 1.6;
-      const radius = Math.max(true_, floor);
-      const points = Array.from({ length: 97 }, (_, i) => {
-        const t = (i / 96) * 2 * Math.PI;
-        return new Vector3(Math.cos(t) * radius, 0, -Math.sin(t) * radius);
-      });
-      const circle = new Line(
-        new BufferGeometry().setFromPoints(points),
-        true_ >= floor
-          ? new LineBasicMaterial({ color: '#c9b6ff', transparent: true, opacity: 0.85 })
-          : new LineDashedMaterial({ color: '#c9b6ff', dashSize: radius * 0.25, gapSize: radius * 0.2, transparent: true, opacity: 0.85 }),
+      // Its moons' rings, round the marker and scaled to it (hidden to scale).
+      const moons = this.systemMoons[k];
+      const reach =
+        moons && !this.realScale ? Math.max(0, ...moons.orbits.map((o) => o.radius)) * moons.group.scale.x : 0;
+      const { radius, toScale } = hillShownRadius(true_, giantMarkerSize(giant.radius_earth), reach);
+      const sphere = new LineSegments(
+        new BufferGeometry().setFromPoints(sphereGrid(radius).map(([x, y, z]) => new Vector3(x, y, z))),
+        toScale
+          ? new LineBasicMaterial({ color: '#c9b6ff', transparent: true, opacity: 0.4, depthWrite: false })
+          : new LineDashedMaterial({ color: '#c9b6ff', dashSize: radius * 0.08, gapSize: radius * 0.06, transparent: true, opacity: 0.4, depthWrite: false }),
       );
-      circle.computeLineDistances();
-      circle.renderOrder = 3;
-      this.hills.push(circle);
-      this.hillGroup.add(circle);
-    }
+      sphere.computeLineDistances();
+      sphere.renderOrder = 3;
+      sphere.frustumCulled = false;
+      this.hills.push(sphere);
+      this.hillGroup.add(sphere);
+    });
   }
 
   setPulls(on: boolean): void {
@@ -1244,7 +1265,15 @@ export class StarView {
     this.orbit.visible = this.orbitOn;
     this.zone.visible = this.zoneOn;
     // In a planetary system, Orbit hides every planet's orbit line.
-    for (const line of this.giantOrbits) line.visible = this.selected === null || this.orbitOn;
+    // A highlighted planet's orbit is drawn bright in place of its thin
+    // line; the selected one's is the thick selected orbit.
+    const orbitsOn = this.selected === null || this.orbitOn;
+    this.giantOrbits.forEach((line, k) => {
+      const bright = this.highlighted.has(k) && k !== this.selected;
+      line.visible = orbitsOn && !bright;
+      const highlight = this.orbitHighlights[k];
+      if (highlight) highlight.visible = orbitsOn && bright;
+    });
     this.zoneLine.visible = this.selected !== null && this.zoneOn && this.distancesOn;
     // A planetary system draws a dotted line to every planet instead.
     this.link.visible = this.distancesOn && this.selected === null;
