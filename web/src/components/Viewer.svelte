@@ -38,6 +38,7 @@
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
+  import { currentProfile } from '../lib/viewer/quality';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
   import LoadingBar from './LoadingBar.svelte';
@@ -414,7 +415,7 @@
 
   onMount(() => {
     try {
-      view = new PlanetView(canvas);
+      view = new PlanetView(canvas, currentProfile());
       if (pendingCamera) {
         view.setCamera(pendingCamera);
         pendingCamera = null;

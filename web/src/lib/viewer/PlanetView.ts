@@ -502,6 +502,8 @@ export class PlanetView {
   /** Counts setTexture calls: only the latest one may set the map. */
   private textureRequest = 0;
   private disposed = false;
+  /** When the last frame was drawn (requestAnimationFrame's clock), for the frame cap. */
+  private lastDrawn = -Infinity;
   private atmosphereOn = true;
   /** Whether the star field is shown. */
   private starsOn = true;
@@ -647,7 +649,7 @@ export class PlanetView {
 
   /**
    * `quality` is what the view draws (see lib/viewer/quality.ts), kept for
-   * its life: switching it makes the view again.
+   * its life: switching it reloads the page.
    */
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -833,7 +835,9 @@ export class PlanetView {
     );
 
     this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.enableDamping = true;
+    // Without inertia in the light profile: it keeps drawing frames after
+    // the pointer stops.
+    this.controls.enableDamping = quality.damping;
     this.applyModeControls();
     this.camera.position.set(0, 0, GLOBE_DISTANCE);
 
@@ -1769,6 +1773,13 @@ export class PlanetView {
     if (!this.shown) {
       return;
     }
+    // At most the profile's frames per second (see QualityProfile.maxFps):
+    // too early, the frame waits for the next one, its changes pending.
+    if (this.quality.maxFps !== null && now - this.lastDrawn < 1000 / this.quality.maxFps - 2) {
+      this.frame = requestAnimationFrame(this.render);
+      return;
+    }
+    this.lastDrawn = now;
     // While the camera follows the morph, it is placed here: the controls
     // (whose distance limits are those of the mode reached) wait for the end.
     let following = false;

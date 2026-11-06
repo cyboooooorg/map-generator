@@ -44,6 +44,16 @@ export const en = {
   language: {
     label: 'Language',
   },
+  /** The 3D views' rendering quality (lib/viewer/quality.ts). */
+  quality: {
+    label: 'Rendering quality',
+    names: { high: 'High', light: 'Light' },
+    auto: (p: { detected: string }) => `Auto (${p.detected.toLowerCase()})`,
+    help: (p: { renderer: string; detected: string }) =>
+      `How much the 3D views draw. Light quality draws fewer pixels, without antialiasing, with a coarser globe, a plain halo for the atmosphere and fewer frames per second: for a computer or a virtual machine without a graphics card, where the browser draws on the processor. The worlds do not change. Changing it reloads the page. Detected: ${p.detected} (${p.renderer}).`,
+    unknownRenderer: 'unknown renderer',
+    lightNotice: 'No graphics card found: the 3D views draw in light quality. The quality menu at the top changes it.',
+  },
   /** Number, unit and time formatting. */
   format: {
     /** Between a number and its unit. */

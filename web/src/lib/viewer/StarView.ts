@@ -171,6 +171,12 @@ export class StarView {
   private frame: number | null = null;
   private loop: number | null = null;
   private lastTick = 0;
+  /** When the last frame was drawn, for the frame cap. */
+  private lastDrawn = -Infinity;
+  /** Least time between frames: the animation's 30 per second, or fewer as the profile caps them. */
+  private get frameMs(): number {
+    return Math.max(FRAME_MS, this.quality.maxFps !== null ? 1000 / this.quality.maxFps : 0);
+  }
   private time = 0;
   private info: StarInfo | null = null;
   /** Orientation of the periapsis in the orbital plane, radians. */
@@ -319,7 +325,7 @@ export class StarView {
 
   /**
    * `quality` is what the view draws (see lib/viewer/quality.ts), kept for
-   * its life: switching it makes the view again.
+   * its life: switching it reloads the page.
    */
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -329,7 +335,9 @@ export class StarView {
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
     this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.enableDamping = true;
+    // Without inertia in the light profile: it keeps drawing frames after
+    // the pointer stops.
+    this.controls.enableDamping = quality.damping;
     // The right button frees the camera: it pans on the screen's two axes.
     this.controls.enablePan = true;
     this.controls.screenSpacePanning = true;
@@ -1365,7 +1373,7 @@ export class StarView {
   private readonly tick = (now: number): void => {
     this.loop = requestAnimationFrame(this.tick);
     const elapsed = now - this.lastTick;
-    if (elapsed < FRAME_MS - 4) return;
+    if (elapsed < this.frameMs - 4) return;
     this.lastTick = now;
     const step = Math.min(elapsed / 1000, MAX_STEP_S);
     this.time += step;
@@ -1722,12 +1730,19 @@ export class StarView {
     }
   }
 
-  private readonly render = (): void => {
+  private readonly render = (now: number = performance.now()): void => {
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
       this.frame = null;
     }
     if (this.disposed) return;
+    // At most the profile's frames per second (see QualityProfile.maxFps):
+    // too early, the frame waits for the next one.
+    if (now - this.lastDrawn < this.frameMs - 2 && this.quality.maxFps !== null) {
+      this.frame = requestAnimationFrame(this.render);
+      return;
+    }
+    this.lastDrawn = now;
     const flying = this.stepFlight(performance.now());
     const moving = flying || (this.flight === null && this.controls.update());
     // The glow faces the camera.

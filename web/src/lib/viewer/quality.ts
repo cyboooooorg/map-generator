@@ -5,8 +5,10 @@
 // pixels, no antialiasing, a coarser globe, a cheaper sky, fewer frames);
 // the worlds themselves do not change, only how they are drawn.
 //
-// A view takes its profile when it is made and keeps it: switching the
-// quality makes the views again (antialiasing is fixed with the context).
+// A view takes its profile when it is made and keeps it (antialiasing is
+// fixed with the WebGL context): switching the quality reloads the page
+// (components/QualitySelect.svelte).
+import { loadSetting, saveSetting } from '../settings';
 
 /** What the user picked: the detected quality, or one forced. */
 export type QualityChoice = 'auto' | 'high' | 'light';
@@ -115,4 +117,22 @@ export function detectRenderer(): RendererInfo {
 export function resolveQuality(choice: QualityChoice, software: boolean): Quality {
   if (choice === 'auto') return software ? 'light' : 'high';
   return choice;
+}
+
+const CHOICE_KEY = 'quality';
+const CHOICES: readonly QualityChoice[] = ['auto', 'high', 'light'];
+
+/** The quality the user picked (`mapgen.quality`), auto by default. */
+export function loadQualityChoice(): QualityChoice {
+  const stored = loadSetting<string>(CHOICE_KEY, 'auto');
+  return (CHOICES as readonly string[]).includes(stored) ? (stored as QualityChoice) : 'auto';
+}
+
+export function saveQualityChoice(choice: QualityChoice): void {
+  saveSetting(CHOICE_KEY, choice);
+}
+
+/** The profile the views of this page draw with: the user's choice, else the detected one. */
+export function currentProfile(): QualityProfile {
+  return PROFILES[resolveQuality(loadQualityChoice(), detectRenderer().software)];
 }
