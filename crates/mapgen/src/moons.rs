@@ -931,6 +931,7 @@ pub fn small_body_params(
         giant_mass_earth: None,
         host: crate::exomoon::HostMode::None,
         given_rings: None,
+        impact_factor: None,
     }
 }
 
@@ -1049,6 +1050,7 @@ mod tests {
             giant_mass_earth: None,
             host: crate::exomoon::HostMode::None,
             given_rings: None,
+            impact_factor: None,
         }
     }
 

@@ -1000,6 +1000,7 @@ mod tests {
             giant_mass_earth: Some(mass),
             host: crate::exomoon::HostMode::None,
             given_rings: None,
+            impact_factor: None,
         }
     }
 

@@ -6,6 +6,7 @@
 //! writes the maps and raw data. The diagnostic maps are written during the
 //! generation, by an [`export::NoiseMapWriter`] passed as its debug sink.
 pub mod atmosphere;
+pub mod belts;
 pub mod biome;
 pub mod carve;
 pub mod climate;

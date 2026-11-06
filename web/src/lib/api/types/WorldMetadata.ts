@@ -41,6 +41,11 @@ star?: StarInfo | null,
  */
 drift_ma?: number, 
 /**
+ * The crater rate its planetary system set (see
+ * `WorldParams::impact_factor`); left out for every other world.
+ */
+impact_factor?: number | null, 
+/**
  * The moons and what bounds them; left out when the request turned
  * them off, and in the worlds made before them.
  */

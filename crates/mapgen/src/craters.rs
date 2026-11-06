@@ -427,9 +427,12 @@ impl CraterField {
             1.0
         };
         // Giants stir the impactors: their mass sets the rate (see
-        // `giants::impact_factor`; 1 without giants modelled).
-        let impact =
-            crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor));
+        // `giants::impact_factor`; 1 without giants modelled). A body of a
+        // planetary system has its rate from its system's giants and belts.
+        let impact = match p.impact_factor {
+            Some(factor) => f64::from(factor),
+            None => crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor)),
+        };
         let raise = locked_raise * impact;
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
@@ -1495,6 +1498,7 @@ mod tests {
             giant_mass_earth: None,
             host: crate::exomoon::HostMode::None,
             given_rings: None,
+            impact_factor: None,
         }
     }
 

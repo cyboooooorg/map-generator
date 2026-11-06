@@ -93,6 +93,10 @@ pub struct WorldMetadata {
     /// Left out at the present, as in the worlds made before it existed.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub drift_ma: f32,
+    /// The crater rate its planetary system set (see
+    /// `WorldParams::impact_factor`); left out for every other world.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impact_factor: Option<f32>,
     /// The moons and what bounds them; left out when the request turned
     /// them off, and in the worlds made before them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -474,6 +478,7 @@ pub fn export_raw_data(
             )
         }),
         drift_ma: world.params.drift_ma,
+        impact_factor: world.params.impact_factor,
         moons: crate::moons::MoonSystem::draw(&world.params),
         giants: crate::giants::GiantSystem::draw(&world.params),
         giant: crate::giant_world::info(&world.params),
@@ -896,6 +901,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         given_rings: meta.giant.as_ref().map(|g| crate::giant_world::GivenRings {
             rings: g.rings.clone(),
         }),
+        impact_factor: meta.impact_factor,
     };
     let l = &meta.layers;
     let infos = [
@@ -1080,6 +1086,7 @@ mod tests {
             giant_mass_earth: None,
             host: crate::exomoon::HostMode::None,
             given_rings: None,
+            impact_factor: None,
         })
         .world;
         let world_dir =

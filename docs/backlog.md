@@ -479,7 +479,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 17. Asteroid belts and Lagrange points
 
-- **Status:** analysis
+- **Status:** in progress
+- **Plan:** [2026-11-06-asteroid-belts.md](superpowers/plans/2026-11-06-asteroid-belts.md)
 - **Analysis:** [13-asteroids.md](analysis/13-asteroids.md)
 - **Problem:** a system has a star, planets and moons, but no small
   bodies: no asteroid belt, no Kuiper belt, no trojans, and its Lagrange
@@ -495,6 +496,17 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   stream of their own, so existing systems keep their bodies; shown in
   the star view with the selected planet's Lagrange points. Five choices
   are left to the user (section 5 of the analysis).
+- **Decided (2026-11-06):**
+  - an inner belt, an outer belt and a scattered disk, only where physics
+    and observations allow;
+  - trojan swarms drawn in the star view, and ringed and labelled from
+    afar in the planet view, where they are invisible;
+  - all five Lagrange points of the selected planet;
+  - a crater rate weighed by the belts;
+  - new systems keep the first cold giant's belt zone free of rocky
+    planets.
+- **Step 1 (2026-11-06):** the draw (`src/belts.rs`, `system.json`),
+  the belt zone kept clear, and the crater rate.
 
 ## 18. Rings and ring moons
 

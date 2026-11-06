@@ -5,6 +5,7 @@ import type { Physical } from "./Physical";
 import type { Preview } from "./Preview";
 import type { Spin } from "./Spin";
 import type { Surroundings } from "./Surroundings";
+import type { Trojans } from "./Trojans";
 import type { WorldParams } from "./WorldParams";
 
 /**
@@ -35,4 +36,10 @@ params: WorldParams,
 /**
  * Whether its maps are in `bodies/<id>/`.
  */
-generated: boolean, };
+generated: boolean, 
+/**
+ * A planet's trojans at its L4 and L5 points, where they last (see
+ * `crate::belts`); none for a moon, and in the systems drawn before
+ * them.
+ */
+trojans?: Trojans, };

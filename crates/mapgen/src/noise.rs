@@ -145,6 +145,8 @@ pub mod stream {
     /// The seeds of a giant's other regular moons (see
     /// `crate::exomoon::sibling_params`), one stream past this per moon.
     pub const SIBLINGS: u32 = 31;
+    pub const BELTS: u32 = 32;
+    pub const TROJANS: u32 = 33;
     /// The rings of a giant of a planetary system, drawn with the system
     /// (see `crate::system`): 32 and 33 are the belts' and the trojans'.
     pub const RINGS: u32 = 34;

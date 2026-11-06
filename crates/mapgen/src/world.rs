@@ -72,6 +72,13 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub given_rings: Option<crate::giant_world::GivenRings>,
+    /// The crater rate relative to the Solar System's, as its planetary
+    /// system sets it from its giants and belts (see `crate::belts`);
+    /// absent for every other world, whose rate comes from the giants its
+    /// seed draws.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub impact_factor: Option<f32>,
 }
 
 impl WorldParams {
