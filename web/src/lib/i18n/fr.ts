@@ -639,7 +639,7 @@ export const fr: Messages = {
     dayUnit: 'j',
     cameraOnBody: 'Caméra liée à l’astre',
     cameraOnBodyHelp:
-      'Pendant la lecture, la caméra tourne avec l’astre, en voyant toujours la même face, et le ciel tourne autour. Désactivée, la caméra reste fixe par rapport aux étoiles, au soleil et aux orbites, et voit le globe tourner sur lui-même',
+      'Pendant la lecture, la caméra tourne avec l’astre, en voyant toujours la même face, et le ciel tourne autour. Désactivée, la caméra reste fixe par rapport aux étoiles, au soleil et aux orbites, et voit le globe tourner sur lui-même. Réglée à part pour les astres en rotation synchrone, où elle est activée par défaut : leur planète ferait sinon le tour de leur ciel à chaque orbite',
     orbitDay: (p) => `Jour ${p.days} d’une orbite de ${p.period}${S}jours`,
     moonSun: `Sur une lune, le soleil suit son orbite${S}: il en fait le tour une fois par mois, la lune gardant sa face vers sa planète`,
     moonSunSpin: ({ hours }: { hours: string }) =>

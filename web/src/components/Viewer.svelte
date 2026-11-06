@@ -162,6 +162,10 @@
     // face, the sky turning). A new key: the former cameraFollowsSky
     // saved the other default.
     cameraOnBody: false,
+    // The same for a body locked to what it orbits, on by default: its
+    // planet, filling its sky, would otherwise sweep round it once per
+    // orbit, as if the camera went round the body.
+    cameraOnLockedBody: true,
     // Names tied to the bodies of the sky.
     skyLabels: true,
     starLight: false,
@@ -218,6 +222,7 @@
   let ringRockScale = $state(RING_ROCK_SCALES.includes(saved.ringRocks) ? saved.ringRocks : 100);
   let axesShown = $state(saved.spinAxes);
   let cameraOnBody = $state(saved.cameraOnBody);
+  let cameraOnLockedBody = $state(saved.cameraOnLockedBody);
   $effect(() => view?.setSpinAxes(axesShown));
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
   /** Labels on the bodies of the sky, and where those are on the screen. */
@@ -449,6 +454,7 @@
       ringRocks: ringRockScale,
       spinAxes: axesShown,
       cameraOnBody,
+      cameraOnLockedBody,
       skyLabels,
       sun,
       season,
@@ -995,9 +1001,12 @@
   // While the orbits play, the camera turns with the stars: it stays still
   // against the sky, the star and the orbits, round the globe's centre or
   // the point it looks at, and sees the globe turn on itself under it; or,
-  // with "Camera turns with the body", it stays fixed on the body, always
-  // seeing the same face, the sky turning round it.
-  $effect(() => view?.setStarsTurn(starsTurn, orbitsPlaying && !cameraOnBody));
+  // with "Camera turns with the body" (on by default for a body locked to
+  // what it orbits), it stays fixed on the body, always seeing the same
+  // face, the sky turning round it.
+  $effect(() => view?.setStarsTurn(starsTurn, orbitsPlaying && !cameraTurnsWithBody));
+  // The gizmo shows the axes of the frame the camera stays in.
+  $effect(() => view?.setGizmoOnSky(Boolean(sysBody) && !cameraTurnsWithBody));
   // The star drawn at its place, at the centre of the planets' orbits.
   $effect(() => view?.setStarPlace(sysSky?.star ?? null));
   // Far enough out to see the moons of the shown body's planet whole.
@@ -1093,6 +1102,12 @@
    */
   const spinLocked = $derived(sysBody ? sysBody.spin.locked : (meta?.star?.tidally_locked ?? false));
   $effect(() => view?.setSpinLocked(meta || sysBody ? spinLocked : null));
+  /** "Camera turns with the body" for the body shown: its own setting for a locked body. */
+  const cameraTurnsWithBody = $derived(spinLocked ? cameraOnLockedBody : cameraOnBody);
+  function setCameraTurnsWithBody(on: boolean): void {
+    if (spinLocked) cameraOnLockedBody = on;
+    else cameraOnBody = on;
+  }
   /** A moon's host planet: where it is, and the moon's direction of motion round it (its own orbit's tangent). */
   const hostGuide = $derived.by(() => {
     if (!sys || !sysBody?.parent || !sysSky) return null;
@@ -1603,7 +1618,7 @@
     {/if}
     {#if orbitPeriod && sysSky}
       <label class="check" title={t.viewer.cameraOnBodyHelp}>
-        <input type="checkbox" bind:checked={cameraOnBody} />
+        <input type="checkbox" checked={cameraTurnsWithBody} onchange={(e) => setCameraTurnsWithBody(e.currentTarget.checked)} />
         {t.viewer.cameraOnBody}
       </label>
     {/if}
