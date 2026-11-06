@@ -14,7 +14,7 @@ describe('skyOrbitDash', () => {
     const dash = skyOrbitDash(length, pace);
     const perSecond = (length * pace) / dash;
     expect(perSecond).toBeCloseTo(SKY_ORBIT_DASHES_PER_SECOND, 6);
-    expect(perSecond).toBeLessThanOrEqual(2);
+    expect(perSecond).toBeLessThanOrEqual(6);
     // Twice the pace, twice the period: as many dashes a second.
     expect(skyOrbitDash(length, 2 * pace)).toBeCloseTo(2 * dash, 6);
   });

@@ -1009,7 +1009,9 @@ export const skyBodyFragment = /* glsl */ `
 export const SKY_ORBIT_DASH = 1.5;
 
 /** Dash periods that go past a point of the line each second at most, while the orbits play (see skyOrbitDash). */
-export const SKY_ORBIT_DASHES_PER_SECOND = 2;
+export const SKY_ORBIT_DASHES_PER_SECOND = 6;
+/** Screen heights a dash spans at most before the line is drawn plain (see skyOrbitFragment). */
+export const SKY_ORBIT_PLAIN_SCREENS = 3;
 
 /**
  * The dash period of an orbit line `length` long (radii of the body
@@ -1017,8 +1019,9 @@ export const SKY_ORBIT_DASHES_PER_SECOND = 2;
  * enough that at most SKY_ORBIT_DASHES_PER_SECOND dashes go past any
  * point of the line each second, whatever the speed and wherever on the
  * screen, so that they are seen sliding rather than streaming or blurred
- * into a solid line. Where a dash would be longer than the screen, the
- * line is drawn plain (see skyOrbitFragment).
+ * into a solid line. Where a dash would be longer than
+ * SKY_ORBIT_PLAIN_SCREENS screens, the line is drawn plain (see
+ * skyOrbitFragment).
  */
 export function skyOrbitDash(length: number, orbitsPerSecond: number): number {
   return Math.max(SKY_ORBIT_DASH, (length * Math.abs(orbitsPerSecond)) / SKY_ORBIT_DASHES_PER_SECOND);
@@ -1062,10 +1065,10 @@ export const skyOrbitFragment = /* glsl */ `
       // Dashes where they span a few pixels, every other one bright (no
       // gaps: the line stays whole as it moves); farther off, where they
       // would flicker, a fainter solid line; where a dash would be longer
-      // than the screen (a fast orbit seen near), the plain line, which
+      // than a few screens (a fast orbit seen near), the plain line, which
       // would otherwise blink from bright to dim as a whole.
       float perPixel = fwidth(vAlong);
-      if (uDash > perPixel * uScreenPx) {
+      if (uDash > perPixel * uScreenPx * ${SKY_ORBIT_PLAIN_SCREENS.toFixed(1)}) {
         // The plain line.
       } else if (perPixel < uDash * 0.25) {
         if (fract(vAlong / uDash) < 0.5) {
