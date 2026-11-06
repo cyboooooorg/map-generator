@@ -68,31 +68,28 @@ pub fn cell_value(seed: u32, x: f64, y: f64, z: f64, sharpness: f64) -> f32 {
     (sum / total) as f32
 }
 
-/// Nearest point of a jittered lattice (one point per unit cell, present
-/// with probability `presence`): its distance from `(x, y, z)`, in cells,
-/// and its hash, for per-point properties. `None` when no point lies in the
-/// surrounding cells.
-pub fn nearest_point(seed: u32, x: f64, y: f64, z: f64, presence: f64) -> Option<(f64, u64)> {
+/// The points of a jittered lattice (one point per unit cell, present
+/// with probability `presence`) in the cells around `(x, y, z)`: each one's
+/// distance from it, in cells, and its hash, for per-point properties.
+pub fn lattice_points(
+    seed: u32,
+    x: f64,
+    y: f64,
+    z: f64,
+    presence: f64,
+) -> impl Iterator<Item = (f64, u64)> {
     let (cx, cy, cz) = (x.floor() as i64, y.floor() as i64, z.floor() as i64);
-    let mut best: Option<(f64, u64)> = None;
-    for dz in -1..=1 {
-        for dy in -1..=1 {
-            for dx in -1..=1 {
-                let (i, j, k) = (cx + dx, cy + dy, cz + dz);
-                let h = hash(seed, i, j, k);
-                if ((h >> 48) as f64 / 65_536.0) >= presence {
-                    continue;
-                }
-                let unit = |shift: u32| ((h >> shift) & 0xFFFF) as f64 / 65_535.0;
-                let p = [i as f64 + unit(0), j as f64 + unit(16), k as f64 + unit(32)];
-                let d = ((p[0] - x).powi(2) + (p[1] - y).powi(2) + (p[2] - z).powi(2)).sqrt();
-                if best.is_none_or(|b| d < b.0) {
-                    best = Some((d, h));
-                }
-            }
+    (0..27).filter_map(move |n: i64| {
+        let (i, j, k) = (cx + n % 3 - 1, cy + (n / 3) % 3 - 1, cz + n / 9 - 1);
+        let h = hash(seed, i, j, k);
+        if ((h >> 48) as f64 / 65_536.0) >= presence {
+            return None;
         }
-    }
-    best
+        let unit = |shift: u32| ((h >> shift) & 0xFFFF) as f64 / 65_535.0;
+        let p = [i as f64 + unit(0), j as f64 + unit(16), k as f64 + unit(32)];
+        let d = ((p[0] - x).powi(2) + (p[1] - y).powi(2) + (p[2] - z).powi(2)).sqrt();
+        Some((d, h))
+    })
 }
 
 /// Hermite step from 0 at `edge0` to 1 at `edge1`, clamped outside.

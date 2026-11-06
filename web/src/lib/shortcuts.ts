@@ -131,16 +131,17 @@ export function shortcutHelp(): readonly [string, string][] {
 }
 
 /** Relief exaggeration change of one `+` or `-` press. */
-export const RELIEF_STEP = 0.1;
+export const RELIEF_STEP = 0.5;
 /**
- * The relief slider's top: an exaggeration of three times the 1 of old
- * (RELIEF_SCALE), so that mountains show on a whole planet in view.
+ * The relief slider's top: ten times the true relief (see lib/relief.ts),
+ * enough for mountains to show on a whole planet in view; the true relief
+ * (1) is marked on the slider's track, and a button goes back to it.
  */
-export const RELIEF_MAX = 3;
-/** The relief a viewer starts with: mountains visible, coasts unchanged. */
+export const RELIEF_MAX = 10;
+/** The relief a viewer starts with: the true relief. */
 export const RELIEF_DEFAULT = 1;
 
-/** The relief after one step up (`direction` 1) or down (-1), within [0, 1]. */
+/** The relief after one step up (`direction` 1) or down (-1), within [0, RELIEF_MAX]. */
 export function stepRelief(relief: number, direction: 1 | -1): number {
   const next = Math.round((relief + direction * RELIEF_STEP) * 100) / 100;
   return Math.min(RELIEF_MAX, Math.max(0, next));

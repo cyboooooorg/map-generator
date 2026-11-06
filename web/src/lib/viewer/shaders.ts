@@ -25,13 +25,13 @@ export const LAYER_IDS = {
 } as const;
 export type Layer = keyof typeof LAYER_IDS;
 
-/** Largest displacement, as a fraction of the planet radius, at full relief. */
-export const RELIEF_SCALE = 0.06;
-
 const common = /* glsl */ `
   const float PI = 3.141592653589793;
   uniform float uMorph;
+  // Relief exaggeration, 1 for the true relief (see lib/relief.ts), and
+  // the body's radii per elevation unit at the true relief.
   uniform float uRelief;
+  uniform float uReliefScale;
   uniform float uCoast;
   // 1 when the sea is liquid; 0 when it has dried up (barren worlds).
   uniform float uLiquidSea;
@@ -116,7 +116,7 @@ export const surfaceVertex = /* glsl */ `
       if (uLiquidSea > 0.5) {
         above = max(above, 0.0);
       }
-      height = above * uRelief * ${RELIEF_SCALE.toFixed(4)};
+      height = above * uRelief * uReliefScale;
     }
     // A spinning giant is flattened at the poles: an ellipsoid, whose normal
     // leans towards the poles.
@@ -498,9 +498,18 @@ export const surfaceFragment = /* glsl */ `
     vec3 normal = normalize(vNormal);
     bool shaded = uTileOn > 0.5 || uLayer == 0;
     if (hasData && uRelief > 0.0 && !water && !shaded) {
-      float east = dataAt(vUv + vec2(uTexel.x, 0.0)).r - dataAt(vUv - vec2(uTexel.x, 0.0)).r;
-      float north = dataAt(vUv + vec2(0.0, uTexel.y)).r - dataAt(vUv - vec2(0.0, uTexel.y)).r;
-      normal = normalize(normal - uRelief * 40.0 * (east * vEast + north * vNorth));
+      // The slope over the span of a screen pixel at least, not a texel:
+      // finer differences shimmer once the map is minified. (Capped, as
+      // the longitude wraps at the seam.)
+      vec2 span = clamp(fwidth(vUv), uTexel, uTexel * 64.0);
+      float east = dataAt(vUv + vec2(span.x, 0.0)).r - dataAt(vUv - vec2(span.x, 0.0)).r;
+      float north = dataAt(vUv + vec2(0.0, span.y)).r - dataAt(vUv - vec2(0.0, span.y)).r;
+      // Rise over run, in radii per radian of arc, as displaced.
+      float rise = uRelief * uReliefScale;
+      float latitude = (vUv.y - 0.5) * PI;
+      float slopeEast = rise * east / (4.0 * PI * span.x * max(cos(latitude), 0.05));
+      float slopeNorth = rise * north / (2.0 * PI * span.y);
+      normal = normalize(normal - slopeEast * vEast - slopeNorth * vNorth);
     }
 
     // Relief is always shaded by the headlight, relative to flat ground, so

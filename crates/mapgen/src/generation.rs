@@ -14,7 +14,8 @@ use crate::geo::Grid;
 use crate::geology::Regime;
 use crate::hydrology::hydrology;
 use crate::noise::{
-    EARTH_CIRCUMFERENCE_KM, cell_value, fbm, nearest_point, ridged, smoothstep, stream, stream_seed,
+    EARTH_CIRCUMFERENCE_KM, cell_value, fbm, lattice_points, ridged, smoothstep, stream,
+    stream_seed,
 };
 use crate::rivers;
 use crate::star::{StarClimate, StarInfo, star_temperatures};
@@ -158,8 +159,24 @@ const ARC_CONE_PRESENCE: f64 = 0.8;
 /// Height of an arc volcano above the terrain at its vent, at full arc
 /// weight (the cones of volcanic provinces: [`CONE_HEIGHT`]).
 const ARC_CONE_HEIGHT: f32 = 0.4;
-/// Below this arc weight, no arc volcano.
+/// Arc weights over which arc volcanoes grow from nothing to their full
+/// height: gradually, as a cut would draw a cliff of up to 10 km along
+/// the arc's edge (where it follows the coarse plate grid).
 const ARC_MIN: f32 = 0.02;
+const ARC_FULL: f32 = 0.3;
+
+/// The volcanoes at a point, from its cone profile `cone` (see
+/// [`Sampler::cone`]), its arc volcanoes' `arc_cone` and the arc weight
+/// `arc`: their share of the volcanic zone and their height, both
+/// continuous (no step where arc volcanoes start, nor where they take
+/// over from the cones of volcanic provinces).
+fn volcanoes(cone: f32, arc_cone: f32, arc: f32) -> (f32, f32) {
+    let arc_cone = arc_cone * smoothstep(ARC_MIN, ARC_FULL, arc);
+    (
+        cone.max(arc_cone),
+        (CONE_HEIGHT * cone).max(ARC_CONE_HEIGHT * arc_cone),
+    )
+}
 
 /// Share of the surface in volcanic provinces at a volcanic intensity of 1;
 /// it is proportional to the intensity.
@@ -307,21 +324,29 @@ impl Sampler {
     }
 
     /// Like [`Self::cone`], on a lattice of its own: one point per
-    /// `cell_km` cell, present with probability `presence`.
+    /// `cell_km` cell, present with probability `presence`. Where cones
+    /// overlap, the highest profile wins: taking the nearest cone's alone
+    /// drew a cliff where a large cone met a small one, halfway between.
     fn cone_on(&self, p: [f64; 3], seed: u32, cell_km: f64, presence: f64) -> f32 {
         let radius_km = self.grid.circumference_km as f64 / (2.0 * PI);
         let f = radius_km / cell_km;
-        let Some((d, h)) = nearest_point(seed, p[0] * f, p[1] * f, p[2] * f, presence) else {
-            return 0.0;
-        };
-        let size = CONE_KM.0 + (CONE_KM.1 - CONE_KM.0) * ((h >> 8) & 0xFF) as f64 / 255.0;
-        // Flows reach further in some directions than others.
-        let g = radius_km / (2.0 * size);
-        let lobe = self
-            .volcano_noise
-            .get([p[0] * g + 71.0, p[1] * g - 13.0, p[2] * g + 29.0]);
-        let r = d * cell_km / size * (1.0 + 0.4 * lobe);
-        (-0.5 * r * r).exp() as f32
+        let mut best = 0.0f64;
+        for (d, h) in lattice_points(seed, p[0] * f, p[1] * f, p[2] * f, presence) {
+            let size = CONE_KM.0 + (CONE_KM.1 - CONE_KM.0) * ((h >> 8) & 0xFF) as f64 / 255.0;
+            // The lobes shorten a flow by 40 % at most: past 4 radii so
+            // shortened, the profile is under 0.04 %.
+            if 0.6 * d * cell_km / size > 4.0 {
+                continue;
+            }
+            // Flows reach further in some directions than others.
+            let g = radius_km / (2.0 * size);
+            let lobe = self
+                .volcano_noise
+                .get([p[0] * g + 71.0, p[1] * g - 13.0, p[2] * g + 29.0]);
+            let r = d * cell_km / size * (1.0 + 0.4 * lobe);
+            best = best.max((-0.5 * r * r).exp());
+        }
+        best as f32
     }
 
     /// Samples every noise layer for the pixel at column `x`, row `y`.
@@ -480,18 +505,13 @@ impl Sampler {
         // Arc volcanoes are stratovolcanoes, standing higher than the
         // cones of volcanic provinces: their summits reach the highland,
         // and become volcanoes and lava fields.
-        let cone_height = if arc_cone > cone {
-            ARC_CONE_HEIGHT
-        } else {
-            CONE_HEIGHT
-        };
-        let cone = cone.max(arc_cone);
+        let (cone, cone_height) = volcanoes(cone, arc_cone, plates.arc);
         let volcanic_zone = broad * (VOLCANIC_BACKGROUND + (1.0 - VOLCANIC_BACKGROUND) * cone);
 
         let elevation = (continent
             + tectonic_uplift
             + mountain * mountain_weight * self.mountain_blend
-            + cone_height * broad * cone)
+            + broad * cone_height)
             .clamp(-1.0, 1.0);
         let cone_relief = elevation
             - (continent + tectonic_uplift + mountain * mountain_weight * self.mountain_blend)
@@ -1243,6 +1263,30 @@ mod tests {
     use super::*;
     use crate::climate::EARTH_AXIAL_TILT_DEG;
     use crate::preset::Preset;
+
+    #[test]
+    fn volcanoes_rise_without_a_step() {
+        // A full arc volcano, where the arc fades out: nothing at the
+        // threshold, then a gradual rise (no cliff of 0.4 at ARC_MIN).
+        assert_eq!(volcanoes(0.0, 1.0, ARC_MIN).1, 0.0);
+        let mut last = 0.0;
+        for k in 1..=100 {
+            let arc = ARC_MIN + (ARC_FULL - ARC_MIN) * k as f32 / 100.0;
+            let height = volcanoes(0.0, 1.0, arc).1;
+            assert!(
+                height >= last && height - last < 0.01,
+                "{arc}: {last} -> {height}"
+            );
+            last = height;
+        }
+        assert_eq!(volcanoes(0.0, 1.0, 1.0).1, ARC_CONE_HEIGHT);
+        // Where arc volcanoes take over from a province's cones, the
+        // height is continuous too (it jumped from 0.25 to 0.4 times the
+        // cone).
+        let below = volcanoes(0.6, 0.599, 1.0).1;
+        let above = volcanoes(0.6, 0.601, 1.0).1;
+        assert!((above - below).abs() < 0.01, "{below} -> {above}");
+    }
 
     pub fn params(seed: u32, planet: &str) -> WorldParams {
         WorldParams {

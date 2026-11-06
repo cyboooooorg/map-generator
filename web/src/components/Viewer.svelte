@@ -14,6 +14,7 @@
   import type { HexMap } from '../lib/api/types/HexMap';
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
+  import { reliefScale } from '../lib/relief';
   import { formatArea, formatInt, formatKm, formatNumber, formatShare, formatUpTo, formatYear, saveBlob, surfaceColour, withUnit } from '../lib/format';
   import type { LonLat } from '../lib/geo';
   import type { ViewLink } from '../lib/link';
@@ -129,7 +130,11 @@
     mode: 'globe' as string,
     layer: 'biomes' as string,
     relief: RELIEF_DEFAULT as number,
-    /** 2 once the relief slider reached RELIEF_MAX: a 0 saved before was the old default, not a choice. */
+    /**
+     * 3 once the relief became an exaggeration of the true relief (1): a
+     * value saved before was on the old, arbitrary scale, so it gives way
+     * to the default.
+     */
     reliefVersion: 1 as number,
     graticule: false,
     referenceLines: true,
@@ -163,7 +168,7 @@
   let view = $state<PlanetView | null>(null);
   let mode = $state<ViewMode>(saved.mode === 'map' ? 'map' : 'globe');
   let layer = $state<Layer>(LAYERS.some((l) => l.id === saved.layer) ? (saved.layer as Layer) : 'biomes');
-  let relief = $state(saved.reliefVersion < 2 && saved.relief === 0 ? RELIEF_DEFAULT : saved.relief);
+  let relief = $state(saved.reliefVersion < 3 ? RELIEF_DEFAULT : Math.min(saved.relief, RELIEF_MAX));
   let graticule = $state(saved.graticule);
   let referenceLines = $state(saved.referenceLines);
   // `contours` keeps its saved name: it was the only (depth) contour toggle.
@@ -342,7 +347,7 @@
       mode,
       layer,
       relief,
-      reliefVersion: 2,
+      reliefVersion: 3,
       graticule,
       referenceLines,
       contours: seaContours,
@@ -481,7 +486,7 @@
   });
 
   $effect(() => {
-    view?.setData(layers, meta ? coastline(meta) : 0, meta ? seaIsLiquid(meta) : true);
+    view?.setData(layers, meta ? coastline(meta) : 0, meta ? seaIsLiquid(meta) : true, meta ? reliefScale(meta.circumference_km) : 0);
   });
   // The layers (relief, contours, picking) follow the epoch once the slider is released.
   $effect(() => {
@@ -1374,10 +1379,21 @@
           {/each}
         </select>
       </label>
-      <label>
+      <label title={t.viewer.reliefHelp}>
         <span>{t.viewer.relief}</span>
-        <input type="range" min="0" max={RELIEF_MAX} step="0.05" bind:value={relief} disabled={!dataReady} />
+        <span class="relief-track">
+          <input type="range" min="0" max={RELIEF_MAX} step="0.1" bind:value={relief} disabled={!dataReady} />
+          <!-- The true relief's point on the track (see lib/relief.ts). -->
+          <span class="true-mark" style:--at={RELIEF_DEFAULT / RELIEF_MAX} title={t.viewer.reliefTrue}></span>
+        </span>
+        <span class="relief-value">×{formatNumber(relief, 1)}</span>
       </label>
+      <button
+        class="small relief-reset"
+        onclick={() => (relief = RELIEF_DEFAULT)}
+        disabled={!dataReady || relief === RELIEF_DEFAULT}
+        title={t.viewer.reliefResetHelp}>↺ {t.viewer.reliefTrue}</button
+      >
 
   </div>
 {/snippet}
@@ -1824,6 +1840,35 @@
   }
   .panel-body label > select {
     min-width: 0;
+  }
+  .relief-track {
+    position: relative;
+    display: grid;
+    align-items: center;
+  }
+  .relief-track input {
+    width: 100%;
+    margin: 0;
+  }
+  /* A tick under the track at the true relief, the thumb's centre there
+     (the thumb, about 16 px wide, stops half its width from each end). */
+  .true-mark {
+    position: absolute;
+    left: calc(8px + (100% - 16px) * var(--at));
+    bottom: -7px;
+    width: 2px;
+    height: 7px;
+    margin-left: -1px;
+    background: var(--accent);
+    pointer-events: auto;
+  }
+  .relief-value {
+    min-width: 3.2em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .relief-reset {
+    justify-self: end;
   }
   .panel-body label.check {
     display: flex;
