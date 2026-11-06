@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { placeSystem, systemReach, systemSky } from './systemSky';
+import { placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
 import type { Vec3 } from './skyBodies';
 
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
@@ -82,5 +82,68 @@ describe('system sky', () => {
     const back = at(period);
     back.forEach((v, i) => expect(v / length(a)).toBeCloseTo(a[i]! / length(a), 6));
     expect((a[0] * half[0] + a[2] * half[2]) / (length(a) * length(half))).toBeLessThan(-0.9);
+  });
+});
+
+describe('small bodies in the sky', () => {
+  // The fixture with trojans for the giant c and a belt round b's orbit.
+  const b = system.bodies.find((x) => x.id === 'b')!;
+  const withSmall: System = {
+    ...system,
+    belts: [
+      {
+        kind: 'inner',
+        inner_au: b.orbit.semi_major_axis_au * 0.8,
+        outer_au: b.orbit.semi_major_axis_au * 1.2,
+        mass_earth: 4e-4,
+        gaps: [],
+        composition: 'rocky',
+        eccentricity: 0.1,
+        inclination_deg: 8,
+        shaped_by: 'c',
+      },
+    ],
+    bodies: system.bodies.map((body) => (body.id === 'c' ? { ...body, trojans: { l4: 230_000, l5: 120_000 } } : body)),
+  };
+  const angle = (u: Vec3, v: Vec3) =>
+    (Math.acos(Math.min(1, (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (length(u) * length(v)))) * 180) / Math.PI;
+  const minus = (u: Vec3, v: Vec3): Vec3 => [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
+
+  it('puts a planet’s swarms 60° ahead of it and behind it on its orbit', () => {
+    const days = 40;
+    const { swarms } = smallBodiesSky(withSmall, 'b', days);
+    expect(swarms.map((s) => [s.planet, s.point, s.count])).toEqual([
+      ['c', 'L4', 230_000],
+      ['c', 'L5', 120_000],
+    ]);
+    const sky = systemSky(withSmall, 'b', days, textures);
+    const star = sky.star.position;
+    const c = sky.bodies[sky.ids.indexOf('c')]!.position!;
+    const later = systemSky(withSmall, 'b', days + 30, textures);
+    const cLater = later.bodies[later.ids.indexOf('c')]!.position!;
+    const l4 = minus(swarms[0]!.position, star);
+    const l5 = minus(swarms[1]!.position, star);
+    const fromStar = minus(c, star);
+    // 60° from the planet, seen from the star, as far from it: an
+    // equilateral triangle, though its orbit is eccentric (0.26).
+    expect(angle(l4, fromStar)).toBeCloseTo(60, 6);
+    expect(angle(l5, fromStar)).toBeCloseTo(60, 6);
+    // L4 ahead: the planet moves towards it; L5 behind.
+    expect(angle(l4, minus(cLater, star))).toBeLessThan(angle(l4, fromStar));
+    expect(angle(l5, minus(cLater, star))).toBeGreaterThan(angle(l5, fromStar));
+    expect(length(l4) / length(fromStar)).toBeCloseTo(1, 9);
+  });
+
+  it('draws a belt’s edges round the star and knows when the body is in it', () => {
+    const { belts } = smallBodiesSky(withSmall, 'b', 10);
+    expect(belts).toHaveLength(1);
+    expect(belts[0]!.inside).toBe(true);
+    const star = systemSky(withSmall, 'b', 10, textures).star.position;
+    const radii = (b.orbit.semi_major_axis_au * 0.8 * 1.495_978_707e8) / b.physical.radius_km;
+    for (const point of belts[0]!.edges[0]) expect(length(minus(point, star)) / radii).toBeCloseTo(1, 6);
+    // From the giant c, far beyond it, the body is not inside.
+    expect(smallBodiesSky(withSmall, 'c', 10).belts[0]!.inside).toBe(false);
+    // A system without small bodies has none.
+    expect(smallBodiesSky(system, 'b', 10)).toEqual({ swarms: [], belts: [] });
   });
 });

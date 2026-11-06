@@ -1686,6 +1686,9 @@ export class PlanetView {
     this.skyOrbits?.geometry.dispose();
     this.skyOrbits?.material.dispose();
     this.skyOrbitsNear?.material.dispose();
+    this.skyBelts?.geometry.dispose();
+    this.skyBelts?.material.dispose();
+    this.skyBeltsNear?.material.dispose();
     this.spinAxis?.geometry.dispose();
     this.guides.dispose();
     this.previewGlobe?.geometry.dispose();
@@ -1934,75 +1937,79 @@ export class PlanetView {
    * shown's own orbit, so that it is seen sliding along it). Empty to clear.
    */
   setSkyOrbits(loops: readonly (readonly Vec3[])[], dashed: readonly boolean[] = []): void {
-    const count = loops.reduce((sum, loop) => sum + loop.length, 0);
-    if (count === 0) {
-      if (this.skyOrbits) this.skyOrbits.visible = false;
-      if (this.skyOrbitsNear) this.skyOrbitsNear.visible = false;
-      this.skyOrbitsOn = false;
-      this.requestRender();
-      return;
-    }
-    // Segments from each point to the next, round each loop.
-    const directions = new Float32Array(count * 6);
-    const along = new Float32Array(count * 2);
-    let at = 0;
-    loops.forEach((loop, k) => {
-      let length = 0;
-      loop.forEach((point, i) => {
-        const next = loop[(i + 1) % loop.length]!;
-        directions.set(point, at * 3);
-        directions.set(next, at * 3 + 3);
-        const step = Math.hypot(next[0] - point[0], next[1] - point[1], next[2] - point[2]);
-        along[at] = dashed[k] ? length : -1;
-        along[at + 1] = dashed[k] ? length + step : -1;
-        length += step;
-        at += 2;
-      });
-    });
     if (!this.skyOrbits) {
-      this.skyOrbits = new LineSegments(
-        new BufferGeometry(),
-        new ShaderMaterial({
-          vertexShader: skyOrbitVertex,
-          fragmentShader: skyOrbitFragment,
-          uniforms: {
-            uColor: { value: new Color(0.55, 0.62, 0.75) },
-            uOpacity: { value: 0.45 },
-            uNear: { value: 0 },
-          },
-          transparent: true,
-          depthWrite: false,
-        }),
-      );
-      this.skyOrbits.frustumCulled = false;
-      // Over the stars and the host star, under the bodies.
-      this.skyOrbits.renderOrder = -1.5;
-      this.scene.add(this.skyOrbits);
-      const near = this.skyOrbits.material.clone();
-      near.uniforms['uNear']!.value = 1;
-      this.skyOrbitsNear = new LineSegments(this.skyOrbits.geometry, near);
-      this.skyOrbitsNear.frustumCulled = false;
-      // After the globe and its air.
-      this.skyOrbitsNear.renderOrder = 10;
-      this.scene.add(this.skyOrbitsNear);
+      [this.skyOrbits, this.skyOrbitsNear] = this.skyLines(new Color(0.55, 0.62, 0.75), 0.45);
     }
-    const geometry = this.skyOrbits.geometry;
-    const old = geometry.getAttribute('point') as BufferAttribute | undefined;
-    const oldAlong = geometry.getAttribute('along') as BufferAttribute | undefined;
-    if (old && oldAlong && old.array.length === directions.length) {
-      (old.array as Float32Array).set(directions);
-      old.needsUpdate = true;
-      (oldAlong.array as Float32Array).set(along);
-      oldAlong.needsUpdate = true;
-    } else {
-      geometry.setAttribute('point', new BufferAttribute(directions, 3));
-      geometry.setAttribute('along', new BufferAttribute(along, 1));
-      // three.js needs a position attribute to count the vertices.
-      geometry.setAttribute('position', new BufferAttribute(directions, 3));
-    }
-    this.skyOrbitsOn = true;
+    this.skyOrbitsOn = fillSkyLines(this.skyOrbits.geometry, loops, dashed);
     this.requestRender();
   }
+
+  /**
+   * The edges of the system's belts in the sky (see smallBodiesSky in
+   * lib/systemSky.ts), loops of points in radii of the body shown, drawn
+   * as the orbits are, fainter and warmer; none hides them.
+   */
+  setSkyBelts(loops: readonly (readonly Vec3[])[]): void {
+    if (!this.skyBelts) {
+      [this.skyBelts, this.skyBeltsNear] = this.skyLines(new Color(0.85, 0.72, 0.5), 0.3);
+    }
+    this.skyBeltsOn = fillSkyLines(this.skyBelts.geometry, loops, []);
+    this.requestRender();
+  }
+
+  /**
+   * A pair of line sets drawn over the sky: its far part under the sky
+   * bodies, its near part after the globe (see skyOrbitFragment).
+   */
+  private skyLines(
+    colour: Color,
+    opacity: number,
+  ): [LineSegments<BufferGeometry, ShaderMaterial>, LineSegments<BufferGeometry, ShaderMaterial>] {
+    const far = new LineSegments(
+      new BufferGeometry(),
+      new ShaderMaterial({
+        vertexShader: skyOrbitVertex,
+        fragmentShader: skyOrbitFragment,
+        uniforms: {
+          uColor: { value: colour },
+          uOpacity: { value: opacity },
+          uNear: { value: 0 },
+        },
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    far.frustumCulled = false;
+    // Over the stars and the host star, under the bodies.
+    far.renderOrder = -1.5;
+    this.scene.add(far);
+    const material = far.material.clone();
+    material.uniforms['uNear']!.value = 1;
+    const near = new LineSegments(far.geometry, material);
+    near.frustumCulled = false;
+    // After the globe and its air.
+    near.renderOrder = 10;
+    this.scene.add(near);
+    return [far, near];
+  }
+
+  /**
+   * Sky points to follow on the screen (see skyScreenPositions): each mark
+   * a list of candidates, of which the one in view nearest its preferred
+   * place on the screen is given (`prefer`, fractions of its width and
+   * height; the centre by default): a swarm's centre, or points along a
+   * belt's edges, each belt preferring its own place so that their labels
+   * spread along the band.
+   */
+  setSkyMarks(marks: readonly { candidates: readonly Vec3[]; prefer?: readonly [number, number] }[]): void {
+    this.skyMarks = marks;
+    this.requestRender();
+  }
+
+  private skyMarks: readonly { candidates: readonly Vec3[]; prefer?: readonly [number, number] }[] = [];
+  private skyBelts: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  private skyBeltsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  private skyBeltsOn = false;
 
   private skyOrbitsOn = false;
 
@@ -2071,6 +2078,8 @@ export class PlanetView {
     star: { x: number; y: number } | null;
     /** Where the body's guides end (see lib/viewer/bodyGuides), null when not drawn or hidden by the globe. */
     guides: Record<keyof GuidePoints, { x: number; y: number } | null>;
+    /** Where each mark of setSkyMarks is: its candidate in view nearest the screen's centre, null when none is. */
+    marks: ({ x: number; y: number } | null)[];
   } {
     const shown = this.u.uLightMode.value === 1 && this.morph > 0.99;
     const camera = this.camera.position;
@@ -2116,6 +2125,20 @@ export class PlanetView {
         this.starPlace ? this.starPlace.position.clone().sub(this.camera.position) : this.u.uSunDir.value,
       ),
       guides: { spin: near(points.spin), host: hostAt, pull: near(points.pull), velocity: near(points.velocity) },
+      marks: this.skyMarks.map(({ candidates, prefer = [0.5, 0.5] }) => {
+        let best: { x: number; y: number } | null = null;
+        let bestDistance = Infinity;
+        for (const point of candidates) {
+          const p = at(new Vector3(...point).sub(camera));
+          if (!p) continue;
+          const distance = Math.hypot(p.x - prefer[0] * width, p.y - prefer[1] * height);
+          if (distance < bestDistance && Math.abs(p.x - width / 2) < 0.45 * width && Math.abs(p.y - height / 2) < 0.45 * height) {
+            best = p;
+            bestDistance = distance;
+          }
+        }
+        return best;
+      }),
     };
   }
 
@@ -2310,6 +2333,11 @@ export class PlanetView {
       orbits.visible = this.skyOrbitsOn && this.morph > 0.01;
       orbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
     }
+    for (const belts of [this.skyBelts, this.skyBeltsNear]) {
+      if (!belts) continue;
+      belts.visible = this.skyBeltsOn && this.morph > 0.01;
+      belts.material.uniforms['uOpacity']!.value = 0.3 * this.morph ** 3;
+    }
     this.stars.material.uniforms['uOpacity']!.value = this.morph ** 3;
     this.stars.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
     const altitude = this.altitude();
@@ -2484,6 +2512,50 @@ export class PlanetView {
  * Sets a sky body's colours, and its preview when it has one (a body not
  * generated yet: its bands, its land and caps, its glow).
  */
+/**
+ * Fills a sky line set's geometry with segments from each point to the
+ * next round each loop, dashed where `dashed` says (see skyOrbitVertex);
+ * false when there is nothing to draw.
+ */
+function fillSkyLines(
+  geometry: BufferGeometry,
+  loops: readonly (readonly Vec3[])[],
+  dashed: readonly boolean[],
+): boolean {
+  const count = loops.reduce((sum, loop) => sum + loop.length, 0);
+  if (count === 0) return false;
+  const directions = new Float32Array(count * 6);
+  const along = new Float32Array(count * 2);
+  let at = 0;
+  loops.forEach((loop, k) => {
+    let length = 0;
+    loop.forEach((point, i) => {
+      const next = loop[(i + 1) % loop.length]!;
+      directions.set(point, at * 3);
+      directions.set(next, at * 3 + 3);
+      const step = Math.hypot(next[0] - point[0], next[1] - point[1], next[2] - point[2]);
+      along[at] = dashed[k] ? length : -1;
+      along[at + 1] = dashed[k] ? length + step : -1;
+      length += step;
+      at += 2;
+    });
+  });
+  const old = geometry.getAttribute('point') as BufferAttribute | undefined;
+  const oldAlong = geometry.getAttribute('along') as BufferAttribute | undefined;
+  if (old && oldAlong && old.array.length === directions.length) {
+    (old.array as Float32Array).set(directions);
+    old.needsUpdate = true;
+    (oldAlong.array as Float32Array).set(along);
+    oldAlong.needsUpdate = true;
+  } else {
+    geometry.setAttribute('point', new BufferAttribute(directions, 3));
+    geometry.setAttribute('along', new BufferAttribute(along, 1));
+    // three.js needs a position attribute to count the vertices.
+    geometry.setAttribute('position', new BufferAttribute(directions, 3));
+  }
+  return true;
+}
+
 function applyPreview(u: Record<string, IUniform>, body: SkyBody): void {
   const preview = body.preview;
   const colours = preview?.colours ?? [];

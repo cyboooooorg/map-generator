@@ -273,3 +273,80 @@ export function starDistanceAu(system: System, shown: string, days: number): num
   const here = placeSystem(system, days).get(shown);
   return here ? Math.hypot(...here.centre) / AU_KM : 1;
 }
+
+/** A trojan swarm in the sky of the body shown. */
+export interface SkySwarm {
+  /** The planet whose swarm it is. */
+  planet: string;
+  point: 'L4' | 'L5';
+  /** Its bodies larger than 1 km. */
+  count: number;
+  /** Where its centre is, in radii of the body shown, in its frame. */
+  position: Vec3;
+}
+
+/** A belt in the sky of the body shown. */
+export interface SkyBelt {
+  /** Its index in the system's `belts`. */
+  index: number;
+  /** Its inner and outer edges, circles round the star in its equatorial plane, in radii of the body shown. */
+  edges: [Vec3[], Vec3[]];
+  /** Whether the body shown (or its planet) orbits within it. */
+  inside: boolean;
+}
+
+/** Points sampled round a belt's edge. */
+const BELT_SAMPLES = 180;
+
+/**
+ * The small bodies of the system in the sky of body `shown` after `days`
+ * (docs/superpowers/plans/2026-11-06-asteroid-belts.md, task 4): each
+ * planet's trojan swarms, at its L4 and L5 points, 60° ahead of it and
+ * behind it round the star (they keep pace with it),
+ * and each belt as its two edges, circles in the star's equatorial plane.
+ * Placed as `systemSky` places the bodies (see `spinOffset` there).
+ */
+export function smallBodiesSky(
+  system: System,
+  shown: string,
+  days: number,
+  spinOffset = 0,
+): { swarms: SkySwarm[]; belts: SkyBelt[] } {
+  const placements = placeSystem(system, days, { id: shown, spinOffset });
+  const self = system.bodies.find((b) => b.id === shown);
+  const here = placements.get(shown);
+  if (!self || !here) return { swarms: [], belts: [] };
+  const [ax, ay, az] = here.axes;
+  const unitKm = Math.max(self.physical.radius_km, 1e-6);
+  const local = (v: Vec3): Vec3 => [dot(v, ax), dot(v, ay), dot(v, az)];
+  const place = (centre: Vec3) => scale(local(sub(centre, here.centre)), 1 / unitKm);
+  const swarms: SkySwarm[] = [];
+  for (const body of system.bodies) {
+    if (body.parent !== null || !body.trojans) continue;
+    const there = placements.get(body.id)!;
+    for (const [point, shift, count] of [
+      ['L4', 60, body.trojans.l4],
+      ['L5', -60, body.trojans.l5],
+    ] as const) {
+      if (count <= 0) continue;
+      // The planet's place turned about its orbit's normal: the star, the
+      // planet and the point make an equilateral triangle, eccentric orbit
+      // or not.
+      swarms.push({ planet: body.id, point, count, position: place(rotate(there.centre, there.plane.normal, shift * DEG)) });
+    }
+  }
+  // How far the body shown (or its planet) is from the star.
+  const planet = placements.get(self.parent ?? self.id)!;
+  const fromStar = Math.hypot(...planet.centre) / AU_KM;
+  const circle = (au: number): Vec3[] =>
+    Array.from({ length: BELT_SAMPLES }, (_, i) => {
+      const angle = (2 * Math.PI * i) / BELT_SAMPLES;
+      return place([au * AU_KM * Math.sin(angle), 0, au * AU_KM * Math.cos(angle)]);
+    });
+  const belts = (system.belts ?? []).map((belt, index) => ({
+    index,
+    edges: [circle(belt.inner_au), circle(belt.outer_au)] as [Vec3[], Vec3[]],
+    inside: fromStar >= belt.inner_au && fromStar <= belt.outer_au,
+  }));
+  return { swarms, belts };
+}
