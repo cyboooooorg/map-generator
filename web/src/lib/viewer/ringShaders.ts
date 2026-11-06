@@ -253,18 +253,35 @@ export const skyRingFragment = /* glsl */ `
       float fb = dot(foot, along);
       float fc = dot(foot, foot);
       float s = -1.0;
+      bool inside = false;
       if (fc <= outer * outer && fc >= inner * inner) {
         // Standing over them (a ring moon): the first of them along the
-        // way, past the gap the camera may stand in, in growing steps.
+        // way, past the gap the camera may stand in, in growing steps,
+        // then pinned down between the last two by halving: the steps
+        // alone moved the line by jumps from one column of pixels to the
+        // next, cutting it into dashes.
+        inside = true;
         float step = 1e-4 * uRadius;
+        float before = 0.0;
         float dist = 0.0;
         for (int k = 0; k < 48; k++) {
           if (ringDensity(length(foot + dist * along) / uRadius) > 0.02) {
             s = dist;
             break;
           }
+          before = dist;
           dist += step;
           step *= 1.3;
+        }
+        if (s > 0.0) {
+          float lo = before;
+          float hi = s;
+          for (int k = 0; k < 14; k++) {
+            float mid = 0.5 * (lo + hi);
+            if (ringDensity(length(foot + mid * along) / uRadius) > 0.02) hi = mid;
+            else lo = mid;
+          }
+          s = hi;
         }
       } else if (fc > outer * outer) {
         float dOut = fb * fb - fc + outer * outer;
@@ -278,8 +295,10 @@ export const skyRingFragment = /* glsl */ `
         float atS = -height / sqrt(s * s + height * height);
         float pixel = max(fwidth(g), 1e-7);
         float cover = 1.0 - smoothstep(0.8, 1.6, abs(g - atS) / pixel);
-        // Only where the open rings are thinner than a few pixels.
-        float span = outer * abs(height) / max(dot(camera, camera), outer * outer);
+        // Only where the open rings are thinner than a few pixels: seen
+        // from afar, their ellipse's minor axis; from over them, the sheet
+        // they make from the horizon down to their nearest part.
+        float span = inside ? abs(height) / max(s, 1e-6) : outer * abs(height) / max(dot(camera, camera), outer * outer);
         cover *= 1.0 - smoothstep(1.5, 4.0, span / pixel);
         float a = cover * min(1.0, 1.5 * uRingOpacity);
         if (a > colour.a) {
