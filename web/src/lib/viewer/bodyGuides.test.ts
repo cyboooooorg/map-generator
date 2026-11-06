@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Color, Vector3 } from 'three';
-import { BodyGuides, hostLineRadii, labelIndex } from './bodyGuides';
+import { BodyGuides, HOST_LABEL_AT, HOST_LABEL_REACH, hostLabelIndex, hostLineRadii, labelIndex } from './bodyGuides';
 
 describe('hostLineRadii', () => {
   it('runs from the surface to the host, geometrically', () => {
@@ -52,5 +52,28 @@ describe('BodyGuides', () => {
     guides.host.updateMatrixWorld(true);
     expect(guides.points().pull!.length() - sphere.pull!.length()).toBeCloseTo(0.6, 6);
     guides.dispose();
+  });
+});
+
+describe('hostLabelIndex', () => {
+  const radii = hostLineRadii(1000, 96);
+  const fixed = radii.findIndex((r) => r >= HOST_LABEL_AT);
+
+  it('holds still near the body while that point is in view, wherever the rest is', () => {
+    expect(hostLabelIndex(radii, radii.map(() => true))).toBe(fixed);
+    expect(hostLabelIndex(radii, radii.map((r) => r < 50))).toBe(fixed);
+  });
+
+  it('else stays within reach of the body, where the line is spread out', () => {
+    const inView = radii.map((r, i) => i !== fixed && r > 3);
+    const k = hostLabelIndex(radii, inView);
+    expect(radii[k]).toBeGreaterThan(3);
+    expect(radii[k]).toBeLessThanOrEqual(HOST_LABEL_REACH);
+  });
+
+  it('goes further out only when nothing near is in view', () => {
+    const inView = radii.map((r) => r > 100);
+    expect(radii[hostLabelIndex(radii, inView)]).toBeGreaterThan(100);
+    expect(hostLabelIndex(radii, radii.map(() => false))).toBe(-1);
   });
 });

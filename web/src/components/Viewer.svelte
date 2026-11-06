@@ -1105,9 +1105,20 @@
   const skyLabelList = $derived.by((): (SkyLabel | null)[] => {
     if (!sys || !sysSky) return [];
     const km = (v: number) => withUnit(formatInt(v), 'km');
-    return sysSky.ids.map((id) => {
+    return sysSky.ids.map((id, k) => {
       const body = sys.bodies.find((b) => b.id === id);
       if (!body) return null;
+      // From a moon, its planet: how far it is now, as its line says.
+      const position = id === sysBody?.parent ? sysSky.bodies[k]?.position : undefined;
+      if (position && sysBody) {
+        return {
+          name: world.systemNames[id] ?? body.designation,
+          detail: t.viewer.skyDistanceFacts({
+            radius: km(body.physical.radius_km),
+            distance: km(Math.hypot(...position) * sysBody.physical.radius_km),
+          }),
+        };
+      }
       return {
         name: world.systemNames[id] ?? body.designation,
         detail: t.viewer.skyOrbitFacts({

@@ -60,7 +60,7 @@ import {
   type IUniform,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { BodyGuides, type GuidePoints, labelIndex, type HostGuide } from './bodyGuides';
+import { BodyGuides, type GuidePoints, type HostGuide, hostLabelIndex } from './bodyGuides';
 import { DIAL_RADIUS, RotationDial } from './rotationDial';
 import type { DialState } from '../rotationDial';
 import type { HexMap } from '../api/types/HexMap';
@@ -2456,7 +2456,8 @@ export class PlanetView {
     // The host's distance goes on the part of its line in view, wherever
     // that is as the camera moves.
     const hostLine = points.host?.map((point) => near(point, 0.9)) ?? [];
-    const hostAt = hostLine[labelIndex(hostLine.map((p) => p !== null))] ?? null;
+    const hostRadii = points.host?.map((point) => point.length()) ?? [];
+    const hostAt = hostLine[hostLabelIndex(hostRadii, hostLine.map((p) => p !== null))] ?? null;
     const dial = this.dialState && this.dial.group.visible ? this.dial.anchors() : null;
     return {
       bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),

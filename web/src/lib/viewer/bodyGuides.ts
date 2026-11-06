@@ -89,6 +89,26 @@ export function labelIndex(inView: boolean[]): number {
   return best;
 }
 
+/** Where the host line's distance label prefers to sit, and how far out it may go, in radii of the body from its centre. */
+export const HOST_LABEL_AT = 2.5;
+export const HOST_LABEL_REACH = 12;
+
+/**
+ * Which point of the host line (`radii` from the body's centre, nearest
+ * first) carries its distance label, given which are in view: a fixed
+ * point near the body (`HOST_LABEL_AT`) while it shows, so that the label
+ * holds still as the camera moves; else the middle of the longest run in
+ * view within `HOST_LABEL_REACH`, where the line is still spread out on
+ * the screen; else anywhere along it (see labelIndex); -1 when none is in
+ * view.
+ */
+export function hostLabelIndex(radii: readonly number[], inView: readonly boolean[]): number {
+  const fixed = radii.findIndex((r) => r >= HOST_LABEL_AT);
+  if (fixed >= 0 && inView[fixed]) return fixed;
+  const near = labelIndex(inView.map((shown, i) => shown && radii[i]! <= HOST_LABEL_REACH));
+  return near >= 0 ? near : labelIndex([...inView]);
+}
+
 export class BodyGuides {
   /** Turns with the stars, as the spin axis does (see PlanetView.setStarsTurn). */
   readonly spin = new Group();
