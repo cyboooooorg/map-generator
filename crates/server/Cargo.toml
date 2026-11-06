@@ -11,6 +11,8 @@ mapgen = { workspace = true, features = ["ts"] }
 # Row-by-row decoding of world.png for thumbnails, see src/thumbs.rs
 png = "0.18.1"
 rand.workspace = true
+# The global pool, given names and a deep stack in main.rs
+rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "fs", "sync"] }

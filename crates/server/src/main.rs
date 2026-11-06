@@ -15,6 +15,13 @@
 //!
 //! After a generation and after evicting worlds from the tile cache, the
 //! server gives the freed memory back to the system (see [`memory`]).
+//!
+//! Tiles, epochs, hex grids, world loads and generations all run their
+//! work on rayon's global pool at once. A worker that waits in a join runs
+//! other queued jobs on top of its stack, so the stack grows with every
+//! request in flight, about 5 KiB a level in a debug build: the pool's
+//! threads get a deep stack (`RAYON_STACK`) and a name (`rayon-<n>`), which
+//! a crash then reports instead of `<unknown>`.
 mod api;
 mod app;
 mod catalog;
@@ -30,8 +37,18 @@ fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
+/// Stack of each rayon worker: room for hundreds of nested joins, even in a
+/// debug build (the default 2 MiB overflowed there under browser traffic).
+/// Reserved, not committed: a thread only uses what it touches.
+const RAYON_STACK: usize = 16 << 20;
+
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    rayon::ThreadPoolBuilder::new()
+        .thread_name(|i| format!("rayon-{i}"))
+        .stack_size(RAYON_STACK)
+        .build_global()
+        .expect("the rayon pool is built once, before any work");
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

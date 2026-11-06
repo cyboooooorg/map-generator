@@ -944,6 +944,7 @@ dependencies = [
  "mapgen",
  "png",
  "rand 0.10.0",
+ "rayon",
  "serde",
  "serde_json",
  "tokio",
