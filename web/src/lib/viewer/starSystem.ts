@@ -1,5 +1,6 @@
 // What the star view draws, from a world's star: the look of its surface
 // and the layout of its system.
+import type { Trojans } from '../api/types/Trojans';
 import type { Moon } from '../api/types/Moon';
 import type { Giant } from '../api/types/Giant';
 import type { RingSystem } from '../api/types/RingSystem';
@@ -41,6 +42,8 @@ export type SystemGiant = Giant & {
    * the system was drawn before rings were.
    */
   ringSystem?: RingSystem | null;
+  /** In a planetary system, its trojans at L4 and L5 (bodies larger than 1 km), where they last. */
+  trojans?: Trojans | null;
   inclination?: number;
   node?: number;
   moons?: readonly Pick<Moon, 'radius_km' | 'inclination_deg' | 'period_days' | 'barycentre_km' | 'semi_major_axis_km'>[];
