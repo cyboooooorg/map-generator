@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
 import { libration, systemSky } from './systemSky';
-import { formatDayLength, formatDialAngle, formatLocalTime, rotationDial } from './rotationDial';
+import { dialFigureText, formatDayLength, formatDialAngle, formatLocalTime, rotationDial } from './rotationDial';
 import type { Vec3 } from './skyBodies';
 
 // The system of systemSky.test.ts: b (terran), c (a gas giant) and its
@@ -114,4 +114,30 @@ describe('rotation dial figures', () => {
     expect(formatDialAngle(rad(-0.3), true)).toBe('−0.3°');
     expect(formatDialAngle(rad(-0.01), true)).toBe('+0.0°');
   });
+
+  it('gives a locked body’s libration the pointer’s sign, so that the panel and the label agree', () => {
+    const eccentric = structuredClone(system);
+    const orbit = eccentric.bodies.find((x) => x.id === 'c-1')!.orbit;
+    orbit.eccentricity = 0.2;
+    for (const f of [0.1, 0.6]) {
+      const d = orbit.period_days * f;
+      const dial = rotationDial(eccentric, 'c-1', d, 0, systemSky(eccentric, 'c-1', d, textures))!;
+      const text = dialFigureText(dial, units);
+      expect(text.locked).toBe(true);
+      if (!text.locked) continue;
+      expect(text.libration).toBe(formatDialAngle(dial.state.reading, true));
+      expect(text.libration.startsWith(dial.state.reading < 0 ? '−' : '+')).toBe(true);
+      expect(text.amplitude).toBe('22.9°');
+    }
+  });
+
+  it('writes a free body’s rotation and days', () => {
+    const dial = rotationDial(system, 'b', 0, 0, systemSky(system, 'b', 0, textures))!;
+    const text = dialFigureText(dial, units);
+    expect(text.locked).toBe(false);
+    if (text.locked) return;
+    expect(text.angle).toBe(formatDialAngle(dial.state.reading, false));
+    expect(text.sidereal).toBe(formatDayLength(dial.figures.siderealHours, units));
+  });
 });
+

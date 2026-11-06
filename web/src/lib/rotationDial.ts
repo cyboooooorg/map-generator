@@ -182,3 +182,43 @@ export function formatDialAngle(radians: number, signed: boolean, number: (value
   const tenths = Math.round(degrees * 10) / 10;
   return `${tenths < 0 ? '−' : '+'}${number(Math.abs(tenths), 1)}°`;
 }
+
+/** The parameters of the dial's two lines of figures, written out (see the `dial…` messages). */
+export type DialFigureText =
+  | { locked: false; angle: string; time: string; sidereal: string; solar: string | null }
+  | { locked: true; libration: string; amplitude: string; time: string; solar: string | null };
+
+/**
+ * The dial's figures written out for the panel. A locked body's libration
+ * is the pointer's swing round 0°, its reading, so that the panel and the
+ * pointer's label agree in sign (the host swings the other way in its
+ * sky: `figures.libration`).
+ */
+export function dialFigureText(
+  dial: { state: DialState; figures: DialFigures },
+  units: DayUnits,
+  format: FigureFormat = {},
+): DialFigureText {
+  const { state, figures } = dial;
+  const number = format.number ?? plainNumber;
+  const length = (hours: number | null) => (hours === null ? null : formatDayLength(hours, units, format));
+  const time = formatLocalTime(figures.localHours);
+  if (state.locked) {
+    const amplitude = ((figures.librationAmplitude ?? 0) * 180) / Math.PI;
+    return {
+      locked: true,
+      libration: formatDialAngle(state.reading, true, number),
+      amplitude: `${number(amplitude, 1)}°`,
+      time,
+      solar: length(figures.solarHours),
+    };
+  }
+  return {
+    locked: false,
+    angle: formatDialAngle(state.reading, false, number),
+    time,
+    sidereal: formatDayLength(figures.siderealHours, units, format),
+    solar: length(figures.solarHours),
+  };
+}
+

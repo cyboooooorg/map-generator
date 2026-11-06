@@ -21,6 +21,26 @@
   }
 
   let { ticks, pointer, sun, host, reading, sunName, hostName }: Props = $props();
+
+  /** A marker's label closer than this to the pointer's (CSS px) would draw over its box. */
+  const CLEAR = 40;
+  /** How far a moved label stands above or below the pointer's box, CSS px. */
+  const STEP = 18;
+  /**
+   * Where the host's and the sun's labels go: by their markers, or, when
+   * that falls on the pointer's box (on a locked body the pointer and the
+   * host both sit near 0°), just above the box, the second one below it;
+   * at the view's top edge, below the box, one under the other.
+   */
+  const placed = $derived.by(() => {
+    let moved = 0;
+    const place = (at: Point): Point => {
+      if (!at || !pointer || Math.hypot(at.x - pointer.x, at.y - pointer.y) >= CLEAR) return at;
+      const slots = pointer.y < STEP + 8 ? [1, 2] : [-1, 1];
+      return { x: pointer.x, y: pointer.y + (slots[moved++] ?? 1) * STEP };
+    };
+    return { host: place(hostName ? host : null), sun: place(sun) };
+  });
 </script>
 
 <div class="dial-labels" aria-hidden="true">
@@ -29,11 +49,11 @@
       <span class="number" style:left={`${at.x}px`} style:top={`${at.y}px`}>{k * 30}°</span>
     {/if}
   {/each}
-  {#if sun}
-    <span class="sun" style:left={`${sun.x}px`} style:top={`${sun.y}px`}>{sunName}</span>
+  {#if placed.sun}
+    <span class="sun" style:left={`${placed.sun.x}px`} style:top={`${placed.sun.y}px`}>{sunName}</span>
   {/if}
-  {#if host && hostName}
-    <span class="host" style:left={`${host.x}px`} style:top={`${host.y}px`}>{hostName}</span>
+  {#if placed.host && hostName}
+    <span class="host" style:left={`${placed.host.x}px`} style:top={`${placed.host.y}px`}>{hostName}</span>
   {/if}
   {#if pointer}
     <span class="pointer" style:left={`${pointer.x}px`} style:top={`${pointer.y}px`}>{reading}</span>

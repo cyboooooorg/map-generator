@@ -36,7 +36,7 @@
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
   import { smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
-  import { formatDayLength, formatDialAngle, formatLocalTime, rotationDial } from '../lib/rotationDial';
+  import { dialFigureText, formatDialAngle, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -869,22 +869,11 @@
   /** The dial's figures, two lines for the Light and season panel. */
   const dialLines = $derived.by((): [string, string] | null => {
     if (!dial) return null;
-    const { state, figures } = dial;
     const units = { hour: t.viewer.hourUnit, minute: t.viewer.minuteUnit, day: t.viewer.dayUnit };
-    const day = (hours: number) => formatDayLength(hours, units, { space: t.format.unitSpace, number: formatNumber });
-    const length = (hours: number | null) => (hours === null ? null : day(hours));
-    const time = formatLocalTime(figures.localHours);
-    if (state.locked) {
-      const amplitude = ((figures.librationAmplitude ?? 0) * 180) / Math.PI;
-      return [
-        t.viewer.dialLocked({ libration: formatDialAngle(figures.libration ?? 0, true, formatNumber), amplitude: `${formatNumber(amplitude, 1)}°` }),
-        t.viewer.dialLockedTime({ time, solar: length(figures.solarHours) }),
-      ];
-    }
-    return [
-      t.viewer.dialFree({ angle: formatDialAngle(state.reading, false, formatNumber), time }),
-      t.viewer.dialFreeDays({ sidereal: day(figures.siderealHours), solar: length(figures.solarHours) }),
-    ];
+    const text = dialFigureText(dial, units, { space: t.format.unitSpace, number: formatNumber });
+    return text.locked
+      ? [t.viewer.dialLocked(text), t.viewer.dialLockedTime(text)]
+      : [t.viewer.dialFree(text), t.viewer.dialFreeDays(text)];
   });
   /** The glossary of the dial's figures, opened by its `?` button. */
   let dialGlossary = $state(false);
