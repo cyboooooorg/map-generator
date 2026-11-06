@@ -872,7 +872,8 @@
   });
   // The moons' orbits in the sky, seen from the body shown.
   const skyOrbitLoops = $derived(orbitLines && sysSky ? sysSky.orbits : []);
-  $effect(() => view?.setSkyOrbits(skyOrbitLoops));
+  // The body shown's own orbit dashed: the body slides along it.
+  $effect(() => view?.setSkyOrbits(skyOrbitLoops, skyOrbitLoops.map((_, i) => i === sysSky?.ownOrbit)));
   // Follow the bodies of the sky on the screen while their labels show.
   $effect(() => {
     const current = view;
@@ -1788,8 +1789,10 @@
   }
   .legend {
     position: absolute;
-    /* Bottom left, above the playback bar; the dock holds the right. */
-    left: 12px;
+    /* Bottom left, above the playback bar and right of the icon bar (12 px
+       from the edge, 40 px wide), so that a long biome list never covers
+       it; the dock holds the right. */
+    left: 64px;
     bottom: 76px;
     width: 240px;
     /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
@@ -1821,7 +1824,8 @@
     margin: 0;
     padding: 0;
     overflow-y: auto;
-    max-height: min(40vh, 360px);
+    /* Twelve biomes or so, then a scroll: the view stays visible. */
+    max-height: min(35vh, 300px);
   }
   .legend li button {
     display: grid;

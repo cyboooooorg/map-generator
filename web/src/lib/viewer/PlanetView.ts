@@ -1868,9 +1868,10 @@ export class PlanetView {
    * Draws orbits in the sky, at infinity like the sky bodies (on the
    * globe): each loop a closed line through points in radii of the body
    * shown, in its frame (see lib/skyBodies `orbitLoops`), each drawn in its
-   * direction from the camera. Empty to clear.
+   * direction from the camera. `dashed[i]` dashes loop `i` (the body
+   * shown's own orbit, so that it is seen sliding along it). Empty to clear.
    */
-  setSkyOrbits(loops: readonly (readonly Vec3[])[]): void {
+  setSkyOrbits(loops: readonly (readonly Vec3[])[], dashed: readonly boolean[] = []): void {
     const count = loops.reduce((sum, loop) => sum + loop.length, 0);
     if (count === 0) {
       if (this.skyOrbits) this.skyOrbits.visible = false;
@@ -1881,15 +1882,21 @@ export class PlanetView {
     }
     // Segments from each point to the next, round each loop.
     const directions = new Float32Array(count * 6);
+    const along = new Float32Array(count * 2);
     let at = 0;
-    for (const loop of loops) {
+    loops.forEach((loop, k) => {
+      let length = 0;
       loop.forEach((point, i) => {
         const next = loop[(i + 1) % loop.length]!;
-        directions.set(point, at);
-        directions.set(next, at + 3);
-        at += 6;
+        directions.set(point, at * 3);
+        directions.set(next, at * 3 + 3);
+        const step = Math.hypot(next[0] - point[0], next[1] - point[1], next[2] - point[2]);
+        along[at] = dashed[k] ? length : -1;
+        along[at + 1] = dashed[k] ? length + step : -1;
+        length += step;
+        at += 2;
       });
-    }
+    });
     if (!this.skyOrbits) {
       this.skyOrbits = new LineSegments(
         new BufferGeometry(),
@@ -1919,11 +1926,15 @@ export class PlanetView {
     }
     const geometry = this.skyOrbits.geometry;
     const old = geometry.getAttribute('point') as BufferAttribute | undefined;
-    if (old && old.array.length === directions.length) {
+    const oldAlong = geometry.getAttribute('along') as BufferAttribute | undefined;
+    if (old && oldAlong && old.array.length === directions.length) {
       (old.array as Float32Array).set(directions);
       old.needsUpdate = true;
+      (oldAlong.array as Float32Array).set(along);
+      oldAlong.needsUpdate = true;
     } else {
       geometry.setAttribute('point', new BufferAttribute(directions, 3));
+      geometry.setAttribute('along', new BufferAttribute(along, 1));
       // three.js needs a position attribute to count the vertices.
       geometry.setAttribute('position', new BufferAttribute(directions, 3));
     }
