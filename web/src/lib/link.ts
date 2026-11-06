@@ -1,7 +1,7 @@
 // Links to a view: the worlds shown, and optionally the camera, the layer,
 // the relief and the sun, in the address's fragment:
 //
-//   #world=<id>&compare=<id>&view=g,<lon>,<lat>,<altitude>&layer=<id>&relief=<0..3>&sun=<season>,<lon>&orbit=<days>&epoch=<Ma>
+//   #world=<id>&compare=<id>&view=g,<lon>,<lat>,<altitude>&layer=<id>&relief=<0..10>&sun=<season>,<lon>&orbit=<days>&epoch=<Ma>
 //
 // `view` is the camera: `g` on the globe (the point under the camera in
 // degrees, and its altitude in planet radii), `m` on the flat map (the

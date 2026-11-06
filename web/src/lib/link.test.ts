@@ -91,7 +91,7 @@ describe('encodeView / decodeView', () => {
   });
 
   it('ignores the parts that are malformed, and keeps the others', () => {
-    const view = decodeView(params('view=g,abc&layer=lava&relief=4&sun=0.5,400&world=x'));
+    const view = decodeView(params('view=g,abc&layer=lava&relief=11&sun=0.5,400&world=x'));
     expect(view).toEqual({});
     const partial = decodeView(params('view=nope&layer=moisture&relief=-1&sun=0.5'));
     expect(partial).toEqual({ layer: 'moisture' });
