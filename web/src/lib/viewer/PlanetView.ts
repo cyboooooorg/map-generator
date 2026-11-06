@@ -112,8 +112,27 @@ import {
   surfaceVertex,
 } from './shaders';
 import { PROFILES, type QualityProfile } from './quality';
-import { BOULDER_M, CELL_KM, ROCKS_PER_CELL, ROWS, type RingRocks, WINDOW } from '../ringRocks';
-import { RING_ROCK_SLOTS, ringRockFragment, ringRockVertex } from './ringRockShaders';
+import {
+  BOULDER_M,
+  CELL_KM,
+  GRAIN_CELL_KM,
+  GRAIN_ROWS,
+  GRAIN_WINDOW,
+  GRAINS_PER_CELL,
+  type LatticeWindow,
+  ROCKS_PER_CELL,
+  ROWS,
+  type RingRocks,
+  WINDOW,
+} from '../ringRocks';
+import {
+  RING_GRAIN_SLOTS,
+  RING_ROCK_SLOTS,
+  ringGrainFragment,
+  ringGrainVertex,
+  ringRockFragment,
+  ringRockVertex,
+} from './ringRockShaders';
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
 import type { RingSystem } from '../api/types/RingSystem';
@@ -595,6 +614,8 @@ export class PlanetView {
   private peakAbove = 0;
   /** The rocks of the giant's rings round a ring moon (see setRingRocks), null until some are. */
   private ringRocks: Mesh<InstancedBufferGeometry, ShaderMaterial> | null = null;
+  /** The grain of the rings beyond the rocks (see setRingRocks). */
+  private ringGrains: Points<BufferGeometry, ShaderMaterial> | null = null;
   private ringRocksOn = false;
   private cloudDriftTimer: ReturnType<typeof setTimeout> | null = null;
   /** The world's sky before the lift over the relief, Earth's until a world sets it. */
@@ -1145,6 +1166,7 @@ export class PlanetView {
     this.ringRocksOn = rocks !== null && this.quality.ringRocks;
     if (!rocks || !this.quality.ringRocks) {
       if (this.ringRocks) this.ringRocks.visible = false;
+      if (this.ringGrains) this.ringGrains.visible = false;
       return;
     }
     if (!this.ringRocks) {
@@ -1153,17 +1175,7 @@ export class PlanetView {
       const geometry = new InstancedBufferGeometry();
       geometry.setAttribute('position', rock.getAttribute('position'));
       geometry.setAttribute('normal', rock.getAttribute('normal'));
-      const slots = new Float32Array(RING_ROCK_SLOTS * 3);
-      let k = 0;
-      for (let row = 0; row < ROWS; row += 1) {
-        for (let cell = -WINDOW; cell <= WINDOW; cell += 1) {
-          for (let rank = 0; rank < ROCKS_PER_CELL; rank += 1) {
-            slots.set([row, cell, rank], k);
-            k += 3;
-          }
-        }
-      }
-      geometry.setAttribute('aSlot', new InstancedBufferAttribute(slots, 3));
+      geometry.setAttribute('aSlot', new InstancedBufferAttribute(latticeSlots(ROWS, WINDOW, ROCKS_PER_CELL), 3));
       geometry.instanceCount = RING_ROCK_SLOTS;
       this.ringRocks = new Mesh(
         geometry,
@@ -1171,31 +1183,9 @@ export class PlanetView {
           vertexShader: ringRockVertex,
           fragmentShader: ringRockFragment,
           uniforms: {
-            uRows: { value: Array.from({ length: ROWS }, () => new Vector4()) },
-            uFirstRow: { value: 0 },
-            uCellKm: { value: CELL_KM },
-            uAKm: { value: 1 },
-            uGiantKm: { value: 1 },
-            uMoonKm: { value: 1 },
-            uFoot: { value: new Vector3() },
-            uOut: { value: new Vector3() },
-            uAhead: { value: new Vector3() },
-            uNormal: { value: new Vector3() },
-            uGiantCentre: { value: new Vector3() },
-            uGiantRadius: { value: 1 },
-            uSunDir: this.u.uSunDir,
+            ...this.latticeUniforms(ROWS, CELL_KM),
             uBoulderM: { value: BOULDER_M.bright },
             uScale: { value: 1 },
-            uPixel: { value: 0.001 },
-            uFar: { value: 100 },
-            uFade: { value: 1 },
-            uColour: { value: new Color() },
-            uRingInner: { value: 0 },
-            uRingOuter: { value: 0 },
-            uRingOpacity: { value: 0 },
-            uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
-            uRingGapCount: { value: 0 },
-            uRingGapLeast: { value: 0 },
           },
           // Faint while under a pixel; drawn after the rings of the sky.
           transparent: true,
@@ -1204,36 +1194,98 @@ export class PlanetView {
       this.ringRocks.frustumCulled = false;
       this.ringRocks.renderOrder = SKY_FRONT_ORDER + 1;
       this.scene.add(this.ringRocks);
+      // The grain beyond them: a point per slot of the coarser window.
+      const grains = new BufferGeometry();
+      grains.setAttribute('aSlot', new BufferAttribute(latticeSlots(GRAIN_ROWS, GRAIN_WINDOW, GRAINS_PER_CELL), 3));
+      // three.js needs a position attribute to count the points.
+      grains.setAttribute('position', new BufferAttribute(new Float32Array(RING_GRAIN_SLOTS * 3), 3));
+      this.ringGrains = new Points(
+        grains,
+        new ShaderMaterial({
+          vertexShader: ringGrainVertex,
+          fragmentShader: ringGrainFragment,
+          uniforms: {
+            ...this.latticeUniforms(GRAIN_ROWS, GRAIN_CELL_KM),
+            uPointSize: { value: 1 },
+            uBoulderM: { value: BOULDER_M.bright },
+            uScale: { value: 1 },
+          },
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      this.ringGrains.frustumCulled = false;
+      this.ringGrains.renderOrder = SKY_FRONT_ORDER + 1;
+      this.scene.add(this.ringGrains);
     }
-    const u = this.ringRocks.material.uniforms;
-    rocks.rows.forEach((row, i) => (u['uRows']!.value as Vector4[])[i]!.set(row.offsetKm, row.cell, row.into, row.cells));
-    u['uFirstRow']!.value = rocks.firstRow;
-    u['uAKm']!.value = rocks.aKm;
-    u['uGiantKm']!.value = rocks.giantRadiusKm;
-    u['uMoonKm']!.value = rocks.moonRadiusKm;
-    (u['uFoot']!.value as Vector3).set(...rocks.foot);
-    (u['uOut']!.value as Vector3).set(...rocks.out);
-    (u['uAhead']!.value as Vector3).set(...rocks.ahead);
-    (u['uNormal']!.value as Vector3).set(...rocks.normal);
-    (u['uGiantCentre']!.value as Vector3).set(...rocks.giantCentre);
-    u['uGiantRadius']!.value = rocks.giantRadius;
-    u['uBoulderM']!.value = rocks.rings.bright ? BOULDER_M.bright : BOULDER_M.faint;
-    u['uScale']!.value = scale;
-    (u['uColour']!.value as Color).setRGB(...rocks.rings.colour, SRGBColorSpace);
-    // The rings' own gaps, not widened to a pixel: no rock in them.
-    setRingUniforms(u, rocks.rings, 0);
+    const lattices: [Record<string, IUniform>, LatticeWindow][] = [
+      [this.ringRocks.material.uniforms, rocks],
+      [this.ringGrains!.material.uniforms, rocks.grains],
+    ];
+    for (const [u, window] of lattices) {
+      window.rows.forEach((row, i) => (u['uRows']!.value as Vector4[])[i]!.set(row.offsetKm, row.cell, row.into, row.cells));
+      u['uFirstRow']!.value = window.firstRow;
+      u['uAKm']!.value = rocks.aKm;
+      u['uGiantKm']!.value = rocks.giantRadiusKm;
+      u['uMoonKm']!.value = rocks.moonRadiusKm;
+      (u['uFoot']!.value as Vector3).set(...rocks.foot);
+      (u['uOut']!.value as Vector3).set(...rocks.out);
+      (u['uAhead']!.value as Vector3).set(...rocks.ahead);
+      (u['uNormal']!.value as Vector3).set(...rocks.normal);
+      (u['uGiantCentre']!.value as Vector3).set(...rocks.giantCentre);
+      u['uGiantRadius']!.value = rocks.giantRadius;
+      (u['uColour']!.value as Color).setRGB(...rocks.rings.colour, SRGBColorSpace);
+      // The rings' own gaps, not widened to a pixel: no rock in them.
+      setRingUniforms(u, rocks.rings, 0);
+    }
+    for (const [u] of lattices) {
+      u['uBoulderM']!.value = rocks.rings.bright ? BOULDER_M.bright : BOULDER_M.faint;
+      u['uScale']!.value = scale;
+    }
   }
 
-  /** Shows the ring rocks this frame, if any, at the camera's pixel and far plane. */
+  /** The uniforms of a window of a ring's lattice of `rows` rows of cells `cellKm` wide (see ringRockShaders). */
+  private latticeUniforms(rows: number, cellKm: number): Record<string, IUniform> {
+    return {
+      uRows: { value: Array.from({ length: rows }, () => new Vector4()) },
+      uFirstRow: { value: 0 },
+      uCellKm: { value: cellKm },
+      uAKm: { value: 1 },
+      uGiantKm: { value: 1 },
+      uMoonKm: { value: 1 },
+      uFoot: { value: new Vector3() },
+      uOut: { value: new Vector3() },
+      uAhead: { value: new Vector3() },
+      uNormal: { value: new Vector3() },
+      uGiantCentre: { value: new Vector3() },
+      uGiantRadius: { value: 1 },
+      uSunDir: this.u.uSunDir,
+      uPixel: { value: 0.001 },
+      uFar: { value: 100 },
+      uFade: { value: 1 },
+      uColour: { value: new Color() },
+      uRingInner: { value: 0 },
+      uRingOuter: { value: 0 },
+      uRingOpacity: { value: 0 },
+      uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
+      uRingGapCount: { value: 0 },
+      uRingGapLeast: { value: 0 },
+    };
+  }
+
+  /** Shows the ring rocks and grain this frame, if any, at the camera's pixel and far plane. */
   private drawRingRocks(): void {
-    const rocks = this.ringRocks;
-    if (!rocks) return;
-    rocks.visible = this.ringRocksOn && this.u.uLightMode.value === 1 && this.morph > 0.01;
-    if (!rocks.visible) return;
-    const u = rocks.material.uniforms;
-    u['uPixel']!.value = (2 * Math.tan((this.camera.fov * Math.PI) / 360)) / Math.max(this.renderer.domElement.height, 1);
-    u['uFar']!.value = this.camera.far;
-    u['uFade']!.value = this.morph ** 3;
+    const visible = this.ringRocksOn && this.u.uLightMode.value === 1 && this.morph > 0.01;
+    for (const lattice of [this.ringRocks, this.ringGrains]) {
+      if (!lattice) continue;
+      lattice.visible = visible;
+      if (!visible) continue;
+      const u = lattice.material.uniforms;
+      u['uPixel']!.value = (2 * Math.tan((this.camera.fov * Math.PI) / 360)) / Math.max(this.renderer.domElement.height, 1);
+      u['uFar']!.value = this.camera.far;
+      u['uFade']!.value = this.morph ** 3;
+    }
+    if (visible && this.ringGrains) this.ringGrains.material.uniforms['uPointSize']!.value = this.renderer.getPixelRatio();
   }
 
   /** Lets the cloud layer drift slowly eastwards around the planet, or stops it where it is. */
@@ -1875,6 +1927,8 @@ export class PlanetView {
     this.rings?.material.dispose();
     this.ringRocks?.geometry.dispose();
     this.ringRocks?.material.dispose();
+    this.ringGrains?.geometry.dispose();
+    this.ringGrains?.material.dispose();
     for (const mesh of this.dustRings) {
       mesh.geometry.dispose();
       mesh.material.dispose();
@@ -2899,4 +2953,19 @@ function shapeRadiusAt(shape: { radii: Float32Array; width: number; height: numb
   const x = Math.min(shape.width - 1, Math.floor(u * shape.width));
   const y = Math.min(shape.height - 1, Math.max(0, Math.floor((1 - v) * shape.height)));
   return shape.radii[y * shape.width + x] ?? 1;
+}
+
+/** The slots of a lattice's window: each row, each cell from -window to window, each rank. */
+function latticeSlots(rows: number, window: number, perCell: number): Float32Array {
+  const slots = new Float32Array(rows * (2 * window + 1) * perCell * 3);
+  let k = 0;
+  for (let row = 0; row < rows; row += 1) {
+    for (let cell = -window; cell <= window; cell += 1) {
+      for (let rank = 0; rank < perCell; rank += 1) {
+        slots.set([row, cell, rank], k);
+        k += 3;
+      }
+    }
+  }
+  return slots;
 }
