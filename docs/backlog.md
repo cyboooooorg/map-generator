@@ -476,3 +476,22 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Next:** phase 6, a card for every body and renaming any of them;
   phase 7, the clean-up of the world layout (`/api/worlds`, the moon and
   host exports, `worlds/`).
+
+## 17. Asteroid belts and Lagrange points
+
+- **Status:** analysis
+- **Analysis:** [13-asteroids.md](analysis/13-asteroids.md)
+- **Problem:** a system has a star, planets and moons, but no small
+  bodies: no asteroid belt, no Kuiper belt, no trojans, and its Lagrange
+  points are not shown.
+- **Studied (2026-11-06):**
+  - belts: what they are, their masses and depletion, the giants'
+    resonances that set their edges and gaps, sizes and spacing (no dense
+    "asteroid fields"), and belts round other stars;
+  - Lagrange points: their stability (Routh's criterion), the tadpole
+    and horseshoe orbits of trojans, the Solar System's swarms and their
+    origin, co-orbital moons, and the PDS 70 b candidate.
+- **Proposed:** belts and trojan swarms drawn in `system.json` from a
+  stream of their own, so existing systems keep their bodies; shown in
+  the star view with the selected planet's Lagrange points. Five choices
+  are left to the user (section 5 of the analysis).
