@@ -120,3 +120,136 @@ export const dustRingFragment = /* glsl */ `
     #include <colorspace_fragment>
   }
 `;
+
+// The opacity of a giant's rings at `r` (its radii), seen straight down:
+// thinner towards both edges, none in their gaps. For the rings of a body
+// of the sky, and the shadow they cast on its disk.
+export const skyRingDensityGlsl = /* glsl */ `
+  uniform float uRingInner;    // edges, in the giant's radii (0: no rings)
+  uniform float uRingOuter;
+  uniform float uRingOpacity;  // of the densest part
+  uniform vec2 uRingGaps[4];   // centre and width, in the giant's radii
+  uniform float uRingGapCount;
+  float ringDensity(float r) {
+    if (uRingOuter <= 0.0 || r < uRingInner || r > uRingOuter) return 0.0;
+    float across = (r - uRingInner) / (uRingOuter - uRingInner);
+    float density = uRingOpacity * smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
+    for (int k = 0; k < 4; k++) {
+      if (float(k) >= uRingGapCount) break;
+      density *= smoothstep(0.0, 1.0, abs(r - uRingGaps[k].x) / max(uRingGaps[k].y * 0.5, 1e-4));
+    }
+    return density;
+  }
+`;
+
+// The rings of a body of the sky (the giant seen from its moon), drawn
+// over the whole screen at infinity, with the sky: each pixel's ray meets
+// the giant's equatorial plane where it meets it. Positions are in the
+// scene's units (radii of the body shown), from the camera.
+export const skyRingVertex = /* glsl */ `
+  uniform mat4 uProjectionInverse;
+  varying vec3 vRay;
+  void main() {
+    // A triangle covering the screen, at the far plane.
+    vec2 ndc = position.xy;
+    vec4 view = uProjectionInverse * vec4(ndc, 1.0, 1.0);
+    // Back from the view's frame to the scene's (the view matrix's
+    // rotation is orthonormal: its inverse is its transpose).
+    vRay = transpose(mat3(viewMatrix)) * (view.xyz / view.w);
+    gl_Position = vec4(ndc, 1.0, 1.0);
+  }
+`;
+
+// Lit by the sun on the face it turns to it (Lommel-Seeliger, as dusty
+// ice reflects), faintly through itself on the other face, darkened where
+// the giant shadows it, hidden behind the giant. Seen edge on, as from a
+// regular moon in their plane, a ring a few km thick would vanish: it is
+// kept a line about a pixel wide, as dense as it is seen along its length.
+export const skyRingFragment = /* glsl */ `
+  uniform vec3 uCentre;        // the giant's centre, from the camera
+  uniform float uRadius;       // the giant's radius
+  uniform vec3 uNormal;        // its spin axis: the rings' plane's normal
+  uniform vec3 uColour;        // linear colour of the ring particles
+  uniform vec3 uSunDir;
+  uniform float uFade;
+  ${skyRingDensityGlsl}
+  varying vec3 vRay;
+
+  // Light off the rings: the face towards the sun lit, the other faintly
+  // through them (the less, the denser), the giant's shadow on them.
+  vec3 ringLight(vec3 p, float mu, float density) {
+    float sunMu = dot(uSunDir, uNormal);
+    float lambert = min(1.0, 2.0 * abs(sunMu) / (abs(sunMu) + mu + 1e-4));
+    float facing = sign(sunMu) * sign(dot(-uCentre, uNormal));
+    float light = facing > 0.0 ? lambert : 0.3 * lambert * (1.0 - 0.7 * density);
+    float b = dot(p, uSunDir);
+    float off = length(p - b * uSunDir) / uRadius;
+    light *= b < 0.0 ? mix(0.03, 1.0, smoothstep(0.98, 1.02, off)) : 1.0;
+    return uColour * (0.01 + 0.99 * light);
+  }
+
+  void main() {
+    if (uRingOuter <= 0.0) discard;
+    vec3 ray = normalize(vRay);
+    // Where the ray meets the giant, if it does (hiding what lies behind).
+    float b = dot(ray, uCentre);
+    float disc = b * b - dot(uCentre, uCentre) + uRadius * uRadius;
+    float hit = disc > 0.0 && b > 0.0 ? b - sqrt(disc) : 1e30;
+    vec3 camera = -uCentre;
+    float height = dot(camera, uNormal);
+    float g = dot(ray, uNormal);
+    vec4 colour = vec4(0.0);
+    // The rings seen open: where the ray crosses their plane.
+    if (abs(g) > 1e-7) {
+      float t = -height / g;
+      if (t > 0.0 && t < hit) {
+        vec3 p = camera + t * ray;
+        float d = ringDensity(length(p) / uRadius);
+        // Seen slant, through more of them.
+        float mu = abs(g);
+        float seen = 1.0 - pow(max(1.0 - d, 0.0), 1.0 / max(mu, 1e-3));
+        if (seen > 0.002) colour = vec4(ringLight(p, mu, d), seen);
+      }
+    }
+    // Nearly edge on: the ray's path along their plane, from where the
+    // camera stands over it, enters them at s; the line where they lie in
+    // the view, about a pixel wide.
+    vec3 along = ray - g * uNormal;
+    float alongLength = length(along);
+    if (alongLength > 1e-6) {
+      along /= alongLength;
+      vec3 foot = camera - height * uNormal;
+      float outer = uRingOuter * uRadius;
+      float inner = uRingInner * uRadius;
+      float fb = dot(foot, along);
+      float fc = dot(foot, foot);
+      float s = -1.0;
+      if (fc <= outer * outer && fc >= inner * inner) {
+        s = 0.0;
+      } else if (fc > outer * outer) {
+        float dOut = fb * fb - fc + outer * outer;
+        if (dOut > 0.0) s = -fb - sqrt(dOut);
+      } else {
+        // Inside the inner edge: out through it.
+        s = -fb + sqrt(max(fb * fb - fc + inner * inner, 0.0));
+      }
+      if (s >= 0.0 && s < hit) {
+        // The line's direction height: below the camera by its height at s.
+        float atS = -height / sqrt(s * s + height * height);
+        float pixel = max(fwidth(g), 1e-7);
+        float cover = 1.0 - smoothstep(0.5, 1.2, abs(g - atS) / pixel);
+        // Only where the open rings are thinner than a few pixels.
+        float span = outer * abs(height) / max(dot(camera, camera), outer * outer);
+        cover *= 1.0 - smoothstep(1.5, 4.0, span / pixel);
+        float a = cover * min(1.0, 1.5 * uRingOpacity);
+        if (a > colour.a) {
+          vec3 p = foot + max(s, 0.0) * along;
+          colour = vec4(ringLight(p, abs(g), uRingOpacity), a);
+        }
+      }
+    }
+    if (colour.a <= 0.002) discard;
+    gl_FragColor = vec4(colour.rgb, colour.a * uFade);
+    #include <colorspace_fragment>
+  }
+`;

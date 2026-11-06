@@ -7,6 +7,7 @@
 // (`[cos lat sin lon, sin lat, cos lat cos lon]`, y along the spin axis);
 // positions and radii are in radii of that body.
 import type { Preview } from './api/types/Preview';
+import type { RingSystem } from './api/types/RingSystem';
 import type { Sky } from './sky';
 
 export type Vec3 = [number, number, number];
@@ -58,6 +59,11 @@ export interface SkyBody {
   show?: SkyBodyShow;
   /** How it is drawn while it has no map (a body of a system not generated yet). */
   preview?: Preview;
+  /**
+   * A giant's rings, in its equatorial plane (edges and gaps in its
+   * radii), with the shadow they cast on it; none for a body without.
+   */
+  rings?: RingSystem | null;
 }
 
 /** How the planet looks in a moon's sky: its clouds, its air, its marks and their switches. */

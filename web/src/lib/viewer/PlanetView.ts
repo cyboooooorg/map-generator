@@ -107,8 +107,9 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
-import { dustRingFragment, dustRingVertex, ringFragment, ringVertex } from './ringShaders';
+import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
+import type { RingSystem } from '../api/types/RingSystem';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import { starField } from './stars';
 
@@ -504,7 +505,13 @@ export class PlanetView {
   /** Whether the star field is shown. */
   private starsOn = true;
   /** The other bodies drawn in the sky (see setSkyBodies), with their maps. */
-  private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; maps: Texture[] }[] = [];
+  private skyBodies: {
+    mesh: Mesh<PlaneGeometry, ShaderMaterial>;
+    body: SkyBody;
+    maps: Texture[];
+    /** Its rings, drawn over the sky (see skyRingFragment), once it has some. */
+    rings: Mesh<BufferGeometry, ShaderMaterial> | null;
+  }[] = [];
   /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
   private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   /**
@@ -1878,6 +1885,11 @@ export class PlanetView {
             uGrid: { value: 0 },
             uTropics: { value: 0 },
             uTilt: { value: 0 },
+            uRingInner: { value: 0 },
+            uRingOuter: { value: 0 },
+            uRingOpacity: { value: 0 },
+            uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
+            uRingGapCount: { value: 0 },
           },
           // Drawn with the star field and the host star (transparent ones
           // come after the surface), over them: a body hides the stars
@@ -1890,7 +1902,7 @@ export class PlanetView {
       mesh.renderOrder = -1;
       mesh.visible = false;
       this.scene.add(mesh);
-      const entry = { mesh, body, maps: [] as Texture[] };
+      const entry = { mesh, body, maps: [] as Texture[], rings: null as Mesh<BufferGeometry, ShaderMaterial> | null };
       const load = (url: string, map: string, has: string) => {
         void this.decodeImage(url, signal)
           .then((bitmap) => {
@@ -2061,10 +2073,12 @@ export class PlanetView {
   }
 
   private disposeSkyBodies(): void {
-    for (const { mesh, maps } of this.skyBodies) {
-      this.scene.remove(mesh);
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+    for (const { mesh, maps, rings } of this.skyBodies) {
+      for (const m of rings ? [mesh, rings] : [mesh]) {
+        this.scene.remove(m);
+        m.geometry.dispose();
+        m.material.dispose();
+      }
       for (const map of maps) map.dispose();
     }
     this.skyBodies = [];
@@ -2220,7 +2234,72 @@ export class PlanetView {
       u['uHaloStrength']!.value = halo?.strength ?? 0;
       u['uSpinAxis']!.value = this.spinAxesOn ? 1 : 0;
       u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, this.spinAxesOn ? SPIN_AXIS_LENGTH + 0.1 : 1);
+      setRingUniforms(u, body.rings ?? null);
+      this.drawSkyRings(entry, place);
     }
+  }
+
+  /**
+   * A body of the sky's rings, if it has any: over the whole screen, each
+   * pixel's ray meeting their plane (see skyRingFragment), drawn after
+   * its disk so that they pass in front of it.
+   */
+  private drawSkyRings(entry: (typeof this.skyBodies)[number], place: { direction: Vector3; half: number }): void {
+    const { body, mesh } = entry;
+    const rings = body.rings ?? null;
+    if (!rings) {
+      if (entry.rings) entry.rings.visible = false;
+      return;
+    }
+    if (!entry.rings) {
+      const geometry = new BufferGeometry();
+      // One triangle covering the screen (see skyRingVertex).
+      geometry.setAttribute('position', new BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+      entry.rings = new Mesh(
+        geometry,
+        new ShaderMaterial({
+          vertexShader: skyRingVertex,
+          fragmentShader: skyRingFragment,
+          uniforms: {
+            uProjectionInverse: { value: this.camera.projectionMatrixInverse },
+            uCentre: { value: new Vector3() },
+            uRadius: { value: 1 },
+            uNormal: { value: new Vector3(0, 1, 0) },
+            uColour: { value: new Color() },
+            uSunDir: this.u.uSunDir,
+            uFade: { value: 1 },
+            uRingInner: { value: 0 },
+            uRingOuter: { value: 0 },
+            uRingOpacity: { value: 0 },
+            uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
+            uRingGapCount: { value: 0 },
+          },
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      entry.rings.frustumCulled = false;
+      this.scene.add(entry.rings);
+    }
+    const ring = entry.rings;
+    ring.visible = mesh.visible;
+    // Just after its disk (in front of the globe or with the sky), hidden
+    // by the globe either way: they may lie behind it.
+    ring.renderOrder = mesh.renderOrder + 0.1;
+    const u = ring.material.uniforms;
+    setRingUniforms(u, rings);
+    // Its centre and radius from the camera: from its place when it has
+    // one, else at infinity in its direction (one radius per sin(half)).
+    if (body.position && body.radius !== undefined) {
+      (u['uCentre']!.value as Vector3).set(...body.position).sub(this.camera.position);
+      u['uRadius']!.value = body.radius;
+    } else {
+      (u['uCentre']!.value as Vector3).copy(place.direction).multiplyScalar(1 / Math.max(Math.sin(place.half), 1e-9));
+      u['uRadius']!.value = 1;
+    }
+    (u['uNormal']!.value as Vector3).set(...(body.axes ?? IDENTITY_AXES)[1]);
+    (u['uColour']!.value as Color).setRGB(...rings.colour, SRGBColorSpace);
+    u['uFade']!.value = mesh.material.uniforms['uOpacity']!.value as number;
   }
 
   /** The body shown drawn from its preview (see setPreviewBody), null until one is. */
@@ -2596,4 +2675,13 @@ function applyPreview(u: Record<string, IUniform>, body: SkyBody): void {
   u['uBands']!.value = preview?.bands ?? 0;
   u['uLand']!.value = preview && preview.bands === 0 && colours.length > 1 ? 1 : 0;
   u['uGlow']!.value = preview?.glow ? 1 : 0;
+}
+
+/** Sets a sky body's ring uniforms (see skyRingDensityGlsl) from its rings; none clears them. */
+function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null): void {
+  u['uRingInner']!.value = rings?.inner ?? 0;
+  u['uRingOuter']!.value = rings?.outer ?? 0;
+  u['uRingOpacity']!.value = rings?.opacity ?? 0;
+  u['uRingGapCount']!.value = Math.min(rings?.gaps.length ?? 0, 4);
+  (u['uRingGaps']!.value as Vector2[]).forEach((gap, k) => gap.set(...(rings?.gaps[k] ?? [0, 0])));
 }
