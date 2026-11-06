@@ -140,6 +140,57 @@ them today (metallicity and star mass).
   2020); mutual inclinations a degree or two (Fabrycky et al. 2014).
 - The letters follow the order from the star (`b`, `c`, `d`…), as the
   naming does today.
+- Rocky planets keep out of the first cold giant's belt zone, 0.40 to
+  0.63 of its distance, where the giant stops a planet forming: a planet
+  there is pushed past it, and the zone follows the giant as it settles.
+  A planet fixed by the request may stay in it. A request whose planets
+  cannot all fit draws their distances again in their preferred bands
+  before it fails.
+
+### Small bodies
+
+Once the planets are placed, the system draws its belts and trojans
+(`src/belts.rs`, analysis 13), each from a stream of its own (`BELTS`,
+`TROJANS`). The planets and moons of a seed do not move.
+
+- **Inner belt.** It needs a giant beyond half the ice line that is not a
+  hot Jupiter, the first of them. Its span runs from 0.40 of that giant's
+  distance to its 2:1 resonance. The other planets clear 5 Hill radii
+  beyond their periapsis and apoapsis, and the widest piece they leave is
+  kept if its ratio is 1.15 at least.
+  - Its gaps are at the 3:1, 5:2 and 7:3, each `0.012 a √(μ / μ_Jupiter)`
+    wide.
+  - The Hildas gather in the 3:2, where clear.
+  - Its mass is log-uniform from 10⁻⁵ to 10⁻² M⊕.
+  - Its composition is rocky, mixed or icy, by where it lies against the
+    ice line.
+- **Outer belt.** It spans the outermost giant's 3:2 to its 2:1, or 11 to
+  18 ice lines without a giant, with the same clearing.
+  - It is drawn for half of F, G and K stars, a quarter of M dwarfs and
+    three in ten hotter stars.
+  - Its mass is log-uniform from 10⁻³ to 1 M⊕.
+  - With a giant, a **scattered disk** goes with it, from the giant to
+    four times its distance, with 0.3 to 3 times the belt's mass.
+- **Trojans.** Bodies larger than 1 km at L4 and L5. A planet has them
+  where its mass share is under Routh's 0.0385 and no heavier planet
+  orbits within a period ratio of 3.
+  - A gas giant, or the outermost ice giant: 10⁴ to 10⁶.
+  - Another ice giant: 10³ to 10⁵.
+  - A hot Jupiter: up to 10³.
+  - A rocky planet: up to 100.
+  - L4 holds 0.41 to 0.59 of them.
+- **Craters.** Each body gets a crater rate, `WorldParams::impact_factor`:
+  the curve of the giant just beyond it (Horner & Jones 2008), times
+  `0.8 A + 0.2 C`, a twentieth at least. Here `A` is the inner belt's
+  mass against the Sun's 4 × 10⁻⁴ M⊕, and `C` the outer belt's and
+  scattered disk's against 0.05 M⊕, each at most 10. A moon takes its
+  planet's rate.
+
+`system.json` stores them as `belts` (each one's kind, span, mass, gaps
+as centre and width, composition, typical eccentricity and inclination,
+and the planet that shapes it) and, on each planet, `trojans` (`l4`,
+`l5`). Systems drawn before read with none of them, and their bodies keep
+their crater rates.
 
 ### Moons
 

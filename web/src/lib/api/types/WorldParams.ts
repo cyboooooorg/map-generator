@@ -102,4 +102,11 @@ host: HostMode,
  * absent for every other world, whose rings (if a giant) come from its
  * seed.
  */
-given_rings?: GivenRings, };
+given_rings?: GivenRings, 
+/**
+ * The crater rate relative to the Solar System's, as its planetary
+ * system sets it from its giants and belts (see `crate::belts`);
+ * absent for every other world, whose rate comes from the giants its
+ * seed draws.
+ */
+impact_factor?: number, };

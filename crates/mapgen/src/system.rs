@@ -124,6 +124,11 @@ pub struct System {
     /// `host = giant`), generated with the system; none for a whole system.
     #[serde(default)]
     pub focus: Option<String>,
+    /// Its belts of small bodies, nearest first (see `crate::belts`); none
+    /// in the systems drawn before them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<crate::belts::Belt>>", optional))]
+    pub belts: Vec<crate::belts::Belt>,
 }
 
 /// The star of a system.
@@ -176,6 +181,12 @@ pub struct Body {
     pub params: WorldParams,
     /// Whether its maps are in `bodies/<id>/`.
     pub generated: bool,
+    /// A planet's trojans at its L4 and L5 points, where they last (see
+    /// `crate::belts`); none for a moon, and in the systems drawn before
+    /// them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub trojans: Option<crate::belts::Trojans>,
     /// A ring moon's part in its giant's rings (see `crate::rings`); none
     /// for every other body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -472,18 +483,74 @@ fn normal(rng: &mut impl RngExt) -> f64 {
 
 /// Spaces planets drawn at their preferred distances: from the star out,
 /// each pushed out until it is clear of the last placed (the fixed ones
-/// stay, the others around them). `None` names the first type pushed out
-/// of its band.
+/// stay, the others around them), and the rocky ones past the inner belt's
+/// zone of the first cold giant (`belts::belt_zone`), where that giant
+/// stops a planet forming. The zone follows the giant as it settles, a few
+/// rounds at most. `None` names the first type pushed out of its band.
 fn space(slots: &mut Vec<Slot>, star_mass: f64, hz: (f64, f64), ice: f64) -> Result<(), String> {
     slots.sort_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
+    let zone_of = |slots: &[Slot]| {
+        slots
+            .iter()
+            .filter(|s| crate::belts::cold_giant(&s.body_type, s.orbit_au, ice))
+            .map(|s| s.orbit_au)
+            .reduce(f64::min)
+            .map(crate::belts::belt_zone)
+    };
+    let mut zone = zone_of(slots);
+    let mut placed = Vec::new();
+    for _ in 0..4 {
+        placed = place(slots, star_mass, hz, ice, zone)?;
+        let settled = zone_of(&placed);
+        if settled == zone || placed.iter().all(|s| !in_zone(s, settled)) {
+            *slots = placed;
+            return Ok(());
+        }
+        zone = settled;
+    }
+    match placed.iter().find(|s| in_zone(s, zone_of(&placed))) {
+        Some(s) => Err(s.body_type.clone()),
+        None => {
+            *slots = placed;
+            Ok(())
+        }
+    }
+}
+
+/// Whether a rocky planet that may move crosses an inner belt's zone.
+fn in_zone(slot: &Slot, zone: Option<(f64, f64)>) -> bool {
+    zone.is_some_and(|(lo, hi)| {
+        !slot.fixed
+            && !is_giant(&slot.body_type)
+            && slot.orbit_au * (1.0 + slot.eccentricity) > lo
+            && slot.orbit_au * (1.0 - slot.eccentricity) < hi
+    })
+}
+
+/// One round of [`space`], the rocky planets kept out of `zone`.
+fn place(
+    slots: &[Slot],
+    star_mass: f64,
+    hz: (f64, f64),
+    ice: f64,
+    zone: Option<(f64, f64)>,
+) -> Result<Vec<Slot>, String> {
     let mut placed: Vec<Slot> = slots.iter().filter(|s| s.fixed).cloned().collect();
     let mut free: Vec<Slot> = slots.iter().filter(|s| !s.fixed).cloned().collect();
     free.sort_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
     for mut slot in free {
         let ((_, max), _) = band(&slot.body_type, hz, ice).expect("known type");
-        // Out in small steps until clear of every planet placed.
-        while !placed.iter().all(|other| clear(&slot, other, star_mass)) {
-            slot.orbit_au *= 1.02;
+        // Out in small steps until clear of every planet placed, jumping
+        // a belt's zone.
+        loop {
+            if in_zone(&slot, zone) {
+                let (_, hi) = zone.expect("in a zone");
+                slot.orbit_au = slot.orbit_au.max(hi / (1.0 - slot.eccentricity) * 1.001);
+            } else if placed.iter().all(|other| clear(&slot, other, star_mass)) {
+                break;
+            } else {
+                slot.orbit_au *= 1.02;
+            }
             if slot.orbit_au > max.min(OUTER_EDGE_AU) {
                 return Err(slot.body_type);
             }
@@ -491,8 +558,7 @@ fn space(slots: &mut Vec<Slot>, star_mass: f64, hz: (f64, f64), ice: f64) -> Res
         placed.push(slot);
     }
     placed.sort_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
-    *slots = placed;
-    Ok(())
+    Ok(placed)
 }
 
 /// How many planets of a type fit in its band, packed from its inner edge
@@ -548,6 +614,9 @@ fn draw_whole(
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
 
+    // The preferred band of each planet asked, to draw its distance again
+    // when a try fails.
+    let mut preferred: Vec<(String, f64, f64)> = Vec::new();
     let asked: Vec<(String, f64)> = match &whole.planets {
         Some(planets) => {
             let total: u32 = planets.values().sum();
@@ -581,6 +650,7 @@ fn draw_whole(
                 let (lo, hi) = (lo.max(min).max(INNER_EDGE_AU), hi.min(max));
                 for _ in 0..count {
                     list.push((body_type.clone(), log_between(lo, hi, &mut rng)));
+                    preferred.push((body_type.clone(), lo, hi));
                 }
             }
             list
@@ -589,7 +659,17 @@ fn draw_whole(
     };
     let packed = asked.len() >= 4;
     let mut last_error = None;
-    for _ in 0..TRIES {
+    let mut asked = asked;
+    for attempt in 0..TRIES {
+        // After a failed try, the planets asked are drawn again in their
+        // preferred bands: a giant too close to a rocky planet asked (its
+        // belt's zone over the planet's band) moves rather than failing.
+        if attempt > 0 && !preferred.is_empty() {
+            asked = preferred
+                .iter()
+                .map(|(t, lo, hi)| (t.clone(), log_between(*lo, *hi, &mut rng)))
+                .collect();
+        }
         let mut slots: Vec<Slot> = asked
             .iter()
             .map(|(body_type, a)| Slot {
@@ -904,6 +984,7 @@ fn assemble(
                 surroundings,
                 params: moon_params,
                 generated: false,
+                trojans: None,
                 ring_role: ring.map(|r| r.role),
             });
         }
@@ -916,6 +997,36 @@ fn assemble(
         {
             rings.gap_moons = gap_moons;
         }
+    }
+    // Its small bodies, from the planets as placed: belts and trojans, and
+    // the crater rate they set on every body.
+    let ids: Vec<String> = (0..slots.len()).map(planet_letter).collect();
+    let tracks: Vec<crate::belts::Track> = slots
+        .iter()
+        .zip(&ids)
+        .map(|(slot, id)| crate::belts::Track {
+            id,
+            body_type: &slot.body_type,
+            mass_earth: slot.mass_earth,
+            orbit_au: slot.orbit_au,
+            eccentricity: slot.eccentricity,
+        })
+        .collect();
+    let belts = crate::belts::draw_belts(&info, f64::from(ice), &tracks, seed);
+    let trojans = crate::belts::draw_trojans(f64::from(info.mass), &tracks, seed);
+    for body in &mut bodies {
+        let planet = body.parent.as_deref().unwrap_or(&body.id);
+        let Some(rank) = tracks.iter().position(|t| t.id == planet) else {
+            continue;
+        };
+        if body.kind == BodyKind::Planet {
+            body.trojans = trojans[rank];
+        }
+        body.params.impact_factor = Some(crate::belts::impact_factor(
+            &belts,
+            &tracks,
+            tracks[rank].orbit_au,
+        ));
     }
     System {
         format_version: SYSTEM_FORMAT_VERSION,
@@ -932,6 +1043,7 @@ fn assemble(
         },
         bodies,
         focus: focus_id,
+        belts,
     }
 }
 
@@ -1055,6 +1167,7 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
         preview: preview_of(&slot.body_type, params, star),
         params: params.clone(),
         generated: false,
+        trojans: None,
         ring_role: None,
     }
 }
@@ -1758,6 +1871,7 @@ mod tests {
                     assert_eq!(look.rings, given.rings);
                     let own = WorldParams {
                         given_rings: None,
+                        impact_factor: None,
                         ..body.params.clone()
                     };
                     let mut alone = crate::giant_world::Look::draw(&own, mass).info;
@@ -1990,5 +2104,113 @@ mod tests {
             serde_json::to_string(&back).unwrap()
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn rocky_planets_keep_out_of_the_first_cold_giants_belt_zone() {
+        let mut zones = 0;
+        for seed in 0..200 {
+            let system = draw(
+                &whole_drawn(seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            let ice = f64::from(system.star.ice_line_au);
+            let planets: Vec<&Body> = planets(&system);
+            let Some(giant) = planets
+                .iter()
+                .filter(|b| crate::belts::cold_giant(&b.body_type, b.orbit.semi_major_axis_au, ice))
+                .map(|b| b.orbit.semi_major_axis_au)
+                .reduce(f64::min)
+            else {
+                continue;
+            };
+            zones += 1;
+            let (lo, hi) = crate::belts::belt_zone(giant);
+            for p in planets.iter().filter(|b| !is_giant(&b.body_type)) {
+                let (a, e) = (p.orbit.semi_major_axis_au, p.orbit.eccentricity);
+                assert!(
+                    a * (1.0 + e) <= lo || a * (1.0 - e) >= hi,
+                    "seed {seed}: {} at {a} in {lo}–{hi}",
+                    p.id
+                );
+            }
+        }
+        assert!(zones > 20, "{zones}");
+    }
+
+    #[test]
+    fn systems_get_belts_trojans_and_their_crater_rate() {
+        let (mut inner, mut trojans) = (0, 0);
+        for seed in 0..40 {
+            let system = draw(
+                &whole(&[("terran", 1), ("gas-giant", 1), ("ice-giant", 1)], seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            inner += system
+                .belts
+                .iter()
+                .filter(|b| b.kind == crate::belts::BeltKind::Inner)
+                .count();
+            trojans += system.bodies.iter().filter(|b| b.trojans.is_some()).count();
+            for body in &system.bodies {
+                assert!(
+                    body.params.impact_factor.is_some_and(|f| f > 0.0),
+                    "{}",
+                    body.id
+                );
+                assert!(body.kind == BodyKind::Planet || body.trojans.is_none());
+            }
+            // A moon strikes at its planet's rate.
+            for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
+                let planet = system
+                    .bodies
+                    .iter()
+                    .find(|b| Some(&b.id) == moon.parent.as_ref())
+                    .unwrap();
+                assert_eq!(moon.params.impact_factor, planet.params.impact_factor);
+            }
+        }
+        assert!(inner > 10 && trojans > 10, "{inner} {trojans}");
+    }
+
+    #[test]
+    fn systems_drawn_before_small_bodies_read_as_they_were() {
+        let system = draw(
+            &whole(&[("terran", 1), ("gas-giant", 1)], 7),
+            &mut StdRng::seed_from_u64(7),
+        )
+        .unwrap();
+        let mut json: serde_json::Value = serde_json::to_value(&system).unwrap();
+        json.as_object_mut().unwrap().remove("belts");
+        for body in json["bodies"].as_array_mut().unwrap() {
+            body.as_object_mut().unwrap().remove("trojans");
+            body["params"]
+                .as_object_mut()
+                .unwrap()
+                .remove("impact_factor");
+        }
+        let old: System = serde_json::from_value(json).unwrap();
+        assert!(old.belts.is_empty());
+        assert!(
+            old.bodies
+                .iter()
+                .all(|b| b.trojans.is_none() && b.params.impact_factor.is_none())
+        );
+        // Written back, it stays as it was.
+        let back: serde_json::Value = serde_json::to_value(&old).unwrap();
+        assert!(back.get("belts").is_none());
+    }
+
+    fn whole_drawn(seed: u32) -> SystemRequest {
+        SystemRequest::System(WholeSystemRequest {
+            star: Some("G2V".into()),
+            metallicity: Some(0.2),
+            planets: None,
+            seed: Some(seed),
+            width: Some(64),
+            height: Some(32),
+        })
     }
 }
