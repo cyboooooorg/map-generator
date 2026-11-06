@@ -1032,6 +1032,9 @@
   const skyOrbitLoops = $derived(orbitLines && sysSky ? sysSky.orbits : []);
   // The body shown's own orbit dashed: the body slides along it.
   $effect(() => view?.setSkyOrbits(skyOrbitLoops, skyOrbitLoops.map((_, i) => i === sysSky?.ownOrbit)));
+  // A moon goes round its orbit 2^speed times every ORBIT_SECONDS while
+  // the orbits play (see orbitPeriod): its dashes lengthen to match.
+  $effect(() => view?.setSkyOrbitPace(orbitsPlaying && sysBody?.parent ? 2 ** orbitSpeed / ORBIT_SECONDS : 0));
   // Follow the bodies of the sky on the screen while their labels show.
   $effect(() => {
     const current = view;

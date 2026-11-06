@@ -1001,8 +1001,27 @@ export const skyBodyFragment = /* glsl */ `
 // shown, drawn where they are, so that the near side of an orbit passes
 // in front of the globe and its far side behind it; beyond the far plane,
 // held on it, behind everything but the sky.
-/** Dash period of the body shown's own orbit line, in its radii (see skyOrbitFragment). */
+/**
+ * Dash period of the body shown's own orbit line, in its radii, while it
+ * stands still (see skyOrbitFragment); longer while it plays (see
+ * skyOrbitDash).
+ */
 export const SKY_ORBIT_DASH = 1.5;
+
+/** Frames a dash period takes to go past at least, while the orbits play (see skyOrbitDash). */
+const DASH_FRAMES = 4;
+/** Frame rate assumed for the dashes' pace. */
+const DASH_FPS = 60;
+
+/**
+ * The dash period of an orbit line `length` long (radii of the body
+ * shown) as the body goes round it `orbitsPerSecond` times a second: long
+ * enough that the dashes go past it at most a quarter of a period a frame,
+ * so that they are seen moving, not blurred into a solid line.
+ */
+export function skyOrbitDash(length: number, orbitsPerSecond: number): number {
+  return Math.max(SKY_ORBIT_DASH, (DASH_FRAMES * length * Math.abs(orbitsPerSecond)) / DASH_FPS);
+}
 
 export const skyOrbitVertex = /* glsl */ `
   attribute vec3 point;
@@ -1028,24 +1047,31 @@ export const skyOrbitFragment = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
   uniform float uNear;
+  // Dash period along a dashed orbit, in radii of the body shown.
+  uniform float uDash;
   varying float vFar;
   varying float vAlong;
-  // Dash period along a dashed orbit, in radii of the body shown.
-  const float DASH = ${SKY_ORBIT_DASH.toFixed(2)};
   void main() {
     if ((uNear > 0.5) == (vFar > 0.5)) discard;
     float opacity = uOpacity;
+    vec3 colour = uColor;
     if (vAlong >= 0.0) {
-      // Dashes where they span a few pixels; farther off, where they would
-      // flicker, a fainter solid line.
+      // Dashes where they span a few pixels, every other one bright (no
+      // gaps: the line stays whole as it moves); farther off, where they
+      // would flicker, a fainter solid line.
       float perPixel = fwidth(vAlong);
-      if (perPixel < DASH * 0.25) {
-        if (fract(vAlong / DASH) > 0.55) discard;
+      if (perPixel < uDash * 0.25) {
+        if (fract(vAlong / uDash) < 0.5) {
+          colour = mix(uColor, vec3(1.0), 0.65);
+          opacity = min(1.0, opacity * 2.0);
+        } else {
+          opacity *= 0.6;
+        }
       } else {
         opacity *= 0.55;
       }
     }
-    gl_FragColor = vec4(uColor, opacity);
+    gl_FragColor = vec4(colour, opacity);
     #include <colorspace_fragment>
   }
 `;
