@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { layoutLabels } from '../lib/labelLayout';
   // Labels for the bodies of the sky (the moons, the planet seen from a
   // moon, a giant's other moons, the host star): a name and a line of
   // facts each, tied to the body by a leader line, so that bodies too small
@@ -20,9 +21,12 @@
   let { positions, labels, star, starLabel }: Props = $props();
   let width = $state(0);
   let height = $state(0);
-
-  /** Offset of a label from its body: up and to the right, mirrored near the right and top edges. */
-  const LEAD = { x: 34, y: -30 };
+  /** Each label's box, as last measured (keyed by its text): laid out with the others. */
+  let sizes = $state<Record<string, { width: number; height: number }>>({});
+  let elements = $state<HTMLDivElement[]>([]);
+  const keyOf = (label: SkyLabel) => `${label.name}\n${label.detail}`;
+  /** Before it is measured: about what a label of this text takes. */
+  const estimate = (label: SkyLabel) => ({ width: Math.max(label.name.length * 7, label.detail.length * 6) + 12, height: 29 });
   const placed = $derived.by(() => {
     const items: { at: { x: number; y: number }; label: SkyLabel; star: boolean }[] = [];
     positions.forEach((at, k) => {
@@ -30,15 +34,29 @@
       if (at && label) items.push({ at, label, star: false });
     });
     if (star && starLabel) items.push({ at: star, label: starLabel, star: true });
-    return items.map((item) => {
-      const left = item.at.x > width - 200;
-      const below = item.at.y < 60;
-      return {
-        ...item,
-        to: { x: item.at.x + (left ? -LEAD.x : LEAD.x), y: item.at.y + (below ? -LEAD.y : LEAD.y) },
-        left,
-      };
+    // Laid out together, so that none covers another (lib/labelLayout.ts).
+    const places = layoutLabels(
+      items.map((item) => ({ at: item.at, ...(sizes[keyOf(item.label)] ?? estimate(item.label)) })),
+      width,
+      height,
+    );
+    return items.map((item, k) => ({ ...item, ...places[k]! }));
+  });
+  // Measures the labels drawn, for the next layout (only when a size changes).
+  $effect(() => {
+    const next: Record<string, { width: number; height: number }> = {};
+    let changed = false;
+    placed.forEach((item, k) => {
+      const element = elements[k];
+      if (!element) return;
+      const key = keyOf(item.label);
+      const size = { width: element.offsetWidth, height: element.offsetHeight };
+      next[key] = size;
+      const old = sizes[key];
+      if (!old || Math.abs(old.width - size.width) > 1 || Math.abs(old.height - size.height) > 1) changed = true;
     });
+    // Only the labels shown: their texts change as the bodies move.
+    if (changed) sizes = next;
   });
 </script>
 
@@ -50,7 +68,7 @@
     {/each}
   </svg>
   {#each placed as item, i (i)}
-    <div class="label" class:left={item.left} class:star={item.star} style:left={`${item.to.x}px`} style:top={`${item.to.y}px`}>
+    <div bind:this={elements[i]} class="label" class:left={item.left} class:star={item.star} style:left={`${item.to.x}px`} style:top={`${item.to.y}px`}>
       <strong>{item.label.name}</strong>
       <span>{item.label.detail}</span>
     </div>
