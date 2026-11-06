@@ -49,6 +49,41 @@ describe('system sky', () => {
     expect(sky.bodies[0]!.preview).toBeDefined();
   });
 
+  it('keeps a moon’s orbit fixed against the stars while its planet turns', () => {
+    const day = system.bodies.find((x) => x.id === 'c')!.spin.period_hours / 24;
+    const period = system.bodies.find((x) => x.id === 'c-1')!.orbit.period_days;
+    const from = (days: number) => {
+      const p = placeSystem(system, days);
+      return [0, 1, 2].map((i) => p.get('c-1')!.centre[i]! - p.get('c')!.centre[i]!) as Vec3;
+    };
+    const a = from(0);
+    const b = from(day / 4);
+    const angle = Math.acos((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (length(a) * length(b))) / (Math.PI / 180);
+    // Only its own orbit moves it: about 15.6°, not the 106° it moved when its plane turned with c
+    // (within 1.5°: its orbit is slightly eccentric).
+    expect(Math.abs(angle - (360 * (day / 4)) / period)).toBeLessThan(1.5);
+  });
+
+  it('lays a moon’s orbit in its planet’s tilted equator, still against the stars', () => {
+    const normal = (days: number) => placeSystem(system, days).get('c-1')!.plane.normal;
+    const axis = placeSystem(system, 0).get('c')!.axes[1];
+    // c-1 is inclined 0.15° to c's equator, which c's 7.8° tilt leans.
+    expect(normal(0)[0] * axis[0] + normal(0)[1] * axis[1] + normal(0)[2] * axis[2]).toBeGreaterThan(Math.cos((0.2 * Math.PI) / 180));
+    normal(0).forEach((v, i) => expect(v).toBeCloseTo(normal(0.3)[i]!, 9));
+  });
+
+  it('brings the sun round a locked moon once per orbit', () => {
+    const period = system.bodies.find((x) => x.id === 'c-1')!.orbit.period_days;
+    const lon = (days: number) => {
+      const s = systemSky(system, 'c-1', days, textures).sun;
+      return Math.atan2(s[0], s[2]);
+    };
+    let turned = (lon(period / 4) - lon(0)) / (Math.PI / 180);
+    turned = ((turned % 360) + 540) % 360 - 180;
+    // A quarter turn in a quarter orbit (within 2°: eccentricity and the planet's year).
+    expect(Math.abs(Math.abs(turned) - 90)).toBeLessThan(2);
+  });
+
   it('keeps a locked moon facing its giant, which it sees on its own orbit', () => {
     const sky = systemSky(system, 'c-1', 3, textures);
     const giant = sky.bodies[sky.ids.indexOf('c')]!;

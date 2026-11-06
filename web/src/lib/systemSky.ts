@@ -8,7 +8,9 @@
 // axis (the plane of the planets near its equator). A planet's orbit is
 // placed by its node, inclination and periapsis, its position by Kepler's
 // equation from its mean anomaly at the system's epoch; a moon's round its
-// planet, in the planet's equatorial plane. A body's spin axis leans from
+// planet, in the planet's equatorial plane, which (like its node, counted
+// from the planet's equinox direction) is held fixed against the stars
+// while the planet turns. A body's spin axis leans from
 // its orbit's normal by its axial tilt, towards a fixed direction (the
 // node line); it turns once per `spin.period_hours`, a locked body keeping
 // its longitude 180° towards what it orbits.
@@ -83,6 +85,12 @@ export interface Placement {
   centre: Vec3;
   /** Its own axes (its map's frame): x, y (its spin axis), z. */
   axes: Axes;
+  /**
+   * Its equatorial frame, not turning with its day: `[cross(y, start), y,
+   * start]`, `y` its spin axis and `start` its equinox direction (its orbit's
+   * node line projected on its equator). The frame its moons' orbits sit in.
+   */
+  equator: Axes;
   /** The plane of its orbit. */
   plane: Plane;
 }
@@ -105,25 +113,24 @@ export function placeSystem(
     if (known) return known;
     const parent = body.parent ? byId.get(body.parent) : undefined;
     const parentPlace = parent ? place(parent) : null;
-    const parentAxes = parentPlace?.axes ?? IDENTITY_AXES;
-    const plane = orbitPlane(body.orbit, parentAxes);
+    const plane = orbitPlane(body.orbit, parentPlace?.equator ?? IDENTITY_AXES);
     const centre = add(parentPlace?.centre ?? [0, 0, 0], orbitPosition(body.orbit, plane, days));
     // Its axis leans from its orbit's normal by its tilt, about the node line.
     const y = unit(rotate(plane.normal, plane.node, body.spin.axial_tilt_deg * DEG));
     // Its longitude 0 at the start, then turning on itself; a locked body
     // keeps its longitude 180° towards what it orbits.
+    const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
     let z: Vec3;
     const towardsParent = sub(parentPlace?.centre ?? [0, 0, 0], centre);
     if (body.spin.locked) {
       z = unit(scale(towardsParent, -1));
     } else {
-      const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
       const turns = (days * 24) / Math.max(body.spin.period_hours, 1e-6);
       const offset = turned && turned.id === body.id ? turned.spinOffset : 0;
       z = rotate(start, y, 2 * Math.PI * (turns - Math.floor(turns)) + offset);
     }
     z = unit(sub(z, scale(y, dot(z, y))));
-    const placement = { centre, axes: [cross(y, z), y, z] as Axes, plane };
+    const placement = { centre, axes: [cross(y, z), y, z] as Axes, equator: [cross(y, start), y, start] as Axes, plane };
     placements.set(body.id, placement);
     return placement;
   };

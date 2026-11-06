@@ -50,7 +50,9 @@ round planets. Every body has:
   `hot-jupiter`; `rocky-moon`, `icy-moon` for small moons);
 - its **parent** (the star, or a planet) and its **orbit**: semi-major
   axis, eccentricity, inclination, longitude of the node, argument of
-  periapsis, mean anomaly at the system's epoch, period;
+  periapsis, mean anomaly at the system's epoch, period (a moon's plane
+  is its planet's equatorial plane, held fixed against the stars with its
+  node, whose longitude is counted from the planet's equinox direction);
 - its **physical facts**: mass, radius, density, surface gravity, shape
   (an irregular moon's axes);
 - its **spin**: rotation period, axial tilt, whether it is locked to its
