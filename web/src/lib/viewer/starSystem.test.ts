@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu } from './starSystem';
+import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -197,5 +197,23 @@ describe('star view', () => {
     expect(frostLineAu(4)).toBeCloseTo(5.4, 10);
     expect(hillRadiusAu(5.2, 0.049, 317.8, 1)).toBeCloseTo(0.338, 2);
     expect(hillRadiusAu(1, 0.0167, 1, 1)).toBeCloseTo(0.0098, 3);
+  });
+
+  it('draws a Hill sphere outside the moons it holds, dashed when that is not to scale', () => {
+    expect(hillShownRadius(2, 0.1, 0.5)).toEqual({ radius: 2, toScale: true });
+    // Smaller than the outermost moon's ring (drawn larger than to scale).
+    const shown = hillShownRadius(0.3, 0.1, 0.5);
+    expect(shown.toScale).toBe(false);
+    expect(shown.radius).toBeGreaterThan(0.5);
+    // No moons: just outside the marker.
+    const bare = hillShownRadius(0.01, 0.1, 0);
+    expect(bare.toScale).toBe(false);
+    expect(bare.radius).toBeCloseTo(0.16, 10);
+  });
+
+  it('builds a sphere grid whose points all lie on the sphere', () => {
+    const grid = sphereGrid(2, 16);
+    expect(grid.length).toBe(11 * 16 * 2);
+    for (const [x, y, z] of grid) expect(Math.hypot(x, y, z)).toBeCloseTo(2, 10);
   });
 });
