@@ -3,13 +3,14 @@
 // (or, for a body locked to what it orbits, a closed ring: no spin of its
 // own against it), and in a planetary system, its host planet: a dotted
 // line to it, the host's pull on the body and the body's orbital velocity
-// as arrows. Positions are in radii of the body shown, in its frame.
+// as arrows, drawn as the spin arrow is (a tube and a cone). Positions are
+// in radii of the body shown, in its frame.
 import {
-  ArrowHelper,
   BufferGeometry,
   Color,
   ConeGeometry,
   CatmullRomCurve3,
+  CylinderGeometry,
   Group,
   Line,
   LineDashedMaterial,
@@ -29,6 +30,8 @@ const SPIN_ARC = 1.5 * Math.PI;
 const SPIN_TUBE = 0.022;
 /** The arrows of the host's pull and the body's velocity: their length beyond the surface, in radii. */
 const GUIDE_LENGTH = 1.4;
+/** Points of the host line, spaced geometrically from the surface to the host (see hostLineRadii). */
+const HOST_LINE_POINTS = 96;
 /** Fixed hues of meaning (see the redesign spec): velocity cyan, pull orange, the host line pale. */
 export const VELOCITY_COLOUR = new Color('#4fd1ff');
 export const PULL_COLOUR = new Color('#ff9a3d');
@@ -40,12 +43,50 @@ export interface HostGuide {
   velocity: Vec3 | null;
 }
 
-/** The points the labels hang from, in the scene's frame (see PlanetView.skyScreenPositions). */
+/**
+ * The points the labels hang from, in the scene's frame (see
+ * PlanetView.skyScreenPositions). The host's distance has no fixed point:
+ * it goes on whatever part of the host line is in view, among `host`.
+ */
 export interface GuidePoints {
   spin: Vector3 | null;
-  host: Vector3 | null;
+  host: Vector3[] | null;
   pull: Vector3 | null;
   velocity: Vector3 | null;
+}
+
+/**
+ * Distances from the body's centre, in its radii, of the host line's
+ * points: from the surface (1) to the host (`distance`), spaced
+ * geometrically so that the stretch near the body, the one in view when
+ * the camera is close, is drawn and labelled as finely as the rest.
+ */
+export function hostLineRadii(distance: number, count = HOST_LINE_POINTS): number[] {
+  const far = Math.max(distance, 1);
+  return Array.from({ length: count }, (_, i) => far ** (i / (count - 1)));
+}
+
+/**
+ * The index of the point to label among a line's points, given which are
+ * in view: the middle of the longest run in view, or -1 if none is. The
+ * label then stays on the line for as long as any of it shows.
+ */
+export function labelIndex(inView: boolean[]): number {
+  let best = -1;
+  let bestLength = 0;
+  let start = -1;
+  inView.forEach((shown, i) => {
+    if (shown && start < 0) start = i;
+    if (start >= 0 && (!shown || i === inView.length - 1)) {
+      const end = shown ? i : i - 1;
+      if (end - start + 1 > bestLength) {
+        bestLength = end - start + 1;
+        best = Math.floor((start + end) / 2);
+      }
+      start = -1;
+    }
+  });
+  return best;
 }
 
 export class BodyGuides {
@@ -54,7 +95,7 @@ export class BodyGuides {
   /** In the body's frame, as the sky bodies are. */
   readonly host = new Group();
   private spinTip = new Vector3();
-  private hostMid: Vector3 | null = null;
+  private hostLine: Vector3[] | null = null;
   private pullTip: Vector3 | null = null;
   private velocityTip: Vector3 | null = null;
   private locked: boolean | null = null;
@@ -100,22 +141,29 @@ export class BodyGuides {
   /** The host planet's guides, or none (null). */
   setHost(guide: HostGuide | null): void {
     clear(this.host);
-    this.hostMid = this.pullTip = this.velocityTip = null;
+    this.hostLine = this.pullTip = this.velocityTip = null;
     if (!guide) return;
     const to = new Vector3(...guide.position);
     const distance = to.length();
     if (distance < 1e-6) return;
     const toward = to.clone().divideScalar(distance);
-    // A dotted line from the surface to the host's centre.
-    const line = new Line(
-      new BufferGeometry().setFromPoints([toward.clone(), to]),
-      new LineDashedMaterial({ color: HOST_LINE_COLOUR, dashSize: 0.25, gapSize: 0.25, transparent: true, opacity: 0.75 }),
-    );
+    // A dotted line from the surface to the host's centre, whole: the
+    // host lies far beyond the camera's far plane, which only bounds the
+    // globe's depth, so the line's depth is held at that plane instead of
+    // being cut there (see clampToFarPlane).
+    this.hostLine = hostLineRadii(distance).map((r) => toward.clone().multiplyScalar(r));
+    const material = new LineDashedMaterial({
+      color: HOST_LINE_COLOUR,
+      dashSize: 0.25,
+      gapSize: 0.25,
+      transparent: true,
+      opacity: 0.75,
+    });
+    clampToFarPlane(material);
+    const line = new Line(new BufferGeometry().setFromPoints(this.hostLine), material);
     line.computeLineDistances();
+    line.frustumCulled = false;
     this.host.add(line);
-    // Its distance is written along the line, a little beyond the pull
-    // arrow (the line's middle may lie far off screen).
-    this.hostMid = toward.clone().multiplyScalar(Math.min((1 + distance) / 2, 1 + GUIDE_LENGTH * 2.2));
     // The host's pull, from the surface towards it.
     this.host.add(arrow(toward, toward, GUIDE_LENGTH, PULL_COLOUR));
     this.pullTip = toward.clone().multiplyScalar(1 + GUIDE_LENGTH);
@@ -143,7 +191,7 @@ export class BodyGuides {
     const scene = (v: Vector3 | null, group: Group) => (v && group.visible ? group.localToWorld(v.clone()) : null);
     return {
       spin: scene(this.spinTip, this.spin),
-      host: scene(this.hostMid, this.host),
+      host: this.hostLine && this.host.visible ? this.hostLine.map((p) => this.host.localToWorld(p.clone())) : null,
       pull: scene(this.pullTip, this.host),
       velocity: scene(this.velocityTip, this.host),
     };
@@ -155,14 +203,39 @@ export class BodyGuides {
   }
 }
 
-/** An arrow from the surface point `from` (a unit vector) along `direction`, `length` long. */
-function arrow(from: Vector3, direction: Vector3, length: number, colour: Color): ArrowHelper {
-  const helper = new ArrowHelper(direction, from, length, colour, length * 0.22, length * 0.12);
-  for (const part of [helper.line, helper.cone]) {
-    (part.material as MeshBasicMaterial).transparent = true;
-  }
-  helper.renderOrder = 2;
-  return helper;
+/**
+ * An arrow from the surface point `from` (a unit vector) along `direction`,
+ * `length` long in all: a tube and a cone, as the spin arrow.
+ */
+function arrow(from: Vector3, direction: Vector3, length: number, colour: Color): Group {
+  const material = new MeshBasicMaterial({ color: colour, transparent: true });
+  const headLength = SPIN_TUBE * 7;
+  const shaft = length - headLength;
+  // Both parts are built along +y from the arrow's foot, then turned.
+  const tube = new Mesh(new CylinderGeometry(SPIN_TUBE, SPIN_TUBE, shaft, 12), material);
+  tube.position.y = shaft / 2;
+  const head = new Mesh(new ConeGeometry(SPIN_TUBE * 3, headLength, 16), material);
+  head.position.y = shaft + headLength / 2;
+  tube.renderOrder = head.renderOrder = 2;
+  const group = new Group();
+  group.add(tube, head);
+  group.position.copy(from);
+  group.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.clone().normalize());
+  return group;
+}
+
+/**
+ * Holds what `material` draws at the camera's far plane at most, instead
+ * of letting the far plane cut it: still hidden by the globe, which lies
+ * nearer.
+ */
+function clampToFarPlane(material: LineDashedMaterial): void {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <project_vertex>',
+      '#include <project_vertex>\n\tgl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);',
+    );
+  };
 }
 
 function clear(group: Object3D): void {
