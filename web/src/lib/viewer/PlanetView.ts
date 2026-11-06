@@ -2708,7 +2708,30 @@ export class PlanetView {
     }
     this.renderer.render(this.scene, this.camera);
     this.onSkyPositions?.(this.skyScreenPositions());
-    this.onAxes(axesOnScreen(this.camera.quaternion));
+    this.onAxes(axesOnScreen(this.gizmoFrame()));
+  }
+
+  /**
+   * Whether the axes gizmo shows the sky's axes on the globe (the camera
+   * kept still against the sky while the clock plays) or the body's (the
+   * camera turning with it): the axes of the frame the camera stays in.
+   */
+  setGizmoOnSky(on: boolean): void {
+    this.gizmoOnSky = on;
+    this.requestRender();
+  }
+
+  private gizmoOnSky = false;
+
+  /**
+   * The camera's turn as the axes gizmo shows it: on the globe, against the
+   * sky (the body's axes turned with the stars, see setStarsTurn) when the
+   * camera stays still against it, so that the gizmo stays still while the
+   * globe turns; else against the body, or the map.
+   */
+  private gizmoFrame(): Quaternion {
+    if (!this.gizmoOnSky || this.mode !== 'globe' || this.starsTurned === 0) return this.camera.quaternion;
+    return new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -this.starsTurned).multiply(this.camera.quaternion);
   }
 
   /** Height of the camera above the surface (globe) or the map plane. */
