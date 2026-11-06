@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
+import { libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
 import type { Vec3 } from './skyBodies';
 
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
@@ -87,11 +87,57 @@ describe('system sky', () => {
   it('keeps a locked moon facing its giant, which it sees on its own orbit', () => {
     const sky = systemSky(system, 'c-1', 3, textures);
     const giant = sky.bodies[sky.ids.indexOf('c')]!;
-    giant.direction.forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 6));
+    expect(Math.acos(-giant.direction[2]!)).toBeLessThan(2.5 * 0.0085);
     // The planets' orbits and the giant's moons'; its own passes through it.
     expect(sky.orbits).toHaveLength(4);
     const own = sky.orbits[2]!;
     expect(Math.min(...own.map(length))).toBeLessThan(1);
+  });
+
+  it('turns a locked body steadily, its host swinging by the libration', () => {
+    const eccentric = structuredClone(system);
+    const moon = eccentric.bodies.find((x) => x.id === 'c-1')!;
+    moon.orbit.eccentricity = 0.2;
+    const period = moon.orbit.period_days;
+    for (const days of [0, period / 8, period / 3]) {
+      const sky = systemSky(eccentric, 'c-1', days, textures);
+      const d = sky.bodies[sky.ids.indexOf('c')]!.direction;
+      // The giant's longitude from the face turned to it (-z), in the sense of the orbit.
+      const swing = Math.atan2(-d[0], -d[2]);
+      expect(Math.abs(swing)).toBeCloseTo(Math.abs(libration(moon.orbit, days)), 6);
+      expect(Math.abs(swing)).toBeLessThan(2.5 * 0.2);
+    }
+  });
+
+  it('faces its host exactly on a circular orbit, and at periapsis', () => {
+    const giantFrom = (s: System, days: number) => { const sky = systemSky(s, 'c-1', days, textures); return sky.bodies[sky.ids.indexOf('c')]!.direction; };
+    const circular = structuredClone(system);
+    circular.bodies.find((x) => x.id === 'c-1')!.orbit.eccentricity = 0;
+    giantFrom(circular, 1.3).forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 6));
+    const eccentric = structuredClone(system);
+    const orbit = eccentric.bodies.find((x) => x.id === 'c-1')!.orbit;
+    orbit.eccentricity = 0.2;
+    // The first periapsis after the epoch: mean anomaly 0.
+    const periapsis = (((360 - orbit.mean_anomaly_deg) % 360) / 360) * orbit.period_days;
+    expect(libration(orbit, periapsis)).toBeCloseTo(0, 6);
+    giantFrom(eccentric, periapsis).forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 4));
+  });
+
+  it('librates a retrograde moon and a planet locked to its star too', () => {
+    const odd = structuredClone(system);
+    odd.bodies.find((x) => x.id === 'c-2')!.orbit.inclination_deg = 150;
+    odd.bodies.find((x) => x.id === 'c-2')!.orbit.eccentricity = 0.1;
+    const b = odd.bodies.find((x) => x.id === 'b')!;
+    b.spin.locked = true;
+    // Untilted, so that the host's longitude is its angle in the orbit's plane.
+    b.spin.axial_tilt_deg = 0;
+    for (const [id, host] of [['c-2', 'c'], ['b', null]] as const) {
+      const body = odd.bodies.find((x) => x.id === id)!;
+      const days = body.orbit.period_days / 5;
+      const sky = systemSky(odd, id, days, textures);
+      const d = host ? sky.bodies[sky.ids.indexOf(host)]!.direction : sky.sun;
+      expect(Math.abs(Math.atan2(-d[0], -d[2]))).toBeCloseTo(Math.abs(libration(body.orbit, days)), 6);
+    }
   });
 
   it('turns a body on itself at its own pace', () => {

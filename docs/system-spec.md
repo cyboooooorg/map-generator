@@ -50,13 +50,16 @@ round planets. Every body has:
   `hot-jupiter`; `rocky-moon`, `icy-moon` for small moons);
 - its **parent** (the star, or a planet) and its **orbit**: semi-major
   axis, eccentricity, inclination, longitude of the node, argument of
-  periapsis, mean anomaly at the system's epoch, period (a moon's plane
-  is its planet's equatorial plane, held fixed against the stars with its
-  node, whose longitude is counted from the planet's equinox direction);
+  periapsis, mean anomaly at the system's epoch, period (a moon's orbit
+  is inclined to its planet's equatorial plane, held fixed against the
+  stars, and its node's longitude is counted from the planet's equinox
+  direction);
 - its **physical facts**: mass, radius, density, surface gravity, shape
   (an irregular moon's axes);
 - its **spin**: rotation period, axial tilt, whether it is locked to its
-  parent (and to what);
+  parent (and to what). A locked body turns at a steady pace, facing its
+  host on average; the host swings in its sky by the libration (true
+  minus mean anomaly, about ±2e radians);
 - its **surroundings**: equilibrium temperature, the starlight it gets,
   its place relative to the habitable zone, the tides it raises and feels;
 - its **preview**: what the viewer draws before its maps exist (see
