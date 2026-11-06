@@ -212,16 +212,13 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('cloudTops')}
 
   // The wind of a giant at the latitude of map row v (0 south, 1 north).
+  // Indexed directly (GLSL ES 3.00 allows it on uniform arrays): a loop
+  // over the 91 entries cost a fifth of the frame on a CPU renderer.
   float bandWind(float v) {
     float at = clamp(v, 0.0, 1.0) * 90.0;
     int i = int(floor(min(at, 89.999)));
-    float f = at - float(i);
-    float a = 0.0;
-    float b = 0.0;
-    for (int k = 0; k < 91; k++) {
-      if (k == i) a = uWind[k];
-      if (k == i + 1) b = uWind[k];
-    }
+    return mix(uWind[i], uWind[i + 1], at - float(i));
+  }
     return mix(a, b, f);
   }
 
