@@ -150,6 +150,12 @@ const SPIN_AXIS_LENGTH = 1.5;
  * its atmosphere, rings, grid and axes, before the near orbit lines (10).
  */
 const SKY_FRONT_ORDER = 5;
+/**
+ * Half-size, in CSS pixels, below which a body of the sky is drawn no
+ * smaller (with a faint ring), and to which a gap in a giant's rings is
+ * widened on screen, so that a moonlet shows inside its gap.
+ */
+const SKY_BODY_MIN_PX = 2.5;
 /** Vertices across a detail patch (see TileLayer); the base surface's are the profile's (surfaceSegments). */
 const PATCH_SEGMENTS = 16;
 /** The arrow of the sense of rotation round it: its height, radius and arc (radians). */
@@ -534,6 +540,8 @@ export class PlanetView {
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
   private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
+  /** Half-size of a small sky body's marker this frame, radians (see drawSkyBodies). */
+  private skySmallest = 0;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
   /**
@@ -1038,6 +1046,7 @@ export class PlanetView {
             uOpacity: { value: r.opacity },
             uGaps: { value: gaps },
             uGapCount: { value: Math.min(r.gaps.length, 4) },
+            uGapPixels: { value: SKY_BODY_MIN_PX },
             uSeed: { value: (info.mass_earth * 7.31) % 13 },
             uLightMode: this.u.uLightMode,
             uSunDir: this.u.uSunDir,
@@ -1919,6 +1928,7 @@ export class PlanetView {
             uRingOpacity: { value: 0 },
             uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
             uRingGapCount: { value: 0 },
+            uRingGapLeast: { value: 0 },
           },
           // Drawn with the star field and the host star (transparent ones
           // come after the surface), over them: a body hides the stars
@@ -2219,7 +2229,8 @@ export class PlanetView {
   private drawSkyBodies(): void {
     const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
     const radiansPerPixel = ((this.camera.fov * Math.PI) / 180) / Math.max(this.renderer.domElement.height, 1);
-    const smallest = 2.5 * this.renderer.getPixelRatio() * radiansPerPixel;
+    const smallest = SKY_BODY_MIN_PX * this.renderer.getPixelRatio() * radiansPerPixel;
+    this.skySmallest = smallest;
     for (const entry of this.skyBodies) {
       const { mesh, body } = entry;
       mesh.visible = visible;
@@ -2263,7 +2274,7 @@ export class PlanetView {
       u['uHaloStrength']!.value = halo?.strength ?? 0;
       u['uSpinAxis']!.value = this.spinAxesOn ? 1 : 0;
       u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, this.spinAxesOn ? SPIN_AXIS_LENGTH + 0.1 : 1);
-      setRingUniforms(u, body.rings ?? null);
+      setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
     }
   }
@@ -2302,6 +2313,7 @@ export class PlanetView {
             uRingOpacity: { value: 0 },
             uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
             uRingGapCount: { value: 0 },
+            uRingGapLeast: { value: 0 },
           },
           transparent: true,
           depthWrite: false,
@@ -2316,7 +2328,7 @@ export class PlanetView {
     // by the globe either way: they may lie behind it.
     ring.renderOrder = mesh.renderOrder + 0.1;
     const u = ring.material.uniforms;
-    setRingUniforms(u, rings);
+    setRingUniforms(u, rings, ringGapLeast(this.skySmallest, place.half));
     // Its centre and radius from the camera: from its place when it has
     // one, else at infinity in its direction (one radius per sin(half)).
     if (body.position && body.radius !== undefined) {
@@ -2430,6 +2442,7 @@ export class PlanetView {
     if (this.rings) {
       this.rings.visible = this.morph > 0.01;
       this.rings.material.uniforms['uFade']!.value = this.morph ** 3;
+      this.rings.material.uniforms['uGapPixels']!.value = SKY_BODY_MIN_PX * this.renderer.getPixelRatio();
     }
     // The stars belong to the globe's sky, like the atmosphere.
     this.stars.visible = this.starsOn && this.morph > 0.01;
@@ -2706,11 +2719,21 @@ function applyPreview(u: Record<string, IUniform>, body: SkyBody): void {
   u['uGlow']!.value = preview?.glow ? 1 : 0;
 }
 
+/**
+ * Half-width a gap in a sky body's rings keeps at least (see
+ * skyRingDensityGlsl), in its radii: `smallest` radians, the half-size of a
+ * small moon's marker, at the distance of a body `half` radians across.
+ */
+function ringGapLeast(smallest: number, half: number): number {
+  return smallest / Math.max(Math.sin(half), 1e-9);
+}
+
 /** Sets a sky body's ring uniforms (see skyRingDensityGlsl) from its rings; none clears them. */
-function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null): void {
+function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null, gapLeast: number): void {
   u['uRingInner']!.value = rings?.inner ?? 0;
   u['uRingOuter']!.value = rings?.outer ?? 0;
   u['uRingOpacity']!.value = rings?.opacity ?? 0;
   u['uRingGapCount']!.value = Math.min(rings?.gaps.length ?? 0, 4);
+  u['uRingGapLeast']!.value = gapLeast;
   (u['uRingGaps']!.value as Vector2[]).forEach((gap, k) => gap.set(...(rings?.gaps[k] ?? [0, 0])));
 }
