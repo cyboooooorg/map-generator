@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { systemStarView } from './systemStar';
+import { ringsKind, systemStarView } from './systemStar';
 
 const system = fixture as unknown as System;
 
@@ -50,5 +50,14 @@ describe('system star view', () => {
     expect(list.map((m) => m.id)).toEqual(['c-1', 'c-2']);
     expect(list[0]!.name).toBe('Io');
     expect(list[0]!.semi_major_axis_km).toBeLessThan(list[1]!.semi_major_axis_km);
+  });
+});
+
+describe('ringsKind', () => {
+  it('sums up a ring system for the star view', () => {
+    const ring = { inner: 1.2, outer: 2.2, gaps: [], opacity: 0.7, colour: [0.8, 0.8, 0.7] as [number, number, number] };
+    expect(ringsKind({ ...ring, bright: true })).toBe('bright');
+    expect(ringsKind({ ...ring, bright: false })).toBe('faint');
+    expect(ringsKind(null)).toBe('none');
   });
 });

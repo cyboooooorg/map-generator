@@ -461,18 +461,18 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
     let effective = (equilibrium.powi(4) + internal.powi(4)).powf(0.25);
     let class = cloud_class(effective);
     let hot = equilibrium > 1000.0;
-    let rings = if hot {
-        if rng.random::<f32>() < 0.1 {
-            Rings::Faint
-        } else {
-            Rings::None
-        }
-    } else {
-        match rng.random::<f32>() {
-            r if r < 0.15 => Rings::Bright,
-            r if r < 0.75 => Rings::Faint,
-            _ => Rings::None,
-        }
+    // The odds of the giant worlds' presets (`[giant] rings`): bright
+    // rings only on cold gas giants, faint ones on most giants, rarely on
+    // hot ones, whose ice would boil away.
+    let [bright, faint] = match (hot, kind) {
+        (true, _) => [0.0, 0.05],
+        (false, GiantKind::Gas) => [0.25, 0.5],
+        (false, GiantKind::Ice) => [0.0, 0.7],
+    };
+    let rings = match rng.random::<f32>() {
+        r if r < bright => Rings::Bright,
+        r if r < bright + faint => Rings::Faint,
+        _ => Rings::None,
     };
     Giant {
         name: crate::naming::planet_letter(rank),
@@ -522,6 +522,7 @@ mod tests {
             giants: GiantsMode::Auto,
             giant_mass_earth: None,
             host: crate::exomoon::HostMode::None,
+            given_rings: None,
         }
     }
 

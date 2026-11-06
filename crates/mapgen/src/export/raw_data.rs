@@ -891,6 +891,11 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         } else {
             crate::exomoon::HostMode::None
         },
+        // A giant keeps the rings stored with it, whether drawn from its
+        // seed or by its system.
+        given_rings: meta.giant.as_ref().map(|g| crate::giant_world::GivenRings {
+            rings: g.rings.clone(),
+        }),
     };
     let l = &meta.layers;
     let infos = [
@@ -1074,6 +1079,7 @@ mod tests {
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: None,
             host: crate::exomoon::HostMode::None,
+            given_rings: None,
         })
         .world;
         let world_dir =

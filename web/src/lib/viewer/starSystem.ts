@@ -2,6 +2,7 @@
 // and the layout of its system.
 import type { Moon } from '../api/types/Moon';
 import type { Giant } from '../api/types/Giant';
+import type { RingSystem } from '../api/types/RingSystem';
 import type { StarInfo } from '../api/types/StarInfo';
 
 /** The surface of a star as the star view draws it (see starSurfaceFragment). */
@@ -34,6 +35,12 @@ export function starSurface(teffK: number, klass: string): StarSurface {
  * ascending node (radians), and its moons. A world's giants have none.
  */
 export type SystemGiant = Giant & {
+  /**
+   * In a planetary system, its rings as the system drew them (edges and
+   * gaps in its radii, opacity, colour), which `rings` sums up; absent when
+   * the system was drawn before rings were.
+   */
+  ringSystem?: RingSystem | null;
   inclination?: number;
   node?: number;
   moons?: readonly Pick<Moon, 'radius_km' | 'inclination_deg' | 'period_days' | 'barycentre_km' | 'semi_major_axis_km'>[];

@@ -310,6 +310,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         giants: crate::giants::GiantsMode::None,
         giant_mass_earth: Some(mass_earth),
         host: HostMode::None,
+        given_rings: None,
     }
 }
 
@@ -341,6 +342,7 @@ mod tests {
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: None,
             host,
+            given_rings: None,
         }
     }
 

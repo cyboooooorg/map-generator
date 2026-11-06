@@ -60,7 +60,12 @@ round planets. Every body has:
 - its **preview**: what the viewer draws before its maps exist (see
   [Spheres before maps](#spheres-before-maps));
 - its full **world parameters** (`WorldParams`): everything its
-  generation needs, fixed when the system is drawn;
+  generation needs, fixed when the system is drawn. A giant's include
+  its rings (`given_rings`), drawn with the system from the stream
+  `RINGS` and its preset's odds, so the star view and the skies have
+  them before its maps exist and its generation keeps them (backlog
+  item 18; absent on systems drawn before, whose giants draw their rings
+  from their seed when generated);
 - whether its maps are **generated**.
 
 The physics of today's draws stays where it is (`star.rs`, `giants.rs`,
