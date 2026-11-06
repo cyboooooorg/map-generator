@@ -9,6 +9,8 @@
   import type { RiverIndex } from '../lib/rivers';
   import { coastline, riverAt, sampleHex, samplePoint } from '../lib/sample';
   import { toasts } from '../lib/toasts.svelte';
+  import { FLOAT_MIN_WIDTH, type FloatAt, INFO_PANEL_BOTTOM, infoPanelAt } from '../lib/dock';
+  import { loadSetting, saveSetting } from '../lib/settings';
 
   interface Props {
     point: LonLat;
@@ -19,10 +21,46 @@
     rivers: RiverIndex | null;
     /** Hex grid shown in the viewer, if any. */
     hexMap: HexMap | null;
+    /** The size of the view the panel floats over, CSS px. */
+    viewWidth: number;
+    viewHeight: number;
     onClose: () => void;
   }
 
-  let { point, meta, layers, rivers, hexMap, onClose }: Props = $props();
+  let { point, meta, layers, rivers, hexMap, viewWidth, viewHeight, onClose }: Props = $props();
+
+  /**
+   * Where the user dragged the panel, kept for every point and session
+   * (null: its default place, see infoPanelAt). Narrow views have no room
+   * to float it: it spans their bottom instead.
+   */
+  let saved = $state(loadSetting<FloatAt | null>('infoPanelAt', null));
+  let height = $state(0);
+  const floating = $derived(viewWidth >= FLOAT_MIN_WIDTH);
+  const at = $derived(infoPanelAt(saved, height, viewWidth, viewHeight));
+
+  /** Drags the panel by its header, as the dock's floating cards. */
+  function drag(event: PointerEvent): void {
+    if (!floating || event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+    // No text selection while dragging.
+    event.preventDefault();
+    const header = event.currentTarget as HTMLElement;
+    header.setPointerCapture(event.pointerId);
+    const start = at;
+    const from = { x: event.clientX, y: event.clientY };
+    const move = (e: PointerEvent) => {
+      saved = infoPanelAt({ x: start.x + e.clientX - from.x, y: start.y + e.clientY - from.y }, height, viewWidth, viewHeight);
+    };
+    const end = () => {
+      header.removeEventListener('pointermove', move);
+      header.removeEventListener('pointerup', end);
+      header.removeEventListener('pointercancel', end);
+      saveSetting('infoPanelAt', saved);
+    };
+    header.addEventListener('pointermove', move);
+    header.addEventListener('pointerup', end);
+    header.addEventListener('pointercancel', end);
+  }
 
   const sample = $derived(layers ? samplePoint(point, meta, layers) : null);
   const river = $derived(rivers && layers ? riverAt(point, rivers, layers.width) : null);
@@ -40,8 +78,17 @@
   }
 </script>
 
-<aside class="info" aria-label={t.info.label}>
-  <header>
+<aside
+  class="info"
+  class:floating
+  aria-label={t.info.label}
+  bind:clientHeight={height}
+  style:left={floating ? `${at.x}px` : null}
+  style:top={floating ? `${at.y}px` : null}
+  style:max-height={floating ? `${Math.max(120, viewHeight - INFO_PANEL_BOTTOM - at.y - 8)}px` : null}
+>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <header onpointerdown={drag}>
     <strong>{formatLonLat(point)}</strong>
     <span class="actions">
       <button class="small" onclick={copyCoordinates} title={t.info.copyHelp}>{t.info.copy}</button>
@@ -130,6 +177,7 @@
 </aside>
 
 <style>
+  /* Narrow views: along the bottom, as wide as the view (below). */
   .info {
     position: absolute;
     left: 12px;
@@ -160,6 +208,20 @@
       clip-path: var(--frame-clip);
       box-shadow: var(--glow);
     }
+  }
+  /* Wide views: floated at `at` (see infoPanelAt), dragged by its header. */
+  .info.floating {
+    bottom: auto;
+    right: auto;
+    z-index: 3;
+  }
+  .floating header {
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }
+  .floating header:active {
+    cursor: grabbing;
   }
   header {
     display: flex;
