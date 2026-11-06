@@ -3,6 +3,7 @@ import type { BodyKind } from "./BodyKind";
 import type { Orbit } from "./Orbit";
 import type { Physical } from "./Physical";
 import type { Preview } from "./Preview";
+import type { RingRole } from "./RingRole";
 import type { Spin } from "./Spin";
 import type { Surroundings } from "./Surroundings";
 import type { WorldParams } from "./WorldParams";
@@ -35,4 +36,9 @@ params: WorldParams,
 /**
  * Whether its maps are in `bodies/<id>/`.
  */
-generated: boolean, };
+generated: boolean, 
+/**
+ * A ring moon's part in its giant's rings (see `crate::rings`); none
+ * for every other body.
+ */
+ring_role?: RingRole, };

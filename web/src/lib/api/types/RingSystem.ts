@@ -23,4 +23,11 @@ colour: [number, number, number],
 /**
  * Bright (broad, icy) or faint (narrow, dusty).
  */
-bright: boolean, };
+bright: boolean, 
+/**
+ * The moon that opens each gap (the same order as `gaps`), by its id
+ * in its planetary system: one that clears it or whose resonance sets
+ * it (see `crate::rings`). Empty on rings drawn otherwise, whose gaps
+ * are tied to no moon.
+ */
+gap_moons?: Array<string>, };

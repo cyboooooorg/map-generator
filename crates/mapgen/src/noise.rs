@@ -148,6 +148,8 @@ pub mod stream {
     /// The rings of a giant of a planetary system, drawn with the system
     /// (see `crate::system`): 32 and 33 are the belts' and the trojans'.
     pub const RINGS: u32 = 34;
+    /// The moons in and next to those rings (see `crate::rings`).
+    pub const RING_MOONS: u32 = 35;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;

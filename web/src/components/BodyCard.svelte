@@ -15,6 +15,7 @@
   import type { LoadedWorld } from '../lib/world.svelte';
   import { MAX_NAME_CHARS } from '../lib/names';
   import { jobs } from '../lib/jobs.svelte';
+  import { ringPart, ringsOf } from '../lib/ringMoons';
 
   interface Props {
     world: LoadedWorld;
@@ -56,6 +57,8 @@
   /** A distance from the parent: AU round the star, km round a planet. */
   const distance = (b: Body) =>
     b.parent ? withUnit(formatInt(b.orbit.semi_major_axis_km), 'km') : formatAu(b.orbit.semi_major_axis_au);
+  const rings = $derived(body ? ringsOf(body) : null);
+  const part = $derived(body ? ringPart(body, planet) : null);
   const hours = (h: number) => (h < 48 ? withUnit(formatUpTo(h, 1), 'h') : formatYear(h / 24));
 
   // Renaming the body shown: empty goes back to its designation.
@@ -186,6 +189,21 @@
           temperature: withUnit(formatInt(Math.round(body.surroundings.equilibrium_k - 273.15)), '°C'),
         })}
       </dd>
+      {#if rings}
+        <dt>{t.card.rings}</dt>
+        <dd>
+          {t.card.ringsValue({
+            kind: rings.bright ? 'bright' : 'faint',
+            inner: formatUpTo(rings.inner, 2),
+            outer: formatUpTo(rings.outer, 2),
+            gaps: rings.gaps.length,
+          })}
+        </dd>
+      {/if}
+      {#if part}
+        <dt>{t.card.ringRole}</dt>
+        <dd>{t.card.ringRoles[part.role]({ gap: withUnit(formatInt(part.gapKm ?? 0), 'km') })}</dd>
+      {/if}
       {#if body.kind === 'planet' && family.length > 0}
         <dt>{t.card.moons}</dt>
         <dd class="moons">

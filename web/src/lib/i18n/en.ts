@@ -104,6 +104,17 @@ export const en = {
     light: 'Light',
     lightValue: (p: { flux: string; temperature: string }) => `${p.flux}× Earth's · equilibrium ${p.temperature}`,
     moons: 'Moons',
+    rings: 'Rings',
+    ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
+      `${p.kind === 'bright' ? 'bright, icy' : 'faint, narrow'} · ${p.inner} to ${p.outer} of its radii` +
+      (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 gap' : `${p.gaps} gaps`}` : ''),
+    ringRole: 'In the rings',
+    ringRoles: {
+      embedded: (p: { gap: string }) => `orbits inside the rings and clears a gap ${p.gap} wide round its orbit`,
+      resonant: (p: { gap: string }) => `orbits outside the rings; its 2:1 resonance opens a gap ${p.gap} wide in them`,
+      edge: () => 'orbits just beyond the rings and keeps their outer edge sharp',
+      shepherd: () => 'one of the pair of shepherd moons that confine the narrow ring',
+    },
     notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
     generating: 'Its maps are being made: see the progress over the view.',
     generate: 'Generate its maps',
@@ -613,6 +624,12 @@ export const en = {
       'hot-jupiter': 'hot Jupiter',
       'rocky-moon': 'rocky moon',
       'icy-moon': 'icy moon',
+    },
+    ringMoonTypes: {
+      embedded: 'ring moon',
+      resonant: 'icy moon, resonant with the rings',
+      edge: 'ring moon',
+      shepherd: 'shepherd moon',
     },
     spinAxes: 'Spin axes',
     spinAxesHelp:
