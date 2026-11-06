@@ -14,13 +14,21 @@ export const MOVING_PIXEL_RATIO = 1.25;
  */
 export const SETTLE_MS = 150;
 
+/** The caps a view draws within (see QualityProfile): settled, and while it moves. */
+export interface PixelRatioCaps {
+  maxPixelRatio: number;
+  movingPixelRatio: number;
+}
+
+const DEFAULT_CAPS: PixelRatioCaps = { maxPixelRatio: MAX_PIXEL_RATIO, movingPixelRatio: MOVING_PIXEL_RATIO };
+
 /** The pixel ratio of the settled view, for a screen of `deviceRatio` (`window.devicePixelRatio`). */
-export function fullPixelRatio(deviceRatio: number): number {
-  return Math.min(deviceRatio, MAX_PIXEL_RATIO);
+export function fullPixelRatio(deviceRatio: number, caps: PixelRatioCaps = DEFAULT_CAPS): number {
+  return Math.min(deviceRatio, caps.maxPixelRatio);
 }
 
 /** The pixel ratio to draw at, for a screen of `deviceRatio`, when the view last moved `msSinceMotion` ago. */
-export function pixelRatio(deviceRatio: number, msSinceMotion: number): number {
-  const full = fullPixelRatio(deviceRatio);
-  return msSinceMotion < SETTLE_MS ? Math.min(full, MOVING_PIXEL_RATIO) : full;
+export function pixelRatio(deviceRatio: number, msSinceMotion: number, caps: PixelRatioCaps = DEFAULT_CAPS): number {
+  const full = fullPixelRatio(deviceRatio, caps);
+  return msSinceMotion < SETTLE_MS ? Math.min(full, caps.movingPixelRatio) : full;
 }

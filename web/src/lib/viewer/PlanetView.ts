@@ -107,6 +107,7 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
+import { PROFILES, type QualityProfile } from './quality';
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
 import type { RingSystem } from '../api/types/RingSystem';
@@ -644,10 +645,17 @@ export class PlanetView {
     return this.shown;
   }
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  /**
+   * `quality` is what the view draws (see lib/viewer/quality.ts), kept for
+   * its life: switching it makes the view again.
+   */
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    readonly quality: QualityProfile = PROFILES.high,
+  ) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, stencil: true });
-    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio));
+    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, stencil: true });
+    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
 
     // The stars, behind everything (see starsVertex).
@@ -1802,8 +1810,8 @@ export class PlanetView {
     if (moving || this.animation) {
       this.lastMotion = now;
     }
-    const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion);
-    const settling = ratio < fullPixelRatio(window.devicePixelRatio);
+    const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion, this.quality);
+    const settling = ratio < fullPixelRatio(window.devicePixelRatio, this.quality);
     if (ratio !== this.renderer.getPixelRatio()) {
       // Resizes the drawing buffer (not the canvas box): redraw it now.
       this.renderer.setPixelRatio(ratio);
@@ -2436,7 +2444,7 @@ export class PlanetView {
     if (!this.animation) {
       // Tiles are picked for the full resolution, whatever the frame's:
       // moving would otherwise swap them for coarser ones and back.
-      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio));
+      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio, this.quality));
     }
     this.renderer.render(this.scene, this.camera);
     this.onSkyPositions?.(this.skyScreenPositions());

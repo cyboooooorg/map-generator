@@ -42,6 +42,7 @@ import type { StarInfo } from '../api/types/StarInfo';
 import type { Belt } from '../api/types/Belt';
 import { SmallBodiesLayer, type SmallBodiesLabels } from './smallBodiesLayer';
 import { fullPixelRatio } from './pixelRatio';
+import { PROFILES, type QualityProfile } from './quality';
 import { axesOnScreen, type ScreenAxis } from './axes';
 import { starsFragment, starsVertex } from './shaders';
 import {
@@ -316,9 +317,16 @@ export class StarView {
   /** Where the distances start being compressed, AU. */
   private from = 1;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio));
+  /**
+   * `quality` is what the view draws (see lib/viewer/quality.ts), kept for
+   * its life: switching it makes the view again.
+   */
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    readonly quality: QualityProfile = PROFILES.high,
+  ) {
+    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias });
+    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
