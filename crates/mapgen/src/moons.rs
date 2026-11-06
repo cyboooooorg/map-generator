@@ -628,8 +628,10 @@ impl MoonSystem {
     /// and Ganymede), rock close in and ice and rock beyond about 9 radii
     /// (Europa's and Ganymede's change); two to five of them, or as many as
     /// asked; on some ice giants a large retrograde moon captured instead
-    /// (Triton, which scattered the regular ones). A hot giant keeps none:
-    /// its Hill sphere is too small and its tides drag them in.
+    /// (Triton, which scattered the regular ones, left closer in). None
+    /// orbits inside the giant's Roche limit or its rings (see
+    /// [`giant_moon_floor_radii`]). A hot giant keeps none: its Hill
+    /// sphere is too small and its tides drag them in.
     fn of_giant(p: &WorldParams, mass_earth: f32) -> Self {
         let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
@@ -654,13 +656,21 @@ impl MoonSystem {
             let weights: Vec<f64> = (0..count).map(|_| rng.uniform(0.3, 1.7)).collect();
             let total: f64 = weights.iter().sum();
             let ice_line = rng.uniform(8.0, 11.0);
+            // A captured giant moon sweeps the outer disk: the regular
+            // moons left keep inside it, but outside the Roche limit and
+            // the rings (only those chains move: an uncaptured chain
+            // starts beyond both).
+            let floor = giant_moon_floor_radii(
+                f64::from(look.density),
+                look.rings.as_ref().map(|r| f64::from(r.outer)),
+            );
+            let base = if captured_triton {
+                (first * 0.5).max(floor / 0.95)
+            } else {
+                first.max(floor / 0.95)
+            };
             for (k, w) in weights.iter().enumerate() {
-                let mut a_radii = first * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
-                // A captured giant moon sweeps the outer disk: the regular
-                // moons left keep inside it.
-                if captured_triton {
-                    a_radii *= 0.5;
-                }
+                let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
                 let a = (a_radii * r_g).min(hill / 3.0);
                 let mass = 1e-4 * m_g * w / total * if captured_triton { 0.02 } else { 1.0 };
                 let icy = a_radii > ice_line || star.equilibrium_k < 60.0;
@@ -721,6 +731,23 @@ impl MoonSystem {
         self.tilt_steadied = effects.stabilised;
         self
     }
+}
+
+/// Density of a giant's icy regular moon, g/cm³ (Ganymede 1.94, Titan
+/// 1.88): the least dense, so the farthest Roche limit.
+const ICY_MOON_DENSITY: f64 = 1.9;
+/// Room kept between a giant's rings and its first regular moon, in the
+/// giant's radii (Mimas, the closest of Saturn's, orbits 0.8 beyond the A
+/// ring; the gap holds only small ring moons).
+const RING_CLEARANCE_RADII: f64 = 0.3;
+
+/// The closest a giant's regular moon may orbit, in the giant's radii:
+/// beyond the fluid Roche limit of an icy moon round a giant of
+/// `giant_density` (g/cm³), `2.44 (ρ_giant / ρ_moon)^(1/3)`, and beyond
+/// its rings' outer edge (`ring_outer`, radii) with some room.
+pub(crate) fn giant_moon_floor_radii(giant_density: f64, ring_outer: Option<f64>) -> f64 {
+    let roche = 2.44 * (giant_density / ICY_MOON_DENSITY).cbrt();
+    ring_outer.map_or(roche, |outer| roche.max(outer + RING_CLEARANCE_RADII))
 }
 
 /// Mass ratio from which a moon stabilises its planet's axial tilt (the
@@ -1324,5 +1351,47 @@ mod tests {
         assert_eq!(asked.moons.len(), 6);
         let hot = MoonSystem::draw(&giant("hot-jupiter", 1, 300.0, 0.04, MoonsMode::Auto)).unwrap();
         assert!(hot.moons.is_empty());
+    }
+
+    #[test]
+    fn giant_moons_keep_outside_the_roche_limit_and_the_rings() {
+        let mut checked = 0;
+        for (preset, mass, orbit_au) in [("ice-giant", 17.0, 20.0), ("gas-giant", 3000.0, 5.2)] {
+            for seed in 0..200 {
+                let mut p = params(seed, 40_075.0);
+                p.planet = crate::preset::Preset::load(preset).unwrap();
+                p.giant_mass_earth = Some(mass);
+                p.orbit_au = orbit_au;
+                p.circumference_km = crate::giant_world::radius_earth(&p, mass) * 40_075.0;
+                let r_g = f64::from(p.circumference_km) / (2.0 * PI);
+                let look = crate::giant_world::Look::draw(&p, mass).info;
+                let floor = giant_moon_floor_radii(
+                    f64::from(look.density),
+                    look.rings.as_ref().map(|r| f64::from(r.outer)),
+                );
+                let system = MoonSystem::draw(&p).unwrap();
+                for moon in &system.moons {
+                    let periapsis =
+                        f64::from(moon.semi_major_axis_km) * (1.0 - f64::from(moon.eccentricity));
+                    assert!(
+                        periapsis / r_g > floor * 0.99,
+                        "{preset} seed {seed}: {} < {floor}",
+                        periapsis / r_g
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 600, "{checked}");
+    }
+
+    #[test]
+    fn the_moon_floor_follows_the_giants_density_and_rings() {
+        // Saturn: the Roche limit of ice at 1.9 g/cm³ is about 1.75 R,
+        // inside its rings, which set the floor instead.
+        assert!((giant_moon_floor_radii(0.69, None) - 1.74).abs() < 0.02);
+        assert!((giant_moon_floor_radii(0.69, Some(2.27)) - 2.57).abs() < 1e-9);
+        // Neptune: no bright rings, the Roche limit of an icy moon.
+        assert!((giant_moon_floor_radii(1.64, None) - 2.32).abs() < 0.02);
     }
 }
