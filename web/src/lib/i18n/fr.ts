@@ -39,6 +39,15 @@ export const fr: Messages = {
   language: {
     label: 'Langue',
   },
+  quality: {
+    label: 'Qualité du rendu',
+    names: { high: 'Haute', light: 'Légère' },
+    auto: (p) => `Auto (${p.detected.toLowerCase()})`,
+    help: (p) =>
+      `Ce que dessinent les vues 3D. La qualité légère dessine moins de pixels, sans anticrénelage, avec un globe plus grossier, un simple halo pour l’atmosphère et moins d’images par seconde${S}: pour un ordinateur ou une machine virtuelle sans carte graphique, où le navigateur dessine avec le processeur. Les mondes ne changent pas. La changer recharge la page. Détectée${S}: ${p.detected} (${p.renderer}).`,
+    unknownRenderer: 'moteur de rendu inconnu',
+    lightNotice: `Aucune carte graphique détectée${S}: les vues 3D sont en qualité légère. Le menu de qualité en haut permet de la changer.`,
+  },
   format: {
     unitSpace: S,
     millionKm2: `M${S}km²`,

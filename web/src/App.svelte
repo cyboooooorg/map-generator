@@ -3,6 +3,7 @@
   import GenerateForm from './components/GenerateForm.svelte';
   import JobsIndicator from './components/JobsIndicator.svelte';
   import LanguageSelect from './components/LanguageSelect.svelte';
+  import QualitySelect from './components/QualitySelect.svelte';
   import ThemeSelect from './components/ThemeSelect.svelte';
   import SystemOrrery from './components/SystemOrrery.svelte';
   import Toasts from './components/Toasts.svelte';
@@ -23,6 +24,7 @@
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { decodeSystems, decodeView, systemHash, type ViewLink } from './lib/link';
   import { loadSetting, saveSetting } from './lib/settings';
+  import { detectRenderer, loadQualityChoice } from './lib/viewer/quality';
   import { stepWorld } from './lib/shortcuts';
   import { toasts } from './lib/toasts.svelte';
   import type { LinkedDisplay } from './lib/display';
@@ -198,6 +200,12 @@
 
   onMount(() => {
     void start();
+    // Light quality picked for a browser drawing on its processor: said
+    // once, the quality menu telling it again (see lib/viewer/quality.ts).
+    if (loadQualityChoice() === 'auto' && detectRenderer().software && !loadSetting('qualityNotice', false)) {
+      toasts.show(t.quality.lightNotice, { ms: 12000 });
+      saveSetting('qualityNotice', true);
+    }
     window.addEventListener('hashchange', applyHash);
     window.addEventListener('popstate', applyHash);
     window.addEventListener('pagehide', flushDeletes);
@@ -474,6 +482,7 @@
       <h1>{t.app.title}</h1>
       <span class="spacer"></span>
       <JobsIndicator onOpen={select} />
+      <QualitySelect />
       <ThemeSelect />
       <LanguageSelect />
     </header>
@@ -521,6 +530,7 @@
         <button onclick={() => (compareId = null)}>{t.app.close}</button>
       {/if}
       <JobsIndicator onOpen={select} />
+      <QualitySelect />
       <ThemeSelect />
       <LanguageSelect />
     </header>

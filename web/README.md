@@ -102,6 +102,35 @@ On the GPU, a pane holds the data layers as RGBA half floats (8 bytes per pixel)
 
 For everyday use, run the whole app in Docker instead: see "Web app" in the repository README.
 
+## Rendering quality
+
+Without a graphics card (a virtual machine, a remote desktop, a server),
+the browser runs WebGL on the processor (SwiftShader in Chrome, llvmpipe
+in Firefox on Linux, the Microsoft Basic Render Driver on Windows), and
+the full 3D views crawl. The header's quality picker (`QualitySelect.svelte`,
+hidden on screens narrower than 480 px) chooses what the views draw:
+
+- **Auto** (the default): light quality when the browser draws on the
+  processor, high otherwise. The renderer is probed once
+  (`detectRenderer` in `lib/viewer/quality.ts`): its name
+  (`WEBGL_debug_renderer_info`), and whether the browser refuses a
+  context without a major performance caveat. The first time auto
+  picks light quality, a notice says so. The picker's tooltip gives the
+  renderer detected.
+- **High**: the views as described above.
+- **Light**: the same worlds, drawn for less:
+  - fewer pixels (0.75 per CSS pixel when still, 0.5 while moving, scaled
+    up by the browser, against up to 2);
+  - no antialiasing;
+  - 20 frames per second at most;
+  - no camera inertia, which keeps drawing frames after the pointer
+    stops.
+
+The choice is remembered (`mapgen.quality`). A view takes its quality
+when it is made (`QualityProfile`, in `lib/viewer/quality.ts`), as
+antialiasing is fixed with the WebGL context, so changing it reloads the
+page; the address keeps the system and body shown.
+
 ## Themes
 
 The header's theme picker restyles the interface: **Default** (the original look), **Holo HUD** (cyan, cut corners, Orbitron and Rajdhani), **Orbital station** (amber, bracket corners, Exo 2), **Cyberpunk** (neon magenta and yellow, diagonal cuts, Audiowide and Chakra Petch, a short glitch on hovered buttons, off with reduced motion) and **Military** (phosphor green, scan lines, Share Tech Mono). The choice is remembered in the browser (`mapgen.theme`, Default when unknown or without storage).

@@ -107,6 +107,7 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
+import { PROFILES, type QualityProfile } from './quality';
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
 import type { RingSystem } from '../api/types/RingSystem';
@@ -501,6 +502,8 @@ export class PlanetView {
   /** Counts setTexture calls: only the latest one may set the map. */
   private textureRequest = 0;
   private disposed = false;
+  /** When the last frame was drawn (requestAnimationFrame's clock), for the frame cap. */
+  private lastDrawn = -Infinity;
   private atmosphereOn = true;
   /** Whether the star field is shown. */
   private starsOn = true;
@@ -644,10 +647,17 @@ export class PlanetView {
     return this.shown;
   }
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  /**
+   * `quality` is what the view draws (see lib/viewer/quality.ts), kept for
+   * its life: switching it reloads the page.
+   */
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    readonly quality: QualityProfile = PROFILES.high,
+  ) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, stencil: true });
-    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio));
+    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, stencil: true });
+    this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
 
     // The stars, behind everything (see starsVertex).
@@ -825,7 +835,9 @@ export class PlanetView {
     );
 
     this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.enableDamping = true;
+    // Without inertia in the light profile: it keeps drawing frames after
+    // the pointer stops.
+    this.controls.enableDamping = quality.damping;
     this.applyModeControls();
     this.camera.position.set(0, 0, GLOBE_DISTANCE);
 
@@ -1761,6 +1773,13 @@ export class PlanetView {
     if (!this.shown) {
       return;
     }
+    // At most the profile's frames per second (see QualityProfile.maxFps):
+    // too early, the frame waits for the next one, its changes pending.
+    if (this.quality.maxFps !== null && now - this.lastDrawn < 1000 / this.quality.maxFps - 2) {
+      this.frame = requestAnimationFrame(this.render);
+      return;
+    }
+    this.lastDrawn = now;
     // While the camera follows the morph, it is placed here: the controls
     // (whose distance limits are those of the mode reached) wait for the end.
     let following = false;
@@ -1802,8 +1821,8 @@ export class PlanetView {
     if (moving || this.animation) {
       this.lastMotion = now;
     }
-    const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion);
-    const settling = ratio < fullPixelRatio(window.devicePixelRatio);
+    const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion, this.quality);
+    const settling = ratio < fullPixelRatio(window.devicePixelRatio, this.quality);
     if (ratio !== this.renderer.getPixelRatio()) {
       // Resizes the drawing buffer (not the canvas box): redraw it now.
       this.renderer.setPixelRatio(ratio);
@@ -2436,7 +2455,7 @@ export class PlanetView {
     if (!this.animation) {
       // Tiles are picked for the full resolution, whatever the frame's:
       // moving would otherwise swap them for coarser ones and back.
-      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio));
+      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio, this.quality));
     }
     this.renderer.render(this.scene, this.camera);
     this.onSkyPositions?.(this.skyScreenPositions());

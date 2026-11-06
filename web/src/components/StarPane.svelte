@@ -24,6 +24,7 @@
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
+  import { currentProfile } from '../lib/viewer/quality';
 
   interface Props {
     star: StarInfo;
@@ -178,7 +179,7 @@
   let view = $state<StarView | null>(null);
 
   onMount(() => {
-    const created = new StarView(canvas);
+    const created = new StarView(canvas, currentProfile());
     created.setOverlayColours(overlayColours());
     created.onAxes = (next) => (axes = next);
     const stopTheme = onThemeChange(() => created.setOverlayColours(overlayColours()));
