@@ -861,7 +861,8 @@
   .unpin-all {
     position: absolute;
     top: 12px;
-    right: 12px;
+    /* Left of the axes gizmo. */
+    right: 88px;
     pointer-events: auto;
     font-size: 0.8rem;
   }

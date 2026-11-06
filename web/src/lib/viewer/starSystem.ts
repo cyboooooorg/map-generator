@@ -194,6 +194,39 @@ export function hillRadiusAu(orbitAu: number, eccentricity: number, massEarth: n
   return orbitAu * (1 - eccentricity) * Math.cbrt(massEarth / EARTH_PER_SUN / (3 * Math.max(starMass, 1e-6)));
 }
 
+/**
+ * The radius a planet's Hill sphere is drawn with in a planetary system's
+ * view, and whether that is to scale: `trueRadius` (its Hill radius on the
+ * view's scale), unless that is smaller than the planet's marker
+ * (`markerSize`) or than its outermost moon's ring (`moonReach`, 0 for
+ * none), both drawn larger than to scale: then just outside those.
+ */
+export function hillShownRadius(trueRadius: number, markerSize: number, moonReach: number): { radius: number; toScale: boolean } {
+  const floor = Math.max(markerSize * 1.6, moonReach * 1.15);
+  return trueRadius >= floor ? { radius: trueRadius, toScale: true } : { radius: floor, toScale: false };
+}
+
+/**
+ * A sphere's grid of `radius`, as line segments (pairs of points): its
+ * equator and two parallels each side, and six meridians.
+ */
+export function sphereGrid(radius: number, steps = 64): [number, number, number][] {
+  const points: [number, number, number][] = [];
+  const circle = (at: (t: number) => [number, number, number]) => {
+    for (let i = 0; i < steps; i++) points.push(at((i / steps) * 2 * Math.PI), at(((i + 1) / steps) * 2 * Math.PI));
+  };
+  for (const lat of [-60, -30, 0, 30, 60]) {
+    const y = radius * Math.sin((lat * Math.PI) / 180);
+    const r = radius * Math.cos((lat * Math.PI) / 180);
+    circle((t) => [r * Math.cos(t), y, -r * Math.sin(t)]);
+  }
+  for (let m = 0; m < 6; m++) {
+    const lon = (m / 6) * Math.PI;
+    circle((t) => [radius * Math.cos(t) * Math.cos(lon), radius * Math.sin(t), -radius * Math.cos(t) * Math.sin(lon)]);
+  }
+  return points;
+}
+
 /** The star's pull on a planet `distanceAu` from it, m/s² (G M / r², `mass` in Suns): the Sun's on Earth is 5.93 mm/s². */
 export function starGravity(mass: number, distanceAu: number): number {
   return (5.93e-3 * mass) / (distanceAu * distanceAu);

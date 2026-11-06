@@ -55,7 +55,7 @@ import {
   type IUniform,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
+import { BodyGuides, type GuidePoints, labelIndex, type HostGuide } from './bodyGuides';
 import type { HexMap } from '../api/types/HexMap';
 import {
   greatCircleArc,
@@ -2041,8 +2041,9 @@ export class PlanetView {
       if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
-    // A point near the globe: hidden when the globe lies in front of it.
-    const near = (point: Vector3 | null): { x: number; y: number } | null => {
+    // A point near the globe: hidden when the globe lies in front of it,
+    // or when it is off the screen by more than `margin` (clip space).
+    const near = (point: Vector3 | null, margin = 1.2): { x: number; y: number } | null => {
       if (!point || this.morph < 0.99) return null;
       const to = point.clone().sub(camera);
       const distance = to.length();
@@ -2052,16 +2053,20 @@ export class PlanetView {
       const disc = b * b - (camera.lengthSq() - 1);
       if (disc > 0 && -b - Math.sqrt(disc) < distance - 1e-3) return null;
       const p = point.clone().project(this.camera);
-      if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
+      if (Math.abs(p.x) > margin || Math.abs(p.y) > margin) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
     const points = this.guides.points();
+    // The host's distance goes on the part of its line in view, wherever
+    // that is as the camera moves.
+    const hostLine = points.host?.map((point) => near(point, 0.9)) ?? [];
+    const hostAt = hostLine[labelIndex(hostLine.map((p) => p !== null))] ?? null;
     return {
       bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),
       star: at(
         this.starPlace ? this.starPlace.position.clone().sub(this.camera.position) : this.u.uSunDir.value,
       ),
-      guides: { spin: near(points.spin), host: near(points.host), pull: near(points.pull), velocity: near(points.velocity) },
+      guides: { spin: near(points.spin), host: hostAt, pull: near(points.pull), velocity: near(points.velocity) },
     };
   }
 
