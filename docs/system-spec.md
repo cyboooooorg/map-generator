@@ -220,7 +220,11 @@ thick: an embedded moonlet's inclination is drawn up to 0.001° (Pan:
 0.0001°, Daphnis: 0.0036°), an edge moon's up to 0.005° (Atlas: 0.003°),
 so that from them the rings lie on the horizon; shepherds and resonant
 moons, outside the rings, up to 0.05° (Prometheus: 0.008°, Pandora:
-0.05°). Within bright rings, gaps never overlap: a moonlet whose gap the
+0.05°). Their eccentricities keep them as close: an embedded moonlet's
+up to 5 × 10⁻⁵, a swing of a few km inside its gap (Pan: 1.4 × 10⁻⁵,
+Daphnis: 3.3 × 10⁻⁵), an edge moon's up to 1.5 × 10⁻³ (Atlas: 1.2 ×
+10⁻³); shepherds and resonant moons draw 2 × 10⁻⁴ to 2.2 × 10⁻³
+(Prometheus: 2.2 × 10⁻³). Within bright rings, gaps never overlap: a moonlet whose gap the
 resonance gap would cover is not kept.
 
 Bright rings end at the fluid Roche limit of their icy particles (0.5 to
