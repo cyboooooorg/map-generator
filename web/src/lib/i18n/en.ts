@@ -682,7 +682,7 @@ export const en = {
     moonSunSpin: ({ hours }: { hours: string }) =>
       `This captured moon is not locked: it spins in ${hours} h, its planet rising and setting`,
     atmosphere: 'Atmosphere',
-    lockedSun: 'Tidally locked: the star stays above the centre of the map, with no seasons',
+    lockedSun: 'Tidally locked: the star stays above the centre of the map on average, with no seasons',
     starLight: 'Star light',
     starLightHelp:
       "The planet and its sky lit by the colour of their star's light, as an eye used to the Sun would see them; off, a white light",

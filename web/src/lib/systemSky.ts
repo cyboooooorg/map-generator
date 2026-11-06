@@ -8,10 +8,14 @@
 // axis (the plane of the planets near its equator). A planet's orbit is
 // placed by its node, inclination and periapsis, its position by Kepler's
 // equation from its mean anomaly at the system's epoch; a moon's round its
-// planet, in the planet's equatorial plane. A body's spin axis leans from
+// planet, in the planet's equatorial plane, which (like its node, counted
+// from the planet's equinox direction) is held fixed against the stars
+// while the planet turns. A body's spin axis leans from
 // its orbit's normal by its axial tilt, towards a fixed direction (the
-// node line); it turns once per `spin.period_hours`, a locked body keeping
-// its longitude 180° towards what it orbits.
+// node line); it turns once per `spin.period_hours`, a locked body at a
+// steady pace, its longitude 180° towards what it orbits on average: its
+// host swings in its sky by the libration (true minus mean anomaly, about
+// +-2e radians).
 import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
@@ -55,12 +59,8 @@ function orbitPlane(orbit: Orbit, parent: Axes): Plane {
   return { node, normal, third: cross(normal, node) };
 }
 
-/**
- * A body's place on its orbit after `days`, km, from its parent's centre:
- * the true anomaly of Kepler's equation, from the argument of periapsis,
- * prograde (from the node towards `third`).
- */
-export function orbitPosition(orbit: Orbit, plane: Plane, days: number): Vec3 {
+/** The mean, true and eccentric anomalies of an orbit after `days`, radians (Kepler's equation). */
+function anomalies(orbit: Orbit, days: number): { mean: number; true: number; eccentric: number } {
   const e = Math.min(Math.max(orbit.eccentricity, 0), 0.95);
   const mean = orbit.mean_anomaly_deg * DEG + (2 * Math.PI * days) / Math.max(orbit.period_days, 1e-6);
   let eccentric = e < 0.8 ? mean : Math.PI;
@@ -68,8 +68,31 @@ export function orbitPosition(orbit: Orbit, plane: Plane, days: number): Vec3 {
     eccentric -= (eccentric - e * Math.sin(eccentric) - mean) / (1 - e * Math.cos(eccentric));
   }
   const nu = 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(eccentric / 2), Math.sqrt(1 - e) * Math.cos(eccentric / 2));
+  return { mean, true: nu, eccentric };
+}
+
+/**
+ * A body's place on its orbit after `days`, km, from its parent's centre:
+ * the true anomaly of Kepler's equation, from the argument of periapsis,
+ * prograde (from the node towards `third`).
+ */
+export function orbitPosition(orbit: Orbit, plane: Plane, days: number): Vec3 {
+  const e = Math.min(Math.max(orbit.eccentricity, 0), 0.95);
+  const { true: nu, eccentric } = anomalies(orbit, days);
   const r = orbit.semi_major_axis_km * (1 - e * Math.cos(eccentric));
   return pointOnOrbit(plane, orbit.periapsis_deg * DEG + nu, r);
+}
+
+/**
+ * The libration of a body locked to what it orbits after `days`, radians in
+ * (-pi, pi]: the true anomaly minus the mean anomaly. A locked body turns at
+ * the mean pace, facing the point of its orbit at the mean anomaly, so its
+ * host is turned from that face by this angle, positive when the host is
+ * ahead of the mean direction in the sense of the orbit.
+ */
+export function libration(orbit: Orbit, days: number): number {
+  const { mean, true: nu } = anomalies(orbit, days);
+  return Math.atan2(Math.sin(nu - mean), Math.cos(nu - mean));
 }
 
 /** The point of an orbit's plane at angle `angle` from its node, `r` km out. */
@@ -83,6 +106,12 @@ export interface Placement {
   centre: Vec3;
   /** Its own axes (its map's frame): x, y (its spin axis), z. */
   axes: Axes;
+  /**
+   * Its equatorial frame, not turning with its day: `[cross(y, start), y,
+   * start]`, `y` its spin axis and `start` its equinox direction (its orbit's
+   * node line projected on its equator). The frame its moons' orbits sit in.
+   */
+  equator: Axes;
   /** The plane of its orbit. */
   plane: Plane;
 }
@@ -105,25 +134,24 @@ export function placeSystem(
     if (known) return known;
     const parent = body.parent ? byId.get(body.parent) : undefined;
     const parentPlace = parent ? place(parent) : null;
-    const parentAxes = parentPlace?.axes ?? IDENTITY_AXES;
-    const plane = orbitPlane(body.orbit, parentAxes);
+    const plane = orbitPlane(body.orbit, parentPlace?.equator ?? IDENTITY_AXES);
     const centre = add(parentPlace?.centre ?? [0, 0, 0], orbitPosition(body.orbit, plane, days));
     // Its axis leans from its orbit's normal by its tilt, about the node line.
     const y = unit(rotate(plane.normal, plane.node, body.spin.axial_tilt_deg * DEG));
     // Its longitude 0 at the start, then turning on itself; a locked body
-    // keeps its longitude 180° towards what it orbits.
+    // turns steadily, its longitude 180° towards the point of its orbit at
+    // the mean anomaly (its host is off that by the libration).
+    const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
     let z: Vec3;
-    const towardsParent = sub(parentPlace?.centre ?? [0, 0, 0], centre);
     if (body.spin.locked) {
-      z = unit(scale(towardsParent, -1));
+      z = pointOnOrbit(plane, body.orbit.periapsis_deg * DEG + anomalies(body.orbit, days).mean, 1);
     } else {
-      const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
       const turns = (days * 24) / Math.max(body.spin.period_hours, 1e-6);
       const offset = turned && turned.id === body.id ? turned.spinOffset : 0;
       z = rotate(start, y, 2 * Math.PI * (turns - Math.floor(turns)) + offset);
     }
     z = unit(sub(z, scale(y, dot(z, y))));
-    const placement = { centre, axes: [cross(y, z), y, z] as Axes, plane };
+    const placement = { centre, axes: [cross(y, z), y, z] as Axes, equator: [cross(y, start), y, start] as Axes, plane };
     placements.set(body.id, placement);
     return placement;
   };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
+import { libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
 import type { Vec3 } from './skyBodies';
 
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
@@ -49,14 +49,104 @@ describe('system sky', () => {
     expect(sky.bodies[0]!.preview).toBeDefined();
   });
 
+  it('keeps a moon’s orbit fixed against the stars while its planet turns', () => {
+    const day = system.bodies.find((x) => x.id === 'c')!.spin.period_hours / 24;
+    const period = system.bodies.find((x) => x.id === 'c-1')!.orbit.period_days;
+    const from = (days: number) => {
+      const p = placeSystem(system, days);
+      return [0, 1, 2].map((i) => p.get('c-1')!.centre[i]! - p.get('c')!.centre[i]!) as Vec3;
+    };
+    const a = from(0);
+    const b = from(day / 4);
+    const angle = Math.acos((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (length(a) * length(b))) / (Math.PI / 180);
+    // Only its own orbit moves it: about 15.6°, not the 106° it moved when its plane turned with c
+    // (within 1.5°: its orbit is slightly eccentric).
+    expect(Math.abs(angle - (360 * (day / 4)) / period)).toBeLessThan(1.5);
+  });
+
+  it('lays a moon’s orbit in its planet’s tilted equator, still against the stars', () => {
+    const normal = (days: number) => placeSystem(system, days).get('c-1')!.plane.normal;
+    const axis = placeSystem(system, 0).get('c')!.axes[1];
+    // c-1 is inclined 0.15° to c's equator, which c's 7.8° tilt leans.
+    expect(normal(0)[0] * axis[0] + normal(0)[1] * axis[1] + normal(0)[2] * axis[2]).toBeGreaterThan(Math.cos((0.2 * Math.PI) / 180));
+    normal(0).forEach((v, i) => expect(v).toBeCloseTo(normal(0.3)[i]!, 9));
+  });
+
+  it('brings the sun round a locked moon once per orbit', () => {
+    const period = system.bodies.find((x) => x.id === 'c-1')!.orbit.period_days;
+    const lon = (days: number) => {
+      const s = systemSky(system, 'c-1', days, textures).sun;
+      return Math.atan2(s[0], s[2]);
+    };
+    let turned = (lon(period / 4) - lon(0)) / (Math.PI / 180);
+    turned = ((turned % 360) + 540) % 360 - 180;
+    // A quarter turn in a quarter orbit (within 2°: eccentricity and the planet's year).
+    expect(Math.abs(Math.abs(turned) - 90)).toBeLessThan(2);
+  });
+
   it('keeps a locked moon facing its giant, which it sees on its own orbit', () => {
     const sky = systemSky(system, 'c-1', 3, textures);
     const giant = sky.bodies[sky.ids.indexOf('c')]!;
-    giant.direction.forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 6));
+    expect(Math.acos(-giant.direction[2]!)).toBeLessThan(2.5 * 0.0085);
     // The planets' orbits and the giant's moons'; its own passes through it.
     expect(sky.orbits).toHaveLength(4);
     const own = sky.orbits[2]!;
     expect(Math.min(...own.map(length))).toBeLessThan(1);
+  });
+
+  it('turns a locked body steadily, its host swinging by the libration', () => {
+    const eccentric = structuredClone(system);
+    const moon = eccentric.bodies.find((x) => x.id === 'c-1')!;
+    moon.orbit.eccentricity = 0.2;
+    const period = moon.orbit.period_days;
+    for (const days of [0, period / 8, period / 3]) {
+      const sky = systemSky(eccentric, 'c-1', days, textures);
+      const d = sky.bodies[sky.ids.indexOf('c')]!.direction;
+      // The giant's longitude from the face turned to it (-z), in the sense of the orbit.
+      const swing = Math.atan2(-d[0], -d[2]);
+      expect(Math.abs(swing)).toBeCloseTo(Math.abs(libration(moon.orbit, days)), 6);
+      expect(Math.abs(swing)).toBeLessThan(2.5 * 0.2);
+    }
+  });
+
+  it('faces its host exactly on a circular orbit, and at periapsis', () => {
+    const giantFrom = (s: System, days: number) => { const sky = systemSky(s, 'c-1', days, textures); return sky.bodies[sky.ids.indexOf('c')]!.direction; };
+    const circular = structuredClone(system);
+    circular.bodies.find((x) => x.id === 'c-1')!.orbit.eccentricity = 0;
+    giantFrom(circular, 1.3).forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 6));
+    const eccentric = structuredClone(system);
+    const orbit = eccentric.bodies.find((x) => x.id === 'c-1')!.orbit;
+    orbit.eccentricity = 0.2;
+    // The first periapsis after the epoch: mean anomaly 0.
+    const periapsis = (((360 - orbit.mean_anomaly_deg) % 360) / 360) * orbit.period_days;
+    expect(libration(orbit, periapsis)).toBeCloseTo(0, 6);
+    giantFrom(eccentric, periapsis).forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 4));
+  });
+
+  it('gives the libration its sign: ahead after periapsis, behind before it', () => {
+    const eccentric = structuredClone(system);
+    const orbit = eccentric.bodies.find((x) => x.id === 'c-1')!.orbit;
+    orbit.eccentricity = 0.2;
+    const periapsis = (((360 - orbit.mean_anomaly_deg) % 360) / 360) * orbit.period_days;
+    expect(libration(orbit, periapsis + orbit.period_days / 8)).toBeGreaterThan(0);
+    expect(libration(orbit, periapsis + (5 * orbit.period_days) / 8)).toBeLessThan(0);
+  });
+
+  it('librates a retrograde moon and a planet locked to its star too', () => {
+    const odd = structuredClone(system);
+    odd.bodies.find((x) => x.id === 'c-2')!.orbit.inclination_deg = 150;
+    odd.bodies.find((x) => x.id === 'c-2')!.orbit.eccentricity = 0.1;
+    const b = odd.bodies.find((x) => x.id === 'b')!;
+    b.spin.locked = true;
+    // Untilted, so that the host's longitude is its angle in the orbit's plane.
+    b.spin.axial_tilt_deg = 0;
+    for (const [id, host] of [['c-2', 'c'], ['b', null]] as const) {
+      const body = odd.bodies.find((x) => x.id === id)!;
+      const days = body.orbit.period_days / 5;
+      const sky = systemSky(odd, id, days, textures);
+      const d = host ? sky.bodies[sky.ids.indexOf(host)]!.direction : sky.sun;
+      expect(Math.abs(Math.atan2(-d[0], -d[2]))).toBeCloseTo(Math.abs(libration(body.orbit, days)), 6);
+    }
   });
 
   it('turns a body on itself at its own pace', () => {

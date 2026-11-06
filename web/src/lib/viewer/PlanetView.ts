@@ -1640,7 +1640,7 @@ export class PlanetView {
   /**
    * Turns the star field about the spin axis by `radians`: a moon locked to
    * its planet turns once per orbit against the stars, its planet fixed in
-   * its sky.
+   * its sky on average (it swings by the libration).
    */
   setStarsTurn(radians: number, follow = false): void {
     // Not wrapped: a body turning more than half a turn between two frames
