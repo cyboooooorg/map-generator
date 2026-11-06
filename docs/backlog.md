@@ -536,3 +536,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   (`given_rings` in a giant's `WorldParams`, stream `RINGS`), shown in
   the star view before generation; a rocky world's giant neighbours draw
   their rings with the presets' odds.
+- **Done (2026-11-06):** ring moons (`rings.rs`, stream `RING_MOONS`):
+  bright rings ending at the Roche limit of their particles, gaps
+  cleared by embedded moonlets or opened by a moon's 2:1 resonance, edge
+  moons and shepherd pairs as `icy-moon` bodies with a `ring_role`, shown
+  in the body menu and on the cards.

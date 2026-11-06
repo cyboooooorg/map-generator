@@ -32,6 +32,7 @@ pub mod noise;
 pub mod plates;
 pub mod preset;
 pub mod request;
+pub mod rings;
 pub mod rivers;
 pub mod star;
 pub mod system;

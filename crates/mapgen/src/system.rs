@@ -187,6 +187,11 @@ pub struct Body {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub trojans: Option<crate::belts::Trojans>,
+    /// A ring moon's part in its giant's rings (see `crate::rings`); none
+    /// for every other body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub ring_role: Option<crate::rings::RingRole>,
 }
 
 /// An orbit, round the star (a planet) or round its planet (a moon).
@@ -898,12 +903,20 @@ fn assemble(
             }
             _ => planet_params(slot, star_code, metallicity, width, height, planet_seed),
         };
-        let params = if is_giant(&slot.body_type) {
+        let mut params = if is_giant(&slot.body_type) {
             with_system_rings(params)
         } else {
             params
         };
+        // The moons its rings shape (none for the giant a world of the
+        // request orbits: its moons are that world's chain).
+        let ring_moons = if is_giant(&slot.body_type) && !at_focus {
+            shape_rings(&mut params, slot, star_code)
+        } else {
+            Vec::new()
+        };
         let planet = planet_body(&id, &planet_designation, slot, &params, star_code);
+        let planet_index = bodies.len();
         if at_focus && focus.as_ref().is_some_and(|f| f.host.is_none()) {
             focus_id = Some(id.clone());
         }
@@ -925,8 +938,31 @@ fn assemble(
         } else {
             rocky_moons(&params)
         };
-        for (k, (moon_type, moon_params, orbit, physical, spin)) in moons.into_iter().enumerate() {
+        // Nearest first, the ring moons among the others.
+        let giant_kg = slot.mass_earth * EARTH_KG;
+        let mut moons: Vec<(MoonParts, Option<&crate::rings::RingMoon>)> = moons
+            .into_iter()
+            .map(|m| (m, None))
+            .chain(
+                ring_moons
+                    .iter()
+                    .map(|r| (ring_moon_parts(&params, r, giant_kg), Some(r))),
+            )
+            .collect();
+        moons.sort_by(|a, b| {
+            a.0.2
+                .semi_major_axis_km
+                .total_cmp(&b.0.2.semi_major_axis_km)
+        });
+        let mut gap_moons =
+            vec![String::new(); ring_moons.iter().filter(|r| r.gap.is_some()).count()];
+        for (k, ((moon_type, moon_params, orbit, physical, spin), ring)) in
+            moons.into_iter().enumerate()
+        {
             let moon_id = format!("{id}-{}", k + 1);
+            if let Some(gap) = ring.and_then(|r| r.gap) {
+                gap_moons[gap] = moon_id.clone();
+            }
             if at_focus
                 && focus
                     .as_ref()
@@ -949,7 +985,17 @@ fn assemble(
                 params: moon_params,
                 generated: false,
                 trojans: None,
+                ring_role: ring.map(|r| r.role),
             });
+        }
+        if let Some(rings) = bodies[planet_index]
+            .params
+            .given_rings
+            .as_mut()
+            .and_then(|g| g.rings.as_mut())
+            && !gap_moons.is_empty()
+        {
+            rings.gap_moons = gap_moons;
         }
     }
     // Its small bodies, from the planets as placed: belts and trojans, and
@@ -1122,6 +1168,7 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
         params: params.clone(),
         generated: false,
         trojans: None,
+        ring_role: None,
     }
 }
 
@@ -1210,6 +1257,78 @@ fn with_system_rings(mut params: WorldParams) -> WorldParams {
         rings: crate::giant_world::draw_rings(&mut rng, odds),
     });
     params
+}
+
+/// Shapes the rings the system drew for the giant of `params` (see
+/// [`crate::rings::shape`]): their Roche edge and their gaps, kept in its
+/// params, and the moons that make them, which this returns. A giant too
+/// hot or with too small a Hill sphere for regular moons (see
+/// [`regular_moons`]) keeps its rings without moons.
+fn shape_rings(params: &mut WorldParams, slot: &Slot, star: f32) -> Vec<crate::rings::RingMoon> {
+    let Some(rings) = params.given_rings.as_mut().and_then(|g| g.rings.take()) else {
+        return Vec::new();
+    };
+    let info = StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32);
+    let mass_kg = slot.mass_earth * EARTH_KG;
+    let radius_m = f64::from(params.circumference_km) * 1000.0 / (2.0 * PI);
+    let density = mass_kg / (4.0 / 3.0 * PI * radius_m.powi(3)) / 1000.0;
+    let hill = slot.orbit_au
+        * (1.0 - slot.eccentricity)
+        * 1.496e11
+        * (mass_kg / (3.0 * f64::from(info.mass) * 1.989e30)).cbrt()
+        / radius_m;
+    let moons = info.equilibrium_k <= 1000.0 && hill / 3.0 >= 6.0;
+    let (rings, ring_moons) = crate::rings::shape(rings, density, mass_kg, moons, params.seed);
+    if let Some(given) = params.given_rings.as_mut() {
+        given.rings = Some(rings);
+    }
+    ring_moons
+}
+
+/// The fields of a ring moon of the giant of `giant` (`giant_kg`): a small
+/// icy body on a circular orbit in the giant's equatorial plane, locked to
+/// it, its angles from its seed.
+fn ring_moon_parts(giant: &WorldParams, moon: &crate::rings::RingMoon, giant_kg: f64) -> MoonParts {
+    let radius_g_km = f64::from(giant.circumference_km) / (2.0 * PI);
+    let a_km = moon.a_radii * radius_g_km;
+    let period_days = crate::rings::period_days(a_km, giant_kg);
+    let mass = 4.0 / 3.0 * PI * (moon.radius_km * 1e3).powi(3) * moon.density * 1e3;
+    let round = moon.shape == [1.0; 3];
+    let shape = (!round).then(|| moon.shape.map(|s| s as f32));
+    let params = crate::moons::small_body_params(
+        giant,
+        Composition::Ice,
+        moon.radius_km as f32,
+        moon.seed,
+        shape,
+    );
+    let seed = f64::from(moon.seed);
+    (
+        "icy-moon".to_string(),
+        params,
+        Orbit {
+            semi_major_axis_km: a_km,
+            semi_major_axis_au: a_km / 1.495_978_707e8,
+            eccentricity: 0.0002 + 0.002 * (seed % 7907.0) / 7907.0,
+            inclination_deg: 0.05 * (seed % 6067.0) / 6067.0,
+            node_deg: (seed % 6421.0) / 6421.0 * 360.0,
+            periapsis_deg: (seed % 7919.0) / 7919.0 * 360.0,
+            mean_anomaly_deg: (seed % 8933.0) / 8933.0 * 360.0,
+            period_days,
+        },
+        Physical {
+            mass_earth: mass / EARTH_KG,
+            radius_km: moon.radius_km,
+            density: moon.density,
+            gravity: G * mass / (moon.radius_km * 1e3).powi(2) / 9.81,
+            axes_km: shape.map(|s| s.map(|a| a * moon.radius_km as f32)),
+        },
+        Spin {
+            period_hours: period_days * 24.0,
+            axial_tilt_deg: 0.0,
+            locked: true,
+        },
+    )
 }
 
 fn regular_moons(giant: &WorldParams, slot: &Slot, star: f32, seed: u32) -> Vec<MoonParts> {
@@ -1546,6 +1665,7 @@ fn name_world(dir: &std::path::Path, system: &str, body: &str) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rings::RingRole;
 
     fn whole(planets: &[(&str, u32)], seed: u32) -> SystemRequest {
         SystemRequest::System(WholeSystemRequest {
@@ -1764,6 +1884,84 @@ mod tests {
         }
         assert!(giants > 60, "{giants}");
         assert!(bright > 0 && faint > bright, "{bright} {faint}");
+    }
+
+    #[test]
+    fn ring_moons_open_the_gaps_and_join_the_moons() {
+        let (mut embedded, mut resonant, mut edge, mut shepherds) = (0, 0, 0, 0);
+        for seed in 0..40 {
+            let system = draw(
+                &whole(&[("gas-giant", 2), ("ice-giant", 2)], seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            for giant in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                let moons: Vec<&Body> = system
+                    .bodies
+                    .iter()
+                    .filter(|b| b.parent.as_deref() == Some(&giant.id))
+                    .collect();
+                // Nearest first, numbered in that order.
+                assert!(
+                    moons
+                        .windows(2)
+                        .all(|w| w[0].orbit.semi_major_axis_km <= w[1].orbit.semi_major_axis_km)
+                );
+                for (k, m) in moons.iter().enumerate() {
+                    assert_eq!(m.id, format!("{}-{}", giant.id, k + 1));
+                }
+                let rings = giant
+                    .params
+                    .given_rings
+                    .as_ref()
+                    .and_then(|g| g.rings.as_ref());
+                let ring_moons: Vec<&&Body> =
+                    moons.iter().filter(|m| m.ring_role.is_some()).collect();
+                let Some(rings) = rings else {
+                    assert!(ring_moons.is_empty());
+                    continue;
+                };
+                // Every gap has its moon, among the giant's.
+                assert_eq!(rings.gap_moons.len(), rings.gaps.len());
+                for id in &rings.gap_moons {
+                    let moon = moons.iter().find(|m| &m.id == id).expect("the gap's moon");
+                    assert!(matches!(
+                        moon.ring_role,
+                        Some(RingRole::Embedded | RingRole::Resonant)
+                    ));
+                }
+                if rings.bright {
+                    assert!((2.0..=2.5).contains(&rings.outer));
+                }
+                let radius = giant.physical.radius_km;
+                for m in ring_moons {
+                    let a = m.orbit.semi_major_axis_km / radius;
+                    assert!(m.body_type == "icy-moon" && m.spin.locked);
+                    match m.ring_role.unwrap() {
+                        RingRole::Embedded => {
+                            embedded += 1;
+                            assert!(a > f64::from(rings.inner) && a < f64::from(rings.outer));
+                        }
+                        RingRole::Resonant => resonant += 1,
+                        RingRole::Edge => {
+                            edge += 1;
+                            assert!(a > f64::from(rings.outer));
+                        }
+                        RingRole::Shepherd => shepherds += 1,
+                    }
+                    // Inside the regular moons, which keep their draws.
+                    let first_regular = moons
+                        .iter()
+                        .find(|r| r.ring_role.is_none())
+                        .map(|r| r.orbit.semi_major_axis_km);
+                    assert!(first_regular.is_none_or(|r| m.orbit.semi_major_axis_km < r));
+                }
+            }
+        }
+        assert!(
+            embedded > 5 && resonant > 5 && edge > 10 && shepherds > 10,
+            "{embedded} {resonant} {edge} {shepherds}"
+        );
     }
 
     #[test]

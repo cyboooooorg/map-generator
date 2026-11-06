@@ -3,6 +3,7 @@ import type { BodyKind } from "./BodyKind";
 import type { Orbit } from "./Orbit";
 import type { Physical } from "./Physical";
 import type { Preview } from "./Preview";
+import type { RingRole } from "./RingRole";
 import type { Spin } from "./Spin";
 import type { Surroundings } from "./Surroundings";
 import type { Trojans } from "./Trojans";
@@ -42,4 +43,9 @@ generated: boolean,
  * `crate::belts`); none for a moon, and in the systems drawn before
  * them.
  */
-trojans?: Trojans, };
+trojans?: Trojans, 
+/**
+ * A ring moon's part in its giant's rings (see `crate::rings`); none
+ * for every other body.
+ */
+ring_role?: RingRole, };

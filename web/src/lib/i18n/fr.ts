@@ -91,6 +91,17 @@ export const fr: Messages = {
     light: 'Lumière',
     lightValue: (p) => `${p.flux}× celle de la Terre · équilibre ${p.temperature}`,
     moons: 'Lunes',
+    rings: 'Anneaux',
+    ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
+      `${p.kind === 'bright' ? 'brillants, glacés' : 'ténus, étroits'} · de ${p.inner} à ${p.outer} de ses rayons` +
+      (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 division' : `${p.gaps} divisions`}` : ''),
+    ringRole: 'Dans les anneaux',
+    ringRoles: {
+      embedded: (p: { gap: string }) => `orbite dans les anneaux et y dégage une division de ${p.gap} autour de son orbite`,
+      resonant: (p: { gap: string }) => `orbite hors des anneaux ; sa résonance 2:1 y ouvre une division de ${p.gap}`,
+      edge: () => 'orbite juste au-delà des anneaux et en garde le bord externe net',
+      shepherd: () => 'l’une des deux lunes bergères qui confinent l’anneau étroit',
+    },
     notGenerated: `Ses cartes ne sont pas encore faites${S}: voici ce que le tirage a fixé.`,
     generating: `Ses cartes sont en cours de fabrication${S}: suivez la progression sur la vue.`,
     generate: 'Générer ses cartes',
@@ -578,6 +589,12 @@ export const fr: Messages = {
       'hot-jupiter': 'Jupiter chaud',
       'rocky-moon': 'lune rocheuse',
       'icy-moon': 'lune glacée',
+    },
+    ringMoonTypes: {
+      embedded: 'lune des anneaux',
+      resonant: 'lune glacée, en résonance avec les anneaux',
+      edge: 'lune des anneaux',
+      shepherd: 'lune bergère',
     },
     spinAxes: 'Axes de rotation',
     spinAxesHelp:

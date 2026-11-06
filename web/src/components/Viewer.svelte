@@ -1574,7 +1574,9 @@
           <option value={body.id}
             >{body.parent ? '\u2003' : ''}{t.viewer.systemBodyOption({
               name: world.systemNames[body.id] ?? body.designation,
-              type: t.viewer.bodyTypes[body.type as keyof typeof t.viewer.bodyTypes] ?? body.type,
+              type: body.ring_role
+                ? t.viewer.ringMoonTypes[body.ring_role]
+                : (t.viewer.bodyTypes[body.type as keyof typeof t.viewer.bodyTypes] ?? body.type),
               generated: body.generated,
             })}</option
           >

@@ -201,6 +201,27 @@ by the chain `exomoon.rs` draws (two to four, about 10⁻⁴ of its mass, a
 moon may be a habitable world: in mode 2 that is the planet asked for; in
 mode 1 a request can ask for it (`moons of giants: terran`).
 
+A giant with rings also gets the moons that shape them (`rings.rs`,
+backlog item 18), drawn from the stream `RING_MOONS` so the other moons
+keep their draws. They are `icy-moon` bodies marked with a `ring_role`:
+
+- `embedded`: zero to two moonlets of 4 to 30 km in the outer part of
+  bright rings, each clearing a gap 7 to 17 of its Hill radii wide;
+- `resonant`: on 60 % of bright rings, a moon of 150 to 250 km just
+  outside them whose 2:1 resonance opens a gap of 0.04 to 0.09 radii
+  (the Cassini Division);
+- `edge`: one to three moons of 10 to 100 km just beyond a bright ring's
+  outer edge;
+- `shepherd`: on 70 % of faint rings, a pair of 10 to 25 km on either
+  side of the ring.
+
+Bright rings end at the fluid Roche limit of their icy particles (0.5 to
+0.9 g/cm³), kept within 2.0 to 2.5 radii; their gaps are those of their
+moons, and the rings' `gap_moons` name the moon of each gap. The ring
+moons are numbered with the others, nearest first. A giant without
+regular moons (hot, or with too small a Hill sphere) keeps its rings
+without moons, and the giant a world of the request orbits gets none.
+
 ### Around one planet (mode 2)
 
 The planet asked keeps its orbit and its parameters, and is placed first;
