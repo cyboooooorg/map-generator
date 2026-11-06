@@ -118,7 +118,13 @@ pub fn shape(
     let mut out = Vec::new();
     // Each moon's own seed, from the stream's seed: no other stream's.
     let base = stream_seed(seed, stream::RING_MOONS);
-    let moon_seed = |k: u32| stream_seed(base, k);
+    // In the order drawn, a moon dropped later keeping its number: the
+    // others' seeds do not depend on it.
+    let mut drawn = 0;
+    let mut next_seed = || {
+        drawn += 1;
+        stream_seed(base, drawn - 1)
+    };
     if rings.bright {
         let particles = rng.random_range(PARTICLE_DENSITY.0..PARTICLE_DENSITY.1);
         let outer = fluid_roche(giant_density, particles).clamp(OUTER_EDGE.0, OUTER_EDGE.1);
@@ -153,12 +159,7 @@ pub fn shape(
             let k = ((mass.ln() - GAP_MASS_KG.0.ln()) / (GAP_MASS_KG.1 / GAP_MASS_KG.0).ln())
                 .clamp(0.0, 1.0);
             let width = hill * (GAP_HILL.0 + k * (GAP_HILL.1 - GAP_HILL.0));
-            // Gaps do not overlap.
-            if rings
-                .gaps
-                .iter()
-                .any(|g| (f64::from(g[0]) - a).abs() < (f64::from(g[1]) + width) / 2.0 + 0.02)
-            {
+            if overlaps(&rings.gaps, a, width) {
                 continue;
             }
             rings.gaps.push([a as f32, width as f32]);
@@ -168,7 +169,7 @@ pub fn shape(
                 radius_km,
                 shape: irregular(radius_km, shape_draws),
                 density,
-                seed: moon_seed(out.len() as u32),
+                seed: next_seed(),
                 gap: Some(rings.gaps.len() - 1),
             });
         }
@@ -185,6 +186,22 @@ pub fn shape(
             let a = from + at * (to - from);
             let gap_at = a * RESONANCE_FACTOR;
             if gap_at - width / 2.0 > inner + 0.1 {
+                // The resonance clears its own gap: a moonlet whose gap it
+                // would overlap is not kept (the moonlets alone, with
+                // their gaps, are in `out` and `rings.gaps` so far, in
+                // the same order).
+                let mut k = 0;
+                while k < rings.gaps.len() {
+                    if overlaps(&rings.gaps[k..=k], gap_at, width) {
+                        rings.gaps.remove(k);
+                        out.remove(k);
+                    } else {
+                        k += 1;
+                    }
+                }
+                for (k, moon) in out.iter_mut().enumerate() {
+                    moon.gap = Some(k);
+                }
                 rings.gaps.push([gap_at as f32, width as f32]);
                 resonant_at = Some(a);
                 out.push(RingMoon {
@@ -193,7 +210,7 @@ pub fn shape(
                     radius_km,
                     shape: [1.0; 3],
                     density,
-                    seed: moon_seed(out.len() as u32),
+                    seed: next_seed(),
                     gap: Some(rings.gaps.len() - 1),
                 });
             }
@@ -215,7 +232,7 @@ pub fn shape(
                 radius_km,
                 shape: irregular(radius_km, shape_draws),
                 density,
-                seed: moon_seed(out.len() as u32),
+                seed: next_seed(),
                 gap: None,
             });
         }
@@ -237,13 +254,20 @@ pub fn shape(
                 radius_km,
                 shape: irregular(radius_km, shape_draws),
                 density,
-                seed: moon_seed(out.len() as u32),
+                seed: next_seed(),
                 gap: None,
             });
         }
     }
     out.sort_by(|x, y| x.a_radii.total_cmp(&y.a_radii));
     (rings, out)
+}
+
+/// Whether a gap `width` wide at `a` (giant radii) would overlap one of
+/// `gaps`, or come within 0.02 radii of it.
+fn overlaps(gaps: &[[f32; 2]], a: f64, width: f64) -> bool {
+    gaps.iter()
+        .any(|g| (f64::from(g[0]) - a).abs() < (f64::from(g[1]) + width) / 2.0 + 0.02)
 }
 
 /// What feeds a dust ring.
@@ -438,6 +462,34 @@ mod tests {
             embedded > 200 && resonant > 100 && edges > 300,
             "{embedded} {resonant} {edges}"
         );
+    }
+
+    #[test]
+    fn gaps_do_not_overlap_and_no_moon_sits_in_another_ones_gap() {
+        for seed in 0..2000 {
+            let (rings, moons) = shape(bright(), 0.69, SATURN_KG, true, seed);
+            for (i, g) in rings.gaps.iter().enumerate() {
+                assert!(
+                    !overlaps(&rings.gaps[i + 1..], f64::from(g[0]), f64::from(g[1])),
+                    "seed {seed}: {:?}",
+                    rings.gaps
+                );
+            }
+            for m in moons.iter().filter(|m| m.role == RingRole::Embedded) {
+                for (k, g) in rings.gaps.iter().enumerate() {
+                    if Some(k) != m.gap {
+                        assert!(
+                            (f64::from(g[0]) - m.a_radii).abs() > f64::from(g[1]) / 2.0,
+                            "seed {seed}"
+                        );
+                    }
+                }
+            }
+            let mut seeds: Vec<u32> = moons.iter().map(|m| m.seed).collect();
+            seeds.sort_unstable();
+            seeds.dedup();
+            assert_eq!(seeds.len(), moons.len(), "seed {seed}");
+        }
     }
 
     #[test]
