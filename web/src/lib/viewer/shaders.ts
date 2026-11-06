@@ -11,6 +11,7 @@
 // `uBiomes` holds the biome id of each pixel (r × 255), for highlighting one biome.
 import { CLOUD_TOPS, glslRamp } from './colormaps';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH } from './sunDepth';
+import { skyRingDensityGlsl } from './ringShaders';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
 export const LAYER_IDS = {
@@ -798,6 +799,8 @@ export const skyBodyFragment = /* glsl */ `
   uniform float uGrid;
   uniform float uTropics;
   uniform float uTilt;
+  // Its rings, for the shadow they cast on it (none when uRingOuter is 0).
+  ${skyRingDensityGlsl}
   varying vec2 vP;
 
   // How close to a line (0 to 1) a point is, value h against lines every
@@ -953,6 +956,13 @@ export const skyBodyFragment = /* glsl */ `
       // some roundness without looking like a lit ball of plaster.
       float s = max(sunCos, 0.0);
       lit = 0.5 * s + s / (s + mu + 1e-4);
+    }
+    // Its rings' shadow: where the ray from this point to the sun crosses
+    // their plane, the light they hide there.
+    float ringSun = dot(uSunDir, uAxisY);
+    if (uRingOuter > 0.0 && abs(ringSun) > 1e-4) {
+      float t = -dot(n, uAxisY) / ringSun;
+      if (t > 0.0) lit *= 1.0 - ringDensity(length(n + t * uSunDir));
     }
     // A soft edge (none under a halo), and a faint night side; opaque
     // inside, so the stars and the host star behind it are hidden.

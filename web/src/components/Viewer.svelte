@@ -923,13 +923,23 @@
   $effect(() => view?.setGlobeReach(reach ?? 0));
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
+  /**
+   * The rings of the giant in its moon's sky: as its system drew them,
+   * else as the moon's world stores its giant (systems drawn before).
+   */
+  const hostRings = $derived.by(() => {
+    const parent = sysBody?.parent ? sys?.bodies.find((b) => b.id === sysBody.parent) : null;
+    if (!parent) return null;
+    const given = parent.params.given_rings;
+    return given ? given.rings : (meta?.host?.giant.rings ?? null);
+  });
   $effect(() => {
     // The planet in its moon's sky, by its own switches (Host planet).
     const parent = sysBody?.parent ?? null;
     const planetTilt = sysPlanet?.spin.axial_tilt_deg ?? 0;
     view?.setSkyBodies(
       (sysSky?.bodies ?? []).map((body, k) =>
-        sysSky?.ids[k] === parent ? { ...body, show: hostShow, axialTiltDeg: planetTilt } : body,
+        sysSky?.ids[k] === parent ? { ...body, show: hostShow, axialTiltDeg: planetTilt, rings: hostRings } : body,
       ),
     );
     view?.setShadowCasters(sysSky?.casters ?? []);

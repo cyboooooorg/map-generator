@@ -107,8 +107,9 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
-import { dustRingFragment, dustRingVertex, ringFragment, ringVertex } from './ringShaders';
+import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
+import type { RingSystem } from '../api/types/RingSystem';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import { starField } from './stars';
 
@@ -504,7 +505,13 @@ export class PlanetView {
   /** Whether the star field is shown. */
   private starsOn = true;
   /** The other bodies drawn in the sky (see setSkyBodies), with their maps. */
-  private skyBodies: { mesh: Mesh<PlaneGeometry, ShaderMaterial>; body: SkyBody; maps: Texture[] }[] = [];
+  private skyBodies: {
+    mesh: Mesh<PlaneGeometry, ShaderMaterial>;
+    body: SkyBody;
+    maps: Texture[];
+    /** Its rings, drawn over the sky (see skyRingFragment), once it has some. */
+    rings: Mesh<BufferGeometry, ShaderMaterial> | null;
+  }[] = [];
   /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
   private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   /**
@@ -1713,7 +1720,10 @@ export class PlanetView {
   private applyModeControls(): void {
     const globe = this.mode === 'globe';
     this.controls.enableRotate = globe;
-    this.controls.enablePan = !globe;
+    // On the globe the right button frees the camera, as in the star view:
+    // it pans on the screen's two axes, the view then turning round the
+    // point reached (resetView centres it again).
+    this.controls.enablePan = true;
     // On the globe the wheel is handled here, by altitude (see handleWheel);
     // on the map, OrbitControls zooms towards the cursor.
     this.controls.enableZoom = !globe;
@@ -1722,7 +1732,7 @@ export class PlanetView {
     this.controls.minDistance = globe ? 1 + MIN_ALTITUDE : MAP_MIN_DISTANCE;
     this.controls.maxDistance = globe ? this.globeReach : MAP_MAX_DISTANCE;
     this.controls.mouseButtons = globe
-      ? { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE }
+      ? { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }
       : { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
   }
 
@@ -1777,6 +1787,7 @@ export class PlanetView {
     // the next interaction: compare the camera itself.
     if (!following) {
       this.controls.update();
+      this.keepAboveGround();
     }
     const moving =
       this.lastPosition.distanceToSquared(this.camera.position) > 1e-16 ||
@@ -1874,6 +1885,11 @@ export class PlanetView {
             uGrid: { value: 0 },
             uTropics: { value: 0 },
             uTilt: { value: 0 },
+            uRingInner: { value: 0 },
+            uRingOuter: { value: 0 },
+            uRingOpacity: { value: 0 },
+            uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
+            uRingGapCount: { value: 0 },
           },
           // Drawn with the star field and the host star (transparent ones
           // come after the surface), over them: a body hides the stars
@@ -1886,7 +1902,7 @@ export class PlanetView {
       mesh.renderOrder = -1;
       mesh.visible = false;
       this.scene.add(mesh);
-      const entry = { mesh, body, maps: [] as Texture[] };
+      const entry = { mesh, body, maps: [] as Texture[], rings: null as Mesh<BufferGeometry, ShaderMaterial> | null };
       const load = (url: string, map: string, has: string) => {
         void this.decodeImage(url, signal)
           .then((bitmap) => {
@@ -2057,10 +2073,12 @@ export class PlanetView {
   }
 
   private disposeSkyBodies(): void {
-    for (const { mesh, maps } of this.skyBodies) {
-      this.scene.remove(mesh);
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+    for (const { mesh, maps, rings } of this.skyBodies) {
+      for (const m of rings ? [mesh, rings] : [mesh]) {
+        this.scene.remove(m);
+        m.geometry.dispose();
+        m.material.dispose();
+      }
       for (const map of maps) map.dispose();
     }
     this.skyBodies = [];
@@ -2216,7 +2234,72 @@ export class PlanetView {
       u['uHaloStrength']!.value = halo?.strength ?? 0;
       u['uSpinAxis']!.value = this.spinAxesOn ? 1 : 0;
       u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, this.spinAxesOn ? SPIN_AXIS_LENGTH + 0.1 : 1);
+      setRingUniforms(u, body.rings ?? null);
+      this.drawSkyRings(entry, place);
     }
+  }
+
+  /**
+   * A body of the sky's rings, if it has any: over the whole screen, each
+   * pixel's ray meeting their plane (see skyRingFragment), drawn after
+   * its disk so that they pass in front of it.
+   */
+  private drawSkyRings(entry: (typeof this.skyBodies)[number], place: { direction: Vector3; half: number }): void {
+    const { body, mesh } = entry;
+    const rings = body.rings ?? null;
+    if (!rings) {
+      if (entry.rings) entry.rings.visible = false;
+      return;
+    }
+    if (!entry.rings) {
+      const geometry = new BufferGeometry();
+      // One triangle covering the screen (see skyRingVertex).
+      geometry.setAttribute('position', new BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+      entry.rings = new Mesh(
+        geometry,
+        new ShaderMaterial({
+          vertexShader: skyRingVertex,
+          fragmentShader: skyRingFragment,
+          uniforms: {
+            uProjectionInverse: { value: this.camera.projectionMatrixInverse },
+            uCentre: { value: new Vector3() },
+            uRadius: { value: 1 },
+            uNormal: { value: new Vector3(0, 1, 0) },
+            uColour: { value: new Color() },
+            uSunDir: this.u.uSunDir,
+            uFade: { value: 1 },
+            uRingInner: { value: 0 },
+            uRingOuter: { value: 0 },
+            uRingOpacity: { value: 0 },
+            uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
+            uRingGapCount: { value: 0 },
+          },
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      entry.rings.frustumCulled = false;
+      this.scene.add(entry.rings);
+    }
+    const ring = entry.rings;
+    ring.visible = mesh.visible;
+    // Just after its disk (in front of the globe or with the sky), hidden
+    // by the globe either way: they may lie behind it.
+    ring.renderOrder = mesh.renderOrder + 0.1;
+    const u = ring.material.uniforms;
+    setRingUniforms(u, rings);
+    // Its centre and radius from the camera: from its place when it has
+    // one, else at infinity in its direction (one radius per sin(half)).
+    if (body.position && body.radius !== undefined) {
+      (u['uCentre']!.value as Vector3).set(...body.position).sub(this.camera.position);
+      u['uRadius']!.value = body.radius;
+    } else {
+      (u['uCentre']!.value as Vector3).copy(place.direction).multiplyScalar(1 / Math.max(Math.sin(place.half), 1e-9));
+      u['uRadius']!.value = 1;
+    }
+    (u['uNormal']!.value as Vector3).set(...(body.axes ?? IDENTITY_AXES)[1]);
+    (u['uColour']!.value as Color).setRGB(...rings.colour, SRGBColorSpace);
+    u['uFade']!.value = mesh.material.uniforms['uOpacity']!.value as number;
   }
 
   /** The body shown drawn from its preview (see setPreviewBody), null until one is. */
@@ -2370,6 +2453,17 @@ export class PlanetView {
       : Math.abs(this.camera.position.z);
   }
 
+  /**
+   * On the globe, keeps the camera at least the lowest altitude over the
+   * ground: a camera freed by the right button turns round a point other
+   * than the centre, which the controls' distance limits do not guard.
+   */
+  private keepAboveGround(): void {
+    if (this.mode !== 'globe' || this.animation?.follow) return;
+    const floor = 1 + MIN_ALTITUDE + this.reliefLift();
+    if (this.camera.position.length() < floor) this.camera.position.setLength(floor);
+  }
+
   // On the globe each wheel step scales the altitude, so zooming stays
   // smooth from orbit down to the deepest tiles.
   private readonly handleWheel = (event: WheelEvent): void => {
@@ -2377,9 +2471,24 @@ export class PlanetView {
       return;
     }
     event.preventDefault();
+    const relief = this.reliefLift();
+    // A camera freed by the right button: the wheel brings it nearer the
+    // point it turns round, or takes it further, kept off the ground.
+    if (this.controls.target.lengthSq() > 1e-12) {
+      const target = this.controls.target;
+      const offset = this.camera.position.clone().sub(target);
+      offset.setLength(Math.min(this.globeReach, Math.max(1e-6, offset.length() * Math.exp(event.deltaY * 0.0015))));
+      this.camera.position.copy(target).add(offset);
+      this.keepAboveGround();
+      this.camera.lookAt(target);
+      this.camera.updateMatrixWorld();
+      this.reportCamera();
+      this.hoverPending = true;
+      this.requestRender();
+      return;
+    }
     // The point of the globe under the cursor stays under it while zooming.
     const anchor = this.globePointAt(event.clientX, event.clientY);
-    const relief = this.reliefLift();
     const altitude = Math.min(
       Math.max(GLOBE_DISTANCE * 2.5, this.globeReach - 1),
       Math.max(MIN_ALTITUDE + relief, this.altitude() * Math.exp(event.deltaY * 0.0015)),
@@ -2566,4 +2675,13 @@ function applyPreview(u: Record<string, IUniform>, body: SkyBody): void {
   u['uBands']!.value = preview?.bands ?? 0;
   u['uLand']!.value = preview && preview.bands === 0 && colours.length > 1 ? 1 : 0;
   u['uGlow']!.value = preview?.glow ? 1 : 0;
+}
+
+/** Sets a sky body's ring uniforms (see skyRingDensityGlsl) from its rings; none clears them. */
+function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null): void {
+  u['uRingInner']!.value = rings?.inner ?? 0;
+  u['uRingOuter']!.value = rings?.outer ?? 0;
+  u['uRingOpacity']!.value = rings?.opacity ?? 0;
+  u['uRingGapCount']!.value = Math.min(rings?.gaps.length ?? 0, 4);
+  (u['uRingGaps']!.value as Vector2[]).forEach((gap, k) => gap.set(...(rings?.gaps[k] ?? [0, 0])));
 }
