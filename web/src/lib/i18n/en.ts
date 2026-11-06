@@ -665,6 +665,9 @@ export const en = {
     spinAxes: 'Spin axes',
     spinAxesHelp:
       'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
+    rotationDial: 'Rotation dial',
+    rotationDialHelp:
+      'A ring round the equator, graduated in degrees: its pointer shows how far the body has turned, against the stars, or against what it orbits for a body locked to it',
     orbitsHelp: 'Moves the moons along their orbits, as many days after the season (their phases, their eclipses)',
     playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds at ×1',
     orbitSpeed: 'Speed',

@@ -61,6 +61,8 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BodyGuides, type GuidePoints, labelIndex, type HostGuide } from './bodyGuides';
+import { DIAL_RADIUS, RotationDial } from './rotationDial';
+import type { DialState } from '../rotationDial';
 import type { HexMap } from '../api/types/HexMap';
 import {
   greatCircleArc,
@@ -579,6 +581,9 @@ export class PlanetView {
   private hostSpinOf: { index: number; locked: boolean } | null = null;
   private hostGuideOn = false;
   private spinAxesOn = false;
+  /** The rotation dial round the body shown (see setRotationDial), and its state; null hides it. */
+  private readonly dial = new RotationDial();
+  private dialState: DialState | null = null;
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
   private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
@@ -624,10 +629,10 @@ export class PlanetView {
   private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
   /**
    * The body's shape as setShape loaded it, for the guides drawn out of its
-   * surface: its radii (row 0 north), and the most it reaches within 15°
-   * of either pole; null for a sphere.
+   * surface: its radii (row 0 north), the most it reaches within 15°
+   * of either pole, and anywhere (`largest`); null for a sphere.
    */
-  private shapeRadii: { radii: Float32Array; width: number; height: number; poles: number } | null = null;
+  private shapeRadii: { radii: Float32Array; width: number; height: number; poles: number; largest: number } | null = null;
   /** Its highest point over the coastline, in elevation units (see setData). */
   private peakAbove = 0;
   /** The rocks of the giant's rings round a ring moon (see setRingRocks), null until some are. */
@@ -799,7 +804,7 @@ export class PlanetView {
     this.surface.material.stencilRef = DETAIL_STENCIL;
     this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
-    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin);
+    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin, this.dial.group);
 
     this.grid = new LineSegments(
       graticule(30),
@@ -1025,9 +1030,11 @@ export class PlanetView {
     const scale = (shape.max - shape.min) / 65535;
     const values = new Uint16Array(image.width * image.height);
     const radii = new Float32Array(values.length);
+    let largest = 0;
     for (let i = 0; i < values.length; i++) {
       radii[i] = shape.min + (image.data[i] ?? 0) * scale;
       values[i] = DataUtils.toHalfFloat(radii[i]!);
+      largest = Math.max(largest, radii[i]!);
     }
     // The caps the spin axis and its arrow stand over.
     const capRows = Math.max(1, Math.round((image.height * 15) / 180));
@@ -1046,7 +1053,7 @@ export class PlanetView {
     this.shared.uShape.value = texture;
     this.shared.uShapeTexel.value.set(1 / image.width, 1 / image.height);
     this.shared.uHasShape.value = 1;
-    this.shapeRadii = { radii, width: image.width, height: image.height, poles };
+    this.shapeRadii = { radii, width: image.width, height: image.height, poles, largest };
     this.requestRender();
   }
 
@@ -1951,6 +1958,7 @@ export class PlanetView {
     this.spinAxis?.geometry.dispose();
     this.guides.dispose();
     this.hostSpin.dispose();
+    this.dial.dispose();
     this.previewGlobe?.geometry.dispose();
     this.previewGlobe?.material.dispose();
     this.spinAxis?.material.dispose();
@@ -2362,6 +2370,15 @@ export class PlanetView {
     this.requestRender();
   }
 
+  /**
+   * The rotation dial round the body shown (see lib/rotationDial), on the
+   * globe; null hides it.
+   */
+  setRotationDial(state: DialState | null): void {
+    this.dialState = state;
+    this.requestRender();
+  }
+
   private disposeSkyBodies(): void {
     for (const { mesh, maps, rings } of this.skyBodies) {
       for (const m of rings ? [mesh, rings] : [mesh]) {
@@ -2388,6 +2405,17 @@ export class PlanetView {
     guides: Record<keyof GuidePoints | 'hostSpin', { x: number; y: number } | null>;
     /** Where each mark of setSkyMarks is: its candidate in view nearest the screen's centre, null when none is. */
     marks: ({ x: number; y: number } | null)[];
+    /**
+     * Where the rotation dial's numbered ticks (0°, 30°, … 330°), pointer
+     * tip and markers are (see RotationDial.anchors), each null when hidden
+     * by the globe; null when the dial is not drawn.
+     */
+    dial: {
+      ticks: ({ x: number; y: number } | null)[];
+      pointer: { x: number; y: number } | null;
+      sun: { x: number; y: number } | null;
+      host: { x: number; y: number } | null;
+    } | null;
   } {
     const shown = this.u.uLightMode.value === 1 && this.morph > 0.99;
     const camera = this.camera.position;
@@ -2427,6 +2455,7 @@ export class PlanetView {
     // that is as the camera moves.
     const hostLine = points.host?.map((point) => near(point, 0.9)) ?? [];
     const hostAt = hostLine[labelIndex(hostLine.map((p) => p !== null))] ?? null;
+    const dial = this.dialState && this.dial.group.visible ? this.dial.anchors() : null;
     return {
       bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),
       star: at(
@@ -2453,6 +2482,12 @@ export class PlanetView {
         }
         return best;
       }),
+      dial: dial && {
+        ticks: dial.ticks.map((point) => near(point)),
+        pointer: near(dial.pointer),
+        sun: near(dial.sun),
+        host: near(dial.host),
+      },
     };
   }
 
@@ -2775,6 +2810,9 @@ export class PlanetView {
       this.spinAxis.scale.setScalar(poles);
     }
     this.guides.update(this.spinAxesOn, this.spinAxesOn && this.hostGuideOn, this.morph);
+    // The dial's ring stands clear of the farthest of the shape.
+    if (this.dialState) this.dial.set(this.dialState, DIAL_RADIUS * (shape?.largest ?? 1));
+    this.dial.update(this.dialState !== null, this.morph);
     for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
       if (!orbits) continue;
       orbits.visible = this.skyOrbitsOn && this.morph > 0.01;

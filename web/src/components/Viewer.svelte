@@ -35,6 +35,7 @@
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
   import { smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
+  import { rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -164,6 +165,8 @@
     ringRocks: 100 as number,
     // The spin axes of the globe and the bodies of the sky.
     spinAxes: false,
+    // The ring round the body shown, graduated in degrees, reading its turn.
+    rotationDial: false,
     // While the clock plays: the camera stays still against the sky, the
     // globe turning under it, or turns with the body (always the same
     // face, the sky turning). A new key: the former cameraFollowsSky
@@ -228,6 +231,7 @@
   let smallBodies = $state(saved.smallBodies);
   let ringRockScale = $state(RING_ROCK_SCALES.includes(saved.ringRocks) ? saved.ringRocks : 100);
   let axesShown = $state(saved.spinAxes);
+  let dialShown = $state(saved.rotationDial);
   let cameraOnBody = $state(saved.cameraOnBody);
   let cameraOnLockedBody = $state(saved.cameraOnLockedBody);
   $effect(() => view?.setSpinAxes(axesShown));
@@ -460,6 +464,7 @@
       smallBodies,
       ringRocks: ringRockScale,
       spinAxes: axesShown,
+      rotationDial: dialShown,
       cameraOnBody,
       cameraOnLockedBody,
       skyLabels,
@@ -850,6 +855,9 @@
   /** The trojan swarms and belts in that sky, while Small bodies is on. */
   const smallSky = $derived(smallBodies && sys && sysBody && sysPlanet ? smallBodiesSky(sys, sysBody.id, sysDays, skySpin) : null);
   $effect(() => view?.setSkyBelts(smallSky ? smallSky.belts.flatMap((b) => b.edges) : []));
+  /** The rotation dial round the body shown, while its switch is on (see lib/rotationDial). */
+  const dial = $derived(dialShown && sys && sysBody && sysSky ? rotationDial(sys, sysBody.id, sysDays, skySpin, sysSky) : null);
+  $effect(() => view?.setRotationDial(dial?.state ?? null));
   // Followed on the screen: each swarm's centre, each belt's edges (every
   // third point is plenty to put its label).
   $effect(() =>
@@ -1261,6 +1269,7 @@
         ? [{ key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' as const, on: smallBodies, set: (v: boolean) => (smallBodies = v) }]
         : []),
       { key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis', on: axesShown, set: (v) => (axesShown = v) },
+      { key: 'dial', label: t.viewer.rotationDial, help: t.viewer.rotationDialHelp, icon: 'dial', on: dialShown, set: (v) => (dialShown = v) },
       {
         key: 'hexes',
         label: t.viewer.hexes,

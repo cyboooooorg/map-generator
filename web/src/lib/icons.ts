@@ -39,6 +39,7 @@ export const ICONS = {
   contours: 'M3 20l5-9l4 5l3-4l6 8zM8 11l2-4l2 3',
   tag: 'M3 12V4h8l10 10l-8 8zM7.5 7.5h.01',
   axis: 'M12 2v20M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10z',
+  dial: 'M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM12 2v3M12 19v3M2 12h3M19 12h3M12 12l4-4',
   hex: 'M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z',
   clock: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 7v5l3 3',
   host: 'M9 9a5 5 0 1 0 0 10a5 5 0 1 0 0-10zM18 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4z',

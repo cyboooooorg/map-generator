@@ -629,6 +629,9 @@ export const fr: Messages = {
     spinAxes: 'Axes de rotation',
     spinAxesHelp:
       `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite`,
+    rotationDial: 'Boussole de rotation',
+    rotationDialHelp:
+      `Un anneau autour de l’équateur, gradué en degrés${S}: son trait montre de combien l’astre a tourné, par rapport aux étoiles, ou par rapport à ce qu’il orbite pour un astre en rotation synchrone`,
     orbitsHelp: 'Avance les lunes sur leurs orbites, d’autant de jours après la saison (leurs phases, leurs éclipses)',
     playOrbitsHelp: `Faire défiler les orbites${S}: à ×1, une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
     orbitSpeed: 'Vitesse',
