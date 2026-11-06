@@ -1301,6 +1301,21 @@ fn shape_rings(params: &mut WorldParams, slot: &Slot, star: f32) -> Vec<crate::r
     ring_moons
 }
 
+/// The highest inclination a ring moon of `role` draws, degrees. Rings are
+/// tens of metres to a kilometre thick: a moon in or at them stays within
+/// a few km of their plane (Pan 0.0001°, Daphnis 0.0036°, Atlas 0.003°),
+/// so that seen from it they lie at its horizon. Shepherds and resonant
+/// moons, outside the rings, swing a little farther (Prometheus 0.008°,
+/// Pandora 0.05°).
+fn ring_moon_inclination_deg(role: crate::rings::RingRole) -> f64 {
+    use crate::rings::RingRole;
+    match role {
+        RingRole::Embedded => 0.001,
+        RingRole::Edge => 0.005,
+        RingRole::Shepherd | RingRole::Resonant => 0.05,
+    }
+}
+
 /// The fields of a ring moon of the giant of `giant` (`giant_kg`): a small
 /// icy body on a circular orbit in the giant's equatorial plane, locked to
 /// it, its angles from its seed.
@@ -1326,7 +1341,7 @@ fn ring_moon_parts(giant: &WorldParams, moon: &crate::rings::RingMoon, giant_kg:
             semi_major_axis_km: a_km,
             semi_major_axis_au: a_km / 1.495_978_707e8,
             eccentricity: 0.0002 + 0.002 * (seed % 7907.0) / 7907.0,
-            inclination_deg: 0.05 * (seed % 6067.0) / 6067.0,
+            inclination_deg: ring_moon_inclination_deg(moon.role) * (seed % 6067.0) / 6067.0,
             node_deg: (seed % 6421.0) / 6421.0 * 360.0,
             periapsis_deg: (seed % 7919.0) / 7919.0 * 360.0,
             mean_anomaly_deg: (seed % 8933.0) / 8933.0 * 360.0,
@@ -1958,6 +1973,14 @@ mod tests {
                 for m in ring_moons {
                     let a = m.orbit.semi_major_axis_km / radius;
                     assert!(m.body_type == "icy-moon" && m.spin.locked);
+                    // In the rings' plane, within a few km of it.
+                    let role = m.ring_role.unwrap();
+                    assert!(m.orbit.inclination_deg <= ring_moon_inclination_deg(role));
+                    if matches!(role, RingRole::Embedded) {
+                        let off_km =
+                            m.orbit.semi_major_axis_km * m.orbit.inclination_deg.to_radians();
+                        assert!(off_km < 5.0, "{off_km}");
+                    }
                     match m.ring_role.unwrap() {
                         RingRole::Embedded => {
                             embedded += 1;

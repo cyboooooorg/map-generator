@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid } from './starSystem';
+import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -163,6 +163,33 @@ describe('star view', () => {
     // A binary's planet swings around the barycentre outside it.
     const [charon] = moonOrbits([{ ...moon(6.4, 0, 2100), semi_major_axis_km: 19_600 }], 1188, 90_000, 60, true);
     expect(charon!.swing).toBeCloseTo(2100 / 19_600, 6);
+  });
+
+  it('draws a ring moon to scale in the rings, in its gap, and the other moons beyond', () => {
+    const R = 60_268;
+    const moon = (a_radii: number, ring: boolean) => ({
+      radius_km: ring ? 10 : 200,
+      inclination_deg: 0,
+      period_days: 1,
+      barycentre_km: 0,
+      semi_major_axis_km: a_radii * R,
+      ring,
+    });
+    const rings = { inner: 1.25, outer: 2.3, gaps: [[2.05, 0.0005] as [number, number], [1.9, 0.06] as [number, number]] };
+    const [moonlet, resonant, other] = moonOrbits([moon(2.05, true), moon(3.0, true), moon(4, false)], R, 365, 60, false);
+    expect(moonlet!.radius).toBeCloseTo(PLANET_MARKER * 2.05, 9);
+    expect(moonlet!.inclination).toBe(RING_TILT);
+    expect(resonant!.radius).toBeCloseTo(PLANET_MARKER * 3.0, 9);
+    expect(other!.radius).toBeGreaterThan(resonant!.radius);
+    // The moonlet's gap is cut wide enough for its marker.
+    const least = RING_MOON_SIZE * 1.6;
+    const bands = ringBands(rings, least);
+    expect(bands.some(([a, b]) => a < 2.05 + RING_MOON_SIZE && b > 2.05 - RING_MOON_SIZE)).toBe(false);
+    expect(bands[0]![0]).toBe(1.25);
+    expect(bands.at(-1)![1]).toBe(2.3);
+    // Without ring moons the moons keep their places.
+    const plain = moonOrbits([moon(4, false)], R, 365, 60, false);
+    expect(plain[0]!.radius).toBeCloseTo(PLANET_MARKER * 1.6, 9);
   });
 
   it('scales every velocity vector alike, the fastest planet at its periapsis the longest', () => {

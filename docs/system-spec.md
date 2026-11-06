@@ -215,6 +215,14 @@ keep their draws. They are `icy-moon` bodies marked with a `ring_role`:
 - `shepherd`: on 70 % of faint rings, a pair of 10 to 25 km on either
   side of the ring.
 
+Ring moons keep to the rings' plane, which is tens of metres to a kilometre
+thick: an embedded moonlet's inclination is drawn up to 0.001° (Pan:
+0.0001°, Daphnis: 0.0036°), an edge moon's up to 0.005° (Atlas: 0.003°),
+so that from them the rings lie on the horizon; shepherds and resonant
+moons, outside the rings, up to 0.05° (Prometheus: 0.008°, Pandora:
+0.05°). Within bright rings, gaps never overlap: a moonlet whose gap the
+resonance gap would cover is not kept.
+
 Bright rings end at the fluid Roche limit of their icy particles (0.5 to
 0.9 g/cm³), kept within 2.0 to 2.5 radii; their gaps are those of their
 moons, and the rings' `gap_moons` name the moon of each gap. The ring

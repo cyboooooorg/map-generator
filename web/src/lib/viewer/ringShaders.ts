@@ -20,6 +20,9 @@ export const ringFragment = /* glsl */ `
   uniform float uOpacity;      // of the densest part
   uniform vec2 uGaps[4];       // centre and width, in planet radii
   uniform int uGapCount;
+  // Half-width a gap keeps at least on screen, in drawn pixels (see main):
+  // the half-size of a small moon's marker (see drawSkyBodies).
+  uniform float uGapPixels;
   uniform float uSeed;
   uniform int uLightMode;      // 0 = headlight, 1 = sun
   uniform vec3 uSunDir;        // world space
@@ -48,13 +51,18 @@ export const ringFragment = /* glsl */ `
 
   void main() {
     float r = length(vLocal.xy);
+    // A moonlet's own gap is a few tens of km wide, under a pixel from
+    // afar, while the moonlet is drawn a few pixels across: the gap is
+    // drawn at least as wide as it, so that it shows round it. (Taken
+    // before the discard: fwidth needs every pixel of a quad.)
+    float least = uGapPixels * fwidth(r);
     if (r < uInner || r > uOuter) discard;
     float across = (r - uInner) / (uOuter - uInner);
     // Thinner towards both edges, densest in the middle-outer part.
     float density = uOpacity * ringlets(r) * smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
     for (int k = 0; k < 4; k++) {
       if (k < uGapCount) {
-        density *= smoothstep(0.0, 1.0, abs(r - uGaps[k].x) / max(uGaps[k].y * 0.5, 1e-4));
+        density *= smoothstep(0.0, 1.0, abs(r - uGaps[k].x) / max(max(uGaps[k].y * 0.5, least), 1e-4));
       }
     }
     if (density < 0.003) discard;
@@ -130,13 +138,18 @@ export const skyRingDensityGlsl = /* glsl */ `
   uniform float uRingOpacity;  // of the densest part
   uniform vec2 uRingGaps[4];   // centre and width, in the giant's radii
   uniform float uRingGapCount;
+  // Half-width a gap keeps at least, in the giant's radii (0: its own): a
+  // few pixels at the giant's distance, as in ringFragment, so that a
+  // moonlet's gap shows round its marker. Set from the CPU: this runs in
+  // branches, where fwidth is undefined.
+  uniform float uRingGapLeast;
   float ringDensity(float r) {
     if (uRingOuter <= 0.0 || r < uRingInner || r > uRingOuter) return 0.0;
     float across = (r - uRingInner) / (uRingOuter - uRingInner);
     float density = uRingOpacity * smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
     for (int k = 0; k < 4; k++) {
       if (float(k) >= uRingGapCount) break;
-      density *= smoothstep(0.0, 1.0, abs(r - uRingGaps[k].x) / max(uRingGaps[k].y * 0.5, 1e-4));
+      density *= smoothstep(0.0, 1.0, abs(r - uRingGaps[k].x) / max(max(uRingGaps[k].y * 0.5, uRingGapLeast), 1e-4));
     }
     return density;
   }
