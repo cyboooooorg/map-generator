@@ -585,6 +585,14 @@ export class PlanetView {
   private rings: Mesh<RingGeometry, ShaderMaterial> | null = null;
   /** The faint dust rings its moons feed (see setDustRings). */
   private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
+  /**
+   * The body's shape as setShape loaded it, for the guides drawn out of its
+   * surface: its radii (row 0 north), and the most it reaches within 15°
+   * of either pole; null for a sphere.
+   */
+  private shapeRadii: { radii: Float32Array; width: number; height: number; poles: number } | null = null;
+  /** Its highest point over the coastline, in elevation units (see setData). */
+  private peakAbove = 0;
   /** The rocks of the giant's rings round a ring moon (see setRingRocks), null until some are. */
   private ringRocks: Mesh<InstancedBufferGeometry, ShaderMaterial> | null = null;
   private ringRocksOn = false;
@@ -962,6 +970,7 @@ export class PlanetView {
     this.shared.uHasShape.value = 0;
     this.shared.uShape.value.dispose();
     this.shared.uShape.value = emptyTexture();
+    this.shapeRadii = null;
     this.requestRender();
     if (!shape) {
       return;
@@ -976,8 +985,17 @@ export class PlanetView {
     }
     const scale = (shape.max - shape.min) / 65535;
     const values = new Uint16Array(image.width * image.height);
+    const radii = new Float32Array(values.length);
     for (let i = 0; i < values.length; i++) {
-      values[i] = DataUtils.toHalfFloat(shape.min + (image.data[i] ?? 0) * scale);
+      radii[i] = shape.min + (image.data[i] ?? 0) * scale;
+      values[i] = DataUtils.toHalfFloat(radii[i]!);
+    }
+    // The caps the spin axis and its arrow stand over.
+    const capRows = Math.max(1, Math.round((image.height * 15) / 180));
+    let poles = 0;
+    for (let row = 0; row < image.height; row++) {
+      if (row >= capRows && row < image.height - capRows) continue;
+      for (let i = row * image.width; i < (row + 1) * image.width; i++) poles = Math.max(poles, radii[i]!);
     }
     const texture = new DataTexture(values, image.width, image.height, RedFormat, HalfFloatType);
     texture.magFilter = LinearFilter;
@@ -989,6 +1007,7 @@ export class PlanetView {
     this.shared.uShape.value = texture;
     this.shared.uShapeTexel.value.set(1 / image.width, 1 / image.height);
     this.shared.uHasShape.value = 1;
+    this.shapeRadii = { radii, width: image.width, height: image.height, poles };
     this.requestRender();
   }
 
@@ -1353,8 +1372,14 @@ export class PlanetView {
     if (!layers) {
       this.shared.uData.value = emptyTexture();
       this.shared.uHasData.value = 0;
+      this.peakAbove = 0;
       return;
     }
+    // Its highest point over the coastline, in elevation units, for the
+    // guides drawn out of its surface (see render).
+    let highest = 0;
+    for (const raw of layers.elevation.data) if (raw > highest) highest = raw;
+    this.peakAbove = Math.max(0, layers.elevation.min + highest * layers.elevation.scale - coast);
     // Worlds wider than the GPU allows are shown at a lower resolution (the
     // point readout still uses every pixel).
     const factor = fitFactor(layers.width, layers.height, this.renderer.capabilities.maxTextureSize);
@@ -2562,9 +2587,16 @@ export class PlanetView {
     this.stars.visible = this.starsOn && this.morph > 0.01;
     this.drawHostStar();
     this.drawSkyBodies();
+    // The axis and the guides start from the farthest of the surface: an
+    // irregular moon's longest semi-axis, with its relief as displayed.
+    const relief = this.shared.uHasData.value > 0.5 ? this.peakAbove * this.reliefLift() : 0;
+    const shape = this.shared.uHasShape.value > 0.5 ? this.shapeRadii : null;
+    const poles = (shape?.poles ?? 1) + relief;
+    this.guides.setSurface(poles, (d) => (shape ? shapeRadiusAt(shape, d) : 1) + relief);
     if (this.spinAxis) {
       this.spinAxis.visible = this.spinAxesOn && this.morph > 0.01;
       this.spinAxis.material.opacity = this.morph ** 3;
+      this.spinAxis.scale.setScalar(poles);
     }
     this.guides.update(this.spinAxesOn, this.spinAxesOn && this.hostGuideOn, this.morph);
     for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
@@ -2851,4 +2883,20 @@ function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null, 
   u['uRingGapCount']!.value = Math.min(rings?.gaps.length ?? 0, 4);
   u['uRingGapLeast']!.value = gapLeast;
   (u['uRingGaps']!.value as Vector2[]).forEach((gap, k) => gap.set(...(rings?.gaps[k] ?? [0, 0])));
+}
+
+/**
+ * The radius of an irregular body's shape along `direction` (its frame:
+ * `[cos lat sin lon, sin lat, cos lat cos lon]`), from its map of radii,
+ * row 0 north, as the surface shader reads it (shapeAt).
+ */
+function shapeRadiusAt(shape: { radii: Float32Array; width: number; height: number }, direction: Vector3): number {
+  const d = direction.clone().normalize();
+  const lon = Math.atan2(d.x, d.z);
+  const lat = Math.asin(Math.max(-1, Math.min(1, d.y)));
+  const u = (lon / (2 * Math.PI) + 1) % 1;
+  const v = lat / Math.PI + 0.5;
+  const x = Math.min(shape.width - 1, Math.floor(u * shape.width));
+  const y = Math.min(shape.height - 1, Math.max(0, Math.floor((1 - v) * shape.height)));
+  return shape.radii[y * shape.width + x] ?? 1;
 }
