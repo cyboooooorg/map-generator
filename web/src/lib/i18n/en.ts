@@ -723,6 +723,7 @@ export const en = {
     biomes: 'Biomes',
     legendHide: 'hide',
     legendShow: (p: { count: number }) => `${p.count}, show`,
+    legendDrag: 'Drag to move the legend; double-click to put it back',
     highlightHelp: 'Hover to highlight, click to keep it highlighted',
     shortcuts: 'Keyboard shortcuts',
     close: 'Close',

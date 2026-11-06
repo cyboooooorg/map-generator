@@ -2291,6 +2291,7 @@ export class PlanetView {
           fragmentShader: skyRingFragment,
           uniforms: {
             uProjectionInverse: { value: this.camera.projectionMatrixInverse },
+            uProjection: { value: this.camera.projectionMatrix },
             uCentre: { value: new Vector3() },
             uRadius: { value: 1 },
             uNormal: { value: new Vector3(0, 1, 0) },
@@ -2312,8 +2313,9 @@ export class PlanetView {
     }
     const ring = entry.rings;
     ring.visible = mesh.visible;
-    // Just after its disk (in front of the globe or with the sky), hidden
-    // by the globe either way: they may lie behind it.
+    // Just after its disk, each pixel at the depth of the point of the
+    // rings it shows (see skyRingFragment): round a ring moon they pass in
+    // front of the globe and behind it.
     ring.renderOrder = mesh.renderOrder + 0.1;
     const u = ring.material.uniforms;
     setRingUniforms(u, rings);
