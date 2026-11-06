@@ -172,6 +172,7 @@ export const surfaceFragment = /* glsl */ `
   uniform float uCasterCount;
   uniform float uSunRadius;
   uniform float uCloudsOn;     // cloud opacity: 0 hides them (toggle, zoom fade)
+  uniform float uCloudShadows; // 1 draws their shadows on the ground
   uniform sampler2D uClouds;   // cloud cover in r, row 0 = north (sampled at 1 - v)
   uniform vec3 uCloudTint;     // linear colour of the clouds
   uniform vec3 uLightTint;     // colour of the light ("Star light"), white otherwise
@@ -212,17 +213,12 @@ export const surfaceFragment = /* glsl */ `
   ${glslRamp('cloudTops')}
 
   // The wind of a giant at the latitude of map row v (0 south, 1 north).
+  // Indexed directly (GLSL ES 3.00 allows it on uniform arrays): a loop
+  // over the 91 entries cost a fifth of the frame on a CPU renderer.
   float bandWind(float v) {
     float at = clamp(v, 0.0, 1.0) * 90.0;
     int i = int(floor(min(at, 89.999)));
-    float f = at - float(i);
-    float a = 0.0;
-    float b = 0.0;
-    for (int k = 0; k < 91; k++) {
-      if (k == i) a = uWind[k];
-      if (k == i + 1) b = uWind[k];
-    }
-    return mix(a, b, f);
+    return mix(uWind[i], uWind[i + 1], at - float(i));
   }
 
   // Depth contours: a pale blue mixed over the sea (linear colour, share).
@@ -543,10 +539,12 @@ export const surfaceFragment = /* glsl */ `
       // thick ones hide the ground.
       vec2 cloudUv = vec2(vUv.x - uCloudShift, 1.0 - vUv.y);
       cover = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv).r) * 0.85 * uCloudsOn;
-      float lat = (vUv.y - 0.5) * PI;
-      vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
-      float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + vec2(1.0, -1.0) * towardsLight * 0.004 * uMorph).r) * uCloudsOn;
-      colour *= 1.0 - 0.45 * shadow;
+      if (uCloudShadows > 0.5) {
+        float lat = (vUv.y - 0.5) * PI;
+        vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
+        float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + vec2(1.0, -1.0) * towardsLight * 0.004 * uMorph).r) * uCloudsOn;
+        colour *= 1.0 - 0.45 * shadow;
+      }
     }
     colour *= shade * uLightTint;
     colour += emitted;
@@ -1167,6 +1165,115 @@ export const atmosphereFragment = /* glsl */ `
     // Soft exposure: bright skies saturate instead of clipping.
     vec3 colour = 1.0 - exp(-EXPOSURE * 4.0 * PI * light);
     vec3 transmittance = exp(-(uBetaR * depthR + uBetaM * depthM));
+    float behind = surface ? dot(transmittance, vec3(1.0 / 3.0)) : 1.0;
+    gl_FragColor = vec4(colour * uOpacity, mix(1.0, behind, uOpacity));
+  }
+`;
+
+// The light profile's sky (see quality.ts): the same shell, passes and
+// output as atmosphereFragment, without its march. The optical depth of
+// the view ray is taken in closed form, from Schüler's approximation of the
+// Chapman function (GPU Pro 3, 2012): the column of an exponential
+// atmosphere from a point to space, for a ray rising from it. A segment's
+// column is the difference of two such columns, split at the ray's closest
+// point to the planet so that each half rises. The light scattered along
+// the ray is that of a uniform medium lit by the sunlight of three of its
+// points, weighed by the air's density there, each reddened by the
+// sunlight's own column: a coarse twilight, at a fraction of the cost.
+export const atmosphereHaloFragment = /* glsl */ `
+  uniform float uOpacity;
+  uniform int uLightMode;
+  uniform vec3 uSunDir;
+  uniform vec3 uLightDir;
+  uniform float uTop;
+  uniform vec3 uBetaR;
+  uniform float uBetaM;
+  uniform vec3 uMieAlbedo;
+  uniform float uHeightR;
+  uniform float uHeightM;
+  uniform float uG;
+  uniform vec3 uLightTint;
+  uniform float uGround;
+  varying vec3 vWorld;
+
+  const float PI = 3.14159265;
+  const float EXPOSURE = 1.6;
+
+  vec2 sphere(vec3 origin, vec3 dir, float radius) {
+    float b = dot(origin, dir);
+    float c = dot(origin, origin) - radius * radius;
+    float h = b * b - c;
+    if (h < 0.0) return vec2(1e9, -1e9);
+    h = sqrt(h);
+    return vec2(-b - h, -b + h);
+  }
+
+  // Column to space from the point p along the rising direction d, over
+  // the density at the ground, for a scale height H (radii).
+  float column(vec3 p, vec3 d, float H) {
+    float r = max(length(p), 1.0);
+    float mu = max(dot(p, d) / r, 0.0);
+    float c = sqrt(r / H);
+    return H * c / (c * mu + 1.0) * exp(-(r - 1.0) / H);
+  }
+
+  // Column along the ray o + t d between t = a and t = b (a < b); c is
+  // where the ray comes closest to the planet.
+  float segment(vec3 o, vec3 d, float a, float b, float c, float H) {
+    vec3 pa = o + d * a;
+    vec3 pb = o + d * b;
+    if (c <= a) return max(column(pa, d, H) - column(pb, d, H), 0.0);
+    if (c >= b) return max(column(pb, -d, H) - column(pa, -d, H), 0.0);
+    vec3 pc = o + d * c;
+    return max(column(pc, -d, H) - column(pa, -d, H), 0.0) + max(column(pc, d, H) - column(pb, d, H), 0.0);
+  }
+
+  // Sunlight reaching the point p: none in the planet's shadow, reddened
+  // by the column it crossed.
+  vec3 sunlightAt(vec3 p, vec3 sun) {
+    float lit = smoothstep(-0.12, 0.08, dot(normalize(p), sun));
+    return exp(-(uBetaR * column(p, sun, uHeightR) + uBetaM * column(p, sun, uHeightM))) * lit;
+  }
+
+  void main() {
+    vec3 origin = cameraPosition;
+    vec3 dir = normalize(vWorld - cameraPosition);
+    vec3 sun = uLightMode == 1 ? uSunDir : uLightDir;
+    vec2 shell = sphere(origin, dir, uTop);
+    if (shell.y <= 0.0) discard;
+    vec2 ground = sphere(origin, dir, 1.0);
+    bool hitsGround = ground.x > 0.0 && ground.x < ground.y;
+    float near = max(shell.x, 0.0);
+    bool surface = uGround > 0.5;
+    float limb = max(-dot(origin, dir), near);
+    float far = hitsGround ? min(shell.y, ground.x) : surface ? min(shell.y, limb) : shell.y;
+    if (far <= near) discard;
+
+    float closest = -dot(origin, dir);
+    float depthR = segment(origin, dir, near, far, closest, uHeightR);
+    float depthM = segment(origin, dir, near, far, closest, uHeightM);
+    vec3 tau = uBetaR * depthR + uBetaM * depthM;
+    vec3 transmittance = exp(-tau);
+
+    // The sunlight along the ray: at its densest point (the ground, or the
+    // closest to the planet) and a quarter of the way from either end,
+    // weighed by the air's density at each.
+    vec3 p0 = origin + dir * (hitsGround ? far : clamp(closest, near, far));
+    vec3 p1 = origin + dir * mix(near, far, 0.25);
+    vec3 p2 = origin + dir * mix(near, far, 0.75);
+    vec3 w = exp(-(vec3(length(p0), length(p1), length(p2)) - 1.0) / uHeightR) * vec3(2.0, 1.0, 1.0);
+    vec3 sunlight = (w.x * sunlightAt(p0, sun) + w.y * sunlightAt(p1, sun) + w.z * sunlightAt(p2, sun)) / max(w.x + w.y + w.z, 1e-6);
+
+    float mu = dot(dir, sun);
+    float phaseR = 3.0 / (16.0 * PI) * (1.0 + mu * mu);
+    float g2 = uG * uG;
+    float phaseM = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) /
+      ((2.0 + g2) * pow(1.0 + g2 - 2.0 * uG * mu, 1.5));
+    // Single scattering in a uniform medium: the light scattered towards
+    // the eye is the share of the ray's extinction that scattering makes.
+    vec3 scattering = uBetaR * phaseR * depthR + uBetaM * uMieAlbedo * phaseM * depthM;
+    vec3 light = (1.0 - transmittance) * scattering / max(tau, vec3(1e-6)) * sunlight * uLightTint;
+    vec3 colour = 1.0 - exp(-EXPOSURE * 4.0 * PI * light);
     float behind = surface ? dot(transmittance, vec3(1.0 / 3.0)) : 1.0;
     gl_FragColor = vec4(colour * uOpacity, mix(1.0, behind, uOpacity));
   }
