@@ -41,6 +41,8 @@ export interface QualityProfile {
   starSegments: number;
   /** Strands in each prominence of the star view (see prominenceGeometry). */
   prominenceStrands: number;
+  /** The rocks of a giant's rings round a ring moon, in the planet view (see lib/ringRocks.ts). */
+  ringRocks: boolean;
 }
 
 export const PROFILES: Record<Quality, QualityProfile> = {
@@ -57,6 +59,7 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     cloudShadows: true,
     starSegments: 128,
     prominenceStrands: 12,
+    ringRocks: true,
   },
   light: {
     quality: 'light',
@@ -73,6 +76,7 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     cloudShadows: false,
     starSegments: 48,
     prominenceStrands: 4,
+    ringRocks: false,
   },
 };
 

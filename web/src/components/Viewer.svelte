@@ -39,6 +39,7 @@
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import { currentProfile } from '../lib/viewer/quality';
+  import { RING_ROCK_SCALES, ringRocks } from '../lib/ringRocks';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
   import LoadingBar from './LoadingBar.svelte';
@@ -151,6 +152,9 @@
     orbitLines: false,
     // The trojan swarms and belts ringed in the sky.
     smallBodies: false,
+    // The rocks of the rings round a ring moon: 0 none, else their drawn
+    // size over their true size (1 true; more is not to scale).
+    ringRocks: 100 as number,
     // The spin axes of the globe and the bodies of the sky.
     spinAxes: false,
     // Names tied to the bodies of the sky.
@@ -206,6 +210,7 @@
   /** The orbits of the moons (or of a giant's other moons) drawn in the sky. */
   let orbitLines = $state(saved.orbitLines);
   let smallBodies = $state(saved.smallBodies);
+  let ringRockScale = $state(RING_ROCK_SCALES.includes(saved.ringRocks) ? saved.ringRocks : 100);
   let axesShown = $state(saved.spinAxes);
   $effect(() => view?.setSpinAxes(axesShown));
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
@@ -435,6 +440,7 @@
       hostTropics,
       orbitLines,
       smallBodies,
+      ringRocks: ringRockScale,
       spinAxes: axesShown,
       skyLabels,
       sun,
@@ -999,6 +1005,18 @@
     const given = parent.params.given_rings;
     return given ? given.rings : (meta?.host?.giant.rings ?? null);
   });
+  /** Whether this view draws the rocks of the rings round a ring moon (high quality only). */
+  const drawsRingRocks = currentProfile().ringRocks;
+  /** The ring moon shown's rocks at the system's time, while they are asked for. */
+  const ringRockWindow = $derived.by(() => {
+    if (!drawsRingRocks || ringRockScale === 0 || !sys || !sysBody?.ring_role || !sysSky || !hostRings) return null;
+    const k = sysSky.ids.indexOf(sysBody.parent ?? '');
+    const giant = sysSky.bodies[k];
+    const giantBody = sys.bodies.find((b) => b.id === sysBody.parent);
+    if (!giant || !giantBody) return null;
+    return ringRocks(sysBody, giant, giantBody.physical.radius_km, hostRings, sysDays);
+  });
+  $effect(() => view?.setRingRocks(ringRockWindow, ringRockScale));
   $effect(() => {
     // The planet in its moon's sky, by its own switches (Host planet).
     const parent = sysBody?.parent ?? null;
@@ -1609,6 +1627,17 @@
           <label class="check"><input type="checkbox" bind:checked={hostGrid} /> {t.viewer.grid}</label>
           <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
         </fieldset>
+        {#if sysBody?.ring_role && drawsRingRocks}
+          <!-- The rocks of the rings round a ring moon, high quality only. -->
+          <label class="ring-rocks" title={t.viewer.ringRocksHelp}>
+            {t.viewer.ringRocks}
+            <select bind:value={ringRockScale}>
+              {#each RING_ROCK_SCALES as scale (scale)}
+                <option value={scale}>{t.viewer.ringRockScales[scale] ?? scale}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
   </div>
 {/snippet}
 {#snippet epochPanel()}
@@ -1930,6 +1959,12 @@
     font-size: 0.8rem;
     color: var(--muted);
     padding: 0 4px;
+  }
+  .ring-rocks {
+    margin-top: 8px;
+    display: grid;
+    gap: 4px;
+    font-size: 0.85rem;
   }
   .viewer {
     position: relative;
