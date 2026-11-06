@@ -1008,19 +1008,20 @@ export const skyBodyFragment = /* glsl */ `
  */
 export const SKY_ORBIT_DASH = 1.5;
 
-/** Frames a dash period takes to go past at least, while the orbits play (see skyOrbitDash). */
-const DASH_FRAMES = 4;
-/** Frame rate assumed for the dashes' pace. */
-const DASH_FPS = 60;
+/** Dash periods that go past a point of the line each second at most, while the orbits play (see skyOrbitDash). */
+export const SKY_ORBIT_DASHES_PER_SECOND = 2;
 
 /**
  * The dash period of an orbit line `length` long (radii of the body
  * shown) as the body goes round it `orbitsPerSecond` times a second: long
- * enough that the dashes go past it at most a quarter of a period a frame,
- * so that they are seen moving, not blurred into a solid line.
+ * enough that at most SKY_ORBIT_DASHES_PER_SECOND dashes go past any
+ * point of the line each second, whatever the speed and wherever on the
+ * screen, so that they are seen sliding rather than streaming or blurred
+ * into a solid line. Where a dash would be longer than the screen, the
+ * line is drawn plain (see skyOrbitFragment).
  */
 export function skyOrbitDash(length: number, orbitsPerSecond: number): number {
-  return Math.max(SKY_ORBIT_DASH, (DASH_FRAMES * length * Math.abs(orbitsPerSecond)) / DASH_FPS);
+  return Math.max(SKY_ORBIT_DASH, (length * Math.abs(orbitsPerSecond)) / SKY_ORBIT_DASHES_PER_SECOND);
 }
 
 export const skyOrbitVertex = /* glsl */ `
@@ -1049,6 +1050,8 @@ export const skyOrbitFragment = /* glsl */ `
   uniform float uNear;
   // Dash period along a dashed orbit, in radii of the body shown.
   uniform float uDash;
+  // The screen's height, in drawn pixels.
+  uniform float uScreenPx;
   varying float vFar;
   varying float vAlong;
   void main() {
@@ -1058,9 +1061,13 @@ export const skyOrbitFragment = /* glsl */ `
     if (vAlong >= 0.0) {
       // Dashes where they span a few pixels, every other one bright (no
       // gaps: the line stays whole as it moves); farther off, where they
-      // would flicker, a fainter solid line.
+      // would flicker, a fainter solid line; where a dash would be longer
+      // than the screen (a fast orbit seen near), the plain line, which
+      // would otherwise blink from bright to dim as a whole.
       float perPixel = fwidth(vAlong);
-      if (perPixel < uDash * 0.25) {
+      if (uDash > perPixel * uScreenPx) {
+        // The plain line.
+      } else if (perPixel < uDash * 0.25) {
         if (fract(vAlong / uDash) < 0.5) {
           colour = mix(uColor, vec3(1.0), 0.65);
           opacity = min(1.0, opacity * 2.0);

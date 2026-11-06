@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKY_ORBIT_DASH, skyOrbitDash } from './shaders';
+import { SKY_ORBIT_DASH, SKY_ORBIT_DASHES_PER_SECOND, skyOrbitDash } from './shaders';
 
 describe('skyOrbitDash', () => {
   it('keeps the still period while the orbits stand still or crawl', () => {
@@ -7,13 +7,15 @@ describe('skyOrbitDash', () => {
     expect(skyOrbitDash(10, 0.1)).toBe(SKY_ORBIT_DASH);
   });
 
-  it('lets the dashes go past at most a quarter of a period a frame at 60 fps', () => {
-    // A moon 222 of its radii from its planet, round once every 10 s.
-    const length = 2 * Math.PI * 222;
-    const dash = skyOrbitDash(length, 0.1);
-    const perFrame = (length * 0.1) / 60;
-    expect(perFrame / dash).toBeCloseTo(0.25, 6);
-    // Twice the pace, twice the period.
-    expect(skyOrbitDash(length, 0.2)).toBeCloseTo(2 * dash, 6);
+  it('lets a fixed number of dashes a second go past, whatever the speed', () => {
+    // A moonlet 33,900 of its radii from its giant, round once every 43 min.
+    const length = 2 * Math.PI * 33_900;
+    const pace = 1 / 2560;
+    const dash = skyOrbitDash(length, pace);
+    const perSecond = (length * pace) / dash;
+    expect(perSecond).toBeCloseTo(SKY_ORBIT_DASHES_PER_SECOND, 6);
+    expect(perSecond).toBeLessThanOrEqual(2);
+    // Twice the pace, twice the period: as many dashes a second.
+    expect(skyOrbitDash(length, 2 * pace)).toBeCloseTo(2 * dash, 6);
   });
 });
