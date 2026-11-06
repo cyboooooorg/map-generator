@@ -22,7 +22,7 @@
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
-  import { debouncedSetting, loadSetting } from '../lib/settings';
+  import { debouncedSetting, loadSetting, saveSetting } from '../lib/settings';
   import { UNITS, unitTooltip } from '../lib/units';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
@@ -242,6 +242,71 @@
   /** The legend and panel states chosen on a wide screen, saved as the preferences. */
   let wideChoice = { legendOpen: saved.legendOpen, panelOpen: saved.panelOpen };
   let legendOpen = $state(saved.legendOpen && wideQuery.matches);
+  /**
+   * Where the legend card was dragged: its left edge and its bottom edge
+   * from the view's left and bottom, CSS px (it grows upwards as it opens);
+   * null for its usual place. Remembered; a double click puts it back.
+   */
+  let legendAt = $state(loadSetting<{ left: number; bottom: number } | null>('legendAt', null));
+  /** Whether the press on the legend turned into a drag: the click ending it toggles nothing. */
+  let legendDragged = false;
+
+  /**
+   * Drags the legend card with the mouse or a pen, from anywhere on it
+   * (its rows too): a press that moves 5 px is a drag, else a click. A
+   * finger on its list scrolls the list instead.
+   */
+  function dragLegend(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    if (event.pointerType === 'touch' && (event.target as HTMLElement).closest('ul')) return;
+    const card = event.currentTarget as HTMLElement;
+    const view = card.offsetParent as HTMLElement | null;
+    if (!view) return;
+    const rect = card.getBoundingClientRect();
+    const box = view.getBoundingClientRect();
+    const start = { left: rect.left - box.left, bottom: box.bottom - rect.bottom };
+    const from = { x: event.clientX, y: event.clientY };
+    legendDragged = false;
+    const move = (e: PointerEvent) => {
+      const dx = e.clientX - from.x;
+      const dy = e.clientY - from.y;
+      if (!legendDragged) {
+        if (Math.hypot(dx, dy) < 5) return;
+        legendDragged = true;
+      }
+      // Kept inside the view, its title always reachable.
+      legendAt = {
+        left: Math.min(Math.max(start.left + dx, 8), Math.max(8, box.width - rect.width - 8)),
+        bottom: Math.min(Math.max(start.bottom - dy, 8), Math.max(8, box.height - 48)),
+      };
+    };
+    // Followed on the window: the pointer leaves the card before the drag
+    // starts (capturing it would send the click to the card, not its buttons).
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (legendDragged) saveSetting('legendAt', legendAt);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  }
+
+  /** The click that ends a drag of the legend does not reach its buttons. */
+  function legendClick(event: MouseEvent): void {
+    if (!legendDragged) return;
+    legendDragged = false;
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
+  /** A double click on the legend (off its buttons) puts it back in its usual place. */
+  function legendHome(event: MouseEvent): void {
+    if ((event.target as HTMLElement).closest('button')) return;
+    legendAt = null;
+    saveSetting('legendAt', null);
+  }
   let hovered = $state<number | null>(null);
   let pinned = $state<number | null>(null);
   let loading = $state(false);
@@ -1719,7 +1784,8 @@
     {@const topsShown = giant !== null && shown === 'elevation'}
     {@const ramp = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown]}
     {@const range = giant && shown === 'temperature' ? giantTemperatureRange(giant) : null}
-    <div class="legend" role="region" aria-label={t.viewer.legend}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="legend" role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
       <strong>{giant ? layerName(shown) : ramp.label}</strong>
       <div class="bar" style:background={cssGradient(windShown ? 'wind' : topsShown ? 'cloudTops' : shown)}></div>
       <div class="ends">
@@ -1742,7 +1808,8 @@
       </div>
     </div>
   {:else if shown === 'biomes' && world.stats}
-    <div class="legend biomes" role="region" aria-label={t.viewer.biomeLegend}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="legend biomes" role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.biomeLegend}>
       <button class="legend-title" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen}>
         <strong>{t.viewer.biomes}</strong>
         <small class="muted">{legendOpen ? t.viewer.legendHide : t.viewer.legendShow({ count: world.stats.shares.length })}</small>
@@ -2015,6 +2082,13 @@
     padding: 8px 10px;
     display: grid;
     gap: 4px;
+    /* Dragged from anywhere on it (see dragLegend): no text selection. */
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }
+  .legend ul {
+    touch-action: pan-y;
   }  /* The playback bar wraps to two lines on narrow views. */
   @media (max-width: 720px) {
     .legend {
@@ -2031,6 +2105,7 @@
     padding: 0;
   }
   .legend ul {
+    touch-action: pan-y;
     list-style: none;
     margin: 0;
     padding: 0;
