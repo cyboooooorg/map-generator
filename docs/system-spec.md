@@ -226,7 +226,10 @@ resonance gap would cover is not kept.
 Bright rings end at the fluid Roche limit of their icy particles (0.5 to
 0.9 g/cm³), kept within 2.0 to 2.5 radii; their gaps are those of their
 moons, and the rings' `gap_moons` name the moon of each gap. The ring
-moons are numbered with the others, nearest first. A giant without
+moons are numbered with the others, nearest first, at their distance in
+the radii of the giant's body (`physical.radius_km`, the unit the views
+place its moons in), so that an embedded moonlet sits in the middle of
+its gap. A giant without
 regular moons (hot, or with too small a Hill sphere) keeps its rings
 without moons, and the giant a world of the request orbits gets none.
 
