@@ -674,9 +674,9 @@ export const en = {
     minuteUnit: 'min',
     hourUnit: 'h',
     dayUnit: 'd',
-    cameraFollowsSky: 'Camera follows the sky',
-    cameraFollowsSkyHelp:
-      'While the clock plays, the camera turns with the stars, the sun and the orbits, and the globe turns under it. Off, the camera stays fixed on the body and the sky turns round it',
+    cameraOnBody: 'Camera turns with the body',
+    cameraOnBodyHelp:
+      'While the clock plays, the camera turns with the body, always seeing the same face, and the sky turns round it. Off, the camera stays still against the stars, the sun and the orbits, and sees the globe turn on itself. Kept apart for bodies locked to what they orbit, where it is on by default: their planet would otherwise sweep round them once per orbit',
     orbitDay: (p: { days: string; period: string }) => `Day ${p.days} of a ${p.period}-day orbit`,
     moonSun: 'On a moon the sun follows its orbit: it turns once a month, the moon keeping its face to its planet',
     moonSunSpin: ({ hours }: { hours: string }) =>
