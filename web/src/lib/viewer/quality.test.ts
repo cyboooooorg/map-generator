@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
+import { STRANDS } from './prominenceGeometry';
 import { isSoftwareRenderer, PROFILES, resolveQuality } from './quality';
 
 describe('quality', () => {
@@ -24,5 +25,14 @@ describe('quality', () => {
     expect(fullPixelRatio(0.5, light)).toBe(0.5);
     expect(pixelRatio(2, 0, light)).toBe(0.5);
     expect(fullPixelRatio(3, PROFILES.high)).toBe(2);
+  });
+
+  it('keeps the full drawing in the high profile and lightens the costly passes in the light one', () => {
+    const { high, light } = PROFILES;
+    expect(high).toMatchObject({ surfaceSegments: 720, atmosphere: 'scattering', tileBudget: 1, cloudShadows: true, starSegments: 128, prominenceStrands: STRANDS });
+    expect(light).toMatchObject({ surfaceSegments: 240, atmosphere: 'halo', tileBudget: 0.25, cloudShadows: false, starSegments: 48, prominenceStrands: 4 });
+    // Meshes have half as many rows as columns.
+    expect(light.surfaceSegments % 2).toBe(0);
+    expect(light.starSegments % 2).toBe(0);
   });
 });

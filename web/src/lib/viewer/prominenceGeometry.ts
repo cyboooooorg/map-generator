@@ -30,15 +30,19 @@ function random(seed: number): () => number {
  * one geometry. Besides the tube's `uv` (x along the strand), each vertex
  * carries `aStrand` (a number in [0, 1) proper to its strand) and `aDrift`
  * (the unit direction its strand frays towards when the prominence erupts).
+ *
+ * `strands` lightens it (the light profile, see quality.ts): the first
+ * `strands` of the full bundle, each with half the segments along it.
  */
-export function prominenceGeometry(arc: Prominence, radius: number, seed: number): BufferGeometry {
+export function prominenceGeometry(arc: Prominence, radius: number, seed: number, strands = STRANDS): BufferGeometry {
   const next = random(seed);
   const from = new Vector3(...arc.from);
   const to = new Vector3(...arc.to);
   // Across the arch: perpendicular to the plane of the two feet and the centre.
   const across = new Vector3().crossVectors(from, to).normalize();
-  const strands: BufferGeometry[] = [];
-  for (let s = 0; s < STRANDS; s += 1) {
+  const segments = strands < STRANDS ? SEGMENTS / 2 : SEGMENTS;
+  const tubes: BufferGeometry[] = [];
+  for (let s = 0; s < Math.min(strands, STRANDS); s += 1) {
     const strand = next();
     // Each strand rises a little higher or lower than the arch, sits to one
     // side of it and winds round its neighbours along the way.
@@ -61,7 +65,7 @@ export function prominenceGeometry(arc: Prominence, radius: number, seed: number
         .addScaledVector(up, spread * (0.6 * lift + 0.4 * Math.cos(wind)));
       return up.multiplyScalar(1 + height * arch).add(offset).multiplyScalar(radius);
     });
-    const tube = new TubeGeometry(new CatmullRomCurve3(points), SEGMENTS, arc.thickness * radius * (0.2 + 0.2 * next()), SIDES);
+    const tube = new TubeGeometry(new CatmullRomCurve3(points), segments, arc.thickness * radius * (0.2 + 0.2 * next()), SIDES);
     const count = tube.getAttribute('position').count;
     tube.setAttribute('aStrand', new BufferAttribute(new Float32Array(count).fill(strand), 1));
     // Frays out sideways and along the arch, each strand its own way.
@@ -70,9 +74,9 @@ export function prominenceGeometry(arc: Prominence, radius: number, seed: number
     const drifts = new Float32Array(count * 3);
     for (let v = 0; v < count; v += 1) drifts.set([drift.x, drift.y, drift.z], v * 3);
     tube.setAttribute('aDrift', new BufferAttribute(drifts, 3));
-    strands.push(tube);
+    tubes.push(tube);
   }
-  const merged = mergeGeometries(strands)!;
-  for (const strand of strands) strand.dispose();
+  const merged = mergeGeometries(tubes)!;
+  for (const tube of tubes) tube.dispose();
   return merged;
 }

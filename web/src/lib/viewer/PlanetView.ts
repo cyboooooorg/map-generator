@@ -90,6 +90,7 @@ import { downsample, fitFactor, releaseOnUpload } from './textures';
 import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
+  atmosphereHaloFragment,
   atmosphereVertex,
   LAYER_IDS,
   type Layer,
@@ -149,8 +150,7 @@ const SPIN_AXIS_LENGTH = 1.5;
  * its atmosphere, rings, grid and axes, before the near orbit lines (10).
  */
 const SKY_FRONT_ORDER = 5;
-/** Vertices across the base surface (2 per degree) and across a detail patch (see TileLayer). */
-const SURFACE_SEGMENTS = 720;
+/** Vertices across a detail patch (see TileLayer); the base surface's are the profile's (surfaceSegments). */
 const PATCH_SEGMENTS = 16;
 /** The arrow of the sense of rotation round it: its height, radius and arc (radians). */
 /** Colours of their north and south ends, linear. */
@@ -354,7 +354,9 @@ const liveViews = new Set<PlanetView>();
 function balanceTileBudgets(): void {
   const budget = liveViews.size > 1 ? COMPARE_TILE_BUDGET : MAX_TEXTURES;
   for (const view of liveViews) {
-    view.setTileBudget(budget);
+    // Its profile's share: without a GPU the textures live in the
+    // machine's memory, and each one is mipmapped on the CPU.
+    view.setTileBudget(budget * view.quality.tileBudget);
   }
 }
 
@@ -431,6 +433,8 @@ export class PlanetView {
     uLift: { value: 0 } as IUniform<number>,
     uMap: { value: emptyTexture() } as IUniform<Texture>,
     uCloudsOn: { value: 0 } as IUniform<number>,
+    // 1 draws the clouds' shadows on the ground (the profile's cloudShadows).
+    uCloudShadows: { value: 1 } as IUniform<number>,
     uClouds: { value: emptyTexture() } as IUniform<Texture>,
     uCloudTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
     uLightTint: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
@@ -456,8 +460,9 @@ export class PlanetView {
     uMapSize: { value: new Vector2(1, 1) } as IUniform<Vector2>,
     // The base surface covers the whole planet and draws no detail tile.
     uTileRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
-    // Vertices across the mesh drawn: the base surface's (see surfaceVertex, the relief's level of detail).
-    uMeshSegments: { value: SURFACE_SEGMENTS } as IUniform<number>,
+    // Vertices across the mesh drawn: the base surface's (see surfaceVertex,
+    // the relief's level of detail), set from the profile when the view is made.
+    uMeshSegments: { value: 720 } as IUniform<number>,
     uTileOn: { value: 0 } as IUniform<number>,
     uTile: { value: emptyTexture() } as IUniform<Texture>,
     uTexRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
@@ -710,9 +715,13 @@ export class PlanetView {
     this.hostStar.visible = false;
     this.scene.add(this.hostStar);
 
+    // 2 vertices per degree in the high profile: enough for the relief to
+    // follow the data. On a CPU renderer the vertices cost more than the
+    // pixels: the light profile's coarser globe (240) halves the frame.
+    this.u.uMeshSegments.value = quality.surfaceSegments;
+    this.u.uCloudShadows.value = quality.cloudShadows ? 1 : 0;
     this.surface = new Mesh(
-      // 2 vertices per degree: enough for the relief to follow the data.
-      new PlaneGeometry(1, 1, SURFACE_SEGMENTS, SURFACE_SEGMENTS / 2),
+      new PlaneGeometry(1, 1, quality.surfaceSegments, quality.surfaceSegments / 2),
       new ShaderMaterial({
         vertexShader: surfaceVertex,
         fragmentShader: surfaceFragment,
@@ -763,7 +772,8 @@ export class PlanetView {
         shell,
         new ShaderMaterial({
           vertexShader: atmosphereVertex,
-          fragmentShader: atmosphereFragment,
+          // The light profile's halo has no march (see atmosphereHaloFragment).
+          fragmentShader: quality.atmosphere === 'halo' ? atmosphereHaloFragment : atmosphereFragment,
           uniforms: {
             uOpacity: this.atmosphereOpacity,
             uLightMode: this.u.uLightMode,
@@ -859,7 +869,7 @@ export class PlanetView {
   /**
    * Sets how many detail tile textures this view keeps on the GPU. Views
    * set it themselves: MAX_TEXTURES alone, half as many each while two are
-   * open.
+   * open, times their profile's tileBudget.
    */
   setTileBudget(count: number): void {
     this.tiles.setTextureBudget(count);

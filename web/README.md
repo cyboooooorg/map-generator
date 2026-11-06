@@ -125,6 +125,24 @@ hidden on screens narrower than 480 px) chooses what the views draw:
   - 20 frames per second at most;
   - no camera inertia, which keeps drawing frames after the pointer
     stops.
+  - a coarser globe: 240 vertices round the planet instead of 720. On a
+    CPU renderer its vertices cost more than its pixels, so this saves
+    more than any other item; the relief keeps its heights, with less
+    detail;
+  - a plain halo for the atmosphere: the same colours and veil as the
+    scattering shell, from optical depths in closed form instead of a
+    16-step march (`atmosphereHaloFragment` in `lib/viewer/shaders.ts`),
+    with a coarser twilight;
+  - no cloud shadows on the ground (the clouds themselves stay);
+  - a quarter of the detail tile textures kept in memory;
+  - in the star view, a coarser star (48 segments instead of 128) and 4
+    strands in each prominence instead of 12.
+
+On SwiftShader, at 1280 × 758 CSS pixels and a device pixel ratio of 1, a
+frame of the planet view takes about 40 ms in light quality against 490
+ms in high quality (60 ms against 470 ms with the globe filling the
+view). A giant takes 48 ms against 560 ms, and the star view 6 ms against
+45 ms.
 
 The choice is remembered (`mapgen.quality`). A view takes its quality
 when it is made (`QualityProfile`, in `lib/viewer/quality.ts`), as

@@ -37,6 +37,10 @@ export interface QualityProfile {
   tileBudget: number;
   /** Cloud shadows on the ground. */
   cloudShadows: boolean;
+  /** Segments round the star view's star (half as many from pole to pole). */
+  starSegments: number;
+  /** Strands in each prominence of the star view (see prominenceGeometry). */
+  prominenceStrands: number;
 }
 
 export const PROFILES: Record<Quality, QualityProfile> = {
@@ -51,6 +55,8 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     atmosphere: 'scattering',
     tileBudget: 1,
     cloudShadows: true,
+    starSegments: 128,
+    prominenceStrands: 12,
   },
   light: {
     quality: 'light',
@@ -65,6 +71,8 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     atmosphere: 'halo',
     tileBudget: 0.25,
     cloudShadows: false,
+    starSegments: 48,
+    prominenceStrands: 4,
   },
 };
 

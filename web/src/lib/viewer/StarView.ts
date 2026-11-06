@@ -394,7 +394,7 @@ export class StarView {
     this.scene.add(this.sky);
 
     this.star = new Mesh(
-      new SphereGeometry(STAR_RADIUS, 128, 64),
+      new SphereGeometry(STAR_RADIUS, quality.starSegments, quality.starSegments / 2),
       new ShaderMaterial({
         vertexShader: starSurfaceVertex,
         fragmentShader: starSurfaceFragment,
@@ -1574,7 +1574,7 @@ export class StarView {
   /** A prominence: a bundle of glowing strands along its arc (see prominenceGeometry). */
   private arcMesh(arc: Prominence, index: number): Mesh<BufferGeometry, ShaderMaterial> {
     const mesh = new Mesh(
-      prominenceGeometry(arc, STAR_RADIUS, this.seed * 13 + index),
+      prominenceGeometry(arc, STAR_RADIUS, this.seed * 13 + index, this.quality.prominenceStrands),
       new ShaderMaterial({
         vertexShader: prominenceVertex,
         fragmentShader: prominenceFragment,

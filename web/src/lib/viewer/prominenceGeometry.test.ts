@@ -28,6 +28,14 @@ describe('prominence geometry', () => {
     expect(highest).toBeGreaterThan(1 + arc.height * 0.7);
   });
 
+  it('keeps the first strands of the bundle, lighter, when asked for fewer', () => {
+    const light = prominenceGeometry(arc, 1, 3, 4);
+    const kept = Array.from(new Set(Array.from(light.getAttribute('aStrand').array)));
+    const all = Array.from(new Set(Array.from(geometry.getAttribute('aStrand').array)));
+    expect(kept).toEqual(all.slice(0, 4));
+    expect(light.getAttribute('position').count).toBeLessThan(geometry.getAttribute('position').count / 4);
+  });
+
   it('is the same for the same seed', () => {
     const again = prominenceGeometry(arc, 1, 3).getAttribute('position').array;
     expect(Array.from(again.slice(0, 30))).toEqual(Array.from(geometry.getAttribute('position').array.slice(0, 30)));
