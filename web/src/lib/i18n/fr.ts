@@ -646,7 +646,7 @@ export const fr: Messages = {
     moonSunSpin: ({ hours }: { hours: string }) =>
       `Cette lune capturée n’est pas synchrone${S}: elle tourne sur elle-même en ${hours}${S}h, sa planète se lève et se couche`,
     atmosphere: 'Atmosphère',
-    lockedSun: `En rotation synchrone${S}: l’étoile reste au-dessus du centre de la carte, sans saisons`,
+    lockedSun: `En rotation synchrone${S}: l’étoile reste en moyenne au-dessus du centre de la carte, sans saisons`,
     starLight: 'Lumière de l’étoile',
     starLightHelp:
       `La planète et son ciel éclairés de la couleur de la lumière de leur étoile, comme les verrait un œil habitué au Soleil${S}; décoché, une lumière blanche`,

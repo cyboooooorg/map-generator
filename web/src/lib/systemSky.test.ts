@@ -123,6 +123,15 @@ describe('system sky', () => {
     giantFrom(eccentric, periapsis).forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 4));
   });
 
+  it('gives the libration its sign: ahead after periapsis, behind before it', () => {
+    const eccentric = structuredClone(system);
+    const orbit = eccentric.bodies.find((x) => x.id === 'c-1')!.orbit;
+    orbit.eccentricity = 0.2;
+    const periapsis = (((360 - orbit.mean_anomaly_deg) % 360) / 360) * orbit.period_days;
+    expect(libration(orbit, periapsis + orbit.period_days / 8)).toBeGreaterThan(0);
+    expect(libration(orbit, periapsis + (5 * orbit.period_days) / 8)).toBeLessThan(0);
+  });
+
   it('librates a retrograde moon and a planet locked to its star too', () => {
     const odd = structuredClone(system);
     odd.bodies.find((x) => x.id === 'c-2')!.orbit.inclination_deg = 150;
