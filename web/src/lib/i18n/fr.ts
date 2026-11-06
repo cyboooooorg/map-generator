@@ -686,6 +686,7 @@ export const fr: Messages = {
     biomes: 'Biomes',
     legendHide: 'masquer',
     legendShow: (p) => `${p.count}, afficher`,
+    legendDrag: 'Glisser pour déplacer la légende, double-cliquer pour la remettre en place',
     highlightHelp: 'Survolez pour mettre en évidence, cliquez pour la garder',
     shortcuts: 'Raccourcis clavier',
     close: 'Fermer',
