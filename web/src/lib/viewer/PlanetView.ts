@@ -103,6 +103,8 @@ import {
   skyBodyVertex,
   previewGlobeFragment,
   previewGlobeVertex,
+  SKY_ORBIT_DASH,
+  skyOrbitDash,
   skyOrbitFragment,
   skyOrbitVertex,
   hostStarVertex,
@@ -2133,6 +2135,28 @@ export class PlanetView {
       [this.skyOrbits, this.skyOrbitsNear] = this.skyLines(new Color(0.55, 0.62, 0.75), 0.45);
     }
     this.skyOrbitsOn = fillSkyLines(this.skyOrbits.geometry, loops, dashed);
+    this.skyOrbitDashed = loops.reduce((most, loop, k) => (dashed[k] ? Math.max(most, loopLength(loop)) : most), 0);
+    this.applySkyOrbitDash();
+  }
+
+  /**
+   * How many times a second the body shown goes round its dashed orbit
+   * (0 while the orbits stand still): its dashes lengthen with the pace so
+   * that they are seen moving (see skyOrbitDash).
+   */
+  setSkyOrbitPace(orbitsPerSecond: number): void {
+    this.skyOrbitPace = orbitsPerSecond;
+    this.applySkyOrbitDash();
+  }
+
+  private skyOrbitDashed = 0;
+  private skyOrbitPace = 0;
+
+  private applySkyOrbitDash(): void {
+    const dash = skyOrbitDash(this.skyOrbitDashed, this.skyOrbitPace);
+    for (const lines of [this.skyOrbits, this.skyOrbitsNear]) {
+      if (lines) lines.material.uniforms['uDash']!.value = dash;
+    }
     this.requestRender();
   }
 
@@ -2166,6 +2190,7 @@ export class PlanetView {
           uColor: { value: colour },
           uOpacity: { value: opacity },
           uNear: { value: 0 },
+          uDash: { value: SKY_ORBIT_DASH },
         },
         transparent: true,
         depthWrite: false,
@@ -2815,6 +2840,13 @@ export class PlanetView {
  * next round each loop, dashed where `dashed` says (see skyOrbitVertex);
  * false when there is nothing to draw.
  */
+function loopLength(loop: readonly Vec3[]): number {
+  return loop.reduce((sum, point, i) => {
+    const next = loop[(i + 1) % loop.length]!;
+    return sum + Math.hypot(next[0] - point[0], next[1] - point[1], next[2] - point[2]);
+  }, 0);
+}
+
 function fillSkyLines(
   geometry: BufferGeometry,
   loops: readonly (readonly Vec3[])[],
