@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RingSystem } from './api/types/RingSystem';
-import { CELL_KM, ringRocks, rockPlace, ROWS, WINDOW } from './ringRocks';
+import { CELL_KM, GRAIN_CELL_KM, GRAIN_REACH_KM, GRAIN_ROWS, GRAIN_WINDOW, latticeWindow, ROCK_REACH_KM, ringRocks, rockPlace, ROWS, WINDOW } from './ringRocks';
 import type { Vec3 } from './skyBodies';
 
 const rings: RingSystem = { inner: 1.25, outer: 2.3, gaps: [[2.1, 0.002]], opacity: 0.8, colour: [0.86, 0.8, 0.68], bright: true, gap_moons: ['c-1'] };
@@ -75,6 +75,20 @@ describe('ring rocks', () => {
     // Exactly on the circle of radius r round the giant.
     const r = Math.hypot(p[0] - giant.position[0], p[1] - giant.position[1], p[2] - giant.position[2]);
     expect(r * moonKm).toBeCloseTo(aKm + 70, 6);
+  });
+
+  it('centres the grain window on the moon too, wider and coarser than the rocks', () => {
+    const rocks = ringRocks(moon, giant, giantKm, rings, 2)!;
+    expect(rocks.grains.rows).toHaveLength(GRAIN_ROWS);
+    expect(rocks.grains.firstRow).toBe(Math.floor(aKm / GRAIN_CELL_KM) - GRAIN_WINDOW);
+    expect(rocks.grains.rows[1]!.offsetKm - rocks.grains.rows[0]!.offsetKm).toBeCloseTo(GRAIN_CELL_KM, 6);
+    expect(rocks.grains).toEqual(latticeWindow(aKm, moon.orbit.period_days, 2, GRAIN_CELL_KM, GRAIN_WINDOW));
+    // The grain reaches two to three times as far as the rocks, both windows round within their rows.
+    expect(GRAIN_REACH_KM / ROCK_REACH_KM).toBeGreaterThanOrEqual(2);
+    expect(GRAIN_REACH_KM / ROCK_REACH_KM).toBeLessThanOrEqual(3);
+    // The innermost row's inner edge at least the reach inside the moon's orbit.
+    expect(0.5 * CELL_KM - rocks.rows[0]!.offsetKm).toBeGreaterThanOrEqual(ROCK_REACH_KM);
+    expect(0.5 * GRAIN_CELL_KM - rocks.grains.rows[0]!.offsetKm).toBeGreaterThanOrEqual(GRAIN_REACH_KM);
   });
 
   it('needs the giant placed', () => {

@@ -10,8 +10,11 @@
 // along and across, are drawn: as the moon moves on, cells leave the
 // window on one side and enter it on the other. A cell's rocks come from
 // a hash of the row and cell (see ringRockVertex), so a cell is the same
-// whenever it comes back. This module places the window at a time; the
-// shader draws the rocks.
+// whenever it comes back. The window is drawn round, its rocks fading out
+// towards ROCK_REACH_KM from the moon. Beyond them, a coarser lattice of
+// the same kind holds the ring's grain: points a pixel wide out to
+// GRAIN_REACH_KM, thinning out with distance into the ring's sheet. This
+// module places both windows at a time; the shaders draw them.
 import type { RingSystem } from './api/types/RingSystem';
 import type { SkyBody, Vec3 } from './skyBodies';
 
@@ -26,11 +29,36 @@ export const WINDOW = 30;
 export const ROWS = 2 * WINDOW + 1;
 /** Rocks a cell holds at most (where the ring is densest). */
 export const ROCKS_PER_CELL = 8;
+/** Distance from the moon the rocks fade out at: the window drawn round. */
+export const ROCK_REACH_KM = WINDOW * CELL_KM;
+
+/** Size of a cell of the grain's lattice, km. */
+export const GRAIN_CELL_KM = 30;
+/** Grain cells drawn on either side of the moon, across and along the ring. */
+export const GRAIN_WINDOW = 30;
+/** Grain rows drawn. */
+export const GRAIN_ROWS = 2 * GRAIN_WINDOW + 1;
+/** Grain points a cell holds at most. */
+export const GRAINS_PER_CELL = 16;
+/** Distance from the moon the grain fades out at, into the ring's sheet. */
+export const GRAIN_REACH_KM = GRAIN_WINDOW * GRAIN_CELL_KM;
 /**
  * Diameter of the largest boulders, m: those of Saturn's A ring reach 10
  * to 20 m (Cuzzi et al. 2009); a faint ring's grains are far smaller.
  */
 export const BOULDER_M = { bright: 12, faint: 3 } as const;
+
+/**
+ * A window of a lattice at a time: the lattice number of its innermost row
+ * (rows are numbered from the giant's centre out), and each row drawn,
+ * innermost first: its middle's offset from the moon's orbit (km), the
+ * cell the moon is in along it, how far into that cell (0 to 1), and the
+ * cells round its circle.
+ */
+export interface LatticeWindow {
+  firstRow: number;
+  rows: { offsetKm: number; cell: number; into: number; cells: number }[];
+}
 
 /** What the view needs to draw a ring moon's rocks at a time. */
 export interface RingRocks {
@@ -49,14 +77,11 @@ export interface RingRocks {
   /** The moon's semi-major axis, km. */
   aKm: number;
   rings: RingSystem;
-  /** Lattice number of the innermost row drawn: rows are numbered from the giant's centre out. */
+  /** The rocks' window (cells of CELL_KM, ROWS rows). */
   firstRow: number;
-  /**
-   * Each row drawn, innermost first: its middle's offset from the moon's
-   * orbit (km), the cell the moon is in along it, how far into that cell
-   * (0 to 1), and the cells round its circle.
-   */
-  rows: { offsetKm: number; cell: number; into: number; cells: number }[];
+  rows: LatticeWindow['rows'];
+  /** The grain's window (cells of GRAIN_CELL_KM, GRAIN_ROWS rows). */
+  grains: LatticeWindow;
 }
 
 /**
@@ -82,19 +107,8 @@ export function ringRocks(
   const moonRadiusKm = Math.max(moon.physical.radius_km, 1e-6);
   const aKm = moon.orbit.semi_major_axis_km;
   const foot = add(centre, scale(out, aKm / moonRadiusKm));
-  // Mean motions, radians a day: the moon's, and a row's by Kepler's third law.
-  const moonMotion = (2 * Math.PI) / Math.max(moon.orbit.period_days, 1e-9);
-  const firstRow = Math.floor(aKm / CELL_KM) - WINDOW;
-  const rows = Array.from({ length: ROWS }, (_, i) => {
-    const r = (firstRow + i + 0.5) * CELL_KM;
-    const cells = Math.max(1, Math.round((2 * Math.PI * r) / CELL_KM));
-    const motion = moonMotion * (aKm / r) ** 1.5;
-    // The moon's angle in the row's frame, which turns with the row.
-    const turns = (((moonMotion - motion) * days) / (2 * Math.PI)) % 1;
-    const at = (turns < 0 ? turns + 1 : turns) * cells;
-    const cell = Math.floor(at);
-    return { offsetKm: r - aKm, cell: cell % cells, into: at - cell, cells };
-  });
+  const moonDays = moon.orbit.period_days;
+  const { firstRow, rows } = latticeWindow(aKm, moonDays, days, CELL_KM, WINDOW);
   return {
     foot,
     out,
@@ -108,7 +122,30 @@ export function ringRocks(
     rings,
     firstRow,
     rows,
+    grains: latticeWindow(aKm, moonDays, days, GRAIN_CELL_KM, GRAIN_WINDOW),
   };
+}
+
+/**
+ * The window of a lattice of cells `cellKm` wide, `window` cells on either
+ * side of a moon `aKm` from the giant that goes round in `periodDays`, at
+ * `days`: each row turning at its own Keplerian pace.
+ */
+export function latticeWindow(aKm: number, periodDays: number, days: number, cellKm: number, window: number): LatticeWindow {
+  // Mean motions, radians a day: the moon's, and a row's by Kepler's third law.
+  const moonMotion = (2 * Math.PI) / Math.max(periodDays, 1e-9);
+  const firstRow = Math.floor(aKm / cellKm) - window;
+  const rows = Array.from({ length: 2 * window + 1 }, (_, i) => {
+    const r = (firstRow + i + 0.5) * cellKm;
+    const cells = Math.max(1, Math.round((2 * Math.PI * r) / cellKm));
+    const motion = moonMotion * (aKm / r) ** 1.5;
+    // The moon's angle in the row's frame, which turns with the row.
+    const turns = (((moonMotion - motion) * days) / (2 * Math.PI)) % 1;
+    const at = (turns < 0 ? turns + 1 : turns) * cells;
+    const cell = Math.floor(at);
+    return { offsetKm: r - aKm, cell: cell % cells, into: at - cell, cells };
+  });
+  return { firstRow, rows };
 }
 
 /**
