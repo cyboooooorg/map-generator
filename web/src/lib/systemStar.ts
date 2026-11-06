@@ -10,6 +10,8 @@ import type { RingSystem } from './api/types/RingSystem';
 import type { GiantSystem } from './api/types/GiantSystem';
 import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
+import type { Belt } from './api/types/Belt';
+import type { Trojans } from './api/types/Trojans';
 import { type SystemGiant, withOrbitDefaults } from './viewer/starSystem';
 
 const DEG = Math.PI / 180;
@@ -55,6 +57,8 @@ export interface SystemPlanet {
   generated: boolean;
   /** What the viewer draws before its maps exist. */
   preview: Preview;
+  /** Its trojans at L4 and L5, where they last; null otherwise (and in systems drawn before them). */
+  trojans: Trojans | null;
 }
 
 /**
@@ -76,6 +80,8 @@ export function systemStarView(
   ids: string[];
   planets: SystemPlanet[];
   selected: number;
+  /** The system's belts, nearest first (none in systems drawn before them). */
+  belts: Belt[];
 } {
   const base = system.star.info;
   const a = planet.orbit.semi_major_axis_au;
@@ -128,6 +134,7 @@ export function systemStarView(
       // Its rings as the system drew them; none on a system drawn before.
       rings: ringsKind(body.params.given_rings?.rings ?? null),
       ringSystem: body.params.given_rings?.rings ?? null,
+      trojans: body.trojans ?? null,
       seed: body.params.seed,
       inclination: body.orbit.inclination_deg * DEG,
       node: body.orbit.node_deg * DEG,
@@ -159,7 +166,9 @@ export function systemStarView(
       locked: body.spin.locked,
       generated: body.generated,
       preview: body.preview,
+      trojans: body.trojans ?? null,
     })),
     selected: all.findIndex((b) => b.id === planet.id),
+    belts: system.belts ?? [],
   };
 }

@@ -188,6 +188,9 @@
   let starPulls = $state(true);
   let starFrost = $state(true);
   let starHills = $state(false);
+  let starBelts = $state(true);
+  let starTrojans = $state(true);
+  let starLagrange = $state(false);
   let starRealScale = $state(false);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
   let starLight = $state(saved.starLight);
@@ -1556,6 +1559,10 @@
       bind:frost={starFrost}
       bind:hills={starHills}
       bind:realScale={starRealScale}
+      belts={sysStar?.belts ?? []}
+      bind:showBelts={starBelts}
+      bind:showTrojans={starTrojans}
+      bind:showLagrange={starLagrange}
     />
   {/if}
 
