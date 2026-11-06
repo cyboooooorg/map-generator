@@ -94,7 +94,6 @@ import {
   LAYER_IDS,
   type Layer,
   lineFragment,
-  RELIEF_SCALE,
   hostStarFragment,
   skyBodyFragment,
   skyBodyVertex,
@@ -412,6 +411,7 @@ export class PlanetView {
   private readonly shared = {
     uMorph: { value: 1 } as IUniform<number>,
     uRelief: { value: 0 } as IUniform<number>,
+    uReliefScale: { value: 0 } as IUniform<number>,
     uCoast: { value: 0 } as IUniform<number>,
     uLiquidSea: { value: 1 } as IUniform<number>,
     uHasData: { value: 0 } as IUniform<number>,
@@ -1144,8 +1144,10 @@ export class PlanetView {
    * elevation of the coastline: the world's sea level plus its preset
    * waterline. `liquidSea` is false on worlds whose seas have dried up: their
    * basins are then shaded and raised like land, without sun glint.
+   * `reliefScale` is the body's radii per elevation unit at its true relief
+   * (lib/relief.ts), which the relief exaggeration multiplies.
    */
-  setData(layers: WorldLayers | null, coast: number, liquidSea = true): void {
+  setData(layers: WorldLayers | null, coast: number, liquidSea = true, reliefScale = 0): void {
     this.requestRender();
     this.shared.uData.value.dispose();
     this.u.uExtra.value.dispose();
@@ -1193,6 +1195,8 @@ export class PlanetView {
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
     this.shared.uCoast.value = coast;
+    this.shared.uReliefScale.value = reliefScale;
+    this.applySky();
     this.shared.uLiquidSea.value = liquidSea ? 1 : 0;
     this.u.uTexel.value.set(1 / surface.width, 1 / surface.height);
     this.u.uMapSize.value.set(layers.width, layers.height);
@@ -1234,7 +1238,7 @@ export class PlanetView {
     this.tiles.setWorld(world);
   }
 
-  /** Relief exaggeration in [0, 1]: 0 is flat. */
+  /** Relief exaggeration: 0 is flat, 1 the true relief (see lib/relief.ts). */
   setRelief(relief: number): void {
     this.requestRender();
     this.shared.uRelief.value = relief;
@@ -1374,9 +1378,14 @@ export class PlanetView {
     }
   }
 
+  /** How far the relief shown rises at most, in radii: an elevation unit above the coastline, as displaced. */
+  private reliefLift(): number {
+    return this.shared.uRelief.value * this.shared.uReliefScale.value;
+  }
+
   /** Sets the sky uniforms from the world's sky, raised above the displaced relief. */
   private applySky(): void {
-    const sky = liftSky(this.worldSky, this.shared.uRelief.value * RELIEF_SCALE);
+    const sky = liftSky(this.worldSky, this.reliefLift());
     for (const pass of this.atmosphere) {
       pass.scale.setScalar(sky.top);
       pass.scale.y *= 1 - this.shared.uFlattening.value;
@@ -1422,7 +1431,7 @@ export class PlanetView {
     // The place at the centre of the screen stays there, at an equivalent
     // zoom: the camera follows it through the morph.
     const centre = this.viewCentre();
-    const relief = this.shared.uRelief.value * RELIEF_SCALE;
+    const relief = this.reliefLift();
     let altitude: number;
     let mapHeight: number;
     if (this.mode === 'globe') {
@@ -2284,7 +2293,7 @@ export class PlanetView {
     event.preventDefault();
     // The point of the globe under the cursor stays under it while zooming.
     const anchor = this.globePointAt(event.clientX, event.clientY);
-    const relief = this.shared.uRelief.value * RELIEF_SCALE;
+    const relief = this.reliefLift();
     const altitude = Math.min(
       Math.max(GLOBE_DISTANCE * 2.5, this.globeReach - 1),
       Math.max(MIN_ALTITUDE + relief, this.altitude() * Math.exp(event.deltaY * 0.0015)),
