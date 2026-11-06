@@ -192,6 +192,8 @@ export const skyRingFragment = /* glsl */ `
   uniform mat4 uProjection;
   ${skyRingDensityGlsl}
   varying vec3 vRay;
+  // Most a sheet of them seen nearly edge on hides (see main).
+  const float GRAZING_OPACITY = 0.55;
 
   // The depth of the point at offset from the camera (scene units),
   // clamped to the far plane.
@@ -231,9 +233,13 @@ export const skyRingFragment = /* glsl */ `
       if (t > 0.0 && t < hit) {
         vec3 p = camera + t * ray;
         float d = ringDensity(length(p) / uRadius);
-        // Seen slant, through more of them.
+        // Seen slant, through more of them; seen nearly edge on, as from
+        // a ring moon a little off their plane, held at most half opaque
+        // (a choice, not physics: dense rings would hide the giant behind
+        // them, a uniform veil over half the sky).
         float mu = abs(g);
         float seen = 1.0 - pow(max(1.0 - d, 0.0), 1.0 / max(mu, 1e-3));
+        seen = min(seen, mix(GRAZING_OPACITY, 1.0, smoothstep(0.15, 0.45, mu)));
         if (seen > 0.002) {
           colour = vec4(ringLight(p, mu, d), seen);
           depth = depthOf(t * ray);
