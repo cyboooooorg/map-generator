@@ -940,14 +940,16 @@ fn assemble(
         };
         // Nearest first, the ring moons among the others.
         let giant_kg = slot.mass_earth * EARTH_KG;
+        let giant_radius_km = bodies[planet_index].physical.radius_km;
         let mut moons: Vec<(MoonParts, Option<&crate::rings::RingMoon>)> = moons
             .into_iter()
             .map(|m| (m, None))
-            .chain(
-                ring_moons
-                    .iter()
-                    .map(|r| (ring_moon_parts(&params, r, giant_kg), Some(r))),
-            )
+            .chain(ring_moons.iter().map(|r| {
+                (
+                    ring_moon_parts(&params, r, giant_kg, giant_radius_km),
+                    Some(r),
+                )
+            }))
             .collect();
         moons.sort_by(|a, b| {
             a.0.2
@@ -1316,12 +1318,22 @@ fn ring_moon_inclination_deg(role: crate::rings::RingRole) -> f64 {
     }
 }
 
-/// The fields of a ring moon of the giant of `giant` (`giant_kg`): a small
-/// icy body on a circular orbit in the giant's equatorial plane, locked to
-/// it, its angles from its seed.
-fn ring_moon_parts(giant: &WorldParams, moon: &crate::rings::RingMoon, giant_kg: f64) -> MoonParts {
-    let radius_g_km = f64::from(giant.circumference_km) / (2.0 * PI);
-    let a_km = moon.a_radii * radius_g_km;
+/// The fields of a ring moon of the giant of `giant` (`giant_kg`, of
+/// radius `giant_radius_km` as its body gives it): a small icy body on a
+/// circular orbit in the giant's equatorial plane, locked to it, its
+/// angles from its seed.
+fn ring_moon_parts(
+    giant: &WorldParams,
+    moon: &crate::rings::RingMoon,
+    giant_kg: f64,
+    giant_radius_km: f64,
+) -> MoonParts {
+    // The rings' gaps are in the radii of the giant's body
+    // (`Physical::radius_km`, from an Earth radius of 6 371 km), the unit
+    // the views place its moons in: its circumference (from Earth's 40 075
+    // km, an equatorial 6 378 km) would put a moonlet 0.11 % further out,
+    // a gap's width beside its gap.
+    let a_km = moon.a_radii * giant_radius_km;
     let period_days = crate::rings::period_days(a_km, giant_kg);
     let mass = 4.0 / 3.0 * PI * (moon.radius_km * 1e3).powi(3) * moon.density * 1e3;
     let round = moon.shape == [1.0; 3];
@@ -1985,6 +1997,16 @@ mod tests {
                         RingRole::Embedded => {
                             embedded += 1;
                             assert!(a > f64::from(rings.inner) && a < f64::from(rings.outer));
+                            // In the middle of its gap, in the radii the
+                            // views use: a tenth of its width at most off.
+                            let k = rings
+                                .gap_moons
+                                .iter()
+                                .position(|id| id == &m.id)
+                                .expect("its gap");
+                            let [centre, width] = rings.gaps[k];
+                            let off = (a - f64::from(centre)).abs() / f64::from(width);
+                            assert!(off < 0.1, "{}: {off} of its gap's width off", m.id);
                         }
                         RingRole::Resonant => resonant += 1,
                         RingRole::Edge => {
