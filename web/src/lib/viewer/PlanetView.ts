@@ -138,6 +138,7 @@ import {
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
 import type { RingSystem } from '../api/types/RingSystem';
+import { type GiantStorm, MAX_STORMS } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import { starField } from './stars';
 
@@ -475,6 +476,9 @@ export class PlanetView {
     uTempRange: { value: new Vector2(-30, 70) } as IUniform<Vector2>,
     uWind: { value: new Array<number>(91).fill(0) } as IUniform<number[]>,
     uBandTime: { value: 0 } as IUniform<number>,
+    // A giant's storms, each drifting whole (see setGiantStorms).
+    uStorms: { value: Array.from({ length: MAX_STORMS }, () => new Vector4()) } as IUniform<Vector4[]>,
+    uStormCount: { value: 0 } as IUniform<number>,
     uHotGlow: { value: 0 } as IUniform<number>,
     uRingInner: { value: 0 } as IUniform<number>,
     uRingOuter: { value: 0 } as IUniform<number>,
@@ -1049,6 +1053,18 @@ export class PlanetView {
   }
 
   /**
+   * A giant's storms (see lib/giantStorms.ts), found in its biome map:
+   * each drifts whole at the wind of its centre, rather than sheared with
+   * its bands. Empty for none.
+   */
+  setGiantStorms(storms: readonly GiantStorm[]): void {
+    const slots = this.u.uStorms.value;
+    storms.slice(0, MAX_STORMS).forEach((s, k) => slots[k]!.set(s.u, s.v, s.halfU, s.halfV));
+    this.u.uStormCount.value = Math.min(storms.length, MAX_STORMS);
+    this.requestRender();
+  }
+
+  /**
    * Shows a giant planet (null for a rocky world): its globe flattened by
    * its spin, its temperatures on a range of their own, its wind on the
    * moisture layer, its bands drifting each with its wind (with the cloud
@@ -1386,6 +1402,10 @@ export class PlanetView {
     const texture = new Texture(bitmap);
     texture.flipY = false;
     texture.colorSpace = SRGBColorSpace;
+    // Repeated across longitudes: a giant's drifting bands read it past
+    // the seam (see the surface shader), continuously, so that no line of
+    // its coarsest mip level shows where they wrap.
+    texture.wrapS = RepeatWrapping;
     texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     texture.needsUpdate = true;
     // The bitmap is closed once uploaded: only the GPU copy stays.
