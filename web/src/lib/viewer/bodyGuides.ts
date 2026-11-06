@@ -94,6 +94,12 @@ export class BodyGuides {
   readonly spin = new Group();
   /** In the body's frame, as the sky bodies are. */
   readonly host = new Group();
+  /** The host's pull and the body's velocity, each starting from the surface where it points (see setSurface). */
+  private readonly arrows = new Group();
+  private pull: { arrow: Group; direction: Vector3 } | null = null;
+  private velocity: { arrow: Group; direction: Vector3 } | null = null;
+  /** How far the surface reaches in a direction of the body's frame, in its radii (1: a sphere). */
+  private surfaceAt: (direction: Vector3) => number = () => 1;
   private spinTip = new Vector3();
   private hostLine: Vector3[] | null = null;
   private pullTip: Vector3 | null = null;
@@ -104,6 +110,30 @@ export class BodyGuides {
     this.spin.visible = false;
     this.spin.renderOrder = 2;
     this.host.visible = false;
+    this.host.add(this.arrows);
+  }
+
+  /**
+   * How far out the body's surface reaches: `poles` round its poles, and
+   * `at` in any direction of its frame, in its radii (an irregular moon's
+   * shape with its relief, a few tenths over 1 on a moonlet a few km
+   * across). The spin arrow, scaled by `poles`, and the arrows of the
+   * host's pull and of the body's velocity start from there rather than
+   * inside the body.
+   */
+  setSurface(poles: number, at: (direction: Vector3) => number): void {
+    this.surfaceAt = at;
+    this.spin.scale.setScalar(poles);
+    for (const guide of [this.pull, this.velocity]) {
+      if (guide) guide.arrow.position.copy(guide.direction).multiplyScalar(at(guide.direction));
+    }
+    if (this.pull) this.pullTip = this.tipOf(this.pull.direction);
+    if (this.velocity) this.velocityTip = this.tipOf(this.velocity.direction);
+  }
+
+  /** The end of an arrow along `direction`, from the surface there. */
+  private tipOf(direction: Vector3): Vector3 {
+    return direction.clone().multiplyScalar(this.surfaceAt(direction) + GUIDE_LENGTH);
   }
 
   /**
@@ -140,8 +170,10 @@ export class BodyGuides {
 
   /** The host planet's guides, or none (null). */
   setHost(guide: HostGuide | null): void {
-    clear(this.host);
+    clear(this.arrows);
+    for (const child of [...this.host.children]) if (child !== this.arrows) clearOne(this.host, child);
     this.hostLine = this.pullTip = this.velocityTip = null;
+    this.pull = this.velocity = null;
     if (!guide) return;
     const to = new Vector3(...guide.position);
     const distance = to.length();
@@ -165,12 +197,16 @@ export class BodyGuides {
     line.frustumCulled = false;
     this.host.add(line);
     // The host's pull, from the surface towards it.
-    this.host.add(arrow(toward, toward, GUIDE_LENGTH, PULL_COLOUR));
-    this.pullTip = toward.clone().multiplyScalar(1 + GUIDE_LENGTH);
+    const pull = arrow(toward.clone().multiplyScalar(this.surfaceAt(toward)), toward, GUIDE_LENGTH, PULL_COLOUR);
+    this.arrows.add(pull);
+    this.pull = { arrow: pull, direction: toward };
+    this.pullTip = this.tipOf(toward);
     if (guide.velocity) {
       const v = new Vector3(...guide.velocity).normalize();
-      this.host.add(arrow(v, v, GUIDE_LENGTH, VELOCITY_COLOUR));
-      this.velocityTip = v.clone().multiplyScalar(1 + GUIDE_LENGTH);
+      const velocity = arrow(v.clone().multiplyScalar(this.surfaceAt(v)), v, GUIDE_LENGTH, VELOCITY_COLOUR);
+      this.arrows.add(velocity);
+      this.velocity = { arrow: velocity, direction: v };
+      this.velocityTip = this.tipOf(v);
     }
   }
 
@@ -192,19 +228,20 @@ export class BodyGuides {
     return {
       spin: scene(this.spinTip, this.spin),
       host: this.hostLine && this.host.visible ? this.hostLine.map((p) => this.host.localToWorld(p.clone())) : null,
-      pull: scene(this.pullTip, this.host),
-      velocity: scene(this.velocityTip, this.host),
+      pull: scene(this.pullTip, this.arrows),
+      velocity: scene(this.velocityTip, this.arrows),
     };
   }
 
   dispose(): void {
     clear(this.spin);
+    clear(this.arrows);
     clear(this.host);
   }
 }
 
 /**
- * An arrow from the surface point `from` (a unit vector) along `direction`,
+ * An arrow from the surface point `from` along `direction`,
  * `length` long in all: a tube and a cone, as the spin arrow.
  */
 function arrow(from: Vector3, direction: Vector3, length: number, colour: Color): Group {
@@ -239,14 +276,17 @@ function clampToFarPlane(material: LineDashedMaterial): void {
 }
 
 function clear(group: Object3D): void {
-  for (const child of [...group.children]) {
-    child.traverse((object) => {
-      const mesh = object as Mesh;
-      mesh.geometry?.dispose();
-      const material = mesh.material as MeshBasicMaterial | MeshBasicMaterial[] | undefined;
-      if (Array.isArray(material)) material.forEach((m) => m.dispose());
-      else material?.dispose();
-    });
-    group.remove(child);
-  }
+  for (const child of [...group.children]) clearOne(group, child);
+}
+
+/** Frees `child`'s geometries and materials and takes it out of `group`. */
+function clearOne(group: Object3D, child: Object3D): void {
+  child.traverse((object) => {
+    const mesh = object as Mesh;
+    mesh.geometry?.dispose();
+    const material = mesh.material as MeshBasicMaterial | MeshBasicMaterial[] | undefined;
+    if (Array.isArray(material)) material.forEach((m) => m.dispose());
+    else material?.dispose();
+  });
+  group.remove(child);
 }
