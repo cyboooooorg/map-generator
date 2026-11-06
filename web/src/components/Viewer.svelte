@@ -157,6 +157,9 @@
     ringRocks: 100 as number,
     // The spin axes of the globe and the bodies of the sky.
     spinAxes: false,
+    // While the clock plays: the camera turns with the sky (the globe
+    // turning under it), or stays fixed on the body (the sky turning).
+    cameraFollowsSky: false,
     // Names tied to the bodies of the sky.
     skyLabels: true,
     starLight: false,
@@ -212,6 +215,7 @@
   let smallBodies = $state(saved.smallBodies);
   let ringRockScale = $state(RING_ROCK_SCALES.includes(saved.ringRocks) ? saved.ringRocks : 100);
   let axesShown = $state(saved.spinAxes);
+  let cameraFollowsSky = $state(saved.cameraFollowsSky);
   $effect(() => view?.setSpinAxes(axesShown));
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
   /** Labels on the bodies of the sky, and where those are on the screen. */
@@ -442,6 +446,7 @@
       smallBodies,
       ringRocks: ringRockScale,
       spinAxes: axesShown,
+      cameraFollowsSky,
       skyLabels,
       sun,
       season,
@@ -985,9 +990,11 @@
     // Not wrapped, so that the camera follows a fast turn the right way.
     return (-2 * Math.PI * sysDays) / Math.max(period, 1e-6);
   });
-  // While the orbits play, the camera turns with the stars: it stays still
-  // against the sky, the star and the orbits, and the globe turns on itself.
-  $effect(() => view?.setStarsTurn(starsTurn, orbitsPlaying));
+  // While the orbits play, the camera stays fixed on the body, the sky
+  // turning round it; or, with "Camera follows the sky", it turns with the
+  // stars: still against the sky, the star and the orbits, the globe
+  // turning on itself under it.
+  $effect(() => view?.setStarsTurn(starsTurn, orbitsPlaying && cameraFollowsSky));
   // The star drawn at its place, at the centre of the planets' orbits.
   $effect(() => view?.setStarPlace(sysSky?.star ?? null));
   // Far enough out to see the moons of the shown body's planet whole.
@@ -1587,6 +1594,12 @@
               ? t.viewer.moonSun
               : t.viewer.moonSunSpin({ hours: formatNumber(sysBody.spin.period_hours, 1) })}{/if}
         </p>
+    {/if}
+    {#if orbitPeriod && sysSky}
+      <label class="check" title={t.viewer.cameraFollowsSkyHelp}>
+        <input type="checkbox" bind:checked={cameraFollowsSky} />
+        {t.viewer.cameraFollowsSky}
+      </label>
     {/if}
   </div>
 {/snippet}
