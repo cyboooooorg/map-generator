@@ -637,6 +637,9 @@ export const fr: Messages = {
     minuteUnit: 'min',
     hourUnit: 'h',
     dayUnit: 'j',
+    cameraFollowsSky: 'Caméra liée au ciel',
+    cameraFollowsSkyHelp:
+      'Pendant la lecture, la caméra tourne avec les étoiles, le soleil et les orbites, et le globe tourne sous elle. Désactivée, la caméra reste fixe sur l’astre et le ciel tourne autour',
     orbitDay: (p) => `Jour ${p.days} d’une orbite de ${p.period}${S}jours`,
     moonSun: `Sur une lune, le soleil suit son orbite${S}: il en fait le tour une fois par mois, la lune gardant sa face vers sa planète`,
     moonSunSpin: ({ hours }: { hours: string }) =>
