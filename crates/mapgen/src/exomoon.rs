@@ -311,6 +311,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         giant_mass_earth: Some(mass_earth),
         host: HostMode::None,
         given_rings: None,
+        impact_factor: None,
     }
 }
 
@@ -343,6 +344,7 @@ mod tests {
             giant_mass_earth: None,
             host,
             given_rings: None,
+            impact_factor: None,
         }
     }
 
