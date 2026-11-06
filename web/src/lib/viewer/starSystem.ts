@@ -46,7 +46,16 @@ export type SystemGiant = Giant & {
   trojans?: Trojans | null;
   inclination?: number;
   node?: number;
-  moons?: readonly Pick<Moon, 'radius_km' | 'inclination_deg' | 'period_days' | 'barycentre_km' | 'semi_major_axis_km'>[];
+  moons?: readonly OrbitMoon[];
+};
+
+/**
+ * A moon as the star view draws it; `ring` for a moon of a giant's rings
+ * (in a gap, at their edge, shepherding them, or making a gap by
+ * resonance), drawn where it is, among the rings.
+ */
+export type OrbitMoon = Pick<Moon, 'radius_km' | 'inclination_deg' | 'period_days' | 'barycentre_km' | 'semi_major_axis_km'> & {
+  ring?: boolean;
 };
 
 /** Radius of the star in the view: the system is drawn around it, not to scale. */
@@ -368,6 +377,35 @@ export interface MoonOrbit {
 export const PLANET_MARKER = 0.11;
 /** Shortest animated period of a moon, s: closer moons would only flicker. */
 const MOON_MIN_PERIOD_S = 2;
+/**
+ * Tilt of a giant's rings round its marker, radians out of the view's
+ * plane (seen a little open, as most giants' are): a ring moon's orbit too.
+ */
+export const RING_TILT = 0.45;
+/** Radius of a ring moon's marker, in planet markers: small enough for its gap. */
+export const RING_MOON_SIZE = 0.06;
+/** The rings drawn round a giant's marker without their system's edges, in its radii. */
+export const SYMBOLIC_RINGS: [number, number] = [1.35, 2.3];
+
+/**
+ * The bands a giant's rings are drawn as round its marker, in its radii:
+ * from their inner to their outer edge, cut by their gaps, each gap at
+ * least `least` wide on either side of its middle (a ring moon's marker
+ * fits in it). Bands narrower than a hundredth of a radius are dropped.
+ */
+export function ringBands(rings: Pick<RingSystem, 'inner' | 'outer' | 'gaps'>, least: number): [number, number][] {
+  const cuts = rings.gaps
+    .map(([at, width]) => [at - Math.max(width / 2, least), at + Math.max(width / 2, least)] as const)
+    .sort((x, y) => x[0] - y[0]);
+  const bands: [number, number][] = [];
+  let from = rings.inner;
+  for (const [start, end] of cuts) {
+    if (start > from) bands.push([from, Math.min(start, rings.outer)]);
+    from = Math.max(from, end);
+  }
+  if (from < rings.outer) bands.push([from, rings.outer]);
+  return bands.filter(([a, b]) => b - a > 0.01);
+}
 
 /**
  * The orbits the star view draws for a planet's moons, nearest first: the
@@ -375,18 +413,37 @@ const MOON_MIN_PERIOD_S = 2;
  * 1 000 planet radii), the largest moons drawn larger, each at its real
  * period relative to the planet's year (`yearS` seconds when animated, two
  * seconds at the shortest). A binary's planet swings around the barycentre.
+ *
+ * A ring moon is drawn to scale instead, in the rings' plane, where the
+ * rings round the marker (see ringBands) put its gap or their edge; the
+ * other moons then start beyond the outermost ring moon.
  */
 export function moonOrbits(
-  moons: readonly Pick<Moon, 'radius_km' | 'inclination_deg' | 'period_days' | 'barycentre_km' | 'semi_major_axis_km'>[],
+  moons: readonly OrbitMoon[],
   planetRadiusKm: number,
   yearDays: number,
   yearS: number,
   binary: boolean,
 ): MoonOrbit[] {
+  const radii = (moon: OrbitMoon) => moon.semi_major_axis_km / Math.max(planetRadiusKm, 1e-9);
+  const ringReach = Math.max(0, ...moons.filter((m) => m.ring).map(radii));
+  const first = ringReach > 0 ? Math.max(1.6, ringReach + 0.35) : 1.6;
+  let slot = 0;
   return moons.map((moon, k) => {
-    const radius = PLANET_MARKER * (1.6 + 0.55 * k);
-    const relative = Math.min(1, Math.max(0.02, moon.radius_km / planetRadiusKm));
     const period = Math.max(MOON_MIN_PERIOD_S, (moon.period_days / Math.max(yearDays, 1e-3)) * yearS);
+    if (moon.ring) {
+      return {
+        radius: PLANET_MARKER * radii(moon),
+        size: PLANET_MARKER * RING_MOON_SIZE,
+        inclination: RING_TILT,
+        speed: (2 * Math.PI) / period,
+        phase: k * 2.4,
+        swing: 0,
+      };
+    }
+    const radius = PLANET_MARKER * (first + 0.55 * slot);
+    slot += 1;
+    const relative = Math.min(1, Math.max(0.02, moon.radius_km / planetRadiusKm));
     const retrograde = moon.inclination_deg > 90;
     const swing = binary && moon.barycentre_km > planetRadiusKm ? moon.barycentre_km / moon.semi_major_axis_km : 0;
     return {

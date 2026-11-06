@@ -113,6 +113,8 @@ export function systemStarView(
         semi_major_axis_km: b.orbit.semi_major_axis_km,
         period_days: b.orbit.period_days,
         inclination_deg: b.orbit.inclination_deg,
+        // A moon of the rings: drawn among them (see moonOrbits).
+        ring: Boolean(b.ring_role),
       }));
   const giants: SystemGiant[] = all.map((body) => {
     const colour = (body.preview.colours[0] ?? [0.4, 0.4, 0.4]).map(toSrgb) as [number, number, number];

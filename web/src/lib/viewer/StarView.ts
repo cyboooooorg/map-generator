@@ -80,7 +80,12 @@ import {
   systemCompressedFrom,
   systemScale,
   velocityScale,
+  RING_MOON_SIZE,
+  RING_TILT,
+  ringBands,
+  SYMBOLIC_RINGS,
 } from './starSystem';
+import type { RingSystem } from '../api/types/RingSystem';
 
 /** Size of a preview's texture on a marker, pixels (a marker is a few pixels to a few dozen wide). */
 const PREVIEW_WIDTH = 64;
@@ -155,6 +160,25 @@ const PIN_HEIGHT = 0.9;
 const SUN_RADIUS_AU = 0.004_65;
 /** Width of the glow quad, in star radii. */
 const GLOW_SIZE = 7;
+
+/**
+ * A giant's rings round its marker (`size` its radius): to scale with
+ * their gaps when the system drew them (`rings`), each gap wide enough
+ * for a ring moon's marker (see moonOrbits); else a plain band. Tilted,
+ * as most giants' rings (and spins) are.
+ */
+function ringMeshes(size: number, rings: RingSystem | null, colour: Color, opacity: number): Group {
+  const group = new Group();
+  const bands = rings ? ringBands(rings, RING_MOON_SIZE * 1.6) : [SYMBOLIC_RINGS];
+  const material = () => new MeshBasicMaterial({ color: colour, transparent: true, opacity, side: DoubleSide, depthWrite: false });
+  for (const [inner, outer] of bands) {
+    const band = new Mesh(new RingGeometry(size * inner, size * outer, 64), material());
+    band.renderOrder = 3;
+    group.add(band);
+  }
+  group.rotation.x = -Math.PI / 2 + RING_TILT;
+  return group;
+}
 
 export class StarView {
   private readonly renderer: WebGLRenderer;
@@ -746,9 +770,12 @@ export class StarView {
    */
   setWorldGiant(info: GiantInfo | null): void {
     for (const child of [...this.planet.children]) {
-      const mesh = child as Mesh<RingGeometry, MeshBasicMaterial>;
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+      child.traverse((object) => {
+        if (object instanceof Mesh) {
+          object.geometry.dispose();
+          (object.material as MeshBasicMaterial).dispose();
+        }
+      });
       this.planet.remove(child);
     }
     if (!info) {
@@ -761,19 +788,9 @@ export class StarView {
     this.planet.material.color.copy(colour);
     this.planet.scale.setScalar(giantMarkerSize(info.radius_earth) / PLANET_MARKER);
     if (info.rings) {
-      const ring = new Mesh(
-        new RingGeometry(PLANET_MARKER * 1.35, PLANET_MARKER * 2.3, 64),
-        new MeshBasicMaterial({
-          color: new Color().setRGB(...info.rings.colour, SRGBColorSpace),
-          transparent: true,
-          opacity: info.rings.bright ? 0.6 : 0.22,
-          side: DoubleSide,
-          depthWrite: false,
-        }),
+      this.planet.add(
+        ringMeshes(PLANET_MARKER, null, new Color().setRGB(...info.rings.colour, SRGBColorSpace), info.rings.bright ? 0.6 : 0.22),
       );
-      ring.rotation.x = -Math.PI / 2 + 0.45;
-      ring.renderOrder = 3;
-      this.planet.add(ring);
     }
     this.requestRender();
   }
@@ -845,25 +862,15 @@ export class StarView {
       this.giantGroup.add(bright);
       const size = giantMarkerSize(giant.radius_earth);
       const marker = new Mesh(new SphereGeometry(size, 32, 16), new MeshBasicMaterial({ color: colour }));
+      const ringsReach = giant.rings !== 'none' ? Math.max(SYMBOLIC_RINGS[1], giant.ringSystem?.outer ?? 0) : 0;
       if (giant.rings !== 'none') {
-        const ring = new Mesh(
-          new RingGeometry(size * 1.35, size * 2.3, 64),
-          new MeshBasicMaterial({
-            color: colour.clone().lerp(new Color('#e8e0d0'), 0.5),
-            transparent: true,
-            opacity: giant.rings === 'bright' ? 0.6 : 0.22,
-            side: DoubleSide,
-            depthWrite: false,
-          }),
+        marker.add(
+          ringMeshes(size, giant.ringSystem ?? null, colour.clone().lerp(new Color('#e8e0d0'), 0.5), giant.rings === 'bright' ? 0.6 : 0.22),
         );
-        // Tilted, as most giants' rings (and spins) are.
-        ring.rotation.x = -Math.PI / 2 + 0.45;
-        ring.renderOrder = 3;
-        marker.add(ring);
       }
       // Its highlight: a ring a little wider than the marker (and its rings).
       const halo = new Mesh(
-        new RingGeometry(size * (giant.rings !== 'none' ? 2.45 : 1.45), size * (giant.rings !== 'none' ? 2.75 : 1.8), 48),
+        new RingGeometry(size * (ringsReach > 0 ? ringsReach + 0.15 : 1.45), size * (ringsReach > 0 ? ringsReach + 0.45 : 1.8), 48),
         new MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.9, side: DoubleSide, depthWrite: false }),
       );
       halo.renderOrder = 4;
