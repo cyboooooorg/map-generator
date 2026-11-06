@@ -32,10 +32,11 @@
   import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
+  import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
   import { smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
-  import { rotationDial } from '../lib/rotationDial';
+  import { formatDayLength, formatDialAngle, formatLocalTime, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -858,6 +859,35 @@
   /** The rotation dial round the body shown, while its switch is on (see lib/rotationDial). */
   const dial = $derived(dialShown && sys && sysBody && sysSky ? rotationDial(sys, sysBody.id, sysDays, skySpin, sysSky) : null);
   $effect(() => view?.setRotationDial(dial?.state ?? null));
+  /** The pointer's reading on the ring: whole degrees, signed tenths for a locked body. */
+  const dialReading = $derived(dial ? formatDialAngle(dial.state.reading, dial.state.locked, formatNumber) : '');
+  /** The name of the planet a moon orbits, by its marker on the dial. */
+  const dialHostName = $derived.by(() => {
+    const parent = sys && sysBody?.parent ? sys.bodies.find((b) => b.id === sysBody.parent) : undefined;
+    return parent ? (world.systemNames[parent.id] ?? parent.designation) : null;
+  });
+  /** The dial's figures, two lines for the Light and season panel. */
+  const dialLines = $derived.by((): [string, string] | null => {
+    if (!dial) return null;
+    const { state, figures } = dial;
+    const units = { hour: t.viewer.hourUnit, minute: t.viewer.minuteUnit, day: t.viewer.dayUnit };
+    const day = (hours: number) => formatDayLength(hours, units, { space: t.format.unitSpace, number: formatNumber });
+    const length = (hours: number | null) => (hours === null ? null : day(hours));
+    const time = formatLocalTime(figures.localHours);
+    if (state.locked) {
+      const amplitude = ((figures.librationAmplitude ?? 0) * 180) / Math.PI;
+      return [
+        t.viewer.dialLocked({ libration: formatDialAngle(figures.libration ?? 0, true, formatNumber), amplitude: `${formatNumber(amplitude, 1)}°` }),
+        t.viewer.dialLockedTime({ time, solar: length(figures.solarHours) }),
+      ];
+    }
+    return [
+      t.viewer.dialFree({ angle: formatDialAngle(state.reading, false, formatNumber), time }),
+      t.viewer.dialFreeDays({ sidereal: day(figures.siderealHours), solar: length(figures.solarHours) }),
+    ];
+  });
+  /** The glossary of the dial's figures, opened by its `?` button. */
+  let dialGlossary = $state(false);
   // Followed on the screen: each swarm's centre, each belt's edges (every
   // third point is plenty to put its label).
   $effect(() =>
@@ -1089,8 +1119,8 @@
   $effect(() => {
     const current = view;
     if (!current) return;
-    // The guides' labels (spin, host) follow with the spin axes.
-    const follow = skyLabels || axesShown || smallBodies;
+    // The guides' labels (spin, host) follow with the spin axes, the dial's with the dial.
+    const follow = skyLabels || axesShown || smallBodies || dialShown;
     current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
     if (!follow) skyPositions = null;
     return () => {
@@ -1681,6 +1711,25 @@
               : t.viewer.moonSunSpin({ hours: formatNumber(sysBody.spin.period_hours, 1) })}{/if}
         </p>
     {/if}
+    {#if dialLines}
+      <div class="dial-figures">
+        <p class="muted">{dialLines[0]}<br />{dialLines[1]}</p>
+        <button
+          class="small"
+          onclick={() => (dialGlossary = !dialGlossary)}
+          aria-expanded={dialGlossary}
+          aria-label={t.viewer.dialGlossaryHelp}
+          title={t.viewer.dialGlossaryHelp}>?</button
+        >
+      </div>
+      {#if dialGlossary}
+        <dl class="dial-glossary">
+          {#each t.viewer.dialGlossary as entry (entry.term)}
+            <div><dt>{entry.term}</dt> <dd>{entry.text}</dd></div>
+          {/each}
+        </dl>
+      {/if}
+    {/if}
     {#if orbitPeriod && sysSky}
       <label class="check" title={t.viewer.cameraOnBodyHelp}>
         <input type="checkbox" checked={cameraTurnsWithBody} onchange={(e) => setCameraTurnsWithBody(e.currentTarget.checked)} />
@@ -1783,6 +1832,17 @@
       star={skyLabels ? skyPositions.star : null}
       {starLabel}
     />
+    {#if dial && skyPositions.dial}
+      <DialLabels
+        ticks={skyPositions.dial.ticks}
+        pointer={skyPositions.dial.pointer}
+        sun={skyPositions.dial.sun}
+        host={skyPositions.dial.host}
+        reading={dialReading}
+        sunName={t.viewer.dialSun}
+        hostName={dialHostName}
+      />
+    {/if}
   {/if}
   {#if world.subject === 'star' && (worldId || sys)}
     <StarPane
@@ -2194,6 +2254,31 @@
     margin: 0;
     color: var(--muted);
     font-size: 0.85rem;
+  }
+  .dial-figures {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .dial-figures .muted {
+    flex: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .dial-glossary {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .dial-glossary dt {
+    display: inline;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .dial-glossary dd {
+    display: inline;
+    margin: 0;
   }
   .value {
     font-variant-numeric: tabular-nums;

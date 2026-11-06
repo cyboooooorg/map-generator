@@ -632,6 +632,37 @@ export const fr: Messages = {
     rotationDial: 'Boussole de rotation',
     rotationDialHelp:
       `Un anneau autour de l’équateur, gradué en degrés${S}: son trait montre de combien l’astre a tourné, par rapport aux étoiles, ou par rapport à ce qu’il orbite pour un astre en rotation synchrone`,
+    dialFree: (p) => `Rotation ${p.angle} · Heure locale ${p.time} (méridien 0)`,
+    dialFreeDays: (p) =>
+      p.solar === null
+        ? `Jour sidéral ${p.sidereal} · Jour solaire${S}: aucun, l’étoile reste immobile`
+        : `Jour sidéral ${p.sidereal} · Jour solaire ${p.solar}`,
+    dialLocked: (p) => `Rotation synchrone · Libration ${p.libration} (±${p.amplitude})`,
+    dialLockedTime: (p) =>
+      p.solar === null ? `Jour solaire${S}: aucun, l’étoile reste immobile` : `Heure locale ${p.time} (face à l’hôte) · Jour solaire ${p.solar}`,
+    dialSun: 'Soleil',
+    dialGlossaryHelp: 'Ce que veulent dire ces chiffres',
+    dialGlossary: [
+      { term: `Jour sidéral${S}:`, text: `un tour de l’astre par rapport aux étoiles (Terre${S}: 23${S}h${S}56${S}min).` },
+      {
+        term: `Jour solaire${S}:`,
+        text: `d’un midi au suivant, le jour vécu sur place (Terre${S}: 24${S}h). Il diffère du jour sidéral car l’astre avance sur son orbite en tournant.`,
+      },
+      {
+        term: `Sol${S}:`,
+        text: `le jour solaire de Mars (24${S}h${S}39${S}min${S}35${S}s), nom réservé à Mars${S}; ailleurs, «${S}jour solaire${S}».`,
+      },
+      {
+        term: `Heure locale${S}:`,
+        text: 'le jour solaire découpé en 24 heures locales, midi quand le soleil passe au méridien (convention des missions martiennes).',
+      },
+      { term: `Rotation synchrone${S}:`, text: 'l’astre fait un tour par orbite et montre toujours la même face à ce qu’il orbite.' },
+      { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’environ ±2e radians.' },
+      {
+        term: `Convention de longitude${S}:`,
+        text: `ici, la face d’un astre synchrone tournée vers son hôte est la longitude 180°${S}; la convention scientifique y place la longitude 0.`,
+      },
+    ],
     orbitsHelp: 'Avance les lunes sur leurs orbites, d’autant de jours après la saison (leurs phases, leurs éclipses)',
     playOrbitsHelp: `Faire défiler les orbites${S}: à ×1, une orbite de la lune affichée, ou de la plus grande, toutes les 10${S}secondes`,
     orbitSpeed: 'Vitesse',

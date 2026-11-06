@@ -128,3 +128,57 @@ export function rotationDial(
 }
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** The unit words of a day length (`h`, `min`, `d` in English). */
+export interface DayUnits {
+  hour: string;
+  minute: string;
+  day: string;
+}
+
+/**
+ * How a figure's numbers are written: the space between a number and its
+ * unit, and a number with `digits` decimals (the locale's, see lib/format).
+ */
+export interface FigureFormat {
+  space?: string;
+  number?: (value: number, digits: number) => string;
+}
+
+const plainNumber = (value: number, digits: number) => value.toFixed(digits);
+
+/**
+ * A local time in hours [0, 24) as `HH:MM`: rounded to the second, then
+ * the minutes floored as a clock shows them, never `24:00`.
+ */
+export function formatLocalTime(hours: number): string {
+  const minutes = Math.min(Math.floor(Math.round(wrap(hours, 24) * 3600) / 60), 24 * 60 - 1);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+/**
+ * The length of a day, `hours` long: under 48 h in hours and minutes to the
+ * nearest minute (`10 h 53 min`, `53 min` under an hour), else in days
+ * with two decimals (`2.49 d`).
+ */
+export function formatDayLength(hours: number, units: DayUnits, format: FigureFormat = {}): string {
+  const { space = ' ', number = plainNumber } = format;
+  const minutes = Math.round(hours * 60);
+  if (minutes >= 48 * 60) return `${number(hours / 24, 2)}${space}${units.day}`;
+  const h = Math.floor(minutes / 60);
+  const m = `${minutes % 60}${space}${units.minute}`;
+  return h > 0 ? `${h}${space}${units.hour} ${m}` : m;
+}
+
+/**
+ * An angle in degrees, from radians: whole degrees in [0, 360) (`137°`),
+ * or signed with one decimal (`+0.3°`, `−0.3°`) for a locked body's
+ * reading and libration.
+ */
+export function formatDialAngle(radians: number, signed: boolean, number: (value: number, digits: number) => string = plainNumber): string {
+  const degrees = (radians * 180) / Math.PI;
+  if (!signed) return `${number(Math.round(wrap(degrees, 360)) % 360, 0)}°`;
+  const tenths = Math.round(degrees * 10) / 10;
+  return `${tenths < 0 ? '−' : '+'}${number(Math.abs(tenths), 1)}°`;
+}

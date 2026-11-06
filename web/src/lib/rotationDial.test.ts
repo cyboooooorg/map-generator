@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
 import { libration, systemSky } from './systemSky';
-import { rotationDial } from './rotationDial';
+import { formatDayLength, formatDialAngle, formatLocalTime, rotationDial } from './rotationDial';
 import type { Vec3 } from './skyBodies';
 
 // The system of systemSky.test.ts: b (terran), c (a gas giant) and its
@@ -80,5 +80,38 @@ describe('rotation dial', () => {
 
   it('has no dial for a body the system lacks', () => {
     expect(rotationDial(system, 'zz', 0, 0, systemSky(system, 'b', 0, textures))).toBeNull();
+  });
+});
+
+describe('rotation dial figures', () => {
+  const units = { hour: 'h', minute: 'min', day: 'd' };
+
+  it('writes a local time as HH:MM, minutes floored, never 24:00', () => {
+    expect(formatLocalTime(14.3333)).toBe('14:20');
+    expect(formatLocalTime(23.9999)).toBe('23:59');
+    expect(formatLocalTime(0)).toBe('00:00');
+    expect(formatLocalTime(9.99)).toBe('09:59');
+  });
+
+  it('writes a day under 48 h in hours and minutes, else in days', () => {
+    expect(formatDayLength(10.883, units)).toBe('10 h 53 min');
+    expect(formatDayLength(0.9, units)).toBe('54 min');
+    expect(formatDayLength(59.82, units)).toBe('2.49 d');
+  });
+
+  it('takes the locale’s unit words, space and numbers', () => {
+    const fr = { hour: 'h', minute: 'min', day: 'j' };
+    const number = (v: number, digits: number) => v.toFixed(digits).replace('.', ',');
+    expect(formatDayLength(59.82, fr, { space: '\u202f', number })).toBe('2,49\u202fj');
+    expect(formatDayLength(10.883, fr, { space: '\u202f', number })).toBe('10\u202fh 53\u202fmin');
+  });
+
+  it('reads the dial in whole degrees, or signed tenths for a locked body', () => {
+    const rad = (deg: number) => (deg * Math.PI) / 180;
+    expect(formatDialAngle(rad(137.4), false)).toBe('137°');
+    expect(formatDialAngle(rad(359.7), false)).toBe('0°');
+    expect(formatDialAngle(rad(0.3), true)).toBe('+0.3°');
+    expect(formatDialAngle(rad(-0.3), true)).toBe('−0.3°');
+    expect(formatDialAngle(rad(-0.01), true)).toBe('+0.0°');
   });
 });
