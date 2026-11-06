@@ -703,8 +703,8 @@ export const en = {
     hostPull: 'Pull of its planet',
     hostOrbitSpeed: 'Orbital speed',
     skyStarFacts: (p: { distance: string }) => `${p.distance} away`,
-    skyOrbitFacts: (p: { radius: string; orbit: string }) => `${p.radius} · orbit ${p.orbit}`,
-    skyDistanceFacts: (p: { radius: string; distance: string }) => `${p.radius} · ${p.distance} away`,
+    skyOrbitFacts: (p: { radius: string; orbit: string }) => `${p.radius} radius · orbit ${p.orbit}`,
+    skyDistanceFacts: (p: { radius: string; distance: string }) => `${p.radius} radius · ${p.distance} away`,
     au: 'AU',
     bandDrift: 'Band drift',
     bandDriftHelp:
