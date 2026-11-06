@@ -984,11 +984,19 @@ export const skyBodyFragment = /* glsl */ `
 // shown, drawn where they are, so that the near side of an orbit passes
 // in front of the globe and its far side behind it; beyond the far plane,
 // held on it, behind everything but the sky.
+/** Dash period of the body shown's own orbit line, in its radii (see skyOrbitFragment). */
+export const SKY_ORBIT_DASH = 1.5;
+
 export const skyOrbitVertex = /* glsl */ `
   attribute vec3 point;
+  // Length along a dashed orbit from its start, in radii of the body
+  // shown; negative on a solid one.
+  attribute float along;
   // 1 where the point is beyond the far plane (held on it).
   varying float vFar;
+  varying float vAlong;
   void main() {
+    vAlong = along;
     vec4 clip = projectionMatrix * viewMatrix * vec4(point, 1.0);
     vFar = step(clip.w, clip.z);
     clip.z = min(clip.z, clip.w);
@@ -1004,9 +1012,23 @@ export const skyOrbitFragment = /* glsl */ `
   uniform float uOpacity;
   uniform float uNear;
   varying float vFar;
+  varying float vAlong;
+  // Dash period along a dashed orbit, in radii of the body shown.
+  const float DASH = ${SKY_ORBIT_DASH.toFixed(2)};
   void main() {
     if ((uNear > 0.5) == (vFar > 0.5)) discard;
-    gl_FragColor = vec4(uColor, uOpacity);
+    float opacity = uOpacity;
+    if (vAlong >= 0.0) {
+      // Dashes where they span a few pixels; farther off, where they would
+      // flicker, a fainter solid line.
+      float perPixel = fwidth(vAlong);
+      if (perPixel < DASH * 0.25) {
+        if (fract(vAlong / DASH) > 0.55) discard;
+      } else {
+        opacity *= 0.55;
+      }
+    }
+    gl_FragColor = vec4(uColor, opacity);
     #include <colorspace_fragment>
   }
 `;
