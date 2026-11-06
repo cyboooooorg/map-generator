@@ -144,6 +144,54 @@ pub struct RingSystem {
     pub bright: bool,
 }
 
+/// A giant's rings as its planetary system drew them, or none (see
+/// `WorldParams::given_rings`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct GivenRings {
+    pub rings: Option<RingSystem>,
+}
+
+/// A giant's rings, drawn from `rng` with the odds of bright and of
+/// faint rings (its preset's `[giant] rings`): bright ones broad and icy
+/// (Saturn's), faint ones narrow and dusty (Uranus's and Neptune's), or
+/// none.
+pub fn draw_rings(rng: &mut impl RngExt, rings_odds: [f32; 2]) -> Option<RingSystem> {
+    let r = rng.random::<f32>();
+    if r < rings_odds[0] {
+        let inner = rng.random_range(1.2..1.5);
+        let outer = rng.random_range(2.1..2.5);
+        let gaps = (0..rng.random_range(1..4))
+            .map(|_| {
+                [
+                    rng.random_range(inner + 0.1..outer - 0.1),
+                    rng.random_range(0.015..0.06),
+                ]
+            })
+            .collect();
+        Some(RingSystem {
+            inner,
+            outer,
+            gaps,
+            opacity: rng.random_range(0.6..0.9),
+            colour: [0.86, 0.8, 0.68],
+            bright: true,
+        })
+    } else if r < rings_odds[0] + rings_odds[1] {
+        let inner = rng.random_range(1.5..1.9);
+        Some(RingSystem {
+            inner,
+            outer: inner + rng.random_range(0.05..0.3),
+            gaps: Vec::new(),
+            opacity: rng.random_range(0.08..0.2),
+            colour: [0.45, 0.43, 0.42],
+            bright: false,
+        })
+    } else {
+        None
+    }
+}
+
 /// What a giant world is, as `world.json` stores it (under `giant`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -434,40 +482,12 @@ impl Look {
         }
         let hexagon = kind == GiantKind::Gas && !hot && rng.random::<f32>() < 0.3;
 
-        let rings = {
-            let r = rng.random::<f32>();
-            if r < rings_odds[0] {
-                let inner = rng.random_range(1.2..1.5);
-                let outer = rng.random_range(2.1..2.5);
-                let gaps = (0..rng.random_range(1..4))
-                    .map(|_| {
-                        [
-                            rng.random_range(inner + 0.1..outer - 0.1),
-                            rng.random_range(0.015..0.06),
-                        ]
-                    })
-                    .collect();
-                Some(RingSystem {
-                    inner,
-                    outer,
-                    gaps,
-                    opacity: rng.random_range(0.6..0.9),
-                    colour: [0.86, 0.8, 0.68],
-                    bright: true,
-                })
-            } else if r < rings_odds[0] + rings_odds[1] {
-                let inner = rng.random_range(1.5..1.9);
-                Some(RingSystem {
-                    inner,
-                    outer: inner + rng.random_range(0.05..0.3),
-                    gaps: Vec::new(),
-                    opacity: rng.random_range(0.08..0.2),
-                    colour: [0.45, 0.43, 0.42],
-                    bright: false,
-                })
-            } else {
-                None
-            }
+        // Drawn whatever the system gave, so that the rest of the look keeps
+        // its draws; the system's rings, when it drew them, take its place.
+        let drawn = draw_rings(&mut rng, rings_odds);
+        let rings = match &p.given_rings {
+            Some(given) => given.rings.clone(),
+            None => drawn,
         };
 
         let mut look = Look {
@@ -979,6 +999,7 @@ mod tests {
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: Some(mass),
             host: crate::exomoon::HostMode::None,
+            given_rings: None,
         }
     }
 

@@ -5,6 +5,8 @@
 // orbit.
 import type { Body } from './api/types/Body';
 import type { Preview } from './api/types/Preview';
+import type { Rings } from './api/types/Rings';
+import type { RingSystem } from './api/types/RingSystem';
 import type { GiantSystem } from './api/types/GiantSystem';
 import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
@@ -16,6 +18,11 @@ const SUN_RADIUS_AU = 0.004_65;
 
 /** A linear colour as the view's markers take it (sRGB). */
 const toSrgb = (c: number) => (c <= 0.003_130_8 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+
+/** What the star view's legend of a giant's rings says of `rings`. */
+export function ringsKind(rings: RingSystem | null): Rings {
+  return rings ? (rings.bright ? 'bright' : 'faint') : 'none';
+}
 
 /** A planet of a system as the star view and its cards show it. */
 export interface SystemPlanet {
@@ -118,8 +125,9 @@ export function systemStarView(
       class: 0,
       hot: body.type === 'hot-jupiter',
       colour,
-      // The draw does not give rings yet.
-      rings: 'none',
+      // Its rings as the system drew them; none on a system drawn before.
+      rings: ringsKind(body.params.given_rings?.rings ?? null),
+      ringSystem: body.params.given_rings?.rings ?? null,
       seed: body.params.seed,
       inclination: body.orbit.inclination_deg * DEG,
       node: body.orbit.node_deg * DEG,

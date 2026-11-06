@@ -818,6 +818,11 @@ fn assemble(
             }
             _ => planet_params(slot, star_code, metallicity, width, height, planet_seed),
         };
+        let params = if is_giant(&slot.body_type) {
+            with_system_rings(params)
+        } else {
+            params
+        };
         let planet = planet_body(&id, &planet_designation, slot, &params, star_code);
         if at_focus && focus.as_ref().is_some_and(|f| f.host.is_none()) {
             focus_id = Some(id.clone());
@@ -1081,6 +1086,19 @@ fn params_tilt() -> f32 {
 /// period twice the last) from 6 of its radii out, inside a third of its
 /// Hill radius, sharing about 10⁻⁴ of its mass (Canup & Ward 2006); icy
 /// beyond its own snow line, as Ganymede and Callisto.
+/// A giant's params with its rings drawn by the system, from a stream of
+/// their own and its preset's odds: the star view and the skies show them
+/// before the giant is generated, and its generation takes them (see
+/// `WorldParams::given_rings`).
+fn with_system_rings(mut params: WorldParams) -> WorldParams {
+    let odds = params.planet.giant.as_ref().map_or([0.0, 0.0], |g| g.rings);
+    let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(params.seed, stream::RINGS)));
+    params.given_rings = Some(crate::giant_world::GivenRings {
+        rings: crate::giant_world::draw_rings(&mut rng, odds),
+    });
+    params
+}
+
 fn regular_moons(giant: &WorldParams, slot: &Slot, star: f32, seed: u32) -> Vec<MoonParts> {
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SIBLINGS)));
     let info = StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32);
@@ -1587,6 +1605,69 @@ mod tests {
         .unwrap();
         assert!(system_id(&other).ends_with("-past250ma-1234"));
         assert_ne!(system_id(&other), system_id(&system));
+    }
+
+    #[test]
+    fn giants_get_their_rings_from_the_system() {
+        let (mut bright, mut faint, mut giants) = (0, 0, 0);
+        for seed in 0..40 {
+            let system = draw(
+                &whole(&[("gas-giant", 2), ("ice-giant", 1), ("terran", 1)], seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            for body in &system.bodies {
+                if body.kind == BodyKind::Planet && is_giant(&body.body_type) {
+                    giants += 1;
+                    let given = body
+                        .params
+                        .given_rings
+                        .as_ref()
+                        .expect("rings drawn with the system");
+                    match &given.rings {
+                        Some(r) if r.bright => bright += 1,
+                        Some(_) => faint += 1,
+                        None => {}
+                    }
+                    if body.body_type == "ice-giant" {
+                        assert!(given.rings.as_ref().is_none_or(|r| !r.bright));
+                    }
+                    // The giant world takes them, and nothing else of its look moves.
+                    let mass = body.params.giant_mass_earth.unwrap();
+                    let look = crate::giant_world::Look::draw(&body.params, mass).info;
+                    assert_eq!(look.rings, given.rings);
+                    let own = WorldParams {
+                        given_rings: None,
+                        ..body.params.clone()
+                    };
+                    let mut alone = crate::giant_world::Look::draw(&own, mass).info;
+                    alone.rings = look.rings.clone();
+                    assert_eq!(alone, look);
+                } else {
+                    assert!(body.params.given_rings.is_none(), "{}", body.id);
+                }
+            }
+        }
+        assert!(giants > 60, "{giants}");
+        assert!(bright > 0 && faint > bright, "{bright} {faint}");
+    }
+
+    #[test]
+    fn rings_given_by_a_system_survive_its_system_json() {
+        let system = draw(
+            &whole(&[("gas-giant", 3)], 3),
+            &mut StdRng::seed_from_u64(3),
+        )
+        .unwrap();
+        let json = serde_json::to_string(&system).unwrap();
+        let back: System = serde_json::from_str(&json).unwrap();
+        for (a, b) in system.bodies.iter().zip(&back.bodies) {
+            assert_eq!(a.params.given_rings, b.params.given_rings);
+        }
+        // A system drawn before has none, and reads as it was.
+        let old = json.replace("\"given_rings\"", "\"unknown_field\"");
+        let back: System = serde_json::from_str(&old).unwrap();
+        assert!(back.bodies.iter().all(|b| b.params.given_rings.is_none()));
     }
 
     #[test]

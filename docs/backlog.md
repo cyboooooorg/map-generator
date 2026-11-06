@@ -498,7 +498,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 18. Rings and ring moons
 
-- **Status:** studied
+- **Status:** in progress
 - **Analysis:** [analysis/14-rings.md](analysis/14-rings.md)
 - **Problem:** giants' rings are drawn twice with different odds
   (`giant_world.rs` for giant worlds, `giants.rs` for a rocky world's
@@ -517,3 +517,10 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   (7–17 of their Hill radii) or set by a moon's 2:1 resonance; edge
   moons and shepherds as `ring-moon` bodies; dust rings fed by moons
   later; first, the Roche check missing from the moons of giant worlds.
+- **Decided (2026-11-06):** the four steps now, one pull request each:
+  the Roche fix, one draw per giant at the system level, the ring moons
+  with their gaps and the Roche edge, then the dust rings.
+- **Done (2026-11-06):** one ring draw per giant at the system level
+  (`given_rings` in a giant's `WorldParams`, stream `RINGS`), shown in
+  the star view before generation; a rocky world's giant neighbours draw
+  their rings with the presets' odds.

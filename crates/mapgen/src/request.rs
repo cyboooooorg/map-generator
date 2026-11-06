@@ -525,6 +525,7 @@ impl WorldRequest {
             } else {
                 self.host.unwrap_or_default()
             },
+            given_rings: None,
         };
         // Moons asked for: the world is not a giant's moon, which keeps none
         // (an error when that is asked for too).

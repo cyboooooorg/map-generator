@@ -930,6 +930,7 @@ pub fn small_body_params(
         giants: crate::giants::GiantsMode::None,
         giant_mass_earth: None,
         host: crate::exomoon::HostMode::None,
+        given_rings: None,
     }
 }
 
@@ -1047,6 +1048,7 @@ mod tests {
             giants: crate::giants::GiantsMode::None,
             giant_mass_earth: None,
             host: crate::exomoon::HostMode::None,
+            given_rings: None,
         }
     }
 

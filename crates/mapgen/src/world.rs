@@ -65,6 +65,13 @@ pub struct WorldParams {
     /// Whether the world is the moon of a giant planet (see
     /// `crate::exomoon`): as its seed draws, always, or never.
     pub host: crate::exomoon::HostMode,
+    /// A giant's rings as its planetary system drew them (see
+    /// `crate::system`), which its look takes instead of drawing its own;
+    /// absent for every other world, whose rings (if a giant) come from its
+    /// seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub given_rings: Option<crate::giant_world::GivenRings>,
 }
 
 impl WorldParams {
