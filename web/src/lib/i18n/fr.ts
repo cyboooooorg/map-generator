@@ -591,6 +591,10 @@ export const fr: Messages = {
     smallBodies: 'Petits corps',
     smallBodiesHelp:
       'Entoure les essaims troyens et trace les ceintures du système dans le ciel (sur le globe, à la lumière du soleil), leurs corps trop petits pour être vus d’ici, avec leur nom',
+    ringRocks: 'Blocs des anneaux',
+    ringRocksHelp:
+      'Les blocs de l’anneau autour de cette lune, au soleil : chacun tourne autour de la géante à son propre rythme, ceux à l’intérieur de l’orbite de la lune la dépassent, ceux à l’extérieur restent en arrière. Les vrais blocs, d’une dizaine de mètres, font moins d’un pixel au-delà de quelques km : agrandis, ils montrent l’anneau comme une ceinture, sans respecter l’échelle',
+    ringRockScales: { 0: 'Masqués', 1: 'Taille réelle', 10: 'Agrandis ×10 (pas à l’échelle)', 30: 'Agrandis ×30 (pas à l’échelle)', 100: 'Agrandis ×100 (pas à l’échelle)' },
     trojanSwarm: (p: { point: string; planet: string }) => `Troyens ${p.point} de ${p.planet}`,
     trojanFacts: (p: { count: string; n: number }) =>
       p.n === 1 ? 'un corps de plus de 1 km' : `${p.n >= 100 ? 'environ ' : ''}${p.count} corps de plus de 1 km`,

@@ -627,6 +627,10 @@ export const en = {
     smallBodies: 'Small bodies',
     smallBodiesHelp:
       'Rings the trojan swarms and traces the belts of the system in the sky (on the globe, in sunlight), their bodies too small to see from here, with their names',
+    ringRocks: 'Ring rocks',
+    ringRocksHelp:
+      'The boulders of the ring round this moon, in sunlight: each goes round the giant at its own pace, those inside the moon\'s orbit passing it, those outside falling behind. Real boulders, 10 m or so, are under a pixel beyond a few km: enlarged, they show the ring as a belt, not to scale',
+    ringRockScales: { 0: 'Hidden', 1: 'True size', 10: 'Enlarged ×10 (not to scale)', 30: 'Enlarged ×30 (not to scale)', 100: 'Enlarged ×100 (not to scale)' } as Record<number, string>,
     trojanSwarm: (p: { point: string; planet: string }) => `${p.point} trojans of ${p.planet}`,
     trojanFacts: (p: { count: string; n: number }) =>
       p.n === 1 ? 'one body over 1 km' : `${p.n >= 100 ? 'about ' : ''}${p.count} bodies over 1 km`,

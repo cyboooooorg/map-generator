@@ -20,6 +20,9 @@ import {
   GreaterDepth,
   Float32BufferAttribute,
   HalfFloatType,
+  IcosahedronGeometry,
+  InstancedBufferAttribute,
+  InstancedBufferGeometry,
   LinearFilter,
   LinearMipmapLinearFilter,
   LessEqualDepth,
@@ -109,6 +112,8 @@ import {
   surfaceVertex,
 } from './shaders';
 import { PROFILES, type QualityProfile } from './quality';
+import { BOULDER_M, CELL_KM, ROCKS_PER_CELL, ROWS, type RingRocks, WINDOW } from '../ringRocks';
+import { RING_ROCK_SLOTS, ringRockFragment, ringRockVertex } from './ringRockShaders';
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
 import type { RingSystem } from '../api/types/RingSystem';
@@ -580,6 +585,9 @@ export class PlanetView {
   private rings: Mesh<RingGeometry, ShaderMaterial> | null = null;
   /** The faint dust rings its moons feed (see setDustRings). */
   private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
+  /** The rocks of the giant's rings round a ring moon (see setRingRocks), null until some are. */
+  private ringRocks: Mesh<InstancedBufferGeometry, ShaderMaterial> | null = null;
+  private ringRocksOn = false;
   private cloudDriftTimer: ReturnType<typeof setTimeout> | null = null;
   /** The world's sky before the lift over the relief, Earth's until a world sets it. */
   private worldSky: Sky = {
@@ -1105,6 +1113,108 @@ export class PlanetView {
       return mesh;
     });
     this.requestRender();
+  }
+
+  /**
+   * The rocks of its giant's rings round the ring moon shown (see
+   * lib/ringRocks.ts), `scale` times their true size (1: true size, more
+   * to see them from afar), under Sunlight, in the profiles that draw them
+   * (QualityProfile.ringRocks); null hides them.
+   */
+  setRingRocks(rocks: RingRocks | null, scale = 1): void {
+    this.requestRender();
+    this.ringRocksOn = rocks !== null && this.quality.ringRocks;
+    if (!rocks || !this.quality.ringRocks) {
+      if (this.ringRocks) this.ringRocks.visible = false;
+      return;
+    }
+    if (!this.ringRocks) {
+      // One low rock (20 flat faces), drawn once per slot of the window.
+      const rock = new IcosahedronGeometry(1, 0);
+      const geometry = new InstancedBufferGeometry();
+      geometry.setAttribute('position', rock.getAttribute('position'));
+      geometry.setAttribute('normal', rock.getAttribute('normal'));
+      const slots = new Float32Array(RING_ROCK_SLOTS * 3);
+      let k = 0;
+      for (let row = 0; row < ROWS; row += 1) {
+        for (let cell = -WINDOW; cell <= WINDOW; cell += 1) {
+          for (let rank = 0; rank < ROCKS_PER_CELL; rank += 1) {
+            slots.set([row, cell, rank], k);
+            k += 3;
+          }
+        }
+      }
+      geometry.setAttribute('aSlot', new InstancedBufferAttribute(slots, 3));
+      geometry.instanceCount = RING_ROCK_SLOTS;
+      this.ringRocks = new Mesh(
+        geometry,
+        new ShaderMaterial({
+          vertexShader: ringRockVertex,
+          fragmentShader: ringRockFragment,
+          uniforms: {
+            uRows: { value: Array.from({ length: ROWS }, () => new Vector4()) },
+            uFirstRow: { value: 0 },
+            uCellKm: { value: CELL_KM },
+            uAKm: { value: 1 },
+            uGiantKm: { value: 1 },
+            uMoonKm: { value: 1 },
+            uFoot: { value: new Vector3() },
+            uOut: { value: new Vector3() },
+            uAhead: { value: new Vector3() },
+            uNormal: { value: new Vector3() },
+            uGiantCentre: { value: new Vector3() },
+            uGiantRadius: { value: 1 },
+            uSunDir: this.u.uSunDir,
+            uBoulderM: { value: BOULDER_M.bright },
+            uScale: { value: 1 },
+            uPixel: { value: 0.001 },
+            uFar: { value: 100 },
+            uFade: { value: 1 },
+            uColour: { value: new Color() },
+            uRingInner: { value: 0 },
+            uRingOuter: { value: 0 },
+            uRingOpacity: { value: 0 },
+            uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
+            uRingGapCount: { value: 0 },
+            uRingGapLeast: { value: 0 },
+          },
+          // Faint while under a pixel; drawn after the rings of the sky.
+          transparent: true,
+        }),
+      );
+      this.ringRocks.frustumCulled = false;
+      this.ringRocks.renderOrder = SKY_FRONT_ORDER + 1;
+      this.scene.add(this.ringRocks);
+    }
+    const u = this.ringRocks.material.uniforms;
+    rocks.rows.forEach((row, i) => (u['uRows']!.value as Vector4[])[i]!.set(row.offsetKm, row.cell, row.into, row.cells));
+    u['uFirstRow']!.value = rocks.firstRow;
+    u['uAKm']!.value = rocks.aKm;
+    u['uGiantKm']!.value = rocks.giantRadiusKm;
+    u['uMoonKm']!.value = rocks.moonRadiusKm;
+    (u['uFoot']!.value as Vector3).set(...rocks.foot);
+    (u['uOut']!.value as Vector3).set(...rocks.out);
+    (u['uAhead']!.value as Vector3).set(...rocks.ahead);
+    (u['uNormal']!.value as Vector3).set(...rocks.normal);
+    (u['uGiantCentre']!.value as Vector3).set(...rocks.giantCentre);
+    u['uGiantRadius']!.value = rocks.giantRadius;
+    u['uBoulderM']!.value = rocks.rings.bright ? BOULDER_M.bright : BOULDER_M.faint;
+    u['uScale']!.value = scale;
+    (u['uColour']!.value as Color).setRGB(...rocks.rings.colour, SRGBColorSpace);
+    // The rings' own gaps, not widened to a pixel: no rock in them.
+    setRingUniforms(u, rocks.rings, 0);
+  }
+
+  /** Shows the ring rocks this frame, if any, at the camera's pixel and far plane. */
+  private drawRingRocks(): void {
+    const rocks = this.ringRocks;
+    if (!rocks) return;
+    rocks.visible = this.ringRocksOn && this.u.uLightMode.value === 1 && this.morph > 0.01;
+    if (!rocks.visible) return;
+    const u = rocks.material.uniforms;
+    u['uPixel']!.value = (2 * Math.tan((this.camera.fov * Math.PI) / 360)) / Math.max(this.renderer.domElement.height, 1);
+    u['uFar']!.value = this.camera.far;
+    u['uFade']!.value = this.morph ** 3;
   }
 
   /** Lets the cloud layer drift slowly eastwards around the planet, or stops it where it is. */
@@ -1738,6 +1848,8 @@ export class PlanetView {
     }
     this.rings?.geometry.dispose();
     this.rings?.material.dispose();
+    this.ringRocks?.geometry.dispose();
+    this.ringRocks?.material.dispose();
     for (const mesh of this.dustRings) {
       mesh.geometry.dispose();
       mesh.material.dispose();
@@ -2475,6 +2587,7 @@ export class PlanetView {
     this.driftClouds();
     this.camera.near = Math.max(altitude * 0.1, 1e-6);
     this.camera.far = altitude + 4;
+    this.drawRingRocks();
     this.camera.updateProjectionMatrix();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
     if (!this.animation) {
