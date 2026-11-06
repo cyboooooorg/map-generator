@@ -107,7 +107,8 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
-import { ringFragment, ringVertex } from './ringShaders';
+import { dustRingFragment, dustRingVertex, ringFragment, ringVertex } from './ringShaders';
+import type { DustRing } from '../api/types/DustRing';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import { starField } from './stars';
 
@@ -554,6 +555,8 @@ export class PlanetView {
   private cloudDriftAt: number | null = null;
   /** The rings of the giant shown, if any. */
   private rings: Mesh<RingGeometry, ShaderMaterial> | null = null;
+  /** The faint dust rings its moons feed (see setDustRings). */
+  private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
   private cloudDriftTimer: ReturnType<typeof setTimeout> | null = null;
   /** The world's sky before the lift over the relief, Earth's until a world sets it. */
   private worldSky: Sky = {
@@ -1021,6 +1024,48 @@ export class PlanetView {
       this.rings.renderOrder = 1;
       this.scene.add(this.rings);
     }
+    this.requestRender();
+  }
+
+  /**
+   * The dust rings of the giant shown, as its planetary system drew them
+   * (`DustRing` in crates/mapgen/src/rings.rs): broad, smooth and faint, in
+   * its equatorial plane like the main rings; none clears them.
+   */
+  setDustRings(rings: readonly DustRing[]): void {
+    for (const mesh of this.dustRings) {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    }
+    this.dustRings = rings.map((ring) => {
+      const mesh = new Mesh(
+        new RingGeometry(ring.inner, ring.outer, 256, 8),
+        new ShaderMaterial({
+          vertexShader: dustRingVertex,
+          fragmentShader: dustRingFragment,
+          uniforms: {
+            uColour: { value: new Color().setRGB(...ring.colour, SRGBColorSpace) },
+            uInner: { value: ring.inner },
+            uOuter: { value: ring.outer },
+            uPeak: { value: ring.peak },
+            uOpacity: { value: ring.opacity },
+            uLightMode: this.u.uLightMode,
+            uSunDir: this.u.uSunDir,
+            uFade: { value: 1 },
+          },
+          transparent: true,
+          depthWrite: false,
+          side: DoubleSide,
+        }),
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.frustumCulled = false;
+      // Behind the main rings where they overlap.
+      mesh.renderOrder = 0;
+      this.scene.add(mesh);
+      return mesh;
+    });
     this.requestRender();
   }
 
@@ -1652,6 +1697,10 @@ export class PlanetView {
     }
     this.rings?.geometry.dispose();
     this.rings?.material.dispose();
+    for (const mesh of this.dustRings) {
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    }
     this.renderer.dispose();
     // Free the WebGL context now: browsers cap live contexts (about 16), and
     // compare panes come and go.
@@ -2239,6 +2288,10 @@ export class PlanetView {
     }
     this.atmosphereOpacity.value = this.morph ** 3;
     // Rings belong to the globe, like the atmosphere.
+    for (const mesh of this.dustRings) {
+      mesh.visible = this.morph > 0.01;
+      mesh.material.uniforms['uFade']!.value = this.morph ** 3;
+    }
     if (this.rings) {
       this.rings.visible = this.morph > 0.01;
       this.rings.material.uniforms['uFade']!.value = this.morph ** 3;

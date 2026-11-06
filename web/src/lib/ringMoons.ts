@@ -2,12 +2,23 @@
 // item 18; crates/mapgen/src/rings.rs): the rings the system drew for the
 // giant, and the part a ring moon plays in them.
 import type { Body } from './api/types/Body';
+import type { DustRing } from './api/types/DustRing';
 import type { RingRole } from './api/types/RingRole';
 import type { RingSystem } from './api/types/RingSystem';
 
 /** The rings the system drew for `body`, if a giant with rings. */
 export function ringsOf(body: Body): RingSystem | null {
   return body.params.given_rings?.rings ?? null;
+}
+
+/** The dust rings the system drew for `body`, if a giant whose moons feed some. */
+export function dustOf(body: Body): DustRing[] {
+  return body.params.given_rings?.dust ?? [];
+}
+
+/** The dust ring `moon` feeds round `planet`, if any. */
+export function dustFedBy(moon: Body, planet: Body | null): DustRing | null {
+  return (planet ? dustOf(planet) : []).find((d) => d.source === moon.id) ?? null;
 }
 
 /** A ring moon's part in its planet's rings: its role, and the width of the gap it opens, km. */

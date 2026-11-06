@@ -95,6 +95,14 @@ export const fr: Messages = {
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
       `${p.kind === 'bright' ? 'brillants, glacés' : 'ténus, étroits'} · de ${p.inner} à ${p.outer} de ses rayons` +
       (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 division' : `${p.gaps} divisions`}` : ''),
+    dustRings: 'Anneaux de poussière',
+    dustRing: (p: { kind: 'gossamer' | 'plume'; moon: string; inner: string; outer: string }) =>
+      `${p.kind === 'plume' ? 'glace des geysers de' : 'poussière arrachée à'} ${p.moon}, de ${p.inner} à ${p.outer} de ses rayons`,
+    dustSource: 'Poussière',
+    dustFed: (p: { kind: 'gossamer' | 'plume' }) =>
+      p.kind === 'plume'
+        ? 'ses geysers projettent des grains de glace qui s’étalent en un anneau large et ténu le long de son orbite'
+        : 'la poussière que les impacts lui arrachent s’étale en un anneau ténu à l’intérieur de son orbite',
     ringRole: 'Dans les anneaux',
     ringRoles: {
       embedded: (p: { gap: string }) => `orbite dans les anneaux et y dégage une division de ${p.gap} autour de son orbite`,

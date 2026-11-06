@@ -900,6 +900,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         // seed or by its system.
         given_rings: meta.giant.as_ref().map(|g| crate::giant_world::GivenRings {
             rings: g.rings.clone(),
+            dust: Vec::new(),
         }),
         impact_factor: meta.impact_factor,
     };

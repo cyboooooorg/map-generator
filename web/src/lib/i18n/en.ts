@@ -108,6 +108,14 @@ export const en = {
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
       `${p.kind === 'bright' ? 'bright, icy' : 'faint, narrow'} · ${p.inner} to ${p.outer} of its radii` +
       (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 gap' : `${p.gaps} gaps`}` : ''),
+    dustRings: 'Dust rings',
+    dustRing: (p: { kind: 'gossamer' | 'plume'; moon: string; inner: string; outer: string }) =>
+      `${p.kind === 'plume' ? 'ice from the geysers of' : 'dust knocked off'} ${p.moon}, ${p.inner} to ${p.outer} of its radii`,
+    dustSource: 'Dust',
+    dustFed: (p: { kind: 'gossamer' | 'plume' }) =>
+      p.kind === 'plume'
+        ? 'its geysers blow out ice grains that spread into a broad, faint ring along its orbit'
+        : 'dust knocked off it by impacts spreads into a faint gossamer ring inside its orbit',
     ringRole: 'In the rings',
     ringRoles: {
       embedded: (p: { gap: string }) => `orbits inside the rings and clears a gap ${p.gap} wide round its orbit`,

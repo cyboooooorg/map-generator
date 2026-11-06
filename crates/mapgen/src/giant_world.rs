@@ -157,6 +157,14 @@ pub struct RingSystem {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct GivenRings {
     pub rings: Option<RingSystem>,
+    /// Faint dust rings its moons feed (see `crate::rings::dust_rings`),
+    /// far wider than the main rings and seen only against the light.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<Vec<crate::rings::DustRing>>", optional)
+    )]
+    pub dust: Vec<crate::rings::DustRing>,
 }
 
 /// A giant's rings, drawn from `rng` with the odds of bright and of

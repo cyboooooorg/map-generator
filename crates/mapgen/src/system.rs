@@ -997,6 +997,21 @@ fn assemble(
         {
             rings.gap_moons = gap_moons;
         }
+        // The dust rings its moons feed.
+        let radius_km = bodies[planet_index].physical.radius_km;
+        let sources: Vec<crate::rings::DustSource> = bodies[planet_index + 1..]
+            .iter()
+            .map(|m| crate::rings::DustSource {
+                id: m.id.clone(),
+                a_radii: m.orbit.semi_major_axis_km / radius_km,
+                role: m.ring_role,
+                icy: m.body_type == "icy-moon",
+            })
+            .collect();
+        let seed = bodies[planet_index].params.seed;
+        if let Some(given) = bodies[planet_index].params.given_rings.as_mut() {
+            given.dust = crate::rings::dust_rings(given.rings.as_ref(), &sources, seed);
+        }
     }
     // Its small bodies, from the planets as placed: belts and trojans, and
     // the crater rate they set on every body.
@@ -1255,6 +1270,7 @@ fn with_system_rings(mut params: WorldParams) -> WorldParams {
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(params.seed, stream::RINGS)));
     params.given_rings = Some(crate::giant_world::GivenRings {
         rings: crate::giant_world::draw_rings(&mut rng, odds),
+        dust: Vec::new(),
     });
     params
 }
@@ -1888,7 +1904,7 @@ mod tests {
 
     #[test]
     fn ring_moons_open_the_gaps_and_join_the_moons() {
-        let (mut embedded, mut resonant, mut edge, mut shepherds) = (0, 0, 0, 0);
+        let (mut embedded, mut resonant, mut edge, mut shepherds, mut dusts) = (0, 0, 0, 0, 0);
         for seed in 0..40 {
             let system = draw(
                 &whole(&[("gas-giant", 2), ("ice-giant", 2)], seed),
@@ -1909,6 +1925,11 @@ mod tests {
                 );
                 for (k, m) in moons.iter().enumerate() {
                     assert_eq!(m.id, format!("{}-{}", giant.id, k + 1));
+                }
+                // Every dust ring has its moon, among the giant's.
+                for dust in giant.params.given_rings.iter().flat_map(|g| &g.dust) {
+                    assert!(moons.iter().any(|m| m.id == dust.source), "{}", dust.source);
+                    dusts += 1;
                 }
                 let rings = giant
                     .params
@@ -1958,6 +1979,7 @@ mod tests {
                 }
             }
         }
+        assert!(dusts > 10, "{dusts}");
         assert!(
             embedded > 5 && resonant > 5 && edge > 10 && shepherds > 10,
             "{embedded} {resonant} {edge} {shepherds}"

@@ -592,6 +592,8 @@
   $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => view?.setCloudsDrifting(cloudDrift));
   $effect(() => view?.setGiant(giant));
+  // The dust rings its system drew for the giant shown.
+  $effect(() => view?.setDustRings(giant && sysBody ? (sysBody.params.given_rings?.dust ?? []) : []));
   $effect(() => {
     // No detail while the slider moves: the reduced preview shows through.
     // A giant has no ground to detail.
