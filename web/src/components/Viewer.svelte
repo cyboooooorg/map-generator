@@ -14,7 +14,7 @@
   import type { HexMap } from '../lib/api/types/HexMap';
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
-  import { formatArea, formatInt, formatKm, formatNumber, formatShare, formatUpTo, saveBlob, surfaceColour, withUnit } from '../lib/format';
+  import { formatArea, formatInt, formatKm, formatNumber, formatShare, formatUpTo, formatYear, saveBlob, surfaceColour, withUnit } from '../lib/format';
   import type { LonLat } from '../lib/geo';
   import type { ViewLink } from '../lib/link';
   import type { LoadProgress } from '../lib/progress';
@@ -199,7 +199,7 @@
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
   /** Labels on the bodies of the sky, and where those are on the screen. */
   let skyLabels = $state(saved.skyLabels);
-  let skyPositions = $state<{ bodies: ({ x: number; y: number } | null)[]; star: { x: number; y: number } | null } | null>(null);
+  let skyPositions = $state<ReturnType<PlanetView['skyScreenPositions']> | null>(null);
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
   let season = $state(saved.season);
@@ -878,8 +878,10 @@
   $effect(() => {
     const current = view;
     if (!current) return;
-    current.onSkyPositions = skyLabels ? (positions) => (skyPositions = positions) : null;
-    if (!skyLabels) skyPositions = null;
+    // The guides' labels (spin, host) follow with the spin axes.
+    const follow = skyLabels || axesShown;
+    current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
+    if (!follow) skyPositions = null;
     return () => {
       current.onSkyPositions = null;
     };
@@ -912,6 +914,68 @@
       name: world.systemNames['star'] ?? `${sys.star.designation} · ${sys.star.type}`,
       detail: t.viewer.skyStarFacts({ distance: withUnit(formatUpTo(sysPlanet.orbit.semi_major_axis_au, 2), t.viewer.au) }),
     };
+  });
+
+  /**
+   * The body shown's spin, for its arrow: locked to what it orbits (a
+   * ring) or on its own; and in a system, its spin speed at the equator.
+   */
+  const spinLocked = $derived(sysBody ? sysBody.spin.locked : (meta?.star?.tidally_locked ?? false));
+  $effect(() => view?.setSpinLocked(meta || sysBody ? spinLocked : null));
+  /** A moon's host planet: where it is, and the moon's direction of motion round it (its own orbit's tangent). */
+  const hostGuide = $derived.by(() => {
+    if (!sys || !sysBody?.parent || !sysSky) return null;
+    const index = sysSky.ids.indexOf(sysBody.parent);
+    const host = sysSky.bodies[index];
+    if (!host?.position) return null;
+    const loop = sysSky.orbits[sysSky.ownOrbit] ?? null;
+    let velocity: [number, number, number] | null = null;
+    if (loop && loop.length > 2) {
+      // The point of the loop at the body (the origin), and its neighbours.
+      let k = 0;
+      loop.forEach((p, i) => {
+        if (Math.hypot(...p) < Math.hypot(...loop[k]!)) k = i;
+      });
+      const next = loop[(k + 1) % loop.length]!;
+      const prev = loop[(k - 1 + loop.length) % loop.length]!;
+      velocity = [next[0] - prev[0], next[1] - prev[1], next[2] - prev[2]];
+    }
+    return { position: host.position, velocity };
+  });
+  $effect(() => view?.setHostGuide(hostGuide));
+  /** The guides' labels: the spin, the host's distance, its pull and the body's speed. */
+  const guideLabels = $derived.by((): { key: 'spin' | 'host' | 'pull' | 'velocity'; label: SkyLabel }[] => {
+    const labels: { key: 'spin' | 'host' | 'pull' | 'velocity'; label: SkyLabel }[] = [];
+    if (sysBody) {
+      const hours = sysBody.spin.period_hours;
+      labels.push({
+        key: 'spin',
+        label: spinLocked
+          ? { name: t.viewer.spinLockedName, detail: t.viewer.spinLockedFacts({ period: formatYear(sysBody.orbit.period_days) }) }
+          : {
+              name: t.viewer.spinName,
+              detail: t.viewer.spinFacts({
+                speed: withUnit(formatInt((2 * Math.PI * sysBody.physical.radius_km) / Math.max(hours, 1e-6)), 'km/h'),
+                period: withUnit(formatUpTo(hours, 1), 'h'),
+              }),
+            },
+      });
+    }
+    const host = sys && sysBody?.parent ? sys.bodies.find((b) => b.id === sysBody.parent) : null;
+    if (sysBody && host) {
+      const G = 6.674e-11;
+      const EARTH_KG = 5.972e24;
+      const r = sysBody.orbit.semi_major_axis_km;
+      const hostKm = hostGuide ? Math.hypot(...hostGuide.position) * sysBody.physical.radius_km : r;
+      const mu = G * (host.physical.mass_earth + sysBody.physical.mass_earth) * EARTH_KG;
+      const pull = (G * host.physical.mass_earth * EARTH_KG) / (hostKm * 1000) ** 2;
+      const speed = Math.sqrt(Math.max(mu * (2 / (hostKm * 1000) - 1 / (r * 1000)), 0)) / 1000;
+      const name = world.systemNames[host.id] ?? host.designation;
+      labels.push({ key: 'host', label: { name, detail: withUnit(formatInt(hostKm), 'km') } });
+      labels.push({ key: 'pull', label: { name: t.viewer.hostPull, detail: withUnit(formatUpTo(pull, pull < 0.01 ? 4 : 3), 'm/s²') } });
+      labels.push({ key: 'velocity', label: { name: t.viewer.hostOrbitSpeed, detail: withUnit(formatUpTo(speed, 2), 'km/s') } });
+    }
+    return labels;
   });
 
   /** The world's axes on screen, for the planet view's gizmo. */
@@ -1422,8 +1486,14 @@
 <div class="viewer">
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
-  {#if world.subject === 'planet' && skyLabels && skyPositions}
-    <SkyLabels positions={skyPositions.bodies} labels={skyLabelList} star={skyPositions.star} {starLabel} />
+  {#if world.subject === 'planet' && skyPositions}
+    {@const guides = axesShown ? guideLabels : []}
+    <SkyLabels
+      positions={[...(skyLabels ? skyPositions.bodies : []), ...guides.map((g) => skyPositions!.guides[g.key])]}
+      labels={[...(skyLabels ? skyLabelList : []), ...guides.map((g) => g.label)]}
+      star={skyLabels ? skyPositions.star : null}
+      {starLabel}
+    />
   {/if}
   {#if world.subject === 'star' && (worldId || sys)}
     <StarPane

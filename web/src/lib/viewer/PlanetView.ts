@@ -55,6 +55,7 @@ import {
   type IUniform,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
 import type { HexMap } from '../api/types/HexMap';
 import {
   greatCircleArc,
@@ -150,9 +151,6 @@ const SKY_FRONT_ORDER = 5;
 const SURFACE_SEGMENTS = 720;
 const PATCH_SEGMENTS = 16;
 /** The arrow of the sense of rotation round it: its height, radius and arc (radians). */
-const SPIN_ARROW_HEIGHT = 1.3;
-const SPIN_ARROW_RADIUS = 0.3;
-const SPIN_ARROW_ARC = 1.5 * Math.PI;
 /** Colours of their north and south ends, linear. */
 const SPIN_AXIS_NORTH: [number, number, number] = [0.9, 0.9, 0.85];
 const SPIN_AXIS_SOUTH: [number, number, number] = [0.3, 0.45, 0.85];
@@ -513,6 +511,9 @@ export class PlanetView {
    * end light, the south end blue.
    */
   private spinAxis: LineSegments<BufferGeometry, LineBasicMaterial> | null = null;
+  /** The spin arrow (or a locked body's ring) and the host planet's line and arrows (see lib/viewer/bodyGuides). */
+  private readonly guides = new BodyGuides(new Color(...SPIN_AXIS_NORTH));
+  private hostGuideOn = false;
   private spinAxesOn = false;
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
   private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
@@ -706,6 +707,7 @@ export class PlanetView {
     this.surface.material.stencilRef = DETAIL_STENCIL;
     this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
+    this.scene.add(this.guides.spin, this.guides.host);
 
     this.grid = new LineSegments(
       graticule(30),
@@ -1342,6 +1344,7 @@ export class PlanetView {
     // The arrow of the sense of rotation is fixed against the stars, not
     // turning with the globe.
     if (this.spinAxis) this.spinAxis.rotation.y = wrapped;
+    this.guides.spin.rotation.y = wrapped;
     // The camera turned with them about the spin axis, on the globe: the
     // camera is still against the stars, the sun and the orbits, and the
     // globe turns under it.
@@ -1630,6 +1633,7 @@ export class PlanetView {
     this.skyOrbits?.material.dispose();
     this.skyOrbitsNear?.material.dispose();
     this.spinAxis?.geometry.dispose();
+    this.guides.dispose();
     this.previewGlobe?.geometry.dispose();
     this.previewGlobe?.material.dispose();
     this.spinAxis?.material.dispose();
@@ -1956,25 +1960,6 @@ export class PlanetView {
       const [n, s] = [SPIN_AXIS_NORTH, SPIN_AXIS_SOUTH];
       const points = [0, 1, 0, 0, SPIN_AXIS_LENGTH, 0, 0, -1, 0, 0, -SPIN_AXIS_LENGTH, 0];
       const colours = [...n, ...n, ...s, ...s];
-      // The sense of rotation: an arrow bent round the axis near its north
-      // end, going the way the body turns (prograde, from z towards x).
-      const at = (angle: number, radius = SPIN_ARROW_RADIUS): number[] => [
-        radius * Math.sin(angle),
-        SPIN_ARROW_HEIGHT,
-        radius * Math.cos(angle),
-      ];
-      const steps = 24;
-      for (let i = 0; i < steps; i += 1) {
-        points.push(...at((SPIN_ARROW_ARC * i) / steps), ...at((SPIN_ARROW_ARC * (i + 1)) / steps));
-        colours.push(...n, ...n);
-      }
-      // Its head, at the end of the arc, pointing on along it.
-      const tip = at(SPIN_ARROW_ARC);
-      const back = SPIN_ARROW_ARC - 0.45;
-      for (const radius of [SPIN_ARROW_RADIUS * 0.75, SPIN_ARROW_RADIUS * 1.25]) {
-        points.push(...tip, ...at(back, radius));
-        colours.push(...n, ...n);
-      }
       geometry.setAttribute('position', new Float32BufferAttribute(points, 3));
       geometry.setAttribute('color', new Float32BufferAttribute(colours, 3));
       this.spinAxis = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true }));
@@ -1983,6 +1968,26 @@ export class PlanetView {
       this.spinAxis.rotation.y = this.stars.rotation.y;
       this.scene.add(this.spinAxis);
     }
+    this.requestRender();
+  }
+
+  /**
+   * How the body shown turns, for its spin arrow: on its own (false), or
+   * locked to what it orbits (true), drawn as a closed ring; null for none.
+   */
+  setSpinLocked(locked: boolean | null): void {
+    this.guides.setSpin(locked);
+    this.requestRender();
+  }
+
+  /**
+   * The host planet of the body shown (a moon's planet), for a dotted line
+   * to it and the arrows of its pull and of the body's velocity; null for
+   * none. Shown with the spin axes.
+   */
+  setHostGuide(guide: HostGuide | null): void {
+    this.guides.setHost(guide);
+    this.hostGuideOn = guide !== null;
     this.requestRender();
   }
 
@@ -2003,7 +2008,12 @@ export class PlanetView {
    * one not drawn, behind the camera or hidden by the globe. Called back
    * through onSkyPositions after each frame while it is set.
    */
-  skyScreenPositions(): { bodies: ({ x: number; y: number } | null)[]; star: { x: number; y: number } | null } {
+  skyScreenPositions(): {
+    bodies: ({ x: number; y: number } | null)[];
+    star: { x: number; y: number } | null;
+    /** Where the body's guides end (see lib/viewer/bodyGuides), null when not drawn or hidden by the globe. */
+    guides: Record<keyof GuidePoints, { x: number; y: number } | null>;
+  } {
     const shown = this.u.uLightMode.value === 1 && this.morph > 0.99;
     const camera = this.camera.position;
     const forward = new Vector3();
@@ -2022,11 +2032,27 @@ export class PlanetView {
       if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
+    // A point near the globe: hidden when the globe lies in front of it.
+    const near = (point: Vector3 | null): { x: number; y: number } | null => {
+      if (!point || this.morph < 0.99) return null;
+      const to = point.clone().sub(camera);
+      const distance = to.length();
+      const d = to.divideScalar(distance);
+      if (d.dot(forward) <= 0) return null;
+      const b = camera.dot(d);
+      const disc = b * b - (camera.lengthSq() - 1);
+      if (disc > 0 && -b - Math.sqrt(disc) < distance - 1e-3) return null;
+      const p = point.clone().project(this.camera);
+      if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
+      return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
+    };
+    const points = this.guides.points();
     return {
       bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),
       star: at(
         this.starPlace ? this.starPlace.position.clone().sub(this.camera.position) : this.u.uSunDir.value,
       ),
+      guides: { spin: near(points.spin), host: near(points.host), pull: near(points.pull), velocity: near(points.velocity) },
     };
   }
 
@@ -2211,6 +2237,7 @@ export class PlanetView {
       this.spinAxis.visible = this.spinAxesOn && this.morph > 0.01;
       this.spinAxis.material.opacity = this.morph ** 3;
     }
+    this.guides.update(this.spinAxesOn, this.spinAxesOn && this.hostGuideOn, this.morph);
     for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
       if (!orbits) continue;
       orbits.visible = this.skyOrbitsOn && this.morph > 0.01;
