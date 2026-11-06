@@ -48,6 +48,9 @@
 
   let viewer = $state<Viewer | null>(null);
   let picked = $state<LonLat | null>(null);
+  /** The pane's size, CSS px: the point panel floats within it. */
+  let paneWidth = $state(0);
+  let paneHeight = $state(0);
   let hover = $state<LonLat | null>(null);
   let measuring = $state(false);
   let path = $state<LonLat[]>([]);
@@ -110,7 +113,7 @@
   }
 </script>
 
-<div class="pane">
+<div class="pane" bind:clientWidth={paneWidth} bind:clientHeight={paneHeight}>
   <Viewer
     bind:this={viewer}
     bind:hexMap
@@ -166,6 +169,8 @@
       layers={world.layers}
       rivers={world.rivers}
       {hexMap}
+      viewWidth={paneWidth}
+      viewHeight={paneHeight}
       onClose={() => (picked = null)}
     />
   {/if}

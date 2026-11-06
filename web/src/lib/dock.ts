@@ -66,5 +66,22 @@ export function clampToView(at: FloatAt, width: number, height: number, viewWidt
   };
 }
 
+/** Width of the point panel (see components/InfoPanel.svelte), CSS px. */
+export const INFO_PANEL_WIDTH = 300;
+/** What the point panel stays clear of: the toolbar above, the playback bar below, CSS px. */
+export const INFO_PANEL_TOP = 56;
+export const INFO_PANEL_BOTTOM = 72;
+
+/**
+ * The point panel's place in a view of `viewWidth` × `viewHeight`: where the
+ * user dragged it (`saved`), kept inside the view and above the playback
+ * bar, or by default centred under the toolbar, clear of the icon bar on
+ * the left and the dock on the right.
+ */
+export function infoPanelAt(saved: FloatAt | null, height: number, viewWidth: number, viewHeight: number): FloatAt {
+  const at = saved ?? { x: (viewWidth - INFO_PANEL_WIDTH) / 2, y: INFO_PANEL_TOP };
+  return clampToView(at, INFO_PANEL_WIDTH, height, viewWidth, viewHeight - INFO_PANEL_BOTTOM);
+}
+
 /** Narrower views (CSS px) have no floating panels: the dock opens its panels full width. */
 export const FLOAT_MIN_WIDTH = 720;
