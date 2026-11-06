@@ -80,7 +80,18 @@ export const ringRockVertex = /* glsl */ `
 
     // As many as the ring's optical depth there, none in its gaps.
     float rKm = uAKm + row.x + (across - 0.5) * uCellKm;
-    float density = ringDensity(rKm / uGiantKm);
+    float r = rKm / uGiantKm;
+    // A gap's edges are sharp (as Encke's and Keeler's are): none inside
+    // its width. ringDensity's soft edges suit the sheet seen from afar,
+    // but would leave rocks a few km from the moon at this scale.
+    for (int k = 0; k < 4; k++) {
+      if (float(k) >= uRingGapCount) break;
+      if (abs(r - uRingGaps[k].x) < 0.5 * uRingGaps[k].y) {
+        hide();
+        return;
+      }
+    }
+    float density = ringDensity(r);
     float depth = -log(1.0 - min(density, 0.95));
     if (keep >= depth / 1.5) {
       hide();
