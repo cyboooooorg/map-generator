@@ -584,6 +584,8 @@ export class PlanetView {
   /** The rotation dial round the body shown (see setRotationDial), and its state; null hides it. */
   private readonly dial = new RotationDial();
   private dialState: DialState | null = null;
+  /** The state and radius the dial was last placed with (see render). */
+  private dialPlaced: { state: DialState; radius: number } | null = null;
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
   private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
@@ -728,6 +730,7 @@ export class PlanetView {
     private readonly canvas: HTMLCanvasElement,
     readonly quality: QualityProfile = PROFILES.high,
   ) {
+    ((globalThis as any).__views ??= []).push(this); // BENCH-HOOK
     // The stencil lets detail patches hide the base surface (see TileLayer).
     this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, stencil: true });
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
@@ -2810,8 +2813,15 @@ export class PlanetView {
       this.spinAxis.scale.setScalar(poles);
     }
     this.guides.update(this.spinAxesOn, this.spinAxesOn && this.hostGuideOn, this.morph);
-    // The dial's ring stands clear of the farthest of the shape.
-    if (this.dialState) this.dial.set(this.dialState, DIAL_RADIUS * (shape?.largest ?? 1));
+    // The dial's ring stands clear of the farthest of the shape, with its
+    // relief as displayed (as the guides), else the surface hides it.
+    if (this.dialState) {
+      const radius = DIAL_RADIUS * ((shape?.largest ?? 1) + relief);
+      if (this.dialPlaced?.state !== this.dialState || this.dialPlaced.radius !== radius) {
+        this.dial.set(this.dialState, radius);
+        this.dialPlaced = { state: this.dialState, radius };
+      }
+    }
     this.dial.update(this.dialState !== null, this.morph);
     for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
       if (!orbits) continue;
