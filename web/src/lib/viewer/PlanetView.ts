@@ -730,7 +730,6 @@ export class PlanetView {
     private readonly canvas: HTMLCanvasElement,
     readonly quality: QualityProfile = PROFILES.high,
   ) {
-    ((globalThis as any).__views ??= []).push(this); // BENCH-HOOK
     // The stencil lets detail patches hide the base surface (see TileLayer).
     this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, stencil: true });
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
