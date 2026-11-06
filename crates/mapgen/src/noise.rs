@@ -150,6 +150,8 @@ pub mod stream {
     pub const RINGS: u32 = 34;
     /// The moons in and next to those rings (see `crate::rings`).
     pub const RING_MOONS: u32 = 35;
+    /// The dust rings its moons feed (see `crate::rings::dust_rings`).
+    pub const DUST_RINGS: u32 = 36;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;

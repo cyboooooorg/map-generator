@@ -71,3 +71,52 @@ export const ringFragment = /* glsl */ `
     #include <colorspace_fragment>
   }
 `;
+
+// A dust ring reaches far beyond the camera's far plane, which only bounds
+// the globe's depth: its depth is held at that plane instead of being cut
+// there (the globe, nearer, still hides it).
+export const dustRingVertex = /* glsl */ `
+  varying vec3 vLocal;
+  varying vec3 vWorld;
+  void main() {
+    vLocal = position;
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+    gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
+  }
+`;
+
+// A faint dust ring (crates/mapgen/src/rings.rs, `DustRing`): smooth, with
+// no ringlets, densest along its source moon's orbit and fading to its
+// edges; lit by the sun and shadowed by the planet as the main rings are.
+export const dustRingFragment = /* glsl */ `
+  uniform vec3 uColour;
+  uniform float uInner;
+  uniform float uOuter;
+  uniform float uPeak;         // the source moon's orbit, planet radii
+  uniform float uOpacity;      // where densest
+  uniform int uLightMode;
+  uniform vec3 uSunDir;
+  uniform float uFade;
+  varying vec3 vLocal;
+  varying vec3 vWorld;
+
+  void main() {
+    float r = length(vLocal.xy);
+    if (r < uInner || r > uOuter) discard;
+    // Falling off from the peak towards each edge.
+    float side = r < uPeak ? (uPeak - r) / max(uPeak - uInner, 1e-4) : (r - uPeak) / max(uOuter - uPeak, 1e-4);
+    float density = uOpacity * (1.0 - smoothstep(0.0, 1.0, side));
+    if (density < 0.001) discard;
+    float light = 1.0;
+    if (uLightMode == 1) {
+      vec3 p = vWorld;
+      float b = dot(p, uSunDir);
+      float c = dot(p, p) - 1.0;
+      light = (b < 0.0 && b * b - c > 0.0) ? 0.08 : 1.0;
+    }
+    gl_FragColor = vec4(uColour * light, density * uFade);
+    #include <colorspace_fragment>
+  }
+`;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Body } from './api/types/Body';
-import { ringPart, ringsOf } from './ringMoons';
+import { dustFedBy, dustOf, ringPart, ringsOf } from './ringMoons';
 
 const body = (over: Record<string, unknown>): Body =>
   ({
@@ -42,5 +42,16 @@ describe('ringPart', () => {
     expect(ringPart(body({ id: 'c-5' }), giant)).toBeNull();
     expect(ringsOf(giant)?.bright).toBe(true);
     expect(ringsOf(body({}))).toBeNull();
+  });
+});
+
+describe('dustFedBy', () => {
+  it('finds the dust ring a moon feeds', () => {
+    const plume = { kind: 'plume', inner: 3, outer: 8, peak: 4, opacity: 0.02, colour: [0.8, 0.9, 1], source: 'c-5' };
+    const giant = body({ params: { given_rings: { rings: null, dust: [plume] } } });
+    expect(dustOf(giant)).toHaveLength(1);
+    expect(dustFedBy(body({ id: 'c-5' }), giant)?.kind).toBe('plume');
+    expect(dustFedBy(body({ id: 'c-6' }), giant)).toBeNull();
+    expect(dustOf(body({}))).toEqual([]);
   });
 });

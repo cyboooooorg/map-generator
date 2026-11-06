@@ -529,3 +529,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   cleared by embedded moonlets or opened by a moon's 2:1 resonance, edge
   moons and shepherd pairs as `icy-moon` bodies with a `ring_role`, shown
   in the body menu and on the cards.
+- **Done (2026-11-06):** dust rings fed by moons (`dust_rings`, stream
+  `DUST_RINGS`): gossamer rings of impact dust out to the edge moons of
+  bright rings, and plume rings round an active icy moon; drawn faint in
+  the planet view of the giant and listed on the cards. A Phoebe-type
+  ring waits for the systems' irregular moons.

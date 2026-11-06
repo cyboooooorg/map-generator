@@ -20,6 +20,13 @@
 //!   pair of 10 to 25 km on either side of a faint narrow ring (Cordelia and
 //!   Ophelia round Uranus's ε ring).
 //!
+//! - **Dust rings fed by moons** ([`dust_rings`]): a faint gossamer ring
+//!   from bright rings out to each of the one or two outermost edge moons
+//!   beyond them (a narrow ring's shepherds, hugging it, make none), of the dust impacts knock off them (Jupiter's
+//!   Amalthea and Thebe rings); and round an icy regular moon close in,
+//!   heated by the tides of its resonant chain, a broad ring of the ice
+//!   its geysers blow out (Saturn's E ring round Enceladus).
+//!
 //! Everything comes from a stream of its own, so a system's other bodies
 //! keep their draws. A giant whose regular moons would not fit (a hot one,
 //! its Hill sphere too small) keeps its rings without moons.
@@ -239,6 +246,107 @@ pub fn shape(
     (rings, out)
 }
 
+/// What feeds a dust ring.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum DustKind {
+    /// Dust knocked off a small moon by impacts (Jupiter's gossamer rings).
+    Gossamer,
+    /// Ice grains from a moon's geysers (Saturn's E ring).
+    Plume,
+}
+
+/// A faint dust ring, in the giant's equatorial plane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct DustRing {
+    pub kind: DustKind,
+    /// Edges, in the giant's radii.
+    pub inner: f32,
+    pub outer: f32,
+    /// Where it is densest, in the giant's radii: its source's orbit.
+    pub peak: f32,
+    /// Opacity where densest, `[0, 1]`: a few hundredths at most.
+    pub opacity: f32,
+    /// Colour, sRGB in `[0, 1]`.
+    pub colour: [f32; 3],
+    /// The moon that feeds it, by its id in the system.
+    pub source: String,
+}
+
+/// A moon of a giant as [`dust_rings`] needs it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DustSource {
+    pub id: String,
+    /// Distance from the giant's centre, in its radii.
+    pub a_radii: f64,
+    /// Its part in the rings, none for a regular moon.
+    pub role: Option<RingRole>,
+    pub icy: bool,
+}
+
+/// Odds of a gossamer ring from a small moon beyond the main rings.
+const GOSSAMER_ODDS: f64 = 0.8;
+/// Odds of an active icy moon, and how far out it may be, in the giant's
+/// radii (Enceladus: 3.95).
+const PLUME_ODDS: f64 = 0.25;
+const PLUME_REACH: f64 = 12.0;
+/// The span of a plume ring as shares of its moon's distance (the E ring:
+/// about 3 to 8 radii round Enceladus at 3.95).
+const PLUME_SPAN: (f64, f64) = (0.75, 2.0);
+
+/// The dust rings fed by the moons of a giant (`moons`, any order) with
+/// main `rings` (or none), from the giant's `seed`.
+pub fn dust_rings(rings: Option<&RingSystem>, moons: &[DustSource], seed: u32) -> Vec<DustRing> {
+    let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::DUST_RINGS)));
+    let mut out = Vec::new();
+    // Gossamer rings: the one or two outermost edge moons beyond bright
+    // rings, each its own, from the rings' edge out to its orbit.
+    if let Some(rings) = rings {
+        let mut small: Vec<&DustSource> = moons
+            .iter()
+            .filter(|m| m.role == Some(RingRole::Edge) && m.a_radii > f64::from(rings.outer))
+            .collect();
+        small.sort_by(|a, b| b.a_radii.total_cmp(&a.a_radii));
+        for moon in small.into_iter().take(2) {
+            let on = rng.random::<f64>() < GOSSAMER_ODDS;
+            let opacity = rng.random_range(0.01..0.03);
+            if !on {
+                continue;
+            }
+            out.push(DustRing {
+                kind: DustKind::Gossamer,
+                inner: rings.outer,
+                outer: (moon.a_radii * 1.03) as f32,
+                peak: moon.a_radii as f32,
+                opacity: opacity as f32,
+                colour: [0.62, 0.52, 0.44],
+                source: moon.id.clone(),
+            });
+        }
+    }
+    // A plume ring round the innermost icy regular moon close in.
+    let active = rng.random::<f64>() < PLUME_ODDS;
+    let opacity = rng.random_range(0.01..0.025);
+    let geyser = moons
+        .iter()
+        .filter(|m| m.role.is_none() && m.icy && m.a_radii < PLUME_REACH)
+        .min_by(|a, b| a.a_radii.total_cmp(&b.a_radii));
+    if let (true, Some(moon)) = (active, geyser) {
+        out.push(DustRing {
+            kind: DustKind::Plume,
+            inner: (moon.a_radii * PLUME_SPAN.0) as f32,
+            outer: (moon.a_radii * PLUME_SPAN.1) as f32,
+            peak: moon.a_radii as f32,
+            opacity: opacity as f32,
+            colour: [0.82, 0.88, 0.96],
+            source: moon.id.clone(),
+        });
+    }
+    out
+}
+
 /// The 2:1 resonance of a moon lies at `2^(-2/3)` of its distance.
 pub const RESONANCE_FACTOR: f64 = 0.629_960_5;
 
@@ -377,5 +485,60 @@ mod tests {
             assert!(none.is_empty());
         }
         assert!((100..180).contains(&pairs), "{pairs}");
+    }
+
+    #[test]
+    fn dust_rings_follow_their_moons() {
+        let moon = |id: &str, a: f64, role: Option<RingRole>, icy: bool| DustSource {
+            id: id.to_string(),
+            a_radii: a,
+            role,
+            icy,
+        };
+        let moons = [
+            moon("c-1", 2.2, Some(RingRole::Embedded), true),
+            moon("c-2", 2.5, Some(RingRole::Edge), true),
+            moon("c-3", 2.9, Some(RingRole::Edge), true),
+            moon("c-4", 3.1, Some(RingRole::Edge), true),
+            moon("c-5", 7.0, None, true),
+            moon("c-6", 11.0, None, true),
+        ];
+        let rings = bright();
+        let (mut gossamer, mut plumes) = (0, 0);
+        for seed in 0..400 {
+            for ring in dust_rings(Some(&rings), &moons, seed) {
+                assert!(ring.opacity < 0.04 && ring.inner < ring.peak && ring.peak <= ring.outer);
+                match ring.kind {
+                    DustKind::Gossamer => {
+                        gossamer += 1;
+                        // The two outermost small moons, never the moonlet.
+                        assert!(
+                            ring.source == "c-3" || ring.source == "c-4",
+                            "{}",
+                            ring.source
+                        );
+                        assert_eq!(ring.inner, rings.outer);
+                    }
+                    DustKind::Plume => {
+                        plumes += 1;
+                        assert_eq!(ring.source, "c-5");
+                        assert!(
+                            (ring.inner - 5.25).abs() < 1e-4 && (ring.outer - 14.0).abs() < 1e-4
+                        );
+                    }
+                }
+            }
+        }
+        assert!((560..720).contains(&gossamer), "{gossamer}");
+        assert!((60..140).contains(&plumes), "{plumes}");
+        // Shepherds make none.
+        let shepherds = [
+            moon("e-1", 1.85, Some(RingRole::Shepherd), true),
+            moon("e-2", 2.02, Some(RingRole::Shepherd), true),
+        ];
+        assert!((0..100).all(|seed| dust_rings(Some(&rings), &shepherds, seed).is_empty()));
+        // No main rings, no small moons: no gossamer ring; a rocky moon has no geysers.
+        let rocky = [moon("d-1", 6.0, None, false)];
+        assert!((0..100).all(|seed| dust_rings(None, &rocky, seed).is_empty()));
     }
 }

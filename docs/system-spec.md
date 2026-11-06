@@ -171,6 +171,16 @@ moons are numbered with the others, nearest first. A giant without
 regular moons (hot, or with too small a Hill sphere) keeps its rings
 without moons, and the giant a world of the request orbits gets none.
 
+Some of those moons feed faint dust rings (`dust_rings`, stream
+`DUST_RINGS`), stored with the giant's rings (`given_rings.dust`): on
+80 % of them, the one or two outermost edge moons of bright rings each
+spread a gossamer ring of impact dust from the rings out to their orbit
+(Jupiter's Amalthea and Thebe rings); on a quarter of giants, the
+innermost icy regular moon within 12 radii, heated by the tides of its
+resonant chain, blows out a broad ring of ice grains from 0.75 to 2 times
+its distance (Saturn's E ring round Enceladus). Each names its source
+moon. Systems have no irregular moons, so no ring like Phoebe's.
+
 ### Around one planet (mode 2)
 
 The planet asked keeps its orbit and its parameters, and is placed first;

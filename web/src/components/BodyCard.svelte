@@ -15,7 +15,7 @@
   import type { LoadedWorld } from '../lib/world.svelte';
   import { MAX_NAME_CHARS } from '../lib/names';
   import { jobs } from '../lib/jobs.svelte';
-  import { ringPart, ringsOf } from '../lib/ringMoons';
+  import { dustFedBy, dustOf, ringPart, ringsOf } from '../lib/ringMoons';
 
   interface Props {
     world: LoadedWorld;
@@ -59,6 +59,8 @@
     b.parent ? withUnit(formatInt(b.orbit.semi_major_axis_km), 'km') : formatAu(b.orbit.semi_major_axis_au);
   const rings = $derived(body ? ringsOf(body) : null);
   const part = $derived(body ? ringPart(body, planet) : null);
+  const dust = $derived(body ? dustOf(body) : []);
+  const fed = $derived(body ? dustFedBy(body, planet) : null);
   const hours = (h: number) => (h < 48 ? withUnit(formatUpTo(h, 1), 'h') : formatYear(h / 24));
 
   // Renaming the body shown: empty goes back to its designation.
@@ -200,6 +202,26 @@
           })}
         </dd>
       {/if}
+      {#if dust.length > 0}
+        <dt>{t.card.dustRings}</dt>
+        <dd>
+          {#each dust as ring, k (k)}
+            {@const moon = family.find((m) => m.id === ring.source)}
+            <span class="dust"
+              >{t.card.dustRing({
+                kind: ring.kind,
+                moon: moon ? nameOf(moon.id, moon.designation) : ring.source,
+                inner: formatUpTo(ring.inner, 1),
+                outer: formatUpTo(ring.outer, 1),
+              })}</span
+            >
+          {/each}
+        </dd>
+      {/if}
+      {#if fed}
+        <dt>{t.card.dustSource}</dt>
+        <dd>{t.card.dustFed({ kind: fed.kind })}</dd>
+      {/if}
       {#if part}
         <dt>{t.card.ringRole}</dt>
         <dd>{t.card.ringRoles[part.role]({ gap: withUnit(formatInt(part.gapKm ?? 0), 'km') })}</dd>
@@ -223,6 +245,9 @@
 {/if}
 
 <style>
+  .dust {
+    display: block;
+  }
   .card {
     border: 1px solid var(--border);
     border-radius: 8px;
