@@ -476,3 +476,25 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Next:** phase 6, a card for every body and renaming any of them;
   phase 7, the clean-up of the world layout (`/api/worlds`, the moon and
   host exports, `worlds/`).
+
+## 18. Rings and ring moons
+
+- **Status:** studied
+- **Analysis:** [analysis/14-rings.md](analysis/14-rings.md)
+- **Problem:** giants' rings are drawn twice with different odds
+  (`giant_world.rs` for giant worlds, `giants.rs` for a rocky world's
+  giant neighbours), not before a giant of a system is generated, and
+  with gaps at random places tied to no moon; no moon ever sits in or
+  next to the rings, and an ice giant with a captured Triton can get a
+  regular moon inside its Roche limit.
+- **Findings (2026-11-06):** bright rings end at the fluid Roche limit
+  (about 2.0–2.5 radii round a gas giant, 2.27 for Saturn), dust rings
+  wherever a moon feeds them (Saturn's Phoebe ring reaches about 270
+  radii); every giant of the Solar System has 2 to about 10 moons in or
+  at the edge of its rings (shepherds, gap-clearing moonlets, resonance
+  edges, dust sources).
+- **Proposed:** one ring draw per giant at the system level; the bright
+  rings' edge from the Roche limit; gaps cleared by embedded moonlets
+  (7–17 of their Hill radii) or set by a moon's 2:1 resonance; edge
+  moons and shepherds as `ring-moon` bodies; dust rings fed by moons
+  later; first, the Roche check missing from the moons of giant worlds.
