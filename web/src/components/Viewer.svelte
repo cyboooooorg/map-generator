@@ -1152,9 +1152,17 @@
     return { position: host.position, velocity };
   });
   $effect(() => view?.setHostGuide(hostGuide));
-  /** The guides' labels: the spin, the host's distance, its pull and the body's speed. */
-  const guideLabels = $derived.by((): { key: 'spin' | 'host' | 'pull' | 'velocity'; label: SkyLabel }[] => {
-    const labels: { key: 'spin' | 'host' | 'pull' | 'velocity'; label: SkyLabel }[] = [];
+  /** The host planet in a moon's sky, whose spin is drawn in 3D round it (Spin axes). */
+  const hostBody = $derived(sys && sysBody?.parent ? (sys.bodies.find((b) => b.id === sysBody.parent) ?? null) : null);
+  $effect(() => {
+    const index = hostBody && sysSky ? sysSky.ids.indexOf(hostBody.id) : -1;
+    view?.setHostSpin(hostBody && index >= 0 ? { index, locked: hostBody.spin.locked } : null);
+  });
+  /** The guides that carry a label. */
+  type GuideKey = 'spin' | 'host' | 'pull' | 'velocity' | 'hostSpin';
+  /** The guides' labels: the spin, the host's distance, its pull, the body's speed and the host's own spin. */
+  const guideLabels = $derived.by((): { key: GuideKey; label: SkyLabel }[] => {
+    const labels: { key: GuideKey; label: SkyLabel }[] = [];
     if (sysBody) {
       const hours = sysBody.spin.period_hours;
       labels.push({
@@ -1183,6 +1191,20 @@
       labels.push({ key: 'host', label: { name, detail: withUnit(formatInt(hostKm), 'km') } });
       labels.push({ key: 'pull', label: { name: t.viewer.hostPull, detail: withUnit(formatUpTo(pull, pull < 0.01 ? 4 : 3), 'm/s²') } });
       labels.push({ key: 'velocity', label: { name: t.viewer.hostOrbitSpeed, detail: withUnit(formatUpTo(speed, 2), 'km/s') } });
+      // Its own spin, drawn round it.
+      const hostHours = host.spin.period_hours;
+      labels.push({
+        key: 'hostSpin',
+        label: {
+          name: t.viewer.hostSpinName({ name }),
+          detail: host.spin.locked
+            ? t.viewer.hostSpinLockedFacts({ period: formatYear(host.orbit.period_days) })
+            : t.viewer.spinFacts({
+                speed: withUnit(formatInt((2 * Math.PI * host.physical.radius_km) / Math.max(hostHours, 1e-6)), 'km/h'),
+                period: withUnit(formatUpTo(hostHours, 1), 'h'),
+              }),
+        },
+      });
     }
     return labels;
   });

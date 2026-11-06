@@ -698,6 +698,8 @@ export const en = {
     spinFacts: (p: { speed: string; period: string }) => `${p.speed} at the equator · a turn in ${p.period}`,
     spinLockedName: 'Locked',
     spinLockedFacts: (p: { period: string }) => `the same face to its planet: a turn per orbit, ${p.period}`,
+    hostSpinName: (p: { name: string }) => `Spin of ${p.name}`,
+    hostSpinLockedFacts: (p: { period: string }) => `the same face to its star: a turn per orbit, ${p.period}`,
     hostPull: 'Pull of its planet',
     hostOrbitSpeed: 'Orbital speed',
     skyStarFacts: (p: { distance: string }) => `${p.distance} away`,

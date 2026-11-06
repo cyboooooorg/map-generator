@@ -831,6 +831,9 @@ export const skyBodyFragment = /* glsl */ `
   uniform float uRing;
   // 1 to draw its spin axis out of its poles (see PlanetView.setSpinAxes).
   uniform float uSpinAxis;
+  // 0 when its spin arrow is drawn in 3D instead (the host planet in a
+  // moon's sky, see PlanetView.setHostSpin): only the axis is drawn here.
+  uniform float uSpinArrow;
   uniform float uOpacity;
   // The body's own axes (its x, its spin axis, its z) in the viewer's
   // frame: its map turns and tilts with them.
@@ -915,7 +918,7 @@ export const skyBodyFragment = /* glsl */ `
       float d = length(p - a - ab * t) / max(length(fwidth(p)), 1e-6);
       arrow = max(arrow, 1.0 - smoothstep(0.5, 1.5, d));
     }
-    if (arrow > mark.a) mark = vec4(0.9, 0.9, 0.85, arrow);
+    if (arrow > mark.a && uSpinArrow > 0.5) mark = vec4(0.9, 0.9, 0.85, arrow);
     return mark;
   }
 

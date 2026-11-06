@@ -28,7 +28,9 @@ import {
   LessEqualDepth,
   LineBasicMaterial,
   LineSegments,
+  Matrix4,
   Mesh,
+  MeshBasicMaterial,
   NoColorSpace,
   MOUSE,
   NotEqualStencilFunc,
@@ -565,6 +567,16 @@ export class PlanetView {
   private spinAxis: LineSegments<BufferGeometry, LineBasicMaterial> | null = null;
   /** The spin arrow (or a locked body's ring) and the host planet's line and arrows (see lib/viewer/bodyGuides). */
   private readonly guides = new BodyGuides(new Color(...SPIN_AXIS_NORTH));
+  /**
+   * The host planet's spin, in a moon's sky (see setHostSpin): its arrow
+   * or locked ring in 3D as the body shown's, round the planet far away,
+   * its depth held at the far plane and hidden where the planet stands in
+   * front of it.
+   */
+  private readonly hostSpinUniforms = { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 1 } };
+  private readonly hostSpin = new BodyGuides(new Color(...SPIN_AXIS_NORTH), (material) => farGuide(material, this.hostSpinUniforms));
+  /** Which body of the sky is the host planet, and whether it is locked to its star; null for none. */
+  private hostSpinOf: { index: number; locked: boolean } | null = null;
   private hostGuideOn = false;
   private spinAxesOn = false;
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
@@ -787,7 +799,7 @@ export class PlanetView {
     this.surface.material.stencilRef = DETAIL_STENCIL;
     this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
-    this.scene.add(this.guides.spin, this.guides.host);
+    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin);
 
     this.grid = new LineSegments(
       graticule(30),
@@ -1938,6 +1950,7 @@ export class PlanetView {
     this.skyBeltsNear?.material.dispose();
     this.spinAxis?.geometry.dispose();
     this.guides.dispose();
+    this.hostSpin.dispose();
     this.previewGlobe?.geometry.dispose();
     this.previewGlobe?.material.dispose();
     this.spinAxis?.material.dispose();
@@ -2129,6 +2142,7 @@ export class PlanetView {
             uGrow: { value: 1 },
             uRing: { value: 0 },
             uSpinAxis: { value: 0 },
+            uSpinArrow: { value: 1 },
             uOpacity: { value: 1 },
             uAxisX: { value: new Vector3(1, 0, 0) },
             uAxisY: { value: new Vector3(0, 1, 0) },
@@ -2371,7 +2385,7 @@ export class PlanetView {
     bodies: ({ x: number; y: number } | null)[];
     star: { x: number; y: number } | null;
     /** Where the body's guides end (see lib/viewer/bodyGuides), null when not drawn or hidden by the globe. */
-    guides: Record<keyof GuidePoints, { x: number; y: number } | null>;
+    guides: Record<keyof GuidePoints | 'hostSpin', { x: number; y: number } | null>;
     /** Where each mark of setSkyMarks is: its candidate in view nearest the screen's centre, null when none is. */
     marks: ({ x: number; y: number } | null)[];
   } {
@@ -2418,7 +2432,13 @@ export class PlanetView {
       star: at(
         this.starPlace ? this.starPlace.position.clone().sub(this.camera.position) : this.u.uSunDir.value,
       ),
-      guides: { spin: near(points.spin), host: hostAt, pull: near(points.pull), velocity: near(points.velocity) },
+      guides: {
+        spin: near(points.spin),
+        host: hostAt,
+        pull: near(points.pull),
+        velocity: near(points.velocity),
+        hostSpin: this.hostSpinTip(near),
+      },
       marks: this.skyMarks.map(({ candidates, prefer = [0.5, 0.5] }) => {
         let best: { x: number; y: number } | null = null;
         let bestDistance = Infinity;
@@ -2461,6 +2481,60 @@ export class PlanetView {
     if (!body.position || body.radius === undefined) return false;
     const c = this.camera.position;
     return inFrontOfGlobe([c.x, c.y, c.z], body.position, body.radius);
+  }
+
+  /**
+   * The host planet in a moon's sky (the body of the sky at `index`), its
+   * spin drawn in 3D round it with Spin axes, as the body shown's: an arrow
+   * going the way it turns, or a ring when `locked` to its star; null for
+   * none (a body without a host).
+   */
+  setHostSpin(host: { index: number; locked: boolean } | null): void {
+    this.hostSpinOf = host;
+    this.hostSpin.setSpin(host ? host.locked : null);
+    // Far beyond the far plane, which its depth is held short of: never
+    // culled by the camera's frustum.
+    this.hostSpin.spin.traverse((object) => (object.frustumCulled = false));
+    this.requestRender();
+  }
+
+  /** Where the host planet's spin arrow ends on the screen, through `near`, null when it is not drawn or the planet hides it. */
+  private hostSpinTip(near: (point: Vector3 | null, margin?: number) => { x: number; y: number } | null): { x: number; y: number } | null {
+    const tip = this.hostSpin.points().spin;
+    if (!tip) return null;
+    // Behind the planet from the camera: hidden, as its arrow is.
+    const { uHostCentre, uHostRadius } = this.hostSpinUniforms;
+    const to = tip.clone().sub(this.camera.position);
+    const distance = to.length();
+    const d = to.divideScalar(distance);
+    const oc = this.camera.position.clone().sub(uHostCentre.value);
+    const b = oc.dot(d);
+    const h = b * b - (oc.lengthSq() - uHostRadius.value ** 2);
+    if (h > 0 && -b - Math.sqrt(h) > 0 && -b - Math.sqrt(h) < distance) return null;
+    return near(tip);
+  }
+
+  /** Places the host planet's spin round it (see setHostSpin), its arc starting on the side facing the body shown. */
+  private drawHostSpin(visible: boolean): void {
+    const entry = this.hostSpinOf ? this.skyBodies[this.hostSpinOf.index] : undefined;
+    const body = entry?.body;
+    const on = visible && this.spinAxesOn && !!body?.position && body.radius !== undefined && entry!.mesh.visible;
+    if (on && body?.position && body.radius !== undefined) {
+      const centre = new Vector3(...body.position);
+      const y = new Vector3(...(body.axes ?? IDENTITY_AXES)[1]).normalize();
+      const toward = centre.clone().negate();
+      const z = toward.sub(y.clone().multiplyScalar(toward.dot(y)));
+      if (z.lengthSq() < 1e-12) z.set(0, 0, 1).cross(y);
+      z.normalize();
+      const x = y.clone().cross(z);
+      const spin = this.hostSpin.spin;
+      spin.position.copy(centre);
+      spin.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(x, y, z));
+      spin.scale.setScalar(body.radius);
+      this.hostSpinUniforms.uHostCentre.value.copy(centre);
+      this.hostSpinUniforms.uHostRadius.value = body.radius;
+    }
+    this.hostSpin.update(on, false, this.morph);
   }
 
   private drawSkyBodies(): void {
@@ -2510,10 +2584,12 @@ export class PlanetView {
       u['uHaloHeight']!.value = height;
       u['uHaloStrength']!.value = halo?.strength ?? 0;
       u['uSpinAxis']!.value = this.spinAxesOn ? 1 : 0;
+      u['uSpinArrow']!.value = this.hostSpinOf?.index === this.skyBodies.indexOf(entry) ? 0 : 1;
       u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, this.spinAxesOn ? SPIN_AXIS_LENGTH + 0.1 : 1);
       setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
     }
+    this.drawHostSpin(visible);
   }
 
   /**
@@ -3045,4 +3121,37 @@ function latticeSlots(rows: number, window: number, perCell: number): Float32Arr
     }
   }
   return slots;
+}
+
+/**
+ * Makes `material` draw far away, as the host planet's spin in a moon's
+ * sky: its depth held at the camera's far plane (which only bounds the
+ * globe's depth), so that the globe still hides it, and its fragments
+ * dropped where the planet (`uniforms`: its centre and radius, in the
+ * scene's frame) stands between them and the camera.
+ */
+function farGuide(material: MeshBasicMaterial, uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> }): void {
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = `varying vec3 vFarWorld;\n${shader.vertexShader}`.replace(
+      '#include <project_vertex>',
+      `#include <project_vertex>
+      vFarWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+      gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);`,
+    );
+    shader.fragmentShader = `uniform vec3 uHostCentre;\nuniform float uHostRadius;\nvarying vec3 vFarWorld;\n${shader.fragmentShader}`.replace(
+      'void main() {',
+      `void main() {
+      vec3 toPoint = vFarWorld - cameraPosition;
+      float far = length(toPoint);
+      vec3 ray = toPoint / far;
+      vec3 oc = cameraPosition - uHostCentre;
+      float b = dot(oc, ray);
+      float h = b * b - dot(oc, oc) + uHostRadius * uHostRadius;
+      if (h > 0.0) {
+        float hit = -b - sqrt(h);
+        if (hit > 0.0 && hit < far - 1e-3 * uHostRadius) discard;
+      }`,
+    );
+  };
 }
