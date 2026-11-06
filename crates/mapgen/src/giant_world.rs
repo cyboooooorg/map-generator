@@ -142,6 +142,13 @@ pub struct RingSystem {
     pub colour: [f32; 3],
     /// Bright (broad, icy) or faint (narrow, dusty).
     pub bright: bool,
+    /// The moon that opens each gap (the same order as `gaps`), by its id
+    /// in its planetary system: one that clears it or whose resonance sets
+    /// it (see `crate::rings`). Empty on rings drawn otherwise, whose gaps
+    /// are tied to no moon.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
+    pub gap_moons: Vec<String>,
 }
 
 /// A giant's rings as its planetary system drew them, or none (see
@@ -176,6 +183,7 @@ pub fn draw_rings(rng: &mut impl RngExt, rings_odds: [f32; 2]) -> Option<RingSys
             opacity: rng.random_range(0.6..0.9),
             colour: [0.86, 0.8, 0.68],
             bright: true,
+            gap_moons: Vec::new(),
         })
     } else if r < rings_odds[0] + rings_odds[1] {
         let inner = rng.random_range(1.5..1.9);
@@ -186,6 +194,7 @@ pub fn draw_rings(rng: &mut impl RngExt, rings_odds: [f32; 2]) -> Option<RingSys
             opacity: rng.random_range(0.08..0.2),
             colour: [0.45, 0.43, 0.42],
             bright: false,
+            gap_moons: Vec::new(),
         })
     } else {
         None
