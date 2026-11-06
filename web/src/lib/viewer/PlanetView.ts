@@ -179,6 +179,8 @@ const SPIN_AXIS_LENGTH = 1.5;
  * its atmosphere, rings, grid and axes, before the near orbit lines (10).
  */
 const SKY_FRONT_ORDER = 5;
+/** About the size of a sky label (see components/SkyLabels.svelte), CSS px: two closer than this overlap. */
+const LABEL_BOX = { x: 220, y: 40 };
 /**
  * Half-size, in CSS pixels, below which a body of the sky is drawn no
  * smaller (with a faint ring), and to which a gap in a giant's rings is
@@ -2427,7 +2429,13 @@ export class PlanetView {
     // that is as the camera moves.
     const hostLine = points.host?.map((point) => near(point, 0.9)) ?? [];
     const hostRadii = points.host?.map((point) => point.length()) ?? [];
-    const hostAt = hostLine[hostLabelIndex(hostRadii, hostLine.map((p) => p !== null))] ?? null;
+    // Its label clear of the pull's and the velocity's: labels hang up and
+    // to the right of their point, about a label's size each.
+    const pullAt = near(points.pull);
+    const velocityAt = near(points.velocity);
+    const others = [pullAt, velocityAt].filter((p): p is { x: number; y: number } => p !== null);
+    const clear = hostLine.map((p) => !p || others.every((o) => Math.abs(p.x - o.x) >= LABEL_BOX.x || Math.abs(p.y - o.y) >= LABEL_BOX.y));
+    const hostAt = hostLine[hostLabelIndex(hostRadii, hostLine.map((p) => p !== null), clear)] ?? null;
     return {
       bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),
       star: at(
@@ -2436,8 +2444,8 @@ export class PlanetView {
       guides: {
         spin: near(points.spin),
         host: hostAt,
-        pull: near(points.pull),
-        velocity: near(points.velocity),
+        pull: pullAt,
+        velocity: velocityAt,
         hostSpin: this.hostSpinTip(near),
       },
       marks: this.skyMarks.map(({ candidates, prefer = [0.5, 0.5] }) => {
