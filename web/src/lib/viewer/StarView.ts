@@ -39,6 +39,8 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { Giant } from '../api/types/Giant';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import type { StarInfo } from '../api/types/StarInfo';
+import type { Belt } from '../api/types/Belt';
+import { SmallBodiesLayer, type SmallBodiesLabels } from './smallBodiesLayer';
 import { fullPixelRatio } from './pixelRatio';
 import { axesOnScreen, type ScreenAxis } from './axes';
 import { starsFragment, starsVertex } from './shaders';
@@ -97,6 +99,8 @@ export interface SystemLabels {
   outer: { x: number; y: number } | null;
   /** The star's centre on screen. */
   star: { x: number; y: number } | null;
+  /** A planetary system's belts, trojan swarms and Lagrange points shown; null otherwise. */
+  small: SmallBodiesLabels | null;
   /** To scale, the tip of the star's pin (its label goes there); null otherwise. */
   starPin: { x: number; y: number } | null;
   /** A point of a planetary system's frost line, with its distance (AU), to label it; null when hidden. */
@@ -236,6 +240,12 @@ export class StarView {
   private pins: Line<BufferGeometry, LineBasicMaterial>[] = [];
   private starPinLine: Line<BufferGeometry, LineBasicMaterial> | null = null;
   private hillsOn = false;
+  /** A planetary system's belts, trojan swarms and the selected planet's Lagrange points (see SmallBodiesLayer). */
+  private readonly smallBodies = new SmallBodiesLayer();
+  private belts: Belt[] = [];
+  private beltsOn = true;
+  private trojansOn = true;
+  private lagrangeOn = false;
   /** Whether a planetary system is drawn to scale: distances linear from the star, the star its true size. */
   private realScale = false;
   /** The star's drawn radius over STAR_RADIUS (1 but to scale). */
@@ -432,6 +442,7 @@ export class StarView {
     this.scene.add(this.pullGroup);
     this.scene.add(this.hillGroup);
     this.scene.add(this.pinGroup);
+    this.scene.add(this.smallBodies.group);
     this.selectedOrbit = new Line2(new LineGeometry(), this.fatMaterial(this.overlay.selected, 2.2, 0.9));
     this.selectedOrbit.renderOrder = 3;
     this.selectedOrbit.frustumCulled = false;
@@ -540,6 +551,7 @@ export class StarView {
     this.giants = giants;
     this.buildGiants();
     this.buildVectors();
+    this.buildSmallBodies();
     const inner = system ? info.hz_outer_au : compressedFrom(info) / 1.15;
     const reach = Math.max(at(inner), ...giants.map((g) => at(g.orbit_au * (1 + g.eccentricity))));
     // A system that reaches further (or less far) is fitted again, unless
@@ -1047,6 +1059,40 @@ export class StarView {
     this.requestRender();
   }
 
+  /** A planetary system's belts (see `crate::belts`), drawn with its next setStar or at once. */
+  setBelts(belts: readonly Belt[]): void {
+    this.belts = [...belts];
+    this.buildSmallBodies();
+    this.placePlanet();
+    this.requestRender();
+  }
+
+  /** Shows or hides a planetary system's belts, its planets' trojan swarms, and the selected planet's Lagrange points. */
+  setSmallBodies(belts: boolean, trojans: boolean, lagrange: boolean): void {
+    this.beltsOn = belts;
+    this.trojansOn = trojans;
+    this.lagrangeOn = lagrange;
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  private buildSmallBodies(): void {
+    if (this.selected === null || !this.info) {
+      this.smallBodies.dispose();
+      this.smallBodies.setSelected(-1);
+      return;
+    }
+    this.smallBodies.build(
+      this.belts,
+      this.giants.map((g) => ({ orbit_au: g.orbit_au, mass_earth: g.mass_earth, trojans: g.trojans ?? null })),
+      this.info.mass,
+      this.at,
+      Math.round(this.info.teff_k * 13),
+    );
+    this.smallBodies.setSelected(this.selected);
+    this.applyVisibility();
+  }
+
   /** Shows or hides a circle round each planet of a planetary system: its Hill sphere (see hillRadiusAu), as far as its moons can be held. */
   setHillSpheres(on: boolean): void {
     this.hillsOn = on;
@@ -1282,6 +1328,7 @@ export class StarView {
     this.arrowGroup.visible = system && this.velocitiesOn;
     this.pullGroup.visible = system && this.pullsOn;
     this.hillGroup.visible = system && this.hillsOn;
+    this.smallBodies.setVisible(system && this.beltsOn, system && this.giantsOn && this.trojansOn, this.picked() && this.lagrangeOn);
     this.pinGroup.visible = system && this.giantsOn;
     this.frost.visible = this.selected !== null && this.frostOn;
     // A planetary system's selected orbit is drawn thick.
@@ -1480,6 +1527,8 @@ export class StarView {
       object.geometry.dispose();
       object.material.dispose();
     }
+    this.smallBodies.dispose();
+    this.smallBodies.setSelected(-1);
     for (const group of [this.giantGroup, this.linkGroup, this.arrowGroup, this.pullGroup, this.hillGroup, this.pinGroup]) group.traverse((object) => {
       const mesh = object as Mesh<BufferGeometry, MeshBasicMaterial>;
       mesh.geometry?.dispose();
@@ -1622,6 +1671,14 @@ export class StarView {
     this.planet.position.copy(own ? own.position : this.inPlane(trueAnomaly, this.planetAu));
     this.placeMoons();
     this.placeSystemMoons();
+    if (this.selected !== null) {
+      const selected = this.giants[this.selected];
+      this.smallBodies.place(
+        this.systemDay,
+        this.giantMarkers.map((m) => m.position),
+        selected ? 2.5 * giantMarkerSize(selected.radius_earth) : 0,
+      );
+    }
     this.hills.forEach((hill, k) => {
       const marker = this.giantMarkers[k];
       if (marker) hill.position.copy(marker.position);
@@ -1688,6 +1745,13 @@ export class StarView {
         inner: on && this.zoneOn ? edge(this.info.hz_inner_au) : null,
         outer: on && this.zoneOn ? edge(this.info.hz_outer_au) : null,
         star: this.screen(new Vector3()),
+        small:
+          this.selected !== null
+            ? this.smallBodies.labels(
+                (v) => this.screen(v),
+                this.giantMarkers.map((m) => m.position),
+              )
+            : null,
         starPin: this.pins.length > 0 ? this.screen(new Vector3(0, PIN_HEIGHT, 0)) : null,
         frost: this.frost.visible
           ? (() => {

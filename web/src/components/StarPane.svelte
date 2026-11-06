@@ -4,6 +4,7 @@
   import { onMount, untrack } from 'svelte';
   import PlanetCard from './PlanetCard.svelte';
   import { extremes, layoutCards, shownCards } from '../lib/planetCard';
+  import type { Belt } from '../lib/api/types/Belt';
   import type { SystemPlanet } from '../lib/systemStar';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
@@ -58,6 +59,11 @@
     frost?: boolean;
     hills?: boolean;
     realScale?: boolean;
+    /** In a planetary system: its belts (see `crate::belts`), and whether its belts, trojans and the selected planet's Lagrange points are drawn. */
+    belts?: readonly Belt[];
+    showBelts?: boolean;
+    showTrojans?: boolean;
+    showLagrange?: boolean;
     /** The world itself when it is a giant planet, or the giant it orbits. */
     worldGiant?: GiantInfo | null;
     /** The giant the world orbits, as its moon. */
@@ -120,6 +126,10 @@
     frost = $bindable(true),
     hills = $bindable(false),
     realScale = $bindable(false),
+    belts = [],
+    showBelts = $bindable(true),
+    showTrojans = $bindable(true),
+    showLagrange = $bindable(false),
     worldGiant = null,
     host = null,
     kinds = null,
@@ -312,6 +322,11 @@
   $effect(() => view?.setPulls(pulls));
   $effect(() => view?.setFrostLine(frost));
   $effect(() => view?.setHillSpheres(hills));
+  $effect(() => view?.setBelts(belts));
+  $effect(() => view?.setSmallBodies(showBelts, showTrojans, showLagrange));
+  /** A belt's name and span, for its label and its row. */
+  const beltRange = (belt: Belt) => `${formatUpTo(belt.inner_au, 2)}–${withUnit(formatUpTo(belt.outer_au, 2), 'AU')}`;
+  const beltName = (belt: Belt) => t.starView.beltNames[belt.kind] ?? belt.kind;
   $effect(() => view?.setRealScale(realScale));
   /** The longest year of a planetary system, days: the time bar's span. */
   const longestYear = $derived(giantList.length > 0 ? Math.max(...giantList.map((g) => g.year_days)) : 0);
@@ -417,7 +432,7 @@
    * habitable zone's width and the compression circle's meaning.
    */
   const placed = $derived.by(() => {
-    const none = { names: [], lines: [], speeds: [] };
+    const none = { names: [], lines: [], speeds: [], small: [] };
     if (!labels) return none;
     // The selected planet's rich label (with Distances) already gives its distance.
     const rich = labels.planet !== null;
@@ -513,8 +528,36 @@
     ];
     const distances = lines.filter((l) => l.kind !== 'pull');
     const pullLabels = lines.filter((l) => l.kind === 'pull');
+    // The small bodies last, level beside their point: the Lagrange points,
+    // then the belts, then the swarms of the planets selected or pinned
+    // (every planet's would crowd the view).
+    const level = (at: { x: number; y: number }, text: string, key: string, kind: string) => {
+      const w = labelWidth(text);
+      return { x: at.x, y: at.y, text, key, kind, box: { x: at.x + 6, y: at.y - LABEL_H, width: w, height: LABEL_H, step: LABEL_H } };
+    };
+    const shownSwarms = new Set([...(selected !== null && selected >= 0 ? [selected] : []), ...(planets ?? []).flatMap((p, i) => (pinned.includes(p.id) ? [i] : []))]);
+    const small = labels.small
+      ? [
+          ...labels.small.lagrange.map((l) => level(l, l.name, `lp${l.name}`, l.stable ? 'lagrange' : 'lagrange unstable')),
+          ...labels.small.belts.flatMap((l) => {
+            const belt = belts[l.index];
+            return belt
+              ? [level(l, t.starView.beltLabel({ name: beltName(belt), range: beltRange(belt) }), `b${l.index}`, belt.composition === 'icy' ? 'belt icy' : 'belt')]
+              : [];
+          }),
+          ...labels.small.swarms
+            .filter((l) => shownSwarms.has(l.planet))
+            .map((l) => level(l, t.starView.swarmLabel({ point: l.point, count: formatInt(l.count) }), `s${l.planet}${l.point}`, 'swarm')),
+        ]
+      : [];
     // The speeds come right after the names: they hide last of the numbers.
-    const order = [...names.map((n) => n.box), ...speeds.map((v) => v.box), ...distances.map((l) => l.box), ...pullLabels.map((l) => l.box)];
+    const order = [
+      ...names.map((n) => n.box),
+      ...speeds.map((v) => v.box),
+      ...distances.map((l) => l.box),
+      ...pullLabels.map((l) => l.box),
+      ...small.map((l) => l.box),
+    ];
     const places = layoutLabels(order, keepClear);
     let k = 0;
     const take = () => places[k++]!;
@@ -529,6 +572,7 @@
       names: placedNames,
       lines: [...distances, ...pullLabels].map((l) => ({ ...l, ...take() })),
       speeds: placedSpeeds,
+      small: small.map((l) => ({ ...l, ...take() })),
     };
   });
 
@@ -556,6 +600,9 @@
       ? [
           { key: 'frost', label: t.starView.showFrost, help: t.starView.showFrostHelp, icon: 'frost', on: frost, set: (v) => (frost = v) },
           { key: 'hills', label: t.starView.showHills, help: t.starView.showHillsHelp, icon: 'hills', on: hills, set: (v) => (hills = v) },
+          { key: 'belts', label: t.starView.showBelts, help: t.starView.showBeltsHelp, icon: 'belt', on: showBelts, set: (v) => (showBelts = v) },
+          { key: 'trojans', label: t.starView.showTrojans, help: t.starView.showTrojansHelp, icon: 'trojans', on: showTrojans, set: (v) => (showTrojans = v) },
+          { key: 'lagrange', label: t.starView.showLagrange, help: t.starView.showLagrangeHelp, icon: 'lagrange', on: showLagrange, set: (v) => (showLagrange = v) },
           { key: 'scale', label: t.starView.realScale, help: t.starView.realScaleHelp, icon: 'scale', on: realScale, set: (v) => (realScale = v) },
         ]
       : [],
@@ -641,6 +688,11 @@
         style:left={`${line.x}px`}
         style:top={`${line.y + line.dy}px`}
         style:transform={`translate(-50%, -50%) rotate(${line.angle}deg)`}>{line.text}</span
+      >
+    {/each}
+    {#each placed.small as label (label.key)}
+      <span class="label small {label.kind}" class:hidden={!label.visible} style:left={`${label.x}px`} style:top={`${label.y + label.dy}px`}
+        >{label.text}</span
       >
     {/each}
     {#each placed.speeds as speed (speed.index)}
@@ -790,6 +842,32 @@
         {/each}
       </ul>
     {/if}
+    {#if selected !== null}
+      <h4 title={t.starView.smallBodiesHelp}>{t.starView.smallBodies}</h4>
+      {#if belts.length === 0}
+        <small class="muted">{t.starView.noSmallBodies}</small>
+      {/if}
+      <ul class="small-bodies">
+        {#each belts as belt, k (k)}
+          {@const shaper = belt.shaped_by ? planets?.find((p) => p.id === belt.shaped_by) : undefined}
+          <li>
+            {t.starView.beltRow({
+              name: beltName(belt),
+              range: beltRange(belt),
+              mass: formatUpTo(belt.mass_earth, belt.mass_earth < 0.01 ? 6 : 3),
+              composition: t.starView.beltCompositions[belt.composition] ?? belt.composition,
+            })}{#if shaper}<br /><small class="muted">{t.starView.beltShaped({ planet: shaper.name })}</small>{/if}{#if belt.gaps.length > 0}<br /><small
+                class="muted">{t.starView.beltGaps({ gaps: belt.gaps.map((g) => withUnit(formatUpTo(g[0], 2), 'AU')).join(', ') })}</small
+              >{/if}
+          </li>
+        {/each}
+        {#each planets ?? [] as planet (planet.id)}
+          {#if planet.trojans && planet.trojans.l4 + planet.trojans.l5 > 0}
+            <li>{t.starView.trojansRow({ planet: planet.name, l4: formatInt(planet.trojans.l4), l5: formatInt(planet.trojans.l5) })}</li>
+          {/if}
+        {/each}
+      </ul>
+    {/if}
     <dl>
       <dt title={t.starView.forcedHelp}>{t.starView.forced}</dt>
       <dd>{formatUpTo(giantSystem.forced_eccentricity, 3)}</dd>
@@ -898,6 +976,29 @@
   }
   .label.apsis {
     color: #ffe3a8;
+  }
+  .label.belt {
+    color: #e2cfb4;
+  }
+  .label.belt.icy {
+    color: #bcd8f2;
+  }
+  .label.swarm {
+    color: #f0d590;
+  }
+  .label.small {
+    transform: translate(6px, -100%);
+  }
+  .label.lagrange {
+    color: #9ff0b8;
+  }
+  .label.lagrange.unstable {
+    color: #ffb49c;
+  }
+  .small-bodies {
+    margin: 0 0 8px;
+    padding-left: 1.1em;
+    font-size: 0.8rem;
   }
   .label.giant {
     color: var(--label-text);
