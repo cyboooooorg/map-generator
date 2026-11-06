@@ -2245,6 +2245,7 @@ export class PlanetView {
           uOpacity: { value: opacity },
           uNear: { value: 0 },
           uDash: { value: SKY_ORBIT_DASH },
+          uScreenPx: { value: 1000 },
         },
         transparent: true,
         depthWrite: false,
@@ -2682,6 +2683,7 @@ export class PlanetView {
       if (!orbits) continue;
       orbits.visible = this.skyOrbitsOn && this.morph > 0.01;
       orbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
+      orbits.material.uniforms['uScreenPx']!.value = this.renderer.domElement.height;
     }
     for (const belts of [this.skyBelts, this.skyBeltsNear]) {
       if (!belts) continue;

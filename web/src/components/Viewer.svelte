@@ -111,17 +111,23 @@
   const YEAR_SECONDS = 12;
   /** One orbit of the orbit animation, in seconds. */
   const ORBIT_SECONDS = 10;
-  /** The orbit animation's slowest and fastest speeds, powers of two (see orbitSpeed). */
+  /**
+   * The orbit animation's slowest and fastest speeds, powers of two (see
+   * orbitSpeed): slower still, down to real time, for a short orbit (see
+   * orbitSpeedMin).
+   */
   const ORBIT_SPEED_MIN = -8;
   // Up to a year of seasons in seconds: the playback bar's one clock moves them too.
   const ORBIT_SPEED_MAX = 12;
-  /** A time in days as the speed's rate shows it: in minutes, hours or days. */
+  /** A time in days as the speed's rate shows it: in seconds, minutes, hours or days. */
   const simulatedSecond = (days: number): string =>
-    days < 1 / 24
-      ? withUnit(formatUpTo(days * 1440, 1), t.viewer.minuteUnit)
-      : days < 1
-        ? withUnit(formatUpTo(days * 24, 1), t.viewer.hourUnit)
-        : withUnit(formatUpTo(days, 1), t.viewer.dayUnit);
+    days < 1 / 1440
+      ? withUnit(formatUpTo(days * 86400, 1), t.viewer.secondUnit)
+      : days < 1 / 24
+        ? withUnit(formatUpTo(days * 1440, 1), t.viewer.minuteUnit)
+        : days < 1
+          ? withUnit(formatUpTo(days * 24, 1), t.viewer.hourUnit)
+          : withUnit(formatUpTo(days, 1), t.viewer.dayUnit);
   /** mapgen::hex::DEFAULT_RIVER_FLOW_KM2, on the log10 slider. */
   const DEFAULT_RIVER_LOG = Math.log10(500_000);
   /** Wait before asking a server busy generating for the hex grid again, ms. */
@@ -959,6 +965,17 @@
     if (sysBody.parent) return sysBody.orbit.period_days;
     const moon = sys.bodies.find((b) => b.parent === sysBody.id);
     return moon?.orbit.period_days ?? (10 * sysBody.spin.period_hours) / 24;
+  });
+  /**
+   * The slowest orbit speed: ORBIT_SPEED_MIN, or slower for a short orbit,
+   * down to real time (the power of two at or just below it).
+   */
+  const orbitSpeedMin = $derived(
+    orbitPeriod ? Math.min(ORBIT_SPEED_MIN, Math.floor(Math.log2(ORBIT_SECONDS / (orbitPeriod * 86400)))) : ORBIT_SPEED_MIN,
+  );
+  // A speed slower than the body shown allows (kept from a shorter orbit) comes up to its slowest.
+  $effect(() => {
+    if (orbitSpeed < orbitSpeedMin) orbitSpeed = orbitSpeedMin;
   });
   /** The sun's direction over the body shown, from its system: longitude and latitude, degrees. */
   const sunPlace = $derived.by(() => {
@@ -1803,7 +1820,7 @@
       speed={sysSky && orbitPeriod
         ? {
             value: orbitSpeed,
-            min: ORBIT_SPEED_MIN,
+            min: orbitSpeedMin,
             max: ORBIT_SPEED_MAX,
             text: t.viewer.orbitSpeedRate({ time: simulatedSecond((orbitPeriod / ORBIT_SECONDS) * 2 ** orbitSpeed) }),
             help: t.viewer.orbitSpeedHelp,
