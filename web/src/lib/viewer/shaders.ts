@@ -12,6 +12,7 @@
 import { CLOUD_TOPS, glslRamp } from './colormaps';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH } from './sunDepth';
 import { skyRingDensityGlsl } from './ringShaders';
+import { MAX_STORMS } from '../giantStorms';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
 export const LAYER_IDS = {
@@ -186,6 +187,10 @@ export const surfaceFragment = /* glsl */ `
   uniform vec2 uTempRange;     // °C at the bottom of the ramp, and its span
   uniform float uWind[91];
   uniform float uBandTime;
+  // Its storms (see lib/giantStorms.ts), each drifting whole at the pace
+  // of its own latitude: centre and half-extents in uv.
+  uniform vec4 uStorms[${MAX_STORMS}];
+  uniform float uStormCount;
   uniform float uHotGlow;      // a hot giant's night-side glow, 0 to 1
   // A giant's rings, for their shadow: edges and gaps in planet radii, in
   // the equatorial plane (y = 0); no rings when uRingOuter is 0.
@@ -219,6 +224,46 @@ export const surfaceFragment = /* glsl */ `
     float at = clamp(v, 0.0, 1.0) * 90.0;
     int i = int(floor(min(at, 89.999)));
     return mix(uWind[i], uWind[i + 1], at - float(i));
+  }
+
+  // How far a storm's halo reaches, over the storm itself.
+  const float STORM_HALO = 1.7;
+
+  // Where point p of the map lies in storm s's ellipse (halo included):
+  // 0 at its centre, 1 at its edge, across the seam.
+  vec2 inStorm(vec2 p, vec4 s) {
+    float du = p.x - s.x;
+    du -= floor(du + 0.5);
+    return vec2(du / (s.z * STORM_HALO), (p.y - s.y) / (s.w * STORM_HALO));
+  }
+
+  // A giant's colour at uv, its bands drifting each with its own wind, its
+  // storms each whole at the wind of its centre (a vortex keeps its shape:
+  // sheared with the bands, it would stretch round the planet). Where the
+  // bands would bring a storm's sheared copy, the band just beside the
+  // storm shows instead. The map repeats across longitudes, and is read
+  // with the derivatives of the continuous uv, so that no seam shows where
+  // a reading point jumps.
+  vec3 giantColour(vec2 uv) {
+    vec2 gx = dFdx(uv);
+    vec2 gy = dFdy(uv);
+    vec2 band = vec2(uv.x - uBandTime * bandWind(uv.y) / ${BAND_PERIOD_S.toFixed(1)}, uv.y);
+    for (int k = 0; k < ${MAX_STORMS}; k++) {
+      if (float(k) >= uStormCount) break;
+      vec2 r = inStorm(band, uStorms[k]);
+      if (dot(r, r) < 1.0) {
+        band.x = uStorms[k].x + (r.x < 0.0 ? -1.05 : 1.05) * uStorms[k].z * STORM_HALO;
+      }
+    }
+    vec3 colour = textureGrad(uMap, band, gx, gy).rgb;
+    for (int k = 0; k < ${MAX_STORMS}; k++) {
+      if (float(k) >= uStormCount) break;
+      vec4 storm = uStorms[k];
+      vec2 at = vec2(uv.x - uBandTime * bandWind(storm.y) / ${BAND_PERIOD_S.toFixed(1)}, uv.y);
+      float d = length(inStorm(at, storm));
+      if (d < 1.0) colour = mix(colour, textureGrad(uMap, at, gx, gy).rgb, 1.0 - smoothstep(0.8, 1.0, d));
+    }
+    return colour;
   }
 
   // Depth contours: a pale blue mixed over the sea (linear colour, share).
@@ -390,7 +435,7 @@ export const surfaceFragment = /* glsl */ `
     // Detail tiles are drawn on the biome layer only.
     vec3 surface = uTileOn > 0.5
       ? texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb
-      : texture2D(uMap, uGiant > 0.5 ? vec2(fract(vUv.x - uBandTime * bandWind(vUv.y) / ${BAND_PERIOD_S.toFixed(1)}), vUv.y) : vUv).rgb;
+      : uGiant > 0.5 ? giantColour(vUv) : texture2D(uMap, vUv).rgb;
     vec3 colour;
     if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
       colour = surface;

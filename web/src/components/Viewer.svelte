@@ -39,6 +39,7 @@
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import { currentProfile } from '../lib/viewer/quality';
+  import { giantStorms } from '../lib/giantStorms';
   import { RING_ROCK_SCALES, ringRocks } from '../lib/ringRocks';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -687,6 +688,11 @@
   $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => view?.setCloudsDrifting(cloudDrift));
   $effect(() => view?.setGiant(giant));
+  // A giant's storms, found in its biome map, each drifting whole.
+  $effect(() => {
+    const stormId = giant && meta ? meta.biomes.find((b) => b.key === 'GiantStorm')?.id : undefined;
+    view?.setGiantStorms(stormId !== undefined && layers ? giantStorms(layers.biomes, layers.width, layers.height, stormId) : []);
+  });
   // The dust rings its system drew for the giant shown.
   $effect(() => view?.setDustRings(giant && sysBody ? (sysBody.params.given_rings?.dust ?? []) : []));
   $effect(() => {
