@@ -34,7 +34,7 @@
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { systemReach, systemSky } from '../lib/systemSky';
+  import { smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
@@ -148,6 +148,8 @@
     hostGrid: false,
     hostTropics: false,
     orbitLines: false,
+    // The trojan swarms and belts ringed in the sky.
+    smallBodies: false,
     // The spin axes of the globe and the bodies of the sky.
     spinAxes: false,
     // Names tied to the bodies of the sky.
@@ -202,6 +204,7 @@
   let hostTropics = $state(saved.hostTropics);
   /** The orbits of the moons (or of a giant's other moons) drawn in the sky. */
   let orbitLines = $state(saved.orbitLines);
+  let smallBodies = $state(saved.smallBodies);
   let axesShown = $state(saved.spinAxes);
   $effect(() => view?.setSpinAxes(axesShown));
   const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
@@ -365,6 +368,7 @@
       hostGrid,
       hostTropics,
       orbitLines,
+      smallBodies,
       spinAxes: axesShown,
       skyLabels,
       sun,
@@ -730,14 +734,64 @@
   );
   const sysDays = $derived((sysPlanet ? season * sysPlanet.orbit.period_days : 0) + orbitDays);
   const sysTextures = (id: string) => (world.systemId ? worldFile(systemBodyId(world.systemId, id), 'raw_data/surface.png') : null);
-  const sysSky = $derived.by(() => {
-    if (!sys || !sysBody || !sysPlanet) return null;
-    // The hour: the sun at the slider's longitude over the body shown at
-    // the season's start, then turning on itself as the orbit time goes.
+  /**
+   * The hour: the sun at the slider's longitude over the body shown at the
+   * season's start, then turning on itself as the orbit time goes.
+   */
+  const skySpin = $derived.by(() => {
+    if (!sys || !sysBody || !sysPlanet || sysBody.spin.locked) return 0;
     const start = systemSky(sys, sysBody.id, sysDays - orbitDays, sysTextures);
     const longitude = Math.atan2(start.sun[0], start.sun[2]);
-    const offset = longitude - (sunLongitude * Math.PI) / 180;
-    return systemSky(sys, sysBody.id, sysDays, sysTextures, sysBody.spin.locked ? 0 : offset);
+    return longitude - (sunLongitude * Math.PI) / 180;
+  });
+  const sysSky = $derived.by(() => {
+    if (!sys || !sysBody || !sysPlanet) return null;
+    return systemSky(sys, sysBody.id, sysDays, sysTextures, skySpin);
+  });
+  /** The trojan swarms and belts in that sky, while Small bodies is on. */
+  const smallSky = $derived(smallBodies && sys && sysBody && sysPlanet ? smallBodiesSky(sys, sysBody.id, sysDays, skySpin) : null);
+  $effect(() => view?.setSkyBelts(smallSky ? smallSky.belts.flatMap((b) => b.edges) : []));
+  // Followed on the screen: each swarm's centre, each belt's edges (every
+  // third point is plenty to put its label).
+  $effect(() =>
+    view?.setSkyMarks(
+      smallSky
+        ? [
+            ...smallSky.swarms.map((s) => ({ candidates: [s.position] })),
+            ...smallSky.belts.map((b, k) => ({
+              candidates: [...b.edges[0], ...b.edges[1]].filter((_, i) => i % 3 === 0),
+              prefer: [0.2 + (0.6 * (k + 0.5)) / smallSky.belts.length, 0.5] as const,
+            })),
+          ]
+        : [],
+    ),
+  );
+  /** Their labels, in the order of the marks. */
+  const smallLabels = $derived.by((): SkyLabel[] => {
+    if (!smallSky || !sys) return [];
+    const nameOf = (id: string) => {
+      const body = sys.bodies.find((b) => b.id === id);
+      return world.systemNames[id] ?? body?.designation ?? id;
+    };
+    // Two significant figures: the draw's counts are estimates.
+    const about = (n: number) => {
+      const digits = Math.max(0, Math.floor(Math.log10(Math.max(n, 1))) - 1);
+      return formatInt(Math.round(n / 10 ** digits) * 10 ** digits);
+    };
+    const au = (v: number) => formatUpTo(v, v < 10 ? 2 : 0);
+    return [
+      ...smallSky.swarms.map((s) => ({
+        name: t.viewer.trojanSwarm({ point: s.point, planet: nameOf(s.planet) }),
+        detail: t.viewer.trojanFacts({ count: about(s.count), n: s.count }),
+      })),
+      ...smallSky.belts.map((b) => {
+        const belt = sys.belts![b.index]!;
+        return {
+          name: t.viewer.beltNames[belt.kind],
+          detail: t.viewer.beltFacts({ inner: au(belt.inner_au), outer: au(belt.outer_au), inside: b.inside }),
+        };
+      }),
+    ];
   });
   // Its preview, while it has no maps.
   $effect(() => view?.setPreviewBody(sysBody && !sysBody.generated ? sysBody.preview : null));
@@ -887,7 +941,7 @@
     const current = view;
     if (!current) return;
     // The guides' labels (spin, host) follow with the spin axes.
-    const follow = skyLabels || axesShown;
+    const follow = skyLabels || axesShown || smallBodies;
     current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
     if (!follow) skyPositions = null;
     return () => {
@@ -1033,6 +1087,9 @@
       { key: 'labels', label: t.viewer.skyLabels, help: t.viewer.skyLabelsHelp, icon: 'tag', on: skyLabels, set: (v) => (skyLabels = v) },
       ...(sys && sys.bodies.length > 1
         ? [{ key: 'orbits', label: t.viewer.orbitLines, help: t.viewer.orbitLinesHelp, icon: 'orbit' as const, on: orbitLines, set: (v: boolean) => (orbitLines = v) }]
+        : []),
+      ...(sys && ((sys.belts?.length ?? 0) > 0 || sys.bodies.some((b) => b.trojans))
+        ? [{ key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' as const, on: smallBodies, set: (v: boolean) => (smallBodies = v) }]
         : []),
       { key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis', on: axesShown, set: (v) => (axesShown = v) },
       {
@@ -1507,9 +1564,16 @@
   <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
   {#if world.subject === 'planet' && skyPositions}
     {@const guides = axesShown ? guideLabels : []}
+    {@const marks = smallSky ? skyPositions.marks : []}
+    <!-- A dashed ring round each trojan swarm, too faint to see. -->
+    {#each marks.slice(0, smallSky?.swarms.length ?? 0) as mark, k (k)}
+      {#if mark}
+        <span class="swarm-ring" style:left="{mark.x}px" style:top="{mark.y}px"></span>
+      {/if}
+    {/each}
     <SkyLabels
-      positions={[...(skyLabels ? skyPositions.bodies : []), ...guides.map((g) => skyPositions!.guides[g.key])]}
-      labels={[...(skyLabels ? skyLabelList : []), ...guides.map((g) => g.label)]}
+      positions={[...(skyLabels ? skyPositions.bodies : []), ...guides.map((g) => skyPositions!.guides[g.key]), ...marks]}
+      labels={[...(skyLabels ? skyLabelList : []), ...guides.map((g) => g.label), ...smallLabels.slice(0, marks.length)]}
       star={skyLabels ? skyPositions.star : null}
       {starLabel}
     />
@@ -1764,6 +1828,16 @@
 </div>
 
 <style>
+  .swarm-ring {
+    position: absolute;
+    width: 34px;
+    height: 34px;
+    margin: -17px 0 0 -17px;
+    border: 1.5px dashed var(--overlay-line, rgba(220, 200, 160, 0.8));
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 1;
+  }
   fieldset.host {
     margin: 4px 0 0;
     padding: 4px 8px 6px;

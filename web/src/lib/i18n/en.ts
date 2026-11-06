@@ -606,6 +606,15 @@ export const en = {
     orbits: 'Moon orbits',
     orbitLines: 'Orbits',
     orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
+    smallBodies: 'Small bodies',
+    smallBodiesHelp:
+      'Rings the trojan swarms and traces the belts of the system in the sky (on the globe, in sunlight), their bodies too small to see from here, with their names',
+    trojanSwarm: (p: { point: string; planet: string }) => `${p.point} trojans of ${p.planet}`,
+    trojanFacts: (p: { count: string; n: number }) =>
+      p.n === 1 ? 'one body over 1 km' : `${p.n >= 100 ? 'about ' : ''}${p.count} bodies over 1 km`,
+    beltNames: { inner: 'Asteroid belt', hildas: 'Hildas', outer: 'Kuiper belt', scattered: 'Scattered disk' },
+    beltFacts: (p: { inner: string; outer: string; inside: boolean }) =>
+      `${p.inside ? 'you are inside it · ' : ''}${p.inner} to ${p.outer} AU`,
     generationQueued: ({ body }: { body: string }) => `Generating ${body}: waiting for its turn`,
     generationRunning: (p: { body: string; step: number; bodies: number; stage: string; stageStep: number; stageSteps: number }) =>
       `Generating ${p.body} (body ${p.step} of ${p.bodies}): ${p.stage}, ${p.stageStep} of ${p.stageSteps}`,

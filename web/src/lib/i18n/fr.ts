@@ -571,6 +571,15 @@ export const fr: Messages = {
     orbits: 'Orbites des lunes',
     orbitLines: 'Orbites',
     orbitLinesHelp: 'Trace les orbites des lunes dans le ciel (sur le globe), vues depuis le corps affiché',
+    smallBodies: 'Petits corps',
+    smallBodiesHelp:
+      'Entoure les essaims troyens et trace les ceintures du système dans le ciel (sur le globe, à la lumière du soleil), leurs corps trop petits pour être vus d’ici, avec leur nom',
+    trojanSwarm: (p: { point: string; planet: string }) => `Troyens ${p.point} de ${p.planet}`,
+    trojanFacts: (p: { count: string; n: number }) =>
+      p.n === 1 ? 'un corps de plus de 1 km' : `${p.n >= 100 ? 'environ ' : ''}${p.count} corps de plus de 1 km`,
+    beltNames: { inner: 'Ceinture d’astéroïdes', hildas: 'Hildas', outer: 'Ceinture de Kuiper', scattered: 'Disque épars' },
+    beltFacts: (p: { inner: string; outer: string; inside: boolean }) =>
+      `${p.inside ? 'dans la ceinture · ' : ''}de ${p.inner} à ${p.outer} UA`,
     generationQueued: ({ body }: { body: string }) => `Génération de ${body}${S}: en attente de son tour`,
     generationRunning: (p: { body: string; step: number; bodies: number; stage: string; stageStep: number; stageSteps: number }) =>
       `Génération de ${p.body} (astre ${p.step} sur ${p.bodies})${S}: ${p.stage}, ${p.stageStep} sur ${p.stageSteps}`,
