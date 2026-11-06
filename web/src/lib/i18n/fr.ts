@@ -662,6 +662,8 @@ export const fr: Messages = {
     spinFacts: (p) => `${p.speed} à l’équateur · un tour en ${p.period}`,
     spinLockedName: 'Synchrone',
     spinLockedFacts: (p) => `la même face vers sa planète${'\u202f'}: un tour par orbite, ${p.period}`,
+    hostSpinName: (p) => `Rotation de ${p.name}`,
+    hostSpinLockedFacts: (p) => `la même face vers son étoile${'\u202f'}: un tour par orbite, ${p.period}`,
     hostPull: 'Attraction de sa planète',
     hostOrbitSpeed: 'Vitesse orbitale',
     skyStarFacts: (p) => `à ${p.distance}`,

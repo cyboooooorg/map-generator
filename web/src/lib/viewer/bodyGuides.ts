@@ -106,7 +106,15 @@ export class BodyGuides {
   private velocityTip: Vector3 | null = null;
   private locked: boolean | null = null;
 
-  constructor(private readonly colour: Color) {
+  /**
+   * `prepare` adjusts each material the guides make (the host planet's
+   * spin, drawn far away in a moon's sky, holds its depth at the far plane
+   * and hides behind the planet; see PlanetView.setHostSpin).
+   */
+  constructor(
+    private readonly colour: Color,
+    private readonly prepare: (material: MeshBasicMaterial) => void = () => {},
+  ) {
     this.spin.visible = false;
     this.spin.renderOrder = 2;
     this.host.visible = false;
@@ -147,6 +155,7 @@ export class BodyGuides {
     clear(this.spin);
     if (locked === null) return;
     const material = new MeshBasicMaterial({ color: this.colour, transparent: true });
+    this.prepare(material);
     if (locked) {
       const ring = new Mesh(new TorusGeometry(SPIN_RADIUS, SPIN_TUBE, 8, 64), material);
       ring.rotation.x = Math.PI / 2;
