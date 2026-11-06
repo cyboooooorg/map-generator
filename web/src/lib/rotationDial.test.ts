@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import type { System } from './api/types/System';
+import fixture from './systemSky.fixture.json';
+import { libration, systemSky } from './systemSky';
+import { rotationDial } from './rotationDial';
+import type { Vec3 } from './skyBodies';
+
+// The system of systemSky.test.ts: b (terran), c (a gas giant) and its
+// moons c-1 and c-2, locked to it.
+const system = fixture as unknown as System;
+const textures = (id: string) => `${id}.png`;
+const body = (id: string) => system.bodies.find((x) => x.id === id)!;
+
+describe('rotation dial', () => {
+  it('reads a free body’s turn against the stars, 0° at its equinox', () => {
+    const day = body('b').spin.period_hours / 24;
+    const at = (d: number) => rotationDial(system, 'b', d, 0, systemSky(system, 'b', d, textures))!.state;
+    expect(at(0).reading).toBeCloseTo(0, 6);
+    expect(at(day / 4).reading).toBeCloseTo(Math.PI / 2, 6);
+    const s = at(day / 4);
+    [-1, 0, 0].forEach((v, i) => expect(s.zero[i]).toBeCloseTo(v, 6));
+    expect(s.pointerLongitude).toBe(0);
+    expect(s.locked).toBe(false);
+  });
+
+  it('graduates a locked moon’s ring against its giant, the pointer swinging by the libration', () => {
+    const eccentric = structuredClone(system);
+    const orbit = eccentric.bodies.find((x) => x.id === 'c-1')!.orbit;
+    orbit.eccentricity = 0.2;
+    const d = orbit.period_days / 8;
+    const dial = rotationDial(eccentric, 'c-1', d, 0, systemSky(eccentric, 'c-1', d, textures))!;
+    expect(dial.state.locked).toBe(true);
+    expect(dial.state.pointerLongitude).toBeCloseTo(Math.PI, 12);
+    expect(Math.abs(dial.state.reading)).toBeCloseTo(Math.abs(libration(orbit, d)), 6);
+    expect(dial.figures.libration).toBeCloseTo(libration(orbit, d), 12);
+    expect(dial.figures.librationAmplitude).toBeCloseTo(0.4, 12);
+    expect(dial.state.host).not.toBeNull();
+  });
+
+  it('gives the local time at the pointer’s meridian, noon under the sun, wrapping past midnight', () => {
+    // Over a whole solar day of b the local time runs once through 0..24, never 24.
+    const { solarHours } = rotationDial(system, 'b', 0, 0, systemSky(system, 'b', 0, textures))!.figures;
+    const hours = Array.from({ length: 48 }, (_, k) => {
+      const d = ((k / 48) * solarHours!) / 24;
+      return rotationDial(system, 'b', d, 0, systemSky(system, 'b', d, textures))!.figures.localHours;
+    });
+    hours.forEach((h) => {
+      expect(h).toBeGreaterThanOrEqual(0);
+      expect(h).toBeLessThan(24);
+    });
+    // Noon: the sun at the pointer's longitude.
+    const noon = hours.findIndex((h, k) => k > 0 && hours[k - 1]! < 12 && h >= 12);
+    expect(noon).toBeGreaterThan(-1);
+  });
+
+  it('gives the sidereal and solar days, a moon taking its planet’s year', () => {
+    const b = rotationDial(system, 'b', 0, 0, systemSky(system, 'b', 0, textures))!.figures;
+    expect(b.siderealHours).toBeCloseTo(body('b').spin.period_hours, 9);
+    expect(b.solarHours).toBeCloseTo(1 / (1 / body('b').spin.period_hours - 1 / (body('b').orbit.period_days * 24)), 6);
+    const m = rotationDial(system, 'c-1', 0, 0, systemSky(system, 'c-1', 0, textures))!.figures;
+    expect(m.siderealHours).toBeCloseTo(body('c-1').orbit.period_days * 24, 9);
+    expect(m.solarHours).toBeCloseTo(1 / (1 / m.siderealHours - 1 / (body('c').orbit.period_days * 24)), 6);
+  });
+
+  it('treats a planet locked to its star: one marker, the sun standing still', () => {
+    const locked = structuredClone(system);
+    const b = locked.bodies.find((x) => x.id === 'b')!;
+    b.spin.locked = true;
+    b.spin.axial_tilt_deg = 0;
+    const dial = rotationDial(locked, 'b', 10, 0, systemSky(locked, 'b', 10, textures))!;
+    expect(dial.state.host).toBeNull();
+    expect(dial.figures.solarHours).toBeNull();
+    expect(Math.abs(dial.state.reading)).toBeCloseTo(Math.abs(libration(b.orbit, 10)), 6);
+  });
+
+  it('hides the sun marker when the sun is along the spin axis', () => {
+    const sky = { ...systemSky(system, 'b', 0, textures), sun: [0, 1, 0] as Vec3 };
+    expect(rotationDial(system, 'b', 0, 0, sky)!.state.sun).toBeNull();
+  });
+
+  it('has no dial for a body the system lacks', () => {
+    expect(rotationDial(system, 'zz', 0, 0, systemSky(system, 'b', 0, textures))).toBeNull();
+  });
+});
