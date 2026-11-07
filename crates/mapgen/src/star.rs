@@ -312,9 +312,37 @@ pub fn angular_diameter_deg(radius: f32, orbit_au: f32) -> f32 {
     0.5332 * radius / orbit_au
 }
 
-/// Main-sequence lifetime, Gyr: `10 Gyr × M / L`.
-pub fn lifetime_gyr(mass: f32, luminosity: f32) -> f32 {
-    10.0 * mass / luminosity
+/// Main-sequence lifetimes, (mass M☉, Gyr): Table 22.1 of Fraknoi et al.
+/// (2022, OpenStax *Astronomy 2e*), O5 to M0, and the lightest star, which
+/// stirs all its hydrogen into its core (Adams & Laughlin 1997).
+const LIFETIMES: [(f32, f32); 8] = [
+    (0.08, 11_000.0),
+    (0.4, 200.0),
+    (0.8, 14.0),
+    (1.1, 9.0),
+    (1.7, 2.7),
+    (3.3, 0.5),
+    (16.0, 0.01),
+    (40.0, 0.001),
+];
+
+/// Main-sequence lifetime of a star of `mass` (M☉), Gyr: interpolated in
+/// [`LIFETIMES`], power law to power law, by mass (the table's types are
+/// heavier than [`SEQUENCE`]'s: its M0 weighs 0.4 M☉, an M0V here 0.57).
+/// 10.3 Gyr for the Sun, 51 for an M0V, 1.9 trillion years for an M5V,
+/// 1.4 Gyr for an A0V. The simpler `10 Gyr × M / L` assumes every star
+/// burns the same share of its hydrogen: it gave an M5V 0.5 trillion
+/// years, although a fully convective star burns all of it, and an A0V
+/// 0.6 Gyr.
+pub fn lifetime_gyr(mass: f32) -> f32 {
+    let m = mass.clamp(LIFETIMES[0].0, LIFETIMES[LIFETIMES.len() - 1].0);
+    let k = LIFETIMES
+        .windows(2)
+        .position(|w| m <= w[1].0)
+        .unwrap_or(LIFETIMES.len() - 2);
+    let ((m0, t0), (m1, t1)) = (LIFETIMES[k], LIFETIMES[k + 1]);
+    let at = (m / m0).ln() / (m1 / m0).ln();
+    (t0.ln() + at * (t1 / t0).ln()).exp()
 }
 
 /// Time for the star's tides to lock an Earth-like planet's spin, Gyr
@@ -520,7 +548,7 @@ impl StarInfo {
             orbit_au * (1.0 + eccentricity),
         );
         let (inner, outer) = habitable_fluxes(v.teff_k);
-        let lifetime = lifetime_gyr(v.mass, v.luminosity);
+        let lifetime = lifetime_gyr(v.mass);
         let locking = locking_gyr(orbit_au, v.mass);
         Self {
             kind: type_name(code),
@@ -538,7 +566,7 @@ impl StarInfo {
             hz_position: position_of(v.teff_k, insolation),
             hz_inner_au: distance_au(v.luminosity, inner),
             hz_outer_au: distance_au(v.luminosity, outer),
-            equilibrium_k: equilibrium_k(insolation),
+            equilibrium_k: equilibrium_k(at(orbit_au)) * mean_temperature_factor(eccentricity),
             year_days: year_days(orbit_au, v.mass),
             angular_diameter_deg: angular_diameter_deg(v.radius, orbit_au),
             lifetime_gyr: lifetime,
@@ -571,6 +599,18 @@ pub fn mean_flux_factor(eccentricity: f32) -> f32 {
     1.0 / (1.0 - eccentricity * eccentricity).max(1e-6).sqrt()
 }
 
+/// The equilibrium temperature of an orbit of `eccentricity` averaged over
+/// its year, relative to a circular orbit's of the same semi-major axis:
+/// `1 − e²/16 − 15e⁴/1024` (Méndez & Rivera-Valentín 2017, eq. 16; 0.997
+/// at e = 0.2, 0.976 at 0.6). It falls with the eccentricity although the
+/// mean flux rises ([`mean_flux_factor`]): the planet spends longer far
+/// out, and the temperature goes as the flux's fourth root. The climate
+/// keeps the mean flux, which sets the heat a world absorbs over a year.
+pub fn mean_temperature_factor(eccentricity: f32) -> f32 {
+    let e2 = eccentricity * eccentricity;
+    1.0 - e2 / 16.0 - 15.0 * e2 * e2 / 1024.0
+}
+
 /// A gamma variate of `shape` (scale 1), Marsaglia & Tsang (2000), boosted
 /// for shapes below 1.
 fn gamma(shape: f64, rng: &mut impl RngExt) -> f64 {
@@ -597,7 +637,7 @@ fn gamma(shape: f64, rng: &mut impl RngExt) -> f64 {
 
 /// An orbital eccentricity drawn like those of the planets known: the beta
 /// distribution fitted by Kipping (2013) to radial-velocity planets
-/// (a = 0.867, b = 3.03; mean 0.22, median 0.16), kept within
+/// (a = 0.867, b = 3.03; mean 0.22, median 0.17), kept within
 /// [`ECCENTRICITY`].
 pub fn draw_eccentricity(rng: &mut impl RngExt) -> f32 {
     let (x, y) = (gamma(0.867, rng), gamma(3.03, rng));
@@ -832,12 +872,32 @@ mod tests {
     }
 
     #[test]
+    fn lifetimes_follow_the_table() {
+        assert!((lifetime_gyr(1.0) - 10.3).abs() < 0.1);
+        assert!((lifetime_gyr(0.4) - 200.0).abs() < 1e-2);
+        assert!((lifetime_gyr(0.08) - 11_000.0).abs() < 1.0);
+        assert!((lifetime_gyr(0.01) - 11_000.0).abs() < 1.0);
+        assert!((lifetime_gyr(60.0) - 0.001).abs() < 1e-6);
+        let masses: Vec<f32> = (0..200).map(|k| 0.08 * 1.03f32.powi(k)).collect();
+        assert!(
+            masses
+                .windows(2)
+                .all(|m| lifetime_gyr(m[1]) < lifetime_gyr(m[0]))
+        );
+    }
+
+    #[test]
     fn eccentric_orbits_get_more_light_and_draw_like_known_planets() {
         let mercury = StarInfo::new(SUN, 0.387, 0.2056);
         assert!((mercury.periapsis_au - 0.307).abs() < 1e-3);
         assert!((mercury.apoapsis_au - 0.467).abs() < 1e-3);
         assert!(mercury.insolation_periapsis > 2.0 * mercury.insolation_apoapsis);
         assert!((mean_flux_factor(0.6) - 1.25).abs() < 1e-4);
+        // The mean temperature falls instead (Méndez & Rivera-Valentín 2017).
+        assert!((mean_temperature_factor(0.6) - 0.9756).abs() < 1e-3);
+        let (circle, eccentric) = (StarInfo::new(SUN, 1.0, 0.0), StarInfo::new(SUN, 1.0, 0.6));
+        assert!(eccentric.insolation > circle.insolation);
+        assert!(eccentric.equilibrium_k < circle.equilibrium_k);
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let draws: Vec<f32> = (0..20_000).map(|_| draw_eccentricity(&mut rng)).collect();
         let mean = draws.iter().sum::<f32>() / draws.len() as f32;
