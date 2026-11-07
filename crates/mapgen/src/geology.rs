@@ -1,6 +1,6 @@
 //! The geology of a planet type: its tectonic regime and the history of its
-//! surface, which the impact craters of `docs/analysis/08-geology.md` will
-//! follow.
+//! surface, which the impact craters (`crate::craters`) and the plates
+//! (`crate::plates`) follow (`docs/analysis/08-geology.md`).
 //!
 //! The age of the surface is a generation parameter (`surface_age_ga`),
 //! drawn from the preset's `[defaults]` like the pressure; the rest comes
@@ -14,9 +14,60 @@
 //! ```
 //!
 //! Every field is optional; a preset without the table gets Earth's.
+//!
+//! **The world decides plates.** The preset's regime is what its type has
+//! at Earth's size and in its star's habitable zone; a world of a plate
+//! preset that cannot hold plates gets another ([`regime_of`]), so a
+//! Mars-sized `terran` world has a stagnant lid.
 use crate::atmosphere::LIQUID_WATER_BAR;
 use crate::request::SURFACE_AGE_GA;
+use crate::world::WorldParams;
 use serde::{Deserialize, Serialize};
+
+/// Smallest mass of a world with plate tectonics, Earth masses: the app's
+/// choice between Mars (0.107, a stagnant lid) and Venus (0.815, Earth's
+/// size; NASA fact sheets), where the science is split. Small planets cool
+/// fast and their lids thicken: models with a damaged lithosphere favour
+/// plates on larger planets (Foley, Bercovici & Landuyt 2012,
+/// doi:10.1016/j.epsl.2012.03.028), and the tectonic activity of the
+/// Solar System's bodies grows with the vigour of their mantle's
+/// convection (Stern, Gerya & Tackley 2018, doi:10.1016/j.gsf.2017.06.004).
+/// The geometric mean of Mars and Venus, about 0.72 Earth radii.
+pub const PLATES_MIN_MASS_EARTH: f32 = 0.3;
+
+/// The tectonic regime of the world `p`: its preset's, except that a plate
+/// preset's world without what plates need has none.
+///
+/// - **Too hot**: inside the inner edge of its star's habitable zone, where
+///   a runaway greenhouse boils its oceans away, an episodic lid, as Venus,
+///   whose atmosphere suggests early plates followed by today's stagnant,
+///   lid-like mode (Weller et al. 2023, doi:10.1038/s41550-023-02102-w).
+/// - **Dry**: under [`LIQUID_WATER_BAR`], no water weakens its lithosphere,
+///   a stagnant lid: the likelihood of plates "is controlled largely by the
+///   presence of surface water" (Korenaga 2010,
+///   doi:10.1088/2041-8205/725/1/L43; Foley 2018,
+///   doi:10.1098/rsta.2017.0409).
+/// - **Small**: under [`PLATES_MIN_MASS_EARTH`], a stagnant lid.
+///
+/// Super-Earths keep their plates: Valencia, O'Connell & Sasselov (2007,
+/// doi:10.1086/524012) find them inevitable, O'Neill & Lenardic (2007,
+/// doi:10.1029/2007GL030598) unlikely; the app follows the first, with
+/// Korenaga (2010), for whom size plays a minor role. Other presets keep
+/// their regime: a stagnant preset's world does not gain plates.
+pub fn regime_of(p: &WorldParams) -> Regime {
+    let preset = p.planet.geology.regime;
+    if preset != Regime::Plates || p.giant_mass_earth.is_some() {
+        return preset;
+    }
+    let star = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    if star.hz_position < 0.0 {
+        Regime::Episodic
+    } else if p.pressure_bar < LIQUID_WATER_BAR || p.mass_earth() < PLATES_MIN_MASS_EARTH {
+        Regime::Stagnant
+    } else {
+        Regime::Plates
+    }
+}
 
 /// How the planet loses its internal heat, which shapes its surface.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -53,7 +104,11 @@ impl Regime {
 #[serde(default, deny_unknown_fields)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Geology {
-    /// Tectonic regime. Recorded for now: it does not shape the relief yet.
+    /// Tectonic regime. `plates` gives the world tectonic plates whose
+    /// boundaries shape its relief (`crate::plates`) and, with liquid
+    /// water, a carbon cycle that steadies its climate; the others shape it
+    /// through the age of its surface and its craters. A plate preset's
+    /// world can lose its plates (see [`regime_of`]).
     pub regime: Regime,
     /// End of the era of liquid water, in Ga before present. 0 means still
     /// wet; a value at or above the surface age means the surface never saw
@@ -112,6 +167,49 @@ impl Geology {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_world_decides_whether_a_plate_preset_has_plates() {
+        let world = |planet: &str, circumference_km: f32, pressure_bar: f32, orbit_au: f32| {
+            let p = WorldParams {
+                circumference_km,
+                pressure_bar,
+                orbit_au,
+                ..crate::generation::tests::params(0, planet)
+            };
+            regime_of(&p)
+        };
+        let earth = crate::noise::EARTH_CIRCUMFERENCE_KM;
+        // An Earth keeps its plates, and so does a super-Earth.
+        assert_eq!(world("terran", earth, 1.0, 1.0), Regime::Plates);
+        assert_eq!(world("terran", 2.0 * earth, 1.0, 1.0), Regime::Plates);
+        // A Mars-sized one has a stagnant lid, as Mars.
+        assert_eq!(world("terran", 21_344.0, 1.0, 1.0), Regime::Stagnant);
+        // Without liquid water, too.
+        assert_eq!(world("terran", earth, 0.005, 1.0), Regime::Stagnant);
+        // Inside the runaway greenhouse, an episodic lid, as Venus.
+        assert_eq!(world("terran", earth, 1.0, 0.72), Regime::Episodic);
+        // A stagnant preset never gains plates.
+        assert_eq!(world("barren", earth, 1.0, 1.0), Regime::Stagnant);
+        // Requests apply it to the preset of the world.
+        let small = crate::request::WorldRequest {
+            planet: Some("terran".into()),
+            circumference_km: Some(21_000.0),
+            ..Default::default()
+        };
+        let params = small.resolve(&mut rand::rng()).unwrap().params;
+        assert_eq!(params.planet.geology.regime, Regime::Stagnant);
+    }
+
+    #[test]
+    fn a_wet_stagnant_lid_has_a_weaker_carbon_cycle() {
+        use crate::generation::carbon_cycle;
+        assert_eq!(carbon_cycle(Regime::Plates, 1.0), 1.0);
+        let lid = carbon_cycle(Regime::Stagnant, 1.0);
+        assert!(lid > 0.0 && lid < 1.0);
+        assert_eq!(carbon_cycle(Regime::Stagnant, 0.006), 0.0);
+        assert_eq!(carbon_cycle(Regime::Episodic, 90.0), 0.0);
+    }
 
     #[test]
     fn worlds_with_liquid_water_are_still_wet() {

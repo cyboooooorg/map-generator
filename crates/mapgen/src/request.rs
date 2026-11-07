@@ -603,6 +603,10 @@ impl WorldRequest {
         {
             params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
         }
+        // The world decides whether it has plates (its size, water and
+        // star), applied to its preset so that `world.json` tells the
+        // regime it was generated with.
+        params.planet.geology.regime = crate::geology::regime_of(&params);
         if let Some(fraction) = land_fraction
             && !giant
         {

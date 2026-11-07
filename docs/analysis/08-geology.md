@@ -207,8 +207,11 @@ regime = "stagnant"          # plates | stagnant | episodic | heat_pipe
 wet_until = 3.5              # Ga: end of the era of liquid water
 ```
 
-- `regime` has no effect on the elevation yet: it records the regime
-  for section 8. It is shown in the world info.
+- `regime` had no effect on the elevation at first: it recorded the
+  regime for section 8. It is shown in the world info. Since then
+  `plates` shapes the relief (section 8) and the carbon cycle, and a
+  plate preset's world loses its plates when it is too small, dry or
+  hot (`geology::regime_of`, 2026-11-07).
 - `surface_age` sets the crater density through the chronology. Like
   the pressure, it is a generation parameter (`--surface-age`, form
   field, `surface_age_ga` in `world.json`) drawn from the preset's

@@ -251,6 +251,31 @@ fn volcanic_threshold(intensity: f32) -> f32 {
     VOLCANIC_NOISE_SIGMA * z
 }
 
+/// Strength of the carbon cycle of a wet world with a stagnant lid, against
+/// a plate world's: Foley & Smye (2018, doi:10.1089/ast.2017.1695) find
+/// that volcanic outgassing can sustain one there for about 1 to 5 Gyr,
+/// though plates remain "the more favorable tectonic state for long-term
+/// climate stability" (Foley 2018, doi:10.1098/rsta.2017.0409). The half
+/// is a calibration, no source.
+const STAGNANT_LID_REGULATION: f32 = 0.5;
+
+/// How strongly a carbonate-silicate cycle steadies the climate of a world
+/// of `regime` and surface pressure `pressure_bar` (see
+/// [`StarClimate::regulation`]): fully with plates and liquid water, by
+/// [`STAGNANT_LID_REGULATION`] with a stagnant lid and liquid water, not
+/// at all otherwise (no rock weathers without water; the app gives none
+/// to episodic and heat-pipe worlds, Venus and Io having no water).
+pub fn carbon_cycle(regime: Regime, pressure_bar: f32) -> f32 {
+    if pressure_bar < LIQUID_WATER_BAR {
+        return 0.0;
+    }
+    match regime {
+        Regime::Plates => 1.0,
+        Regime::Stagnant => STAGNANT_LID_REGULATION,
+        Regime::Episodic | Regime::HeatPipe => 0.0,
+    }
+}
+
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
     grid: Grid,
@@ -973,13 +998,13 @@ pub fn generate_with_progress(
     }
     // Rows of sea-level temperature, evened out by dense air.
     // The host star: its light, regulated by a carbon cycle on wet worlds
-    // with plate tectonics, and the planet's own heat.
+    // (fully with plate tectonics, partly under a stagnant lid), and the
+    // planet's own heat.
     let star_climate = StarClimate {
         star: params.star,
         orbit_au: params.orbit_au,
         eccentricity: params.eccentricity,
-        regulated: planet.geology.regime == Regime::Plates
-            && params.pressure_bar >= LIQUID_WATER_BAR,
+        regulation: carbon_cycle(planet.geology.regime, params.pressure_bar),
         // A giant's moon: its tidal heat adds to its own, as radiated power.
         internal_heat_k: crate::exomoon::HostGiant::draw(params)
             .map_or(planet.climate.internal_heat, |h| {
@@ -1314,7 +1339,7 @@ pub fn generate_with_progress(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::climate::EARTH_AXIAL_TILT_DEG;
     use crate::preset::Preset;
