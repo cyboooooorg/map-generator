@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
+import { hillRadiusKm, hillSphere, libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
 import type { Vec3 } from './skyBodies';
 
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
@@ -305,5 +305,30 @@ describe('small bodies in the sky', () => {
     expect(smallBodiesSky(withSmall, 'c', 10).belts[0]!.inside).toBe(false);
     // A system without small bodies has none.
     expect(smallBodiesSky(system, 'b', 10)).toEqual({ swarms: [], belts: [] });
+  });
+});
+
+describe('Hill sphere', () => {
+  it("is 1.5 million km for the Earth round the Sun and about 60 000 km for the Moon round the Earth", () => {
+    expect(hillRadiusKm(149_597_870.7, 0.0167, 1, 332_946)).toBeGreaterThan(1.4e6);
+    expect(hillRadiusKm(149_597_870.7, 0.0167, 1, 332_946)).toBeLessThan(1.5e6);
+    expect(hillRadiusKm(384_400, 0.0549, 0.0123, 1)).toBeGreaterThan(55_000);
+    expect(hillRadiusKm(384_400, 0.0549, 0.0123, 1)).toBeLessThan(62_000);
+  });
+
+  it('is the planet\'s own, and the host planet\'s from a moon', () => {
+    const giant = system.bodies.find((x) => x.id === 'c')!;
+    const own = hillSphere(system, 'c')!;
+    expect(own.id).toBe('c');
+    const au = giant.orbit.semi_major_axis_km;
+    const expected = au * (1 - giant.orbit.eccentricity) * Math.cbrt(giant.physical.mass_earth / 332_946 / (3 * system.star.info.mass));
+    expect(own.radiusKm).toBeCloseTo(expected, 3);
+    expect(own.radiusInHostRadii).toBeCloseTo(expected / giant.physical.radius_km, 6);
+    const fromMoon = hillSphere(system, 'c-1')!;
+    expect(fromMoon.id).toBe('c');
+    expect(fromMoon.radiusKm).toBe(own.radiusKm);
+    // The moons orbit well inside it.
+    expect(system.bodies.find((x) => x.id === 'c-2')!.orbit.semi_major_axis_km).toBeLessThan(own.radiusKm / 3);
+    expect(hillSphere(system, 'nope')).toBeNull();
   });
 });

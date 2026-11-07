@@ -594,6 +594,9 @@ export const fr: Messages = {
     sunLongitude: 'Longitude du soleil',
     orbits: 'Orbites des lunes',
     orbitLines: 'Orbites',
+    hillSphere: 'Sphère de Hill',
+    hillSphereHelp: (p) =>
+      `Trace la sphère de Hill de ${p.host}, la limite des orbites de ses lunes (sur le globe, depuis une lune : celle de sa planète) : ${p.radius}, ${p.radii} rayons planétaires`,
     orbitLinesHelp: 'Trace les orbites des lunes dans le ciel (sur le globe), vues depuis le corps affiché',
     smallBodies: 'Petits corps',
     smallBodiesHelp:

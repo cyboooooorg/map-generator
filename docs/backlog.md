@@ -152,7 +152,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
 | Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
-| Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | todo   |
+| Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | done   |
 | Planet view: from a moon, the host planet is drawn without its atmosphere and clouds                                 | todo   |
 
 ## 5. Terrain realism, second round

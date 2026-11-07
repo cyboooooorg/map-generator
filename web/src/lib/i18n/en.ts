@@ -631,6 +631,9 @@ export const en = {
     sunLongitude: 'Sun longitude',
     orbits: 'Moon orbits',
     orbitLines: 'Orbits',
+    hillSphere: 'Hill sphere',
+    hillSphereHelp: (p: { host: string; radius: string; radii: string }) =>
+      `Draws the Hill sphere of ${p.host}, the bound of its moons' orbits (on the globe, from a moon: its host planet's): ${p.radius}, ${p.radii} planet radii`,
     orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
     smallBodies: 'Small bodies',
     smallBodiesHelp:
