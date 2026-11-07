@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { skyFromWorld } from './sky';
-import { eclipse, halo, inFrontOfGlobe, pickShadowCasters } from './skyBodies';
+import { eclipse, halo, inFrontOfGlobe, pickShadowCasters, skyOccluders } from './skyBodies';
 
 describe('eclipses', () => {
   it('darkens the ground in the umbra, less in the penumbra, not elsewhere', () => {
@@ -78,5 +78,26 @@ describe('inFrontOfGlobe', () => {
 
   it('puts a near body off the line of sight in front, when closer than the horizon', () => {
     expect(inFrontOfGlobe(camera, [1.2, 0, 3.5], 0.1)).toBe(true);
+  });
+});
+
+describe('skyOccluders', () => {
+  const camera: [number, number, number] = [0, 0, 5];
+
+  it('gives the bodies drawn at their size, the largest from the camera first', () => {
+    const giant = { position: [0, 0, -100] as [number, number, number], radius: 40 };
+    const moon = { position: [10, 0, 0] as [number, number, number], radius: 1 };
+    const far = { position: [0, 0, -1000] as [number, number, number], radius: 20 };
+    // About 0.39, 0.09 and 0.02 radians across.
+    expect(skyOccluders(camera, [moon, far, giant], 1e-3, 4)).toEqual([giant, moon, far]);
+    // At most as many as asked.
+    expect(skyOccluders(camera, [moon, far, giant], 1e-3, 2)).toEqual([giant, moon]);
+  });
+
+  it('leaves out a body drawn as a marker, and one without a place', () => {
+    const speck = { position: [0, 0, -1e6] as [number, number, number], radius: 1 };
+    const moon = { position: [10, 0, 0] as [number, number, number], radius: 1 };
+    // The speck's angular radius is about 1e-6, under the marker's 1e-3.
+    expect(skyOccluders(camera, [speck, {}, moon], 1e-3, 4)).toEqual([moon]);
   });
 });

@@ -1,8 +1,10 @@
 // GLSL of the planet surface, the graticule and the atmosphere.
 //
-// Every surface vertex is placed from its uv coordinate, on the flat map
-// (plane z = 0, 2π × π) and on the unit globe, then mixed by `uMorph`
-// (0 = map, 1 = globe). Conventions are documented in ../geo.ts.
+// Every surface vertex is placed from its uv coordinate on the flat map
+// (plane z = 0, 2π × π) rolled onto a sphere of radius 1 / `uMorph`
+// (0 = map, 1 = the unit globe) round the meridian at the centre of the
+// screen (`morphWrap`, mirrored by morphPoint in viewTransfer.ts).
+// Conventions are documented in ../geo.ts.
 //
 // `uData` packs the decoded layers, row 0 = north (sampled at 1 − v):
 //   r = elevation, g = temperature, b = moisture, a = log10(1 + flow km²).
@@ -30,6 +32,13 @@ export type Layer = keyof typeof LAYER_IDS;
 const common = /* glsl */ `
   const float PI = 3.141592653589793;
   uniform float uMorph;
+  // The meridian the morph wraps the map round: its longitude from 0 in
+  // (−π, π], and its x on the map (see morphPoint in viewTransfer.ts).
+  uniform float uMorphLon;
+  uniform float uMorphX;
+  // Light added to the night side while the globe turns before unrolling
+  // into the map, so that the turn does not pass through black (0 to 1).
+  uniform float uNightLift;
   // Relief exaggeration, 1 for the true relief (see lib/relief.ts), and
   // the body's radii per elevation unit at the true relief.
   uniform float uRelief;
@@ -82,6 +91,35 @@ export const surfaceVertex = /* glsl */ `
   varying vec3 vNorth;
   varying vec3 vWorld;
 
+  // The map point (x, y) rolled onto a sphere of radius 1 / uMorph that
+  // touches the map along the meridian x = uMorphX and bulges towards +z,
+  // turned by uMorphLon × uMorph: the map wraps round the globe, its edges
+  // going back, and ends on it: point is where it lies, outward the
+  // sphere's normal there, east and north its axes.
+  void morphWrap(vec2 plane, out vec3 point, out vec3 outward, out vec3 east, out vec3 north) {
+    if (uMorph < 1e-4) {
+      point = vec3(plane, 0.0);
+      outward = vec3(0.0, 0.0, 1.0);
+      east = vec3(1.0, 0.0, 0.0);
+      north = vec3(0.0, 1.0, 0.0);
+      return;
+    }
+    float a = (plane.x - uMorphX) * uMorph;
+    float b = plane.y * uMorph;
+    float r = 1.0 / uMorph;
+    float sa = sin(0.5 * a);
+    float sb = sin(0.5 * b);
+    // r (cos b cos a − 1) without the loss of cos near 1, then moved out
+    // by uMorph so that the sphere ends centred on the origin.
+    vec3 local = vec3(r * cos(b) * sin(a), r * sin(b), -2.0 * r * (sb * sb * cos(a) + sa * sa) + uMorph);
+    float turn = uMorphLon * uMorph;
+    mat3 spin = mat3(cos(turn), 0.0, -sin(turn), 0.0, 1.0, 0.0, sin(turn), 0.0, cos(turn));
+    point = spin * local + vec3((1.0 - uMorph) * uMorphX, 0.0, 0.0);
+    outward = spin * vec3(cos(b) * sin(a), sin(b), cos(b) * cos(a));
+    east = spin * vec3(cos(a), 0.0, -sin(a));
+    north = spin * vec3(-sin(b) * sin(a), cos(b), -sin(b) * cos(a));
+  }
+
   void main() {
     vec2 g = uTileRect.xy + uv * uTileRect.zw;
     vUv = g;
@@ -90,7 +128,12 @@ export const surfaceVertex = /* glsl */ `
     float lat = (g.y - 0.5) * PI;
     vec3 sphere = vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
     vec3 plane = vec3((g.x - 0.5) * 2.0 * PI, (g.y - 0.5) * PI, 0.0);
-    vec3 normal = normalize(mix(vec3(0.0, 0.0, 1.0), sphere, uMorph));
+    vec3 wrapped;
+    vec3 outward;
+    vec3 wrapEast;
+    vec3 wrapNorth;
+    morphWrap(plane.xy, wrapped, outward, wrapEast, wrapNorth);
+    vec3 normal = outward;
     vec3 eastward = vec3(cos(lon), 0.0, -sin(lon));
     vec3 northward = vec3(-sin(lat) * sin(lon), cos(lat), -sin(lat) * cos(lon));
     // An irregular body: the sphere scaled by its shape, the normal tilted
@@ -105,7 +148,7 @@ export const surfaceVertex = /* glsl */ `
       vec3 tilted = normalize(
         sphere - perLon / (radius * max(cos(lat), 0.05)) * eastward - perLat / radius * northward
       );
-      normal = normalize(mix(vec3(0.0, 0.0, 1.0), tilted, uMorph));
+      normal = normalize(mix(outward, tilted, uMorph));
       radius = mix(1.0, radius, uMorph);
     }
 
@@ -125,15 +168,15 @@ export const surfaceVertex = /* glsl */ `
     if (uFlattening > 0.0) {
       float squash = 1.0 - uFlattening;
       vec3 ellipsoid = normalize(vec3(sphere.x, sphere.y / (squash * squash), sphere.z));
-      normal = normalize(mix(vec3(0.0, 0.0, 1.0), ellipsoid, uMorph));
+      normal = normalize(mix(outward, ellipsoid, uMorph));
     }
-    vec3 position = mix(plane, sphere * radius, uMorph) + normal * (height + uLift);
+    vec3 position = wrapped + outward * (radius - 1.0) + normal * (height + uLift);
     position.y *= 1.0 - uFlattening * uMorph;
 
     vSphere = sphere;
     vNormal = normal;
-    vEast = normalize(mix(vec3(1.0, 0.0, 0.0), eastward, uMorph));
-    vNorth = normalize(mix(vec3(0.0, 1.0, 0.0), northward, uMorph));
+    vEast = wrapEast;
+    vNorth = wrapNorth;
     vec4 world = modelMatrix * vec4(position, 1.0);
     vWorld = world.xyz;
     gl_Position = projectionMatrix * viewMatrix * world;
@@ -572,7 +615,8 @@ export const surfaceFragment = /* glsl */ `
       float sunlit = uCasterCount > 0.0 ? 1.0 - eclipse(normalize(vSphere)) : 1.0;
       // A giant's rings shadow a band of it.
       sunlit *= 1.0 - ringShadow(normalize(vSphere));
-      shade = (0.07 + 0.93 * day * strength * sunlit) * relief;
+      float night = mix(0.07, 0.45, uNightLift);
+      shade = (night + (1.0 - night) * day * strength * sunlit) * relief;
     } else {
       float globe = 0.35 + 0.75 * lambert;
       shade = mix(relief, globe, uMorph);
@@ -1050,7 +1094,12 @@ export const skyBodyFragment = /* glsl */ `
 // Orbit lines of the bodies in the sky: points in radii of the body
 // shown, drawn where they are, so that the near side of an orbit passes
 // in front of the globe and its far side behind it; beyond the far plane,
-// held on it, behind everything but the sky.
+// held on it, behind everything but the sky. The sky bodies drawn at
+// their size (see SKY_OCCLUDERS) hide the parts of the lines behind them
+// and are crossed by those in front of them, whatever the far plane,
+// which only bounds the globe: the giant seen from its moon stands in the
+// middle of its moons' orbits, their near halves over it, their far
+// halves hidden by it.
 /**
  * Dash period of the body shown's own orbit line, in its radii, while it
  * stands still (see skyOrbitFragment); longer while it plays (see
@@ -1077,6 +1126,15 @@ export function skyOrbitDash(length: number, orbitsPerSecond: number): number {
   return Math.max(SKY_ORBIT_DASH, (length * Math.abs(orbitsPerSecond)) / SKY_ORBIT_DASHES_PER_SECOND);
 }
 
+/**
+ * Sky bodies (spheres) the orbit lines test against, at most: the largest
+ * in view (see skyOrbitFragment).
+ */
+export const SKY_OCCLUDERS = 4;
+
+/** Passes of the orbit lines (see skyOrbitFragment), the value of its uPass. */
+export const SKY_LINE_PASS = { farUnder: 0, farOver: 1, near: 2 } as const;
+
 export const skyOrbitVertex = /* glsl */ `
   attribute vec3 point;
   // Length along a dashed orbit from its start, in radii of the body
@@ -1085,8 +1143,11 @@ export const skyOrbitVertex = /* glsl */ `
   // 1 where the point is beyond the far plane (held on it).
   varying float vFar;
   varying float vAlong;
+  // The point itself, in the scene's frame, for the sky bodies' test.
+  varying vec3 vPoint;
   void main() {
     vAlong = along;
+    vPoint = point;
     vec4 clip = projectionMatrix * viewMatrix * vec4(point, 1.0);
     vFar = step(clip.w, clip.z);
     clip.z = min(clip.z, clip.w);
@@ -1094,21 +1155,56 @@ export const skyOrbitVertex = /* glsl */ `
   }
 `;
 
-// Drawn twice: the far parts (uNear 0) under the sky bodies and before
-// the globe, the near ones (uNear 1) after the globe, which hides those
-// behind it by depth.
+// Drawn in three passes (uPass, see SKY_LINE_PASS): the far parts under
+// the sky bodies (0), which paint over those behind them, and over them
+// where they stand in front of one (1), both before the globe and its
+// air; the near parts after the globe (2), which hides those behind it by
+// depth, dropped where a sky body hides them. The sky bodies, in
+// uOccluders: their centres (xyz) and radii (w), in the scene's frame,
+// the first uOccluderCount of them.
 export const skyOrbitFragment = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
-  uniform float uNear;
+  uniform int uPass;
+  uniform vec4 uOccluders[${SKY_OCCLUDERS}];
+  uniform int uOccluderCount;
   // Dash period along a dashed orbit, in radii of the body shown.
   uniform float uDash;
   // The screen's height, in drawn pixels.
   uniform float uScreenPx;
   varying float vFar;
   varying float vAlong;
+  varying vec3 vPoint;
   void main() {
-    if ((uNear > 0.5) == (vFar > 0.5)) discard;
+    bool far = vFar > 0.5;
+    if (far == (uPass == ${SKY_LINE_PASS.near})) discard;
+    // Whether a sky body stands between the camera and the point (hidden),
+    // or behind it (over), along the ray: its first hit nearer than the
+    // point or farther. The hit from the ray's closest approach to the
+    // centre, which keeps its precision far from the scene's origin.
+    vec3 toPoint = vPoint - cameraPosition;
+    float pointDistance = length(toPoint);
+    vec3 ray = toPoint / max(pointDistance, 1e-9);
+    bool hidden = false;
+    bool over = false;
+    for (int i = 0; i < ${SKY_OCCLUDERS}; i++) {
+      if (i >= uOccluderCount) break;
+      vec4 body = uOccluders[i];
+      vec3 oc = cameraPosition - body.xyz;
+      float b = dot(oc, ray);
+      vec3 across = oc - b * ray;
+      float h = body.w * body.w - dot(across, across);
+      if (h <= 0.0) continue;
+      float hit = -b - sqrt(h);
+      // Not from inside a body, nor one behind the camera.
+      if (hit <= 0.0) continue;
+      if (hit < pointDistance - 1e-4 * body.w) hidden = true;
+      else over = true;
+    }
+    bool front = over && !hidden;
+    if (uPass == ${SKY_LINE_PASS.farUnder} && front) discard;
+    if (uPass == ${SKY_LINE_PASS.farOver} && !front) discard;
+    if (uPass == ${SKY_LINE_PASS.near} && hidden) discard;
     float opacity = uOpacity;
     vec3 colour = uColor;
     if (vAlong >= 0.0) {

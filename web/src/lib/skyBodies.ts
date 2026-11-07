@@ -140,6 +140,32 @@ export function inFrontOfGlobe(camera: Vec3, position: Vec3, radius: number): bo
 }
 
 /**
+ * The sky bodies the orbit lines are tested against (see skyOrbitFragment
+ * in lib/viewer/shaders.ts), at most `most`: those with a place, drawn at
+ * their size (the tangent of their angular radius from the camera at
+ * `camera` at least `least`; a smaller one is drawn as a marker, which
+ * the lines pass under as before), the largest from the camera first.
+ */
+export function skyOccluders(
+  camera: Vec3,
+  bodies: readonly Pick<SkyBody, 'position' | 'radius'>[],
+  least: number,
+  most: number,
+): ShadowCaster[] {
+  const found: { position: Vec3; radius: number; half: number }[] = [];
+  for (const { position, radius } of bodies) {
+    if (!position || radius === undefined) continue;
+    const distance = Math.hypot(position[0] - camera[0], position[1] - camera[1], position[2] - camera[2]);
+    const half = Math.asin(Math.min(radius / Math.max(distance, 1e-12), 0.999));
+    if (Math.tan(half) >= least) found.push({ position, radius, half });
+  }
+  return found
+    .sort((p, q) => q.half - p.half)
+    .slice(0, most)
+    .map(({ position, radius }) => ({ position, radius }));
+}
+
+/**
  * The shadow casters the surface shader gets, at most MAX_CASTERS of them:
  * those whose shadow (its penumbra included) reaches the body shown (the
  * unit sphere) now, the sun in direction `sun` of angular radius
