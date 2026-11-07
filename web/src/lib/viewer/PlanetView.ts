@@ -1386,7 +1386,11 @@ export class PlanetView {
    */
   private driftClouds(): void {
     // A giant's bands drift too, each with its own wind.
-    const visible = this.u.uCloudsOn.value > 0 || this.u.uGiant.value > 0;
+    const visible =
+      this.u.uCloudsOn.value > 0 ||
+      this.u.uGiant.value > 0 ||
+      // The clouds of a planet in a moon's sky drift as its own do.
+      this.skyBodies.some(({ mesh }) => mesh.visible && mesh.material.uniforms['uHasClouds']!.value > 0.5);
     if (!this.cloudsDrifting || !visible) {
       this.cloudDriftAt = null;
       return;
@@ -2271,6 +2275,8 @@ export class PlanetView {
             uHasClouds: { value: 0 },
             uClouds: { value: emptyTexture() },
             uCloudTint: { value: new Vector3(1, 1, 1) },
+            // Drifts with the body shown's own clouds (see driftClouds).
+            uCloudShift: this.u.uCloudShift,
             uHaloColor: { value: new Vector3() },
             uHaloHeight: { value: 0 },
             uHaloStrength: { value: 0 },

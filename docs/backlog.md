@@ -153,7 +153,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
 | Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
 | Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | todo   |
-| Planet view: from a moon, the host planet is drawn without its atmosphere and clouds                                 | todo   |
+| Planet view: from a moon, the host planet is drawn without its atmosphere and clouds                                 | done   |
 
 ## 5. Terrain realism, second round
 

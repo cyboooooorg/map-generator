@@ -8,7 +8,8 @@
 // positions and radii are in radii of that body.
 import type { Preview } from './api/types/Preview';
 import type { RingSystem } from './api/types/RingSystem';
-import type { Sky } from './sky';
+import type { WorldMetadata } from './api/types/WorldMetadata';
+import { cloudTint, skyFromWorld, type Sky } from './sky';
 
 export type Vec3 = [number, number, number];
 
@@ -68,6 +69,22 @@ export interface SkyBody {
 
 /** How the planet looks in a moon's sky: its clouds, its air, its marks and their switches. */
 export type PlanetLook = Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo' | 'axialTiltDeg' | 'show'>;
+
+/**
+ * The planet's look in a moon's sky, from the planet's own `world.json`:
+ * its air (the halo of its sky, as its own view scatters it), and its
+ * clouds (the layer its view draws, `file` resolved by `url`) in its
+ * cloud colour. A world without a sky or a cloud layer (an airless rock,
+ * a giant, whose surface is its clouds) gets none of them.
+ */
+export function planetLook(meta: WorldMetadata, url: (file: string) => string): PlanetLook {
+  const file = meta.layers.clouds?.file;
+  return {
+    halo: halo(skyFromWorld(meta)),
+    clouds: file ? url(file) : null,
+    cloudTint: cloudTint(meta),
+  };
+}
 
 /** The display switches of a body in the sky (its own, not the body shown's). */
 export interface SkyBodyShow {

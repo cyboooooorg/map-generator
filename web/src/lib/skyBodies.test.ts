@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { skyFromWorld } from './sky';
-import { eclipse, halo, inFrontOfGlobe, pickShadowCasters, skyOccluders } from './skyBodies';
+import { eclipse, halo, inFrontOfGlobe, pickShadowCasters, planetLook, skyOccluders } from './skyBodies';
 
 describe('eclipses', () => {
   it('darkens the ground in the umbra, less in the penumbra, not elsewhere', () => {
@@ -43,6 +43,24 @@ describe('halo', () => {
     const thin = halo(skyFromWorld(world(0.006)))!;
     const dense = halo(skyFromWorld(world(92)))!;
     expect(dense.strength).toBeGreaterThan(thin.strength);
+  });
+});
+
+describe('planetLook', () => {
+  const world = (pressure: number, layers: object, clouds = 'water') =>
+    ({ pressure_bar: pressure, layers, preset: { atmosphere: { rayleigh: [0.17, 0.41, 1], haze: 0.1, haze_colour: [1, 1, 1], greenhouse: 0, clouds, cloud_cover: 0.5 } } }) as unknown as WorldMetadata;
+  const url = (file: string) => `/w/raw_data/${file}`;
+
+  it('gives a cloudy world with air its halo, its cloud map and its cloud colour', () => {
+    const look = planetLook(world(1, { clouds: { file: 'clouds.png' } }, 'sulfuric'), url);
+    expect(look.halo).not.toBeNull();
+    expect(look.clouds).toBe('/w/raw_data/clouds.png');
+    expect(look.cloudTint).toEqual([0.9, 0.82, 0.55]);
+  });
+
+  it('gives a world without a cloud layer (a giant) no clouds, and an airless one no halo', () => {
+    expect(planetLook(world(1, {}), url).clouds).toBeNull();
+    expect(planetLook(world(0, { clouds: { file: 'clouds.png' } }), url).halo).toBeNull();
   });
 });
 

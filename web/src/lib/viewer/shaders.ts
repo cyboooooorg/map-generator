@@ -866,6 +866,7 @@ export const skyBodyFragment = /* glsl */ `
   uniform float uGlow;
   ${previewGlsl}
   uniform float uHasClouds;
+  uniform float uCloudShift;
   uniform sampler2D uClouds;
   uniform vec3 uCloudTint;
   // Halo: its colour, its height in disk radii, its strength (0: none).
@@ -1027,7 +1028,7 @@ export const skyBodyFragment = /* glsl */ `
       colour = texture2D(uMap, uv).rgb;
     }
     if (uHasClouds > 0.5) {
-      colour = mix(colour, uCloudTint, texture2D(uClouds, uv).r);
+      colour = mix(colour, uCloudTint, texture2D(uClouds, vec2(uv.x - uCloudShift, uv.y)).r);
     }
     // Cosines of the sun's and of the viewer's angles from the vertical.
     float sunCos = dot(n, uSunDir);
