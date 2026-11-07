@@ -74,6 +74,7 @@ import {
   planeToLonLat,
   rayPlaneZ0,
   raySphere,
+  rayRelief,
   sphereToLonLat,
   type Vec3,
 } from '../geo';
@@ -3264,10 +3265,20 @@ export class PlanetView {
     this.onPick(this.pickAt(event.clientX, event.clientY));
   };
 
-  // Picking ignores the relief displacement: at most a few percent of the
-  // radius, which shifts the picked point by a fraction of a degree.
+  /**
+   * The ray marched against the surface as drawn (its shape and its relief
+   * as displayed, from the CPU copy of the elevation); the sphere when
+   * there is no relief to show.
+   */
   private pickGlobe(origin: Vec3, direction: Vec3): LonLat | null {
-    const t = raySphere(origin, direction, 1);
+    const shape = this.shared.uHasShape.value > 0.5 ? this.shapeRadii : null;
+    const relief = this.shared.uHasData.value > 0.5 ? this.peakAbove * this.reliefLift() : 0;
+    const maxRadius = (shape ? shape.largest : 1) + relief;
+    const scratch = new Vector3();
+    const t =
+      maxRadius <= 1 && !shape
+        ? raySphere(origin, direction, 1)
+        : rayRelief(origin, direction, (x, y, z) => this.surfaceRadiusAt(scratch.set(x, y, z)), maxRadius, 0.5);
     if (t === null) {
       return null;
     }

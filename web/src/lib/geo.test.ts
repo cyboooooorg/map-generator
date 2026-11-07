@@ -10,6 +10,7 @@ import {
   lonLatToSphere,
   planeToLonLat,
   rayPlaneZ0,
+  rayRelief,
   raySphere,
   sphereToLonLat,
   uvToLonLat,
@@ -92,5 +93,47 @@ describe('geo', () => {
     const [lat, lon] = lonLatDegrees({ lon: (270 * Math.PI) / 180, lat: Math.PI / 4 });
     expect(lat).toBeCloseTo(45);
     expect(lon).toBeCloseTo(-90);
+  });
+
+  describe('rayRelief', () => {
+    // A cone-shaped mountain 0.1 radii high, 0.3 radii wide, on the +x axis.
+    const mountain = (x: number, y: number, z: number): number => {
+      const d = Math.hypot(x - 1, y, z);
+      return 1 + Math.max(0, 0.1 * (1 - d / 0.3));
+    };
+    const flat = () => 1;
+
+    it('gives the sphere hit on a flat surface', () => {
+      const origin: [number, number, number] = [0.2, 0.1, 5];
+      const direction: [number, number, number] = [0, 0, -1];
+      const t = rayRelief(origin, direction, flat, 1.05);
+      expect(t).toBeCloseTo(raySphere(origin, direction, 1)!, 6);
+    });
+
+    it('misses when the ray passes outside the relief', () => {
+      expect(rayRelief([0, 2, 5], [0, 0, -1], mountain, 1.1)).toBeNull();
+    });
+
+    it('hits the flank of a mountain a grazing ray meets before the sphere', () => {
+      // Parallel to the ground, 0.04 above the sphere at x = 1: the plain
+      // sphere test would miss it or land far behind.
+      const origin: [number, number, number] = [1.04, 0, 5];
+      const direction: [number, number, number] = [0, 0, -1];
+      const t = rayRelief(origin, direction, mountain, 1.1)!;
+      expect(t).not.toBeNull();
+      const z = 5 - t;
+      expect(z).toBeGreaterThan(0.05);
+      const point = [origin[0], 0, z];
+      const r = Math.hypot(...point);
+      const [x, y, zz] = point.map((v) => v / r) as [number, number, number];
+      expect(r).toBeCloseTo(mountain(x, y, zz), 4);
+      const sphere = raySphere(origin, direction, 1);
+      expect(sphere === null || t < sphere).toBe(true);
+    });
+
+    it('hits the summit rather than the sphere behind it when looking straight down', () => {
+      const t = rayRelief([5, 0, 0], [-1, 0, 0], mountain, 1.1)!;
+      expect(5 - t).toBeCloseTo(1.1, 3);
+    });
   });
 });
