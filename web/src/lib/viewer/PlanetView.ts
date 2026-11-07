@@ -80,7 +80,7 @@ import { decodePng } from '../layers/png';
 import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
-import { liftSky, type Sky } from '../sky';
+import { liftSky, sunDeclinationDeg, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
 import {
   altitudeForMapHeight,
@@ -1565,9 +1565,7 @@ export class PlanetView {
     this.u.uLightMode.value = lighting.kind === 'sun' ? 1 : 0;
     if (lighting.kind === 'sun') {
       const declination =
-        lighting.latitudeDeg !== undefined
-          ? (lighting.latitudeDeg * Math.PI) / 180
-          : ((lighting.axialTiltDeg * Math.PI) / 180) * Math.sin(2 * Math.PI * lighting.season);
+        ((lighting.latitudeDeg ?? sunDeclinationDeg(lighting.axialTiltDeg, lighting.season)) * Math.PI) / 180;
       const [x, y, z] = lonLatToSphere({ lon: (lighting.longitudeDeg * Math.PI) / 180, lat: declination });
       this.u.uSunDir.value.set(x, y, z);
     }
