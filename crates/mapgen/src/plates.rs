@@ -397,6 +397,10 @@ pub struct Relief {
     /// Height added (negative: lowered), elevation units, at Earth's
     /// gravity.
     pub uplift: f32,
+    /// Height of young ocean floor above the old floor, elevation units:
+    /// the swell of a mid-ocean ridge, from the age of the floor (see
+    /// [`ridge_swell`]). Thermal isostasy: the same at any gravity.
+    pub swell: f32,
     /// Weight of mountain ridges, in `[0, 1]`.
     pub orogeny: f32,
     /// Weight of a volcanic arc, in `[0, 1]`.
@@ -408,6 +412,31 @@ const ARC_SPEED: f32 = 2.0;
 /// Convergence over which boundary relief grows from nothing to its full
 /// height, cm per year.
 const RELIEF_SPEED: (f32, f32) = (0.5, 5.0);
+
+/// Depth of the ocean floor at a ridge crest, km, and its sinking with
+/// the square root of its age, km per √Ma: `d = 2.5 + 0.35 √t` up to
+/// about 70 Ma, as the floor cools and contracts (Parsons & Sclater 1977,
+/// doi:10.1029/JB082i005p00803).
+const RIDGE_CREST_KM: f32 = 2.5;
+const SUBSIDENCE_KM: f32 = 0.35;
+/// Depth of the generator's old sea floor, km: its median, about 0.16
+/// elevation units (see `craters::ELEVATION_KM`). Young floor stands above
+/// it until the age at which Parsons & Sclater's floor reaches this depth
+/// (18 Ma); older floor stays at the noise's depth, which knows no age.
+pub const OLD_FLOOR_KM: f32 = 4.0;
+
+/// The swell of the ocean floor at `d_km` from a ridge spreading at
+/// `spreading` cm per year (both plates together), elevation units: the
+/// floor there is `d / (v/2)` old, and stands above [`OLD_FLOOR_KM`] by
+/// what Parsons & Sclater's age–depth relation gives. 1.5 km at the crest;
+/// at 5 cm/yr it fades out 460 km from the ridge, at 2 cm/yr 180 km.
+pub fn ridge_swell(d_km: f32, spreading: f32) -> f32 {
+    // cm/yr to km/Ma, one plate's half.
+    let half_km_per_ma = 5.0 * spreading.max(1e-3);
+    let age_ma = d_km.max(0.0) / half_km_per_ma;
+    let depth_km = RIDGE_CREST_KM + SUBSIDENCE_KM * age_ma.sqrt();
+    (OLD_FLOOR_KM - depth_km).max(0.0) / crate::craters::ELEVATION_KM
+}
 
 /// A bump of width `sigma` (km) centred at `mu` km from the boundary.
 fn bump(d: f32, mu: f32, sigma: f32) -> f32 {
@@ -569,6 +598,7 @@ impl PlateMap {
         let at = |dx: i64, dy: i64| self.reliefs[self.grid.cell(face, x0 + dx, y0 + dy)];
         let mix = |a: Relief, b: Relief, t: f32| Relief {
             uplift: a.uplift + (b.uplift - a.uplift) * t,
+            swell: a.swell + (b.swell - a.swell) * t,
             orogeny: a.orogeny + (b.orogeny - a.orogeny) * t,
             arc: a.arc + (b.arc - a.arc) * t,
         };
@@ -615,7 +645,8 @@ impl PlateMap {
             }
         } else if parting > 0.0 {
             match (mine, theirs) {
-                (false, false) => r.uplift = 0.1 * parting * bump(d, 0.0, 450.0),
+                // A mid-ocean ridge: young floor, the younger the higher.
+                (false, false) => r.swell = parting * ridge_swell(d, -b.convergence),
                 (true, true) => {
                     r.uplift = parting * (0.02 * bump(d, 120.0, 60.0) - 0.06 * bump(d, 0.0, 60.0));
                 }
@@ -847,6 +878,19 @@ mod tests {
     }
 
     #[test]
+    fn ridges_follow_the_age_depth_relation_of_the_ocean_floor() {
+        // Parsons & Sclater: 2.5 km deep at the crest, 4.3 km at 25 Ma.
+        let km = |d, v| OLD_FLOOR_KM - ridge_swell(d, v) * crate::craters::ELEVATION_KM;
+        assert!((km(0.0, 5.0) - 2.5).abs() < 1e-4);
+        // 25 Ma old at 5 cm/yr: 625 km out, below the generator's floor.
+        assert_eq!(ridge_swell(625.0, 5.0), 0.0);
+        // 9 Ma: 3.55 km deep.
+        assert!((km(225.0, 5.0) - 3.55).abs() < 1e-3);
+        // Faster ridges are broader.
+        assert!(ridge_swell(200.0, 8.0) > ridge_swell(200.0, 2.0));
+    }
+
+    #[test]
     fn boundaries_raise_ranges_and_arcs_and_sink_trenches() {
         // Continents in one hemisphere (x > 0), ocean in the other.
         let map = PlateMap::with_crust(&params(5), |q| q[0] > 0.0);
@@ -862,7 +906,7 @@ mod tests {
             );
             range |= r.orogeny > 0.3 && r.uplift > 0.03;
             trench |= r.uplift < -0.05;
-            ridge |= r.uplift > 0.03 && r.orogeny == 0.0 && r.arc < 0.1;
+            ridge |= r.swell > 0.03 && r.orogeny == 0.0 && r.arc < 0.1;
             arc |= r.arc > 0.5;
             polar |= g.point(k)[2].abs() > 0.98 && r != Relief::default();
         }

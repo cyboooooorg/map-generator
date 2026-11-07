@@ -189,8 +189,10 @@ fn within_range(e: f32) -> f32 {
 /// about 5 000 km around.
 const MAX_NOISE_SCALE: f32 = 8.0;
 /// Depth of the crust formed where the plates part below the waterline, in
-/// continent-shape units, and the share of the fine octaves it keeps.
-const NEW_CRUST_DEPTH: f32 = 0.3;
+/// continent-shape units: the generator's old sea floor (4 km), the swell
+/// of the ridge it formed at standing on it by its age (see
+/// `plates::ridge_swell`). The share of the fine octaves it keeps.
+const NEW_CRUST_DEPTH: f32 = crate::plates::OLD_FLOOR_KM / crate::craters::ELEVATION_KM;
 const NEW_CRUST_ROUGHNESS: f32 = 0.5;
 /// Share of the noise's mountain weight kept on worlds with plate
 /// tectonics: the rest of their ranges follow the plate boundaries.
@@ -555,7 +557,9 @@ impl Sampler {
             .as_ref()
             .map_or(crate::plates::Relief::default(), |t| t.relief(map_point));
         // Relief scales with gravity as the mountains do.
-        let tectonic_uplift = plates.uplift * self.relief_scale;
+        // The young floor's swell is thermal isostasy: the same at any
+        // gravity.
+        let tectonic_uplift = plates.uplift * self.relief_scale + plates.swell;
         let mountain_weight = (mountain_weight * self.noise_mountains).max(plates.orogeny);
         let broad = ((volcanic_raw - self.volcanic_threshold) * 4.0)
             .clamp(0.0, 1.0)

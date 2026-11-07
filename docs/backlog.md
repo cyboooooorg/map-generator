@@ -573,3 +573,28 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     keeps the Moon's flux, scaled by its giants and belts and by
     locking; a general rule would need the flux of impactors and their
     speeds per orbit (gravitational focusing included).
+- **Plates:**
+  - Plates are not driven: poles and speeds are drawn at random, where
+    slab pull sets the speed of a plate by its subducting edge (Forsyth
+    & Uyeda 1975). Feeding the subduction found on the boundaries back
+    into each plate's speed needs a second pass of the boundaries per
+    drift stage (each stage draws its own poles), about twice the plates'
+    0.13 s per world. The plate count does not follow the size of the
+    planet: no source scales it.
+  - Isostasy: continents and sea floor are not scaled by gravity, and
+    ridges follow the age–depth relation, but the continents' level is
+    noise, not floating crust. Measured on four `earth-like` worlds
+    (1024 × 512), land stands 2.1 to 2.8 km above the sea on average and
+    the sea floor 4.4 to 5.1 km below it, 6.6 to 7.9 km apart, where
+    Airy's balance of a continental crust of 41 km (density 2.83 g/cm³,
+    Christensen & Mooney 1995) against a thin oceanic one gives about
+    4.5 km, close to Earth's (land under 1 km on average, the ocean
+    3.7 km deep). Bringing continents down would move every biome's
+    altitude line; it needs a crustal-thickness field and a
+    recalibration of the biome thresholds. No flexure: volcanoes and
+    ranges do not bend the lithosphere into moats.
+  - The age of old ocean floor is unknown: floor older than about 18 Ma
+    keeps the noise's depth (4 km) instead of sinking towards 6.4 km.
+- **Mountains:** the planet's mass the moons see (`moons.rs`,
+  `PLANET_DENSITY`) is still Earth's density at every size, while the
+  planet's gravity and card follow the rocky mass–radius relation.
