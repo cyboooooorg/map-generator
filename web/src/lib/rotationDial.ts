@@ -96,7 +96,7 @@ export function rotationDial(
   if (locked) {
     // The host's bearing, or the sun's for a planet; failing both (the host
     // along the axis), the meridian the body would face on average.
-    zero = (parent ? host : sun) ?? [0, 0, 1];
+    zero = (parent ? host : sun) ?? [0, 0, -1];
     pointerLongitude = Math.PI;
     // The pointer stands at [0, 0, −1]: bearing π.
     reading = wrapSigned(Math.PI - bearing(zero));
@@ -112,7 +112,7 @@ export function rotationDial(
   const yearHours = (parent ?? self).orbit.period_days * 24;
   const siderealHours = locked ? self.orbit.period_days * 24 : self.spin.period_hours;
   const rate = 1 / siderealHours - 1 / yearHours;
-  const solarHours = !parent && locked ? null : Math.abs(rate) < STILL ? null : 1 / rate;
+  const solarHours = !parent && locked ? null : Math.abs(rate) < STILL ? null : 1 / Math.abs(rate);
   const localHours = wrap(12 + (24 * (pointerLongitude - bearing(sky.sun))) / TAU, 24);
 
   return {

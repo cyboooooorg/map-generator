@@ -1109,7 +1109,7 @@
     const current = view;
     if (!current) return;
     // The guides' labels (spin, host) follow with the spin axes, the dial's with the dial.
-    const follow = skyLabels || axesShown || smallBodies || dialShown;
+    const follow = skyLabels || axesShown || smallBodies || dial !== null;
     current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
     if (!follow) skyPositions = null;
     return () => {
@@ -1299,7 +1299,9 @@
         ? [{ key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' as const, on: smallBodies, set: (v: boolean) => (smallBodies = v) }]
         : []),
       { key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis', on: axesShown, set: (v) => (axesShown = v) },
-      { key: 'dial', label: t.viewer.rotationDial, help: t.viewer.rotationDialHelp, icon: 'dial', on: dialShown, set: (v) => (dialShown = v) },
+      ...(sys && sysBody
+        ? [{ key: 'dial', label: t.viewer.rotationDial, help: t.viewer.rotationDialHelp, icon: 'dial' as const, on: dialShown, set: (v: boolean) => (dialShown = v) }]
+        : []),
       {
         key: 'hexes',
         label: t.viewer.hexes,

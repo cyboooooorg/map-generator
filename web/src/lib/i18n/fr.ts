@@ -639,7 +639,9 @@ export const fr: Messages = {
         : `Jour sidéral ${p.sidereal} · Jour solaire ${p.solar}`,
     dialLocked: (p) => `Rotation synchrone · Libration ${p.libration} (±${p.amplitude})`,
     dialLockedTime: (p) =>
-      p.solar === null ? `Jour solaire${S}: aucun, l’étoile reste immobile` : `Heure locale ${p.time} (face à l’hôte) · Jour solaire ${p.solar}`,
+      p.solar === null
+        ? `Heure locale ${p.time} (face à l’hôte) · Jour solaire${S}: aucun, l’étoile reste immobile`
+        : `Heure locale ${p.time} (face à l’hôte) · Jour solaire ${p.solar}`,
     dialSun: 'Soleil',
     dialGlossaryHelp: 'Ce que veulent dire ces chiffres',
     dialGlossary: [

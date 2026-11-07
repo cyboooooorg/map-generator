@@ -73,6 +73,24 @@ describe('rotation dial', () => {
     expect(Math.abs(dial.state.reading)).toBeCloseTo(Math.abs(libration(b.orbit, 10)), 6);
   });
 
+  it('reads 0 for a locked body whose host is along the spin axis', () => {
+    const sky = systemSky(system, 'c-1', 0, textures);
+    const bodies = sky.bodies.map((x, i) => (i === sky.ids.indexOf('c') ? { ...x, direction: [0, 1, 0] as Vec3 } : x));
+    const dial = rotationDial(system, 'c-1', 0, 0, { ...sky, bodies })!;
+    expect(dial.state.locked).toBe(true);
+    expect(dial.state.reading).toBeCloseTo(0, 9);
+  });
+
+  it('gives a positive solar day when the sidereal day is longer than the year', () => {
+    const slow = structuredClone(system);
+    const b = slow.bodies.find((x) => x.id === 'b')!;
+    b.spin.period_hours = b.orbit.period_days * 24 * 3;
+    const figures = rotationDial(slow, 'b', 0, 0, systemSky(slow, 'b', 0, textures))!.figures;
+    const expected = 1 / Math.abs(1 / b.spin.period_hours - 1 / (b.orbit.period_days * 24));
+    expect(figures.solarHours).toBeGreaterThan(0);
+    expect(figures.solarHours).toBeCloseTo(expected, 6);
+  });
+
   it('hides the sun marker when the sun is along the spin axis', () => {
     const sky = { ...systemSky(system, 'b', 0, textures), sun: [0, 1, 0] as Vec3 };
     expect(rotationDial(system, 'b', 0, 0, sky)!.state.sun).toBeNull();
@@ -139,5 +157,15 @@ describe('rotation dial figures', () => {
     expect(text.angle).toBe(formatDialAngle(dial.state.reading, false));
     expect(text.sidereal).toBe(formatDayLength(dial.figures.siderealHours, units));
   });
-});
 
+  it('keeps the local time of a planet locked to its star', () => {
+    const locked = structuredClone(system);
+    locked.bodies.find((x) => x.id === 'b')!.spin.locked = true;
+    const dial = rotationDial(locked, 'b', 10, 0, systemSky(locked, 'b', 10, textures))!;
+    const text = dialFigureText(dial, units);
+    expect(text.locked).toBe(true);
+    if (!text.locked) return;
+    expect(text.solar).toBeNull();
+    expect(text.time).toBe(formatLocalTime(dial.figures.localHours));
+  });
+});

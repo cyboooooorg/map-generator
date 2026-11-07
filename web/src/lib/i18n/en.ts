@@ -675,7 +675,9 @@ export const en = {
         : `Sidereal day ${p.sidereal} · Solar day ${p.solar}`,
     dialLocked: (p: { libration: string; amplitude: string }) => `Synchronous rotation · Libration ${p.libration} (±${p.amplitude})`,
     dialLockedTime: (p: { time: string; solar: string | null }) =>
-      p.solar === null ? 'Solar day: none, the star stands still' : `Local time ${p.time} (face to the host) · Solar day ${p.solar}`,
+      p.solar === null
+        ? `Local time ${p.time} (face to the host) · Solar day: none, the star stands still`
+        : `Local time ${p.time} (face to the host) · Solar day ${p.solar}`,
     dialSun: 'Sun',
     dialGlossaryHelp: 'What these figures mean',
     /** Each entry's term carries its colon (the French takes a space before it). */
