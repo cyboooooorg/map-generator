@@ -547,7 +547,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
 
-## 19. Relief science, what remains
+## 20. Relief science, what remains
 
 - **Status:** todo
 - **Problem:** the science articles on craters, plates and mountains
@@ -594,4 +594,9 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     lithosphere into moats), and the platform floats at the waterline,
     so a sea level lowered on a world exposes platform, not old basins.
   - The age of old ocean floor is unknown: floor older than about 18 Ma
-    keeps the noise's depth (4 km) instead of sinking towards 6.4 km.
+    lies between 4 and 6.4 km by the noise (`generation::floating`), not
+    by its age.
+- **Small bodies:** their noise relief is capped (8 % of the radius;
+  9 km on airless stagnant bodies, ice 0.4 of rock), but an icy body's
+  simple craters are still rock's bowls, under rock's transition (see
+  the craters' first point).
