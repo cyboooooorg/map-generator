@@ -1,3 +1,4 @@
+import type { Line } from 'three';
 import { describe, expect, it } from 'vitest';
 import { LABEL_OUT, RotationDial } from './rotationDial';
 
@@ -59,6 +60,39 @@ describe('RotationDial', () => {
     expect(dial.group.visible).toBe(false);
     dial.update(true, 0.5);
     expect(dial.group.visible).toBe(true);
+    dial.dispose();
+  });
+
+  it('draws the host as a half-circle its marker slides along, a moon as a quarter flipped below the ring', () => {
+    const dial = new RotationDial();
+    const state = (hostAltitude: number) => ({
+      locked: true,
+      zero: [0, 0, -1] as [number, number, number],
+      pointerLongitude: Math.PI,
+      reading: 0,
+      sun: null,
+      host: [0, 0, -1] as [number, number, number],
+      sunAltitude: 0,
+      bodies: [
+        { id: 'c', bearing: [0, 0, -1] as [number, number, number], altitude: hostAltitude, host: true },
+        { id: 'c-2', bearing: [0, 0, 1] as [number, number, number], altitude: -Math.PI / 4, host: false },
+      ],
+    });
+    const arcs = () => dial.group.children.filter((o): o is Line => o.type === 'Line');
+    const count = (line: Line) => line.geometry.getAttribute('position').count;
+    const heights: number[] = [];
+    for (const altitude of [0.01, -0.01]) {
+      dial.set(state(altitude), 2);
+      const [host, moon] = arcs();
+      // Same geometry and orientation on both sides of 0: nothing flips.
+      expect(count(host!)).toBe(73);
+      expect(host!.scale.y).toBeGreaterThan(0);
+      expect(count(moon!)).toBe(37);
+      expect(moon!.scale.y).toBeLessThan(0);
+      heights.push(dial.anchors().host!.y);
+    }
+    expect(heights[0]).toBeCloseTo(2 * Math.sin(0.01), 9);
+    expect(heights[1]).toBeCloseTo(-2 * Math.sin(0.01), 9);
     dial.dispose();
   });
 });

@@ -3,9 +3,11 @@
 // graduated every 5° (long ticks every 30°), a pointer running out to it
 // from the surface at the longitude the dial reads, and, standing on the
 // ring, a vertical half-circle at the star's bearing, graduated every 10°
-// from −90° to +90°, the star's marker hung on it at its height; and a
-// fainter quarter-circle for each body of the sky chosen (the host, the
-// moons), from the ring up or down to its height, its marker at its end.
+// from −90° to +90°, the star's marker hung on it at its height; a fainter
+// half-circle in the same way for the host (its marker slides along it, so
+// nothing flips as its height crosses 0, as a moon's libration makes it
+// do); and a fainter quarter-circle for each other body of the sky chosen
+// (the moons), from the ring up or down to its height, its marker at its end.
 // Positions are in radii of the body shown, in its frame, as the guides'
 // (see bodyGuides.ts).
 import {
@@ -50,7 +52,7 @@ const MARKER = 0.03;
 export const ARC_NUMBERS = [-90, -60, -30, 0, 30, 60, 90];
 const Y = new Vector3(0, 1, 0);
 
-/** A body's quarter-circle and marker, kept while it is chosen. */
+/** A body's arc (the host's half-circle, a moon's quarter-circle) and marker, kept while it is chosen. */
 interface BodyArc {
   arc: Line;
   marker: Mesh;
@@ -70,6 +72,7 @@ export class RotationDial {
   private readonly sun: Mesh;
   private readonly bodyArcs = new Map<string, BodyArc>();
   private readonly quarter: BufferGeometry;
+  private readonly half: BufferGeometry;
   private readonly marker: SphereGeometry;
   private readonly materials: { material: LineBasicMaterial | MeshBasicMaterial; weight: number }[] = [];
   private readonly geometries: BufferGeometry[] = [];
@@ -114,18 +117,19 @@ export class RotationDial {
     );
 
     // The half-circle from −90° to +90° of height, ticks every 10°, long every 30°.
-    const half: number[] = [];
+    const halfList: number[] = [];
     for (let i = 0; i <= CIRCLE_POINTS / 2; i++) {
       const a = -Math.PI / 2 + (Math.PI * i) / (CIRCLE_POINTS / 2);
-      half.push(Math.cos(a), Math.sin(a), 0);
+      halfList.push(Math.cos(a), Math.sin(a), 0);
     }
+    this.half = points(halfList);
     const arcTicks: number[] = [];
     for (let degrees = -90; degrees <= 90; degrees += 10) {
       const a = (degrees * Math.PI) / 180;
       const length = degrees % 30 === 0 ? LONG_TICK : SHORT_TICK;
       arcTicks.push(Math.cos(a), Math.sin(a), 0, Math.cos(a) * (1 + length), Math.sin(a) * (1 + length), 0);
     }
-    this.sunArc.add(new Line(points(half), line(SUN_COLOUR, 0.7)), new LineSegments(points(arcTicks), line(SUN_COLOUR, 0.7)));
+    this.sunArc.add(new Line(this.half, line(SUN_COLOUR, 0.7)), new LineSegments(points(arcTicks), line(SUN_COLOUR, 0.7)));
 
     // A body's quarter-circle, from the ring up to the zenith (flipped for one below the equator).
     const up: number[] = [];
@@ -163,7 +167,7 @@ export class RotationDial {
 
   /**
    * Places the ring (0° at state.zero), the pointer, the star's
-   * half-circle and the quarter-circles of `state.bodies` (those chosen);
+   * half-circle and the arcs of `state.bodies` (those chosen);
    * `radius` in body radii.
    */
   set(state: DialState, radius: number): void {
@@ -226,7 +230,7 @@ export class RotationDial {
       if (!arc) {
         const colour = body.host ? HOST_COLOUR : MOON_COLOUR;
         arc = {
-          arc: new Line(this.quarter, this.material(new LineBasicMaterial({ color: colour }), body.host ? 0.55 : 0.4)),
+          arc: new Line(body.host ? this.half : this.quarter, this.material(new LineBasicMaterial({ color: colour }), body.host ? 0.55 : 0.4)),
           marker: new Mesh(this.marker, this.material(new MeshBasicMaterial({ color: colour }), body.host ? 0.85 : 0.7)),
           point: null,
         };
@@ -239,7 +243,9 @@ export class RotationDial {
       if (!body.bearing) continue;
       const bearing = new Vector3(...body.bearing);
       arc.arc.rotation.set(0, Math.atan2(-bearing.z, bearing.x), 0);
-      arc.arc.scale.set(radius, radius * (body.altitude < 0 ? -1 : 1), radius);
+      // The host's half-circle spans both sides of the ring; a moon's quarter
+      // is flipped below it.
+      arc.arc.scale.set(radius, radius * (!body.host && body.altitude < 0 ? -1 : 1), radius);
       arc.point = this.onArc(bearing, body.altitude, radius);
       arc.marker.position.copy(arc.point);
       arc.marker.scale.setScalar(MARKER * radius * (body.host ? 1 : 0.8));
