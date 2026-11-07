@@ -177,6 +177,13 @@ const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodpla
 
 /** How far above the equator the camera looks at the rotation dial from, degrees. */
 const DIAL_ELEVATION = 20;
+/** How long the camera takes to rise to it, ms. */
+const DIAL_TRAVEL_MS = 700;
+/** A camera's position and the point it looks at. */
+interface Pose {
+  position: Vector3;
+  target: Vector3;
+}
 const MORPH_MS = 1200;
 /** How far the spin axes reach out of a body, in its radii (see setSpinAxes). */
 const SPIN_AXIS_LENGTH = 1.5;
@@ -690,6 +697,8 @@ export class PlanetView {
    * `centreFrom` to `centreTo`, from `altitude` above the globe to
    * `mapHeight` above the map (see viewTransfer.ts).
    */
+  /** The camera's travel to the dial's viewpoint under way (see travelTo), or none. */
+  private travel: { from: Pose; to: Pose; start: number } | null = null;
   private animation: {
     from: number;
     to: number;
@@ -946,6 +955,11 @@ export class PlanetView {
     canvas.addEventListener('pointerenter', this.handlePointerEnter);
     canvas.addEventListener('pointerleave', this.handlePointerLeave);
     this.controls.addEventListener('change', this.handleControlsChange);
+    // A press, the wheel or a key ends the travel at once, the camera where
+    // it was going (as the star view's flights).
+    canvas.addEventListener('pointerdown', this.endTravel, { capture: true });
+    canvas.addEventListener('wheel', this.endTravel, { capture: true, passive: true });
+    window.addEventListener('keydown', this.endTravel);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
@@ -1783,6 +1797,7 @@ export class PlanetView {
     if (mode === this.mode) {
       return;
     }
+    this.travel = null;
     // The place at the centre of the screen stays there, at an equivalent
     // zoom: the camera follows it through the morph.
     const centre = this.viewCentre();
@@ -1942,13 +1957,23 @@ export class PlanetView {
     if (this.animation) {
       this.animation.follow = false;
     }
+    // With the dial, to the whole planet from a little above the equator
+    // (see setRotationDial), the camera travelling there.
+    if (this.dialState && this.mode === 'globe') {
+      const up = (DIAL_ELEVATION * Math.PI) / 180;
+      this.camera.up.set(0, 1, 0);
+      this.travelTo({
+        position: new Vector3(0, Math.sin(up) * GLOBE_DISTANCE, Math.cos(up) * GLOBE_DISTANCE),
+        target: new Vector3(0, 0, 0),
+      });
+      return;
+    }
+    this.endTravel();
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, 0, this.mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(0, 0, 0);
     this.controls.update();
-    // With the dial, from a little above the equator (see setRotationDial).
-    if (this.dialState && this.mode === 'globe') this.raiseOverEquator(90);
   }
 
   getCamera(): CameraState {
@@ -1967,6 +1992,7 @@ export class PlanetView {
    */
   setCamera(state: CameraState): void {
     this.requestRender();
+    this.travel = null;
     this.applyingCamera = true;
     if (state.mode !== this.mode) {
       this.setMode(state.mode);
@@ -2007,6 +2033,10 @@ export class PlanetView {
     this.canvas.removeEventListener('pointerenter', this.handlePointerEnter);
     this.canvas.removeEventListener('pointerleave', this.handlePointerLeave);
     this.controls.removeEventListener('change', this.handleControlsChange);
+    this.canvas.removeEventListener('pointerdown', this.endTravel, { capture: true });
+    this.canvas.removeEventListener('wheel', this.endTravel, { capture: true });
+    window.removeEventListener('keydown', this.endTravel);
+    this.travel = null;
     this.controls.dispose();
     this.tiles.dispose();
     this.disposeTexture();
@@ -2138,6 +2168,7 @@ export class PlanetView {
     // continue until it has settled. OrbitControls' own change threshold is
     // too coarse near the surface, where its residue would show as a jump at
     // the next interaction: compare the camera itself.
+    const travelling = !following && this.stepTravel(now);
     if (!following) {
       this.controls.update();
       this.keepAboveGround();
@@ -2152,7 +2183,7 @@ export class PlanetView {
     }
     // A lower resolution while the view moves; the frame after it settles
     // is drawn at full resolution again.
-    if (moving || this.animation) {
+    if (moving || this.animation || travelling) {
       this.lastMotion = now;
     }
     const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion, this.quality);
@@ -2170,7 +2201,7 @@ export class PlanetView {
       this.hoverPending = false;
       this.onHover(this.hovering ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
     }
-    if (moving || this.animation || settling) {
+    if (moving || this.animation || settling || travelling) {
       this.schedule();
     }
   };
@@ -2464,7 +2495,10 @@ export class PlanetView {
     this.requestRender();
   }
 
-  /** Lifts the camera to DIAL_ELEVATION above the equator when it is closer than `within` degrees to it. */
+  /**
+   * Has the camera rise to DIAL_ELEVATION above the equator, keeping its
+   * distance and azimuth, when it is closer than `within` degrees to it.
+   */
   private raiseOverEquator(within: number): void {
     const target = this.controls.target;
     const offset = this.camera.position.clone().sub(target);
@@ -2475,14 +2509,64 @@ export class PlanetView {
     const flat = Math.hypot(offset.x, offset.z);
     const [x, z] = flat > 1e-9 ? [offset.x / flat, offset.z / flat] : [0, 1];
     const up = (DIAL_ELEVATION * Math.PI) / 180;
-    this.camera.position.set(
-      target.x + x * Math.cos(up) * distance,
-      target.y + Math.sin(up) * distance,
-      target.z + z * Math.cos(up) * distance,
-    );
-    this.camera.lookAt(target);
-    this.controls.update();
+    this.travelTo({
+      position: new Vector3(
+        target.x + x * Math.cos(up) * distance,
+        target.y + Math.sin(up) * distance,
+        target.z + z * Math.cos(up) * distance,
+      ),
+      target: target.clone(),
+    });
   }
+
+  /** Sends the camera to `to` along the arc round its target, eased over DIAL_TRAVEL_MS (see stepTravel). */
+  private travelTo(to: Pose): void {
+    this.travel = null;
+    const from: Pose = { position: this.camera.position.clone(), target: this.controls.target.clone() };
+    if (from.position.distanceToSquared(to.position) < 1e-12 && from.target.distanceToSquared(to.target) < 1e-12) return;
+    this.travel = { from, to, start: performance.now() };
+    this.requestRender();
+  }
+
+  /** Moves the camera along the travel, eased in and out; true while it goes on. */
+  private stepTravel(now: number): boolean {
+    const travel = this.travel;
+    if (!travel) return false;
+    // A morph that moves the camera itself takes over.
+    if (this.animation?.follow) {
+      this.travel = null;
+      return false;
+    }
+    const u = Math.max(0, Math.min(1, (now - travel.start) / DIAL_TRAVEL_MS));
+    const eased = u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2;
+    const { from, to } = travel;
+    const target = new Vector3().lerpVectors(from.target, to.target, eased);
+    const a = from.position.clone().sub(from.target);
+    const b = to.position.clone().sub(to.target);
+    const distance = a.length() + (b.length() - a.length()) * eased;
+    // The direction turns by the shortest arc, at a steady rate in the eased time.
+    const turn = new Quaternion().setFromUnitVectors(a.clone().normalize(), b.clone().normalize());
+    const direction = a.normalize().applyQuaternion(new Quaternion().slerp(turn, eased));
+    this.controls.target.copy(target);
+    this.camera.position.copy(target).addScaledVector(direction, distance);
+    this.camera.lookAt(target);
+    this.dirty = true;
+    if (u < 1) return true;
+    this.travel = null;
+    return false;
+  }
+
+  /** Ends the travel under way, the camera where it was going. */
+  private readonly endTravel = (): void => {
+    const travel = this.travel;
+    if (!travel) return;
+    this.travel = null;
+    this.camera.position.copy(travel.to.position);
+    this.controls.target.copy(travel.to.target);
+    this.camera.lookAt(travel.to.target);
+    this.controls.update();
+    this.requestRender();
+  };
 
   private disposeSkyBodies(): void {
     for (const { mesh, maps, rings } of this.skyBodies) {
