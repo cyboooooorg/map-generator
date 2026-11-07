@@ -30,7 +30,7 @@
 //! many impactors reach it (Horner & Jones 2008; see [`impact_factor`]).
 use crate::noise::{smoothstep, stream, stream_seed};
 use crate::star::{
-    StarValues, draw_eccentricity, equilibrium_k, mean_flux_factor, values, year_days,
+    StarValues, draw_eccentricity, equilibrium_k, mean_temperature_factor, values, year_days,
 };
 use crate::world::WorldParams;
 use rand::rngs::StdRng;
@@ -469,8 +469,8 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
     let mass_earth = (track.mass * SUN_EARTH_MASSES) as f32;
     let orbit_au = track.orbit as f32;
     let eccentricity = track.eccentricity as f32;
-    let flux = star.luminosity / (orbit_au * orbit_au) * mean_flux_factor(eccentricity);
-    let equilibrium = equilibrium_k(flux);
+    let flux = star.luminosity / (orbit_au * orbit_au);
+    let equilibrium = equilibrium_k(flux) * mean_temperature_factor(eccentricity);
     // Heat left from formation: Jupiter's internal temperature is about
     // 100 K; less for smaller giants, little for ice giants.
     let internal = match kind {

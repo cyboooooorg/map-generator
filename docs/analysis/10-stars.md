@@ -42,7 +42,12 @@ Taken with the user:
 Stars are classed by their surface temperature (O B A F G K M, each
 split 0–9; the Sun is G2V, `V` meaning a main-sequence dwarf). On the
 main sequence, mass sets everything else: luminosity grows roughly as
-`M^3.5–4`, the lifetime as `M / L ≈ 10 Gyr × M^−2.5`.
+`M^3.5–4`, the lifetime as `M / L ≈ 10 Gyr × M^−2.5`. That ratio
+assumes every star burns the same share of its hydrogen; fully convective
+red dwarfs (below about 0.25 M☉) burn all of it, so the app interpolates
+the lifetimes of Fraknoi et al. (2022, Table 22.1) by mass instead, with
+about 11 trillion years for the lightest star (Adams & Laughlin 1997):
+`star::lifetime_gyr`.
 
 | Type | Teff (K)      | Mass (M☉) | Radius (R☉) | Luminosity (L☉) | Lifetime   | Share of stars | Colour (seen)        |
 | ---- | ------------- | --------- | ----------- | --------------- | ---------- | -------------- | -------------------- |
@@ -343,7 +348,7 @@ Orbits were circles; they are now ellipses of eccentricity `e`, the star
 at a focus. Solar System values: Venus 0.007, Earth 0.017, Mars 0.093,
 Mercury 0.206 (the example presets use them). Without a value, `e` is
 drawn from the beta distribution fitted by Kipping (2013) to
-radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.16),
+radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.17),
 capped at 0.9; tidally locked planets get 0, their orbits circularised
 by the same tides. Over a year an elliptical orbit receives
 `1 / sqrt(1 − e²)` times the light of a circular one of the same
