@@ -38,6 +38,9 @@ describe('small bodies', () => {
     expect(5.2 - l1!.au).toBeCloseTo(0.355, 2);
     expect(l2!.au - 5.2).toBeCloseTo(0.355, 2);
     expect(l3!.angle).toBe(Math.PI);
+    // L3, from the star: a little inside the orbit, a (1 − 7μ/12).
+    expect(l3!.au).toBeCloseTo(5.2 * (1 - (7 * mu) / 12), 10);
+    expect(l3!.au).toBeLessThan(5.2);
     expect(l4!.angle).toBeCloseTo(Math.PI / 3, 10);
     expect(l5!.angle).toBeCloseTo(-Math.PI / 3, 10);
     expect([l1, l2, l3].every((p) => !p!.stable)).toBe(true);

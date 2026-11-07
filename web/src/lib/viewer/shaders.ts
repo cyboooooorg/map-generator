@@ -466,7 +466,9 @@ export const surfaceFragment = /* glsl */ `
     // Vegetation under another star ("Star light"): photosynthesis adapts
     // to the light, so leaves turn dark, near black, under red dwarfs and
     // yellow under F stars (Kiang et al. 2007). The biome map and the
-    // detail tiles only, by the share of vegetation of each biome.
+    // detail tiles only, by the share of vegetation of each biome. The
+    // dark tint is a third as bright as the colour it replaces, since
+    // such leaves absorb the whole visible range; the gold keeps it.
     if ((uVegShift.x > 0.0 || uVegShift.y > 0.0) && uHasBiomes > 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
       float id = floor(texture2D(uBiomes, vec2(vUv.x, 1.0 - vUv.y)).r * 255.0 + 0.5);
       float plants = uVegetation[int(min(id, 63.0))];
