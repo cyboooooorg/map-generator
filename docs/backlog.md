@@ -546,3 +546,57 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   bright rings, and plume rings round an active icy moon; drawn faint in
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
+
+## 20. Relief science, what remains
+
+- **Status:** todo
+- **Problem:** the science articles on craters, plates and mountains
+  (2026-11-07) list departures of the generator from the science. The
+  fixes of 2026-11-07 (rocky gravity, `1/g` relief, crater depths, peak
+  rings, diffusion, size law, saturation) leave these, each needing a
+  model the app does not have yet.
+- **Craters:**
+  - The transition from simple to complex craters follows gravity only:
+    a target's strength would move it (Mercury about 12 km where the app
+    gives 6.6, Earth 3 to 5 km against 2.5, Barnouin et al. 2012). Icy
+    moons turn complex far sooner than rock at the same gravity (2 to
+    3 km on Ganymede, Schenk 1991, 2002, a number read only in secondary
+    sources), so `icy-moon` worlds get a transition several times too
+    large. Done when the transition reads a strength per crust (rock,
+    volatile-rich rock, ice) from a checked source.
+  - No multi-ring basins (Orientale): their onset does not scale as
+    `1/g` and depends on a weak layer under the surface (Melosh &
+    Ivanov 1999), with no rule to scale it from the Moon.
+  - The lunar chronology on most worlds: `[geology] impact_ratio` and
+    `crater_scale` carry a body's flux and crater size against the
+    Moon's, set for `mars-like` from Hartmann's isochrons (2.6 and
+    0.751). Mercury, Venus and Earth keep 1: Le Feuvre & Wieczorek 2011
+    (doi:10.1016/j.icarus.2011.03.010) could not be read (paywall, HAL
+    behind a bot wall), and Marchi et al. 2009 give Mercury's production
+    function only in figures. A world of another system keeps the
+    Moon's flux, scaled by its giants and belts and by locking; a
+    general rule would need the flux of impactors and their speeds per
+    orbit (gravitational focusing included).
+- **Plates:**
+  - Slab pull sets the present speed of each plate from its sinking
+    edge (2026-11-07), on one pass over the present boundary cells; at
+    another epoch that pass is extra, about 5 % of a plate map (0.24 s
+    at −100 Ma). The drift's other stages keep drawn speeds: setting
+    theirs too means finding each stage's boundaries, a pass per stage.
+    The plate count does not follow the planet's size: no source scales
+    it (Bird 2003 counts Earth's).
+  - Isostasy: continents float as a platform and the sea floor is
+    bounded between the shelf and Parsons & Sclater's old floor
+    (`generation::floating`, 2026-11-07), calibrated on Earth's
+    hypsometry (ETOPO 2022). What remains: no crustal-thickness field
+    (the platform's height is a calibration rather than Airy's balance
+    of a thickness), no flexure (volcanoes and ranges do not bend the
+    lithosphere into moats), and the platform floats at the waterline,
+    so a sea level lowered on a world exposes platform, not old basins.
+  - The age of old ocean floor is unknown: floor older than about 18 Ma
+    lies between 4 and 6.4 km by the noise (`generation::floating`), not
+    by its age.
+- **Small bodies:** their noise relief is capped (8 % of the radius;
+  9 km on airless stagnant bodies, ice 0.4 of rock), but an icy body's
+  simple craters are still rock's bowls, under rock's transition (see
+  the craters' first point).

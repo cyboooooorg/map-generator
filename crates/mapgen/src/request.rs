@@ -527,6 +527,7 @@ impl WorldRequest {
             },
             given_rings: None,
             impact_factor: None,
+            gravity: None,
         };
         // Moons asked for: the world is not a giant's moon, which keeps none
         // (an error when that is asked for too).
@@ -602,6 +603,10 @@ impl WorldRequest {
         {
             params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
         }
+        // The world decides whether it has plates (its size, water and
+        // star), applied to its preset so that `world.json` tells the
+        // regime it was generated with.
+        params.planet.geology.regime = crate::geology::regime_of(&params);
         if let Some(fraction) = land_fraction
             && !giant
         {
@@ -726,6 +731,34 @@ mod tests {
         // More land needs a lower sea.
         assert!(level(0.6) < level(0.3));
         assert!(level(0.3) < level(0.1));
+        // And the world gets the land asked for.
+        for fraction in [0.1, 0.29, 0.6] {
+            let mut params = WorldRequest {
+                width: Some(256),
+                height: Some(128),
+                ..request(fraction)
+            }
+            .resolve(&mut rand::rng())
+            .unwrap()
+            .params;
+            params.erosion = 0.0;
+            let world = crate::generation::generate(&params).world;
+            let waterline = params.sea_level + params.planet.rules.waterline;
+            let grid = params.grid();
+            let (mut land, mut all) = (0.0, 0.0);
+            for (i, &e) in world.elevation.iter().enumerate() {
+                let w = grid.latitude((i / world.width as usize) as u32).cos();
+                all += w;
+                if e > waterline {
+                    land += w;
+                }
+            }
+            let share = land / all;
+            assert!(
+                (share - f64::from(fraction)).abs() < 0.03,
+                "{fraction}: {share}"
+            );
+        }
     }
 
     #[test]

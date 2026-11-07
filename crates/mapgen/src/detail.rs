@@ -430,7 +430,7 @@ impl DetailWorld {
         // Snow, ice, lava and sand are smooth surfaces (see `roughness`);
         // small bodies are flattened as their base relief is.
         let amplitude = DETAIL_AMPLITUDE
-            * crate::generation::relief_share(w.params.circumference_km)
+            * crate::generation::relief_share(&w.params)
             * (1.0 + MOUNTAIN_BOOST * high)
             * bilinear(&Roughness(&w.biomes), w.width, w.height, x, y);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;

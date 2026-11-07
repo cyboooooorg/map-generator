@@ -6,7 +6,11 @@ import type { Regime } from "./Regime";
  */
 export type Geology = { 
 /**
- * Tectonic regime. Recorded for now: it does not shape the relief yet.
+ * Tectonic regime. `plates` gives the world tectonic plates whose
+ * boundaries shape its relief (`crate::plates`) and, with liquid
+ * water, a carbon cycle that steadies its climate; the others shape it
+ * through the age of its surface and its craters. A plate preset's
+ * world can lose its plates (see [`regime_of`]).
  */
 regime: Regime, 
 /**
@@ -20,4 +24,18 @@ wet_until: number,
  * When lava flooded large impact basins, `[start, end]` in Ga before
  * present (the Moon's maria: 3.9 to 3.1), or none.
  */
-maria: [number, number] | null, };
+maria: [number, number] | null, 
+/**
+ * Impactors hitting the body per unit area and time, against the
+ * Moon: 1 for a world of any other system, whose rate comes from its
+ * giants and belts. Set for Solar System look-alikes where a source
+ * gives it (`mars-like`: 2.6, Hartmann's Mars/Moon `R_bolide` for
+ * asteroids, PSI isochron page).
+ */
+impact_ratio?: number, 
+/**
+ * Diameter of the crater the same impactor digs on the body, against
+ * the Moon (impact speed and gravity): 1 elsewhere; `mars-like`
+ * 0.751 (Hartmann, as above).
+ */
+crater_scale?: number, };

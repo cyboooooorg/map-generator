@@ -142,9 +142,10 @@ of a seed does not change until step 5.
 ### Step 1: the moon system (Rust)
 
 - **Module `src/moons.rs`:** `MoonSystem::draw(params, star)` from a new
-  noise stream (`stream::MOONS`, 26). The planet's mass follows from its
-  size at Earth's density (as `gravity_modifier` does), icy bodies
-  lighter.
+  noise stream (`stream::MOONS`, 26). The planet's mass followed from
+  its size at Earth's density (as `gravity_modifier` did); since
+  2026-11-07 both follow the mass–radius relation of rocky planets
+  (`WorldParams::mass_earth`), icy bodies lighter.
 - **Channels and odds** (constants to calibrate, see section 2):
   - giant impact: 1 in 12 for planets above about 0.3 Earth radii, mass
     ratio 0.005–0.03 (the Moon: 0.0123); on small worlds (below about
@@ -180,9 +181,11 @@ it off. Over 4 000 seeds:
 | Earth-sized, at 1 AU      | 63 %    | 21 % | 16 %        | 8.8 %      | none   |
 | Pluto-sized, at 30 AU     | 37 %    | 50 % | 13 %        | 48 %       | 10 %   |
 
-- The planet's mass follows from its size at Earth's density, as its
-  gravity does: a small icy world is then heavier than Pluto (1.85
-  g/cm³), so binaries are rarer than a Pluto density would give.
+- The planet's mass followed from its size at Earth's density, as its
+  gravity did: a small icy world was then heavier than Pluto (1.85
+  g/cm³), so binaries are rarer than a Pluto density would give. Since
+  2026-11-07 it follows the mass–radius relation of rocky planets,
+  never less dense than the Moon (3.34 g/cm³), still heavier than Pluto.
 - Each origin draws all of its values whatever its outcome, so one
   origin's odds never shift another's draws; the planet's day is drawn
   before the tidal-locking test, so a world's moons do not depend on
