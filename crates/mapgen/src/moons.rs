@@ -870,21 +870,37 @@ const SHAPE_BUMPS: f64 = 0.12;
 /// for 4 Ga, under the planet's star, its map as many pixels per km as the
 /// planet's (at least [`MOON_MIN_WIDTH`] wide, at most the planet's
 /// width). The long axis of an irregular moon points at longitude 180°,
-/// the centre of its map: towards its planet, which tides lock it to.
+/// the centre of its map: towards its planet, which tides lock it to. Its
+/// gravity is the moon's own, from the density it was drawn with.
 pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
-    small_body_params(
-        planet,
-        moon.composition,
-        moon.radius_km,
-        moon.seed,
-        (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
-    )
+    WorldParams {
+        gravity: Some(moon.gravity),
+        ..small_body_params(
+            planet,
+            moon.composition,
+            moon.radius_km,
+            moon.seed,
+            (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
+        )
+    }
+}
+
+/// Bulk density of a small body of `composition` whose own is not given,
+/// g/cm³: the giants' regular moons' (rock 3.3, ice and rock 1.9).
+fn small_body_density(composition: Composition) -> f64 {
+    match composition {
+        Composition::Rock => 3.3,
+        Composition::Ice => 1.9,
+    }
 }
 
 /// The parameters of a small airless body near the world `planet`, as a
 /// world of its own: a rocky or icy moon of `radius_km` (its map as wide
 /// as its size makes it on the planet's scale, within limits), its seed,
 /// and its shape (semi-axes over the mean radius) when it is not round.
+/// Its gravity is that of its radius at the density of its composition
+/// ([`small_body_density`]); a caller that drew another density sets its
+/// own.
 pub fn small_body_params(
     planet: &WorldParams,
     composition: Composition,
@@ -932,6 +948,16 @@ pub fn small_body_params(
         host: crate::exomoon::HostMode::None,
         given_rings: None,
         impact_factor: None,
+        // G ρ (4/3 π r³) / r², as the moons' cards have it.
+        gravity: Some(
+            (G * 4.0 / 3.0
+                * PI
+                * f64::from(radius_km)
+                * small_body_density(composition)
+                * 1e12
+                * 1000.0
+                / 9.81) as f32,
+        ),
     }
 }
 
@@ -1051,6 +1077,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            gravity: None,
         }
     }
 

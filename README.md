@@ -99,7 +99,7 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 - **Debris** (Phobos and Deimos): one or two small irregular moons close in (2.2 to 9 planet radii) on one planet in five without a large moon, sized like Phobos around Mars, scaled with the planet.
 - **Captured**: one to three small irregular moons (1 to 30 km) on one planet in seven, far out (0.05 to 0.3 Hill radii), eccentric, inclined, half of them retrograde.
 
-Moons orbit beyond the Roche limit (fluid for round moons, rigid for small ones) and within a third of the Hill radius at periapsis (half for retrograde ones); one closer than eight mutual Hill radii to a larger moon is dropped. Planets tidally locked to their star have none: tides bring every moon down. Moons below 900 km across (rock) or 400 km (ice, beyond an equilibrium temperature of 150 K) get three unequal axes. Each moon migrates by the planet's tides: it recedes above the synchronous orbit (the planet's day is drawn from 12 to 36 hours), falls in below it or on a retrograde orbit, stays put in a binary, and hardly moves far out. The planet's mass follows from its size at Earth's density, as its gravity does. On Earth-sized planets, about 63 % have no moon, 21 % one and 16 % two or more. `world.json` stores the system under `moons` (each moon's origin, composition, radius and axes, mass ratio, density, gravity, orbit, period, tidal locking, migration, apparent size from the planet and barycentre; the planet's day, synchronous orbit and Hill radius), and the CLI prints one line on them. See `src/moons.rs`.
+Moons orbit beyond the Roche limit (fluid for round moons, rigid for small ones) and within a third of the Hill radius at periapsis (half for retrograde ones); one closer than eight mutual Hill radii to a larger moon is dropped. Planets tidally locked to their star have none: tides bring every moon down. Moons below 900 km across (rock) or 400 km (ice, beyond an equilibrium temperature of 150 K) get three unequal axes. Each moon migrates by the planet's tides: it recedes above the synchronous orbit (the planet's day is drawn from 12 to 36 hours), falls in below it or on a retrograde orbit, stays put in a binary, and hardly moves far out. For its moons, the planet's mass follows from its size at Earth's density; its gravity, and the mass on its card, follow the mass–radius relation of rocky planets (see [Gravity modifier](#gravity-modifier--landscape-relief)). On Earth-sized planets, about 63 % have no moon, 21 % one and 16 % two or more. `world.json` stores the system under `moons` (each moon's origin, composition, radius and axes, mass ratio, density, gravity, orbit, period, tidal locking, migration, apparent size from the planet and barycentre; the planet's day, synchronous orbit and Hill radius), and the CLI prints one line on them. See `src/moons.rs`.
 
 The moons shape their planet in two ways. Its drawn axial tilt ranges wider without a large moon (see **axial-tilt** above). And its tides, from the moons and the star (relative to Earth's, the Moon's and the Sun's together: a height in planet radii of `mass ratio × (radius / distance)³`, times the planet's size), set the width of its tidal flats: the preset's `shore_width_km` is multiplied by the fourth root of the tides, between 0.5 and 2 (Earth with the Moon keeps its 40 km; without one, the Sun alone gives 0.31 of Earth's tides and 30 km). A planet locked to its star has no tides that come and go (0.5), nor does a binary from its moon, locked face to face with it. `world.json` stores the tides and whether the tilt is steadied under `moons`, and the preset it stores has the shore width as generated. In the viewer, a binary's moon hangs over the same point of its planet, at longitude 180°. A world that is itself the moon of a giant (see **host**) turns with the giant, not with its star: its equator lies in the giant's equatorial plane and the giant holds its spin axis, so its seasons follow the giant's tilt, drawn in the usual 5 to 40° (never left free); its star's tides come and go with its month; and of the giant's huge tidal bulge, still on a world locked to it, only the part its slightly eccentric orbit swings (about `3e` of it, as Io's flexes) comes and goes, from 1.5 to 18 times Earth's tides around a Jupiter, so its tidal flats are wide.
 
@@ -712,17 +712,13 @@ This multiplies every noise coordinate, effectively zooming in or out on the sph
 
 ### Gravity modifier — landscape relief
 
-Assuming a **constant-density rocky planet**, mass scales with volume and surface gravity scales with radius:
+A rocky planet compresses its own rock: the larger it is, the denser. Its mass follows the mass–radius relation of rocky planets fitted to Earth's interior (Zeng et al. 2016, [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127), Earth's composition, the coefficient taken as 1 so that Earth's size gives Earth's mass), and a body too small to compress itself keeps the density of uncompressed rock, the Moon's (3.344 g/cm³, NASA):
 
 ```text
-M ∝ r³     g = GM/r²  ∝  r  ∝  C
+r = C / C⊕     M = r^3.7 (but ρ ≥ 3.344 / 5.513 ρ⊕)     g = GM/r²  ∝  r^1.7
 ```
 
-So:
-
-```text
-gravity_modifier = circumference_km / C⊕
-```
+So `gravity_modifier = max(r^1.7, 0.607 r)`: about 0.34 g for a Mars-sized world (Mars: 0.38, where Earth's density gave 0.53), 0.92 for Venus's size (0.90), 0.165 for the Moon's (0.165) and 3.2 at twice Earth's size. Mercury, with its large iron core, has 0.38 g where this gives 0.20. A moon generated as a world has its own gravity instead, from the density its system drew for it (the gravity on its card, `gravity` in its parameters), and a giant its mass over its radius squared. The planet card's mass and gravity follow the same rule.
 
 Higher gravity means tectonic plates are pressed flatter and mountains cannot stand as tall. This is encoded in the **mountain blend coefficient**:
 
@@ -734,8 +730,8 @@ The square-root softens the curve so extreme planets remain visually interesting
 
 | Circumference | gravity  | mountain_blend | Relief                  |
 | ------------- | -------- | -------------- | ----------------------- |
-| 20 000 km     | ≈ 0.50 g | ≈ 0.49         | Dramatic, jagged peaks  |
+| 20 000 km     | ≈ 0.31 g | ≈ 0.63         | Dramatic, jagged peaks  |
 | 40 075 km     | 1.00 g   | 0.35           | Earth baseline          |
-| 80 000 km     | ≈ 2.00 g | ≈ 0.25         | Flat, rounded landscape |
+| 80 000 km     | ≈ 3.24 g | ≈ 0.19         | Flat, rounded landscape |
 
 Both values are written into `raw_data/world.json` as `circumference_km` and `gravity_modifier` for downstream use.

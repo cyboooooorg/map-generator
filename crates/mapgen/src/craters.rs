@@ -1499,6 +1499,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            gravity: None,
         }
     }
 

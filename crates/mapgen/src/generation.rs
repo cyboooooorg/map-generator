@@ -1313,6 +1313,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            gravity: None,
         }
     }
 
@@ -1370,7 +1371,7 @@ mod tests {
     }
 
     #[test]
-    fn gravity_is_earth_baseline_and_clamped() {
+    fn rocky_gravity_follows_the_mass_radius_relation() {
         let g = |circumference_km| {
             WorldParams {
                 circumference_km,
@@ -1379,8 +1380,41 @@ mod tests {
             .gravity_modifier()
         };
         assert!((g(EARTH_CIRCUMFERENCE_KM) - 1.0).abs() < 1e-6);
-        assert_eq!(g(1.0), 0.1);
-        assert_eq!(g(1e9), 5.0);
+        // Equatorial circumferences (NASA): Mars 0.38 g (Earth's density
+        // gave 0.53), Venus 0.90, the Moon 0.165.
+        let mars = g(21_344.0);
+        assert!((0.32..0.40).contains(&mars), "{mars}");
+        let venus = g(38_025.0);
+        assert!((0.88..0.95).contains(&venus), "{venus}");
+        let moon = g(10_921.0);
+        assert!((moon - 0.165).abs() < 0.005, "{moon}");
+        // Heavier with size, faster than the radius.
+        assert!(g(2.0 * EARTH_CIRCUMFERENCE_KM) > 3.0);
+    }
+
+    #[test]
+    fn a_moon_world_has_the_gravity_of_its_card() {
+        // The moons of small planets, which often have one (rocky and icy).
+        let mut seen = 0;
+        for seed in 0..40 {
+            let planet = WorldParams {
+                circumference_km: 20_000.0,
+                ..params(seed, "terran")
+            };
+            let Some(system) = crate::moons::MoonSystem::draw(&planet) else {
+                continue;
+            };
+            for moon in &system.moons {
+                let world = crate::moons::body_params(&planet, moon);
+                assert_eq!(world.gravity_modifier(), moon.gravity);
+                // Not the rocky planets' rule for its size.
+                let rule =
+                    crate::world::rocky_gravity(world.circumference_km / EARTH_CIRCUMFERENCE_KM);
+                assert_ne!(world.gravity_modifier(), rule);
+                seen += 1;
+            }
+        }
+        assert!(seen > 5, "{seen}");
     }
 
     #[test]

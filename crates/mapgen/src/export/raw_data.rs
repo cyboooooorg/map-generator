@@ -903,6 +903,10 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             dust: Vec::new(),
         }),
         impact_factor: meta.impact_factor,
+        // The gravity it was generated with (worlds made before the
+        // mass–radius relation keep theirs), so its epochs and detail tiles
+        // draw the craters it was drawn with.
+        gravity: Some(meta.gravity_modifier),
     };
     let l = &meta.layers;
     let infos = [
@@ -1088,6 +1092,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            gravity: None,
         })
         .world;
         let world_dir =

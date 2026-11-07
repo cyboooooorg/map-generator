@@ -109,4 +109,12 @@ given_rings?: GivenRings,
  * absent for every other world, whose rate comes from the giants its
  * seed draws.
  */
-impact_factor?: number, };
+impact_factor?: number, 
+/**
+ * Surface gravity relative to Earth's, when the body's own is known:
+ * a moon's, from the density its system drew for it (the gravity of
+ * its card), or a reloaded world's, as it was generated. Absent for
+ * every other world, whose gravity follows from its size (see
+ * [`WorldParams::gravity_modifier`]).
+ */
+gravity?: number, };

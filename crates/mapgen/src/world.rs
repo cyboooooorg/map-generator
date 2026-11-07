@@ -79,20 +79,70 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub impact_factor: Option<f32>,
+    /// Surface gravity relative to Earth's, when the body's own is known:
+    /// a moon's, from the density its system drew for it (the gravity of
+    /// its card), or a reloaded world's, as it was generated. Absent for
+    /// every other world, whose gravity follows from its size (see
+    /// [`WorldParams::gravity_modifier`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub gravity: Option<f32>,
+}
+
+/// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &
+/// Jacobsen 2016, doi:10.3847/0004-637X/819/2/127: `R/R⊕ = (1.07 − 0.21
+/// CMF) (M/M⊕)^(1/3.7)`, fitted to Earth's interior model PREM for 1 to
+/// 8 Earth masses). At Earth's core mass fraction (0.325) the coefficient
+/// is 1.002: it is taken as 1, so that a world of Earth's size has Earth's
+/// mass and gravity. Below 1 Earth mass the fit is extrapolated, down to
+/// [`UNCOMPRESSED_ROCK_DENSITY`].
+const ROCKY_MASS_RADIUS_EXPONENT: f32 = 3.7;
+/// Bulk density of a rocky body too small to compress its own rock,
+/// relative to Earth's: the Moon's 3.344 g/cm³ over Earth's 5.513 (NASA
+/// planetary fact sheets). At small masses the density of a planet tends
+/// to that of its uncompressed material (Seager et al. 2007,
+/// doi:10.1086/521346: "for Ms ≪ 1, the EOS reduces to ρs = 1"). The
+/// compressed density of [`ROCKY_MASS_RADIUS_EXPONENT`] falls to it at
+/// 0.48 Earth radii.
+const UNCOMPRESSED_ROCK_DENSITY: f32 = 3.344 / 5.513;
+
+/// Surface gravity of a rocky body of `radius` Earth radii, relative to
+/// Earth's: from its mass, `M = R^3.7` (Zeng et al. 2016), and never less
+/// dense than uncompressed rock (the Moon's density). Mars's size gives
+/// 0.34 (Mars: 0.38, NASA), the Moon's 0.165 (0.165), Venus's 0.92 (0.90).
+/// Mercury, with its large iron core, has 0.38 where this gives 0.20.
+pub fn rocky_gravity(radius: f32) -> f32 {
+    let radius = radius.max(0.0);
+    let density = radius
+        .powf(ROCKY_MASS_RADIUS_EXPONENT - 3.0)
+        .max(UNCOMPRESSED_ROCK_DENSITY);
+    density * radius
 }
 
 impl WorldParams {
-    /// Approximate surface gravity relative to Earth (1.0 = Earth gravity).
+    /// Surface gravity relative to Earth's (1.0 = Earth's).
     ///
-    /// Assumes constant density, so gravity scales linearly with radius (and
-    /// thus circumference). Clamped to a plausible range for rocky planets.
+    /// The body's own when known ([`Self::gravity`]: a moon's, from its
+    /// density); a giant's from its mass and radius; a rocky world's from
+    /// its size, by the mass–radius relation of rocky planets
+    /// ([`rocky_gravity`]).
     pub fn gravity_modifier(&self) -> f32 {
+        if let Some(gravity) = self.gravity {
+            return gravity;
+        }
+        let radius = self.circumference_km / EARTH_CIRCUMFERENCE_KM;
         // A giant: its own mass over its radius squared.
         if let Some(mass) = self.giant_mass_earth {
-            let radius = self.circumference_km / EARTH_CIRCUMFERENCE_KM;
             return mass / (radius * radius);
         }
-        (self.circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0)
+        rocky_gravity(radius)
+    }
+
+    /// Mass of a rocky world, Earth masses: its gravity times its radius
+    /// squared, as [`Self::gravity_modifier`] has it.
+    pub fn mass_earth(&self) -> f32 {
+        let radius = self.circumference_km / EARTH_CIRCUMFERENCE_KM;
+        self.gravity_modifier() * radius * radius
     }
 
     /// The pixel grid with its physical dimensions.
