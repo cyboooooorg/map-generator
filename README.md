@@ -539,19 +539,22 @@ The row position for each line is derived from the equirectangular projection us
 
 ### Temperature — axial tilt
 
-The sea-level temperature of each latitude comes from the annual-mean sunlight it receives, using the classic two-term approximation (North, 1975):
+The sea-level temperature of each latitude comes from the annual-mean sunlight it receives: the daily-mean sunlight at the top of the atmosphere (Nadeau & McGehee 2021, eq. 45–47, after Sellers 1965), averaged over a circular orbit (an eccentric one multiplies every latitude by the same factor, see below):
 
 ```text
-x  = sin(latitude)
-P2(x) = (3x² − 1) / 2
-S(x)  = 1 + s2 · P2(x)        with  s2 = −5/8 · P2(cos(tilt))
+Q(φ, δ) = (4/π) (h0 sin φ sin δ + cos φ cos δ sin h0)    relative to the global mean S0/4
+cos h0  = −tan φ tan δ                                   (h0 = 0 in polar night, π in polar day)
+sin δ   = sin(tilt) sin λ                                (λ: place on the orbit from the spring equinox)
+S(φ)    = mean of Q(φ, δ(λ)) over λ
 ```
 
-`S` is then rescaled so that an Earth-like tilt (23.44°) gives `t = 0` at the poles and `t = 1` at the equator (kept within `[−0.5, 1.5]` for other tilts), and turned into an annual mean temperature in °C by a curve fitted to Earth's zonal mean:
+With no tilt the poles get no light; at Earth's tilt the equator gets 416 W/m² and the poles 172; from a tilt of 53.9° the poles get more than the equator. `S` is then rescaled so that Earth's tilt (23.44°) gives `t = 0` at the poles and `t = 1` at the equator (kept within `[−0.5, 1.5]` for other tilts), and turned into an annual mean temperature in °C by a curve fitted to Earth's zonal mean:
 
 ```text
-T = −18 + 66.2 t − 21.2 t²     (−18 °C at the poles, 12 °C at 42°, 27 °C at the equator)
+T = −18 + 56.28 t − 11.28 t²     (−18 °C at the poles, 12 °C at 42°, 27 °C at the equator)
 ```
+
+The tilt moves the light between latitudes, not its global mean, so the rows are then shifted to keep the global mean temperature of Earth's tilt (14.5 °C): in an energy balance model whose outgoing radiation is linear in temperature, the mean temperature depends only on the mean absorbed light (Budyko 1969; North et al. 1981).
 
 Temperature is not linear in sunlight: the tropics are flatter, heat being carried polewards, so a straight line would leave the mid-latitudes too cold. Land then cools by `13.5 °C` per unit of elevation above the waterline; the sea surface does not.
 
@@ -561,8 +564,8 @@ A large-scale anomaly is added on top: `18 °C × fbm` on land and `9 °C × fbm
 | ---------- | -------------------------------------------------------- |
 | 0°         | Strongest equator-to-pole contrast, large ice caps       |
 | 23.44°     | Earth baseline                                           |
-| ~54°       | Nearly uniform temperature across latitudes              |
-| 70°+       | Poles receive more sunlight over a year than the equator |
+| ~54°       | Nearly uniform sunlight across latitudes                 |
+| 54°+       | Poles receive more sunlight over a year than the equator |
 
 The atmosphere then acts on these rows. **Heat transport:** above 1 bar, dense air carries heat to the poles, so each row is pulled towards the area-weighted mean by `1 / (1 + 0.1 × (pressure − 1))` (0.45 at 13 bar, 0.1 on Venus at 92 bar); the global mean does not move, and thinner atmospheres keep Earth's contrast. **Star:** the rows are Earth's around the Sun; the host star and the orbit then move them, through the flux the planet gets relative to Earth's (`S`):
 
@@ -572,7 +575,7 @@ The atmosphere then acts on these rows. **Heat transport:** above 1 bar, dense a
 
 The Sun at 1 AU leaves the rows unchanged, so `earth-like` worlds are exactly as before.
 
-**Tidal locking:** a planet whose tidal locking time (Gladman et al. 1996, about `166 Gyr × a⁶ / M²` for an Earth-like planet) is shorter than its star's age (4.6 Gyr, or the star's whole life if shorter) always shows the same face to its star: the planets in the habitable zone of M dwarfs, and of the coolest K dwarfs. Their temperature follows the angle from the point under the star, at the centre of the map (longitude 180°, on the equator), instead of the latitude: the light is `4 cos θ` times the mean on the day side and none on the night side, turned into °C like the rows (34 °C under the star, −56 °C on the night side around the Sun's light), then evened out by the atmosphere and moved by the star as above. Winds, rain and clouds keep their latitude bands. **Greenhouse:** the preset's `[atmosphere] greenhouse` is added to every pixel (395 °C on `venus-like`, 20 °C on `volcanic`). **Liquid water:** below 0.01 bar (water's triple point is 0.006 bar) moisture is −1 everywhere, so there is no rain, no river and no lake, and erosion is off unless the request or the preset sets it (`mars-like` and `barren` keep `erosion = 1` for valleys carved when they were wetter).
+**Tidal locking:** a planet whose tidal locking time (Gladman et al. 1996, about `166 Gyr × a⁶ / M²` for an Earth-like planet) is shorter than its star's age (4.6 Gyr, or the star's whole life if shorter) always shows the same face to its star: the planets in the habitable zone of M dwarfs, and of the coolest K dwarfs. Their temperature follows the angle from the point under the star, at the centre of the map (longitude 180°, on the equator), instead of the latitude: the light is `4 cos θ` times the mean on the day side and none on the night side, turned into °C like the rows (41 °C under the star, −49 °C on the night side around the Sun's light), then evened out by the atmosphere and moved by the star as above. Winds, rain and clouds keep their latitude bands. **Greenhouse:** the preset's `[atmosphere] greenhouse` is added to every pixel (395 °C on `venus-like`, 20 °C on `volcanic`). **Liquid water:** below 0.01 bar (water's triple point is 0.006 bar) moisture is −1 everywhere, so there is no rain, no river and no lake, and erosion is off unless the request or the preset sets it (`mars-like` and `barren` keep `erosion = 1` for valleys carved when they were wetter).
 
 The `[climate]` table of the planet preset then shifts the whole temperature field (for example `+4.5 °C` on caustic worlds, `−10 °C` on `mars-like`, about −50 °C on average with its distance, whose ice thresholds are lowered to `−70 °C` to keep its caps; frozen worlds get their cold from their distance alone). Biomes use annual mean thresholds: sea ice below −13.5 °C, ice cap below −11.6 °C, boreal (tundra, taiga) below 0 °C, temperate below 12 °C and tropical above; highland is snow below 2.6 °C. They were converted from the former `[0, 1]` scale through the same curve, so each sits at the latitude it had.
 

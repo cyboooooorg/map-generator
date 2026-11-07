@@ -4,6 +4,7 @@
 //! Temperatures are annual means in degrees Celsius.
 use crate::geo::Grid;
 use rayon::prelude::*;
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 /// Earth's axial tilt in degrees, the calibration point of the temperature scale.
 pub const EARTH_AXIAL_TILT_DEG: f32 = 23.44;
@@ -21,50 +22,148 @@ pub const DEGREES_PER_UNIT: f32 = 45.0;
 const LAPSE_RATE: f32 = 0.3 * DEGREES_PER_UNIT;
 
 /// Range of insolation levels [`row_temperatures`] keeps, in units of
-/// Earth's equator-to-pole difference: beyond it the fitted curve would
-/// turn back.
+/// Earth's equator-to-pole difference: from no light at all (−0.71) to
+/// 4 times the mean under the star of a locked planet (4.87), the curve of
+/// [`sea_level_celsius`] would leave Earth's range of climates far behind.
 const INSOLATION_RANGE: (f32, f32) = (-0.5, 1.5);
 
 /// Annual mean sea-level temperature, in °C, for an insolation level `t`
-/// (0 at Earth's poles, 1 at its equator).
+/// (0 at Earth's poles, 1 at its equator, from [`annual_insolation`]).
 ///
 /// Fitted to Earth's annual zonal mean: −18 °C at the poles, 12 °C at 42°
-/// and 27 °C at the equator. Temperature is not linear in insolation (the
-/// tropics are flatter, heat being carried polewards), so a straight line
-/// would put mid-latitudes too cold.
+/// and 27 °C at the equator (calibration on Earth, no source for the
+/// curve). Temperature is not linear in insolation (the tropics are
+/// flatter, heat being carried polewards), so a straight line would put
+/// mid-latitudes too cold. Its ends: −49 °C with no light, 41 °C at 1.5.
+pub fn sea_level_celsius(t: f32) -> f32 {
+    -18.0 + 56.28 * t - 11.28 * t * t
+}
+
+/// The former curve of [`sea_level_celsius`], fitted to the two-term
+/// insolation series this module used before (`1 − 5/8 P2(cos ε) P2(sin
+/// φ)`): it converts temperatures stored on the former `[0, 1]` scale
+/// (worlds of format version 3 and older, and their presets), and must not
+/// change.
 pub fn celsius(t: f32) -> f32 {
     -18.0 + 66.2 * t - 21.2 * t * t
 }
 
-/// Second Legendre polynomial, P2(x) = (3x² − 1) / 2.
-fn p2(x: f64) -> f64 {
-    (3.0 * x * x - 1.0) / 2.0
-}
+/// Steps of the orbit [`annual_insolation`] averages over (midpoint rule):
+/// within 0.1 % of the exact mean at every latitude and tilt.
+const ORBIT_STEPS: usize = 360;
 
-/// Annual-mean insolation at `latitude` (radians) for an axial tilt (degrees),
-/// relative to the global mean.
+/// Daily-mean insolation at the top of the atmosphere at `latitude`
+/// (radians) when the star stands over latitude `declination` (radians),
+/// relative to the global annual mean `S0/4` of a circular orbit
+/// (Nadeau & McGehee 2021, eq. 45–47, after Sellers 1965,
+/// doi:10.1016/j.jmaa.2021.125129):
 ///
-/// Uses the classic two-term approximation `S(x) = 1 + s2·P2(x)` with
-/// `x = sin(latitude)` and `s2 = −5/8 · P2(cos(tilt))` (North, 1975). Low tilt
-/// makes poles much colder than the equator; above ~54° the poles receive more
-/// sunlight over a year than the equator.
-fn insolation(latitude: f64, axial_tilt_deg: f32) -> f64 {
-    let s2 = -5.0 / 8.0 * p2((axial_tilt_deg as f64).to_radians().cos());
-    1.0 + s2 * p2(latitude.sin())
+/// `Q = (4/π) (h0 sin φ sin δ + cos φ cos δ sin h0)`, `cos h0 = −tan φ tan δ`,
+///
+/// `h0` the half-length of the day as an angle (0 in polar night, π in
+/// polar day). The North Pole at the June solstice of Earth gets 1.59
+/// (541 W/m²), the equator 1.17 (397 W/m²).
+pub fn daily_insolation(latitude: f64, declination: f64) -> f64 {
+    let x = -latitude.tan() * declination.tan();
+    let h0 = if x >= 1.0 {
+        0.0
+    } else if x <= -1.0 {
+        PI
+    } else {
+        x.acos()
+    };
+    let q = 4.0 / PI
+        * (h0 * latitude.sin() * declination.sin() + latitude.cos() * declination.cos() * h0.sin());
+    q.max(0.0)
 }
 
-/// Sea-level temperature of each row, in °C (see [`celsius`]): Earth's tilt
+/// Declination of the star (radians) at an angle `longitude` (radians)
+/// along the orbit from the spring equinox, for an axial tilt in degrees:
+/// `sin δ = sin ε sin λ` (Nadeau & McGehee 2021).
+pub fn declination(axial_tilt_deg: f32, longitude: f64) -> f64 {
+    ((axial_tilt_deg as f64).to_radians().sin() * longitude.sin()).asin()
+}
+
+/// Annual-mean insolation at `latitude` (radians) for an axial tilt in
+/// `[0, 90]` degrees, relative to the global mean: the exact mean of
+/// [`daily_insolation`] over a circular orbit (an eccentric one multiplies
+/// every latitude by the same `1/sqrt(1 − e²)`, see
+/// [`crate::star::mean_flux_factor`]). With no tilt the poles get nothing;
+/// at Earth's tilt the equator gets 1.22 (416 W/m²) and the poles 0.51
+/// (172 W/m²); from 53.9° the poles get more than the equator (Nadeau &
+/// McGehee 2017, doi:10.1016/j.icarus.2017.01.040, show 54° as the tilt
+/// "where polar and equatorial regions receive about the same yearly
+/// insolation"). The global mean stays 1 whatever the tilt.
+pub fn annual_insolation(latitude: f64, axial_tilt_deg: f32) -> f64 {
+    (0..ORBIT_STEPS)
+        .map(|k| {
+            let longitude = (k as f64 + 0.5) / ORBIT_STEPS as f64 * TAU;
+            daily_insolation(latitude, declination(axial_tilt_deg, longitude))
+        })
+        .sum::<f64>()
+        / ORBIT_STEPS as f64
+}
+
+/// Insolation level of the temperature scale for an insolation relative
+/// to the global mean: 0 at Earth's poles, 1 at its equator.
+fn insolation_level(s: f64) -> f32 {
+    let (pole, equator) = earth_insolation();
+    ((s - pole) / (equator - pole)) as f32
+}
+
+/// Annual-mean insolation of Earth's poles and equator (see
+/// [`annual_insolation`]), computed once.
+fn earth_insolation() -> (f64, f64) {
+    static EARTH: std::sync::OnceLock<(f64, f64)> = std::sync::OnceLock::new();
+    *EARTH.get_or_init(|| {
+        (
+            annual_insolation(FRAC_PI_2, EARTH_AXIAL_TILT_DEG),
+            annual_insolation(0.0, EARTH_AXIAL_TILT_DEG),
+        )
+    })
+}
+
+/// Sea-level temperature at `latitude` (radians), °C, before the mean is
+/// set (see [`row_temperatures`]).
+fn latitude_temperature(latitude: f64, axial_tilt_deg: f32) -> f32 {
+    let t = insolation_level(annual_insolation(latitude, axial_tilt_deg));
+    sea_level_celsius(t.clamp(INSOLATION_RANGE.0, INSOLATION_RANGE.1))
+}
+
+/// Bands of latitude [`mean_latitude_temperature`] integrates over.
+const MEAN_BANDS: usize = 180;
+
+/// Area-weighted global mean of [`latitude_temperature`], °C, on a fixed
+/// set of bands so that it does not depend on the map's size.
+fn mean_latitude_temperature(axial_tilt_deg: f32) -> f32 {
+    let (mut sum, mut weight) = (0.0f64, 0.0f64);
+    for k in 0..MEAN_BANDS {
+        let latitude = ((k as f64 + 0.5) / MEAN_BANDS as f64 - 0.5) * PI;
+        let w = latitude.cos();
+        sum += f64::from(latitude_temperature(latitude, axial_tilt_deg)) * w;
+        weight += w;
+    }
+    (sum / weight) as f32
+}
+
+/// Sea-level temperature of each row, in °C (see [`sea_level_celsius`]): Earth's tilt
 /// gives −18 °C at the poles and 27 °C at the equator. A lower tilt makes
 /// the poles colder, a higher one warmer, within [`INSOLATION_RANGE`].
+///
+/// The tilt moves the light between latitudes without changing its global
+/// mean, so the rows are then shifted to keep the global mean temperature
+/// of Earth's tilt (14.5 °C): in an energy balance model whose outgoing
+/// radiation is linear in temperature, `A + B T`, the mean temperature
+/// depends only on the mean absorbed light (Budyko 1969,
+/// doi:10.3402/tellusa.v21i5.10109; North et al. 1981,
+/// doi:10.1029/RG019i001p00091). Without the shift the curvature of
+/// [`sea_level_celsius`] would move it with the tilt (by about 3 °C
+/// between no tilt and 55° with the former curve).
 pub fn row_temperatures(grid: &Grid, axial_tilt_deg: f32) -> Vec<f32> {
-    let pole = insolation(std::f64::consts::FRAC_PI_2, EARTH_AXIAL_TILT_DEG);
-    let equator = insolation(0.0, EARTH_AXIAL_TILT_DEG);
+    let shift =
+        mean_latitude_temperature(EARTH_AXIAL_TILT_DEG) - mean_latitude_temperature(axial_tilt_deg);
     (0..grid.height)
-        .map(|y| {
-            let s = insolation(grid.latitude(y), axial_tilt_deg);
-            let t = ((s - pole) / (equator - pole)) as f32;
-            celsius(t.clamp(INSOLATION_RANGE.0, INSOLATION_RANGE.1))
-        })
+        .map(|y| latitude_temperature(grid.latitude(y), axial_tilt_deg) + shift)
         .collect()
 }
 
@@ -77,7 +176,7 @@ const LOCKED_STEPS: usize = 720;
 /// the map's centre, longitude 180°, on the equator) instead of the
 /// latitude. The light is `4 cos θ` times the mean on the day side, none on
 /// the night side, turned into °C on Earth's scale and curve like the rows
-/// of [`row_temperatures`] (from 34 °C under the star to −56 °C on the
+/// of [`row_temperatures`] (from 41 °C under the star to −49 °C on the
 /// night side, then evened out by the atmosphere and moved by the star,
 /// see [`LockedClimate::profile_mut`]).
 #[derive(Clone, Debug)]
@@ -94,14 +193,11 @@ impl Default for LockedClimate {
 
 impl LockedClimate {
     pub fn new() -> Self {
-        let pole = insolation(std::f64::consts::FRAC_PI_2, EARTH_AXIAL_TILT_DEG);
-        let equator = insolation(0.0, EARTH_AXIAL_TILT_DEG);
         let profile = (0..LOCKED_STEPS)
             .map(|k| {
                 let theta = Self::angle(k);
-                let s = 4.0 * theta.cos().max(0.0);
-                let t = ((s - pole) / (equator - pole)) as f32;
-                celsius(t.clamp(INSOLATION_RANGE.0, INSOLATION_RANGE.1))
+                let t = insolation_level(4.0 * theta.cos().max(0.0));
+                sea_level_celsius(t.clamp(INSOLATION_RANGE.0, INSOLATION_RANGE.1))
             })
             .collect();
         Self { profile }
@@ -435,8 +531,8 @@ mod tests {
         };
         let substellar = locked.at_angle(LockedClimate::angle_at(&grid, 180, 90));
         let antistellar = locked.at_angle(LockedClimate::angle_at(&grid, 0, 90));
-        assert!((substellar - 33.6).abs() < 0.5, "{substellar}");
-        assert!((antistellar - -56.4).abs() < 0.5, "{antistellar}");
+        assert!((substellar - 41.0).abs() < 0.5, "{substellar}");
+        assert!((antistellar - -49.0).abs() < 0.5, "{antistellar}");
         // A dense atmosphere carries heat to the night side.
         let mut thick = locked.clone();
         thick.transport_heat(30.0);
@@ -459,6 +555,80 @@ mod tests {
     fn high_tilt_warms_the_poles_above_the_equator() {
         let t = row_temperatures(&grid(), 80.0);
         assert!(t[0] > t[44]);
+    }
+
+    /// W/m² for an insolation relative to the mean, with the Sun's 1361
+    /// W/m² (Nadeau & McGehee's tables use the same).
+    fn watts(s: f64) -> f64 {
+        s * 1361.0 / 4.0
+    }
+
+    #[test]
+    fn annual_insolation_is_the_exact_mean_of_the_daily_one() {
+        let at = |latitude_deg: f64, tilt: f32| {
+            watts(annual_insolation(latitude_deg.to_radians(), tilt))
+        };
+        // The values of the axial tilt article (from Nadeau & McGehee 2021).
+        for (tilt, equator, pole) in [
+            (0.0, 433.2, 0.0),
+            (23.44, 415.5, 172.3),
+            (45.0, 372.5, 306.3),
+            (90.0, 275.8, 433.2),
+        ] {
+            assert!(
+                (at(0.0, tilt) - equator).abs() < 1.0,
+                "{tilt}: {}",
+                at(0.0, tilt)
+            );
+            assert!(
+                (at(90.0, tilt) - pole).abs() < 1.0,
+                "{tilt}: {}",
+                at(90.0, tilt)
+            );
+        }
+        // The poles overtake the equator at 53.9°, not at 54.7° as the
+        // two-term series had it.
+        assert!(at(90.0, 53.8) < at(0.0, 53.8));
+        assert!(at(90.0, 54.0) > at(0.0, 54.0));
+        // The tilt moves the light, not its global mean.
+        for tilt in [0.0, 23.44, 60.0, 90.0] {
+            let (mut sum, mut weight) = (0.0, 0.0);
+            for k in 0..360 {
+                let latitude = ((k as f64 + 0.5) / 360.0 - 0.5) * PI;
+                sum += annual_insolation(latitude, tilt) * latitude.cos();
+                weight += latitude.cos();
+            }
+            assert!(
+                (sum / weight - 1.0).abs() < 2e-3,
+                "{tilt}: {}",
+                sum / weight
+            );
+        }
+        // The pole at the June solstice: lit around the clock.
+        let solstice = daily_insolation(FRAC_PI_2, declination(23.44, FRAC_PI_2));
+        assert!((watts(solstice) - 541.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn the_global_mean_temperature_does_not_follow_the_tilt() {
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        let mean = |tilt: f32| {
+            let rows = row_temperatures(&grid, tilt);
+            let w: Vec<f32> = (0..180).map(|y| grid.latitude(y).cos() as f32).collect();
+            rows.iter().zip(&w).map(|(t, w)| t * w).sum::<f32>() / w.iter().sum::<f32>()
+        };
+        let earth = mean(EARTH_AXIAL_TILT_DEG);
+        assert!((earth - 14.5).abs() < 0.3, "{earth}");
+        for tilt in [0.0, 40.0, 54.7, 90.0] {
+            assert!((mean(tilt) - earth).abs() < 0.05, "{tilt}: {}", mean(tilt));
+        }
+        // With no tilt the poles get no light: as cold as the curve goes.
+        let flat = row_temperatures(&grid, 0.0);
+        assert!(flat[0] < -45.0, "{}", flat[0]);
     }
 
     /// A row of ocean on the west half and flat land on the east half.
