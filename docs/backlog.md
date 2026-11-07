@@ -146,7 +146,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Item                                                                                                                 | Status |
 | -------------------------------------------------------------------------------------------------------------------- | ------ |
 | Depression filling: neighbours by index (4.2 → 2.4 s at 8192 × 4096, same worlds); parallel land masses gave no gain | done   |
-| Picking on the globe ignores the relief displacement (error under a degree)                                          | todo   |
+| Picking on the globe ignores the relief displacement (error under a degree)                                          | done   |
 | Night side lighting is a fixed 7 % floor, not physically calibrated                                                  | todo   |
 | Volcanoes on non-volcanic presets: quantile threshold, cones after erosion, lowland vents (lava 0 → 0.3–0.5 %)       | done   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
