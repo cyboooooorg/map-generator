@@ -443,18 +443,24 @@ impl WorldRequest {
                     ),
                 },
             };
-            // The eccentricity last; tides circularise the orbits of the
-            // planets they lock.
+            // The eccentricity last; the star's tides circularise the
+            // closest orbits (a planet they despin on an eccentric orbit
+            // keeps it, in the 3:2 resonance: see `crate::spin`).
             let eccentricity = match (self.eccentricity, s.eccentricity) {
                 (Some(e), _) => e,
                 (None, Some(e)) => e.pick(rng),
                 (None, None) => {
                     let drawn = crate::star::draw_eccentricity(rng);
-                    if crate::star::StarInfo::new(star, orbit_au, 0.0).tidally_locked {
-                        0.0
-                    } else {
-                        drawn
-                    }
+                    let at = crate::star::StarInfo::new(star, orbit_au, 0.0);
+                    let circular = match giant_mass_earth {
+                        Some(mass) => crate::spin::giant_circularised(
+                            &at,
+                            mass,
+                            crate::giants::giant_radius(mass, at.equilibrium_k),
+                        ),
+                        None => crate::spin::circularised(&at),
+                    };
+                    if circular { 0.0 } else { drawn }
                 }
             };
             Ok((star, orbit_au, eccentricity))
@@ -548,8 +554,8 @@ impl WorldRequest {
         // (moons and star) widen or narrow the tidal flats. Applied to the
         // parameters, so `world.json` (its tilt, its preset's shore width)
         // explains the world as generated.
-        // Moons asked for need room: a planet free of its star's tides and
-        // far enough from it. A drawn star and orbit are drawn again until
+        // Moons asked for need room: a Hill sphere wide enough, and on a
+        // planet its star despun, moons light enough to outlast its tides. A drawn star and orbit are drawn again until
         // they leave it (the generation stays coherent); set ones that do
         // not are an error.
         if let Some(n) = params.moons.count() {
@@ -579,12 +585,21 @@ impl WorldRequest {
         if tilt_drawn && let ParamDefault::Range(range) = fallback::AXIAL_TILT_DEG {
             params.axial_tilt_deg = effects.tilt(params.axial_tilt_deg, (range[0], range[1]));
         }
+        // The tides that despin a planet also stand it upright, its axis
+        // along its orbit's (see `crate::spin::upright`).
+        if tilt_drawn && !giant {
+            params.axial_tilt_deg = crate::spin::upright(&params, params.axial_tilt_deg);
+        }
         params.planet.rules.shore_width_km *= effects.shore_factor;
         // Eccentric giants force an eccentricity on the world: a drawn one is
         // at least that (the giants are placed around the final orbit, which
         // the moons may have drawn again).
-        let locked = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0).tidally_locked;
-        if eccentricity_drawn && !locked {
+        let circular = crate::spin::circularised(&crate::star::StarInfo::new(
+            params.star,
+            params.orbit_au,
+            0.0,
+        ));
+        if eccentricity_drawn && !circular {
             for _ in 0..3 {
                 let forced = crate::giants::GiantSystem::draw(&params)
                     .map_or(0.0, |g| g.forced_eccentricity);
@@ -640,6 +655,8 @@ mod tests {
             planet: Some("terran".into()),
             star: Some("M4V".into()),
             hz_position: Some(0.5),
+            // The position is that of a circular orbit.
+            eccentricity: Some(0.0),
             ..Default::default()
         });
         assert_eq!(red.star, parse_type("M4V").unwrap());
@@ -887,21 +904,38 @@ mod tests {
             let p = request.resolve(&mut rand::rng()).unwrap().params;
             let system = crate::moons::MoonSystem::draw(&p).unwrap();
             assert_eq!(system.moons.len(), 3);
-            assert!(!crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity).tidally_locked);
+            // A planet its star despun keeps only light moons.
+            if crate::spin::despun(&crate::star::StarInfo::new(
+                p.star,
+                p.orbit_au,
+                p.eccentricity,
+            )) {
+                assert!(system.moons.iter().all(|m| m.mass_ratio < 1e-6));
+            }
         }
-        // A star and orbit set by the request that lock the planet: no room.
-        let locked = WorldRequest {
+        // A planet locked to its star in the habitable zone of a red dwarf
+        // keeps a moonlet light enough to outlast the system (Barnes &
+        // O'Brien 2002); one in a close orbit has no room for any.
+        let locked = |orbit_au: Option<f32>, hz_position: Option<f32>| WorldRequest {
             planet: Some("terran".into()),
             seed: Some(1),
             star: Some("M5V".into()),
-            hz_position: Some(0.5),
+            orbit_au,
+            hz_position,
+            eccentricity: Some(0.0),
             moons: Some(crate::moons::MoonsMode::Count(1)),
             width: Some(64),
             height: Some(32),
             ..Default::default()
         };
+        let p = locked(None, Some(0.5))
+            .resolve(&mut rand::rng())
+            .unwrap()
+            .params;
+        let moons = crate::moons::MoonSystem::draw(&p).unwrap().moons;
+        assert!(moons.len() == 1 && moons[0].mass_ratio < 1e-6, "{moons:?}");
         assert!(matches!(
-            locked.resolve(&mut rand::rng()),
+            locked(Some(0.006), None).resolve(&mut rand::rng()),
             Err(RequestError::NoRoomForMoons { count: 1 })
         ));
         let too_many = WorldRequest {

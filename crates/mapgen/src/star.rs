@@ -497,9 +497,17 @@ pub struct StarInfo {
     pub lifetime_gyr: f32,
     /// Time for the star's tides to lock the planet's spin, Gyr.
     pub locking_gyr: f32,
-    /// Whether the planet is tidally locked: its locking time is shorter
-    /// than the star's age ([`AGE_GYR`] or the star's lifetime).
+    /// Whether the planet is tidally locked, one face to its star: its
+    /// locking time is shorter than the star's age ([`AGE_GYR`] or the
+    /// star's lifetime) and its orbit circular (see `crate::spin`).
     pub tidally_locked: bool,
+    /// Whether the star's tides hold the planet in the 3:2 spin–orbit
+    /// resonance instead, three turns every two orbits, as Mercury: despun
+    /// on an eccentric orbit (see `crate::spin`). Worlds made before it:
+    /// false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub spin_orbit_3_2: bool,
     /// Colour of the star's light, linear RGB, the Sun white.
     pub light: [f32; 3],
     /// Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
@@ -543,7 +551,8 @@ impl StarInfo {
             angular_diameter_deg: angular_diameter_deg(v.radius, orbit_au),
             lifetime_gyr: lifetime,
             locking_gyr: locking,
-            tidally_locked: locking < AGE_GYR.min(lifetime),
+            tidally_locked: crate::spin::locked(locking, AGE_GYR.min(lifetime), eccentricity),
+            spin_orbit_3_2: crate::spin::resonant(locking, AGE_GYR.min(lifetime), eccentricity),
             light: light_colour(v.teff_k),
             metallicity: 0.0,
         }

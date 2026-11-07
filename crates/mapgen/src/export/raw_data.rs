@@ -471,11 +471,7 @@ pub fn export_raw_data(
         surface_age_ga: Some(world.params.surface_age_ga),
         star: Some(StarInfo {
             metallicity: world.params.metallicity,
-            ..StarInfo::new(
-                world.params.star,
-                world.params.orbit_au,
-                world.params.eccentricity,
-            )
+            ..crate::spin::star_info(&world.params)
         }),
         drift_ma: world.params.drift_ma,
         impact_factor: world.params.impact_factor,

@@ -69,10 +69,18 @@ lifetime_gyr: number,
  */
 locking_gyr: number, 
 /**
- * Whether the planet is tidally locked: its locking time is shorter
- * than the star's age ([`AGE_GYR`] or the star's lifetime).
+ * Whether the planet is tidally locked, one face to its star: its
+ * locking time is shorter than the star's age ([`AGE_GYR`] or the
+ * star's lifetime) and its orbit circular (see `crate::spin`).
  */
 tidally_locked: boolean, 
+/**
+ * Whether the star's tides hold the planet in the 3:2 spin–orbit
+ * resonance instead, three turns every two orbits, as Mercury: despun
+ * on an eccentric orbit (see `crate::spin`). Worlds made before it:
+ * false.
+ */
+spin_orbit_3_2?: boolean, 
 /**
  * Colour of the star's light, linear RGB, the Sun white.
  */

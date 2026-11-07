@@ -546,3 +546,28 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   bright rings, and plume rings round an active icy moon; drawn faint in
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
+
+## 19. Tides, spin and moons: what the science fixes left
+
+- **Problem:** the science fixes of 2026-11-07 (`spin.rs`, `moons.rs`)
+  model the 3:2 spin–orbit resonance, circularisation, light moons of
+  despun planets and tidal shapes, but keep some simplifications:
+  - only the 3:2 resonance: with core–mantle friction and a steady
+    eccentricity, Correia & Laskar 2009 capture Mercury into 2:1 or 5:2
+    first at its eccentricity (0.206); its chaotic eccentricity history
+    is what brings it to 3:2 most often (26 %);
+  - every despun rocky planet is taken to have core–mantle friction
+    (capture into 3:2 almost certain); without it the odds at Mercury's
+    eccentricity are about 7 % (Correia & Laskar 2009, Table 3, after
+    Goldreich & Peale 1966);
+  - giants are locked once despun, where a fluid planet on an eccentric
+    orbit settles into pseudo-synchronous rotation (Hut 1981);
+  - a moon's tilt is the Moon's 6.68° for a giant-impact moon and 0 for
+    the others, not its own Cassini state from the precession rates;
+  - inclinations of moons are to the planet's equator, the stability
+    limits to its orbit;
+  - Elser et al. 2011's odds of a large moon apply round every star.
+- **Done when:** resonances above 3:2 are drawn by eccentricity, a body
+  without a liquid core uses the odds without friction, giants turn
+  pseudo-synchronously, and moons get their Cassini obliquity.
+- **Status:** todo
