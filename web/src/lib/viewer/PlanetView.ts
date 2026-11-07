@@ -1396,7 +1396,11 @@ export class PlanetView {
    */
   private driftClouds(): void {
     // A giant's bands drift too, each with its own wind.
-    const visible = this.u.uCloudsOn.value > 0 || this.u.uGiant.value > 0;
+    const visible =
+      this.u.uCloudsOn.value > 0 ||
+      this.u.uGiant.value > 0 ||
+      // The clouds of a planet in a moon's sky drift as its own do.
+      this.skyBodies.some(({ mesh }) => mesh.visible && mesh.material.uniforms['uHasClouds']!.value > 0.5);
     if (!this.cloudsDrifting || !visible) {
       this.cloudDriftAt = null;
       return;
@@ -2242,9 +2246,9 @@ export class PlanetView {
    * least a few pixels. Their maps load in the background.
    */
   setSkyBodies(bodies: readonly SkyBody[], signal?: AbortSignal): void {
-    this.skyRequest += 1;
-    const request = this.skyRequest;
-    // The same bodies at new places keep their meshes and maps.
+    // The same bodies at new places keep their meshes and maps, and the
+    // maps still loading: the request number only moves when they are
+    // rebuilt, else a late map (a giant's) would be dropped as stale.
     const same =
       bodies.length === this.skyBodies.length &&
       bodies.every((b, i) => {
@@ -2260,6 +2264,8 @@ export class PlanetView {
       this.requestRender();
       return;
     }
+    this.skyRequest += 1;
+    const request = this.skyRequest;
     this.disposeSkyBodies();
     this.skyBodies = bodies.map((body) => {
       const mesh = new Mesh(
@@ -2285,6 +2291,8 @@ export class PlanetView {
             uHasClouds: { value: 0 },
             uClouds: { value: emptyTexture() },
             uCloudTint: { value: new Vector3(1, 1, 1) },
+            // Drifts with the body shown's own clouds (see driftClouds).
+            uCloudShift: this.u.uCloudShift,
             uHaloColor: { value: new Vector3() },
             uHaloHeight: { value: 0 },
             uHaloStrength: { value: 0 },
