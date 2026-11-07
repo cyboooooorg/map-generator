@@ -1,46 +1,23 @@
 <script lang="ts">
-  // The rotation dial's labels (see lib/viewer/rotationDial): its numbers
-  // on the ring, the pointer's reading in a box, and the names of the sun
-  // and of the host by their markers. Small text centred on each point, no
-  // leader lines; positions come from PlanetView.skyScreenPositions, null
-  // where the globe hides the point.
+  // The rotation dial's numbers (see lib/viewer/rotationDial): the ring's,
+  // 0° to 330°, and the star's half-circle's, −90° to +90°, each outside
+  // its circle, centred on its point, small, without leader lines. The
+  // pointer's reading and the markers' names are laid out with the other
+  // labels of the sky (SkyLabels). Positions come from
+  // PlanetView.skyScreenPositions, null where the body hides the point.
+  import { ARC_NUMBERS } from '../lib/viewer/rotationDial';
 
   type Point = { x: number; y: number } | null;
 
   interface Props {
     /** The ring's numbered ticks, 0°, 30°, … 330° in order. */
     ticks: readonly Point[];
-    pointer: Point;
-    sun: Point;
-    host: Point;
-    /** The pointer's reading, written out (`137°`, `+0.3°`). */
-    reading: string;
-    sunName: string;
-    /** The host's name, null when the body shown has none (a planet). */
-    hostName: string | null;
+    /** The half-circle's, in the order of ARC_NUMBERS. */
+    arcTicks: readonly Point[];
   }
 
-  let { ticks, pointer, sun, host, reading, sunName, hostName }: Props = $props();
-
-  /** A marker's label closer than this to the pointer's (CSS px) would draw over its box. */
-  const CLEAR = 40;
-  /** How far a moved label stands above or below the pointer's box, CSS px. */
-  const STEP = 18;
-  /**
-   * Where the host's and the sun's labels go: by their markers, or, when
-   * that falls on the pointer's box (on a locked body the pointer and the
-   * host both sit near 0°), just above the box, the second one below it;
-   * at the view's top edge, below the box, one under the other.
-   */
-  const placed = $derived.by(() => {
-    let moved = 0;
-    const place = (at: Point): Point => {
-      if (!at || !pointer || Math.hypot(at.x - pointer.x, at.y - pointer.y) >= CLEAR) return at;
-      const slots = pointer.y < STEP + 8 ? [1, 2] : [-1, 1];
-      return { x: pointer.x, y: pointer.y + (slots[moved++] ?? 1) * STEP };
-    };
-    return { host: place(hostName ? host : null), sun: place(sun) };
-  });
+  let { ticks, arcTicks }: Props = $props();
+  const signed = (degrees: number) => (degrees > 0 ? `+${degrees}°` : degrees < 0 ? `−${-degrees}°` : '0°');
 </script>
 
 <div class="dial-labels" aria-hidden="true">
@@ -49,15 +26,12 @@
       <span class="number" style:left={`${at.x}px`} style:top={`${at.y}px`}>{k * 30}°</span>
     {/if}
   {/each}
-  {#if placed.sun}
-    <span class="sun" style:left={`${placed.sun.x}px`} style:top={`${placed.sun.y}px`}>{sunName}</span>
-  {/if}
-  {#if placed.host && hostName}
-    <span class="host" style:left={`${placed.host.x}px`} style:top={`${placed.host.y}px`}>{hostName}</span>
-  {/if}
-  {#if pointer}
-    <span class="pointer" style:left={`${pointer.x}px`} style:top={`${pointer.y}px`}>{reading}</span>
-  {/if}
+  {#each arcTicks as at, k (k)}
+    <!-- 0° on the half-circle is the ring's own bearing: its number is left out. -->
+    {#if at && ARC_NUMBERS[k] !== 0}
+      <span class="height" style:left={`${at.x}px`} style:top={`${at.y}px`}>{signed(ARC_NUMBERS[k]!)}</span>
+    {/if}
+  {/each}
 </div>
 
 <style>
@@ -79,18 +53,7 @@
   .number {
     color: #9fd3ff;
   }
-  .sun {
-    color: #ffe28a;
-  }
-  .host {
-    color: #c89a6a;
-  }
-  .pointer {
-    padding: 1px 5px;
-    border: 1px solid #ffcc66;
-    border-radius: 3px;
-    background: rgb(5 7 13 / 0.85);
-    color: #ffcc66;
-    text-shadow: none;
+  .height {
+    color: #c9b98a;
   }
 </style>

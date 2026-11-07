@@ -678,7 +678,11 @@ export const en = {
       p.solar === null
         ? `Local time ${p.time} (face to the host) · Solar day: none, the star stands still`
         : `Local time ${p.time} (face to the host) · Solar day ${p.solar}`,
-    dialSun: 'Sun',
+    dialHeight: (p: { angle: string }) => `height ${p.angle}`,
+    dialPointerFree: 'turned since the equinox',
+    dialPointerLocked: 'libration',
+    dialBodies: 'On the dial',
+    dialBodiesHelp: 'The bodies whose height the dial shows, each on a quarter-circle from the ring',
     dialGlossaryHelp: 'What these figures mean',
     /** Each entry's term carries its colon (the French takes a space before it). */
     dialGlossary: [
@@ -735,6 +739,7 @@ export const en = {
     hostSpinName: (p: { name: string }) => `Spin of ${p.name}`,
     hostSpinLockedFacts: (p: { period: string }) => `the same face to its star: a turn per orbit, ${p.period}`,
     hostPull: 'Pull of its planet',
+    hostLineFacts: (p: { distance: string; pull: string }) => `${p.distance} · pull ${p.pull}`,
     hostOrbitSpeed: 'Orbital speed',
     skyStarFacts: (p: { distance: string }) => `${p.distance} away`,
     skyOrbitFacts: (p: { radius: string; orbit: string }) => `${p.radius} radius · orbit ${p.orbit}`,

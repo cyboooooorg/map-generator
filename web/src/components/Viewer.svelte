@@ -9,6 +9,7 @@
   import AxesGizmo from './AxesGizmo.svelte';
   import type { ScreenAxis } from '../lib/viewer/axes';
   import { ApiFailure, api, followJob, systemBodyId, worldFile, worldThumbnail } from '../lib/api/client';
+  import type { BiomeInfo } from '../lib/api/types/BiomeInfo';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -29,7 +30,7 @@
   import { cloudTint, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
-  import { vegetationShares } from '../lib/vegetation';
+  import { starLitColour, vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
   import DialLabels from './DialLabels.svelte';
@@ -39,7 +40,14 @@
   import { dialFigureText, formatDialAngle, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
-  import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
+  import {
+    type CameraState,
+    giantTemperatureRange,
+    PlanetView,
+    SUN_STAR,
+    vegetationShift,
+    type ViewMode,
+  } from '../lib/viewer/PlanetView';
   import { currentProfile } from '../lib/viewer/quality';
   import { giantStorms } from '../lib/giantStorms';
   import { RING_ROCK_SCALES, ringRocks } from '../lib/ringRocks';
@@ -722,6 +730,18 @@
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setStars(stars));
   $effect(() => view?.setStarLight(starLight));
+  /**
+   * A biome's colour in the legend, as the globe shows it: under "Star
+   * light", recoloured for the star's vegetation and lit by its light.
+   */
+  function legendColour(biome: BiomeInfo): string {
+    const base = hexOn ? biome.color : surfaceColour(biome);
+    const star = meta?.star;
+    if (!starLight || !star) return base;
+    // The hex grid shows the classification colours, without the vegetation.
+    const plants = hexOn ? 0 : (vegetationShares([biome])[biome.id] ?? 0);
+    return starLitColour(base, plants, vegetationShift(star.teff_k), star.light);
+  }
   $effect(() => {
     const biomes = meta?.biomes;
     if (biomes) view?.setVegetation(vegetationShares(biomes));
@@ -849,23 +869,70 @@
     const longitude = Math.atan2(start.sun[0], start.sun[2]);
     return longitude - (sunLongitude * Math.PI) / 180;
   });
+  /** Points round each orbit line in the sky, by quality (see QualityProfile.orbitSamples). */
+  const orbitSamples = currentProfile().orbitSamples;
   const sysSky = $derived.by(() => {
     if (!sys || !sysBody || !sysPlanet) return null;
-    return systemSky(sys, sysBody.id, sysDays, sysTextures, skySpin);
+    return systemSky(sys, sysBody.id, sysDays, sysTextures, skySpin, orbitSamples);
   });
   /** The trojan swarms and belts in that sky, while Small bodies is on. */
   const smallSky = $derived(smallBodies && sys && sysBody && sysPlanet ? smallBodiesSky(sys, sysBody.id, sysDays, skySpin) : null);
   $effect(() => view?.setSkyBelts(smallSky ? smallSky.belts.flatMap((b) => b.edges) : []));
   /** The rotation dial round the body shown, while its switch is on (see lib/rotationDial). */
   const dial = $derived(dialShown && sys && sysBody && sysSky ? rotationDial(sys, sysBody.id, sysDays, skySpin, sysSky) : null);
-  $effect(() => view?.setRotationDial(dial?.state ?? null));
+  /**
+   * The bodies of the sky chosen for the dial, by system and id: the host
+   * by default, the others when ticked in the Light and season panel.
+   */
+  let dialChoices = $state<Record<string, boolean>>({});
+  const dialChosen = (id: string, host: boolean) => dialChoices[`${world.systemId ?? ''}/${id}`] ?? host;
+  function chooseDialBody(id: string, on: boolean): void {
+    dialChoices = { ...dialChoices, [`${world.systemId ?? ''}/${id}`]: on };
+  }
+  /** The dial as drawn: with the chosen bodies only. */
+  const dialDrawn = $derived(dial ? { ...dial.state, bodies: dial.state.bodies.filter((b) => dialChosen(b.id, b.host)) } : null);
+  $effect(() => view?.setRotationDial(dialDrawn));
+  /** The bodies the dial can show, with their names, for the panel's ticks. */
+  const dialChoiceList = $derived(
+    dial && sys
+      ? dial.state.bodies.map((b) => {
+          const body = sys.bodies.find((x) => x.id === b.id);
+          return { id: b.id, host: b.host, name: world.systemNames[b.id] ?? body?.designation ?? b.id, on: dialChosen(b.id, b.host) };
+        })
+      : [],
+  );
+  /** The dial's names and readings, laid out with the other labels of the sky (see SkyLabels). */
+  const dialLabels = $derived.by((): { at: { x: number; y: number } | null; label: SkyLabel }[] => {
+    const at = skyPositions?.dial;
+    if (!dialDrawn || !at || !sys) return [];
+    const degrees = (radians: number) => formatDialAngle(radians, true, formatNumber);
+    const out: { at: { x: number; y: number } | null; label: SkyLabel }[] = [
+      {
+        at: at.pointer,
+        label: { name: dialReading, detail: dialDrawn.locked ? t.viewer.dialPointerLocked : t.viewer.dialPointerFree },
+      },
+    ];
+    if (dialDrawn.sun) {
+      out.push({
+        at: at.sun,
+        label: {
+          name: world.systemNames['star'] ?? sys.star.designation,
+          detail: t.viewer.dialHeight({ angle: degrees(dialDrawn.sunAltitude) }),
+        },
+      });
+    }
+    // The host's name and distance already hang on its line with the spin
+    // axes: its marker then only gives its height.
+    const hostNamed = axesShown && skyPositions?.guides.host;
+    dialDrawn.bodies.forEach((b, k) => {
+      const name = dialChoiceList.find((c) => c.id === b.id)?.name ?? b.id;
+      const height = t.viewer.dialHeight({ angle: degrees(b.altitude) });
+      out.push({ at: at.bodies[k] ?? null, label: b.host && hostNamed ? { name: height, detail: '' } : { name, detail: height } });
+    });
+    return out;
+  });
   /** The pointer's reading on the ring: whole degrees, signed tenths for a locked body. */
   const dialReading = $derived(dial ? formatDialAngle(dial.state.reading, dial.state.locked, formatNumber) : '');
-  /** The name of the planet a moon orbits, by its marker on the dial. */
-  const dialHostName = $derived.by(() => {
-    const parent = sys && sysBody?.parent ? sys.bodies.find((b) => b.id === sysBody.parent) : undefined;
-    return parent ? (world.systemNames[parent.id] ?? parent.designation) : null;
-  });
   /** The dial's figures, two lines for the Light and season panel. */
   const dialLines = $derived.by((): [string, string] | null => {
     if (!dial) return null;
@@ -1229,8 +1296,15 @@
       const pull = (G * host.physical.mass_earth * EARTH_KG) / (hostKm * 1000) ** 2;
       const speed = Math.sqrt(Math.max(mu * (2 / (hostKm * 1000) - 1 / (r * 1000)), 0)) / 1000;
       const name = world.systemNames[host.id] ?? host.designation;
-      labels.push({ key: 'host', label: { name, detail: withUnit(formatInt(hostKm), 'km') } });
-      labels.push({ key: 'pull', label: { name: t.viewer.hostPull, detail: withUnit(formatUpTo(pull, pull < 0.01 ? 4 : 3), 'm/s²') } });
+      // The line to the host and the pull of the host point the same way:
+      // one label for both on the line (see the template), the pull's own
+      // only when the line is hidden.
+      const pullText = withUnit(formatUpTo(pull, pull < 0.01 ? 4 : 3), 'm/s²');
+      labels.push({
+        key: 'host',
+        label: { name, detail: t.viewer.hostLineFacts({ distance: withUnit(formatInt(hostKm), 'km'), pull: pullText }) },
+      });
+      labels.push({ key: 'pull', label: { name: t.viewer.hostPull, detail: pullText } });
       labels.push({ key: 'velocity', label: { name: t.viewer.hostOrbitSpeed, detail: withUnit(formatUpTo(speed, 2), 'km/s') } });
       // Its own spin, drawn round it.
       const hostHours = host.spin.period_hours;
@@ -1723,6 +1797,17 @@
           {/each}
         </dl>
       {/if}
+      {#if dialChoiceList.length > 0}
+        <fieldset class="dial-bodies" title={t.viewer.dialBodiesHelp}>
+          <legend>{t.viewer.dialBodies}</legend>
+          {#each dialChoiceList as choice (choice.id)}
+            <label class="check">
+              <input type="checkbox" checked={choice.on} onchange={(e) => chooseDialBody(choice.id, e.currentTarget.checked)} />
+              {choice.name}
+            </label>
+          {/each}
+        </fieldset>
+      {/if}
     {/if}
     {#if orbitPeriod && sysSky}
       <label class="check" title={t.viewer.cameraOnBodyHelp}>
@@ -1812,7 +1897,7 @@
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
   {#if world.subject === 'planet' && skyPositions}
-    {@const guides = axesShown ? guideLabels : []}
+    {@const guides = axesShown ? guideLabels.filter((g) => g.key !== 'pull' || !skyPositions!.guides.host) : []}
     {@const marks = smallSky ? skyPositions.marks : []}
     <!-- A dashed ring round each trojan swarm, too faint to see. -->
     {#each marks.slice(0, smallSky?.swarms.length ?? 0) as mark, k (k)}
@@ -1821,21 +1906,23 @@
       {/if}
     {/each}
     <SkyLabels
-      positions={[...(skyLabels ? skyPositions.bodies : []), ...guides.map((g) => skyPositions!.guides[g.key]), ...marks]}
-      labels={[...(skyLabels ? skyLabelList : []), ...guides.map((g) => g.label), ...smallLabels.slice(0, marks.length)]}
+      positions={[
+        ...(skyLabels ? skyPositions.bodies : []),
+        ...guides.map((g) => skyPositions!.guides[g.key]),
+        ...marks,
+        ...dialLabels.map((d) => d.at),
+      ]}
+      labels={[
+        ...(skyLabels ? skyLabelList : []),
+        ...guides.map((g) => g.label),
+        ...smallLabels.slice(0, marks.length),
+        ...dialLabels.map((d) => d.label),
+      ]}
       star={skyLabels ? skyPositions.star : null}
       {starLabel}
     />
     {#if dial && skyPositions.dial}
-      <DialLabels
-        ticks={skyPositions.dial.ticks}
-        pointer={skyPositions.dial.pointer}
-        sun={skyPositions.dial.sun}
-        host={skyPositions.dial.host}
-        reading={dialReading}
-        sunName={t.viewer.dialSun}
-        hostName={dialHostName}
-      />
+      <DialLabels ticks={skyPositions.dial.ticks} arcTicks={skyPositions.dial.arcTicks} />
     {/if}
   {/if}
   {#if world.subject === 'star' && (worldId || sys)}
@@ -2009,7 +2096,7 @@
                 aria-pressed={pinned === entry.biome.id}
                 title={t.viewer.highlightHelp}
               >
-                <span class="swatch" style:background={hexOn ? entry.biome.color : surfaceColour(entry.biome)}></span>
+                <span class="swatch" style:background={legendColour(entry.biome)}></span>
                 <span class="name">{biomeName(entry.biome)}</span>
                 <span class="value">{formatShare(entry.share)}</span>
               </button>
@@ -2273,6 +2360,19 @@
   .dial-glossary dd {
     display: inline;
     margin: 0;
+  }
+  .dial-bodies {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 4px 8px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .dial-bodies legend {
+    padding: 0 4px;
+    font-size: 0.8rem;
+    color: var(--muted);
   }
   .value {
     font-variant-numeric: tabular-nums;

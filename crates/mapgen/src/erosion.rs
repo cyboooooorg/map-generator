@@ -69,6 +69,13 @@ const FLAT_SLOPE: (f32, f32) = (0.04, 0.1);
 /// not fill.
 const BASIN_DEPTH: f32 = 0.001;
 
+/// Radius, in cells, of each box pass of the blur that band-limits the
+/// change on steep ground (see [`GULLY_SOFTEN`]).
+const GULLY_BLUR: usize = 1;
+/// Share of the blur in the steep change: 1 lowered the peaks less and
+/// pushed the Earth-like worlds' land above 4 km over its band.
+const GULLY_SOFTEN: f32 = 0.5;
+
 /// Radius, in cells, of each box pass of the blur applied on flat ground.
 const FLAT_BLUR: usize = 2;
 
@@ -514,6 +521,17 @@ fn erode_pass(
     // reach the plains), and the deposits of slowing droplets no longer
     // roughen plains and deserts.
     let soft = blur(&raw, ew, eh, FLAT_BLUR);
+    // The droplets of a steep flank follow one another into channels a cell
+    // wide, parallel and a few cells apart: on the grid's Nyquist
+    // frequency, stripes that alias (the map's pixels sample them at 2 per
+    // cell or fewer). Half of the change is replaced by its blur, which
+    // widens them; all of it would lower the peaks less (see
+    // `GULLY_SOFTEN`).
+    let raw: Vec<f32> = blur(&raw, ew, eh, GULLY_BLUR)
+        .iter()
+        .zip(&raw)
+        .map(|(b, r)| r + GULLY_SOFTEN * (b - r))
+        .collect();
     // Basins of the terrain before erosion hold lakes: the blurred deposits
     // of flat ground must not fill them (carving them deeper is fine): see
     // `spill` above.
@@ -840,6 +858,52 @@ mod tests {
                 assert!(*a >= -1e-3, "land dug below the waterline: {b} -> {a}");
             }
         }
+    }
+
+    /// Share of the carved change that is finer than three cells: its
+    /// second difference across a cell (along both axes), against its own
+    /// amplitude, over the land.
+    fn pixel_scale_share(change: &[f32], map: &[f32], (w, h): (usize, usize)) -> f32 {
+        let (mut fine, mut total) = (0.0f64, 0.0f64);
+        for y in 1..h - 1 {
+            for x in 1..w - 1 {
+                let i = y * w + x;
+                if map[i] <= 0.0 {
+                    continue;
+                }
+                let d2 = (change[i - 1] + change[i + 1] - 2.0 * change[i]).abs()
+                    + (change[i - w] + change[i + w] - 2.0 * change[i]).abs();
+                fine += f64::from(d2);
+                total += f64::from(change[i].abs());
+            }
+        }
+        (fine / total.max(1e-12)) as f32
+    }
+
+    #[test]
+    fn gullies_are_wider_than_a_cell() {
+        // A steep island: its flanks are carved by many droplets, which
+        // channel into parallel gullies. One cell wide, they alias: the
+        // change is a stripe pattern at the grid's Nyquist frequency.
+        let (w, h) = (512usize, 256usize);
+        let mut map = island(w as u32, h as u32);
+        for z in &mut map {
+            *z = (*z * 1.6).min(1.0);
+        }
+        let before = map.clone();
+        let mut change = vec![0.0; w * h];
+        erode(
+            &mut map,
+            (w as u32, h as u32),
+            0.0,
+            1.0,
+            3,
+            &vec![1.0; h],
+            Some(&mut change),
+        );
+        let share = pixel_scale_share(&change, &before, (w, h));
+        // 0.031 with one-cell channels, 0.022 as they are now.
+        assert!(share < 0.025, "{share}");
     }
 
     #[test]
