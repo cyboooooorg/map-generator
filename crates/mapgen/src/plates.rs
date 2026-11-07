@@ -106,6 +106,7 @@ fn normalise(a: [f64; 3]) -> [f64; 3] {
 }
 
 /// The plates of a world: where they are and how they turn.
+#[derive(Clone)]
 pub struct Plates {
     seed: u32,
     warp: Perlin,
@@ -368,6 +369,61 @@ pub struct PlateMap {
     epoch: Option<Epoch>,
 }
 
+/// What a world's present plate map owes to its plates alone, not to its
+/// crust (and so not to its sea level, which sets the crust): the plates
+/// as drawn, the plate of each cell, the boundary cells and the distance
+/// to them. Built once, it gives the map for any crust
+/// ([`PlateMap::from_frame`]), as the search of a sea level for a land
+/// share needs.
+pub struct PlateFrame {
+    grid: CubeGrid,
+    plates: Plates,
+    present: Vec<u16>,
+    cells: Vec<BoundaryCell>,
+    boundary_km: Vec<f32>,
+    nearest: Vec<u32>,
+}
+
+impl PlateFrame {
+    /// The present frame of the world `p`.
+    pub fn new(p: &WorldParams) -> Self {
+        let plates = Plates::new(p);
+        // A fixed grid, whatever the map's size: the same world gets the
+        // same boundaries at every resolution.
+        let grid = CubeGrid { size: COARSE_SIZE };
+        let present: Vec<u16> = (0..grid.cell_count())
+            .into_par_iter()
+            .map(|k| plates.plate_at(grid.point(k)) as u16)
+            .collect();
+        let cells = boundary_cells(&grid, &present, |_| false);
+        let radius_km = f64::from(p.circumference_km) / std::f64::consts::TAU;
+        let positions: Vec<(usize, Boundary)> = cells
+            .iter()
+            .map(|c| {
+                (
+                    c.cell,
+                    Boundary {
+                        convergence: 0.0,
+                        plate: c.plate,
+                        other: c.other,
+                        continental: false,
+                        other_continental: false,
+                    },
+                )
+            })
+            .collect();
+        let (boundary_km, nearest) = nearest_boundary(&grid, radius_km, &positions);
+        PlateFrame {
+            grid,
+            plates,
+            present,
+            cells,
+            boundary_km,
+            nearest,
+        }
+    }
+}
+
 /// Where the crust at a point at the map's epoch lies today (see
 /// [`PlateMap::origin`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -476,6 +532,9 @@ impl PlateMap {
         t_ma: f64,
         continental: impl Fn([f64; 3]) -> bool + Sync,
     ) -> Self {
+        if t_ma == 0.0 {
+            return Self::from_frame(&PlateFrame::new(p), continental);
+        }
         let mut plates = Plates::new(p);
         // A fixed grid, whatever the map's size: the same world gets the
         // same boundaries at every resolution.
@@ -545,6 +604,66 @@ impl PlateMap {
             epoch,
         };
         map.reliefs = (0..n).into_par_iter().map(|k| map.relief_of(k)).collect();
+        map
+    }
+
+    /// The present plate map of a world from its `frame`, with
+    /// `continental` telling the crust on each side of its boundaries:
+    /// the same map as [`Self::with_crust`], the crust's part only
+    /// computed (see [`PlateFrame`]).
+    pub fn from_frame(frame: &PlateFrame, continental: impl Fn([f64; 3]) -> bool + Sync) -> Self {
+        let grid = frame.grid;
+        let mut plates = frame.plates.clone();
+        let cells: Vec<BoundaryCell> = frame
+            .cells
+            .par_iter()
+            .map(|c| BoundaryCell {
+                continental: continental(grid.point(c.cell)),
+                other_continental: continental(grid.point(c.across_cell)),
+                ..c.clone()
+            })
+            .collect();
+        // Slab pull: the present speed of each plate from its subducting
+        // edge.
+        pull_by_slabs(&mut plates, &cells);
+        let seeds: Vec<Boundary> = cells
+            .into_iter()
+            .map(|c| {
+                let (va, vb) = (
+                    plates.velocity(usize::from(c.plate), c.point),
+                    plates.velocity(usize::from(c.other), c.point),
+                );
+                let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], c.across);
+                Boundary {
+                    // km/Ma to cm/yr.
+                    convergence: (closing * 0.1) as f32,
+                    plate: c.plate,
+                    other: c.other,
+                    continental: c.continental,
+                    other_continental: c.other_continental,
+                }
+            })
+            .collect();
+        let convergence = frame
+            .nearest
+            .iter()
+            .map(|&k| seeds.get(k as usize).map_or(0.0, |b| b.convergence))
+            .collect();
+        let mut map = PlateMap {
+            grid,
+            plate: frame.present.clone(),
+            boundary_km: frame.boundary_km.clone(),
+            convergence,
+            boundaries: seeds,
+            nearest: frame.nearest.clone(),
+            reliefs: Vec::new(),
+            plates,
+            epoch: None,
+        };
+        map.reliefs = (0..grid.cell_count())
+            .into_par_iter()
+            .map(|k| map.relief_of(k))
+            .collect();
         map
     }
 
@@ -691,8 +810,11 @@ impl PlateMap {
 }
 
 /// A boundary cell of a plate map, before its plates' motion is known.
+#[derive(Clone)]
 struct BoundaryCell {
     cell: usize,
+    /// The neighbour across the boundary.
+    across_cell: usize,
     point: [f64; 3],
     /// The direction across the boundary, towards the other plate, in the
     /// tangent plane.
@@ -745,6 +867,7 @@ fn boundary_cells(
             ]);
             Some(BoundaryCell {
                 cell: k,
+                across_cell,
                 point: p,
                 across,
                 plate: a,
