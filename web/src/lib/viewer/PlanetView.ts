@@ -81,6 +81,7 @@ import {
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
+import { MAX_NIGHT_SOURCES, NIGHT_CEILING, NIGHT_FLOOR, NIGHT_RATIO_MAX, NIGHT_RATIO_MIN, STARLIGHT_RATIO, type NightSource } from '../nightLight';
 import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody, skyOccluders } from '../skyBodies';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
@@ -482,6 +483,17 @@ export class PlanetView {
     uMorphX: { value: 0 } as IUniform<number>,
     /** Light added to the night side during the turn towards the map (see setMode). */
     uNightLift: { value: 0 } as IUniform<number>,
+    uNightDir: { value: Array.from({ length: MAX_NIGHT_SOURCES }, () => new Vector4()) } as IUniform<Vector4[]>,
+    uNightRatio: { value: new Array<number>(MAX_NIGHT_SOURCES).fill(0) } as IUniform<number[]>,
+    uNightCurve: {
+      value: new Vector4(
+        NIGHT_FLOOR,
+        NIGHT_CEILING,
+        Math.log10(NIGHT_RATIO_MIN),
+        1 / (Math.log10(NIGHT_RATIO_MAX) - Math.log10(NIGHT_RATIO_MIN)),
+      ),
+    } as IUniform<Vector4>,
+    uStarlight: { value: STARLIGHT_RATIO } as IUniform<number>,
     uRelief: { value: 0 } as IUniform<number>,
     uReliefScale: { value: 0 } as IUniform<number>,
     uCoast: { value: 0 } as IUniform<number>,
@@ -2354,6 +2366,22 @@ export class PlanetView {
       if (body.clouds) load(body.clouds, 'uClouds', 'uHasClouds');
       return entry;
     });
+    this.requestRender();
+  }
+
+  /**
+   * The lights of the night side with Sunlight: the bodies of the sky that
+   * reflect the star's light onto it (see lib/nightLight.ts). Without any,
+   * the night side shows the display floor.
+   */
+  setNightSources(sources: readonly NightSource[]): void {
+    const dirs = this.shared.uNightDir.value;
+    const ratios = this.shared.uNightRatio.value;
+    for (let i = 0; i < MAX_NIGHT_SOURCES; i++) {
+      const s = sources[i];
+      if (s) dirs[i]!.set(...s.direction, s.half);
+      ratios[i] = s?.ratio ?? 0;
+    }
     this.requestRender();
   }
 

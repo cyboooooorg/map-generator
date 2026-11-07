@@ -39,6 +39,14 @@ const common = /* glsl */ `
   // Light added to the night side while the globe turns before unrolling
   // into the map, so that the turn does not pass through black (0 to 1).
   uniform float uNightLift;
+  // Lights of the night side (see lib/nightLight.ts): per source, its
+  // direction and the sine of its angular radius, and its illuminance over
+  // the star's; the display curve (floor, ceiling, log10 of the ratio at the
+  // floor, 1 over the log span); starlight's ratio.
+  uniform vec4 uNightDir[4];
+  uniform float uNightRatio[4];
+  uniform vec4 uNightCurve;
+  uniform float uStarlight;
   // Relief exaggeration, 1 for the true relief (see lib/relief.ts), and
   // the body's radii per elevation unit at the true relief.
   uniform float uRelief;
@@ -428,6 +436,19 @@ export const surfaceFragment = /* glsl */ `
     return mix(colour * 0.55, colour, smoothstep(0.0, line, edge));
   }
 
+  // Brightness of the night side at a point of the unit sphere (see
+  // lib/nightLight.ts, nightAt): the light of the bodies of the sky above
+  // its horizon plus starlight, on a log display curve.
+  float nightShade(vec3 point) {
+    float total = uStarlight;
+    for (int i = 0; i < 4; i++) {
+      vec4 s = uNightDir[i];
+      total += uNightRatio[i] * max((dot(point, s.xyz) + s.w) / (1.0 + s.w), 0.0);
+    }
+    float t = clamp((log2(max(total, 1e-30)) * 0.30103 - uNightCurve.z) * uNightCurve.w, 0.0, 1.0);
+    return mix(uNightCurve.x, uNightCurve.y, t);
+  }
+
   // Share of the sunlight hidden at a point of the unit sphere (see
   // lib/skyBodies.ts, eclipse).
   float eclipse(vec3 point) {
@@ -605,6 +626,7 @@ export const surfaceFragment = /* glsl */ `
     float flatLambert = max(dot(normalize(vNormal), uLightDir), 0.2);
     float relief = min(lambert / flatLambert, 1.5);
     float shade;
+    float nightLevel = 0.0;
     if (uLightMode == 1) {
       // Day and night come from the sphere normal, on the globe and the map alike.
       float sunHeight = dot(normalize(vSphere), uSunDir);
@@ -615,7 +637,8 @@ export const surfaceFragment = /* glsl */ `
       float sunlit = uCasterCount > 0.0 ? 1.0 - eclipse(normalize(vSphere)) : 1.0;
       // A giant's rings shadow a band of it.
       sunlit *= 1.0 - ringShadow(normalize(vSphere));
-      float night = mix(0.07, 0.45, uNightLift);
+      float night = mix(nightShade(normalize(vSphere)), 0.45, uNightLift);
+      nightLevel = night;
       shade = (night + (1.0 - night) * day * strength * sunlit) * relief;
     } else {
       float globe = 0.35 + 0.75 * lambert;
@@ -655,7 +678,7 @@ export const surfaceFragment = /* glsl */ `
       float cloudShade;
       if (uLightMode == 1) {
         float sunHeight = dot(normalize(vSphere), uSunDir);
-        cloudShade = 0.04 + 0.96 * smoothstep(-0.08, 0.15, sunHeight) * (0.6 + 0.4 * clamp(sunHeight, 0.0, 1.0));
+        cloudShade = 0.6 * nightLevel + (1.0 - 0.6 * nightLevel) * smoothstep(-0.08, 0.15, sunHeight) * (0.6 + 0.4 * clamp(sunHeight, 0.0, 1.0));
       } else {
         cloudShade = mix(1.0, 0.35 + 0.75 * max(dot(normalize(vNormal), uLightDir), 0.0), uMorph);
       }

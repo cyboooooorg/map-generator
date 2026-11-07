@@ -65,6 +65,13 @@ export interface SkyBody {
    * radii), with the shadow they cast on it; none for a body without.
    */
   rings?: RingSystem | null;
+  /**
+   * Cosine of its phase angle, the angle at it between the star and the body
+   * shown (1 full, -1 new); the sun's direction is used when absent.
+   */
+  phaseCos?: number;
+  /** The star's flux at it over its flux at the body shown (1 when absent). */
+  insolation?: number;
 }
 
 /** How the planet looks in a moon's sky: its clouds, its air, its marks and their switches. */
