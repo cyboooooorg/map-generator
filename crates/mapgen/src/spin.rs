@@ -6,28 +6,33 @@
 //! for a giant. A planet whose time is shorter than the star's age
 //! ([`AGE_GYR`], or the star's whole life when shorter) is despun.
 //!
-//! **Locked or resonant.** A despun rocky planet on an eccentric orbit is
-//! captured into the 3:2 spin–orbit resonance, Mercury's three turns every
-//! two orbits, rather than into one turn per orbit: with the friction
-//! between a liquid core and the mantle, capture into 3:2 is "almost 100 %
-//! even for very low values of the eccentricity", and the resonance holds
-//! while the eccentricity stays above [`RESONANCE_MIN_ECCENTRICITY`]
-//! (Correia & Laskar 2009). The tides circularise the orbit far more slowly
-//! than they despin the planet ([`circularisation_gyr`]); a planet whose
-//! orbit they have circularised leaves the resonance and ends locked, one
-//! face to its star. Giants are fluid, with no lasting bulge for the star
-//! to hold: a despun giant is locked.
+//! **Locked or resonant.** A despun rocky planet on an orbit of
+//! eccentricity [`RESONANCE_CAPTURE_ECCENTRICITY`] (0.06) or more is held
+//! in the 3:2 spin–orbit resonance, Mercury's three turns every two
+//! orbits; below it, the most probable state is one turn per orbit, locked
+//! with one face to its star (Ribas et al. 2016, for Proxima b, an Earth
+//! of a red dwarf's habitable zone; Makarov 2012 finds capture into 3:2
+//! inevitable for Mercury from e = 0.2 to 0.41, ever less likely below).
+//! The tides circularise the orbit far more slowly than they despin the
+//! planet ([`circularisation_gyr`]); a planet whose orbit they have
+//! circularised ends locked. Higher resonances (2:1, 5:2), which large
+//! eccentricities favour, are not modelled. Giants are fluid, with no
+//! lasting bulge for the star to hold: a despun giant is locked.
 //!
 //! [`locking_gyr`]: crate::star::locking_gyr
 //! [`AGE_GYR`]: crate::star::AGE_GYR
 
 use crate::star::{AGE_GYR, StarInfo};
 
-/// Eccentricity under which the 3:2 resonance no longer holds against the
-/// tides, Correia & Laskar 2009, Table 2 (`e_c ≈ 2.6 × 10⁻⁵` for Mercury
-/// with core–mantle friction), doi:10.1016/j.icarus.2008.12.034. Below it
-/// the spin falls to one turn per orbit.
-pub const RESONANCE_MIN_ECCENTRICITY: f32 = 2.6e-5;
+/// Eccentricity from which a despun rocky planet is held in the 3:2
+/// resonance rather than locked, from Ribas et al. 2016, §4.6
+/// (doi:10.1051/0004-6361/201629576), for an Earth-mass planet of a red
+/// dwarf with a Maxwell rheology: "the ω≈3n/2 rotation becomes stable for
+/// an eccentricity greater than 0.06–0.07"; "At eccentricities lower than
+/// 0.06, the most probable state becomes the synchronous one". Taken as a
+/// sharp line (in reality the odds of capture rise with the
+/// eccentricity: Makarov 2012, doi:10.1088/0004-637X/752/1/73).
+pub const RESONANCE_CAPTURE_ECCENTRICITY: f32 = 0.06;
 
 /// Turns per orbit of a planet in the 3:2 resonance: its sidereal day is
 /// two thirds of its year, its solar day two years (Mercury: 58.65 and
@@ -86,16 +91,17 @@ pub fn tidal_eccentricity(star: &StarInfo, drawn: f32) -> f32 {
     if circularised(star) { 0.0 } else { drawn }
 }
 
-/// The spin of a rocky planet locked to its star on an orbit of
-/// `locking_gyr`, `age_gyr` and `eccentricity`: one turn per orbit.
+/// Whether a rocky planet whose locking time is `locking_gyr`, round a
+/// star of `age_gyr`, on an orbit of `eccentricity`, is locked to its star:
+/// despun, below [`RESONANCE_CAPTURE_ECCENTRICITY`], one turn per orbit.
 pub fn locked(locking_gyr: f32, age_gyr: f32, eccentricity: f32) -> bool {
-    locking_gyr < age_gyr && eccentricity < RESONANCE_MIN_ECCENTRICITY
+    locking_gyr < age_gyr && eccentricity < RESONANCE_CAPTURE_ECCENTRICITY
 }
 
 /// Whether a rocky planet despun on an orbit of `eccentricity` turns three
 /// times every two orbits (see the module's doc).
 pub fn resonant(locking_gyr: f32, age_gyr: f32, eccentricity: f32) -> bool {
-    locking_gyr < age_gyr && eccentricity >= RESONANCE_MIN_ECCENTRICITY
+    locking_gyr < age_gyr && eccentricity >= RESONANCE_CAPTURE_ECCENTRICITY
 }
 
 /// The axial tilt of the rocky world `p` drawn as `drawn` degrees, once its
@@ -198,9 +204,18 @@ mod tests {
         let mercury = StarInfo::new(SUN, 0.387, 0.2056);
         assert!(despun(&mercury) && !circularised(&mercury));
         assert!(mercury.spin_orbit_3_2 && !mercury.tidally_locked);
-        // On a circle, it would be locked.
-        let circular = StarInfo::new(SUN, 0.387, 0.0);
-        assert!(circular.tidally_locked && !circular.spin_orbit_3_2);
+        // On a circle, or on an orbit as round as Proxima b's, it would be
+        // locked (Ribas et al. 2016).
+        for e in [0.0, 0.0478, 0.059] {
+            let round = StarInfo::new(SUN, 0.387, e);
+            assert!(round.tidally_locked && !round.spin_orbit_3_2, "{e}");
+        }
+        // A habitable-zone Earth of an M5 dwarf at e = 0.0478 is locked,
+        // at 0.1 resonant.
+        let red = parse_type("M5V").unwrap();
+        let a = orbit_at(red, 0.5);
+        assert!(StarInfo::new(red, a, 0.0478).tidally_locked);
+        assert!(StarInfo::new(red, a, 0.1).spin_orbit_3_2);
         // Earth is neither.
         let earth = StarInfo::new(SUN, 1.0, 0.0167);
         assert!(!earth.tidally_locked && !earth.spin_orbit_3_2);

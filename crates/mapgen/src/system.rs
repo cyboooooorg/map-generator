@@ -2331,7 +2331,12 @@ mod spin_tests {
                 assert_eq!(body.spin.spin_orbit_3_2, info.spin_orbit_3_2, "{}", body.id);
                 if body.spin.locked {
                     locked += 1;
+                    assert!(body.orbit.eccentricity < 0.06, "{}", body.id);
+                }
+                // A circularised orbit is a circle, and its planet locked.
+                if crate::spin::circularised(&info) {
                     assert_eq!(body.orbit.eccentricity, 0.0, "{}", body.id);
+                    assert!(body.spin.locked, "{}", body.id);
                 }
                 if body.spin.spin_orbit_3_2 {
                     resonant += 1;

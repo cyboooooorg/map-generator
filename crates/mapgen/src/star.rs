@@ -499,12 +499,13 @@ pub struct StarInfo {
     pub locking_gyr: f32,
     /// Whether the planet is tidally locked, one face to its star: its
     /// locking time is shorter than the star's age ([`AGE_GYR`] or the
-    /// star's lifetime) and its orbit circular (see `crate::spin`).
+    /// star's lifetime) and its eccentricity under 0.06 (see
+    /// `crate::spin`).
     pub tidally_locked: bool,
     /// Whether the star's tides hold the planet in the 3:2 spin–orbit
     /// resonance instead, three turns every two orbits, as Mercury: despun
-    /// on an eccentric orbit (see `crate::spin`). Worlds made before it:
-    /// false.
+    /// on an orbit of eccentricity 0.06 or more (see `crate::spin`). Worlds
+    /// made before it: false.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub spin_orbit_3_2: bool,
