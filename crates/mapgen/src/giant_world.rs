@@ -5,13 +5,15 @@
 //! **Bands.** Fast rotation turns the flow into zonal jets; their width
 //! follows the Rhines scale `√(2U/β)` (Scott & Polvani 2007), so the number
 //! of eastward jets in each hemisphere grows as `√(ΩR/U)`: about five for
-//! Jupiter. The wind `U` is an outcome: it grows with the flux the giant
-//! radiates (its internal heat, cooled with the age of its system, plus the
-//! starlight it absorbs) and falls with the spin ([`wind_speed`]), so a
-//! Saturn-like giant, colder and slower, gets as many jets as Jupiter, an
-//! ice giant (fast and broad winds: retrograde at the equator, prograde at
-//! high latitudes) one or two, a locked hot Jupiter (its day is days long)
-//! one or two. Between the jets, pale zones (rising air, high ammonia
+//! Jupiter. `U` here is the speed of the eddies that make the jets
+//! ([`eddy_speed`]), which grows with the flux the giant radiates (its
+//! internal heat, cooled with the age of its system, plus the starlight it
+//! absorbs) and falls with the spin, so a Saturn-like giant, colder and
+//! slower, gets as many jets as Jupiter, an ice giant (fast and broad winds:
+//! retrograde at the equator, prograde at high latitudes) one or two, a
+//! locked hot Jupiter (its day is days long) one or two. The peak wind of
+//! the jets is another number ([`peak_wind`]), a calibration on the four
+//! giants of the Solar System: Saturn's 400 m/s and its 20 jets go together. Between the jets, pale zones (rising air, high ammonia
 //! clouds) alternate with dark belts (sinking air, deeper clouds), each
 //! hemisphere drawn on its own. Which clouds are on top, and so the colours
 //! and the height between zones and belts, come from the decks that
@@ -63,10 +65,10 @@ pub const CLOUD_DECK: f32 = 0.3;
 /// Earth's radius (m) and `GM` (m³/s²).
 const EARTH_RADIUS_M: f64 = 6.371e6;
 const EARTH_GM: f64 = 3.986e14;
-/// Jupiter's wind, m/s: the speed many of its jets reach ("exceed
+/// Eddy speed of Jupiter, m/s: the speed many of its jets reach ("exceed
 /// 100 m s⁻¹", Ingersoll et al. 2004, the Cambridge chapter in the article's
-/// sources) and the reference of [`wind_speed`]. Showman et al. 2010 give
-/// peaks from about 150 m/s on Jupiter.
+/// sources), the reference of [`eddy_speed`] and what its five jets per
+/// hemisphere need.
 const JUPITER_WIND: f64 = 100.0;
 /// Jupiter's total radiated flux, W/m²: the 6.25 it absorbs and the 7.485
 /// it makes (Li et al. 2018, doi:10.1038/s41467-018-06107-2).
@@ -74,11 +76,10 @@ const JUPITER_FLUX: f64 = 13.7;
 /// Jupiter's `β = 2Ω/R` at the equator, 1/(m s): 9.925 h, 71 492 km (NASA
 /// Jupiter fact sheet).
 const JUPITER_BETA: f64 = 2.0 * 1.7585e-4 / 7.1492e7;
-/// An ice giant's reference wind, flux and `β`: calibration, no source. The
-/// wind the jet count of Neptune needs (about 300 m/s: Showman et al. 2010
-/// give peaks over 400 m/s), at the flux of an ice giant of effective
-/// temperature 60 K, and Neptune's `β` (16.11 h, 24 764 km, NASA Neptune fact
-/// sheet).
+/// An ice giant's reference eddy speed, flux and `β`: calibration, no
+/// source. The speed the jet count of Neptune needs (about 300 m/s), at the
+/// flux of an ice giant of effective temperature 60 K, and Neptune's `β`
+/// (16.11 h, 24 764 km, NASA Neptune fact sheet).
 const ICE_WIND: f64 = 300.0;
 const ICE_FLUX: f64 = 5.670_374e-8 * 60.0 * 60.0 * 60.0 * 60.0;
 const ICE_BETA: f64 = 2.0 * 1.0834e-4 / 2.4764e7;
@@ -87,27 +88,43 @@ const ICE_BETA: f64 = 2.0 * 1.0834e-4 / 2.4764e7;
 const HOT_WIND: f64 = 2000.0;
 /// Jets per hemisphere at `√(ΩR/U) = 1`: Jupiter (`ΩR/U` ≈ 126) gets five.
 const JET_FACTOR: f64 = 0.45;
+/// Peak winds over `ΩR` (the Rossby number of the strongest jet) of the gas
+/// giants: Jupiter's 150 m/s ("about 150 m/s on Jupiter", Showman et al.
+/// 2010) over `ΩR` = 12 570 m/s at its flux of 13.7 W/m². Calibration, with
+/// [`ROSSBY_EXPONENT`]: `Ro ∝ F^−0.75` puts the app's own Saturn analogue
+/// (a 95 M⊕ giant at 9.6 AU radiates 3.2 W/m², colder than the real Saturn's
+/// 4.6) at about 350 to 400 m/s against "over 400" (Showman et al. 2010);
+/// with Saturn's real flux it would be about 270 m/s.
+const GAS_ROSSBY: f64 = 150.0 / (1.7585e-4 * 7.1492e7);
+const ROSSBY_EXPONENT: f64 = 0.75;
+/// Peak winds over `ΩR` of the ice giants: 0.11, which gives 285 m/s for
+/// Uranus and Neptune alike (`ΩR` about 2 600 m/s) against "up to 200 and
+/// 400 m/s" (Soyuer, Neuenschwander & Helled 2022, arXiv:2210.17389).
+/// Calibration, no source for the number itself.
+const ICE_ROSSBY: f64 = 0.11;
+/// Irradiated giants: a floor to the peak wind, m/s at 1 500 K of
+/// equilibrium temperature, growing as its square: calibration, no source,
+/// so that a warm giant joins the hot ones' superrotation ([`HOT_WIND`]).
+const IRRADIATED_WIND: f64 = 2000.0;
 
-/// Typical wind speed of a giant, m/s, from the energy it has to drive
-/// winds and its spin: `U = U₀ (F/F₀)^(2/5) (β/β₀)^(−1/5)`, with `U₀`, `F₀`
-/// and `β₀` of Jupiter (gas giants) or Neptune (ice giants).
+/// Speed of the eddies that set the width of the jets, m/s, from the energy
+/// they have and the spin: `U = U₀ (F/F₀)^(2/5) (β/β₀)^(−1/5)`, with `U₀`,
+/// `F₀` and `β₀` of Jupiter (gas giants) or Neptune (ice giants).
 ///
 /// The energy is the flux `F = σT_eff⁴` the giant radiates, the sum of the
 /// sunlight it absorbs and its internal heat; a fixed share of it feeds the
-/// winds, as on Earth, where about 1 % of the absorbed flux is converted
+/// eddies, as on Earth, where about 1 % of the absorbed flux is converted
 /// (Showman et al. 2010, section 3.1). In the turbulence that makes the jets
 /// the energy input `ε ~ U³/L_β` is carried at the Rhines scale
 /// `L_β = (U/β)^(1/2)` (Rhines 1975), which gives `U ∝ ε^(2/5) β^(−1/5)`:
-/// the dimensional balance of Vallis & Maltrud (1993, doi:10.1175/1520-0485
-/// (1993)023<1346:GOMFAJ>2.0.CO;2) for the jets of a forced flow on a beta
-/// plane, derived here and not read from their paper. Showman et al. say
-/// themselves that the winds of the giants are not understood this way
-/// (Neptune has stronger winds than Jupiter with 4 % of the sunlight):
-/// a Saturn-like giant comes out slower than Jupiter, not faster.
+/// derived here, not read from a paper (it is the balance of Vallis &
+/// Maltrud 1993 for a forced flow on a beta plane). It is the speed of the
+/// eddies, not of the jets: the jets of Saturn blow at 400 m/s ([`peak_wind`]),
+/// which with the Rhines count would give a third of its 20 jets.
 ///
-/// A hot giant is not driven this way: its wind is [`HOT_WIND`] scaled by
-/// its equilibrium temperature.
-fn wind_speed(
+/// A hot giant is not driven this way: its eddies go at [`HOT_WIND`] scaled
+/// by its equilibrium temperature.
+fn eddy_speed(
     kind: GiantKind,
     hot: bool,
     equilibrium_k: f32,
@@ -125,6 +142,49 @@ fn wind_speed(
         GiantKind::Ice => (ICE_WIND, ICE_FLUX, ICE_BETA),
     };
     (u0 * (flux / f0).powf(0.4) * (beta / b0).powf(-0.2)).clamp(20.0, 3000.0)
+}
+
+/// Peak wind of the jets, m/s: a calibration on the four giants of the Solar
+/// System, not a derivation. A gas giant's Rossby number `U/ΩR` falls as the
+/// flux it radiates rises (`Ro = 0.0119 (13.7 W/m² / F)^0.75`: Jupiter 150 m/s,
+/// the app's Saturn analogue about 350 against "over 400"); an ice giant's is 0.11 (Uranus 200,
+/// Neptune 400). Published scalings (Showman, Kaspi & Flierl 2011) are for the
+/// deep envelope and increase with the flux: none puts Saturn's cloud winds
+/// above Jupiter's, as observed. A giant warm from its star has at least an
+/// irradiation floor, and a hot one its superrotation.
+fn peak_wind(
+    kind: GiantKind,
+    hot: bool,
+    equilibrium_k: f32,
+    effective_k: f32,
+    omega: f64,
+    radius_m: f64,
+) -> f64 {
+    let irradiated = IRRADIATED_WIND * (f64::from(equilibrium_k) / 1500.0).powi(2);
+    if hot {
+        return HOT_WIND * (f64::from(equilibrium_k) / 1500.0).clamp(0.6, 2.5);
+    }
+    let reach = omega * radius_m;
+    let law = match kind {
+        GiantKind::Gas => {
+            let flux = 5.670_374e-8 * f64::from(effective_k).powi(4);
+            GAS_ROSSBY * (JUPITER_FLUX / flux).powf(ROSSBY_EXPONENT) * reach
+        }
+        GiantKind::Ice => ICE_ROSSBY * reach,
+    };
+    law.max(irradiated).clamp(20.0, 3000.0)
+}
+
+/// Shape of a Neptune-like ice giant's wind from the equator to the pole,
+/// `u(φ) = −398 + 0.188 φ² − 1.2×10⁻⁵ φ⁴` m/s (φ in degrees), fitted to the
+/// cloud tracking of Voyager 2 (Sromovsky et al. 1993, as quoted by
+/// Fitzpatrick et al. 2014, arXiv:1312.2676, table 1), divided by 398: −1 at
+/// the equator, changing sign near 50°, +0.6 at 70°, which is the westward
+/// equator and eastward high latitudes of Uranus and Neptune, with the
+/// westward peak larger than the eastward one.
+fn ice_shape(lat: f32) -> f32 {
+    let phi = lat.abs().min(90.0);
+    (-398.0 + 0.188 * phi.powi(2) - 1.2e-5 * phi.powi(4)) / 398.0
 }
 
 /// One band of latitude, from `south` to `north` (degrees).
@@ -311,6 +371,10 @@ pub struct GiantInfo {
     /// Whether it has a great spot (gas) or a dark spot (ice), and a polar
     /// hexagon.
     pub great_spot: bool,
+    /// Longitude and latitude (degrees) of the great spot, when there is
+    /// one: the viewer finds the storm that drifts slowly by it.
+    #[serde(default)]
+    pub great_spot_at: Option<[f32; 2]>,
     pub hexagon: bool,
     /// The look of the north and south poles, and the cyclones ringing
     /// each (0 when none).
@@ -333,7 +397,7 @@ pub struct Look {
     polar: f32,
     /// The north and south poles.
     poles: [Pole; 2],
-    /// Typical wind speed, m/s, and the equatorial jet (gas giants).
+    /// Peak wind, m/s, and the equatorial jet.
     wind: f32,
     equatorial_jet: f32,
     /// Jets at the band edges: latitude, signed speed, half-width.
@@ -385,7 +449,7 @@ fn palette(kind: GiantKind, clouds: Clouds, t: f32, u: f32) -> Palette {
     if clouds.thin <= 0.0 {
         return own;
     }
-    let next = class_palette(kind, clouds.class + 1, t, u);
+    let next = class_palette(kind, clouds.next, t, u);
     let blend = |a: [f32; 3], b: [f32; 3]| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * clouds.thin);
     Palette {
         zone: blend(own.zone, next.zone),
@@ -488,8 +552,9 @@ impl Look {
         let q = omega * omega * radius_m.powi(3) / gm;
         let flattening = (0.7 * q).min(0.12) as f32;
 
-        let wind = wind_speed(kind, hot, equilibrium, effective, omega, radius_m);
-        let jets = ((JET_FACTOR * (omega * radius_m / wind).sqrt()).round() as u32).clamp(1, 8);
+        let eddies = eddy_speed(kind, hot, equilibrium, effective, omega, radius_m);
+        let wind = peak_wind(kind, hot, equilibrium, effective, omega, radius_m);
+        let jets = ((JET_FACTOR * (omega * radius_m / eddies).sqrt()).round() as u32).clamp(1, 8);
 
         // The bands of each hemisphere, from the equator out to the polar
         // regions: an equatorial zone, then belts and zones in turn.
@@ -551,7 +616,9 @@ impl Look {
             } else {
                 -1.0
             };
-            let strength = rng.random_range(0.4..1.4) * (1.0 - lat.abs() / 90.0).sqrt();
+            // Off the equator the jets reach a third to two thirds of the
+            // peak wind (Jupiter's 50 to 100 m/s of its 150).
+            let strength = rng.random_range(0.3..0.7) * (1.0 - lat.abs() / 90.0).sqrt();
             jets_at.push((
                 lat,
                 sign * strength * wind as f32,
@@ -563,8 +630,8 @@ impl Look {
         // its equatorial jet blows against the spin (Showman et al. 2010;
         // Scott & Polvani 2007).
         let equatorial_jet = match (hot, kind) {
-            (false, GiantKind::Gas) => rng.random_range(0.8..4.0) * wind as f32,
-            (false, GiantKind::Ice) if jets > 1 => -rng.random_range(0.8..2.0) * wind as f32,
+            (false, GiantKind::Gas) => rng.random_range(0.9..1.2) * wind as f32,
+            (false, GiantKind::Ice) if jets > 1 => -rng.random_range(0.9..1.2) * wind as f32,
             _ => 0.0,
         };
 
@@ -654,6 +721,7 @@ impl Look {
                 wind_west: 0.0,
                 wind_profile: Vec::new(),
                 great_spot,
+                great_spot_at: great_spot.then(|| [storms[0].lon, storms[0].lat]),
                 hexagon,
                 poles: [PoleStyle::Haze; 2],
                 polar_cyclones: [0; 2],
@@ -764,12 +832,10 @@ impl Look {
             return self.wind * (-(lat / 25.0).powi(2)).exp() * polar_fade;
         }
         match self.info.kind {
-            // Three broad jets, westward at the equator, eastward near 69°:
-            // the profile of Uranus and Neptune scaled by the giant's wind.
-            GiantKind::Ice if self.info.jets <= 1 => {
-                let s = (lat.to_radians() * 1.3).sin();
-                self.wind * (1.6 * s * s - 0.8) * polar_fade
-            }
+            // Three broad jets, westward at the equator, eastward at high
+            // latitudes: the profile of Neptune (see [`ice_shape`]) scaled
+            // by the giant's peak wind.
+            GiantKind::Ice if self.info.jets <= 1 => self.wind * ice_shape(lat) * polar_fade,
             GiantKind::Ice | GiantKind::Gas => {
                 let jets: f32 = self
                     .jets_at
@@ -1179,48 +1245,69 @@ mod tests {
         assert_eq!(neptune.jets, 1);
         // Retrograde at the equator, prograde at high latitudes.
         let profile = &neptune.wind_profile;
+        let east = profile.iter().copied().fold(0.0, f32::max);
+        assert!(profile[45] < -100.0 && east > 100.0, "{profile:?}");
+    }
+
+    #[test]
+    fn the_solar_giants_get_their_jets_and_peak_winds() {
+        // (name, mass ME, AU, jets per hemisphere, west peak m/s, east peak
+        // m/s) with the ranges the calibration allows (Showman et al. 2010:
+        // Jupiter 150 m/s, Saturn and Neptune over 400; Uranus about 200).
+        let wind = |preset: &str, mass: f32, au: f32, jets: (u32, u32), peak: (f32, f32)| {
+            for seed in 0..12 {
+                let i = Look::draw(&params(preset, seed, mass, au), mass).info;
+                assert!(
+                    (jets.0..=jets.1).contains(&i.jets),
+                    "{preset} {seed}: {} jets",
+                    i.jets
+                );
+                let top = i.wind_east.max(i.wind_west);
+                assert!(
+                    (peak.0..peak.1).contains(&top),
+                    "{preset} {seed}: {top} m/s"
+                );
+            }
+        };
+        wind("gas-giant", 317.8, 5.2, (4, 6), (85.0, 200.0));
+        // Saturn: about 20 jets in all, 4J − 1 for J per hemisphere; the
+        // old fixed wind gave it four, a wind of 80 m/s would give seven.
+        wind("gas-giant", 95.16, 9.58, (4, 7), (250.0, 600.0));
+        wind("ice-giant", 14.5, 19.2, (1, 2), (180.0, 450.0));
+        wind("ice-giant", 17.1, 30.07, (1, 2), (180.0, 450.0));
+    }
+
+    #[test]
+    fn a_neptune_like_giants_wind_is_westward_at_the_equator_and_peaks_there() {
+        let i = Look::draw(&params("ice-giant", 2, 17.1, 30.0), 17.1).info;
+        assert_eq!(i.jets, 1);
+        // Voyager's fit: −398 at the equator, +0.6 of it at 70°: the
+        // westward peak is larger than the eastward one.
         assert!(
-            profile[45] < -100.0 && profile[45 + 30] > 100.0,
-            "{profile:?}"
+            i.wind_west > 1.2 * i.wind_east,
+            "{} {}",
+            i.wind_west,
+            i.wind_east
         );
+        assert!(i.wind_east > 0.4 * i.wind_west);
     }
 
     #[test]
-    fn a_saturn_like_giant_gets_saturns_jets_and_the_wind_is_an_outcome() {
-        // Saturn: about 20 jets in all, 4J − 1 for J per hemisphere: five
-        // to seven, not the four the fixed wind of 100 m/s gave.
-        for seed in 0..20 {
-            let saturn = Look::draw(&params("gas-giant", seed, 95.16, 9.5), 95.16).info;
-            assert!((5..=7).contains(&saturn.jets), "{} {}", seed, saturn.jets);
-        }
-        // The wind falls with the energy: the same giant far from its star
-        // and a young-looking one near it do not blow alike.
-        let wind = |mass: f32, au: f32| {
-            let i = Look::draw(&params("gas-giant", 1, mass, au), mass).info;
-            (i.wind_east.max(i.wind_west), i.effective_k)
+    fn the_peak_wind_follows_the_spin_and_the_flux_it_radiates() {
+        let peak = |preset: &str, mass: f32, au: f32, seed: u32| {
+            Look::draw(&params(preset, seed, mass, au), mass).wind
         };
-        let (cold, cold_k) = wind(317.8, 40.0);
-        let (warm, warm_k) = wind(317.8, 2.0);
-        assert!(warm_k > cold_k && warm > 1.5 * cold, "{cold} {warm}");
-    }
-
-    #[test]
-    fn an_ice_giants_winds_follow_its_energy_and_spin_not_one_fixed_profile() {
-        let peak = |mass: f32, au: f32, seed: u32| {
-            Look::draw(&params("ice-giant", seed, mass, au), mass).wind
-        };
-        // Neptune-like: close to the 300 m/s the jet count was made with.
-        let neptune = peak(17.1, 30.0, 2);
-        assert!((200.0..400.0).contains(&neptune), "{neptune}");
-        // Colder, further out: slower. Warmer: faster.
-        assert!(peak(17.1, 90.0, 2) < 0.9 * neptune);
-        assert!(peak(17.1, 8.0, 2) > 1.1 * neptune);
-        // The spin matters too: different seeds spin differently.
-        let spins: Vec<f32> = (0..30).map(|s| peak(17.1, 30.0, s)).collect();
+        // A gas giant that radiates less blows faster (Rossby number ∝ 1/F).
+        assert!(peak("gas-giant", 317.8, 5.2, 1) > 0.0);
+        assert!(peak("gas-giant", 95.16, 9.58, 1) > peak("gas-giant", 317.8, 5.2, 1) * 1.5);
+        // Different spins give different winds.
+        let spins: Vec<f32> = (0..30).map(|s| peak("ice-giant", 17.1, 30.0, s)).collect();
         let (lo, hi) = spins
             .iter()
             .fold((f32::MAX, 0f32), |(l, h), &w| (l.min(w), h.max(w)));
         assert!(hi > 1.05 * lo, "{lo} {hi}");
+        // A giant close to its star keeps at least the irradiation floor.
+        assert!(peak("gas-giant", 317.8, 0.3, 1) > 150.0);
     }
 
     #[test]

@@ -438,11 +438,12 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   gravity, internal heat cooling with the system's age, the great spot in
   a southern zone drifting slowly, previews following the generated
   bands (`giant_clouds.rs`, `giant_world.rs`). Left to do:
-  - Saturn's winds (over 400 m/s) and Neptune's are faster than Jupiter's
-    with less energy (Showman et al. 2010 call it not understood); the
-    energy scaling gives Saturn-like giants slower winds than Jupiter's,
-    and ice giants a calibration to Neptune. A friction or depth term
-    would need a model of the deep flow.
+  - The peak winds are a calibration on the four giants (Rossby number
+    against the flux), not a derivation: Showman et al. 2010 call the
+    winds of Saturn and Neptune, faster than Jupiter's on less energy,
+    not understood. A friction or depth term would need a model of the
+    deep flow. With Saturn's real flux the law gives about a third under
+    its winds, and Uranus comes out at 285 m/s against 200.
   - Saturn's internal heat is above the cooling law (helium rain); ice
     giants keep a fixed 40 K instead of Neptune's and Uranus's very
     different heat.

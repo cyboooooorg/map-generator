@@ -470,8 +470,9 @@ Giant worlds of their own (`src/giant_world.rs`), as presets
   temperature, and the wind in the moisture layer (a share of the
   strongest). `surface.png` comes rendered from the pipeline.
 - **Bands** from the Rhines count of eastward jets (Jupiter five a
-  hemisphere, Neptune one), the wind behind it scaled with the flux the
-  giant radiates and its spin, noise stretched along them and stronger at
+  hemisphere, Neptune one) from an eddy speed scaled with the flux the
+  giant radiates and its spin, the peak wind calibrated on the four
+  giants of the Solar System, noise stretched along them and stronger at
   the jets,
   vortices swirling them, hazy poles and an optional hexagon; colours
   by Sudarsky class and kind.

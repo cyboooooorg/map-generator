@@ -143,7 +143,7 @@ import {
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
 import type { RingSystem } from '../api/types/RingSystem';
-import { type GiantStorm, MAX_STORMS } from '../giantStorms';
+import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import { starField } from './stars';
 
@@ -489,8 +489,8 @@ export class PlanetView {
     // A giant's storms, each drifting whole (see setGiantStorms).
     uStorms: { value: Array.from({ length: MAX_STORMS }, () => new Vector4()) } as IUniform<Vector4[]>,
     uStormCount: { value: 0 } as IUniform<number>,
-    // Whether the largest storm is a great spot, which drifts slowly.
-    uGreatSpot: { value: 0 } as IUniform<number>,
+    // Index of the storm that is the great spot (it drifts slowly), or -1.
+    uGreatSpot: { value: -1 } as IUniform<number>,
     uHotGlow: { value: 0 } as IUniform<number>,
     uRingInner: { value: 0 } as IUniform<number>,
     uRingOuter: { value: 0 } as IUniform<number>,
@@ -1090,7 +1090,18 @@ export class PlanetView {
     const slots = this.u.uStorms.value;
     storms.slice(0, MAX_STORMS).forEach((s, k) => slots[k]!.set(s.u, s.v, s.halfU, s.halfV));
     this.u.uStormCount.value = Math.min(storms.length, MAX_STORMS);
+    this.storms = storms.slice(0, MAX_STORMS);
+    this.updateGreatSpot();
     this.requestRender();
+  }
+
+  /** The storms found in the map, and where the giant says its great spot is. */
+  private storms: readonly GiantStorm[] = [];
+  private greatSpotAt: readonly [number, number] | null = null;
+
+  /** Points uGreatSpot at the storm nearest the great spot (none if none lies near it). */
+  private updateGreatSpot(): void {
+    this.u.uGreatSpot.value = greatSpotIndex(this.storms, this.greatSpotAt);
   }
 
   /**
@@ -1102,7 +1113,8 @@ export class PlanetView {
   setGiant(info: GiantInfo | null): void {
     this.shared.uFlattening.value = info?.flattening ?? 0;
     this.u.uGiant.value = info ? 1 : 0;
-    this.u.uGreatSpot.value = info?.great_spot ? 1 : 0;
+    this.greatSpotAt = info?.great_spot_at ?? null;
+    this.updateGreatSpot();
     // Clouds above about 1 100 K glow red, brighter the hotter.
     const t = info ? Math.min(Math.max((info.effective_k - 1100) / 1100, 0), 1) : 0;
     this.u.uHotGlow.value = 0.6 * t * t * (3 - 2 * t);

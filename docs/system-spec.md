@@ -301,6 +301,8 @@ when the preview is made); a giant's `edges` are the latitudes of the
 bands it will be generated with, so the preview sphere shows the same
 belts and zones as the globe (`bands` is their number; a preview with no
 `edges`, made earlier, is drawn with evenly spaced bands).
+Such an earlier preview also keeps a giant's sRGB palette read as linear, so
+it stays washed out until the system is drawn again.
 
 ## Generating on demand
 

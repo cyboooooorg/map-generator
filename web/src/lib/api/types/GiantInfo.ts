@@ -53,7 +53,12 @@ wind_profile: Array<number>,
  * Whether it has a great spot (gas) or a dark spot (ice), and a polar
  * hexagon.
  */
-great_spot: boolean, hexagon: boolean, 
+great_spot: boolean, 
+/**
+ * Longitude and latitude (degrees) of the great spot, when there is
+ * one: the viewer finds the storm that drifts slowly by it.
+ */
+great_spot_at: [number, number] | null, hexagon: boolean, 
 /**
  * The look of the north and south poles, and the cyclones ringing
  * each (0 when none).

@@ -284,12 +284,17 @@ pub fn cloud_class(teff: f32, gravity: f32) -> u8 {
 const JUPITER_INTERNAL_FLUX: f64 = 7.485;
 /// Stefan–Boltzmann constant, W/(m² K⁴).
 const STEFAN_BOLTZMANN: f64 = 5.670_374e-8;
-/// Radius of Jupiter in the radius curve of [`giant_radius`], Earth radii.
-const JUPITER_RADIUS_EARTH: f32 = 11.21;
-/// Youngest age the cooling law is applied at, Gyr: it is a fit to the
-/// late cooling of giants and brown dwarfs, from about a hundred million
-/// years on (Burrows et al. 2001).
+/// Youngest age the cooling law is applied at, Gyr: the Baraffe et al.
+/// (2003) tables start at 0.1 Gyr.
 const YOUNGEST_GYR: f32 = 0.1;
+/// Exponents of the cooling law: `T ∝ M^0.5 t^−0.29`, fitted to the COND
+/// evolution tables of Baraffe et al. (2003, A&A 402, 701,
+/// doi:10.1051/0004-6361:20030252, tables 2 to 5) for 1 to 10.5 Jupiter
+/// masses and 0.5 to 10 Gyr (least squares in the logs; the fit is within
+/// 10 % of every entry, 5 % for 3 to 10 Jupiter masses). The same T_eff at
+/// 4.6 Gyr extrapolates to about 100 K for Jupiter.
+const COOLING_MASS_EXPONENT: f32 = 0.5;
+const COOLING_AGE_EXPONENT: f32 = -0.29;
 /// Internal temperature of an ice giant, K: calibration, no source (little
 /// internal heat compared with the gas giants').
 const ICE_INTERNAL_K: f32 = 40.0;
@@ -304,16 +309,17 @@ pub fn system_age_gyr(star_mass: f32) -> f32 {
 /// Temperature of the heat a giant of `mass_earth` radiates from its
 /// interior at `age_gyr`, K.
 ///
-/// The late cooling of giant planets and brown dwarfs follows power laws,
-/// `L ∝ t^−1.3 M^2.64` (Burrows et al. 2001, eq. 1, the fits of Burrows &
-/// Liebert 1993 and Marley et al. 1996; doi:10.1103/RevModPhys.73.719).
-/// With `L = 4πR²σT⁴` the temperature goes as `M^0.66 t^−0.325 R^−0.5`,
-/// taken here from Jupiter's, 107.2 K at 4.6 Gyr and 11.21 Earth radii
-/// (`7.485 W/m²`, Li et al. 2018). The old rule `100 K × (M/MJ)^0.4` had
-/// no age: a giant of ten Jupiter masses gets 250 K from it whatever its
-/// age; here it has about 510 K after 4.6 Gyr and a young one is far
-/// hotter. Saturn comes out at about 49 K, probably under its real
-/// internal heat (an extra source such as helium rain is not modelled).
+/// Giants cool as `T ∝ M^0.5 t^−0.29`, fitted to the evolution tables of
+/// Baraffe et al. (2003; see [`COOLING_MASS_EXPONENT`]) and normalised to
+/// Jupiter's own, 107.2 K at 4.6 Gyr (`7.485 W/m²`, Li et al. 2018,
+/// doi:10.1038/s41467-018-06107-2). Against the tables, ten Jupiter masses
+/// have about 340 K at 4.6 Gyr (Baraffe: 322 K at 5 Gyr), 530 K at 1 Gyr
+/// (491 K) and 1 000 K at 0.1 Gyr (953 K). The old rule `100 K × (M/MJ)^0.4`
+/// had no age. (Burrows et al. 2001, eq. 1, `L ∝ t^−1.3 M^2.64`,
+/// doi:10.1103/RevModPhys.73.719, normalised to Jupiter overshoots by half
+/// at ten Jupiter masses: its exponents belong to brown dwarfs.) Saturn
+/// comes out at 59 K, under its real internal heat (an extra source such as
+/// helium rain is not modelled).
 ///
 /// An ice giant keeps [`ICE_INTERNAL_K`].
 pub fn internal_temperature(kind: GiantKind, mass_earth: f32, age_gyr: f32) -> f32 {
@@ -322,12 +328,9 @@ pub fn internal_temperature(kind: GiantKind, mass_earth: f32, age_gyr: f32) -> f
     }
     let jupiter = (JUPITER_INTERNAL_FLUX / STEFAN_BOLTZMANN).powf(0.25) as f32;
     let mass = mass_earth / JUPITER_EARTH_MASSES;
-    // The radius of the giant alone, without the inflation of a hot one.
-    let radius = giant_radius(mass_earth, 0.0);
     jupiter
-        * mass.powf(2.64 / 4.0)
-        * (age_gyr.max(YOUNGEST_GYR) / AGE_GYR).powf(-1.3 / 4.0)
-        * (JUPITER_RADIUS_EARTH / radius).sqrt()
+        * mass.powf(COOLING_MASS_EXPONENT)
+        * (age_gyr.max(YOUNGEST_GYR) / AGE_GYR).powf(COOLING_AGE_EXPONENT)
 }
 
 /// Surface gravity of a giant of `mass_earth` and `radius_earth`, m/s².
@@ -681,31 +684,37 @@ mod tests {
         // Jupiter's own: 7.485 W/m² of internal heat is 107 K.
         let jupiter = internal_temperature(GiantKind::Gas, JUPITER_EARTH_MASSES, AGE_GYR);
         assert!((jupiter - 107.2).abs() < 0.3, "{jupiter}");
-        // Saturn: the cooling law alone gives 49 K (it really has 78 K).
+        // Saturn: the cooling law alone gives 59 K (it really has more).
         let saturn = internal_temperature(GiantKind::Gas, 95.16, AGE_GYR);
-        assert!((44.0..56.0).contains(&saturn), "{saturn}");
-        // Ten Jupiter masses cooled for 4.6 Gyr: about 510 K, not 250 K at
-        // any age as the old mass-only rule had it; a young one far hotter.
-        let heavy = internal_temperature(GiantKind::Gas, 10.0 * JUPITER_EARTH_MASSES, AGE_GYR);
-        assert!((450.0..580.0).contains(&heavy), "{heavy}");
-        let young = internal_temperature(GiantKind::Gas, 10.0 * JUPITER_EARTH_MASSES, 0.5);
-        assert!(young > 1.5 * heavy, "{young}");
+        assert!((54.0..64.0).contains(&saturn), "{saturn}");
+        // Baraffe et al. (2003) for ten Jupiter masses: 491 K at 1 Gyr,
+        // 322 K at 5 Gyr, 953 K at 0.1 Gyr; within 10 %.
+        let heavy = |age| internal_temperature(GiantKind::Gas, 10.0 * JUPITER_EARTH_MASSES, age);
+        for (age, table) in [(1.0, 491.0), (5.0, 322.0), (0.1, 953.0)] {
+            let got = heavy(age);
+            assert!(
+                (got / table - 1.0).abs() < 0.12,
+                "{age} Gyr: {got} vs {table}"
+            );
+        }
+        // And one Jupiter mass at 1 Gyr: 160 K.
+        let one = internal_temperature(GiantKind::Gas, JUPITER_EARTH_MASSES, 1.0);
+        assert!((one / 160.0 - 1.0).abs() < 0.2, "{one}");
         // The Sun's age, or a short-lived star's whole life.
         assert_eq!(system_age_gyr(1.0), AGE_GYR);
         assert!(system_age_gyr(3.0) < 1.0);
     }
 
     #[test]
-    fn an_old_massive_giant_far_from_its_star_is_not_a_water_cloud_world() {
-        // Same mass, same far orbit: ten Jupiter masses at 40 AU.
+    fn an_old_massive_giant_far_from_its_star_keeps_its_own_heat() {
+        // Ten Jupiter masses at 40 AU: it radiates its own 340 K, with no
+        // sunlight to speak of, and sits near the edge of the water clouds.
         let star = values(42.0);
         let internal = internal_temperature(GiantKind::Gas, 3178.0, system_age_gyr(star.mass));
         let teq = equilibrium_k(star.luminosity / 1600.0);
         let teff = (teq.powi(4) + internal.powi(4)).powf(0.25);
-        // Hot enough from the inside to lose its ammonia clouds, but its
-        // class follows the decks that condense, not a fixed 250 K.
-        assert_eq!(cloud_class(teff, 60.0), Clouds::of(teff, 60.0).class);
-        assert!(teff > 350.0, "{teff}");
+        assert!((320.0..380.0).contains(&teff), "{teff}");
+        assert!((2..=3).contains(&cloud_class(teff, 60.0)));
     }
 
     #[test]

@@ -49,6 +49,10 @@ const KAPPA: f64 = 2.0 / 7.0;
 /// its effective temperature of 124.7 K, from the 13.7 W/m² it radiates
 /// (absorbed 6.25 plus internal 7.485 W/m²; Li et al. 2018,
 /// doi:10.1038/s41467-018-06107-2).
+///
+/// The profile puts the tropopause of Jupiter at 81 K for 0.085 bar (the real
+/// one is 110 K near 0.1 bar): the tropopause pressure is a knob that hides
+/// the cold top of a dry adiabat, not a measured level.
 const ONE_BAR_OVER_TEFF: f64 = 1.32;
 /// Pressure of the tropopause, where the decks end, bar: calibration, no
 /// source (Jupiter's is near 0.1 bar). It is set so that the water deck
@@ -92,8 +96,11 @@ pub fn temperature_k(teff: f64, p_bar: f64) -> f64 {
 /// and 681 K more for the heat of fusion (5.66 kJ/mol) on the solid.
 /// Ammonium hydrosulphide: `log10 Kp = 14.82 − 4705 / T` with `Kp` in atm²
 /// for `NH₃ + H₂S ⇌ NH₄SH` as Lewis (1969,
-/// doi:10.1016/0019-1035(69)90091-8) gives it; the three laws were checked
-/// by the bases they give Jupiter, not read from the papers' tables.
+/// doi:10.1016/0019-1035(69)90091-8) gives it, as quoted by Li & Ingersoll
+/// (2018, arXiv:1801.05529) and checked by the base it gives Jupiter (not
+/// read from Lewis's paper). It is fitted to 180-300 K and extended in a
+/// straight line outside, which a colder giant needs; only the relief
+/// between decks uses it (the classes come from ammonia and water).
 fn excess(deck: Deck, p_bar: f64, t: f64) -> f64 {
     match deck {
         Deck::Water => {
@@ -164,6 +171,8 @@ const METHANE_RED: f32 = 0.85;
 pub struct Clouds {
     /// Cloud class of Sudarsky, Burrows & Pinto (2000), 1 to 5.
     pub class: u8,
+    /// The class whose look shows through as the clouds thin.
+    pub next: u8,
     /// The deck on top, when there is one (classes I and II).
     pub top: Option<Deck>,
     /// How thin the top deck is, `[0, 1]`: 0 for a thick one, 1 for one that
@@ -196,8 +205,9 @@ fn relief_of(teff: f64, gravity: f64, top: Option<Deck>) -> f32 {
     // The last deck modelled has nothing beneath: one e-fold of pressure.
     let ratio = below.map_or(std::f64::consts::E, |p| p / p_top);
     // Scale height R T / (μ g), μ = 2.22 g/mol.
-    let height = 8.314 * temperature_k(teff, p_top) / (2.22e-3 * gravity);
-    (height * ratio.max(1.0).ln()) as f32
+    let height = 8.314 * temperature_k(teff, p_top) / (2.22e-3 * gravity.max(0.1));
+    let relief = (height * ratio.max(1.0).ln()) as f32;
+    if relief.is_finite() { relief } else { 0.0 }
 }
 
 impl Clouds {
@@ -209,17 +219,23 @@ impl Clouds {
     pub fn of(teff: f32, gravity: f32) -> Self {
         let t = f64::from(teff);
         if teff >= 1500.0 || (gravity < LOW_GRAVITY && teff >= LOW_GRAVITY_CLASS_V_K) {
-            return Self::flat(5);
+            return Self::flat(5, 5, 0.0);
         }
+        // The flat classes blend into the next over the last 100 K, so that
+        // no bound is a step in colour (calibration, no source).
+        let ramp = |from: f32| smooth(f64::from((teff - from) / 100.0)) as f32;
         if teff >= 900.0 {
-            return Self::flat(4);
+            return Self::flat(4, 5, ramp(1400.0));
         }
         let ammonia = base_bar(Deck::Ammonia, t);
         let water = base_bar(Deck::Water, t);
         let (class, top, base) = match (ammonia, water) {
             (Some(p), _) => (1, Some(Deck::Ammonia), p),
             (None, Some(p)) => (2, Some(Deck::Water), p),
-            (None, None) => return Self::flat(3),
+            (None, None) => {
+                let next = if gravity < LOW_GRAVITY { 5 } else { 4 };
+                return Self::flat(3, next, ramp(800.0));
+            }
         };
         // Thick once the base lies 4 times deeper than the tropopause.
         let depth = (base / TROPOPAUSE_BAR).ln() / 4f64.ln();
@@ -227,19 +243,25 @@ impl Clouds {
         let relief = relief_of(t, f64::from(gravity), top) / jupiter_relief();
         Clouds {
             class,
+            next: class + 1,
             top,
             thin: thin as f32,
-            relief: relief.clamp(0.3, 2.0),
+            relief: if relief.is_finite() {
+                relief.clamp(0.3, 2.0)
+            } else {
+                1.0
+            },
         }
     }
 
     /// A class with no volatile deck on top: haze and silicate clouds only
     /// show a faint relief (calibration, no source).
-    fn flat(class: u8) -> Self {
+    fn flat(class: u8, next: u8, thin: f32) -> Self {
         Clouds {
             class,
+            next,
             top: None,
-            thin: 0.0,
+            thin,
             relief: 0.5,
         }
     }
@@ -310,6 +332,19 @@ mod tests {
         assert!(class(125.0).thin < 0.1);
         // Jupiter sets the relief.
         assert!((class(124.7).relief - 1.0).abs() < 0.05);
+    }
+
+    #[test]
+    fn the_hot_classes_blend_before_their_bounds_too() {
+        assert!(Clouds::of(899.0, 25.0).thin > 0.95);
+        assert_eq!(Clouds::of(899.0, 25.0).next, 4);
+        assert!(Clouds::of(1499.0, 25.0).thin > 0.95);
+        assert_eq!(Clouds::of(1499.0, 25.0).next, 5);
+        // A low-gravity giant goes straight to the pale class V.
+        assert_eq!(Clouds::of(899.0, 8.0).next, 5);
+        assert_eq!(Clouds::of(700.0, 25.0).thin, 0.0);
+        // No NaN from a giant with no gravity.
+        assert!(Clouds::of(150.0, 0.0).relief.is_finite());
     }
 
     #[test]

@@ -269,9 +269,9 @@ export const surfaceFragment = /* glsl */ `
     for (int k = 0; k < ${MAX_STORMS}; k++) {
       if (float(k) >= uStormCount) break;
       vec4 storm = uStorms[k];
-      // The great spot, the largest storm, drifts slowly; the others go with
-      // the wind where they sit.
-      float wind = k == 0 && uGreatSpot > 0.5 ? ${GREAT_SPOT_DRIFT.toFixed(3)} : bandWind(storm.y);
+      // The great spot (uGreatSpot, its index) drifts slowly; the others go
+      // with the wind where they sit.
+      float wind = float(k) == uGreatSpot ? ${GREAT_SPOT_DRIFT.toFixed(3)} : bandWind(storm.y);
       vec2 at = vec2(uv.x - uBandTime * wind / ${BAND_PERIOD_S.toFixed(1)}, uv.y);
       float d = length(inStorm(at, storm));
       if (d < 1.0) colour = mix(colour, textureGrad(uMap, at, gx, gy).rgb, 1.0 - smoothstep(0.8, 1.0, d));

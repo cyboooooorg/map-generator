@@ -82,3 +82,26 @@ export function giantStorms(ids: Uint8Array, width: number, height: number, stor
     .slice(0, MAX_STORMS)
     .map(({ u, v, halfU, halfV }) => ({ u, v, halfU, halfV }));
 }
+
+/**
+ * Index of the storm that is a giant's great spot: the one nearest the spot
+ * the generator placed (`great_spot_at`, longitude and latitude in degrees),
+ * within 15° of it; -1 when the giant has none or no storm lies there. The
+ * largest storm is not told apart this way: a white oval can tie with it.
+ */
+export function greatSpotIndex(storms: readonly GiantStorm[], at: readonly [number, number] | null): number {
+  if (!at) return -1;
+  let best = -1;
+  let bestDistance = 15;
+  storms.forEach((s, k) => {
+    let dLon = Math.abs(s.u * 360 - at[0]) % 360;
+    if (dLon > 180) dLon = 360 - dLon;
+    const dLat = (s.v - 0.5) * 180 - at[1];
+    const d = Math.hypot(dLon * Math.cos((at[1] * Math.PI) / 180), dLat);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = k;
+    }
+  });
+  return best;
+}
