@@ -1127,6 +1127,10 @@ fn planet_params(
         giants: if giant { None } else { Some(GiantsMode::None) },
         host: if giant { None } else { Some(HostMode::None) },
         mass_earth: giant.then_some(slot.mass_earth as f32),
+        // A rocky planet takes the size of the mass it was spaced with, at
+        // Earth's density (the mass a world's size gives, see planet_body),
+        // rather than its preset's own draw, so that the spacing holds.
+        circumference_km: (!giant).then(|| (40_075.0 * slot.mass_earth.cbrt()) as f32),
         width: Some(width),
         height: Some(height),
         ..WorldRequest::default()
@@ -1914,6 +1918,45 @@ mod tests {
             ),
             Err(RequestError::UnknownType(_))
         ));
+    }
+
+    #[test]
+    fn drawn_planets_keep_the_spacing_with_their_own_masses() {
+        // The masses stored, not only those the slots were spaced with.
+        for seed in 0..40 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            let star_mass = f64::from(system.star.info.mass);
+            let mut planets = planets(&system);
+            planets.sort_by(|a, b| {
+                a.orbit
+                    .semi_major_axis_au
+                    .total_cmp(&b.orbit.semi_major_axis_au)
+            });
+            for pair in planets.windows(2) {
+                let slot = |b: &Body| Slot {
+                    body_type: b.body_type.clone(),
+                    mass_earth: b.physical.mass_earth,
+                    orbit_au: b.orbit.semi_major_axis_au,
+                    eccentricity: b.orbit.eccentricity,
+                    fixed: false,
+                };
+                // A hair of slack for the stored values' rounding.
+                let (mut inner, outer) = (slot(pair[0]), slot(pair[1]));
+                inner.orbit_au *= 0.999;
+                assert!(
+                    clear(&inner, &outer, star_mass),
+                    "seed {seed}: {} and {}",
+                    pair[0].id,
+                    pair[1].id
+                );
+            }
+        }
     }
 
     #[test]
