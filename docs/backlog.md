@@ -636,6 +636,14 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   condenses late on a climb. Done when the lee of such a range gets at
   most half the rain of flat ground, with the sea's humidity from a
   source (marine boundary layer relative humidity).
+- **Too little arid land:** on four `earth-like` seeds desert and
+  shrubland cover under 1 % of the land (0.2 % on main before the climate
+  fixes), where Köppen's arid climates B cover 30 % of Earth's (Peel et
+  al. 2007, doi:10.5194/hess-11-1633-2007). The precipitation term
+  saturates near +1 on most land, since the rain is divided by what the
+  air holds, a stand-in for potential evaporation that grows faster
+  than any evaporation formula. Done when the index uses a sourced
+  potential evaporation and the arid share comes near Earth's.
 - **Storms, fronts and ENSO:** moisture is the annual mean of a steady
   wind. Weather, interannual variability (El Niño, La Niña) and the storm
   rain that makes most orographic precipitation are model limits, not
