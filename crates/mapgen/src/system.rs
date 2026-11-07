@@ -401,10 +401,6 @@ fn is_giant(body_type: &str) -> bool {
     matches!(body_type, "gas-giant" | "ice-giant" | "hot-jupiter")
 }
 
-/// The planets drawn when a request leaves them to the draw: small planets
-/// from the Kepler counts (about 1.5 within 1 AU of a Sun-like star, 2.5 of
-/// an M dwarf; Mulders et al. 2018), a few colder ones beyond, the giants
-/// as [`GiantSystem`] draws them; their types from where they fall.
 /// A hot Jupiter for a drawn system, or none: as often as round a world
 /// ([`HOT_JUPITERS`], about 1 % of Sun-like stars, Wright et al. 2012;
 /// times `10^(2 [Fe/H])` and the star's mass, like the other gas giants),
@@ -429,6 +425,11 @@ fn drawn_hot_jupiter(
     })
 }
 
+/// The planets drawn when a request leaves them to the draw: small planets
+/// from the Kepler counts (about 1.5 within 1 AU of a Sun-like star, 2.5 of
+/// an M dwarf; Mulders et al. 2018), a few colder ones beyond, the giants
+/// as [`GiantSystem`] draws them; their types from where they fall. Hot
+/// Jupiters come from [`drawn_hot_jupiter`].
 fn drawn_types(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<(String, f64)> {
     let mass = f64::from(star.mass);
     let inner_mean = if mass < 0.6 {
@@ -748,12 +749,18 @@ fn draw_whole(
             kept.remove(i);
             let mut slots: Vec<Slot> = kept
                 .iter()
-                .map(|(t, a)| Slot {
-                    body_type: t.clone(),
-                    mass_earth: draw_mass(t, &mut rng),
-                    orbit_au: *a,
-                    eccentricity: f64::from(draw_eccentricity(&mut rng)) * 0.4,
-                    fixed: false,
+                .map(|(t, a)| {
+                    let mass_earth = draw_mass(t, &mut rng);
+                    // Drawn for every planet, so the others' draws stay put;
+                    // a hot Jupiter's orbit is circular.
+                    let e = f64::from(draw_eccentricity(&mut rng)) * 0.4;
+                    Slot {
+                        body_type: t.clone(),
+                        mass_earth,
+                        orbit_au: *a,
+                        eccentricity: if t == "hot-jupiter" { 0.0 } else { e },
+                        fixed: false,
+                    }
                 })
                 .collect();
             if space(&mut slots, star_mass, hz, ice).is_ok() {

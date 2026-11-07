@@ -332,7 +332,7 @@ their latitude bands: a substellar circulation is left for later.
 In the "Star light" view only, the surface shader recolours vegetated
 biomes (by their share of plants: forest and jungle 1 down to tundra
 0.35) towards dark purple-black under stars cooler than 4 900 K (fully
-at 3 400 K, an M2 dwarf), about a third as bright since such leaves
+at 3 400 K, between M3V and M3.5V), about a third as bright since such leaves
 absorb the whole visible range, and towards gold under stars hotter than
 the Sun (fully at 7 300 K), keeping their luminance. Sun-like stars and
 early K dwarfs leave them as they are: round a K2V star, whose light at

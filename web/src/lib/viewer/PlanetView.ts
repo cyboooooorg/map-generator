@@ -413,11 +413,11 @@ export interface HostStar {
 
 /**
  * How far vegetation is recoloured under a star (see the surface shader):
- * towards dark purple-black below 4 900 K (fully at 3 400 K, an M2 dwarf),
- * towards gold above the Sun's temperature (fully at 7 300 K). None from
- * 4 900 to 5 772 K: plants round early K dwarfs, whose light at the ground
- * peaks in the red like the Sun's, "would look very similar to the Earth"
- * (Kiang et al. 2007, paper II).
+ * towards dark purple-black below 4 900 K (fully at 3 400 K, between M3V
+ * and M3.5V), towards gold above the Sun's temperature (fully at 7 300 K).
+ * None from 4 900 to 5 772 K: plants round early K dwarfs, whose light at
+ * the ground peaks in the red like the Sun's, "would look very similar to
+ * the Earth" (Kiang et al. 2007, paper II).
  */
 export function vegetationShift(teffK: number): [number, number] {
   const clamp = (x: number) => Math.min(1, Math.max(0, x));

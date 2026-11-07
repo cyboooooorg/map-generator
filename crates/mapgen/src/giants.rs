@@ -224,7 +224,7 @@ fn world_mass_earth(p: &WorldParams) -> f64 {
 /// The heat a hot giant's interior gets from its star's light, relative to
 /// the most any giant gets, at an `equilibrium_k` (K, Earth's albedo, as
 /// [`equilibrium_k`] gives it): the flux times the share of it turned into
-/// heat, the Gaussian in `log F` of Thorngren & Fortney (2018, eq. 35:
+/// heat, the Gaussian in `log F` of Thorngren & Fortney (2018, eq. 34 of the preprint:
 /// 2.37 % at most, at `log F` = 0.14 with `F` in Gerg s⁻¹ cm⁻², spread
 /// 0.37). The share falls at high fluxes faster than the flux grows: the
 /// heat peaks at about 1 700 K, is 0.8 of it at 1 500 K, 0.5 at 2 200 K
