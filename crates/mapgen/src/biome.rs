@@ -428,13 +428,19 @@ pub struct BiomeRules {
 impl Default for BiomeRules {
     fn default() -> Self {
         Self {
+            // Altitude lines, in elevation units (25 km) above the sea
+            // level; the waterline is 0.15 below it. Set for the floating
+            // crust's hypsometry (see `generation::floating`): deep ocean
+            // 5 km under the waterline, shores under 1.5 km above it,
+            // highland from 2 km, snow from 4.5 km, volcanoes from 3 km,
+            // ash from 1.5 km.
             waterline: -0.15,
-            deep_ocean: -0.45,
+            deep_ocean: -0.35,
             sea_ice_temperature: -13.5,
-            shore_top: 0.0,
+            shore_top: -0.09,
             shore_width_km: 40.0,
-            highland: 0.10,
-            snow_line: 0.30,
+            highland: -0.07,
+            snow_line: 0.03,
             highland_snow_temperature: 0.0,
             polar: 0.0,
             boreal: 0.0,
@@ -447,10 +453,10 @@ impl Default for BiomeRules {
             forest_moisture: 0.20,
             desert_moisture: -0.05,
             jungle_moisture: 0.30,
-            volcano_elevation: 0.15,
+            volcano_elevation: -0.03,
             volcano_zone: 0.55,
             lava_zone: 0.30,
-            ash_elevation: 0.0,
+            ash_elevation: -0.09,
             ash_zone: 0.15,
             vent_zone: 0.45,
         }
@@ -684,7 +690,7 @@ mod tests {
         let rules = crate::preset::Preset::load("terran").unwrap().rules;
         let forest = |volcanic_zone: f32| {
             rules.choose(BiomeInput {
-                elevation: 0.05,
+                elevation: -0.12,
                 moisture: 0.5,
                 temperature: 8.0,
                 seasonality: 0.0,
@@ -744,7 +750,7 @@ mod tests {
     fn shore_needs_nearby_water() {
         let rules = BiomeRules::default();
         let lowland = |coast_distance_km| BiomeInput {
-            elevation: -0.05,
+            elevation: -0.13,
             moisture: 0.0,
             temperature: 20.0,
             seasonality: 0.0,
@@ -779,7 +785,7 @@ mod tests {
         let rules = BiomeRules::default();
         let land = |temperature: f32, seasonality: f32| {
             rules.choose(BiomeInput {
-                elevation: 0.05,
+                elevation: -0.12,
                 moisture: 0.5,
                 temperature,
                 seasonality,
@@ -806,7 +812,7 @@ mod tests {
             river: true,
             temperature: -5.0,
             seasonality,
-            elevation: 0.05,
+            elevation: -0.12,
             moisture: 0.5,
             volcanic_zone: 0.0,
             coast_distance_km: 1000.0,

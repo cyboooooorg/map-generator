@@ -1312,7 +1312,7 @@ mod tests {
             pressure_bar: 0.006,
             ..p.clone()
         };
-        assert!((lapse_rate(&mars) / EARTH_LAPSE - 0.533).abs() < 0.01);
+        assert!((lapse_rate(&mars) / EARTH_LAPSE - mars.gravity_modifier()).abs() < 1e-3);
         let moon = crate::world::WorldParams {
             pressure_bar: 0.0,
             ..p

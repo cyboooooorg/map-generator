@@ -101,6 +101,9 @@ struct Physics {
     erode: f32,
     /// Fraction of water evaporated per step.
     evaporate: f32,
+    /// Acceleration of a droplet per unit of height it drops (Beyer 2015):
+    /// a constant of the droplet method, tuned with the others, not the
+    /// planet's gravity. A heavier world is not worn faster.
     gravity: f32,
     max_steps: u32,
     /// Radius of the erosion brush, in erosion-grid pixels.

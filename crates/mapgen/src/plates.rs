@@ -11,7 +11,9 @@
 //! (frozenfractal's *Around The World* builds its plates the same way).
 //!
 //! **Motion.** Each plate turns about an Euler pole of its own, at 20 to
-//! 100 km per Ma at its equator (2 to 10 cm per year, Earth's range).
+//! 100 km per Ma at its equator (2 to 10 cm per year, Earth's range):
+//! faster the longer the edge along which it sinks under its neighbours
+//! (slab pull, see [`pull_by_slabs`]).
 //!
 //! **Boundaries.** On a coarse cube-sphere grid ([`CubeGrid`], nearly
 //! uniform, so the poles are like anywhere else), a cell whose neighbour
@@ -397,6 +399,10 @@ pub struct Relief {
     /// Height added (negative: lowered), elevation units, at Earth's
     /// gravity.
     pub uplift: f32,
+    /// Height of young ocean floor above the old floor, elevation units:
+    /// the swell of a mid-ocean ridge, from the age of the floor (see
+    /// [`ridge_swell`]). Thermal isostasy: the same at any gravity.
+    pub swell: f32,
     /// Weight of mountain ridges, in `[0, 1]`.
     pub orogeny: f32,
     /// Weight of a volcanic arc, in `[0, 1]`.
@@ -408,6 +414,31 @@ const ARC_SPEED: f32 = 2.0;
 /// Convergence over which boundary relief grows from nothing to its full
 /// height, cm per year.
 const RELIEF_SPEED: (f32, f32) = (0.5, 5.0);
+
+/// Depth of the ocean floor at a ridge crest, km, and its sinking with
+/// the square root of its age, km per √Ma: `d = 2.5 + 0.35 √t` up to
+/// about 70 Ma, as the floor cools and contracts (Parsons & Sclater 1977,
+/// doi:10.1029/JB082i005p00803).
+const RIDGE_CREST_KM: f32 = 2.5;
+const SUBSIDENCE_KM: f32 = 0.35;
+/// Depth of the generator's old sea floor, km: its median, about 0.16
+/// elevation units (see `craters::ELEVATION_KM`). Young floor stands above
+/// it until the age at which Parsons & Sclater's floor reaches this depth
+/// (18 Ma); older floor stays at the noise's depth, which knows no age.
+pub const OLD_FLOOR_KM: f32 = 4.0;
+
+/// The swell of the ocean floor at `d_km` from a ridge spreading at
+/// `spreading` cm per year (both plates together), elevation units: the
+/// floor there is `d / (v/2)` old, and stands above [`OLD_FLOOR_KM`] by
+/// what Parsons & Sclater's age–depth relation gives. 1.5 km at the crest;
+/// at 5 cm/yr it fades out 460 km from the ridge, at 2 cm/yr 180 km.
+pub fn ridge_swell(d_km: f32, spreading: f32) -> f32 {
+    // cm/yr to km/Ma, one plate's half.
+    let half_km_per_ma = 5.0 * spreading.max(1e-3);
+    let age_ma = d_km.max(0.0) / half_km_per_ma;
+    let depth_km = RIDGE_CREST_KM + SUBSIDENCE_KM * age_ma.sqrt();
+    (OLD_FLOOR_KM - depth_km).max(0.0) / crate::craters::ELEVATION_KM
+}
 
 /// A bump of width `sigma` (km) centred at `mu` km from the boundary.
 fn bump(d: f32, mu: f32, sigma: f32) -> f32 {
@@ -445,7 +476,7 @@ impl PlateMap {
         t_ma: f64,
         continental: impl Fn([f64; 3]) -> bool + Sync,
     ) -> Self {
-        let plates = Plates::new(p);
+        let mut plates = Plates::new(p);
         // A fixed grid, whatever the map's size: the same world gets the
         // same boundaries at every resolution.
         let grid = CubeGrid { size: COARSE_SIZE };
@@ -455,6 +486,10 @@ impl PlateMap {
             .into_par_iter()
             .map(|k| plates.plate_at(grid.point(k)) as u16)
             .collect();
+        // Slab pull: the present speed of each plate from its subducting
+        // edge, found on the present boundaries.
+        let present_cells = boundary_cells(&grid, &present, |k| continental(grid.point(k)));
+        pull_by_slabs(&mut plates, &present_cells);
         let epoch = (t_ma != 0.0).then(|| plates.at_epoch(t_ma));
         // The plate and crust of each cell at the epoch (the crust of the
         // present map is only sampled on its boundaries, below).
@@ -465,63 +500,31 @@ impl PlateMap {
                 (plate, Some(crust))
             }
         };
-        let crust_of = |k: usize| match &crust {
-            Some(crust) => crust[k],
-            None => continental(grid.point(k)),
-        };
         let velocity = |plate: u16, q: [f64; 3]| match &epoch {
             Some(epoch) => epoch.velocity(usize::from(plate), q),
             None => plates.velocity(usize::from(plate), q),
         };
-        // Boundary cells and their convergence: the speed of this plate
-        // against the other one across the boundary. The direction across
-        // is taken over a window of cells, from this cell towards those of
-        // the other plate: one neighbour only gives one of 8 directions,
-        // which jump from cell to cell along a stepped boundary.
-        let seeds: Vec<(usize, Boundary)> = (0..n)
-            .into_par_iter()
-            .filter_map(|k| {
-                let a = plate[k];
-                // The other plate: the first neighbour's that is not this one.
-                let (across_cell, b) = grid
-                    .neighbours(k)
-                    .map(|j| (j, plate[j]))
-                    .find(|&(_, other)| other != a)?;
-                let p = grid.point(k);
-                let mut towards = [0.0f64; 3];
-                for oy in -BOUNDARY_WINDOW..=BOUNDARY_WINDOW {
-                    for ox in -BOUNDARY_WINDOW..=BOUNDARY_WINDOW {
-                        let j = grid.offset(k, ox, oy);
-                        if plate[j] == b {
-                            let q = grid.point(j);
-                            towards = [
-                                towards[0] + q[0] - p[0],
-                                towards[1] + q[1] - p[1],
-                                towards[2] + q[2] - p[2],
-                            ];
-                        }
-                    }
-                }
-                // In the tangent plane.
-                let t = dot(towards, p);
-                let across = normalise([
-                    towards[0] - t * p[0],
-                    towards[1] - t * p[1],
-                    towards[2] - t * p[2],
-                ]);
-                let (va, vb) = (velocity(a, p), velocity(b, p));
-                let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], across);
-                Some((
-                    k,
+        let cells = match &crust {
+            // At the present, the boundaries already found.
+            None => present_cells,
+            Some(crust) => boundary_cells(&grid, &plate, |k| crust[k]),
+        };
+        let seeds: Vec<(usize, Boundary)> = cells
+            .into_iter()
+            .map(|c| {
+                let (va, vb) = (velocity(c.plate, c.point), velocity(c.other, c.point));
+                let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], c.across);
+                (
+                    c.cell,
                     Boundary {
                         // km/Ma to cm/yr.
                         convergence: (closing * 0.1) as f32,
-                        plate: a,
-                        other: b,
-                        continental: crust_of(k),
-                        other_continental: crust_of(across_cell),
+                        plate: c.plate,
+                        other: c.other,
+                        continental: c.continental,
+                        other_continental: c.other_continental,
                     },
-                ))
+                )
             })
             .collect();
         let (boundary_km, nearest) = nearest_boundary(&grid, radius_km, &seeds);
@@ -569,6 +572,7 @@ impl PlateMap {
         let at = |dx: i64, dy: i64| self.reliefs[self.grid.cell(face, x0 + dx, y0 + dy)];
         let mix = |a: Relief, b: Relief, t: f32| Relief {
             uplift: a.uplift + (b.uplift - a.uplift) * t,
+            swell: a.swell + (b.swell - a.swell) * t,
             orogeny: a.orogeny + (b.orogeny - a.orogeny) * t,
             arc: a.arc + (b.arc - a.arc) * t,
         };
@@ -595,6 +599,13 @@ impl PlateMap {
         let parting = smooth(RELIEF_SPEED.0, RELIEF_SPEED.1, -b.convergence);
         let trench = || -0.16 * closing * bump(d, 40.0, 45.0);
         let mut r = Relief::default();
+        // A mid-ocean ridge: young floor, the younger the higher, its crest
+        // at Parsons & Sclater's depth at any spreading rate (slow ridges
+        // are narrow by their age alone); it fades in only as the plates
+        // start to part, under 0.5 cm/yr.
+        if !mine && !theirs && b.convergence < 0.0 {
+            r.swell = smooth(0.0, RELIEF_SPEED.0, -b.convergence) * ridge_swell(d, -b.convergence);
+        }
         if closing > 0.0 {
             match (mine, theirs) {
                 (true, true) => {
@@ -615,7 +626,7 @@ impl PlateMap {
             }
         } else if parting > 0.0 {
             match (mine, theirs) {
-                (false, false) => r.uplift = 0.1 * parting * bump(d, 0.0, 450.0),
+                (false, false) => {}
                 (true, true) => {
                     r.uplift = parting * (0.02 * bump(d, 120.0, 60.0) - 0.06 * bump(d, 0.0, 60.0));
                 }
@@ -675,6 +686,121 @@ impl PlateMap {
         Origin {
             point,
             new_crust: false,
+        }
+    }
+}
+
+/// A boundary cell of a plate map, before its plates' motion is known.
+struct BoundaryCell {
+    cell: usize,
+    point: [f64; 3],
+    /// The direction across the boundary, towards the other plate, in the
+    /// tangent plane.
+    across: [f64; 3],
+    plate: u16,
+    other: u16,
+    continental: bool,
+    other_continental: bool,
+}
+
+/// The cells of `grid` next to another plate than their own (`plate`),
+/// with the direction across the boundary and the crust on each side
+/// (`crust_of`). The direction is taken over a window of cells, from the
+/// cell towards those of the other plate: one neighbour only gives one of
+/// 8 directions, which jump from cell to cell along a stepped boundary.
+fn boundary_cells(
+    grid: &CubeGrid,
+    plate: &[u16],
+    crust_of: impl Fn(usize) -> bool + Sync,
+) -> Vec<BoundaryCell> {
+    (0..grid.cell_count())
+        .into_par_iter()
+        .filter_map(|k| {
+            let a = plate[k];
+            // The other plate: the first neighbour's that is not this one.
+            let (across_cell, b) = grid
+                .neighbours(k)
+                .map(|j| (j, plate[j]))
+                .find(|&(_, other)| other != a)?;
+            let p = grid.point(k);
+            let mut towards = [0.0f64; 3];
+            for oy in -BOUNDARY_WINDOW..=BOUNDARY_WINDOW {
+                for ox in -BOUNDARY_WINDOW..=BOUNDARY_WINDOW {
+                    let j = grid.offset(k, ox, oy);
+                    if plate[j] == b {
+                        let q = grid.point(j);
+                        towards = [
+                            towards[0] + q[0] - p[0],
+                            towards[1] + q[1] - p[1],
+                            towards[2] + q[2] - p[2],
+                        ];
+                    }
+                }
+            }
+            let t = dot(towards, p);
+            let across = normalise([
+                towards[0] - t * p[0],
+                towards[1] - t * p[1],
+                towards[2] - t * p[2],
+            ]);
+            Some(BoundaryCell {
+                cell: k,
+                point: p,
+                across,
+                plate: a,
+                other: b,
+                continental: crust_of(k),
+                other_continental: crust_of(across_cell),
+            })
+        })
+        .collect()
+}
+
+/// Share of its boundary a plate must sink along (subduct) to reach the
+/// top of [`PLATE_SPEED`]. Calibration, no source: Forsyth & Uyeda
+/// (1975, doi:10.1111/j.1365-246X.1975.tb00631.x) find the plates
+/// attached to downgoing slabs the fast ones, "the forces acting on the
+/// downgoing slab" an order of magnitude stronger than any other.
+const SLAB_FULL_SHARE: f64 = 0.3;
+
+/// Slab pull: sets the speed of every plate from the share of its
+/// boundary where it sinks under its neighbour (oceanic crust under
+/// continental crust, or under the other oceanic plate where that one
+/// rides over: the lower index), keeping its Euler pole. A plate with no
+/// sinking edge turns at the bottom of [`PLATE_SPEED`], one sinking along
+/// [`SLAB_FULL_SHARE`] of its boundary or more at the top. Only the
+/// present stage: the drift's other stages keep their drawn speeds.
+fn pull_by_slabs(plates: &mut Plates, cells: &[BoundaryCell]) {
+    let count = plates.count();
+    let mut edge = vec![0usize; count];
+    let mut sinking = vec![0usize; count];
+    for c in cells {
+        let own = usize::from(c.plate);
+        let p = c.point;
+        let (va, vb) = (
+            plates.velocity(own, p),
+            plates.velocity(usize::from(c.other), p),
+        );
+        let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], c.across) * 0.1;
+        edge[own] += 1;
+        let under = !c.continental && (c.other_continental || c.plate > c.other);
+        if closing > f64::from(RELIEF_SPEED.0) && under {
+            sinking[own] += 1;
+        }
+    }
+    for k in 0..count {
+        let share = if edge[k] > 0 {
+            sinking[k] as f64 / edge[k] as f64
+        } else {
+            0.0
+        };
+        let speed_km =
+            PLATE_SPEED.0 + (PLATE_SPEED.1 - PLATE_SPEED.0) * (share / SLAB_FULL_SHARE).min(1.0);
+        let omega = plates.omegas[k];
+        let len = dot(omega, omega).sqrt();
+        if len > 0.0 {
+            let target = speed_km / plates.radius_km;
+            plates.omegas[k] = omega.map(|c| c * target / len);
         }
     }
 }
@@ -816,6 +942,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            gravity: None,
         }
     }
 
@@ -846,6 +973,69 @@ mod tests {
     }
 
     #[test]
+    fn ridges_follow_the_age_depth_relation_of_the_ocean_floor() {
+        // Parsons & Sclater: 2.5 km deep at the crest, 4.3 km at 25 Ma.
+        let km = |d, v| OLD_FLOOR_KM - ridge_swell(d, v) * crate::craters::ELEVATION_KM;
+        assert!((km(0.0, 5.0) - 2.5).abs() < 1e-4);
+        // 25 Ma old at 5 cm/yr: 625 km out, below the generator's floor.
+        assert_eq!(ridge_swell(625.0, 5.0), 0.0);
+        // 9 Ma: 3.55 km deep.
+        assert!((km(225.0, 5.0) - 3.55).abs() < 1e-3);
+        // Faster ridges are broader.
+        assert!(ridge_swell(200.0, 8.0) > ridge_swell(200.0, 2.0));
+        // A slow ridge, as the Mid-Atlantic's 2.5 cm/yr (USGS), keeps its
+        // full crest: 1.5 km over the old floor.
+        let map = PlateMap::with_crust(&params(5), |_| false);
+        let slow_crests: Vec<f32> = (0..map.grid.cell_count())
+            .filter(|&k| {
+                map.boundaries
+                    .get(map.nearest[k] as usize)
+                    .is_some_and(|b| {
+                        map.boundary_km[k] < 1.0 && (-3.0..-1.0).contains(&b.convergence)
+                    })
+            })
+            .map(|k| map.reliefs[k].swell * crate::craters::ELEVATION_KM)
+            .collect();
+        assert!(!slow_crests.is_empty());
+        assert!(
+            slow_crests.iter().all(|&h| (h - 1.5).abs() < 1e-3),
+            "{slow_crests:?}"
+        );
+    }
+
+    #[test]
+    fn plates_sinking_along_their_edges_are_the_fast_ones() {
+        // Continents in one hemisphere (x > 0), ocean in the other.
+        let p = params(5);
+        let continental = |q: [f64; 3]| q[0] > 0.0;
+        let mut plates = Plates::new(&p);
+        let grid = CubeGrid { size: COARSE_SIZE };
+        let present: Vec<u16> = (0..grid.cell_count())
+            .map(|k| plates.plate_at(grid.point(k)) as u16)
+            .collect();
+        let cells = boundary_cells(&grid, &present, |k| continental(grid.point(k)));
+        let drawn = plates.omegas.clone();
+        pull_by_slabs(&mut plates, &cells);
+        let speed = |o: [f64; 3]| dot(o, o).sqrt() * plates.radius_km;
+        let speeds: Vec<f64> = plates.omegas.iter().map(|&o| speed(o)).collect();
+        for (k, &v) in speeds.iter().enumerate() {
+            assert!(
+                (PLATE_SPEED.0 - 1e-6..=PLATE_SPEED.1 + 1e-6).contains(&v),
+                "{v}"
+            );
+            // The pole is kept.
+            let (a, b) = (normalise(drawn[k]), normalise(plates.omegas[k]));
+            assert!(dot(a, b) > 1.0 - 1e-9);
+        }
+        // Some sink and are fast, continental ones without a slab are slow.
+        assert!(speeds.iter().any(|&v| v > 60.0), "{speeds:?}");
+        assert!(speeds.iter().any(|&v| v < 30.0), "{speeds:?}");
+        // The map uses them.
+        let map = PlateMap::with_crust(&p, continental);
+        assert_eq!(map.plates.omegas, plates.omegas);
+    }
+
+    #[test]
     fn boundaries_raise_ranges_and_arcs_and_sink_trenches() {
         // Continents in one hemisphere (x > 0), ocean in the other.
         let map = PlateMap::with_crust(&params(5), |q| q[0] > 0.0);
@@ -861,7 +1051,7 @@ mod tests {
             );
             range |= r.orogeny > 0.3 && r.uplift > 0.03;
             trench |= r.uplift < -0.05;
-            ridge |= r.uplift > 0.03 && r.orogeny == 0.0 && r.arc < 0.1;
+            ridge |= r.swell > 0.03 && r.orogeny == 0.0 && r.arc < 0.1;
             arc |= r.arc > 0.5;
             polar |= g.point(k)[2].abs() > 0.98 && r != Relief::default();
         }

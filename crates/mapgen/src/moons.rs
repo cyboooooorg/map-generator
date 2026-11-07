@@ -196,9 +196,13 @@ pub struct MoonSystem {
 const G: f64 = 6.674e-20;
 const EARTH_MASS_KG: f64 = 5.972e24;
 const EARTH_RADIUS_KM: f64 = 6371.0;
-/// The planet's density, g/cm³: Earth's, as `WorldParams::gravity_modifier`
-/// assumes.
-const PLANET_DENSITY: f64 = 5.51;
+/// The density of the planet `p` of `radius_km`, g/cm³ (1e12 kg/km³), from
+/// its mass as `WorldParams::mass_earth` has it (the mass–radius relation
+/// of rocky planets): denser the larger it is (Mars's size 3.5, Earth's
+/// 5.5, twice Earth's 8.9).
+fn planet_density(p: &WorldParams, radius_km: f64) -> f64 {
+    EARTH_MASS_KG * f64::from(p.mass_earth()) / (4.0 / 3.0 * PI * radius_km.powi(3)) / 1e12
+}
 const SUN_MASS_KG: f64 = 1.989e30;
 const AU_KM: f64 = 1.496e8;
 /// Below this equilibrium temperature, K, moons formed from the debris of
@@ -312,7 +316,8 @@ impl MoonSystem {
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
         let r_p = f64::from(p.circumference_km) / (2.0 * PI);
         let size = r_p / EARTH_RADIUS_KM;
-        let m_p = EARTH_MASS_KG * size.powi(3) * PLANET_DENSITY / 5.51;
+        let m_p = EARTH_MASS_KG * f64::from(p.mass_earth());
+        let planet_density = planet_density(p, r_p);
         let periapsis_km = f64::from(star.periapsis_au.max(1e-4)) * AU_KM;
         let hill = periapsis_km * (m_p / (3.0 * f64::from(star.mass) * SUN_MASS_KG)).cbrt();
         let cold = star.equilibrium_k < SNOW_LINE_K;
@@ -429,9 +434,9 @@ impl MoonSystem {
         // Stable orbits only: beyond the Roche limit, within the Hill sphere.
         let stable = |c: &Candidate| {
             let roche = if c.round() {
-                2.44 * r_p * (PLANET_DENSITY / c.density).cbrt()
+                2.44 * r_p * (planet_density / c.density).cbrt()
             } else {
-                1.26 * r_p * (PLANET_DENSITY / c.density).cbrt()
+                1.26 * r_p * (planet_density / c.density).cbrt()
             };
             let reach = if c.inclination_deg > 90.0 {
                 0.5
@@ -810,7 +815,7 @@ impl PlanetEffects {
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
         let r_p = f64::from(p.circumference_km) / (2.0 * PI);
         let size = r_p / EARTH_RADIUS_KM;
-        let m_p = EARTH_MASS_KG * size.powi(3);
+        let m_p = EARTH_MASS_KG * f64::from(p.mass_earth());
         let moons = system.map_or(&[][..], |s| &s.moons[..]);
         let stabilised = moons
             .iter()
@@ -881,21 +886,37 @@ const SHAPE_BUMPS: f64 = 0.12;
 /// for 4 Ga, under the planet's star, its map as many pixels per km as the
 /// planet's (at least [`MOON_MIN_WIDTH`] wide, at most the planet's
 /// width). The long axis of an irregular moon points at longitude 180°,
-/// the centre of its map: towards its planet, which tides lock it to.
+/// the centre of its map: towards its planet, which tides lock it to. Its
+/// gravity is the moon's own, from the density it was drawn with.
 pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
-    small_body_params(
-        planet,
-        moon.composition,
-        moon.radius_km,
-        moon.seed,
-        (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
-    )
+    WorldParams {
+        gravity: Some(moon.gravity),
+        ..small_body_params(
+            planet,
+            moon.composition,
+            moon.radius_km,
+            moon.seed,
+            (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
+        )
+    }
+}
+
+/// Bulk density of a small body of `composition` whose own is not given,
+/// g/cm³: the giants' regular moons' (rock 3.3, ice and rock 1.9).
+fn small_body_density(composition: Composition) -> f64 {
+    match composition {
+        Composition::Rock => 3.3,
+        Composition::Ice => 1.9,
+    }
 }
 
 /// The parameters of a small airless body near the world `planet`, as a
 /// world of its own: a rocky or icy moon of `radius_km` (its map as wide
 /// as its size makes it on the planet's scale, within limits), its seed,
 /// and its shape (semi-axes over the mean radius) when it is not round.
+/// Its gravity is that of its radius at the density of its composition
+/// ([`small_body_density`]); a caller that drew another density sets its
+/// own.
 pub fn small_body_params(
     planet: &WorldParams,
     composition: Composition,
@@ -943,6 +964,16 @@ pub fn small_body_params(
         host: crate::exomoon::HostMode::None,
         given_rings: None,
         impact_factor: None,
+        // G ρ (4/3 π r³) / r², as the moons' cards have it.
+        gravity: Some(
+            (G * 4.0 / 3.0
+                * PI
+                * f64::from(radius_km)
+                * small_body_density(composition)
+                * 1e12
+                * 1000.0
+                / 9.81) as f32,
+        ),
     }
 }
 
@@ -1062,6 +1093,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            gravity: None,
         }
     }
 

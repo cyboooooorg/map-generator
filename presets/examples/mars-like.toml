@@ -56,6 +56,12 @@ clouds = "dust"
 regime = "stagnant"
 wet_until = 3.5                        # Ga: end of the era of liquid water
 maria = [3.7, 3.0]                     # Ga: the volcanic plains of the Hesperian
+# Mars against the Moon (Hartmann, "Isochrons for Martian crater populations",
+# PSI; Hartmann 2005, doi:10.1016/j.icarus.2004.11.023): 2.6 times the
+# asteroids per unit area, each digging a crater 0.751 times as wide
+# (slower impacts, stronger gravity).
+impact_ratio = 2.6
+crater_scale = 0.751
 
 # target = [biomes replaced by it]
 [remap]
