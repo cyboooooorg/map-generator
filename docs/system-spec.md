@@ -134,16 +134,22 @@ each planet asked, then spaces them (below). Types the request leaves to
 the draw get occurrence rates by star: rocky planets from the Kepler
 counts (about one to three small planets within 1 AU of a Sun-like star,
 more round M dwarfs; Mulders et al. 2018), giants as `giants.rs` draws
-them today (metallicity and star mass).
+them today (metallicity and star mass), a hot Jupiter included: about
+1 % of Sun-like stars of the Sun's metallicity get one (Wright et al.
+2012), on a 1 to 10 day orbit.
 
 ### Spacing and order
 
 - Planets are placed from the inside out. Two neighbours must be at least
-  **10 mutual Hill radii** apart (periapsis to apoapsis), the spacing that
-  keeps multi-planet systems stable for billions of years (Chambers et
-  al. 1996; Pu & Wu 2015); a pair closer than that is spread outwards, a
-  planet pushed out of its allowed band is redrawn a few times, then the
-  request fails (below).
+  **10 mutual Hill radii** apart (periapsis to apoapsis) when they weigh
+  about an Earth, the spacing that keeps multi-planet systems stable for
+  billions of years (Chambers et al. 1996; Pu & Wu 2015). Heavier pairs
+  need fewer: the spacing falls as their mass share to the power −1/12
+  (Chambers et al. 1996 found stable spacings scale with `μ^¼`, the Hill
+  radius with `μ^⅓`), 6.4 for a Jupiter and a Saturn, which are 6.5
+  apart; never under `2√3` (Gladman 1993). A pair closer than that is
+  spread outwards, a planet pushed out of its allowed band is redrawn a
+  few times, then the request fails (below).
 - Neighbouring periods fall mostly between 1.3 and 3 times each other
   (the peas-in-a-pod systems of Weiss et al. 2018): planets of a system
   are of similar size and evenly spaced in `log a`.
@@ -185,8 +191,9 @@ Once the planets are placed, the system draws its belts and trojans
   - With a giant, a **scattered disk** goes with it, from the giant to
     four times its distance, with 0.3 to 3 times the belt's mass.
 - **Trojans.** Bodies larger than 1 km at L4 and L5. A planet has them
-  where its mass share is under Routh's 0.0385 and no heavier planet
-  orbits within a period ratio of 3.
+  where its mass share is under Routh's 0.0385 and no heavier giant
+  orbits within a period ratio of 3 (Mars keeps its trojans next to the
+  heavier, rocky Earth).
   - A gas giant, or the outermost ice giant: 10⁴ to 10⁶.
   - Another ice giant: 10³ to 10⁵.
   - A hot Jupiter: up to 10³.
