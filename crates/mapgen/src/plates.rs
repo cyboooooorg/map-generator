@@ -604,6 +604,7 @@ impl PlateMap {
             epoch,
         };
         map.reliefs = (0..n).into_par_iter().map(|k| map.relief_of(k)).collect();
+        map.soften_reliefs();
         map
     }
 
@@ -664,6 +665,7 @@ impl PlateMap {
             .into_par_iter()
             .map(|k| map.relief_of(k))
             .collect();
+        map.soften_reliefs();
         map
     }
 
@@ -698,6 +700,43 @@ impl PlateMap {
         let top = mix(at(0, 0), at(1, 0), fx);
         let bottom = mix(at(0, 1), at(1, 1), fx);
         mix(top, bottom, fy)
+    }
+
+    /// Blurs the relief of the coarse cells with their eight neighbours
+    /// (weights 1-2-1 across, 1-2-1 down). A cell takes its relief from its
+    /// nearest boundary: where the nearest one changes (halfway between two
+    /// boundaries, or two stretches of one that close at different speeds
+    /// or border different crust) the relief jumps by up to several km
+    /// from one cell to the next, a straight cliff a pixel or two wide
+    /// along the line of equal distance.
+    fn soften_reliefs(&mut self) {
+        let sum = |a: Relief, b: Relief, w: f32| Relief {
+            uplift: a.uplift + w * b.uplift,
+            swell: a.swell + w * b.swell,
+            orogeny: a.orogeny + w * b.orogeny,
+            arc: a.arc + w * b.arc,
+        };
+        // The ridges' swell stays as it is: it is the same on both sides of
+        // a boundary (no cliff), and a crest keeps its full height.
+        let softened: Vec<Relief> = (0..self.reliefs.len())
+            .into_par_iter()
+            .map(|k| {
+                let mut r = sum(Relief::default(), self.reliefs[k], 4.0);
+                for dy in -1i64..=1 {
+                    for dx in -1i64..=1 {
+                        if (dx, dy) != (0, 0) {
+                            let w = if dx == 0 || dy == 0 { 2.0 } else { 1.0 };
+                            r = sum(r, self.reliefs[self.grid.offset(k, dx, dy)], w);
+                        }
+                    }
+                }
+                Relief {
+                    swell: self.reliefs[k].swell,
+                    ..sum(Relief::default(), r, 1.0 / 16.0)
+                }
+            })
+            .collect();
+        self.reliefs = softened;
     }
 
     /// The relief of coarse cell `k` (see [`Self::relief`]).
@@ -1124,6 +1163,31 @@ mod tests {
             slow_crests.iter().all(|&h| (h - 1.5).abs() < 1e-3),
             "{slow_crests:?}"
         );
+    }
+
+    #[test]
+    fn boundary_relief_does_not_step_from_cell_to_cell() {
+        // Continents in one hemisphere, ocean in the other: boundaries of
+        // every kind. The mountains' weight and the uplift (0.12 is 3 km)
+        // change by a few tenths at most from one coarse cell to the next,
+        // not by their full height along the line where the nearest
+        // boundary changes.
+        for seed in [3, 5, 7] {
+            let map = PlateMap::with_crust(&params(seed), |q| q[0] > 0.0);
+            let (mut orogeny, mut uplift) = (0.0f32, 0.0f32);
+            for k in 0..map.grid.cell_count() {
+                for (dx, dy) in [(1, 0), (0, 1)] {
+                    let (a, b) = (map.reliefs[k], map.reliefs[map.grid.offset(k, dx, dy)]);
+                    orogeny = orogeny.max((a.orogeny - b.orogeny).abs());
+                    uplift = uplift.max((a.uplift - b.uplift).abs());
+                }
+            }
+            // Before the blur: a full step of 1.0 and 0.28 (7 km).
+            assert!(
+                orogeny < 0.6 && uplift < 0.15,
+                "seed {seed}: {orogeny} {uplift}"
+            );
+        }
     }
 
     #[test]
