@@ -40,3 +40,9 @@ Rules that follow from it:
   `develop`, since a rebuild drops what the other merged into it.
 - A pull request that conflicts with `main` is rebased (or `main` merged
   into it) on its own branch before step 2.
+- Merge commits follow Conventional Commits too: git's default message
+  (`Merge remote-tracking branch …`) fails the cocogitto check. Give each
+  one a message such as `chore: merge main into fix/<branch>` or
+  `chore: merge fix/<branch> (#123) into develop` (`git merge -m`), and
+  merge pull requests into `main` with a conventional subject
+  (`gh pr merge --merge --subject "feat(web): … (#123)"`).
