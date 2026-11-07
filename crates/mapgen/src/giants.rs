@@ -28,7 +28,7 @@
 //! the world (Laplace–Lagrange secular theory; the request raises a drawn
 //! eccentricity to it), and the giant outside the world's orbit sets how
 //! many impactors reach it (Horner & Jones 2008; see [`impact_factor`]).
-use crate::noise::{smoothstep, stream, stream_seed};
+use crate::noise::{stream, stream_seed};
 use crate::star::{
     StarValues, draw_eccentricity, equilibrium_k, mean_temperature_factor, values, year_days,
 };
@@ -221,10 +221,36 @@ fn world_mass_earth(p: &WorldParams) -> f64 {
     }
 }
 
+/// The heat a hot giant's interior gets from its star's light, relative to
+/// the most any giant gets, at an `equilibrium_k` (K, Earth's albedo, as
+/// [`equilibrium_k`] gives it): the flux times the share of it turned into
+/// heat, the Gaussian in `log F` of Thorngren & Fortney (2018, eq. 35:
+/// 2.37 % at most, at `log F` = 0.14 with `F` in Gerg s⁻¹ cm⁻², spread
+/// 0.37). The share falls at high fluxes faster than the flux grows: the
+/// heat peaks at about 1 700 K, is 0.8 of it at 1 500 K, 0.5 at 2 200 K
+/// and 0.04 at 1 000 K.
+fn inflation_heat(equilibrium_k: f32) -> f32 {
+    const PEAK_LOG_F: f32 = 0.14;
+    const SPREAD: f32 = 0.37;
+    // Earth's flux, Gerg s⁻¹ cm⁻².
+    const EARTH_FLUX: f32 = 1.361e-3;
+    let flux = (equilibrium_k / equilibrium_k_of_earth()).powi(4) * EARTH_FLUX;
+    let ln_power =
+        |x: f32| -(x - PEAK_LOG_F).powi(2) / (2.0 * SPREAD * SPREAD) + x * std::f32::consts::LN_10;
+    let peak = PEAK_LOG_F + SPREAD * SPREAD * std::f32::consts::LN_10;
+    (ln_power(flux.max(1e-12).log10()) - ln_power(peak)).exp()
+}
+
+/// Earth's equilibrium temperature as [`equilibrium_k`] gives it, K.
+fn equilibrium_k_of_earth() -> f32 {
+    equilibrium_k(1.0)
+}
+
 /// Radius of a giant, Earth radii, from its mass (Earth masses): through
 /// Neptune (`M^0.59` below it, Chen & Kipping 2017), Saturn and Jupiter,
-/// then `M^−0.04`; inflated when hot (Thorngren & Fortney 2018), the less
-/// massive the more.
+/// then `M^−0.04`; inflated when hot, by the heat of [`inflation_heat`]
+/// (Thorngren & Fortney 2018), most near 1 700 K, the less massive the
+/// more.
 pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
     const ANCHORS: [(f32, f32); 3] = [(17.15, 3.88), (95.16, 9.45), (317.8, 11.21)];
     let m = mass_earth;
@@ -238,7 +264,7 @@ pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
         let f = (m / m0).ln() / (m1 / m0).ln();
         (r0.ln() + (r1.ln() - r0.ln()) * f).exp()
     };
-    let heat = smoothstep(1000.0, 2200.0, equilibrium_k);
+    let heat = inflation_heat(equilibrium_k);
     let inflation = (1.0 + 0.7 * heat * (JUPITER_EARTH_MASSES / m.max(30.0)).powf(0.25)).min(1.9);
     cold * if m > 30.0 { inflation } else { 1.0 }
 }
@@ -524,7 +550,11 @@ mod tests {
         assert!((hill_spacing(earth) - 10.0).abs() < 1e-9);
         // A Jupiter and a Saturn: 6.4, under their own 6.5.
         let pair = 0.5 * (317.8 + 95.2) * earth;
-        assert!((hill_spacing(pair) - 6.4).abs() < 0.05, "{}", hill_spacing(pair));
+        assert!(
+            (hill_spacing(pair) - 6.4).abs() < 0.05,
+            "{}",
+            hill_spacing(pair)
+        );
         // Never under Gladman's two-planet limit, even for a star's mass.
         assert!(hill_spacing(1.0) >= 2.0 * 3f64.sqrt());
         assert!((hill_spacing(1e3) - 2.0 * 3f64.sqrt()).abs() < 1e-9);
@@ -567,6 +597,13 @@ mod tests {
         assert!((giant_radius(3178.0, 100.0) / 11.21 - 0.912).abs() < 0.01);
         assert!(giant_radius(317.8, 1800.0) > 1.4 * 11.21);
         assert!(giant_radius(317.8, 1800.0) < 1.9 * 11.21);
+        // The heat peaks near 1 700 K and falls on both sides (Thorngren &
+        // Fortney 2018).
+        assert!((inflation_heat(1725.0) - 1.0).abs() < 0.01);
+        assert!((inflation_heat(1500.0) - 0.8).abs() < 0.05);
+        assert!((inflation_heat(2200.0) - 0.5).abs() < 0.05);
+        assert!(inflation_heat(1000.0) < 0.05);
+        assert!(giant_radius(317.8, 2600.0) < giant_radius(317.8, 1800.0));
     }
 
     #[test]

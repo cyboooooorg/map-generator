@@ -134,6 +134,10 @@ Hot giants are larger than that: close to their star, giants above an
 equilibrium temperature of about 1 000 K are **inflated**, up to about
 2 Jupiter radii, a few percent of the starlight they get being turned
 into internal heat (Thorngren & Fortney 2018, favouring Ohmic heating).
+That share peaks at about 2.4 % and falls at higher fluxes faster than
+the flux grows (their eq. 35, a Gaussian in `log F`), so the heat
+itself peaks near an equilibrium temperature of 1 700 K (Earth's albedo;
+about 1 900 K for a black body) and is halved by 2 200 K.
 
 ## 2. Kinds of giant planets
 
@@ -401,8 +405,10 @@ A world could be a moon of a giant rather than a planet of the star:
   of years.
 - **Each giant:** a letter (b, c, … by distance, the world being the
   system's planet of interest), mass, radius (power laws through
-  Neptune, Saturn and Jupiter, `M^−0.04` above; inflated when
-  `Teq > 1 000 K`), orbit, eccentricity, year, equilibrium temperature,
+  Neptune, Saturn and Jupiter, `M^−0.04` above; inflated by the heat
+  of Thorngren & Fortney's fit, from about 1 000 K, most near 1 700 K;
+  first a rise from 1 000 to 2 200 K held at its top, which ignored the
+  fall at high fluxes), orbit, eccentricity, year, equilibrium temperature,
   Sudarsky class (ice giants apart), a colour for the views, rings
   (none, faint or bright).
 - **Effects on the world:**
