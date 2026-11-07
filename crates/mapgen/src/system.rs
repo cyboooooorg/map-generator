@@ -35,7 +35,7 @@
 use crate::exomoon::{EARTH_KG, EARTH_M, G, HostGiant, HostMode};
 use crate::giants::{
     GiantKind, GiantSystem, GiantsMode, HOT_JUPITERS, HOT_PERIOD_DAYS, JUPITER_EARTH_MASSES,
-    giant_radius, hill_spacing,
+    hill_spacing,
 };
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
