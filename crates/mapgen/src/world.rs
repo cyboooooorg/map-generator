@@ -87,20 +87,102 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub locked_to_star: Option<bool>,
+    /// Surface gravity relative to Earth's, when the body's own is known:
+    /// a moon's, from the density its system drew for it (the gravity of
+    /// its card), or a reloaded world's, as it was generated. Absent for
+    /// every other world, whose gravity follows from its size (see
+    /// [`WorldParams::gravity_modifier`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub gravity: Option<f32>,
+}
+
+/// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &
+/// Jacobsen 2016, doi:10.3847/0004-637X/819/2/127: `R/R⊕ = (1.07 − 0.21
+/// CMF) (M/M⊕)^(1/3.7)`, fitted to Earth's interior model PREM for 1 to
+/// 8 Earth masses). At Earth's core mass fraction (0.325) the coefficient
+/// is 1.002: it is taken as 1, so that a world of Earth's size has Earth's
+/// mass and gravity. Below 1 Earth mass the fit is extrapolated, down to
+/// [`UNCOMPRESSED_ROCK_DENSITY`].
+const ROCKY_MASS_RADIUS_EXPONENT: f32 = 3.7;
+/// Bulk density of a rocky body too small to compress its own rock,
+/// relative to Earth's: the Moon's 3.344 g/cm³ over Earth's 5.513 (NASA
+/// planetary fact sheets). At small masses the density of a planet tends
+/// to that of its uncompressed material (Seager et al. 2007,
+/// doi:10.1086/521346: "for Ms ≪ 1, the EOS reduces to ρs = 1"). The
+/// compressed density of [`ROCKY_MASS_RADIUS_EXPONENT`] falls to it at
+/// 0.48 Earth radii.
+const UNCOMPRESSED_ROCK_DENSITY: f32 = 3.344 / 5.513;
+
+/// Largest surface gravity of a rocky world, Earth's = 1: the bound the
+/// app kept before the mass–radius relation, reached at 2.6 Earth radii
+/// (about 100 000 km round), far beyond the relation's fit (8 Earth
+/// masses, 1.75 radii). Larger "rocky" worlds keep it, their mass growing
+/// as their radius squared. Calibration, no source.
+const MAX_ROCKY_GRAVITY: f32 = 5.0;
+
+/// Surface gravity of a rocky body of `radius` Earth radii, relative to
+/// Earth's: from its mass, `M = R^3.7` (Zeng et al. 2016), and never less
+/// dense than uncompressed rock (the Moon's density), up to
+/// [`MAX_ROCKY_GRAVITY`]. Mars's size gives 0.34 (Mars: 0.38, NASA), the
+/// Moon's 0.165 (0.165), Venus's 0.92 (0.90). Mercury, with its large iron
+/// core, has 0.38 where this gives 0.23.
+pub fn rocky_gravity(radius: f32) -> f32 {
+    let radius = radius.max(0.0);
+    let density = radius
+        .powf(ROCKY_MASS_RADIUS_EXPONENT - 3.0)
+        .max(UNCOMPRESSED_ROCK_DENSITY);
+    (density * radius).min(MAX_ROCKY_GRAVITY)
+}
+
+/// Circumference, km, of the rocky body of `mass_earth` Earth masses: the
+/// inverse of `M = g(R) R²` with [`rocky_gravity`], so that a world of this
+/// size weighs ([`WorldParams::mass_earth`]) the mass asked.
+pub fn rocky_circumference_km(mass_earth: f64) -> f32 {
+    let mass = |radius: f64| f64::from(rocky_gravity(radius as f32)) * radius * radius;
+    // The mass grows with the radius, past 2.6 Earth radii as R² once the
+    // gravity is capped: bisect between 0 and 100 Earth radii.
+    let (mut low, mut high) = (0.0_f64, 100.0_f64);
+    for _ in 0..60 {
+        let mid = 0.5 * (low + high);
+        if mass(mid) < mass_earth {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    (0.5 * (low + high) * f64::from(EARTH_CIRCUMFERENCE_KM)) as f32
 }
 
 impl WorldParams {
-    /// Approximate surface gravity relative to Earth (1.0 = Earth gravity).
+    /// Surface gravity relative to Earth's (1.0 = Earth's).
     ///
-    /// Assumes constant density, so gravity scales linearly with radius (and
-    /// thus circumference). Clamped to a plausible range for rocky planets.
+    /// The body's own when known ([`Self::gravity`]: a moon's, from its
+    /// density); a giant's from its mass and radius; a rocky world's from
+    /// its size, by the mass–radius relation of rocky planets
+    /// ([`rocky_gravity`]).
     pub fn gravity_modifier(&self) -> f32 {
+        if let Some(gravity) = self.gravity {
+            return gravity;
+        }
+        let radius = self.circumference_km / EARTH_CIRCUMFERENCE_KM;
         // A giant: its own mass over its radius squared.
         if let Some(mass) = self.giant_mass_earth {
-            let radius = self.circumference_km / EARTH_CIRCUMFERENCE_KM;
             return mass / (radius * radius);
         }
-        (self.circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0)
+        // An icy moon asked for on its own: the density of the icy moons
+        // a system draws, 1.9 g/cm³ against Earth's 5.513.
+        if self.planet.name == "icy-moon" {
+            return 1.9 / 5.513 * radius;
+        }
+        rocky_gravity(radius)
+    }
+
+    /// Mass of a rocky world, Earth masses: its gravity times its radius
+    /// squared, as [`Self::gravity_modifier`] has it.
+    pub fn mass_earth(&self) -> f32 {
+        let radius = self.circumference_km / EARTH_CIRCUMFERENCE_KM;
+        self.gravity_modifier() * radius * radius
     }
 
     /// The pixel grid with its physical dimensions.
@@ -138,6 +220,13 @@ pub struct World {
     pub moisture: Vec<f32>,
     /// Annual mean temperature in °C, planet offset and greenhouse included.
     pub temperature: Vec<f32>,
+    /// The seasonal cycle by row (see [`crate::climate::Seasons`]),
+    /// computed from the parameters (none for worlds stored before it).
+    pub seasons: crate::climate::Seasons,
+    /// Cooling of the land per elevation unit the temperatures were made
+    /// with (see [`crate::climate::lapse_rate`]; the former rate for worlds
+    /// stored before format version 11).
+    pub lapse_rate: f32,
     /// Wet-equivalent drainage area in km² flowing through each pixel
     /// (0 on the sea): rivers are pixels above a threshold.
     pub flow_km2: Vec<f32>,
@@ -172,10 +261,17 @@ impl World {
     /// flags (not stored): for lake and river pixels it selects the biome
     /// the pixel would have without them.
     pub fn biome_input(&self, i: usize) -> BiomeInput {
+        let elevation = (self.elevation[i] - self.params.sea_level).clamp(-1.0, 1.0);
+        let land = elevation >= self.params.planet.rules.waterline;
         BiomeInput {
-            elevation: (self.elevation[i] - self.params.sea_level).clamp(-1.0, 1.0),
+            elevation,
             moisture: self.moisture[i],
             temperature: self.temperature[i],
+            seasonality: self.seasons.at(
+                (i / self.width as usize) as u32,
+                land,
+                self.coast_distance_km[i],
+            ),
             volcanic_zone: self.volcanic_zone[i],
             coast_distance_km: self.coast_distance_km[i],
             lake: false,

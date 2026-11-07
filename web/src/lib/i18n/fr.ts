@@ -331,7 +331,7 @@ export const fr: Messages = {
     tides: 'Marées',
     tidesHelp: `Leur amplitude, due aux lunes et à l’étoile, rapportée à celle de la Terre${S}: les estrans s’élargissent avec elle${S}; une planète verrouillée sur son étoile n’en a pas`,
     tidesValue: (p) => `×${p.tide} celles de la Terre`,
-    tiltHelp: `Une grosse lune stabilise l’inclinaison de l’axe (la Lune tient celle de la Terre vers 23°)${S}; sans elle, l’inclinaison erre, tirée de 0 à 60°`,
+    tiltHelp: `Une grosse lune stabilise l’inclinaison de l’axe (la Lune tient celle de la Terre vers 23°)${S}; sans elle, l’inclinaison peut errer, tirée de 0 à 85°`,
     tiltSteady: 'inclinaison stabilisée par sa lune',
     tiltFree: 'inclinaison libre',
     eccentricity: 'Excentricité',
@@ -648,7 +648,11 @@ export const fr: Messages = {
       p.solar === null
         ? `Heure locale ${p.time} (face à l’hôte) · Jour solaire${S}: aucun, l’étoile reste immobile`
         : `Heure locale ${p.time} (face à l’hôte) · Jour solaire ${p.solar}`,
-    dialSun: 'Soleil',
+    dialHeight: (p) => `hauteur ${p.angle}`,
+    dialPointerFree: 'rotation depuis l’équinoxe',
+    dialPointerLocked: 'libration',
+    dialBodies: 'Sur la boussole',
+    dialBodiesHelp: 'Les astres dont la boussole montre la hauteur, chacun sur un quart de cercle partant de l’anneau',
     dialGlossaryHelp: 'Ce que veulent dire ces chiffres',
     dialGlossary: [
       { term: `Jour sidéral${S}:`, text: `un tour de l’astre par rapport aux étoiles (Terre${S}: 23${S}h${S}56${S}min).` },
@@ -711,6 +715,7 @@ export const fr: Messages = {
     hostSpinName: (p) => `Rotation de ${p.name}`,
     hostSpinLockedFacts: (p) => `la même face vers son étoile${'\u202f'}: un tour par orbite, ${p.period}`,
     hostPull: 'Attraction de sa planète',
+    hostLineFacts: (p) => `${p.distance} · attraction ${p.pull}`,
     hostOrbitSpeed: 'Vitesse orbitale',
     skyStarFacts: (p) => `à ${p.distance}`,
     skyOrbitFacts: (p) => `${p.radius} de rayon · orbite de ${p.orbit}`,

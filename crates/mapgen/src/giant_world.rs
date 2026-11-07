@@ -948,6 +948,8 @@ pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
         elevation_base: None,
         moisture: Vec::with_capacity(n),
         temperature: Vec::with_capacity(n),
+        seasons: crate::climate::Seasons::none(h),
+        lapse_rate: 0.0,
         flow_km2: vec![0.0; n],
         volcanic_zone: vec![0.0; n],
         coast_distance_km: vec![crate::generation::COAST_DISTANCE_CAP_KM; n],
@@ -1025,6 +1027,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            gravity: None,
         }
     }
 

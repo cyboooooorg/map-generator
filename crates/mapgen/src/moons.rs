@@ -211,9 +211,13 @@ pub struct MoonSystem {
 const G: f64 = 6.674e-20;
 const EARTH_MASS_KG: f64 = 5.972e24;
 const EARTH_RADIUS_KM: f64 = 6371.0;
-/// The planet's density, g/cm³: Earth's, as `WorldParams::gravity_modifier`
-/// assumes.
-const PLANET_DENSITY: f64 = 5.51;
+/// The density of the planet `p` of `radius_km`, g/cm³ (1e12 kg/km³), from
+/// its mass as `WorldParams::mass_earth` has it (the mass–radius relation
+/// of rocky planets): denser the larger it is (Mars's size 3.5, Earth's
+/// 5.5, twice Earth's 8.9).
+fn planet_density(p: &WorldParams, radius_km: f64) -> f64 {
+    EARTH_MASS_KG * f64::from(p.mass_earth()) / (4.0 / 3.0 * PI * radius_km.powi(3)) / 1e12
+}
 const SUN_MASS_KG: f64 = 1.989e30;
 const AU_KM: f64 = 1.496e8;
 /// Below this equilibrium temperature, K, moons formed from the debris of
@@ -458,7 +462,9 @@ pub(crate) fn despin_gyr(
 /// (0.07 AU), about 2 × 10¹⁸ kg, a moonlet of 60 km; round Mercury, a moon
 /// of a few hundred km; never a giant-impact moon.
 fn lasting_moon_kg(reach: f64, a_p_km: f64, star_kg: f64, m_p: f64, r_p: f64, age_gyr: f64) -> f64 {
-    let k2 = love_number(m_p, r_p, PLANET_DENSITY);
+    // The planet's own density, g/cm³ (1e12 kg/km³), as its mass and radius give it.
+    let density = m_p / (4.0 / 3.0 * PI * r_p.powi(3)) / 1e12;
+    let k2 = love_number(m_p, r_p, density);
     lasting_moon_kg_with(reach, a_p_km, star_kg, m_p, r_p, age_gyr, k2, TIDAL_Q)
 }
 
@@ -499,7 +505,8 @@ impl MoonSystem {
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
         let r_p = f64::from(p.circumference_km) / (2.0 * PI);
         let size = r_p / EARTH_RADIUS_KM;
-        let m_p = EARTH_MASS_KG * size.powi(3) * PLANET_DENSITY / 5.51;
+        let m_p = EARTH_MASS_KG * f64::from(p.mass_earth());
+        let planet_density = planet_density(p, r_p);
         let periapsis_km = f64::from(star.periapsis_au.max(1e-4)) * AU_KM;
         let hill = periapsis_km * (m_p / (3.0 * f64::from(star.mass) * SUN_MASS_KG)).cbrt();
         let cold = star.equilibrium_k < SNOW_LINE_K;
@@ -630,9 +637,9 @@ impl MoonSystem {
         // Stable orbits only: beyond the Roche limit, within the Hill sphere.
         let stable = |c: &Candidate| {
             let roche = if c.round() {
-                2.44 * r_p * (PLANET_DENSITY / c.density).cbrt()
+                2.44 * r_p * (planet_density / c.density).cbrt()
             } else {
-                1.26 * r_p * (PLANET_DENSITY / c.density).cbrt()
+                1.26 * r_p * (planet_density / c.density).cbrt()
             };
             let reach = if c.inclination_deg > 90.0 {
                 RETROGRADE_REACH
@@ -753,7 +760,7 @@ impl MoonSystem {
             .max_by(|a, b| a.mass_kg.total_cmp(&b.mass_kg))
             .filter(|c| {
                 !despun
-                    && despin_gyr(m_p, r_p, PLANET_DENSITY, PLANET_INERTIA, c.mass_kg, c.a_km)
+                    && despin_gyr(m_p, r_p, planet_density, PLANET_INERTIA, c.mass_kg, c.a_km)
                         < age_gyr
             });
         let binary = largest.is_some_and(|c| c.a_km * c.mass_kg / (m_p + c.mass_kg) > r_p);
@@ -1009,7 +1016,11 @@ pub(crate) fn giant_moon_floor_radii(giant_density: f64, ring_outer: Option<f64>
 }
 
 /// Mass ratio from which a moon stabilises its planet's axial tilt (the
-/// Moon: 0.0123; Laskar et al. 1993).
+/// Moon: 0.0123). The app's choice, between the Moon and a moon too small
+/// to matter: the studies computed only Earth with and without its Moon.
+/// With the Moon, Earth's tilt is "essentially stable, exhibiting only
+/// small variations of ±1.3° around the mean value of 23.3°" (Laskar,
+/// Joutel & Robutel 1993, doi:10.1038/361615a0).
 const STABILISING_MASS_RATIO: f64 = 0.005;
 /// Tidal height of the Moon and of the Sun on Earth, in the units of
 /// [`tidal_height`] (`mass ratio × (radius / distance)³ × radius in Earth
@@ -1025,9 +1036,16 @@ const GIANT_TIDE_SWING: f64 = 3.0;
 /// the coast, which the tides do not change.
 const SHORE_FACTOR: (f64, f64) = (0.5, 2.0);
 /// Axial tilt range drawn without a stabilising moon, degrees, in place of
-/// the usual `[5, 40]`: Mars, without one, ranges up to 60° (Laskar &
-/// Robutel 1993).
-pub const UNSTABLE_TILT_DEG: (f32, f32) = (0.0, 60.0);
+/// the usual `[5, 40]`. Without the Moon, Earth's "chaotic zone would then
+/// extend from nearly 0° up to about 85°" (Laskar, Joutel & Robutel 1993,
+/// doi:10.1038/361615a0); Mars, without a large moon, ranges from 0 to 60°
+/// (Laskar & Robutel 1993, doi:10.1038/361608a0). The range is where a
+/// moonless tilt can be found, not how fast it gets there: over hundreds
+/// of millions of years a moonless Earth's tilt stays "within a
+/// constrained range, typically 20–25° in extent" (Lissauer, Barnes &
+/// Chambers 2012, doi:10.1016/j.icarus.2011.10.013). The app draws one
+/// tilt for the world's whole life, anywhere in the chaotic zone.
+pub const UNSTABLE_TILT_DEG: (f32, f32) = (0.0, 85.0);
 
 /// What a world's moons do to it (step 5 of backlog item 13).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1057,7 +1075,7 @@ impl PlanetEffects {
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
         let r_p = f64::from(p.circumference_km) / (2.0 * PI);
         let size = r_p / EARTH_RADIUS_KM;
-        let m_p = EARTH_MASS_KG * size.powi(3);
+        let m_p = EARTH_MASS_KG * f64::from(p.mass_earth());
         let moons = system.map_or(&[][..], |s| &s.moons[..]);
         let stabilised = moons
             .iter()
@@ -1147,7 +1165,8 @@ const SHAPE_BUMPS: f64 = 0.12;
 /// planet's (at least [`MOON_MIN_WIDTH`] wide, at most the planet's
 /// width), tilted by [`moon_tilt_deg`]. The long axis of an irregular or
 /// tidally stretched moon points at longitude 180°, the centre of its map:
-/// towards its planet, which tides lock it to.
+/// towards its planet, which tides lock it to. Its gravity is the moon's
+/// own, from the density it was drawn with.
 pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
     let [a, _, c] = moon.axes_km;
     let mut params = small_body_params(
@@ -1158,6 +1177,7 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
         (a > c).then(|| moon.axes_km.map(|x| x / moon.radius_km)),
     );
     params.axial_tilt_deg = moon_tilt_deg(moon);
+    params.gravity = Some(moon.gravity);
     params
 }
 
@@ -1167,11 +1187,22 @@ pub fn is_moon_world(p: &WorldParams) -> bool {
     matches!(p.planet.name.as_str(), "rocky-moon" | "icy-moon")
 }
 
+/// Bulk density of a small body of `composition` whose own is not given,
+/// g/cm³: the giants' regular moons' (rock 3.3, ice and rock 1.9).
+fn small_body_density(composition: Composition) -> f64 {
+    match composition {
+        Composition::Rock => 3.3,
+        Composition::Ice => 1.9,
+    }
+}
+
 /// The parameters of a small airless body near the world `planet`, as a
 /// world of its own: a rocky or icy moon of `radius_km` (its map as wide
 /// as its size makes it on the planet's scale, within limits), its seed,
 /// and its shape (semi-axes over the mean radius) when it is not a sphere;
-/// upright ([`CLOSE_MOON_TILT_DEG`]).
+/// upright ([`CLOSE_MOON_TILT_DEG`]). Its gravity is that of its radius at
+/// the density of its composition ([`small_body_density`]); a caller that
+/// drew another density sets its own.
 pub fn small_body_params(
     planet: &WorldParams,
     composition: Composition,
@@ -1220,6 +1251,16 @@ pub fn small_body_params(
         given_rings: None,
         impact_factor: None,
         locked_to_star: None,
+        // G ρ (4/3 π r³) / r², as the moons' cards have it.
+        gravity: Some(
+            (G * 4.0 / 3.0
+                * PI
+                * f64::from(radius_km)
+                * small_body_density(composition)
+                * 1e12
+                * 1000.0
+                / 9.81) as f32,
+        ),
     }
 }
 
@@ -1358,6 +1399,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            gravity: None,
         }
     }
 
@@ -1472,7 +1514,7 @@ mod tests {
         assert!((without.tide - 0.315).abs() < 0.02, "{without:?}");
         assert!((without.shore_factor - 0.75).abs() < 0.02, "{without:?}");
         assert_eq!(without.tilt(5.0, (5.0, 40.0)), 0.0);
-        assert_eq!(without.tilt(40.0, (5.0, 40.0)), 60.0);
+        assert_eq!(without.tilt(40.0, (5.0, 40.0)), 85.0);
         assert_eq!(with.tilt(23.0, (5.0, 40.0)), 23.0);
         // A binary's moon raises a bulge that never moves.
         let locked = Moon {

@@ -120,6 +120,24 @@ describe('rotation dial', () => {
     expect(rotationDial(system, 'b', 0, 0, sky)!.state.sun).toBeNull();
   });
 
+  it('gives the sun’s height and each body of the sky, the host marked', () => {
+    const sky = { ...systemSky(system, 'c-1', 0, textures), sun: [0, 1, 1] as Vec3 };
+    const state = rotationDial(system, 'c-1', 0, 0, sky)!.state;
+    expect(state.sunAltitude).toBeCloseTo(Math.PI / 4, 12);
+    // Its planet and the other moon, not the other planet.
+    expect(state.bodies.map((b) => b.id).sort()).toEqual(['c', 'c-2']);
+    expect(state.bodies.filter((b) => b.host).map((b) => b.id)).toEqual(['c']);
+    for (const b of state.bodies) {
+      const d = sky.bodies[sky.ids.indexOf(b.id)]!.direction;
+      expect(b.altitude).toBeCloseTo(Math.asin(d[1] / Math.hypot(...d)), 12);
+      if (b.bearing) expect(b.bearing[1]).toBe(0);
+    }
+    // From the planet, its moons.
+    const planet = rotationDial(system, 'c', 0, 0, systemSky(system, 'c', 0, textures))!.state;
+    expect(planet.bodies.map((b) => b.id).sort()).toEqual(['c-1', 'c-2']);
+    expect(planet.bodies.some((b) => b.host)).toBe(false);
+  });
+
   it('has no dial for a body the system lacks', () => {
     expect(rotationDial(system, 'zz', 0, 0, systemSky(system, 'b', 0, textures))).toBeNull();
   });

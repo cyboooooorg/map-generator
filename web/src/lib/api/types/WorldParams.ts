@@ -117,4 +117,12 @@ impact_factor?: number,
  * today (see [`crate::spin::star_info`]). Absent on a world about to
  * be generated, whose lock follows the current rule.
  */
-locked_to_star?: boolean, };
+locked_to_star?: boolean, 
+/**
+ * Surface gravity relative to Earth's, when the body's own is known:
+ * a moon's, from the density its system drew for it (the gravity of
+ * its card), or a reloaded world's, as it was generated. Absent for
+ * every other world, whose gravity follows from its size (see
+ * [`WorldParams::gravity_modifier`]).
+ */
+gravity?: number, };

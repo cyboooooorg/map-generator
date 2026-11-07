@@ -184,8 +184,12 @@ export function placeSystem(
   return placements;
 }
 
-/** Points sampled round an orbit line. */
-const ORBIT_SAMPLES = 160;
+/**
+ * Points sampled evenly round an orbit line by default (the light
+ * quality profile; see QualityProfile.orbitSamples): 2.25° apart, whose
+ * corners show where a line passes near the camera.
+ */
+export const ORBIT_SAMPLES = 160;
 
 /** Colours of a body drawn before its map loads (or when it has none). */
 const ROCK: Vec3 = [0.32, 0.3, 0.28];
@@ -198,7 +202,8 @@ const ROCK: Vec3 = [0.32, 0.3, 0.28];
  * round the star and of the moons of the shown body's planet; and the
  * star's direction, for the light, and its place and radius (in radii of
  * the body shown), to draw it there. `spinOffset` turns the body shown on
- * itself (see placeSystem).
+ * itself (see placeSystem). Each orbit line is `orbitSamples` points
+ * spread evenly round it, and more ever closer to its body (see below).
  */
 export function systemSky(
   system: System,
@@ -206,6 +211,7 @@ export function systemSky(
   days: number,
   textures: (id: string) => string | null,
   spinOffset = 0,
+  orbitSamples = ORBIT_SAMPLES,
 ): {
   bodies: SkyBody[];
   ids: string[];
@@ -262,18 +268,22 @@ export function systemSky(
       const parent = body.parent ? placements.get(body.parent)!.centre : ([0, 0, 0] as Vec3);
       const e = Math.min(Math.max(body.orbit.eccentricity, 0), 0.95);
       const a = body.orbit.semi_major_axis_km;
-      // Its true anomaly now, so the body shown's own orbit is sampled
-      // ever closer to it.
+      // Its angle now, from the node: each line sampled ever closer to its
+      // body, through its centre, from a step a fifth of the body's
+      // distance from the body shown (of the body shown's radius on its
+      // own orbit), growing by 1.4 to the even one. A chord of the even
+      // samples would miss it by up to 1.9e-4 of the orbit's radius at
+      // 160 (a giant's own orbit round its star by half its radius,
+      // beside it in its moon's sky), and corners would show near it.
       const rel = sub(there.centre, parent);
       const now = Math.atan2(dot(rel, there.plane.third), dot(rel, there.plane.node));
-      const angles: number[] = Array.from({ length: ORBIT_SAMPLES }, (_, i) => (2 * Math.PI * i) / ORBIT_SAMPLES);
-      if (body.id === shown) {
-        const size = self.physical.radius_km / a;
-        for (let step = 0.2 * size; step < (2 * Math.PI) / ORBIT_SAMPLES; step *= 1.4) {
-          angles.push(now + step, now - step);
-        }
-        angles.push(now);
+      const even = (2 * Math.PI) / orbitSamples;
+      const angles: number[] = Array.from({ length: orbitSamples }, (_, i) => even * i);
+      const from = Math.max(Math.hypot(...sub(there.centre, here.centre)), self.physical.radius_km);
+      for (let step = (0.2 * from) / a; step < even; step *= 1.4) {
+        angles.push(now + step, now - step);
       }
+      angles.push(now);
       const wrap = (x: number) => x - 2 * Math.PI * Math.floor(x / (2 * Math.PI));
       const periapsis = body.orbit.periapsis_deg * DEG;
       return angles

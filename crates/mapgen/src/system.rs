@@ -841,7 +841,8 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
             (Some(h), _) => f64::from(h.giant.mass_earth),
             // A giant asked for: its own mass, not a rocky planet's of its size.
             (None, Some(mass)) => f64::from(mass),
-            (None, None) => (f64::from(params.circumference_km) / 40_075.0).powi(3),
+            // The mass of the gravity its world is generated with.
+            (None, None) => f64::from(params.mass_earth()),
         },
         orbit_au: f64::from(params.orbit_au),
         eccentricity: f64::from(params.eccentricity),
@@ -1005,10 +1006,7 @@ fn assemble(
                 ),
             }
         } else {
-            drawn_moons(
-                &params,
-                (f64::from(params.circumference_km) / 40_075.0).powi(3),
-            )
+            drawn_moons(&params, f64::from(params.mass_earth()))
         };
         // Nearest first, the ring moons among the others.
         let giant_kg = slot.mass_earth * EARTH_KG;
@@ -1177,10 +1175,11 @@ fn planet_params(
         giants: if giant { None } else { Some(GiantsMode::None) },
         host: if giant { None } else { Some(HostMode::None) },
         mass_earth: giant.then_some(slot.mass_earth as f32),
-        // A rocky planet takes the size of the mass it was spaced with, at
-        // Earth's density (the mass a world's size gives, see planet_body),
-        // rather than its preset's own draw, so that the spacing holds.
-        circumference_km: (!giant).then(|| (40_075.0 * slot.mass_earth.cbrt()) as f32),
+        // A rocky planet takes the size of the mass it was spaced with, by
+        // the mass-radius relation of rocky planets (the mass a world's size
+        // gives, see planet_body), rather than its preset's own draw, so
+        // that the spacing holds.
+        circumference_km: (!giant).then(|| crate::world::rocky_circumference_km(slot.mass_earth)),
         width: Some(width),
         height: Some(height),
         ..WorldRequest::default()
@@ -1247,9 +1246,10 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
         } else {
             day
         };
+        // The mass of the gravity its world is generated with.
         (
             radius,
-            (radius / 6371.0).powi(3),
+            f64::from(params.mass_earth()),
             day,
             info.tidally_locked,
             resonant,
@@ -1257,7 +1257,11 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
     };
     let volume = 4.0 / 3.0 * PI * (radius_km * 1000.0).powi(3);
     let density = mass_earth * EARTH_KG / volume / 1000.0;
-    let gravity = mass_earth / (radius_km / 6371.0).powi(2);
+    let gravity = if giant {
+        mass_earth / (radius_km / 6371.0).powi(2)
+    } else {
+        f64::from(params.gravity_modifier())
+    };
     Body {
         id: id.to_string(),
         designation: designation.to_string(),
@@ -1371,6 +1375,19 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
     )
 }
 
+/// The parameters a body's world is generated with: its stored ones, a
+/// moon or a rocky planet stored before they carried their gravity (a
+/// system made by an older version) taking its card's, from the mass and
+/// radius the system stored, not the gravity the radius alone gives.
+fn world_params(body: &Body) -> WorldParams {
+    let mut params = body.params.clone();
+    let rocky = body.kind == BodyKind::Moon || params.planet.giant.is_none();
+    if rocky && params.gravity.is_none() {
+        params.gravity = Some(body.physical.gravity as f32);
+    }
+    params
+}
+
 /// A giant's params with its rings drawn by the system, from a stream of
 /// their own and its preset's odds: the star view and the skies show them
 /// before the giant is generated, and its generation takes them (see
@@ -1461,13 +1478,17 @@ fn ring_moon_parts(
     let mass = 4.0 / 3.0 * PI * (moon.radius_km * 1e3).powi(3) * moon.density * 1e3;
     let round = moon.shape == [1.0; 3];
     let shape = (!round).then(|| moon.shape.map(|s| s as f32));
-    let params = crate::moons::small_body_params(
-        giant,
-        Composition::Ice,
-        moon.radius_km as f32,
-        moon.seed,
-        shape,
-    );
+    let gravity = G * mass / (moon.radius_km * 1e3).powi(2) / 9.81;
+    let params = WorldParams {
+        gravity: Some(gravity as f32),
+        ..crate::moons::small_body_params(
+            giant,
+            Composition::Ice,
+            moon.radius_km as f32,
+            moon.seed,
+            shape,
+        )
+    };
     let seed = f64::from(moon.seed);
     (
         "icy-moon".to_string(),
@@ -1486,7 +1507,7 @@ fn ring_moon_parts(
             mass_earth: mass / EARTH_KG,
             radius_km: moon.radius_km,
             density: moon.density,
-            gravity: G * mass / (moon.radius_km * 1e3).powi(2) / 9.81,
+            gravity,
             axes_km: shape.map(|s| s.map(|a| a * moon.radius_km as f32)),
         },
         Spin {
@@ -1504,7 +1525,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
     let giant_kg = f64::from(host.giant.mass_earth) * EARTH_KG;
     let mut moons: Vec<(f64, MoonParts)> = Vec::new();
     let world_radius = f64::from(world.circumference_km) / (2.0 * PI);
-    let world_mass = (world_radius / 6371.0).powi(3);
+    let world_mass = f64::from(world.mass_earth());
     moons.push((
         f64::from(host.distance_km),
         (
@@ -1526,7 +1547,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                 density: world_mass * EARTH_KG
                     / (4.0 / 3.0 * PI * (world_radius * 1000.0).powi(3))
                     / 1000.0,
-                gravity: world_mass / (world_radius / 6371.0).powi(2),
+                gravity: f64::from(world.gravity_modifier()),
                 axes_km: None,
             },
             Spin {
@@ -1725,7 +1746,7 @@ pub fn generate_neighbourhood_with(
         let options = GenerateOptions {
             debug: writer.as_ref().map(|w| w as _),
         };
-        let generated = generate_with_progress(&body.params, options, at);
+        let generated = generate_with_progress(&world_params(body), options, at);
         if let Some(writer) = writer {
             writer.finish()?;
         }
@@ -2074,6 +2095,7 @@ mod tests {
                         given_rings: None,
                         impact_factor: None,
                         locked_to_star: None,
+                        gravity: None,
                         ..body.params.clone()
                     };
                     let mut alone = crate::giant_world::Look::draw(&own, mass).info;
@@ -2576,5 +2598,57 @@ mod spin_tests {
                 assert_eq!(regular, drawn, "{}", giant.id);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod gravity_tests {
+    use super::*;
+
+    #[test]
+    fn a_moon_stored_without_gravity_takes_its_cards() {
+        // A world with moons, as a system draws around it.
+        let world = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(3),
+            moons: Some(crate::moons::MoonsMode::Count(2)),
+            ..WorldRequest::default()
+        };
+        let params = world.resolve(&mut StdRng::seed_from_u64(3)).unwrap().params;
+        let system = draw_around_params(&world, params);
+        let moon = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Moon)
+            .expect("a moon");
+        assert_eq!(world_params(moon).gravity, moon.params.gravity);
+        // As stored before moons carried their gravity.
+        let mut old = moon.clone();
+        old.params.gravity = None;
+        let g = world_params(&old).gravity_modifier();
+        assert!((f64::from(g) - moon.physical.gravity).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_rocky_planet_stored_without_gravity_takes_its_cards() {
+        let world = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(5),
+            ..WorldRequest::default()
+        };
+        let params = world.resolve(&mut StdRng::seed_from_u64(5)).unwrap().params;
+        let system = draw_around_params(&world, params);
+        let mut old = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Planet && b.params.planet.giant.is_none())
+            .expect("a rocky planet")
+            .clone();
+        // A system made by main stored no gravity; its card shows the
+        // gravity of the stored mass and radius.
+        old.params.gravity = None;
+        old.physical.gravity = 1.94;
+        let g = world_params(&old).gravity_modifier();
+        assert!((f64::from(g) - 1.94).abs() < 1e-6, "got {g}");
     }
 }

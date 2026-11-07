@@ -575,7 +575,10 @@ fn intersection(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> [f64; 2] 
 /// same, and the tributaries joining it below the cut take its course on
 /// (see [`hand_over_tail`]). The very end of a tributary, which lies on its
 /// parent, is not a crossing. `width` is the map's width, in pixels.
-fn end_at_first_crossing(lines: &mut [RiverLine], width: f64) {
+/// Returns whether any line was cut: a tail handed over may cross a line
+/// already checked, so [`shape`] runs it again until none is.
+fn end_at_first_crossing(lines: &mut [RiverLine], width: f64) -> bool {
+    let mut any = false;
     let index = SegmentIndex::new(lines);
     // First segment of each line that may be cut: past its tributaries' mouths.
     let mut protected = vec![0usize; lines.len()];
@@ -616,9 +619,15 @@ fn end_at_first_crossing(lines: &mut [RiverLine], width: f64) {
             line.parent = Some(other);
             line.mouth = Mouth::River;
             protected[other] = protected[other].max(t + 1);
+            any = true;
         }
     }
+    any
 }
+
+/// Passes of [`end_at_first_crossing`] at most: each pass only cuts lines,
+/// and the tails it hands over rarely cross again.
+const CROSSING_PASSES: usize = 8;
 
 /// Before line `id` is cut at its segment `s`: each of its tributaries
 /// joining it further down takes the rest of its course on, down to its
@@ -864,7 +873,13 @@ pub fn shape(lines: &[RiverLine], grid: &Grid, filled: &[f32], seed: u32) -> Vec
             estuary: line.estuary,
         });
     }
-    end_at_first_crossing(&mut out, f64::from(width));
+    // Again while a pass cut something: a tail handed over to a line
+    // already checked may cross another river.
+    for _ in 0..CROSSING_PASSES {
+        if !end_at_first_crossing(&mut out, f64::from(width)) {
+            break;
+        }
+    }
     out
 }
 

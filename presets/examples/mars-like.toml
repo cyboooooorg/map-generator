@@ -36,10 +36,11 @@ moisture = -0.7
 
 # Any BiomeRules field; the others keep their default. Ice only near the
 # poles (down to about 65 degrees): too dry for snow on lower mountains.
+# `polar` and `highland_snow_temperature` are summer temperatures.
 [rules]
-polar = -70.0
+polar = -62.0
 sea_ice_temperature = -70.0
-highland_snow_temperature = -70.0
+highland_snow_temperature = -62.0
 snow_line = 0.6
 
 # Thin CO2 laden with fine dust: a butterscotch sky (with blue sunsets),
@@ -55,6 +56,12 @@ clouds = "dust"
 regime = "stagnant"
 wet_until = 3.5                        # Ga: end of the era of liquid water
 maria = [3.7, 3.0]                     # Ga: the volcanic plains of the Hesperian
+# Mars against the Moon (Hartmann, "Isochrons for Martian crater populations",
+# PSI; Hartmann 2005, doi:10.1016/j.icarus.2004.11.023): 2.6 times the
+# asteroids per unit area, each digging a crater 0.751 times as wide
+# (slower impacts, stronger gravity).
+impact_ratio = 2.6
+crater_scale = 0.751
 
 # target = [biomes replaced by it]
 [remap]

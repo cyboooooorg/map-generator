@@ -30,6 +30,21 @@ export interface DialState {
   sun: Vec3 | null;
   /** The planet a moon orbits, projected on the equator (unit), null for a planet. */
   host: Vec3 | null;
+  /** The star's height above the equator, radians, −π/2 to π/2 (see the dial's vertical half-circle). */
+  sunAltitude: number;
+  /** The other bodies of the planet's system in the sky: from a moon its host and the other moons, from a planet its moons (see DialBody). */
+  bodies: DialBody[];
+}
+
+/** A body of the sky on the dial: a quarter-circle from the ring up or down to its height. */
+export interface DialBody {
+  id: string;
+  /** Its direction projected on the equator (unit), null when within 1° of the spin axis. */
+  bearing: Vec3 | null;
+  /** Its height above the equator, radians. */
+  altitude: number;
+  /** The planet the body shown orbits. */
+  host: boolean;
 }
 
 export interface DialFigures {
@@ -69,6 +84,8 @@ const onEquator = (v: Vec3): Vec3 | null => {
 };
 /** The angle of a direction about +y, from +z towards +x. */
 const bearing = (v: Vec3) => Math.atan2(v[0], v[2]);
+/** A direction's height above the equatorial plane, radians. */
+export const altitudeOf = (v: Vec3) => Math.asin(Math.max(-1, Math.min(1, v[1] / (Math.hypot(...v) || 1))));
 
 /**
  * The dial of body `shown` after `days`, `spinOffset` radians of extra turn
@@ -118,7 +135,25 @@ export function rotationDial(
   const localHours = wrap(12 + (24 * (pointerLongitude - bearing(sky.sun))) / TAU, 24);
 
   return {
-    state: { locked, zero, pointerLongitude, reading, sun, host: parent ? host : null },
+    state: {
+      locked,
+      zero,
+      pointerLongitude,
+      reading,
+      sun,
+      host: parent ? host : null,
+      sunAltitude: altitudeOf(sky.sun),
+      // The planet's own system: from a moon, its planet and the other
+      // moons; from a planet, its moons. Other planets are left out.
+      bodies: sky.bodies.flatMap((body, k) => {
+        const id = sky.ids[k] ?? '';
+        const other = system.bodies.find((b) => b.id === id);
+        const local = parent ? id === parent.id || other?.parent === parent.id : other?.parent === self.id;
+        return local
+          ? [{ id, bearing: onEquator(body.direction), altitude: altitudeOf(body.direction), host: id === parent?.id }]
+          : [];
+      }),
+    },
     figures: {
       siderealHours,
       solarHours,

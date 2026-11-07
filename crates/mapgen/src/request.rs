@@ -539,6 +539,7 @@ impl WorldRequest {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            gravity: None,
         };
         // Moons asked for: the world is not a giant's moon, which keeps none
         // (an error when that is asked for too).
@@ -625,6 +626,10 @@ impl WorldRequest {
         {
             params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
         }
+        // The world decides whether it has plates (its size, water and
+        // star), applied to its preset so that `world.json` tells the
+        // regime it was generated with.
+        params.planet.geology.regime = crate::geology::regime_of(&params);
         if let Some(fraction) = land_fraction
             && !giant
         {
@@ -751,6 +756,34 @@ mod tests {
         // More land needs a lower sea.
         assert!(level(0.6) < level(0.3));
         assert!(level(0.3) < level(0.1));
+        // And the world gets the land asked for.
+        for fraction in [0.1, 0.29, 0.6] {
+            let mut params = WorldRequest {
+                width: Some(256),
+                height: Some(128),
+                ..request(fraction)
+            }
+            .resolve(&mut rand::rng())
+            .unwrap()
+            .params;
+            params.erosion = 0.0;
+            let world = crate::generation::generate(&params).world;
+            let waterline = params.sea_level + params.planet.rules.waterline;
+            let grid = params.grid();
+            let (mut land, mut all) = (0.0, 0.0);
+            for (i, &e) in world.elevation.iter().enumerate() {
+                let w = grid.latitude((i / world.width as usize) as u32).cos();
+                all += w;
+                if e > waterline {
+                    land += w;
+                }
+            }
+            let share = land / all;
+            assert!(
+                (share - f64::from(fraction)).abs() < 0.03,
+                "{fraction}: {share}"
+            );
+        }
     }
 
     #[test]
@@ -813,8 +846,8 @@ mod tests {
         let resolved = WorldRequest::default().resolve(&mut rand::rng()).unwrap();
         let p = resolved.params;
         assert!((0.10..0.40).contains(&p.sea_level));
-        // 5 to 40°, or 0 to 60° without a moon to steady it.
-        assert!((0.0..=60.0).contains(&p.axial_tilt_deg));
+        // 5 to 40°, or 0 to 85° without a moon to steady it.
+        assert!((0.0..=85.0).contains(&p.axial_tilt_deg));
         // The planet is random: its preset may set its own range.
         assert!(SURFACE_AGE_GA.contains(p.surface_age_ga));
         assert_eq!((p.width, p.height), (1920, 1080));
@@ -877,7 +910,7 @@ mod tests {
                 free += usize::from(!(5.0..=40.0).contains(&p.axial_tilt_deg));
             }
         }
-        // Most Earths have no large moon: their tilt ranges from 0 to 60°.
+        // Most Earths have no large moon: their tilt ranges from 0 to 85°.
         assert!(steady > 10 && free > 100, "{steady} {free}");
         // A tilt asked for stays.
         let asked = WorldRequest {

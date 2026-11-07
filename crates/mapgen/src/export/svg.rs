@@ -58,8 +58,9 @@ pub fn export_svg(world: &World, layers: &MapLayers, path: &str) -> std::io::Res
             );
             // Frozen rivers and rivers under lava are not drawn, as in the PNG.
             let i = my * w + mx;
-            let lava = planet.rules.choose(world.biome_input(i)).is_lava();
-            if world.temperature[i] >= planet.rules.polar && !lava {
+            let input = world.biome_input(i);
+            let lava = planet.rules.choose(input).is_lava();
+            if !planet.rules.frozen(input) && !lava {
                 let width = widths[start..=stop].iter().sum::<f64>() / (stop - start + 1) as f64;
                 let min_x = points.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
                 let max_x = points.iter().map(|p| p[0]).fold(f64::MIN, f64::max);
