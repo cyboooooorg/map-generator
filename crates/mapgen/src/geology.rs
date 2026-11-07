@@ -38,10 +38,6 @@ pub const PLATES_MIN_MASS_EARTH: f32 = 0.3;
 /// The tectonic regime of the world `p`: its preset's, except that a plate
 /// preset's world without what plates need has none.
 ///
-/// - **Too hot**: inside the inner edge of its star's habitable zone, where
-///   a runaway greenhouse boils its oceans away, an episodic lid, as Venus,
-///   whose atmosphere suggests early plates followed by today's stagnant,
-///   lid-like mode (Weller et al. 2023, doi:10.1038/s41550-023-02102-w).
 /// - **Dry**: under [`LIQUID_WATER_BAR`], no water weakens its lithosphere,
 ///   a stagnant lid: the likelihood of plates "is controlled largely by the
 ///   presence of surface water" (Korenaga 2010,
@@ -52,17 +48,21 @@ pub const PLATES_MIN_MASS_EARTH: f32 = 0.3;
 /// Super-Earths keep their plates: Valencia, O'Connell & Sasselov (2007,
 /// doi:10.1086/524012) find them inevitable, O'Neill & Lenardic (2007,
 /// doi:10.1029/2007GL030598) unlikely; the app follows the first, with
-/// Korenaga (2010), for whom size plays a minor role. Other presets keep
-/// their regime: a stagnant preset's world does not gain plates.
+/// Korenaga (2010), for whom size plays a minor role (which argues against
+/// any size threshold: the one above is the app's choice). Other presets
+/// keep their regime: a stagnant preset's world does not gain plates.
+///
+/// A world near its star keeps its plates: no source ties the inner edge
+/// of the habitable zone to a regime (Venus's present mode is "stagnant
+/// lid-like" after early plates, Weller et al. 2023,
+/// doi:10.1038/s41550-023-02102-w, a history, not a threshold), and
+/// switching there would cut its carbon cycle at a hard edge.
 pub fn regime_of(p: &WorldParams) -> Regime {
     let preset = p.planet.geology.regime;
     if preset != Regime::Plates || p.giant_mass_earth.is_some() {
         return preset;
     }
-    let star = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity);
-    if star.hz_position < 0.0 {
-        Regime::Episodic
-    } else if p.pressure_bar < LIQUID_WATER_BAR || p.mass_earth() < PLATES_MIN_MASS_EARTH {
+    if p.pressure_bar < LIQUID_WATER_BAR || p.mass_earth() < PLATES_MIN_MASS_EARTH {
         Regime::Stagnant
     } else {
         Regime::Plates
@@ -187,8 +187,9 @@ mod tests {
         assert_eq!(world("terran", 21_344.0, 1.0, 1.0), Regime::Stagnant);
         // Without liquid water, too.
         assert_eq!(world("terran", earth, 0.005, 1.0), Regime::Stagnant);
-        // Inside the runaway greenhouse, an episodic lid, as Venus.
-        assert_eq!(world("terran", earth, 1.0, 0.72), Regime::Episodic);
+        // Near its star too: no jump of its climate at the habitable
+        // zone's inner edge.
+        assert_eq!(world("terran", earth, 1.0, 0.72), Regime::Plates);
         // A stagnant preset never gains plates.
         assert_eq!(world("barren", earth, 1.0, 1.0), Regime::Stagnant);
         // Requests apply it to the preset of the world.
