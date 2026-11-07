@@ -639,6 +639,17 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   (`MM_PER_RATE`, `COLD_RAIN_EXPONENT`, `CIRCULATION_OCTAVES`,
   `ITCZ_OCTAVES`, `SUBSIDENCE_HUMIDITY`). Done when the rain comes from a
   moisture budget (evaporation, convergence) in physical units.
+- **Circulation on tilted worlds:** the wind belts, the circulation
+  factor and the ITCZ follow the geographic latitude, whatever the
+  tilt. At 90° the poles are the warm annual-mean regions and the rain
+  there reaches 4 000 mm a year, from warm air over a nearby sea, while
+  the cells stay where a vertical axis would put them. A circulation
+  following the thermal equator (the latitude of the annual-mean
+  insolation maximum) would need a source for the Hadley cell's response
+  to the tilt (Kaspi & Showman 2015 vary obliquity). A world with no
+  tilt has ice on half of its 45-60° land: with no seasons the warmest
+  month is the annual mean, below 0 °C there (Köppen's EF), which is
+  physical.
 - **Storms, fronts and ENSO:** moisture is the annual mean of a steady
   wind. Weather, interannual variability (El Niño, La Niña) and the storm
   rain that makes most orographic precipitation are model limits, not

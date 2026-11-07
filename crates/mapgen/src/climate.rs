@@ -480,12 +480,20 @@ const EARTH_LAPSE: f32 = LAPSE_RATE_K_PER_KM * crate::craters::ELEVATION_KM;
 
 // ── Moisture ──────────────────────────────────────────────────────────────────
 
+/// Smallest and largest stretch of the moisture lengths with the planet's
+/// circumference (Earth's is 1); beyond them the planet is not Earth-like
+/// enough for the scaling to mean anything. Calibration, no source.
+const MIN_STRETCH: f32 = 0.5;
+const MAX_STRETCH: f32 = 2.0;
+
 /// Ocean distance over which air picks up ~63% of the humidity it can hold.
 /// With [`RAIN_KM`] it sets the humidity of marine air, where evaporation
 /// balances the drizzle: `RAIN_KM / (RAIN_KM + EVAPORATION_KM)`, 80 % of
-/// what the air can hold, the relative humidity of the lower marine
-/// boundary layer on average (Held & Soden 2000,
-/// doi:10.1146/annurev.energy.25.1.441, section on water vapour).
+/// what the air can hold: turbulent mixing keeps the relative humidity of
+/// the lower planetary boundary layer at about 80 % on average (Held &
+/// Soden 2000, doi:10.1146/annurev.energy.25.1.441, p. 459, "The
+/// Planetary Boundary Layer"; read in the paper, which gives it for the
+/// boundary layer in general, and models ocean evaporation from it).
 const EVAPORATION_KM: f32 = 500.0;
 /// Land distance over which air rains out ~63% of its humidity.
 const RAIN_KM: f32 = 2_000.0;
@@ -512,17 +520,19 @@ const NEUTRAL_RAIN: f32 = 0.08;
 /// pixel; smoothing keeps biome borders from turning to speckle, short
 /// enough to keep the wet windward side of a range 50 km wide.
 const RAIN_SMOOTHING_KM: f32 = 25.0;
-/// Weight of the moisture noise, in index units (see [`moisture_index`]).
+/// Weight of the moisture noise, in index units (see [`moisture_index`]): a
+/// factor of about 2.8 in rain at one unit. Calibration, no source.
 const NOISE_WEIGHT: f32 = 1.0;
 
 /// Annual precipitation per unit of the smoothed rain rate (humidity per
 /// 1 000 km), mm. Calibration to the mean over Earth's land, 2.25 mm a day
 /// or 821 mm a year (GPCP version 2.3, 1979-2013: Adler et al. 2018,
-/// doi:10.3390/atmos9040138, Table 1), of the rain the moisture index can
-/// hold (125 to 8 000 mm), on `earth-like` seeds 1 to 4. The mean of the
-/// unclamped rain is about a fifth higher: the unbounded windward maxima
-/// of a pixel-scale model, which GPCP's 2.5° cells and gauges never see.
-const MM_PER_RATE: f32 = 2_300.0;
+/// doi:10.3390/atmos9040138, Table 1), of the rain of the stored moisture
+/// layer (noise and regional variability included, so within 125 to 8 000
+/// mm), over `earth-like` seeds 1-4 and 11-16. The unclamped mean of the
+/// model is higher: its unbounded windward maxima are what GPCP's 2.5°
+/// cells and gauges never see.
+const MM_PER_RATE: f32 = 2_120.0;
 /// Octaves of rain (doublings) from 1 000 mm to a moisture of 1: the
 /// index runs from 125 mm a year (-1) to 8 000 mm (+1).
 const RAIN_OCTAVES: f32 = 3.0;
@@ -551,7 +561,7 @@ const ITCZ_WIDTH_DEG: f32 = 10.0;
 /// Share of the background humidity that reaches the land under the
 /// sinking air of the Hadley edge (1 under rising air): the dry air of the
 /// subtropical highs brings land no moisture. Calibration, no source.
-const SUBSIDENCE_HUMIDITY: f32 = 0.7;
+const SUBSIDENCE_HUMIDITY: f32 = 0.5;
 
 /// Warming of air, K, per unit of humidity it rains out (humidity being
 /// relative to saturated air at 27 °C and 1013 hPa, 21.9 g of vapour per
@@ -762,9 +772,16 @@ fn rain_along(
     background: impl Fn(usize) -> f32,
 ) -> (Vec<f32>, Vec<f32>) {
     let n = path.len();
-    let evaporation = 1.0 - (-step_km / EVAPORATION_KM).exp();
-    let supply = 1.0 - (-step_km / MERIDIONAL_KM).exp();
-    let drizzle = 1.0 - (-step_km / RAIN_KM).exp();
+    // The distances of the moisture model are Earth's: on a larger planet
+    // (continents and oceans grow with it) they stretch with it, so
+    // interiors are not drier for being farther from the sea. Rain rates
+    // stay per Earth-equivalent 1 000 km.
+    let stretch = (input.grid.circumference_km / crate::noise::EARTH_CIRCUMFERENCE_KM)
+        .clamp(MIN_STRETCH, MAX_STRETCH);
+    let reach_km = step_km / stretch;
+    let evaporation = 1.0 - (-reach_km / EVAPORATION_KM).exp();
+    let supply = 1.0 - (-reach_km / MERIDIONAL_KM).exp();
+    let drizzle = 1.0 - (-reach_km / RAIN_KM).exp();
     let fade = (-step_km / FOEHN_KM).exp();
     let (mut rain, mut warm) = (vec![0.0f32; n], vec![0.0f32; n]);
     let mut humidity = match path.first() {
@@ -814,7 +831,7 @@ fn rain_along(
                 ordinary + excess
             };
             if lap + 1 == laps {
-                rain[k] = fallen / step_km * 1_000.0;
+                rain[k] = fallen / reach_km * 1_000.0;
                 warm[k] = if here >= 0.0 { lift } else { 0.0 };
             }
         }
@@ -1042,17 +1059,16 @@ pub fn rain_mm(moisture: f32) -> f32 {
 /// (at least 2/3 of the year's rain), with `T` the annual mean (Kottek et
 /// al. 2006, doi:10.1127/0941-2948/2006/0130, eq. 2.1). The model has no
 /// monthly rain, so the share of the summer half-year is the one the
-/// air's capacity gives it: [`holding_capacity`] of the half-years' mean
-/// temperatures (the annual mean plus or minus `2/π` of the half-range
-/// of the temperature, the mean of a sine over its half-period). Rain
-/// peaking in winter (the Mediterranean) is not modelled: calibration, no
-/// source.
+/// model's own rain gives it: rain goes as the air's holding capacity
+/// (humidity) to the power `1 - COLD_RAIN_EXPONENT` (the cold damping of
+/// [`annual_rain_mm`]), at the half-years' mean temperatures (the annual
+/// mean plus or minus `2/π` of the half-range of the temperature, the mean
+/// of a sine over its half-period). Rain peaking in winter (the
+/// Mediterranean) and monsoons are not modelled: calibration, no source.
 pub fn dryness_threshold_mm(annual: f32, summer: f32, winter: f32) -> f32 {
     let half_year = |t: f32| annual + (t - annual) * 2.0 / std::f32::consts::PI;
-    let (warm, cold) = (
-        holding_capacity(half_year(summer)),
-        holding_capacity(half_year(winter)),
-    );
+    let rain = |t: f32| holding_capacity(half_year(t)).powf(1.0 - COLD_RAIN_EXPONENT);
+    let (warm, cold) = (rain(summer), rain(winter));
     let share = warm / (warm + cold);
     let season = if share >= 2.0 / 3.0 { 28.0 } else { 14.0 };
     (2.0 * annual.abs() + season).max(1.0)
@@ -1366,6 +1382,35 @@ mod tests {
     }
 
     #[test]
+    fn the_moisture_lengths_stretch_with_the_planet() {
+        // Half the row is sea, half flat land: at the same fraction of the
+        // way across, a planet twice as large rains the same, not less.
+        let rain_at = |circumference_km: f32| {
+            let grid = Grid {
+                width: 512,
+                height: 1,
+                circumference_km,
+            };
+            let height: Vec<f32> = (0..512)
+                .map(|x| if x < 256 { -0.3 } else { 0.01 })
+                .collect();
+            let temperature = vec![20.0; 512];
+            let noise = vec![0.0; 512];
+            let input = MoistureInput {
+                grid,
+                height_above_water: &height,
+                temperature: &temperature,
+                noise: &noise,
+                belts: Belts::EARTH,
+            };
+            let (rain, _) = rain_along(&input, &eastward(&grid, 0), 2, grid.dx_km(0), |_| 0.5);
+            rain[256 + 128]
+        };
+        let (earth, twice) = (rain_at(40_000.0), rain_at(80_000.0));
+        assert!((earth / twice - 1.0).abs() < 0.05, "{earth} vs {twice}");
+    }
+
+    #[test]
     fn the_moisture_index_is_the_log_of_the_annual_rain() {
         assert!(moisture_index(NEUTRAL_RAIN_MM).abs() < 1e-6);
         assert!((moisture_index(8_000.0) - 1.0).abs() < 1e-5);
@@ -1380,9 +1425,10 @@ mod tests {
         // Kottek et al. 2006, eq. 2.1, at 20 °C: 2T plus 14 spread through
         // the year, plus 28 when two thirds of the rain falls in summer.
         assert!((dryness_threshold_mm(20.0, 20.0, 20.0) - 54.0).abs() < 1e-3);
-        // A continental summer 30 °C warmer than the winter puts well over
-        // two thirds of the rain in the warm half-year.
-        assert!((dryness_threshold_mm(20.0, 35.0, 5.0) - 68.0).abs() < 1e-3);
+        // Rain follows the capacity to the power 0.2, so only an extreme
+        // swing puts two thirds of it in the warm half-year.
+        assert!((dryness_threshold_mm(20.0, 35.0, 5.0) - 54.0).abs() < 1e-3);
+        assert!((dryness_threshold_mm(20.0, 80.0, -40.0) - 68.0).abs() < 1e-3);
         // Absolute temperature, as the paper writes it.
         assert!((dryness_threshold_mm(-5.0, -5.0, -5.0) - 24.0).abs() < 1e-3);
     }

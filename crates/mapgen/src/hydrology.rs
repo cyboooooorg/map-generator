@@ -125,12 +125,21 @@ fn routing_noise(grid: &Grid, seed: u32) -> Vec<f32> {
         .collect()
 }
 
-/// Share of the rain that runs off, from moisture in `[-1, 1]`: none in a
-/// desert, all of it in the wettest places.
+/// Share of the rain that runs off, from the moisture index (the log of
+/// the annual rain, see [`crate::climate::moisture_index`]): none at the
+/// index's driest (125 mm a year), `1 - exp(-(P - 125 mm) / 400 mm)`
+/// above: 0.3 at 260 mm, 0.8 at Earth's mean land rain of 821 mm, nearly all
+/// in the wettest places. A saturating runoff coefficient, calibrated so
+/// `earth-like` worlds keep the 200 or so river lines the former linear
+/// index gave (about 130 with 1 000 mm), no source.
 fn runoff(moisture: f32) -> f32 {
-    let wet = ((moisture + 1.0) / 2.0).clamp(0.0, 1.0);
-    wet * wet
+    let rain = crate::climate::rain_mm(moisture) - crate::climate::rain_mm(-1.0);
+    1.0 - (-rain.max(0.0) / RUNOFF_RAIN_MM).exp()
 }
+
+/// Rain, mm a year, over the driest rain, at which the runoff share is
+/// 1 - 1/e (see [`runoff`]).
+const RUNOFF_RAIN_MM: f32 = 400.0;
 
 #[derive(PartialEq)]
 struct Node(f32, u32);
