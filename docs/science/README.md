@@ -13,12 +13,35 @@ wants to understand it, and link back to those studies.
 
 ### Star view
 
-No topic yet. Planned: "How do asteroid belts form?", "What does a G-type
-star mean?"
+- [What does a G-type star mean?](star-types.md)
+- [What is the habitable zone?](habitable-zone.md)
+- [How do asteroid belts form?](asteroid-belts.md)
+- [What are Lagrange points and trojans?](lagrange-points.md)
+- [Why are giant planets far from their star, and what is a hot
+  Jupiter?](giant-planet-placement.md)
+- [How close can two planets orbit?](planet-spacing.md)
+- [What does an eccentric orbit change?](eccentric-orbits.md)
 
-### Planet view
+### Planet view: the body and its moons
 
+- [Why does a world always show the same face to its
+  host?](tidal-locking.md)
 - [Why are ring moons so small?](ring-moons.md)
+- [How far can rings reach?](ring-extent.md)
+- [How many moons can a planet keep, and how large?](how-many-moons.md)
+- [Why are small moons shaped like potatoes?](moon-shapes.md)
+- [Why do gas giants have bands?](gas-giant-bands.md)
+
+### Planet view: the surface
+
+- [What decides whether a world has an atmosphere?](atmospheres.md)
+- [How does axial tilt make climate zones and
+  seasons?](axial-tilt-climate.md)
+- [Why is one side of a mountain range dry?](rain-shadows.md)
+- [How do impact craters form and fade?](impact-craters.md)
+- [Do all rocky planets have plate tectonics?](plate-tectonics.md)
+- [Why are mountains lower on heavier planets?](mountains-and-gravity.md)
+- [What colour would plants be under another star?](plant-colours.md)
 
 ## Writing an article
 
