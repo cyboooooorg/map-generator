@@ -1119,14 +1119,20 @@ mod tests {
         assert_eq!(back.seasons, crate::generation::seasons(&back.params));
         assert!(back.seasons.half_range(4, true) > 5.0);
         assert_eq!(back.lapse_rate, crate::climate::lapse_rate(&back.params));
-        let rules = &back.params.planet.rules;
-        for i in 0..back.biomes.len() {
-            let stored = back.biomes[i];
+        // The seasons the biomes were chosen with are those a world reads
+        // (on the generated world: its stored temperatures are quantised,
+        // which can move a pixel right at a threshold).
+        let rules = &world.params.planet.rules;
+        for i in 0..world.biomes.len() {
+            let stored = world.biomes[i];
             // The lake flag is not stored: lakes, and frozen lakes stored
             // as ice cap, are left out.
             if !matches!(stored, Biome::Lake | Biome::River | Biome::IceCap) {
                 assert_eq!(
-                    back.params.planet.remap(rules.choose(back.biome_input(i))),
+                    world
+                        .params
+                        .planet
+                        .remap(rules.choose(world.biome_input(i))),
                     stored
                 );
             }
