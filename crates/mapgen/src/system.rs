@@ -1203,7 +1203,7 @@ fn rocky_moons(planet: &WorldParams) -> Vec<MoonParts> {
     let Some(system) = MoonSystem::draw(planet) else {
         return Vec::new();
     };
-    let planet_mass = (f64::from(planet.circumference_km) / 40_075.0).powi(3);
+    let planet_mass = f64::from(planet.mass_earth());
     system
         .moons
         .iter()

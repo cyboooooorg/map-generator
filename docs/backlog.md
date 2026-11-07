@@ -595,6 +595,3 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     so a sea level lowered on a world exposes platform, not old basins.
   - The age of old ocean floor is unknown: floor older than about 18 Ma
     keeps the noise's depth (4 km) instead of sinking towards 6.4 km.
-- **Mountains:** the planet's mass the moons see (`moons.rs`,
-  `PLANET_DENSITY`) is still Earth's density at every size, while the
-  planet's gravity and card follow the rocky mass–radius relation.
