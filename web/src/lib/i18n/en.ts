@@ -350,7 +350,7 @@ export const en = {
     tides: 'Tides',
     tidesHelp: 'Their range from the moons and the star, relative to Earth’s: tidal flats widen with it; a planet locked to its star has none',
     tidesValue: (p: { tide: string }) => `×${p.tide} Earth’s`,
-    tiltHelp: 'A large moon keeps the axial tilt steady (the Moon holds Earth’s near 23°); without one it wanders, and is drawn from 0 to 60°',
+    tiltHelp: 'A large moon keeps the axial tilt steady (the Moon holds Earth’s near 23°); without one it can wander, and is drawn from 0 to 85°',
     tiltSteady: 'tilt steadied by its moon',
     tiltFree: 'tilt left free',
     eccentricity: 'Eccentricity',

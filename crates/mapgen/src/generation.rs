@@ -1,7 +1,7 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
-use crate::climate::LockedClimate;
+use crate::climate::{Belts, LockedClimate, Moisture, Seasons};
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
@@ -1059,6 +1059,50 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     level
 }
 
+/// The host star's action on the climate of world `params`: its light,
+/// regulated by a carbon cycle on wet worlds (fully with plate tectonics,
+/// partly under a stagnant lid), and the planet's own heat.
+fn star_climate(params: &WorldParams) -> StarClimate {
+    let planet = &params.planet;
+    StarClimate {
+        star: params.star,
+        orbit_au: params.orbit_au,
+        eccentricity: params.eccentricity,
+        regulation: carbon_cycle(planet.geology.regime, params.pressure_bar),
+        // A giant's moon: its tidal heat adds to its own, as radiated power.
+        internal_heat_k: crate::exomoon::HostGiant::draw(params)
+            .map_or(planet.climate.internal_heat, |h| {
+                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
+            }),
+    }
+}
+
+/// The wind belts of world `params` (see [`Belts`]), from its day: the
+/// rotation its moons draw, its year if locked to its star, Earth's 24 h
+/// for a world without moons.
+pub fn belts(params: &WorldParams) -> Belts {
+    let star = StarInfo::new(params.star, params.orbit_au, params.eccentricity);
+    let day_hours = if star.tidally_locked {
+        f64::from(star.year_days) * 24.0
+    } else {
+        crate::moons::MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours))
+    };
+    Belts::new(day_hours, f64::from(params.circumference_km))
+}
+
+/// The seasonal cycle of world `params` (see [`Seasons`]): none on a
+/// planet locked to its star, whose sun never moves in its sky.
+pub fn seasons(params: &WorldParams) -> Seasons {
+    let grid = params.grid();
+    if StarInfo::new(params.star, params.orbit_au, params.eccentricity).tidally_locked {
+        return Seasons::none(grid.height);
+    }
+    let star = star_climate(params);
+    Seasons::new(&grid, params.axial_tilt_deg, params.pressure_bar, |rows| {
+        star_temperatures(rows, star)
+    })
+}
+
 /// Generates a world, running every pass in order, without debug layers.
 pub fn generate(params: &WorldParams) -> Generated {
     generate_with_progress(params, GenerateOptions::default(), |_| {})
@@ -1070,6 +1114,13 @@ pub fn generate_with_progress(
     options: GenerateOptions,
     progress: impl Fn(Stage),
 ) -> Generated {
+    // Regenerating a world stored before the arid criterion: its rules
+    // meant the former moisture scale.
+    if params.planet.rules.is_legacy() {
+        let mut modern = params.clone();
+        modern.planet.rules = params.planet.rules.modernised();
+        return generate_with_progress(&modern, options, progress);
+    }
     // A giant has no ground: its cloud bands have a pipeline of their own.
     if params.giant_mass_earth.is_some() {
         return crate::giant_world::generate(params, &progress);
@@ -1165,21 +1216,9 @@ pub fn generate_with_progress(
             .par_iter_mut()
             .for_each(|e| *e = waterline + (*e - waterline) * flatten);
     }
-    // Rows of sea-level temperature, evened out by dense air.
-    // The host star: its light, regulated by a carbon cycle on wet worlds
-    // (fully with plate tectonics, partly under a stagnant lid), and the
-    // planet's own heat.
-    let star_climate = StarClimate {
-        star: params.star,
-        orbit_au: params.orbit_au,
-        eccentricity: params.eccentricity,
-        regulation: carbon_cycle(planet.geology.regime, params.pressure_bar),
-        // A giant's moon: its tidal heat adds to its own, as radiated power.
-        internal_heat_k: crate::exomoon::HostGiant::draw(params)
-            .map_or(planet.climate.internal_heat, |h| {
-                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
-            }),
-    };
+    // Rows of sea-level temperature, evened out by dense air, then moved by
+    // the host star.
+    let star_climate = star_climate(params);
     // A tidally locked planet's climate follows the angle from the point
     // under its star instead of the latitude.
     let locked = StarInfo::new(params.star, params.orbit_au, params.eccentricity)
@@ -1199,9 +1238,11 @@ pub fn generate_with_progress(
             rows
         }
     };
+    let seasons = seasons(params);
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
-    let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
+    // Water carves where it thaws in summer.
+    let thaw = crate::erosion::thaw(&seasons.land_summer(&row_temperature), warming, rules.polar);
     // Impact craters: those of the wet era are worn by the erosion, the
     // younger ones are drawn over it. Their height change is only kept for
     // its debug map.
@@ -1278,6 +1319,7 @@ pub fn generate_with_progress(
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
+    let lapse = crate::climate::lapse_rate(params);
     let raw_temperature: Vec<f32> = elevation
         .par_iter()
         .enumerate()
@@ -1291,7 +1333,7 @@ pub fn generate_with_progress(
                 )),
                 None => row_temperature[i / width as usize],
             };
-            temperature(sea_level, above_water)
+            temperature(sea_level, above_water, lapse)
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
         .collect();
@@ -1320,8 +1362,18 @@ pub fn generate_with_progress(
     progress(Stage::Moisture);
     // ── Pass 5: moisture ──────────────────────────────────────────────────────
     // Winds carry ocean evaporation inland; it rains out with distance and on
-    // windward slopes, leaving rain shadows behind mountains.
-    let (coast_distance_km, (raw_moisture, precipitation)) = rayon::join(
+    // windward slopes, leaving rain shadows behind mountains, where the air
+    // comes down warmer (foehn).
+    let belts = belts(params);
+    let (
+        coast_distance_km,
+        Moisture {
+            moisture: raw_moisture,
+            precipitation,
+            foehn,
+            ..
+        },
+    ) = rayon::join(
         || grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM),
         || {
             moisture(&MoistureInput {
@@ -1329,6 +1381,7 @@ pub fn generate_with_progress(
                 height_above_water: &height_above_water,
                 temperature: &raw_temperature,
                 noise: &moisture_noise,
+                belts,
             })
         },
     );
@@ -1364,15 +1417,18 @@ pub fn generate_with_progress(
                 -1.0
             }
         });
+    // The foehn warms the lee of ranges where rain fell on the climb.
+    let foehn_share = if liquid_water { 1.0 } else { 0.0 };
     let mut temperature = raw_temperature;
     temperature
         .par_iter_mut()
         .zip(&variability_t)
-        .for_each(|(t, v)| {
-            *t = (*t + dt + regional_variability(*v, Field::Temperature))
+        .zip(&foehn)
+        .for_each(|((t, v), f)| {
+            *t = (*t + dt + regional_variability(*v, Field::Temperature) + foehn_share * f)
                 .clamp(TEMPERATURE_RANGE.0, TEMPERATURE_RANGE.1)
         });
-    drop((variability_t, variability_m));
+    drop((variability_t, variability_m, foehn));
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
@@ -1388,11 +1444,28 @@ pub fn generate_with_progress(
         },
         cover_shift: planet.atmosphere.cloud_cover,
         precipitation: &precipitation,
+        belts,
         seed: params.seed,
     };
     let (clouds, mut water) = rayon::join(
         || crate::clouds::clouds(&cloud_input),
-        || hydrology(&grid, &height_above_water, &moisture, params.seed),
+        || {
+            // Lava does not depend on rain: the flows of a volcanic world
+            // run off everywhere alike.
+            let lava = planet.remap(Biome::River).is_lava();
+            let runoff: Vec<f32> = moisture
+                .par_iter()
+                .zip(&temperature)
+                .map(|(&m, &t)| {
+                    if lava {
+                        1.0
+                    } else {
+                        crate::hydrology::runoff_share(m, t)
+                    }
+                })
+                .collect();
+            hydrology(&grid, &height_above_water, &runoff, params.seed)
+        },
     );
     if let Some(sink) = sink {
         sink.layer(DebugLayer {
@@ -1462,10 +1535,12 @@ pub fn generate_with_progress(
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
+            let land = relief(elevation[i]) >= rules.waterline;
             let input = BiomeInput {
                 elevation: relief(elevation[i]),
                 moisture: moisture[i],
                 temperature: temperature[i],
+                seasonality: seasons.at((i / width as usize) as u32, land, coast_distance_km[i]),
                 volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
                 lake: lake[i],
@@ -1492,6 +1567,8 @@ pub fn generate_with_progress(
             elevation_base,
             moisture,
             temperature,
+            seasons,
+            lapse_rate: lapse,
             flow_km2,
             volcanic_zone,
             coast_distance_km,
@@ -1704,6 +1781,65 @@ pub(crate) mod tests {
             // The old ramp: a fifth of the land above 4 km.
             assert!(above(&sea, 1.0) > 70.0, "{report}");
         }
+    }
+
+    #[test]
+    fn earth_like_worlds_are_dry_where_earth_is_dry() {
+        // Köppen's arid climates B cover 30.2 % of Earth's land (Peel et al.
+        // 2007), the tropical ones 19.0 %. Four seeds together, as the
+        // calibration was made.
+        let earth = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/earth-like.toml"
+        );
+        let (mut land, mut arid, mut tropical) = (0.0f64, 0.0f64, 0.0f64);
+        // Mean rain of the 0-10° belt and of the 20-35° belts, mm.
+        let mut belt = [(0.0f64, 0.0f64); 2];
+        for seed in [1u32, 2, 3, 4] {
+            let request = crate::request::WorldRequest {
+                planet: Some(earth.into()),
+                seed: Some(seed),
+                width: Some(512),
+                height: Some(256),
+                ..Default::default()
+            };
+            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
+            let p = request.resolve(&mut rng).unwrap().params;
+            let w = generate(&p).world;
+            let grid = p.grid();
+            for i in 0..w.biomes.len() {
+                let latitude = grid
+                    .latitude((i / w.width as usize) as u32)
+                    .to_degrees()
+                    .abs();
+                let area = grid.latitude((i / w.width as usize) as u32).cos();
+                let rain = f64::from(crate::climate::rain_mm(w.moisture[i]));
+                if latitude < 10.0 {
+                    belt[0].0 += rain * area;
+                    belt[0].1 += area;
+                } else if (20.0..35.0).contains(&latitude) {
+                    belt[1].0 += rain * area;
+                    belt[1].1 += area;
+                }
+                let b = w.biomes[i];
+                if b.is_water() && !matches!(b, Biome::Lake | Biome::River) {
+                    continue;
+                }
+                land += area;
+                match b {
+                    Biome::Desert | Biome::Shrubland => arid += area,
+                    Biome::Jungle | Biome::Savanna => tropical += area,
+                    _ => {}
+                }
+            }
+        }
+        let (arid, tropical) = (arid / land, tropical / land);
+        assert!((0.25..0.36).contains(&arid), "arid {arid}");
+        assert!((0.12..0.24).contains(&tropical), "tropical {tropical}");
+        // The ITCZ is wet and the subtropical highs dry (GPCP: 1 900 mm at
+        // 5° N, 665 mm at 25° N).
+        let (itcz, highs) = (belt[0].0 / belt[0].1, belt[1].0 / belt[1].1);
+        assert!(itcz > 1.8 * highs, "{itcz} vs {highs}");
     }
 
     #[test]

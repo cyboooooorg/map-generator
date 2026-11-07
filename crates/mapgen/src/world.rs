@@ -212,6 +212,13 @@ pub struct World {
     pub moisture: Vec<f32>,
     /// Annual mean temperature in °C, planet offset and greenhouse included.
     pub temperature: Vec<f32>,
+    /// The seasonal cycle by row (see [`crate::climate::Seasons`]),
+    /// computed from the parameters (none for worlds stored before it).
+    pub seasons: crate::climate::Seasons,
+    /// Cooling of the land per elevation unit the temperatures were made
+    /// with (see [`crate::climate::lapse_rate`]; the former rate for worlds
+    /// stored before format version 11).
+    pub lapse_rate: f32,
     /// Wet-equivalent drainage area in km² flowing through each pixel
     /// (0 on the sea): rivers are pixels above a threshold.
     pub flow_km2: Vec<f32>,
@@ -246,10 +253,17 @@ impl World {
     /// flags (not stored): for lake and river pixels it selects the biome
     /// the pixel would have without them.
     pub fn biome_input(&self, i: usize) -> BiomeInput {
+        let elevation = (self.elevation[i] - self.params.sea_level).clamp(-1.0, 1.0);
+        let land = elevation >= self.params.planet.rules.waterline;
         BiomeInput {
-            elevation: (self.elevation[i] - self.params.sea_level).clamp(-1.0, 1.0),
+            elevation,
             moisture: self.moisture[i],
             temperature: self.temperature[i],
+            seasonality: self.seasons.at(
+                (i / self.width as usize) as u32,
+                land,
+                self.coast_distance_km[i],
+            ),
             volcanic_zone: self.volcanic_zone[i],
             coast_distance_km: self.coast_distance_km[i],
             lake: false,

@@ -47,7 +47,8 @@ struct Args {
     #[arg(long, value_parser = parse_in(request::CIRCUMFERENCE_KM))]
     circumference: Option<f32>,
 
-    /// Axial tilt in degrees, in [0, 90] [default: random in 5..40]
+    /// Axial tilt in degrees, in [0, 90] [default: random in 5..40, or 0..85
+    /// on a planet without a large moon to steady it]
     #[arg(long, value_parser = parse_in(request::AXIAL_TILT_DEG))]
     axial_tilt: Option<f32>,
 

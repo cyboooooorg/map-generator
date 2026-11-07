@@ -36,10 +36,11 @@ moisture = -0.7
 
 # Any BiomeRules field; the others keep their default. Ice only near the
 # poles (down to about 65 degrees): too dry for snow on lower mountains.
+# `polar` and `highland_snow_temperature` are summer temperatures.
 [rules]
-polar = -70.0
+polar = -62.0
 sea_ice_temperature = -70.0
-highland_snow_temperature = -70.0
+highland_snow_temperature = -62.0
 snow_line = 0.6
 
 # Thin CO2 laden with fine dust: a butterscotch sky (with blue sunsets),

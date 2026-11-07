@@ -97,3 +97,15 @@ export function cloudTint(meta: WorldMetadata): [number, number, number] {
       return [0.95, 0.95, 0.95];
   }
 }
+
+/**
+ * Latitude under a world's star, degrees, at `season` (fraction of the
+ * year from the spring equinox) for an axial tilt in degrees, on a circular
+ * orbit: `sin δ = sin ε · sin λ`, λ = 2π · season the planet's place on its
+ * orbit (Nadeau & McGehee 2021; the generator's `climate::declination`).
+ * A world in a system takes the sun's direction from the orbit instead.
+ */
+export function sunDeclinationDeg(axialTiltDeg: number, season: number): number {
+  const tilt = (axialTiltDeg * Math.PI) / 180;
+  return (Math.asin(Math.sin(tilt) * Math.sin(2 * Math.PI * season)) * 180) / Math.PI;
+}

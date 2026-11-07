@@ -27,7 +27,7 @@
   import { UNITS, unitTooltip } from '../lib/units';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
-  import { cloudTint, skyFromWorld } from '../lib/sky';
+  import { cloudTint, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
@@ -1094,8 +1094,11 @@
       latitudeDeg: (Math.asin(Math.max(-1, Math.min(1, dir[1]))) * 180) / Math.PI,
     };
   });
-  // The latitude under the sun, as the system places it.
-  const declination = $derived(sunPlace?.latitudeDeg ?? 0);
+  // The latitude under the sun, as the system places it, or from the tilt
+  // and the season on a world without a system.
+  const declination = $derived(
+    sunPlace?.latitudeDeg ?? (locked ? 0 : sunDeclinationDeg(meta?.axial_tilt_deg ?? 23.44, season)),
+  );
   $effect(() => {
     view?.setLighting(
       !sun

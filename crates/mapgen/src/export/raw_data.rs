@@ -49,8 +49,19 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// fresh craters; version 9 the moons (under `moons` in `world.json`, each
 /// one a world of its own, now a body of the system) and the shape of irregular
 /// bodies; version 10 the star's metallicity and the giant planets of the
-/// system (under `giants`), whose mass sets the crater rate.
-pub const FORMAT_VERSION: u32 = 10;
+/// system (under `giants`), whose mass sets the crater rate; version 11
+/// reads the biomes with the seasonal cycle (no new file: the seasons
+/// come from the parameters, and the preset's `polar` and
+/// `highland_snow_temperature` are summer temperatures, see
+/// [`crate::climate::Seasons`]); older worlds keep their biomes without
+/// it. Version 11 also stores the moisture as the log of the annual rain
+/// and chooses arid land by Köppen's criterion B: an older world keeps
+/// its rules with the former `shrubland_moisture` and `desert_moisture`
+/// (see [`crate::biome::BiomeRules::is_legacy`]) and its linear moisture.
+pub const FORMAT_VERSION: u32 = 11;
+
+/// First format version whose biomes read the seasonal cycle.
+pub const SEASONS_VERSION: u32 = 11;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
@@ -706,6 +717,12 @@ pub struct LoadedWorld {
     pub elevation: Layer16,
     pub moisture: Layer16,
     pub temperature: Layer16,
+    /// The seasonal cycle, from the parameters (none before
+    /// [`SEASONS_VERSION`]).
+    pub seasons: crate::climate::Seasons,
+    /// Cooling of the land per elevation unit the temperatures were made
+    /// with: the former one before [`SEASONS_VERSION`].
+    pub lapse_rate: f32,
     /// Drainage area in km² (stored on a log scale).
     pub flow_km2: Layer16,
     pub volcanic_zone: Layer16,
@@ -733,6 +750,8 @@ impl LoadedWorld {
             elevation: Layer16::quantise(&world.elevation, ELEVATION),
             moisture: Layer16::quantise(&world.moisture, MOISTURE),
             temperature: Layer16::quantise(&world.temperature, TEMPERATURE),
+            seasons: world.seasons.clone(),
+            lapse_rate: world.lapse_rate,
             flow_km2,
             volcanic_zone: Layer16::quantise(&world.volcanic_zone, VOLCANIC_ZONE),
             coast_distance_km: Layer16::quantise(&world.coast_distance_km, COAST_DISTANCE),
@@ -816,6 +835,8 @@ impl LoadedWorld {
             elevation,
             moisture,
             temperature,
+            seasons: self.seasons.clone(),
+            lapse_rate: self.lapse_rate,
             flow_km2,
             volcanic_zone,
             coast_distance_km,
@@ -1015,6 +1036,19 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
     if meta.format_version < CELSIUS_VERSION {
         params.planet.to_celsius();
     }
+    // Worlds stored before the seasons chose their biomes without them, and
+    // made their temperatures with the former lapse rate.
+    let (seasons, lapse_rate) = if meta.format_version < SEASONS_VERSION {
+        (
+            crate::climate::Seasons::none(meta.height),
+            crate::climate::LEGACY_LAPSE_RATE,
+        )
+    } else {
+        (
+            crate::generation::seasons(&params),
+            crate::climate::lapse_rate(&params),
+        )
+    };
     let albedo = match &meta.layers.albedo {
         Some(layer) => {
             let img = image::open(raw.join(&layer.file))
@@ -1033,6 +1067,8 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         elevation,
         moisture,
         temperature,
+        seasons,
+        lapse_rate,
         flow_km2,
         volcanic_zone,
         coast_distance_km,
@@ -1064,6 +1100,62 @@ mod tests {
         assert_eq!(quantise(-1.0, -1.0, 1.0), 0);
         assert_eq!(quantise(1.0, -1.0, 1.0), u16::MAX);
         assert_eq!(quantise(5.0, 0.0, 1.0), u16::MAX);
+    }
+
+    #[test]
+    fn worlds_before_the_seasons_keep_their_climate_rules() {
+        let params = WorldParams {
+            width: 32,
+            height: 16,
+            ..crate::generation::tests::params(4, "terran")
+        };
+        let world = generate(&params).world;
+        let world_dir =
+            std::env::temp_dir().join(format!("map-generator-seasons-test-{}", std::process::id()));
+        let dir = world_dir.join("raw_data");
+        std::fs::create_dir_all(&dir).unwrap();
+        export_raw_data(&world, &dir, None).unwrap();
+
+        // Today's worlds: their seasons and lapse rate from the parameters,
+        // and the biomes they were made with.
+        let back = load_world(&world_dir).unwrap();
+        assert_eq!(back.seasons, crate::generation::seasons(&back.params));
+        assert!(back.seasons.half_range(4, true) > 5.0);
+        assert_eq!(back.lapse_rate, crate::climate::lapse_rate(&back.params));
+        // The seasons the biomes were chosen with are those a world reads
+        // (on the generated world: its stored temperatures are quantised,
+        // which can move a pixel right at a threshold).
+        let rules = &world.params.planet.rules;
+        for i in 0..world.biomes.len() {
+            let stored = world.biomes[i];
+            // The lake flag is not stored: lakes, and frozen lakes stored
+            // as ice cap, are left out.
+            if !matches!(stored, Biome::Lake | Biome::River | Biome::IceCap) {
+                assert_eq!(
+                    world
+                        .params
+                        .planet
+                        .remap(rules.choose(world.biome_input(i))),
+                    stored
+                );
+            }
+        }
+
+        // The same world labelled version 10: no seasons, the former lapse
+        // rate, as worlds of that version were made.
+        let mut meta: WorldMetadata =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("world.json")).unwrap())
+                .unwrap();
+        meta.format_version = SEASONS_VERSION - 1;
+        std::fs::write(
+            dir.join("world.json"),
+            serde_json::to_string(&meta).unwrap(),
+        )
+        .unwrap();
+        let old = load_layers(&world_dir).unwrap();
+        assert_eq!(old.seasons, crate::climate::Seasons::none(16));
+        assert_eq!(old.lapse_rate, crate::climate::LEGACY_LAPSE_RATE);
+        std::fs::remove_dir_all(&world_dir).unwrap();
     }
 
     #[test]

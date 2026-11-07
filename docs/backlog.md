@@ -600,3 +600,57 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   9 km on airless stagnant bodies, ice 0.4 of rock), but an icy body's
   simple craters are still rock's bowls, under rock's transition (see
   the craters' first point).
+
+## 21. Climate: what the model leaves out
+
+- **Status:** todo
+- **Source:** the science articles "How does axial tilt make climate zones
+  and seasons?" and "Why is one side of a mountain range dry?" (their
+  "Where it departs from the science" sections), after the climate fixes
+  of 2026-11-07 (exact insolation, seasons, Clausius-Clapeyron rain,
+  meridional winds, foehn).
+- **Cold eastern-boundary currents** (Humboldt, Benguela, California): the
+  sea off the west coasts of the subtropics is several degrees colder,
+  which dries the coast (the Atacama, the Namib). A rule cooling the sea
+  pixels west of a continent between about 10° and 40° would need a
+  sourced magnitude and width (SST climatologies), the ocean basins found
+  row by row, and the moisture pass to read the cooled sea; the
+  temperature anomaly noise stands in for it today.
+- **Monsoons:** the seasonal reversal of the wind between land and sea.
+  The seasons now set summer and winter temperatures, but the wind and
+  the rain are annual means: a monsoon needs a summer and a winter run of
+  the moisture pass with winds driven by the land-sea contrast.
+- **Uneven seasons on eccentric orbits:** the annual mean keeps the
+  `1/sqrt(1 − e²)` factor, but the seasonal swing ignores the distance to
+  the star at the solstices (Mars: 46 % more light at perihelion). It
+  needs a longitude of perihelion, drawn or given, in `WorldParams`.
+- **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
+  narrower Hadley cells under heavier atmospheres, without a scaling the
+  app could use; the belts scale with rotation and size only.
+- **Winter-rain climates and the season of the rain:** Köppen's dryness
+  threshold depends on the season of the rain (Kottek et al. 2006). The
+  app has annual rain only and takes the summer share from the air's
+  capacity at the half-years' temperatures, so rain peaking in winter
+  (the Mediterranean, BSk and Csa borders) is not modelled; deserts are
+  7.5 % of the land and steppes 22 %, where Earth's are about half and
+  half. A monthly moisture pass (see Monsoons) would give both.
+- **Absolute rain is calibrated, not derived:** the rain rate is scaled
+  to GPCP's land mean and zonal means with constants that have no source
+  (`MM_PER_RATE`, `COLD_RAIN_EXPONENT`, `CIRCULATION_OCTAVES`,
+  `ITCZ_OCTAVES`, `SUBSIDENCE_HUMIDITY`). Done when the rain comes from a
+  moisture budget (evaporation, convergence) in physical units.
+- **Circulation on tilted worlds:** the wind belts, the circulation
+  factor and the ITCZ follow the geographic latitude, whatever the
+  tilt. At 90° the poles are the warm annual-mean regions and the rain
+  there reaches 4 000 mm a year, from warm air over a nearby sea, while
+  the cells stay where a vertical axis would put them. A circulation
+  following the thermal equator (the latitude of the annual-mean
+  insolation maximum) would need a source for the Hadley cell's response
+  to the tilt (Kaspi & Showman 2015 vary obliquity). A world with no
+  tilt has ice on half of its 45-60° land: with no seasons the warmest
+  month is the annual mean, below 0 °C there (Köppen's EF), which is
+  physical.
+- **Storms, fronts and ENSO:** moisture is the annual mean of a steady
+  wind. Weather, interannual variability (El Niño, La Niña) and the storm
+  rain that makes most orographic precipitation are model limits, not
+  planned.

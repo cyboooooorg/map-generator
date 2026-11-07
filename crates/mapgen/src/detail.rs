@@ -551,6 +551,7 @@ impl DetailWorld {
         let (elevation, surface) = self.tile_elevation(tile, pixel_km, &channel);
 
         let river_colour = linear_of(surface_color(planet.remap(Biome::River)));
+        let lapse = w.lapse_rate;
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
 
@@ -577,14 +578,19 @@ impl DetailWorld {
                 let sample = |layer: &dyn Samples| bilinear(layer, w.width, w.height, cx, cy);
                 let base_above = sample(&w.elevation) - w.params.sea_level - planet.rules.waterline;
                 // Temperature follows the detailed elevation (lapse rate).
-                let t =
-                    sample(&w.temperature) + temperature(0.0, above) - temperature(0.0, base_above);
+                let t = sample(&w.temperature) + temperature(0.0, above, lapse)
+                    - temperature(0.0, base_above, lapse);
                 // Lakes: smooth shores from the base lake mask.
                 let lake = sample(&Lakes(&self.flags)) > 0.5 && above >= 0.0;
                 let input = BiomeInput {
                     elevation: relief,
                     moisture: sample(&w.moisture),
                     temperature: t,
+                    seasonality: w.seasons.at(
+                        (cy.max(0.0) as u32).min(w.height - 1),
+                        above >= 0.0,
+                        sample(&w.coast_distance_km),
+                    ),
                     volcanic_zone: sample(&w.volcanic_zone),
                     coast_distance_km: sample(&w.coast_distance_km),
                     lake,
@@ -623,11 +629,7 @@ impl DetailWorld {
                     }
                 };
                 let c = coverage[i];
-                if c > 0.0
-                    && input.temperature >= planet.rules.polar
-                    && !biome.is_water()
-                    && !dry.is_lava()
-                {
+                if c > 0.0 && !planet.rules.frozen(input) && !biome.is_water() && !dry.is_lava() {
                     colour = blend_river(colour, river_colour, c);
                 }
                 colour.map(|c| c.clamp(0.0, 255.0) as u8)
