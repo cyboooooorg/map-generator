@@ -133,7 +133,7 @@ export const en = {
         `orbits outside the rings; its 2:1 resonance cuts an edge in them and clears a division ${p.gap} wide outward of it`,
       edge: () => 'orbits just beyond the rings and keeps their outer edge sharp',
       shepherd: () => 'one of the pair of shepherd moons that confine the narrow ring',
-      source: () => 'a small moon beyond the narrow ring, whose dust feeds a faint dust ring',
+      source: () => 'a small moon beyond the narrow ring, whose impact dust may feed a faint dust ring',
     },
     notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
     generating: 'Its maps are being made: see the progress over the view.',

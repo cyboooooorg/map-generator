@@ -119,7 +119,7 @@ export const fr: Messages = {
         `orbite hors des anneaux ; sa résonance 2:1 y taille un bord et dégage au-delà une division de ${p.gap}`,
       edge: () => 'orbite juste au-delà des anneaux et en garde le bord externe net',
       shepherd: () => 'l’une des deux lunes bergères qui confinent l’anneau étroit',
-      source: () => 'petite lune au-delà de l’anneau étroit, dont la poussière alimente un anneau ténu',
+      source: () => 'petite lune au-delà de l’anneau étroit, dont la poussière d’impacts peut alimenter un anneau ténu',
     },
     notGenerated: `Ses cartes ne sont pas encore faites${S}: voici ce que le tirage a fixé.`,
     generating: `Ses cartes sont en cours de fabrication${S}: suivez la progression sur la vue.`,
