@@ -71,6 +71,14 @@ describe('hostLabelIndex', () => {
     expect(radii[k]).toBeLessThanOrEqual(HOST_LABEL_REACH);
   });
 
+  it('moves out along the line just enough to clear the other labels', () => {
+    // The pull's label covers the points up to 4 radii.
+    const clear = radii.map((r) => r > 4);
+    const k = hostLabelIndex(radii, radii.map(() => true), clear);
+    expect(radii[k]).toBeGreaterThan(4);
+    expect(radii[k - 1]).toBeLessThanOrEqual(4);
+  });
+
   it('goes further out only when nothing near is in view', () => {
     const inView = radii.map((r) => r > 100);
     expect(radii[hostLabelIndex(radii, inView)]).toBeGreaterThan(100);

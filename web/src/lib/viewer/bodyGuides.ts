@@ -95,18 +95,31 @@ export const HOST_LABEL_REACH = 12;
 
 /**
  * Which point of the host line (`radii` from the body's centre, nearest
- * first) carries its distance label, given which are in view: a fixed
- * point near the body (`HOST_LABEL_AT`) while it shows, so that the label
- * holds still as the camera moves; else the middle of the longest run in
- * view within `HOST_LABEL_REACH`, where the line is still spread out on
- * the screen; else anywhere along it (see labelIndex); -1 when none is in
- * view.
+ * first) carries its distance label, given which are in view and which
+ * leave its label `clear` of the other guides' labels (the pull's and the
+ * velocity's, whose arrows start along the same line): the first point
+ * from `HOST_LABEL_AT` outwards that is both, within `HOST_LABEL_REACH`,
+ * so that the label holds still as the camera moves and moves out just
+ * enough not to cover theirs; else the middle of the longest run of such
+ * points; else of those in view within reach; else anywhere along it (see
+ * labelIndex); -1 when none is in view.
  */
-export function hostLabelIndex(radii: readonly number[], inView: readonly boolean[]): number {
-  const fixed = radii.findIndex((r) => r >= HOST_LABEL_AT);
-  if (fixed >= 0 && inView[fixed]) return fixed;
-  const near = labelIndex(inView.map((shown, i) => shown && radii[i]! <= HOST_LABEL_REACH));
-  return near >= 0 ? near : labelIndex([...inView]);
+export function hostLabelIndex(radii: readonly number[], inView: readonly boolean[], clear?: readonly boolean[]): number {
+  const free = (i: number) => inView[i] === true && clear?.[i] !== false;
+  const within = (i: number) => radii[i]! <= HOST_LABEL_REACH;
+  const first = radii.findIndex((r) => r >= HOST_LABEL_AT);
+  for (let i = Math.max(first, 0); i < radii.length && within(i); i++) {
+    if (free(i)) return i;
+  }
+  for (const pick of [
+    radii.map((_, i) => free(i)),
+    inView.map((shown, i) => shown && within(i)),
+    [...inView],
+  ]) {
+    const k = labelIndex(pick);
+    if (k >= 0) return k;
+  }
+  return -1;
 }
 
 export class BodyGuides {
