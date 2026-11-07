@@ -91,6 +91,7 @@ import {
   mapHeightForAltitude,
   mapPoint,
   morphCamera,
+  lonDelta,
 } from './viewTransfer';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH, sunDepthTable } from './sunDepth';
 import { downsample, fitFactor, releaseOnUpload } from './textures';
@@ -457,6 +458,15 @@ export class PlanetView {
   /** Uniforms shared by the surface and the graticule (the same objects). */
   private readonly shared = {
     uMorph: { value: 1 } as IUniform<number>,
+    /**
+     * The meridian the morph wraps the map round (see morphFrame in
+     * viewTransfer.ts): its longitude from 0 and its x on the map, which
+     * must agree (the map's middle, x = 0, is longitude π).
+     */
+    uMorphLon: { value: Math.PI } as IUniform<number>,
+    uMorphX: { value: 0 } as IUniform<number>,
+    /** Light added to the night side during the turn towards the map (see setMode). */
+    uNightLift: { value: 0 } as IUniform<number>,
     uRelief: { value: 0 } as IUniform<number>,
     uReliefScale: { value: 0 } as IUniform<number>,
     uCoast: { value: 0 } as IUniform<number>,
@@ -1778,6 +1788,10 @@ export class PlanetView {
       altitude,
       mapHeight,
     };
+    // The map wraps round the meridian at the centre of its own view, the
+    // one it ends on or starts from: that part stays in front while the
+    // rest rolls back round the globe.
+    this.setMorphCentre((mode === 'map' ? centreTo : centre).lon);
     this.applyModeControls();
   }
 
@@ -1808,18 +1822,39 @@ export class PlanetView {
     // Not quite at the poles, where "north up" has no direction.
     const centre = lerpLonLat(animation.centreFrom, animation.centreTo, progress);
     centre.lat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, centre.lat));
-    const { target, position } = morphCamera(centre, animation.mapHeight, animation.altitude, this.morph);
+    const { target, position, distance } = morphCamera(
+      centre,
+      animation.mapHeight,
+      animation.altitude,
+      this.morph,
+      this.morphCentreLon(),
+    );
     this.camera.position.set(...position);
     this.camera.up.set(0, 1, 0);
+    // The clipping planes follow this distance all along, also once the
+    // turn is over and only the unrolling (which moves the camera away on
+    // the way to the map) is left.
+    this.morphDistance = distance;
     if (progress < 1) {
       this.controls.target.set(...target);
-      this.morphDistance = this.camera.position.distanceTo(this.controls.target);
     } else if (this.mode === 'globe') {
       this.controls.target.set(0, 0, 0);
     } else {
       this.controls.target.set(target[0], target[1], 0);
     }
     this.camera.lookAt(this.controls.target);
+  }
+
+  /** The longitude of the meridian the morph wraps round. */
+  private morphCentreLon(): number {
+    return this.shared.uMorphX.value + Math.PI;
+  }
+
+  /** Wraps the morph round the meridian `lon` (see morphPoint in viewTransfer.ts). */
+  private setMorphCentre(lon: number): void {
+    const turn = 2 * Math.PI;
+    this.shared.uMorphLon.value = lonDelta(0, lon);
+    this.shared.uMorphX.value = (((lon % turn) + turn) % turn) - Math.PI;
   }
 
   setGraticule(visible: boolean): void {
@@ -1909,6 +1944,7 @@ export class PlanetView {
     }
     // Skip the morph: the other view has finished it already.
     this.animation = null;
+    this.shared.uNightLift.value = 0;
     this.morph = state.mode === 'globe' ? 1 : 0;
     this.camera.position.fromArray(state.position);
     this.controls.target.fromArray(state.target);
@@ -2045,10 +2081,19 @@ export class PlanetView {
     let following = false;
     if (this.animation) {
       const t = Math.min(1, (now - this.animation.start) / MORPH_MS);
-      const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
-      this.morph = this.animation.from + (this.animation.to - this.animation.from) * eased;
+      const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+      // Towards the map, the globe first turns to the meridian the map will
+      // be centred on, then unrolls round it, so that it does not open on
+      // the camera (the map's edges are where the globe faced by default).
+      const toMap = this.animation.to === 0;
+      const turned = toMap ? ease(Math.min(1, t / 0.4)) : ease(t);
+      const unrolled = toMap ? ease(Math.max(0, (t - 0.3) / 0.7)) : ease(t);
+      this.morph = this.animation.from + (this.animation.to - this.animation.from) * unrolled;
+      // The turn may swing the camera over the night side: lit a little,
+      // rising and falling over the morph, so that it does not go black.
+      this.shared.uNightLift.value = toMap && t < 1 ? Math.sin(Math.PI * t) : 0;
       if (this.animation.follow) {
-        this.followMorph(t === 1 ? 1 : eased);
+        this.followMorph(t === 1 ? 1 : turned);
         following = t < 1;
       }
       if (t === 1) {
@@ -2861,7 +2906,12 @@ export class PlanetView {
     if (!this.animation) {
       // Tiles are picked for the full resolution, whatever the frame's:
       // moving would otherwise swap them for coarser ones and back.
-      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio, this.quality));
+      this.tiles.update(
+        this.camera,
+        this.morph,
+        this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio, this.quality),
+        this.morphCentreLon(),
+      );
     }
     this.renderer.render(this.scene, this.camera);
     this.onSkyPositions?.(this.skyScreenPositions());
