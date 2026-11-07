@@ -22,18 +22,36 @@ pub const DEGREES_PER_UNIT: f32 = 45.0;
 /// `T = 15.04 − 0.00649 h` (°C, h in m; NASA Glenn Research Center, Earth
 /// atmosphere model, after the U.S. Standard Atmosphere 1976).
 pub const LAPSE_RATE_K_PER_KM: f32 = 6.5;
+/// Exponent of the pressure in [`lapse_rate`]: the power law through
+/// Earth's 6.5 °C per km at 1 bar and Mars's 0.998 °C per km at 0.007 bar
+/// (NASA Glenn Research Center, Mars atmosphere model: `T = −31 −
+/// 0.000998 h` from the ground to 7 km, `p = 0.699 exp(−0.00009 h)` kPa).
+/// The two points are measured; the power law between them is a
+/// calibration, no source.
+const LAPSE_PRESSURE_EXPONENT: f32 = 0.378;
+
+/// The cooling per elevation unit worlds stored before format version 11
+/// were made with (0.54 °C per km): their detail tiles and epochs keep it,
+/// so that they match their stored temperatures.
+pub const LEGACY_LAPSE_RATE: f32 = 13.5;
+
 /// Cooling of the land with height on world `params`, °C per unit of
 /// elevation (elevation in `[-1, 1]`, [`crate::craters::ELEVATION_KM`] km
-/// per unit): Earth's [`LAPSE_RATE_K_PER_KM`] (162.5 °C per unit) scaled
-/// with the surface gravity, as the dry adiabatic rate `g / c_p` is (NASA
-/// Glenn's Mars model cools by 2.22 °C per km, 2.9 times less than Earth's
-/// for 2.6 times less gravity). An airless body has no air to cool: its
-/// ground takes the temperature its light gives it at any height.
+/// per unit). Earth-like air of 1 bar or more cools at
+/// [`LAPSE_RATE_K_PER_KM`] (162.5 °C per unit). Thinner air couples the
+/// ground less to the air column: the ground's temperature is set by its
+/// own radiation balance and falls less with height, Mars's air by 0.998
+/// °C per km near the ground. The rate follows `(p / 1 bar)^0.378` between
+/// the two (see [`LAPSE_PRESSURE_EXPONENT`]), and tends smoothly to none as
+/// the air vanishes: an airless body's ground takes the temperature its
+/// light gives it at any height.
 pub fn lapse_rate(params: &crate::world::WorldParams) -> f32 {
-    if params.pressure_bar < crate::atmosphere::AIRLESS_BAR {
-        return 0.0;
-    }
-    LAPSE_RATE_K_PER_KM * crate::craters::ELEVATION_KM * params.gravity_modifier()
+    let coupling = params
+        .pressure_bar
+        .max(0.0)
+        .powf(LAPSE_PRESSURE_EXPONENT)
+        .min(1.0);
+    LAPSE_RATE_K_PER_KM * crate::craters::ELEVATION_KM * coupling
 }
 
 /// Range of insolation levels [`row_temperatures`] keeps, in units of
@@ -188,9 +206,10 @@ pub fn row_temperatures(grid: &Grid, axial_tilt_deg: f32) -> Vec<f32> {
 /// equilibrium response (ω the year's angular frequency, λ the climate's
 /// restoring rate, North et al. 1981, doi:10.1029/RG019i001p00091).
 /// Calibration, no source for the value: land's small heat capacity
-/// (its air and a few metres of ground) lets it follow almost half,
-/// which gives Earth's continental interiors their seasonal half-range of
-/// about 10 °C at 30° and 20 °C at 60° (Phoenix, Fairbanks).
+/// (its air and a few metres of ground) lets it follow almost half, chosen
+/// so that continental interiors swing by about ±10 °C at 30° and ±20 °C
+/// at 60°, the order of Phoenix's and Fairbanks's ranges (not checked
+/// against station normals). Coasts swing less: see [`Seasons::at`].
 pub const LAND_SEASONS: f32 = 0.45;
 /// The same for the sea, whose mixed layer (tens of metres of water)
 /// holds the heat of a whole season: a half-range of about 4 °C at 60°.
@@ -198,6 +217,10 @@ pub const LAND_SEASONS: f32 = 0.45;
 /// of [`sea_level_celsius`] at Earth's light), a mixed layer 50 m deep
 /// would give 0.13.
 pub const SEA_SEASONS: f32 = 0.10;
+/// Distance from the coast over which land goes ~63 % of the way from the
+/// sea's seasonal range to the interior's, km: the sea's mild air reaches
+/// a few hundred km inland. Calibration, no source.
+pub const CONTINENTALITY_KM: f32 = 400.0;
 
 /// Swing of the daily-mean light at `latitude` over a year, as half the
 /// difference between its sunniest and darkest days, relative to the
@@ -288,11 +311,25 @@ impl Seasons {
         }
     }
 
-    /// Half the summer-to-winter difference on row `y`, °C, on land or on
-    /// the sea.
+    /// Half the summer-to-winter difference on row `y`, °C, on the sea
+    /// or deep inland.
     pub fn half_range(&self, y: u32, land: bool) -> f32 {
         let rows = if land { &self.land } else { &self.sea };
         rows.get(y as usize).copied().unwrap_or(0.0)
+    }
+
+    /// Half the summer-to-winter difference of a pixel on row `y`, °C: the
+    /// sea's on water, rising inland from it to the interior's with the
+    /// distance to the coast (`coast_km`), over [`CONTINENTALITY_KM`]. A
+    /// coast swings about half as much as an interior at the same
+    /// latitude (Bergen against Yakutsk).
+    pub fn at(&self, y: u32, land: bool, coast_km: f32) -> f32 {
+        let sea = self.half_range(y, false);
+        if !land {
+            return sea;
+        }
+        let inland = 1.0 - (-coast_km.max(0.0) / CONTINENTALITY_KM).exp();
+        sea + (self.half_range(y, true) - sea) * inland
     }
 
     /// Each row's summer temperature on land, from its annual-mean rows.
@@ -511,10 +548,12 @@ const CALM_ZONAL: f32 = 0.25;
 ///
 /// The Hadley edge scales as `1 / (Ω a)` with the rotation rate Ω and the
 /// radius a: Held & Hou (1980, doi:10.1175/1520-0469(1980)037<0515:NASCIA>2.0.CO;2)
-/// find `φ_H = (5 g H Δ / (3 Ω² a²))^(1/2)`, and `g H = R T / μ` does not
-/// depend on gravity. Kaspi & Showman (2015, doi:10.1088/0004-637X/804/1/60)
+/// find `φ_H = (5 g H Δ / (3 Ω² a²))^(1/2)`, H the depth of the
+/// circulation. Kaspi & Showman (2015, doi:10.1088/0004-637X/804/1/60)
 /// find nearly global cells on slow rotators and narrower ones on fast
-/// rotators. The polar front stays halfway between the Hadley edge and the
+/// rotators, with `Ω⁻¹` as a reference that eddies complicate. Gravity is
+/// left out: Held & Hou give a `g^(1/2)` widening, Kaspi & Showman find
+/// less. The polar front stays halfway between the Hadley edge and the
 /// pole. The atmosphere's mass, which narrows the cells in their models, is
 /// not taken into account (see `docs/backlog.md`).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -697,7 +736,8 @@ fn rain_along(
             // went up: it climbed at the moist rate, it sinks at the dry
             // one (9.8 °C per km, NWS glossary). Its warmth shows once it
             // stops climbing.
-            let lift = if climbing { 0.0 } else { foehn };
+            // Over land only: the sea takes back its own temperature.
+            let lift = if climbing || here < 0.0 { 0.0 } else { foehn };
             let capacity = holding_capacity(input.temperature[i] + lift);
             let fallen = if here < 0.0 {
                 // Over the sea: evaporation tops the air up towards its
@@ -880,10 +920,13 @@ pub fn moisture(input: &MoistureInput) -> Moisture {
     drop(rate);
     let foehn = smooth(&grid, &warmth, RAIN_SMOOTHING_KM);
     drop(warmth);
-    // The smoothed rate, relative to what the air holds where it falls (a
-    // ratio of rain to the evaporation the warmth allows, which grows with
-    // the saturation vapour pressure), turned into the precipitation term,
-    // in place.
+    // The smoothed rate, relative to what the air holds where it falls,
+    // turned into the precipitation term, in place: a ratio of rain to the
+    // evaporation the warmth allows, potential evaporation taken as
+    // proportional to the saturation vapour pressure. Calibration, no
+    // source: e_sat grows by about 7 % per °C, faster than evaporation
+    // formulas, so cold land comes out wetter than it is (the summer rule
+    // of the tundra keeps it treeless).
     rain.par_iter_mut()
         .zip(input.temperature)
         .for_each(|(r, &t)| {
@@ -1307,17 +1350,19 @@ mod tests {
         // A lighter world cools more slowly; an airless one not at all.
         let p = crate::generation::tests::params(1, "terran");
         assert!((lapse_rate(&p) - EARTH_LAPSE).abs() < 1e-3);
-        let mars = crate::world::WorldParams {
-            circumference_km: 21_344.0,
-            pressure_bar: 0.006,
-            ..p.clone()
+        let at = |pressure_bar: f32| {
+            lapse_rate(&crate::world::WorldParams {
+                pressure_bar,
+                ..p.clone()
+            }) / crate::craters::ELEVATION_KM
         };
-        assert!((lapse_rate(&mars) / EARTH_LAPSE - mars.gravity_modifier()).abs() < 1e-3);
-        let moon = crate::world::WorldParams {
-            pressure_bar: 0.0,
-            ..p
-        };
-        assert_eq!(lapse_rate(&moon), 0.0);
+        // Venus's dense air cools like Earth's, Mars's thin air by about
+        // 1 °C per km (NASA Glenn), and the rate fades out smoothly with
+        // the air.
+        assert_eq!(at(92.0), LAPSE_RATE_K_PER_KM);
+        assert!((at(0.007) - 0.998).abs() < 0.02, "{}", at(0.007));
+        assert!(at(2e-4) > at(5e-5) && at(5e-5) > 0.0 && at(2e-4) < 0.3);
+        assert_eq!(at(0.0), 0.0);
     }
 
     #[test]
