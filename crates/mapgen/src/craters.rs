@@ -116,14 +116,16 @@ const WEAR_GA: f64 = 0.1;
 const WEAR_KM: f64 = 20.0;
 /// Topographic diffusion of crater profiles by small impacts, m² per Ma
 /// (the lunar maria over the past 3 Ga, Fassett & Thomson 2014,
-/// doi:10.1002/2014JE004698): a crater of radius `R` loses `1/e` of its
-/// relief once `κ t` reaches [`DIFFUSION_SHARE`] of `R²`. The share is
-/// set so that a 1 km crater keeps 52 % of its depth after 3 Ga, as they
-/// measure: craters below about 430 m wear out in that time (they find
-/// 200–300 m), a 2 km one keeps 85 %; craters of the base map (tens of
-/// km) are untouched.
+/// doi:10.1002/2014JE004698): a crater of radius `R` keeps
+/// `1 / (1 + κt / (s R²))` of its relief, `s` being [`DIFFUSION_SHARE`]:
+/// a hollow spreading under diffusion keeps its volume, so its depth
+/// falls as the inverse of its widening area, not exponentially. The share
+/// is set so that a 1 km crater keeps 52 % of its depth after 3 Ga, as
+/// they measure; a 300 m one then keeps 8.9 % (they find about 7 %) and a
+/// 200 m one 4 % ("beyond recognition" below 200–300 m); a 2 km one 81 %;
+/// craters of the base map (tens of km) are untouched.
 const DIFFUSIVITY_M2_PER_MA: f64 = 5.5;
-const DIFFUSION_SHARE: f64 = 0.101;
+const DIFFUSION_SHARE: f64 = 0.0715;
 /// Below this share of its relief left, a worn crater is not drawn.
 const WORN_OUT: f64 = 0.03;
 /// Share of the previous relief kept inside a new crater.
@@ -865,7 +867,7 @@ impl CraterField {
         // Diffused since it formed, until the epoch shown.
         let since_ga = (crater.age_ga - self.epoch_ga).max(0.0);
         let diffused = DIFFUSIVITY_M2_PER_MA * since_ga * 1000.0;
-        let mut wear = (-diffused / (DIFFUSION_SHARE * radius_m * radius_m)).exp();
+        let mut wear = 1.0 / (1.0 + diffused / (DIFFUSION_SHARE * radius_m * radius_m));
         let exposure = (crater.age_ga - self.wet_until_ga).max(0.0);
         if exposure > 0.0 && self.erosion > 0.0 {
             let lasts = WEAR_GA * crater.diameter_km / WEAR_KM / self.erosion;
@@ -2032,12 +2034,12 @@ mod tests {
         let p = moon(4.0);
         let crater = Crater {
             centre: [1.0, 0.0, 0.0],
-            diameter_km: 0.4,
+            diameter_km: 0.2,
             age_ga: 3.0,
             shape: 0,
         };
         let now = CraterField::context(&p).wear(&crater);
-        let then = CraterField::context_at(&p, 2.9).wear(&crater);
+        let then = CraterField::context_at(&p, 2.99).wear(&crater);
         assert!(then > 0.8 && now < 0.1, "{then} {now}");
     }
 
@@ -2225,11 +2227,12 @@ mod tests {
             age_ga,
             shape: 0,
         };
-        assert!(field.wear(&crater(0.3, 3.0)) < 0.03);
         // Fassett & Thomson (2014): a 1 km crater keeps about 52 % of its
-        // depth in 3 Ga.
+        // depth in 3 Ga, a 300 m one about 7 % (8.9 % here).
         let kilometre = field.wear(&crater(1.0, 3.0));
         assert!((kilometre - 0.52).abs() < 0.01, "{kilometre}");
+        let small = field.wear(&crater(0.3, 3.0));
+        assert!((0.06..0.1).contains(&small), "{small}");
         assert!(field.wear(&crater(0.5, 0.01)) > 0.9);
         assert!(field.wear(&crater(4.0, 3.9)) > 0.8);
         assert!(field.wear(&crater(40.0, 4.0)) > 0.99);
