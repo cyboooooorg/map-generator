@@ -1219,6 +1219,7 @@ pub fn small_body_params(
         host: crate::exomoon::HostMode::None,
         given_rings: None,
         impact_factor: None,
+        locked_to_star: None,
     }
 }
 
@@ -1356,6 +1357,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            locked_to_star: None,
         }
     }
 

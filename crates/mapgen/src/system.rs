@@ -2073,6 +2073,7 @@ mod tests {
                     let own = WorldParams {
                         given_rings: None,
                         impact_factor: None,
+                        locked_to_star: None,
                         ..body.params.clone()
                     };
                     let mut alone = crate::giant_world::Look::draw(&own, mass).info;

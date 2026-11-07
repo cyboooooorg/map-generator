@@ -130,7 +130,10 @@ pub fn upright(p: &crate::world::WorldParams, drawn: f32) -> f32 {
 /// giant world (locked, never resonant, see [`giant_locking_gyr`]). A moon
 /// (a moon's world, or a world orbiting a giant) is locked to its planet,
 /// not to the star: never locked nor resonant against the star, whatever
-/// its planet's orbit (its world takes the planet's star and orbit).
+/// its planet's orbit (its world takes the planet's star and orbit). A
+/// reloaded world's [`locked_to_star`](crate::world::WorldParams::locked_to_star)
+/// overrides the lock, so the tiles and epochs of a world generated under
+/// an older rule agree with its stored map.
 pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
     let mut star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
     if crate::moons::is_moon_world(p) || crate::exomoon::HostGiant::draw(p).is_some() {
@@ -142,6 +145,11 @@ pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
         star.tidally_locked = star.locking_gyr < tidal_age_gyr(&star)
             || star.equilibrium_k > crate::giant_world::HOT_GIANT_K;
         star.spin_orbit_3_2 = false;
+    }
+    // A stored world keeps the lock it was generated with.
+    if let Some(locked) = p.locked_to_star {
+        star.tidally_locked = locked;
+        star.spin_orbit_3_2 &= !locked;
     }
     star
 }

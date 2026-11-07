@@ -1500,6 +1500,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            locked_to_star: None,
         }
     }
 
@@ -1898,6 +1899,72 @@ mod tests {
         assert!((n / unlocked - 1.0).abs() < 0.05, "{n} vs {unlocked}");
         // Unlocked worlds: no favoured side.
         assert!(CraterField::context(&moon(4.0)).locked_since_ga.is_none());
+    }
+
+    /// Exports a small world to a fresh directory, with its stored star
+    /// `tidally_locked` set to `stored`, as a world generated under another
+    /// locking rule would have it, and reloads its parameters.
+    fn reloaded_with_stored_lock(p: &WorldParams, name: &str, stored: bool) -> WorldParams {
+        let small = WorldParams {
+            width: 32,
+            height: 16,
+            ..p.clone()
+        };
+        let world = crate::generation::generate(&small).world;
+        let dir = std::env::temp_dir().join(format!("map-generator-{name}-{}", std::process::id()));
+        let raw = dir.join("raw_data");
+        std::fs::create_dir_all(&raw).unwrap();
+        crate::export::export_raw_data(&world, &raw, None).unwrap();
+        let file = raw.join("world.json");
+        let mut meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        meta["star"]["tidally_locked"] = stored.into();
+        std::fs::write(&file, meta.to_string()).unwrap();
+        let params = crate::export::raw_data::load_layers(&dir).unwrap().params;
+        std::fs::remove_dir_all(&dir).unwrap();
+        params
+    }
+
+    #[test]
+    fn a_reloaded_world_keeps_the_lock_its_map_was_made_with() {
+        let star = crate::star::parse_type("M5V").unwrap();
+        let hz = crate::star::orbit_at(star, 0.5);
+        // Made before the 3:2 resonance: e = 0.1 stored as locked. Today's
+        // rule holds it in the resonance, but its tiles and epochs keep the
+        // stored lock.
+        let eccentric = WorldParams {
+            star,
+            orbit_au: hz,
+            eccentricity: 0.1,
+            ..moon(4.0)
+        };
+        assert!(crate::spin::star_info(&eccentric).spin_orbit_3_2);
+        assert!(CraterField::context(&eccentric).locked_since_ga.is_none());
+        let old = reloaded_with_stored_lock(&eccentric, "lock-eccentric", true);
+        assert!(crate::spin::star_info(&old).tidally_locked);
+        assert!(!crate::spin::star_info(&old).spin_orbit_3_2);
+        assert!(CraterField::context(&old).locked_since_ga.is_some());
+        assert!(CraterField::context_at(&old, 1.0).locked_since_ga.is_some());
+        assert!(
+            CraterField::new_at(&old, 20.0, -0.5)
+                .locked_since_ga
+                .is_some()
+        );
+        // A moon of a locked planet, stored locked to the star.
+        let mut rocky_moon = moon(4.0);
+        rocky_moon.planet.name = "rocky-moon".into();
+        rocky_moon.star = star;
+        rocky_moon.orbit_au = hz;
+        assert!(CraterField::context(&rocky_moon).locked_since_ga.is_none());
+        let old = reloaded_with_stored_lock(&rocky_moon, "lock-moon", true);
+        assert!(CraterField::context(&old).locked_since_ga.is_some());
+        // The other way round: stored free, it stays free.
+        let circular = WorldParams {
+            eccentricity: 0.0,
+            ..eccentric
+        };
+        let old = reloaded_with_stored_lock(&circular, "lock-free", false);
+        assert!(CraterField::context(&old).locked_since_ga.is_none());
     }
 
     #[test]

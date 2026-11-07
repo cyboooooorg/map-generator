@@ -79,6 +79,14 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub impact_factor: Option<f32>,
+    /// Whether the star's tides locked the world, as it was generated: set
+    /// when a stored world is reloaded, so that its tiles and epochs keep
+    /// the lock its base map was made with, whatever the locking rule is
+    /// today (see [`crate::spin::star_info`]). Absent on a world about to
+    /// be generated, whose lock follows the current rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub locked_to_star: Option<bool>,
 }
 
 impl WorldParams {
