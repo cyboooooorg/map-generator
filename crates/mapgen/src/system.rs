@@ -797,9 +797,11 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
             Some(_) => "gas-giant".to_string(),
             None => params.planet.name.clone(),
         },
-        mass_earth: match &host {
-            Some(h) => f64::from(h.giant.mass_earth),
-            None => (f64::from(params.circumference_km) / 40_075.0).powi(3),
+        mass_earth: match (&host, params.giant_mass_earth) {
+            (Some(h), _) => f64::from(h.giant.mass_earth),
+            // A giant asked for: its own mass, not a rocky planet's of its size.
+            (None, Some(mass)) => f64::from(mass),
+            (None, None) => (f64::from(params.circumference_km) / 40_075.0).powi(3),
         },
         orbit_au: f64::from(params.orbit_au),
         eccentricity: f64::from(params.eccentricity),
@@ -956,7 +958,11 @@ fn assemble(
                     }),
                     true,
                 ) => host_chain(host, world, star_code),
-                _ => drawn_moons(&params, slot.mass_earth),
+                // The mass the moons were drawn with.
+                _ => drawn_moons(
+                    &params,
+                    params.giant_mass_earth.map_or(slot.mass_earth, f64::from),
+                ),
             }
         } else {
             drawn_moons(
@@ -2354,6 +2360,37 @@ mod spin_tests {
             locked > 0 && resonant > 0,
             "{locked} locked, {resonant} resonant"
         );
+    }
+
+    #[test]
+    fn a_giants_moons_weigh_what_their_size_and_density_say() {
+        // Around a giant asked for: its moons drawn with its params' mass.
+        let request = SystemRequest::Around(WorldRequest {
+            planet: Some("gas-giant".into()),
+            star: Some("G2V".into()),
+            orbit_au: Some(5.2),
+            mass_earth: Some(318.0),
+            seed: Some(2),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        });
+        let system = draw(&request, &mut rand::rng()).unwrap();
+        let mut checked = 0;
+        for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
+            if moon.ring_role.is_some() {
+                continue;
+            }
+            let p = &moon.physical;
+            let kg = 4.0 / 3.0 * PI * (p.radius_km * 1000.0).powi(3) * p.density * 1000.0;
+            assert!(
+                (p.mass_earth * EARTH_KG / kg - 1.0).abs() < 1e-3,
+                "{}",
+                moon.id
+            );
+            checked += 1;
+        }
+        assert!(checked >= 2, "{checked}");
     }
 
     #[test]

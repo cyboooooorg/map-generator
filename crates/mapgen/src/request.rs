@@ -183,15 +183,18 @@ pub enum RequestError {
     /// Both `orbit_au` and `hz_position` are set.
     OrbitAndPosition,
     /// The moons asked for find no stable orbits around the planet: it is
-    /// locked to its star or too close to it, and its star and orbit were
-    /// set (otherwise they are drawn again).
+    /// too close to its star (a Hill sphere too small, or despun by its
+    /// star's tides with no moon light enough to last), and its star and
+    /// orbit were set (otherwise they are drawn again).
     NoRoomForMoons {
         count: u8,
     },
     /// Moons asked for on the moon of a giant (`host: giant`), which keeps
     /// none of its own: its Hill sphere is too small.
     MoonsOfAMoon,
-    /// Moons asked for on a hot giant, whose star's tides leave it none.
+    /// Moons asked for on a giant too close to its star to keep that many:
+    /// a hot giant keeps none, one its star has locked only light ones, and
+    /// a small Hill sphere fewer.
     HotGiantMoons {
         count: u8,
     },
@@ -237,8 +240,9 @@ impl fmt::Display for RequestError {
             RequestError::BadStar(e) => write!(f, "star: {e}"),
             RequestError::NoRoomForMoons { count } => write!(
                 f,
-                "no stable orbits for {count} moon(s) around this planet: it is tidally \
-                 locked to its star or too close to it (pick a farther orbit or a hotter star)"
+                "no stable orbits for {count} moon(s) around this planet: it is too close to \
+                 its star, whose tides have despun it and pull down all but the lightest \
+                 moons (pick a farther orbit or a hotter star)"
             ),
             RequestError::OrbitAndPosition => {
                 write!(f, "set orbit_au or hz_position, not both")
@@ -250,8 +254,9 @@ impl fmt::Display for RequestError {
             ),
             RequestError::HotGiantMoons { count } => write!(
                 f,
-                "no moons for a hot giant (asked for {count}): so close to its star, its \
-                 Hill sphere is too small to keep any (pick a cooler orbit or no moons)"
+                "not that many moons for a giant this close to its star (asked for {count}): \
+                 its Hill sphere is too small, or its star's tides have locked it and its \
+                 moons spiral in (pick a farther orbit or fewer moons)"
             ),
             RequestError::Preset(e) => e.fmt(f),
             RequestError::TooManyPlanets { asked, max } => {
@@ -555,9 +560,9 @@ impl WorldRequest {
         // parameters, so `world.json` (its tilt, its preset's shore width)
         // explains the world as generated.
         // Moons asked for need room: a Hill sphere wide enough, and on a
-        // planet its star despun, moons light enough to outlast its tides. A drawn star and orbit are drawn again until
-        // they leave it (the generation stays coherent); set ones that do
-        // not are an error.
+        // planet its star despun, moons light enough to outlast its tides.
+        // A drawn star and orbit are drawn again until they leave it (the
+        // generation stays coherent); set ones that do not are an error.
         if let Some(n) = params.moons.count() {
             let room = |p: &WorldParams| {
                 crate::moons::MoonSystem::draw(p).is_some_and(|m| m.moons.len() >= usize::from(n))

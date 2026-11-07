@@ -459,11 +459,30 @@ pub(crate) fn despin_gyr(
 /// of a few hundred km; never a giant-impact moon.
 fn lasting_moon_kg(reach: f64, a_p_km: f64, star_kg: f64, m_p: f64, r_p: f64, age_gyr: f64) -> f64 {
     let k2 = love_number(m_p, r_p, PLANET_DENSITY);
+    lasting_moon_kg_with(reach, a_p_km, star_kg, m_p, r_p, age_gyr, k2, TIDAL_Q)
+}
+
+/// [`lasting_moon_kg`] for a planet of Love number `k2` and tidal quality
+/// factor `q`: a giant's ([`crate::spin::GIANT_K2`], [`crate::spin::GIANT_Q`]),
+/// the case Barnes & O'Brien 2002 treat. A Jupiter at 0.12 AU from the Sun,
+/// locked to it, keeps moons up to about 10²² kg, none as large as the
+/// Galilean ones.
+#[allow(clippy::too_many_arguments)]
+fn lasting_moon_kg_with(
+    reach: f64,
+    a_p_km: f64,
+    star_kg: f64,
+    m_p: f64,
+    r_p: f64,
+    age_gyr: f64,
+    k2: f64,
+    q: f64,
+) -> f64 {
     let t = age_gyr * GYR_S;
     2.0 / 13.0
         * ((reach * a_p_km).powi(3) / (3.0 * star_kg)).powf(13.0 / 6.0)
         * m_p.powf(8.0 / 3.0)
-        * TIDAL_Q
+        * q
         / (3.0 * k2 * t * r_p.powi(5) * G.sqrt())
 }
 
@@ -820,8 +839,11 @@ impl MoonSystem {
     /// asked; on some ice giants a large retrograde moon captured instead
     /// (Triton, which scattered the regular ones, left closer in). None
     /// orbits inside the giant's Roche limit or its rings (see
-    /// [`giant_moon_floor_radii`]). A hot giant keeps none: its Hill
-    /// sphere is too small and its tides drag them in.
+    /// [`giant_moon_floor_radii`]), and the chain ends at a third of the
+    /// Hill radius (as many as fit, fewer than asked if need be). A hot
+    /// giant keeps none: its Hill sphere is too small and its tides drag
+    /// them in; one its star has locked keeps only the moons light enough
+    /// to outlast the system's age (Barnes & O'Brien 2002).
     fn of_giant(p: &WorldParams, mass_earth: f32) -> Self {
         let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
@@ -859,9 +881,20 @@ impl MoonSystem {
             } else {
                 first.max(floor / 0.95)
             };
+            // Triton's orbit, 12 to 16 radii out: the regular moons left
+            // keep inside it (1.2 times closer at least).
+            let triton_radii = captured_triton.then(|| rng.uniform(12.0, 16.0));
             for (k, w) in weights.iter().enumerate() {
                 let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
-                let a = (a_radii * r_g).min(hill / 3.0);
+                // The chain ends at the edge of the stable zone (with room
+                // for the moon's eccentricity, at most 0.01): the moons
+                // beyond would not last.
+                let a = a_radii * r_g;
+                if a * 1.01 >= PROGRADE_REACH * hill
+                    || triton_radii.is_some_and(|t| asked.is_none() && a_radii * 1.2 > t)
+                {
+                    break;
+                }
                 let mass = 1e-4 * m_g * w / total * if captured_triton { 0.02 } else { 1.0 };
                 let icy = a_radii > ice_line || star.equilibrium_k < 60.0;
                 let density = if icy { 1.9 } else { 3.3 };
@@ -881,9 +914,9 @@ impl MoonSystem {
             }
             if captured_triton && asked.is_none() {
                 // Triton: 2.4 times its mass in a retrograde orbit at 14 radii.
-                let a = (rng.uniform(12.0, 16.0) * r_g).min(hill / 3.0);
+                let a = triton_radii.unwrap_or(14.0) * r_g;
                 let mass = rng.uniform(1.5e-4, 3e-4) * m_g;
-                moons.push(regular_moon(
+                let triton = regular_moon(
                     p,
                     &mut rng,
                     m_g,
@@ -895,7 +928,42 @@ impl MoonSystem {
                     synchronous,
                     MoonOrigin::Captured,
                     157.0,
-                ));
+                );
+                // Within the retrograde stable zone.
+                if a * 1.01 < RETROGRADE_REACH * hill {
+                    moons.push(triton);
+                }
+            }
+        }
+        // A giant its star has locked (a hot one keeps none at all) turns
+        // once a year: its synchronous orbit lies beyond its Hill sphere and
+        // its moons spiral in. Only those light enough to outlast the
+        // system's age remain (Barnes & O'Brien 2002, eq. 8, with the
+        // giant's own tides).
+        if crate::spin::giant_locked(&star, mass_earth, look.radius_earth) {
+            let age = f64::from(crate::spin::tidal_age_gyr(&star));
+            let a_p = f64::from(star.orbit_au) * AU_KM;
+            let star_kg = f64::from(star.mass) * SUN_MASS_KG;
+            moons.retain(|m| {
+                let reach = if m.inclination_deg > 90.0 {
+                    RETROGRADE_REACH
+                } else {
+                    PROGRADE_REACH
+                };
+                let limit = lasting_moon_kg_with(
+                    reach,
+                    a_p,
+                    star_kg,
+                    m_g,
+                    r_g,
+                    age,
+                    crate::spin::GIANT_K2,
+                    crate::spin::GIANT_Q,
+                );
+                f64::from(m.mass_ratio) * m_g <= limit
+            });
+            for m in &mut moons {
+                m.migration = Migration::Decaying;
             }
         }
         moons.sort_by(|a, b| a.semi_major_axis_km.total_cmp(&b.semi_major_axis_km));
@@ -1091,6 +1159,12 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
     );
     params.axial_tilt_deg = moon_tilt_deg(moon);
     params
+}
+
+/// Whether `p` is the world of a moon of a system (the `rocky-moon` or
+/// `icy-moon` preset, see [`small_body_params`]).
+pub fn is_moon_world(p: &WorldParams) -> bool {
+    matches!(p.planet.name.as_str(), "rocky-moon" | "icy-moon")
 }
 
 /// The parameters of a small airless body near the world `planet`, as a
@@ -1771,6 +1845,66 @@ mod tests {
             }
         }
         assert!(checked > 0 && small > 0, "{small} of {checked}");
+    }
+
+    #[test]
+    fn a_close_giant_keeps_its_moons_apart_and_only_light_ones_once_locked() {
+        // A Jupiter at 0.12 AU from the Sun: locked by its star, a small
+        // Hill sphere.
+        for seed in 0..60 {
+            let mut p = params(seed, 40_075.0);
+            p.planet = crate::preset::Preset::load("gas-giant").unwrap();
+            p.giant_mass_earth = Some(318.0);
+            p.orbit_au = 0.12;
+            p.circumference_km = crate::giant_world::radius_earth(&p, 318.0) * 40_075.0;
+            let system = MoonSystem::draw(&p).unwrap();
+            let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+            let look = crate::giant_world::Look::draw(&p, 318.0).info;
+            assert!(crate::spin::giant_locked(&star, 318.0, look.radius_earth));
+            let m_g = 318.0 * EARTH_MASS_KG;
+            for m in &system.moons {
+                assert!(f64::from(m.mass_ratio) * m_g < 1e22, "{m:?}");
+                assert!(m.semi_major_axis_km < system.hill_radius_km / 3.0);
+                assert_eq!(m.migration, Migration::Decaying);
+            }
+            for pair in system.moons.windows(2) {
+                let ratio = pair[1].semi_major_axis_km / pair[0].semi_major_axis_km;
+                assert!(ratio > 1.2, "seed {seed}: {ratio}");
+            }
+        }
+        // Far out, the full chain, kept apart.
+        for seed in 0..60 {
+            let mut p = params(seed, 40_075.0);
+            p.planet = crate::preset::Preset::load("gas-giant").unwrap();
+            p.giant_mass_earth = Some(318.0);
+            p.orbit_au = 5.2;
+            p.circumference_km = crate::giant_world::radius_earth(&p, 318.0) * 40_075.0;
+            let system = MoonSystem::draw(&p).unwrap();
+            assert!(system.moons.len() >= 2);
+            for pair in system.moons.windows(2) {
+                assert!(pair[1].semi_major_axis_km / pair[0].semi_major_axis_km > 1.2);
+            }
+        }
+    }
+
+    #[test]
+    fn a_moons_world_is_locked_to_its_planet_not_to_the_star() {
+        // An Earth locked to an M5 dwarf, with a moonlet.
+        let mut p = params(3, 40_075.0);
+        p.star = crate::star::parse_type("M5V").unwrap();
+        p.orbit_au = crate::star::orbit_at(p.star, 0.5);
+        p.moons = MoonsMode::Count(1);
+        assert!(crate::spin::star_info(&p).tidally_locked);
+        let moon = &MoonSystem::draw(&p).unwrap().moons[0];
+        let world = body_params(&p, moon);
+        let star = crate::spin::star_info(&world);
+        assert!(!star.tidally_locked && !star.spin_orbit_3_2);
+        // A 3:2 planet's moon is not resonant either.
+        p.eccentricity = 0.1;
+        assert!(crate::spin::star_info(&p).spin_orbit_3_2);
+        if let Some(moon) = MoonSystem::draw(&p).unwrap().moons.first() {
+            assert!(!crate::spin::star_info(&body_params(&p, moon)).spin_orbit_3_2);
+        }
     }
 
     #[test]

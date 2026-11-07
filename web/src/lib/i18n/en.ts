@@ -112,7 +112,7 @@ export const en = {
     locked: 'locked to its parent',
     resonant: (p: { day: string }) => `${p.day}, 3:2 resonance: three turns every two orbits`,
     axes: (p: { a: string; b: string; c: string }) => `${p.a} × ${p.b} × ${p.c} across`,
-    axesHelp: 'Its three diameters, the longest towards its planet: an irregular moon, or a round one stretched by its planet’s tides',
+    axesHelp: 'Its three diameters, the longest towards its planet when it is locked to it: an irregular moon, or a round one stretched by its planet’s tides',
     tilt: (p: { tilt: string }) => `tilt ${p.tilt}`,
     light: 'Light',
     lightValue: (p: { flux: string; temperature: string }) => `${p.flux}× Earth's · equilibrium ${p.temperature}`,
@@ -1082,7 +1082,7 @@ export const en = {
     unknownStar: (p: { star: string }) => `Unknown star: ${p.star}`,
     orbitAndPosition: 'Set the orbit by its distance or by its position in the habitable zone, not both.',
     noRoomForMoons: (p: { count: number }) =>
-      `No stable orbits for ${p.count === 1 ? 'a moon' : `${p.count} moons`}: the star and orbit chosen lock the planet to its star or keep it too close. Leave them random, or pick a farther orbit or a hotter star.`,
+      `No stable orbits for ${p.count === 1 ? 'a moon' : `${p.count} moons`}: the star and orbit chosen keep the planet too close to its star, whose tides pull down all but the lightest moons. Leave them random, or pick a farther orbit or a hotter star.`,
     moonsOfAMoon: "The moon of a giant keeps no moons of its own (its Hill sphere is too small): ask for moons or for a giant's moon, not both.",
     tooManyPlanets: (p: { asked: number; max: number }) => `${p.asked} planets asked for: a system holds ${p.max} at most.`,
     zoneFull: (p: { type: string; asked: number; fits: number }) =>
@@ -1091,7 +1091,7 @@ export const en = {
     unknownType: (p: { type: string }) => `Unknown planet type ${p.type}.`,
     systemExists: (p: { system: string }) => `System ${p.system} exists already: replace it, delete it or pick another seed.`,
     hotGiantMoons: (p: { count: number }) =>
-      `A hot giant keeps no moons (${p.count} asked for): so close to its star, its Hill sphere is too small. Pick a cooler orbit or no moons.`,
+      `Not that many moons for a giant this close to its star (${p.count} asked for): its Hill sphere is too small, or its star's tides have locked it and its moons spiral in. Pick a farther orbit or fewer moons.`,
     unknownPreset: (p: { preset: string }) => `There is no planet preset named ${p.preset}.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,

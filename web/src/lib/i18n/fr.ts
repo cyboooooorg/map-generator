@@ -98,7 +98,7 @@ export const fr: Messages = {
     locked: 'synchrone avec son astre',
     resonant: (p) => `${p.day}, résonance 3:2${S}: trois tours toutes les deux orbites`,
     axes: (p) => `${p.a} × ${p.b} × ${p.c} de diamètre`,
-    axesHelp: `Ses trois diamètres, le plus long vers sa planète${S}: une lune irrégulière, ou ronde mais étirée par les marées de sa planète`,
+    axesHelp: `Ses trois diamètres, le plus long vers sa planète quand elle lui est synchrone${S}: une lune irrégulière, ou ronde mais étirée par les marées de sa planète`,
     tilt: (p) => `inclinaison ${p.tilt}`,
     light: 'Lumière',
     lightValue: (p) => `${p.flux}× celle de la Terre · équilibre ${p.temperature}`,
@@ -1024,7 +1024,7 @@ export const fr: Messages = {
     unknownStar: (p) => `Étoile inconnue${S}: ${p.star}`,
     orbitAndPosition: 'Réglez l’orbite par sa distance ou par sa position dans la zone habitable, pas les deux.',
     noRoomForMoons: (p) =>
-      `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies verrouillent la planète sur son étoile ou la gardent trop près. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
+      `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies gardent la planète trop près de son étoile, dont les marées font tomber toutes les lunes sauf les plus légères. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
     moonsOfAMoon: `La lune d’une géante ne garde aucune lune (sa sphère de Hill est trop petite)${S}: demandez des lunes ou une lune de géante, pas les deux.`,
     tooManyPlanets: (p) => `${p.asked} planètes demandées${S}: un système en compte ${p.max} au plus.`,
     zoneFull: (p) => `${p.asked} planètes de type ${p.type} demandées, mais leur bande de distances autour de cette étoile n’en tient que ${p.fits}.`,
@@ -1032,7 +1032,7 @@ export const fr: Messages = {
     unknownType: (p) => `Type de planète inconnu${S}: ${p.type}.`,
     systemExists: (p) => `Le système ${p.system} existe déjà${S}: remplacez-le, supprimez-le ou choisissez une autre graine.`,
     hotGiantMoons: (p) =>
-      `Une géante chaude ne garde aucune lune (${p.count} demandées)${S}: si près de son étoile, sa sphère de Hill est trop petite. Choisissez une orbite plus froide ou aucune lune.`,
+      `Pas autant de lunes pour une géante si près de son étoile (${p.count} demandées)${S}: sa sphère de Hill est trop petite, ou les marées de son étoile l’ont rendue synchrone et ses lunes tombent. Choisissez une orbite plus lointaine ou moins de lunes.`,
     unknownPreset: (p) => `Aucun modèle de planète ne s’appelle ${p.preset}.`,
     tooManyPixels: (p) =>
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,

@@ -18,7 +18,7 @@ use crate::noise::{
     stream_seed,
 };
 use crate::rivers;
-use crate::star::{StarClimate, StarInfo, star_temperatures};
+use crate::star::{StarClimate, star_temperatures};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -933,14 +933,12 @@ pub fn generate_with_progress(
     };
     // A tidally locked planet's climate follows the angle from the point
     // under its star instead of the latitude.
-    let locked = StarInfo::new(params.star, params.orbit_au, params.eccentricity)
-        .tidally_locked
-        .then(|| {
-            let mut locked = LockedClimate::new();
-            locked.transport_heat(params.pressure_bar);
-            star_temperatures(locked.profile_mut(), star_climate);
-            locked
-        });
+    let locked = crate::spin::star_info(params).tidally_locked.then(|| {
+        let mut locked = LockedClimate::new();
+        locked.transport_heat(params.pressure_bar);
+        star_temperatures(locked.profile_mut(), star_climate);
+        locked
+    });
     let row_temperature = match &locked {
         Some(locked) => locked.rows(&grid),
         None => {

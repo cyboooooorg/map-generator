@@ -415,7 +415,8 @@ impl CraterField {
     /// present, negative in the future, down to [`FUTURE_GA`]).
     pub fn context_at(p: &WorldParams, epoch_ga: f64) -> Self {
         let radius_km = p.circumference_km as f64 / (2.0 * PI);
-        let star = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        // Locked to its star (not a moon, which is locked to its planet).
+        let star = crate::spin::star_info(p);
         let locked_since_ga = star.tidally_locked.then(|| {
             f64::from((crate::star::AGE_GYR.min(star.lifetime_gyr) - star.locking_gyr).max(0.0))
         });

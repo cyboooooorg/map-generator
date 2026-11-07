@@ -416,7 +416,9 @@ from the science. What changed:
   likewise; the mass ratio of 0.05 of section 4 is gone.
 - **Despun planets.** A planet its star has despun keeps only the moons
   light enough to outlast the system (Barnes & O'Brien 2002, eq. 8), not
-  none.
+  none; so does a giant its star has locked, with its own tides. A
+  giant's chain ends at a third of its Hill radius. A moon's world is
+  locked to its planet, not to the star.
 - **Captured moons** avoid the inclinations of 55° to 130° (Carruba et al.
   2002, via Shen & Tremaine 2008).
 - **One recipe for a giant's moons**: a giant of a system draws them as a

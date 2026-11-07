@@ -62,7 +62,9 @@ round planets. Every body has:
   the 3:2 spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
   turns every two orbits, as Mercury, see `spin.rs`). A locked body turns
   at a steady pace, facing its host on average; the host swings in its
-  sky by the libration (true minus mean anomaly, about ±2e radians). A
+  sky by the libration (true minus mean anomaly, about ±2e radians; the
+  dial gives its exact amplitude, `librationAmplitude` in
+  `web/src/lib/systemSky.ts`). A
   moon's axial tilt is its world's (`moons::moon_tilt_deg`: the Moon's
   6.68° to its orbit for a giant-impact moon, 0 for the others). A planet
   locked to its star turns on a circular orbit, upright;

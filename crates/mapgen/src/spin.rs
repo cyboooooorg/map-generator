@@ -52,7 +52,10 @@ const ROCKY_Q_PRIME: f64 = 3.0 * 100.0 / (2.0 * 0.3);
 /// `n` the mean motion. About 10⁸ Gyr × a^6.5 / M^1.5 (a in AU, M in solar
 /// masses), some 10⁵ to 10⁶ times the locking time: only the planets
 /// within about 0.05 AU of a red dwarf or 0.07 AU of the Sun are
-/// circularised in 4.6 Gyr.
+/// circularised in 4.6 Gyr. Every rocky planet is given Earth's mass and
+/// radius here, as in [`crate::star::locking_gyr`]: the time goes as
+/// `m / R⁵`, so a super-Earth of 5.5 Earth masses (1.76 radii) would
+/// circularise about three times faster.
 pub fn circularisation_gyr(orbit_au: f32, star_mass: f32) -> f32 {
     const G: f64 = 6.674e-11;
     const SUN_KG: f64 = 1.989e30;
@@ -124,10 +127,16 @@ pub fn upright(p: &crate::world::WorldParams, drawn: f32) -> f32 {
 
 /// The star of world `p` with what its tides do to it: [`StarInfo::new`],
 /// whose locking is a rocky planet's, with a giant's own instead for a
-/// giant world (locked, never resonant, see [`giant_locking_gyr`]).
+/// giant world (locked, never resonant, see [`giant_locking_gyr`]). A moon
+/// (a moon's world, or a world orbiting a giant) is locked to its planet,
+/// not to the star: never locked nor resonant against the star, whatever
+/// its planet's orbit (its world takes the planet's star and orbit).
 pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
     let mut star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
-    if let Some(mass) = p.giant_mass_earth {
+    if crate::moons::is_moon_world(p) || crate::exomoon::HostGiant::draw(p).is_some() {
+        star.tidally_locked = false;
+        star.spin_orbit_3_2 = false;
+    } else if let Some(mass) = p.giant_mass_earth {
         let radius = f64::from(p.circumference_km) / 40_075.0;
         star.locking_gyr = giant_locking_gyr(p.orbit_au, star.mass, mass, radius as f32);
         star.tidally_locked = star.locking_gyr < tidal_age_gyr(&star)
@@ -179,6 +188,10 @@ pub fn giant_locking_gyr(orbit_au: f32, star_mass: f32, mass_earth: f32, radius_
 /// with a giant's `Q' = 3Q / (2k₂)` ([`GIANT_Q`], [`GIANT_K2`]), the time
 /// going as `Q' m / R⁵`. Its large radius makes Jupiter circularise twice
 /// as fast as the Earth at the same place: a hot Jupiter's orbit is round.
+/// This `Q'` (about 1.4 × 10⁵) is the one Lainey et al. 2009 measured at
+/// Io's tidal frequency; Jackson, Greenberg & Barnes 2008 fit a planetary
+/// tidal Q of about 10^6.5 to the eccentricities of close-in giants, which
+/// would circularise them about 20 times more slowly.
 pub fn giant_circularised(star: &StarInfo, mass_earth: f32, radius_earth: f32) -> bool {
     let q_prime = 3.0 * GIANT_Q / (2.0 * GIANT_K2);
     let scale =
