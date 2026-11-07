@@ -68,10 +68,11 @@ tundra_summer: number,
  */
 temperate: number, 
 /**
- * At or below this winter temperature, land is never tropical: it is
- * temperate at most (Köppen's snow climates D, coldest month at or
- * below −3 °C; Kottek et al. 2006). A high tilt gives its poles a
- * warm annual mean but freezing winters.
+ * Below this winter temperature, land is never tropical: it is
+ * temperate at most. Köppen's tropical climates A need a coldest month
+ * of at least 18 °C (Kottek et al. 2006); warmer land with cooler
+ * winters is warm temperate (C) or dry (B). A high tilt gives its
+ * poles a warm annual mean but freezing winters.
  */
 tropical_winter: number, 
 /**
