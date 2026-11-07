@@ -28,9 +28,9 @@ import {
   LessEqualDepth,
   LineBasicMaterial,
   LineSegments,
+  type Material,
   Matrix4,
   Mesh,
-  MeshBasicMaterial,
   NoColorSpace,
   MOUSE,
   NotEqualStencilFunc,
@@ -60,8 +60,10 @@ import {
   type IUniform,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { cameraPlanes } from './cameraPlanes';
 import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
 import { DIAL_RADIUS, RotationDial } from './rotationDial';
+import { sphereGrid } from './starSystem';
 import { hiddenByShape } from './occlusion';
 import type { DialState } from '../rotationDial';
 import type { HexMap } from '../api/types/HexMap';
@@ -73,6 +75,7 @@ import {
   planeToLonLat,
   rayPlaneZ0,
   raySphere,
+  rayRelief,
   sphereToLonLat,
   type Vec3,
 } from '../geo';
@@ -618,6 +621,13 @@ export class PlanetView {
   /** Which body of the sky is the host planet, and whether it is locked to its star; null for none. */
   private hostSpinOf: { index: number; locked: boolean } | null = null;
   private hostGuideOn = false;
+  /**
+   * The Hill sphere drawn round a body of the sky (see setHillSphere): a
+   * grid and a faint limb shell on a unit sphere, placed and scaled to it,
+   * its depth held at the far plane (see farGuide), null until first asked.
+   */
+  private hill: { grid: LineSegments<BufferGeometry, LineBasicMaterial>; shell: Mesh<SphereGeometry, ShaderMaterial> } | null = null;
+  private hillSphereOn: { centre: Vec3; radius: number } | null = null;
   private spinAxesOn = false;
   /** The rotation dial round the body shown (see setRotationDial), and its state; null hides it. */
   private readonly dial = new RotationDial();
@@ -2068,6 +2078,10 @@ export class PlanetView {
     this.u.uBiomes.value.dispose();
     this.sky.uSunDepth.value.dispose();
     this.disposeSkyBodies();
+    this.hill?.grid.geometry.dispose();
+    this.hill?.grid.material.dispose();
+    this.hill?.shell.geometry.dispose();
+    this.hill?.shell.material.dispose();
     this.skyOrbits?.geometry.dispose();
     this.skyOrbits?.material.dispose();
     this.skyOrbitsOver?.material.dispose();
@@ -2385,6 +2399,52 @@ export class PlanetView {
     const dash = skyOrbitDash(this.skyOrbitDashed, this.skyOrbitPace);
     for (const lines of [this.skyOrbits, this.skyOrbitsOver, this.skyOrbitsNear]) {
       if (lines) lines.material.uniforms['uDash']!.value = dash;
+    }
+    this.requestRender();
+  }
+
+  /**
+   * Draws a Hill sphere in the sky (on the globe): a grid and a faint shell
+   * that lights towards its limb, centred on `sphere.centre` and `radius`
+   * in radii of the body shown, in its frame. The camera is usually inside
+   * it (a body's moons orbit well within), so the grid carries it; its
+   * depth is held at the far plane, so the globe hides it. Null hides it.
+   */
+  setHillSphere(sphere: { centre: Vec3; radius: number } | null): void {
+    this.hillSphereOn = sphere;
+    if (sphere && !this.hill) {
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new Float32BufferAttribute(sphereGrid(1, 96, 15).flat(), 3));
+      const grid = new LineSegments(geometry, new LineBasicMaterial({ color: new Color(0.55, 0.85, 0.8), transparent: true, depthWrite: false }));
+      farGuide(grid.material, { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 0 } });
+      const shell = new Mesh(
+        new SphereGeometry(1, 64, 32),
+        new ShaderMaterial({
+          vertexShader: `varying vec3 vNormal; varying vec3 vWorld;
+            void main() {
+              vNormal = normalize(mat3(modelMatrix) * normal);
+              vec4 world = modelMatrix * vec4(position, 1.0);
+              vWorld = world.xyz;
+              gl_Position = projectionMatrix * viewMatrix * world;
+              gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
+            }`,
+          fragmentShader: `uniform float uOpacity; varying vec3 vNormal; varying vec3 vWorld;
+            void main() {
+              float rim = 1.0 - abs(dot(normalize(vNormal), normalize(cameraPosition - vWorld)));
+              gl_FragColor = vec4(0.55, 0.85, 0.8, uOpacity * (0.04 + 0.5 * pow(rim, 4.0)));
+            }`,
+          uniforms: { uOpacity: { value: 0 } },
+          transparent: true,
+          depthWrite: false,
+          side: DoubleSide,
+        }),
+      );
+      for (const object of [grid, shell]) {
+        object.frustumCulled = false;
+        object.renderOrder = -0.25;
+        this.scene.add(object);
+      }
+      this.hill = { grid, shell };
     }
     this.requestRender();
   }
@@ -3051,6 +3111,18 @@ export class PlanetView {
       orbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
       orbits.material.uniforms['uScreenPx']!.value = this.renderer.domElement.height;
     }
+    if (this.hill) {
+      const sphere = this.hillSphereOn;
+      for (const object of [this.hill.grid, this.hill.shell]) {
+        object.visible = sphere !== null && this.morph > 0.01;
+        if (sphere) {
+          object.position.set(...sphere.centre);
+          object.scale.setScalar(sphere.radius);
+        }
+      }
+      this.hill.grid.material.opacity = 0.3 * this.morph ** 3;
+      this.hill.shell.material.uniforms['uOpacity']!.value = this.morph ** 3;
+    }
     for (const belts of [this.skyBelts, this.skyBeltsOver, this.skyBeltsNear]) {
       if (!belts) continue;
       belts.visible = this.skyBeltsOn && this.morph > 0.01;
@@ -3064,8 +3136,9 @@ export class PlanetView {
     this.u.uCloudsOn.value =
       this.cloudsOn && this.hasClouds ? smoothstepJs(CLOUD_FADE[0], CLOUD_FADE[1], altitude) : 0;
     this.driftClouds();
-    this.camera.near = Math.max(altitude * 0.1, 1e-6);
-    this.camera.far = altitude + 4;
+    const planes = cameraPlanes(altitude, this.ringReach());
+    this.camera.near = planes.near;
+    this.camera.far = planes.far;
     this.drawRingRocks();
     this.camera.updateProjectionMatrix();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
@@ -3108,6 +3181,13 @@ export class PlanetView {
   }
 
   /** Height of the camera above the surface (globe) or the map plane. */
+  /** The radius of the outermost ring drawn, bright or dust, in radii of the body (0: none). */
+  private ringReach(): number {
+    let reach = this.rings ? this.u.uRingOuter.value : 0;
+    for (const mesh of this.dustRings) reach = Math.max(reach, mesh.material.uniforms['uOuter']!.value as number);
+    return reach;
+  }
+
   private altitude(): number {
     if (this.animation?.follow) {
       return this.morphDistance;
@@ -3261,10 +3341,20 @@ export class PlanetView {
     this.onPick(this.pickAt(event.clientX, event.clientY));
   };
 
-  // Picking ignores the relief displacement: at most a few percent of the
-  // radius, which shifts the picked point by a fraction of a degree.
+  /**
+   * The ray marched against the surface as drawn (its shape and its relief
+   * as displayed, from the CPU copy of the elevation); the sphere when
+   * there is no relief to show.
+   */
   private pickGlobe(origin: Vec3, direction: Vec3): LonLat | null {
-    const t = raySphere(origin, direction, 1);
+    const shape = this.shared.uHasShape.value > 0.5 ? this.shapeRadii : null;
+    const relief = this.shared.uHasData.value > 0.5 ? this.peakAbove * this.reliefLift() : 0;
+    const maxRadius = (shape ? shape.largest : 1) + relief;
+    const scratch = new Vector3();
+    const t =
+      maxRadius <= 1 && !shape
+        ? raySphere(origin, direction, 1)
+        : rayRelief(origin, direction, (x, y, z) => this.surfaceRadiusAt(scratch.set(x, y, z)), maxRadius, 0.5);
     if (t === null) {
       return null;
     }
@@ -3405,7 +3495,7 @@ function latticeSlots(rows: number, window: number, perCell: number): Float32Arr
  * dropped where the planet (`uniforms`: its centre and radius, in the
  * scene's frame) stands between them and the camera.
  */
-function farGuide(material: MeshBasicMaterial, uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> }): void {
+function farGuide(material: Material, uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> }): void {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = `varying vec3 vFarWorld;\n${shader.vertexShader}`.replace(

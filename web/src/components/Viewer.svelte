@@ -37,7 +37,7 @@
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
+  import { hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
   import { dialFigureText, formatDialAngle, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -168,6 +168,7 @@
     hostGrid: false,
     hostTropics: false,
     orbitLines: false,
+    hillSphere: false,
     // The trojan swarms and belts ringed in the sky.
     smallBodies: false,
     // The rocks of the rings round a ring moon: 0 none, else their drawn
@@ -238,6 +239,8 @@
   let hostTropics = $state(saved.hostTropics);
   /** The orbits of the moons (or of a giant's other moons) drawn in the sky. */
   let orbitLines = $state(saved.orbitLines);
+  /** The Hill sphere of the body shown (its host planet's from a moon) drawn in the sky. */
+  let hillOn = $state(saved.hillSphere);
   let smallBodies = $state(saved.smallBodies);
   let ringRockScale = $state(RING_ROCK_SCALES.includes(saved.ringRocks) ? saved.ringRocks : 100);
   let axesShown = $state(saved.spinAxes);
@@ -471,6 +474,7 @@
       hostGrid,
       hostTropics,
       orbitLines,
+      hillSphere: hillOn,
       smallBodies,
       ringRocks: ringRockScale,
       spinAxes: axesShown,
@@ -1196,6 +1200,14 @@
   });
   // The moons' orbits in the sky, seen from the body shown.
   const skyOrbitLoops = $derived(orbitLines && sysSky ? sysSky.orbits : []);
+  // The Hill sphere: the body's own, or its host planet's from a moon (round
+  // the planet as it stands in the moon's sky).
+  const hill = $derived(sys && sysBody ? hillSphere(sys, sysBody.id) : null);
+  $effect(() => {
+    const k = hill && sysBody?.parent && sysSky ? sysSky.ids.indexOf(hill.id) : -1;
+    const centre: [number, number, number] | null = !hill ? null : k >= 0 ? (sysSky?.bodies[k]?.position ?? null) : sysBody?.parent ? null : [0, 0, 0];
+    view?.setHillSphere(hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null);
+  });
   // The body shown's own orbit dashed: the body slides along it.
   $effect(() => view?.setSkyOrbits(skyOrbitLoops, skyOrbitLoops.map((_, i) => i === sysSky?.ownOrbit)));
   // A moon goes round its orbit 2^speed times every ORBIT_SECONDS while
@@ -1398,6 +1410,22 @@
       { key: 'labels', label: t.viewer.skyLabels, help: t.viewer.skyLabelsHelp, icon: 'tag', on: skyLabels, set: (v) => (skyLabels = v) },
       ...(sys && sys.bodies.length > 1
         ? [{ key: 'orbits', label: t.viewer.orbitLines, help: t.viewer.orbitLinesHelp, icon: 'orbit' as const, on: orbitLines, set: (v: boolean) => (orbitLines = v) }]
+        : []),
+      ...(hill && sysBody
+        ? [
+            {
+              key: 'hill',
+              label: t.viewer.hillSphere,
+              help: t.viewer.hillSphereHelp({
+                host: world.systemNames[hill.id] ?? sys?.bodies.find((b) => b.id === hill.id)?.designation ?? hill.id,
+                radius: withUnit(formatInt(hill.radiusKm), 'km'),
+                radii: formatInt(hill.radiusInHostRadii),
+              }),
+              icon: 'orbit' as const,
+              on: hillOn,
+              set: (v: boolean) => (hillOn = v),
+            },
+          ]
         : []),
       ...(sys && ((sys.belts?.length ?? 0) > 0 || sys.bodies.some((b) => b.trojans))
         ? [{ key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' as const, on: smallBodies, set: (v: boolean) => (smallBodies = v) }]

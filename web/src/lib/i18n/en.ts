@@ -128,13 +128,15 @@ export const en = {
     dustFed: (p: { kind: 'gossamer' | 'plume' }) =>
       p.kind === 'plume'
         ? 'its geysers blow out ice grains that spread into a broad, faint ring along its orbit'
-        : 'dust knocked off it by impacts spreads into a faint gossamer ring inside its orbit',
+        : 'dust knocked off it by impacts spreads into a faint gossamer ring along and inside its orbit',
     ringRole: 'In the rings',
     ringRoles: {
       embedded: (p: { gap: string }) => `orbits inside the rings and clears a gap ${p.gap} wide round its orbit`,
-      resonant: (p: { gap: string }) => `orbits outside the rings; its 2:1 resonance opens a gap ${p.gap} wide in them`,
+      resonant: (p: { gap: string }) =>
+        `orbits outside the rings; its 2:1 resonance cuts an edge in them and clears a division ${p.gap} wide outward of it`,
       edge: () => 'orbits just beyond the rings and keeps their outer edge sharp',
       shepherd: () => 'one of the pair of shepherd moons that confine the narrow ring',
+      source: () => 'a small moon beyond the narrow ring, whose impact dust may feed a faint dust ring',
     },
     notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
     generating: 'Its maps are being made: see the progress over the view.',
@@ -629,6 +631,9 @@ export const en = {
     sunLongitude: 'Sun longitude',
     orbits: 'Moon orbits',
     orbitLines: 'Orbits',
+    hillSphere: 'Hill sphere',
+    hillSphereHelp: (p: { host: string; radius: string; radii: string }) =>
+      `Draws the Hill sphere of ${p.host}, the bound of its moons' orbits (on the globe, from a moon: its host planet's): ${p.radius}, ${p.radii} planet radii`,
     orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
     smallBodies: 'Small bodies',
     smallBodiesHelp:
@@ -667,6 +672,7 @@ export const en = {
       resonant: 'icy moon, resonant with the rings',
       edge: 'ring moon',
       shepherd: 'shepherd moon',
+      source: 'small inner moon',
     },
     spinAxes: 'Spin axes',
     spinAxesHelp:

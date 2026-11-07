@@ -331,6 +331,37 @@ export function systemReach(system: System, shown: string): number | null {
   return (3 * furthest) / Math.max(self.physical.radius_km, 1e-6);
 }
 
+/** Earth masses in a Sun's mass. */
+const EARTH_PER_SUN = 332_946;
+
+/**
+ * The radius of a body's Hill sphere, km: how far round it its own gravity
+ * holds moons against its primary's, `a (1 - e) cbrt(m / 3M)` at the
+ * periapsis, the tightest. `mass` and `primaryMass` in the same unit.
+ */
+export function hillRadiusKm(semiMajorKm: number, eccentricity: number, mass: number, primaryMass: number): number {
+  return semiMajorKm * (1 - Math.min(Math.max(eccentricity, 0), 0.95)) * Math.cbrt(mass / (3 * Math.max(primaryMass, 1e-12)));
+}
+
+/**
+ * The Hill sphere to draw for body `shown`: its own, round the primary it
+ * orbits (the star for a planet); from a moon, its host planet's (round the
+ * star), the one the moon sits in. Null when the body is unknown.
+ */
+export function hillSphere(
+  system: System,
+  shown: string,
+): { id: string; radiusKm: number; radiusInHostRadii: number } | null {
+  const self = system.bodies.find((b) => b.id === shown);
+  if (!self) return null;
+  const host = self.parent ? system.bodies.find((b) => b.id === self.parent) : self;
+  if (!host) return null;
+  const primary = host.parent ? system.bodies.find((b) => b.id === host.parent) : undefined;
+  const primaryMass = primary ? primary.physical.mass_earth : system.star.info.mass * EARTH_PER_SUN;
+  const radiusKm = hillRadiusKm(host.orbit.semi_major_axis_km, host.orbit.eccentricity, host.physical.mass_earth, primaryMass);
+  return { id: host.id, radiusKm, radiusInHostRadii: radiusKm / Math.max(host.physical.radius_km, 1e-6) };
+}
+
 /** The shown body's distance from the star, AU (for the light it gets). */
 export function starDistanceAu(system: System, shown: string, days: number): number {
   const here = placeSystem(system, days).get(shown);

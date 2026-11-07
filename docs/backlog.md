@@ -146,13 +146,13 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Item                                                                                                                 | Status |
 | -------------------------------------------------------------------------------------------------------------------- | ------ |
 | Depression filling: neighbours by index (4.2 → 2.4 s at 8192 × 4096, same worlds); parallel land masses gave no gain | done   |
-| Picking on the globe ignores the relief displacement (error under a degree)                                          | todo   |
+| Picking on the globe ignores the relief displacement (error under a degree)                                          | done   |
 | Night side lighting is a fixed 7 % floor, not physically calibrated                                                  | todo   |
 | Volcanoes on non-volcanic presets: quantile threshold, cones after erosion, lowland vents (lava 0 → 0.3–0.5 %)       | done   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
 | Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
-| Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | todo   |
+| Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | done   |
 | Planet view: from a moon, the host planet is drawn without its atmosphere and clouds                                 | done   |
 
 ## 5. Terrain realism, second round
@@ -548,6 +548,19 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   bright rings, and plume rings round an active icy moon; drawn faint in
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
+- **Done (2026-11-07):** the rings follow the science more closely: the
+  Roche limit alone sets a bright ring's edge (no cap at 2.5 radii), the
+  giant asked for is shaped as the others, the 2:1 resonance cuts an
+  edge with a division outward of it, placed with the giant's `J2`,
+  moonlets grow from cores until they fill their Roche lobe, edge moons
+  grow with distance, and giants with faint rings get small dust-source
+  moons and dust rings (Jupiter's gossamer rings, Uranus's μ ring).
+- **Remaining:** a plume moon chosen by its tidal heating (an icy moon in
+  resonance, its eccentricity forced: Peale et al. 1979 for Io, Meyer &
+  Wisdom 2007 for Enceladus), not by drawn odds; a Phoebe-type ring, once
+  systems have irregular moons; the A ring's outer edge set by an outer
+  moon's 7:6 resonance (Janus); a faint D ring inside bright rings; the
+  equatorial ridges of Pan and Atlas.
 
 ## 19. Tides, spin and moons: what the science fixes left
 

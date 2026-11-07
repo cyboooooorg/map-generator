@@ -227,20 +227,23 @@ export function hillShownRadius(trueRadius: number, markerSize: number, moonReac
 
 /**
  * A sphere's grid of `radius`, as line segments (pairs of points): its
- * equator and two parallels each side, and six meridians.
+ * parallels and its meridians every `spacing` degrees (30: the equator and
+ * two parallels each side, and six meridians).
  */
-export function sphereGrid(radius: number, steps = 64): [number, number, number][] {
+export function sphereGrid(radius: number, steps = 64, spacing = 30): [number, number, number][] {
   const points: [number, number, number][] = [];
   const circle = (at: (t: number) => [number, number, number]) => {
     for (let i = 0; i < steps; i++) points.push(at((i / steps) * 2 * Math.PI), at(((i + 1) / steps) * 2 * Math.PI));
   };
-  for (const lat of [-60, -30, 0, 30, 60]) {
+  const parallels = Array.from({ length: Math.round(180 / spacing) - 1 }, (_, i) => -90 + spacing * (i + 1));
+  for (const lat of parallels) {
     const y = radius * Math.sin((lat * Math.PI) / 180);
     const r = radius * Math.cos((lat * Math.PI) / 180);
     circle((t) => [r * Math.cos(t), y, -r * Math.sin(t)]);
   }
-  for (let m = 0; m < 6; m++) {
-    const lon = (m / 6) * Math.PI;
+  const meridians = Math.round(180 / spacing);
+  for (let m = 0; m < meridians; m++) {
+    const lon = (m / meridians) * Math.PI;
     circle((t) => [radius * Math.cos(t) * Math.cos(lon), radius * Math.sin(t), -radius * Math.cos(t) * Math.sin(lon)]);
   }
   return points;

@@ -226,47 +226,76 @@ A giant with rings also gets the moons that shape them (`rings.rs`,
 backlog item 18), drawn from the stream `RING_MOONS` so the other moons
 keep their draws. They are `icy-moon` bodies marked with a `ring_role`:
 
-- `embedded`: zero to two moonlets of 4 to 30 km in the outer part of
-  bright rings, each clearing a gap 7 to 17 of its Hill radii wide;
-- `resonant`: on 60 % of bright rings, a moon of 150 to 250 km just
-  outside them whose 2:1 resonance opens a gap of 0.04 to 0.09 radii
-  (the Cassini Division);
+- `embedded`: zero to two moonlets in the outer 40 % of bright rings,
+  each clearing a gap 7 to 17 of its Hill radii wide. Each grew from a
+  core of solid ice, 1.5 to 10 km in radius, under a mantle of ring
+  particles with 65 % voids, until it filled its Roche lobe: it ends at
+  the critical density of its distance, `3M / (γ a³)` (`γ` 1.59), its
+  long semi-axis `R_c (4π/(3γ) (ρ_c − ρ_m) / (ρ_crit − ρ_m))^(1/3)`, in
+  the lobe's 3 : 2 : 2 shape (Porco et al. 2007): about 4 to 30 km
+  across round a Saturn;
+- `resonant`: on 60 % of bright rings, a moon of 150 to 250 km in radius
+  outside them (irregular below 200 km, round above) whose 2:1 inner
+  Lindblad resonance, placed with the giant's `J2`, cuts the edge of the
+  inner ring and clears a division 0.04 to 0.09 radii wide outward of it
+  (Mimas, the B ring's edge and the Cassini Division);
 - `edge`: one to three moons of 10 to 100 km just beyond a bright ring's
-  outer edge;
+  outer edge, the larger the farther out (Charnoz et al. 2010);
 - `shepherd`: on 70 % of faint rings, a pair of 10 to 25 km on either
-  side of the ring.
+  side of the ring;
+- `source`: beyond a faint ring, one or two small moons of 4 to 90 km at
+  2 to 3.2 radii (Amalthea, Thebe), and on half of those giants one of
+  5 to 20 km at 3.4 to 4.2 radii (Mab), which may feed dust rings.
+
+Edge moons, shepherds and sources are no less dense than the critical
+density at their distance, or solid ice's where that is lower; those
+raised to it fill their Roche lobe and take its shape. Where the critical
+density exceeds solid ice (close to a dense giant), no loose mantle holds:
+the moon is bare solid ice (0.9 g/cm³), irregular, outside its rigid
+Roche limit.
 
 Ring moons keep to the rings' plane, which is tens of metres to a kilometre
 thick: an embedded moonlet's inclination is drawn up to 0.001° (Pan:
 0.0001°, Daphnis: 0.0036°), an edge moon's up to 0.005° (Atlas: 0.003°),
 so that from them the rings lie on the horizon; shepherds and resonant
 moons, outside the rings, up to 0.05° (Prometheus: 0.008°, Pandora:
-0.05°). Their eccentricities keep them as close: an embedded moonlet's
-up to 5 × 10⁻⁵, a swing of a few km inside its gap (Pan: 1.4 × 10⁻⁵,
-Daphnis: 3.3 × 10⁻⁵), an edge moon's up to 1.5 × 10⁻³ (Atlas: 1.2 ×
-10⁻³); shepherds and resonant moons draw 2 × 10⁻⁴ to 2.2 × 10⁻³
-(Prometheus: 2.2 × 10⁻³). Within bright rings, gaps never overlap: a moonlet whose gap the
-resonance gap would cover is not kept.
+0.05°); dust sources up to 1.1° (Thebe: 1.08°). Their eccentricities keep
+them as close: an embedded moonlet's up to 5 × 10⁻⁵, a swing of a few km
+inside its gap (Pan: 1.4 × 10⁻⁵, Daphnis: 3.3 × 10⁻⁵), scaled down past
+Daphnis's distance so that the swing stays as small round a larger giant;
+an edge moon's up to 1.5 × 10⁻³ (Atlas: 1.2 × 10⁻³); shepherds and
+resonant moons draw 2 × 10⁻⁴ to 2.2 × 10⁻³ (Prometheus: 2.2 × 10⁻³);
+dust sources 10⁻³ to 1.8 × 10⁻² (Thebe: 1.8 × 10⁻²). Within bright
+rings, gaps never overlap: a moonlet whose gap the resonance's division
+would cover is not kept.
 
 Bright rings end at the fluid Roche limit of their icy particles (0.5 to
-0.9 g/cm³), kept within 2.0 to 2.5 radii; their gaps are those of their
-moons, and the rings' `gap_moons` name the moon of each gap. The ring
-moons are numbered with the others, nearest first, at their distance in
-the radii of the giant's body (`physical.radius_km`, the unit the views
-place its moons in), so that an embedded moonlet sits in the middle of
-its gap. A giant without
-regular moons (hot, or with too small a Hill sphere) keeps its rings
-without moons, and the giant a world of the request orbits gets none.
+0.9 g/cm³), from the giant's density over its equatorial radius: 2.15 to
+2.62 radii round a Saturn, past 3 round a denser giant. Only physics
+bounds them: the rings and their moons stay Hill stable inside the
+giant's innermost other moon (Gladman 1993) and within a third of its
+Hill radius, and a bright ring keeps 0.3 radii above 1.11 (Saturn's D
+ring), or is not kept. Their gaps are those of their moons, and the
+rings' `gap_moons` name the moon of each gap. The ring moons are numbered
+with the others, nearest first, at their distance in the radii of the
+giant's body (`physical.radius_km`, the unit the views place its moons
+in), so that an embedded moonlet sits in the middle of its gap. A giant
+without regular moons (hot, or with too small a Hill sphere) keeps its
+rings without moons. The giant asked for, and the giant a world of the
+request orbits, are shaped as the others, inside that world's chain.
 
 Some of those moons feed faint dust rings (`dust_rings`, stream
 `DUST_RINGS`), stored with the giant's rings (`given_rings.dust`): on
-80 % of them, the one or two outermost edge moons of bright rings each
-spread a gossamer ring of impact dust from the rings out to their orbit
-(Jupiter's Amalthea and Thebe rings); on a quarter of giants, the
-innermost icy regular moon within 12 radii, heated by the tides of its
-resonant chain, blows out a broad ring of ice grains from 0.75 to 2 times
-its distance (Saturn's E ring round Enceladus). Each names its source
-moon. Systems have no irregular moons, so no ring like Phoebe's.
+80 % of them, the one or two outermost edge moons or sources within 3.3
+radii each spread a gossamer ring of impact dust from the main rings out
+to their orbit and up to 1.26 times past it (Jupiter's Amalthea and Thebe
+rings, and Thebe's extension); a source farther out wraps its orbit in a
+faint belt from 0.913 to 1.087 times its distance (Uranus's μ ring round
+Mab). On a quarter of giants, the innermost icy regular moon within 12
+radii blows out a broad ring of ice grains from 0.75 to 2 times its
+distance (Saturn's E ring round Enceladus): which moon is active is
+drawn, its tidal heating not computed. Each names its source moon.
+Systems have no irregular moons, so no ring like Phoebe's.
 
 ### Around one planet (mode 2)
 
