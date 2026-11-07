@@ -106,17 +106,25 @@ const ROCKY_MASS_RADIUS_EXPONENT: f32 = 3.7;
 /// 0.48 Earth radii.
 const UNCOMPRESSED_ROCK_DENSITY: f32 = 3.344 / 5.513;
 
+/// Largest surface gravity of a rocky world, Earth's = 1: the bound the
+/// app kept before the mass–radius relation, reached at 2.6 Earth radii
+/// (about 100 000 km round), far beyond the relation's fit (8 Earth
+/// masses, 1.75 radii). Larger "rocky" worlds keep it, their mass growing
+/// as their radius squared. Calibration, no source.
+const MAX_ROCKY_GRAVITY: f32 = 5.0;
+
 /// Surface gravity of a rocky body of `radius` Earth radii, relative to
 /// Earth's: from its mass, `M = R^3.7` (Zeng et al. 2016), and never less
-/// dense than uncompressed rock (the Moon's density). Mars's size gives
-/// 0.34 (Mars: 0.38, NASA), the Moon's 0.165 (0.165), Venus's 0.92 (0.90).
-/// Mercury, with its large iron core, has 0.38 where this gives 0.20.
+/// dense than uncompressed rock (the Moon's density), up to
+/// [`MAX_ROCKY_GRAVITY`]. Mars's size gives 0.34 (Mars: 0.38, NASA), the
+/// Moon's 0.165 (0.165), Venus's 0.92 (0.90). Mercury, with its large iron
+/// core, has 0.38 where this gives 0.23.
 pub fn rocky_gravity(radius: f32) -> f32 {
     let radius = radius.max(0.0);
     let density = radius
         .powf(ROCKY_MASS_RADIUS_EXPONENT - 3.0)
         .max(UNCOMPRESSED_ROCK_DENSITY);
-    density * radius
+    (density * radius).min(MAX_ROCKY_GRAVITY)
 }
 
 impl WorldParams {
