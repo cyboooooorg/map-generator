@@ -8,6 +8,7 @@ import {
   MAP_DISTANCE,
   mapHeightForAltitude,
   mapPoint,
+  morphFrame,
   morphPoint,
   morphCamera,
 } from './viewTransfer';
@@ -113,6 +114,35 @@ describe('morphPoint', () => {
       const next = morphPoint(p, k / 100, 1);
       expect(Math.hypot(next[0]! - last[0]!, next[1]! - last[1]!, next[2]! - last[2]!)).toBeLessThan(0.1);
       last = next;
+    }
+  });
+});
+
+describe('morphCamera clipping', () => {
+  // PlanetView sets near = 0.1 × d and far = d + 4 from the camera's
+  // distance d to the followed point: the whole sheet must stay inside,
+  // also zoomed out, where the unrolling carries the camera far away.
+  it('keeps the whole sheet between the near and far planes through the morph', () => {
+    const wrapLon = 0.7;
+    for (const [mapHeight, altitude] of [[12, 7], [5.5, 2.2], [1, 0.3]] as const) {
+      for (let i = 0; i <= 100; i++) {
+        const morph = i / 100;
+        const centre = { lon: wrapLon, lat: 0.2 };
+        const { position, target, distance } = morphCamera(centre, mapHeight, altitude, morph, wrapLon);
+        const view = [target[0] - position[0], target[1] - position[1], target[2] - position[2]].map((v) => v / distance);
+        for (let lon = 0; lon < 2 * Math.PI; lon += 0.2) {
+          for (let lat = -Math.PI / 2; lat <= Math.PI / 2; lat += 0.2) {
+            const front = morphFrame({ lon, lat }, morph, wrapLon);
+            const p = front.point;
+            const depth = (p[0] - position[0]) * view[0]! + (p[1] - position[1]) * view[1]! + (p[2] - position[2]) * view[2]!;
+            // Only the points facing the camera are drawn.
+            const facing = front.normal[0] * -view[0]! + front.normal[1] * -view[1]! + front.normal[2] * -view[2]! > 0;
+            if (!facing) continue;
+            expect(depth).toBeLessThanOrEqual(distance + 4);
+            expect(depth).toBeGreaterThanOrEqual(distance * 0.1);
+          }
+        }
+      }
     }
   });
 });

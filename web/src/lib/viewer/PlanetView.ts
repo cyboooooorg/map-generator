@@ -1822,7 +1822,7 @@ export class PlanetView {
     // Not quite at the poles, where "north up" has no direction.
     const centre = lerpLonLat(animation.centreFrom, animation.centreTo, progress);
     centre.lat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, centre.lat));
-    const { target, position } = morphCamera(
+    const { target, position, distance } = morphCamera(
       centre,
       animation.mapHeight,
       animation.altitude,
@@ -1831,9 +1831,12 @@ export class PlanetView {
     );
     this.camera.position.set(...position);
     this.camera.up.set(0, 1, 0);
+    // The clipping planes follow this distance all along, also once the
+    // turn is over and only the unrolling (which moves the camera away on
+    // the way to the map) is left.
+    this.morphDistance = distance;
     if (progress < 1) {
       this.controls.target.set(...target);
-      this.morphDistance = this.camera.position.distanceTo(this.controls.target);
     } else if (this.mode === 'globe') {
       this.controls.target.set(0, 0, 0);
     } else {

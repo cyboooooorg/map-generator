@@ -110,11 +110,12 @@ export function morphCamera(
   altitude: number,
   morph: number,
   wrapLon = centre.lon,
-): { target: Vec3; position: Vec3 } {
+): { target: Vec3; position: Vec3; distance: number } {
   const { point: target, normal: direction } = morphFrame(centre, morph, wrapLon);
   const distance = Math.exp(Math.log(mapHeight) + (Math.log(altitude) - Math.log(mapHeight)) * morph);
   return {
     target,
+    distance,
     position: [
       target[0] + direction[0] * distance,
       target[1] + direction[1] * distance,
