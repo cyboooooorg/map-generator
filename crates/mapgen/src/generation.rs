@@ -127,16 +127,63 @@ const CONE_HEIGHT: f32 = 0.25;
 /// continental (the continental shelf), elevation units.
 const CONTINENTAL_SHELF: f32 = 0.05;
 /// Share of the noise relief a body of `circumference_km` keeps: all of it
-/// above about 2 100 km in radius, below that [`SMALL_BODY_RELIEF`] of its
+/// down to about 160 km in radius, below that [`SMALL_BODY_RELIEF`] of its
 /// radius over the noise's typical amplitude (half an elevation unit,
-/// 12.5 km).
+/// 12.5 km). Real bodies from Mars down to Vesta carry relief of tens of
+/// kilometres whatever their size, a larger share of their radius the
+/// smaller they are, until it nears a tenth of it.
 pub(crate) fn relief_share(circumference_km: f32) -> f32 {
     let radius_km = circumference_km / (2.0 * std::f32::consts::PI);
     (SMALL_BODY_RELIEF * radius_km / (0.5 * crate::craters::ELEVATION_KM)).min(1.0)
 }
 
-/// Relief of a small body, as a share of its radius.
-const SMALL_BODY_RELIEF: f32 = 0.006;
+/// Largest relief of a small body, as a share of its radius: Vesta's
+/// central mound in Rheasilvia, about 22 km high (Yingst et al. 2012, EGU
+/// abstract, approximate) on a mean radius of about 262 km (NASA): 8 %.
+const SMALL_BODY_RELIEF: f32 = 0.08;
+
+/// Mountain blend at Earth's gravity: the weight of the ridged mountains
+/// in the elevation.
+const MOUNTAIN_BLEND: f32 = 0.35;
+/// Largest relief scale ([`relief_scale`]): Olympus Mons's 21.9 km of
+/// relief over its surroundings (Plescia 2004, doi:10.1029/2002JE002031)
+/// is 2.5 times Everest's 8.85 km, the tallest mountain known against
+/// Earth's tallest. Lighter bodies (the Moon, Io, Vesta) do not come near
+/// their `1/g` ceiling, and higher ranges would fill the elevation range
+/// (one unit is 25 km) with flat clipped summits.
+const MAX_RELIEF_SCALE: f32 = 2.0;
+
+/// How tall the relief built on a world of `gravity` (Earth's = 1) stands
+/// against Earth's: `1/g`, the height rock can bear under its own weight
+/// (`σ / ρ g`, Weisskopf 1975, doi:10.1126/science.187.4177.605), up to
+/// [`MAX_RELIEF_SCALE`]. Mars's size (0.34 g) reaches the cap; twice
+/// Earth's (3.2 g) keeps 31 %.
+///
+/// It scales what loads the crust: the mountains, the plate boundaries'
+/// ranges, arcs, trenches and ridges, and the volcanoes. The continents and
+/// the sea floor do not scale: they float on the mantle (Airy isostasy,
+/// Airy 1855, doi:10.1098/rstl.1855.0003), and the height of a floating
+/// crust, `t (1 − ρc/ρm)` for a crust `t` thick, does not depend on `g`.
+pub(crate) fn relief_scale(gravity: f32) -> f32 {
+    (1.0 / gravity.max(1e-3)).min(MAX_RELIEF_SCALE)
+}
+
+/// Elevation beyond which the relief is compressed into the range
+/// `[-1, 1]` rather than clipped, in units.
+const RANGE_KNEE: f32 = 0.85;
+
+/// An elevation brought within `[-1, 1]`: unchanged up to
+/// [`RANGE_KNEE`], compressed smoothly beyond, so that the tall relief of
+/// light worlds keeps its summits instead of flat clipped tops (on
+/// Earth-sized worlds, only the highest volcanoes reach the knee).
+fn within_range(e: f32) -> f32 {
+    let over = e.abs() - RANGE_KNEE;
+    if over <= 0.0 {
+        return e;
+    }
+    let room = 1.0 - RANGE_KNEE;
+    e.signum() * (RANGE_KNEE + room * (over / room).tanh())
+}
 
 /// Largest noise scale (relief features per Earth-sized ones), reached at
 /// about 5 000 km around.
@@ -224,6 +271,9 @@ pub struct Sampler {
     cone_seed: u32,
     arc_cone_seed: u32,
     mountain_blend: f32,
+    /// Height of the relief built on the crust against Earth's (see
+    /// [`relief_scale`]).
+    relief_scale: f32,
     volcanic_threshold: f32,
     elevation_noise: Perlin,
     moisture_noise: Perlin,
@@ -263,9 +313,9 @@ impl Sampler {
             plate_seed: stream_seed(seed, stream::PLATES),
             cone_seed: stream_seed(seed, stream::CONES),
             arc_cone_seed: stream_seed(seed, stream::ARC_CONES),
-            // Stronger gravity suppresses mountain relief; sqrt dampens the effect
-            // for extreme values. Baseline 0.35 at Earth gravity.
-            mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
+            // Stronger gravity lowers the mountains, as 1/g (capped).
+            mountain_blend: MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()),
+            relief_scale: relief_scale(p.gravity_modifier()),
             // The noise's quantile for the share of the surface the
             // intensity asks for (see `volcanic_threshold`).
             volcanic_threshold: volcanic_threshold(p.volcanic_intensity),
@@ -480,7 +530,7 @@ impl Sampler {
             .as_ref()
             .map_or(crate::plates::Relief::default(), |t| t.relief(map_point));
         // Relief scales with gravity as the mountains do.
-        let tectonic_uplift = plates.uplift * self.mountain_blend / 0.35;
+        let tectonic_uplift = plates.uplift * self.relief_scale;
         let mountain_weight = (mountain_weight * self.noise_mountains).max(plates.orogeny);
         let broad = ((volcanic_raw - self.volcanic_threshold) * 4.0)
             .clamp(0.0, 1.0)
@@ -506,16 +556,21 @@ impl Sampler {
         // cones of volcanic provinces: their summits reach the highland,
         // and become volcanoes and lava fields.
         let (cone, cone_height) = volcanoes(cone, arc_cone, plates.arc);
+        // Volcanoes load the crust as mountains do: the tallest stand on
+        // light worlds (Olympus Mons).
+        let cone_height = cone_height * self.relief_scale;
         let volcanic_zone = broad * (VOLCANIC_BACKGROUND + (1.0 - VOLCANIC_BACKGROUND) * cone);
 
-        let elevation = (continent
-            + tectonic_uplift
-            + mountain * mountain_weight * self.mountain_blend
-            + broad * cone_height)
-            .clamp(-1.0, 1.0);
+        let elevation = within_range(
+            continent
+                + tectonic_uplift
+                + mountain * mountain_weight * self.mountain_blend
+                + broad * cone_height,
+        );
         let cone_relief = elevation
-            - (continent + tectonic_uplift + mountain * mountain_weight * self.mountain_blend)
-                .clamp(-1.0, 1.0);
+            - within_range(
+                continent + tectonic_uplift + mountain * mountain_weight * self.mountain_blend,
+            );
 
         // Positive sea_level raises the waterline (more ocean); negative lowers it.
         let biome_elevation = (elevation - self.sea_level).clamp(-1.0, 1.0);
@@ -906,9 +961,9 @@ pub fn generate_with_progress(
         variability_m,
         highland_offset,
     } = fields;
-    // Small bodies (moons) cannot hold the relief of a planet: it is
-    // flattened towards the sea level to a few percent of their radius,
-    // where craters shape them.
+    // The smallest bodies (moonlets) cannot hold the relief of a planet:
+    // it is flattened towards the sea level to a share of their radius,
+    // and craters shape them.
     let flatten = relief_share(params.circumference_km);
     if flatten < 1.0 {
         let sea = params.sea_level;
@@ -1390,6 +1445,56 @@ mod tests {
         assert!((moon - 0.165).abs() < 0.005, "{moon}");
         // Heavier with size, faster than the radius.
         assert!(g(2.0 * EARTH_CIRCUMFERENCE_KM) > 3.0);
+    }
+
+    #[test]
+    fn relief_stands_as_one_over_gravity_up_to_a_cap() {
+        assert_eq!(relief_scale(1.0), 1.0);
+        assert_eq!(relief_scale(2.0), 0.5);
+        // A Mars-sized world: 1/g is 2.9, capped below Olympus Mons's 2.5.
+        let mars = crate::world::rocky_gravity(21_344.0 / EARTH_CIRCUMFERENCE_KM);
+        assert_eq!(relief_scale(mars), MAX_RELIEF_SCALE);
+        // The volcanoes scale too: a light world's stand higher.
+        let cone = |gravity: f32| {
+            let p = WorldParams {
+                width: 256,
+                height: 128,
+                gravity: Some(gravity),
+                volcanic_intensity: 1.0,
+                ..params(5, "terran")
+            };
+            let s = Sampler::new(&p);
+            (0..p.height)
+                .flat_map(|y| (0..p.width).map(move |x| (x, y)))
+                .map(|(x, y)| s.sample(x, y).cone_relief)
+                .fold(0.0f32, f32::max)
+        };
+        let (light, earth) = (cone(0.6), cone(1.0));
+        assert!(earth > 0.0 && light > 1.5 * earth, "{light} {earth}");
+    }
+
+    #[test]
+    fn elevations_are_compressed_into_range_not_clipped() {
+        assert_eq!(within_range(0.5), 0.5);
+        assert_eq!(within_range(-0.85), -0.85);
+        let (a, b) = (within_range(1.1), within_range(1.4));
+        assert!(a < b && b < 1.0, "{a} {b}");
+        assert!(within_range(-3.0) >= -1.0);
+    }
+
+    #[test]
+    fn small_bodies_keep_relief_of_a_larger_share_of_their_radius() {
+        let share_of_radius = |radius_km: f32| {
+            let c = 2.0 * std::f32::consts::PI * radius_km;
+            relief_share(c) * 0.5 * crate::craters::ELEVATION_KM / radius_km
+        };
+        // The Moon and Vesta keep their whole noise relief.
+        assert_eq!(relief_share(10_921.0), 1.0);
+        assert_eq!(relief_share(2.0 * std::f32::consts::PI * 262.0), 1.0);
+        // The smaller the body, the larger the share of its radius, up to
+        // Vesta's 8 %.
+        assert!(share_of_radius(262.0) > 5.0 * share_of_radius(1737.0));
+        assert!((share_of_radius(20.0) - SMALL_BODY_RELIEF).abs() < 1e-6);
     }
 
     #[test]

@@ -41,6 +41,11 @@ use std::f64::consts::PI;
 /// Kilometres per elevation unit, calibrated on Earth-like worlds: their
 /// median sea floor (−0.16) is about 4 km deep and their highest peaks
 /// (0.30–0.39) about 8–10 km high.
+///
+/// A unit of height, the same on every world (the climate converts its
+/// lapse rate through it): what changes with gravity is how many units
+/// the relief spans (mountains and volcanoes as `1/g`, see
+/// `generation::relief_scale`), not the unit.
 pub const ELEVATION_KM: f32 = 25.0;
 
 /// Cap of the density of craters of 1 km or more, per km²: about a tenth of
