@@ -87,6 +87,8 @@
     persistDisplay?: boolean;
     /** The body's details (its card and world sheet), shown as the dock's first panel. */
     info?: Snippet | undefined;
+    /** The drift slider of a world with plates (see DriftPanel), shown as a panel of the dock. */
+    drift?: Snippet | undefined;
   }
 
   let {
@@ -106,6 +108,7 @@
     linkedDisplay = null,
     persistDisplay = true,
     info,
+    drift,
   }: Props = $props();
 
   type Needs = 'none' | 'extra' | 'floodplain';
@@ -1451,6 +1454,7 @@
     { id: 'map', title: t.viewer.mapPanel, icon: 'planet', content: mapPanel },
     { id: 'light', title: t.viewer.lightPanel, icon: 'sun', content: lightPanel },
     ...(epochs && epochStops.length > 1 ? [{ id: 'epoch', title: t.epochs.slider, icon: 'clock' as const, content: epochPanel }] : []),
+    ...(drift ? [{ id: 'drift', title: t.drift.title, icon: 'clock' as const, content: drift }] : []),
     ...(sysBody?.parent ? [{ id: 'host', title: t.viewer.host, icon: 'host' as const, content: hostPanel }] : []),
     { id: 'hex', title: t.viewer.hexes, icon: 'hex', content: hexPanel },
   ]);

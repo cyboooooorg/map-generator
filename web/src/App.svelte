@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import DriftPanel from './components/DriftPanel.svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobsIndicator from './components/JobsIndicator.svelte';
   import LanguageSelect from './components/LanguageSelect.svelte';
@@ -17,6 +18,7 @@
   import type { SystemSummary } from './lib/api/types/SystemSummary';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
+  import { driftRange, driftRequest } from './lib/drift';
   import { requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
@@ -465,6 +467,19 @@
   {/if}
 {/snippet}
 
+{#snippet drift()}
+  {#if primary.meta && primary.id}
+    {#key primary.id}
+      <DriftPanel
+        id={primary.id}
+        revision={revision(selectedId)}
+        current={primary.meta.drift_ma ?? 0}
+        onGenerate={(ma) => primary.meta && openForm('around', driftRequest(primary.meta, ma), primary.id)}
+      />
+    {/key}
+  {/if}
+{/snippet}
+
 {#snippet fatalError()}
   {#if fatal}
     <p class="error" role="alert">
@@ -543,6 +558,7 @@
         keyboard={form === null}
         label={compareId ? titleOf(selectedId) : null}
         {info}
+        drift={primary.meta && driftRange(primary.meta) ? drift : undefined}
         onStepWorld={step}
         onDisplayChange={(display) => (mainDisplay = display)}
         onCameraChange={cameraFrom(() => secondaryPane)}

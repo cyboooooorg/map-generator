@@ -14,6 +14,7 @@
   import type { PresetInfo } from '../lib/api/types/PresetInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
   import { formatInt, formatUpTo, MAX_SEED, randomSeed } from '../lib/format';
+  import { formatDrift } from '../lib/drift';
   import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
   import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
@@ -389,6 +390,7 @@
       for (const f of shownFields) {
         if (!fields[f].random) fixed.push({ label: fieldText(f).label, value: formatUpTo(fields[f].value, 3) });
       }
+      if (driftMa !== 0 && !giantWorld) fixed.push({ label: t.form.drift, value: formatDrift(driftMa) });
       if (!star.orbitRandom) {
         fixed.push(
           star.orbitBy === 'position'
@@ -416,9 +418,15 @@
     return lines;
   });
 
+  /** The epoch of the plates a varied world was shown at (the drift slider), kept as it is: the form has no field for it. */
+  const driftMa = start.initial?.drift_ma ?? 0;
+
   function buildRequest(): WorldRequest {
     const [width, height] = size.split('x').map(Number);
     const request: WorldRequest = {};
+    if (driftMa !== 0 && !giantWorld) {
+      request.drift_ma = driftMa;
+    }
     if (!randomPlanet) {
       request.planet = planet;
     }

@@ -26,6 +26,7 @@ mod api;
 mod app;
 mod catalog;
 mod memory;
+mod previews;
 mod staging;
 mod systems;
 mod thumbs;

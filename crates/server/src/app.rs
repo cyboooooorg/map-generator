@@ -12,6 +12,7 @@
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
 //! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body |
+//! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates |
 //! | `GET /systems/{id}/...`         | system files (`system.json`, `bodies/<body>/…`)   |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
@@ -31,6 +32,7 @@ use crate::api::{
 };
 use crate::catalog::Catalog;
 use crate::memory;
+use crate::previews::{PreviewCache, PreviewKey};
 use crate::systems;
 use crate::thumbs::{ThumbError, Thumbnails};
 use crate::tiles::{self, TileCache, TileError};
@@ -136,6 +138,10 @@ pub struct AppState {
     /// Epoch surfaces rendered at once: each one decodes its whole world
     /// and renders it at full size, outside the tile cache's budget.
     epoch_surfaces: Semaphore,
+    /// Drift previews generated at once: each one runs a whole (small)
+    /// generation on every core.
+    drift_previews: Semaphore,
+    drift_cache: PreviewCache,
     thumbnails: Thumbnails,
 }
 
@@ -208,6 +214,8 @@ pub fn router(config: Config) -> Router {
         renders: Semaphore::new(CONCURRENT_RENDERS),
         hex_grids: Semaphore::new(1),
         epoch_surfaces: Semaphore::new(1),
+        drift_previews: Semaphore::new(1),
+        drift_cache: PreviewCache::default(),
         thumbnails: Thumbnails::default(),
         config: config.clone(),
     });
@@ -254,6 +262,10 @@ pub fn router(config: Config) -> Router {
         .route(
             "/api/systems/{id}/bodies/{body}/epoch/{epoch}/{file}",
             get(system_epoch_layer),
+        )
+        .route(
+            "/api/systems/{id}/bodies/{body}/drift/{ma}/{file}",
+            get(system_drift_preview),
         )
         .route(
             "/api/systems/{id}/bodies/{body}/thumb",
@@ -622,6 +634,15 @@ async fn system_epoch_layer(
     body_epoch_layer(state, loc, epoch_ma, file, query).await
 }
 
+async fn system_drift_preview(
+    State(state): State<Shared>,
+    UrlPath((id, body, drift_ma, file)): UrlPath<(String, String, i32, String)>,
+    Query(query): Query<DriftQuery>,
+) -> Result<Response, Failure> {
+    let loc = system_body_loc(&state, &id, &body).await?;
+    body_drift_preview(state, &id, &body, loc, drift_ma, file, query).await
+}
+
 async fn system_thumbnail(
     State(state): State<Shared>,
     UrlPath((id, body)): UrlPath<(String, String)>,
@@ -855,6 +876,117 @@ async fn body_epoch_layer(
         png,
     )
         .into_response())
+}
+
+/// Query of a drift preview request: the width (256 or 512, default 512)
+/// and the world revision the client knows.
+#[derive(serde::Deserialize)]
+struct DriftQuery {
+    rev: Option<u64>,
+    width: Option<u32>,
+}
+
+/// A low-resolution preview of a body at `drift_ma` Ma from the present
+/// (negative in the past), generated from the body's stored parameters
+/// with the epoch changed (see [`mapgen::drift`]): 404 for a body without
+/// plates, 400 outside `[-300, 300]` Ma, 503 while a generation runs.
+async fn body_drift_preview(
+    state: Shared,
+    system: &str,
+    body: &str,
+    loc: BodyLoc,
+    drift_ma: i32,
+    file: String,
+    query: DriftQuery,
+) -> Result<Response, Failure> {
+    use mapgen::drift::{self, PreviewError};
+    if file != "surface.png" {
+        return Err(Failure(
+            StatusCode::NOT_FOUND,
+            format!("no layer {file}: surface.png"),
+        ));
+    }
+    let width = query
+        .width
+        .unwrap_or(*drift::PREVIEW_WIDTHS.last().expect("widths"));
+    let cache_header = |revision: u64| {
+        if query.rev == Some(revision) {
+            IMMUTABLE
+        } else {
+            "no-cache"
+        }
+    };
+    let png_response = |png: Arc<Vec<u8>>, revision: u64| {
+        (
+            [
+                (header::CONTENT_TYPE, "image/png"),
+                (header::CACHE_CONTROL, cache_header(revision)),
+            ],
+            png.as_ref().clone(),
+        )
+            .into_response()
+    };
+    let key = PreviewKey {
+        body: loc.key.clone(),
+        revision: loc.revision,
+        drift_ma,
+        width,
+    };
+    if let Some(png) = state.drift_cache.get(&key) {
+        return Ok(png_response(png, loc.revision));
+    }
+    let root = state.config.systems_dir.clone();
+    let (owned_system, owned_body) = (system.to_owned(), body.to_owned());
+    let params = tokio::task::spawn_blocking(move || {
+        systems::body_params(&root, &owned_system, &owned_body)
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or_else(|| {
+        Failure(
+            StatusCode::NOT_FOUND,
+            format!("no parameters for {}", loc.key),
+        )
+    })?;
+    // Refused before waiting for a turn.
+    let refused = |e: PreviewError| match e {
+        PreviewError::NoPlates => Failure(StatusCode::NOT_FOUND, e.to_string()),
+        PreviewError::OutOfRange | PreviewError::BadWidth => {
+            Failure(StatusCode::BAD_REQUEST, e.to_string())
+        }
+    };
+    drift::preview_params(&params, drift_ma as f32, width).map_err(refused)?;
+    let _turn = state
+        .drift_previews
+        .acquire()
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // Another request may have made it while this one waited.
+    if let Some(png) = state.drift_cache.get(&key) {
+        return Ok(png_response(png, loc.revision));
+    }
+    // A generation uses every core and all the memory it can: previews
+    // wait for it to end, as tiles do.
+    let Ok(_generation) = state.queue.try_acquire() else {
+        return Ok(world_failure(TileError::Busy, "drift previews"));
+    };
+    let png = tokio::task::spawn_blocking(move || {
+        let preview = drift::preview(&params, drift_ma as f32, width).map_err(|e| e.to_string())?;
+        let image = image::RgbImage::from_fn(preview.width, preview.height, |x, y| {
+            image::Rgb(preview.pixels[(y * preview.width + x) as usize])
+        });
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?;
+        Ok::<_, String>(bytes.into_inner())
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let png = Arc::new(png);
+    state.drift_cache.insert(key, png.clone());
+    Ok(png_response(png, loc.revision))
 }
 
 /// Query of a thumbnail request: the world revision the client knows.
@@ -1323,6 +1455,61 @@ mod tests {
             ),
         ] {
             let (status, _) = call(&app, "GET", &uri, None).await;
+            assert_eq!(status, expected, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn previews_plates_at_other_epochs() {
+        let config = temp_config("drift");
+        let app = router(config);
+        let (plates, planet) = generated_planet(&app, "terran", 5, "").await;
+        let (dry, rock) = generated_planet(&app, "examples/mercury-like.toml", 6, "").await;
+        let get = |uri: String| {
+            let app = app.clone();
+            async move {
+                let request = Request::get(&uri).body(Body::empty()).unwrap();
+                let response = app.oneshot(request).await.unwrap();
+                let status = response.status();
+                let cache = response.headers().get(header::CACHE_CONTROL).cloned();
+                let bytes = response.into_body().collect().await.unwrap().to_bytes();
+                (status, cache, bytes)
+            }
+        };
+        let base = format!("/api/systems/{plates}/bodies/{planet}/drift");
+        // A coarse and a finer preview at the aspect ratio of the world
+        // (256 x 128, so the finer one is capped at its width).
+        let (status, _, small) = get(format!("{base}/-120/surface.png?width=256")).await;
+        assert_eq!(status, StatusCode::OK);
+        let image = image::load_from_memory(&small).unwrap();
+        assert_eq!((image.width(), image.height()), (256, 128));
+        let (_, _, again) = get(format!("{base}/-120/surface.png?width=256")).await;
+        assert_eq!(small, again, "served from the cache, the same bytes");
+        let (_, _, other) = get(format!("{base}/120/surface.png?width=256")).await;
+        assert_ne!(small, other);
+        // Only a URL naming the current revision is cached for good.
+        let (status, cache, _) = get(format!("{base}/0/surface.png?width=256&rev=1")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(cache.unwrap(), "no-cache");
+        // Refused: out of range, bad width, unknown layer, a world without plates.
+        for (uri, expected) in [
+            (format!("{base}/301/surface.png"), StatusCode::BAD_REQUEST),
+            (format!("{base}/-301/surface.png"), StatusCode::BAD_REQUEST),
+            (
+                format!("{base}/10/surface.png?width=300"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (format!("{base}/10/elevation.png"), StatusCode::NOT_FOUND),
+            (
+                format!("/api/systems/{dry}/bodies/{rock}/drift/10/surface.png"),
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                format!("/api/systems/{plates}/bodies/zz/drift/10/surface.png"),
+                StatusCode::NOT_FOUND,
+            ),
+        ] {
+            let (status, _, _) = get(uri.clone()).await;
             assert_eq!(status, expected, "{uri}");
         }
     }
