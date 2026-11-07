@@ -1259,6 +1259,16 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
     )
 }
 
+/// The parameters a body's world is generated with: its stored ones, a
+/// moon stored before moons carried their gravity taking its card's.
+fn world_params(body: &Body) -> WorldParams {
+    let mut params = body.params.clone();
+    if body.kind == BodyKind::Moon && params.gravity.is_none() {
+        params.gravity = Some(body.physical.gravity as f32);
+    }
+    params
+}
+
 /// A moon's axial tilt: upright, as the moons' worlds are drawn.
 fn params_tilt() -> f32 {
     0.0
@@ -1694,7 +1704,7 @@ pub fn generate_neighbourhood_with(
         let options = GenerateOptions {
             debug: writer.as_ref().map(|w| w as _),
         };
-        let generated = generate_with_progress(&body.params, options, at);
+        let generated = generate_with_progress(&world_params(body), options, at);
         if let Some(writer) = writer {
             writer.finish()?;
         }
@@ -2311,5 +2321,34 @@ mod tests {
             width: Some(64),
             height: Some(32),
         })
+    }
+}
+
+#[cfg(test)]
+mod gravity_tests {
+    use super::*;
+
+    #[test]
+    fn a_moon_stored_without_gravity_takes_its_cards() {
+        // A world with moons, as a system draws around it.
+        let world = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(3),
+            moons: Some(crate::moons::MoonsMode::Count(2)),
+            ..WorldRequest::default()
+        };
+        let params = world.resolve(&mut StdRng::seed_from_u64(3)).unwrap().params;
+        let system = draw_around_params(&world, params);
+        let moon = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Moon)
+            .expect("a moon");
+        assert_eq!(world_params(moon).gravity, moon.params.gravity);
+        // As stored before moons carried their gravity.
+        let mut old = moon.clone();
+        old.params.gravity = None;
+        let g = world_params(&old).gravity_modifier();
+        assert!((f64::from(g) - moon.physical.gravity).abs() < 1e-6);
     }
 }
