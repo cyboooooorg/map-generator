@@ -444,6 +444,17 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     not understood. A friction or depth term would need a model of the
     deep flow. With Saturn's real flux the law gives about a third under
     its winds, and Uranus comes out at 285 m/s against 200.
+  - The peak wind is bounded by 0.75 of the speed of sound and rises
+    with the heating (calibrations, no source); a cold light giant
+    would otherwise reach 2 000 m/s. A Saturn-like giant's westward
+    flank (-130 to -170 m/s) is stronger than the real one (about
+    -50 to -100): the jets away from the equator take either sign at 0.3 to
+    0.7 of the peak. Uranus has Neptune's wind profile; its real
+    eastward peak is the larger and its westward flow weaker.
+  - The great spot drifts slowly but the hole that hides the map's copy of
+    it in `giantColour` (`shaders.ts`) still follows the band wind, a
+    patch of plain band riding along the zone. Check it in a browser with
+    Band drift on; making the hole follow the spot would freeze the band.
   - Saturn's internal heat is above the cooling law (helium rain); ice
     giants keep a fixed 40 K instead of Neptune's and Uranus's very
     different heat.

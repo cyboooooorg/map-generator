@@ -251,7 +251,11 @@ export const surfaceFragment = /* glsl */ `
   // slow drift (a vortex keeps its shape:
   // sheared with the bands, it would stretch round the planet). Where the
   // bands would bring a storm's sheared copy, the band just beside the
-  // storm shows instead. The map repeats across longitudes, and is read
+  // storm shows instead. That hole follows the band wind, so around the
+  // great spot, which drifts slower, the map's copy of it stays hidden but
+  // the hole separates from the spot: a patch of plain band colour rides
+  // along its zone (not checked in a browser, see docs/backlog.md). The map
+  // repeats across longitudes, and is read
   // with the derivatives of the continuous uv, so that no seam shows where
   // a reading point jumps.
   vec3 giantColour(vec2 uv) {

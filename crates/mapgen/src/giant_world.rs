@@ -13,7 +13,8 @@
 //! retrograde at the equator, prograde at high latitudes) one or two, a
 //! locked hot Jupiter (its day is days long) one or two. The peak wind of
 //! the jets is another number ([`peak_wind`]), a calibration on the four
-//! giants of the Solar System: Saturn's 400 m/s and its 20 jets go together. Between the jets, pale zones (rising air, high ammonia
+//! giants of the Solar System: Saturn's 400 m/s and its 20 jets go
+//! together. Between the jets, pale zones (rising air, high ammonia
 //! clouds) alternate with dark belts (sinking air, deeper clouds), each
 //! hemisphere drawn on its own. Which clouds are on top, and so the colours
 //! and the height between zones and belts, come from the decks that
@@ -90,13 +91,24 @@ const HOT_WIND: f64 = 2000.0;
 const JET_FACTOR: f64 = 0.45;
 /// Peak winds over `ΩR` (the Rossby number of the strongest jet) of the gas
 /// giants: Jupiter's 150 m/s ("about 150 m/s on Jupiter", Showman et al.
-/// 2010) over `ΩR` = 12 570 m/s at its flux of 13.7 W/m². Calibration, with
-/// [`ROSSBY_EXPONENT`]: `Ro ∝ F^−0.75` puts the app's own Saturn analogue
-/// (a 95 M⊕ giant at 9.6 AU radiates 3.2 W/m², colder than the real Saturn's
-/// 4.6) at about 350 to 400 m/s against "over 400" (Showman et al. 2010);
-/// with Saturn's real flux it would be about 270 m/s.
+/// 2010) over `ΩR` = 12 570 m/s at its internal flux of 7.485 W/m² (Li et al.
+/// 2018). Calibration, with [`ROSSBY_EXPONENT`]: `Ro ∝ F_int^−0.5` puts the
+/// app's own Saturn analogue (a 95 M⊕ giant has 0.67 W/m² of internal heat in
+/// the cooling law of `giants::internal_temperature`, Saturn's real 2 W/m²
+/// being higher) at about 400 m/s against "over 400" (Showman et al. 2010);
+/// with Saturn's real internal flux it would give about 230 m/s. The
+/// internal flux, not the starlight, because the sunlight is absorbed high
+/// and drives the winds of a warm giant separately: [`IRRADIATED_WIND`].
 const GAS_ROSSBY: f64 = 150.0 / (1.7585e-4 * 7.1492e7);
-const ROSSBY_EXPONENT: f64 = 0.75;
+const ROSSBY_EXPONENT: f64 = 0.5;
+/// Jupiter's internal heat flux, W/m² (Li et al. 2018).
+const JUPITER_INTERNAL_FLUX: f64 = 7.485;
+/// Highest peak wind, as a share of the sound speed at the temperature of the
+/// cloud tops: Neptune's 400 m/s is 0.7 of the 560 m/s of sound at its 59 K,
+/// Jupiter's and Saturn's about 0.2 to 0.6. Calibration, no source: the
+/// supersonic winds that the Rossby law would give a cold light giant
+/// (2 000 m/s at 0.1 Jupiter masses and 60 AU) would shock.
+const MAX_MACH: f64 = 0.75;
 /// Peak winds over `ΩR` of the ice giants: 0.11, which gives 285 m/s for
 /// Uranus and Neptune alike (`ΩR` about 2 600 m/s) against "up to 200 and
 /// 400 m/s" (Soyuer, Neuenschwander & Helled 2022, arXiv:2210.17389).
@@ -144,44 +156,56 @@ fn eddy_speed(
     (u0 * (flux / f0).powf(0.4) * (beta / b0).powf(-0.2)).clamp(20.0, 3000.0)
 }
 
+/// Sound speed of a hydrogen–helium gas of `t` K, m/s: `√(γRT/μ)` with
+/// γ = 1.4 and μ = 2.22 g/mol.
+fn sound_speed(t: f64) -> f64 {
+    (1.4 * 8.314 * t / 2.22e-3).sqrt()
+}
+
 /// Peak wind of the jets, m/s: a calibration on the four giants of the Solar
-/// System, not a derivation. A gas giant's Rossby number `U/ΩR` falls as the
-/// flux it radiates rises (`Ro = 0.0119 (13.7 W/m² / F)^0.75`: Jupiter 150 m/s,
-/// the app's Saturn analogue about 350 against "over 400"); an ice giant's is 0.11 (Uranus 200,
-/// Neptune 400). Published scalings (Showman, Kaspi & Flierl 2011) are for the
-/// deep envelope and increase with the flux: none puts Saturn's cloud winds
-/// above Jupiter's, as observed. A giant warm from its star has at least an
-/// irradiation floor, and a hot one its superrotation.
+/// System, not a derivation. A gas giant's Rossby number `U/ΩR` falls as its
+/// internal heat flux rises (`Ro = 0.0119 (7.485 W/m² / F_int)^0.5`: Jupiter
+/// 150 m/s, the app's Saturn analogue about 400); an ice giant's is 0.11
+/// (Uranus 200, Neptune 400). Published scalings (Showman, Kaspi & Flierl
+/// 2011) are for the deep envelope and increase with the flux: none puts
+/// Saturn's cloud winds above Jupiter's, as observed. A giant warm from its
+/// star has at least an irradiation floor, which grows with the heating, so
+/// the wind never falls as a giant moves closer to its star at a fixed mass;
+/// a hot one has its superrotation. No peak passes [`MAX_MACH`] times the
+/// sound speed at the effective temperature.
 fn peak_wind(
     kind: GiantKind,
     hot: bool,
     equilibrium_k: f32,
+    internal_k: f32,
     effective_k: f32,
     omega: f64,
     radius_m: f64,
 ) -> f64 {
-    let irradiated = IRRADIATED_WIND * (f64::from(equilibrium_k) / 1500.0).powi(2);
     if hot {
         return HOT_WIND * (f64::from(equilibrium_k) / 1500.0).clamp(0.6, 2.5);
     }
+    let irradiated = IRRADIATED_WIND * (f64::from(equilibrium_k) / 1500.0).powi(2);
     let reach = omega * radius_m;
     let law = match kind {
         GiantKind::Gas => {
-            let flux = 5.670_374e-8 * f64::from(effective_k).powi(4);
-            GAS_ROSSBY * (JUPITER_FLUX / flux).powf(ROSSBY_EXPONENT) * reach
+            let flux = 5.670_374e-8 * f64::from(internal_k).powi(4);
+            GAS_ROSSBY * (JUPITER_INTERNAL_FLUX / flux).powf(ROSSBY_EXPONENT) * reach
         }
         GiantKind::Ice => ICE_ROSSBY * reach,
     };
-    law.max(irradiated).clamp(20.0, 3000.0)
+    let ceiling = MAX_MACH * sound_speed(f64::from(effective_k));
+    law.max(irradiated).min(ceiling).clamp(20.0, 3000.0)
 }
 
-/// Shape of a Neptune-like ice giant's wind from the equator to the pole,
+/// Shape of an ice giant's wind from the equator to the pole,
 /// `u(φ) = −398 + 0.188 φ² − 1.2×10⁻⁵ φ⁴` m/s (φ in degrees), fitted to the
-/// cloud tracking of Voyager 2 (Sromovsky et al. 1993, as quoted by
-/// Fitzpatrick et al. 2014, arXiv:1312.2676, table 1), divided by 398: −1 at
-/// the equator, changing sign near 50°, +0.6 at 70°, which is the westward
-/// equator and eastward high latitudes of Uranus and Neptune, with the
-/// westward peak larger than the eastward one.
+/// cloud tracking of Voyager 2 on Neptune (Sromovsky et al. 1993, as quoted
+/// by Fitzpatrick et al. 2014, arXiv:1312.2676, table 1), divided by 398:
+/// −1 at the equator, changing sign near 50°, +0.6 at 70°. It is Neptune's:
+/// westward equator, eastward high latitudes, the westward peak larger. Every
+/// ice giant uses it, Uranus too, whose eastward peak is the larger and whose
+/// westward flow is weaker (no readable table of its profile was found).
 fn ice_shape(lat: f32) -> f32 {
     let phi = lat.abs().min(90.0);
     (-398.0 + 0.188 * phi.powi(2) - 1.2e-5 * phi.powi(4)) / 398.0
@@ -553,7 +577,7 @@ impl Look {
         let flattening = (0.7 * q).min(0.12) as f32;
 
         let eddies = eddy_speed(kind, hot, equilibrium, effective, omega, radius_m);
-        let wind = peak_wind(kind, hot, equilibrium, effective, omega, radius_m);
+        let wind = peak_wind(kind, hot, equilibrium, internal, effective, omega, radius_m);
         let jets = ((JET_FACTOR * (omega * radius_m / eddies).sqrt()).round() as u32).clamp(1, 8);
 
         // The bands of each hemisphere, from the equator out to the polar
@@ -617,7 +641,9 @@ impl Look {
                 -1.0
             };
             // Off the equator the jets reach a third to two thirds of the
-            // peak wind (Jupiter's 50 to 100 m/s of its 150).
+            // peak wind (Jupiter's 50 to 100 m/s of its 150), with either
+            // sign: a Saturn-like giant's westward flank comes out too strong
+            // (see docs/backlog.md).
             let strength = rng.random_range(0.3..0.7) * (1.0 - lat.abs() / 90.0).sqrt();
             jets_at.push((
                 lat,
@@ -1269,10 +1295,10 @@ mod tests {
                 );
             }
         };
-        wind("gas-giant", 317.8, 5.2, (4, 6), (85.0, 200.0));
+        wind("gas-giant", 317.8, 5.2, (4, 6), (85.0, 240.0));
         // Saturn: about 20 jets in all, 4J − 1 for J per hemisphere; the
         // old fixed wind gave it four, a wind of 80 m/s would give seven.
-        wind("gas-giant", 95.16, 9.58, (4, 7), (250.0, 600.0));
+        wind("gas-giant", 95.16, 9.58, (4, 7), (250.0, 700.0));
         wind("ice-giant", 14.5, 19.2, (1, 2), (180.0, 450.0));
         wind("ice-giant", 17.1, 30.07, (1, 2), (180.0, 450.0));
     }
@@ -1297,9 +1323,10 @@ mod tests {
         let peak = |preset: &str, mass: f32, au: f32, seed: u32| {
             Look::draw(&params(preset, seed, mass, au), mass).wind
         };
-        // A gas giant that radiates less blows faster (Rossby number ∝ 1/F).
-        assert!(peak("gas-giant", 317.8, 5.2, 1) > 0.0);
-        assert!(peak("gas-giant", 95.16, 9.58, 1) > peak("gas-giant", 317.8, 5.2, 1) * 1.5);
+        // A gas giant with less internal heat blows faster (Ro ∝ F_int^−0.5).
+        let jupiter = peak("gas-giant", 317.8, 5.2, 1);
+        assert!((100.0..200.0).contains(&jupiter), "{jupiter}");
+        assert!(peak("gas-giant", 95.16, 9.58, 1) > jupiter * 1.5);
         // Different spins give different winds.
         let spins: Vec<f32> = (0..30).map(|s| peak("ice-giant", 17.1, 30.0, s)).collect();
         let (lo, hi) = spins
@@ -1308,6 +1335,57 @@ mod tests {
         assert!(hi > 1.05 * lo, "{lo} {hi}");
         // A giant close to its star keeps at least the irradiation floor.
         assert!(peak("gas-giant", 317.8, 0.3, 1) > 150.0);
+    }
+
+    #[test]
+    fn no_wind_passes_a_share_of_the_speed_of_sound() {
+        // A cold light gas giant far out: the Rossby law alone would give
+        // it about 2 000 m/s.
+        for (mass, au) in [(31.8, 60.0), (31.8, 25.0), (60.0, 60.0), (14.0, 30.0)] {
+            for preset in ["gas-giant", "ice-giant"] {
+                let look = Look::draw(&params(preset, 1, mass, au), mass);
+                let ceiling = MAX_MACH * sound_speed(f64::from(look.info.effective_k));
+                assert!(
+                    f64::from(look.wind) <= ceiling + 1e-3,
+                    "{preset} {mass} ME at {au} AU: {} m/s over {ceiling}",
+                    look.wind
+                );
+            }
+        }
+        let cold = Look::draw(&params("gas-giant", 1, 31.8, 60.0), 31.8);
+        assert!(cold.wind < 400.0, "{}", cold.wind);
+    }
+
+    #[test]
+    fn a_giant_never_blows_slower_as_it_moves_closer_to_its_star() {
+        // Same mass, same seed (same spin), from far to near: the peak wind
+        // does not dip between the Rossby regime and the irradiated one.
+        for (preset, mass) in [
+            ("gas-giant", 31.8),
+            ("gas-giant", 95.16),
+            ("gas-giant", 317.8),
+            ("gas-giant", 3178.0),
+            ("ice-giant", 17.1),
+        ] {
+            let mut last = 0.0f32;
+            for au in [
+                60.0, 30.0, 15.0, 8.0, 5.2, 3.0, 2.0, 1.0, 0.7, 0.5, 0.4, 0.3,
+            ] {
+                let look = Look::draw(&params(preset, 4, mass, au), mass);
+                assert!(!look.info.hot);
+                // Tidal locking slows the spin (and so the wind, a Rossby
+                // number of ΩR) close in: that is a change of spin, not a dip.
+                if look.info.rotation_hours > 100.0 {
+                    break;
+                }
+                assert!(
+                    look.wind >= last - 1e-3,
+                    "{preset} {mass} ME: {} m/s at {au} AU after {last}",
+                    look.wind
+                );
+                last = look.wind;
+            }
+        }
     }
 
     #[test]
