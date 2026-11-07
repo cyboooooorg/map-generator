@@ -3,10 +3,11 @@
 //!
 //! **How many.** The lunar chronology of Neukum gives the density of
 //! craters of 1 km or more on a surface of a given age ([`crater_density`]);
-//! sizes follow a power law, `N(>D) ∝ D⁻²`, and the density is capped at
-//! [`SATURATION`], where each new crater erases as many as it adds. Ages are
-//! drawn from the same curve, so most craters of an old surface are very
-//! old.
+//! sizes follow Hartmann's piecewise power law ([`size_share`]: `N(>D)` falls
+//! as `D^-3.82` below 1.4 km, `D^-1.8` to 64 km, `D^-2.2` above), and each
+//! size octave is capped at [`SATURATION`], where each new crater erases as
+//! many as it adds: the oldest go first. Ages are drawn from the same
+//! curve, so most craters of an old surface are very old.
 //!
 //! **Where.** Diameters are split into octaves `[2^k, 2^(k+1)]` km. Each
 //! octave has a grid on the six faces of a cube projected on the sphere;
@@ -16,8 +17,9 @@
 //! and in any detail tile that draws it.
 //!
 //! **Shape.** Simple craters are bowls about `D/5` deep; above a transition
-//! diameter that scales as `1/g` (15 km on the Moon) they get a flat floor,
-//! a central peak, then a peak ring, shallower than a bowl would be (Pike).
+//! diameter that scales as `1/g` (15 km on the Moon) they get a flat floor
+//! and a central peak, with Pike's complex depth law, then a peak ring
+//! from about 9 transition diameters (Baker et al. 2011).
 //! A raised rim and an ejecta blanket thinning as `(r/R)⁻³` surround them;
 //! rims and ejecta are irregular.
 //!
@@ -27,8 +29,9 @@
 //! end of the era of liquid water) is worn in proportion to the time it
 //! spent exposed to water and to the erosion strength, and craters on the
 //! floor of a sea that still fills the basins (water, ice-sealed, acid or
-//! magma) leave nothing: sediment or lava buries them, and on plate worlds
-//! the sea floor is recycled.
+//! magma) leave nothing, sediment or lava burying them: the rule reads
+//! only the sea, on every tectonic regime (plates recycling the sea floor
+//! are not modelled apart).
 //! A thick atmosphere breaks up small impactors: no crater below about
 //! `0.1 km × p^0.75`, fewer below ten times that.
 use crate::biome::Biome;
@@ -48,10 +51,32 @@ use std::f64::consts::PI;
 /// `generation::relief_scale`), not the unit.
 pub const ELEVATION_KM: f32 = 25.0;
 
-/// Cap of the density of craters of 1 km or more, per km²: about a tenth of
-/// geometric saturation (1.15 D⁻²), the empirical equilibrium of the
-/// lunar highlands. Reached by surfaces older than about 4.1 Ga.
+/// Cap of the density of craters, as craters of 1 km or more per km² of a
+/// surface in equilibrium (`N(>D) = 0.115 D⁻²`, each size octave capped at
+/// its share, `0.75 × 0.115 / D²` for `[D, 2D)`): a tenth of geometric
+/// saturation (hexagonal packing, `1.15 D⁻²`). Calibration, no source: real
+/// equilibrium densities vary from surface to surface (Xiao & Werner
+/// 2015, doi:10.1002/2015JE004860), and the most densely cratered lunar
+/// highlands reached equilibrium (Head et al. 2010,
+/// doi:10.1126/science.1195050). Craters of 1 km reach it on surfaces
+/// older than about 4.1 Ga, smaller ones much sooner.
 pub const SATURATION: f64 = 0.115;
+
+/// Breaks of the crater size–frequency distribution, km, and the slope of
+/// `N(>D)` below, between and above them: −3.82 below 1.4 km (where
+/// secondary craters take over), −1.80 from 1.4 to 64 km, −2.2 above
+/// (Hartmann 2005, doi:10.1016/j.icarus.2004.11.023, as given on his PSI
+/// isochron page).
+const SIZE_BREAKS_KM: (f64, f64) = (1.4, 64.0);
+const SIZE_SLOPES: (f64, f64, f64) = (3.82, 1.80, 2.2);
+/// Craters of a saturated octave drawn, as a multiple of those it keeps:
+/// the erased ones come back at the epochs before they were erased. On
+/// surfaces whose octave formed more craters than this, the oldest are
+/// never drawn (craters of 1 km on surfaces older than about 4.2 Ga,
+/// sub-km ones on 4 Ga surfaces), so that the detail tiles stay cheap
+/// (eight times made the deepest tiles of a 4 Ga `mercury-like` 2.5 to
+/// 3.5 times slower to render).
+const ERASED_DRAWN: f64 = 2.0;
 
 /// Smallest crater on the base map, in map pixels across.
 const MIN_PIXELS: f64 = 4.0;
@@ -59,22 +84,46 @@ const MIN_PIXELS: f64 = 4.0;
 /// one radius beyond the rim, fading out by three.
 const EJECTA_RADII: f64 = 3.0;
 /// Simple-to-complex transition on the Moon, km, and the Moon's gravity,
-/// m/s²: the transition scales as `1/g`.
+/// m/s²: the transition scales as `1/g` (Melosh & Ivanov 1999,
+/// doi:10.1146/annurev.earth.27.1.385). The target's strength is left out:
+/// Mercury turns complex at about 12 km where this gives 6.6, Earth at 3
+/// to 5 km (2.5), icy moons far sooner than rock (Barnouin et al. 2012,
+/// doi:10.1016/j.icarus.2012.02.029).
 const MOON_TRANSITION_KM: f64 = 15.0;
 const MOON_GRAVITY: f64 = 1.62;
 const EARTH_GRAVITY: f64 = 9.81;
+/// Depth of complex lunar craters, km, from the rim crest to the floor:
+/// `d = 1.044 D^0.301` above the transition (Pike 1977, as quoted by
+/// Feoktistova & Ipatov 2021, doi:10.1007/s11038-021-09538-y), 4.2 km at
+/// 100 km. Written in transition diameters, `d = COMPLEX_DEPTH × D_t ×
+/// (D / D_t)^0.301`, so that other gravities scale it with the transition.
+/// `1.044 × 15^0.301 / 15`.
+const COMPLEX_DEPTH: f64 = 0.157_258;
+const COMPLEX_DEPTH_EXPONENT: f64 = 0.301;
+/// Onset of peak rings, in transition diameters: protobasins (a ring and
+/// a peak) from 137 km, peak-ring basins from 207 km on the Moon (Baker et
+/// al. 2011, doi:10.1016/j.icarus.2011.05.030), over its 15 km transition;
+/// this transition also scales as `1/g` (Melosh & Ivanov 1999).
+const PROTOBASIN_TRANSITIONS: f64 = 137.0 / 15.0;
+const PEAK_RING_TRANSITIONS: f64 = 207.0 / 15.0;
 /// Wear of craters formed while water was liquid: a 20 km crater loses
 /// `1/e` of its relief in 0.1 Ga of exposure at erosion 1; larger craters
-/// last longer in proportion.
+/// last longer in proportion. Calibration, no source: it gives worn
+/// Noachian craters on `mars-like`, small ones worn first, as water wears
+/// Martian craters (Forsberg-Taylor et al. 2004, doi:10.1029/2004JE002242),
+/// but no study fixes these numbers.
 const WEAR_GA: f64 = 0.1;
 const WEAR_KM: f64 = 20.0;
 /// Topographic diffusion of crater profiles by small impacts, m² per Ma
-/// (the Moon, Fassett & Thomson 2014): a crater of radius `R` loses `1/e`
-/// of its relief once `κ t` reaches [`DIFFUSION_SHARE`] of `R²`. A 500 m
-/// crater is subdued in about 0.6 Ga, a 2 km one barely in 4 Ga; craters of
-/// the base map (tens of km) are untouched.
+/// (the lunar maria over the past 3 Ga, Fassett & Thomson 2014,
+/// doi:10.1002/2014JE004698): a crater of radius `R` loses `1/e` of its
+/// relief once `κ t` reaches [`DIFFUSION_SHARE`] of `R²`. The share is
+/// set so that a 1 km crater keeps 52 % of its depth after 3 Ga, as they
+/// measure: craters below about 430 m wear out in that time (they find
+/// 200–300 m), a 2 km one keeps 85 %; craters of the base map (tens of
+/// km) are untouched.
 const DIFFUSIVITY_M2_PER_MA: f64 = 5.5;
-const DIFFUSION_SHARE: f64 = 0.05;
+const DIFFUSION_SHARE: f64 = 0.101;
 /// Below this share of its relief left, a worn crater is not drawn.
 const WORN_OUT: f64 = 0.03;
 /// Share of the previous relief kept inside a new crater.
@@ -88,6 +137,8 @@ const PARALLEL_ROWS: usize = 32;
 /// Brightness of fresh craters (see [`CraterField::albedo`]): space
 /// weathering darkens their ejecta and rays, `1/e` in this time (Ga), so
 /// that they are all but gone in 1 Ga (the Moon's Copernican craters).
+/// Calibration, no source: chosen for the time scale of the Moon's young
+/// craters, not fitted.
 const RAY_FADE_GA: f64 = 0.25;
 /// Below this share of its brightness left, a crater has none.
 const RAY_GONE: f64 = 0.02;
@@ -105,11 +156,18 @@ const RAY_LENGTH: (f64, f64) = (8.0, 30.0);
 /// `p^0.75` (Venus: about 3 km at 92 bar).
 const AIR_FILTER_KM: f64 = 0.1;
 
-/// Density of the craters a surface `age_ga` old has kept, its impact rate
-/// raised `impact` times by the giants: more craters build up faster, but
-/// never past saturation, where each new crater erases as many as it adds.
-fn past_density(age_ga: f64, impact: f64) -> f64 {
-    (crater_density(age_ga) * impact).min(SATURATION)
+/// `N(>D) / N(>1 km)` for a diameter `d` km: Hartmann's piecewise power
+/// law (see [`SIZE_SLOPES`]), continuous at its breaks.
+pub fn size_share(d: f64) -> f64 {
+    let (small, large) = SIZE_BREAKS_KM;
+    let (s0, s1, s2) = SIZE_SLOPES;
+    if d < small {
+        d.powf(-s0)
+    } else if d < large {
+        small.powf(-s0) * (d / small).powf(-s1)
+    } else {
+        small.powf(-s0) * (large / small).powf(-s1) * (d / large).powf(-s2)
+    }
 }
 
 /// Cumulative density of craters of 1 km or more on a surface `age_ga`
@@ -233,10 +291,42 @@ fn cube_cell(p: [f64; 3]) -> (u32, f64, f64) {
     }
 }
 
-/// Craters per km² of an octave of a population: `N(>D) − N(>2D)`.
+/// How an octave `[2^k, 2^(k+1))` km of a population fills: craters per
+/// km² formed, kept at saturation, and drawn on the lattice.
+#[derive(Clone, Copy, Debug)]
+struct OctaveFill {
+    /// Formed over the population's span: `N(>D) − N(>2D)`.
+    formed: f64,
+    /// Kept: no more than its saturation.
+    kept: f64,
+    /// Drawn: the kept ones and some of the erased, up to [`ERASED_DRAWN`]
+    /// times the kept.
+    drawn: f64,
+    /// Slope of `N(>D)` within the octave.
+    slope: f64,
+}
+
+impl OctaveFill {
+    fn new(population: Population, octave: i32) -> Self {
+        let low = 2f64.powi(octave);
+        let (a, b) = (size_share(low), size_share(2.0 * low));
+        let formed = population.density * (a - b);
+        let kept = match population.cap {
+            Some(cap) => formed.min(0.75 * cap / (low * low)),
+            None => formed,
+        };
+        OctaveFill {
+            formed,
+            kept,
+            drawn: formed.min(ERASED_DRAWN * kept),
+            slope: (a / b).log2(),
+        }
+    }
+}
+
+/// Craters per km² of an octave of a population drawn on its lattice.
 fn per_km2(population: Population, octave: i32) -> f64 {
-    let low = 2f64.powi(octave);
-    0.75 * population.density / (low * low)
+    OctaveFill::new(population, octave).drawn
 }
 
 /// Cells per face edge of an octave's grid on a planet of `radius_km`:
@@ -367,8 +457,13 @@ const FLUX_PER_GA: f64 = 8.38e-4;
 #[derive(Clone, Copy, Debug)]
 struct Population {
     seed: u32,
-    /// Craters of 1 km or more per km².
+    /// Craters of 1 km or more per km² formed over its span, before
+    /// saturation.
     density: f64,
+    /// Saturation, as craters of 1 km or more per km² of a surface in
+    /// equilibrium (see [`SATURATION`]), for the craters formed so far;
+    /// none for those still to come.
+    cap: Option<f64>,
     ages: Ages,
 }
 
@@ -453,7 +548,8 @@ impl CraterField {
             erosion: p.erosion as f64,
             past: Population {
                 seed: stream_seed(p.seed, stream::CRATERS),
-                density: past_density(p.surface_age_ga as f64, impact) * locked_raise,
+                density: crater_density(p.surface_age_ga as f64) * raise,
+                cap: Some(SATURATION * locked_raise),
                 ages: Ages::Past {
                     surface_age_ga: p.surface_age_ga as f64,
                 },
@@ -467,6 +563,7 @@ impl CraterField {
                 } else {
                     0.0
                 },
+                cap: None,
                 ages: Ages::Future { span_ga: FUTURE_GA },
             },
             air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
@@ -656,16 +753,56 @@ impl CraterField {
         let omega = solid_angle(a0, a0 + step, b0, b0 + step);
         let mut rng = Rng::cell(population.seed, octave, face, i, j);
         let area = self.radius_km * self.radius_km;
-        let count = rng.poisson(per_km2(population, octave) * omega * area);
+        let fill = OctaveFill::new(population, octave);
+        let count = rng.poisson(fill.drawn * omega * area);
         let (low, air_km, locked_since) = (2f64.powi(octave), self.air_km, self.locked_since_ga);
+        // The craters drawn are the youngest of those formed, as a share of
+        // the chronology counted from the youngest. At the epoch, those
+        // formed by then are kept up to saturation, youngest first: the
+        // oldest are the ones erased.
+        let drawn_share = if fill.formed > 0.0 {
+            fill.drawn / fill.formed
+        } else {
+            1.0
+        };
+        let kept_share = if fill.formed > 0.0 {
+            fill.kept / fill.formed
+        } else {
+            1.0
+        };
+        let kept_by = match population.ages {
+            Ages::Past { surface_age_ga } => {
+                let total = crater_density(surface_age_ga);
+                let since = if total > 0.0 {
+                    crater_density(self.epoch_ga.max(0.0)) / total
+                } else {
+                    0.0
+                };
+                since + kept_share.min(1.0 - since)
+            }
+            Ages::Future { .. } => 1.0,
+        };
+        let slope = fill.slope;
         (0..count).filter_map(move |_| {
             let centre = cube_point(face, a0 + step * rng.unit(), b0 + step * rng.unit());
-            // Power law within the octave: N(>D) ∝ D⁻².
-            let diameter_km = low / (1.0 - 0.75 * rng.unit()).sqrt();
-            let age_ga = match population.ages {
-                Ages::Past { surface_age_ga } => age_at(rng.unit(), surface_age_ga),
+            // Power law within the octave: N(>D) ∝ D^-slope.
+            let diameter_km =
+                low * (1.0 - (1.0 - 0.5f64.powf(slope)) * rng.unit()).powf(-1.0 / slope);
+            let (age_ga, kept) = match population.ages {
+                Ages::Past { surface_age_ga } => {
+                    let share = drawn_share * rng.unit();
+                    // An erased crater needs no age (inverting the
+                    // chronology is the costly part of a draw).
+                    let kept = share < kept_by;
+                    let age = if kept {
+                        age_at(share, surface_age_ga)
+                    } else {
+                        surface_age_ga
+                    };
+                    (age, kept)
+                }
                 // In [-span, 0): none forms at the present itself.
-                Ages::Future { span_ga } => -span_ga * (1.0 - rng.unit()),
+                Ages::Future { span_ga } => (-span_ga * (1.0 - rng.unit()), true),
             };
             let survives = air_km <= 0.0
                 || rng.unit()
@@ -692,7 +829,7 @@ impl CraterField {
                 }
                 None => survives,
             };
-            survives.then_some(Crater {
+            (survives && kept).then_some(Crater {
                 centre,
                 diameter_km,
                 age_ga,
@@ -1381,16 +1518,26 @@ impl Profile {
         let t = transition_km;
         let units = f64::from(ELEVATION_KM);
         // Pike (1974, 1977): simple craters 0.2 D deep with a rim of
-        // 0.036 D; complex ones grow shallower, continuously at the
-        // transition.
-        let (depth, rim) = if d < t {
-            (0.2 * d, 0.036 * d)
+        // 0.036 D; complex ones follow Pike's complex depth law. The two
+        // fits do not meet at the transition (3.0 and 2.4 km at 15 km on
+        // the Moon): the depth passes from one to the other as the crater
+        // turns complex, from 1 to 1.5 transitions.
+        let complex = f64::from(smoothstep(1.0, 1.5, (d / t) as f32));
+        let simple_depth = 0.2 * d;
+        let complex_depth = COMPLEX_DEPTH * t * (d / t).powf(COMPLEX_DEPTH_EXPONENT);
+        let depth = simple_depth + complex * (complex_depth - simple_depth);
+        let rim = if d < t {
+            0.036 * d
         } else {
-            (0.2 * t * (d / t).powf(0.3), 0.036 * t * (d / t).powf(0.4))
+            0.036 * t * (d / t).powf(0.4)
         };
         let complexity = ((d / t).log2() / 4.0).clamp(0.0, 1.0);
-        let complex = f64::from(smoothstep(1.0, 1.5, (d / t) as f32));
-        let ring = f64::from(smoothstep(5.0, 9.0, (d / t) as f32));
+        // A protobasin's ring beside its peak, then a peak-ring basin.
+        let ring = f64::from(smoothstep(
+            PROTOBASIN_TRANSITIONS as f32,
+            PEAK_RING_TRANSITIONS as f32,
+            (d / t) as f32,
+        ));
         let mut rng = Rng(crater.shape);
         let mut harmonics = || {
             [(); 4].map(|_| {
@@ -1516,12 +1663,76 @@ mod tests {
             .map(|k| f64::from(k) * 0.1)
             .find(|&age| crater_density(age) >= SATURATION / 0.7)
             .expect("a surface old enough to saturate at the lowest factor");
+        let kept = |age: f64, impact: f64| {
+            let population = Population {
+                seed: 0,
+                density: crater_density(age) * impact,
+                cap: Some(SATURATION),
+                ages: Ages::Past {
+                    surface_age_ga: age,
+                },
+            };
+            OctaveFill::new(population, 0).kept
+        };
         for impact in [0.7, 1.0, 1.8] {
-            assert_eq!(past_density(old, impact), SATURATION, "{impact}");
+            assert_eq!(kept(old, impact), 0.75 * SATURATION, "{impact}");
         }
         // A young surface scales with the impact rate.
-        let young = past_density(1.0, 1.8) / past_density(1.0, 0.7);
+        let young = kept(1.0, 1.8) / kept(1.0, 0.7);
         assert!((young - 1.8 / 0.7).abs() < 1e-9, "{young}");
+    }
+
+    #[test]
+    fn sizes_follow_hartmanns_piecewise_slopes() {
+        assert_eq!(size_share(1.0), 1.0);
+        let slope = |a: f64, b: f64| (size_share(a) / size_share(b)).ln() / (b / a).ln();
+        assert!((slope(0.25, 0.5) - 3.82).abs() < 1e-9);
+        assert!((slope(2.0, 32.0) - 1.80).abs() < 1e-9);
+        assert!((slope(100.0, 400.0) - 2.2).abs() < 1e-9);
+        // Continuous at the breaks.
+        for b in [1.4, 64.0] {
+            assert!((size_share(b * (1.0 - 1e-9)) / size_share(b) - 1.0).abs() < 1e-6);
+        }
+        // Many more small craters than a single D⁻² law gave.
+        assert!(size_share(0.25) > 10.0 * 0.25f64.powi(-2));
+    }
+
+    #[test]
+    fn saturation_erases_the_oldest_craters_first() {
+        // Sub-km craters of a 4 Ga surface are saturated: those kept are
+        // the youngest formed, and the erased ones come back in the past.
+        // A small moon, 50 km in radius.
+        let small_moon = || WorldParams {
+            circumference_km: 314.0,
+            ..moon(4.0)
+        };
+        let field = CraterField::new(&small_moon(), 0.25);
+        let small: Vec<&Crater> = field
+            .craters
+            .iter()
+            .filter(|c| c.diameter_km < 0.5)
+            .collect();
+        assert!(!small.is_empty());
+        let population = field.past;
+        let fill = OctaveFill::new(population, -2);
+        assert!(fill.kept < 0.5 * fill.formed, "{fill:?}");
+        // Every one is younger than the age a random thinning would give
+        // its oldest.
+        let cutoff = age_at(fill.kept / fill.formed * 1.0001, 4.0);
+        assert!(
+            small
+                .iter()
+                .filter(|c| (0.25..0.5).contains(&c.diameter_km))
+                .all(|c| c.age_ga <= cutoff)
+        );
+        // At 3.5 Ga, craters older than the present's oldest are there.
+        let past = CraterField::new_at(&small_moon(), 0.25, 3.5);
+        assert!(
+            past.craters
+                .iter()
+                .filter(|c| (0.25..0.5).contains(&c.diameter_km))
+                .any(|c| c.age_ga > cutoff)
+        );
     }
 
     #[test]
@@ -1564,7 +1775,7 @@ mod tests {
         // (5 185 counted by Head et al. 2010).
         let field = CraterField::new(&moon(4.0), 20.0);
         let radius = 10_917.0 / (2.0 * PI);
-        let expected = crater_density(4.0) / 400.0 * 4.0 * PI * radius * radius;
+        let expected = crater_density(4.0) * size_share(20.0) * 4.0 * PI * radius * radius;
         let n = field.craters.len() as f64;
         assert!((n / expected - 1.0).abs() < 0.05, "{n} vs {expected}");
         assert!(field.craters.iter().all(|c| c.diameter_km >= 20.0));
@@ -1652,7 +1863,16 @@ mod tests {
         assert!(complex.floor > 0.25 && complex.peak > 0.0 && complex.ring == 0.0);
         // Shallower than a bowl of the same size.
         assert!(complex.depth * f64::from(ELEVATION_KM) < 0.5 * 0.2 * 50.0);
-        let basin = Profile::new(&crater(300.0), MOON_TRANSITION_KM);
+        // Pike's law: a 100 km lunar crater is about 4.2 km deep.
+        let hundred = Profile::new(&crater(100.0), MOON_TRANSITION_KM);
+        let depth = hundred.depth * f64::from(ELEVATION_KM);
+        assert!((depth - 4.2).abs() < 0.1, "{depth}");
+        // No ring below the protobasins (137 km), a ring and a peak in
+        // between, a peak ring alone from 207 km (Baker et al. 2011).
+        assert_eq!(Profile::new(&crater(130.0), MOON_TRANSITION_KM).ring, 0.0);
+        let proto = Profile::new(&crater(160.0), MOON_TRANSITION_KM);
+        assert!(proto.ring > 0.0 && proto.peak > 0.0);
+        let basin = Profile::new(&crater(210.0), MOON_TRANSITION_KM);
         assert!(basin.ring > 0.0 && basin.peak == 0.0);
         // Stronger gravity lowers the transition: an 8 km crater on a
         // planet of Earth's gravity is complex.
@@ -1761,7 +1981,7 @@ mod tests {
         let p = moon(4.0);
         let crater = Crater {
             centre: [1.0, 0.0, 0.0],
-            diameter_km: 0.6,
+            diameter_km: 0.4,
             age_ga: 3.0,
             shape: 0,
         };
@@ -1954,7 +2174,11 @@ mod tests {
             age_ga,
             shape: 0,
         };
-        assert!(field.wear(&crater(0.5, 3.0)) < 0.05);
+        assert!(field.wear(&crater(0.3, 3.0)) < 0.03);
+        // Fassett & Thomson (2014): a 1 km crater keeps about 52 % of its
+        // depth in 3 Ga.
+        let kilometre = field.wear(&crater(1.0, 3.0));
+        assert!((kilometre - 0.52).abs() < 0.01, "{kilometre}");
         assert!(field.wear(&crater(0.5, 0.01)) > 0.9);
         assert!(field.wear(&crater(4.0, 3.9)) > 0.8);
         assert!(field.wear(&crater(40.0, 4.0)) > 0.99);

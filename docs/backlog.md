@@ -546,3 +546,30 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   bright rings, and plume rings round an active icy moon; drawn faint in
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
+
+## 19. Relief science, what remains
+
+- **Status:** todo
+- **Problem:** the science articles on craters, plates and mountains
+  (2026-11-07) list departures of the generator from the science. The
+  fixes of 2026-11-07 (rocky gravity, `1/g` relief, crater depths, peak
+  rings, diffusion, size law, saturation) leave these, each needing a
+  model the app does not have yet.
+- **Craters:**
+  - The transition from simple to complex craters follows gravity only:
+    a target's strength would move it (Mercury about 12 km where the app
+    gives 6.6, Earth 3 to 5 km against 2.5, Barnouin et al. 2012). Icy
+    moons turn complex far sooner than rock at the same gravity (2 to
+    3 km on Ganymede, Schenk 1991, 2002, a number read only in secondary
+    sources), so `icy-moon` worlds get a transition several times too
+    large. Done when the transition reads a strength per crust (rock,
+    volatile-rich rock, ice) from a checked source.
+  - No multi-ring basins (Orientale): their onset does not scale as
+    `1/g` and depends on a weak layer under the surface (Melosh &
+    Ivanov 1999), with no rule to scale it from the Moon.
+  - The lunar chronology on every world: impact rates per body (Ivanov
+    2001; Le Feuvre & Wieczorek 2011) are ratios for the Solar System's
+    planets and its own impactor populations. A world of another system
+    keeps the Moon's flux, scaled by its giants and belts and by
+    locking; a general rule would need the flux of impactors and their
+    speeds per orbit (gravitational focusing included).
