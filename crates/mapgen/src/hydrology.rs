@@ -125,21 +125,34 @@ fn routing_noise(grid: &Grid, seed: u32) -> Vec<f32> {
         .collect()
 }
 
-/// Share of the rain that runs off, from the moisture index (the log of
-/// the annual rain, see [`crate::climate::moisture_index`]): none at the
-/// index's driest (125 mm a year), `1 - exp(-(P - 125 mm) / 400 mm)`
-/// above: 0.3 at 260 mm, 0.8 at Earth's mean land rain of 821 mm, nearly all
-/// in the wettest places. A saturating runoff coefficient, calibrated so
-/// `earth-like` worlds keep the 200 or so river lines the former linear
-/// index gave (about 130 with 1 000 mm), no source.
-fn runoff(moisture: f32) -> f32 {
-    let rain = crate::climate::rain_mm(moisture) - crate::climate::rain_mm(-1.0);
-    1.0 - (-rain.max(0.0) / RUNOFF_RAIN_MM).exp()
+/// Share of the rain that runs off, in wet-equivalent units: the runoff
+/// ratio of the annual rain `P` (from the moisture index, see
+/// [`crate::climate::moisture_index`]) and the annual mean temperature
+/// `T` (°C), divided by [`EARTH_RUNOFF_RATIO`] so that the river thresholds
+/// in km² keep their meaning.
+///
+/// The ratio is `(P - E) / P` with the actual evapotranspiration of Turc
+/// (1954, Annales Agronomiques 5, 491-596; no DOI):
+/// `E = P / sqrt(0.9 + P² / L²)`, `L = 300 + 25 T + 0.05 T³`, `E` kept
+/// under `P`. A dry hot climate returns none of its rain (300 mm at 20 °C), 5 % at
+/// 400 mm, a wet or a cold one a quarter to a third; Earth's land returns
+/// 0.41 of its rain (Oki & Kanae 2006, doi:10.1126/science.1128845).
+pub fn runoff_share(moisture: f32, temperature: f32) -> f32 {
+    let rain = crate::climate::rain_mm(moisture);
+    let t = temperature.clamp(-10.0, 40.0);
+    let l = (300.0 + 25.0 * t + 0.05 * t * t * t).max(1.0);
+    let evaporation = (rain / (0.9 + (rain / l).powi(2)).sqrt()).min(rain);
+    ((rain - evaporation) / rain / EARTH_RUNOFF_RATIO).min(MAX_RUNOFF)
 }
 
-/// Rain, mm a year, over the driest rain, at which the runoff share is
-/// 1 - 1/e (see [`runoff`]).
-const RUNOFF_RAIN_MM: f32 = 400.0;
+/// Reference runoff ratio (see [`runoff_share`]): calibrated so `earth-like`
+/// worlds keep about 200 river lines (170-230 over seeds 1-4 and 11-16),
+/// above Earth's mean over land (0.41, Oki & Kanae 2006) because the
+/// model's wet land is cooler and its rain more evenly spread. Calibration,
+/// no source.
+const EARTH_RUNOFF_RATIO: f32 = 0.6;
+/// Largest share, in wet-equivalent units.
+const MAX_RUNOFF: f32 = 2.0;
 
 #[derive(PartialEq)]
 struct Node(f32, u32);
@@ -159,8 +172,9 @@ impl PartialOrd for Node {
 /// Computes rivers and lakes.
 ///
 /// `height` is the elevation above the waterline (negative on the sea);
-/// `moisture` in `[-1, 1]` sets how much rain runs off.
-pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hydrology {
+/// `runoff` (see [`runoff_share`]) is the share of the rain that runs off
+/// each pixel, in wet-equivalent units.
+pub fn hydrology(grid: &Grid, height: &[f32], runoff: &[f32], seed: u32) -> Hydrology {
     let n = grid.pixel_count();
     let noise = flat_noise(grid, seed);
     let sea: Vec<bool> = height.par_iter().map(|&z| z < 0.0).collect();
@@ -222,7 +236,7 @@ pub fn hydrology(grid: &Grid, height: &[f32], moisture: &[f32], seed: u32) -> Hy
             let start = y * grid.width as usize;
             for (k, f) in row.iter_mut().enumerate() {
                 if !sea[start + k] {
-                    *f = area * runoff(moisture[start + k]);
+                    *f = area * runoff[start + k];
                 }
             }
         });
@@ -362,7 +376,7 @@ mod tests {
     fn serial_reference(
         grid: &Grid,
         height: &[f32],
-        moisture: &[f32],
+        runoff: &[f32],
         seed: u32,
         h: &Hydrology,
     ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
@@ -413,7 +427,7 @@ mod tests {
                     return 0.0;
                 }
                 let y = i as u32 / grid.width;
-                grid.dx_km(y) * grid.dy_km() * runoff(moisture[i])
+                grid.dx_km(y) * grid.dy_km() * runoff[i]
             })
             .collect();
         for &i in order.iter().rev() {
@@ -445,7 +459,7 @@ mod tests {
                 })
                 .collect();
             let moisture: Vec<f32> = (0..g.pixel_count())
-                .map(|i| ((i % 17) as f32 / 8.0) - 1.0)
+                .map(|i| (i % 17) as f32 / 16.0)
                 .collect();
             let h = hydrology(&g, &height, &moisture, 9);
             let (filled, _, flow) = serial_reference(&g, &height, &moisture, 9, &h);
@@ -488,9 +502,20 @@ mod tests {
     }
 
     #[test]
+    fn runoff_depends_on_the_aridity() {
+        use crate::climate::moisture_index;
+        let at = |mm: f32, t: f32| runoff_share(moisture_index(mm), t);
+        // Hot and dry: nothing runs off; wet or cold: a good share.
+        assert_eq!(at(300.0, 20.0), 0.0);
+        assert!(at(400.0, 20.0) < 0.2 * at(1500.0, 20.0));
+        assert!(at(800.0, 15.0) > 0.3);
+        assert!(at(300.0, 0.0) > at(300.0, 25.0));
+    }
+
+    #[test]
     fn deserts_have_no_runoff() {
         let g = grid();
-        let h = hydrology(&g, &ramp(&g), &vec![-1.0; g.pixel_count()], 1);
+        let h = hydrology(&g, &ramp(&g), &vec![0.0; g.pixel_count()], 1);
         assert!(h.flow_km2.iter().all(|&f| f == 0.0));
         assert!(!h.river.iter().any(|&r| r));
     }

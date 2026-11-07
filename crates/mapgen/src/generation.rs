@@ -1449,7 +1449,23 @@ pub fn generate_with_progress(
     };
     let (clouds, mut water) = rayon::join(
         || crate::clouds::clouds(&cloud_input),
-        || hydrology(&grid, &height_above_water, &moisture, params.seed),
+        || {
+            // Lava does not depend on rain: the flows of a volcanic world
+            // run off everywhere alike.
+            let lava = planet.remap(Biome::River).is_lava();
+            let runoff: Vec<f32> = moisture
+                .par_iter()
+                .zip(&temperature)
+                .map(|(&m, &t)| {
+                    if lava {
+                        1.0
+                    } else {
+                        crate::hydrology::runoff_share(m, t)
+                    }
+                })
+                .collect();
+            hydrology(&grid, &height_above_water, &runoff, params.seed)
+        },
     );
     if let Some(sink) = sink {
         sink.layer(DebugLayer {
