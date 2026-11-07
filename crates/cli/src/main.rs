@@ -412,7 +412,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     if let Some(giant) = mapgen::giant_world::info(p) {
         println!(
             "Giant → {:.1} Earth masses ({:.2} MJ), {:.1} Earth radii, {:.2} g/cm³, day {:.1} h, \
-             flattening {:.3}, Teff {:.0} K (class {}), {} jets per hemisphere, winds {:.0} to {:.0} m/s{}",
+             flattening {:.3}, Teff {:.0} K (class {}), {} eastward jets per hemisphere, winds {:.0} to {:.0} m/s{}",
             giant.mass_earth,
             giant.mass_earth / JUPITER_EARTH_MASSES,
             giant.radius_earth,

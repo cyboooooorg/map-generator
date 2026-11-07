@@ -22,6 +22,7 @@ pub mod export;
 pub mod generation;
 pub mod geo;
 pub mod geology;
+pub mod giant_clouds;
 pub mod giant_world;
 pub mod giants;
 pub mod hex;

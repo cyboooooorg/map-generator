@@ -433,6 +433,27 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   in its sky with its phases and eclipses; tidal heating warming the
   climate and raising volcanism, watery worlds kept beyond the habitable
   edge.
+- **Science fixes (2026-11-07):** wind speed an outcome of the flux and
+  the spin, cloud decks deciding the Sudarsky class, class V with
+  gravity, internal heat cooling with the system's age, the great spot in
+  a southern zone drifting slowly, previews following the generated
+  bands (`giant_clouds.rs`, `giant_world.rs`). Left to do:
+  - Saturn's winds (over 400 m/s) and Neptune's are faster than Jupiter's
+    with less energy (Showman et al. 2010 call it not understood); the
+    energy scaling gives Saturn-like giants slower winds than Jupiter's,
+    and ice giants a calibration to Neptune. A friction or depth term
+    would need a model of the deep flow.
+  - Saturn's internal heat is above the cooling law (helium rain); ice
+    giants keep a fixed 40 K instead of Neptune's and Uranus's very
+    different heat.
+  - The decks use the Sun's composition; an ice giant's methane and
+    water enrichment (a methane ice deck on Neptune, water near 40 bar)
+    and the deep dry adiabat of its troposphere are not modelled.
+  - The great spot has the size it is drawn with; the real one shrinks
+    by 0.19° of longitude a year (Simon et al. 2018), which needs a
+    date in the viewer.
+  - Cloud tops only: no view of the depths where Juno sees the belt and
+    zone contrast change sign (Fletcher et al. 2021).
 
 ## 15. Names
 

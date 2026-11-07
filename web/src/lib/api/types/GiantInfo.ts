@@ -35,7 +35,9 @@ equilibrium_k: number, effective_k: number, heat_ratio: number,
  */
 class: number, 
 /**
- * Jets in each hemisphere (the Rhines count).
+ * Eastward jets in each hemisphere (the Rhines count). The wind profile
+ * has `2 × jets − 1` alternating jets in each hemisphere, `jets` of them
+ * eastward, besides the equatorial one.
  */
 jets: number, 
 /**
