@@ -627,23 +627,18 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
   narrower Hadley cells under heavier atmospheres, without a scaling the
   app could use; the belts scale with rotation and size only.
-- **Depth of the rain shadow:** a 3 km range leaves its windward slope
-  more than ten times wetter than its lee, but the lee still gets 0.6 to
-  0.75 of the rain of flat ground, where Roe (2005) gives the Southern
-  Alps' eastern plains under 1 m a year against 2 to 3 m on the western
-  lowlands (0.3 to 0.5). Marine air in the app reaches only about 57 % of
-  what it can hold, as ocean drizzle balances evaporation, so it
-  condenses late on a climb. Done when the lee of such a range gets at
-  most half the rain of flat ground, with the sea's humidity from a
-  source (marine boundary layer relative humidity).
-- **Too little arid land:** on four `earth-like` seeds desert and
-  shrubland cover under 1 % of the land (0.2 % on main before the climate
-  fixes), where Köppen's arid climates B cover 30 % of Earth's (Peel et
-  al. 2007, doi:10.5194/hess-11-1633-2007). The precipitation term
-  saturates near +1 on most land, since the rain is divided by what the
-  air holds, a stand-in for potential evaporation that grows faster
-  than any evaporation formula. Done when the index uses a sourced
-  potential evaporation and the arid share comes near Earth's.
+- **Winter-rain climates and the season of the rain:** Köppen's dryness
+  threshold depends on the season of the rain (Kottek et al. 2006). The
+  app has annual rain only and takes the summer share from the air's
+  capacity at the half-years' temperatures, so rain peaking in winter
+  (the Mediterranean, BSk and Csa borders) is not modelled; deserts are
+  7.5 % of the land and steppes 22 %, where Earth's are about half and
+  half. A monthly moisture pass (see Monsoons) would give both.
+- **Absolute rain is calibrated, not derived:** the rain rate is scaled
+  to GPCP's land mean and zonal means with constants that have no source
+  (`MM_PER_RATE`, `COLD_RAIN_EXPONENT`, `CIRCULATION_OCTAVES`,
+  `ITCZ_OCTAVES`, `SUBSIDENCE_HUMIDITY`). Done when the rain comes from a
+  moisture budget (evaporation, convergence) in physical units.
 - **Storms, fronts and ENSO:** moisture is the annual mean of a steady
   wind. Weather, interannual variability (El Niño, La Niña) and the storm
   rain that makes most orographic precipitation are model limits, not

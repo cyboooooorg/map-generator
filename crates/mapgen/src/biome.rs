@@ -394,17 +394,23 @@ pub struct BiomeRules {
     /// poles a warm annual mean but freezing winters.
     pub tropical_winter: f32,
 
+    // Dry land (Köppen's B)
+    /// Land with an annual rain under this many times its dryness
+    /// threshold is arid: steppe (shrubland) or desert. Köppen's 10
+    /// (Kottek et al. 2006, doi:10.1127/0941-2948/2006/0130, Table 1:
+    /// `P_ann < 10 P_th`).
+    pub steppe_ratio: f32,
+    /// Arid land with an annual rain under this many times the dryness
+    /// threshold is desert, otherwise steppe. Köppen's 5 (`P_ann ≤ 5 P_th`).
+    pub desert_ratio: f32,
+
     // Moisture splits
     /// Shore wetter than this is wetland, otherwise beach.
     pub wetland_moisture: f32,
     /// Boreal land wetter than this is taiga, otherwise tundra.
     pub taiga_moisture: f32,
-    /// Temperate land drier than this is shrubland.
-    pub shrubland_moisture: f32,
     /// Temperate land wetter than this is forest.
     pub forest_moisture: f32,
-    /// Tropical land drier than this is desert.
-    pub desert_moisture: f32,
     /// Tropical land wetter than this is jungle; between, savanna.
     pub jungle_moisture: f32,
 
@@ -449,11 +455,11 @@ impl Default for BiomeRules {
             temperate: 12.0,
             tropical_winter: 18.0,
             wetland_moisture: 0.30,
-            taiga_moisture: 0.05,
-            shrubland_moisture: -0.10,
-            forest_moisture: 0.20,
-            desert_moisture: -0.05,
-            jungle_moisture: 0.30,
+            taiga_moisture: -0.33,
+            steppe_ratio: 10.0,
+            desert_ratio: 5.0,
+            forest_moisture: -0.25,
+            jungle_moisture: 0.10,
             volcano_elevation: -0.03,
             volcano_zone: 0.55,
             lava_zone: 0.30,
@@ -590,26 +596,44 @@ impl BiomeRules {
     fn land(&self, t: f32, m: f32, summer: f32, winter: f32) -> Biome {
         if summer < self.polar {
             Biome::IceCap
+        } else if summer < self.tundra_summer && t < self.boreal {
+            // Köppen tests the polar climates E first, then the arid B.
+            Biome::Tundra
+        } else if let Some(arid) = self.arid(t, m, summer, winter) {
+            arid
         } else if t < self.boreal {
-            if m > self.taiga_moisture && summer >= self.tundra_summer {
+            if m > self.taiga_moisture {
                 Biome::Taiga
             } else {
                 Biome::Tundra
             }
         } else if t < self.temperate || winter < self.tropical_winter {
-            if m < self.shrubland_moisture {
-                Biome::Shrubland
-            } else if m > self.forest_moisture {
+            if m > self.forest_moisture {
                 Biome::Forest
             } else {
                 Biome::Plain
             }
-        } else if m < self.desert_moisture {
-            Biome::Desert
         } else if m < self.jungle_moisture {
             Biome::Savanna
         } else {
             Biome::Jungle
+        }
+    }
+
+    /// Köppen's arid climates B: the annual rain of the moisture index `m`
+    /// against the dryness threshold of the temperature and the season of
+    /// the rain (Kottek et al. 2006, doi:10.1127/0941-2948/2006/0130):
+    /// desert (BW) under [`desert_ratio`](Self::desert_ratio) thresholds,
+    /// steppe (shrubland, BS) under [`steppe_ratio`](Self::steppe_ratio).
+    pub fn arid(&self, t: f32, m: f32, summer: f32, winter: f32) -> Option<Biome> {
+        let ratio =
+            crate::climate::rain_mm(m) / crate::climate::dryness_threshold_mm(t, summer, winter);
+        if ratio <= self.desert_ratio {
+            Some(Biome::Desert)
+        } else if ratio < self.steppe_ratio {
+            Some(Biome::Shrubland)
+        } else {
+            None
         }
     }
 
@@ -686,6 +710,46 @@ mod tests {
         assert_eq!(rules.choose(input(true, false, 0.0)), Biome::Lake);
         assert_eq!(rules.choose(input(false, true, 0.0)), Biome::River);
     }
+    #[test]
+    fn arid_land_follows_koppens_b_criterion() {
+        use crate::climate::{dryness_threshold_mm, moisture_index};
+        let rules = BiomeRules::default();
+        // 20 °C all year: P_th is 54 mm, so desert up to 270 mm, steppe up
+        // to 540 mm.
+        let at = |mm: f32| {
+            rules.choose(BiomeInput {
+                elevation: -0.12,
+                moisture: moisture_index(mm),
+                temperature: 20.0,
+                seasonality: 0.0,
+                volcanic_zone: 0.0,
+                coast_distance_km: 1000.0,
+                lake: false,
+                river: false,
+                highland_offset: 0.0,
+            })
+        };
+        assert_eq!(dryness_threshold_mm(20.0, 20.0, 20.0), 54.0);
+        assert_eq!(at(200.0), Biome::Desert);
+        assert_eq!(at(400.0), Biome::Shrubland);
+        assert_ne!(at(700.0), Biome::Shrubland);
+        assert_ne!(at(700.0), Biome::Desert);
+        // The same rain is steppe on a hot summer-rain land and enough in a
+        // cool, even climate (P_th 14 + 2 T).
+        let cool = rules.choose(BiomeInput {
+            temperature: 8.0,
+            moisture: moisture_index(400.0),
+            elevation: -0.12,
+            seasonality: 0.0,
+            volcanic_zone: 0.0,
+            coast_distance_km: 1000.0,
+            lake: false,
+            river: false,
+            highland_offset: 0.0,
+        });
+        assert!(!matches!(cool, Biome::Desert | Biome::Shrubland));
+    }
+
     #[test]
     fn cones_rise_out_of_the_lowland() {
         let rules = crate::preset::Preset::load("terran").unwrap().rules;

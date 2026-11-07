@@ -481,7 +481,12 @@ const EARTH_LAPSE: f32 = LAPSE_RATE_K_PER_KM * crate::craters::ELEVATION_KM;
 // ── Moisture ──────────────────────────────────────────────────────────────────
 
 /// Ocean distance over which air picks up ~63% of the humidity it can hold.
-const EVAPORATION_KM: f32 = 1_500.0;
+/// With [`RAIN_KM`] it sets the humidity of marine air, where evaporation
+/// balances the drizzle: `RAIN_KM / (RAIN_KM + EVAPORATION_KM)`, 80 % of
+/// what the air can hold, the relative humidity of the lower marine
+/// boundary layer on average (Held & Soden 2000,
+/// doi:10.1146/annurev.energy.25.1.441, section on water vapour).
+const EVAPORATION_KM: f32 = 500.0;
 /// Land distance over which air rains out ~63% of its humidity.
 const RAIN_KM: f32 = 2_000.0;
 /// Land distance over which air drifts ~63% of the way towards the background
@@ -507,10 +512,46 @@ const NEUTRAL_RAIN: f32 = 0.08;
 /// pixel; smoothing keeps biome borders from turning to speckle, short
 /// enough to keep the wet windward side of a range 50 km wide.
 const RAIN_SMOOTHING_KM: f32 = 25.0;
-/// Weights of the precipitation, circulation-band and noise terms.
-const RAIN_WEIGHT: f32 = 0.75;
-const BAND_WEIGHT: f32 = 0.25;
-const NOISE_WEIGHT: f32 = 0.50;
+/// Weight of the moisture noise, in index units (see [`moisture_index`]).
+const NOISE_WEIGHT: f32 = 1.0;
+
+/// Annual precipitation per unit of the smoothed rain rate (humidity per
+/// 1 000 km), mm. Calibration to the mean over Earth's land, 2.25 mm a day
+/// or 821 mm a year (GPCP version 2.3, 1979-2013: Adler et al. 2018,
+/// doi:10.3390/atmos9040138, Table 1), of the rain the moisture index can
+/// hold (125 to 8 000 mm), on `earth-like` seeds 1 to 4. The mean of the
+/// unclamped rain is about a fifth higher: the unbounded windward maxima
+/// of a pixel-scale model, which GPCP's 2.5° cells and gauges never see.
+const MM_PER_RATE: f32 = 2_300.0;
+/// Octaves of rain (doublings) from 1 000 mm to a moisture of 1: the
+/// index runs from 125 mm a year (-1) to 8 000 mm (+1).
+const RAIN_OCTAVES: f32 = 3.0;
+/// Rain at moisture 0, mm a year.
+const NEUTRAL_RAIN_MM: f32 = 1_000.0;
+/// Exponent of the cold damping of rain: rain is divided by the air's
+/// holding capacity to this power, so cold air rains less than the warm
+/// air that moisture comes from, but less than its capacity alone would
+/// say (the eddies of the westerlies keep carrying moisture polewards).
+/// Calibration to GPCP's zonal means (Adler et al. 2018, same table and
+/// version, 2.5° zonal means from NOAA PSL), no source for the value.
+const COLD_RAIN_EXPONENT: f32 = 0.8;
+/// Holding capacity below which the cold damping stops growing (about
+/// -8 °C), so polar land is dry but not absurdly wet. Calibration, no
+/// source.
+const COLD_CAPACITY_FLOOR: f32 = 0.1;
+/// Octaves by which the circulation raises or lowers the rain: the
+/// equator and the polar front gain, the Hadley edge and the poles lose.
+/// Calibration to GPCP's zonal means, no source.
+const CIRCULATION_OCTAVES: f32 = 0.4;
+/// Extra octaves of the ITCZ, a belt `ITCZ_WIDTH_DEG` wide (in Earth
+/// degrees of latitude, as a Gaussian's scale) at the equator. Calibration
+/// to GPCP's zonal means, no source.
+const ITCZ_OCTAVES: f32 = 0.6;
+const ITCZ_WIDTH_DEG: f32 = 10.0;
+/// Share of the background humidity that reaches the land under the
+/// sinking air of the Hadley edge (1 under rising air): the dry air of the
+/// subtropical highs brings land no moisture. Calibration, no source.
+const SUBSIDENCE_HUMIDITY: f32 = 0.7;
 
 /// Warming of air, K, per unit of humidity it rains out (humidity being
 /// relative to saturated air at 27 °C and 1013 hPa, 21.9 g of vapour per
@@ -639,6 +680,15 @@ impl Belts {
         MERIDIONAL_WIND * shape as f32
     }
 
+    /// Octaves (doublings) by which the large-scale circulation raises or
+    /// lowers the rain at `latitude` (radians): [`band`](Self::band) times
+    /// [`CIRCULATION_OCTAVES`], plus the narrow rain belt of the ITCZ.
+    pub fn rain_octaves(&self, latitude: f64) -> f32 {
+        let e = self.earth_latitude(latitude) as f32;
+        let itcz = (-(e / ITCZ_WIDTH_DEG).powi(2)).exp();
+        CIRCULATION_OCTAVES * self.band(latitude) + ITCZ_OCTAVES * itcz
+    }
+
     /// Large-scale circulation bias in `[-1, 1]`: rising wet air at the
     /// equator and at the polar front, sinking dry air at the Hadley edge
     /// (desert belts) and at the poles.
@@ -686,6 +736,8 @@ pub struct Moisture {
     /// The precipitation term alone, in `[-1, 1]` (for the clouds and the
     /// diagnostic maps).
     pub precipitation: Vec<f32>,
+    /// Annual precipitation, mm, before the moisture noise.
+    pub annual_mm: Vec<f32>,
     /// Warming of the air that rained out on a climb and comes down dry
     /// (foehn), °C, on land.
     pub foehn: Vec<f32>,
@@ -794,7 +846,8 @@ fn background_humidity(input: &MoistureInput) -> Vec<f32> {
             }
             let local = if weight > 0.0 { sum / weight } else { 0.0 };
             // Half from nearby latitudes, half from the planet's whole ocean.
-            (local + global) / 2.0
+            let lift = (1.0 + input.belts.band(input.grid.latitude(y as u32))) / 2.0;
+            (local + global) / 2.0 * (SUBSIDENCE_HUMIDITY + (1.0 - SUBSIDENCE_HUMIDITY) * lift)
         })
         .collect()
 }
@@ -920,13 +973,26 @@ pub fn moisture(input: &MoistureInput) -> Moisture {
     drop(rate);
     let foehn = smooth(&grid, &warmth, RAIN_SMOOTHING_KM);
     drop(warmth);
-    // The smoothed rate, relative to what the air holds where it falls,
-    // turned into the precipitation term, in place: a ratio of rain to the
-    // evaporation the warmth allows, potential evaporation taken as
-    // proportional to the saturation vapour pressure. Calibration, no
-    // source: e_sat grows by about 7 % per °C, faster than evaporation
-    // formulas, so cold land comes out wetter than it is (the summer rule
-    // of the tundra keeps it treeless).
+    // Rain in mm a year: the smoothed rate, scaled to GPCP's land mean,
+    // damped where the air is cold and modulated by the circulation (rising
+    // air at the equator and the polar front, sinking air at the Hadley
+    // edge), then the log-scale moisture index of the biomes.
+    let row_octaves: Vec<f32> = (0..grid.height)
+        .map(|y| belts.rain_octaves(grid.latitude(y)))
+        .collect();
+    let annual: Vec<f32> = (0..grid.pixel_count())
+        .into_par_iter()
+        .map(|i| {
+            let octaves = row_octaves[i / w];
+            annual_rain_mm(rain[i], input.temperature[i], octaves)
+        })
+        .collect();
+    // The rate, relative to what the air holds where it falls, turned into
+    // the precipitation term, in place: a ratio of rain to the evaporation
+    // the warmth allows, potential evaporation taken as proportional to the
+    // saturation vapour pressure. Calibration, no source: e_sat grows by
+    // about 7 % per °C, faster than evaporation formulas, so cold land
+    // comes out wetter than it is. The clouds read it.
     rain.par_iter_mut()
         .zip(input.temperature)
         .for_each(|(r, &t)| {
@@ -935,11 +1001,8 @@ pub fn moisture(input: &MoistureInput) -> Moisture {
         });
     let moisture = (0..grid.pixel_count())
         .into_par_iter()
-        .map(|i| {
-            let band = belts.band(grid.latitude((i / w) as u32));
-            let m = RAIN_WEIGHT * rain[i] + BAND_WEIGHT * band + NOISE_WEIGHT * input.noise[i];
-            m.clamp(-1.0, 1.0)
-        })
+        .map(|i| moisture_index(annual[i]) + NOISE_WEIGHT * input.noise[i])
+        .map(|m| m.clamp(-1.0, 1.0))
         .collect();
     let foehn = foehn
         .into_par_iter()
@@ -949,8 +1012,50 @@ pub fn moisture(input: &MoistureInput) -> Moisture {
     Moisture {
         moisture,
         precipitation: rain,
+        annual_mm: annual,
         foehn,
     }
+}
+
+/// Annual rain, mm, from the smoothed rain `rate`, the air `temperature`
+/// (°C) and the circulation `band` in `[-1, 1]`.
+fn annual_rain_mm(rate: f32, temperature: f32, octaves: f32) -> f32 {
+    let cold = holding_capacity(temperature)
+        .max(COLD_CAPACITY_FLOOR)
+        .powf(-COLD_RAIN_EXPONENT);
+    (MM_PER_RATE * rate * cold * octaves.exp2()).max(1.0)
+}
+
+/// Moisture index in `[-1, 1]` of an annual rain in mm: its base-2
+/// logarithm, so each doubling is a third of a unit.
+pub fn moisture_index(rain_mm: f32) -> f32 {
+    (rain_mm / NEUTRAL_RAIN_MM).log2() / RAIN_OCTAVES
+}
+
+/// Annual rain, mm, of a moisture index (the inverse of [`moisture_index`]).
+pub fn rain_mm(moisture: f32) -> f32 {
+    NEUTRAL_RAIN_MM * (moisture * RAIN_OCTAVES).exp2()
+}
+
+/// Köppen's dryness threshold `P_th`, mm: `2 |T|` plus 0, 14 or 28 for rain
+/// mostly in the winter half-year, spread, or mostly in the summer one
+/// (at least 2/3 of the year's rain), with `T` the annual mean (Kottek et
+/// al. 2006, doi:10.1127/0941-2948/2006/0130, eq. 2.1). The model has no
+/// monthly rain, so the share of the summer half-year is the one the
+/// air's capacity gives it: [`holding_capacity`] of the half-years' mean
+/// temperatures (the annual mean plus or minus `2/π` of the half-range
+/// of the temperature, the mean of a sine over its half-period). Rain
+/// peaking in winter (the Mediterranean) is not modelled: calibration, no
+/// source.
+pub fn dryness_threshold_mm(annual: f32, summer: f32, winter: f32) -> f32 {
+    let half_year = |t: f32| annual + (t - annual) * 2.0 / std::f32::consts::PI;
+    let (warm, cold) = (
+        holding_capacity(half_year(summer)),
+        holding_capacity(half_year(winter)),
+    );
+    let share = warm / (warm + cold);
+    let season = if share >= 2.0 / 3.0 { 28.0 } else { 14.0 };
+    (2.0 * annual.abs() + season).max(1.0)
 }
 
 /// Box blur of `radius_km`, separable: east-west (wrapping, radius in pixels
@@ -1242,12 +1347,44 @@ mod tests {
             flat[ridge]
         );
         assert!(windward > 10.0 * lee, "{windward} vs {lee}");
-        assert!(lee < 0.75 * flat[ridge + 8], "{lee} vs {}", flat[ridge + 8]);
+        // Roe (2005): the lee gets a third to a half of the rain of the flat
+        // ground, and a fraction of the windward maximum.
+        assert!(lee < 0.5 * flat[ridge + 8], "{lee} vs {}", flat[ridge + 8]);
+        assert!(windward > 20.0 * lee, "{windward} vs {lee}");
+        // In mm a year: Southern Alps 11-12 m windward, under 1 m in the lee.
+        let (windward_mm, lee_mm) = (windward * MM_PER_RATE, lee * MM_PER_RATE);
+        assert!(
+            (6_000.0..16_000.0).contains(&windward_mm),
+            "{windward_mm} mm"
+        );
+        assert!(lee_mm < 1_000.0, "{lee_mm} mm");
         // The air that rained out comes down warmer than it went up, and
         // the warmth fades downwind.
         assert_eq!(warm[ridge - 2], 0.0);
         assert!(warm[ridge + 8] > 2.0, "{}", warm[ridge + 8]);
         assert!(warm[ridge + 100] < 0.5 * warm[ridge + 8]);
+    }
+
+    #[test]
+    fn the_moisture_index_is_the_log_of_the_annual_rain() {
+        assert!(moisture_index(NEUTRAL_RAIN_MM).abs() < 1e-6);
+        assert!((moisture_index(8_000.0) - 1.0).abs() < 1e-5);
+        assert!((moisture_index(125.0) + 1.0).abs() < 1e-5);
+        for m in [-0.7f32, -0.2, 0.0, 0.4, 0.9] {
+            assert!((moisture_index(rain_mm(m)) - m).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn koppens_dryness_threshold_follows_the_temperature_and_the_rain_season() {
+        // Kottek et al. 2006, eq. 2.1, at 20 °C: 2T plus 14 spread through
+        // the year, plus 28 when two thirds of the rain falls in summer.
+        assert!((dryness_threshold_mm(20.0, 20.0, 20.0) - 54.0).abs() < 1e-3);
+        // A continental summer 30 °C warmer than the winter puts well over
+        // two thirds of the rain in the warm half-year.
+        assert!((dryness_threshold_mm(20.0, 35.0, 5.0) - 68.0).abs() < 1e-3);
+        // Absolute temperature, as the paper writes it.
+        assert!((dryness_threshold_mm(-5.0, -5.0, -5.0) - 24.0).abs() < 1e-3);
     }
 
     #[test]

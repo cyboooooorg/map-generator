@@ -1364,6 +1364,7 @@ pub fn generate_with_progress(
             moisture: raw_moisture,
             precipitation,
             foehn,
+            ..
         },
     ) = rayon::join(
         || grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM),
@@ -1757,6 +1758,65 @@ pub(crate) mod tests {
             // The old ramp: a fifth of the land above 4 km.
             assert!(above(&sea, 1.0) > 70.0, "{report}");
         }
+    }
+
+    #[test]
+    fn earth_like_worlds_are_dry_where_earth_is_dry() {
+        // Köppen's arid climates B cover 30.2 % of Earth's land (Peel et al.
+        // 2007), the tropical ones 19.0 %. Four seeds together, as the
+        // calibration was made.
+        let earth = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/earth-like.toml"
+        );
+        let (mut land, mut arid, mut tropical) = (0.0f64, 0.0f64, 0.0f64);
+        // Mean rain of the 0-10° belt and of the 20-35° belts, mm.
+        let mut belt = [(0.0f64, 0.0f64); 2];
+        for seed in [1u32, 2, 3, 4] {
+            let request = crate::request::WorldRequest {
+                planet: Some(earth.into()),
+                seed: Some(seed),
+                width: Some(512),
+                height: Some(256),
+                ..Default::default()
+            };
+            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
+            let p = request.resolve(&mut rng).unwrap().params;
+            let w = generate(&p).world;
+            let grid = p.grid();
+            for i in 0..w.biomes.len() {
+                let latitude = grid
+                    .latitude((i / w.width as usize) as u32)
+                    .to_degrees()
+                    .abs();
+                let area = grid.latitude((i / w.width as usize) as u32).cos();
+                let rain = f64::from(crate::climate::rain_mm(w.moisture[i]));
+                if latitude < 10.0 {
+                    belt[0].0 += rain * area;
+                    belt[0].1 += area;
+                } else if (20.0..35.0).contains(&latitude) {
+                    belt[1].0 += rain * area;
+                    belt[1].1 += area;
+                }
+                let b = w.biomes[i];
+                if b.is_water() && !matches!(b, Biome::Lake | Biome::River) {
+                    continue;
+                }
+                land += area;
+                match b {
+                    Biome::Desert | Biome::Shrubland => arid += area,
+                    Biome::Jungle | Biome::Savanna => tropical += area,
+                    _ => {}
+                }
+            }
+        }
+        let (arid, tropical) = (arid / land, tropical / land);
+        assert!((0.25..0.36).contains(&arid), "arid {arid}");
+        assert!((0.12..0.24).contains(&tropical), "tropical {tropical}");
+        // The ITCZ is wet and the subtropical highs dry (GPCP: 1 900 mm at
+        // 5° N, 665 mm at 25° N).
+        let (itcz, highs) = (belt[0].0 / belt[0].1, belt[1].0 / belt[1].1);
+        assert!(itcz > 1.8 * highs, "{itcz} vs {highs}");
     }
 
     #[test]
