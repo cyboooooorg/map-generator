@@ -143,6 +143,11 @@ impl WorldParams {
         if let Some(mass) = self.giant_mass_earth {
             return mass / (radius * radius);
         }
+        // An icy moon asked for on its own: the density of the icy moons
+        // a system draws, 1.9 g/cm³ against Earth's 5.513.
+        if self.planet.name == "icy-moon" {
+            return 1.9 / 5.513 * radius;
+        }
         rocky_gravity(radius)
     }
 

@@ -178,8 +178,10 @@ const SMALL_BODY_RELIEF: f32 = 0.08;
 /// Calibration on that one body.
 const IMPACT_RELIEF_KM: f32 = 9.0;
 /// Relief ice holds against rock: complex craters on Ganymede are about
-/// 1.1 km deep at 26 km (Schenk 2002, doi:10.1038/417419a), where Pike's
-/// lunar law gives 2.8 km at nearly the same gravity: 0.4. Icy bodies'
+/// 1.1 km deep at 26 km (Schenk 2002, doi:10.1038/417419a, read in the
+/// letter's NTRS copy), where Pike's lunar law gives 2.8 km at nearly the
+/// same gravity: 0.4. A calibration: taking that crater-depth ratio for
+/// the share of all relief ice holds is an extrapolation. Icy bodies'
 /// complex craters take it too (`craters::CraterField`).
 pub(crate) const ICE_RELIEF: f32 = 0.4;
 
@@ -1133,15 +1135,17 @@ pub fn generate_with_progress(
         variability_m,
         highland_offset,
     } = fields;
-    // The smallest bodies (moonlets) cannot hold the relief of a planet:
-    // it is flattened towards the sea level to a share of their radius,
-    // and craters shape them.
+    // Small and airless bodies cannot hold the relief of a planet: it is
+    // flattened towards the waterline (see `relief_share`), and craters
+    // shape them.
     let flatten = relief_share(params);
     if flatten < 1.0 {
-        let sea = params.sea_level;
+        // Towards the waterline, where the floating crust is measured
+        // from: the sea level itself sits above the altitude lines.
+        let waterline = params.sea_level + planet.rules.waterline;
         elevation
             .par_iter_mut()
-            .for_each(|e| *e = sea + (*e - sea) * flatten);
+            .for_each(|e| *e = waterline + (*e - waterline) * flatten);
     }
     // Rows of sea-level temperature, evened out by dense air.
     // The host star: its light, regulated by a carbon cycle on wet worlds
@@ -1770,6 +1774,22 @@ pub(crate) mod tests {
         assert!(relief_share(&p) * noise_span_km(&p) <= SMALL_BODY_RELIEF * 32.0 + 1e-3);
         // Planets keep their whole relief.
         assert_eq!(relief_share(&params(0, "terran")), 1.0);
+    }
+
+    #[test]
+    fn an_icy_moon_asked_for_alone_has_ices_gravity() {
+        let file = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/moons/icy-moon.toml"
+        );
+        let p = WorldParams {
+            planet: Preset::load(file).unwrap(),
+            circumference_km: 9_800.0,
+            ..params(0, "terran")
+        };
+        let radius = 9_800.0 / EARTH_CIRCUMFERENCE_KM;
+        assert!((p.gravity_modifier() - 1.9 / 5.513 * radius).abs() < 1e-6);
+        assert!(icy(&p));
     }
 
     #[test]
