@@ -117,7 +117,7 @@ Each moon is generated after its planet as a world of its own, a body of its sys
 
 - **An inner belt** inside the first cold giant, from 0.40 of its distance to its 2:1 resonance, with Kirkwood gaps at its 3:1, 5:2 and 7:3 and the Hildas in its 3:2. None without a giant, whose planetesimals grew into planets. Its mass is log-uniform from 10⁻⁵ to 10⁻² Earth masses; the Sun's is 4 × 10⁻⁴.
 - **An outer belt** between the outermost giant's 3:2 and 2:1, or at 11 to 18 ice lines without a giant, for half of F, G and K stars, a quarter of M dwarfs and three in ten hotter stars. With a giant, a **scattered disk** goes with it.
-- **Trojans** at each planet's L4 and L5 points. A planet keeps them where Routh's criterion holds (mass share under 0.0385) and no heavier planet orbits within a period ratio of 3.
+- **Trojans** at each planet's L4 and L5 points. A planet keeps them where Routh's criterion holds (mass share under 0.0385) and no heavier giant orbits within a period ratio of 3 (a rocky neighbour does not count: Mars keeps its trojans next to the Earth).
 
 A belt is drawn only where the planets leave it a span of 1.15 in ratio at least. The belts set every body's crater rate: the giant beyond it (Horner & Jones 2008) times four fifths of the asteroids (the inner belt against the Sun's) and a fifth of the comets (the outer belt and scattered disk against the Sun's 0.05 Earth masses), a twentieth at least; a moon strikes at its planet's rate. Systems drawn before keep their bodies and their crater rates.
 

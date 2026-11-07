@@ -177,8 +177,9 @@ Once the planets are placed, the system draws its belts and trojans
   - With a giant, a **scattered disk** goes with it, from the giant to
     four times its distance, with 0.3 to 3 times the belt's mass.
 - **Trojans.** Bodies larger than 1 km at L4 and L5. A planet has them
-  where its mass share is under Routh's 0.0385 and no heavier planet
-  orbits within a period ratio of 3.
+  where its mass share is under Routh's 0.0385 and no heavier giant
+  orbits within a period ratio of 3 (Mars keeps its trojans next to the
+  heavier, rocky Earth).
   - A gas giant, or the outermost ice giant: 10⁴ to 10⁶.
   - Another ice giant: 10³ to 10⁵.
   - A hot Jupiter: up to 10³.

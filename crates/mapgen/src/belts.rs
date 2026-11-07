@@ -21,9 +21,10 @@
 //! what is left spans a ratio of 1.15 at least.
 //!
 //! **Trojans.** L4 and L5 are stable while the planet's mass share stays
-//! under Routh's 0.0385; a swarm lasts unless a more massive planet orbits
+//! under Routh's 0.0385; a swarm lasts unless a more massive giant orbits
 //! within a period ratio of 3 (Saturn and Uranus have none; Jupiter and
-//! Neptune have many).
+//! Neptune have many; Mars, next to the heavier but rocky Earth, keeps
+//! its own).
 //!
 //! **Craters.** Asteroids from the inner belt and comets from the outer
 //! belt and the scattered disk strike the planets; [`impact_factor`]
@@ -335,8 +336,11 @@ pub fn draw_trojans(star_mass: f64, planets: &[Track], seed: u32) -> Vec<Option<
             // does not move another's.
             let (u, r) = (rng.random::<f64>(), 0.7 + 0.75 * rng.random::<f64>());
             let mu = p.mass_earth / (star_mass * SUN_EARTH + p.mass_earth);
+            // Only a heavier giant empties the points: Jupiter Saturn's,
+            // Saturn Uranus's. A rocky neighbour does not (the Earth leaves
+            // Mars its trojans, Christou et al. 2025).
             let perturbed = planets.iter().any(|q| {
-                q.id != p.id && q.mass_earth > p.mass_earth && {
+                q.id != p.id && q.giant() && q.mass_earth > p.mass_earth && {
                     let ratio = (q.orbit_au / p.orbit_au).max(p.orbit_au / q.orbit_au);
                     ratio.powf(1.5) < 3.0
                 }
@@ -540,17 +544,18 @@ mod tests {
     }
 
     #[test]
-    fn trojans_need_stable_points_and_no_heavier_neighbour() {
+    fn trojans_need_stable_points_and_no_heavier_giant() {
         let trojans = draw_trojans(1.0, &solar(), 3);
         // Jupiter and Neptune keep theirs; Saturn and Uranus lose them to
-        // a heavier neighbour.
+        // a heavier giant.
         assert!(trojans[4].is_some_and(|t| t.l4 + t.l5 >= 10_000));
         assert!(trojans[5].is_none() && trojans[6].is_none());
         assert!(trojans[7].is_some_and(|t| t.l4 + t.l5 >= 10_000));
-        // Earth keeps a handful at most; Venus, inside Earth's period
-        // ratio of 3 and lighter, none.
-        assert!(trojans[2].is_some_and(|t| t.l4 + t.l5 <= 100));
-        assert!(trojans[1].is_none());
+        // The rocky planets keep a handful at most, Mars too: its heavier
+        // neighbour, the Earth, is no giant.
+        for rocky in 0..4 {
+            assert!(trojans[rocky].is_some_and(|t| t.l4 + t.l5 <= 100), "{rocky}");
+        }
         // A giant of 13 Jupiters round a small red dwarf passes Routh's limit.
         let heavy = [Track {
             id: "b",

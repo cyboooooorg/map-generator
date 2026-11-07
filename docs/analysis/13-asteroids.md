@@ -134,7 +134,7 @@ the planet's pulls.
 | ------- | ------------------------ | -------------------------------------------------------------------------------------------- |
 | Jupiter | more than 10 000 known   | about 2.6 × 10⁵ larger than 1 km, a tenth of the main belt; L4 holds 1.4 times as many as L5 |
 | Neptune | about 30                 | thought to be as many as Jupiter's, or more                                                  |
-| Mars    | about ten                | mostly at L5, some of them fragments of one body                                             |
+| Mars    | 16, 15 of them stable    | mostly at L5, some of them fragments of one body                                             |
 | Uranus  | two, both temporary      | Saturn's and Jupiter's pulls destabilize them                                                |
 | Earth   | two (2010 TK7, 2020 XL5) | temporary, a few thousand years; tens to hundreds expected, not thousands                    |
 | Saturn  | none stable              | Jupiter, near a 5:2 resonance, empties its L4 and L5                                         |
@@ -207,8 +207,10 @@ planet.trojans: { l4: count, l5: count }   // bodies larger than 1 km
   - One FGK system in four gets one, and one M system in ten. These are
     observed rates; real belts are more common, since ours would go
     undetected.
-- **Trojans.** A planet gets swarms when no more massive planet orbits
-  within a period ratio of 3 of it.
+- **Trojans.** A planet gets swarms when no more massive giant orbits
+  within a period ratio of 3 of it. A rocky neighbour does not count: Mars
+  keeps its trojans (16 known, 15 stable, Christou et al. 2025) next to
+  the heavier Earth.
   - A giant: 10⁴ to 10⁶ bodies larger than 1 km, the L4 swarm a little
     richer.
   - An ice giant on the outside: as many as a gas giant.
