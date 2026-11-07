@@ -599,6 +599,13 @@ impl PlateMap {
         let parting = smooth(RELIEF_SPEED.0, RELIEF_SPEED.1, -b.convergence);
         let trench = || -0.16 * closing * bump(d, 40.0, 45.0);
         let mut r = Relief::default();
+        // A mid-ocean ridge: young floor, the younger the higher, its crest
+        // at Parsons & Sclater's depth at any spreading rate (slow ridges
+        // are narrow by their age alone); it fades in only as the plates
+        // start to part, under 0.5 cm/yr.
+        if !mine && !theirs && b.convergence < 0.0 {
+            r.swell = smooth(0.0, RELIEF_SPEED.0, -b.convergence) * ridge_swell(d, -b.convergence);
+        }
         if closing > 0.0 {
             match (mine, theirs) {
                 (true, true) => {
@@ -619,8 +626,7 @@ impl PlateMap {
             }
         } else if parting > 0.0 {
             match (mine, theirs) {
-                // A mid-ocean ridge: young floor, the younger the higher.
-                (false, false) => r.swell = parting * ridge_swell(d, -b.convergence),
+                (false, false) => {}
                 (true, true) => {
                     r.uplift = parting * (0.02 * bump(d, 120.0, 60.0) - 0.06 * bump(d, 0.0, 60.0));
                 }
@@ -977,6 +983,24 @@ mod tests {
         assert!((km(225.0, 5.0) - 3.55).abs() < 1e-3);
         // Faster ridges are broader.
         assert!(ridge_swell(200.0, 8.0) > ridge_swell(200.0, 2.0));
+        // A slow ridge, as the Mid-Atlantic's 2.5 cm/yr (USGS), keeps its
+        // full crest: 1.5 km over the old floor.
+        let map = PlateMap::with_crust(&params(5), |_| false);
+        let slow_crests: Vec<f32> = (0..map.grid.cell_count())
+            .filter(|&k| {
+                map.boundaries
+                    .get(map.nearest[k] as usize)
+                    .is_some_and(|b| {
+                        map.boundary_km[k] < 1.0 && (-3.0..-1.0).contains(&b.convergence)
+                    })
+            })
+            .map(|k| map.reliefs[k].swell * crate::craters::ELEVATION_KM)
+            .collect();
+        assert!(!slow_crests.is_empty());
+        assert!(
+            slow_crests.iter().all(|&h| (h - 1.5).abs() < 1e-3),
+            "{slow_crests:?}"
+        );
     }
 
     #[test]
