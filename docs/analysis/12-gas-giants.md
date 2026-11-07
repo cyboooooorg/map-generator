@@ -134,6 +134,10 @@ Hot giants are larger than that: close to their star, giants above an
 equilibrium temperature of about 1 000 K are **inflated**, up to about
 2 Jupiter radii, a few percent of the starlight they get being turned
 into internal heat (Thorngren & Fortney 2018, favouring Ohmic heating).
+That share peaks at about 2.4 % and falls at higher fluxes faster than
+the flux grows (eq. 34 of their preprint, a Gaussian in `log F`), so the heat
+itself peaks near an equilibrium temperature of 1 700 K (Earth's albedo;
+about 1 900 K for a black body) and is halved by 2 200 K.
 
 ## 2. Kinds of giant planets
 
@@ -391,13 +395,20 @@ A world could be a moon of a giant rather than a planet of the star:
   Sun-like stars with a hot Jupiter (periods of 1 to 10 days), fewer
   when the world orbits nearby (hot Jupiters are lonely);
   eccentricities from Kipping's law, none for hot Jupiters.
-- **Spacing:** a giant closer than `2√3` mutual Hill radii (apoapsis to
-  periapsis) to the world or to another giant is redrawn a few times,
-  then dropped; at most four giants.
+- **Spacing:** a giant too close to the world or to another giant
+  (apoapsis to periapsis) is redrawn a few times, then dropped; at most
+  four giants. The gap kept is the system's (`giants::hill_spacing`): 10
+  mutual Hill radii for Earth-mass planets, falling as the pair's mass
+  share to the power −1/12 (Chambers et al. 1996), 6.4 for a Jupiter and
+  a Saturn, never under `2√3`. It was `2√3` alone at first, Gladman's
+  limit for two planets, which lets three or more meet within millions
+  of years.
 - **Each giant:** a letter (b, c, … by distance, the world being the
   system's planet of interest), mass, radius (power laws through
-  Neptune, Saturn and Jupiter, `M^−0.04` above; inflated when
-  `Teq > 1 000 K`), orbit, eccentricity, year, equilibrium temperature,
+  Neptune, Saturn and Jupiter, `M^−0.04` above; inflated by the heat
+  of Thorngren & Fortney's fit, from about 1 000 K, most near 1 700 K;
+  first a rise from 1 000 to 2 200 K held at its top, which ignored the
+  fall at high fluxes), orbit, eccentricity, year, equilibrium temperature,
   Sudarsky class (ice giants apart), a colour for the views, rings
   (none, faint or bright).
 - **Effects on the world:**

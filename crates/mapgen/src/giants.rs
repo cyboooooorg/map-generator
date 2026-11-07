@@ -18,18 +18,19 @@
 //! (Cumming et al. 2008) for gas giants, log-uniform for ice giants;
 //! eccentricities Kipping's law, like the world's, none for hot Jupiters.
 //!
-//! **Spacing.** Two orbits closer than `2√3` mutual Hill radii, apoapsis to
-//! periapsis, are unstable (Gladman 1993): a giant that close to the world
-//! or to another giant is redrawn a few times, then dropped. At most
-//! [`MAX_GIANTS`].
+//! **Spacing.** Neighbouring orbits keep [`hill_spacing`] mutual Hill radii
+//! apart, apoapsis to periapsis: 10 for Earth-mass planets, fewer for
+//! heavier ones (Chambers et al. 1996; Pu & Wu 2015), never under `2√3`
+//! (Gladman 1993). A giant too close to the world or to another giant is
+//! redrawn a few times, then dropped. At most [`MAX_GIANTS`].
 //!
 //! **Effects on the world.** An eccentric giant forces an eccentricity on
 //! the world (Laplace–Lagrange secular theory; the request raises a drawn
 //! eccentricity to it), and the giant outside the world's orbit sets how
 //! many impactors reach it (Horner & Jones 2008; see [`impact_factor`]).
-use crate::noise::{smoothstep, stream, stream_seed};
+use crate::noise::{stream, stream_seed};
 use crate::star::{
-    StarValues, draw_eccentricity, equilibrium_k, mean_flux_factor, values, year_days,
+    StarValues, draw_eccentricity, equilibrium_k, mean_temperature_factor, values, year_days,
 };
 use crate::world::WorldParams;
 use rand::rngs::StdRng;
@@ -46,7 +47,7 @@ const SUN_EARTH_MASSES: f64 = 332_946.0;
 const GAS_GIANTS: f64 = 0.25;
 const ICE_GIANTS: f64 = 0.3;
 /// Share of Sun-like stars of the Sun's metallicity with a hot Jupiter.
-const HOT_JUPITERS: f64 = 0.01;
+pub const HOT_JUPITERS: f64 = 0.01;
 /// Gas giant masses, Jupiter masses: from 0.1 (about a third of Saturn) to
 /// the deuterium-burning limit, and the slope of `dN/d ln M`.
 const GAS_MASS: (f64, f64) = (0.1, 13.0);
@@ -59,9 +60,27 @@ const ICE_ORBIT: (f64, f64) = (0.7, 0.3);
 /// Distances kept, AU.
 const ORBIT_RANGE: (f64, f64) = (0.02, 60.0);
 /// Hot Jupiter periods, days.
-const HOT_PERIOD_DAYS: (f64, f64) = (1.0, 10.0);
-/// Least gap between two orbits, in mutual Hill radii (Gladman 1993).
-const HILL_GAP: f64 = 3.464;
+pub const HOT_PERIOD_DAYS: (f64, f64) = (1.0, 10.0);
+/// Gap kept between two Earth-mass neighbours, in mutual Hill radii: about
+/// what systems of a few Earth masses need to last a billion years (Pu &
+/// Wu 2015; Obertas et al. 2017).
+const EARTH_HILL_SPACING: f64 = 10.0;
+
+/// Least gap kept between two neighbouring orbits, apoapsis to periapsis,
+/// in mutual Hill radii, for a pair whose mean mass share of the star is
+/// `mass_share` (`(m₁ + m₂) / 2M`).
+///
+/// [`EARTH_HILL_SPACING`] for Earth-mass planets. Heavier planets need
+/// fewer Hill radii: Chambers et al. (1996) found the stable spacings of
+/// different masses agree once scaled by `μ^¼` rather than by the Hill
+/// radius's `μ^⅓`, so the spacing falls as `μ^(−1/12)`: about 6.4 for a
+/// Jupiter and a Saturn, which keeps the Solar System's own pair (6.5
+/// apart). Never below `2√3`, the limit under which even two planets alone
+/// meet (Gladman 1993).
+pub fn hill_spacing(mass_share: f64) -> f64 {
+    const EARTH_SHARE: f64 = 1.0 / 332_946.0;
+    (EARTH_HILL_SPACING * (mass_share / EARTH_SHARE).powf(-1.0 / 12.0)).max(2.0 * 3f64.sqrt())
+}
 /// Tries to place a giant before it is dropped.
 const TRIES: usize = 6;
 /// Metallicity of the stars nearby, dex: mean, spread and limits
@@ -202,10 +221,36 @@ fn world_mass_earth(p: &WorldParams) -> f64 {
     }
 }
 
+/// The heat a hot giant's interior gets from its star's light, relative to
+/// the most any giant gets, at an `equilibrium_k` (K, Earth's albedo, as
+/// [`equilibrium_k`] gives it): the flux times the share of it turned into
+/// heat, the Gaussian in `log F` of Thorngren & Fortney (2018, eq. 34 of the preprint:
+/// 2.37 % at most, at `log F` = 0.14 with `F` in Gerg s⁻¹ cm⁻², spread
+/// 0.37). The share falls at high fluxes faster than the flux grows: the
+/// heat peaks at about 1 700 K, is 0.8 of it at 1 500 K, 0.5 at 2 200 K
+/// and 0.04 at 1 000 K.
+fn inflation_heat(equilibrium_k: f32) -> f32 {
+    const PEAK_LOG_F: f32 = 0.14;
+    const SPREAD: f32 = 0.37;
+    // Earth's flux, Gerg s⁻¹ cm⁻².
+    const EARTH_FLUX: f32 = 1.361e-3;
+    let flux = (equilibrium_k / equilibrium_k_of_earth()).powi(4) * EARTH_FLUX;
+    let ln_power =
+        |x: f32| -(x - PEAK_LOG_F).powi(2) / (2.0 * SPREAD * SPREAD) + x * std::f32::consts::LN_10;
+    let peak = PEAK_LOG_F + SPREAD * SPREAD * std::f32::consts::LN_10;
+    (ln_power(flux.max(1e-12).log10()) - ln_power(peak)).exp()
+}
+
+/// Earth's equilibrium temperature as [`equilibrium_k`] gives it, K.
+fn equilibrium_k_of_earth() -> f32 {
+    equilibrium_k(1.0)
+}
+
 /// Radius of a giant, Earth radii, from its mass (Earth masses): through
 /// Neptune (`M^0.59` below it, Chen & Kipping 2017), Saturn and Jupiter,
-/// then `M^−0.04`; inflated when hot (Thorngren & Fortney 2018), the less
-/// massive the more.
+/// then `M^−0.04`; inflated when hot, by the heat of [`inflation_heat`]
+/// (Thorngren & Fortney 2018), most near 1 700 K, the less massive the
+/// more.
 pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
     const ANCHORS: [(f32, f32); 3] = [(17.15, 3.88), (95.16, 9.45), (317.8, 11.21)];
     let m = mass_earth;
@@ -219,7 +264,7 @@ pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
         let f = (m / m0).ln() / (m1 / m0).ln();
         (r0.ln() + (r1.ln() - r0.ln()) * f).exp()
     };
-    let heat = smoothstep(1000.0, 2200.0, equilibrium_k);
+    let heat = inflation_heat(equilibrium_k);
     let inflation = (1.0 + 0.7 * heat * (JUPITER_EARTH_MASSES / m.max(30.0)).powf(0.25)).min(1.9);
     cold * if m > 30.0 { inflation } else { 1.0 }
 }
@@ -296,8 +341,8 @@ struct Track {
 }
 
 impl Track {
-    /// Whether two orbits keep the least gap of [`HILL_GAP`] mutual Hill
-    /// radii between them.
+    /// Whether two orbits keep the least gap of [`hill_spacing`] mutual
+    /// Hill radii between them.
     fn clear_of(&self, other: &Track, star_mass: f64) -> bool {
         let (inner, outer) = if self.orbit < other.orbit {
             (self, other)
@@ -309,7 +354,7 @@ impl Track {
             * (self.orbit + other.orbit);
         let gap =
             outer.orbit * (1.0 - outer.eccentricity) - inner.orbit * (1.0 + inner.eccentricity);
-        gap >= HILL_GAP * hill
+        gap >= hill_spacing(0.5 * (self.mass + other.mass) / star_mass) * hill
     }
 }
 
@@ -450,8 +495,8 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
     let mass_earth = (track.mass * SUN_EARTH_MASSES) as f32;
     let orbit_au = track.orbit as f32;
     let eccentricity = track.eccentricity as f32;
-    let flux = star.luminosity / (orbit_au * orbit_au) * mean_flux_factor(eccentricity);
-    let equilibrium = equilibrium_k(flux);
+    let flux = star.luminosity / (orbit_au * orbit_au);
+    let equilibrium = equilibrium_k(flux) * mean_temperature_factor(eccentricity);
     // Heat left from formation: Jupiter's internal temperature is about
     // 100 K; less for smaller giants, little for ice giants.
     let internal = match kind {
@@ -499,6 +544,22 @@ mod tests {
     use super::*;
     use crate::preset::Preset;
 
+    #[test]
+    fn heavier_pairs_need_fewer_hill_radii() {
+        let earth = 1.0 / 332_946.0;
+        assert!((hill_spacing(earth) - 10.0).abs() < 1e-9);
+        // A Jupiter and a Saturn: 6.4, under their own 6.5.
+        let pair = 0.5 * (317.8 + 95.2) * earth;
+        assert!(
+            (hill_spacing(pair) - 6.4).abs() < 0.05,
+            "{}",
+            hill_spacing(pair)
+        );
+        // Never under Gladman's two-planet limit, even for a star's mass.
+        assert!(hill_spacing(1.0) >= 2.0 * 3f64.sqrt());
+        assert!((hill_spacing(1e3) - 2.0 * 3f64.sqrt()).abs() < 1e-9);
+    }
+
     fn params(seed: u32, star: f32, orbit_au: f32, metallicity: f32) -> WorldParams {
         WorldParams {
             width: 64,
@@ -536,6 +597,13 @@ mod tests {
         assert!((giant_radius(3178.0, 100.0) / 11.21 - 0.912).abs() < 0.01);
         assert!(giant_radius(317.8, 1800.0) > 1.4 * 11.21);
         assert!(giant_radius(317.8, 1800.0) < 1.9 * 11.21);
+        // The heat peaks near 1 700 K and falls on both sides (Thorngren &
+        // Fortney 2018).
+        assert!((inflation_heat(1725.0) - 1.0).abs() < 0.01);
+        assert!((inflation_heat(1500.0) - 0.8).abs() < 0.05);
+        assert!((inflation_heat(2200.0) - 0.5).abs() < 0.05);
+        assert!(inflation_heat(1000.0) < 0.05);
+        assert!(giant_radius(317.8, 2600.0) < giant_radius(317.8, 1800.0));
     }
 
     #[test]
