@@ -183,11 +183,17 @@ const IMPACT_RELIEF_KM: f32 = 9.0;
 /// complex craters take it too (`craters::CraterField`).
 pub(crate) const ICE_RELIEF: f32 = 0.4;
 
+/// Height of the continents' noise above the waterline from which the
+/// mountains rise (over 0.4 more): measured from the waterline, so that a
+/// world with little land does not make most of it mountains.
+/// Calibration with [`MOUNTAIN_BLEND`] on Earth's hypsometry.
+const MOUNTAIN_ONSET: f32 = 0.15;
+
 /// Mountain blend at Earth's gravity: the weight of the ridged mountains
 /// in the elevation. Calibration, no source: with the floating platform
 /// (see [`floating`]), it puts about a tenth of an Earth-like world's land
 /// above 2 km and 2 % above 4 km, as on Earth (ETOPO 2022).
-const MOUNTAIN_BLEND: f32 = 0.36;
+const MOUNTAIN_BLEND: f32 = 0.45;
 /// Largest relief scale ([`relief_scale`]): Olympus Mons's 21.9 km of
 /// relief over its surroundings (Plescia 2004, doi:10.1029/2002JE002031)
 /// is 2.5 times Everest's 8.85 km, the tallest mountain known against
@@ -214,7 +220,7 @@ pub(crate) fn relief_scale(gravity: f32) -> f32 {
 /// Height of the continental platform above the waterline, km: where the
 /// continents' crust floats (calibration on Earth's hypsometry, see
 /// [`floating`]).
-const PLATFORM_KM: f32 = 0.45;
+const PLATFORM_KM: f32 = 0.5;
 /// Rise of the platform inland, in units of the continents' noise above
 /// the waterline: `1 − 1/e` of its height at this.
 const PLATFORM_RISE: f32 = 0.1;
@@ -223,13 +229,13 @@ const PLATFORM_RISE: f32 = 0.1;
 const SHELF_KM: f32 = 0.2;
 const SHELF_NOISE: f32 = 0.03;
 /// Width of the continental slope in the noise, down to the old floor.
-const SLOPE_NOISE: f32 = 0.05;
+const SLOPE_NOISE: f32 = 0.1;
 /// Depth of old ocean floor, km: from where Parsons & Sclater's floor is
 /// 18 Ma old (4 km, `plates::OLD_FLOOR_KM`) to their old floor's level,
 /// 6.4 km (Parsons & Sclater 1977, doi:10.1029/JB082i005p00803), reached
 /// as the noise falls further by about [`ABYSS_NOISE`].
 const ABYSS_KM: f32 = 6.4;
-const ABYSS_NOISE: f32 = 0.18;
+const ABYSS_NOISE: f32 = 0.35;
 
 /// Height (negative: depth) of the crust above the waterline, elevation
 /// units, for the continents' noise `x` units above (below) it.
@@ -622,7 +628,8 @@ impl Sampler {
         } else {
             (coarse, fine)
         };
-        let mountain_weight = ((coarse + fine - 0.2) * 2.5).clamp(0.0, 1.0);
+        let mountain_weight =
+            ((coarse + fine - self.waterline - MOUNTAIN_ONSET) * 2.5).clamp(0.0, 1.0);
         // Low ground inland keeps a share of the fine octaves: plains and
         // deserts are smooth, coasts keep their outline and mountains their
         // foothills.
@@ -954,19 +961,21 @@ impl NoiseFields {
 }
 
 /// Size of the grid [`sea_level_for_land_fraction`] samples the relief on.
-const LAND_GRID: (u32, u32) = (512, 256);
-/// Most passes [`sea_level_for_land_fraction`] makes; each one samples the
-/// relief at the previous estimate, since the coast outline depends on it.
-const LAND_PASSES: usize = 4;
+const LAND_GRID: (u32, u32) = (256, 128);
+/// Most passes [`sea_level_for_land_fraction`] makes, and the land share
+/// within which of its target it stops.
+const LAND_PASSES: usize = 16;
+const LAND_TOLERANCE: f64 = 0.003;
 
 /// The sea level that leaves `fraction` of the planet's surface (by area,
 /// in `[0, 1]`) above the waterline, for the other parameters of `params`.
 ///
-/// Samples the relief on a coarse grid and takes the area-weighted quantile
-/// of its elevation. The coast outline shifts with the sea level, so this
-/// repeats from the new estimate until it settles. Erosion runs later and
-/// is not modelled, yet on test worlds the land share lands within about
-/// 0.1 point of the target.
+/// The land share falls as the sea level rises: the sea level is found by
+/// regula falsi (the Illinois variant) on the share, sampled on a coarse
+/// grid at each estimate (the floating crust, the coasts and the plates'
+/// crust all follow the waterline, so no single sampling gives it).
+/// Erosion runs later and is not modelled, yet on test worlds the land
+/// share lands within about 0.02 of the target.
 pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     let limits = crate::request::SEA_LEVEL;
     let mut coarse = params.clone();
@@ -974,37 +983,60 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     let grid = coarse.grid();
     let weights: Vec<f64> = (0..grid.height).map(|y| grid.latitude(y).cos()).collect();
     let total: f64 = weights.iter().sum::<f64>() * grid.width as f64;
-    let waterline_shift = params.planet.rules.waterline;
-    for _ in 0..LAND_PASSES {
-        let sampler = Sampler::new(&coarse);
-        let mut samples: Vec<(f32, f64)> = (0..grid.height)
+    let target = f64::from(fraction.clamp(0.0, 1.0));
+    // The land share minus the target, at a sea level.
+    let excess = |level: f32| {
+        let p = WorldParams {
+            sea_level: level,
+            ..coarse.clone()
+        };
+        let waterline = level + p.planet.rules.waterline;
+        let sampler = Sampler::new(&p);
+        let land: f64 = (0..grid.height)
             .into_par_iter()
-            .flat_map_iter(|y| {
-                let sampler = &sampler;
+            .map(|y| {
                 let w = weights[y as usize];
-                (0..grid.width).map(move |x| (sampler.sample(x, y).elevation, w))
+                (0..grid.width)
+                    .filter(|&x| sampler.sample(x, y).elevation > waterline)
+                    .count() as f64
+                    * w
             })
-            .collect();
-        samples.par_sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
-        // Walk down from the highest ground until the target area is reached.
-        let target = fraction.clamp(0.0, 1.0) as f64 * total;
-        let mut area = 0.0;
-        let mut waterline = samples.last().map_or(-1.0, |s| s.0);
-        for &(elevation, w) in &samples {
-            area += w;
-            if area >= target {
-                waterline = elevation;
-                break;
-            }
-        }
-        let level = (waterline - waterline_shift).clamp(limits.min, limits.max);
-        let settled = (level - coarse.sea_level).abs() < 1e-3;
-        coarse.sea_level = level;
-        if settled {
+            .sum();
+        land / total - target
+    };
+    let (mut lo, mut hi) = (limits.min, limits.max);
+    let (mut f_lo, mut f_hi) = (excess(lo), excess(hi));
+    // Out of reach: the nearest limit.
+    if f_lo <= 0.0 {
+        return lo;
+    }
+    if f_hi >= 0.0 {
+        return hi;
+    }
+    let mut level = 0.5 * (lo + hi);
+    let mut side = 0;
+    for _ in 0..LAND_PASSES {
+        level = ((f64::from(lo) * f_hi - f64::from(hi) * f_lo) / (f_hi - f_lo)) as f32;
+        let f = excess(level);
+        if f.abs() < LAND_TOLERANCE {
             break;
         }
+        // More land than asked: raise the sea.
+        if f > 0.0 {
+            (lo, f_lo) = (level, f);
+            if side == 1 {
+                f_hi *= 0.5;
+            }
+            side = 1;
+        } else {
+            (hi, f_hi) = (level, f);
+            if side == -1 {
+                f_lo *= 0.5;
+            }
+            side = -1;
+        }
     }
-    coarse.sea_level
+    level
 }
 
 /// Generates a world, running every pass in order, without debug layers.
@@ -1636,6 +1668,10 @@ pub(crate) mod tests {
             let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
             let p = request.resolve(&mut rng).unwrap().params;
             let (land, sea) = hypsometry(&generate(&p).world);
+            // The land the preset asks for (0.29).
+            let area = |v: &[(f32, f32)]| v.iter().map(|x| x.1).sum::<f32>();
+            let share = area(&land) / (area(&land) + area(&sea));
+            assert!((share - 0.29).abs() < 0.05, "seed {seed}: land {share}");
             let lowland = 100.0 - above(&land, 0.5);
             let (high, higher, deep) = (above(&land, 2.0), above(&land, 4.0), above(&sea, 6.0));
             let report = format!("seed {seed}: {lowland} {high} {higher} {deep}");
