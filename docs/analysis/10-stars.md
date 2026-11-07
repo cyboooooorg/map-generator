@@ -42,7 +42,12 @@ Taken with the user:
 Stars are classed by their surface temperature (O B A F G K M, each
 split 0–9; the Sun is G2V, `V` meaning a main-sequence dwarf). On the
 main sequence, mass sets everything else: luminosity grows roughly as
-`M^3.5–4`, the lifetime as `M / L ≈ 10 Gyr × M^−2.5`.
+`M^3.5–4`, the lifetime as `M / L ≈ 10 Gyr × M^−2.5`. That ratio
+assumes every star burns the same share of its hydrogen; fully convective
+red dwarfs (below about 0.25 M☉) burn all of it, so the app interpolates
+the lifetimes of Fraknoi et al. (2022, Table 22.1) by mass instead, with
+about 11 trillion years for the lightest star (Adams & Laughlin 1997):
+`star::lifetime_gyr`.
 
 | Type | Teff (K)      | Mass (M☉) | Radius (R☉) | Luminosity (L☉) | Lifetime   | Share of stars | Colour (seen)        |
 | ---- | ------------- | --------- | ----------- | --------------- | ---------- | -------------- | -------------------- |
@@ -250,9 +255,9 @@ by the recalibration error for the others; step 5 changes locked worlds.
   ring where water stays liquid), winds and rain follow that geometry,
   and the viewer's sun stops moving with the season.
 - **Step 6:** biome colours of vegetated biomes get a tint by star type
-  (dark red to near black under M dwarfs, unchanged under G, yellowish
-  under F), applied by the "Star light" view only, so the usual maps and
-  the exported files stay Earth-coloured.
+  (dark red to near black under M dwarfs, unchanged under G and early K,
+  yellowish under F), applied by the "Star light" view only, so the usual
+  maps and the exported files stay Earth-coloured.
 
 ## Outcome
 
@@ -326,9 +331,14 @@ their latitude bands: a substellar circulation is left for later.
 
 In the "Star light" view only, the surface shader recolours vegetated
 biomes (by their share of plants: forest and jungle 1 down to tundra
-0.35) towards dark purple-black under stars cooler than the Sun (fully
-at 3 300 K) and towards gold under hotter ones (fully at 7 300 K),
-keeping their luminance; Sun-like stars leave them as they are. The
+0.35) towards dark purple-black under stars cooler than 4 900 K (fully
+at 3 400 K, between M3V and M3.5V), about a third as bright since such leaves
+absorb the whole visible range, and towards gold under stars hotter than
+the Sun (fully at 7 300 K), keeping their luminance. Sun-like stars and
+early K dwarfs leave them as they are: round a K2V star, whose light at
+the ground peaks in the red like the Sun's, plants "would look very
+similar to the Earth" (Kiang et al. 2007). The first version darkened
+them from the Sun's temperature down, already halfway at K5V. The
 exported maps keep Earth's colours. Under an M4V dwarf, the green
 continents of a locked planet turn dark brown in the orange light.
 
@@ -338,7 +348,7 @@ Orbits were circles; they are now ellipses of eccentricity `e`, the star
 at a focus. Solar System values: Venus 0.007, Earth 0.017, Mars 0.093,
 Mercury 0.206 (the example presets use them). Without a value, `e` is
 drawn from the beta distribution fitted by Kipping (2013) to
-radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.16),
+radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.17),
 capped at 0.9; tidally locked planets get 0, their orbits circularised
 by the same tides. Over a year an elliptical orbit receives
 `1 / sqrt(1 − e²)` times the light of a circular one of the same
@@ -374,7 +384,7 @@ light at each.
   <https://arxiv.org/abs/1901.06364>.
 - Kiang et al. 2007, "Spectral Signatures of Photosynthesis II:
   Coevolution with Other Stars and the Atmosphere on Extrasolar
-  Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701382>.
+  Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701391>.
 - Kipping 2013, "Parametrizing the exoplanet eccentricity distribution
   with the Beta distribution", MNRAS 434, L51.
 - Kiang & Hoehler 2021, photon absorption of photosynthetic organisms
