@@ -553,8 +553,8 @@ mod tests {
         assert!(trojans[7].is_some_and(|t| t.l4 + t.l5 >= 10_000));
         // The rocky planets keep a handful at most, Mars too: its heavier
         // neighbour, the Earth, is no giant.
-        for rocky in 0..4 {
-            assert!(trojans[rocky].is_some_and(|t| t.l4 + t.l5 <= 100), "{rocky}");
+        for (rocky, swarm) in trojans.iter().enumerate().take(4) {
+            assert!(swarm.is_some_and(|t| t.l4 + t.l5 <= 100), "{rocky}");
         }
         // A giant of 13 Jupiters round a small red dwarf passes Routh's limit.
         let heavy = [Track {

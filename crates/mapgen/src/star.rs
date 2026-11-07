@@ -336,7 +336,10 @@ const LIFETIMES: [(f32, f32); 8] = [
 /// 0.6 Gyr.
 pub fn lifetime_gyr(mass: f32) -> f32 {
     let m = mass.clamp(LIFETIMES[0].0, LIFETIMES[LIFETIMES.len() - 1].0);
-    let k = LIFETIMES.windows(2).position(|w| m <= w[1].0).unwrap_or(LIFETIMES.len() - 2);
+    let k = LIFETIMES
+        .windows(2)
+        .position(|w| m <= w[1].0)
+        .unwrap_or(LIFETIMES.len() - 2);
     let ((m0, t0), (m1, t1)) = (LIFETIMES[k], LIFETIMES[k + 1]);
     let at = (m / m0).ln() / (m1 / m0).ln();
     (t0.ln() + at * (t1 / t0).ln()).exp()
@@ -876,7 +879,11 @@ mod tests {
         assert!((lifetime_gyr(0.01) - 11_000.0).abs() < 1.0);
         assert!((lifetime_gyr(60.0) - 0.001).abs() < 1e-6);
         let masses: Vec<f32> = (0..200).map(|k| 0.08 * 1.03f32.powi(k)).collect();
-        assert!(masses.windows(2).all(|m| lifetime_gyr(m[1]) < lifetime_gyr(m[0])));
+        assert!(
+            masses
+                .windows(2)
+                .all(|m| lifetime_gyr(m[1]) < lifetime_gyr(m[0]))
+        );
     }
 
     #[test]

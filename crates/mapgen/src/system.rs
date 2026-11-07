@@ -371,7 +371,8 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
         outer.orbit_au * (1.0 - outer.eccentricity) - inner.orbit_au * (1.0 + inner.eccentricity);
     let hot = inner.body_type == "hot-jupiter" || outer.body_type == "hot-jupiter";
     let share = 0.5 * (inner.mass_earth + outer.mass_earth) / (star_mass * sun);
-    gap >= hill_spacing(share) * hill && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
+    gap >= hill_spacing(share) * hill
+        && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
 }
 
 /// A typical mass for a planet type, Earth masses, drawn.
@@ -415,13 +416,15 @@ fn drawn_hot_jupiter(
     rng: &mut impl RngExt,
 ) -> Option<(String, f64)> {
     let mass = f64::from(star.mass);
-    let odds = (HOT_JUPITERS * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5))
-        .min(0.2);
+    let odds =
+        (HOT_JUPITERS * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5)).min(0.2);
     let (hot, u) = (rng.random::<f64>() < odds, rng.random::<f64>());
     hot.then(|| {
         let (lo, hi) = HOT_PERIOD_DAYS;
         let days = (lo.ln() + u * (hi / lo).ln()).exp();
-        let a = (mass * (days / 365.25).powi(2)).cbrt().clamp(INNER_EDGE_AU, 0.1);
+        let a = (mass * (days / 365.25).powi(2))
+            .cbrt()
+            .clamp(INNER_EDGE_AU, 0.1);
         ("hot-jupiter".to_string(), a)
     })
 }
@@ -1779,7 +1782,11 @@ mod tests {
             assert!(clear(&pair[0], &pair[1], 1.0), "{pair:?}");
         }
         // Two Earths at Jupiter and Saturn's 6.5 Hill radii are too close.
-        assert!(!clear(&slot("cold", 1.0, 5.20, 0.049), &slot("cold", 1.0, 5.47, 0.057), 1.0));
+        assert!(!clear(
+            &slot("cold", 1.0, 5.20, 0.049),
+            &slot("cold", 1.0, 5.47, 0.057),
+            1.0
+        ));
     }
 
     fn whole(planets: &[(&str, u32)], seed: u32) -> SystemRequest {
