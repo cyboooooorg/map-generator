@@ -289,9 +289,9 @@ generated.
   and lies near the fluid Roche limit, but it does not depend on the
   giant's density. Inflated giants (low density, a lower limit) and
   dense ones get the same range. For a giant of Saturn's density the
-  limit for ice is 2.2–2.7 R; for one of Jupiter's, 2.8–3.4 R. The
-  current range stays inside both, so this is not wrong, only blind to
-  the planet.
+  limit for ice is 2.15–2.62 R; for one of Jupiter's, 2.72–3.30 R. The
+  current range stays inside both but for its lowest edges (2.1 against
+  2.15), so this is about right, only blind to the planet.
 - **Faint rings:** 1.5–2.2 R matches Uranus's and Neptune's narrow
   rings. There are no dust rings further out: no gossamer rings, no
   E-type or Phoebe-type ring.
@@ -440,8 +440,8 @@ further than proposed:
   resonant moon, found with the giant's `J2` (from its flattening,
   `f = 3/2 J2 + q/2`, Murray & Dermott 1999), is the inner edge of a
   division 0.04–0.09 R wide: the B ring's edge and the Cassini Division.
-  Saturn's `J2` puts Mimas's 2:1 670 km outward of Kepler's, at 117,550
-  km (Spitale & Porco 2010: 117,556).
+  Saturn's `J2` puts Mimas's 2:1 650 km outward of Kepler's, at 117,532
+  km (Spitale & Porco 2010, with the field's higher terms: 117,556).
 - **Ring moons grow.** A moonlet grows from a core of solid ice (1.5 to
   10 km) under a mantle of ring particles with 65 % voids until it fills
   its Roche lobe (Porco et al. 2007, eq. 3): it ends at the critical

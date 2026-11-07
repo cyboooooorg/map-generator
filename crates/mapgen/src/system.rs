@@ -1320,10 +1320,14 @@ fn shape_rings(
     let look = crate::giant_world::Look::draw(params, slot.mass_earth as f32).info;
     let omega = 2.0 * PI / (f64::from(look.rotation_hours) * 3600.0);
     let q = omega * omega * (f64::from(look.radius_earth) * EARTH_M).powi(3) / (G * mass_kg);
+    // The globe is drawn flattened by `min(0.7 q, 0.12)` (`giant_world`):
+    // past that cap J2 would fall as the giant spins faster, so it takes
+    // the uncapped `0.7 q`, which keeps it rising with the spin.
+    let flattening = f64::from(look.flattening).max(0.7 * q);
     let giant = crate::rings::Giant {
         density,
         mass_kg,
-        j2: crate::rings::j2(f64::from(look.flattening), q),
+        j2: crate::rings::j2(flattening, q),
         room,
         moons: info.equilibrium_k <= 1000.0 && hill / 3.0 >= 6.0,
     };

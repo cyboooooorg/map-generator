@@ -132,15 +132,15 @@ const CORE_DENSITY: f64 = 0.9;
 /// particles packed as in the simulations of Porco et al. (2007; 65 %
 /// voids, doi:10.1126/science.1143977).
 const MANTLE_PACKING: f64 = 0.35;
-/// Radius of a moonlet's core, km, log-uniform: a third to a half of the
-/// final size of Daphnis (3.8 km) to Pan (14 km), as Porco et al. (2007,
-/// doi:10.1126/science.1143977) find their cores (calibration on those
-/// two).
+/// Radius of a moonlet's core, km, log-uniform (calibration on Daphnis
+/// and Pan). Round a Saturn a core grows 1.9 times to its long semi-axis
+/// ([`grown`]), so its mean radius ends at about 1.35 times the core's:
+/// these cores make moonlets of about 2 to 14 km in mean radius, Daphnis
+/// (3.8 km) to Pan (14 km), each core about 0.74 of its moon's mean
+/// radius and 0.54 of its long semi-axis, in line with the cores of a
+/// third to a half of the moons' size Porco et al. (2007,
+/// doi:10.1126/science.1143977) find.
 const CORE_KM: (f64, f64) = (1.5, 10.0);
-/// The most a moonlet grows over its core, should its mantle be as dense
-/// as the critical density (two to three times, Porco et al. 2007,
-/// doi:10.1126/science.1143977).
-const MAX_GROWTH: f64 = 3.0;
 /// Semi-axes over the mean radius of a moon filling its Roche lobe, in the
 /// lobe's ratio 3 : 2 : 2 (Porco et al. 2007, doi:10.1126/science.1143977):
 /// its long axis points at the giant.
@@ -165,7 +165,9 @@ const SHEPHERD_ODDS: f64 = 0.7;
 /// giant's radii: Jupiter's Amalthea (2.54) and Thebe (3.10, NASA Jovian
 /// satellite fact sheet), Neptune's Despina (2.13) to Larissa (2.98).
 const SOURCE_SPAN: (f64, f64) = (2.0, 3.2);
-/// Their mean radius, km, log-uniform (Adrastea 4, Amalthea 84).
+/// Their mean radius, km, log-uniform: from moons of a few km, below what
+/// the probes could see round most giants, to Thebe (49) and Amalthea
+/// (84, NASA Jovian satellite fact sheet).
 const SOURCE_KM: (f64, f64) = (4.0, 90.0);
 /// Odds of a small moon farther out, which keeps a faint belt round its
 /// orbit (Mab and Uranus's μ ring; calibration, no source: one giant of
@@ -220,8 +222,9 @@ pub const RESONANCE_FACTOR: f64 = 0.629_960_5;
 /// first order in `J2`, `Ω² = GM/r³ (1 + 3/2 J2 / r²)` and
 /// `κ² = GM/r³ (1 − 3/2 J2 / r²)` (Murray & Dermott 1999,
 /// doi:10.1017/CBO9781139174817). For Mimas this gives the edge of
-/// Saturn's B ring 670 km outward of Kepler's, at 117,550 km (Spitale &
-/// Porco 2010 put it at 117,556, doi:10.1088/0004-6256/140/6/1747).
+/// Saturn's B ring 650 km outward of Kepler's, at 117,532 km: 24 km short
+/// of the 117,556 Spitale & Porco (2010, doi:10.1088/0004-6256/140/6/1747)
+/// find with the higher terms of Saturn's field.
 pub fn inner_lindblad(a_moon: f64, m: u32, j2: f64) -> f64 {
     let m = f64::from(m);
     let omega = |r: f64| (r.powi(-3) * (1.0 + 1.5 * j2 / (r * r))).sqrt();
@@ -248,18 +251,17 @@ pub fn inner_lindblad(a_moon: f64, m: u32, j2: f64) -> f64 {
 /// Roche lobe, whose long semi-axis is then
 /// `R_c (4π/(3γ) (ρ_c − ρ_m) / (ρ_crit − ρ_m))^(1/3)` (Porco et al. 2007,
 /// eq. 3, doi:10.1126/science.1143977): Pan's 1.9 times its core. Where
-/// the critical density is above the core's, the core stays bare.
+/// the critical density is above the core's, the core stays bare. Inside
+/// the fluid Roche limit of the particles the critical density is at least
+/// 0.54 of their density, above the mantle's 0.35: the growth stays finite
+/// (2.7 times at most).
 fn grown(core_km: f64, mantle: f64, crit: f64, draws: [f64; 2]) -> (f64, f64, [f64; 3]) {
     if crit >= CORE_DENSITY {
         return (core_km, CORE_DENSITY, irregular(core_km, draws));
     }
-    let growth = if crit > mantle {
-        (4.0 * PI / (3.0 * LOBE_VOLUME) * (CORE_DENSITY - mantle) / (crit - mantle))
-            .cbrt()
-            .min(MAX_GROWTH)
-    } else {
-        MAX_GROWTH
-    };
+    debug_assert!(crit > mantle, "a moonlet beyond the Roche limit");
+    let growth =
+        (4.0 * PI / (3.0 * LOBE_VOLUME) * (CORE_DENSITY - mantle) / (crit - mantle)).cbrt();
     let hill_km = core_km * growth;
     let radius_km = hill_km * (3.0 * LOBE_VOLUME / (4.0 * PI)).cbrt();
     let density = mantle + (CORE_DENSITY - mantle) * (core_km / radius_km).powi(3);
@@ -959,17 +961,14 @@ mod tests {
     #[test]
     fn mimass_resonance_with_saturns_j2_sets_the_edge_of_the_b_ring() {
         // Mimas at 185,539 km; J2 0.01633 in Saturn's equatorial radius of
-        // 60,268 km. Spitale & Porco 2010: 117,556 km, about 690 km
-        // outward of Kepler's.
+        // 60,268 km: 117,532 km, 650 km outward of Kepler's (Spitale &
+        // Porco 2010, with J4 and beyond: 117,556 km).
         let a = 185_539.0 / SATURN_KM;
         let edge = inner_lindblad(a, 2, 0.016_33) * SATURN_KM;
         let kepler = a * RESONANCE_FACTOR * SATURN_KM;
+        assert!((edge - 117_532.3).abs() < 1.0, "{edge}");
+        assert!((edge - kepler - 650.0).abs() < 1.0, "{}", edge - kepler);
         assert!((edge - 117_556.0).abs() < 30.0, "{edge}");
-        assert!(
-            (600.0..720.0).contains(&(edge - kepler)),
-            "{}",
-            edge - kepler
-        );
         // Without J2, Kepler's.
         assert!((inner_lindblad(a, 2, 0.0) - a * RESONANCE_FACTOR).abs() < 1e-6);
         // Saturn's real flattening and spin give about its J2.
