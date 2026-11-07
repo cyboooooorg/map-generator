@@ -546,3 +546,39 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   bright rings, and plume rings round an active icy moon; drawn faint in
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
+
+## 19. Climate: what the model leaves out
+
+- **Status:** todo
+- **Source:** the science articles "How does axial tilt make climate zones
+  and seasons?" and "Why is one side of a mountain range dry?" (their
+  "Where it departs from the science" sections), after the climate fixes
+  of 2026-11-07 (exact insolation, seasons, Clausius-Clapeyron rain,
+  meridional winds, foehn).
+- **Cold eastern-boundary currents** (Humboldt, Benguela, California): the
+  sea off the west coasts of the subtropics is several degrees colder,
+  which dries the coast (the Atacama, the Namib). A rule cooling the sea
+  pixels west of a continent between about 10° and 40° would need a
+  sourced magnitude and width (SST climatologies), the ocean basins found
+  row by row, and the moisture pass to read the cooled sea; the
+  temperature anomaly noise stands in for it today.
+- **Monsoons:** the seasonal reversal of the wind between land and sea.
+  The seasons now set summer and winter temperatures, but the wind and
+  the rain are annual means: a monsoon needs a summer and a winter run of
+  the moisture pass with winds driven by the land-sea contrast.
+- **Uneven seasons on eccentric orbits:** the annual mean keeps the
+  `1/sqrt(1 − e²)` factor, but the seasonal swing ignores the distance to
+  the star at the solstices (Mars: 46 % more light at perihelion). It
+  needs a longitude of perihelion, drawn or given, in `WorldParams`.
+- **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
+  narrower Hadley cells under heavier atmospheres, without a scaling the
+  app could use; the belts scale with rotation and size only.
+- **Storms, fronts and ENSO:** moisture is the annual mean of a steady
+  wind. Weather, interannual variability (El Niño, La Niña) and the storm
+  rain that makes most orographic precipitation are model limits, not
+  planned.
+- **Relief and the lapse rate:** with the standard lapse rate (6.5 °C per
+  km through `craters::ELEVATION_KM`), a fifth of an Earth-like world's
+  land stands above 4 km (on Earth, a few percent) and most ranges are
+  snow. A hypsometry closer to Earth's would be a change of the relief,
+  not of the climate.
