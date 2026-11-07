@@ -126,7 +126,9 @@ each planet asked, then spaces them (below). Types the request leaves to
 the draw get occurrence rates by star: rocky planets from the Kepler
 counts (about one to three small planets within 1 AU of a Sun-like star,
 more round M dwarfs; Mulders et al. 2018), giants as `giants.rs` draws
-them today (metallicity and star mass).
+them today (metallicity and star mass), a hot Jupiter included: about
+1 % of Sun-like stars of the Sun's metallicity get one (Wright et al.
+2012), on a 1 to 10 day orbit.
 
 ### Spacing and order
 

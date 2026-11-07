@@ -35,7 +35,8 @@ use crate::exomoon::{
     EARTH_KG, EARTH_M, G, HostGiant, HostMode, SATELLITE_MASS_SHARE, SIBLING_SPACING,
 };
 use crate::giants::{
-    GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES, giant_radius, hill_spacing,
+    GiantKind, GiantSystem, GiantsMode, HOT_JUPITERS, HOT_PERIOD_DAYS, JUPITER_EARTH_MASSES,
+    giant_radius, hill_spacing,
 };
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
@@ -403,6 +404,28 @@ fn is_giant(body_type: &str) -> bool {
 /// from the Kepler counts (about 1.5 within 1 AU of a Sun-like star, 2.5 of
 /// an M dwarf; Mulders et al. 2018), a few colder ones beyond, the giants
 /// as [`GiantSystem`] draws them; their types from where they fall.
+/// A hot Jupiter for a drawn system, or none: as often as round a world
+/// ([`HOT_JUPITERS`], about 1 % of Sun-like stars, Wright et al. 2012;
+/// times `10^(2 [Fe/H])` and the star's mass, like the other gas giants),
+/// on an orbit of 1 to 10 days, log-uniform, within the type's 0.1 AU.
+/// The spacing then keeps other planets beyond four times its period.
+fn drawn_hot_jupiter(
+    star: &StarInfo,
+    metallicity: f64,
+    rng: &mut impl RngExt,
+) -> Option<(String, f64)> {
+    let mass = f64::from(star.mass);
+    let odds = (HOT_JUPITERS * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5))
+        .min(0.2);
+    let (hot, u) = (rng.random::<f64>() < odds, rng.random::<f64>());
+    hot.then(|| {
+        let (lo, hi) = HOT_PERIOD_DAYS;
+        let days = (lo.ln() + u * (hi / lo).ln()).exp();
+        let a = (mass * (days / 365.25).powi(2)).cbrt().clamp(INNER_EDGE_AU, 0.1);
+        ("hot-jupiter".to_string(), a)
+    })
+}
+
 fn drawn_types(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<(String, f64)> {
     let mass = f64::from(star.mass);
     let inner_mean = if mass < 0.6 {
@@ -657,7 +680,12 @@ fn draw_whole(
             }
             list
         }
-        None => drawn_types(&star, f64::from(metallicity), &mut rng),
+        None => {
+            let mut list = drawn_types(&star, f64::from(metallicity), &mut rng);
+            // Drawn last, so that the other planets' draws stay as they were.
+            list.extend(drawn_hot_jupiter(&star, f64::from(metallicity), &mut rng));
+            list
+        }
     };
     let packed = asked.len() >= 4;
     let mut last_error = None;
@@ -1872,6 +1900,37 @@ mod tests {
             ),
             Err(RequestError::UnknownType(_))
         ));
+    }
+
+    #[test]
+    fn a_drawn_system_sometimes_has_a_hot_jupiter() {
+        let (mut hot, mut close) = (0, 0);
+        let n = 600;
+        for seed in 0..n {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some("G2V".into()),
+                metallicity: Some(0.0),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            let planets = planets(&system);
+            if let Some(h) = planets.iter().find(|b| b.body_type == "hot-jupiter") {
+                hot += 1;
+                // Lonely: no planet within four times its period.
+                let a = h.orbit.semi_major_axis_au;
+                close += planets
+                    .iter()
+                    .filter(|b| b.body_type != "hot-jupiter")
+                    .filter(|b| b.orbit.semi_major_axis_au < a * 4f64.powf(2.0 / 3.0))
+                    .count();
+            }
+        }
+        // About 1 % of Sun-like stars (Wright et al. 2012).
+        assert!((1..=15).contains(&hot), "{hot} of {n}");
+        assert_eq!(close, 0);
     }
 
     #[test]

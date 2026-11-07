@@ -47,7 +47,7 @@ const SUN_EARTH_MASSES: f64 = 332_946.0;
 const GAS_GIANTS: f64 = 0.25;
 const ICE_GIANTS: f64 = 0.3;
 /// Share of Sun-like stars of the Sun's metallicity with a hot Jupiter.
-const HOT_JUPITERS: f64 = 0.01;
+pub const HOT_JUPITERS: f64 = 0.01;
 /// Gas giant masses, Jupiter masses: from 0.1 (about a third of Saturn) to
 /// the deuterium-burning limit, and the slope of `dN/d ln M`.
 const GAS_MASS: (f64, f64) = (0.1, 13.0);
@@ -60,7 +60,7 @@ const ICE_ORBIT: (f64, f64) = (0.7, 0.3);
 /// Distances kept, AU.
 const ORBIT_RANGE: (f64, f64) = (0.02, 60.0);
 /// Hot Jupiter periods, days.
-const HOT_PERIOD_DAYS: (f64, f64) = (1.0, 10.0);
+pub const HOT_PERIOD_DAYS: (f64, f64) = (1.0, 10.0);
 /// Gap kept between two Earth-mass neighbours, in mutual Hill radii: about
 /// what systems of a few Earth masses need to last a billion years (Pu &
 /// Wu 2015; Obertas et al. 2017).
