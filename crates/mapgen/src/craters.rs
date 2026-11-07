@@ -944,14 +944,20 @@ impl CraterField {
                     return None;
                 }
                 let (east, north) = tangent_basis(c);
+                let radius = 0.5 * crater.diameter_km / self.radius_km;
                 Some(Drawn {
                     c,
-                    radius: 0.5 * crater.diameter_km / self.radius_km,
+                    radius,
                     reach,
                     cos_reach: reach.cos(),
                     east,
                     north,
-                    profile: Profile::shaped(crater, self.transition_km, self.complex_depth),
+                    profile: Profile::shaped(
+                        crater,
+                        self.transition_km,
+                        self.complex_depth,
+                        window.dlon / radius,
+                    ),
                     wear: wear as f32 * gain(crater),
                     lon: (c[1].atan2(c[0]) - window.lon0 + PI).rem_euclid(2.0 * PI) - PI,
                     rows: (y0, (y1 as usize).min(h - 1)),
@@ -1303,7 +1309,12 @@ impl CraterField {
         if self.sea && level < self.waterline {
             return Vec::new();
         }
-        let profile = Profile::shaped(crater, self.transition_km, self.complex_depth);
+        let profile = Profile::shaped(
+            crater,
+            self.transition_km,
+            self.complex_depth,
+            2.0 * PI / px.w as f64 / radius,
+        );
         let reach = self.reach(crater);
         let lat = c[2].clamp(-1.0, 1.0).asin();
         let lon = c[1].atan2(c[0]).rem_euclid(2.0 * PI);
@@ -1545,12 +1556,13 @@ struct Profile {
 impl Profile {
     #[cfg(test)]
     fn new(crater: &Crater, transition_km: f64) -> Self {
-        Self::shaped(crater, transition_km, 1.0)
+        Self::shaped(crater, transition_km, 1.0, 0.0)
     }
 
     /// The profile of `crater` above a transition of `transition_km`, its
-    /// complex depth times `complex_depth` (less on ice).
-    fn shaped(crater: &Crater, transition_km: f64, complex_depth: f64) -> Self {
+    /// complex depth times `complex_depth` (less on ice), drawn on pixels
+    /// `pixel` crater radii wide (0: infinitely fine).
+    fn shaped(crater: &Crater, transition_km: f64, complex_depth: f64, pixel: f64) -> Self {
         let d = crater.diameter_km;
         let t = transition_km;
         let units = f64::from(ELEVATION_KM);
@@ -1569,6 +1581,17 @@ impl Profile {
         } else {
             0.036 * t * (d / t).powf(0.4)
         };
+        // A rim a pixel or two wide is sampled, not drawn: the pixel under
+        // its crest catches it or misses it by chance, a ring of dots. It
+        // grows with the crater, from nothing at the smallest drawn
+        // ([`MIN_PIXELS`] across) to its height at three times that.
+        let full_rim = rim;
+        let rim = rim
+            * f64::from(smoothstep(
+                MIN_PIXELS as f32,
+                3.0 * MIN_PIXELS as f32,
+                (2.0 / pixel.max(1e-9)) as f32,
+            ));
         let complexity = ((d / t).log2() / 4.0).clamp(0.0, 1.0);
         // A protobasin's ring beside its peak, then a peak-ring basin.
         let ring = f64::from(smoothstep(
@@ -1584,7 +1607,8 @@ impl Profile {
             })
         };
         Profile {
-            depth: depth / units,
+            // The floor stays where it was: the depth is from the rim crest.
+            depth: (depth - (full_rim - rim)) / units,
             rim: rim / units,
             floor: complex * (0.25 + 0.35 * complexity),
             peak: complex * (1.0 - ring) * 0.3 * depth / units,
@@ -1911,6 +1935,40 @@ mod tests {
         // A worn crater keeps a share of its relief.
         let worn = p.blend(0.0, (1.0, 0.0), 0.0, 0.0, 0.25) * ELEVATION_KM;
         assert!((worn - 0.25 * floor).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_small_craters_rim_does_not_alias() {
+        // A crater `pixels` across, sampled on a pixel line whose offset
+        // from its centre varies: the highest pixel of the rim must not
+        // depend on where the pixels fall by more than a third of the
+        // rim it would have at any resolution (half of it before the rim
+        // faded out under 12 pixels).
+        let crater = Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km: 10.0,
+            age_ga: 1.0,
+            shape: 0,
+        };
+        let full = Profile::new(&crater, MOON_TRANSITION_KM).rim;
+        for pixels in [4.0, 6.0, 8.0, 12.0] {
+            let p = Profile::shaped(&crater, MOON_TRANSITION_KM, 1.0, 2.0 / pixels);
+            let crest = |offset: f64| {
+                (-40..=40)
+                    .map(|i| {
+                        let r = ((f64::from(i) + offset) / (0.5 * pixels)).abs();
+                        p.blend(r, (1.0, 0.0), 0.0, 0.0, 1.0)
+                    })
+                    .fold(f32::MIN, f32::max)
+            };
+            let (lo, hi) = (0..20)
+                .map(|k| crest(f64::from(k) / 20.0))
+                .fold((f32::MAX, f32::MIN), |(a, b), c| (a.min(c), b.max(c)));
+            assert!(
+                f64::from(hi - lo) <= full / 3.0,
+                "{pixels} px: crest {lo}..{hi}, rim {full}"
+            );
+        }
     }
 
     #[test]
