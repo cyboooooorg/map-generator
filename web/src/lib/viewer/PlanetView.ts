@@ -62,6 +62,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BodyGuides, type GuidePoints, type HostGuide, hostLabelIndex } from './bodyGuides';
 import { DIAL_RADIUS, RotationDial } from './rotationDial';
+import { hiddenByShape } from './occlusion';
 import type { DialState } from '../rotationDial';
 import type { HexMap } from '../api/types/HexMap';
 import {
@@ -173,6 +174,8 @@ export type Lighting =
 /** Layers drawn from uExtra, uploaded the first time one of them is shown. */
 const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodplain']);
 
+/** How far above the equator the camera looks at the rotation dial from, degrees. */
+const DIAL_ELEVATION = 20;
 const MORPH_MS = 1200;
 /** How far the spin axes reach out of a body, in its radii (see setSpinAxes). */
 const SPIN_AXIS_LENGTH = 1.5;
@@ -637,6 +640,8 @@ export class PlanetView {
    * of either pole, and anywhere (`largest`); null for a sphere.
    */
   private shapeRadii: { radii: Float32Array; width: number; height: number; poles: number; largest: number } | null = null;
+  /** The elevation the surface is raised by, for the labels it hides (see surfaceRadiusAt). */
+  private heights: { layers: WorldLayers; coast: number; liquidSea: boolean } | null = null;
   /** Its highest point over the coastline, in elevation units (see setData). */
   private peakAbove = 0;
   /** The rocks of the giant's rings round a ring moon (see setRingRocks), null until some are. */
@@ -1470,6 +1475,7 @@ export class PlanetView {
       this.shared.uData.value = emptyTexture();
       this.shared.uHasData.value = 0;
       this.peakAbove = 0;
+      this.heights = null;
       return;
     }
     // Its highest point over the coastline, in elevation units, for the
@@ -1477,6 +1483,7 @@ export class PlanetView {
     let highest = 0;
     for (const raw of layers.elevation.data) if (raw > highest) highest = raw;
     this.peakAbove = Math.max(0, layers.elevation.min + highest * layers.elevation.scale - coast);
+    this.heights = { layers, coast, liquidSea };
     // Worlds wider than the GPU allows are shown at a lower resolution (the
     // point readout still uses every pixel).
     const factor = fitFactor(layers.width, layers.height, this.renderer.capabilities.maxTextureSize);
@@ -1694,6 +1701,28 @@ export class PlanetView {
   }
 
   /** How far the relief shown rises at most, in radii: an elevation unit above the coastline, as displaced. */
+  /**
+   * The radius of the surface as drawn along `direction` (the body's frame),
+   * in radii: its shape, raised by its relief as displayed (liquid seas
+   * flat at the coastline), as the vertex shader places it.
+   */
+  private surfaceRadiusAt(direction: Vector3): number {
+    const shape = this.shared.uHasShape.value > 0.5 ? this.shapeRadii : null;
+    const base = shape ? shapeRadiusAt(shape, direction) : 1;
+    const heights = this.shared.uHasData.value > 0.5 ? this.heights : null;
+    if (!heights) return base;
+    const { layers, coast, liquidSea } = heights;
+    const d = direction.clone().normalize();
+    const u = (Math.atan2(d.x, d.z) / (2 * Math.PI) + 1) % 1;
+    const v = Math.asin(Math.max(-1, Math.min(1, d.y))) / Math.PI + 0.5;
+    const x = Math.min(layers.width - 1, Math.floor(u * layers.width));
+    const y = Math.min(layers.height - 1, Math.max(0, Math.floor((1 - v) * layers.height)));
+    const raw = layers.elevation.data[y * layers.width + x] ?? 0;
+    let above = layers.elevation.min + raw * layers.elevation.scale - coast;
+    if (liquidSea) above = Math.max(above, 0);
+    return base + above * this.reliefLift();
+  }
+
   private reliefLift(): number {
     return this.shared.uRelief.value * this.shared.uReliefScale.value;
   }
@@ -1882,6 +1911,8 @@ export class PlanetView {
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(0, 0, 0);
     this.controls.update();
+    // With the dial, from a little above the equator (see setRotationDial).
+    if (this.dialState && this.mode === 'globe') this.raiseOverEquator(90);
   }
 
   getCamera(): CameraState {
@@ -2379,8 +2410,32 @@ export class PlanetView {
    * globe; null hides it.
    */
   setRotationDial(state: DialState | null): void {
+    // Seen edge-on, the ring, the markers and the guides fall on one line:
+    // when the dial comes on, a camera within 10° of the equator rises to
+    // DIAL_ELEVATION above it.
+    if (state && !this.dialState && this.mode === 'globe') this.raiseOverEquator(10);
     this.dialState = state;
     this.requestRender();
+  }
+
+  /** Lifts the camera to DIAL_ELEVATION above the equator when it is closer than `within` degrees to it. */
+  private raiseOverEquator(within: number): void {
+    const target = this.controls.target;
+    const offset = this.camera.position.clone().sub(target);
+    const distance = offset.length();
+    if (distance < 1e-9) return;
+    const elevation = Math.asin(Math.max(-1, Math.min(1, offset.y / distance)));
+    if (Math.abs(elevation) >= (within * Math.PI) / 180) return;
+    const flat = Math.hypot(offset.x, offset.z);
+    const [x, z] = flat > 1e-9 ? [offset.x / flat, offset.z / flat] : [0, 1];
+    const up = (DIAL_ELEVATION * Math.PI) / 180;
+    this.camera.position.set(
+      target.x + x * Math.cos(up) * distance,
+      target.y + Math.sin(up) * distance,
+      target.z + z * Math.cos(up) * distance,
+    );
+    this.camera.lookAt(target);
+    this.controls.update();
   }
 
   private disposeSkyBodies(): void {
@@ -2416,9 +2471,13 @@ export class PlanetView {
      */
     dial: {
       ticks: ({ x: number; y: number } | null)[];
+      /** The star's half-circle's numbers (see ARC_NUMBERS). */
+      arcTicks: ({ x: number; y: number } | null)[];
       pointer: { x: number; y: number } | null;
       sun: { x: number; y: number } | null;
       host: { x: number; y: number } | null;
+      /** Each chosen body's marker, in the order of the dial state's bodies. */
+      bodies: ({ x: number; y: number } | null)[];
     } | null;
   } {
     const shown = this.u.uLightMode.value === 1 && this.morph > 0.99;
@@ -2439,17 +2498,16 @@ export class PlanetView {
       if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
-    // A point near the globe: hidden when the globe lies in front of it,
-    // or when it is off the screen by more than `margin` (clip space).
+    // A point near the globe: hidden when the body lies in front of it (its
+    // true shape, which bulges past radius 1 on a small moon), or when it
+    // is off the screen by more than `margin` (clip space).
+ const radiusAt = (d: Vector3) => this.surfaceRadiusAt(d);
+    const bound = (this.shared.uHasShape.value > 0.5 && this.shapeRadii ? this.shapeRadii.largest : 1) + this.peakAbove * this.reliefLift();
     const near = (point: Vector3 | null, margin = 1.2): { x: number; y: number } | null => {
       if (!point || this.morph < 0.99) return null;
-      const to = point.clone().sub(camera);
-      const distance = to.length();
-      const d = to.divideScalar(distance);
+      const d = point.clone().sub(camera).normalize();
       if (d.dot(forward) <= 0) return null;
-      const b = camera.dot(d);
-      const disc = b * b - (camera.lengthSq() - 1);
-      if (disc > 0 && -b - Math.sqrt(disc) < distance - 1e-3) return null;
+      if (hiddenByShape(camera, point, radiusAt, bound)) return null;
       const p = point.clone().project(this.camera);
       if (Math.abs(p.x) > margin || Math.abs(p.y) > margin) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
@@ -2495,9 +2553,11 @@ export class PlanetView {
       }),
       dial: dial && {
         ticks: dial.ticks.map((point) => near(point)),
+        arcTicks: dial.arcTicks.map((point) => near(point)),
         pointer: near(dial.pointer),
         sun: near(dial.sun),
         host: near(dial.host),
+        bodies: dial.bodies.map((point) => near(point)),
       },
     };
   }

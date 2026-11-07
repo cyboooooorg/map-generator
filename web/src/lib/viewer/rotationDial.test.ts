@@ -1,26 +1,55 @@
 import { describe, expect, it } from 'vitest';
-import { RotationDial } from './rotationDial';
+import { LABEL_OUT, RotationDial } from './rotationDial';
 
 describe('RotationDial', () => {
   it('lays 72 ticks, 12 of them long, with the 0° tick along the state’s zero', () => {
     const dial = new RotationDial();
-    dial.set({ locked: false, zero: [1, 0, 0], pointerLongitude: 0, reading: Math.PI / 2, sun: null, host: null }, 1.25);
+    dial.set({ locked: false, zero: [1, 0, 0], pointerLongitude: 0, reading: Math.PI / 2, sun: null, host: null, sunAltitude: 0, bodies: [] }, 1.25);
     const { ticks } = dial.anchors();
     expect(ticks).toHaveLength(12);
     expect(ticks[0]!.clone().normalize().x).toBeCloseTo(1, 9);
     // 90° on: turned right-handed about +y from +x, towards −z.
     expect(ticks[3]!.clone().normalize().z).toBeCloseTo(-1, 9);
     ticks.forEach((t) => expect(t.y).toBeCloseTo(0, 12));
+    // The numbers stand outside the ring.
+    ticks.forEach((t) => expect(t.length()).toBeCloseTo(1.25 * LABEL_OUT, 9));
     dial.dispose();
   });
 
-  it('runs the pointer to the ring at its longitude and puts the markers on the ring', () => {
+  it('runs the pointer to the ring at its longitude and hangs the markers at their heights', () => {
     const dial = new RotationDial();
-    dial.set({ locked: true, zero: [0, 0, -1], pointerLongitude: Math.PI, reading: 0, sun: [1, 0, 0], host: [0, 0, -1] }, 2);
-    const { pointer, sun, host } = dial.anchors();
+    dial.set(
+      {
+        locked: true,
+        zero: [0, 0, -1],
+        pointerLongitude: Math.PI,
+        reading: 0,
+        sun: [1, 0, 0],
+        host: [0, 0, -1],
+        sunAltitude: Math.PI / 6,
+        bodies: [
+          { id: 'c', bearing: [0, 0, -1], altitude: 0, host: true },
+          { id: 'c-2', bearing: [0, 0, 1], altitude: -Math.PI / 4, host: false },
+        ],
+      },
+      2,
+    );
+    const { pointer, sun, host, bodies, arcTicks } = dial.anchors();
     [0, 0, -2].forEach((v, i) => expect(pointer.getComponent(i)).toBeCloseTo(v, 6));
-    expect(sun!.length()).toBeCloseTo(2, 6);
-    expect(host!.length()).toBeCloseTo(2, 6);
+    // The star 30° up its half-circle, at its bearing.
+    [2 * Math.cos(Math.PI / 6), 2 * Math.sin(Math.PI / 6), 0].forEach((v, i) => expect(sun!.getComponent(i)).toBeCloseTo(v, 6));
+    [0, 0, -2].forEach((v, i) => expect(host!.getComponent(i)).toBeCloseTo(v, 6));
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]!.y).toBeCloseTo(-2 * Math.SQRT1_2, 6);
+    expect(bodies[1]!.z).toBeCloseTo(2 * Math.SQRT1_2, 6);
+    // The half-circle's numbers, −90° to +90°, outside it, at the star's bearing.
+    expect(arcTicks).toHaveLength(7);
+    expect(arcTicks[0]!.y).toBeCloseTo(-2 * LABEL_OUT, 6);
+    expect(arcTicks[3]!.x).toBeCloseTo(2 * LABEL_OUT, 6);
+    // A body no longer chosen is dropped.
+    dial.set({ locked: true, zero: [0, 0, -1], pointerLongitude: Math.PI, reading: 0, sun: null, host: null, sunAltitude: 0, bodies: [] }, 2);
+    expect(dial.anchors().bodies).toHaveLength(0);
+    expect(dial.anchors().arcTicks.every((t) => t === null)).toBe(true);
     dial.dispose();
   });
 
