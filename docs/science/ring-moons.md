@@ -89,10 +89,12 @@ had grown to fill its Roche lobe and could grow no further.
 
 ```mermaid
 flowchart LR
-  A["A dense icy shard<br/>in the rings"] --> B["It sweeps up<br/>ring particles"]
+  A["A dense icy shard<br/>in the rings"]
+  A --> B["It sweeps up<br/>ring particles"]
   B --> C{"Mean density above<br/>the critical density?"}
   C -- yes --> B
-  C -- no --> D["It fills its Roche lobe<br/>and stops: 2 to 3 times<br/>the size of the core"]
+  D["It fills its Roche lobe<br/>and stops: 2 to 3 times<br/>the size of the core"]
+  C -- no --> D
 ```
 
 The final long semi-axis $a$ of a moon grown from a core of radius $R_c$ and
