@@ -665,6 +665,40 @@ export const en = {
     spinAxes: 'Spin axes',
     spinAxesHelp:
       'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
+    rotationDial: 'Rotation dial',
+    rotationDialHelp:
+      'A ring round the equator, graduated in degrees: its pointer shows how far the body has turned, against the stars, or against what it orbits for a body locked to it',
+    dialFree: (p: { angle: string; time: string }) => `Rotation ${p.angle} · Local time ${p.time} (meridian 0)`,
+    dialFreeDays: (p: { sidereal: string; solar: string | null }) =>
+      p.solar === null
+        ? `Sidereal day ${p.sidereal} · Solar day: none, the star stands still`
+        : `Sidereal day ${p.sidereal} · Solar day ${p.solar}`,
+    dialLocked: (p: { libration: string; amplitude: string }) => `Synchronous rotation · Libration ${p.libration} (±${p.amplitude})`,
+    dialLockedTime: (p: { time: string; solar: string | null }) =>
+      p.solar === null
+        ? `Local time ${p.time} (face to the host) · Solar day: none, the star stands still`
+        : `Local time ${p.time} (face to the host) · Solar day ${p.solar}`,
+    dialSun: 'Sun',
+    dialGlossaryHelp: 'What these figures mean',
+    /** Each entry's term carries its colon (the French takes a space before it). */
+    dialGlossary: [
+      { term: 'Sidereal day:', text: 'one turn of the body against the stars (Earth: 23 h 56 min).' },
+      {
+        term: 'Solar day:',
+        text: 'from one noon to the next, the day lived there (Earth: 24 h). It differs from the sidereal day because the body moves along its orbit as it turns.',
+      },
+      { term: 'Sol:', text: 'the solar day of Mars (24 h 39 min 35 s), a name kept for Mars; elsewhere, "solar day".' },
+      {
+        term: 'Local time:',
+        text: 'the solar day cut into 24 local hours, noon when the sun crosses the meridian (the convention of Mars missions).',
+      },
+      { term: 'Synchronous rotation:', text: 'the body turns once per orbit and always shows the same face to what it orbits.' },
+      { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by about ±2e radians.' },
+      {
+        term: 'Longitude convention:',
+        text: "in this app a synchronous body's face to its host is longitude 180°; the scientific convention puts longitude 0 there.",
+      },
+    ] as readonly { term: string; text: string }[],
     orbitsHelp: 'Moves the moons along their orbits, as many days after the season (their phases, their eclipses)',
     playOrbitsHelp: 'Play the orbits: one orbit of the moon shown, or of the largest, every 10 seconds at ×1',
     orbitSpeed: 'Speed',
