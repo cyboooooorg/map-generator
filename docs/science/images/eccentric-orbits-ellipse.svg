@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 540" width="860" height="540" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">An eccentric orbit: periapsis, apoapsis and Kepler's second law</title>
+  <desc id="desc">An elliptical orbit of eccentricity 0.4, drawn to scale, with the star at one focus. The closest point, the periapsis, is at 0.6 times the semi-major axis; the farthest, the apoapsis, at 1.4 times. Sixteen dots mark the planet's place at equal steps of time: they crowd together near the apoapsis, where the planet is slow, and spread out near the periapsis, where it is fast. Two shaded sectors, one at each end, are swept in the same time and have the same area. A dashed circle shows a circular orbit of the same semi-major axis round the same star. At the periapsis the planet gets 5.4 times the light it gets at the apoapsis.</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .orbit { fill: none; stroke: #9fd3ff; stroke-width: 1.8; }
+    .circle { fill: none; stroke: #6b7886; stroke-width: 1; stroke-dasharray: 5 4; }
+    .axis { stroke: #6b7886; stroke-width: 0.8; }
+    .dot { fill: #cfe3ff; stroke: #0f1622; stroke-width: 0.8; }
+    .sector { fill: #ffcc66; fill-opacity: 0.22; stroke: #ffcc66; stroke-width: 0.8; }
+    .dim { stroke: #e6edf3; stroke-width: 1; }
+  </style>
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#e6edf3"/>
+    </marker>
+  </defs>
+  <rect width="860" height="540" fill="#0f1622"/>
+
+  <text class="h" x="20" y="30">An eccentric orbit, e = 0.4</text>
+  <text class="s" x="20" y="48">Drawn to scale. The star sits at one focus of the ellipse, not at its centre.</text>
+
+  <!-- A circular orbit of the same semi-major axis, round the star. -->
+  <circle class="circle" cx="364.0" cy="262.0" r="185.0"/>
+  <!-- Two sectors swept in the same time: equal areas (Kepler's second law). -->
+  <path class="sector" d="M364.0 262.0 L465.4 315.9 L466.3 313.3 L467.2 310.8 L468.0 308.2 L468.8 305.6 L469.5 302.9 L470.2 300.3 L470.9 297.6 L471.5 294.9 L472.0 292.2 L472.5 289.5 L473.0 286.8 L473.4 284.1 L473.8 281.3 L474.1 278.6 L474.4 275.8 L474.6 273.1 L474.8 270.3 L474.9 267.5 L475.0 264.8 L475.0 262.0 L475.0 259.2 L474.9 256.5 L474.8 253.7 L474.6 250.9 L474.4 248.2 L474.1 245.4 L473.8 242.7 L473.4 239.9 L473.0 237.2 L472.5 234.5 L472.0 231.8 L471.5 229.1 L470.9 226.4 L470.2 223.7 L469.5 221.1 L468.8 218.4 L468.0 215.8 L467.2 213.2 L466.3 210.7 L465.4 208.1 Z"/>
+  <path class="sector" d="M364.0 262.0 L106.8 238.3 L106.6 239.5 L106.5 240.6 L106.3 241.8 L106.2 243.0 L106.0 244.2 L105.9 245.4 L105.8 246.6 L105.7 247.7 L105.6 248.9 L105.5 250.1 L105.4 251.3 L105.3 252.5 L105.2 253.7 L105.2 254.9 L105.1 256.1 L105.1 257.2 L105.0 258.4 L105.0 259.6 L105.0 260.8 L105.0 262.0 L105.0 263.2 L105.0 264.4 L105.0 265.6 L105.1 266.8 L105.1 267.9 L105.2 269.1 L105.2 270.3 L105.3 271.5 L105.4 272.7 L105.5 273.9 L105.6 275.1 L105.7 276.3 L105.8 277.4 L105.9 278.6 L106.0 279.8 L106.2 281.0 L106.3 282.2 L106.5 283.4 L106.6 284.5 L106.8 285.7 Z"/>
+  <!-- The orbit. -->
+  <ellipse class="orbit" cx="290.0" cy="262.0" rx="185.0" ry="169.6"/>
+  <line class="axis" x1="105.0" y1="262.0" x2="475.0" y2="262.0"/>
+  <!-- Centre of the ellipse and empty focus. -->
+  <circle cx="290.0" cy="262.0" r="2" fill="#6b7886"/>
+  <text class="s" x="290.0" y="278.0" text-anchor="middle">centre</text>
+  <!-- The star. -->
+  <circle cx="364.0" cy="262.0" r="9" fill="#ffd27a"/>
+  <text class="t" x="364.0" y="288.0" text-anchor="middle">star</text>
+  <circle class="dot" cx="475.0" cy="262.0" r="4"/>
+  <circle class="dot" cx="439.7" cy="162.4" r="4"/>
+  <circle class="dot" cx="365.5" cy="107.2" r="4"/>
+  <circle class="dot" cx="288.7" cy="92.4" r="4"/>
+  <circle class="dot" cx="222.7" cy="104.1" r="4"/>
+  <circle class="dot" cx="171.0" cy="132.2" r="4"/>
+  <circle class="dot" cx="134.2" cy="170.6" r="4"/>
+  <circle class="dot" cx="112.3" cy="214.9" r="4"/>
+  <circle class="dot" cx="105.0" cy="262.0" r="4"/>
+  <circle class="dot" cx="112.3" cy="309.1" r="4"/>
+  <circle class="dot" cx="134.2" cy="353.4" r="4"/>
+  <circle class="dot" cx="171.0" cy="391.8" r="4"/>
+  <circle class="dot" cx="222.7" cy="419.9" r="4"/>
+  <circle class="dot" cx="288.7" cy="431.6" r="4"/>
+  <circle class="dot" cx="365.5" cy="416.8" r="4"/>
+  <circle class="dot" cx="439.7" cy="361.6" r="4"/>
+
+  <!-- Periapsis and apoapsis. -->
+  <line class="axis" x1="479.0" y1="262.0" x2="555.0" y2="262.0"/>
+  <text class="t" x="559.0" y="258.0">periapsis</text>
+  <text class="s" x="559.0" y="274.0">a(1 − e) = 0.6 a from the star</text>
+  <text class="t" x="95.0" y="254.0" text-anchor="end">apoapsis</text>
+  <text class="s" x="95.0" y="270.0" text-anchor="end">1.4 a from</text>
+  <text class="s" x="95.0" y="284.0" text-anchor="end">the star</text>
+
+  <!-- Semi-major axis. -->
+  <line class="dim" x1="105.0" y1="453.6" x2="290.0" y2="453.6" marker-start="url(#tip)" marker-end="url(#tip)"/>
+  <text class="t" x="197.5" y="471.6" text-anchor="middle">a, the semi-major axis</text>
+  <text class="s" x="464.5" y="97.8">dashed: a circular orbit of the same a</text>
+
+  <!-- Legend. -->
+  <circle class="dot" cx="606" cy="122" r="4"/>
+  <text class="t" x="618" y="126">the planet every</text>
+  <text class="t" x="618" y="142">sixteenth of its year</text>
+  <text class="s" x="618" y="158">crowded where it is slow,</text>
+  <text class="s" x="618" y="172">spread where it is fast</text>
+  <rect x="600" y="190" width="12" height="12" fill="#ffcc66" fill-opacity="0.22" stroke="#ffcc66" stroke-width="0.8"/>
+  <text class="t" x="618" y="200">swept in the same time</text>
+  <text class="s" x="618" y="216">equal areas: Kepler's</text>
+  <text class="s" x="618" y="230">second law</text>
+
+  <text class="t" x="600" y="372">At periapsis</text>
+  <text class="s" x="600" y="390">2.3 times closer than at</text>
+  <text class="s" x="600" y="404">apoapsis: (1.4 / 0.6)² = 5.4</text>
+  <text class="s" x="600" y="418">times the light, and 2.3</text>
+  <text class="s" x="600" y="432">times the speed.</text>
+  <text class="t" x="600" y="456">Over the year</text>
+  <text class="s" x="600" y="474">1 / √(1 − e²) = 1.09 times</text>
+  <text class="s" x="600" y="488">the light of the dashed orbit.</text>
+
+  <text class="s" x="20" y="504">Geometry and Kepler's laws: Murray &amp; Dermott 1999. Positions at equal steps of time from Kepler's equation, M = E − e sin E.</text>
+  <text class="s" x="20" y="519">Light over the year: Méndez &amp; Rivera-Valentín 2017, eq. 14. For scale, Earth's orbit has e = 0.017 and Mars's 0.093.</text>
+  <text class="s" x="20" y="534">Only the dots are not to scale: a planet would be far smaller than a dot.</text>
+</svg>

@@ -537,6 +537,8 @@ The row position for each line is derived from the equirectangular projection us
 
 ## Calculations
 
+The science behind some of these calculations is explained one question at a time in [docs/science/](docs/science/README.md), for readers who want to understand a topic: the theories with their equations and sources, then how the app computes it.
+
 ### Temperature — axial tilt
 
 The sea-level temperature of each latitude comes from the annual-mean sunlight it receives, using the classic two-term approximation (North, 1975):
