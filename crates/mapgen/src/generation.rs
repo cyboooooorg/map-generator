@@ -62,7 +62,7 @@ impl Sample {
 }
 
 /// Weight of the highland line jitter (about 0.09 of standard deviation).
-const HIGHLAND_JITTER: f32 = 0.50;
+const HIGHLAND_JITTER: f32 = 0.15;
 
 /// Lateral displacement of the continent outline, per octave of the coast
 /// warp, in units of the octave's wavelength (on the unit sphere).
@@ -143,8 +143,10 @@ pub(crate) fn relief_share(circumference_km: f32) -> f32 {
 const SMALL_BODY_RELIEF: f32 = 0.08;
 
 /// Mountain blend at Earth's gravity: the weight of the ridged mountains
-/// in the elevation.
-const MOUNTAIN_BLEND: f32 = 0.35;
+/// in the elevation. Calibration, no source: with the floating platform
+/// (see [`floating`]), it puts about a tenth of an Earth-like world's land
+/// above 2 km and 2 % above 4 km, as on Earth (ETOPO 2022).
+const MOUNTAIN_BLEND: f32 = 0.26;
 /// Largest relief scale ([`relief_scale`]): Olympus Mons's 21.9 km of
 /// relief over its surroundings (Plescia 2004, doi:10.1029/2002JE002031)
 /// is 2.5 times Everest's 8.85 km, the tallest mountain known against
@@ -166,6 +168,67 @@ const MAX_RELIEF_SCALE: f32 = 2.0;
 /// crust, `t (1 − ρc/ρm)` for a crust `t` thick, does not depend on `g`.
 pub(crate) fn relief_scale(gravity: f32) -> f32 {
     (1.0 / gravity.max(1e-3)).min(MAX_RELIEF_SCALE)
+}
+
+/// Height of the continental platform above the waterline, km: where the
+/// continents' crust floats (calibration on Earth's hypsometry, see
+/// [`floating`]).
+const PLATFORM_KM: f32 = 0.4;
+/// Rise of the platform inland, in units of the continents' noise above
+/// the waterline: `1 − 1/e` of its height at this.
+const PLATFORM_RISE: f32 = 0.1;
+/// Depth of the shelf's edge, km, and its width in the continents' noise
+/// below the waterline.
+const SHELF_KM: f32 = 0.2;
+const SHELF_NOISE: f32 = 0.03;
+/// Width of the continental slope in the noise, down to the old floor.
+const SLOPE_NOISE: f32 = 0.05;
+/// Depth of old ocean floor, km: from where Parsons & Sclater's floor is
+/// 18 Ma old (4 km, `plates::OLD_FLOOR_KM`) to their old floor's level,
+/// 6.4 km (Parsons & Sclater 1977, doi:10.1029/JB082i005p00803), reached
+/// as the noise falls further by about [`ABYSS_NOISE`].
+const ABYSS_KM: f32 = 6.4;
+const ABYSS_NOISE: f32 = 0.18;
+
+/// Height (negative: depth) of the crust above the waterline, elevation
+/// units, for the continents' noise `x` units above (below) it.
+///
+/// The crust floats on the mantle (Airy isostasy, Airy 1855,
+/// doi:10.1098/rstl.1855.0003): continental crust, thick and light,
+/// stands as a platform, oceanic crust as the floor of the basins, with
+/// little in between. The noise, a single smooth field, would make a
+/// ramp from the coast to 5–10 km inland and basins 15 km deep; it is
+/// mapped instead
+///
+/// - on land, to a platform rising to [`PLATFORM_KM`]: the high ground is
+///   left to the mountains, the plate boundaries and the volcanoes;
+/// - at sea, to a shelf down to [`SHELF_KM`], a slope down to the old
+///   floor at 4 km, and an abyss levelling off towards Parsons & Sclater's
+///   6.4 km; only trenches go deeper.
+///
+/// The platform's height, the widths in the noise and the mountains'
+/// weight ([`MOUNTAIN_BLEND`]) are calibrations, no source, on Earth's
+/// hypsometry (ETOPO 2022, NOAA NCEI, doi:10.25921/fd45-gt74; ice
+/// surface): land median about 0.42 km, 56 % of land under 500 m, 10.8 %
+/// above 2 km, 1.8 % above 4 km, 1 % of the sea floor deeper than 6 km.
+/// None depends on gravity: floating crust stands as high under any `g`.
+pub(crate) fn floating(x: f32) -> f32 {
+    let km = crate::craters::ELEVATION_KM;
+    if x >= 0.0 {
+        return PLATFORM_KM / km * (1.0 - (-x / PLATFORM_RISE).exp());
+    }
+    let u = -x;
+    let old_floor = crate::plates::OLD_FLOOR_KM;
+    let depth_km = if u < SHELF_NOISE {
+        SHELF_KM * u / SHELF_NOISE
+    } else if u < SHELF_NOISE + SLOPE_NOISE {
+        let t = smoothstep(0.0, 1.0, (u - SHELF_NOISE) / SLOPE_NOISE);
+        SHELF_KM + (old_floor - SHELF_KM) * t
+    } else {
+        let v = u - SHELF_NOISE - SLOPE_NOISE;
+        old_floor + (ABYSS_KM - old_floor) * (1.0 - (-v / ABYSS_NOISE).exp())
+    };
+    -depth_km / km
 }
 
 /// Elevation beyond which the relief is compressed into the range
@@ -530,7 +593,14 @@ impl Sampler {
             (coarse + fine - self.waterline).abs(),
         );
         let roughness = (1.0 - (1.0 - PLAIN_ROUGHNESS) * inland).max(mountain_weight);
-        let continent = coarse + fine * roughness;
+        // The crust floats: continents as a low platform, the sea floor
+        // between its shelf and the old floor (see `floating`). New crust
+        // is laid at the old floor already.
+        let continent = if origin.new_crust {
+            coarse + fine * roughness
+        } else {
+            floating(coarse + fine * roughness - self.waterline) + self.waterline
+        };
 
         // Ridged mountains blended only onto elevated terrain: a main ridge,
         // with two finer ridged octaves concentrated on it.
@@ -1474,6 +1544,82 @@ pub(crate) mod tests {
         assert!((moon - 0.165).abs() < 0.005, "{moon}");
         // Heavier with size, faster than the radius.
         assert!(g(2.0 * EARTH_CIRCUMFERENCE_KM) > 3.0);
+    }
+
+    /// Land heights and sea depths of a world above (below) its
+    /// waterline, km, each with its pixel's area.
+    fn hypsometry(w: &World) -> (Vec<(f32, f32)>, Vec<(f32, f32)>) {
+        let p = &w.params;
+        let waterline = p.sea_level + p.planet.rules.waterline;
+        let grid = p.grid();
+        let (mut land, mut sea) = (Vec::new(), Vec::new());
+        for (i, &e) in w.elevation.iter().enumerate() {
+            let a = grid.latitude((i / w.width as usize) as u32).cos() as f32;
+            let h = (e - waterline) * crate::craters::ELEVATION_KM;
+            if h >= 0.0 {
+                land.push((h, a));
+            } else {
+                sea.push((-h, a));
+            }
+        }
+        (land, sea)
+    }
+
+    /// Share of the area of `v` above `km`, %.
+    fn above(v: &[(f32, f32)], km: f32) -> f32 {
+        let total: f32 = v.iter().map(|x| x.1).sum();
+        100.0 * v.iter().filter(|x| x.0 > km).map(|x| x.1).sum::<f32>() / total
+    }
+
+    #[test]
+    fn earth_like_worlds_have_earths_hypsometry() {
+        // ETOPO 2022 (ice surface): land median 0.42 km, 56 % under 500 m,
+        // 10.8 % above 2 km, 1.8 % above 4 km; 1 % of the sea floor deeper
+        // than 6 km. Each seed within a band around them.
+        let earth = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/earth-like.toml"
+        );
+        for seed in [1u32, 2, 3] {
+            let request = crate::request::WorldRequest {
+                planet: Some(earth.into()),
+                seed: Some(seed),
+                width: Some(256),
+                height: Some(128),
+                ..Default::default()
+            };
+            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
+            let p = request.resolve(&mut rng).unwrap().params;
+            let (land, sea) = hypsometry(&generate(&p).world);
+            let lowland = 100.0 - above(&land, 0.5);
+            let (high, higher, deep) = (above(&land, 2.0), above(&land, 4.0), above(&sea, 6.0));
+            let report = format!("seed {seed}: {lowland} {high} {higher} {deep}");
+            assert!((45.0..75.0).contains(&lowland), "{report}");
+            assert!((4.0..15.0).contains(&high), "{report}");
+            assert!((0.5..4.0).contains(&higher), "{report}");
+            assert!(deep < 3.0, "{report}");
+            // The old ramp: a fifth of the land above 4 km.
+            assert!(above(&sea, 1.0) > 70.0, "{report}");
+        }
+    }
+
+    #[test]
+    fn the_crust_floats_as_a_platform_and_a_bounded_floor() {
+        let km = |x: f32| floating(x) * crate::craters::ELEVATION_KM;
+        assert_eq!(km(0.0), 0.0);
+        // The platform levels off at its height, however high the noise.
+        assert!(km(1.0) <= PLATFORM_KM && km(1.0) > 0.99 * PLATFORM_KM);
+        // The shelf, then the old floor between 4 and 6.4 km.
+        assert!((km(-SHELF_NOISE) + SHELF_KM).abs() < 1e-5);
+        assert!((km(-SHELF_NOISE - SLOPE_NOISE) + 4.0).abs() < 1e-4);
+        assert!(km(-2.0) >= -ABYSS_KM && km(-2.0) < -6.3);
+        // Monotonic.
+        let mut last = f32::MAX;
+        for k in 0..400 {
+            let v = km(1.0 - k as f32 / 200.0);
+            assert!(v <= last);
+            last = v;
+        }
     }
 
     #[test]

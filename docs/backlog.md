@@ -581,18 +581,14 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     drift stage (each stage draws its own poles), about twice the plates'
     0.13 s per world. The plate count does not follow the size of the
     planet: no source scales it.
-  - Isostasy: continents and sea floor are not scaled by gravity, and
-    ridges follow the age–depth relation, but the continents' level is
-    noise, not floating crust. Measured on four `earth-like` worlds
-    (1024 × 512), land stands 2.1 to 2.8 km above the sea on average and
-    the sea floor 4.4 to 5.1 km below it, 6.6 to 7.9 km apart, where
-    Airy's balance of a continental crust of 41 km (density 2.83 g/cm³,
-    Christensen & Mooney 1995) against a thin oceanic one gives about
-    4.5 km, close to Earth's (land under 1 km on average, the ocean
-    3.7 km deep). Bringing continents down would move every biome's
-    altitude line; it needs a crustal-thickness field and a
-    recalibration of the biome thresholds. No flexure: volcanoes and
-    ranges do not bend the lithosphere into moats.
+  - Isostasy: continents float as a platform and the sea floor is
+    bounded between the shelf and Parsons & Sclater's old floor
+    (`generation::floating`, 2026-11-07), calibrated on Earth's
+    hypsometry (ETOPO 2022). What remains: no crustal-thickness field
+    (the platform's height is a calibration rather than Airy's balance
+    of a thickness), no flexure (volcanoes and ranges do not bend the
+    lithosphere into moats), and the platform floats at the waterline,
+    so a sea level lowered on a world exposes platform, not old basins.
   - The age of old ocean floor is unknown: floor older than about 18 Ma
     keeps the noise's depth (4 km) instead of sinking towards 6.4 km.
 - **Mountains:** the planet's mass the moons see (`moons.rs`,
