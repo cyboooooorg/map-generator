@@ -1305,10 +1305,13 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
 }
 
 /// The parameters a body's world is generated with: its stored ones, a
-/// moon stored before moons carried their gravity taking its card's.
+/// moon or a rocky planet stored before they carried their gravity (a
+/// system made by an older version) taking its card's, from the mass and
+/// radius the system stored, not the gravity the radius alone gives.
 fn world_params(body: &Body) -> WorldParams {
     let mut params = body.params.clone();
-    if body.kind == BodyKind::Moon && params.gravity.is_none() {
+    let rocky = body.kind == BodyKind::Moon || params.planet.giant.is_none();
+    if rocky && params.gravity.is_none() {
         params.gravity = Some(body.physical.gravity as f32);
     }
     params
@@ -2496,5 +2499,28 @@ mod gravity_tests {
         old.params.gravity = None;
         let g = world_params(&old).gravity_modifier();
         assert!((f64::from(g) - moon.physical.gravity).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_rocky_planet_stored_without_gravity_takes_its_cards() {
+        let world = WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(5),
+            ..WorldRequest::default()
+        };
+        let params = world.resolve(&mut StdRng::seed_from_u64(5)).unwrap().params;
+        let system = draw_around_params(&world, params);
+        let mut old = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Planet && b.params.planet.giant.is_none())
+            .expect("a rocky planet")
+            .clone();
+        // A system made by main stored no gravity; its card shows the
+        // gravity of the stored mass and radius.
+        old.params.gravity = None;
+        old.physical.gravity = 1.94;
+        let g = world_params(&old).gravity_modifier();
+        assert!((f64::from(g) - 1.94).abs() < 1e-6, "got {g}");
     }
 }
