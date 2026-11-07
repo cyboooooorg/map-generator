@@ -326,7 +326,7 @@ export const fr: Messages = {
     tides: 'Marées',
     tidesHelp: `Leur amplitude, due aux lunes et à l’étoile, rapportée à celle de la Terre${S}: les estrans s’élargissent avec elle${S}; une planète verrouillée sur son étoile n’en a pas`,
     tidesValue: (p) => `×${p.tide} celles de la Terre`,
-    tiltHelp: `Une grosse lune stabilise l’inclinaison de l’axe (la Lune tient celle de la Terre vers 23°)${S}; sans elle, l’inclinaison erre, tirée de 0 à 60°`,
+    tiltHelp: `Une grosse lune stabilise l’inclinaison de l’axe (la Lune tient celle de la Terre vers 23°)${S}; sans elle, l’inclinaison peut errer, tirée de 0 à 85°`,
     tiltSteady: 'inclinaison stabilisée par sa lune',
     tiltFree: 'inclinaison libre',
     eccentricity: 'Excentricité',

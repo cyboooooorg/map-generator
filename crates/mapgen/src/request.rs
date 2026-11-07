@@ -788,8 +788,8 @@ mod tests {
         let resolved = WorldRequest::default().resolve(&mut rand::rng()).unwrap();
         let p = resolved.params;
         assert!((0.10..0.40).contains(&p.sea_level));
-        // 5 to 40°, or 0 to 60° without a moon to steady it.
-        assert!((0.0..=60.0).contains(&p.axial_tilt_deg));
+        // 5 to 40°, or 0 to 85° without a moon to steady it.
+        assert!((0.0..=85.0).contains(&p.axial_tilt_deg));
         // The planet is random: its preset may set its own range.
         assert!(SURFACE_AGE_GA.contains(p.surface_age_ga));
         assert_eq!((p.width, p.height), (1920, 1080));
@@ -852,7 +852,7 @@ mod tests {
                 free += usize::from(!(5.0..=40.0).contains(&p.axial_tilt_deg));
             }
         }
-        // Most Earths have no large moon: their tilt ranges from 0 to 60°.
+        // Most Earths have no large moon: their tilt ranges from 0 to 85°.
         assert!(steady > 10 && free > 100, "{steady} {free}");
         // A tilt asked for stays.
         let asked = WorldRequest {

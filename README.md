@@ -83,7 +83,7 @@ Invalid or unknown options are rejected with an error. Run `target/release/map-g
 
 **volcanic** — controls how much of the planet is volcanic: the share of volcanic provinces, and so the number of volcanoes, not their size. The share is proportional: `0.0` = no volcanoes, `0.4` = 12 % of the surface in volcanic provinces, `1.0` = 30 %.
 
-**axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt). Drawn (neither the request nor the preset sets it) on a planet without a large moon (mass ratio under 0.005), it ranges from 0 to 60° instead of 5 to 40°: without the Moon, Earth's tilt would wander chaotically (Laskar et al. 1993), and Mars's, without one, ranges up to 60°.
+**axial-tilt** — tilt of the rotation axis. Shapes the temperature profile from equator to poles and places the tropics and polar circles, see [Temperature](#temperature--axial-tilt). Drawn (neither the request nor the preset sets it) on a planet without a large moon (mass ratio under 0.005), it ranges from 0 to 85° instead of 5 to 40°: without the Moon, Earth's tilt could wander chaotically from nearly 0 to about 85° (Laskar, Joutel & Robutel 1993), and Mars's, without one, ranges from 0 to 60° (Laskar & Robutel 1993). Both the 0.005 threshold and the single tilt drawn for the world's whole life are the app's choices: over hundreds of millions of years a moonless Earth's tilt stays within a range of 20–25° (Lissauer et al. 2012), so the range says where a moonless tilt can be, not how fast it moves.
 
 **erosion** — how much rain carves the terrain: droplets per cell of the erosion grid, see [Erosion](#hydraulic-erosion).
 

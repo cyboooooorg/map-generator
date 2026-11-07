@@ -751,7 +751,11 @@ pub(crate) fn giant_moon_floor_radii(giant_density: f64, ring_outer: Option<f64>
 }
 
 /// Mass ratio from which a moon stabilises its planet's axial tilt (the
-/// Moon: 0.0123; Laskar et al. 1993).
+/// Moon: 0.0123). The app's choice, between the Moon and a moon too small
+/// to matter: the studies computed only Earth with and without its Moon.
+/// With the Moon, Earth's tilt is "essentially stable, exhibiting only
+/// small variations of ±1.3° around the mean value of 23.3°" (Laskar,
+/// Joutel & Robutel 1993, doi:10.1038/361615a0).
 const STABILISING_MASS_RATIO: f64 = 0.005;
 /// Tidal height of the Moon and of the Sun on Earth, in the units of
 /// [`tidal_height`] (`mass ratio × (radius / distance)³ × radius in Earth
@@ -767,9 +771,16 @@ const GIANT_TIDE_SWING: f64 = 3.0;
 /// the coast, which the tides do not change.
 const SHORE_FACTOR: (f64, f64) = (0.5, 2.0);
 /// Axial tilt range drawn without a stabilising moon, degrees, in place of
-/// the usual `[5, 40]`: Mars, without one, ranges up to 60° (Laskar &
-/// Robutel 1993).
-pub const UNSTABLE_TILT_DEG: (f32, f32) = (0.0, 60.0);
+/// the usual `[5, 40]`. Without the Moon, Earth's "chaotic zone would then
+/// extend from nearly 0° up to about 85°" (Laskar, Joutel & Robutel 1993,
+/// doi:10.1038/361615a0); Mars, without a large moon, ranges from 0 to 60°
+/// (Laskar & Robutel 1993, doi:10.1038/361608a0). The range is where a
+/// moonless tilt can be found, not how fast it gets there: over hundreds
+/// of millions of years a moonless Earth's tilt stays "within a
+/// constrained range, typically 20–25° in extent" (Lissauer, Barnes &
+/// Chambers 2012, doi:10.1016/j.icarus.2011.10.013). The app draws one
+/// tilt for the world's whole life, anywhere in the chaotic zone.
+pub const UNSTABLE_TILT_DEG: (f32, f32) = (0.0, 85.0);
 
 /// What a world's moons do to it (step 5 of backlog item 13).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1163,7 +1174,7 @@ mod tests {
         assert!((without.tide - 0.315).abs() < 0.02, "{without:?}");
         assert!((without.shore_factor - 0.75).abs() < 0.02, "{without:?}");
         assert_eq!(without.tilt(5.0, (5.0, 40.0)), 0.0);
-        assert_eq!(without.tilt(40.0, (5.0, 40.0)), 60.0);
+        assert_eq!(without.tilt(40.0, (5.0, 40.0)), 85.0);
         assert_eq!(with.tilt(23.0, (5.0, 40.0)), 23.0);
         // A binary's moon raises a bulge that never moves.
         let locked = Moon {

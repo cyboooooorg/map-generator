@@ -321,7 +321,10 @@ generated:
 
 - **Axial tilt:** a drawn tilt (neither the request nor the preset sets
   it) moves from `[5, 40]` to `[0, 60]` without a moon of mass ratio
-  0.005 or more, mapped linearly so no draw changes.
+  0.005 or more, mapped linearly so no draw changes. Since 2026-11-07
+  the free range is `[0, 85]`, the chaotic zone of a moonless Earth
+  (Laskar, Joutel & Robutel 1993) rather than Mars's 0–60° (Laskar &
+  Robutel 1993).
 - **Tides:** `PlanetEffects` sums the tidal heights of the moons and the
   star, `mass ratio × (radius / distance)³ × size`, relative to Earth's
   (the Sun's 0.46 of the Moon's). A planet locked to its star feels no
