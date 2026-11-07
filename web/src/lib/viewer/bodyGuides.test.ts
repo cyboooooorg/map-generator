@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Color, Vector3 } from 'three';
-import { BodyGuides, HOST_LABEL_AT, HOST_LABEL_REACH, hostLabelIndex, hostLineRadii, labelIndex } from './bodyGuides';
+import { BodyGuides, HOST_LABEL_BEYOND, hostLabelRadius, hostLineRadii } from './bodyGuides';
 
 describe('hostLineRadii', () => {
   it('runs from the surface to the host, geometrically', () => {
@@ -13,18 +13,6 @@ describe('hostLineRadii', () => {
 
   it('stays at the surface for a host closer than it', () => {
     expect(hostLineRadii(0.5, 3)).toEqual([1, 1, 1]);
-  });
-});
-
-describe('labelIndex', () => {
-  it('picks the middle of the longest run in view', () => {
-    expect(labelIndex([false, true, true, true, false, true])).toBe(2);
-    expect(labelIndex([true, false, true, true, true, true])).toBe(3);
-  });
-
-  it('is -1 when none is in view', () => {
-    expect(labelIndex([false, false])).toBe(-1);
-    expect(labelIndex([])).toBe(-1);
   });
 });
 
@@ -45,8 +33,8 @@ describe('BodyGuides', () => {
     expect(moonlet.spin!.y).toBeCloseTo(1.4 * sphere.spin!.y, 6);
     expect(moonlet.pull!.length() - sphere.pull!.length()).toBeCloseTo(0.6, 6);
     expect(moonlet.velocity!.length() - sphere.velocity!.length()).toBeCloseTo(0.1, 6);
-    // The host line still runs to the host's centre.
-    expect(moonlet.host!.at(-1)!.z).toBeCloseTo(-100, 6);
+    // The host label stands one diameter beyond the surface towards the host.
+    expect(moonlet.host!.z).toBeCloseTo(-(1.6 + HOST_LABEL_BEYOND), 6);
     // A host set afterwards starts from the surface too.
     guides.setHost({ position: [0, 0, -100], velocity: null });
     guides.host.updateMatrixWorld(true);
@@ -55,33 +43,36 @@ describe('BodyGuides', () => {
   });
 });
 
-describe('hostLabelIndex', () => {
-  const radii = hostLineRadii(1000, 96);
-  const fixed = radii.findIndex((r) => r >= HOST_LABEL_AT);
-
-  it('holds still near the body while that point is in view, wherever the rest is', () => {
-    expect(hostLabelIndex(radii, radii.map(() => true))).toBe(fixed);
-    expect(hostLabelIndex(radii, radii.map((r) => r < 50))).toBe(fixed);
+describe('hostLabelRadius', () => {
+  it('hangs one diameter beyond the surface', () => {
+    expect(hostLabelRadius(1, 2.4, 1000)).toBe(1 + HOST_LABEL_BEYOND);
+    expect(hostLabelRadius(1.6, 3, 1000)).toBeCloseTo(3.6, 9);
   });
 
-  it('else stays within reach of the body, where the line is spread out', () => {
-    const inView = radii.map((r, i) => i !== fixed && r > 3);
-    const k = hostLabelIndex(radii, inView);
-    expect(radii[k]).toBeGreaterThan(3);
-    expect(radii[k]).toBeLessThanOrEqual(HOST_LABEL_REACH);
+  it('goes to the tip of the pull arrow when that lies farther out', () => {
+    expect(hostLabelRadius(1, 4.5, 1000)).toBe(4.5);
   });
 
-  it('moves out along the line just enough to clear the other labels', () => {
-    // The pull's label covers the points up to 4 radii.
-    const clear = radii.map((r) => r > 4);
-    const k = hostLabelIndex(radii, radii.map(() => true), clear);
-    expect(radii[k]).toBeGreaterThan(4);
-    expect(radii[k - 1]).toBeLessThanOrEqual(4);
+  it('stays within the line to the host', () => {
+    expect(hostLabelRadius(1, 2.4, 2)).toBe(2);
+    expect(hostLabelRadius(1, 2.4, 0.5)).toBe(1);
   });
 
-  it('goes further out only when nothing near is in view', () => {
-    const inView = radii.map((r) => r > 100);
-    expect(radii[hostLabelIndex(radii, inView)]).toBeGreaterThan(100);
-    expect(hostLabelIndex(radii, radii.map(() => false))).toBe(-1);
+  it('holds still on the axis as the surface and the pull are set', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    guides.setHost({ position: [0, 0, -100], velocity: null });
+    guides.update(false, true, 1);
+    guides.host.updateMatrixWorld(true);
+    const label = guides.points().host!;
+    expect(label.x).toBeCloseTo(0, 9);
+    expect(label.z).toBeCloseTo(-(1 + HOST_LABEL_BEYOND), 9);
+    // A moonlet bulging 1.6 radii towards its host moves it out with the surface.
+    guides.setSurface(1, () => 1.6);
+    guides.host.updateMatrixWorld(true);
+    expect(guides.points().host!.z).toBeCloseTo(-(1.6 + HOST_LABEL_BEYOND), 9);
+    // Hidden with the host guides.
+    guides.update(false, false, 1);
+    expect(guides.points().host).toBeNull();
+    guides.dispose();
   });
 });

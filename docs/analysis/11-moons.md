@@ -142,9 +142,10 @@ of a seed does not change until step 5.
 ### Step 1: the moon system (Rust)
 
 - **Module `src/moons.rs`:** `MoonSystem::draw(params, star)` from a new
-  noise stream (`stream::MOONS`, 26). The planet's mass follows from its
-  size at Earth's density (as `gravity_modifier` does), icy bodies
-  lighter.
+  noise stream (`stream::MOONS`, 26). The planet's mass followed from
+  its size at Earth's density (as `gravity_modifier` did); since
+  2026-11-07 both follow the mass–radius relation of rocky planets
+  (`WorldParams::mass_earth`), icy bodies lighter.
 - **Channels and odds** (constants to calibrate, see section 2):
   - giant impact: 1 in 12 for planets above about 0.3 Earth radii, mass
     ratio 0.005–0.03 (the Moon: 0.0123); on small worlds (below about
@@ -180,9 +181,11 @@ it off. Over 4 000 seeds:
 | Earth-sized, at 1 AU      | 63 %    | 21 % | 16 %        | 8.8 %      | none   |
 | Pluto-sized, at 30 AU     | 37 %    | 50 % | 13 %        | 48 %       | 10 %   |
 
-- The planet's mass follows from its size at Earth's density, as its
-  gravity does: a small icy world is then heavier than Pluto (1.85
-  g/cm³), so binaries are rarer than a Pluto density would give.
+- The planet's mass followed from its size at Earth's density, as its
+  gravity did: a small icy world was then heavier than Pluto (1.85
+  g/cm³), so binaries are rarer than a Pluto density would give. Since
+  2026-11-07 it follows the mass–radius relation of rocky planets,
+  never less dense than the Moon (3.34 g/cm³), still heavier than Pluto.
 - Each origin draws all of its values whatever its outcome, so one
   origin's odds never shift another's draws; the planet's day is drawn
   before the tidal-locking test, so a world's moons do not depend on
@@ -321,7 +324,10 @@ generated:
 
 - **Axial tilt:** a drawn tilt (neither the request nor the preset sets
   it) moves from `[5, 40]` to `[0, 60]` without a moon of mass ratio
-  0.005 or more, mapped linearly so no draw changes.
+  0.005 or more, mapped linearly so no draw changes. Since 2026-11-07
+  the free range is `[0, 85]`, the chaotic zone of a moonless Earth
+  (Laskar, Joutel & Robutel 1993) rather than Mars's 0–60° (Laskar &
+  Robutel 1993).
 - **Tides:** `PlanetEffects` sums the tidal heights of the moons and the
   star, `mass ratio × (radius / distance)³ × size`, relative to Earth's
   (the Sun's 0.46 of the Moon's). A planet locked to its star feels no
@@ -395,6 +401,44 @@ and casts their shadows, the four largest of all bodies kept.
   like any world.
 - The user can turn moons off (`none`), not choose their number: they
   follow from the seed and the physics.
+
+## 9. Science fixes (2026-11-07)
+
+The science articles (`docs/science/how-many-moons.md`,
+`moon-shapes.md`, `tidal-locking.md`) found where the rules above depart
+from the science. What changed:
+
+- **Round from 300 km (rock).** The rock limit is now 600 km across, a
+  mean radius of 300 km, where Lineweaver & Norman 2010 observe the
+  change (the 900 km of section 5 came from an estimate). The ice limit
+  stays 400 km. The irregularity falls to 0 at the limit, so the shape no
+  longer jumps there, and a giant's regular moons follow the same limits.
+- **Tidal shapes.** A locked moon is stretched into the hydrostatic
+  ellipsoid of a fluid body, `(b − c) / (a − c) = 1/4` (Noyelles 2017),
+  in full from the round limit up.
+- **Locking by timescale.** A moon is locked when the planet's tides
+  have despun it within the system's age (Gladman et al. 1996, its Love
+  number from the rigidity of rock), and the planet to its largest moon
+  likewise; the mass ratio of 0.05 of section 4 is gone.
+- **Despun planets.** A planet its star has despun keeps only the moons
+  light enough to outlast the system (Barnes & O'Brien 2002, eq. 8), not
+  none; so does a giant its star has locked, with its own tides. A
+  giant's chain ends at a third of its Hill radius. A moon's world is
+  locked to its planet, not to the star.
+- **Worlds made before keep their lock.** A reloaded world takes the lock
+  its base map was made with, from the `tidally_locked` of its stored
+  `world.json` (`WorldParams.locked_to_star`), not the rule above: its
+  detail tiles and epochs (the craters of a world locked to its star
+  favour its leading hemisphere) then agree with the map and its card.
+  Only newly generated worlds follow the new rule.
+- **Captured moons** avoid the inclinations of 55° to 130° (Carruba et al.
+  2002, via Shen & Tremaine 2008).
+- **One recipe for a giant's moons**: a giant of a system draws them as a
+  giant world does (two to five, a captured Triton on 35 % of ice
+  giants).
+- **The odds** are labelled in `moons.rs` as a source or a calibration.
+  Elser et al. 2011 give no dependence on the star, so their 1 in 12
+  stays the same round every star.
 
 ## Sources
 

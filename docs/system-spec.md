@@ -55,11 +55,19 @@ round planets. Every body has:
   stars, and its node's longitude is counted from the planet's equinox
   direction);
 - its **physical facts**: mass, radius, density, surface gravity, shape
-  (an irregular moon's axes);
+  (`axes_km`: an irregular moon's axes, or a round one's stretched by its
+  planet's tides);
 - its **spin**: rotation period, axial tilt, whether it is locked to its
-  parent (and to what). A locked body turns at a steady pace, facing its
-  host on average; the host swings in its sky by the libration (true
-  minus mean anomaly, about ±2e radians);
+  parent (and to what), and for a planet whether its star holds it in
+  the 3:2 spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
+  turns every two orbits, as Mercury, see `spin.rs`). A locked body turns
+  at a steady pace, facing its host on average; the host swings in its
+  sky by the libration (true minus mean anomaly, about ±2e radians; the
+  dial gives its exact amplitude, `librationAmplitude` in
+  `web/src/lib/systemSky.ts`). A
+  moon's axial tilt is its world's (`moons::moon_tilt_deg`: the Moon's
+  6.68° to its orbit for a giant-impact moon, 0 for the others). A planet
+  locked to its star turns on a circular orbit, upright;
 - its **surroundings**: equilibrium temperature, the starlight it gets,
   its place relative to the habitable zone, the tides it raises and feels;
 - its **preview**: what the viewer draws before its maps exist (see
@@ -126,16 +134,22 @@ each planet asked, then spaces them (below). Types the request leaves to
 the draw get occurrence rates by star: rocky planets from the Kepler
 counts (about one to three small planets within 1 AU of a Sun-like star,
 more round M dwarfs; Mulders et al. 2018), giants as `giants.rs` draws
-them today (metallicity and star mass).
+them today (metallicity and star mass), a hot Jupiter included: about
+1 % of Sun-like stars of the Sun's metallicity get one (Wright et al.
+2012), on a 1 to 10 day orbit.
 
 ### Spacing and order
 
 - Planets are placed from the inside out. Two neighbours must be at least
-  **10 mutual Hill radii** apart (periapsis to apoapsis), the spacing that
-  keeps multi-planet systems stable for billions of years (Chambers et
-  al. 1996; Pu & Wu 2015); a pair closer than that is spread outwards, a
-  planet pushed out of its allowed band is redrawn a few times, then the
-  request fails (below).
+  **10 mutual Hill radii** apart (periapsis to apoapsis) when they weigh
+  about an Earth, the spacing that keeps multi-planet systems stable for
+  billions of years (Chambers et al. 1996; Pu & Wu 2015). Heavier pairs
+  need fewer: the spacing falls as their mass share to the power −1/12
+  (Chambers et al. 1996 found stable spacings scale with `μ^¼`, the Hill
+  radius with `μ^⅓`), 6.4 for a Jupiter and a Saturn, which are 6.5
+  apart; never under `2√3` (Gladman 1993). A pair closer than that is
+  spread outwards, a planet pushed out of its allowed band is redrawn a
+  few times, then the request fails (below).
 - Neighbouring periods fall mostly between 1.3 and 3 times each other
   (the peas-in-a-pod systems of Weiss et al. 2018): planets of a system
   are of similar size and evenly spaced in `log a`.
@@ -177,8 +191,9 @@ Once the planets are placed, the system draws its belts and trojans
   - With a giant, a **scattered disk** goes with it, from the giant to
     four times its distance, with 0.3 to 3 times the belt's mass.
 - **Trojans.** Bodies larger than 1 km at L4 and L5. A planet has them
-  where its mass share is under Routh's 0.0385 and no heavier planet
-  orbits within a period ratio of 3.
+  where its mass share is under Routh's 0.0385 and no heavier giant
+  orbits within a period ratio of 3 (Mars keeps its trojans next to the
+  heavier, rocky Earth).
   - A gas giant, or the outermost ice giant: 10⁴ to 10⁶.
   - Another ice giant: 10³ to 10⁵.
   - A hot Jupiter: up to 10³.
@@ -199,10 +214,11 @@ their crater rates.
 
 ### Moons
 
-Each planet draws its moons as today: a rocky planet by `moons.rs`
-(impacts, captures, tides, the Hill sphere), a giant its regular moons
-by the chain `exomoon.rs` draws (two to four, about 10⁻⁴ of its mass, a
-1:2:4 resonance), plus captured irregular moons. A giant's large regular
+Each planet draws its moons as a world does, by `MoonSystem::draw` in
+`moons.rs`: a rocky planet's (impacts, captures, tides, the Hill
+sphere), a giant's regular moons (two to five, about 10⁻⁴ of its mass, a
+1:2:4 resonance, on some ice giants a captured Triton), one recipe for a
+giant of a system and a giant world. A giant's large regular
 moon may be a habitable world: in mode 2 that is the planet asked for; in
 mode 1 a request can ask for it (`moons of giants: terran`).
 
@@ -210,47 +226,76 @@ A giant with rings also gets the moons that shape them (`rings.rs`,
 backlog item 18), drawn from the stream `RING_MOONS` so the other moons
 keep their draws. They are `icy-moon` bodies marked with a `ring_role`:
 
-- `embedded`: zero to two moonlets of 4 to 30 km in the outer part of
-  bright rings, each clearing a gap 7 to 17 of its Hill radii wide;
-- `resonant`: on 60 % of bright rings, a moon of 150 to 250 km just
-  outside them whose 2:1 resonance opens a gap of 0.04 to 0.09 radii
-  (the Cassini Division);
+- `embedded`: zero to two moonlets in the outer 40 % of bright rings,
+  each clearing a gap 7 to 17 of its Hill radii wide. Each grew from a
+  core of solid ice, 1.5 to 10 km in radius, under a mantle of ring
+  particles with 65 % voids, until it filled its Roche lobe: it ends at
+  the critical density of its distance, `3M / (γ a³)` (`γ` 1.59), its
+  long semi-axis `R_c (4π/(3γ) (ρ_c − ρ_m) / (ρ_crit − ρ_m))^(1/3)`, in
+  the lobe's 3 : 2 : 2 shape (Porco et al. 2007): about 4 to 30 km
+  across round a Saturn;
+- `resonant`: on 60 % of bright rings, a moon of 150 to 250 km in radius
+  outside them (irregular below 200 km, round above) whose 2:1 inner
+  Lindblad resonance, placed with the giant's `J2`, cuts the edge of the
+  inner ring and clears a division 0.04 to 0.09 radii wide outward of it
+  (Mimas, the B ring's edge and the Cassini Division);
 - `edge`: one to three moons of 10 to 100 km just beyond a bright ring's
-  outer edge;
+  outer edge, the larger the farther out (Charnoz et al. 2010);
 - `shepherd`: on 70 % of faint rings, a pair of 10 to 25 km on either
-  side of the ring.
+  side of the ring;
+- `source`: beyond a faint ring, one or two small moons of 4 to 90 km at
+  2 to 3.2 radii (Amalthea, Thebe), and on half of those giants one of
+  5 to 20 km at 3.4 to 4.2 radii (Mab), which may feed dust rings.
+
+Edge moons, shepherds and sources are no less dense than the critical
+density at their distance, or solid ice's where that is lower; those
+raised to it fill their Roche lobe and take its shape. Where the critical
+density exceeds solid ice (close to a dense giant), no loose mantle holds:
+the moon is bare solid ice (0.9 g/cm³), irregular, outside its rigid
+Roche limit.
 
 Ring moons keep to the rings' plane, which is tens of metres to a kilometre
 thick: an embedded moonlet's inclination is drawn up to 0.001° (Pan:
 0.0001°, Daphnis: 0.0036°), an edge moon's up to 0.005° (Atlas: 0.003°),
 so that from them the rings lie on the horizon; shepherds and resonant
 moons, outside the rings, up to 0.05° (Prometheus: 0.008°, Pandora:
-0.05°). Their eccentricities keep them as close: an embedded moonlet's
-up to 5 × 10⁻⁵, a swing of a few km inside its gap (Pan: 1.4 × 10⁻⁵,
-Daphnis: 3.3 × 10⁻⁵), an edge moon's up to 1.5 × 10⁻³ (Atlas: 1.2 ×
-10⁻³); shepherds and resonant moons draw 2 × 10⁻⁴ to 2.2 × 10⁻³
-(Prometheus: 2.2 × 10⁻³). Within bright rings, gaps never overlap: a moonlet whose gap the
-resonance gap would cover is not kept.
+0.05°); dust sources up to 1.1° (Thebe: 1.08°). Their eccentricities keep
+them as close: an embedded moonlet's up to 5 × 10⁻⁵, a swing of a few km
+inside its gap (Pan: 1.4 × 10⁻⁵, Daphnis: 3.3 × 10⁻⁵), scaled down past
+Daphnis's distance so that the swing stays as small round a larger giant;
+an edge moon's up to 1.5 × 10⁻³ (Atlas: 1.2 × 10⁻³); shepherds and
+resonant moons draw 2 × 10⁻⁴ to 2.2 × 10⁻³ (Prometheus: 2.2 × 10⁻³);
+dust sources 10⁻³ to 1.8 × 10⁻² (Thebe: 1.8 × 10⁻²). Within bright
+rings, gaps never overlap: a moonlet whose gap the resonance's division
+would cover is not kept.
 
 Bright rings end at the fluid Roche limit of their icy particles (0.5 to
-0.9 g/cm³), kept within 2.0 to 2.5 radii; their gaps are those of their
-moons, and the rings' `gap_moons` name the moon of each gap. The ring
-moons are numbered with the others, nearest first, at their distance in
-the radii of the giant's body (`physical.radius_km`, the unit the views
-place its moons in), so that an embedded moonlet sits in the middle of
-its gap. A giant without
-regular moons (hot, or with too small a Hill sphere) keeps its rings
-without moons, and the giant a world of the request orbits gets none.
+0.9 g/cm³), from the giant's density over its equatorial radius: 2.15 to
+2.62 radii round a Saturn, past 3 round a denser giant. Only physics
+bounds them: the rings and their moons stay Hill stable inside the
+giant's innermost other moon (Gladman 1993) and within a third of its
+Hill radius, and a bright ring keeps 0.3 radii above 1.11 (Saturn's D
+ring), or is not kept. Their gaps are those of their moons, and the
+rings' `gap_moons` name the moon of each gap. The ring moons are numbered
+with the others, nearest first, at their distance in the radii of the
+giant's body (`physical.radius_km`, the unit the views place its moons
+in), so that an embedded moonlet sits in the middle of its gap. A giant
+without regular moons (hot, or with too small a Hill sphere) keeps its
+rings without moons. The giant asked for, and the giant a world of the
+request orbits, are shaped as the others, inside that world's chain.
 
 Some of those moons feed faint dust rings (`dust_rings`, stream
 `DUST_RINGS`), stored with the giant's rings (`given_rings.dust`): on
-80 % of them, the one or two outermost edge moons of bright rings each
-spread a gossamer ring of impact dust from the rings out to their orbit
-(Jupiter's Amalthea and Thebe rings); on a quarter of giants, the
-innermost icy regular moon within 12 radii, heated by the tides of its
-resonant chain, blows out a broad ring of ice grains from 0.75 to 2 times
-its distance (Saturn's E ring round Enceladus). Each names its source
-moon. Systems have no irregular moons, so no ring like Phoebe's.
+80 % of them, the one or two outermost edge moons or sources within 3.3
+radii each spread a gossamer ring of impact dust from the main rings out
+to their orbit and up to 1.26 times past it (Jupiter's Amalthea and Thebe
+rings, and Thebe's extension); a source farther out wraps its orbit in a
+faint belt from 0.913 to 1.087 times its distance (Uranus's μ ring round
+Mab). On a quarter of giants, the innermost icy regular moon within 12
+radii blows out a broad ring of ice grains from 0.75 to 2 times its
+distance (Saturn's E ring round Enceladus): which moon is active is
+drawn, its tidal heating not computed. Each names its source moon.
+Systems have no irregular moons, so no ring like Phoebe's.
 
 ### Around one planet (mode 2)
 

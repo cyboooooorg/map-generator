@@ -8,4 +8,11 @@ export type Spin = { period_hours: number, axial_tilt_deg: number,
  * Locked to what it orbits: its star (a planet) or its planet (a
  * moon), its day its orbit.
  */
-locked: boolean, };
+locked: boolean, 
+/**
+ * Held by its star's tides in the 3:2 spin–orbit resonance, as
+ * Mercury: three turns every two orbits, its long axis towards the
+ * star at each periapsis (see `crate::spin`). Systems drawn before it:
+ * false.
+ */
+spin_orbit_3_2?: boolean, };

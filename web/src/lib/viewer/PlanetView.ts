@@ -28,9 +28,9 @@ import {
   LessEqualDepth,
   LineBasicMaterial,
   LineSegments,
+  type Material,
   Matrix4,
   Mesh,
-  MeshBasicMaterial,
   NoColorSpace,
   MOUSE,
   NotEqualStencilFunc,
@@ -60,7 +60,12 @@ import {
   type IUniform,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { BodyGuides, type GuidePoints, type HostGuide, hostLabelIndex } from './bodyGuides';
+import { cameraPlanes } from './cameraPlanes';
+import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
+import { DIAL_RADIUS, RotationDial } from './rotationDial';
+import { sphereGrid } from './starSystem';
+import { hiddenByShape } from './occlusion';
+import type { DialState } from '../rotationDial';
 import type { HexMap } from '../api/types/HexMap';
 import {
   greatCircleArc,
@@ -70,15 +75,16 @@ import {
   planeToLonLat,
   rayPlaneZ0,
   raySphere,
+  rayRelief,
   sphereToLonLat,
   type Vec3,
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
-import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
+import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody, skyOccluders } from '../skyBodies';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
-import { liftSky, type Sky } from '../sky';
+import { liftSky, sunDeclinationDeg, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
 import {
   altitudeForMapHeight,
@@ -89,6 +95,7 @@ import {
   mapHeightForAltitude,
   mapPoint,
   morphCamera,
+  lonDelta,
 } from './viewTransfer';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH, sunDepthTable } from './sunDepth';
 import { downsample, fitFactor, releaseOnUpload } from './textures';
@@ -105,6 +112,8 @@ import {
   skyBodyVertex,
   previewGlobeFragment,
   previewGlobeVertex,
+  SKY_LINE_PASS,
+  SKY_OCCLUDERS,
   SKY_ORBIT_DASH,
   skyOrbitDash,
   skyOrbitFragment,
@@ -171,6 +180,15 @@ export type Lighting =
 /** Layers drawn from uExtra, uploaded the first time one of them is shown. */
 const EXTRA_LAYERS: ReadonlySet<Layer> = new Set(['volcanic', 'coast', 'floodplain']);
 
+/** How far above the equator the camera looks at the rotation dial from, degrees. */
+const DIAL_ELEVATION = 20;
+/** How long the camera takes to rise to it, ms. */
+const DIAL_TRAVEL_MS = 700;
+/** A camera's position and the point it looks at. */
+interface Pose {
+  position: Vector3;
+  target: Vector3;
+}
 const MORPH_MS = 1200;
 /** How far the spin axes reach out of a body, in its radii (see setSpinAxes). */
 const SPIN_AXIS_LENGTH = 1.5;
@@ -179,8 +197,8 @@ const SPIN_AXIS_LENGTH = 1.5;
  * its atmosphere, rings, grid and axes, before the near orbit lines (10).
  */
 const SKY_FRONT_ORDER = 5;
-/** About the size of a sky label (see components/SkyLabels.svelte), CSS px: two closer than this overlap. */
-const LABEL_BOX = { x: 220, y: 40 };
+/** One pass of a sky line set (see PlanetView.skyLines). */
+type SkyLinePass = LineSegments<BufferGeometry, ShaderMaterial>;
 /**
  * Half-size, in CSS pixels, below which a body of the sky is drawn no
  * smaller (with a faint ring), and to which a gap in a giant's rings is
@@ -411,12 +429,15 @@ export interface HostStar {
 
 /**
  * How far vegetation is recoloured under a star (see the surface shader):
- * towards dark purple-black below the Sun's temperature (fully at 3 300 K),
- * towards gold above it (fully at 7 300 K); none for a Sun-like star.
+ * towards dark purple-black below 4 900 K (fully at 3 400 K, between M3V
+ * and M3.5V), towards gold above the Sun's temperature (fully at 7 300 K).
+ * None from 4 900 to 5 772 K: plants round early K dwarfs, whose light at
+ * the ground peaks in the red like the Sun's, "would look very similar to
+ * the Earth" (Kiang et al. 2007, paper II).
  */
 export function vegetationShift(teffK: number): [number, number] {
   const clamp = (x: number) => Math.min(1, Math.max(0, x));
-  return [clamp((5772 - teffK) / 2500), clamp((teffK - 5772) / 1500)];
+  return [clamp((4900 - teffK) / 1500), clamp((teffK - 5772) / 1500)];
 }
 
 /** The Sun from Earth: worlds made before stars. */
@@ -452,6 +473,15 @@ export class PlanetView {
   /** Uniforms shared by the surface and the graticule (the same objects). */
   private readonly shared = {
     uMorph: { value: 1 } as IUniform<number>,
+    /**
+     * The meridian the morph wraps the map round (see morphFrame in
+     * viewTransfer.ts): its longitude from 0 and its x on the map, which
+     * must agree (the map's middle, x = 0, is longitude π).
+     */
+    uMorphLon: { value: Math.PI } as IUniform<number>,
+    uMorphX: { value: 0 } as IUniform<number>,
+    /** Light added to the night side during the turn towards the map (see setMode). */
+    uNightLift: { value: 0 } as IUniform<number>,
     uRelief: { value: 0 } as IUniform<number>,
     uReliefScale: { value: 0 } as IUniform<number>,
     uCoast: { value: 0 } as IUniform<number>,
@@ -562,6 +592,17 @@ export class PlanetView {
   }[] = [];
   /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
   private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  /** Their far parts in front of a sky body, drawn over it (see skyOrbitFragment). */
+  private skyOrbitsOver: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  /**
+   * The sky bodies the orbit lines pass in front of and behind (see
+   * skyOrbitFragment), shared by their materials; set each frame by
+   * drawSkyBodies.
+   */
+  private readonly skyOccluders = {
+    uOccluders: { value: Array.from({ length: SKY_OCCLUDERS }, () => new Vector4()) },
+    uOccluderCount: { value: 0 },
+  };
   /**
    * The globe's spin axis (see setSpinAxes): out of its poles, the north
    * end light, the south end blue.
@@ -580,7 +621,19 @@ export class PlanetView {
   /** Which body of the sky is the host planet, and whether it is locked to its star; null for none. */
   private hostSpinOf: { index: number; locked: boolean } | null = null;
   private hostGuideOn = false;
+  /**
+   * The Hill sphere drawn round a body of the sky (see setHillSphere): a
+   * grid and a faint limb shell on a unit sphere, placed and scaled to it,
+   * its depth held at the far plane (see farGuide), null until first asked.
+   */
+  private hill: { grid: LineSegments<BufferGeometry, LineBasicMaterial>; shell: Mesh<SphereGeometry, ShaderMaterial> } | null = null;
+  private hillSphereOn: { centre: Vec3; radius: number } | null = null;
   private spinAxesOn = false;
+  /** The rotation dial round the body shown (see setRotationDial), and its state; null hides it. */
+  private readonly dial = new RotationDial();
+  private dialState: DialState | null = null;
+  /** The state and radius the dial was last placed with (see render). */
+  private dialPlaced: { state: DialState; radius: number } | null = null;
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
   private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
@@ -626,10 +679,12 @@ export class PlanetView {
   private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
   /**
    * The body's shape as setShape loaded it, for the guides drawn out of its
-   * surface: its radii (row 0 north), and the most it reaches within 15°
-   * of either pole; null for a sphere.
+   * surface: its radii (row 0 north), the most it reaches within 15°
+   * of either pole, and anywhere (`largest`); null for a sphere.
    */
-  private shapeRadii: { radii: Float32Array; width: number; height: number; poles: number } | null = null;
+  private shapeRadii: { radii: Float32Array; width: number; height: number; poles: number; largest: number } | null = null;
+  /** The elevation the surface is raised by, for the labels it hides (see surfaceRadiusAt). */
+  private heights: { layers: WorldLayers; coast: number; liquidSea: boolean } | null = null;
   /** Its highest point over the coastline, in elevation units (see setData). */
   private peakAbove = 0;
   /** The rocks of the giant's rings round a ring moon (see setRingRocks), null until some are. */
@@ -667,6 +722,8 @@ export class PlanetView {
    * `centreFrom` to `centreTo`, from `altitude` above the globe to
    * `mapHeight` above the map (see viewTransfer.ts).
    */
+  /** The camera's travel to the dial's viewpoint under way (see travelTo), or none. */
+  private travel: { from: Pose; to: Pose; start: number } | null = null;
   private animation: {
     from: number;
     to: number;
@@ -801,7 +858,7 @@ export class PlanetView {
     this.surface.material.stencilRef = DETAIL_STENCIL;
     this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
-    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin);
+    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin, this.dial.group);
 
     this.grid = new LineSegments(
       graticule(30),
@@ -923,6 +980,11 @@ export class PlanetView {
     canvas.addEventListener('pointerenter', this.handlePointerEnter);
     canvas.addEventListener('pointerleave', this.handlePointerLeave);
     this.controls.addEventListener('change', this.handleControlsChange);
+    // A press, the wheel or a key ends the travel at once, the camera where
+    // it was going (as the star view's flights).
+    canvas.addEventListener('pointerdown', this.endTravel, { capture: true });
+    canvas.addEventListener('wheel', this.endTravel, { capture: true, passive: true });
+    window.addEventListener('keydown', this.endTravel);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
@@ -1027,9 +1089,11 @@ export class PlanetView {
     const scale = (shape.max - shape.min) / 65535;
     const values = new Uint16Array(image.width * image.height);
     const radii = new Float32Array(values.length);
+    let largest = 0;
     for (let i = 0; i < values.length; i++) {
       radii[i] = shape.min + (image.data[i] ?? 0) * scale;
       values[i] = DataUtils.toHalfFloat(radii[i]!);
+      largest = Math.max(largest, radii[i]!);
     }
     // The caps the spin axis and its arrow stand over.
     const capRows = Math.max(1, Math.round((image.height * 15) / 180));
@@ -1048,7 +1112,7 @@ export class PlanetView {
     this.shared.uShape.value = texture;
     this.shared.uShapeTexel.value.set(1 / image.width, 1 / image.height);
     this.shared.uHasShape.value = 1;
-    this.shapeRadii = { radii, width: image.width, height: image.height, poles };
+    this.shapeRadii = { radii, width: image.width, height: image.height, poles, largest };
     this.requestRender();
   }
 
@@ -1332,7 +1396,11 @@ export class PlanetView {
    */
   private driftClouds(): void {
     // A giant's bands drift too, each with its own wind.
-    const visible = this.u.uCloudsOn.value > 0 || this.u.uGiant.value > 0;
+    const visible =
+      this.u.uCloudsOn.value > 0 ||
+      this.u.uGiant.value > 0 ||
+      // The clouds of a planet in a moon's sky drift as its own do.
+      this.skyBodies.some(({ mesh }) => mesh.visible && mesh.material.uniforms['uHasClouds']!.value > 0.5);
     if (!this.cloudsDrifting || !visible) {
       this.cloudDriftAt = null;
       return;
@@ -1461,6 +1529,7 @@ export class PlanetView {
       this.shared.uData.value = emptyTexture();
       this.shared.uHasData.value = 0;
       this.peakAbove = 0;
+      this.heights = null;
       return;
     }
     // Its highest point over the coastline, in elevation units, for the
@@ -1468,6 +1537,7 @@ export class PlanetView {
     let highest = 0;
     for (const raw of layers.elevation.data) if (raw > highest) highest = raw;
     this.peakAbove = Math.max(0, layers.elevation.min + highest * layers.elevation.scale - coast);
+    this.heights = { layers, coast, liquidSea };
     // Worlds wider than the GPU allows are shown at a lower resolution (the
     // point readout still uses every pixel).
     const factor = fitFactor(layers.width, layers.height, this.renderer.capabilities.maxTextureSize);
@@ -1556,9 +1626,7 @@ export class PlanetView {
     this.u.uLightMode.value = lighting.kind === 'sun' ? 1 : 0;
     if (lighting.kind === 'sun') {
       const declination =
-        lighting.latitudeDeg !== undefined
-          ? (lighting.latitudeDeg * Math.PI) / 180
-          : ((lighting.axialTiltDeg * Math.PI) / 180) * Math.sin(2 * Math.PI * lighting.season);
+        ((lighting.latitudeDeg ?? sunDeclinationDeg(lighting.axialTiltDeg, lighting.season)) * Math.PI) / 180;
       const [x, y, z] = lonLatToSphere({ lon: (lighting.longitudeDeg * Math.PI) / 180, lat: declination });
       this.u.uSunDir.value.set(x, y, z);
     }
@@ -1685,6 +1753,28 @@ export class PlanetView {
   }
 
   /** How far the relief shown rises at most, in radii: an elevation unit above the coastline, as displaced. */
+  /**
+   * The radius of the surface as drawn along `direction` (the body's frame),
+   * in radii: its shape, raised by its relief as displayed (liquid seas
+   * flat at the coastline), as the vertex shader places it.
+   */
+  private surfaceRadiusAt(direction: Vector3): number {
+    const shape = this.shared.uHasShape.value > 0.5 ? this.shapeRadii : null;
+    const base = shape ? shapeRadiusAt(shape, direction) : 1;
+    const heights = this.shared.uHasData.value > 0.5 ? this.heights : null;
+    if (!heights) return base;
+    const { layers, coast, liquidSea } = heights;
+    const d = direction.clone().normalize();
+    const u = (Math.atan2(d.x, d.z) / (2 * Math.PI) + 1) % 1;
+    const v = Math.asin(Math.max(-1, Math.min(1, d.y))) / Math.PI + 0.5;
+    const x = Math.min(layers.width - 1, Math.floor(u * layers.width));
+    const y = Math.min(layers.height - 1, Math.max(0, Math.floor((1 - v) * layers.height)));
+    const raw = layers.elevation.data[y * layers.width + x] ?? 0;
+    let above = layers.elevation.min + raw * layers.elevation.scale - coast;
+    if (liquidSea) above = Math.max(above, 0);
+    return base + above * this.reliefLift();
+  }
+
   private reliefLift(): number {
     return this.shared.uRelief.value * this.shared.uReliefScale.value;
   }
@@ -1734,6 +1824,7 @@ export class PlanetView {
     if (mode === this.mode) {
       return;
     }
+    this.travel = null;
     // The place at the centre of the screen stays there, at an equivalent
     // zoom: the camera follows it through the morph.
     const centre = this.viewCentre();
@@ -1766,6 +1857,10 @@ export class PlanetView {
       altitude,
       mapHeight,
     };
+    // The map wraps round the meridian at the centre of its own view, the
+    // one it ends on or starts from: that part stays in front while the
+    // rest rolls back round the globe.
+    this.setMorphCentre((mode === 'map' ? centreTo : centre).lon);
     this.applyModeControls();
   }
 
@@ -1796,18 +1891,39 @@ export class PlanetView {
     // Not quite at the poles, where "north up" has no direction.
     const centre = lerpLonLat(animation.centreFrom, animation.centreTo, progress);
     centre.lat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, centre.lat));
-    const { target, position } = morphCamera(centre, animation.mapHeight, animation.altitude, this.morph);
+    const { target, position, distance } = morphCamera(
+      centre,
+      animation.mapHeight,
+      animation.altitude,
+      this.morph,
+      this.morphCentreLon(),
+    );
     this.camera.position.set(...position);
     this.camera.up.set(0, 1, 0);
+    // The clipping planes follow this distance all along, also once the
+    // turn is over and only the unrolling (which moves the camera away on
+    // the way to the map) is left.
+    this.morphDistance = distance;
     if (progress < 1) {
       this.controls.target.set(...target);
-      this.morphDistance = this.camera.position.distanceTo(this.controls.target);
     } else if (this.mode === 'globe') {
       this.controls.target.set(0, 0, 0);
     } else {
       this.controls.target.set(target[0], target[1], 0);
     }
     this.camera.lookAt(this.controls.target);
+  }
+
+  /** The longitude of the meridian the morph wraps round. */
+  private morphCentreLon(): number {
+    return this.shared.uMorphX.value + Math.PI;
+  }
+
+  /** Wraps the morph round the meridian `lon` (see morphPoint in viewTransfer.ts). */
+  private setMorphCentre(lon: number): void {
+    const turn = 2 * Math.PI;
+    this.shared.uMorphLon.value = lonDelta(0, lon);
+    this.shared.uMorphX.value = (((lon % turn) + turn) % turn) - Math.PI;
   }
 
   setGraticule(visible: boolean): void {
@@ -1868,6 +1984,18 @@ export class PlanetView {
     if (this.animation) {
       this.animation.follow = false;
     }
+    // With the dial, to the whole planet from a little above the equator
+    // (see setRotationDial), the camera travelling there.
+    if (this.dialState && this.mode === 'globe') {
+      const up = (DIAL_ELEVATION * Math.PI) / 180;
+      this.camera.up.set(0, 1, 0);
+      this.travelTo({
+        position: new Vector3(0, Math.sin(up) * GLOBE_DISTANCE, Math.cos(up) * GLOBE_DISTANCE),
+        target: new Vector3(0, 0, 0),
+      });
+      return;
+    }
+    this.endTravel();
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, 0, this.mode === 'globe' ? GLOBE_DISTANCE : MAP_DISTANCE);
     this.camera.up.set(0, 1, 0);
@@ -1891,12 +2019,14 @@ export class PlanetView {
    */
   setCamera(state: CameraState): void {
     this.requestRender();
+    this.travel = null;
     this.applyingCamera = true;
     if (state.mode !== this.mode) {
       this.setMode(state.mode);
     }
     // Skip the morph: the other view has finished it already.
     this.animation = null;
+    this.shared.uNightLift.value = 0;
     this.morph = state.mode === 'globe' ? 1 : 0;
     this.camera.position.fromArray(state.position);
     this.controls.target.fromArray(state.target);
@@ -1930,6 +2060,10 @@ export class PlanetView {
     this.canvas.removeEventListener('pointerenter', this.handlePointerEnter);
     this.canvas.removeEventListener('pointerleave', this.handlePointerLeave);
     this.controls.removeEventListener('change', this.handleControlsChange);
+    this.canvas.removeEventListener('pointerdown', this.endTravel, { capture: true });
+    this.canvas.removeEventListener('wheel', this.endTravel, { capture: true });
+    window.removeEventListener('keydown', this.endTravel);
+    this.travel = null;
     this.controls.dispose();
     this.tiles.dispose();
     this.disposeTexture();
@@ -1944,15 +2078,22 @@ export class PlanetView {
     this.u.uBiomes.value.dispose();
     this.sky.uSunDepth.value.dispose();
     this.disposeSkyBodies();
+    this.hill?.grid.geometry.dispose();
+    this.hill?.grid.material.dispose();
+    this.hill?.shell.geometry.dispose();
+    this.hill?.shell.material.dispose();
     this.skyOrbits?.geometry.dispose();
     this.skyOrbits?.material.dispose();
+    this.skyOrbitsOver?.material.dispose();
     this.skyOrbitsNear?.material.dispose();
     this.skyBelts?.geometry.dispose();
     this.skyBelts?.material.dispose();
+    this.skyBeltsOver?.material.dispose();
     this.skyBeltsNear?.material.dispose();
     this.spinAxis?.geometry.dispose();
     this.guides.dispose();
     this.hostSpin.dispose();
+    this.dial.dispose();
     this.previewGlobe?.geometry.dispose();
     this.previewGlobe?.material.dispose();
     this.spinAxis?.material.dispose();
@@ -2032,10 +2173,19 @@ export class PlanetView {
     let following = false;
     if (this.animation) {
       const t = Math.min(1, (now - this.animation.start) / MORPH_MS);
-      const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
-      this.morph = this.animation.from + (this.animation.to - this.animation.from) * eased;
+      const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+      // Towards the map, the globe first turns to the meridian the map will
+      // be centred on, then unrolls round it, so that it does not open on
+      // the camera (the map's edges are where the globe faced by default).
+      const toMap = this.animation.to === 0;
+      const turned = toMap ? ease(Math.min(1, t / 0.4)) : ease(t);
+      const unrolled = toMap ? ease(Math.max(0, (t - 0.3) / 0.7)) : ease(t);
+      this.morph = this.animation.from + (this.animation.to - this.animation.from) * unrolled;
+      // The turn may swing the camera over the night side: lit a little,
+      // rising and falling over the morph, so that it does not go black.
+      this.shared.uNightLift.value = toMap && t < 1 ? Math.sin(Math.PI * t) : 0;
       if (this.animation.follow) {
-        this.followMorph(t === 1 ? 1 : eased);
+        this.followMorph(t === 1 ? 1 : turned);
         following = t < 1;
       }
       if (t === 1) {
@@ -2051,6 +2201,7 @@ export class PlanetView {
     // continue until it has settled. OrbitControls' own change threshold is
     // too coarse near the surface, where its residue would show as a jump at
     // the next interaction: compare the camera itself.
+    const travelling = !following && this.stepTravel(now);
     if (!following) {
       this.controls.update();
       this.keepAboveGround();
@@ -2065,7 +2216,7 @@ export class PlanetView {
     }
     // A lower resolution while the view moves; the frame after it settles
     // is drawn at full resolution again.
-    if (moving || this.animation) {
+    if (moving || this.animation || travelling) {
       this.lastMotion = now;
     }
     const ratio = pixelRatio(window.devicePixelRatio, now - this.lastMotion, this.quality);
@@ -2083,7 +2234,7 @@ export class PlanetView {
       this.hoverPending = false;
       this.onHover(this.hovering ? this.pickAt(this.hoverAt.x, this.hoverAt.y) : null);
     }
-    if (moving || this.animation || settling) {
+    if (moving || this.animation || settling || travelling) {
       this.schedule();
     }
   };
@@ -2095,9 +2246,9 @@ export class PlanetView {
    * least a few pixels. Their maps load in the background.
    */
   setSkyBodies(bodies: readonly SkyBody[], signal?: AbortSignal): void {
-    this.skyRequest += 1;
-    const request = this.skyRequest;
-    // The same bodies at new places keep their meshes and maps.
+    // The same bodies at new places keep their meshes and maps, and the
+    // maps still loading: the request number only moves when they are
+    // rebuilt, else a late map (a giant's) would be dropped as stale.
     const same =
       bodies.length === this.skyBodies.length &&
       bodies.every((b, i) => {
@@ -2113,6 +2264,8 @@ export class PlanetView {
       this.requestRender();
       return;
     }
+    this.skyRequest += 1;
+    const request = this.skyRequest;
     this.disposeSkyBodies();
     this.skyBodies = bodies.map((body) => {
       const mesh = new Mesh(
@@ -2138,6 +2291,8 @@ export class PlanetView {
             uHasClouds: { value: 0 },
             uClouds: { value: emptyTexture() },
             uCloudTint: { value: new Vector3(1, 1, 1) },
+            // Drifts with the body shown's own clouds (see driftClouds).
+            uCloudShift: this.u.uCloudShift,
             uHaloColor: { value: new Vector3() },
             uHaloHeight: { value: 0 },
             uHaloStrength: { value: 0 },
@@ -2222,7 +2377,7 @@ export class PlanetView {
    */
   setSkyOrbits(loops: readonly (readonly Vec3[])[], dashed: readonly boolean[] = []): void {
     if (!this.skyOrbits) {
-      [this.skyOrbits, this.skyOrbitsNear] = this.skyLines(new Color(0.55, 0.62, 0.75), 0.45);
+      [this.skyOrbits, this.skyOrbitsOver, this.skyOrbitsNear] = this.skyLines(new Color(0.55, 0.62, 0.75), 0.45);
     }
     this.skyOrbitsOn = fillSkyLines(this.skyOrbits.geometry, loops, dashed);
     this.skyOrbitDashed = loops.reduce((most, loop, k) => (dashed[k] ? Math.max(most, loopLength(loop)) : most), 0);
@@ -2244,8 +2399,54 @@ export class PlanetView {
 
   private applySkyOrbitDash(): void {
     const dash = skyOrbitDash(this.skyOrbitDashed, this.skyOrbitPace);
-    for (const lines of [this.skyOrbits, this.skyOrbitsNear]) {
+    for (const lines of [this.skyOrbits, this.skyOrbitsOver, this.skyOrbitsNear]) {
       if (lines) lines.material.uniforms['uDash']!.value = dash;
+    }
+    this.requestRender();
+  }
+
+  /**
+   * Draws a Hill sphere in the sky (on the globe): a grid and a faint shell
+   * that lights towards its limb, centred on `sphere.centre` and `radius`
+   * in radii of the body shown, in its frame. The camera is usually inside
+   * it (a body's moons orbit well within), so the grid carries it; its
+   * depth is held at the far plane, so the globe hides it. Null hides it.
+   */
+  setHillSphere(sphere: { centre: Vec3; radius: number } | null): void {
+    this.hillSphereOn = sphere;
+    if (sphere && !this.hill) {
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new Float32BufferAttribute(sphereGrid(1, 96, 15).flat(), 3));
+      const grid = new LineSegments(geometry, new LineBasicMaterial({ color: new Color(0.55, 0.85, 0.8), transparent: true, depthWrite: false }));
+      farGuide(grid.material, { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 0 } });
+      const shell = new Mesh(
+        new SphereGeometry(1, 64, 32),
+        new ShaderMaterial({
+          vertexShader: `varying vec3 vNormal; varying vec3 vWorld;
+            void main() {
+              vNormal = normalize(mat3(modelMatrix) * normal);
+              vec4 world = modelMatrix * vec4(position, 1.0);
+              vWorld = world.xyz;
+              gl_Position = projectionMatrix * viewMatrix * world;
+              gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
+            }`,
+          fragmentShader: `uniform float uOpacity; varying vec3 vNormal; varying vec3 vWorld;
+            void main() {
+              float rim = 1.0 - abs(dot(normalize(vNormal), normalize(cameraPosition - vWorld)));
+              gl_FragColor = vec4(0.55, 0.85, 0.8, uOpacity * (0.04 + 0.5 * pow(rim, 4.0)));
+            }`,
+          uniforms: { uOpacity: { value: 0 } },
+          transparent: true,
+          depthWrite: false,
+          side: DoubleSide,
+        }),
+      );
+      for (const object of [grid, shell]) {
+        object.frustumCulled = false;
+        object.renderOrder = -0.25;
+        this.scene.add(object);
+      }
+      this.hill = { grid, shell };
     }
     this.requestRender();
   }
@@ -2257,48 +2458,51 @@ export class PlanetView {
    */
   setSkyBelts(loops: readonly (readonly Vec3[])[]): void {
     if (!this.skyBelts) {
-      [this.skyBelts, this.skyBeltsNear] = this.skyLines(new Color(0.85, 0.72, 0.5), 0.3);
+      [this.skyBelts, this.skyBeltsOver, this.skyBeltsNear] = this.skyLines(new Color(0.85, 0.72, 0.5), 0.3);
     }
     this.skyBeltsOn = fillSkyLines(this.skyBelts.geometry, loops, []);
     this.requestRender();
   }
 
   /**
-   * A pair of line sets drawn over the sky: its far part under the sky
-   * bodies, its near part after the globe (see skyOrbitFragment).
+   * Three passes of a line set drawn over the sky, sharing its geometry
+   * (see skyOrbitFragment): its far part under the sky bodies, then over
+   * those it passes in front of, and its near part after the globe.
    */
-  private skyLines(
-    colour: Color,
-    opacity: number,
-  ): [LineSegments<BufferGeometry, ShaderMaterial>, LineSegments<BufferGeometry, ShaderMaterial>] {
-    const far = new LineSegments(
-      new BufferGeometry(),
-      new ShaderMaterial({
-        vertexShader: skyOrbitVertex,
-        fragmentShader: skyOrbitFragment,
-        uniforms: {
-          uColor: { value: colour },
-          uOpacity: { value: opacity },
-          uNear: { value: 0 },
-          uDash: { value: SKY_ORBIT_DASH },
-          uScreenPx: { value: 1000 },
-        },
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    far.frustumCulled = false;
-    // Over the stars and the host star, under the bodies.
-    far.renderOrder = -1.5;
-    this.scene.add(far);
-    const material = far.material.clone();
-    material.uniforms['uNear']!.value = 1;
-    const near = new LineSegments(far.geometry, material);
-    near.frustumCulled = false;
-    // After the globe and its air.
-    near.renderOrder = 10;
-    this.scene.add(near);
-    return [far, near];
+  private skyLines(colour: Color, opacity: number): [SkyLinePass, SkyLinePass, SkyLinePass] {
+    const geometry = new BufferGeometry();
+    const pass = (value: number, renderOrder: number): SkyLinePass => {
+      const lines = new LineSegments(
+        geometry,
+        new ShaderMaterial({
+          vertexShader: skyOrbitVertex,
+          fragmentShader: skyOrbitFragment,
+          uniforms: {
+            uColor: { value: colour },
+            uOpacity: { value: opacity },
+            uPass: { value },
+            uDash: { value: SKY_ORBIT_DASH },
+            uScreenPx: { value: 1000 },
+            // The same objects for every pass, set once a frame.
+            ...this.skyOccluders,
+          },
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      lines.frustumCulled = false;
+      lines.renderOrder = renderOrder;
+      this.scene.add(lines);
+      return lines;
+    };
+    return [
+      // Over the stars and the host star, under the bodies.
+      pass(SKY_LINE_PASS.farUnder, -1.5),
+      // Over the bodies behind the globe and their rings, under its air.
+      pass(SKY_LINE_PASS.farOver, -0.5),
+      // After the globe and its air.
+      pass(SKY_LINE_PASS.near, 10),
+    ];
   }
 
   /**
@@ -2316,6 +2520,7 @@ export class PlanetView {
 
   private skyMarks: readonly { candidates: readonly Vec3[]; prefer?: readonly [number, number] }[] = [];
   private skyBelts: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  private skyBeltsOver: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyBeltsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyBeltsOn = false;
 
@@ -2364,6 +2569,92 @@ export class PlanetView {
     this.requestRender();
   }
 
+  /**
+   * The rotation dial round the body shown (see lib/rotationDial), on the
+   * globe; null hides it.
+   */
+  setRotationDial(state: DialState | null): void {
+    // Seen edge-on, the ring, the markers and the guides fall on one line:
+    // when the dial comes on, a camera within 10° of the equator rises to
+    // DIAL_ELEVATION above it.
+    if (state && !this.dialState && this.mode === 'globe') this.raiseOverEquator(10);
+    this.dialState = state;
+    this.requestRender();
+  }
+
+  /**
+   * Has the camera rise to DIAL_ELEVATION above the equator, keeping its
+   * distance and azimuth, when it is closer than `within` degrees to it.
+   */
+  private raiseOverEquator(within: number): void {
+    const target = this.controls.target;
+    const offset = this.camera.position.clone().sub(target);
+    const distance = offset.length();
+    if (distance < 1e-9) return;
+    const elevation = Math.asin(Math.max(-1, Math.min(1, offset.y / distance)));
+    if (Math.abs(elevation) >= (within * Math.PI) / 180) return;
+    const flat = Math.hypot(offset.x, offset.z);
+    const [x, z] = flat > 1e-9 ? [offset.x / flat, offset.z / flat] : [0, 1];
+    const up = (DIAL_ELEVATION * Math.PI) / 180;
+    this.travelTo({
+      position: new Vector3(
+        target.x + x * Math.cos(up) * distance,
+        target.y + Math.sin(up) * distance,
+        target.z + z * Math.cos(up) * distance,
+      ),
+      target: target.clone(),
+    });
+  }
+
+  /** Sends the camera to `to` along the arc round its target, eased over DIAL_TRAVEL_MS (see stepTravel). */
+  private travelTo(to: Pose): void {
+    this.travel = null;
+    const from: Pose = { position: this.camera.position.clone(), target: this.controls.target.clone() };
+    if (from.position.distanceToSquared(to.position) < 1e-12 && from.target.distanceToSquared(to.target) < 1e-12) return;
+    this.travel = { from, to, start: performance.now() };
+    this.requestRender();
+  }
+
+  /** Moves the camera along the travel, eased in and out; true while it goes on. */
+  private stepTravel(now: number): boolean {
+    const travel = this.travel;
+    if (!travel) return false;
+    // A morph that moves the camera itself takes over.
+    if (this.animation?.follow) {
+      this.travel = null;
+      return false;
+    }
+    const u = Math.max(0, Math.min(1, (now - travel.start) / DIAL_TRAVEL_MS));
+    const eased = u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2;
+    const { from, to } = travel;
+    const target = new Vector3().lerpVectors(from.target, to.target, eased);
+    const a = from.position.clone().sub(from.target);
+    const b = to.position.clone().sub(to.target);
+    const distance = a.length() + (b.length() - a.length()) * eased;
+    // The direction turns by the shortest arc, at a steady rate in the eased time.
+    const turn = new Quaternion().setFromUnitVectors(a.clone().normalize(), b.clone().normalize());
+    const direction = a.normalize().applyQuaternion(new Quaternion().slerp(turn, eased));
+    this.controls.target.copy(target);
+    this.camera.position.copy(target).addScaledVector(direction, distance);
+    this.camera.lookAt(target);
+    this.dirty = true;
+    if (u < 1) return true;
+    this.travel = null;
+    return false;
+  }
+
+  /** Ends the travel under way, the camera where it was going. */
+  private readonly endTravel = (): void => {
+    const travel = this.travel;
+    if (!travel) return;
+    this.travel = null;
+    this.camera.position.copy(travel.to.position);
+    this.controls.target.copy(travel.to.target);
+    this.camera.lookAt(travel.to.target);
+    this.controls.update();
+    this.requestRender();
+  };
+
   private disposeSkyBodies(): void {
     for (const { mesh, maps, rings } of this.skyBodies) {
       for (const m of rings ? [mesh, rings] : [mesh]) {
@@ -2390,6 +2681,21 @@ export class PlanetView {
     guides: Record<keyof GuidePoints | 'hostSpin', { x: number; y: number } | null>;
     /** Where each mark of setSkyMarks is: its candidate in view nearest the screen's centre, null when none is. */
     marks: ({ x: number; y: number } | null)[];
+    /**
+     * Where the rotation dial's numbered ticks (0°, 30°, … 330°), pointer
+     * tip and markers are (see RotationDial.anchors), each null when hidden
+     * by the globe; null when the dial is not drawn.
+     */
+    dial: {
+      ticks: ({ x: number; y: number } | null)[];
+      /** The star's half-circle's numbers (see ARC_NUMBERS). */
+      arcTicks: ({ x: number; y: number } | null)[];
+      pointer: { x: number; y: number } | null;
+      sun: { x: number; y: number } | null;
+      host: { x: number; y: number } | null;
+      /** Each chosen body's marker, in the order of the dial state's bodies. */
+      bodies: ({ x: number; y: number } | null)[];
+    } | null;
   } {
     const shown = this.u.uLightMode.value === 1 && this.morph > 0.99;
     const camera = this.camera.position;
@@ -2409,33 +2715,27 @@ export class PlanetView {
       if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
-    // A point near the globe: hidden when the globe lies in front of it,
-    // or when it is off the screen by more than `margin` (clip space).
+    // A point near the globe: hidden when the body lies in front of it (its
+    // true shape, which bulges past radius 1 on a small moon), or when it
+    // is off the screen by more than `margin` (clip space).
+ const radiusAt = (d: Vector3) => this.surfaceRadiusAt(d);
+    const bound = (this.shared.uHasShape.value > 0.5 && this.shapeRadii ? this.shapeRadii.largest : 1) + this.peakAbove * this.reliefLift();
     const near = (point: Vector3 | null, margin = 1.2): { x: number; y: number } | null => {
       if (!point || this.morph < 0.99) return null;
-      const to = point.clone().sub(camera);
-      const distance = to.length();
-      const d = to.divideScalar(distance);
+      const d = point.clone().sub(camera).normalize();
       if (d.dot(forward) <= 0) return null;
-      const b = camera.dot(d);
-      const disc = b * b - (camera.lengthSq() - 1);
-      if (disc > 0 && -b - Math.sqrt(disc) < distance - 1e-3) return null;
+      if (hiddenByShape(camera, point, radiusAt, bound)) return null;
       const p = point.clone().project(this.camera);
       if (Math.abs(p.x) > margin || Math.abs(p.y) > margin) return null;
       return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
     };
     const points = this.guides.points();
-    // The host's distance goes on the part of its line in view, wherever
-    // that is as the camera moves.
-    const hostLine = points.host?.map((point) => near(point, 0.9)) ?? [];
-    const hostRadii = points.host?.map((point) => point.length()) ?? [];
-    // Its label clear of the pull's and the velocity's: labels hang up and
-    // to the right of their point, about a label's size each.
+    // The host's distance hangs at a fixed point of its line (see
+    // hostLabelRadius), hidden with the body when it stands in front.
     const pullAt = near(points.pull);
     const velocityAt = near(points.velocity);
-    const others = [pullAt, velocityAt].filter((p): p is { x: number; y: number } => p !== null);
-    const clear = hostLine.map((p) => !p || others.every((o) => Math.abs(p.x - o.x) >= LABEL_BOX.x || Math.abs(p.y - o.y) >= LABEL_BOX.y));
-    const hostAt = hostLine[hostLabelIndex(hostRadii, hostLine.map((p) => p !== null), clear)] ?? null;
+    const hostAt = near(points.host);
+    const dial = this.dialState && this.dial.group.visible ? this.dial.anchors() : null;
     return {
       bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),
       star: at(
@@ -2462,6 +2762,14 @@ export class PlanetView {
         }
         return best;
       }),
+      dial: dial && {
+        ticks: dial.ticks.map((point) => near(point)),
+        arcTicks: dial.arcTicks.map((point) => near(point)),
+        pointer: near(dial.pointer),
+        sun: near(dial.sun),
+        host: near(dial.host),
+        bodies: dial.bodies.map((point) => near(point)),
+      },
     };
   }
 
@@ -2598,6 +2906,11 @@ export class PlanetView {
       setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
     }
+    // The bodies the orbit lines pass behind and in front of.
+    const c = this.camera.position;
+    const occluders = visible ? skyOccluders([c.x, c.y, c.z], this.skyBodies.map(({ body }) => body), smallest, SKY_OCCLUDERS) : [];
+    occluders.forEach(({ position, radius }, i) => this.skyOccluders.uOccluders.value[i]!.set(...position, radius));
+    this.skyOccluders.uOccluderCount.value = occluders.length;
     this.drawHostSpin(visible);
   }
 
@@ -2784,13 +3097,35 @@ export class PlanetView {
       this.spinAxis.scale.setScalar(poles);
     }
     this.guides.update(this.spinAxesOn, this.spinAxesOn && this.hostGuideOn, this.morph);
-    for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
+    // The dial's ring stands clear of the farthest of the shape, with its
+    // relief as displayed (as the guides), else the surface hides it.
+    if (this.dialState) {
+      const radius = DIAL_RADIUS * ((shape?.largest ?? 1) + relief);
+      if (this.dialPlaced?.state !== this.dialState || this.dialPlaced.radius !== radius) {
+        this.dial.set(this.dialState, radius);
+        this.dialPlaced = { state: this.dialState, radius };
+      }
+    }
+    this.dial.update(this.dialState !== null, this.morph);
+    for (const orbits of [this.skyOrbits, this.skyOrbitsOver, this.skyOrbitsNear]) {
       if (!orbits) continue;
       orbits.visible = this.skyOrbitsOn && this.morph > 0.01;
       orbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
       orbits.material.uniforms['uScreenPx']!.value = this.renderer.domElement.height;
     }
-    for (const belts of [this.skyBelts, this.skyBeltsNear]) {
+    if (this.hill) {
+      const sphere = this.hillSphereOn;
+      for (const object of [this.hill.grid, this.hill.shell]) {
+        object.visible = sphere !== null && this.morph > 0.01;
+        if (sphere) {
+          object.position.set(...sphere.centre);
+          object.scale.setScalar(sphere.radius);
+        }
+      }
+      this.hill.grid.material.opacity = 0.3 * this.morph ** 3;
+      this.hill.shell.material.uniforms['uOpacity']!.value = this.morph ** 3;
+    }
+    for (const belts of [this.skyBelts, this.skyBeltsOver, this.skyBeltsNear]) {
       if (!belts) continue;
       belts.visible = this.skyBeltsOn && this.morph > 0.01;
       belts.material.uniforms['uOpacity']!.value = 0.3 * this.morph ** 3;
@@ -2803,15 +3138,21 @@ export class PlanetView {
     this.u.uCloudsOn.value =
       this.cloudsOn && this.hasClouds ? smoothstepJs(CLOUD_FADE[0], CLOUD_FADE[1], altitude) : 0;
     this.driftClouds();
-    this.camera.near = Math.max(altitude * 0.1, 1e-6);
-    this.camera.far = altitude + 4;
+    const planes = cameraPlanes(altitude, this.ringReach());
+    this.camera.near = planes.near;
+    this.camera.far = planes.far;
     this.drawRingRocks();
     this.camera.updateProjectionMatrix();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
     if (!this.animation) {
       // Tiles are picked for the full resolution, whatever the frame's:
       // moving would otherwise swap them for coarser ones and back.
-      this.tiles.update(this.camera, this.morph, this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio, this.quality));
+      this.tiles.update(
+        this.camera,
+        this.morph,
+        this.canvas.clientHeight * fullPixelRatio(window.devicePixelRatio, this.quality),
+        this.morphCentreLon(),
+      );
     }
     this.renderer.render(this.scene, this.camera);
     this.onSkyPositions?.(this.skyScreenPositions());
@@ -2842,6 +3183,13 @@ export class PlanetView {
   }
 
   /** Height of the camera above the surface (globe) or the map plane. */
+  /** The radius of the outermost ring drawn, bright or dust, in radii of the body (0: none). */
+  private ringReach(): number {
+    let reach = this.rings ? this.u.uRingOuter.value : 0;
+    for (const mesh of this.dustRings) reach = Math.max(reach, mesh.material.uniforms['uOuter']!.value as number);
+    return reach;
+  }
+
   private altitude(): number {
     if (this.animation?.follow) {
       return this.morphDistance;
@@ -2995,10 +3343,20 @@ export class PlanetView {
     this.onPick(this.pickAt(event.clientX, event.clientY));
   };
 
-  // Picking ignores the relief displacement: at most a few percent of the
-  // radius, which shifts the picked point by a fraction of a degree.
+  /**
+   * The ray marched against the surface as drawn (its shape and its relief
+   * as displayed, from the CPU copy of the elevation); the sphere when
+   * there is no relief to show.
+   */
   private pickGlobe(origin: Vec3, direction: Vec3): LonLat | null {
-    const t = raySphere(origin, direction, 1);
+    const shape = this.shared.uHasShape.value > 0.5 ? this.shapeRadii : null;
+    const relief = this.shared.uHasData.value > 0.5 ? this.peakAbove * this.reliefLift() : 0;
+    const maxRadius = (shape ? shape.largest : 1) + relief;
+    const scratch = new Vector3();
+    const t =
+      maxRadius <= 1 && !shape
+        ? raySphere(origin, direction, 1)
+        : rayRelief(origin, direction, (x, y, z) => this.surfaceRadiusAt(scratch.set(x, y, z)), maxRadius, 0.5);
     if (t === null) {
       return null;
     }
@@ -3139,7 +3497,7 @@ function latticeSlots(rows: number, window: number, perCell: number): Float32Arr
  * dropped where the planet (`uniforms`: its centre and radius, in the
  * scene's frame) stands between them and the camera.
  */
-function farGuide(material: MeshBasicMaterial, uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> }): void {
+function farGuide(material: Material, uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> }): void {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = `varying vec3 vFarWorld;\n${shader.vertexShader}`.replace(
