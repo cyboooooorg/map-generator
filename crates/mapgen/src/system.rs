@@ -910,19 +910,6 @@ fn assemble(
         } else {
             params
         };
-        // The moons its rings shape (none for the giant a world of the
-        // request orbits: its moons are that world's chain).
-        let ring_moons = if is_giant(&slot.body_type) && !at_focus {
-            shape_rings(&mut params, slot, star_code)
-        } else {
-            Vec::new()
-        };
-        let planet = planet_body(&id, &planet_designation, slot, &params, star_code);
-        let planet_index = bodies.len();
-        if at_focus && focus.as_ref().is_some_and(|f| f.host.is_none()) {
-            focus_id = Some(id.clone());
-        }
-        bodies.push(planet);
         // Its moons.
         let moons = if is_giant(&slot.body_type) {
             match (&focus, at_focus) {
@@ -940,6 +927,19 @@ fn assemble(
         } else {
             rocky_moons(&params)
         };
+        // The moons its rings shape, inside the others (the giant asked
+        // for, and the giant a world of the request orbits, among them).
+        let ring_moons = if is_giant(&slot.body_type) {
+            shape_rings(&mut params, slot, star_code, &moons)
+        } else {
+            Vec::new()
+        };
+        let planet = planet_body(&id, &planet_designation, slot, &params, star_code);
+        let planet_index = bodies.len();
+        if at_focus && focus.as_ref().is_some_and(|f| f.host.is_none()) {
+            focus_id = Some(id.clone());
+        }
+        bodies.push(planet);
         // Nearest first, the ring moons among the others.
         let giant_kg = slot.mass_earth * EARTH_KG;
         let giant_radius_km = bodies[planet_index].physical.radius_km;
@@ -1281,10 +1281,21 @@ fn with_system_rings(mut params: WorldParams) -> WorldParams {
 
 /// Shapes the rings the system drew for the giant of `params` (see
 /// [`crate::rings::shape`]): their Roche edge and their gaps, kept in its
-/// params, and the moons that make them, which this returns. A giant too
-/// hot or with too small a Hill sphere for regular moons (see
-/// [`regular_moons`]) keeps its rings without moons.
-fn shape_rings(params: &mut WorldParams, slot: &Slot, star: f32) -> Vec<crate::rings::RingMoon> {
+/// params, and the moons that make them, which this returns. They stay
+/// inside its other `moons`: Hill stable from the innermost, `a_2 > a_1 (1 +
+/// 2·3^(1/6) μ^(1/3))` (Gladman 1993, doi:10.1006/icar.1993.1169, in the
+/// form of Obertas et al. 2017, doi:10.1016/j.icarus.2017.04.010), the ring
+/// moons' masses neglected; and within a third of its Hill radius, where
+/// its regular moons keep. A giant too hot or with too small a Hill sphere
+/// for regular moons (see [`regular_moons`]) keeps its rings without
+/// moons. The resonances in its rings take its `J2` from its flattening
+/// and spin ([`crate::rings::j2`]).
+fn shape_rings(
+    params: &mut WorldParams,
+    slot: &Slot,
+    star: f32,
+    moons: &[MoonParts],
+) -> Vec<crate::rings::RingMoon> {
     let Some(rings) = params.given_rings.as_mut().and_then(|g| g.rings.take()) else {
         return Vec::new();
     };
@@ -1297,10 +1308,28 @@ fn shape_rings(params: &mut WorldParams, slot: &Slot, star: f32) -> Vec<crate::r
         * 1.496e11
         * (mass_kg / (3.0 * f64::from(info.mass) * 1.989e30)).cbrt()
         / radius_m;
-    let moons = info.equilibrium_k <= 1000.0 && hill / 3.0 >= 6.0;
-    let (rings, ring_moons) = crate::rings::shape(rings, density, mass_kg, moons, params.seed);
+    let room = moons
+        .iter()
+        .map(|(_, _, orbit, physical, _)| {
+            let mu = physical.mass_earth * EARTH_KG / mass_kg;
+            orbit.semi_major_axis_km * 1000.0
+                / radius_m
+                / (1.0 + 2.0 * 3f64.powf(1.0 / 6.0) * mu.cbrt())
+        })
+        .fold(hill / 3.0, f64::min);
+    let look = crate::giant_world::Look::draw(params, slot.mass_earth as f32).info;
+    let omega = 2.0 * PI / (f64::from(look.rotation_hours) * 3600.0);
+    let q = omega * omega * (f64::from(look.radius_earth) * EARTH_M).powi(3) / (G * mass_kg);
+    let giant = crate::rings::Giant {
+        density,
+        mass_kg,
+        j2: crate::rings::j2(f64::from(look.flattening), q),
+        room,
+        moons: info.equilibrium_k <= 1000.0 && hill / 3.0 >= 6.0,
+    };
+    let (rings, ring_moons) = crate::rings::shape(rings, &giant, params.seed);
     if let Some(given) = params.given_rings.as_mut() {
-        given.rings = Some(rings);
+        given.rings = rings;
     }
     ring_moons
 }
@@ -1310,13 +1339,17 @@ fn shape_rings(params: &mut WorldParams, slot: &Slot, star: f32) -> Vec<crate::r
 /// a few km of their plane (Pan 0.0001°, Daphnis 0.0036°, Atlas 0.003°),
 /// so that seen from it they lie at its horizon. Shepherds and resonant
 /// moons, outside the rings, swing a little farther (Prometheus 0.008°,
-/// Pandora 0.05°).
+/// Pandora 0.05°). The small moons that feed dust rings swing farther
+/// still, and so thicken their rings (Amalthea 0.37°, Thebe 1.08°, NASA
+/// Jovian satellite fact sheet; Burns et al. 1999,
+/// doi:10.1126/science.284.5417.1146).
 fn ring_moon_inclination_deg(role: crate::rings::RingRole) -> f64 {
     use crate::rings::RingRole;
     match role {
         RingRole::Embedded => 0.001,
         RingRole::Edge => 0.005,
         RingRole::Shepherd | RingRole::Resonant => 0.05,
+        RingRole::Source => 1.1,
     }
 }
 
@@ -1325,13 +1358,16 @@ fn ring_moon_inclination_deg(role: crate::rings::RingRole) -> f64 {
 /// gap, a few tens of km wide (Pan 1.4e-5, Daphnis 3.3e-5, about ±4 km,
 /// which raises the waves on the Keeler gap's edges), so it draws up to
 /// 5e-5; an edge moon up to 1.5e-3 (Atlas 1.2e-3); shepherds and resonant
-/// moons, outside the rings, 2e-4 to 2.2e-3 (Prometheus 2.2e-3).
+/// moons, outside the rings, 2e-4 to 2.2e-3 (Prometheus 2.2e-3); the
+/// small moons that feed dust rings 1e-3 to 1.8e-2 (Amalthea 3e-3, Thebe
+/// 1.8e-2, NASA Jovian satellite fact sheet).
 fn ring_moon_eccentricity(role: crate::rings::RingRole, frac: f64) -> f64 {
     use crate::rings::RingRole;
     match role {
         RingRole::Embedded => 5e-5 * frac,
         RingRole::Edge => 1.5e-3 * frac,
         RingRole::Shepherd | RingRole::Resonant => 0.0002 + 0.002 * frac,
+        RingRole::Source => 0.001 + 0.017 * frac,
     }
 }
 
@@ -1363,13 +1399,20 @@ fn ring_moon_parts(
         shape,
     );
     let seed = f64::from(moon.seed);
+    // A moonlet in the rings of a giant larger than Saturn keeps the swing
+    // it would have there, a few km in its gap (Daphnis: ±4 km at 136,505
+    // km), its eccentricity scaled down with its distance.
+    let swing = match moon.role {
+        crate::rings::RingRole::Embedded => (136_505.0 / a_km).min(1.0),
+        _ => 1.0,
+    };
     (
         "icy-moon".to_string(),
         params,
         Orbit {
             semi_major_axis_km: a_km,
             semi_major_axis_au: a_km / 1.495_978_707e8,
-            eccentricity: ring_moon_eccentricity(moon.role, (seed % 7907.0) / 7907.0),
+            eccentricity: ring_moon_eccentricity(moon.role, swing * (seed % 7907.0) / 7907.0),
             inclination_deg: ring_moon_inclination_deg(moon.role) * (seed % 6067.0) / 6067.0,
             node_deg: (seed % 6421.0) / 6421.0 * 360.0,
             periapsis_deg: (seed % 7919.0) / 7919.0 * 360.0,
@@ -1996,7 +2039,9 @@ mod tests {
                     ));
                 }
                 if rings.bright {
-                    assert!((2.0..=2.5).contains(&rings.outer));
+                    // At the fluid Roche limit of ice of 0.5 to 0.9 g/cm³.
+                    let roche = crate::rings::fluid_roche(giant.physical.density, 0.5);
+                    assert!(f64::from(rings.outer) <= roche * 1.01, "{}", rings.outer);
                 }
                 let radius = giant.physical.radius_km;
                 for m in ring_moons {
@@ -2031,7 +2076,7 @@ mod tests {
                             assert!(off < 0.1, "{}: {off} of its gap's width off", m.id);
                         }
                         RingRole::Resonant => resonant += 1,
-                        RingRole::Edge => {
+                        RingRole::Edge | RingRole::Source => {
                             edge += 1;
                             assert!(a > f64::from(rings.outer));
                         }
@@ -2301,5 +2346,106 @@ mod tests {
             width: Some(64),
             height: Some(32),
         })
+    }
+}
+
+/// The rings of the giant a request asks for, or that its world orbits:
+/// shaped as every other giant's.
+#[cfg(test)]
+mod focus_ring_tests {
+    use super::*;
+    use crate::rings::RingRole;
+
+    fn around(planet: &str, seed: u32, host: Option<HostMode>) -> System {
+        let world = WorldRequest {
+            planet: Some(planet.into()),
+            seed: Some(seed),
+            host,
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        draw(
+            &SystemRequest::Around(world),
+            &mut StdRng::seed_from_u64(u64::from(seed)),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_giant_asked_for_has_its_own_mass_and_rings_shaped_by_it() {
+        let (mut bright, mut owned) = (0, 0);
+        for seed in 1..=40 {
+            let system = around("gas-giant", seed, None);
+            let id = system.focus.as_deref().expect("the giant asked");
+            let giant = system.bodies.iter().find(|b| b.id == id).unwrap();
+            let mass = giant.params.giant_mass_earth.expect("a giant");
+            assert!(
+                (giant.physical.mass_earth / f64::from(mass) - 1.0).abs() < 1e-4,
+                "seed {seed}: {} against {mass}",
+                giant.physical.mass_earth
+            );
+            let Some(rings) = giant
+                .params
+                .given_rings
+                .as_ref()
+                .and_then(|g| g.rings.as_ref())
+            else {
+                continue;
+            };
+            // Every gap has its moon, none drawn at random.
+            assert_eq!(rings.gap_moons.len(), rings.gaps.len(), "seed {seed}");
+            owned += rings.gap_moons.len();
+            if rings.bright {
+                bright += 1;
+                let roche = (
+                    crate::rings::fluid_roche(giant.physical.density, 0.9),
+                    crate::rings::fluid_roche(giant.physical.density, 0.5),
+                );
+                let outer = f64::from(rings.outer);
+                assert!(
+                    outer > roche.0 * 0.99 && outer < roche.1 * 1.01,
+                    "seed {seed}: {outer} outside {roche:?}"
+                );
+                assert!(system.bodies.iter().any(|b| {
+                    b.parent.as_deref() == Some(id) && b.ring_role == Some(RingRole::Edge)
+                }));
+            }
+        }
+        assert!(bright > 3 && owned > 0, "{bright} {owned}");
+    }
+
+    #[test]
+    fn the_rings_of_a_worlds_giant_stay_inside_its_chain() {
+        for seed in 0..30 {
+            let system = around("terran", seed, Some(HostMode::Giant));
+            let giant = system
+                .bodies
+                .iter()
+                .find(|b| b.kind == BodyKind::Planet && is_giant(&b.body_type))
+                .expect("the giant");
+            let moons: Vec<&Body> = system
+                .bodies
+                .iter()
+                .filter(|b| b.parent.as_deref() == Some(&giant.id))
+                .collect();
+            let first = moons
+                .iter()
+                .filter(|m| m.ring_role.is_none())
+                .map(|m| m.orbit.semi_major_axis_km)
+                .fold(f64::INFINITY, f64::min);
+            if let Some(rings) = giant
+                .params
+                .given_rings
+                .as_ref()
+                .and_then(|g| g.rings.as_ref())
+            {
+                assert_eq!(rings.gap_moons.len(), rings.gaps.len());
+                assert!(f64::from(rings.outer) * giant.physical.radius_km < first);
+            }
+            for m in moons.iter().filter(|m| m.ring_role.is_some()) {
+                assert!(m.orbit.semi_major_axis_km < first, "seed {seed}: {}", m.id);
+            }
+        }
     }
 }

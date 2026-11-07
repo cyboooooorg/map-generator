@@ -422,6 +422,44 @@ output. Only realism fixes change it.
 3. Steps 2 to 4 together (ring moons and the gaps they clear).
 4. Step 5 later, if wanted.
 
+## 5. Since the study (2026-11-07)
+
+Steps 2 to 5 are in (`rings.rs`, `system.rs`), and follow the physics
+further than proposed:
+
+- **The Roche limit alone sets a bright ring's edge.** No cap at 2.5 R:
+  the edge is the fluid limit for particles of 0.5–0.9 g/cm³ from the
+  giant's density over its equatorial radius, 2.15–2.62 R round a
+  Saturn, past 3 R round a denser giant. Only physics bounds it: the
+  rings stay Hill stable inside the giant's innermost other moon
+  (Gladman 1993) and above its atmosphere (1.11 R, Saturn's D ring;
+  Mitchell et al. 2018). The giant asked for (`--planet gas-giant`) and
+  the giant a world of the request orbits are shaped as the others; the
+  first now has its own mass in its system, not Earth's density.
+- **The resonance cuts an edge.** The 2:1 inner Lindblad resonance of the
+  resonant moon, found with the giant's `J2` (from its flattening,
+  `f = 3/2 J2 + q/2`, Murray & Dermott 1999), is the inner edge of a
+  division 0.04–0.09 R wide: the B ring's edge and the Cassini Division.
+  Saturn's `J2` puts Mimas's 2:1 670 km outward of Kepler's, at 117,550
+  km (Spitale & Porco 2010: 117,556).
+- **Ring moons grow.** A moonlet grows from a core of solid ice (1.5 to
+  10 km) under a mantle of ring particles with 65 % voids until it fills
+  its Roche lobe (Porco et al. 2007, eq. 3): it ends at the critical
+  density of its distance, `3M / (γ a³)`, in the lobe's 3 : 2 : 2 shape.
+  Edge moons and shepherds are no less dense than the critical density,
+  filling their lobes when raised to it; edge moons are larger the
+  farther out (Charnoz et al. 2010). The resonant moon is irregular below
+  200 km in radius (Lineweaver & Norman 2010).
+- **Dust-only ring systems.** A giant with faint rings gets one or two
+  small moons at 2–3.2 R (Amalthea, Thebe) whose dust spreads from the
+  narrow ring out to their orbit (Burns et al. 1999), and on half of them
+  a small moon at 3.4–4.2 R wrapped in a faint belt (Mab and the μ ring,
+  de Pater et al. 2006). A gossamer ring reaches 1 to 1.26 times its
+  moon's distance (Thebe's extension).
+- **Not done:** a plume moon chosen by its tidal heating, a Phoebe ring
+  (systems have no irregular moons yet) and the Janus 7:6 edge of the A
+  ring (backlog item 18).
+
 ## Sources
 
 - Roche limit, classical and for rubble piles: Murray & Dermott 1999,
@@ -464,6 +502,21 @@ output. Only realism fixes change it.
   Science 338, 1196.
 - Jupiter's rings from its inner moons: Burns et al. 1999, "The
   formation of Jupiter's faint rings", Science 284, 1146.
+- Uranus's μ ring: de Pater, Hammel, Gibbard & Showalter 2006, "New dust
+  belts of Uranus: one ring, two ring, red ring, blue ring", Science 312,
+  92, <https://doi.org/10.1126/science.1125110>.
+- The B ring's edge and Mimas's 2:1: Spitale & Porco 2010, "Free unstable
+  modes and massive bodies in Saturn's outer B ring", AJ 140, 1747,
+  <https://doi.org/10.1088/0004-6256/140/6/1747>.
+- The D ring's inner edge: Mitchell et al. 2018, "Dust grains fall from
+  Saturn's D-ring into its equatorial upper atmosphere", Science 362,
+  eaat2236, <https://doi.org/10.1126/science.aat2236>.
+- Hill stability: Gladman 1993, "Dynamics of systems of two close
+  planets", Icarus 106, 247, <https://doi.org/10.1006/icar.1993.1169>,
+  in the form of Obertas, Van Laerhoven & Tamayo 2017, Icarus 293, 52,
+  <https://doi.org/10.1016/j.icarus.2017.04.010>.
+- Round moons: Lineweaver & Norman 2010, "The potato radius: a lower
+  minimum size for dwarf planets", <https://arxiv.org/abs/1004.1091>.
 - Shepherding and ring edges: Goldreich & Tremaine 1979, "Towards a
   theory for the Uranian rings", Nature 277, 97; Goldreich & Tremaine
   1982, "The dynamics of planetary rings", ARA&A 20, 249.

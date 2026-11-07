@@ -111,13 +111,15 @@ export const fr: Messages = {
     dustFed: (p: { kind: 'gossamer' | 'plume' }) =>
       p.kind === 'plume'
         ? 'ses geysers projettent des grains de glace qui s’étalent en un anneau large et ténu le long de son orbite'
-        : 'la poussière que les impacts lui arrachent s’étale en un anneau ténu à l’intérieur de son orbite',
+        : 'la poussière que les impacts lui arrachent s’étale en un anneau ténu le long et à l’intérieur de son orbite',
     ringRole: 'Dans les anneaux',
     ringRoles: {
       embedded: (p: { gap: string }) => `orbite dans les anneaux et y dégage une division de ${p.gap} autour de son orbite`,
-      resonant: (p: { gap: string }) => `orbite hors des anneaux ; sa résonance 2:1 y ouvre une division de ${p.gap}`,
+      resonant: (p: { gap: string }) =>
+        `orbite hors des anneaux ; sa résonance 2:1 y taille un bord et dégage au-delà une division de ${p.gap}`,
       edge: () => 'orbite juste au-delà des anneaux et en garde le bord externe net',
       shepherd: () => 'l’une des deux lunes bergères qui confinent l’anneau étroit',
+      source: () => 'petite lune au-delà de l’anneau étroit, dont la poussière alimente un anneau ténu',
     },
     notGenerated: `Ses cartes ne sont pas encore faites${S}: voici ce que le tirage a fixé.`,
     generating: `Ses cartes sont en cours de fabrication${S}: suivez la progression sur la vue.`,
@@ -625,6 +627,7 @@ export const fr: Messages = {
       resonant: 'lune glacée, en résonance avec les anneaux',
       edge: 'lune des anneaux',
       shepherd: 'lune bergère',
+      source: 'petite lune intérieure',
     },
     spinAxes: 'Axes de rotation',
     spinAxesHelp:
