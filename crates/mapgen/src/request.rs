@@ -569,9 +569,11 @@ impl WorldRequest {
             };
             let mut attempts = 0;
             while !room(&params) {
-                // A giant has room for any number of moons unless its star
-                // is so close it keeps none: drawing it another orbit would
-                // make it another kind of giant than the one asked for.
+                // A giant far from its star has room for any number of
+                // moons; close in, a hot one keeps none, one its star has
+                // locked only light ones, and a small Hill sphere fewer.
+                // Drawing it another orbit would make it another kind of
+                // giant than the one asked for: an error.
                 if giant {
                     return Err(RequestError::HotGiantMoons { count: n });
                 }
