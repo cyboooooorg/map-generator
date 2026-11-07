@@ -14,9 +14,10 @@
 //! band it may sit in and one it prefers ([`band`]).
 //!
 //! **Spacing.** Planets are placed from the star out, each at least
-//! [`HILL_SPACING`] mutual Hill radii from the last, periapsis to
-//! apoapsis, the spacing that keeps systems stable for billions of years
-//! (Chambers et al. 1996; Pu & Wu 2015); a hot Jupiter keeps others beyond
+//! [`hill_spacing`] mutual Hill radii from the last, periapsis to
+//! apoapsis, the spacing that keeps systems stable for billions of years:
+//! 10 for Earth-mass planets, fewer for heavier ones, 6.4 for a Jupiter
+//! and a Saturn (Chambers et al. 1996; Pu & Wu 2015); a hot Jupiter keeps others beyond
 //! four times its period (Steffen et al. 2012). A planet pushed out of its
 //! band is drawn again a few times, then the request fails
 //! ([`RequestError::ZoneFull`]).
@@ -33,7 +34,10 @@
 use crate::exomoon::{
     EARTH_KG, EARTH_M, G, HostGiant, HostMode, SATELLITE_MASS_SHARE, SIBLING_SPACING,
 };
-use crate::giants::{GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES, giant_radius};
+use crate::giants::{
+    GiantKind, GiantSystem, GiantsMode, HOT_JUPITERS, HOT_PERIOD_DAYS, JUPITER_EARTH_MASSES,
+    giant_radius, hill_spacing,
+};
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
@@ -50,8 +54,6 @@ use std::f64::consts::PI;
 pub const SYSTEM_FORMAT_VERSION: u32 = 1;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
-/// Mutual Hill radii kept between neighbouring planets.
-pub const HILL_SPACING: f64 = 10.0;
 /// Inner and outer edges of a system, AU.
 const INNER_EDGE_AU: f64 = 0.02;
 const OUTER_EDGE_AU: f64 = 60.0;
@@ -353,7 +355,7 @@ struct Slot {
 }
 
 /// Whether two orbits round a star of `star_mass` (M☉) are clear of each
-/// other: [`HILL_SPACING`] mutual Hill radii, periapsis to apoapsis, and
+/// other: [`hill_spacing`] mutual Hill radii, periapsis to apoapsis, and
 /// four times a hot Jupiter's period.
 fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
     let (inner, outer) = if a.orbit_au < b.orbit_au {
@@ -368,7 +370,9 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
     let gap =
         outer.orbit_au * (1.0 - outer.eccentricity) - inner.orbit_au * (1.0 + inner.eccentricity);
     let hot = inner.body_type == "hot-jupiter" || outer.body_type == "hot-jupiter";
-    gap >= HILL_SPACING * hill && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
+    let share = 0.5 * (inner.mass_earth + outer.mass_earth) / (star_mass * sun);
+    gap >= hill_spacing(share) * hill
+        && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
 }
 
 /// A typical mass for a planet type, Earth masses, drawn.
@@ -397,10 +401,35 @@ fn is_giant(body_type: &str) -> bool {
     matches!(body_type, "gas-giant" | "ice-giant" | "hot-jupiter")
 }
 
+/// A hot Jupiter for a drawn system, or none: as often as round a world
+/// ([`HOT_JUPITERS`], about 1 % of Sun-like stars, Wright et al. 2012;
+/// times `10^(2 [Fe/H])` and the star's mass, like the other gas giants),
+/// on an orbit of 1 to 10 days, log-uniform, within the type's 0.1 AU.
+/// The spacing then keeps other planets beyond four times its period.
+fn drawn_hot_jupiter(
+    star: &StarInfo,
+    metallicity: f64,
+    rng: &mut impl RngExt,
+) -> Option<(String, f64)> {
+    let mass = f64::from(star.mass);
+    let odds =
+        (HOT_JUPITERS * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5)).min(0.2);
+    let (hot, u) = (rng.random::<f64>() < odds, rng.random::<f64>());
+    hot.then(|| {
+        let (lo, hi) = HOT_PERIOD_DAYS;
+        let days = (lo.ln() + u * (hi / lo).ln()).exp();
+        let a = (mass * (days / 365.25).powi(2))
+            .cbrt()
+            .clamp(INNER_EDGE_AU, 0.1);
+        ("hot-jupiter".to_string(), a)
+    })
+}
+
 /// The planets drawn when a request leaves them to the draw: small planets
 /// from the Kepler counts (about 1.5 within 1 AU of a Sun-like star, 2.5 of
 /// an M dwarf; Mulders et al. 2018), a few colder ones beyond, the giants
-/// as [`GiantSystem`] draws them; their types from where they fall.
+/// as [`GiantSystem`] draws them; their types from where they fall. Hot
+/// Jupiters come from [`drawn_hot_jupiter`].
 fn drawn_types(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<(String, f64)> {
     let mass = f64::from(star.mass);
     let inner_mean = if mass < 0.6 {
@@ -655,7 +684,12 @@ fn draw_whole(
             }
             list
         }
-        None => drawn_types(&star, f64::from(metallicity), &mut rng),
+        None => {
+            let mut list = drawn_types(&star, f64::from(metallicity), &mut rng);
+            // Drawn last, so that the other planets' draws stay as they were.
+            list.extend(drawn_hot_jupiter(&star, f64::from(metallicity), &mut rng));
+            list
+        }
     };
     let packed = asked.len() >= 4;
     let mut last_error = None;
@@ -715,12 +749,18 @@ fn draw_whole(
             kept.remove(i);
             let mut slots: Vec<Slot> = kept
                 .iter()
-                .map(|(t, a)| Slot {
-                    body_type: t.clone(),
-                    mass_earth: draw_mass(t, &mut rng),
-                    orbit_au: *a,
-                    eccentricity: f64::from(draw_eccentricity(&mut rng)) * 0.4,
-                    fixed: false,
+                .map(|(t, a)| {
+                    let mass_earth = draw_mass(t, &mut rng);
+                    // Drawn for every planet, so the others' draws stay put;
+                    // a hot Jupiter's orbit is circular.
+                    let e = f64::from(draw_eccentricity(&mut rng)) * 0.4;
+                    Slot {
+                        body_type: t.clone(),
+                        mass_earth,
+                        orbit_au: *a,
+                        eccentricity: if t == "hot-jupiter" { 0.0 } else { e },
+                        fixed: false,
+                    }
                 })
                 .collect();
             if space(&mut slots, star_mass, hz, ice).is_ok() {
@@ -1087,6 +1127,10 @@ fn planet_params(
         giants: if giant { None } else { Some(GiantsMode::None) },
         host: if giant { None } else { Some(HostMode::None) },
         mass_earth: giant.then_some(slot.mass_earth as f32),
+        // A rocky planet takes the size of the mass it was spaced with, at
+        // Earth's density (the mass a world's size gives, see planet_body),
+        // rather than its preset's own draw, so that the spacing holds.
+        circumference_km: (!giant).then(|| (40_075.0 * slot.mass_earth.cbrt()) as f32),
         width: Some(width),
         height: Some(height),
         ..WorldRequest::default()
@@ -1746,6 +1790,37 @@ mod tests {
     use super::*;
     use crate::rings::RingRole;
 
+    #[test]
+    fn the_solar_system_planets_are_spaced_far_enough() {
+        // (type, Earth masses, AU, eccentricity), NASA fact sheets.
+        let slot = |body_type: &str, mass_earth: f64, orbit_au: f64, eccentricity: f64| Slot {
+            body_type: body_type.into(),
+            mass_earth,
+            orbit_au,
+            eccentricity,
+            fixed: false,
+        };
+        let planets = [
+            slot("hot", 0.055, 0.387, 0.206),
+            slot("temperate", 0.815, 0.723, 0.007),
+            slot("temperate", 1.0, 1.0, 0.017),
+            slot("cold", 0.107, 1.524, 0.094),
+            slot("gas-giant", 317.8, 5.20, 0.049),
+            slot("gas-giant", 95.2, 9.57, 0.057),
+            slot("ice-giant", 14.5, 19.17, 0.046),
+            slot("ice-giant", 17.1, 30.18, 0.010),
+        ];
+        for pair in planets.windows(2) {
+            assert!(clear(&pair[0], &pair[1], 1.0), "{pair:?}");
+        }
+        // Two Earths at Jupiter and Saturn's 6.5 Hill radii are too close.
+        assert!(!clear(
+            &slot("cold", 1.0, 5.20, 0.049),
+            &slot("cold", 1.0, 5.47, 0.057),
+            1.0
+        ));
+    }
+
     fn whole(planets: &[(&str, u32)], seed: u32) -> SystemRequest {
         SystemRequest::System(WholeSystemRequest {
             star: Some("G2V".into()),
@@ -1864,6 +1939,76 @@ mod tests {
             ),
             Err(RequestError::UnknownType(_))
         ));
+    }
+
+    #[test]
+    fn drawn_planets_keep_the_spacing_with_their_own_masses() {
+        // The masses stored, not only those the slots were spaced with.
+        for seed in 0..40 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            let star_mass = f64::from(system.star.info.mass);
+            let mut planets = planets(&system);
+            planets.sort_by(|a, b| {
+                a.orbit
+                    .semi_major_axis_au
+                    .total_cmp(&b.orbit.semi_major_axis_au)
+            });
+            for pair in planets.windows(2) {
+                let slot = |b: &Body| Slot {
+                    body_type: b.body_type.clone(),
+                    mass_earth: b.physical.mass_earth,
+                    orbit_au: b.orbit.semi_major_axis_au,
+                    eccentricity: b.orbit.eccentricity,
+                    fixed: false,
+                };
+                // A hair of slack for the stored values' rounding.
+                let (mut inner, outer) = (slot(pair[0]), slot(pair[1]));
+                inner.orbit_au *= 0.999;
+                assert!(
+                    clear(&inner, &outer, star_mass),
+                    "seed {seed}: {} and {}",
+                    pair[0].id,
+                    pair[1].id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_drawn_system_sometimes_has_a_hot_jupiter() {
+        let (mut hot, mut close) = (0, 0);
+        let n = 600;
+        for seed in 0..n {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some("G2V".into()),
+                metallicity: Some(0.0),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            let planets = planets(&system);
+            if let Some(h) = planets.iter().find(|b| b.body_type == "hot-jupiter") {
+                hot += 1;
+                // Lonely: no planet within four times its period.
+                let a = h.orbit.semi_major_axis_au;
+                close += planets
+                    .iter()
+                    .filter(|b| b.body_type != "hot-jupiter")
+                    .filter(|b| b.orbit.semi_major_axis_au < a * 4f64.powf(2.0 / 3.0))
+                    .count();
+            }
+        }
+        // About 1 % of Sun-like stars (Wright et al. 2012).
+        assert!((1..=15).contains(&hot), "{hot} of {n}");
+        assert_eq!(close, 0);
     }
 
     #[test]
