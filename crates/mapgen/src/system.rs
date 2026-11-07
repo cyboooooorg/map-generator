@@ -791,9 +791,11 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
             Some(_) => "gas-giant".to_string(),
             None => params.planet.name.clone(),
         },
-        mass_earth: match &host {
-            Some(h) => f64::from(h.giant.mass_earth),
-            None => (f64::from(params.circumference_km) / 40_075.0).powi(3),
+        // A giant asked for has its own mass; a rocky world Earth's density.
+        mass_earth: match (&host, params.giant_mass_earth) {
+            (Some(h), _) => f64::from(h.giant.mass_earth),
+            (None, Some(giant)) => f64::from(giant),
+            (None, None) => (f64::from(params.circumference_km) / 40_075.0).powi(3),
         },
         orbit_au: f64::from(params.orbit_au),
         eccentricity: f64::from(params.eccentricity),
