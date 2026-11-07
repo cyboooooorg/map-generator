@@ -402,7 +402,23 @@ impl Preset {
 
     /// Parses and validates a preset. `origin` names the source in errors.
     pub fn from_toml(text: &str, origin: &str) -> Result<Self, PresetError> {
-        toml::from_str(text).map_err(|e| PresetError(format!("{origin}: {e}")))
+        let mut preset: Self =
+            toml::from_str(text).map_err(|e| PresetError(format!("{origin}: {e}")))?;
+        // A preset file written for the former moisture scale: the world
+        // files keep theirs (see `BiomeRules::is_legacy`), a preset does not.
+        if preset.rules.is_legacy() {
+            eprintln!(
+                "warning: {origin}: shrubland_moisture and desert_moisture are ignored; \
+                 arid land follows Koppen's criterion B (steppe_ratio, desert_ratio), and \
+                 the moisture thresholds are now on the log scale of the annual rain"
+            );
+            preset.rules.shrubland_moisture = None;
+            preset.rules.desert_moisture = None;
+        }
+        // A lone legacy field means nothing alone.
+        preset.rules.shrubland_moisture = None;
+        preset.rules.desert_moisture = None;
+        Ok(preset)
     }
 
     /// Loads a built-in preset by name, or a preset file when `spec` ends

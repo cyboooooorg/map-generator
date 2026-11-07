@@ -1114,6 +1114,13 @@ pub fn generate_with_progress(
     options: GenerateOptions,
     progress: impl Fn(Stage),
 ) -> Generated {
+    // Regenerating a world stored before the arid criterion: its rules
+    // meant the former moisture scale.
+    if params.planet.rules.is_legacy() {
+        let mut modern = params.clone();
+        modern.planet.rules = params.planet.rules.modernised();
+        return generate_with_progress(&modern, options, progress);
+    }
     // A giant has no ground: its cloud bands have a pipeline of their own.
     if params.giant_mass_earth.is_some() {
         return crate::giant_world::generate(params, &progress);

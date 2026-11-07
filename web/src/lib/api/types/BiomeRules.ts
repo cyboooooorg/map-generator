@@ -76,6 +76,19 @@ temperate: number,
  */
 tropical_winter: number, 
 /**
+ * Former cut-off: temperate land with a moisture under it was
+ * shrubland. Only present in the rules stored with an older world,
+ * whose biomes are re-chosen with the former rules (see
+ * [`is_legacy`](Self::is_legacy)); in a preset it is dropped with a
+ * warning.
+ */
+shrubland_moisture?: number, 
+/**
+ * Former cut-off: tropical land with a moisture under it was desert
+ * (see [`shrubland_moisture`](Self::shrubland_moisture)).
+ */
+desert_moisture?: number, 
+/**
  * Land with an annual rain under this many times its dryness
  * threshold is arid: steppe (shrubland) or desert. Köppen's 10
  * (Kottek et al. 2006, doi:10.1127/0941-2948/2006/0130, Table 1:
@@ -88,7 +101,8 @@ steppe_ratio: number,
  */
 desert_ratio: number, 
 /**
- * Shore wetter than this is wetland, otherwise beach.
+ * Shore with a moisture index above this (1 000 mm of rain a year at
+ * 0) is wetland, otherwise beach.
  */
 wetland_moisture: number, 
 /**

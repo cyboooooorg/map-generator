@@ -54,7 +54,10 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// come from the parameters, and the preset's `polar` and
 /// `highland_snow_temperature` are summer temperatures, see
 /// [`crate::climate::Seasons`]); older worlds keep their biomes without
-/// it.
+/// it. Version 11 also stores the moisture as the log of the annual rain
+/// and chooses arid land by Köppen's criterion B: an older world keeps
+/// its rules with the former `shrubland_moisture` and `desert_moisture`
+/// (see [`crate::biome::BiomeRules::is_legacy`]) and its linear moisture.
 pub const FORMAT_VERSION: u32 = 11;
 
 /// First format version whose biomes read the seasonal cycle.
