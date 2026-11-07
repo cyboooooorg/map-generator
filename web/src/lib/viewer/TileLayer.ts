@@ -41,7 +41,6 @@ import {
   tileRect,
 } from './tiles';
 import { releaseOnUpload } from './textures';
-import { morphPoint } from './viewTransfer';
 
 /** Split a tile while one of its texels covers more screen pixels than this. */
 const SPLIT_PX = 1.5;
@@ -110,9 +109,16 @@ function disposeTile(texture: Texture): void {
   (texture.image as ImageBitmap).close();
 }
 
-/** Position of a texture coordinate on the surface morphed round `centreLon` (see shaders.ts). */
-function surfacePoint(u: number, v: number, morph: number, centreLon: number, out: Vector3): Vector3 {
-  return out.set(...morphPoint({ lon: u * 2 * Math.PI, lat: (v - 0.5) * Math.PI }, morph, centreLon));
+/** Position of a texture coordinate on the morphed surface (see shaders.ts). */
+function surfacePoint(u: number, v: number, morph: number, out: Vector3): Vector3 {
+  const lon = u * 2 * Math.PI;
+  const lat = (v - 0.5) * Math.PI;
+  const sx = Math.cos(lat) * Math.sin(lon);
+  const sy = Math.sin(lat);
+  const sz = Math.cos(lat) * Math.cos(lon);
+  const px = (u - 0.5) * 2 * Math.PI;
+  const py = (v - 0.5) * Math.PI;
+  return out.set(px + (sx - px) * morph, py + (sy - py) * morph, sz * morph);
 }
 
 export class TileLayer {
@@ -140,7 +146,6 @@ export class TileLayer {
   // the quadtree allocates nothing but the leaves it finds.
   private readonly walkCamera = new Vector3();
   private walkMorph = 1;
-  private walkCentreLon = 0;
   private pxPerUnit = 1;
   private readonly leaves: TileId[] = [];
   /** tileIndex of each leaf, and of the tile it shows (itself or an ancestor; -1: none). */
@@ -195,7 +200,7 @@ export class TileLayer {
   }
 
   /** Picks, loads and places the patches for the current view. */
-  update(camera: PerspectiveCamera, morph: number, viewportHeight: number, morphLon = 0): void {
+  update(camera: PerspectiveCamera, morph: number, viewportHeight: number): void {
     this.frame += 1;
     if (!this.world || !this.enabled) {
       return;
@@ -206,7 +211,6 @@ export class TileLayer {
     this.pxPerUnit = viewportHeight / (2 * Math.tan((camera.fov * Math.PI) / 360) / camera.zoom);
     this.walkCamera.copy(camera.position);
     this.walkMorph = morph;
-    this.walkCentreLon = morphLon;
 
     const { leaves, leafIndices, sources, shown } = this;
     leaves.length = 0;
@@ -244,13 +248,12 @@ export class TileLayer {
     const u0 = x * du;
     const v0 = 1 - (y + 1) * dv;
     const morph = this.walkMorph;
-    const centreLon = this.walkCentreLon;
     const [c0, c1, c2, c3, c4] = this.corners as [Vector3, Vector3, Vector3, Vector3, Vector3];
-    surfacePoint(u0, v0, morph, centreLon, c0);
-    surfacePoint(u0 + du, v0, morph, centreLon, c1);
-    surfacePoint(u0, v0 + dv, morph, centreLon, c2);
-    surfacePoint(u0 + du, v0 + dv, morph, centreLon, c3);
-    surfacePoint(u0 + du / 2, v0 + dv / 2, morph, centreLon, c4);
+    surfacePoint(u0, v0, morph, c0);
+    surfacePoint(u0 + du, v0, morph, c1);
+    surfacePoint(u0, v0 + dv, morph, c2);
+    surfacePoint(u0 + du, v0 + dv, morph, c3);
+    surfacePoint(u0 + du / 2, v0 + dv / 2, morph, c4);
     this.sphere.setFromPoints(this.corners);
     // A quarter of the globe can bulge beyond its corners: pad coarse tiles.
     this.sphere.radius *= z < 2 ? 1.6 : 1.05;
@@ -329,7 +332,7 @@ export class TileLayer {
       const failure = this.failed.get(index);
       if (!this.cache.has(index) && !this.loading.has(index) && (failure === undefined || failure.retryAt <= now)) {
         const [u, v, du, dv] = tileRect(tile);
-        missing.push({ tile, distance: surfacePoint(u + du / 2, v + dv / 2, 1, 0, this.centre).distanceTo(camera) });
+        missing.push({ tile, distance: surfacePoint(u + du / 2, v + dv / 2, 1, this.centre).distanceTo(camera) });
       }
     }
     // Coarse tiles first, then the closest to the camera.
