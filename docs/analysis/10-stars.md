@@ -256,8 +256,8 @@ by the recalibration error for the others; step 5 changes locked worlds.
   and the viewer's sun stops moving with the season.
 - **Step 6:** biome colours of vegetated biomes get a tint by star type
   (dark red to near black under M dwarfs, unchanged under G and early K,
-  yellowish under F), applied by the "Star light" view only, so the usual maps and
-  the exported files stay Earth-coloured.
+  yellowish under F), applied by the "Star light" view only, so the usual
+  maps and the exported files stay Earth-coloured.
 
 ## Outcome
 
