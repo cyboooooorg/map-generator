@@ -12,7 +12,8 @@ circular orbits can never meet if their orbits are more than about 3.5
 safe distance: their pulls add up, and the system only waits longer
 before two of them meet. About 10 mutual Hill radii buy a billion years
 or more. Kepler's packed systems sit just beyond that limit. The app keeps
-its planets at least 10 mutual Hill radii apart.
+Earth-mass planets at least 10 mutual Hill radii apart, heavier ones a
+little less: 6.4 for a Jupiter and a Saturn.
 
 ## The science
 
@@ -194,24 +195,43 @@ the star outwards:
    so on. A planet asked for starts at a distance drawn in its type's
    preferred band; one left to the draw, where the occurrence rates put
    it.
-2. **The spacing.** A planet is pushed out by 2 % at a time until it is at
-   least `HILL_SPACING` = 10 mutual Hill radii from every planet already
-   placed. The gap is measured from the inner planet's apoapsis to the
-   outer one's periapsis, so eccentric orbits need more room.
-3. **Hot Jupiters** keep other planets beyond four times their period.
-4. **The belt zone.** Rocky planets also jump past the first cold giant's
+2. **The spacing.** A planet is pushed out by 2 % at a time until it is
+   clear of every planet already placed: at least `hill_spacing` mutual
+   Hill radii, from the inner planet's apoapsis to the outer one's
+   periapsis, so eccentric orbits need more room.
+3. **Fewer Hill radii for heavier pairs.** `hill_spacing` asks 10 of two
+   Earth masses, and falls as $\mu^{-1/12}$, the scaling of Chambers et
+   al. (1996) above, with $\mu$ the pair's mean mass share of the star:
+   6.6 for an Earth and a Jupiter, 6.4 for a Jupiter and a Saturn. It
+   never goes below Gladman's $2\sqrt{3}$, which only a pair about as
+   heavy as its star would reach.
+4. **Hot Jupiters** keep other planets beyond four times their period.
+5. **The belt zone.** Rocky planets also jump past the first cold giant's
    belt zone (see [How do asteroid belts form?](asteroid-belts.md)).
-5. **Failure.** When a planet is pushed out of its band, the planets asked
+6. **Failure.** When a planet is pushed out of its band, the planets asked
    for are drawn again, up to 24 tries, before the request fails with
    `zone_full`. A system left wholly to the draw drops planets of the
    failing type until the others fit.
 
+The spacing, trimmed (from `crates/mapgen/src/giants.rs`):
+
+```rust
+/// Gap kept between two Earth-mass neighbours, in mutual Hill radii.
+const EARTH_HILL_SPACING: f64 = 10.0;
+
+/// Least gap kept between two neighbouring orbits, apoapsis to periapsis,
+/// in mutual Hill radii, for a pair whose mean mass share of the star is
+/// `mass_share` (`(m₁ + m₂) / 2M`).
+pub fn hill_spacing(mass_share: f64) -> f64 {
+    const EARTH_SHARE: f64 = 1.0 / 332_946.0;
+    (EARTH_HILL_SPACING * (mass_share / EARTH_SHARE).powf(-1.0 / 12.0))
+        .max(2.0 * 3f64.sqrt())
+}
+```
+
 The test, trimmed (from `crates/mapgen/src/system.rs`):
 
 ```rust
-/// Mutual Hill radii kept between neighbouring planets.
-pub const HILL_SPACING: f64 = 10.0;
-
 fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
     let (inner, outer) =
         if a.orbit_au < b.orbit_au { (a, b) } else { (b, a) };
@@ -227,7 +247,9 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
         - inner.orbit_au * (1.0 + inner.eccentricity);
     let hot = inner.body_type == "hot-jupiter"
         || outer.body_type == "hot-jupiter";
-    gap >= HILL_SPACING * hill
+    let share = 0.5 * (inner.mass_earth + outer.mass_earth)
+        / (star_mass * sun);
+    gap >= hill_spacing(share) * hill
         // A hot Jupiter: four times the period, by Kepler's third law.
         && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
 }
@@ -235,22 +257,29 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
 
 A single world drawn on its own, outside a system, gets its giant planets
 from [`giants.rs`](../../crates/mapgen/src/giants.rs) instead. There, a
-giant must stay `HILL_GAP` = 3.464 mutual Hill radii, Gladman's
-$2\sqrt{3}$, from the world and from every other giant, apoapsis to
-periapsis. A giant that fails is drawn again up to 6 times, then dropped.
+giant must keep the same `hill_spacing` from the world and from every
+other giant, apoapsis to periapsis. A giant that fails is drawn again up
+to 6 times, then dropped.
+
+With the Solar System's planets, every neighbouring pair passes. The
+closest is Jupiter–Saturn: 6.5 mutual Hill radii from apoapsis to
+periapsis, against the 6.4 asked. Two Earths that close would fail (a
+test in `system.rs`).
 
 ### Where it departs from the science
 
-- **One spacing for every mass.** The app asks 10 mutual Hill radii of
-  every pair. Heavier planets need fewer, and the Solar System's own
-  giants break the rule: Jupiter and Saturn are 7.9 mutual Hill radii
-  apart, 6.6 from apoapsis to periapsis. Drawn by the app, a Saturn next
-  to a Jupiter at 5.2 AU would be pushed out to about 13 AU.
+- **The mass scaling is our reading.** Chambers et al. (1996) found the
+  $\mu^{1/4}$ scaling for planets of equal mass. The app turns it into
+  $\mu^{-1/12}$ Hill radii, applies it to pairs of unequal mass through
+  their mean, and sets it to 10 at one Earth mass. Pu & Wu (2015) found
+  about 10 for planets of 3 to 9 Earth masses; the same scaling would
+  then ask 11 to 12 of Earth-mass planets. The app's calibration is
+  checked against the Solar System, which it lets through, not against
+  simulations of unequal planets.
 - **Many-planet rule for two planets.** A system of two planets would be
-  Hill stable at 3.5 mutual Hill radii; the app still asks 10.
-- **Two rules in one app.** A world's giants (`giants.rs`) may sit 3.5
-  mutual Hill radii apart, a system's planets (`system.rs`) 10. The same
-  pair of planets can be allowed in one and not in the other.
+  Hill stable at 3.5 mutual Hill radii; the app still asks 10 of two
+  Earths. Round a single world, its giants keep the same rule, though a
+  world and one giant are only two planets.
 - **Eccentric orbits.** Measuring the gap from apoapsis to periapsis
   follows Pu & Wu's finding that eccentric systems behave like circular
   ones with the same closest approach.

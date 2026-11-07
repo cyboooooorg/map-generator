@@ -246,12 +246,18 @@ Laskar et al. 2004).
    giants as the square root of the sum of squares, at most 0.5.
 3. **The light.** `StarInfo::new` stores the periapsis and apoapsis, the
    light at each, and the mean over the year, which uses the factor
-   $1/\sqrt{1 - e^2}$. The equilibrium temperature and the climate use that
-   mean (`relative_flux`).
-4. **Systems.** A whole system draws each planet's eccentricity from the
+   $1/\sqrt{1 - e^2}$. The climate takes that mean flux (`relative_flux`):
+   it sets the heat a world absorbs over a year.
+4. **The equilibrium temperature** is the mean over the year of Méndez &
+   Rivera-Valentín (2017, eq. 16): the circular orbit's, at the
+   semi-major axis, times $1 - e^2/16 - 15e^4/1024$
+   (`mean_temperature_factor`). It falls a little as the eccentricity
+   grows, while the mean flux rises. A giant's equilibrium temperature is
+   computed the same way (`describe` in `giants.rs`).
+5. **Systems.** A whole system draws each planet's eccentricity from the
    same law, times 0.4 in systems of four or more planets (packed systems
    are calmer, He et al. 2020); hot Jupiters get 0.
-5. **The viewer** solves Kepler's equation by Newton's method
+6. **The viewer** solves Kepler's equation by Newton's method
    (`keplerPosition` in
    [`starSystem.ts`](../../web/src/lib/viewer/starSystem.ts)) and gives the
    speeds by the vis-viva equation (`orbitalSpeed`).
@@ -265,6 +271,18 @@ The rules, trimmed (from
 pub fn mean_flux_factor(eccentricity: f32) -> f32 {
     1.0 / (1.0 - eccentricity * eccentricity).max(1e-6).sqrt()
 }
+
+/// `1 − e²/16 − 15e⁴/1024` (Méndez & Rivera-Valentín 2017, eq. 16; 0.997
+/// at e = 0.2, 0.976 at 0.6).
+pub fn mean_temperature_factor(eccentricity: f32) -> f32 {
+    let e2 = eccentricity * eccentricity;
+    1.0 - e2 / 16.0 - 15.0 * e2 * e2 / 1024.0
+}
+
+// In `StarInfo::new`: the mean flux, and the mean temperature.
+let at = |au: f32| v.luminosity / (au * au);
+let insolation = at(orbit_au) * mean_flux_factor(eccentricity);
+equilibrium_k: equilibrium_k(at(orbit_au)) * mean_temperature_factor(eccentricity),
 
 /// The beta distribution fitted by Kipping (2013) (a = 0.867, b = 3.03).
 pub fn draw_eccentricity(rng: &mut impl RngExt) -> f32 {
@@ -304,14 +322,14 @@ if eccentricity_drawn && !locked {
   $e = 0.5$ gets nine times more light at periapsis than at apoapsis, yet
   its maps show one mean year. The viewer's season control moves the sun
   with the tilt only.
-- **The mean flux, not the mean temperature.** The app's equilibrium
-  temperature comes from the mean flux, so it rises with the eccentricity:
-  by 0.5 % at $e = 0.2$, by 5.7 % at $e = 0.6$. Méndez & Rivera-Valentín
-  (2017) count this shortcut among the "incorrect interpretations that have
-  been used extensively in the literature": the time-averaged temperature
-  falls instead, by 0.3 % and 2.4 %. Up to $e = 0.2$ the two agree within
-  1 %; at $e = 0.6$ the app runs about 8 % warmer, some 20 K for an
-  Earth-like world.
+- **A climate from the mean flux.** The card's equilibrium temperature
+  is the mean over the year, which falls with the eccentricity, but the
+  climate scales with the mean flux, which rises. A world whose climate
+  scales as $S^{1/4}$ is 5.7 % warmer at $e = 0.6$, in kelvins, than on a
+  circle, while its equilibrium temperature reads 2.4 % lower. The mean
+  flux sets the heat absorbed over a year, but the climate models that
+  Méndez & Rivera-Valentín (2017) cite find the habitable zone of very
+  eccentric planets wider than the mean flux predicts.
 - **A giant's law for every world.** Kipping's fit comes from planets found
   by radial velocities, mostly giants. A lone rocky world drawn from it has
   a median of 0.17, while small planets in multi-planet systems average
@@ -327,8 +345,10 @@ if eccentricity_drawn && !locked {
   app inverts the ratio; the sources here do not cover that case.
 - **A low-order formula.** Thébault et al. (2006) find its amplitude within
   10 % of their simulations for the cases they explored, and its period off
-  by up to 70 %. The app applies it to any world at least $2\sqrt{3}$
-  mutual Hill radii from a giant, however close.
+  by up to 70 %. The app applies it to any world that keeps the spacing
+  of [How close can two planets orbit?](planet-spacing.md) from a giant,
+  about 6.6 mutual Hill radii for an Earth and a Jupiter, however close
+  that is.
 
 ## Sources
 

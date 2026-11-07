@@ -147,8 +147,9 @@ star's ultraviolet flares there.
 
 **Star light** lights the planet with the colour of its star's light.
 With it on, the app also recolours vegetation: under a star cooler than
-the Sun, forests and grasslands turn towards a dark purple-black; under a
-hotter one, towards gold. Sun-like stars leave them green. The study's
+4,900 K, from the K3 dwarfs down, forests and grasslands turn
+towards a dark purple-black; under one hotter than the Sun, towards gold.
+Sun-like stars and early K dwarfs leave them green. The study's
 example: under an M4 dwarf, the green continents of a locked planet turn
 dark brown in the orange light. With **Star light** off, and in every
 exported map, plants keep Earth's colours.
@@ -163,32 +164,40 @@ Three pieces, all in the viewer:
    tundra 0.35, every other biome 0.
 2. **How far to recolour**, from the star's temperature
    ([`PlanetView.ts`](../../web/src/lib/viewer/PlanetView.ts)): a "cool"
-   share rising from 0 at 5,772 K to 1 at about 3,300 K, and a "hot"
-   share rising from 0 at 5,772 K to 1 at about 7,300 K.
+   share rising from 0 at 4,900 K to 1 at 3,400 K, and a "hot" share
+   rising from 0 at 5,772 K to 1 at 7,300 K. Between 4,900 and 5,772 K,
+   K2V included, nothing changes: Kiang et al. (2007b) expect K2V planets
+   to look "very similar to the Earth".
 3. **The recolouring** in the surface shader
    ([`shaders.ts`](../../web/src/lib/viewer/shaders.ts)): the biome's
    colour is pulled towards a dark purple, about a third as bright, and
    then towards a gold as bright as the original, in proportion to its
-   share of plants. It applies to the biome map and the detail tiles
-   only.
+   share of plants. The dark tint is that dim on purpose: such leaves
+   would absorb the whole visible range. It applies to the biome map and
+   the detail tiles only.
 
 Trimmed, from `web/src/lib/viewer/PlanetView.ts`:
 
 ```ts
 /**
- * How far vegetation is recoloured under a star: towards dark
- * purple-black below the Sun's temperature (fully at 3 300 K), towards
- * gold above it (fully at 7 300 K); none for a Sun-like star.
+ * How far vegetation is recoloured under a star (see the surface shader):
+ * towards dark purple-black below 4 900 K (fully at 3 400 K),
+ * towards gold above the Sun's temperature (fully at 7 300 K). None from
+ * 4 900 to 5 772 K: plants round early K dwarfs, whose light at the ground
+ * peaks in the red like the Sun's, "would look very similar to the Earth"
+ * (Kiang et al. 2007, paper II).
  */
 export function vegetationShift(teffK: number): [number, number] {
   const clamp = (x: number) => Math.min(1, Math.max(0, x));
-  return [clamp((5772 - teffK) / 2500), clamp((teffK - 5772) / 1500)];
+  return [clamp((4900 - teffK) / 1500), clamp((teffK - 5772) / 1500)];
 }
 ```
 
 And from the surface shader in `web/src/lib/viewer/shaders.ts`:
 
 ```glsl
+// The dark tint is a third as bright as the colour it replaces, since
+// such leaves absorb the whole visible range; the gold keeps it.
 float plants = uVegetation[int(min(id, 63.0))];
 if (plants > 0.0) {
   float lum = dot(colour, vec3(0.2126, 0.7152, 0.0722));
@@ -206,10 +215,12 @@ What it gives for a few stars (the share recoloured for a forest):
 | F0V | 7,220 | 0 | 0.97 |
 | F5V | 6,550 | 0 | 0.52 |
 | G2V | 5,770 | 0 | 0 |
-| K2V | 5,100 | 0.27 | 0 |
-| K5V | 4,440 | 0.53 | 0 |
-| M0V | 3,850 | 0.77 | 0 |
-| M4V and cooler | 3,210 | 1 | 0 |
+| K2V | 5,100 | 0 | 0 |
+| K3V | 4,830 | 0.05 | 0 |
+| K5V | 4,440 | 0.31 | 0 |
+| M0V | 3,850 | 0.70 | 0 |
+| M3V | 3,430 | 0.98 | 0 |
+| M3.5V and cooler | 3,270 | 1 | 0 |
 
 The light itself is then tinted by the star's colour, as for every other
 surface (see [What does a G-type star mean?](star-types.md)).
@@ -219,13 +230,18 @@ surface (see [What does a G-type star mean?](star-types.md)).
 - **A straight line in temperature.** The app recolours by the star's
   temperature alone. Kiang et al. (2007b) work from the light that reaches
   the ground, which depends on the planet's air as much as on the star.
-- **K stars turn dark too early.** Kiang et al. (2007b) expect K2V planets
-  to look "very similar to the Earth". The app already pulls a K2V
-  planet's forests 27 % of the way to dark purple, a K5V's 53 %.
+- **The thresholds are the app's.** Kiang et al. (2007b) expect K2V
+  plants to look like Earth's and M stars' pigments to absorb in the
+  near-infrared, but give no temperature where one gives way to the
+  other. The app starts the dark tint at 4,900 K, between K2V and K3V,
+  and makes it full at 3,400 K, between M3V and M3.5V of its star table;
+  the straight line between them is its choice too.
 - **The colours are readings, not predictions.** Gold under F stars and
   near-black under M dwarfs follow from where the pigments would absorb,
   not from a computed reflectance, which Kiang et al. (2007b) say cannot
-  be predicted yet. The purple hue of the dark tint is the app's choice.
+  be predicted yet. The dark tint's purple hue, and its brightness, a
+  third of the colour it replaces, are the app's choices: no source here
+  says how dark such leaves would look.
 - **Only the colour changes.** The biomes stay the same: a red dwarf's
   planet keeps forests as dense as Earth's, though its plants may be a
   half to a tenth as productive in the visible.

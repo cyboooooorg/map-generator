@@ -212,9 +212,10 @@ stream of their own:
 
 1. **Routh's criterion.** No trojans if the planet's mass share is 0.0385
    or more.
-2. **A heavier neighbour.** No trojans if a more massive planet orbits
-   within a period ratio of 3. This removes Saturn's and Uranus's, as in
-   the Solar System.
+2. **A heavier giant nearby.** No trojans if a more massive giant orbits
+   within a period ratio of 3. This removes Saturn's, to Jupiter, and
+   Uranus's, to Saturn, as in the Solar System. A rocky neighbour does not
+   count: Mars, next to the heavier Earth, keeps its own.
 3. **A count by type**, log-uniform: 10⁴ to 10⁶ for a gas giant or the
    outermost ice giant, 10³ to 10⁵ for another ice giant, 0 to 10³ for a
    hot Jupiter, 0 to 100 for a rocky planet.
@@ -228,8 +229,11 @@ pub const ROUTH: f64 = 0.038_520_896_504_551_1;
 
 let (u, r) = (rng.random::<f64>(), 0.7 + 0.75 * rng.random::<f64>());
 let mu = p.mass_earth / (star_mass * SUN_EARTH + p.mass_earth);
+// Only a heavier giant empties the points: Jupiter Saturn's,
+// Saturn Uranus's. A rocky neighbour does not (the Earth leaves
+// Mars its trojans, Christou et al. 2025).
 let perturbed = planets.iter().any(|q| {
-    q.id != p.id && q.mass_earth > p.mass_earth && {
+    q.id != p.id && q.giant() && q.mass_earth > p.mass_earth && {
         let ratio = (q.orbit_au / p.orbit_au).max(p.orbit_au / q.orbit_au);
         ratio.powf(1.5) < 3.0 // period ratio, by Kepler's third law
     }
@@ -249,7 +253,7 @@ export function lagrangePoints(a: number, mu: number): LagrangePoint[] {
   return [
     { name: 'L1', angle: 0, au: a * (1 - hill), stable: false },
     { name: 'L2', angle: 0, au: a * (1 + hill), stable: false },
-    { name: 'L3', angle: Math.PI, au: a * (1 + (5 * mu) / 12), stable: false },
+    { name: 'L3', angle: Math.PI, au: a * (1 - (7 * mu) / 12), stable: false },
     { name: 'L4', angle: Math.PI / 3, au: a, stable },
     { name: 'L5', angle: -Math.PI / 3, au: a, stable },
   ];
@@ -265,11 +269,15 @@ plane.
 
 ### Where it departs from the science
 
-- **Mars loses its trojans.** The heavier-neighbour rule counts the Earth,
-  within 1.9 times Mars's period and nine times its mass, so Mars gets
-  none. The real Mars keeps 15 stable ones. The rule is the app's
-  shortcut for "a heavier planet nearby disturbs them"; it matches Saturn
-  and Uranus, not Mars.
+- **A rule, not a stability test.** "A heavier giant within a period
+  ratio of 3" is the app's shortcut for "the other planets disturb them".
+  It matches the Solar System: Saturn and Uranus lose their swarms, Mars,
+  Jupiter and Neptune keep theirs. It follows no orbit, so it cannot tell
+  a swarm that lasts from one that slowly leaks away.
+- **Every rocky planet gets a few.** Each rocky planet draws 0 to 100
+  trojans, whether its points hold them or not. Mars's 16 fit, but the
+  Earth's real ones only pass through (Hui et al. 2021), and the app
+  gives Venus and Mercury as many.
 - **The counts are drawn, not grown.** No capture is modelled. The ranges
   put Jupiter's 2.6 × 10⁵ inside the gas giants' range, but a giant's
   count does not depend on its mass or on how much material lay beyond.
@@ -284,10 +292,10 @@ plane.
   wide, is drawn about 14 times too wide.
 - **L1, L2 and L3 approximately.** The formulas are the first terms of a
   series in $\mu$: for Jupiter, L1 and L2 are off by 2 % of their
-  distance to the planet. L3 is placed at $a\,(1 + 5\mu/12)$, which is
-  its distance from the system's centre of mass; from the star it is
-  about $a\,(1 - 7\mu/12)$ (our own expansion, checked numerically).
-  The difference, 0.005 AU for Jupiter, does not show. When L1 and L2
+  distance to the planet. L3 lies at $a\,(1 + 5\mu/12)$ from the
+  system's centre of mass, which sits $\mu a$ from the star towards the
+  planet; the app places it from the star, at $a\,(1 - 7\mu/12)$ (our
+  own expansion, checked numerically). When L1 and L2
   fall inside the planet's marker, they are drawn just outside it, not to
   scale.
 - **No co-orbital moons.** Moons have no trojans in the app: no Telesto,

@@ -219,7 +219,12 @@ The model lives in [`star.rs`](../../crates/mapgen/src/star.rs):
    sequence of Pecaut & Mamajek (2013), as Mamajek's table of 2022.04.16
    gives it, from O3V to M9.5V: temperature, luminosity, radius and mass.
    Between two rows, `values` interpolates each value in log.
-3. **The lifetime** is `10 Gyr × M / L`, the formula above.
+3. **The lifetime** comes from the star's mass, read in `LIFETIMES`:
+   Table 22.1 of Fraknoi et al. (2022), from O5 to M0, and the lightest
+   star's 11 trillion years (Adams & Laughlin 1997). Between two rows,
+   `lifetime_gyr` draws a power law, a straight line in log–log. It goes
+   by mass, not by type: the table's M0 weighs 0.4 Sun masses, the app's
+   M0V 0.57.
 4. **The colour** is a black body at the star's temperature, weighted by
    the CIE 1931 colour matching functions (the analytic fit of Wyman et
    al. 2013), turned into linear sRGB, divided by the Sun's and scaled so
@@ -239,9 +244,31 @@ const SEQUENCE: &[Row] = &[
     // ...
 ];
 
-/// Main-sequence lifetime, Gyr: `10 Gyr × M / L`.
-pub fn lifetime_gyr(mass: f32, luminosity: f32) -> f32 {
-    10.0 * mass / luminosity
+/// Main-sequence lifetimes, (mass M☉, Gyr): Table 22.1 of Fraknoi et al.
+/// (2022, OpenStax *Astronomy 2e*), O5 to M0, and the lightest star, which
+/// stirs all its hydrogen into its core (Adams & Laughlin 1997).
+const LIFETIMES: [(f32, f32); 8] = [
+    (0.08, 11_000.0),
+    (0.4, 200.0),
+    (0.8, 14.0),
+    (1.1, 9.0),
+    (1.7, 2.7),
+    (3.3, 0.5),
+    (16.0, 0.01),
+    (40.0, 0.001),
+];
+
+/// Main-sequence lifetime of a star of `mass` (M☉), Gyr: interpolated in
+/// [`LIFETIMES`], power law to power law, by mass.
+pub fn lifetime_gyr(mass: f32) -> f32 {
+    let m = mass.clamp(LIFETIMES[0].0, LIFETIMES[LIFETIMES.len() - 1].0);
+    let k = LIFETIMES
+        .windows(2)
+        .position(|w| m <= w[1].0)
+        .unwrap_or(LIFETIMES.len() - 2);
+    let ((m0, t0), (m1, t1)) = (LIFETIMES[k], LIFETIMES[k + 1]);
+    let at = (m / m0).ln() / (m1 / m0).ln();
+    (t0.ln() + at * (t1 / t0).ln()).exp()
 }
 
 /// The colour of a star's light, linear RGB, white-balanced on the Sun.
@@ -258,13 +285,13 @@ What the model gives for a few types:
 
 | Type | Teff (K) | L (L☉) | R (R☉) | M (M☉) | Lifetime | Light (RGB) |
 | --- | --- | --- | --- | --- | --- | --- |
-| B0V | 31,400 | 44,700 | 7.16 | 17.7 | 4 Myr | 0.30, 0.46, 1 |
-| A0V | 9,700 | 38 | 2.19 | 2.18 | 0.57 Gyr | 0.52, 0.66, 1 |
-| F5V | 6,550 | 3.6 | 1.47 | 1.33 | 3.7 Gyr | 0.82, 0.88, 1 |
-| G2V | 5,770 | 1.02 | 1.01 | 1.00 | 9.8 Gyr | 1, 1, 1 |
-| K5V | 4,440 | 0.17 | 0.70 | 0.70 | 40 Gyr | 1, 0.82, 0.59 |
-| M0V | 3,850 | 0.069 | 0.59 | 0.57 | 82 Gyr | 1, 0.72, 0.42 |
-| M5V | 3,060 | 0.0030 | 0.20 | 0.162 | 540 Gyr | 1, 0.56, 0.20 |
+| B0V | 31,400 | 44,700 | 7.16 | 17.7 | 8 Myr | 0.30, 0.46, 1 |
+| A0V | 9,700 | 38 | 2.19 | 2.18 | 1.4 Gyr | 0.52, 0.66, 1 |
+| F5V | 6,550 | 3.6 | 1.47 | 1.33 | 5.3 Gyr | 0.82, 0.88, 1 |
+| G2V | 5,770 | 1.02 | 1.01 | 1.00 | 10.3 Gyr | 1, 1, 1 |
+| K5V | 4,440 | 0.17 | 0.70 | 0.70 | 23 Gyr | 1, 0.82, 0.59 |
+| M0V | 3,850 | 0.069 | 0.59 | 0.57 | 51 Gyr | 1, 0.72, 0.42 |
+| M5V | 3,060 | 0.0030 | 0.20 | 0.162 | 1,900 Gyr | 1, 0.56, 0.20 |
 
 Light colours: linear RGB, the Sun white, as `light_colour` returns them.
 
@@ -281,13 +308,15 @@ the luminosity, within bounds
   type. There are no giants, white dwarfs or binaries, and a star does not
   age: it keeps the same luminosity forever, while a real star brightens
   slowly as it burns its hydrogen.
-- **Red dwarfs die too young.** `10 Gyr × M / L` assumes every star burns
-  the same share of its hydrogen as the Sun. The app gives an M0 dwarf
-  82 billion years, where Fraknoi et al. (2022) give 200 billion, and an
-  M5 dwarf 540 billion years, where a fully mixed star would last
-  trillions (Adams & Laughlin 1997). It never shows: any of these is far
-  longer than the age of the Universe. For hot stars it errs the other
-  way: B0V gets 4 million years, against 10 million in the same table.
+- **Lifetimes by mass, between a few rows.** The app reads the lifetime
+  from the star's mass in Table 22.1 of Fraknoi et al. (2022), whose types
+  are heavier than Pecaut & Mamajek's: its A0 weighs 3.3 Sun masses, the
+  app's A0V 2.18. By mass, the app's A0V lives 1.4 billion years, not the
+  table's 500 million for an A0. Between the rows, and between the M0 of
+  0.4 Sun masses and the lightest star, the power law is the app's choice:
+  it gives an M5 dwarf 1.9 trillion years, a figure no source here gives.
+  For red dwarfs it never shows: any of these is far longer than the age
+  of the Universe.
 - **The colour is a black body's.** Real M dwarfs are "strongly
   non-blackbody emitters" (Kiang et al. 2007): molecules carve wide bands
   out of their light. The app's red dwarfs have a smooth spectrum, without

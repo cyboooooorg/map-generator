@@ -258,7 +258,12 @@ The zone lives in [`star.rs`](../../crates/mapgen/src/star.rs):
    $S = S_\text{in}\,(S_\text{out}/S_\text{in})^h$, so it carries on
    smoothly beyond them. The same position gives the same climate round
    any star.
-4. **The equilibrium temperature** is Earth's, 255 K, times $S^{1/4}$.
+4. **The equilibrium temperature** is Earth's, 255 K, times $S^{1/4}$,
+   with $S$ the light at the orbit's semi-major axis. On an eccentric
+   orbit it is the mean over the year, a little lower (see [What does an
+   eccentric orbit change?](eccentric-orbits.md)). The zone position,
+   like the climate, uses the mean light over the year, a little more
+   than at the semi-major axis.
 
 Trimmed, from `crates/mapgen/src/star.rs`:
 

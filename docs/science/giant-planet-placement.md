@@ -272,16 +272,19 @@ drawn values do not change:
    $10^{0.7 \pm 0.3}$ times it. A hot Jupiter gets a period of 1 to 10
    days, log-uniform, and a circular orbit. Every orbit stays within 0.02
    and 60 AU.
-5. **Spacing.** A giant closer than $2\sqrt{3}$ mutual Hill radii to the
-   world or to another giant, apoapsis to periapsis, is drawn again up to
-   six times, then dropped. At most four giants stay.
+5. **Spacing.** A giant too close to the world or to another giant,
+   apoapsis to periapsis, is drawn again up to six times, then dropped.
+   Close means fewer mutual Hill radii than `hill_spacing` asks of the
+   pair: 10 for two Earth masses, fewer for heavier pairs, about 6.6 for
+   an Earth and a Jupiter, 6.4 for a Jupiter and a Saturn (see [How close
+   can two planets orbit?](planet-spacing.md)). At most four giants stay.
 
 The draw, trimmed (from `crates/mapgen/src/giants.rs`):
 
 ```rust
 const GAS_GIANTS: f64 = 0.25;
 const ICE_GIANTS: f64 = 0.3;
-const HOT_JUPITERS: f64 = 0.01;
+pub const HOT_JUPITERS: f64 = 0.01;
 // Distances, as `log10` of a multiple of the ice line: mean and spread.
 const GAS_ORBIT: (f64, f64) = (0.3, 0.4);
 const ICE_ORBIT: (f64, f64) = (0.7, 0.3);
@@ -297,10 +300,47 @@ let orbit =
 ```
 
 Each giant then gets its equilibrium temperature from the light it gets
-(255 K × $S^{1/4}$, Earth's albedo). It is a hot giant above 1,000 K, and
-its radius is inflated (`giant_radius`): by a factor that rises smoothly
-from 1 at 1,000 K to 1.7 at 2,200 K for a Jupiter mass, more for lighter
-giants, at most 1.9. Giants under 30 Earth masses are not inflated.
+at its semi-major axis (255 K × $S^{1/4}$, Earth's albedo), averaged over
+its year as for the world (see [What does an eccentric orbit
+change?](eccentric-orbits.md)). It is a hot giant above 1,000 K. Its
+radius is inflated (`giant_radius`) by the heat its interior gets
+(`inflation_heat`): the flux times the share of it turned into heat, the
+Gaussian that Thorngren & Fortney (2018, eq. 34) fitted, relative to its
+peak. That heat is greatest near 1,700 K, 0.8 of it at 1,500 K, half at
+2,200 K, 4 % at 1,000 K. A Jupiter mass grows by 0.7 times the heat:
+1.7 times its cold radius at its peak, 1.37 times at 2,200 K. Lighter
+giants grow more, at most 1.9 times. Giants under 30 Earth masses are
+not inflated.
+
+From `crates/mapgen/src/giants.rs`, trimmed:
+
+```rust
+/// The heat a hot giant's interior gets from its star's light, relative to
+/// the most any giant gets: the flux times the share of it turned into
+/// heat, the Gaussian in `log F` of Thorngren & Fortney (2018).
+fn inflation_heat(equilibrium_k: f32) -> f32 {
+    const PEAK_LOG_F: f32 = 0.14;
+    const SPREAD: f32 = 0.37;
+    // Earth's flux, Gerg s⁻¹ cm⁻².
+    const EARTH_FLUX: f32 = 1.361e-3;
+    let flux = (equilibrium_k / equilibrium_k_of_earth()).powi(4)
+        * EARTH_FLUX;
+    // The log of the heat: the Gaussian share times the flux.
+    let ln_power = |x: f32| {
+        -(x - PEAK_LOG_F).powi(2) / (2.0 * SPREAD * SPREAD)
+            + x * std::f32::consts::LN_10
+    };
+    let peak = PEAK_LOG_F + SPREAD * SPREAD * std::f32::consts::LN_10;
+    (ln_power(flux.max(1e-12).log10()) - ln_power(peak)).exp()
+}
+
+// In `giant_radius`:
+let heat = inflation_heat(equilibrium_k);
+let inflation = (1.0
+    + 0.7 * heat * (JUPITER_EARTH_MASSES / m.max(30.0)).powf(0.25))
+.min(1.9);
+cold * if m > 30.0 { inflation } else { 1.0 }
+```
 
 A whole system ([`system.rs`](../../crates/mapgen/src/system.rs)) places
 each planet type in a band of distances (`band`), from the star out:
@@ -311,10 +351,13 @@ each planet type in a band of distances (`band`), from the star out:
 | Gas giant | half the ice line to 60 AU | the ice line to 4 times it |
 | Ice giant | the ice line to 60 AU | 2.5 to 10 times the ice line |
 
-Planets keep 10 mutual Hill radii apart (Chambers et al. 1996), and a hot
-Jupiter keeps the others beyond four times its period. When the planets are
-left to the draw (`drawn_types`), giants come with the same means and
-log-normal distances as round a world.
+Its planets keep the same spacing, `hill_spacing` mutual Hill radii, and
+a hot Jupiter keeps the others beyond four times its period. When the
+planets are left to the draw (`drawn_types`), giants come with the same
+means and log-normal distances as round a world. A hot Jupiter is drawn
+last (`drawn_hot_jupiter`), so the other planets' draws do not change:
+the same odds of 1 %, times the same metallicity and star mass factors,
+at most 20 %, on a period of 1 to 10 days within 0.1 AU.
 
 ### Where it departs from the science
 
@@ -336,17 +379,29 @@ log-normal distances as round a world.
 - **Today's luminosity sets the ice line.** The app uses the star's present
   luminosity in $2.7\sqrt{L}$, the simplification Hayashi (1981) made for
   the young Sun. It ignores how the disk changes as it ages.
-- **Inflation keeps growing past its peak.** Thorngren & Fortney (2018)
-  find the heating efficiency peaks near 1,500 K and falls beyond. The
-  app's inflation keeps rising up to 2,200 K, then stays at its cap. Its
-  stronger inflation for lighter giants is a choice, not from the paper.
+- **Inflation from the heat, by a rule.** The heat follows Thorngren &
+  Fortney (2018); how much the radius grows with it is the app's choice,
+  a straight line in the heat, not their evolution models. Its stronger
+  inflation for lighter giants is a choice too, not from the paper.
+- **Two temperature scales.** Thorngren & Fortney (2018) count the
+  equilibrium temperature of a black body with no albedo. The app counts
+  it with Earth's albedo, which reads the same flux 8.5 % cooler. The
+  heat's peak, near 1,700 K in the app, is about 1,860 K on their scale.
+  The heat itself is computed from the flux, so the two agree.
+- **Beyond the data.** Thorngren & Fortney (2018) plot their fits up to
+  about 2,500 K on their scale, where their abstract puts the efficiency
+  near 0.2 %. Beyond, the app carries the Gaussian on, and the inflation
+  falls towards nothing: a Jupiter mass is 1.15 times its cold radius at
+  the app's 2,500 K, 1.02 times at 3,000 K. Whether the hottest giants
+  stay inflated is left to that extrapolation.
 - **Lonely, but not always.** Steffen et al. (2012) found no sign of close
-  neighbours to hot Jupiters. The app only lowers the odds (by five) of a
-  hot Jupiter when the world orbits within 0.5 AU; it does not forbid it.
-- **No hot Jupiters in drawn systems.** A system drawn without a count of
-  each type (`drawn_types`) draws gas and ice giants but never a hot
-  Jupiter; one only comes when asked for. Round a single world, about 1 %
-  of Sun-like stars get one.
+  neighbours to hot Jupiters. Round a world, the app only lowers the odds
+  (by five) of a hot Jupiter when the world orbits within 0.5 AU; it does
+  not forbid it. In a drawn system the odds ignore the other planets, and
+  the spacing then pushes them beyond four times the hot Jupiter's period.
+- **Two mass laws for hot Jupiters.** Round a world, a hot Jupiter takes
+  the gas giants' masses, 0.1 to 13 Jupiter masses. In a system, it takes
+  the type's own, log-uniform from 0.3 to 3 Jupiter masses.
 
 ## Sources
 
@@ -407,13 +462,15 @@ log-normal distances as round a world.
     hot-Jupiter radius anomalies: evidence for Ohmic dissipation?", *The
     Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13),
-    preprint [arXiv:1709.04539](https://arxiv.org/abs/1709.04539).
+    preprint [arXiv:1709.04539](https://arxiv.org/abs/1709.04539). The
+    heating efficiency, the Gaussian of eq. 34.
 14. Méndez, A. & Rivera-Valentín, E. G. 2017, "The equilibrium temperature
     of planets in elliptical orbits", *The Astrophysical Journal Letters*
     837, L1,
     [doi:10.3847/2041-8213/aa5f13](https://doi.org/10.3847/2041-8213/aa5f13),
     preprint [arXiv:1702.07314](https://arxiv.org/abs/1702.07314). The
-    equilibrium temperature, eq. 4.
+    equilibrium temperature, eq. 4, and its mean over an eccentric orbit,
+    eq. 16.
 15. Dawson, R. I. & Johnson, J. A. 2018, "Origins of hot Jupiters",
     *Annual Review of Astronomy and Astrophysics* 56, 175–221,
     [doi:10.1146/annurev-astro-081817-051853](https://doi.org/10.1146/annurev-astro-081817-051853),
