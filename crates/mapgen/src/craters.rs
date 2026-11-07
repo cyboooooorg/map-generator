@@ -540,9 +540,18 @@ impl CraterField {
         // Giants stir the impactors: their mass sets the rate (see
         // `giants::impact_factor`; 1 without giants modelled). A body of a
         // planetary system has its rate from its system's giants and belts.
-        let impact = match p.impact_factor {
-            Some(factor) => f64::from(factor),
-            None => crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor)),
+        // A preset with its own flux against the Moon's (a Solar System
+        // look-alike, `[geology] impact_ratio`) already has its giants in
+        // it: the drawn ones would count them twice.
+        let impact = if p.planet.geology.impact_ratio != 1.0 {
+            1.0
+        } else {
+            match p.impact_factor {
+                Some(factor) => f64::from(factor),
+                None => {
+                    crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor))
+                }
+            }
         };
         // The body's own flux against the Moon's, where a source gives it
         // (`[geology] impact_ratio`, 1 elsewhere).
