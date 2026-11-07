@@ -41,21 +41,39 @@ highland: number,
  */
 snow_line: number, 
 /**
- * Below this temperature, highland is snow whatever its elevation.
+ * Below this summer temperature, highland is snow whatever its
+ * elevation: snow that lasts the year.
  */
 highland_snow_temperature: number, 
 /**
- * Below this temperature, land and shore are ice cap.
+ * Below this summer temperature, land and shore are ice cap, and
+ * rivers freeze: ice needs a summer below freezing (Köppen's frost
+ * climate EF, warmest month below 0 °C; Kottek et al. 2006,
+ * doi:10.1127/0941-2948/2006/0130).
  */
 polar: number, 
 /**
- * Below this temperature, land is boreal (tundra, taiga).
+ * Below this annual mean temperature, land is boreal (tundra, taiga).
  */
 boreal: number, 
 /**
- * Below this temperature, land is temperate; above, tropical.
+ * Below this summer temperature, boreal land is tundra whatever its
+ * moisture: too cold a summer for trees (Köppen's tundra climate ET,
+ * warmest month below 10 °C; Kottek et al. 2006).
+ */
+tundra_summer: number, 
+/**
+ * Below this annual mean temperature, land is temperate; above,
+ * tropical.
  */
 temperate: number, 
+/**
+ * At or below this winter temperature, land is never tropical: it is
+ * temperate at most (Köppen's snow climates D, coldest month at or
+ * below −3 °C; Kottek et al. 2006). A high tilt gives its poles a
+ * warm annual mean but freezing winters.
+ */
+tropical_winter: number, 
 /**
  * Shore wetter than this is wetland, otherwise beach.
  */

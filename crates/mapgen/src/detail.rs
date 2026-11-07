@@ -551,6 +551,7 @@ impl DetailWorld {
         let (elevation, surface) = self.tile_elevation(tile, pixel_km, &channel);
 
         let river_colour = linear_of(surface_color(planet.remap(Biome::River)));
+        let lapse = crate::climate::lapse_rate(&w.params);
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
 
@@ -577,8 +578,8 @@ impl DetailWorld {
                 let sample = |layer: &dyn Samples| bilinear(layer, w.width, w.height, cx, cy);
                 let base_above = sample(&w.elevation) - w.params.sea_level - planet.rules.waterline;
                 // Temperature follows the detailed elevation (lapse rate).
-                let t =
-                    sample(&w.temperature) + temperature(0.0, above) - temperature(0.0, base_above);
+                let t = sample(&w.temperature) + temperature(0.0, above, lapse)
+                    - temperature(0.0, base_above, lapse);
                 // Lakes: smooth shores from the base lake mask.
                 let lake = sample(&Lakes(&self.flags)) > 0.5 && above >= 0.0;
                 let input = BiomeInput {

@@ -64,11 +64,12 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
     );
     let rules = &p.planet.rules;
     let above = |e: f32| (e - p.sea_level).clamp(-1.0, 1.0) - rules.waterline;
+    let lapse = crate::climate::lapse_rate(p);
     let temperature: Vec<f32> = (0..elevation.len())
         .into_par_iter()
         .map(|i| {
-            world.temperature.get(i) + temperature(0.0, above(elevation[i]))
-                - temperature(0.0, above(world.elevation.get(i)))
+            world.temperature.get(i) + temperature(0.0, above(elevation[i]), lapse)
+                - temperature(0.0, above(world.elevation.get(i)), lapse)
         })
         .collect();
     let biomes = (0..elevation.len())

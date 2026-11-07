@@ -1,11 +1,11 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
+use crate::climate::{Belts, LockedClimate, Moisture, Seasons};
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
 };
-use crate::climate::{LockedClimate, Seasons};
 use crate::clouds::CloudInput;
 use crate::craters::{CraterField, Era, RAY_MIN_PIXELS, base_min_diameter_km, darken_maria};
 use crate::delta;
@@ -831,6 +831,19 @@ fn star_climate(params: &WorldParams) -> StarClimate {
     }
 }
 
+/// The wind belts of world `params` (see [`Belts`]), from its day: the
+/// rotation its moons draw, its year if locked to its star, Earth's 24 h
+/// for a world without moons.
+pub fn belts(params: &WorldParams) -> Belts {
+    let star = StarInfo::new(params.star, params.orbit_au, params.eccentricity);
+    let day_hours = if star.tidally_locked {
+        f64::from(star.year_days) * 24.0
+    } else {
+        crate::moons::MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours))
+    };
+    Belts::new(day_hours, f64::from(params.circumference_km))
+}
+
 /// The seasonal cycle of world `params` (see [`Seasons`]): none on a
 /// planet locked to its star, whose sun never moves in its sky.
 pub fn seasons(params: &WorldParams) -> Seasons {
@@ -1051,6 +1064,7 @@ pub fn generate_with_progress(
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
+    let lapse = crate::climate::lapse_rate(params);
     let raw_temperature: Vec<f32> = elevation
         .par_iter()
         .enumerate()
@@ -1064,7 +1078,7 @@ pub fn generate_with_progress(
                 )),
                 None => row_temperature[i / width as usize],
             };
-            temperature(sea_level, above_water)
+            temperature(sea_level, above_water, lapse)
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
         .collect();
@@ -1093,8 +1107,17 @@ pub fn generate_with_progress(
     progress(Stage::Moisture);
     // ── Pass 5: moisture ──────────────────────────────────────────────────────
     // Winds carry ocean evaporation inland; it rains out with distance and on
-    // windward slopes, leaving rain shadows behind mountains.
-    let (coast_distance_km, (raw_moisture, precipitation)) = rayon::join(
+    // windward slopes, leaving rain shadows behind mountains, where the air
+    // comes down warmer (foehn).
+    let belts = belts(params);
+    let (
+        coast_distance_km,
+        Moisture {
+            moisture: raw_moisture,
+            precipitation,
+            foehn,
+        },
+    ) = rayon::join(
         || grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM),
         || {
             moisture(&MoistureInput {
@@ -1102,6 +1125,7 @@ pub fn generate_with_progress(
                 height_above_water: &height_above_water,
                 temperature: &raw_temperature,
                 noise: &moisture_noise,
+                belts,
             })
         },
     );
@@ -1137,15 +1161,18 @@ pub fn generate_with_progress(
                 -1.0
             }
         });
+    // The foehn warms the lee of ranges where rain fell on the climb.
+    let foehn_share = if liquid_water { 1.0 } else { 0.0 };
     let mut temperature = raw_temperature;
     temperature
         .par_iter_mut()
         .zip(&variability_t)
-        .for_each(|(t, v)| {
-            *t = (*t + dt + regional_variability(*v, Field::Temperature))
+        .zip(&foehn)
+        .for_each(|((t, v), f)| {
+            *t = (*t + dt + regional_variability(*v, Field::Temperature) + foehn_share * f)
                 .clamp(TEMPERATURE_RANGE.0, TEMPERATURE_RANGE.1)
         });
-    drop((variability_t, variability_m));
+    drop((variability_t, variability_m, foehn));
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
@@ -1161,6 +1188,7 @@ pub fn generate_with_progress(
         },
         cover_shift: planet.atmosphere.cloud_cover,
         precipitation: &precipitation,
+        belts,
         seed: params.seed,
     };
     let (clouds, mut water) = rayon::join(
@@ -1284,7 +1312,7 @@ pub fn generate_with_progress(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::climate::EARTH_AXIAL_TILT_DEG;
     use crate::preset::Preset;

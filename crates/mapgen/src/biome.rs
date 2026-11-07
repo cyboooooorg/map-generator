@@ -380,6 +380,10 @@ pub struct BiomeRules {
     pub polar: f32,
     /// Below this annual mean temperature, land is boreal (tundra, taiga).
     pub boreal: f32,
+    /// Below this summer temperature, boreal land is tundra whatever its
+    /// moisture: too cold a summer for trees (Köppen's tundra climate ET,
+    /// warmest month below 10 °C; Kottek et al. 2006).
+    pub tundra_summer: f32,
     /// Below this annual mean temperature, land is temperate; above,
     /// tropical.
     pub temperate: f32,
@@ -434,6 +438,7 @@ impl Default for BiomeRules {
             highland_snow_temperature: 0.0,
             polar: 0.0,
             boreal: 0.0,
+            tundra_summer: 10.0,
             temperate: 12.0,
             tropical_winter: -3.0,
             wetland_moisture: 0.30,
@@ -579,7 +584,7 @@ impl BiomeRules {
         if summer < self.polar {
             Biome::IceCap
         } else if t < self.boreal {
-            if m > self.taiga_moisture {
+            if m > self.taiga_moisture && summer >= self.tundra_summer {
                 Biome::Taiga
             } else {
                 Biome::Tundra
@@ -786,8 +791,10 @@ mod tests {
             })
         };
         // Ice needs a summer below freezing: a polar coast at −12 °C with
-        // a summer at +8 °C is boreal, a steady −12 °C is ice.
-        assert_eq!(land(-12.0, 20.0), Biome::Taiga);
+        // a summer at +8 °C is tundra (too cold a summer for trees), a
+        // steady −12 °C is ice; a summer at +15 °C grows a taiga.
+        assert_eq!(land(-12.0, 20.0), Biome::Tundra);
+        assert_eq!(land(-5.0, 20.0), Biome::Taiga);
         assert_eq!(land(-12.0, 0.0), Biome::IceCap);
         assert_eq!(land(-25.0, 20.0), Biome::IceCap);
         // A warm annual mean with freezing winters (the pole of a world

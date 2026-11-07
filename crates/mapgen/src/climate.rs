@@ -17,9 +17,24 @@ pub const TEMPERATURE_RANGE: (f32, f32) = (-200.0, 600.0);
 /// converts climate terms once expressed on the former `[0, 1]` scale.
 pub const DEGREES_PER_UNIT: f32 = 45.0;
 
-/// Cooling per unit of elevation above the waterline (elevation in `[-1, 1]`),
-/// in °C.
-const LAPSE_RATE: f32 = 0.3 * DEGREES_PER_UNIT;
+/// Cooling of the air with height, °C per km: the environmental lapse rate
+/// of the standard atmosphere, whose troposphere follows
+/// `T = 15.04 − 0.00649 h` (°C, h in m; NASA Glenn Research Center, Earth
+/// atmosphere model, after the U.S. Standard Atmosphere 1976).
+pub const LAPSE_RATE_K_PER_KM: f32 = 6.5;
+/// Cooling of the land with height on world `params`, °C per unit of
+/// elevation (elevation in `[-1, 1]`, [`crate::craters::ELEVATION_KM`] km
+/// per unit): Earth's [`LAPSE_RATE_K_PER_KM`] (162.5 °C per unit) scaled
+/// with the surface gravity, as the dry adiabatic rate `g / c_p` is (NASA
+/// Glenn's Mars model cools by 2.22 °C per km, 2.9 times less than Earth's
+/// for 2.6 times less gravity). An airless body has no air to cool: its
+/// ground takes the temperature its light gives it at any height.
+pub fn lapse_rate(params: &crate::world::WorldParams) -> f32 {
+    if params.pressure_bar < crate::atmosphere::AIRLESS_BAR {
+        return 0.0;
+    }
+    LAPSE_RATE_K_PER_KM * crate::craters::ELEVATION_KM * params.gravity_modifier()
+}
 
 /// Range of insolation levels [`row_temperatures`] keeps, in units of
 /// Earth's equator-to-pole difference: from no light at all (−0.71) to
@@ -413,13 +428,18 @@ pub fn regional_variability(noise: f32, field: Field) -> f32 {
         }
 }
 
-/// Temperature of a pixel: its row temperature, cooled on land with altitude.
-/// The sea surface follows latitude only, whatever the depth underneath.
+/// Temperature of a pixel: its row temperature, cooled on land with altitude
+/// by `lapse_rate` (°C per elevation unit, see [`lapse_rate`]). The sea
+/// surface follows latitude only, whatever the depth underneath.
 ///
 /// `height_above_water` is the elevation above the waterline (negative under water).
-pub fn temperature(row_temperature: f32, height_above_water: f32) -> f32 {
-    row_temperature - height_above_water.max(0.0) * LAPSE_RATE
+pub fn temperature(row_temperature: f32, height_above_water: f32, lapse_rate: f32) -> f32 {
+    row_temperature - height_above_water.max(0.0) * lapse_rate
 }
+
+/// Earth's lapse rate per elevation unit, for the tests.
+#[cfg(test)]
+const EARTH_LAPSE: f32 = LAPSE_RATE_K_PER_KM * crate::craters::ELEVATION_KM;
 
 // ── Moisture ──────────────────────────────────────────────────────────────────
 
@@ -434,37 +454,177 @@ const MERIDIONAL_KM: f32 = 3_000.0;
 /// background humidity of a row.
 const MERIDIONAL_REACH_DEG: f64 = 20.0;
 
-/// Share of the rain over land that evaporates again (soil and plants), so
-/// continental interiors are not starved of moisture.
+/// Share of the ordinary rain over land that evaporates again (soil and
+/// plants), so continental interiors are not starved of moisture: land
+/// evapotranspiration is 65 500 km³ a year for 111 000 km³ of rain, 0.59
+/// (Oki & Kanae 2006, doi:10.1126/science.1128845). The rain wrung out by
+/// a climb does not come back: evaporation is limited by the energy the
+/// ground receives, so the heavy rain of windward slopes runs off, and the
+/// air crosses the crest drier.
 const RECYCLING: f32 = 0.6;
-/// Extra fraction of humidity rained out per unit of elevation climbed.
-const OROGRAPHIC_RAIN: f32 = 4.0;
-/// Precipitation rate (humidity per 1 000 km) that maps to neutral moisture.
+/// Precipitation index (rain per 1 000 km relative to what the air holds
+/// where it falls) that maps to neutral moisture.
 const NEUTRAL_RAIN: f32 = 0.08;
-/// Radius of the smoothing applied to precipitation, in km. Rain depends on
-/// slopes pixel by pixel; smoothing keeps biome borders from turning to speckle.
-const RAIN_SMOOTHING_KM: f32 = 100.0;
+/// Radius of the smoothing applied to precipitation, in km (at least a
+/// pixel's width rounds to one pixel). Rain depends on slopes pixel by
+/// pixel; smoothing keeps biome borders from turning to speckle, short
+/// enough to keep the wet windward side of a range 50 km wide.
+const RAIN_SMOOTHING_KM: f32 = 25.0;
 /// Weights of the precipitation, circulation-band and noise terms.
 const RAIN_WEIGHT: f32 = 0.75;
 const BAND_WEIGHT: f32 = 0.25;
 const NOISE_WEIGHT: f32 = 0.50;
 
-/// Zonal wind at `latitude` in `[-1, 1]`: positive blows east. Easterly trade
-/// winds near the equator, westerlies at mid-latitudes, polar easterlies.
-pub fn zonal_wind(latitude: f64) -> f32 {
-    -(4.0 * latitude).cos() as f32
+/// Warming of air, K, per unit of humidity it rains out (humidity being
+/// relative to saturated air at 27 °C and 1013 hPa, 21.9 g of vapour per
+/// kg): the latent heat it releases, `L/cp` = 2491 K per kg/kg.
+const LATENT_K_PER_UNIT: f32 = 54.5;
+/// Distance over which the warmth of a foehn fades by ~63 % as the air
+/// mixes and radiates, km. Calibration, no source.
+const FOEHN_KM: f32 = 200.0;
+
+/// Edge of the Hadley cells on Earth, degrees of latitude: the trade winds
+/// blow "between about 30 degrees north and 30 degrees south" (NOAA National
+/// Ocean Service), the westerlies between it and about 60° (NOAA
+/// JetStream).
+pub const EARTH_HADLEY_EDGE_DEG: f64 = 30.0;
+/// Range the Hadley edge is kept in, degrees: below it a fast rotator
+/// would grow more jets than three belts can draw, above it the cells
+/// reach the poles. Calibration, no source.
+const HADLEY_EDGE_RANGE_DEG: (f64, f64) = (15.0, 70.0);
+/// Strength of the north-south surface wind against the east-west one at
+/// the middle of each belt: the trades blow from the north-east and the
+/// westerlies from the south-west (NOAA JetStream), the meridional part
+/// being the weaker. Calibration, no source.
+const MERIDIONAL_WIND: f32 = 0.5;
+/// Weight the zonal runs keep where the wind is calm, against the
+/// meridional ones (see [`moisture`]): the meridional share is
+/// `|v| / (|u| + CALM_ZONAL + |v|)`, 0.29 at the middle of a belt and
+/// fading to 0 at its edges. Calibration, no source.
+const CALM_ZONAL: f32 = 0.25;
+
+/// The wind belts of a planet: easterly trade winds blowing towards the
+/// equator up to the edge of the Hadley cells, westerlies blowing towards
+/// the poles up to the polar front, then polar easterlies blowing away from
+/// the poles. Each belt is Earth's (edges at 30° and 60°) stretched between
+/// the planet's own edges.
+///
+/// The Hadley edge scales as `1 / (Ω a)` with the rotation rate Ω and the
+/// radius a: Held & Hou (1980, doi:10.1175/1520-0469(1980)037<0515:NASCIA>2.0.CO;2)
+/// find `φ_H = (5 g H Δ / (3 Ω² a²))^(1/2)`, and `g H = R T / μ` does not
+/// depend on gravity. Kaspi & Showman (2015, doi:10.1088/0004-637X/804/1/60)
+/// find nearly global cells on slow rotators and narrower ones on fast
+/// rotators. The polar front stays halfway between the Hadley edge and the
+/// pole. The atmosphere's mass, which narrows the cells in their models, is
+/// not taken into account (see `docs/backlog.md`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Belts {
+    /// Edge of the Hadley cells, degrees.
+    hadley_deg: f64,
 }
 
-/// Large-scale circulation bias in `[-1, 1]`: rising wet air at the equator
-/// and around 60°, sinking dry air around 30° (desert belts) and at the poles.
-pub(crate) fn circulation_band(latitude: f64) -> f32 {
-    (6.0 * latitude).cos() as f32
+impl Belts {
+    /// Earth's belts.
+    pub const EARTH: Belts = Belts {
+        hadley_deg: EARTH_HADLEY_EDGE_DEG,
+    };
+
+    /// The belts of a planet whose day lasts `day_hours` (sidereal, Earth:
+    /// 24) and whose equator is `circumference_km` round.
+    pub fn new(day_hours: f64, circumference_km: f64) -> Self {
+        let scale = day_hours / 24.0 * crate::noise::EARTH_CIRCUMFERENCE_KM as f64
+            / circumference_km.max(1.0);
+        let edge = EARTH_HADLEY_EDGE_DEG * scale;
+        Self {
+            hadley_deg: if edge.is_finite() {
+                edge.clamp(HADLEY_EDGE_RANGE_DEG.0, HADLEY_EDGE_RANGE_DEG.1)
+            } else {
+                HADLEY_EDGE_RANGE_DEG.1
+            },
+        }
+    }
+
+    /// Edge of the Hadley cells, degrees.
+    pub fn hadley_edge_deg(&self) -> f64 {
+        self.hadley_deg
+    }
+
+    /// Latitude of the polar front, degrees.
+    pub fn polar_front_deg(&self) -> f64 {
+        self.hadley_deg + (90.0 - self.hadley_deg) / 2.0
+    }
+
+    /// The latitude on Earth at the same place in its belt, degrees,
+    /// unsigned: 0 to 30 in the Hadley cell, 30 to 60 in the westerlies,
+    /// 60 to 90 in the polar cell.
+    fn earth_latitude(&self, latitude: f64) -> f64 {
+        let b = latitude.to_degrees().abs().min(90.0);
+        let (h, p) = (self.hadley_deg, self.polar_front_deg());
+        if b < h {
+            30.0 * b / h
+        } else if b < p {
+            30.0 + 30.0 * (b - h) / (p - h)
+        } else {
+            60.0 + 30.0 * (b - p) / (90.0 - p)
+        }
+    }
+
+    /// Zonal wind at `latitude` (radians) in `[-1, 1]`: positive blows
+    /// east. Easterly at the equator and the poles, westerly between the
+    /// belt edges, calm at the edges.
+    pub fn zonal_wind(&self, latitude: f64) -> f32 {
+        let b = self.earth_latitude(latitude);
+        (if b < 30.0 {
+            -(3.0 * b).to_radians().cos()
+        } else if b < 60.0 {
+            (6.0 * (b - 30.0)).to_radians().sin()
+        } else {
+            -(3.0 * (b - 60.0)).to_radians().sin()
+        }) as f32
+    }
+
+    /// Meridional wind at `latitude` (radians) in `[-1, 1]`: positive blows
+    /// towards the pole of its hemisphere. The trades and the polar
+    /// easterlies blow towards the equator, the westerlies towards the
+    /// poles; calm at the equator, the belt edges and the poles, where air
+    /// rises or sinks.
+    pub fn meridional_wind(&self, latitude: f64) -> f32 {
+        let b = self.earth_latitude(latitude);
+        let shape = if b < 30.0 {
+            -(6.0 * b).to_radians().sin()
+        } else if b < 60.0 {
+            (6.0 * (b - 30.0)).to_radians().sin()
+        } else {
+            -(6.0 * (b - 60.0)).to_radians().sin()
+        };
+        MERIDIONAL_WIND * shape as f32
+    }
+
+    /// Large-scale circulation bias in `[-1, 1]`: rising wet air at the
+    /// equator and at the polar front, sinking dry air at the Hadley edge
+    /// (desert belts) and at the poles.
+    pub fn band(&self, latitude: f64) -> f32 {
+        (6.0 * self.earth_latitude(latitude)).to_radians().cos() as f32
+    }
 }
 
-/// Humidity that warm air can hold, relative to the warmest air, from a
-/// temperature in °C: rises from polar (−18 °C) to equatorial (27 °C) air.
+/// Saturation vapour pressure over water at `temperature` (°C), hPa:
+/// `6.112 exp(17.67 T / (T + 243.5))` (Bolton 1980,
+/// doi:10.1175/1520-0493(1980)108<1046:TCOEPT>2.0.CO;2, as Roe 2005 gives
+/// it). It halves for about every 10 °C of cooling.
+pub fn saturation_vapour_hpa(temperature: f32) -> f32 {
+    6.112 * (17.67 * temperature / (temperature + 243.5)).exp()
+}
+
+/// Humidity that air can hold at `temperature` (°C), relative to saturated
+/// air at 27 °C (the warm equator), from [`saturation_vapour_hpa`]: 0.66 at
+/// 20 °C, 0.17 at 0 °C, 0.04 at −18 °C. Rising air cools at the lapse
+/// rate and its capacity falls with it, so what it can no longer hold
+/// condenses and rains out: the windward rain of a range.
 fn holding_capacity(temperature: f32) -> f32 {
-    0.2 + 0.8 * ((temperature + 18.0) / DEGREES_PER_UNIT).clamp(0.0, 1.0)
+    // Below −80 °C the formula's pole at −243.5 °C is far, but the air
+    // holds next to nothing: keep the capacity positive.
+    saturation_vapour_hpa(temperature.max(-80.0)) / saturation_vapour_hpa(27.0)
 }
 
 /// Inputs of the moisture model, all row-major on the same grid.
@@ -476,55 +636,98 @@ pub struct MoistureInput<'a> {
     pub temperature: &'a [f32],
     /// Moisture noise in `[-1, 1]`, for local variation.
     pub noise: &'a [f32],
+    /// The planet's wind belts.
+    pub belts: Belts,
 }
 
-/// Rain rate along one row when the wind blows in `direction` (+1 east, −1 west).
+/// What the moisture model gives each pixel.
+pub struct Moisture {
+    /// Moisture in `[-1, 1]`.
+    pub moisture: Vec<f32>,
+    /// The precipitation term alone, in `[-1, 1]` (for the clouds and the
+    /// diagnostic maps).
+    pub precipitation: Vec<f32>,
+    /// Warming of the air that rained out on a climb and comes down dry
+    /// (foehn), °C, on land.
+    pub foehn: Vec<f32>,
+}
+
+/// Rain rate (humidity per 1 000 km) and foehn warming (°C) of each pixel
+/// of `path`, the pixel indices the wind crosses in order, `step_km`
+/// apart. The path is walked `laps` times (twice round a row, so the
+/// humidity entering the first pixel is the steady state left by the
+/// previous lap); only the last lap is kept. The air sets out with the
+/// background humidity of the first pixel, as the surface air of the
+/// subsiding branch of a cell has taken up.
 ///
-/// Walks the row twice around the planet so the humidity entering the first
-/// pixel is the steady state left by the previous lap.
-///
-/// `background` is the humidity, relative to capacity, that north-south
-/// circulation brings to this latitude: land air drifts towards it, so rows
-/// with no ocean of their own still get some rain.
-fn rain_along_row(input: &MoistureInput, y: u32, direction: i64, background: f32) -> Vec<f32> {
-    let w = input.grid.width as i64;
-    let row = (y * input.grid.width) as usize;
-    let step_km = input.grid.dx_km(y);
+/// `background(k)` is the humidity, relative to capacity, that north-south
+/// circulation brings to the `k`-th pixel: land air drifts towards it, so
+/// rows with no ocean of their own still get some rain.
+fn rain_along(
+    input: &MoistureInput,
+    path: &[usize],
+    laps: usize,
+    step_km: f32,
+    background: impl Fn(usize) -> f32,
+) -> (Vec<f32>, Vec<f32>) {
+    let n = path.len();
     let evaporation = 1.0 - (-step_km / EVAPORATION_KM).exp();
     let supply = 1.0 - (-step_km / MERIDIONAL_KM).exp();
     let drizzle = 1.0 - (-step_km / RAIN_KM).exp();
-    let mut rain = vec![0.0f32; w as usize];
-    let mut humidity = 0.0f32;
-
-    for k in 0..2 * w {
-        let x = (k * direction).rem_euclid(w) as usize;
-        let next = (x as i64 + direction).rem_euclid(w) as usize;
-        let here = input.height_above_water[row + x];
-        let capacity = holding_capacity(input.temperature[row + x]);
-        let fallen = if here < 0.0 {
-            // Over the sea: evaporation tops the air up towards its capacity,
-            // and some of it rains back.
-            humidity += (capacity - humidity).max(0.0) * evaporation;
-            humidity * drizzle
-        } else {
-            // Over land: steady drizzle, heavy rain where the wind climbs, and
-            // forced condensation where the air cools below what it holds.
-            humidity += (background * capacity - humidity).max(0.0) * supply;
-            let climb = (input.height_above_water[row + next] - here).max(0.0);
-            let fraction = (drizzle + OROGRAPHIC_RAIN * climb).min(1.0);
-            let excess = (humidity - capacity).max(0.0);
-            (humidity - excess) * fraction + excess
-        };
-        humidity -= if here < 0.0 {
-            fallen
-        } else {
-            fallen * (1.0 - RECYCLING)
-        };
-        if k >= w {
-            rain[x] = fallen / step_km * 1_000.0;
+    let fade = (-step_km / FOEHN_KM).exp();
+    let (mut rain, mut warm) = (vec![0.0f32; n], vec![0.0f32; n]);
+    let mut humidity = match path.first() {
+        Some(&i) => background(0) * holding_capacity(input.temperature[i]),
+        None => 0.0,
+    };
+    let mut foehn = 0.0f32;
+    for lap in 0..laps {
+        for k in 0..n {
+            let i = path[k];
+            let here = input.height_above_water[i];
+            // The air climbed to get here.
+            let behind = if k > 0 || laps > 1 {
+                input.height_above_water[path[(k + n - 1) % n]]
+            } else {
+                here
+            };
+            let climbing = here >= 0.0 && here > behind;
+            foehn *= fade;
+            // Air that rained out on a climb comes down warmer than it
+            // went up: it climbed at the moist rate, it sinks at the dry
+            // one (9.8 °C per km, NWS glossary). Its warmth shows once it
+            // stops climbing.
+            let lift = if climbing { 0.0 } else { foehn };
+            let capacity = holding_capacity(input.temperature[i] + lift);
+            let fallen = if here < 0.0 {
+                // Over the sea: evaporation tops the air up towards its
+                // capacity, and some of it rains back.
+                humidity += (capacity - humidity).max(0.0) * evaporation;
+                let fallen = humidity * drizzle;
+                humidity -= fallen;
+                fallen
+            } else {
+                // Over land: a steady drizzle, of which RECYCLING
+                // evaporates again, and the condensation of whatever the
+                // air can no longer hold where it has cooled (climbing,
+                // or moving towards colder latitudes), which runs off.
+                // Wrung out by a climb, its latent heat warms the air.
+                humidity += (background(k) * capacity - humidity).max(0.0) * supply;
+                let excess = (humidity - capacity).max(0.0);
+                let ordinary = (humidity - excess) * drizzle;
+                humidity -= ordinary * (1.0 - RECYCLING) + excess;
+                if climbing {
+                    foehn += LATENT_K_PER_UNIT * excess;
+                }
+                ordinary + excess
+            };
+            if lap + 1 == laps {
+                rain[k] = fallen / step_km * 1_000.0;
+                warm[k] = if here >= 0.0 { lift } else { 0.0 };
+            }
         }
     }
-    rain
+    (rain, warm)
 }
 
 /// Background humidity of each row: the mean of the area-weighted ocean
@@ -556,41 +759,155 @@ fn background_humidity(input: &MoistureInput) -> Vec<f32> {
         .collect()
 }
 
-/// Moisture of every pixel in `[-1, 1]`, and the precipitation term alone
-/// (for the diagnostic maps).
-pub fn moisture(input: &MoistureInput) -> (Vec<f32>, Vec<f32>) {
-    let grid = input.grid;
-    let w = grid.width as usize;
-    let background = background_humidity(input);
+/// The runs of rows the meridional wind crosses, each in the direction it
+/// blows: from where air sinks and spreads (the poles, the Hadley edges)
+/// to where it meets and rises (the equator, the polar fronts). Row 0 is
+/// the north pole.
+fn meridional_runs(grid: &Grid, belts: &Belts) -> Vec<Vec<u32>> {
+    let h = grid.height;
+    // Rows by hemisphere, from the equator outwards.
+    let north: Vec<u32> = (0..h / 2).rev().collect();
+    let south: Vec<u32> = (h.div_ceil(2)..h).collect();
+    let mut runs = Vec::new();
+    for rows in [north, south] {
+        let mut run: Vec<u32> = Vec::new();
+        let mut poleward: Option<bool> = None;
+        for &y in &rows {
+            let v = belts.meridional_wind(grid.latitude(y));
+            let dir = v > 0.0;
+            if poleward.is_some_and(|p| p != dir) && !run.is_empty() {
+                runs.push(std::mem::take(&mut run));
+            }
+            poleward = Some(dir);
+            run.push(y);
+        }
+        if !run.is_empty() {
+            runs.push(run);
+        }
+    }
+    // Each run in the wind's direction: outwards when poleward, else
+    // towards the equator.
+    runs.into_iter()
+        .map(|mut run| {
+            let v = belts.meridional_wind(grid.latitude(run[run.len() / 2]));
+            if v <= 0.0 {
+                run.reverse();
+            }
+            run
+        })
+        .collect()
+}
 
-    // Rain rate of every pixel, blending both wind directions by how much the
-    // wind blows each way, so the field stays continuous across wind belts.
-    // Scoped so the unsmoothed rate is freed once smoothed.
-    let mut rain = {
-        let rate: Vec<f32> = (0..grid.height)
-            .into_par_iter()
-            .flat_map_iter(|y| {
-                let east_share = (1.0 + zonal_wind(grid.latitude(y))) / 2.0;
-                let b = background[y as usize];
-                let east = rain_along_row(input, y, 1, b);
-                let west = rain_along_row(input, y, -1, b);
-                (0..w).map(move |x| east_share * east[x] + (1.0 - east_share) * west[x])
+/// Moisture of every pixel in `[-1, 1]`, the precipitation term alone, and
+/// the foehn warming of the lee of ranges.
+///
+/// The wind carries the humidity along each row (blending the east and
+/// west runs by the zonal wind, so the field stays continuous across the
+/// belts) and along each column (the meridional wind, from where air
+/// sinks to where it rises), the two weighed by the strength of each
+/// component.
+pub fn moisture(input: &MoistureInput) -> Moisture {
+    let grid = input.grid;
+    let (w, h) = (grid.width as usize, grid.height as usize);
+    let background = background_humidity(input);
+    let belts = input.belts;
+
+    // Zonal runs: rain and warmth of every pixel.
+    let zonal: Vec<(f32, f32)> = (0..grid.height)
+        .into_par_iter()
+        .flat_map_iter(|y| {
+            let u = belts.zonal_wind(grid.latitude(y));
+            let east_share = (1.0 + u) / 2.0;
+            let b = background[y as usize];
+            let row = y as usize * w;
+            let path_east: Vec<usize> = (0..w).map(|x| row + x).collect();
+            let path_west: Vec<usize> = (0..w).rev().map(|x| row + x).collect();
+            let step = grid.dx_km(y);
+            let (east, east_warm) = rain_along(input, &path_east, 2, step, |_| b);
+            let (west, west_warm) = rain_along(input, &path_west, 2, step, |_| b);
+            (0..w).map(move |x| {
+                let wx = w - 1 - x;
+                (
+                    east_share * east[x] + (1.0 - east_share) * west[wx],
+                    east_share * east_warm[x] + (1.0 - east_share) * west_warm[wx],
+                )
             })
-            .collect();
-        smooth(&grid, &rate, RAIN_SMOOTHING_KM)
-    };
-    // The smoothed rate turned into the precipitation term, in place.
+        })
+        .collect();
+    // Meridional runs, column by column.
+    let runs = meridional_runs(&grid, &belts);
+    let columns: Vec<Vec<(usize, f32, f32)>> = (0..w)
+        .into_par_iter()
+        .map(|x| {
+            let mut out = Vec::with_capacity(h);
+            for run in &runs {
+                let path: Vec<usize> = run.iter().map(|&y| y as usize * w + x).collect();
+                let (rain, warm) = rain_along(input, &path, 1, grid.dy_km(), |k| {
+                    background[run[k] as usize]
+                });
+                out.extend(
+                    path.iter()
+                        .zip(rain)
+                        .zip(warm)
+                        .map(|((&i, r), t)| (i, r, t)),
+                );
+            }
+            out
+        })
+        .collect();
+    let mut meridional = vec![(0.0f32, 0.0f32); w * h];
+    for (i, r, t) in columns.into_iter().flatten() {
+        meridional[i] = (r, t);
+    }
+    // Weighed by the strength of each wind component; the zonal one alone
+    // at the belt edges, where both are calm and where the meridional runs
+    // of two cells meet (a floor of CALM_ZONAL on the zonal weight keeps
+    // the field continuous there).
+    let (rate, warmth): (Vec<f32>, Vec<f32>) = zonal
+        .into_par_iter()
+        .zip(meridional)
+        .enumerate()
+        .map(|(i, ((zr, zt), (mr, mt)))| {
+            let latitude = grid.latitude((i / w) as u32);
+            let wu = belts.zonal_wind(latitude).abs() + CALM_ZONAL;
+            let wv = belts.meridional_wind(latitude).abs();
+            let share = wv / (wu + wv);
+            (zr + (mr - zr) * share, zt + (mt - zt) * share)
+        })
+        .unzip();
+    // Scoped so the unsmoothed fields are freed once smoothed.
+    let mut rain = smooth(&grid, &rate, RAIN_SMOOTHING_KM);
+    drop(rate);
+    let foehn = smooth(&grid, &warmth, RAIN_SMOOTHING_KM);
+    drop(warmth);
+    // The smoothed rate, relative to what the air holds where it falls (a
+    // ratio of rain to the evaporation the warmth allows, which grows with
+    // the saturation vapour pressure), turned into the precipitation term,
+    // in place.
     rain.par_iter_mut()
-        .for_each(|r| *r = 1.0 - 2.0 * (-*r / NEUTRAL_RAIN).exp2());
+        .zip(input.temperature)
+        .for_each(|(r, &t)| {
+            let index = *r / holding_capacity(t);
+            *r = 1.0 - 2.0 * (-index / NEUTRAL_RAIN).exp2();
+        });
     let moisture = (0..grid.pixel_count())
         .into_par_iter()
         .map(|i| {
-            let band = circulation_band(grid.latitude((i / w) as u32));
+            let band = belts.band(grid.latitude((i / w) as u32));
             let m = RAIN_WEIGHT * rain[i] + BAND_WEIGHT * band + NOISE_WEIGHT * input.noise[i];
             m.clamp(-1.0, 1.0)
         })
         .collect();
-    (moisture, rain)
+    let foehn = foehn
+        .into_par_iter()
+        .zip(input.height_above_water)
+        .map(|(f, &z)| if z >= 0.0 { f } else { 0.0 })
+        .collect();
+    Moisture {
+        moisture,
+        precipitation: rain,
+        foehn,
+    }
 }
 
 /// Box blur of `radius_km`, separable: east-west (wrapping, radius in pixels
@@ -798,6 +1115,13 @@ mod tests {
             .collect()
     }
 
+    /// The pixels of row `y` in the order a wind blowing east crosses them.
+    fn eastward(grid: &Grid, y: u32) -> Vec<usize> {
+        (0..grid.width as usize)
+            .map(|x| y as usize * grid.width as usize + x)
+            .collect()
+    }
+
     #[test]
     fn rain_decreases_inland_downwind() {
         let grid = Grid {
@@ -806,49 +1130,194 @@ mod tests {
             circumference_km: 40_000.0,
         };
         let height = half_ocean(&grid);
-        let temperature = vec![0.8; grid.pixel_count()];
+        let temperature = vec![15.0; grid.pixel_count()];
         let noise = vec![0.0; grid.pixel_count()];
         let input = MoistureInput {
             grid,
             height_above_water: &height,
             temperature: &temperature,
             noise: &noise,
+            belts: Belts::EARTH,
         };
         // Wind blowing east: land starts at x = 200, coast first.
-        let rain = rain_along_row(&input, 1, 1, 0.0);
+        let (rain, _) = rain_along(&input, &eastward(&grid, 1), 2, grid.dx_km(1), |_| 0.0);
         assert!(rain[201] > rain[260] && rain[260] > rain[390]);
     }
 
-    #[test]
-    fn mountains_cast_a_rain_shadow() {
+    /// A coast at x = 2048 of a 4096-pixel equator (10 km pixels, the
+    /// server's default on an Earth) and, when `height_km` is not 0, a
+    /// ridge `height_km` high and 50 km wide 760 km inland; the air
+    /// cools with height at the lapse rate. Returns the rain rate along
+    /// the row (smoothed as the moisture pass does), the foehn warming,
+    /// and the ridge's pixel.
+    fn ridge_row(height_km: f32) -> (Vec<f32>, Vec<f32>, usize) {
         let grid = Grid {
-            width: 400,
-            height: 4,
+            width: 4096,
+            height: 1,
             circumference_km: 40_000.0,
         };
-        let mut height = half_ocean(&grid);
-        // A ridge at x = 220..230 on every row.
-        for y in 0..4 {
-            for x in 220..230 {
-                height[y * 400 + x] = 0.8;
-            }
-        }
-        let flat = half_ocean(&grid);
-        let temperature = vec![0.8; grid.pixel_count()];
-        let noise = vec![0.0; grid.pixel_count()];
-        let with_ridge = MoistureInput {
+        let step = grid.dx_km(0);
+        let ridge = 2048 + (760.0 / step) as usize;
+        let height: Vec<f32> = (0..4096)
+            .map(|x| {
+                if x < 2048 {
+                    -0.3
+                } else {
+                    let d = (x as f32 - ridge as f32).abs() * step;
+                    0.001 + (height_km / crate::craters::ELEVATION_KM) * (1.0 - d / 25.0).max(0.0)
+                }
+            })
+            .collect();
+        let temperature: Vec<f32> = height
+            .iter()
+            .map(|&z| self::temperature(20.0, z, EARTH_LAPSE))
+            .collect();
+        let noise = vec![0.0; 4096];
+        let input = MoistureInput {
             grid,
             height_above_water: &height,
             temperature: &temperature,
             noise: &noise,
+            belts: Belts::EARTH,
         };
-        let without = MoistureInput {
-            height_above_water: &flat,
-            ..with_ridge
+        let (rain, warm) = rain_along(&input, &eastward(&grid, 0), 2, step, |_| 0.5);
+        (smooth(&grid, &rain, RAIN_SMOOTHING_KM), warm, ridge)
+    }
+
+    #[test]
+    fn a_range_wrings_the_rain_out_of_the_wind_and_leaves_a_dry_warm_lee() {
+        // A range 3 km high and 50 km wide (Roe 2005: the Southern Alps get
+        // 11–12 m of rain a year on their windward side, under 1 m in
+        // their lee).
+        let (rain, warm, ridge) = ridge_row(3.0);
+        let (flat, _, _) = ridge_row(0.0);
+        let windward = rain[ridge - 3..=ridge].iter().copied().fold(0.0, f32::max);
+        let lee = rain[ridge + 8];
+        assert!(
+            windward > 5.0 * flat[ridge],
+            "{windward} vs {}",
+            flat[ridge]
+        );
+        assert!(windward > 10.0 * lee, "{windward} vs {lee}");
+        assert!(lee < 0.75 * flat[ridge + 8], "{lee} vs {}", flat[ridge + 8]);
+        // The air that rained out comes down warmer than it went up, and
+        // the warmth fades downwind.
+        assert_eq!(warm[ridge - 2], 0.0);
+        assert!(warm[ridge + 8] > 2.0, "{}", warm[ridge + 8]);
+        assert!(warm[ridge + 100] < 0.5 * warm[ridge + 8]);
+    }
+
+    #[test]
+    fn an_east_west_range_shades_the_meridional_wind() {
+        // Land from 37° to 50° N on an ocean planet; a ridge along 40° N in
+        // the westerlies, whose air moves polewards from the sea.
+        let grid = Grid {
+            width: 64,
+            height: 180,
+            circumference_km: 40_000.0,
         };
-        let shadow = rain_along_row(&with_ridge, 1, 1, 0.0)[250];
-        let open = rain_along_row(&without, 1, 1, 0.0)[250];
-        assert!(shadow < open * 0.75, "shadow {shadow} vs open {open}");
+        let row = |latitude: f64| (90.0 - latitude) as usize;
+        let land = |ridge: bool| -> Vec<f32> {
+            (0..grid.pixel_count())
+                .map(|i| {
+                    let y = i / 64;
+                    if y > row(37.0) || y < row(50.0) {
+                        -0.3
+                    } else if ridge && (row(41.0)..=row(39.0)).contains(&y) {
+                        0.12
+                    } else {
+                        0.001
+                    }
+                })
+                .collect()
+        };
+        let noise = vec![0.0; grid.pixel_count()];
+        let rain_north_of_ridge = |height: &[f32]| {
+            let temperature: Vec<f32> = (0..grid.pixel_count())
+                .map(|i| self::temperature(20.0 - 0.3 * (i / 64) as f32, height[i], EARTH_LAPSE))
+                .collect();
+            let m = moisture(&MoistureInput {
+                grid,
+                height_above_water: height,
+                temperature: &temperature,
+                noise: &noise,
+                belts: Belts::EARTH,
+            });
+            (0..64)
+                .map(|x| m.precipitation[row(44.0) * 64 + x])
+                .sum::<f32>()
+                / 64.0
+        };
+        let (with, without) = (
+            rain_north_of_ridge(&land(true)),
+            rain_north_of_ridge(&land(false)),
+        );
+        // Without the meridional wind the rows north of the ridge would
+        // never see it: the same rain with or without it.
+        assert!(with < without - 0.03, "{with} vs {without}");
+    }
+
+    #[test]
+    fn belts_turn_at_30_and_60_degrees_on_earth_and_widen_on_slow_rotators() {
+        let earth = Belts::EARTH;
+        let at = |b: &Belts, deg: f64| {
+            (
+                b.zonal_wind(deg.to_radians()),
+                b.meridional_wind(deg.to_radians()),
+            )
+        };
+        assert!(at(&earth, 30.0).0.abs() < 1e-6 && at(&earth, 60.0).0.abs() < 1e-6);
+        // Trades from the east, blowing towards the equator.
+        let trades = at(&earth, 15.0);
+        assert!(trades.0 < -0.5 && trades.1 < -0.4);
+        // A range at 25° gets its rain from the east (it got it from the
+        // west when the belts turned at 22.5°).
+        assert!(at(&earth, 25.0).0 < 0.0);
+        let westerlies = at(&earth, -45.0);
+        assert!(westerlies.0 > 0.99 && westerlies.1 > 0.49);
+        assert!(at(&earth, 75.0).0 < -0.5 && at(&earth, 75.0).1 < -0.4);
+        assert!(earth.band(0.0) > 0.99 && earth.band(30f64.to_radians()) < -0.99);
+        // Held & Hou: the edge scales as 1 / (rotation rate × radius).
+        let earth_km = f64::from(crate::noise::EARTH_CIRCUMFERENCE_KM);
+        assert!((Belts::new(24.0, earth_km).hadley_edge_deg() - 30.0).abs() < 1e-9);
+        assert!((Belts::new(48.0, earth_km).hadley_edge_deg() - 60.0).abs() < 1e-9);
+        assert!((Belts::new(24.0, 2.0 * earth_km).hadley_edge_deg() - 15.0).abs() < 1e-9);
+        assert_eq!(Belts::new(24.0 * 365.0, earth_km).hadley_edge_deg(), 70.0);
+        assert_eq!(Belts::new(4.0, earth_km).hadley_edge_deg(), 15.0);
+        let wide = Belts::new(40.0, earth_km);
+        assert!((wide.polar_front_deg() - 70.0).abs() < 1e-9);
+        assert!(wide.zonal_wind(45f64.to_radians()) < 0.0);
+    }
+
+    #[test]
+    fn warm_air_holds_more_water_by_clausius_clapeyron() {
+        assert!((saturation_vapour_hpa(0.0) - 6.112).abs() < 1e-3);
+        assert!((saturation_vapour_hpa(20.0) - 23.37).abs() < 0.05);
+        assert!((holding_capacity(27.0) - 1.0).abs() < 1e-6);
+        // About half for every 10 °C of cooling (Roe 2005).
+        let ratio = holding_capacity(20.0) / holding_capacity(10.0);
+        assert!((1.7..2.0).contains(&ratio), "{ratio}");
+    }
+
+    #[test]
+    fn land_cools_at_the_standard_lapse_rate() {
+        // 3 km above the waterline: 19.5 °C colder.
+        let t = temperature(20.0, 3.0 / crate::craters::ELEVATION_KM, EARTH_LAPSE);
+        assert!((t - 0.5).abs() < 1e-4, "{t}");
+        // A lighter world cools more slowly; an airless one not at all.
+        let p = crate::generation::tests::params(1, "terran");
+        assert!((lapse_rate(&p) - EARTH_LAPSE).abs() < 1e-3);
+        let mars = crate::world::WorldParams {
+            circumference_km: 21_344.0,
+            pressure_bar: 0.006,
+            ..p.clone()
+        };
+        assert!((lapse_rate(&mars) / EARTH_LAPSE - 0.533).abs() < 0.01);
+        let moon = crate::world::WorldParams {
+            pressure_bar: 0.0,
+            ..p
+        };
+        assert_eq!(lapse_rate(&moon), 0.0);
     }
 
     #[test]
@@ -880,7 +1349,7 @@ mod tests {
 
     #[test]
     fn only_land_cools_with_altitude() {
-        assert_eq!(temperature(20.0, -0.5), 20.0);
-        assert!(temperature(20.0, 0.5) < 20.0);
+        assert_eq!(temperature(20.0, -0.5, EARTH_LAPSE), 20.0);
+        assert!(temperature(20.0, 0.5, EARTH_LAPSE) < 20.0);
     }
 }
