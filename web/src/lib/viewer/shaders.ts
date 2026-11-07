@@ -36,6 +36,9 @@ const common = /* glsl */ `
   // (−π, π], and its x on the map (see morphPoint in viewTransfer.ts).
   uniform float uMorphLon;
   uniform float uMorphX;
+  // Light added to the night side while the globe turns before unrolling
+  // into the map, so that the turn does not pass through black (0 to 1).
+  uniform float uNightLift;
   // Relief exaggeration, 1 for the true relief (see lib/relief.ts), and
   // the body's radii per elevation unit at the true relief.
   uniform float uRelief;
@@ -612,7 +615,8 @@ export const surfaceFragment = /* glsl */ `
       float sunlit = uCasterCount > 0.0 ? 1.0 - eclipse(normalize(vSphere)) : 1.0;
       // A giant's rings shadow a band of it.
       sunlit *= 1.0 - ringShadow(normalize(vSphere));
-      shade = (0.07 + 0.93 * day * strength * sunlit) * relief;
+      float night = mix(0.07, 0.45, uNightLift);
+      shade = (night + (1.0 - night) * day * strength * sunlit) * relief;
     } else {
       float globe = 0.35 + 0.75 * lambert;
       shade = mix(relief, globe, uMorph);

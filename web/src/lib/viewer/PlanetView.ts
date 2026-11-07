@@ -465,6 +465,8 @@ export class PlanetView {
      */
     uMorphLon: { value: Math.PI } as IUniform<number>,
     uMorphX: { value: 0 } as IUniform<number>,
+    /** Light added to the night side during the turn towards the map (see setMode). */
+    uNightLift: { value: 0 } as IUniform<number>,
     uRelief: { value: 0 } as IUniform<number>,
     uReliefScale: { value: 0 } as IUniform<number>,
     uCoast: { value: 0 } as IUniform<number>,
@@ -1939,6 +1941,7 @@ export class PlanetView {
     }
     // Skip the morph: the other view has finished it already.
     this.animation = null;
+    this.shared.uNightLift.value = 0;
     this.morph = state.mode === 'globe' ? 1 : 0;
     this.camera.position.fromArray(state.position);
     this.controls.target.fromArray(state.target);
@@ -2083,6 +2086,9 @@ export class PlanetView {
       const turned = toMap ? ease(Math.min(1, t / 0.4)) : ease(t);
       const unrolled = toMap ? ease(Math.max(0, (t - 0.3) / 0.7)) : ease(t);
       this.morph = this.animation.from + (this.animation.to - this.animation.from) * unrolled;
+      // The turn may swing the camera over the night side: lit a little,
+      // rising and falling over the morph, so that it does not go black.
+      this.shared.uNightLift.value = toMap && t < 1 ? Math.sin(Math.PI * t) : 0;
       if (this.animation.follow) {
         this.followMorph(t === 1 ? 1 : turned);
         following = t < 1;
