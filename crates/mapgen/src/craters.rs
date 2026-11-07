@@ -309,7 +309,10 @@ struct OctaveFill {
 impl OctaveFill {
     fn new(population: Population, octave: i32) -> Self {
         let low = 2f64.powi(octave);
-        let (a, b) = (size_share(low), size_share(2.0 * low));
+        // The body's craters are its impactors' lunar craters scaled by
+        // `crater_scale`: `N(>D)` is the Moon's at `D / scale`.
+        let scale = population.crater_scale;
+        let (a, b) = (size_share(low / scale), size_share(2.0 * low / scale));
         let formed = population.density * (a - b);
         let kept = match population.cap {
             Some(cap) => formed.min(0.75 * cap / (low * low)),
@@ -464,6 +467,9 @@ struct Population {
     /// equilibrium (see [`SATURATION`]), for the craters formed so far;
     /// none for those still to come.
     cap: Option<f64>,
+    /// Diameter of the body's craters against the Moon's for the same
+    /// impactors (`[geology] crater_scale`).
+    crater_scale: f64,
     ages: Ages,
 }
 
@@ -533,7 +539,10 @@ impl CraterField {
             Some(factor) => f64::from(factor),
             None => crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor)),
         };
-        let raise = locked_raise * impact;
+        // The body's own flux against the Moon's, where a source gives it
+        // (`[geology] impact_ratio`, 1 elsewhere).
+        let raise = locked_raise * impact * f64::from(p.planet.geology.impact_ratio);
+        let crater_scale = f64::from(p.planet.geology.crater_scale);
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
             craters: Vec::new(),
@@ -550,6 +559,7 @@ impl CraterField {
                 seed: stream_seed(p.seed, stream::CRATERS),
                 density: crater_density(p.surface_age_ga as f64) * raise,
                 cap: Some(SATURATION * locked_raise),
+                crater_scale,
                 ages: Ages::Past {
                     surface_age_ga: p.surface_age_ga as f64,
                 },
@@ -564,6 +574,7 @@ impl CraterField {
                     0.0
                 },
                 cap: None,
+                crater_scale,
                 ages: Ages::Future { span_ga: FUTURE_GA },
             },
             air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
@@ -1668,6 +1679,7 @@ mod tests {
                 seed: 0,
                 density: crater_density(age) * impact,
                 cap: Some(SATURATION),
+                crater_scale: 1.0,
                 ages: Ages::Past {
                     surface_age_ga: age,
                 },
@@ -1680,6 +1692,29 @@ mod tests {
         // A young surface scales with the impact rate.
         let young = kept(1.0, 1.8) / kept(1.0, 0.7);
         assert!((young - 1.8 / 0.7).abs() < 1e-9, "{young}");
+    }
+
+    #[test]
+    fn a_mars_like_world_has_marss_crater_production() {
+        // Hartmann's isochrons: on the shallow branch (1.4–64 km), Mars
+        // has 10^0.191 = 1.55 times the Moon's craters at equal age.
+        let field = |ratio: f32, scale: f32| {
+            let mut p = moon(3.5);
+            p.planet.geology.impact_ratio = ratio;
+            p.planet.geology.crater_scale = scale;
+            CraterField::context(&p)
+        };
+        let (moon_field, mars_field) = (field(1.0, 1.0), field(2.6, 0.751));
+        let octave = 3; // 8–16 km
+        let ratio = OctaveFill::new(mars_field.past, octave).formed
+            / OctaveFill::new(moon_field.past, octave).formed;
+        assert!((ratio - 1.55).abs() < 0.02, "{ratio}");
+        let mars = crate::preset::Preset::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/mars-like.toml"
+        ))
+        .unwrap();
+        assert_eq!(mars.geology.impact_ratio, 2.6);
     }
 
     #[test]

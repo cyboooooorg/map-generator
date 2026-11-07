@@ -567,12 +567,16 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   - No multi-ring basins (Orientale): their onset does not scale as
     `1/g` and depends on a weak layer under the surface (Melosh &
     Ivanov 1999), with no rule to scale it from the Moon.
-  - The lunar chronology on every world: impact rates per body (Ivanov
-    2001; Le Feuvre & Wieczorek 2011) are ratios for the Solar System's
-    planets and its own impactor populations. A world of another system
-    keeps the Moon's flux, scaled by its giants and belts and by
-    locking; a general rule would need the flux of impactors and their
-    speeds per orbit (gravitational focusing included).
+  - The lunar chronology on most worlds: `[geology] impact_ratio` and
+    `crater_scale` carry a body's flux and crater size against the
+    Moon's, set for `mars-like` from Hartmann's isochrons (2.6 and
+    0.751). Mercury, Venus and Earth keep 1: Le Feuvre & Wieczorek 2011
+    (doi:10.1016/j.icarus.2011.03.010) could not be read (paywall, HAL
+    behind a bot wall), and Marchi et al. 2009 give Mercury's production
+    function only in figures. A world of another system keeps the
+    Moon's flux, scaled by its giants and belts and by locking; a
+    general rule would need the flux of impactors and their speeds per
+    orbit (gravitational focusing included).
 - **Plates:**
   - Plates are not driven: poles and speeds are drawn at random, where
     slab pull sets the speed of a plate by its subducting edge (Forsyth
