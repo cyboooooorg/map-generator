@@ -873,7 +873,7 @@
     const text = dialFigureText(dial, units, { space: t.format.unitSpace, number: formatNumber });
     return text.locked
       ? [t.viewer.dialLocked(text), t.viewer.dialLockedTime(text)]
-      : [t.viewer.dialFree(text), t.viewer.dialFreeDays(text)];
+      : [text.resonant ? t.viewer.dialResonant(text) : t.viewer.dialFree(text), t.viewer.dialFreeDays(text)];
   });
   /** The glossary of the dial's figures, opened by its `?` button. */
   let dialGlossary = $state(false);

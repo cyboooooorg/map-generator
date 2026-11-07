@@ -110,6 +110,9 @@ export const en = {
     lunarMasses: 'lunar masses',
     spin: 'Day',
     locked: 'locked to its parent',
+    resonant: (p: { day: string }) => `${p.day}, 3:2 resonance: three turns every two orbits`,
+    axes: (p: { a: string; b: string; c: string }) => `${p.a} × ${p.b} × ${p.c} across`,
+    axesHelp: 'Its three diameters, the longest towards its planet: an irregular moon, or a round one stretched by its planet’s tides',
     tilt: (p: { tilt: string }) => `tilt ${p.tilt}`,
     light: 'Light',
     lightValue: (p: { flux: string; temperature: string }) => `${p.flux}× Earth's · equilibrium ${p.temperature}`,
@@ -297,6 +300,9 @@ export const en = {
     starSizeValue: (p: { size: string; sun: string }) => `${p.size} (the Sun from Earth: ${p.sun})`,
     locked: 'tidally locked',
     lockedHelp: 'One face always lit: the star does not move in its sky',
+    resonant: '3:2 spin–orbit resonance',
+    resonantHelp:
+      'Like Mercury: the star’s tides hold it at three turns every two orbits, its eccentric orbit keeping it from locking; its solar day lasts two years',
     moons: 'Moons',
     moonsHelp: 'Each one a world of its own: open it with Moon above the viewer (U)',
     noMoon: 'none',
@@ -513,7 +519,7 @@ export const en = {
       F: 'F: yellow-white, a little hotter and brighter than the Sun',
       G: 'G: like the Sun (G2V), 5 300 to 6 000 K',
       K: 'K: orange dwarf, dimmer than the Sun, lives tens of billions of years',
-      M: 'M: red dwarf, cool and dim, three quarters of all stars; its habitable planets orbit close and are tidally locked',
+      M: 'M: red dwarf, cool and dim, three quarters of all stars; its habitable planets orbit close, despun by its tides: locked, or in a 3:2 resonance on an eccentric orbit',
     } as Record<string, string>,
     orbitBy: 'Set the orbit by',
     orbitPosition: 'Habitable zone position',
@@ -522,7 +528,7 @@ export const en = {
     orbitAuHelp: 'Earth: 1 · Mars: 1.52 · Venus: 0.72',
     eccentricity: 'Eccentricity',
     eccentricityHelp:
-      '0: a circle · Venus: 0.007 · Earth: 0.017 · Mars: 0.09 · Mercury: 0.21. More gives more light over a year. Random: drawn like the planets known, circular for tidally locked ones',
+      '0: a circle · Venus: 0.007 · Earth: 0.017 · Mars: 0.09 · Mercury: 0.21. More gives more light over a year. Random: drawn like the planets known, circular for the closest planets, whose orbits the tides have rounded',
     moons: 'Moons',
     metallicity: 'Star metallicity [Fe/H]',
     metallicityHelp:
@@ -545,7 +551,7 @@ export const en = {
     moonsNone: 'None',
     moonsCount: (p: { count: number }) => (p.count === 1 ? '1 moon' : `${p.count} moons`),
     moonsHelp:
-      'Drawn by the seed: about one rocky planet in 12 has a large moon, small worlds often a companion, others small debris or captured moons, planets locked to their star none. A number gets that many stable moons: a random star and orbit are drawn again until the planet is free of its star’s tides and has room for them; a large moon steadies the axial tilt, and the moons raise the tides',
+      'Drawn by the seed: about one rocky planet in 12 has a large moon, small worlds often a companion, others small debris or captured moons, planets despun by their star only moonlets light enough to outlast its tides. A number gets that many stable moons: a random star and orbit are drawn again until the planet has room for them; a large moon steadies the axial tilt, and the moons raise the tides',
     seed: 'Seed',
     seedPlaceholder: 'random',
     roll: 'Roll',
@@ -669,6 +675,8 @@ export const en = {
     rotationDialHelp:
       'A ring round the equator, graduated in degrees: its pointer shows how far the body has turned, against the stars, or against what it orbits for a body locked to it',
     dialFree: (p: { angle: string; time: string }) => `Rotation ${p.angle} · Local time ${p.time} (meridian 0)`,
+    dialResonant: (p: { angle: string; time: string }) =>
+      `3:2 spin–orbit resonance · Rotation ${p.angle} · Local time ${p.time} (meridian 0)`,
     dialFreeDays: (p: { sidereal: string; solar: string | null }) =>
       p.solar === null
         ? `Sidereal day ${p.sidereal} · Solar day: none, the star stands still`
@@ -694,6 +702,10 @@ export const en = {
       },
       { term: 'Synchronous rotation:', text: 'the body turns once per orbit and always shows the same face to what it orbits.' },
       { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by about ±2e radians.' },
+      {
+        term: '3:2 resonance:',
+        text: 'three turns every two orbits, as Mercury: the star’s tides hold an eccentric planet there instead of locking it; its solar day lasts two of its years.',
+      },
       {
         term: 'Longitude convention:',
         text: "in this app a synchronous body's face to its host is longitude 180°; the scientific convention puts longitude 0 there.",
