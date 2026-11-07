@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 440" width="860" height="440" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">The habitable zones of six main-sequence stars, from an F5 dwarf to an M5 dwarf</title>
+  <desc id="desc">Distances from each star in astronomical units, on a logarithmic scale from 0.03 to 4.5 AU. For each star a dark green band shows the conservative habitable zone, from the runaway greenhouse limit to the maximum greenhouse limit, and a pale band the optimistic one, from the recent Venus limit to the early Mars limit. F5V (6550 K): 1.73 to 3.00 AU; G2V (5770 K): 0.96 to 1.70 AU; K5V (4440 K): 0.42 to 0.78 AU; M0V (3850 K): 0.27 to 0.52 AU; M3V (3430 K): 0.13 to 0.26 AU; M5V (3060 K): 0.06 to 0.11 AU. Venus, Earth and Mars are marked round the G2V star, the Sun.</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .grid { stroke: #2a3644; stroke-width: 1; }
+    .opt { fill: #3fbf6f; fill-opacity: 0.25; }
+    .con { fill: #3fbf6f; fill-opacity: 0.75; }
+    .planet { fill: #cfe3ff; stroke: #0f1622; stroke-width: 0.8; }
+  </style>
+  <rect width="860" height="440" fill="#0f1622"/>
+  <text class="h" x="20" y="30">Where the habitable zone lies round different stars</text>
+  <text class="s" x="20" y="48">Distance from the star, logarithmic scale. Each star is drawn in the colour of its light as the app computes it, the Sun white.</text>
+  <line class="grid" x1="150.0" y1="72" x2="150.0" y2="346"/>
+  <text class="s" x="150.0" y="362" text-anchor="middle">0.03 AU</text>
+  <line class="grid" x1="313.4" y1="72" x2="313.4" y2="346"/>
+  <text class="s" x="313.4" y="362" text-anchor="middle">0.1 AU</text>
+  <line class="grid" x1="462.5" y1="72" x2="462.5" y2="346"/>
+  <text class="s" x="462.5" y="362" text-anchor="middle">0.3 AU</text>
+  <line class="grid" x1="625.9" y1="72" x2="625.9" y2="346"/>
+  <text class="s" x="625.9" y="362" text-anchor="middle">1 AU</text>
+  <line class="grid" x1="775.0" y1="72" x2="775.0" y2="346"/>
+  <text class="s" x="775.0" y="362" text-anchor="middle">3 AU</text>
+  <!-- F5V: Teff 6550 K, L 3.631 Lsun. -->
+  <circle cx="30" cy="92" r="7" fill="rgb(233,241,255)"/>
+  <text class="t" x="46" y="91">F5V</text>
+  <text class="s" x="46" y="105">6550 K, 3.63 L☉</text>
+  <rect class="opt" x="668.1" y="80" width="114.2" height="24"/>
+  <rect class="con" x="700.2" y="80" width="74.9" height="24"/>
+  <!-- G2V: Teff 5770 K, L 1.023 Lsun. -->
+  <circle cx="30" cy="138" r="7" fill="rgb(255,255,255)"/>
+  <text class="t" x="46" y="137">G2V</text>
+  <text class="s" x="46" y="151">5770 K, 1.02 L☉</text>
+  <rect class="opt" x="588.5" y="126" width="116.3" height="24"/>
+  <rect class="con" x="620.6" y="126" width="77.0" height="24"/>
+  <circle class="planet" cx="581.9" cy="138" r="4"/>
+  <text class="s" x="581.9" y="122" text-anchor="middle">Venus</text>
+  <circle class="planet" cx="625.9" cy="138" r="4"/>
+  <text class="s" x="625.9" y="122" text-anchor="middle">Earth</text>
+  <circle class="planet" cx="683.1" cy="138" r="4"/>
+  <text class="s" x="683.1" y="122" text-anchor="middle">Mars</text>
+  <!-- K5V: Teff 4440 K, L 0.1738 Lsun. -->
+  <circle cx="30" cy="184" r="7" fill="rgb(255,234,203)"/>
+  <text class="t" x="46" y="183">K5V</text>
+  <text class="s" x="46" y="197">4440 K, 0.174 L☉</text>
+  <rect class="opt" x="477.1" y="172" width="123.1" height="24"/>
+  <rect class="con" x="509.2" y="172" width="83.8" height="24"/>
+  <!-- M0V: Teff 3850 K, L 0.06918 Lsun. -->
+  <circle cx="30" cy="230" r="7" fill="rgb(255,221,173)"/>
+  <text class="t" x="46" y="229">M0V</text>
+  <text class="s" x="46" y="243">3850 K, 0.0692 L☉</text>
+  <rect class="opt" x="416.6" y="218" width="127.0" height="24"/>
+  <rect class="con" x="448.7" y="218" width="87.7" height="24"/>
+  <!-- M3V: Teff 3430 K, L 0.01622 Lsun. -->
+  <circle cx="30" cy="276" r="7" fill="rgb(255,210,148)"/>
+  <text class="t" x="46" y="275">M3V</text>
+  <text class="s" x="46" y="289">3430 K, 0.0162 L☉</text>
+  <rect class="opt" x="319.0" y="264" width="129.9" height="24"/>
+  <rect class="con" x="351.1" y="264" width="90.6" height="24"/>
+  <!-- M5V: Teff 3060 K, L 0.00302 Lsun. -->
+  <circle cx="30" cy="322" r="7" fill="rgb(255,198,124)"/>
+  <text class="t" x="46" y="321">M5V</text>
+  <text class="s" x="46" y="335">3060 K, 0.00302 L☉</text>
+  <rect class="opt" x="205.5" y="310" width="132.3" height="24"/>
+  <rect class="con" x="237.6" y="310" width="93.0" height="24"/>
+  <rect class="con" x="20" y="376" width="22" height="12"/>
+  <text class="t" x="50" y="386">conservative: runaway greenhouse to maximum greenhouse</text>
+  <rect class="opt" x="440" y="376" width="22" height="12"/>
+  <text class="t" x="470" y="386">optimistic: recent Venus to early Mars</text>
+  <text class="s" x="20" y="412">Edges: the fits of Kopparapu et al. 2014 for a planet of one Earth mass. Temperatures and luminosities: Pecaut &amp; Mamajek 2013</text>
+  <text class="s" x="20" y="426">(Mamajek's table, version 2022.04.16). Planets' distances: NASA fact sheets. Star colours: black bodies through the CIE 1931 functions.</text>
+</svg>

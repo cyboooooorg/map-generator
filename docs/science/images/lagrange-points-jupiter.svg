@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Jupiter's five Lagrange points and its trojan swarms</title>
+  <desc id="desc">The Sun at the centre and Jupiter's orbit, 5.2 AU in radius, seen in the frame that turns with Jupiter, distances to scale. L1 and L2 lie on either side of Jupiter, 0.36 AU from it, at the edge of its Hill sphere; L3 lies on the orbit on the far side of the Sun. L1, L2 and L3 are unstable. L4 and L5 lie on the orbit 60 degrees ahead of and behind Jupiter, where Sun, Jupiter and point make an equilateral triangle; they are stable because Jupiter holds less than 0.0385 of the mass. Round each, a trojan swarm librates on tadpole orbits, at most 0.26 AU either side of the orbit; the swarms' length along the orbit is drawn as a sketch.</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .orbit { stroke: #6b7886; stroke-width: 1; fill: none; }
+    .tri { stroke: #7fe0a0; stroke-width: 0.8; stroke-dasharray: 3 4; fill: none; }
+    .lead { stroke: #6b7886; stroke-width: 0.8; fill: none; }
+    .stable { fill: #7fe0a0; }
+    .unstable { fill: #ff9a7a; }
+    .swarm { fill: #e9c97c; fill-opacity: 0.45; stroke: #e9c97c; stroke-width: 0.6; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9fd3ff"/>
+    </marker>
+  </defs>
+  <rect width="900" height="600" fill="#0f1622"/>
+
+  <text class="h" x="20" y="30">Jupiter's Lagrange points, in the frame that turns with Jupiter</text>
+  <text class="s" x="20" y="48">Distances to scale (1 AU = 40.4 px). The Sun and Jupiter are drawn far larger than to scale. Seen from above the Sun's north pole.</text>
+
+  <circle class="orbit" cx="300" cy="318" r="210"/>
+  <path class="tri" d="M300 318 L510.0 318.0 L405.0 136.1 Z M300 318 L405.0 499.9 L510.0 318.0"/>
+
+  <!-- Trojan swarms: half-width sqrt(8 mu / 3) a to scale; extent along the orbit (28 to 96 degrees) a sketch. -->
+  <path class="swarm" d="M485.4 219.4 L482.5 209.1 L478.2 199.3 L473.2 189.9 L467.5 180.8 L461.2 172.0 L454.4 163.6 L447.0 155.7 L439.2 148.2 L430.9 141.1 L422.1 134.6 L413.0 128.6 L403.6 123.2 L393.8 118.4 L383.7 114.2 L373.4 110.6 L363.0 107.6 L352.4 105.3 L341.7 103.7 L330.9 102.7 L320.1 102.4 L309.4 102.8 L298.8 103.9 L288.3 105.8 L278.0 109.2 L288.5 110.9 L298.8 112.1 L308.9 113.6 L318.9 115.4 L328.8 117.5 L338.5 120.0 L348.1 122.8 L357.5 126.0 L366.8 129.5 L375.9 133.3 L384.8 137.5 L393.6 141.9 L402.2 146.7 L410.7 151.8 L419.0 157.2 L427.0 163.0 L434.9 169.0 L442.6 175.4 L450.1 182.1 L457.4 189.0 L464.5 196.3 L471.4 203.9 L478.1 211.7 Z"/>
+  <path class="swarm" d="M485.4 416.6 L482.5 426.9 L478.2 436.7 L473.2 446.1 L467.5 455.2 L461.2 464.0 L454.4 472.4 L447.0 480.3 L439.2 487.8 L430.9 494.9 L422.1 501.4 L413.0 507.4 L403.6 512.8 L393.8 517.6 L383.7 521.8 L373.4 525.4 L363.0 528.4 L352.4 530.7 L341.7 532.3 L330.9 533.3 L320.1 533.6 L309.4 533.2 L298.8 532.1 L288.3 530.2 L278.0 526.8 L288.5 525.1 L298.8 523.9 L308.9 522.4 L318.9 520.6 L328.8 518.5 L338.5 516.0 L348.1 513.2 L357.5 510.0 L366.8 506.5 L375.9 502.7 L384.8 498.5 L393.6 494.1 L402.2 489.3 L410.7 484.2 L419.0 478.8 L427.0 473.0 L434.9 467.0 L442.6 460.6 L450.1 453.9 L457.4 447.0 L464.5 439.7 L471.4 432.1 L478.1 424.3 Z"/>
+
+  <!-- Jupiter's motion. -->
+  <path d="M213.1 102.9 A232 232 0 0 0 117.2 175.2" stroke="#9fd3ff" stroke-width="1.4" fill="none" marker-end="url(#arrow)"/>
+  <text class="s" x="60" y="118" style="fill:#9fd3ff">Jupiter's motion</text>
+
+  <!-- Sun and Jupiter. -->
+  <circle cx="300" cy="318" r="10" fill="#ffd27a"/>
+  <text class="t" x="300" y="346" text-anchor="middle">Sun</text>
+  <circle cx="510.0" cy="318.0" r="14.3" fill="none" stroke="#9fd3ff" stroke-width="0.8" stroke-dasharray="2 3"/>
+  <circle cx="510.0" cy="318.0" r="5" fill="#d9b77a"/>
+
+  <!-- Lagrange points. -->
+  <circle class="unstable" cx="495.7" cy="318.0" r="3.2"/>
+  <circle class="unstable" cx="524.3" cy="318.0" r="3.2"/>
+  <circle class="unstable" cx="90.0" cy="318.0" r="4"/>
+  <circle class="stable" cx="405.0" cy="136.1" r="4"/>
+  <circle class="stable" cx="405.0" cy="499.9" r="4"/>
+
+  <path class="lead" d="M493.7 323.0 L446 372"/>
+  <path class="lead" d="M526.3 323.0 L560 372"/>
+  <text class="t" x="442" y="388" text-anchor="middle">L1</text>
+  <text class="t" x="566" y="388" text-anchor="middle">L2</text>
+  <text class="t" x="532.0" y="298.0">Jupiter</text>
+  <text class="s" x="532.0" y="312.0">5.2 AU</text>
+  <text class="t" x="78.0" y="323.0" text-anchor="end">L3</text>
+  <text class="t" x="421.0" y="122.1">L4</text>
+  <text class="s" x="421.0" y="136.1346652052679">60° ahead</text>
+  <text class="t" x="421.0" y="517.9">L5</text>
+  <text class="s" x="421.0" y="531.9">60° behind</text>
+
+  <!-- Legend. -->
+  <circle class="stable" cx="594" cy="96" r="4"/>
+  <text class="t" x="606" y="100">stable: L4 and L5</text>
+  <text class="s" x="606" y="116">while the planet holds less than</text>
+  <text class="s" x="606" y="130">0.0385 of the mass (Jupiter: 0.00095)</text>
+  <circle class="unstable" cx="594" cy="156" r="4"/>
+  <text class="t" x="606" y="160">unstable: L1, L2 and L3</text>
+  <text class="s" x="606" y="176">L1 and L2 sit 0.36 AU from Jupiter,</text>
+  <text class="s" x="606" y="190">on its Hill sphere (dotted circle)</text>
+  <rect x="586" y="212" width="16" height="10" class="swarm"/>
+  <text class="t" x="606" y="222">trojan swarm</text>
+  <text class="s" x="606" y="238">tadpole orbits round L4 or L5, at most</text>
+  <text class="s" x="606" y="252">0.26 AU either side of the orbit (to scale);</text>
+  <text class="s" x="606" y="266">their length along the orbit is a sketch</text>
+  <line class="tri" x1="586" y1="290" x2="602" y2="290"/>
+  <text class="t" x="606" y="294">equilateral triangles</text>
+  <text class="s" x="606" y="310">Sun, Jupiter and L4 (or L5) are</text>
+  <text class="s" x="606" y="324">5.2 AU from one another</text>
+
+  <text class="s" x="20" y="566">L1 and L2 at a (μ/3)^1/3 from Jupiter; L3 at about a; tadpole half-width √(8μ/3) a (Christou et al. 2025); Jupiter's mass share μ = 9.5 × 10⁻⁴ (NASA).</text>
+  <text class="s" x="20" y="582">L4 and L5 stable for μ under 0.0385: Routh's criterion, from the libration frequency in Emery et al. 2015.</text>
+</svg>
