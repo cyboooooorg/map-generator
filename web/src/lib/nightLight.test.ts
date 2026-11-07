@@ -74,14 +74,28 @@ describe('night brightness', () => {
     const giant = nightSources([body(diameter(70_000, 400_000), { colour: [0.5, 0.4, 0.3] })], SUN);
     const smallMoon = nightSources([body(diameter(1_000, 400_000))], SUN);
     const normal: Vec3 = [0, 0, -1];
-    expect(nightAt(normal, giant)).toBeGreaterThan(nightAt(normal, smallMoon) + 0.1);
-    expect(nightAt(normal, smallMoon)).toBeLessThan(0.2);
+    expect(nightAt(normal, giant)).toBeGreaterThan(nightAt(normal, smallMoon) + 0.05);
+    expect(nightAt(normal, smallMoon)).toBeLessThan(0.12);
   });
 
   it('lights the side facing the source, not the other', () => {
     const sources = nightSources([body(diameter(70_000, 400_000))], SUN);
     expect(nightAt([0, 0, -1], sources)).toBeGreaterThan(nightAt([0, 0, 1], sources));
-    expect(nightAt([0, 0, 1], sources)).toBe(NIGHT_FLOOR);
+    expect(nightAt([0, 0, 1], sources)).toBeCloseTo(NIGHT_FLOOR, 3);
+  });
+
+  it('fades smoothly to the horizon, with no step', () => {
+    const sources = nightSources([body(diameter(70_000, 400_000))], SUN);
+    let worst = 0;
+    let last = nightAt([0, 0, -1], sources);
+    for (let deg = 1; deg <= 120; deg++) {
+      const a = (deg * Math.PI) / 180;
+      const now = nightAt([Math.sin(a), 0, -Math.cos(a)], sources);
+      worst = Math.max(worst, Math.abs(now - last));
+      last = now;
+    }
+    // At most a tenth of the night's range per degree.
+    expect(worst).toBeLessThan(0.1 * (NIGHT_CEILING - NIGHT_FLOOR));
   });
 
   it('keeps the brightest four sources', () => {

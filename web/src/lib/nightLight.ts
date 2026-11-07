@@ -38,8 +38,8 @@ export const NIGHT_RATIO_MIN = 1e-7;
 export const NIGHT_RATIO_MAX = 2e-2;
 /** Brightness of a night side lit by nothing: kept from before, a display choice, not physics. */
 export const NIGHT_FLOOR = 0.07;
-/** Brightness of a night side lit by a full giant, a display choice (the day side is 1). */
-export const NIGHT_CEILING = 0.4;
+/** Brightness of a night side lit by a full giant, a display choice (the day side is 1): well under the day's, so the terminator stays obvious. */
+export const NIGHT_CEILING = 0.18;
 
 /** Starlight and airglow, relative to the Sun's illuminance on Earth: 2e-3 lux over 1.3e5 lux. */
 export const STARLIGHT_RATIO = 1.5e-8;
@@ -126,15 +126,22 @@ export function nightBrightness(ratio: number): number {
 }
 
 /**
- * The night brightness at a point of the surface with outward normal `normal`:
- * every source adds its ratio by how high it stands over the horizon there
- * (a disk, so a source just under the horizon still gives a little), and
- * starlight adds `starlight`.
+ * The night brightness at a point of the surface with outward normal `normal`.
+ * The log curve sets the brightest the night gets, from the sum of the
+ * sources' ratios (`peak`); the light at the point, each source's ratio by how
+ * high it stands over the horizon there (a disk, so one just under the horizon
+ * still gives a little) plus starlight, scales it linearly between the floor
+ * and that. Putting the log on the peak only, not on each point, keeps the
+ * edge of a source's reach soft: a log of the cosine law would drop from half
+ * brightness to nothing within a degree of the horizon, a hard line on the
+ * ground (a display choice).
  */
 export function nightAt(normal: Vec3, sources: readonly NightSource[], starlight = STARLIGHT_RATIO): number {
+  let peak = starlight;
   let total = starlight;
   for (const s of sources) {
+    peak += s.ratio;
     total += s.ratio * Math.max((dot(normal, s.direction) + s.half) / (1 + s.half), 0);
   }
-  return nightBrightness(total);
+  return NIGHT_FLOOR + (nightBrightness(peak) - NIGHT_FLOOR) * (total / peak);
 }

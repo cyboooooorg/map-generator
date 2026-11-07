@@ -440,13 +440,17 @@ export const surfaceFragment = /* glsl */ `
   // lib/nightLight.ts, nightAt): the light of the bodies of the sky above
   // its horizon plus starlight, on a log display curve.
   float nightShade(vec3 point) {
+    float peak = uStarlight;
     float total = uStarlight;
     for (int i = 0; i < 4; i++) {
       vec4 s = uNightDir[i];
+      peak += uNightRatio[i];
       total += uNightRatio[i] * max((dot(point, s.xyz) + s.w) / (1.0 + s.w), 0.0);
     }
-    float t = clamp((log2(max(total, 1e-30)) * 0.30103 - uNightCurve.z) * uNightCurve.w, 0.0, 1.0);
-    return mix(uNightCurve.x, uNightCurve.y, t);
+    // The log curve sets the brightest night, the horizon law scales it
+    // linearly (a log of it would make a hard edge at the source's horizon).
+    float t = clamp((log2(max(peak, 1e-30)) * 0.30103 - uNightCurve.z) * uNightCurve.w, 0.0, 1.0);
+    return uNightCurve.x + (uNightCurve.y - uNightCurve.x) * t * (total / peak);
   }
 
   // Share of the sunlight hidden at a point of the unit sphere (see
