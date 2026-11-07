@@ -4,11 +4,19 @@ Backlog item 17. User request (2026-11-06): study scientifically asteroid
 fields, asteroid belts, and the Lagrange points with the asteroids they
 hold in theory.
 
-Today a system (`src/system.rs`, `system.json`) holds a star, its planets
-and their moons. Small bodies do not exist: there is no belt, no trojan
-swarm and no Lagrange point anywhere in the data or the viewers. The only
-trace of them is the crater rate, which `giants.rs` sets from the mass of
-the outermost giant (`impact_factor`, after Horner & Jones 2008).
+**Status (2026-11-07): implemented.** The proposal of section 4 is in
+the app: `src/belts.rs` draws the belts, their gaps, the trojans and the
+crater rate from the belts' mass, the star view draws them with the
+Lagrange points (`web/src/lib/viewer/smallBodies.ts`), and rocky planets
+keep out of a giant's belt zone. Co-orbital moons are not drawn. Section
+3 describes the app before this study.
+
+Before it, a system (`src/system.rs`, `system.json`) held a star, its
+planets and their moons. Small bodies did not exist: there was no belt,
+no trojan swarm and no Lagrange point anywhere in the data or the
+viewers. The only trace of them was the crater rate, which `giants.rs`
+set from the mass of the outermost giant (`impact_factor`, after Horner
+& Jones 2008).
 
 ## 1. What a belt is
 
@@ -159,7 +167,7 @@ the planet's pulls.
   by the orbit's motion after 2026). Co-orbital planets are allowed by
   dynamics but none is known.
 
-## 3. What our generator does, and what is missing
+## 3. What our generator did, and what was missing
 
 | Piece              | Today                                                 | Missing                                                                  |
 | ------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------ |
