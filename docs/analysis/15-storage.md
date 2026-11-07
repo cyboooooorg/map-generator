@@ -202,6 +202,15 @@ The user's answers to the study's questions:
    of today's disk.
 6. **Backups:** none automatic. The app exports a system's seeds and
    requests (JSON) and its images (PNG) instead.
+7. **Persistence:** the database file survives restarts and image
+   rebuilds. It lives on the host next to `systems/`, mounted like it
+   (`./db:/data/db` in `compose.yaml`), never inside the container. Once
+   it holds what the tree no longer does (names, last opened dates, the
+   seeds of evicted bodies), losing it loses data, so it is the one file
+   to export or copy. SQLite on a bind mount of the Colima VM (virtiofs):
+   one server process writes, so the default rollback journal is safe;
+   WAL mode needs shared memory across the mount and is to be checked
+   there before it is turned on.
 
 The steps that follow are in the backlog, item 22.
 
