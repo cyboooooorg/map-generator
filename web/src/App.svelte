@@ -55,6 +55,8 @@
     variedFrom: string | null;
     entry: 'around' | 'system' | null;
     atSummary: boolean;
+    /** Opened from the Drift panel: the view to restore on the new world's planet once it is made. */
+    fromDrift?: { view: ViewLink | null };
   } | null>(null);
   /** Systems deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
   let hidden = $state<string[]>([]);
@@ -78,7 +80,7 @@
   let primaryPane = $state<WorldPane | null>(null);
   let secondaryPane = $state<WorldPane | null>(null);
   /** The job whose world opens when ready, if the selection has not changed meanwhile. */
-  let autoOpen: { jobId: string; selection: string | null } | null = null;
+  let autoOpen: { jobId: string; selection: string | null; planetView?: ViewLink | null } | null = null;
   /** Deletions waiting for their undo delay, flushed if the page closes. */
   const pendingDeletes = new Set<string>();
 
@@ -275,8 +277,11 @@
       if (status.status === 'done') {
         // A body generated in the system shown: load the system again,
         // which keeps the body shown and loads its maps.
+        // Made from the Drift panel: the planet itself, in the view the panel left.
+        const fromDrift = autoOpen?.jobId === job.jobId && autoOpen.selection === selectedId ? autoOpen.planetView : undefined;
         if (status.world_id === selectedId) {
-          primary.loadSystem(status.world_id);
+          primary.loadSystem(status.world_id, null, fromDrift !== undefined);
+          if (fromDrift) pendingView = fromDrift;
         }
         if (selectedId && status.world_id === compareId) {
           secondary.loadSystem(status.world_id);
@@ -401,13 +406,18 @@
 
   /** A system drawn: shown at once (its bodies as spheres), its planet's maps following its job. */
   function submitted(created: SystemCreated, request: WorldRequest | null): void {
+    const fromDrift = form?.fromDrift;
     form = null;
     void refresh().then(() => select(created.system_id));
     if (created.ignored.length > 0) {
       toasts.show(t.app.ignored({ fields: created.ignored.join(', ') }));
     }
     if (created.job_id) {
-      autoOpen = { jobId: created.job_id, selection: created.system_id };
+      autoOpen = {
+        jobId: created.job_id,
+        selection: created.system_id,
+        ...(fromDrift ? { planetView: fromDrift.view } : {}),
+      };
       jobs.track(created.job_id, created.system_id, request ?? {}, { status: 'queued' }, true);
     }
   }
@@ -474,7 +484,11 @@
         id={primary.id}
         revision={revision(selectedId)}
         current={primary.meta.drift_ma ?? 0}
-        onGenerate={(ma) => primary.meta && openForm('around', driftRequest(primary.meta, ma), primary.id)}
+        onGenerate={(ma) => {
+          if (!primary.meta) return;
+          openForm('around', driftRequest(primary.meta, ma), primary.id);
+          if (form) form.fromDrift = { view: primaryPane?.viewState() ?? null };
+        }}
       />
     {/key}
   {/if}

@@ -42,4 +42,16 @@ describe('LoadedWorld.loadSystem', () => {
     await flush();
     expect(world.shownSystemBody?.id).toBe('d-1');
   });
+
+  it('opens the planet the system was drawn around when asked, from the star view', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: files.a }) }));
+    const world = new LoadedWorld();
+    world.loadSystem('a');
+    await flush();
+    expect(world.subject).toBe('star');
+    world.loadSystem('a', null, true);
+    await flush();
+    expect(world.subject).toBe('planet');
+    expect(world.shownSystemBody?.id).toBe('d');
+  });
 });
