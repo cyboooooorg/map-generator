@@ -1583,8 +1583,9 @@ pub(crate) mod tests {
         assert!((0.88..0.95).contains(&venus), "{venus}");
         let moon = g(10_921.0);
         assert!((moon - 0.165).abs() < 0.005, "{moon}");
-        // Heavier with size, faster than the radius.
+        // Heavier with size, faster than the radius, up to 5 g.
         assert!(g(2.0 * EARTH_CIRCUMFERENCE_KM) > 3.0);
+        assert_eq!(g(1_000_000.0), 5.0);
     }
 
     /// Heights (km) with the area of their pixel.
