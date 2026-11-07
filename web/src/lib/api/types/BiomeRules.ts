@@ -76,6 +76,18 @@ temperate: number,
  */
 tropical_winter: number, 
 /**
+ * Land with an annual rain under this many times its dryness
+ * threshold is arid: steppe (shrubland) or desert. Köppen's 10
+ * (Kottek et al. 2006, doi:10.1127/0941-2948/2006/0130, Table 1:
+ * `P_ann < 10 P_th`).
+ */
+steppe_ratio: number, 
+/**
+ * Arid land with an annual rain under this many times the dryness
+ * threshold is desert, otherwise steppe. Köppen's 5 (`P_ann ≤ 5 P_th`).
+ */
+desert_ratio: number, 
+/**
  * Shore wetter than this is wetland, otherwise beach.
  */
 wetland_moisture: number, 
@@ -84,17 +96,9 @@ wetland_moisture: number,
  */
 taiga_moisture: number, 
 /**
- * Temperate land drier than this is shrubland.
- */
-shrubland_moisture: number, 
-/**
  * Temperate land wetter than this is forest.
  */
 forest_moisture: number, 
-/**
- * Tropical land drier than this is desert.
- */
-desert_moisture: number, 
 /**
  * Tropical land wetter than this is jungle; between, savanna.
  */
