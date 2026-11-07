@@ -60,6 +60,7 @@ import {
   type IUniform,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { cameraPlanes } from './cameraPlanes';
 import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
 import { DIAL_RADIUS, RotationDial } from './rotationDial';
 import { hiddenByShape } from './occlusion';
@@ -3058,8 +3059,9 @@ export class PlanetView {
     this.u.uCloudsOn.value =
       this.cloudsOn && this.hasClouds ? smoothstepJs(CLOUD_FADE[0], CLOUD_FADE[1], altitude) : 0;
     this.driftClouds();
-    this.camera.near = Math.max(altitude * 0.1, 1e-6);
-    this.camera.far = altitude + 4;
+    const planes = cameraPlanes(altitude, this.ringReach());
+    this.camera.near = planes.near;
+    this.camera.far = planes.far;
     this.drawRingRocks();
     this.camera.updateProjectionMatrix();
     this.u.uLightDir.value.copy(HEADLIGHT).applyQuaternion(this.camera.quaternion);
@@ -3102,6 +3104,13 @@ export class PlanetView {
   }
 
   /** Height of the camera above the surface (globe) or the map plane. */
+  /** The radius of the outermost ring drawn, bright or dust, in radii of the body (0: none). */
+  private ringReach(): number {
+    let reach = this.rings ? this.u.uRingOuter.value : 0;
+    for (const mesh of this.dustRings) reach = Math.max(reach, mesh.material.uniforms['uOuter']!.value as number);
+    return reach;
+  }
+
   private altitude(): number {
     if (this.animation?.follow) {
       return this.morphDistance;
