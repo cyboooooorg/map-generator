@@ -1546,9 +1546,12 @@ pub(crate) mod tests {
         assert!(g(2.0 * EARTH_CIRCUMFERENCE_KM) > 3.0);
     }
 
+    /// Heights (km) with the area of their pixel.
+    type Heights = Vec<(f32, f32)>;
+
     /// Land heights and sea depths of a world above (below) its
     /// waterline, km, each with its pixel's area.
-    fn hypsometry(w: &World) -> (Vec<(f32, f32)>, Vec<(f32, f32)>) {
+    fn hypsometry(w: &World) -> (Heights, Heights) {
         let p = &w.params;
         let waterline = p.sea_level + p.planet.rules.waterline;
         let grid = p.grid();
