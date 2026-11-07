@@ -182,19 +182,28 @@ A first, then D, with C kept possible:
 PostgreSQL (B) is worth it only if several server instances must write
 the metadata at once; SQLite covers one instance.
 
-## Questions for the user
+## Decisions (2026-11-08)
 
-1. **Scale.** How many systems and bodies do you expect: tens, hundreds,
-   thousands? Will others use the app, or only you?
-2. **Hosting.** Does the app stay on this machine in Docker, or should it
-   run elsewhere (a server, the cloud, several machines)?
-3. **Rebuilding.** Is it acceptable that a body you have not opened for a
-   long time takes a few minutes to regenerate when you open it again,
-   in exchange for far less disk?
-4. **Diagnostics.** Can `noise_maps/` and `world.svg` become opt-in,
-   produced only on request?
-5. **Backups.** Do you want backups, and where (another disk, a cloud
-   bucket)?
+The user's answers to the study's questions:
+
+1. **Scale:** tens to a few hundred systems, for the user alone.
+2. **Hosting:** Docker on this machine, perhaps on a server later; no
+   second host and no cloud. SQLite covers it, and no object store (C) is
+   needed for now.
+3. **Rebuilding:** accepted. The database keeps each body's seed and
+   request; a body not opened for **14 days** loses its generated files
+   and is regenerated when it is opened again.
+4. **Generator version:** a body regenerated after the generator changed
+   is drawn by the current version (option a), even though it then
+   differs from what was evicted. The database records the version each
+   body was made with, so the viewer can say so.
+5. **Diagnostics:** `world.svg` and `noise_maps/` are produced only on
+   request (an "Export SVG" action and a debug option), about a quarter
+   of today's disk.
+6. **Backups:** none automatic. The app exports a system's seeds and
+   requests (JSON) and its images (PNG) instead.
+
+The steps that follow are in the backlog, item 22.
 
 ## Sources
 

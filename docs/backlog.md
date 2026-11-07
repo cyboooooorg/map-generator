@@ -703,18 +703,20 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 22. Storage
 
-- **Status:** study
+- **Status:** decided (2026-11-08)
 - **Analysis:** [analysis/15-storage.md](analysis/15-storage.md)
 - **Problem:** everything is files on one host's disk: listing systems
   opens every `system.json`, jobs are lost on a restart, source data,
   derived files and diagnostics share one directory (about 30 % of the
   3.9 GB could be rebuilt or dropped), and the user's names sit next to
   generated files.
-- **Proposed:** an SQLite index owned by the server (systems, bodies,
-  names, jobs, file manifests), rebuilt from the tree when missing;
-  diagnostics opt-in; then generated files treated as a cache rebuilt on
-  demand, as generation is deterministic; an S3-compatible store (Garage
-  or RustFS, not MinIO, now in maintenance mode) only when a second host
-  or remote storage is needed.
-- **Open questions:** scale, hosting, rebuilding on demand, diagnostics
-  and backups (see the analysis).
+- **Decided:** tens to hundreds of systems, one user, one Docker host
+  (perhaps a server later); no object store. The steps, each its own pull
+  request:
+
+| Step | Change                                                                                                   | Status |
+| ---- | -------------------------------------------------------------------------------------------------------- | ------ |
+| 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing | todo   |
+| 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
+| 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
+| 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |
