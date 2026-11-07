@@ -146,7 +146,7 @@ const SMALL_BODY_RELIEF: f32 = 0.08;
 /// in the elevation. Calibration, no source: with the floating platform
 /// (see [`floating`]), it puts about a tenth of an Earth-like world's land
 /// above 2 km and 2 % above 4 km, as on Earth (ETOPO 2022).
-const MOUNTAIN_BLEND: f32 = 0.26;
+const MOUNTAIN_BLEND: f32 = 0.36;
 /// Largest relief scale ([`relief_scale`]): Olympus Mons's 21.9 km of
 /// relief over its surroundings (Plescia 2004, doi:10.1029/2002JE002031)
 /// is 2.5 times Everest's 8.85 km, the tallest mountain known against
@@ -173,7 +173,7 @@ pub(crate) fn relief_scale(gravity: f32) -> f32 {
 /// Height of the continental platform above the waterline, km: where the
 /// continents' crust floats (calibration on Earth's hypsometry, see
 /// [`floating`]).
-const PLATFORM_KM: f32 = 0.4;
+const PLATFORM_KM: f32 = 0.45;
 /// Rise of the platform inland, in units of the continents' noise above
 /// the waterline: `1 − 1/e` of its height at this.
 const PLATFORM_RISE: f32 = 0.1;

@@ -578,13 +578,13 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     general rule would need the flux of impactors and their speeds per
     orbit (gravitational focusing included).
 - **Plates:**
-  - Plates are not driven: poles and speeds are drawn at random, where
-    slab pull sets the speed of a plate by its subducting edge (Forsyth
-    & Uyeda 1975). Feeding the subduction found on the boundaries back
-    into each plate's speed needs a second pass of the boundaries per
-    drift stage (each stage draws its own poles), about twice the plates'
-    0.13 s per world. The plate count does not follow the size of the
-    planet: no source scales it.
+  - Slab pull sets the present speed of each plate from its sinking
+    edge (2026-11-07), on one pass over the present boundary cells; at
+    another epoch that pass is extra, about 5 % of a plate map (0.24 s
+    at −100 Ma). The drift's other stages keep drawn speeds: setting
+    theirs too means finding each stage's boundaries, a pass per stage.
+    The plate count does not follow the planet's size: no source scales
+    it (Bird 2003 counts Earth's).
   - Isostasy: continents float as a platform and the sea floor is
     bounded between the shelf and Parsons & Sclater's old floor
     (`generation::floating`, 2026-11-07), calibrated on Earth's
