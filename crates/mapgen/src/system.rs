@@ -2571,13 +2571,33 @@ mod focus_ring_tests {
                     crate::rings::fluid_roche(giant.physical.density, 0.5),
                 );
                 let outer = f64::from(rings.outer);
+                // The Roche edge, or lower where the giant's innermost
+                // regular moon keeps it in.
+                let first = system
+                    .bodies
+                    .iter()
+                    .filter(|b| b.parent.as_deref() == Some(id) && b.ring_role.is_none())
+                    .map(|b| b.orbit.semi_major_axis_km)
+                    .fold(f64::INFINITY, f64::min);
+                let capped = outer * giant.physical.radius_km < first;
                 assert!(
-                    outer > roche.0 * 0.99 && outer < roche.1 * 1.01,
+                    outer < roche.1 * 1.01 && (outer > roche.0 * 0.99 || capped),
                     "seed {seed}: {outer} outside {roche:?}"
                 );
-                assert!(system.bodies.iter().any(|b| {
-                    b.parent.as_deref() == Some(id) && b.ring_role == Some(RingRole::Edge)
-                }));
+                // An edge moon keeps the edge, unless a resonant moon's
+                // division or the innermost regular moon leaves no room.
+                let roles = |role| {
+                    system
+                        .bodies
+                        .iter()
+                        .any(|b| b.parent.as_deref() == Some(id) && b.ring_role == Some(role))
+                };
+                assert!(
+                    roles(RingRole::Edge)
+                        || roles(RingRole::Resonant)
+                        || first < outer * giant.physical.radius_km * 1.25,
+                    "seed {seed}: no edge moon"
+                );
             }
         }
         assert!(bright > 3 && owned > 0, "{bright} {owned}");
