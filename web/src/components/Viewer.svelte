@@ -28,6 +28,7 @@
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
+  import { planetLook, type PlanetLook } from '../lib/skyBodies';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
@@ -1160,13 +1161,39 @@
     return ringRocks(sysBody, giant, giantBody.physical.radius_km, hostRings, sysDays);
   });
   $effect(() => view?.setRingRocks(ringRockWindow, ringRockScale));
+  /**
+   * The host planet's air and clouds in its moon's sky, from the planet's
+   * own world.json (null until it loads, or when it is not generated).
+   */
+  let hostLook = $state.raw<{ id: string; look: PlanetLook } | null>(null);
+  $effect(() => {
+    const parent = sysBody?.parent ? sys?.bodies.find((b) => b.id === sysBody.parent) : null;
+    const system = world.systemId;
+    if (!parent?.generated || !system) {
+      hostLook = null;
+      return;
+    }
+    const id = systemBodyId(system, parent.id);
+    const controller = new AbortController();
+    api
+      .metadata(id, controller.signal)
+      .then((host) => {
+        if (!controller.signal.aborted) hostLook = { id: parent.id, look: planetLook(host, (file) => worldFile(id, `raw_data/${file}`)) };
+      })
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) console.warn("Could not load the host planet's world", e);
+      });
+    return () => controller.abort();
+  });
   $effect(() => {
     // The planet in its moon's sky, by its own switches (Host planet).
     const parent = sysBody?.parent ?? null;
     const planetTilt = sysPlanet?.spin.axial_tilt_deg ?? 0;
     view?.setSkyBodies(
       (sysSky?.bodies ?? []).map((body, k) =>
-        sysSky?.ids[k] === parent ? { ...body, show: hostShow, axialTiltDeg: planetTilt, rings: hostRings } : body,
+        sysSky?.ids[k] === parent
+          ? { ...body, ...(hostLook?.id === parent ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
+          : body,
       ),
     );
     view?.setShadowCasters(sysSky?.casters ?? []);
