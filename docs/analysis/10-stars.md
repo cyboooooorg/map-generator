@@ -250,8 +250,8 @@ by the recalibration error for the others; step 5 changes locked worlds.
   ring where water stays liquid), winds and rain follow that geometry,
   and the viewer's sun stops moving with the season.
 - **Step 6:** biome colours of vegetated biomes get a tint by star type
-  (dark red to near black under M dwarfs, unchanged under G, yellowish
-  under F), applied by the "Star light" view only, so the usual maps and
+  (dark red to near black under M dwarfs, unchanged under G and early K,
+  yellowish under F), applied by the "Star light" view only, so the usual maps and
   the exported files stay Earth-coloured.
 
 ## Outcome
@@ -326,9 +326,14 @@ their latitude bands: a substellar circulation is left for later.
 
 In the "Star light" view only, the surface shader recolours vegetated
 biomes (by their share of plants: forest and jungle 1 down to tundra
-0.35) towards dark purple-black under stars cooler than the Sun (fully
-at 3 300 K) and towards gold under hotter ones (fully at 7 300 K),
-keeping their luminance; Sun-like stars leave them as they are. The
+0.35) towards dark purple-black under stars cooler than 4 900 K (fully
+at 3 400 K, an M2 dwarf), about a third as bright since such leaves
+absorb the whole visible range, and towards gold under stars hotter than
+the Sun (fully at 7 300 K), keeping their luminance. Sun-like stars and
+early K dwarfs leave them as they are: round a K2V star, whose light at
+the ground peaks in the red like the Sun's, plants "would look very
+similar to the Earth" (Kiang et al. 2007). The first version darkened
+them from the Sun's temperature down, already halfway at K5V. The
 exported maps keep Earth's colours. Under an M4V dwarf, the green
 continents of a locked planet turn dark brown in the orange light.
 
@@ -374,7 +379,7 @@ light at each.
   <https://arxiv.org/abs/1901.06364>.
 - Kiang et al. 2007, "Spectral Signatures of Photosynthesis II:
   Coevolution with Other Stars and the Atmosphere on Extrasolar
-  Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701382>.
+  Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701391>.
 - Kipping 2013, "Parametrizing the exoplanet eccentricity distribution
   with the Beta distribution", MNRAS 434, L51.
 - Kiang & Hoehler 2021, photon absorption of photosynthetic organisms
