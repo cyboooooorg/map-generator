@@ -833,7 +833,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
         },
         mass_earth: match &host {
             Some(h) => f64::from(h.giant.mass_earth),
-            None => (f64::from(params.circumference_km) / 40_075.0).powi(3),
+            None => f64::from(params.mass_earth()),
         },
         orbit_au: f64::from(params.orbit_au),
         eccentricity: f64::from(params.eccentricity),
@@ -1127,10 +1127,11 @@ fn planet_params(
         giants: if giant { None } else { Some(GiantsMode::None) },
         host: if giant { None } else { Some(HostMode::None) },
         mass_earth: giant.then_some(slot.mass_earth as f32),
-        // A rocky planet takes the size of the mass it was spaced with, at
-        // Earth's density (the mass a world's size gives, see planet_body),
-        // rather than its preset's own draw, so that the spacing holds.
-        circumference_km: (!giant).then(|| (40_075.0 * slot.mass_earth.cbrt()) as f32),
+        // A rocky planet takes the size of the mass it was spaced with, by
+        // the mass-radius relation of rocky planets (the mass a world's size
+        // gives, see planet_body), rather than its preset's own draw, so
+        // that the spacing holds.
+        circumference_km: (!giant).then(|| crate::world::rocky_circumference_km(slot.mass_earth)),
         width: Some(width),
         height: Some(height),
         ..WorldRequest::default()

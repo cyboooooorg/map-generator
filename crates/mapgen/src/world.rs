@@ -127,6 +127,25 @@ pub fn rocky_gravity(radius: f32) -> f32 {
     (density * radius).min(MAX_ROCKY_GRAVITY)
 }
 
+/// Circumference, km, of the rocky body of `mass_earth` Earth masses: the
+/// inverse of `M = g(R) R²` with [`rocky_gravity`], so that a world of this
+/// size weighs ([`WorldParams::mass_earth`]) the mass asked.
+pub fn rocky_circumference_km(mass_earth: f64) -> f32 {
+    let mass = |radius: f64| f64::from(rocky_gravity(radius as f32)) * radius * radius;
+    // The mass grows with the radius, past 2.6 Earth radii as R² once the
+    // gravity is capped: bisect between 0 and 100 Earth radii.
+    let (mut low, mut high) = (0.0_f64, 100.0_f64);
+    for _ in 0..60 {
+        let mid = 0.5 * (low + high);
+        if mass(mid) < mass_earth {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    (0.5 * (low + high) * f64::from(EARTH_CIRCUMFERENCE_KM)) as f32
+}
+
 impl WorldParams {
     /// Surface gravity relative to Earth's (1.0 = Earth's).
     ///
