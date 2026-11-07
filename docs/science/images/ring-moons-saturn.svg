@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 475" width="860" height="475" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title id="title">Saturn's rings, its Roche limits and the small moons at the rings' edge</title>
-  <desc id="desc">Distances from Saturn to scale, in Saturn radii. The main rings run from 1.24 to 2.27 radii. The rigid Roche limit for solid ice is at 1.15 radii; the fluid Roche limit for ring ice of 0.9 to 0.5 grams per cubic centimetre lies between 2.23 and 2.71 radii. Pan and Daphnis sit in gaps of the A ring; Atlas, Prometheus and Pandora just outside it; Janus and Epimetheus at 2.51 radii; Mimas, much larger, at 3.08 radii. The moons get larger with distance from the Roche limit.</desc>
+  <desc id="desc">Distances from Saturn to scale, in Saturn radii. The main rings run from 1.24 to 2.27 radii. The rigid Roche limit for solid ice is at 1.11 radii; the fluid Roche limit for ring ice of 0.9 to 0.5 grams per cubic centimetre lies between 2.16 and 2.62 radii, so the A ring ends inside it. Pan and Daphnis sit in gaps of the A ring; Atlas, Prometheus and Pandora just outside it; Janus and Epimetheus at 2.51 radii; Mimas, much larger, at 3.08 radii. The moons get larger with distance from the Roche limit.</desc>
   <style>
+    .t, .s { paint-order: stroke; stroke: #0f1622; stroke-width: 4px; stroke-linejoin: round; }
     .t { fill: #e6edf3; font-size: 13px; }
     .s { fill: #9aa7b4; font-size: 11px; }
     .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
@@ -13,20 +14,20 @@
   <clipPath id="sky"><rect x="0" y="64" width="860" height="330"/></clipPath>
 
   <text class="h" x="20" y="30">Saturn's rings and the small moons at their edge</text>
-  <text class="s" x="20" y="48">Distances from Saturn to scale; the moons are drawn 24 times larger than that scale so they show. Sizes are mean radii.</text>
+  <text class="s" x="20" y="48">Distances from Saturn's centre to scale, in equatorial radii; the moons are drawn 24 times larger than that scale so they show. Sizes are mean radii.</text>
 
   <!-- Fluid Roche zone for ring ice of 0.9 to 0.5 g/cm³ (Saturn's mean density 0.69). -->
-  <rect x="449" y="176" width="145" height="164" fill="#ffcc66" fill-opacity="0.10"/>
-  <line class="roche" x1="449" y1="176" x2="449" y2="340"/>
-  <line class="roche" x1="594" y1="176" x2="594" y2="340"/>
-  <text class="t" x="521" y="356" text-anchor="middle">fluid Roche limit</text>
+  <rect x="426" y="176" width="140" height="164" fill="#ffcc66" fill-opacity="0.10"/>
+  <line class="roche" x1="426" y1="176" x2="426" y2="340"/>
+  <line class="roche" x1="566" y1="176" x2="566" y2="340"/>
+  <text class="t" x="496" y="356" text-anchor="middle">fluid Roche limit</text>
   <!-- Rigid Roche limit for solid ice of 0.9 g/cm³. -->
-  <line class="roche" x1="126" y1="176" x2="126" y2="340"/>
-  <text class="t" x="126" y="356" text-anchor="middle">rigid Roche limit</text>
+  <line class="roche" x1="114" y1="176" x2="114" y2="340"/>
+  <text class="t" x="114" y="356" text-anchor="middle">rigid Roche limit</text>
 
   <!-- Saturn: a disc of 300 px radius whose cloud tops are at x = 80. -->
   <circle cx="-220" cy="230" r="300" fill="#d9b77a" clip-path="url(#sky)"/>
-  <text class="t" x="12" y="236" style="fill:#3a2a10">Saturn</text>
+  <text class="t" x="12" y="236" style="fill:#3a2a10; stroke:none">Saturn</text>
 
   <!-- Main rings, seen face-on as a radial strip. -->
   <rect x="152" y="223" width="87" height="14" fill="#8a7a66"/>
@@ -83,9 +84,9 @@
       <path d="M0 0 L10 5 L0 10 z" fill="#9fd3ff"/>
     </marker>
   </defs>
-  <line x1="449" y1="416" x2="830" y2="416" stroke="#9fd3ff" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="426" y1="416" x2="830" y2="416" stroke="#9fd3ff" stroke-width="1.6" marker-end="url(#arrow)"/>
   <text class="t" x="640" y="436" text-anchor="middle" style="fill:#9fd3ff">moons get larger with distance from the Roche limit</text>
 
   <text class="s" x="20" y="456">Ring edges: NASA Saturnian rings fact sheet. Moon sizes and distances: Porco et al. 2007, Table 1; Mimas: NASA.</text>
-  <text class="s" x="20" y="469">Roche limits for Saturn's mean density, 0.69 g/cm³: rigid for solid ice (0.9 g/cm³), fluid for ring ice of 0.9 to 0.5 g/cm³.</text>
+  <text class="s" x="20" y="469">Roche limits from Saturn's mean density (0.69 g/cm³) and mean radius, in equatorial radii: rigid for solid ice, fluid for ring ice of 0.9 to 0.5 g/cm³.</text>
 </svg>

@@ -36,9 +36,11 @@ zone*: a solid body survives there, but loose material cannot gather into a
 new one.
 
 **Orders of magnitude.** For Saturn (mean density 0.69 g/cm³) and ring ice
-(0.5 to 0.9 g/cm³, porous), the fluid limit lies at 2.2 to 2.7 Saturn radii.
-Saturn's main rings end at 2.27 radii, right where it begins. A solid ice
-body would hold down to 1.15 radii, inside the rings.
+(0.5 to 0.9 g/cm³, porous), the fluid limit lies 130,000 to 158,000 km from
+Saturn's centre: 2.16 to 2.62 equatorial radii. (The density is the mean one,
+so $R$ is the mean radius, 58,232 km; the equatorial radius is 60,268 km.)
+Saturn's main rings end at 2.27 equatorial radii, inside that band. A solid
+ice body would hold down to 1.11 equatorial radii, inside the rings.
 
 ### The Roche lobe: how much a moon can hold on to
 
@@ -161,9 +163,9 @@ ran out of ring material before they reached their critical density.
 ### What we do not know
 
 - **The rings' age.** The rings may be 10 to a few hundred million years old
-  (Iess et al. 2019; Kempf et al. 2023), or as old as Saturn and cleaned of
-  dust (Crida et al. 2019). Either way, their small moons are young or have
-  been rebuilt since.
+  (Iess et al. 2019; Kempf et al. 2023), or much older: Crida et al. (2019)
+  argue that their clean ice does not prove they are young. Either way, the
+  small moons at their edge are young or have been rebuilt since.
 - **The cores.** Nobody has seen a core. Their sizes come from the moons'
   densities and the model above, not from observation.
 
