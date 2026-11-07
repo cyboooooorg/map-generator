@@ -43,6 +43,12 @@ export interface QualityProfile {
   prominenceStrands: number;
   /** The rocks of a giant's rings round a ring moon, in the planet view (see lib/ringRocks.ts). */
   ringRocks: boolean;
+  /**
+   * Points spread evenly round each orbit line in the planet view's sky
+   * (see lib/systemSky.ts systemSky), recomputed every frame while the
+   * orbits play: more, the smoother a line passing near the camera.
+   */
+  orbitSamples: number;
 }
 
 export const PROFILES: Record<Quality, QualityProfile> = {
@@ -60,6 +66,9 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     starSegments: 128,
     prominenceStrands: 12,
     ringRocks: true,
+    // 0.5° apart: no corner shows on a line passing a twentieth of its
+    // radius from the camera (under a tenth of a pixel off the curve).
+    orbitSamples: 720,
   },
   light: {
     quality: 'light',
@@ -77,6 +86,8 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     starSegments: 48,
     prominenceStrands: 4,
     ringRocks: false,
+    // 2.25° apart (see ORBIT_SAMPLES in lib/systemSky.ts).
+    orbitSamples: 160,
   },
 };
 

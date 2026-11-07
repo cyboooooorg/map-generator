@@ -869,9 +869,11 @@
     const longitude = Math.atan2(start.sun[0], start.sun[2]);
     return longitude - (sunLongitude * Math.PI) / 180;
   });
+  /** Points round each orbit line in the sky, by quality (see QualityProfile.orbitSamples). */
+  const orbitSamples = currentProfile().orbitSamples;
   const sysSky = $derived.by(() => {
     if (!sys || !sysBody || !sysPlanet) return null;
-    return systemSky(sys, sysBody.id, sysDays, sysTextures, skySpin);
+    return systemSky(sys, sysBody.id, sysDays, sysTextures, skySpin, orbitSamples);
   });
   /** The trojan swarms and belts in that sky, while Small bodies is on. */
   const smallSky = $derived(smallBodies && sys && sysBody && sysPlanet ? smallBodiesSky(sys, sysBody.id, sysDays, skySpin) : null);

@@ -78,7 +78,7 @@ import {
 } from '../geo';
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
-import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody } from '../skyBodies';
+import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody, skyOccluders } from '../skyBodies';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, type Sky } from '../sky';
@@ -109,6 +109,8 @@ import {
   skyBodyVertex,
   previewGlobeFragment,
   previewGlobeVertex,
+  SKY_LINE_PASS,
+  SKY_OCCLUDERS,
   SKY_ORBIT_DASH,
   skyOrbitDash,
   skyOrbitFragment,
@@ -192,6 +194,8 @@ const SPIN_AXIS_LENGTH = 1.5;
  * its atmosphere, rings, grid and axes, before the near orbit lines (10).
  */
 const SKY_FRONT_ORDER = 5;
+/** One pass of a sky line set (see PlanetView.skyLines). */
+type SkyLinePass = LineSegments<BufferGeometry, ShaderMaterial>;
 /**
  * Half-size, in CSS pixels, below which a body of the sky is drawn no
  * smaller (with a faint ring), and to which a gap in a giant's rings is
@@ -585,6 +589,17 @@ export class PlanetView {
   }[] = [];
   /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
   private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  /** Their far parts in front of a sky body, drawn over it (see skyOrbitFragment). */
+  private skyOrbitsOver: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  /**
+   * The sky bodies the orbit lines pass in front of and behind (see
+   * skyOrbitFragment), shared by their materials; set each frame by
+   * drawSkyBodies.
+   */
+  private readonly skyOccluders = {
+    uOccluders: { value: Array.from({ length: SKY_OCCLUDERS }, () => new Vector4()) },
+    uOccluderCount: { value: 0 },
+  };
   /**
    * The globe's spin axis (see setSpinAxes): out of its poles, the north
    * end light, the south end blue.
@@ -2053,9 +2068,11 @@ export class PlanetView {
     this.disposeSkyBodies();
     this.skyOrbits?.geometry.dispose();
     this.skyOrbits?.material.dispose();
+    this.skyOrbitsOver?.material.dispose();
     this.skyOrbitsNear?.material.dispose();
     this.skyBelts?.geometry.dispose();
     this.skyBelts?.material.dispose();
+    this.skyBeltsOver?.material.dispose();
     this.skyBeltsNear?.material.dispose();
     this.spinAxis?.geometry.dispose();
     this.guides.dispose();
@@ -2340,7 +2357,7 @@ export class PlanetView {
    */
   setSkyOrbits(loops: readonly (readonly Vec3[])[], dashed: readonly boolean[] = []): void {
     if (!this.skyOrbits) {
-      [this.skyOrbits, this.skyOrbitsNear] = this.skyLines(new Color(0.55, 0.62, 0.75), 0.45);
+      [this.skyOrbits, this.skyOrbitsOver, this.skyOrbitsNear] = this.skyLines(new Color(0.55, 0.62, 0.75), 0.45);
     }
     this.skyOrbitsOn = fillSkyLines(this.skyOrbits.geometry, loops, dashed);
     this.skyOrbitDashed = loops.reduce((most, loop, k) => (dashed[k] ? Math.max(most, loopLength(loop)) : most), 0);
@@ -2362,7 +2379,7 @@ export class PlanetView {
 
   private applySkyOrbitDash(): void {
     const dash = skyOrbitDash(this.skyOrbitDashed, this.skyOrbitPace);
-    for (const lines of [this.skyOrbits, this.skyOrbitsNear]) {
+    for (const lines of [this.skyOrbits, this.skyOrbitsOver, this.skyOrbitsNear]) {
       if (lines) lines.material.uniforms['uDash']!.value = dash;
     }
     this.requestRender();
@@ -2375,48 +2392,51 @@ export class PlanetView {
    */
   setSkyBelts(loops: readonly (readonly Vec3[])[]): void {
     if (!this.skyBelts) {
-      [this.skyBelts, this.skyBeltsNear] = this.skyLines(new Color(0.85, 0.72, 0.5), 0.3);
+      [this.skyBelts, this.skyBeltsOver, this.skyBeltsNear] = this.skyLines(new Color(0.85, 0.72, 0.5), 0.3);
     }
     this.skyBeltsOn = fillSkyLines(this.skyBelts.geometry, loops, []);
     this.requestRender();
   }
 
   /**
-   * A pair of line sets drawn over the sky: its far part under the sky
-   * bodies, its near part after the globe (see skyOrbitFragment).
+   * Three passes of a line set drawn over the sky, sharing its geometry
+   * (see skyOrbitFragment): its far part under the sky bodies, then over
+   * those it passes in front of, and its near part after the globe.
    */
-  private skyLines(
-    colour: Color,
-    opacity: number,
-  ): [LineSegments<BufferGeometry, ShaderMaterial>, LineSegments<BufferGeometry, ShaderMaterial>] {
-    const far = new LineSegments(
-      new BufferGeometry(),
-      new ShaderMaterial({
-        vertexShader: skyOrbitVertex,
-        fragmentShader: skyOrbitFragment,
-        uniforms: {
-          uColor: { value: colour },
-          uOpacity: { value: opacity },
-          uNear: { value: 0 },
-          uDash: { value: SKY_ORBIT_DASH },
-          uScreenPx: { value: 1000 },
-        },
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    far.frustumCulled = false;
-    // Over the stars and the host star, under the bodies.
-    far.renderOrder = -1.5;
-    this.scene.add(far);
-    const material = far.material.clone();
-    material.uniforms['uNear']!.value = 1;
-    const near = new LineSegments(far.geometry, material);
-    near.frustumCulled = false;
-    // After the globe and its air.
-    near.renderOrder = 10;
-    this.scene.add(near);
-    return [far, near];
+  private skyLines(colour: Color, opacity: number): [SkyLinePass, SkyLinePass, SkyLinePass] {
+    const geometry = new BufferGeometry();
+    const pass = (value: number, renderOrder: number): SkyLinePass => {
+      const lines = new LineSegments(
+        geometry,
+        new ShaderMaterial({
+          vertexShader: skyOrbitVertex,
+          fragmentShader: skyOrbitFragment,
+          uniforms: {
+            uColor: { value: colour },
+            uOpacity: { value: opacity },
+            uPass: { value },
+            uDash: { value: SKY_ORBIT_DASH },
+            uScreenPx: { value: 1000 },
+            // The same objects for every pass, set once a frame.
+            ...this.skyOccluders,
+          },
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      lines.frustumCulled = false;
+      lines.renderOrder = renderOrder;
+      this.scene.add(lines);
+      return lines;
+    };
+    return [
+      // Over the stars and the host star, under the bodies.
+      pass(SKY_LINE_PASS.farUnder, -1.5),
+      // Over the bodies behind the globe and their rings, under its air.
+      pass(SKY_LINE_PASS.farOver, -0.5),
+      // After the globe and its air.
+      pass(SKY_LINE_PASS.near, 10),
+    ];
   }
 
   /**
@@ -2434,6 +2454,7 @@ export class PlanetView {
 
   private skyMarks: readonly { candidates: readonly Vec3[]; prefer?: readonly [number, number] }[] = [];
   private skyBelts: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
+  private skyBeltsOver: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyBeltsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyBeltsOn = false;
 
@@ -2819,6 +2840,11 @@ export class PlanetView {
       setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
     }
+    // The bodies the orbit lines pass behind and in front of.
+    const c = this.camera.position;
+    const occluders = visible ? skyOccluders([c.x, c.y, c.z], this.skyBodies.map(({ body }) => body), smallest, SKY_OCCLUDERS) : [];
+    occluders.forEach(({ position, radius }, i) => this.skyOccluders.uOccluders.value[i]!.set(...position, radius));
+    this.skyOccluders.uOccluderCount.value = occluders.length;
     this.drawHostSpin(visible);
   }
 
@@ -3015,13 +3041,13 @@ export class PlanetView {
       }
     }
     this.dial.update(this.dialState !== null, this.morph);
-    for (const orbits of [this.skyOrbits, this.skyOrbitsNear]) {
+    for (const orbits of [this.skyOrbits, this.skyOrbitsOver, this.skyOrbitsNear]) {
       if (!orbits) continue;
       orbits.visible = this.skyOrbitsOn && this.morph > 0.01;
       orbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
       orbits.material.uniforms['uScreenPx']!.value = this.renderer.domElement.height;
     }
-    for (const belts of [this.skyBelts, this.skyBeltsNear]) {
+    for (const belts of [this.skyBelts, this.skyBeltsOver, this.skyBeltsNear]) {
       if (!belts) continue;
       belts.visible = this.skyBeltsOn && this.morph > 0.01;
       belts.material.uniforms['uOpacity']!.value = 0.3 * this.morph ** 3;
