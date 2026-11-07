@@ -1168,7 +1168,7 @@
    * The host planet's air and clouds in its moon's sky, from the planet's
    * own world.json (null until it loads, or when it is not generated).
    */
-  let hostLook = $state.raw<{ id: string; look: PlanetLook } | null>(null);
+  let hostLook = $state.raw<{ system: string; id: string; look: PlanetLook } | null>(null);
   $effect(() => {
     const parent = sysBody?.parent ? sys?.bodies.find((b) => b.id === sysBody.parent) : null;
     const system = world.systemId;
@@ -1181,7 +1181,7 @@
     api
       .metadata(id, controller.signal)
       .then((host) => {
-        if (!controller.signal.aborted) hostLook = { id: parent.id, look: planetLook(host, (file) => worldFile(id, `raw_data/${file}`)) };
+        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => worldFile(id, `raw_data/${file}`)) };
       })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) console.warn("Could not load the host planet's world", e);
@@ -1195,7 +1195,7 @@
     view?.setSkyBodies(
       (sysSky?.bodies ?? []).map((body, k) =>
         sysSky?.ids[k] === parent
-          ? { ...body, ...(hostLook?.id === parent ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
+          ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
           : body,
       ),
     );
