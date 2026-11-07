@@ -402,6 +402,44 @@ and casts their shadows, the four largest of all bodies kept.
 - The user can turn moons off (`none`), not choose their number: they
   follow from the seed and the physics.
 
+## 9. Science fixes (2026-11-07)
+
+The science articles (`docs/science/how-many-moons.md`,
+`moon-shapes.md`, `tidal-locking.md`) found where the rules above depart
+from the science. What changed:
+
+- **Round from 300 km (rock).** The rock limit is now 600 km across, a
+  mean radius of 300 km, where Lineweaver & Norman 2010 observe the
+  change (the 900 km of section 5 came from an estimate). The ice limit
+  stays 400 km. The irregularity falls to 0 at the limit, so the shape no
+  longer jumps there, and a giant's regular moons follow the same limits.
+- **Tidal shapes.** A locked moon is stretched into the hydrostatic
+  ellipsoid of a fluid body, `(b − c) / (a − c) = 1/4` (Noyelles 2017),
+  in full from the round limit up.
+- **Locking by timescale.** A moon is locked when the planet's tides
+  have despun it within the system's age (Gladman et al. 1996, its Love
+  number from the rigidity of rock), and the planet to its largest moon
+  likewise; the mass ratio of 0.05 of section 4 is gone.
+- **Despun planets.** A planet its star has despun keeps only the moons
+  light enough to outlast the system (Barnes & O'Brien 2002, eq. 8), not
+  none; so does a giant its star has locked, with its own tides. A
+  giant's chain ends at a third of its Hill radius. A moon's world is
+  locked to its planet, not to the star.
+- **Worlds made before keep their lock.** A reloaded world takes the lock
+  its base map was made with, from the `tidally_locked` of its stored
+  `world.json` (`WorldParams.locked_to_star`), not the rule above: its
+  detail tiles and epochs (the craters of a world locked to its star
+  favour its leading hemisphere) then agree with the map and its card.
+  Only newly generated worlds follow the new rule.
+- **Captured moons** avoid the inclinations of 55° to 130° (Carruba et al.
+  2002, via Shen & Tremaine 2008).
+- **One recipe for a giant's moons**: a giant of a system draws them as a
+  giant world does (two to five, a captured Triton on 35 % of ice
+  giants).
+- **The odds** are labelled in `moons.rs` as a source or a calibration.
+  Elser et al. 2011 give no dependence on the star, so their 1 in 12
+  stays the same round every star.
+
 ## Sources
 
 - Elser, Stadel, Moore & Morishima 2011, "How common are Earth-Moon

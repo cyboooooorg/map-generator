@@ -18,7 +18,7 @@ use crate::noise::{
     stream_seed,
 };
 use crate::rivers;
-use crate::star::{StarClimate, StarInfo, star_temperatures};
+use crate::star::{StarClimate, star_temperatures};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -1078,12 +1078,15 @@ fn star_climate(params: &WorldParams) -> StarClimate {
 }
 
 /// The wind belts of world `params` (see [`Belts`]), from its day: the
-/// rotation its moons draw, its year if locked to its star, Earth's 24 h
-/// for a world without moons.
+/// rotation its moons draw, its year if locked to its star (two thirds of
+/// it in the 3:2 resonance), Earth's 24 h for a world without moons.
 pub fn belts(params: &WorldParams) -> Belts {
-    let star = StarInfo::new(params.star, params.orbit_au, params.eccentricity);
+    let star = crate::spin::star_info(params);
     let day_hours = if star.tidally_locked {
         f64::from(star.year_days) * 24.0
+    } else if star.spin_orbit_3_2 {
+        // Three turns every two orbits.
+        f64::from(star.year_days) * 24.0 / f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
     } else {
         crate::moons::MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours))
     };
@@ -1094,7 +1097,7 @@ pub fn belts(params: &WorldParams) -> Belts {
 /// planet locked to its star, whose sun never moves in its sky.
 pub fn seasons(params: &WorldParams) -> Seasons {
     let grid = params.grid();
-    if StarInfo::new(params.star, params.orbit_au, params.eccentricity).tidally_locked {
+    if crate::spin::star_info(params).tidally_locked {
         return Seasons::none(grid.height);
     }
     let star = star_climate(params);
@@ -1221,14 +1224,12 @@ pub fn generate_with_progress(
     let star_climate = star_climate(params);
     // A tidally locked planet's climate follows the angle from the point
     // under its star instead of the latitude.
-    let locked = StarInfo::new(params.star, params.orbit_au, params.eccentricity)
-        .tidally_locked
-        .then(|| {
-            let mut locked = LockedClimate::new();
-            locked.transport_heat(params.pressure_bar);
-            star_temperatures(locked.profile_mut(), star_climate);
-            locked
-        });
+    let locked = crate::spin::star_info(params).tidally_locked.then(|| {
+        let mut locked = LockedClimate::new();
+        locked.transport_heat(params.pressure_bar);
+        star_temperatures(locked.profile_mut(), star_climate);
+        locked
+    });
     let row_temperature = match &locked {
         Some(locked) => locked.rows(&grid),
         None => {
@@ -1639,6 +1640,7 @@ pub(crate) mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            locked_to_star: None,
             gravity: None,
         }
     }

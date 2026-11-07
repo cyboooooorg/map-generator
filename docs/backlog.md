@@ -549,6 +549,37 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
 
+## 19. Tides, spin and moons: what the science fixes left
+
+- **Problem:** the science fixes of 2026-11-07 (`spin.rs`, `moons.rs`)
+  model the 3:2 spin–orbit resonance, circularisation, light moons of
+  despun planets and giants, and tidal shapes, but keep some
+  simplifications:
+  - a sharp line at e = 0.06 between locked and 3:2 (Ribas et al. 2016),
+    where the odds of capture rise with the eccentricity (Makarov 2012):
+    a draw keyed by the seed would be closer;
+  - only the 3:2 resonance: large eccentricities favour 2:1 and higher
+    (Makarov, Berghea & Efroimsky 2012; Correia & Laskar 2009, Table 3);
+  - giants are locked once despun, where a fluid planet on an eccentric
+    orbit settles into pseudo-synchronous rotation (Hut 1981);
+  - circularisation and despinning take Earth's mass and radius for every
+    rocky planet (a super-Earth circularises about three times faster);
+  - a 3:2 world takes the rotating climate whatever its solar day (two
+    years: 176 days for Mercury), not a slow rotator's;
+  - drawn eccentricities follow Kipping 2013, fitted mostly to giants:
+    small close-in planets are less eccentric, so too many despun
+    planets of red dwarfs come out in 3:2;
+  - a moon's tilt is the Moon's 6.68° for a giant-impact moon and 0 for
+    the others, not its own Cassini state from the precession rates;
+  - inclinations of moons are to the planet's equator, the stability
+    limits to its orbit;
+  - Elser et al. 2011's odds of a large moon apply round every star.
+- **Done when:** capture into 3:2 and higher resonances is drawn by
+  eccentricity, giants turn pseudo-synchronously, slow rotators get a
+  climate of their own, rocky planets' tides scale with their mass and
+  radius, and moons get their Cassini obliquity.
+- **Status:** todo
+
 ## 20. Relief science, what remains
 
 - **Status:** todo

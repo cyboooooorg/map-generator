@@ -482,11 +482,7 @@ pub fn export_raw_data(
         surface_age_ga: Some(world.params.surface_age_ga),
         star: Some(StarInfo {
             metallicity: world.params.metallicity,
-            ..StarInfo::new(
-                world.params.star,
-                world.params.orbit_au,
-                world.params.eccentricity,
-            )
+            ..crate::spin::star_info(&world.params)
         }),
         drift_ma: world.params.drift_ma,
         impact_factor: world.params.impact_factor,
@@ -924,6 +920,10 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             dust: Vec::new(),
         }),
         impact_factor: meta.impact_factor,
+        // The lock the base map was made with, not today's rule: worlds made
+        // before the 3:2 resonance and the moons' locking to their planet
+        // were locked to the star at any eccentricity, moons included.
+        locked_to_star: meta.star.as_ref().map(|s| s.tidally_locked),
         // The gravity it was generated with (worlds made before the
         // mass–radius relation keep theirs), so its epochs and detail tiles
         // draw the craters it was drawn with.
@@ -1184,6 +1184,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            locked_to_star: None,
             gravity: None,
         })
         .world;

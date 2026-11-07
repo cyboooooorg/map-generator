@@ -96,6 +96,9 @@ export const fr: Messages = {
     lunarMasses: 'masses lunaires',
     spin: 'Jour',
     locked: 'synchrone avec son astre',
+    resonant: (p) => `${p.day}, résonance 3:2${S}: trois tours toutes les deux orbites`,
+    axes: (p) => `${p.a} × ${p.b} × ${p.c} de diamètre`,
+    axesHelp: `Ses trois diamètres, le plus long vers sa planète quand elle lui est synchrone${S}: une lune irrégulière, ou ronde mais étirée par les marées de sa planète`,
     tilt: (p) => `inclinaison ${p.tilt}`,
     light: 'Lumière',
     lightValue: (p) => `${p.flux}× celle de la Terre · équilibre ${p.temperature}`,
@@ -274,6 +277,8 @@ export const fr: Messages = {
     starSizeValue: (p) => `${p.size} (le Soleil vu de la Terre${S}: ${p.sun})`,
     locked: 'en rotation synchrone',
     lockedHelp: `Une face toujours éclairée${S}: l’étoile reste fixe dans son ciel`,
+    resonant: 'résonance spin-orbite 3:2',
+    resonantHelp: `Comme Mercure${S}: les marées de l’étoile la tiennent à trois tours toutes les deux orbites, son orbite excentrique l’empêchant d’être synchrone${S}; son jour solaire dure deux ans`,
     moons: 'Lunes',
     moonsHelp: `Chacune un monde à part entière${S}: ouvrez-la avec Lune au-dessus de la visionneuse (U)`,
     noMoon: 'aucune',
@@ -484,7 +489,7 @@ export const fr: Messages = {
       F: `F${S}: blanc-jaune, un peu plus chaude et plus brillante que le Soleil`,
       G: `G${S}: comme le Soleil (G2V), 5${S}300 à 6${S}000${S}K`,
       K: `K${S}: naine orange, moins brillante que le Soleil, vit des dizaines de milliards d’années`,
-      M: `M${S}: naine rouge, froide et peu lumineuse, trois quarts des étoiles${S}; ses planètes habitables sont proches et en rotation synchrone`,
+      M: `M${S}: naine rouge, froide et peu lumineuse, trois quarts des étoiles${S}; ses planètes habitables sont proches, freinées par ses marées${S}: synchrones, ou en résonance 3:2 sur une orbite excentrique`,
     },
     orbitBy: 'Régler l’orbite par',
     orbitPosition: 'Position dans la zone habitable',
@@ -492,7 +497,7 @@ export const fr: Messages = {
     orbitPositionHelp: `0${S}: bord intérieur de la zone habitable · 1${S}: bord extérieur · Terre${S}: environ 0,1`,
     orbitAuHelp: `Terre${S}: 1 · Mars${S}: 1,52 · Vénus${S}: 0,72`,
     eccentricity: 'Excentricité',
-    eccentricityHelp: `0${S}: un cercle · Vénus${S}: 0,007 · Terre${S}: 0,017 · Mars${S}: 0,09 · Mercure${S}: 0,21. Plus elle est forte, plus la planète reçoit de lumière sur l’année. Au hasard${S}: tirée comme celles des planètes connues, nulle pour les planètes en rotation synchrone`,
+    eccentricityHelp: `0${S}: un cercle · Vénus${S}: 0,007 · Terre${S}: 0,017 · Mars${S}: 0,09 · Mercure${S}: 0,21. Plus elle est forte, plus la planète reçoit de lumière sur l’année. Au hasard${S}: tirée comme celles des planètes connues, nulle pour les planètes les plus proches, dont les marées ont arrondi l’orbite`,
     moons: 'Lunes',
     metallicity: 'Métallicité de l’étoile [Fe/H]',
     metallicityHelp: `Fer par rapport à l’hydrogène, en dex par rapport au Soleil (0)${S}; tirée comme les étoiles voisines (autour de −0,1). Les étoiles riches en métaux ont bien plus de planètes géantes${S}: environ 1,6 fois plus par 0,1 dex`,
@@ -511,7 +516,7 @@ export const fr: Messages = {
     moonsAuto: 'Tirées par la graine',
     moonsNone: 'Aucune',
     moonsCount: (p) => (p.count === 1 ? '1 lune' : `${p.count} lunes`),
-    moonsHelp: `Tirées par la graine${S}: environ une planète rocheuse sur 12 a une grosse lune, les petits mondes souvent un compagnon, d’autres de petites lunes de débris ou capturées, les planètes verrouillées sur leur étoile aucune. Un nombre donne autant de lunes stables${S}: une étoile et une orbite au hasard sont tirées de nouveau jusqu’à ce que la planète échappe aux marées de son étoile et ait la place${S}; une grosse lune stabilise l’inclinaison de l’axe, et les lunes lèvent les marées`,
+    moonsHelp: `Tirées par la graine${S}: environ une planète rocheuse sur 12 a une grosse lune, les petits mondes souvent un compagnon, d’autres de petites lunes de débris ou capturées, les planètes freinées par leur étoile seulement de petites lunes assez légères pour survivre à ses marées. Un nombre donne autant de lunes stables${S}: une étoile et une orbite au hasard sont tirées de nouveau jusqu’à ce que la planète ait la place${S}; une grosse lune stabilise l’inclinaison de l’axe, et les lunes lèvent les marées`,
     seed: 'Graine',
     seedPlaceholder: 'au hasard',
     roll: 'Tirer',
@@ -633,6 +638,7 @@ export const fr: Messages = {
     rotationDialHelp:
       `Un anneau autour de l’équateur, gradué en degrés${S}: son trait montre de combien l’astre a tourné, par rapport aux étoiles, ou par rapport à ce qu’il orbite pour un astre en rotation synchrone`,
     dialFree: (p) => `Rotation ${p.angle} · Heure locale ${p.time} (méridien 0)`,
+    dialResonant: (p) => `Résonance spin-orbite 3:2 · Rotation ${p.angle} · Heure locale ${p.time} (méridien 0)`,
     dialFreeDays: (p) =>
       p.solar === null
         ? `Jour sidéral ${p.sidereal} · Jour solaire${S}: aucun, l’étoile reste immobile`
@@ -664,6 +670,10 @@ export const fr: Messages = {
       },
       { term: `Rotation synchrone${S}:`, text: 'l’astre fait un tour par orbite et montre toujours la même face à ce qu’il orbite.' },
       { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’environ ±2e radians.' },
+      {
+        term: `Résonance 3:2${S}:`,
+        text: `trois tours toutes les deux orbites, comme Mercure${S}: les marées de l’étoile y tiennent une planète excentrique au lieu de la rendre synchrone${S}; son jour solaire dure deux de ses années.`,
+      },
       {
         term: `Convention de longitude${S}:`,
         text: `ici, la face d’un astre synchrone tournée vers son hôte est la longitude 180°${S}; la convention scientifique y place la longitude 0.`,
@@ -1019,7 +1029,7 @@ export const fr: Messages = {
     unknownStar: (p) => `Étoile inconnue${S}: ${p.star}`,
     orbitAndPosition: 'Réglez l’orbite par sa distance ou par sa position dans la zone habitable, pas les deux.',
     noRoomForMoons: (p) =>
-      `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies verrouillent la planète sur son étoile ou la gardent trop près. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
+      `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies gardent la planète trop près de son étoile, dont les marées font tomber toutes les lunes sauf les plus légères. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
     moonsOfAMoon: `La lune d’une géante ne garde aucune lune (sa sphère de Hill est trop petite)${S}: demandez des lunes ou une lune de géante, pas les deux.`,
     tooManyPlanets: (p) => `${p.asked} planètes demandées${S}: un système en compte ${p.max} au plus.`,
     zoneFull: (p) => `${p.asked} planètes de type ${p.type} demandées, mais leur bande de distances autour de cette étoile n’en tient que ${p.fits}.`,
@@ -1027,7 +1037,7 @@ export const fr: Messages = {
     unknownType: (p) => `Type de planète inconnu${S}: ${p.type}.`,
     systemExists: (p) => `Le système ${p.system} existe déjà${S}: remplacez-le, supprimez-le ou choisissez une autre graine.`,
     hotGiantMoons: (p) =>
-      `Une géante chaude ne garde aucune lune (${p.count} demandées)${S}: si près de son étoile, sa sphère de Hill est trop petite. Choisissez une orbite plus froide ou aucune lune.`,
+      `Pas autant de lunes pour une géante si près de son étoile (${p.count} demandées)${S}: sa sphère de Hill est trop petite, ou les marées de son étoile l’ont rendue synchrone et ses lunes tombent. Choisissez une orbite plus lointaine ou moins de lunes.`,
     unknownPreset: (p) => `Aucun modèle de planète ne s’appelle ${p.preset}.`,
     tooManyPixels: (p) =>
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,

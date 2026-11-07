@@ -17,19 +17,34 @@
 //!
 //! **Stability.** A moon must orbit beyond the Roche limit (fluid for
 //! round moons, rigid for small ones) and within a third of the Hill radius
-//! at the planet's periapsis (half for retrograde moons). Moons too close
-//! to a larger one are dropped. A planet locked to its star keeps no moon:
-//! its synchronous orbit lies beyond its Hill sphere, so tides bring every
-//! moon down (Barnes & O'Brien 2002).
+//! at the planet's periapsis (half for retrograde moons, see
+//! `PROGRADE_REACH`); captured moons keep out of the unstable
+//! inclinations of 55° to 130°. Moons too close to a larger one are
+//! dropped. A planet its star has despun (locked or in the 3:2 resonance,
+//! see `crate::spin`) has its synchronous orbit beyond its Hill sphere, so
+//! tides bring every moon down: it keeps only those light enough to
+//! outlast the system's age (Barnes & O'Brien 2002, eq. 8).
 //!
-//! **Shapes.** Moons smaller than about 900 km across (rock) or 400 km
-//! (ice) are not pulled round by their gravity: they get three axes, the
-//! more unequal the smaller they are.
+//! **Locking.** A moon is locked to its planet when the planet's tides
+//! have despun it within the system's age, and the planet to its largest
+//! moon when that moon's tides have despun it (`despin_gyr`, the
+//! formula the planets' locking scales); a binary when their barycentre
+//! lies outside the planet.
+//!
+//! **Shapes.** Moons smaller than 600 km across (rock) or 400 km (ice),
+//! a mean radius of 300 and 200 km (Lineweaver & Norman 2010), are not
+//! pulled round by their gravity: they get three axes, the more unequal
+//! the smaller they are, equal at the limit. A locked moon is stretched by
+//! its planet's tides into a triaxial ellipsoid, in full from the limit
+//! up (`moon_axes`). The same rules apply to a giant's regular moons.
 //!
 //! **Migration.** A moon above the synchronous orbit recedes (the Moon), a
 //! moon below it or on a retrograde orbit falls in (Phobos, Triton); a
 //! binary is locked face to face and stays put, and far captured moons
 //! hardly move.
+//!
+//! **Giants.** A giant's regular moons are drawn by [`MoonSystem::draw`]
+//! for a giant world and a giant of a system alike (`of_giant`).
 use crate::noise::{stream, stream_seed};
 use crate::star::StarInfo;
 use crate::world::WorldParams;
@@ -210,8 +225,17 @@ const AU_KM: f64 = 1.496e8;
 const SNOW_LINE_K: f32 = 150.0;
 
 /// Odds of a giant-impact moon: on worlds up to `SMALL_WORLD` Earth radii,
-/// and from `LARGE_WORLD` up (Elser et al. 2011: 1 in 12, 1 in 4 to 1 in 45
-/// depending on the assumptions), linear in between.
+/// and from `LARGE_WORLD` up, linear in between. The large-world odds are
+/// Elser et al. 2011's "more than 1 in 12 terrestrial planets hosting a
+/// massive moon, with a low-end estimate of 1 in 45 and a high-end
+/// estimate of 1 in 4" (doi:10.1016/j.icarus.2011.05.025). They come from
+/// simulations of Earth-like planets forming in the habitable zone of a
+/// Sun-like star with Jupiter and Saturn (Morishima et al. 2010), and the
+/// paper gives no dependence on the star, the planet's mass or its
+/// distance: the app applies them round every star (an assumption, not a
+/// result). The small-world odds, 1 in 2, are a calibration loosely on
+/// Brown et al. 2006 (three of the four brightest Kuiper belt objects have
+/// satellites, doi:10.1086/501524).
 const IMPACT_ODDS: (f64, f64) = (0.5, 1.0 / 12.0);
 const SMALL_WORLD: f64 = 0.25;
 const LARGE_WORLD: f64 = 0.4;
@@ -222,12 +246,15 @@ const IMPACT_MASS_RATIO: (f64, f64, f64) = (0.005, 0.15, 0.03);
 /// large worlds (Charon: 16.5; the Moon: 60).
 const IMPACT_ORBIT_SMALL: (f64, f64) = (8.0, 25.0);
 const IMPACT_ORBIT_LARGE: (f64, f64) = (10.0, 65.0);
-/// Odds of debris moonlets (no giant-impact moon), and their size: Phobos
-/// (11 km) around Mars (3 390 km), scaled with the planet.
+/// Odds of debris moonlets (no giant-impact moon), a calibration with no
+/// source (no statistics exist: Mars is the one example, Canup & Salmon
+/// 2018, doi:10.1126/sciadv.aar6887), and their size: Phobos (11 km)
+/// around Mars (3 390 km), scaled with the planet.
 const DEBRIS_ODDS: f64 = 0.2;
 const DEBRIS_RADIUS: (f64, f64) = (0.4, 2.5);
 const PHOBOS_OVER_MARS: f64 = 11.1 / 3390.0;
-/// Odds of captured moons, their radius range, km, and their semi-major
+/// Odds of captured moons (a calibration with no source: none of the
+/// rocky planets has one), their radius range, km, and their semi-major
 /// axis range as a share of the Hill radius.
 const CAPTURE_ODDS: f64 = 0.15;
 const CAPTURED_RADIUS_KM: (f64, f64) = (1.0, 30.0);
@@ -236,12 +263,25 @@ const CAPTURED_ORBIT: (f64, f64) = (0.05, 0.3);
 /// asked for, as a share of the Hill radius: wider, so that several fit
 /// (retrograde orbits stay stable out to half of it).
 const COUNT_CAPTURED_ORBIT: (f64, f64) = (0.03, 0.45);
-/// Diameter below which a body is not round, km, for rock and ice.
-const ROUND_ROCK_KM: f64 = 900.0;
+/// Diameter from which a body is round, km, for rock and ice: twice the
+/// mean radius of about 300 km (rocky asteroids) and 200 km (icy moons)
+/// where Lineweaver & Norman 2010 observe the change from irregular to
+/// round shapes ("The potato radius", arXiv:1004.1091, Fig. 2).
+const ROUND_ROCK_KM: f64 = 600.0;
 const ROUND_ICE_KM: f64 = 400.0;
-/// Mass ratio from which the largest moon makes a binary, locked face to
-/// face with its planet.
-const BINARY_MASS_RATIO: f64 = 0.05;
+/// Outermost stable orbits, as a share of the Hill radius, for prograde
+/// and retrograde moons: the cautious end of the published range. Barnes
+/// & O'Brien 2002 take 0.36 and 0.50 (doi:10.1086/341477, after Holman &
+/// Wiegert 1999 and the Solar System's moons); Shen & Tremaine 2008 find
+/// that "many prograde and retrograde satellites can survive out to radii
+/// ∼ 0.5rH and ∼ 0.7rH" (doi:10.1088/0004-6256/136/6/2453). The app loses
+/// some far moons a real planet could keep, never the reverse.
+const PROGRADE_REACH: f64 = 1.0 / 3.0;
+const RETROGRADE_REACH: f64 = 0.5;
+/// Inclinations to the planet's orbit between which a moon's orbit is
+/// generally unstable, degrees (Carruba et al. 2002, as summarised by Shen
+/// & Tremaine 2008): captured moons are drawn outside them.
+const UNSTABLE_INCLINATION_DEG: (f64, f64) = (55.0, 130.0);
 /// Moons closer to a larger one than this many mutual Hill radii are
 /// dropped (orbits that close do not last).
 const SPACING_HILL: f64 = 8.0;
@@ -295,12 +335,161 @@ impl Candidate {
     }
 
     fn round(&self) -> bool {
-        let limit = match self.composition {
-            Composition::Rock => ROUND_ROCK_KM,
-            Composition::Ice => ROUND_ICE_KM,
-        };
-        2.0 * self.radius_km() >= limit
+        is_round(self.composition, self.radius_km())
     }
+}
+
+/// Whether a body of `composition` and mean `radius_km` is pulled round by
+/// its own gravity (see [`ROUND_ROCK_KM`]).
+fn is_round(composition: Composition, radius_km: f64) -> bool {
+    2.0 * radius_km >= round_limit_km(composition)
+}
+
+/// The diameter from which a body of `composition` is round, km.
+fn round_limit_km(composition: Composition) -> f64 {
+    match composition {
+        Composition::Rock => ROUND_ROCK_KM,
+        Composition::Ice => ROUND_ICE_KM,
+    }
+}
+
+/// The three semi-axes of a moon of `composition` and mean `radius_km`, km,
+/// the longest first (towards its planet when locked), their product the
+/// mean radius cubed.
+///
+/// - **Irregular** under the round limit, the more so the smaller: an
+///   irregularity of `1 − d / limit` (1 for a moonlet, 0 at the limit),
+///   the middle axis shortened by 5 to 30 % of it and the short one by as
+///   much again (`draws`, two uniform draws). Calibration, no source: the
+///   real change is a band, not a line (Proteus stays lumpy above it,
+///   Lineweaver & Norman 2010).
+/// - **Stretched by its planet's tides** when it is synchronous (`locked`:
+///   its mass, its planet's and its semi-major axis, kg and km), as far as
+///   its gravity rules its shape (in full from the round limit, not at all
+///   for a moonlet held by its strength): the hydrostatic ellipsoid of a
+///   homogeneous fluid body (Love number `h₂ = 5/2`) under the tide and its
+///   spin, to first order in `q = n² R³ / (G m)`: `a = R (1 + 35q/12)`,
+///   `b = R (1 − 5q/6)`, `c = R (1 − 25q/12)`, so `(b − c) / (a − c) = 1/4`
+///   (Noyelles 2017, eq. 4, doi:10.1016/j.icarus.2016.10.001; Murray &
+///   Dermott 1999, ch. 4) and `a − c = 5qR`. Mimas (`q = 0.0185`, 198 km)
+///   comes out 18 km longer than wide; measured, 207.8 × 196.7 × 190.6 km
+///   (Thomas 2010, as tabulated by Noyelles, Karatekin & Rambaux 2011,
+///   doi:10.1051/0004-6361/201117558).
+fn moon_axes(
+    composition: Composition,
+    radius_km: f64,
+    draws: [f64; 2],
+    locked: Option<(f64, f64, f64)>,
+) -> [f64; 3] {
+    let limit = round_limit_km(composition);
+    let irregular = (1.0 - 2.0 * radius_km / limit).clamp(0.0, 1.0);
+    let b = 1.0 - irregular * (0.05 + 0.25 * draws[0]);
+    let c = b - irregular * (0.05 + 0.25 * draws[1]);
+    let mut axes = [1.0, b, c];
+    if let Some((mass_kg, host_kg, a_km)) = locked {
+        let n2 = G * (host_kg + mass_kg) / a_km.powi(3);
+        let q = (n2 * radius_km.powi(3) / (G * mass_kg)).min(MAX_HYDROSTATIC_Q) * (1.0 - irregular);
+        axes[0] *= 1.0 + 35.0 / 12.0 * q;
+        axes[1] *= 1.0 - 5.0 / 6.0 * q;
+        axes[2] *= 1.0 - 25.0 / 12.0 * q;
+    }
+    let scale = radius_km / (axes[0] * axes[1] * axes[2]).cbrt();
+    axes.map(|x| x * scale)
+}
+
+/// Largest `q` the first-order hydrostatic shape is taken to: beyond it a
+/// moon would be torn apart near its Roche limit (Mimas, among the most
+/// stretched, has 0.0185). Calibration, no source.
+const MAX_HYDROSTATIC_Q: f64 = 0.05;
+
+/// Rigidity of rock, Pa, as Thirouin et al. 2014 take it from Gladman et
+/// al. 1996 (doi:10.1051/0004-6361/201423567): used for ice too, which
+/// makes icy moons lock a little slower than they would.
+const RIGIDITY_PA: f64 = 3e10;
+/// Tidal quality factor, Love number cap, first day and the moments of
+/// inertia (over `m R²`) of the despinning time: those of
+/// [`crate::star::locking_gyr`] (`Q = 100`, `k₂ = 0.3`, 12 h, Earth's 0.33)
+/// for a planet, a uniform body's 0.4 for a moon (the Moon: 0.394, NASA).
+const TIDAL_Q: f64 = 100.0;
+const MAX_K2: f64 = 0.3;
+const FIRST_DAY_S: f64 = 12.0 * 3600.0;
+const PLANET_INERTIA: f64 = 0.33;
+const MOON_INERTIA: f64 = 0.4;
+const GYR_S: f64 = 3.156e16;
+
+/// Tidal Love number of a solid body of `mass_kg`, `radius_km` and
+/// `density` (g/cm³): `k₂ = 1.5 / (1 + 19μ / (2ρgR))` (Gladman et al. 1996,
+/// as quoted by Thirouin et al. 2014, eq. 6), with the rigidity of rock,
+/// at most Earth's 0.3: a small rigid body hardly deforms (Phobos: 6 ×
+/// 10⁻⁷).
+fn love_number(mass_kg: f64, radius_km: f64, density: f64) -> f64 {
+    let g = G * mass_kg / (radius_km * radius_km) * 1000.0;
+    let rho_g_r = density * 1000.0 * g * radius_km * 1000.0;
+    (1.5 / (1.0 + 19.0 * RIGIDITY_PA / (2.0 * rho_g_r))).min(MAX_K2)
+}
+
+/// Time for a host of `host_kg` to despin a body of `mass_kg`, `radius_km`,
+/// `density` (g/cm³) and moment of inertia `inertia` (over `m R²`) orbiting
+/// it at `a_km`, Gyr: `t = ω a⁶ I Q / (3 G M² k₂ R⁵)`, the formula
+/// [`crate::star::locking_gyr`] scales for planets (Gladman et al. 1996,
+/// doi:10.1006/icar.1996.0117, as quoted by Thirouin et al. 2014, eq. 7),
+/// from a first day of 12 h, with [`love_number`]. Phobos locks in about
+/// 20 000 years; the Earth would take 35 Gyr to turn with the Moon, Pluto
+/// a million years with Charon.
+pub(crate) fn despin_gyr(
+    mass_kg: f64,
+    radius_km: f64,
+    density: f64,
+    inertia: f64,
+    host_kg: f64,
+    a_km: f64,
+) -> f64 {
+    let omega = 2.0 * PI / FIRST_DAY_S;
+    let moment = inertia * mass_kg * radius_km * radius_km;
+    let k2 = love_number(mass_kg, radius_km, density);
+    omega * a_km.powi(6) * moment * TIDAL_Q
+        / (3.0 * G * host_kg * host_kg * k2 * radius_km.powi(5))
+        / GYR_S
+}
+
+/// The heaviest moon that outlasts `age_gyr` round a planet of `m_p` kg and
+/// `r_p` km that its star (of `star_kg`, at `a_p_km`) has despun, kg: Barnes
+/// & O'Brien 2002, eq. 8 (doi:10.1086/341477),
+/// `M_m ≤ (2/13) ((f a_p)³ / 3M*)^(13/6) M_p^(8/3) Q / (3 k₂ T R⁵ √G)`,
+/// a moon starting from the edge of the stable zone (`reach`, the share `f`
+/// of the Hill radius) and spiralling in, with the planet's `Q` and `k₂` of
+/// [`despin_gyr`]. Round an Earth in the habitable zone of an M5 dwarf
+/// (0.07 AU), about 2 × 10¹⁸ kg, a moonlet of 60 km; round Mercury, a moon
+/// of a few hundred km; never a giant-impact moon.
+fn lasting_moon_kg(reach: f64, a_p_km: f64, star_kg: f64, m_p: f64, r_p: f64, age_gyr: f64) -> f64 {
+    // The planet's own density, g/cm³ (1e12 kg/km³), as its mass and radius give it.
+    let density = m_p / (4.0 / 3.0 * PI * r_p.powi(3)) / 1e12;
+    let k2 = love_number(m_p, r_p, density);
+    lasting_moon_kg_with(reach, a_p_km, star_kg, m_p, r_p, age_gyr, k2, TIDAL_Q)
+}
+
+/// [`lasting_moon_kg`] for a planet of Love number `k2` and tidal quality
+/// factor `q`: a giant's ([`crate::spin::GIANT_K2`], [`crate::spin::GIANT_Q`]),
+/// the case Barnes & O'Brien 2002 treat. A Jupiter at 0.12 AU from the Sun,
+/// locked to it, keeps moons up to about 10²² kg, none as large as the
+/// Galilean ones.
+#[allow(clippy::too_many_arguments)]
+fn lasting_moon_kg_with(
+    reach: f64,
+    a_p_km: f64,
+    star_kg: f64,
+    m_p: f64,
+    r_p: f64,
+    age_gyr: f64,
+    k2: f64,
+    q: f64,
+) -> f64 {
+    let t = age_gyr * GYR_S;
+    2.0 / 13.0
+        * ((reach * a_p_km).powi(3) / (3.0 * star_kg)).powf(13.0 / 6.0)
+        * m_p.powf(8.0 / 3.0)
+        * q
+        / (3.0 * k2 * t * r_p.powi(5) * G.sqrt())
 }
 
 impl MoonSystem {
@@ -325,25 +514,38 @@ impl MoonSystem {
             let t = day_hours * 3600.0;
             (G * m_p * t * t / (4.0 * PI * PI)).cbrt()
         };
-        // Drawn even on a locked planet, so a world's draws do not depend
+        // Drawn even on a despun planet, so a world's draws do not depend
         // on its star.
         let drawn_day = rng.log_uniform(12.0, 36.0);
-        if star.tidally_locked {
-            let day = f64::from(star.year_days) * 24.0;
-            return Some(
-                Self {
-                    planet_day_hours: day as f32,
-                    synchronous_orbit_km: synchronous(day) as f32,
-                    hill_radius_km: hill as f32,
-                    binary: false,
-                    tide: 0.0,
-                    tilt_steadied: false,
-                    count_asked: p.moons.count(),
-                    moons: Vec::new(),
-                }
-                .with_effects(p),
-            );
-        }
+        let age_gyr = f64::from(crate::spin::tidal_age_gyr(&star));
+        // A planet its star has despun turns once a year, or three times
+        // every two years in the 3:2 resonance. Its synchronous orbit then
+        // lies beyond its Hill sphere: every moon spirals in, the heavy
+        // ones first. Only those light enough to outlast the system's age
+        // remain (Barnes & O'Brien 2002, eq. 8, see `lasting_moon_kg`).
+        let despun = crate::spin::despun(&star);
+        let star_day = despun.then(|| {
+            let turns = if star.spin_orbit_3_2 {
+                f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
+            } else {
+                1.0
+            };
+            f64::from(star.year_days) * 24.0 / turns
+        });
+        let lasting = |reach: f64| {
+            if despun {
+                lasting_moon_kg(
+                    reach,
+                    f64::from(star.orbit_au) * AU_KM,
+                    f64::from(star.mass) * SUN_MASS_KG,
+                    m_p,
+                    r_p,
+                    age_gyr,
+                )
+            } else {
+                f64::INFINITY
+            }
+        };
 
         // Shares of the way from small to large worlds.
         let large = ((size - SMALL_WORLD) / (LARGE_WORLD - SMALL_WORLD)).clamp(0.0, 1.0);
@@ -413,10 +615,11 @@ impl MoonSystem {
             let radius = rng.log_uniform(CAPTURED_RADIUS_KM.0, CAPTURED_RADIUS_KM.1);
             let a_km = rng.log_uniform(lo, hi) * hill;
             let eccentricity = rng.uniform(0.1, 0.45);
+            // Outside the unstable band, half of them retrograde.
             let inclination_deg = if rng.next() < 0.5 {
-                rng.uniform(100.0, 170.0)
+                rng.uniform(UNSTABLE_INCLINATION_DEG.1, 170.0)
             } else {
-                rng.uniform(10.0, 60.0)
+                rng.uniform(10.0, UNSTABLE_INCLINATION_DEG.0)
             };
             let shape = [rng.next(), rng.next()];
             let density = if cold { 1.5 } else { 1.9 };
@@ -439,12 +642,13 @@ impl MoonSystem {
                 1.26 * r_p * (planet_density / c.density).cbrt()
             };
             let reach = if c.inclination_deg > 90.0 {
-                0.5
+                RETROGRADE_REACH
             } else {
-                1.0 / 3.0
+                PROGRADE_REACH
             };
             c.a_km * (1.0 - c.eccentricity) > roche
                 && c.a_km * (1.0 + c.eccentricity) < reach * hill
+                && c.mass_kg <= lasting(reach)
         };
         // Orbits too close to a larger moon's do not last.
         let clear = |kept: &[Candidate], c: &Candidate| {
@@ -528,8 +732,11 @@ impl MoonSystem {
                     let mut c = captured_moon(&mut extra, COUNT_CAPTURED_ORBIT);
                     // Less eccentric, so that several share the space.
                     c.eccentricity *= 0.5;
-                    if c.inclination_deg < 90.0 && c.a_km * (1.0 + c.eccentricity) >= hill / 3.0 {
-                        c.inclination_deg = 180.0 - c.inclination_deg;
+                    if c.inclination_deg < 90.0
+                        && c.a_km * (1.0 + c.eccentricity) >= PROGRADE_REACH * hill
+                    {
+                        c.inclination_deg =
+                            180.0 - c.inclination_deg.min(180.0 - UNSTABLE_INCLINATION_DEG.1);
                     }
                     c
                 };
@@ -543,13 +750,22 @@ impl MoonSystem {
 
         let period_days =
             |c: &Candidate| 2.0 * PI * (c.a_km.powi(3) / (G * (m_p + c.mass_kg))).sqrt() / 86_400.0;
-        // A binary: the planet turns with its largest moon.
+        // The planet turns with its largest moon when that moon's tides
+        // have despun it within the system's age (the same despinning time
+        // as the planets', with Earth's moment of inertia); a binary when
+        // their barycentre lies outside the planet, as Pluto and Charon.
+        // The star's tides despin a planet first: its moons are light.
         let largest = kept
             .iter()
             .max_by(|a, b| a.mass_kg.total_cmp(&b.mass_kg))
-            .filter(|c| c.mass_kg / m_p >= BINARY_MASS_RATIO);
+            .filter(|c| {
+                !despun
+                    && despin_gyr(m_p, r_p, planet_density, PLANET_INERTIA, c.mass_kg, c.a_km)
+                        < age_gyr
+            });
         let binary = largest.is_some_and(|c| c.a_km * c.mass_kg / (m_p + c.mass_kg) > r_p);
-        let day_hours = largest.map_or(drawn_day, |c| period_days(c) * 24.0);
+        let day_hours =
+            star_day.unwrap_or_else(|| largest.map_or(drawn_day, |c| period_days(c) * 24.0));
         let sync_km = synchronous(day_hours);
         let seed = p.seed;
 
@@ -559,24 +775,19 @@ impl MoonSystem {
             .map(|(k, c)| {
                 let radius = c.radius_km();
                 let round = c.round();
-                let axes = if round {
-                    [radius; 3]
-                } else {
-                    // The smaller, the more unequal.
-                    let limit = match c.composition {
-                        Composition::Rock => ROUND_ROCK_KM,
-                        Composition::Ice => ROUND_ICE_KM,
-                    };
-                    let irregular = (1.0 - 2.0 * radius / limit).clamp(0.2, 1.0);
-                    let b = 1.0 - irregular * (0.05 + 0.25 * c.shape[0]);
-                    let c_axis = b - irregular * (0.05 + 0.25 * c.shape[1]);
-                    let scale = radius / (b * c_axis).cbrt();
-                    [scale, scale * b, scale * c_axis]
-                };
                 let is_largest = largest.is_some_and(|l| std::ptr::eq(l, c));
+                let locked = is_largest
+                    || despin_gyr(c.mass_kg, radius, c.density, MOON_INERTIA, m_p, c.a_km)
+                        < age_gyr;
+                let axes = moon_axes(
+                    c.composition,
+                    radius,
+                    c.shape,
+                    locked.then_some((c.mass_kg, m_p, c.a_km)),
+                );
                 let migration = if is_largest {
                     Migration::Locked
-                } else if c.inclination_deg > 90.0 {
+                } else if despun || c.inclination_deg > 90.0 {
                     Migration::Decaying
                 } else if c.a_km > TIDES_REACH * hill {
                     Migration::Negligible
@@ -602,7 +813,7 @@ impl MoonSystem {
                     eccentricity: c.eccentricity as f32,
                     inclination_deg: c.inclination_deg as f32,
                     period_days: period_days(c) as f32,
-                    tidally_locked: c.origin != MoonOrigin::Captured,
+                    tidally_locked: locked,
                     migration,
                     angular_diameter_deg: (2.0 * (radius / (c.a_km - r_p)).atan()).to_degrees()
                         as f32,
@@ -635,8 +846,11 @@ impl MoonSystem {
     /// asked; on some ice giants a large retrograde moon captured instead
     /// (Triton, which scattered the regular ones, left closer in). None
     /// orbits inside the giant's Roche limit or its rings (see
-    /// [`giant_moon_floor_radii`]). A hot giant keeps none: its Hill
-    /// sphere is too small and its tides drag them in.
+    /// [`giant_moon_floor_radii`]), and the chain ends at a third of the
+    /// Hill radius (as many as fit, fewer than asked if need be). A hot
+    /// giant keeps none: its Hill sphere is too small and its tides drag
+    /// them in; one its star has locked keeps only the moons light enough
+    /// to outlast the system's age (Barnes & O'Brien 2002).
     fn of_giant(p: &WorldParams, mass_earth: f32) -> Self {
         let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
@@ -674,9 +888,20 @@ impl MoonSystem {
             } else {
                 first.max(floor / 0.95)
             };
+            // Triton's orbit, 12 to 16 radii out: the regular moons left
+            // keep inside it (1.2 times closer at least).
+            let triton_radii = captured_triton.then(|| rng.uniform(12.0, 16.0));
             for (k, w) in weights.iter().enumerate() {
                 let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
-                let a = (a_radii * r_g).min(hill / 3.0);
+                // The chain ends at the edge of the stable zone (with room
+                // for the moon's eccentricity, at most 0.01): the moons
+                // beyond would not last.
+                let a = a_radii * r_g;
+                if a * 1.01 >= PROGRADE_REACH * hill
+                    || triton_radii.is_some_and(|t| asked.is_none() && a_radii * 1.2 > t)
+                {
+                    break;
+                }
                 let mass = 1e-4 * m_g * w / total * if captured_triton { 0.02 } else { 1.0 };
                 let icy = a_radii > ice_line || star.equilibrium_k < 60.0;
                 let density = if icy { 1.9 } else { 3.3 };
@@ -696,9 +921,9 @@ impl MoonSystem {
             }
             if captured_triton && asked.is_none() {
                 // Triton: 2.4 times its mass in a retrograde orbit at 14 radii.
-                let a = (rng.uniform(12.0, 16.0) * r_g).min(hill / 3.0);
+                let a = triton_radii.unwrap_or(14.0) * r_g;
                 let mass = rng.uniform(1.5e-4, 3e-4) * m_g;
-                moons.push(regular_moon(
+                let triton = regular_moon(
                     p,
                     &mut rng,
                     m_g,
@@ -710,7 +935,42 @@ impl MoonSystem {
                     synchronous,
                     MoonOrigin::Captured,
                     157.0,
-                ));
+                );
+                // Within the retrograde stable zone.
+                if a * 1.01 < RETROGRADE_REACH * hill {
+                    moons.push(triton);
+                }
+            }
+        }
+        // A giant its star has locked (a hot one keeps none at all) turns
+        // once a year: its synchronous orbit lies beyond its Hill sphere and
+        // its moons spiral in. Only those light enough to outlast the
+        // system's age remain (Barnes & O'Brien 2002, eq. 8, with the
+        // giant's own tides).
+        if crate::spin::giant_locked(&star, mass_earth, look.radius_earth) {
+            let age = f64::from(crate::spin::tidal_age_gyr(&star));
+            let a_p = f64::from(star.orbit_au) * AU_KM;
+            let star_kg = f64::from(star.mass) * SUN_MASS_KG;
+            moons.retain(|m| {
+                let reach = if m.inclination_deg > 90.0 {
+                    RETROGRADE_REACH
+                } else {
+                    PROGRADE_REACH
+                };
+                let limit = lasting_moon_kg_with(
+                    reach,
+                    a_p,
+                    star_kg,
+                    m_g,
+                    r_g,
+                    age,
+                    crate::spin::GIANT_K2,
+                    crate::spin::GIANT_Q,
+                );
+                f64::from(m.mass_ratio) * m_g <= limit
+            });
+            for m in &mut moons {
+                m.migration = Migration::Decaying;
             }
         }
         moons.sort_by(|a, b| a.semi_major_axis_km.total_cmp(&b.semi_major_axis_km));
@@ -875,8 +1135,26 @@ impl PlanetEffects {
 const MARIA_MIN_RADIUS_KM: f32 = 500.0;
 /// Narrowest map of a moon, pixels.
 const MOON_MIN_WIDTH: u32 = 512;
-/// Axial tilt of a moon, degrees: tides keep it small (the Moon: 1.5°).
-const MOON_TILT_DEG: f32 = 1.5;
+/// Axial tilt of a giant-impact moon to its orbit, degrees: the Moon's
+/// obliquity to its orbit, 6.68° (NASA Moon fact sheet), in the Cassini
+/// state its tides hold it in (its spin axis, its orbit's and the
+/// ecliptic's in one plane). It tips the planet north and south in the
+/// moon's sky over a month: the libration in latitude.
+pub const MOON_TILT_DEG: f32 = 6.68;
+/// Axial tilt of the other moons to their orbits, degrees: upright.
+/// Calibration, no source: close moons and a giant's regular moons orbit
+/// in their planet's equator, where no Cassini state as tilted as the
+/// Moon's is known to the app.
+pub const CLOSE_MOON_TILT_DEG: f32 = 0.0;
+
+/// The axial tilt of `moon` to its orbit, degrees: its world's and its
+/// spin's in a system (see [`MOON_TILT_DEG`]).
+pub fn moon_tilt_deg(moon: &Moon) -> f32 {
+    match moon.origin {
+        MoonOrigin::GiantImpact => MOON_TILT_DEG,
+        _ => CLOSE_MOON_TILT_DEG,
+    }
+}
 /// Low-frequency bumps of an irregular body, as a share of its radius at
 /// full irregularity (equal axes add none).
 const SHAPE_BUMPS: f64 = 0.12;
@@ -885,20 +1163,28 @@ const SHAPE_BUMPS: f64 = 0.12;
 /// the `rocky-moon` or `icy-moon` preset, airless and never wet, cratered
 /// for 4 Ga, under the planet's star, its map as many pixels per km as the
 /// planet's (at least [`MOON_MIN_WIDTH`] wide, at most the planet's
-/// width). The long axis of an irregular moon points at longitude 180°,
-/// the centre of its map: towards its planet, which tides lock it to. Its
-/// gravity is the moon's own, from the density it was drawn with.
+/// width), tilted by [`moon_tilt_deg`]. The long axis of an irregular or
+/// tidally stretched moon points at longitude 180°, the centre of its map:
+/// towards its planet, which tides lock it to. Its gravity is the moon's
+/// own, from the density it was drawn with.
 pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
-    WorldParams {
-        gravity: Some(moon.gravity),
-        ..small_body_params(
-            planet,
-            moon.composition,
-            moon.radius_km,
-            moon.seed,
-            (!moon.round).then(|| moon.axes_km.map(|a| a / moon.radius_km)),
-        )
-    }
+    let [a, _, c] = moon.axes_km;
+    let mut params = small_body_params(
+        planet,
+        moon.composition,
+        moon.radius_km,
+        moon.seed,
+        (a > c).then(|| moon.axes_km.map(|x| x / moon.radius_km)),
+    );
+    params.axial_tilt_deg = moon_tilt_deg(moon);
+    params.gravity = Some(moon.gravity);
+    params
+}
+
+/// Whether `p` is the world of a moon of a system (the `rocky-moon` or
+/// `icy-moon` preset, see [`small_body_params`]).
+pub fn is_moon_world(p: &WorldParams) -> bool {
+    matches!(p.planet.name.as_str(), "rocky-moon" | "icy-moon")
 }
 
 /// Bulk density of a small body of `composition` whose own is not given,
@@ -913,10 +1199,10 @@ fn small_body_density(composition: Composition) -> f64 {
 /// The parameters of a small airless body near the world `planet`, as a
 /// world of its own: a rocky or icy moon of `radius_km` (its map as wide
 /// as its size makes it on the planet's scale, within limits), its seed,
-/// and its shape (semi-axes over the mean radius) when it is not round.
-/// Its gravity is that of its radius at the density of its composition
-/// ([`small_body_density`]); a caller that drew another density sets its
-/// own.
+/// and its shape (semi-axes over the mean radius) when it is not a sphere;
+/// upright ([`CLOSE_MOON_TILT_DEG`]). Its gravity is that of its radius at
+/// the density of its composition ([`small_body_density`]); a caller that
+/// drew another density sets its own.
 pub fn small_body_params(
     planet: &WorldParams,
     composition: Composition,
@@ -948,7 +1234,7 @@ pub fn small_body_params(
         sea_level: 0.0,
         volcanic_intensity: 0.0,
         circumference_km: (f64::from(radius_km) * 2.0 * PI) as f32,
-        axial_tilt_deg: MOON_TILT_DEG,
+        axial_tilt_deg: CLOSE_MOON_TILT_DEG,
         erosion: 0.0,
         pressure_bar: 0.0,
         surface_age_ga,
@@ -964,6 +1250,7 @@ pub fn small_body_params(
         host: crate::exomoon::HostMode::None,
         given_rings: None,
         impact_factor: None,
+        locked_to_star: None,
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -1012,8 +1299,11 @@ pub fn shape_layer(p: &WorldParams) -> Option<Vec<f32>> {
     )
 }
 
-/// A round moon of a giant on a near-circular orbit of semi-major axis `a`
-/// km (inclination `inclination` degrees, retrograde above 90).
+/// A moon of a giant on a near-circular orbit of semi-major axis `a` km
+/// (inclination `inclination` degrees, retrograde above 90): round from the
+/// limits of [`ROUND_ROCK_KM`] and [`ROUND_ICE_KM`], irregular below, and
+/// locked to the giant when its tides have despun it within the system's
+/// age ([`despin_gyr`]).
 #[allow(clippy::too_many_arguments)]
 fn regular_moon(
     p: &WorldParams,
@@ -1028,30 +1318,45 @@ fn regular_moon(
     origin: MoonOrigin,
     inclination: f64,
 ) -> Moon {
-    let _ = p;
+    let age_gyr = f64::from(crate::spin::tidal_age_gyr(&StarInfo::new(
+        p.star,
+        p.orbit_au,
+        p.eccentricity,
+    )));
     let radius = (3.0 * mass / (4.0 * PI * density * 1e12)).cbrt();
     let period = 2.0 * PI * (a.powi(3) / (G * (m_g + mass))).sqrt() / 86_400.0;
     let retrograde = inclination > 90.0;
+    let composition = if icy {
+        Composition::Ice
+    } else {
+        Composition::Rock
+    };
+    let locked = despin_gyr(mass, radius, density, MOON_INERTIA, m_g, a) < age_gyr;
+    let eccentricity = rng.uniform(0.0, 0.01);
+    let inclination_deg = (inclination + rng.uniform(-0.3, 0.3)).max(0.0);
+    let seed = (rng.next() * f64::from(u32::MAX)) as u32;
+    let axes = moon_axes(
+        composition,
+        radius,
+        [rng.next(), rng.next()],
+        locked.then_some((mass, m_g, a)),
+    );
     Moon {
         name: String::new(),
         origin,
-        composition: if icy {
-            Composition::Ice
-        } else {
-            Composition::Rock
-        },
+        composition,
         radius_km: radius as f32,
-        axes_km: [radius as f32; 3],
-        round: true,
+        axes_km: axes.map(|x| x as f32),
+        round: is_round(composition, radius),
         mass_ratio: (mass / m_g) as f32,
         density: density as f32,
         gravity: (G * mass / (radius * radius) * 1000.0 / 9.81) as f32,
         semi_major_axis_km: a as f32,
         semi_major_axis_radii: (a / r_g) as f32,
-        eccentricity: rng.uniform(0.0, 0.01) as f32,
-        inclination_deg: (inclination + rng.uniform(-0.3, 0.3)).max(0.0) as f32,
+        eccentricity: eccentricity as f32,
+        inclination_deg: inclination_deg as f32,
         period_days: period as f32,
-        tidally_locked: true,
+        tidally_locked: locked,
         migration: if retrograde || a < synchronous {
             Migration::Decaying
         } else {
@@ -1059,7 +1364,7 @@ fn regular_moon(
         },
         angular_diameter_deg: (2.0 * (radius / (a - r_g)).atan()).to_degrees() as f32,
         barycentre_km: (a * mass / (m_g + mass)) as f32,
-        seed: (rng.next() * f64::from(u32::MAX)) as u32,
+        seed,
     }
 }
 
@@ -1093,6 +1398,7 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            locked_to_star: None,
             gravity: None,
         }
     }
@@ -1119,16 +1425,18 @@ mod tests {
                 assert!(m.semi_major_axis_radii > 1.0 && m.period_days > 0.0);
                 assert!(
                     m.round
-                        == (2.0 * m.radius_km >= 900.0 && m.composition == Composition::Rock
+                        == (2.0 * m.radius_km >= 600.0 && m.composition == Composition::Rock
                             || 2.0 * m.radius_km >= 400.0 && m.composition == Composition::Ice)
                 );
             }
         }
         let share = large as f64 / f64::from(n);
         assert!((0.06..0.11).contains(&share), "{share}");
-        // Most planets have no moon; Earth-sized ones no binary.
+        // Most planets have no moon; Earth-sized ones rarely a binary (a
+        // heavy moon close enough to have despun its planet, the
+        // barycentre outside it).
         assert!(any < n as usize / 2, "{any}");
-        assert_eq!(binaries, 0);
+        assert!(binaries < n as usize / 100, "{binaries}");
     }
 
     #[test]
@@ -1308,7 +1616,10 @@ mod tests {
         p.star = crate::star::parse_type("M5V").unwrap();
         p.orbit_au = crate::star::orbit_at(p.star, 0.5);
         let locked = MoonSystem::draw(&p).unwrap();
-        assert!(locked.moons.is_empty());
+        assert!(
+            locked.moons.iter().all(|m| m.mass_ratio < 1e-6),
+            "{locked:?}"
+        );
         // Turned off.
         p.moons = MoonsMode::None;
         assert!(MoonSystem::draw(&p).is_none());
@@ -1430,6 +1741,234 @@ mod tests {
             }
         }
         assert!(checked > 600, "{checked}");
+    }
+
+    #[test]
+    fn planets_despun_by_their_star_keep_only_light_moons() {
+        // An Earth in the habitable zone of an M5 dwarf: never a large moon,
+        // now and then a moonlet that outlasts the system.
+        let (mut kept, mut light) = (0, 0);
+        for seed in 0..400 {
+            let mut p = params(seed, 40_075.0);
+            p.star = crate::star::parse_type("M5V").unwrap();
+            p.orbit_au = crate::star::orbit_at(p.star, 0.5);
+            let system = MoonSystem::draw(&p).unwrap();
+            let year_h =
+                crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity).year_days * 24.0;
+            assert!((system.planet_day_hours - year_h).abs() < 1e-3 * year_h);
+            assert!(!system.binary);
+            for m in &system.moons {
+                kept += 1;
+                light += usize::from(m.mass_ratio < 1e-6);
+                assert_eq!(m.migration, Migration::Decaying, "{m:?}");
+            }
+        }
+        assert!(kept > 0 && light == kept, "{light} of {kept}");
+        // Barnes & O'Brien's limit grows as a^6.5.
+        let star_kg = 0.16 * SUN_MASS_KG;
+        let near = lasting_moon_kg(1.0 / 3.0, 0.05 * AU_KM, star_kg, EARTH_MASS_KG, 6371.0, 4.6);
+        let far = lasting_moon_kg(1.0 / 3.0, 0.1 * AU_KM, star_kg, EARTH_MASS_KG, 6371.0, 4.6);
+        assert!((far / near / 2f64.powf(6.5) - 1.0).abs() < 1e-6);
+        // About 2 × 10¹⁸ kg in the middle of the zone, 0.07 AU: a moonlet
+        // of 60 km at Phobos's density.
+        let mid = lasting_moon_kg(1.0 / 3.0, 0.07 * AU_KM, star_kg, EARTH_MASS_KG, 6371.0, 4.6);
+        assert!((1e18..4e18).contains(&mid), "{mid:e}");
+    }
+
+    #[test]
+    fn captured_moons_avoid_the_unstable_inclinations() {
+        let mut captured = 0;
+        for seed in 0..3000 {
+            for n in [None, Some(5)] {
+                let mut p = params(seed % 600, 21_300.0);
+                if let Some(n) = n {
+                    p.moons = MoonsMode::Count(n);
+                }
+                let system = MoonSystem::draw(&p).unwrap();
+                for m in system
+                    .moons
+                    .iter()
+                    .filter(|m| m.origin == MoonOrigin::Captured)
+                {
+                    captured += 1;
+                    assert!(
+                        !(55.0..130.0).contains(&m.inclination_deg),
+                        "{}",
+                        m.inclination_deg
+                    );
+                }
+            }
+        }
+        assert!(captured > 100, "{captured}");
+    }
+
+    #[test]
+    fn moons_lock_by_their_despinning_time() {
+        // Phobos round Mars: about 20 000 years.
+        let mars = 6.417e23;
+        let phobos = despin_gyr(1.066e16, 11.1, 1.87, MOON_INERTIA, mars, 9_376.0);
+        assert!((5e-6..1e-4).contains(&phobos), "{phobos}");
+        // The Moon: a few million years; the Earth would need 35 Gyr to
+        // turn with it; Pluto turns with Charon within a few million years.
+        let moon = despin_gyr(7.35e22, 1737.0, 3.34, 0.394, EARTH_MASS_KG, 384_400.0);
+        assert!((1e-3..0.1).contains(&moon), "{moon}");
+        let earth = despin_gyr(
+            EARTH_MASS_KG,
+            6371.0,
+            5.51,
+            PLANET_INERTIA,
+            7.35e22,
+            384_400.0,
+        );
+        assert!((20.0..60.0).contains(&earth), "{earth}");
+        let pluto = despin_gyr(1.303e22, 1188.0, 1.85, PLANET_INERTIA, 1.59e21, 19_596.0);
+        assert!(pluto < 0.05, "{pluto}");
+        // Drawn moons: close ones locked, some far captured ones free.
+        let (mut free, mut locked_close) = (0, 0);
+        for seed in 0..2000 {
+            let system = MoonSystem::draw(&params(seed, 21_300.0)).unwrap();
+            for m in &system.moons {
+                if m.semi_major_axis_radii < 10.0 {
+                    assert!(m.tidally_locked, "{m:?}");
+                    locked_close += 1;
+                }
+                free += usize::from(!m.tidally_locked);
+            }
+        }
+        assert!(free > 0 && locked_close > 0, "{free} {locked_close}");
+    }
+
+    #[test]
+    fn moon_shapes_round_off_continuously_and_tides_stretch_round_moons() {
+        // Rock rounds from 300 km in radius, ice from 200 km.
+        assert!(is_round(Composition::Rock, 300.0) && !is_round(Composition::Rock, 299.0));
+        assert!(is_round(Composition::Ice, 200.0) && !is_round(Composition::Ice, 199.0));
+        // No jump at the limit: just under it, nearly a sphere.
+        let under = moon_axes(Composition::Rock, 299.9, [1.0, 1.0], None);
+        let over = moon_axes(Composition::Rock, 300.0, [1.0, 1.0], None);
+        assert!(
+            under[2] / under[0] > 0.998 && over == [300.0; 3],
+            "{under:?}"
+        );
+        let tiny = moon_axes(Composition::Rock, 10.0, [0.5, 0.5], None);
+        assert!(tiny[2] / tiny[0] < 0.8, "{tiny:?}");
+        // Mimas round Saturn: 198 km, 1.15 g/cm³, 185 539 km out; measured
+        // 207.8 × 196.7 × 190.6 km.
+        let mass = 4.0 / 3.0 * PI * 198.0f64.powi(3) * 1.15e12;
+        let mimas = moon_axes(
+            Composition::Ice,
+            198.0,
+            [0.5, 0.5],
+            Some((mass, 5.683e26, 185_539.0)),
+        );
+        let [a, b, c] = mimas;
+        assert!(((a - c) - 17.2).abs() < 2.5, "{mimas:?}");
+        assert!(((b - c) / (a - c) - 0.25).abs() < 0.01, "{mimas:?}");
+        assert!(((a * b * c).cbrt() - 198.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_giants_small_regular_moons_are_not_round() {
+        // A giant world with a captured Triton: its regular moons share a
+        // fiftieth of the mass, the smallest under the ice limit.
+        let (mut small, mut checked) = (0, 0);
+        for seed in 0..200 {
+            let mut p = params(seed, 40_075.0);
+            p.planet = crate::preset::Preset::load("ice-giant").unwrap();
+            p.giant_mass_earth = Some(17.0);
+            p.orbit_au = 20.0;
+            p.circumference_km = crate::giant_world::radius_earth(&p, 17.0) * 40_075.0;
+            for m in MoonSystem::draw(&p).unwrap().moons {
+                checked += 1;
+                assert_eq!(m.round, is_round(m.composition, f64::from(m.radius_km)));
+                if !m.round {
+                    small += 1;
+                    let [a, _, c] = m.axes_km;
+                    assert!(c < a, "{m:?}");
+                }
+            }
+        }
+        assert!(checked > 0 && small > 0, "{small} of {checked}");
+    }
+
+    #[test]
+    fn a_close_giant_keeps_its_moons_apart_and_only_light_ones_once_locked() {
+        // A Jupiter at 0.12 AU from the Sun: locked by its star, a small
+        // Hill sphere.
+        for seed in 0..60 {
+            let mut p = params(seed, 40_075.0);
+            p.planet = crate::preset::Preset::load("gas-giant").unwrap();
+            p.giant_mass_earth = Some(318.0);
+            p.orbit_au = 0.12;
+            p.circumference_km = crate::giant_world::radius_earth(&p, 318.0) * 40_075.0;
+            let system = MoonSystem::draw(&p).unwrap();
+            let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+            let look = crate::giant_world::Look::draw(&p, 318.0).info;
+            assert!(crate::spin::giant_locked(&star, 318.0, look.radius_earth));
+            let m_g = 318.0 * EARTH_MASS_KG;
+            for m in &system.moons {
+                assert!(f64::from(m.mass_ratio) * m_g < 1e22, "{m:?}");
+                assert!(m.semi_major_axis_km < system.hill_radius_km / 3.0);
+                assert_eq!(m.migration, Migration::Decaying);
+            }
+            for pair in system.moons.windows(2) {
+                let ratio = pair[1].semi_major_axis_km / pair[0].semi_major_axis_km;
+                assert!(ratio > 1.2, "seed {seed}: {ratio}");
+            }
+        }
+        // Far out, the full chain, kept apart.
+        for seed in 0..60 {
+            let mut p = params(seed, 40_075.0);
+            p.planet = crate::preset::Preset::load("gas-giant").unwrap();
+            p.giant_mass_earth = Some(318.0);
+            p.orbit_au = 5.2;
+            p.circumference_km = crate::giant_world::radius_earth(&p, 318.0) * 40_075.0;
+            let system = MoonSystem::draw(&p).unwrap();
+            assert!(system.moons.len() >= 2);
+            for pair in system.moons.windows(2) {
+                assert!(pair[1].semi_major_axis_km / pair[0].semi_major_axis_km > 1.2);
+            }
+        }
+    }
+
+    #[test]
+    fn a_moons_world_is_locked_to_its_planet_not_to_the_star() {
+        // An Earth locked to an M5 dwarf, with a moonlet.
+        let mut p = params(3, 40_075.0);
+        p.star = crate::star::parse_type("M5V").unwrap();
+        p.orbit_au = crate::star::orbit_at(p.star, 0.5);
+        p.moons = MoonsMode::Count(1);
+        assert!(crate::spin::star_info(&p).tidally_locked);
+        let moon = &MoonSystem::draw(&p).unwrap().moons[0];
+        let world = body_params(&p, moon);
+        let star = crate::spin::star_info(&world);
+        assert!(!star.tidally_locked && !star.spin_orbit_3_2);
+        // A 3:2 planet's moon is not resonant either.
+        p.eccentricity = 0.1;
+        assert!(crate::spin::star_info(&p).spin_orbit_3_2);
+        if let Some(moon) = MoonSystem::draw(&p).unwrap().moons.first() {
+            assert!(!crate::spin::star_info(&body_params(&p, moon)).spin_orbit_3_2);
+        }
+    }
+
+    #[test]
+    fn a_moons_world_takes_its_tilt() {
+        let planet = params(5, 40_075.0);
+        let moons = (0..400)
+            .filter_map(|seed| MoonSystem::draw(&params(seed, 40_075.0)))
+            .flat_map(|s| s.moons)
+            .collect::<Vec<_>>();
+        let impact = moons
+            .iter()
+            .find(|m| m.origin == MoonOrigin::GiantImpact)
+            .unwrap();
+        assert_eq!(body_params(&planet, impact).axial_tilt_deg, MOON_TILT_DEG);
+        if let Some(other) = moons.iter().find(|m| m.origin != MoonOrigin::GiantImpact) {
+            assert_eq!(
+                body_params(&planet, other).axial_tilt_deg,
+                CLOSE_MOON_TILT_DEG
+            );
+        }
     }
 
     #[test]

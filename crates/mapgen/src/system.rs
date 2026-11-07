@@ -24,19 +24,18 @@
 //!
 //! **Moons.** A rocky planet draws its moons as a world does
 //! ([`MoonSystem::draw`]); a giant its regular moons, a resonant chain
-//! sharing about 10⁻⁴ of its mass, as Jupiter's ([`regular_moons`]).
+//! sharing about 10⁻⁴ of its mass, as Jupiter's, drawn as a giant world
+//! draws them (`MoonSystem::draw` too).
 //!
 //! **Determinism.** A system is its request and its seed: each body's seed
 //! comes from the system's seed and the body's id, and its parameters are
 //! stored, so a body generated later is the world it would have been at
 //! once.
 
-use crate::exomoon::{
-    EARTH_KG, EARTH_M, G, HostGiant, HostMode, SATELLITE_MASS_SHARE, SIBLING_SPACING,
-};
+use crate::exomoon::{EARTH_KG, EARTH_M, G, HostGiant, HostMode};
 use crate::giants::{
     GiantKind, GiantSystem, GiantsMode, HOT_JUPITERS, HOT_PERIOD_DAYS, JUPITER_EARTH_MASSES,
-    giant_radius, hill_spacing,
+    hill_spacing,
 };
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
@@ -236,6 +235,13 @@ pub struct Spin {
     /// Locked to what it orbits: its star (a planet) or its planet (a
     /// moon), its day its orbit.
     pub locked: bool,
+    /// Held by its star's tides in the 3:2 spin–orbit resonance, as
+    /// Mercury: three turns every two orbits, its long axis towards the
+    /// star at each periapsis (see `crate::spin`). Systems drawn before it:
+    /// false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub spin_orbit_3_2: bool,
 }
 
 /// What a body gets from its star.
@@ -831,9 +837,12 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
             Some(_) => "gas-giant".to_string(),
             None => params.planet.name.clone(),
         },
-        mass_earth: match &host {
-            Some(h) => f64::from(h.giant.mass_earth),
-            None => f64::from(params.mass_earth()),
+        mass_earth: match (&host, params.giant_mass_earth) {
+            (Some(h), _) => f64::from(h.giant.mass_earth),
+            // A giant asked for: its own mass, not a rocky planet's of its size.
+            (None, Some(mass)) => f64::from(mass),
+            // The mass of the gravity its world is generated with.
+            (None, None) => f64::from(params.mass_earth()),
         },
         orbit_au: f64::from(params.orbit_au),
         eccentricity: f64::from(params.eccentricity),
@@ -925,6 +934,23 @@ fn assemble(
     let info = StarInfo::new(star_code, 1.0, 0.0);
     let designation = star_name(seed, &info.kind);
     let ice = 2.7 * info.luminosity.sqrt();
+    // The star's tides have circularised the closest orbits: a planet
+    // locked to its star turns on a circle (a despun one left eccentric is
+    // held in the 3:2 resonance, see `crate::spin`). The planet a request
+    // is around keeps the orbit its request resolved.
+    let slots: Vec<Slot> = slots
+        .into_iter()
+        .map(|mut slot| {
+            let asked = slot.fixed
+                && focus
+                    .as_ref()
+                    .is_some_and(|f| (f64::from(f.params.orbit_au) - slot.orbit_au).abs() < 1e-9);
+            if !asked {
+                slot.eccentricity = tidal_eccentricity(&slot, star_code);
+            }
+            slot
+        })
+        .collect();
     let mut bodies = Vec::new();
     let mut focus_id = None;
     for (rank, slot) in slots.iter().enumerate() {
@@ -973,10 +999,14 @@ fn assemble(
                     }),
                     true,
                 ) => host_chain(host, world, star_code),
-                _ => regular_moons(&params, slot, star_code, planet_seed),
+                // The mass the moons were drawn with.
+                _ => drawn_moons(
+                    &params,
+                    params.giant_mass_earth.map_or(slot.mass_earth, f64::from),
+                ),
             }
         } else {
-            rocky_moons(&params)
+            drawn_moons(&params, f64::from(params.mass_earth()))
         };
         // Nearest first, the ring moons among the others.
         let giant_kg = slot.mass_earth * EARTH_KG;
@@ -1104,6 +1134,24 @@ fn assemble(
     }
 }
 
+/// The eccentricity the star's tides leave a planet drawn for `slot` round
+/// a star of type `star`: none when they have circularised its orbit, a
+/// giant's with its own tides (see `crate::spin`).
+fn tidal_eccentricity(slot: &Slot, star: f32) -> f64 {
+    let at = StarInfo::new(star, slot.orbit_au as f32, 0.0);
+    let circular = if is_giant(&slot.body_type) {
+        let mass = slot.mass_earth as f32;
+        crate::spin::giant_circularised(
+            &at,
+            mass,
+            crate::giants::giant_radius(mass, at.equilibrium_k),
+        )
+    } else {
+        crate::spin::circularised(&at)
+    };
+    if circular { 0.0 } else { slot.eccentricity }
+}
+
 /// The world parameters of a placed planet, its preset resolved with its
 /// own seed at its orbit.
 fn planet_params(
@@ -1175,20 +1223,37 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
     let info = StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32);
     let mut rng = StdRng::seed_from_u64(u64::from(body_seed(params.seed, "orbit")));
     let giant = is_giant(&slot.body_type);
-    let (radius_km, mass_earth, period_hours, locked) = if giant {
+    // A giant locks with its own tides (a hot one always); a rocky planet
+    // may be locked or held in the 3:2 resonance (see `crate::spin`), its
+    // sidereal day then two thirds of its year.
+    let (radius_km, mass_earth, period_hours, locked, resonant) = if giant {
         let look = crate::giant_world::Look::draw(params, slot.mass_earth as f32).info;
+        let locked =
+            look.hot || crate::spin::giant_locked(&info, look.mass_earth, look.radius_earth);
         (
             f64::from(look.radius_earth) * EARTH_M / 1000.0,
             f64::from(look.mass_earth),
             f64::from(look.rotation_hours),
-            info.tidally_locked,
+            locked,
+            false,
         )
     } else {
         let radius = f64::from(params.circumference_km) / (2.0 * PI);
         let day = MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours));
-        let locked = info.tidally_locked;
+        let resonant = info.spin_orbit_3_2;
+        let day = if resonant {
+            f64::from(info.year_days) * 24.0 / f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
+        } else {
+            day
+        };
         // The mass of the gravity its world is generated with.
-        (radius, f64::from(params.mass_earth()), day, locked)
+        (
+            radius,
+            f64::from(params.mass_earth()),
+            day,
+            info.tidally_locked,
+            resonant,
+        )
     };
     let volume = 4.0 / 3.0 * PI * (radius_km * 1000.0).powi(3);
     let density = mass_earth * EARTH_KG / volume / 1000.0;
@@ -1229,6 +1294,7 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
             },
             axial_tilt_deg: f64::from(params.axial_tilt_deg),
             locked,
+            spin_orbit_3_2: resonant,
         },
         surroundings: surroundings_at(&info, slot.orbit_au, slot.eccentricity),
         preview: preview_of(&slot.body_type, params, star),
@@ -1243,12 +1309,13 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
 /// spin.
 type MoonParts = (String, WorldParams, Orbit, Physical, Spin);
 
-/// The moons a rocky planet draws, as a world does.
-fn rocky_moons(planet: &WorldParams) -> Vec<MoonParts> {
+/// The moons a planet of `planet_mass` Earth masses draws, as a world
+/// does ([`MoonSystem::draw`]): a rocky planet's, or a giant's regular
+/// moons (one recipe for a giant of a system and a giant world).
+fn drawn_moons(planet: &WorldParams, planet_mass: f64) -> Vec<MoonParts> {
     let Some(system) = MoonSystem::draw(planet) else {
         return Vec::new();
     };
-    let planet_mass = f64::from(planet.mass_earth());
     system
         .moons
         .iter()
@@ -1261,6 +1328,7 @@ fn rocky_moons(planet: &WorldParams) -> Vec<MoonParts> {
 
 /// The fields of a moon drawn by [`MoonSystem`].
 fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonParts {
+    let tilt = params.axial_tilt_deg;
     let body_type = match moon.composition {
         Composition::Rock => "rocky-moon",
         Composition::Ice => "icy-moon",
@@ -1294,12 +1362,15 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
             radius_km: f64::from(moon.radius_km),
             density: f64::from(moon.density),
             gravity: f64::from(moon.gravity),
-            axes_km: (!moon.round).then_some(moon.axes_km),
+            // Irregular, or stretched by its planet's tides.
+            axes_km: (moon.axes_km[0] > moon.axes_km[2]).then_some(moon.axes_km),
         },
         Spin {
             period_hours,
-            axial_tilt_deg: f64::from(params_tilt()),
+            // Its world's: one tilt for both (see `moons::moon_tilt_deg`).
+            axial_tilt_deg: f64::from(tilt),
             locked,
+            spin_orbit_3_2: false,
         },
     )
 }
@@ -1317,15 +1388,6 @@ fn world_params(body: &Body) -> WorldParams {
     params
 }
 
-/// A moon's axial tilt: upright, as the moons' worlds are drawn.
-fn params_tilt() -> f32 {
-    0.0
-}
-
-/// The regular moons of a giant: two to four on a resonant chain (each
-/// period twice the last) from 6 of its radii out, inside a third of its
-/// Hill radius, sharing about 10⁻⁴ of its mass (Canup & Ward 2006); icy
-/// beyond its own snow line, as Ganymede and Callisto.
 /// A giant's params with its rings drawn by the system, from a stream of
 /// their own and its preset's odds: the star view and the skies show them
 /// before the giant is generated, and its generation takes them (see
@@ -1344,7 +1406,7 @@ fn with_system_rings(mut params: WorldParams) -> WorldParams {
 /// [`crate::rings::shape`]): their Roche edge and their gaps, kept in its
 /// params, and the moons that make them, which this returns. A giant too
 /// hot or with too small a Hill sphere for regular moons (see
-/// [`regular_moons`]) keeps its rings without moons.
+/// `MoonSystem::draw`) keeps its rings without moons.
 fn shape_rings(params: &mut WorldParams, slot: &Slot, star: f32) -> Vec<crate::rings::RingMoon> {
     let Some(rings) = params.given_rings.as_mut().and_then(|g| g.rings.take()) else {
         return Vec::new();
@@ -1452,79 +1514,9 @@ fn ring_moon_parts(
             period_hours: period_days * 24.0,
             axial_tilt_deg: 0.0,
             locked: true,
+            spin_orbit_3_2: false,
         },
     )
-}
-
-fn regular_moons(giant: &WorldParams, slot: &Slot, star: f32, seed: u32) -> Vec<MoonParts> {
-    let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SIBLINGS)));
-    let info = StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32);
-    let mass_kg = slot.mass_earth * EARTH_KG;
-    let radius_m = f64::from(giant_radius(slot.mass_earth as f32, info.equilibrium_k)) * EARTH_M;
-    let hill = slot.orbit_au
-        * (1.0 - slot.eccentricity)
-        * 1.496e11
-        * (mass_kg / (3.0 * f64::from(info.mass) * 1.989e30)).cbrt()
-        / radius_m;
-    // Hot giants keep none: their Hill sphere is too small.
-    if info.equilibrium_k > 1000.0 || hill / 3.0 < 6.0 {
-        return Vec::new();
-    }
-    let count = 2 + (rng.random::<f64>() * 3.0) as usize;
-    let shares: Vec<f64> = (0..count).map(|_| 0.3 + rng.random::<f64>()).collect();
-    let total: f64 = shares.iter().sum();
-    let first = 6.0 * (1.0 + rng.random::<f64>());
-    let mut out = Vec::new();
-    for (k, share) in shares.iter().enumerate() {
-        let radii = first * SIBLING_SPACING.powi(k as i32);
-        if radii > hill / 3.0 {
-            break;
-        }
-        let icy = info.equilibrium_k < 150.0 || radii > 12.0;
-        let density = if icy { 1.9e3 } else { 3.3e3 };
-        let mass = SATELLITE_MASS_SHARE * mass_kg * share / total;
-        let radius_km = (3.0 * mass / (4.0 * PI * density)).cbrt() / 1000.0;
-        let a_m = radii * radius_m;
-        let period_days = 2.0 * PI * (a_m.powi(3) / (G * mass_kg)).sqrt() / 86_400.0;
-        let moon_seed = stream_seed(seed, stream::SIBLINGS + 1 + k as u32);
-        let composition = if icy {
-            Composition::Ice
-        } else {
-            Composition::Rock
-        };
-        let gravity = (G * mass / (radius_km * 1000.0).powi(2)) / 9.81;
-        let params = WorldParams {
-            gravity: Some(gravity as f32),
-            ..crate::moons::small_body_params(giant, composition, radius_km as f32, moon_seed, None)
-        };
-        out.push((
-            if icy { "icy-moon" } else { "rocky-moon" }.to_string(),
-            params,
-            Orbit {
-                semi_major_axis_km: a_m / 1000.0,
-                semi_major_axis_au: a_m / 1.495_978_707e11,
-                eccentricity: 0.001 + 0.01 * rng.random::<f64>(),
-                inclination_deg: 0.5 * rng.random::<f64>(),
-                node_deg: rng.random::<f64>() * 360.0,
-                periapsis_deg: rng.random::<f64>() * 360.0,
-                mean_anomaly_deg: rng.random::<f64>() * 360.0,
-                period_days,
-            },
-            Physical {
-                mass_earth: mass / EARTH_KG,
-                radius_km,
-                density: density / 1000.0,
-                gravity,
-                axes_km: None,
-            },
-            Spin {
-                period_hours: period_days * 24.0,
-                axial_tilt_deg: 0.0,
-                locked: true,
-            },
-        ));
-    }
-    out
 }
 
 /// The moons of the giant a world of a request orbits: the world among
@@ -1562,6 +1554,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                 period_hours: f64::from(host.period_days) * 24.0,
                 axial_tilt_deg: f64::from(world.axial_tilt_deg),
                 locked: true,
+                spin_orbit_3_2: false,
             },
         ),
     ));
@@ -1602,6 +1595,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                     period_hours: f64::from(sibling.period_days) * 24.0,
                     axial_tilt_deg: 0.0,
                     locked: true,
+                    spin_orbit_3_2: false,
                 },
             ),
         ));
@@ -2100,6 +2094,7 @@ mod tests {
                     let own = WorldParams {
                         given_rings: None,
                         impact_factor: None,
+                        locked_to_star: None,
                         gravity: None,
                         ..body.params.clone()
                     };
@@ -2470,6 +2465,139 @@ mod tests {
             width: Some(64),
             height: Some(32),
         })
+    }
+}
+
+/// The star's tides on a system's planets, and its moons' spins (see
+/// `crate::spin`).
+#[cfg(test)]
+mod spin_tests {
+    use super::*;
+
+    fn red_dwarf_system(seed: u32) -> System {
+        let request = SystemRequest::System(WholeSystemRequest {
+            star: Some("M4V".into()),
+            metallicity: Some(0.0),
+            planets: None,
+            seed: Some(seed),
+            width: Some(64),
+            height: Some(32),
+        });
+        draw(&request, &mut rand::rng()).unwrap()
+    }
+
+    #[test]
+    fn planets_locked_to_their_star_turn_on_circles_upright() {
+        let (mut locked, mut resonant) = (0, 0);
+        for seed in 0..60 {
+            let system = red_dwarf_system(seed);
+            let star = parse_type(&system.star.spectral).unwrap();
+            for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                if is_giant(&body.body_type) {
+                    continue;
+                }
+                let info = StarInfo::new(
+                    star,
+                    body.orbit.semi_major_axis_au as f32,
+                    body.orbit.eccentricity as f32,
+                );
+                assert_eq!(body.spin.locked, info.tidally_locked, "{}", body.id);
+                assert_eq!(body.spin.spin_orbit_3_2, info.spin_orbit_3_2, "{}", body.id);
+                if body.spin.locked {
+                    locked += 1;
+                    assert!(body.orbit.eccentricity < 0.06, "{}", body.id);
+                }
+                // A circularised orbit is a circle, and its planet locked.
+                if crate::spin::circularised(&info) {
+                    assert_eq!(body.orbit.eccentricity, 0.0, "{}", body.id);
+                    assert!(body.spin.locked, "{}", body.id);
+                }
+                if body.spin.spin_orbit_3_2 {
+                    resonant += 1;
+                    // Three turns every two orbits.
+                    let year_h = body.orbit.period_days * 24.0;
+                    assert!((body.spin.period_hours * 1.5 / year_h - 1.0).abs() < 1e-3);
+                    assert!(body.orbit.eccentricity > 0.0);
+                }
+                if crate::spin::despun(&info) {
+                    assert_eq!(body.spin.axial_tilt_deg, 0.0, "{}", body.id);
+                }
+            }
+        }
+        assert!(
+            locked > 0 && resonant > 0,
+            "{locked} locked, {resonant} resonant"
+        );
+    }
+
+    #[test]
+    fn a_giants_moons_weigh_what_their_size_and_density_say() {
+        // Around a giant asked for: its moons drawn with its params' mass.
+        let request = SystemRequest::Around(WorldRequest {
+            planet: Some("gas-giant".into()),
+            star: Some("G2V".into()),
+            orbit_au: Some(5.2),
+            mass_earth: Some(318.0),
+            seed: Some(2),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        });
+        let system = draw(&request, &mut rand::rng()).unwrap();
+        let mut checked = 0;
+        for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
+            if moon.ring_role.is_some() {
+                continue;
+            }
+            let p = &moon.physical;
+            let kg = 4.0 / 3.0 * PI * (p.radius_km * 1000.0).powi(3) * p.density * 1000.0;
+            assert!(
+                (p.mass_earth * EARTH_KG / kg - 1.0).abs() < 1e-3,
+                "{}",
+                moon.id
+            );
+            checked += 1;
+        }
+        assert!(checked >= 2, "{checked}");
+    }
+
+    #[test]
+    fn a_moons_spin_and_world_share_one_tilt_and_giants_one_recipe() {
+        for seed in 0..20 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some("G2V".into()),
+                metallicity: Some(0.0),
+                planets: Some(
+                    [("terran".to_string(), 2), ("gas-giant".to_string(), 1)]
+                        .into_iter()
+                        .collect(),
+                ),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+            });
+            let system = draw(&request, &mut rand::rng()).unwrap();
+            for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
+                if moon.ring_role.is_none() {
+                    assert_eq!(
+                        moon.spin.axial_tilt_deg,
+                        f64::from(moon.params.axial_tilt_deg),
+                        "{}",
+                        moon.id
+                    );
+                }
+            }
+            // A giant's regular moons are those the giant world draws.
+            for giant in system.bodies.iter().filter(|b| b.body_type == "gas-giant") {
+                let drawn = MoonSystem::draw(&giant.params).map_or(0, |m| m.moons.len());
+                let regular = system
+                    .bodies
+                    .iter()
+                    .filter(|b| b.parent.as_deref() == Some(&giant.id) && b.ring_role.is_none())
+                    .count();
+                assert_eq!(regular, drawn, "{}", giant.id);
+            }
+        }
     }
 }
 

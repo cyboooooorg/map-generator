@@ -15,7 +15,9 @@
 // node line); it turns once per `spin.period_hours`, a locked body at a
 // steady pace, its longitude 180° towards what it orbits on average: its
 // host swings in its sky by the libration (true minus mean anomaly, about
-// +-2e radians).
+// +-2e radians). A planet in the 3:2 spin-orbit resonance turns 1.5 times
+// per orbit, its long axis (longitude 0 or 180°) towards the star at each
+// periapsis, as Mercury.
 import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
@@ -83,6 +85,27 @@ export function orbitPosition(orbit: Orbit, plane: Plane, days: number): Vec3 {
   return pointOnOrbit(plane, orbit.periapsis_deg * DEG + nu, r);
 }
 
+/** Turns per orbit of a planet in the 3:2 spin-orbit resonance (Mercury's). */
+export const RESONANCE_TURNS_PER_ORBIT = 1.5;
+
+/**
+ * The amplitude of the libration of a locked body on an orbit of
+ * eccentricity `e`, radians: the greatest true minus mean anomaly, exact
+ * (Kepler's equation) rather than the first-order 2e. It is reached where
+ * the orbital rate equals the mean motion, at r = a (1 - e^2)^(1/4) (from
+ * Kepler's second law, r^2 dnu/dt = n a^2 sqrt(1 - e^2)): 28.9° at e = 0.25
+ * against 2e = 28.6°.
+ */
+export function librationAmplitude(e: number): number {
+  const ecc = Math.min(Math.max(e, 0), 0.95);
+  if (ecc < 1e-9) return 0;
+  const r = Math.pow(1 - ecc * ecc, 0.25);
+  const eccentric = Math.acos(Math.min(Math.max((1 - r) / ecc, -1), 1));
+  const mean = eccentric - ecc * Math.sin(eccentric);
+  const nu = 2 * Math.atan2(Math.sqrt(1 + ecc) * Math.sin(eccentric / 2), Math.sqrt(1 - ecc) * Math.cos(eccentric / 2));
+  return nu - mean;
+}
+
 /**
  * The libration of a body locked to what it orbits after `days`, radians in
  * (-pi, pi]: the true anomaly minus the mean anomaly. A locked body turns at
@@ -140,11 +163,13 @@ export function placeSystem(
     const y = unit(rotate(plane.normal, plane.node, body.spin.axial_tilt_deg * DEG));
     // Its longitude 0 at the start, then turning on itself; a locked body
     // turns steadily, its longitude 180° towards the point of its orbit at
-    // the mean anomaly (its host is off that by the libration).
+    // the mean anomaly (its host is off that by the libration); one in the
+    // 3:2 resonance turns 1.5 times as fast from the same face at periapsis.
     const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
     let z: Vec3;
-    if (body.spin.locked) {
-      z = pointOnOrbit(plane, body.orbit.periapsis_deg * DEG + anomalies(body.orbit, days).mean, 1);
+    if (body.spin.locked || body.spin.spin_orbit_3_2) {
+      const turns = body.spin.locked ? 1 : RESONANCE_TURNS_PER_ORBIT;
+      z = pointOnOrbit(plane, body.orbit.periapsis_deg * DEG + turns * anomalies(body.orbit, days).mean, 1);
     } else {
       const turns = (days * 24) / Math.max(body.spin.period_hours, 1e-6);
       const offset = turned && turned.id === body.id ? turned.spinOffset : 0;

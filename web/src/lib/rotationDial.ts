@@ -14,7 +14,7 @@
 // lat cos lon]`, y along its spin axis; angles about +y run from +z to +x,
 // as a longitude does.
 import type { System } from './api/types/System';
-import { libration, placeSystem } from './systemSky';
+import { libration, librationAmplitude, placeSystem } from './systemSky';
 import type { SkyBody, Vec3 } from './skyBodies';
 
 export interface DialState {
@@ -53,9 +53,11 @@ export interface DialFigures {
   solarHours: number | null;
   /** Local time at the pointer's meridian, in local hours [0, 24): noon when the sun crosses it. */
   localHours: number;
-  /** Synchronous bodies only (null otherwise): the libration now and its amplitude, 2e, radians. */
+  /** Synchronous bodies only (null otherwise): the libration now and its amplitude (about 2e, exact), radians. */
   libration: number | null;
   librationAmplitude: number | null;
+  /** Held by its star's tides in the 3:2 spin-orbit resonance (a free dial, three turns every two orbits). */
+  resonant: boolean;
 }
 
 const TAU = 2 * Math.PI;
@@ -157,7 +159,8 @@ export function rotationDial(
       solarHours,
       localHours,
       libration: locked ? libration(self.orbit, days) : null,
-      librationAmplitude: locked ? 2 * self.orbit.eccentricity : null,
+      librationAmplitude: locked ? librationAmplitude(self.orbit.eccentricity) : null,
+      resonant: !locked && (self.spin.spin_orbit_3_2 ?? false),
     },
   };
 }
@@ -220,7 +223,7 @@ export function formatDialAngle(radians: number, signed: boolean, number: (value
 
 /** The parameters of the dial's two lines of figures, written out (see the `dial…` messages). */
 export type DialFigureText =
-  | { locked: false; angle: string; time: string; sidereal: string; solar: string | null }
+  | { locked: false; resonant: boolean; angle: string; time: string; sidereal: string; solar: string | null }
   | { locked: true; libration: string; amplitude: string; time: string; solar: string | null };
 
 /**
@@ -250,6 +253,7 @@ export function dialFigureText(
   }
   return {
     locked: false,
+    resonant: figures.resonant,
     angle: formatDialAngle(state.reading, false, number),
     time,
     sidereal: formatDayLength(figures.siderealHours, units, format),
