@@ -126,21 +126,62 @@ const CONE_HEIGHT: f32 = 0.25;
 /// Depth below the waterline down to which the crust counts as
 /// continental (the continental shelf), elevation units.
 const CONTINENTAL_SHELF: f32 = 0.05;
-/// Share of the noise relief a body of `circumference_km` keeps: all of it
-/// down to about 160 km in radius, below that [`SMALL_BODY_RELIEF`] of its
-/// radius over the noise's typical amplitude (half an elevation unit,
-/// 12.5 km). Real bodies from Mars down to Vesta carry relief of tens of
-/// kilometres whatever their size, a larger share of their radius the
-/// smaller they are, until it nears a tenth of it.
-pub(crate) fn relief_share(circumference_km: f32) -> f32 {
-    let radius_km = circumference_km / (2.0 * std::f32::consts::PI);
-    (SMALL_BODY_RELIEF * radius_km / (0.5 * crate::craters::ELEVATION_KM)).min(1.0)
+/// Share of the noise relief the world `p` keeps, so that its span (from
+/// the old floor to its highest mountains, see [`noise_span_km`]) stays
+/// within
+///
+/// - [`SMALL_BODY_RELIEF`] of its radius: real bodies from Mars down to
+///   Vesta carry relief of tens of km whatever their size, a larger share
+///   of their radius the smaller they are, up to Vesta's 8 %;
+/// - on an airless body with a stagnant lid (a moon, a dead world), the
+///   relief impacts give it, [`IMPACT_RELIEF_KM`]: there neither plates
+///   nor volcanism build ranges near the `1/g` ceiling. Ice holds
+///   [`ICE_RELIEF`] of rock's.
+///
+/// 1 for planets, whose relief comes from their plates, mountains and
+/// volcanoes.
+pub(crate) fn relief_share(p: &WorldParams) -> f32 {
+    let radius_km = p.circumference_km / (2.0 * std::f32::consts::PI);
+    let mut cap = SMALL_BODY_RELIEF * radius_km;
+    let stagnant = p.planet.geology.regime == Regime::Stagnant;
+    if stagnant && p.pressure_bar <= AIRLESS_BAR {
+        let ice = if icy(p) { ICE_RELIEF } else { 1.0 };
+        cap = cap.min(IMPACT_RELIEF_KM * ice);
+    }
+    (cap / noise_span_km(p)).min(1.0)
+}
+
+/// Span of the noise relief of the world `p`, km: from the old floor
+/// ([`ABYSS_KM`]) to the top of the platform and of the mountains at its
+/// gravity.
+fn noise_span_km(p: &WorldParams) -> f32 {
+    ABYSS_KM
+        + PLATFORM_KM
+        + MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()) * crate::craters::ELEVATION_KM
+}
+
+/// Whether the world `p` is mostly ice: a bulk density, from its gravity
+/// and size, under 2.5 g/cm³ (rock and iron bodies are denser, the Moon
+/// 3.34; icy moons 1.8–1.9, Ganymede and Callisto, NASA).
+pub(crate) fn icy(p: &WorldParams) -> bool {
+    let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
+    radius > 0.0 && 5.513 * p.gravity_modifier() / radius < 2.5
 }
 
 /// Largest relief of a small body, as a share of its radius: Vesta's
 /// central mound in Rheasilvia, about 22 km high (Yingst et al. 2012, EGU
 /// abstract, approximate) on a mean radius of about 262 km (NASA): 8 %.
 const SMALL_BODY_RELIEF: f32 = 0.08;
+/// Span of the noise relief of an airless body with a stagnant lid, km,
+/// so that a Moon-sized rocky moon spans about the Moon's 13 km (NASA fact
+/// sheet, as the mountains article gives it) with its craters.
+/// Calibration on that one body.
+const IMPACT_RELIEF_KM: f32 = 9.0;
+/// Relief ice holds against rock: complex craters on Ganymede are about
+/// 1.1 km deep at 26 km (Schenk 2002, doi:10.1038/417419a), where Pike's
+/// lunar law gives 2.8 km at nearly the same gravity: 0.4. Icy bodies'
+/// complex craters take it too (`craters::CraterField`).
+pub(crate) const ICE_RELIEF: f32 = 0.4;
 
 /// Mountain blend at Earth's gravity: the weight of the ridged mountains
 /// in the elevation. Calibration, no source: with the floating platform
@@ -1063,7 +1104,7 @@ pub fn generate_with_progress(
     // The smallest bodies (moonlets) cannot hold the relief of a planet:
     // it is flattened towards the sea level to a share of their radius,
     // and craters shape them.
-    let flatten = relief_share(params.circumference_km);
+    let flatten = relief_share(params);
     if flatten < 1.0 {
         let sea = params.sea_level;
         elevation
@@ -1661,18 +1702,37 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn small_bodies_keep_relief_of_a_larger_share_of_their_radius() {
-        let share_of_radius = |radius_km: f32| {
-            let c = 2.0 * std::f32::consts::PI * radius_km;
-            relief_share(c) * 0.5 * crate::craters::ELEVATION_KM / radius_km
+    fn small_bodies_keep_relief_within_their_caps() {
+        // A moon of `radius_km` and `density` (g/cm³), its span of
+        // elevation as generated (craters included), km.
+        let span = |radius_km: f32, density: f64, composition| {
+            let planet = params(0, "terran");
+            let mut p = crate::moons::small_body_params(&planet, composition, radius_km, 7, None);
+            let r = f64::from(radius_km);
+            let mass = 4.0 / 3.0 * PI * r.powi(3) * density * 1e12;
+            p.gravity = Some((6.674e-20 * mass / (r * r) * 1000.0 / 9.81) as f32);
+            (p.width, p.height) = (256, 128);
+            let w = generate(&p).world;
+            let (lo, hi) = w
+                .elevation
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(a, b), &e| (a.min(e), b.max(e)));
+            (hi - lo) * crate::craters::ELEVATION_KM
         };
-        // The Moon and Vesta keep their whole noise relief.
-        assert_eq!(relief_share(10_921.0), 1.0);
-        assert_eq!(relief_share(2.0 * std::f32::consts::PI * 262.0), 1.0);
-        // The smaller the body, the larger the share of its radius, up to
-        // Vesta's 8 %.
-        assert!(share_of_radius(262.0) > 5.0 * share_of_radius(1737.0));
-        assert!((share_of_radius(20.0) - SMALL_BODY_RELIEF).abs() < 1e-6);
+        use crate::moons::Composition::{Ice, Rock};
+        // A Moon: about the Moon's 13 km.
+        let moon = span(1737.0, 3.34, Rock);
+        assert!((9.0..18.0).contains(&moon), "Moon {moon}");
+        // An icy moon of Ganymede's size holds less than rock: its noise
+        // relief 0.4 of rock's; its simple craters are still rock's (the
+        // transition does not know ice).
+        let ice = span(2634.0, 1.94, Ice);
+        assert!(ice < 0.8 * moon, "ice {ice} rock {moon}");
+        // A moonlet: within 8 % of its radius, craters aside.
+        let p = crate::moons::small_body_params(&params(0, "terran"), Rock, 32.0, 7, None);
+        assert!(relief_share(&p) * noise_span_km(&p) <= SMALL_BODY_RELIEF * 32.0 + 1e-3);
+        // Planets keep their whole relief.
+        assert_eq!(relief_share(&params(0, "terran")), 1.0);
     }
 
     #[test]

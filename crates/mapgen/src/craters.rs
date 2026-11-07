@@ -366,6 +366,9 @@ pub struct CraterField {
     radius_km: f64,
     /// Simple-to-complex transition diameter, km.
     transition_km: f64,
+    /// Depth of complex craters against the rocky law: less on ice (see
+    /// `generation::ICE_RELIEF`).
+    complex_depth: f64,
     /// Absolute elevation of the sea surface.
     waterline: f32,
     /// Whether the basins hold a sea today (water, ice-sealed, acid or
@@ -549,6 +552,11 @@ impl CraterField {
             floods: Vec::new(),
             radius_km,
             transition_km: MOON_TRANSITION_KM * MOON_GRAVITY / gravity,
+            complex_depth: if crate::generation::icy(p) {
+                f64::from(crate::generation::ICE_RELIEF)
+            } else {
+                1.0
+            },
             waterline: p.sea_level + p.planet.rules.waterline,
             sea: [Biome::DeepOcean, Biome::Ocean]
                 .iter()
@@ -932,7 +940,7 @@ impl CraterField {
                     cos_reach: reach.cos(),
                     east,
                     north,
-                    profile: Profile::new(crater, self.transition_km),
+                    profile: Profile::shaped(crater, self.transition_km, self.complex_depth),
                     wear: wear as f32 * gain(crater),
                     lon: (c[1].atan2(c[0]) - window.lon0 + PI).rem_euclid(2.0 * PI) - PI,
                     rows: (y0, (y1 as usize).min(h - 1)),
@@ -1284,7 +1292,7 @@ impl CraterField {
         if self.sea && level < self.waterline {
             return Vec::new();
         }
-        let profile = Profile::new(crater, self.transition_km);
+        let profile = Profile::shaped(crater, self.transition_km, self.complex_depth);
         let reach = self.reach(crater);
         let lat = c[2].clamp(-1.0, 1.0).asin();
         let lon = c[1].atan2(c[0]).rem_euclid(2.0 * PI);
@@ -1524,7 +1532,14 @@ struct Profile {
 }
 
 impl Profile {
+    #[cfg(test)]
     fn new(crater: &Crater, transition_km: f64) -> Self {
+        Self::shaped(crater, transition_km, 1.0)
+    }
+
+    /// The profile of `crater` above a transition of `transition_km`, its
+    /// complex depth times `complex_depth` (less on ice).
+    fn shaped(crater: &Crater, transition_km: f64, complex_depth: f64) -> Self {
         let d = crater.diameter_km;
         let t = transition_km;
         let units = f64::from(ELEVATION_KM);
@@ -1535,7 +1550,8 @@ impl Profile {
         // turns complex, from 1 to 1.5 transitions.
         let complex = f64::from(smoothstep(1.0, 1.5, (d / t) as f32));
         let simple_depth = 0.2 * d;
-        let complex_depth = COMPLEX_DEPTH * t * (d / t).powf(COMPLEX_DEPTH_EXPONENT);
+        let complex_depth =
+            complex_depth * COMPLEX_DEPTH * t * (d / t).powf(COMPLEX_DEPTH_EXPONENT);
         let depth = simple_depth + complex * (complex_depth - simple_depth);
         let rim = if d < t {
             0.036 * d
