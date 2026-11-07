@@ -1,11 +1,11 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
-use crate::climate::LockedClimate;
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
 };
+use crate::climate::{LockedClimate, Seasons};
 use crate::clouds::CloudInput;
 use crate::craters::{CraterField, Era, RAY_MIN_PIXELS, base_min_diameter_km, darken_maria};
 use crate::delta;
@@ -812,6 +812,38 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     coarse.sea_level
 }
 
+/// The host star's action on the climate of world `params`: its light,
+/// regulated by a carbon cycle on wet worlds with plate tectonics, and the
+/// planet's own heat.
+fn star_climate(params: &WorldParams) -> StarClimate {
+    let planet = &params.planet;
+    StarClimate {
+        star: params.star,
+        orbit_au: params.orbit_au,
+        eccentricity: params.eccentricity,
+        regulated: planet.geology.regime == Regime::Plates
+            && params.pressure_bar >= LIQUID_WATER_BAR,
+        // A giant's moon: its tidal heat adds to its own, as radiated power.
+        internal_heat_k: crate::exomoon::HostGiant::draw(params)
+            .map_or(planet.climate.internal_heat, |h| {
+                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
+            }),
+    }
+}
+
+/// The seasonal cycle of world `params` (see [`Seasons`]): none on a
+/// planet locked to its star, whose sun never moves in its sky.
+pub fn seasons(params: &WorldParams) -> Seasons {
+    let grid = params.grid();
+    if StarInfo::new(params.star, params.orbit_au, params.eccentricity).tidally_locked {
+        return Seasons::none(grid.height);
+    }
+    let star = star_climate(params);
+    Seasons::new(&grid, params.axial_tilt_deg, params.pressure_bar, |rows| {
+        star_temperatures(rows, star)
+    })
+}
+
 /// Generates a world, running every pass in order, without debug layers.
 pub fn generate(params: &WorldParams) -> Generated {
     generate_with_progress(params, GenerateOptions::default(), |_| {})
@@ -916,21 +948,9 @@ pub fn generate_with_progress(
             .par_iter_mut()
             .for_each(|e| *e = sea + (*e - sea) * flatten);
     }
-    // Rows of sea-level temperature, evened out by dense air.
-    // The host star: its light, regulated by a carbon cycle on wet worlds
-    // with plate tectonics, and the planet's own heat.
-    let star_climate = StarClimate {
-        star: params.star,
-        orbit_au: params.orbit_au,
-        eccentricity: params.eccentricity,
-        regulated: planet.geology.regime == Regime::Plates
-            && params.pressure_bar >= LIQUID_WATER_BAR,
-        // A giant's moon: its tidal heat adds to its own, as radiated power.
-        internal_heat_k: crate::exomoon::HostGiant::draw(params)
-            .map_or(planet.climate.internal_heat, |h| {
-                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
-            }),
-    };
+    // Rows of sea-level temperature, evened out by dense air, then moved by
+    // the host star.
+    let star_climate = star_climate(params);
     // A tidally locked planet's climate follows the angle from the point
     // under its star instead of the latitude.
     let locked = StarInfo::new(params.star, params.orbit_au, params.eccentricity)
@@ -950,9 +970,11 @@ pub fn generate_with_progress(
             rows
         }
     };
+    let seasons = seasons(params);
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
-    let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
+    // Water carves where it thaws in summer.
+    let thaw = crate::erosion::thaw(&seasons.land_summer(&row_temperature), warming, rules.polar);
     // Impact craters: those of the wet era are worn by the erosion, the
     // younger ones are drawn over it. Their height change is only kept for
     // its debug map.
@@ -1213,10 +1235,12 @@ pub fn generate_with_progress(
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
+            let land = relief(elevation[i]) >= rules.waterline;
             let input = BiomeInput {
                 elevation: relief(elevation[i]),
                 moisture: moisture[i],
                 temperature: temperature[i],
+                seasonality: seasons.half_range((i / width as usize) as u32, land),
                 volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
                 lake: lake[i],
@@ -1243,6 +1267,7 @@ pub fn generate_with_progress(
             elevation_base,
             moisture,
             temperature,
+            seasons,
             flow_km2,
             volcanic_zone,
             coast_distance_km,

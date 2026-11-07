@@ -344,9 +344,10 @@ fn run_droplets(
     }
 }
 
-/// Weight of erosion on each row of a map: 0 where the sea-level temperature
-/// (`row_temperature` plus the planet's `shift`) stays below `polar`, where
-/// water is ice and carves no valleys, rising to 1 a little above it.
+/// Weight of erosion on each row of a map: 0 where the summer sea-level
+/// temperature (`row_temperature`, the rows' land summer, plus the
+/// planet's `shift`) stays below `polar`, where water is ice all year and
+/// carves no valleys, rising to 1 a little above it.
 pub fn thaw(row_temperature: &[f32], shift: f32, polar: f32) -> Vec<f32> {
     row_temperature
         .iter()

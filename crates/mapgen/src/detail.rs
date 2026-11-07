@@ -585,6 +585,9 @@ impl DetailWorld {
                     elevation: relief,
                     moisture: sample(&w.moisture),
                     temperature: t,
+                    seasonality: w
+                        .seasons
+                        .half_range((cy.max(0.0) as u32).min(w.height - 1), above >= 0.0),
                     volcanic_zone: sample(&w.volcanic_zone),
                     coast_distance_km: sample(&w.coast_distance_km),
                     lake,
@@ -623,11 +626,7 @@ impl DetailWorld {
                     }
                 };
                 let c = coverage[i];
-                if c > 0.0
-                    && input.temperature >= planet.rules.polar
-                    && !biome.is_water()
-                    && !dry.is_lava()
-                {
+                if c > 0.0 && !planet.rules.frozen(input) && !biome.is_water() && !dry.is_lava() {
                     colour = blend_river(colour, river_colour, c);
                 }
                 colour.map(|c| c.clamp(0.0, 255.0) as u8)

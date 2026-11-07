@@ -167,6 +167,128 @@ pub fn row_temperatures(grid: &Grid, axial_tilt_deg: f32) -> Vec<f32> {
         .collect()
 }
 
+/// Share of the seasonal swing of sunlight that land follows, against the
+/// temperature its annual light gives it: a body of heat capacity `C`
+/// under a yearly swing follows `1 / sqrt(1 + (ω C / λ)²)` of its
+/// equilibrium response (ω the year's angular frequency, λ the climate's
+/// restoring rate, North et al. 1981, doi:10.1029/RG019i001p00091).
+/// Calibration, no source for the value: land's small heat capacity
+/// (its air and a few metres of ground) lets it follow almost half,
+/// which gives Earth's continental interiors their seasonal half-range of
+/// about 10 °C at 30° and 20 °C at 60° (Phoenix, Fairbanks).
+pub const LAND_SEASONS: f32 = 0.45;
+/// The same for the sea, whose mixed layer (tens of metres of water)
+/// holds the heat of a whole season: a half-range of about 4 °C at 60°.
+/// Calibration, no source for the value; with λ = 5.4 W/m²/K (the slope
+/// of [`sea_level_celsius`] at Earth's light), a mixed layer 50 m deep
+/// would give 0.13.
+pub const SEA_SEASONS: f32 = 0.10;
+
+/// Swing of the daily-mean light at `latitude` over a year, as half the
+/// difference between its sunniest and darkest days, relative to the
+/// global mean (see [`daily_insolation`]).
+fn insolation_swing(latitude: f64, axial_tilt_deg: f32) -> f64 {
+    let (mut most, mut least) = (f64::MIN, f64::MAX);
+    for k in 0..ORBIT_STEPS {
+        let longitude = (k as f64 + 0.5) / ORBIT_STEPS as f64 * TAU;
+        let q = daily_insolation(latitude, declination(axial_tilt_deg, longitude));
+        most = most.max(q);
+        least = least.min(q);
+    }
+    (most - least) / 2.0
+}
+
+/// The seasonal cycle of a planet's climate: for each row, half the
+/// difference between its summer and its winter temperature, °C, on land
+/// and on the sea. Summer is the annual mean plus it, winter the mean
+/// minus it. The climate's layers keep the annual mean; the biomes read
+/// the seasons where they decide the outcome (ice needs a summer below
+/// freezing, see [`crate::biome::BiomeRules`]).
+///
+/// The swing of light is turned into degrees with the mean slope of
+/// [`sea_level_celsius`], damped by thermal inertia ([`LAND_SEASONS`],
+/// [`SEA_SEASONS`]) and by dense air (like the rows, see
+/// [`crate::atmosphere::heat_contrast`]), then moved by the star like the
+/// rows. At Earth's tilt land swings by about 11 °C at 30° and 20 °C at
+/// 60°; at 90° a land pole swings by 57 °C, from a scorching summer to a
+/// winter far below freezing. A planet locked to its star has no seasons.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Seasons {
+    land: Vec<f32>,
+    sea: Vec<f32>,
+}
+
+impl Seasons {
+    /// No seasonal cycle: summer and winter are the annual mean. Worlds
+    /// stored before the seasons (format version 10 and older) read their
+    /// biomes this way, as they were made.
+    pub fn none(height: u32) -> Self {
+        Self {
+            land: vec![0.0; height as usize],
+            sea: vec![0.0; height as usize],
+        }
+    }
+
+    /// The seasons of the rows of `grid` for an axial tilt (degrees) and a
+    /// surface pressure (bar); `star` moves rows of sea-level temperature
+    /// as [`crate::star::star_temperatures`] does.
+    pub fn new(
+        grid: &Grid,
+        axial_tilt_deg: f32,
+        pressure_bar: f32,
+        star: impl Fn(&mut [f32]),
+    ) -> Self {
+        let mut rows = row_temperatures(grid, axial_tilt_deg);
+        crate::atmosphere::transport_heat(&mut rows, grid, pressure_bar);
+        let (pole, equator) = earth_insolation();
+        let contrast = crate::atmosphere::heat_contrast(pressure_bar);
+        let swing: Vec<f32> = (0..grid.height)
+            .map(|y| {
+                let s = insolation_swing(grid.latitude(y), axial_tilt_deg) / (equator - pole);
+                s as f32 * DEGREES_PER_UNIT * contrast
+            })
+            .collect();
+        let half_range = |damping: f32| {
+            let mut summer: Vec<f32> = rows
+                .iter()
+                .zip(&swing)
+                .map(|(t, s)| t + s * damping)
+                .collect();
+            let mut winter: Vec<f32> = rows
+                .iter()
+                .zip(&swing)
+                .map(|(t, s)| t - s * damping)
+                .collect();
+            star(&mut summer);
+            star(&mut winter);
+            summer
+                .iter()
+                .zip(&winter)
+                .map(|(s, w)| ((s - w) / 2.0).max(0.0))
+                .collect()
+        };
+        Self {
+            land: half_range(LAND_SEASONS),
+            sea: half_range(SEA_SEASONS),
+        }
+    }
+
+    /// Half the summer-to-winter difference on row `y`, °C, on land or on
+    /// the sea.
+    pub fn half_range(&self, y: u32, land: bool) -> f32 {
+        let rows = if land { &self.land } else { &self.sea };
+        rows.get(y as usize).copied().unwrap_or(0.0)
+    }
+
+    /// Each row's summer temperature on land, from its annual-mean rows.
+    pub fn land_summer(&self, rows: &[f32]) -> Vec<f32> {
+        rows.iter()
+            .enumerate()
+            .map(|(y, t)| t + self.half_range(y as u32, true))
+            .collect()
+    }
+}
+
 /// Steps of [`LockedClimate`]'s profile over the angle from the substellar
 /// point, 0 to 180°.
 const LOCKED_STEPS: usize = 720;
@@ -629,6 +751,38 @@ mod tests {
         // With no tilt the poles get no light: as cold as the curve goes.
         let flat = row_temperatures(&grid, 0.0);
         assert!(flat[0] < -45.0, "{}", flat[0]);
+    }
+
+    #[test]
+    fn land_swings_with_the_seasons_far_more_than_the_sea() {
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        // Row 29 is centred on 60.5° N, row 59 on 30.5° N.
+        let earth = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, |_| {});
+        let (land60, sea60) = (earth.half_range(29, true), earth.half_range(29, false));
+        assert!((land60 - 19.6).abs() < 1.0, "{land60}");
+        assert!((sea60 - 4.4).abs() < 0.5, "{sea60}");
+        assert!((earth.half_range(59, true) - 11.2).abs() < 1.0);
+        // The equator: the twice-yearly swing of its light only.
+        assert!(earth.half_range(89, true) < 2.0);
+        // Tilted by 90°, the pole swings from a scorching summer to a
+        // winter far below freezing.
+        let rows = row_temperatures(&grid, 90.0);
+        let tipped = Seasons::new(&grid, 90.0, 1.0, |_| {});
+        assert!(rows[0] - tipped.half_range(0, true) < -20.0);
+        // Dense air damps the seasons; a dim star narrows them in degrees.
+        let dense = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 92.0, |_| {});
+        assert!(dense.half_range(29, true) < 0.11 * land60);
+        let dim = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, |rows| {
+            for t in rows {
+                *t = (*t + 273.15) * 0.8 - 273.15;
+            }
+        });
+        assert!((dim.half_range(29, true) - 0.8 * land60).abs() < 1e-3);
+        assert_eq!(Seasons::none(180).half_range(29, true), 0.0);
     }
 
     /// A row of ocean on the west half and flat land on the east half.

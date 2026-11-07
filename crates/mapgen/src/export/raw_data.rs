@@ -49,8 +49,16 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// fresh craters; version 9 the moons (under `moons` in `world.json`, each
 /// one a world of its own, now a body of the system) and the shape of irregular
 /// bodies; version 10 the star's metallicity and the giant planets of the
-/// system (under `giants`), whose mass sets the crater rate.
-pub const FORMAT_VERSION: u32 = 10;
+/// system (under `giants`), whose mass sets the crater rate; version 11
+/// reads the biomes with the seasonal cycle (no new file: the seasons
+/// come from the parameters, and the preset's `polar` and
+/// `highland_snow_temperature` are summer temperatures, see
+/// [`crate::climate::Seasons`]); older worlds keep their biomes without
+/// it.
+pub const FORMAT_VERSION: u32 = 11;
+
+/// First format version whose biomes read the seasonal cycle.
+pub const SEASONS_VERSION: u32 = 11;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
@@ -706,6 +714,9 @@ pub struct LoadedWorld {
     pub elevation: Layer16,
     pub moisture: Layer16,
     pub temperature: Layer16,
+    /// The seasonal cycle, from the parameters (none before
+    /// [`SEASONS_VERSION`]).
+    pub seasons: crate::climate::Seasons,
     /// Drainage area in km² (stored on a log scale).
     pub flow_km2: Layer16,
     pub volcanic_zone: Layer16,
@@ -733,6 +744,7 @@ impl LoadedWorld {
             elevation: Layer16::quantise(&world.elevation, ELEVATION),
             moisture: Layer16::quantise(&world.moisture, MOISTURE),
             temperature: Layer16::quantise(&world.temperature, TEMPERATURE),
+            seasons: world.seasons.clone(),
             flow_km2,
             volcanic_zone: Layer16::quantise(&world.volcanic_zone, VOLCANIC_ZONE),
             coast_distance_km: Layer16::quantise(&world.coast_distance_km, COAST_DISTANCE),
@@ -816,6 +828,7 @@ impl LoadedWorld {
             elevation,
             moisture,
             temperature,
+            seasons: self.seasons.clone(),
             flow_km2,
             volcanic_zone,
             coast_distance_km,
@@ -1011,6 +1024,12 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
     if meta.format_version < CELSIUS_VERSION {
         params.planet.to_celsius();
     }
+    // Worlds stored before the seasons chose their biomes without them.
+    let seasons = if meta.format_version < SEASONS_VERSION {
+        crate::climate::Seasons::none(meta.height)
+    } else {
+        crate::generation::seasons(&params)
+    };
     let albedo = match &meta.layers.albedo {
         Some(layer) => {
             let img = image::open(raw.join(&layer.file))
@@ -1029,6 +1048,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         elevation,
         moisture,
         temperature,
+        seasons,
         flow_km2,
         volcanic_zone,
         coast_distance_km,

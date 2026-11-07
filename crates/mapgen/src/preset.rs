@@ -508,7 +508,10 @@ mod tests {
 
     #[test]
     fn old_presets_convert_to_the_celsius_thresholds() {
-        // The former [0, 1] defaults land on today's °C defaults.
+        // The former [0, 1] defaults land on the °C defaults of format
+        // version 4 to 10, when every threshold was an annual mean (ice
+        // and highland snow now compare with the summer, read without
+        // seasons on those worlds).
         let mut old = Preset::load("terran").unwrap();
         let r = &mut old.rules;
         (r.sea_ice_temperature, r.highland_snow_temperature) = (0.07, 0.35);
@@ -518,11 +521,8 @@ mod tests {
         let new = crate::biome::BiomeRules::default();
         for (a, b) in [
             (old.rules.sea_ice_temperature, new.sea_ice_temperature),
-            (
-                old.rules.highland_snow_temperature,
-                new.highland_snow_temperature,
-            ),
-            (old.rules.polar, new.polar),
+            (old.rules.highland_snow_temperature, 2.6),
+            (old.rules.polar, -11.6),
             (old.rules.boreal, new.boreal),
             (old.rules.temperate, new.temperate),
         ] {

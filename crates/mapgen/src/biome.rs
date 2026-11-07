@@ -368,16 +368,26 @@ pub struct BiomeRules {
     pub highland: f32,
     /// Above this elevation, highland is always snow.
     pub snow_line: f32,
-    /// Below this temperature, highland is snow whatever its elevation.
+    /// Below this summer temperature, highland is snow whatever its
+    /// elevation: snow that lasts the year.
     pub highland_snow_temperature: f32,
 
     // Temperature zones
-    /// Below this temperature, land and shore are ice cap.
+    /// Below this summer temperature, land and shore are ice cap, and
+    /// rivers freeze: ice needs a summer below freezing (Köppen's frost
+    /// climate EF, warmest month below 0 °C; Kottek et al. 2006,
+    /// doi:10.1127/0941-2948/2006/0130).
     pub polar: f32,
-    /// Below this temperature, land is boreal (tundra, taiga).
+    /// Below this annual mean temperature, land is boreal (tundra, taiga).
     pub boreal: f32,
-    /// Below this temperature, land is temperate; above, tropical.
+    /// Below this annual mean temperature, land is temperate; above,
+    /// tropical.
     pub temperate: f32,
+    /// At or below this winter temperature, land is never tropical: it is
+    /// temperate at most (Köppen's snow climates D, coldest month at or
+    /// below −3 °C; Kottek et al. 2006). A high tilt gives its poles a
+    /// warm annual mean but freezing winters.
+    pub tropical_winter: f32,
 
     // Moisture splits
     /// Shore wetter than this is wetland, otherwise beach.
@@ -421,10 +431,11 @@ impl Default for BiomeRules {
             shore_width_km: 40.0,
             highland: 0.10,
             snow_line: 0.30,
-            highland_snow_temperature: 2.6,
-            polar: -11.6,
+            highland_snow_temperature: 0.0,
+            polar: 0.0,
             boreal: 0.0,
             temperate: 12.0,
+            tropical_winter: -3.0,
             wetland_moisture: 0.30,
             taiga_moisture: 0.05,
             shrubland_moisture: -0.10,
@@ -450,6 +461,10 @@ pub struct BiomeInput {
     pub moisture: f32,
     /// Annual mean temperature in °C.
     pub temperature: f32,
+    /// Half the difference between summer and winter temperatures, °C
+    /// (see [`crate::climate::Seasons`]): summer is `temperature` plus it,
+    /// winter `temperature` minus it.
+    pub seasonality: f32,
     /// Volcanic zone in `[0, 1]` (`0` = inert, `1` = fully volcanic).
     pub volcanic_zone: f32,
     /// Distance to the nearest open water in km (`0` on water).
@@ -461,6 +476,18 @@ pub struct BiomeInput {
     /// Local shift of the highland line, so mountain borders do not follow
     /// elevation contours.
     pub highland_offset: f32,
+}
+
+impl BiomeInput {
+    /// Summer temperature, °C.
+    pub fn summer(&self) -> f32 {
+        self.temperature + self.seasonality
+    }
+
+    /// Winter temperature, °C.
+    pub fn winter(&self) -> f32 {
+        self.temperature - self.seasonality
+    }
 }
 
 // ── Top-level biome selector ──────────────────────────────────────────────────
@@ -475,6 +502,7 @@ impl BiomeRules {
             temperature: t,
             ..
         } = input;
+        let summer = input.summer();
         // Lava overrides water: no lake or river inside a lava field or a
         // volcano, whose rivers start at its edge instead.
         if (input.lake || input.river) && e >= self.waterline {
@@ -495,14 +523,14 @@ impl BiomeRules {
             } else {
                 Biome::Lake
             }
-        } else if input.river && t >= self.polar {
+        } else if input.river && !self.frozen(input) {
             Biome::River
         } else if e < self.shore_top && input.coast_distance_km <= self.shore_width_km {
-            self.shore(t, m)
+            self.shore(summer, m)
         } else if e + input.highland_offset > self.highland {
-            self.highland(e + input.highland_offset, t)
+            self.highland(e + input.highland_offset, summer)
         } else {
-            self.land(t, m)
+            self.land(t, m, summer, input.winter())
         };
         self.apply_volcanic(base, e, input.volcanic_zone)
     }
@@ -519,8 +547,14 @@ impl BiomeRules {
         }
     }
 
-    fn shore(&self, t: f32, m: f32) -> Biome {
-        if t < self.polar {
+    /// Whether the ground stays frozen all year (summer below
+    /// [`polar`](Self::polar)): ice, and no flowing river.
+    pub fn frozen(&self, input: BiomeInput) -> bool {
+        input.summer() < self.polar
+    }
+
+    fn shore(&self, summer: f32, m: f32) -> Biome {
+        if summer < self.polar {
             Biome::IceCap // frozen shore / pack ice
         } else if m > self.wetland_moisture {
             Biome::Wetland // mangroves / marshes
@@ -529,8 +563,8 @@ impl BiomeRules {
         }
     }
 
-    fn highland(&self, e: f32, t: f32) -> Biome {
-        if t < self.highland_snow_temperature || e > self.snow_line {
+    fn highland(&self, e: f32, summer: f32) -> Biome {
+        if summer < self.highland_snow_temperature || e > self.snow_line {
             Biome::Snow
         } else {
             Biome::Mountain
@@ -539,8 +573,10 @@ impl BiomeRules {
 
     // ── Land: temperature zones ───────────────────────────────────────────────
 
-    fn land(&self, t: f32, m: f32) -> Biome {
-        if t < self.polar {
+    /// Land from its annual mean `t`, moisture `m`, and its `summer` and
+    /// `winter` temperatures.
+    fn land(&self, t: f32, m: f32, summer: f32, winter: f32) -> Biome {
+        if summer < self.polar {
             Biome::IceCap
         } else if t < self.boreal {
             if m > self.taiga_moisture {
@@ -548,7 +584,7 @@ impl BiomeRules {
             } else {
                 Biome::Tundra
             }
-        } else if t < self.temperate {
+        } else if t < self.temperate || winter <= self.tropical_winter {
             if m < self.shrubland_moisture {
                 Biome::Shrubland
             } else if m > self.forest_moisture {
@@ -623,6 +659,7 @@ mod tests {
             elevation: rules.highland + 0.05,
             moisture: 0.2,
             temperature: 20.0,
+            seasonality: 0.0,
             volcanic_zone,
             coast_distance_km: 1000.0,
             lake,
@@ -645,6 +682,7 @@ mod tests {
                 elevation: 0.05,
                 moisture: 0.5,
                 temperature: 8.0,
+                seasonality: 0.0,
                 volcanic_zone,
                 coast_distance_km: 1000.0,
                 lake: false,
@@ -674,6 +712,7 @@ mod tests {
                                 elevation: e,
                                 moisture: m,
                                 temperature: t,
+                                seasonality: 0.0,
                                 volcanic_zone: vz,
                                 coast_distance_km: 0.0,
                                 lake,
@@ -703,6 +742,7 @@ mod tests {
             elevation: -0.05,
             moisture: 0.0,
             temperature: 20.0,
+            seasonality: 0.0,
             volcanic_zone: 0.0,
             coast_distance_km,
             lake: false,
@@ -719,6 +759,7 @@ mod tests {
             elevation: -0.5,
             moisture: 0.0,
             temperature: -15.0,
+            seasonality: 0.0,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
             lake: false,
@@ -729,11 +770,54 @@ mod tests {
     }
 
     #[test]
+    fn the_seasons_decide_ice_and_the_tropics() {
+        let rules = BiomeRules::default();
+        let land = |temperature: f32, seasonality: f32| {
+            rules.choose(BiomeInput {
+                elevation: 0.05,
+                moisture: 0.5,
+                temperature,
+                seasonality,
+                volcanic_zone: 0.0,
+                coast_distance_km: 1000.0,
+                lake: false,
+                river: false,
+                highland_offset: 0.0,
+            })
+        };
+        // Ice needs a summer below freezing: a polar coast at −12 °C with
+        // a summer at +8 °C is boreal, a steady −12 °C is ice.
+        assert_eq!(land(-12.0, 20.0), Biome::Taiga);
+        assert_eq!(land(-12.0, 0.0), Biome::IceCap);
+        assert_eq!(land(-25.0, 20.0), Biome::IceCap);
+        // A warm annual mean with freezing winters (the pole of a world
+        // tilted by 90°) is not tropical.
+        assert_eq!(land(25.0, 2.0), Biome::Jungle);
+        assert_eq!(land(25.0, 50.0), Biome::Forest);
+        // Rivers freeze only where the summer does.
+        let river = |seasonality| BiomeInput {
+            river: true,
+            temperature: -5.0,
+            seasonality,
+            elevation: 0.05,
+            moisture: 0.5,
+            volcanic_zone: 0.0,
+            coast_distance_km: 1000.0,
+            lake: false,
+            highland_offset: 0.0,
+        };
+        assert!(rules.frozen(river(2.0)));
+        assert!(!rules.frozen(river(10.0)));
+        assert_eq!(rules.choose(river(10.0)), Biome::River);
+    }
+
+    #[test]
     fn deep_water_is_ocean_on_terran() {
         let input = BiomeInput {
             elevation: -0.9,
             moisture: 0.0,
             temperature: 20.0,
+            seasonality: 0.0,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
             lake: false,

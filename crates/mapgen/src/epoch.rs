@@ -78,6 +78,9 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
                 elevation: (elevation[i] - p.sea_level).clamp(-1.0, 1.0),
                 moisture: world.moisture.get(i),
                 temperature: temperature[i],
+                seasonality: world
+                    .seasons
+                    .half_range((i / grid.width as usize) as u32, above(elevation[i]) >= 0.0),
                 volcanic_zone: world.volcanic_zone.get(i),
                 coast_distance_km: world.coast_distance_km.get(i),
                 // No liquid water: no lakes or rivers.
