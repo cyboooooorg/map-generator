@@ -74,13 +74,15 @@ export type PlanetLook = Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo' | 'axialT
  * The planet's look in a moon's sky, from the planet's own `world.json`:
  * its air (the halo of its sky, as its own view scatters it), and its
  * clouds (the layer its view draws, `file` resolved by `url`) in its
- * cloud colour. A world without a sky or a cloud layer (an airless rock,
- * a giant, whose surface is its clouds) gets none of them.
+ * cloud colour. A world without a sky or a cloud layer (an airless rock)
+ * gets none of them, and a giant, whose surface is its clouds, neither.
  */
 export function planetLook(meta: WorldMetadata, url: (file: string) => string): PlanetLook {
   const file = meta.layers.clouds?.file;
   return {
-    halo: halo(skyFromWorld(meta)),
+    // A giant has no sky to scatter (its pressure is nominal): the halo's
+    // limb mix and darkening would wash its bands out.
+    halo: meta.giant ? null : halo(skyFromWorld(meta)),
     clouds: file ? url(file) : null,
     cloudTint: cloudTint(meta),
   };

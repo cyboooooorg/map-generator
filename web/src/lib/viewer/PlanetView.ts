@@ -2246,9 +2246,9 @@ export class PlanetView {
    * least a few pixels. Their maps load in the background.
    */
   setSkyBodies(bodies: readonly SkyBody[], signal?: AbortSignal): void {
-    this.skyRequest += 1;
-    const request = this.skyRequest;
-    // The same bodies at new places keep their meshes and maps.
+    // The same bodies at new places keep their meshes and maps, and the
+    // maps still loading: the request number only moves when they are
+    // rebuilt, else a late map (a giant's) would be dropped as stale.
     const same =
       bodies.length === this.skyBodies.length &&
       bodies.every((b, i) => {
@@ -2264,6 +2264,8 @@ export class PlanetView {
       this.requestRender();
       return;
     }
+    this.skyRequest += 1;
+    const request = this.skyRequest;
     this.disposeSkyBodies();
     this.skyBodies = bodies.map((body) => {
       const mesh = new Mesh(
