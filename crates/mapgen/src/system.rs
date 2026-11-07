@@ -252,13 +252,23 @@ pub struct Surroundings {
 
 /// What the viewer draws before a body's maps exist: a sphere of
 /// `colours[0]`, with `colours[1]` as its land or its belts and the
-/// following as its poles; giants with `bands` bands.
+/// following as its poles; giants with `bands` bands between `edges`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Preview {
-    /// Linear RGB.
+    /// Linear RGB (a giant's palette is sRGB, converted).
     pub colours: Vec<[f32; 3]>,
+    /// The bands of a giant, as it will be generated (0 for a rocky body).
     pub bands: u8,
+    /// Latitudes in degrees of the `bands + 1` edges of a giant's bands,
+    /// ascending, from the south edge of its polar region to the north
+    /// edge of the other: the band between the `k`-th and the next edge is
+    /// a belt for even `k`, a zone for odd `k`, in `colours[1]` and
+    /// `colours[0]`; beyond the outer edges the polar colour. Empty on
+    /// previews made before it existed: the viewer then spaces `bands`
+    /// bands evenly.
+    #[serde(default)]
+    pub edges: Vec<f32>,
     /// Lava glowing on its night side.
     pub glow: bool,
 }
@@ -1586,12 +1596,24 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
     moons.into_iter().map(|(_, parts)| parts).collect()
 }
 
+/// A colour from sRGB to linear RGB.
+fn srgb_to_linear(c: [f32; 3]) -> [f32; 3] {
+    c.map(|v| {
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    })
+}
+
 /// The preview of a body: colours by type, a giant's from its look.
 fn preview_of(body_type: &str, params: &WorldParams, _star: f32) -> Preview {
     let rgb = |r: f32, g: f32, b: f32| [r, g, b];
     let rocky = |colours: Vec<[f32; 3]>, glow: bool| Preview {
         colours,
         bands: 0,
+        edges: Vec::new(),
         glow,
     };
     match body_type {
@@ -1611,11 +1633,15 @@ fn preview_of(body_type: &str, params: &WorldParams, _star: f32) -> Preview {
         "icy-moon" => rocky(vec![rgb(0.72, 0.76, 0.8)], false),
         _ if is_giant(body_type) => {
             let mass = params.giant_mass_earth.unwrap_or(318.0);
-            let info = crate::giant_world::Look::draw(params, mass).info;
-            let p = info.palette;
+            let look = crate::giant_world::Look::draw(params, mass);
+            let p = look.info.palette;
+            // The palette is sRGB, as the globe's surface is; a preview's
+            // colours are linear, and the viewer converts them back.
+            let edges = look.band_edges();
             Preview {
-                colours: vec![p.zone, p.belt, p.polar],
-                bands: (info.jets.min(24)) as u8,
+                colours: [p.zone, p.belt, p.polar].map(srgb_to_linear).to_vec(),
+                bands: (edges.len() - 1) as u8,
+                edges,
                 glow: false,
             }
         }
@@ -2041,6 +2067,49 @@ mod tests {
         .unwrap();
         assert!(system_id(&other).ends_with("-past250ma-1234"));
         assert_ne!(system_id(&other), system_id(&system));
+    }
+
+    #[test]
+    fn a_giants_preview_is_linear_and_follows_the_bands_it_will_get() {
+        let mut checked = 0;
+        for seed in 0..10 {
+            let system = draw(
+                &whole(&[("gas-giant", 2), ("ice-giant", 1), ("terran", 1)], seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            for body in &system.bodies {
+                if body.kind != BodyKind::Planet || !is_giant(&body.body_type) {
+                    continue;
+                }
+                let mass = body.params.giant_mass_earth.unwrap();
+                let look = crate::giant_world::Look::draw(&body.params, mass);
+                let p = look.info.palette;
+                // Linear: the sRGB palette converted, so the viewer's own
+                // conversion back gives the globe's bytes.
+                let to_srgb = |c: f32| {
+                    if c <= 0.003_130_8 {
+                        12.92 * c
+                    } else {
+                        1.055 * c.powf(1.0 / 2.4) - 0.055
+                    }
+                };
+                for (got, want) in body.preview.colours.iter().zip([p.zone, p.belt, p.polar]) {
+                    for k in 0..3 {
+                        assert!((to_srgb(got[k]) - want[k]).abs() < 1e-4, "{got:?} {want:?}");
+                    }
+                }
+                // The bands the globe is generated with, not the jet count.
+                assert_eq!(body.preview.edges, look.band_edges());
+                assert_eq!(
+                    usize::from(body.preview.bands) + 1,
+                    body.preview.edges.len()
+                );
+                assert!(body.preview.bands > u8::try_from(look.info.jets).unwrap());
+                checked += 1;
+            }
+        }
+        assert!(checked > 10, "{checked}");
     }
 
     #[test]

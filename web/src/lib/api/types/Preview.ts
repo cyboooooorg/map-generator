@@ -3,13 +3,27 @@
 /**
  * What the viewer draws before a body's maps exist: a sphere of
  * `colours[0]`, with `colours[1]` as its land or its belts and the
- * following as its poles; giants with `bands` bands.
+ * following as its poles; giants with `bands` bands between `edges`.
  */
 export type Preview = { 
 /**
- * Linear RGB.
+ * Linear RGB (a giant's palette is sRGB, converted).
  */
-colours: Array<[number, number, number]>, bands: number, 
+colours: Array<[number, number, number]>, 
+/**
+ * The bands of a giant, as it will be generated (0 for a rocky body).
+ */
+bands: number, 
+/**
+ * Latitudes in degrees of the `bands + 1` edges of a giant's bands,
+ * ascending, from the south edge of its polar region to the north
+ * edge of the other: the band between the `k`-th and the next edge is
+ * a belt for even `k`, a zone for odd `k`, in `colours[1]` and
+ * `colours[0]`; beyond the outer edges the polar colour. Empty on
+ * previews made before it existed: the viewer then spaces `bands`
+ * bands evenly.
+ */
+edges: Array<number>, 
 /**
  * Lava glowing on its night side.
  */

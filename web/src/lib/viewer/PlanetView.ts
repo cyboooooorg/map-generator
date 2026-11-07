@@ -117,6 +117,7 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
+import { PREVIEW_EDGES, previewEdgeUniform } from './previewTexture';
 import { PROFILES, type QualityProfile } from './quality';
 import {
   BOULDER_M,
@@ -488,6 +489,8 @@ export class PlanetView {
     // A giant's storms, each drifting whole (see setGiantStorms).
     uStorms: { value: Array.from({ length: MAX_STORMS }, () => new Vector4()) } as IUniform<Vector4[]>,
     uStormCount: { value: 0 } as IUniform<number>,
+    // Whether the largest storm is a great spot, which drifts slowly.
+    uGreatSpot: { value: 0 } as IUniform<number>,
     uHotGlow: { value: 0 } as IUniform<number>,
     uRingInner: { value: 0 } as IUniform<number>,
     uRingOuter: { value: 0 } as IUniform<number>,
@@ -1099,6 +1102,7 @@ export class PlanetView {
   setGiant(info: GiantInfo | null): void {
     this.shared.uFlattening.value = info?.flattening ?? 0;
     this.u.uGiant.value = info ? 1 : 0;
+    this.u.uGreatSpot.value = info?.great_spot ? 1 : 0;
     // Clouds above about 1 100 K glow red, brighter the hotter.
     const t = info ? Math.min(Math.max((info.effective_k - 1100) / 1100, 0), 1) : 0;
     this.u.uHotGlow.value = 0.6 * t * t * (3 - 2 * t);
@@ -2143,6 +2147,7 @@ export class PlanetView {
             uColor2: { value: new Vector3() },
             uColor3: { value: new Vector3() },
             uBands: { value: 0 },
+            uEdges: { value: new Array<number>(PREVIEW_EDGES).fill(0) },
             uLand: { value: 0 },
             uPreview: { value: 0 },
             uGlow: { value: 0 },
@@ -2727,6 +2732,7 @@ export class PlanetView {
             uColor2: { value: new Vector3() },
             uColor3: { value: new Vector3() },
             uBands: { value: 0 },
+            uEdges: { value: new Array<number>(PREVIEW_EDGES).fill(0) },
             uLand: { value: 0 },
             uGlow: { value: 0 },
             uOpacity: { value: 1 },
@@ -2748,6 +2754,7 @@ export class PlanetView {
         (u['uColor2']!.value as Vector3).set(...(c[1] ?? [0, 0, 0]));
         (u['uColor3']!.value as Vector3).set(...(c[2] ?? [0, 0, 0]));
         u['uBands']!.value = preview.bands;
+        u['uEdges']!.value = previewEdgeUniform(preview);
         u['uLand']!.value = preview.bands === 0 && c.length > 1 ? 1 : 0;
         u['uGlow']!.value = preview.glow ? 1 : 0;
       }
@@ -3128,6 +3135,7 @@ function applyPreview(u: Record<string, IUniform>, body: SkyBody): void {
   (u['uColor3']!.value as Vector3).set(...(colours[2] ?? [0, 0, 0]));
   u['uPreview']!.value = preview ? 1 : 0;
   u['uBands']!.value = preview?.bands ?? 0;
+  u['uEdges']!.value = preview ? previewEdgeUniform(preview) : new Array<number>(PREVIEW_EDGES).fill(0);
   u['uLand']!.value = preview && preview.bands === 0 && colours.length > 1 ? 1 : 0;
   u['uGlow']!.value = preview?.glow ? 1 : 0;
 }
