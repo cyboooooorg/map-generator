@@ -18,10 +18,11 @@
 //! (Cumming et al. 2008) for gas giants, log-uniform for ice giants;
 //! eccentricities Kipping's law, like the world's, none for hot Jupiters.
 //!
-//! **Spacing.** Two orbits closer than `2√3` mutual Hill radii, apoapsis to
-//! periapsis, are unstable (Gladman 1993): a giant that close to the world
-//! or to another giant is redrawn a few times, then dropped. At most
-//! [`MAX_GIANTS`].
+//! **Spacing.** Neighbouring orbits keep [`hill_spacing`] mutual Hill radii
+//! apart, apoapsis to periapsis: 10 for Earth-mass planets, fewer for
+//! heavier ones (Chambers et al. 1996; Pu & Wu 2015), never under `2√3`
+//! (Gladman 1993). A giant too close to the world or to another giant is
+//! redrawn a few times, then dropped. At most [`MAX_GIANTS`].
 //!
 //! **Effects on the world.** An eccentric giant forces an eccentricity on
 //! the world (Laplace–Lagrange secular theory; the request raises a drawn
@@ -60,8 +61,26 @@ const ICE_ORBIT: (f64, f64) = (0.7, 0.3);
 const ORBIT_RANGE: (f64, f64) = (0.02, 60.0);
 /// Hot Jupiter periods, days.
 const HOT_PERIOD_DAYS: (f64, f64) = (1.0, 10.0);
-/// Least gap between two orbits, in mutual Hill radii (Gladman 1993).
-const HILL_GAP: f64 = 3.464;
+/// Gap kept between two Earth-mass neighbours, in mutual Hill radii: about
+/// what systems of a few Earth masses need to last a billion years (Pu &
+/// Wu 2015; Obertas et al. 2017).
+const EARTH_HILL_SPACING: f64 = 10.0;
+
+/// Least gap kept between two neighbouring orbits, apoapsis to periapsis,
+/// in mutual Hill radii, for a pair whose mean mass share of the star is
+/// `mass_share` (`(m₁ + m₂) / 2M`).
+///
+/// [`EARTH_HILL_SPACING`] for Earth-mass planets. Heavier planets need
+/// fewer Hill radii: Chambers et al. (1996) found the stable spacings of
+/// different masses agree once scaled by `μ^¼` rather than by the Hill
+/// radius's `μ^⅓`, so the spacing falls as `μ^(−1/12)`: about 6.4 for a
+/// Jupiter and a Saturn, which keeps the Solar System's own pair (6.5
+/// apart). Never below `2√3`, the limit under which even two planets alone
+/// meet (Gladman 1993).
+pub fn hill_spacing(mass_share: f64) -> f64 {
+    const EARTH_SHARE: f64 = 1.0 / 332_946.0;
+    (EARTH_HILL_SPACING * (mass_share / EARTH_SHARE).powf(-1.0 / 12.0)).max(2.0 * 3f64.sqrt())
+}
 /// Tries to place a giant before it is dropped.
 const TRIES: usize = 6;
 /// Metallicity of the stars nearby, dex: mean, spread and limits
@@ -296,8 +315,8 @@ struct Track {
 }
 
 impl Track {
-    /// Whether two orbits keep the least gap of [`HILL_GAP`] mutual Hill
-    /// radii between them.
+    /// Whether two orbits keep the least gap of [`hill_spacing`] mutual
+    /// Hill radii between them.
     fn clear_of(&self, other: &Track, star_mass: f64) -> bool {
         let (inner, outer) = if self.orbit < other.orbit {
             (self, other)
@@ -309,7 +328,7 @@ impl Track {
             * (self.orbit + other.orbit);
         let gap =
             outer.orbit * (1.0 - outer.eccentricity) - inner.orbit * (1.0 + inner.eccentricity);
-        gap >= HILL_GAP * hill
+        gap >= hill_spacing(0.5 * (self.mass + other.mass) / star_mass) * hill
     }
 }
 
@@ -498,6 +517,18 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
 mod tests {
     use super::*;
     use crate::preset::Preset;
+
+    #[test]
+    fn heavier_pairs_need_fewer_hill_radii() {
+        let earth = 1.0 / 332_946.0;
+        assert!((hill_spacing(earth) - 10.0).abs() < 1e-9);
+        // A Jupiter and a Saturn: 6.4, under their own 6.5.
+        let pair = 0.5 * (317.8 + 95.2) * earth;
+        assert!((hill_spacing(pair) - 6.4).abs() < 0.05, "{}", hill_spacing(pair));
+        // Never under Gladman's two-planet limit, even for a star's mass.
+        assert!(hill_spacing(1.0) >= 2.0 * 3f64.sqrt());
+        assert!((hill_spacing(1e3) - 2.0 * 3f64.sqrt()).abs() < 1e-9);
+    }
 
     fn params(seed: u32, star: f32, orbit_au: f32, metallicity: f32) -> WorldParams {
         WorldParams {

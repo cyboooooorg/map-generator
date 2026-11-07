@@ -391,9 +391,14 @@ A world could be a moon of a giant rather than a planet of the star:
   Sun-like stars with a hot Jupiter (periods of 1 to 10 days), fewer
   when the world orbits nearby (hot Jupiters are lonely);
   eccentricities from Kipping's law, none for hot Jupiters.
-- **Spacing:** a giant closer than `2√3` mutual Hill radii (apoapsis to
-  periapsis) to the world or to another giant is redrawn a few times,
-  then dropped; at most four giants.
+- **Spacing:** a giant too close to the world or to another giant
+  (apoapsis to periapsis) is redrawn a few times, then dropped; at most
+  four giants. The gap kept is the system's (`giants::hill_spacing`): 10
+  mutual Hill radii for Earth-mass planets, falling as the pair's mass
+  share to the power −1/12 (Chambers et al. 1996), 6.4 for a Jupiter and
+  a Saturn, never under `2√3`. It was `2√3` alone at first, Gladman's
+  limit for two planets, which lets three or more meet within millions
+  of years.
 - **Each giant:** a letter (b, c, … by distance, the world being the
   system's planet of interest), mass, radius (power laws through
   Neptune, Saturn and Jupiter, `M^−0.04` above; inflated when

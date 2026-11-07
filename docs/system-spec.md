@@ -131,11 +131,15 @@ them today (metallicity and star mass).
 ### Spacing and order
 
 - Planets are placed from the inside out. Two neighbours must be at least
-  **10 mutual Hill radii** apart (periapsis to apoapsis), the spacing that
-  keeps multi-planet systems stable for billions of years (Chambers et
-  al. 1996; Pu & Wu 2015); a pair closer than that is spread outwards, a
-  planet pushed out of its allowed band is redrawn a few times, then the
-  request fails (below).
+  **10 mutual Hill radii** apart (periapsis to apoapsis) when they weigh
+  about an Earth, the spacing that keeps multi-planet systems stable for
+  billions of years (Chambers et al. 1996; Pu & Wu 2015). Heavier pairs
+  need fewer: the spacing falls as their mass share to the power −1/12
+  (Chambers et al. 1996 found stable spacings scale with `μ^¼`, the Hill
+  radius with `μ^⅓`), 6.4 for a Jupiter and a Saturn, which are 6.5
+  apart; never under `2√3` (Gladman 1993). A pair closer than that is
+  spread outwards, a planet pushed out of its allowed band is redrawn a
+  few times, then the request fails (below).
 - Neighbouring periods fall mostly between 1.3 and 3 times each other
   (the peas-in-a-pod systems of Weiss et al. 2018): planets of a system
   are of similar size and evenly spaced in `log a`.

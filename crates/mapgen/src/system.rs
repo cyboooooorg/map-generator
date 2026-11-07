@@ -14,9 +14,10 @@
 //! band it may sit in and one it prefers ([`band`]).
 //!
 //! **Spacing.** Planets are placed from the star out, each at least
-//! [`HILL_SPACING`] mutual Hill radii from the last, periapsis to
-//! apoapsis, the spacing that keeps systems stable for billions of years
-//! (Chambers et al. 1996; Pu & Wu 2015); a hot Jupiter keeps others beyond
+//! [`hill_spacing`] mutual Hill radii from the last, periapsis to
+//! apoapsis, the spacing that keeps systems stable for billions of years:
+//! 10 for Earth-mass planets, fewer for heavier ones, 6.4 for a Jupiter
+//! and a Saturn (Chambers et al. 1996; Pu & Wu 2015); a hot Jupiter keeps others beyond
 //! four times its period (Steffen et al. 2012). A planet pushed out of its
 //! band is drawn again a few times, then the request fails
 //! ([`RequestError::ZoneFull`]).
@@ -33,7 +34,9 @@
 use crate::exomoon::{
     EARTH_KG, EARTH_M, G, HostGiant, HostMode, SATELLITE_MASS_SHARE, SIBLING_SPACING,
 };
-use crate::giants::{GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES, giant_radius};
+use crate::giants::{
+    GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES, giant_radius, hill_spacing,
+};
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
@@ -50,8 +53,6 @@ use std::f64::consts::PI;
 pub const SYSTEM_FORMAT_VERSION: u32 = 1;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
-/// Mutual Hill radii kept between neighbouring planets.
-pub const HILL_SPACING: f64 = 10.0;
 /// Inner and outer edges of a system, AU.
 const INNER_EDGE_AU: f64 = 0.02;
 const OUTER_EDGE_AU: f64 = 60.0;
@@ -353,7 +354,7 @@ struct Slot {
 }
 
 /// Whether two orbits round a star of `star_mass` (M☉) are clear of each
-/// other: [`HILL_SPACING`] mutual Hill radii, periapsis to apoapsis, and
+/// other: [`hill_spacing`] mutual Hill radii, periapsis to apoapsis, and
 /// four times a hot Jupiter's period.
 fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
     let (inner, outer) = if a.orbit_au < b.orbit_au {
@@ -368,7 +369,8 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
     let gap =
         outer.orbit_au * (1.0 - outer.eccentricity) - inner.orbit_au * (1.0 + inner.eccentricity);
     let hot = inner.body_type == "hot-jupiter" || outer.body_type == "hot-jupiter";
-    gap >= HILL_SPACING * hill && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
+    let share = 0.5 * (inner.mass_earth + outer.mass_earth) / (star_mass * sun);
+    gap >= hill_spacing(share) * hill && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
 }
 
 /// A typical mass for a planet type, Earth masses, drawn.
@@ -1724,6 +1726,33 @@ fn name_world(dir: &std::path::Path, system: &str, body: &str) -> Result<(), Str
 mod tests {
     use super::*;
     use crate::rings::RingRole;
+
+    #[test]
+    fn the_solar_system_planets_are_spaced_far_enough() {
+        // (type, Earth masses, AU, eccentricity), NASA fact sheets.
+        let slot = |body_type: &str, mass_earth: f64, orbit_au: f64, eccentricity: f64| Slot {
+            body_type: body_type.into(),
+            mass_earth,
+            orbit_au,
+            eccentricity,
+            fixed: false,
+        };
+        let planets = [
+            slot("hot", 0.055, 0.387, 0.206),
+            slot("temperate", 0.815, 0.723, 0.007),
+            slot("temperate", 1.0, 1.0, 0.017),
+            slot("cold", 0.107, 1.524, 0.094),
+            slot("gas-giant", 317.8, 5.20, 0.049),
+            slot("gas-giant", 95.2, 9.57, 0.057),
+            slot("ice-giant", 14.5, 19.17, 0.046),
+            slot("ice-giant", 17.1, 30.18, 0.010),
+        ];
+        for pair in planets.windows(2) {
+            assert!(clear(&pair[0], &pair[1], 1.0), "{pair:?}");
+        }
+        // Two Earths at Jupiter and Saturn's 6.5 Hill radii are too close.
+        assert!(!clear(&slot("cold", 1.0, 5.20, 0.049), &slot("cold", 1.0, 5.47, 0.057), 1.0));
+    }
 
     fn whole(planets: &[(&str, u32)], seed: u32) -> SystemRequest {
         SystemRequest::System(WholeSystemRequest {
