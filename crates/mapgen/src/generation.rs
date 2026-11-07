@@ -429,6 +429,13 @@ pub struct Sampler {
 
 impl Sampler {
     pub fn new(p: &WorldParams) -> Self {
+        Self::with_frame(p, None)
+    }
+
+    /// Like [`Self::new`], the plates of a world at the present taken from
+    /// `frame` when given (built for the same world, see
+    /// [`crate::plates::PlateFrame`]): only their crust is found again.
+    pub fn with_frame(p: &WorldParams, frame: Option<&crate::plates::PlateFrame>) -> Self {
         let seed = p.seed;
         // Scale noise frequencies by planet size: a larger circumference
         // stretches the unit-sphere coordinates, producing broader continents.
@@ -473,9 +480,13 @@ impl Sampler {
         if p.planet.geology.regime == crate::geology::Regime::Plates {
             // The crust of each side of a boundary: continental above the
             // edge of the shelf, from the continents' shape alone.
-            let map = crate::plates::PlateMap::at_epoch(p, f64::from(p.drift_ma), |q| {
-                sampler.continental(q)
-            });
+            let continental = |q| sampler.continental(q);
+            let map = match frame {
+                Some(frame) if p.drift_ma == 0.0 => {
+                    crate::plates::PlateMap::from_frame(frame, continental)
+                }
+                _ => crate::plates::PlateMap::at_epoch(p, f64::from(p.drift_ma), continental),
+            };
             sampler.tectonics = Some(map);
             sampler.noise_mountains = NOISE_MOUNTAINS_WITH_PLATES;
         }
@@ -975,7 +986,10 @@ const LAND_TOLERANCE: f64 = 0.003;
 /// The land share falls as the sea level rises: the sea level is found by
 /// regula falsi (the Illinois variant) on the share, sampled on a coarse
 /// grid at each estimate (the floating crust, the coasts and the plates'
-/// crust all follow the waterline, so no single sampling gives it).
+/// crust all follow the waterline, so no single sampling gives it). The
+/// plates themselves are built once ([`crate::plates::PlateFrame`]); only
+/// the crust on their boundaries, and so their relief and slab pull, is
+/// found again at each pass. About 0.25 s on an Earth-like world.
 /// Erosion runs later and is not modelled, yet on test worlds the land
 /// share lands within about 0.02 of the target.
 pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
@@ -986,6 +1000,10 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     let weights: Vec<f64> = (0..grid.height).map(|y| grid.latitude(y).cos()).collect();
     let total: f64 = weights.iter().sum::<f64>() * grid.width as f64;
     let target = f64::from(fraction.clamp(0.0, 1.0));
+    // The plates do not depend on the sea level, only their crust: built
+    // once (at the present; drifted plates move with their crust).
+    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+        .then(|| crate::plates::PlateFrame::new(&coarse));
     // The land share minus the target, at a sea level.
     let excess = |level: f32| {
         let p = WorldParams {
@@ -993,7 +1011,7 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
             ..coarse.clone()
         };
         let waterline = level + p.planet.rules.waterline;
-        let sampler = Sampler::new(&p);
+        let sampler = Sampler::with_frame(&p, frame.as_ref());
         let land: f64 = (0..grid.height)
             .into_par_iter()
             .map(|y| {
