@@ -229,13 +229,14 @@ keep their draws. They are `icy-moon` bodies marked with a `ring_role`:
   side of the ring;
 - `source`: beyond a faint ring, one or two small moons of 4 to 90 km at
   2 to 3.2 radii (Amalthea, Thebe), and on half of those giants one of
-  5 to 20 km at 3.4 to 4.2 radii (Mab), which feed dust rings.
+  5 to 20 km at 3.4 to 4.2 radii (Mab), which may feed dust rings.
 
 Edge moons, shepherds and sources are no less dense than the critical
-density at their distance; those raised to it fill their Roche lobe and
-take its shape. Where the critical density exceeds solid ice (close to a
-dense giant), no loose mantle holds: the moon stays a bare solid body of
-its drawn density, outside its rigid Roche limit.
+density at their distance, or solid ice's where that is lower; those
+raised to it fill their Roche lobe and take its shape. Where the critical
+density exceeds solid ice (close to a dense giant), no loose mantle holds:
+the moon is bare solid ice (0.9 g/cm³), irregular, outside its rigid
+Roche limit.
 
 Ring moons keep to the rings' plane, which is tens of metres to a kilometre
 thick: an embedded moonlet's inclination is drawn up to 0.001° (Pan:

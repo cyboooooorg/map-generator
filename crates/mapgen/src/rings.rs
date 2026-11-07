@@ -26,9 +26,10 @@
 //!   outer edge (Atlas, Prometheus, Pandora, Janus), larger the farther
 //!   out (Charnoz et al. 2010), and a pair of 10 to 25 km on either side
 //!   of a faint narrow ring (Cordelia and Ophelia round Uranus's ε ring).
-//!   None is less dense than the critical density at its distance (up to
-//!   solid ice's, beyond which it stays a bare solid body): those raised
-//!   to it fill their Roche lobe.
+//!   None is less dense than the critical density at its distance, up to
+//!   solid ice's: those raised to it fill their Roche lobe; where it is
+//!   higher, the moon is bare solid ice (0.9 g/cm³), held by its
+//!   strength.
 //! - **Dust sources.** Small moons beyond a faint ring (Jupiter's Amalthea
 //!   and Thebe outside its main ring, Neptune's inner moons) and, on half
 //!   the giants with faint rings, a small moon farther out (Uranus's Mab).
@@ -269,9 +270,10 @@ fn grown(core_km: f64, mantle: f64, crit: f64, draws: [f64; 2]) -> (f64, f64, [f
 /// critical density there, below which it would lose what it gathers
 /// (Porco et al. 2007, doi:10.1126/science.1143977), and filling its Roche
 /// lobe when raised to it; irregular otherwise. Where the critical density
-/// exceeds solid ice, no loose mantle holds: the moon is a bare solid body
-/// of its drawn density, kept by its strength (Metis and Adrastea inside
-/// Jupiter's Roche zone). Its density and semi-axes.
+/// exceeds solid ice, no loose mantle holds: the moon is bare solid ice
+/// (0.9 g/cm³), irregular, kept by its strength outside its rigid Roche
+/// limit (Metis and Adrastea inside Jupiter's Roche zone), as a moonlet's
+/// bare core is ([`grown`]). Its density and semi-axes.
 fn lobe_bound(
     giant_density: f64,
     a_radii: f64,
@@ -280,7 +282,9 @@ fn lobe_bound(
     draws: [f64; 2],
 ) -> (f64, [f64; 3]) {
     let crit = critical_density(giant_density, a_radii);
-    if crit >= density && crit <= CORE_DENSITY {
+    if crit > CORE_DENSITY {
+        (CORE_DENSITY, irregular(radius_km, draws))
+    } else if crit >= density {
         (crit, LOBE_SHAPE)
     } else {
         (density, irregular(radius_km, draws))
@@ -1025,6 +1029,41 @@ mod tests {
         assert!((100..180).contains(&pairs), "{pairs}");
         assert!((70..130).contains(&far), "{far}");
         assert!(fed > 180, "{fed}");
+    }
+
+    #[test]
+    fn small_moons_round_a_dense_giant_are_never_rubble_below_the_critical_density() {
+        // A super-Jupiter of 4 g/cm³: the critical density exceeds solid
+        // ice out to 3.27 radii. A moon there is bare solid ice; farther
+        // out, no less dense than the critical density.
+        let dense = Giant {
+            density: 4.0,
+            mass_kg: 5.7e27,
+            j2: 0.01,
+            room: 8.0,
+            moons: true,
+        };
+        let mut solid = 0;
+        for seed in 0..300 {
+            for rings in [faint(), bright()] {
+                let (_, moons) = shape(rings, &dense, seed);
+                for m in moons.iter().filter(|m| m.role != RingRole::Resonant) {
+                    let crit = critical_density(dense.density, m.a_radii);
+                    assert!(
+                        m.density >= crit.min(CORE_DENSITY) - 1e-9,
+                        "seed {seed}: {:?} at {:.2} radii, {:.2} g/cm³ against {crit:.2}",
+                        m.role,
+                        m.a_radii,
+                        m.density
+                    );
+                    if crit > CORE_DENSITY && m.role != RingRole::Embedded {
+                        solid += 1;
+                        assert!(m.density == CORE_DENSITY && m.shape != LOBE_SHAPE);
+                    }
+                }
+            }
+        }
+        assert!(solid > 200, "{solid}");
     }
 
     #[test]
