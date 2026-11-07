@@ -368,28 +368,66 @@ pub struct BiomeRules {
     pub highland: f32,
     /// Above this elevation, highland is always snow.
     pub snow_line: f32,
-    /// Below this temperature, highland is snow whatever its elevation.
+    /// Below this summer temperature, highland is snow whatever its
+    /// elevation: snow that lasts the year.
     pub highland_snow_temperature: f32,
 
     // Temperature zones
-    /// Below this temperature, land and shore are ice cap.
+    /// Below this summer temperature, land and shore are ice cap, and
+    /// rivers freeze: ice needs a summer below freezing (Köppen's frost
+    /// climate EF, warmest month below 0 °C; Kottek et al. 2006,
+    /// doi:10.1127/0941-2948/2006/0130).
     pub polar: f32,
-    /// Below this temperature, land is boreal (tundra, taiga).
+    /// Below this annual mean temperature, land is boreal (tundra, taiga).
     pub boreal: f32,
-    /// Below this temperature, land is temperate; above, tropical.
+    /// Below this summer temperature, boreal land is tundra whatever its
+    /// moisture: too cold a summer for trees (Köppen's tundra climate ET,
+    /// warmest month below 10 °C; Kottek et al. 2006).
+    pub tundra_summer: f32,
+    /// Below this annual mean temperature, land is temperate; above,
+    /// tropical.
     pub temperate: f32,
+    /// Below this winter temperature, land is never tropical: it is
+    /// temperate at most. Köppen's tropical climates A need a coldest month
+    /// of at least 18 °C (Kottek et al. 2006); warmer land with cooler
+    /// winters is warm temperate (C) or dry (B). A high tilt gives its
+    /// poles a warm annual mean but freezing winters.
+    pub tropical_winter: f32,
+
+    // Legacy fields, read from worlds and systems made before the arid
+    // criterion (format version 10 and older), never written
+    /// Former cut-off: temperate land with a moisture under it was
+    /// shrubland. Only present in the rules stored with an older world,
+    /// whose biomes are re-chosen with the former rules (see
+    /// [`is_legacy`](Self::is_legacy)); in a preset it is dropped with a
+    /// warning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub shrubland_moisture: Option<f32>,
+    /// Former cut-off: tropical land with a moisture under it was desert
+    /// (see [`shrubland_moisture`](Self::shrubland_moisture)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub desert_moisture: Option<f32>,
+
+    // Dry land (Köppen's B)
+    /// Land with an annual rain under this many times its dryness
+    /// threshold is arid: steppe (shrubland) or desert. Köppen's 10
+    /// (Kottek et al. 2006, doi:10.1127/0941-2948/2006/0130, Table 1:
+    /// `P_ann < 10 P_th`).
+    pub steppe_ratio: f32,
+    /// Arid land with an annual rain under this many times the dryness
+    /// threshold is desert, otherwise steppe. Köppen's 5 (`P_ann ≤ 5 P_th`).
+    pub desert_ratio: f32,
 
     // Moisture splits
-    /// Shore wetter than this is wetland, otherwise beach.
+    /// Shore with a moisture index above this (1 000 mm of rain a year at
+    /// 0) is wetland, otherwise beach.
     pub wetland_moisture: f32,
     /// Boreal land wetter than this is taiga, otherwise tundra.
     pub taiga_moisture: f32,
-    /// Temperate land drier than this is shrubland.
-    pub shrubland_moisture: f32,
     /// Temperate land wetter than this is forest.
     pub forest_moisture: f32,
-    /// Tropical land drier than this is desert.
-    pub desert_moisture: f32,
     /// Tropical land wetter than this is jungle; between, savanna.
     pub jungle_moisture: f32,
 
@@ -414,27 +452,37 @@ pub struct BiomeRules {
 impl Default for BiomeRules {
     fn default() -> Self {
         Self {
+            // Altitude lines, in elevation units (25 km) above the sea
+            // level; the waterline is 0.15 below it. Set for the floating
+            // crust's hypsometry (see `generation::floating`): deep ocean
+            // 5 km under the waterline, shores under 1.5 km above it,
+            // highland from 2 km, snow from 4.5 km, volcanoes from 3 km,
+            // ash from 1.5 km.
             waterline: -0.15,
-            deep_ocean: -0.45,
+            deep_ocean: -0.35,
             sea_ice_temperature: -13.5,
-            shore_top: 0.0,
+            shore_top: -0.09,
             shore_width_km: 40.0,
-            highland: 0.10,
-            snow_line: 0.30,
-            highland_snow_temperature: 2.6,
-            polar: -11.6,
+            highland: -0.07,
+            snow_line: 0.03,
+            highland_snow_temperature: 0.0,
+            polar: 0.0,
             boreal: 0.0,
+            tundra_summer: 10.0,
             temperate: 12.0,
-            wetland_moisture: 0.30,
-            taiga_moisture: 0.05,
-            shrubland_moisture: -0.10,
-            forest_moisture: 0.20,
-            desert_moisture: -0.05,
-            jungle_moisture: 0.30,
-            volcano_elevation: 0.15,
+            tropical_winter: 18.0,
+            wetland_moisture: 0.0,
+            taiga_moisture: -0.33,
+            shrubland_moisture: None,
+            desert_moisture: None,
+            steppe_ratio: 10.0,
+            desert_ratio: 5.0,
+            forest_moisture: -0.25,
+            jungle_moisture: 0.10,
+            volcano_elevation: -0.03,
             volcano_zone: 0.55,
             lava_zone: 0.30,
-            ash_elevation: 0.0,
+            ash_elevation: -0.09,
             ash_zone: 0.15,
             vent_zone: 0.45,
         }
@@ -450,6 +498,10 @@ pub struct BiomeInput {
     pub moisture: f32,
     /// Annual mean temperature in °C.
     pub temperature: f32,
+    /// Half the difference between summer and winter temperatures, °C
+    /// (see [`crate::climate::Seasons`]): summer is `temperature` plus it,
+    /// winter `temperature` minus it.
+    pub seasonality: f32,
     /// Volcanic zone in `[0, 1]` (`0` = inert, `1` = fully volcanic).
     pub volcanic_zone: f32,
     /// Distance to the nearest open water in km (`0` on water).
@@ -461,6 +513,18 @@ pub struct BiomeInput {
     /// Local shift of the highland line, so mountain borders do not follow
     /// elevation contours.
     pub highland_offset: f32,
+}
+
+impl BiomeInput {
+    /// Summer temperature, °C.
+    pub fn summer(&self) -> f32 {
+        self.temperature + self.seasonality
+    }
+
+    /// Winter temperature, °C.
+    pub fn winter(&self) -> f32 {
+        self.temperature - self.seasonality
+    }
 }
 
 // ── Top-level biome selector ──────────────────────────────────────────────────
@@ -475,6 +539,7 @@ impl BiomeRules {
             temperature: t,
             ..
         } = input;
+        let summer = input.summer();
         // Lava overrides water: no lake or river inside a lava field or a
         // volcano, whose rivers start at its edge instead.
         if (input.lake || input.river) && e >= self.waterline {
@@ -495,14 +560,14 @@ impl BiomeRules {
             } else {
                 Biome::Lake
             }
-        } else if input.river && t >= self.polar {
+        } else if input.river && !self.frozen(input) {
             Biome::River
         } else if e < self.shore_top && input.coast_distance_km <= self.shore_width_km {
-            self.shore(t, m)
+            self.shore(summer, m)
         } else if e + input.highland_offset > self.highland {
-            self.highland(e + input.highland_offset, t)
+            self.highland(e + input.highland_offset, summer)
         } else {
-            self.land(t, m)
+            self.land(t, m, summer, input.winter())
         };
         self.apply_volcanic(base, e, input.volcanic_zone)
     }
@@ -519,8 +584,14 @@ impl BiomeRules {
         }
     }
 
-    fn shore(&self, t: f32, m: f32) -> Biome {
-        if t < self.polar {
+    /// Whether the ground stays frozen all year (summer below
+    /// [`polar`](Self::polar)): ice, and no flowing river.
+    pub fn frozen(&self, input: BiomeInput) -> bool {
+        input.summer() < self.polar
+    }
+
+    fn shore(&self, summer: f32, m: f32) -> Biome {
+        if summer < self.polar {
             Biome::IceCap // frozen shore / pack ice
         } else if m > self.wetland_moisture {
             Biome::Wetland // mangroves / marshes
@@ -529,8 +600,8 @@ impl BiomeRules {
         }
     }
 
-    fn highland(&self, e: f32, t: f32) -> Biome {
-        if t < self.highland_snow_temperature || e > self.snow_line {
+    fn highland(&self, e: f32, summer: f32) -> Biome {
+        if summer < self.highland_snow_temperature || e > self.snow_line {
             Biome::Snow
         } else {
             Biome::Mountain
@@ -539,7 +610,67 @@ impl BiomeRules {
 
     // ── Land: temperature zones ───────────────────────────────────────────────
 
-    fn land(&self, t: f32, m: f32) -> Biome {
+    /// Land from its annual mean `t`, moisture `m`, and its `summer` and
+    /// `winter` temperatures.
+    fn land(&self, t: f32, m: f32, summer: f32, winter: f32) -> Biome {
+        if let (Some(shrubland), Some(desert)) = (self.shrubland_moisture, self.desert_moisture) {
+            return self.legacy_land(t, m, shrubland, desert);
+        }
+        if summer < self.polar {
+            Biome::IceCap
+        } else if summer < self.tundra_summer && t < self.boreal {
+            // Köppen tests the polar climates E first, then the arid B.
+            Biome::Tundra
+        } else if let Some(arid) = self.arid(t, m, summer, winter) {
+            arid
+        } else if t < self.boreal {
+            if m > self.taiga_moisture {
+                Biome::Taiga
+            } else {
+                Biome::Tundra
+            }
+        } else if t < self.temperate || winter < self.tropical_winter {
+            if m > self.forest_moisture {
+                Biome::Forest
+            } else {
+                Biome::Plain
+            }
+        } else if m < self.jungle_moisture {
+            Biome::Savanna
+        } else {
+            Biome::Jungle
+        }
+    }
+
+    /// Whether these rules come from a world made before the arid
+    /// criterion: its moisture is the former linear index (not the log of
+    /// the annual rain), and its biomes were chosen by cut-offs on it.
+    pub fn is_legacy(&self) -> bool {
+        self.shrubland_moisture.is_some() && self.desert_moisture.is_some()
+    }
+
+    /// The same rules for the current model: the former moisture cut-offs
+    /// are dropped and the six moisture thresholds, which meant another
+    /// scale, take their current defaults.
+    pub fn modernised(&self) -> Self {
+        if !self.is_legacy() {
+            return self.clone();
+        }
+        let d = Self::default();
+        Self {
+            shrubland_moisture: None,
+            desert_moisture: None,
+            wetland_moisture: d.wetland_moisture,
+            taiga_moisture: d.taiga_moisture,
+            forest_moisture: d.forest_moisture,
+            jungle_moisture: d.jungle_moisture,
+            ..self.clone()
+        }
+    }
+
+    /// Land as chosen before the seasons and the arid criterion (format
+    /// version 10): annual mean `t` and linear moisture `m` only.
+    fn legacy_land(&self, t: f32, m: f32, shrubland: f32, desert: f32) -> Biome {
         if t < self.polar {
             Biome::IceCap
         } else if t < self.boreal {
@@ -549,19 +680,36 @@ impl BiomeRules {
                 Biome::Tundra
             }
         } else if t < self.temperate {
-            if m < self.shrubland_moisture {
+            if m < shrubland {
                 Biome::Shrubland
             } else if m > self.forest_moisture {
                 Biome::Forest
             } else {
                 Biome::Plain
             }
-        } else if m < self.desert_moisture {
+        } else if m < desert {
             Biome::Desert
         } else if m < self.jungle_moisture {
             Biome::Savanna
         } else {
             Biome::Jungle
+        }
+    }
+
+    /// Köppen's arid climates B: the annual rain of the moisture index `m`
+    /// against the dryness threshold of the temperature and the season of
+    /// the rain (Kottek et al. 2006, doi:10.1127/0941-2948/2006/0130):
+    /// desert (BW) under [`desert_ratio`](Self::desert_ratio) thresholds,
+    /// steppe (shrubland, BS) under [`steppe_ratio`](Self::steppe_ratio).
+    pub fn arid(&self, t: f32, m: f32, summer: f32, winter: f32) -> Option<Biome> {
+        let ratio =
+            crate::climate::rain_mm(m) / crate::climate::dryness_threshold_mm(t, summer, winter);
+        if ratio <= self.desert_ratio {
+            Some(Biome::Desert)
+        } else if ratio < self.steppe_ratio {
+            Some(Biome::Shrubland)
+        } else {
+            None
         }
     }
 
@@ -623,6 +771,7 @@ mod tests {
             elevation: rules.highland + 0.05,
             moisture: 0.2,
             temperature: 20.0,
+            seasonality: 0.0,
             volcanic_zone,
             coast_distance_km: 1000.0,
             lake,
@@ -638,13 +787,54 @@ mod tests {
         assert_eq!(rules.choose(input(false, true, 0.0)), Biome::River);
     }
     #[test]
+    fn arid_land_follows_koppens_b_criterion() {
+        use crate::climate::{dryness_threshold_mm, moisture_index};
+        let rules = BiomeRules::default();
+        // 20 °C all year: P_th is 54 mm, so desert up to 270 mm, steppe up
+        // to 540 mm.
+        let at = |mm: f32| {
+            rules.choose(BiomeInput {
+                elevation: -0.12,
+                moisture: moisture_index(mm),
+                temperature: 20.0,
+                seasonality: 0.0,
+                volcanic_zone: 0.0,
+                coast_distance_km: 1000.0,
+                lake: false,
+                river: false,
+                highland_offset: 0.0,
+            })
+        };
+        assert_eq!(dryness_threshold_mm(20.0, 20.0, 20.0), 54.0);
+        assert_eq!(at(200.0), Biome::Desert);
+        assert_eq!(at(400.0), Biome::Shrubland);
+        assert_ne!(at(700.0), Biome::Shrubland);
+        assert_ne!(at(700.0), Biome::Desert);
+        // The same rain is steppe on a hot summer-rain land and enough in a
+        // cool, even climate (P_th 14 + 2 T).
+        let cool = rules.choose(BiomeInput {
+            temperature: 8.0,
+            moisture: moisture_index(400.0),
+            elevation: -0.12,
+            seasonality: 0.0,
+            volcanic_zone: 0.0,
+            coast_distance_km: 1000.0,
+            lake: false,
+            river: false,
+            highland_offset: 0.0,
+        });
+        assert!(!matches!(cool, Biome::Desert | Biome::Shrubland));
+    }
+
+    #[test]
     fn cones_rise_out_of_the_lowland() {
         let rules = crate::preset::Preset::load("terran").unwrap().rules;
         let forest = |volcanic_zone: f32| {
             rules.choose(BiomeInput {
-                elevation: 0.05,
+                elevation: -0.12,
                 moisture: 0.5,
                 temperature: 8.0,
+                seasonality: 0.0,
                 volcanic_zone,
                 coast_distance_km: 1000.0,
                 lake: false,
@@ -674,6 +864,7 @@ mod tests {
                                 elevation: e,
                                 moisture: m,
                                 temperature: t,
+                                seasonality: 0.0,
                                 volcanic_zone: vz,
                                 coast_distance_km: 0.0,
                                 lake,
@@ -700,9 +891,10 @@ mod tests {
     fn shore_needs_nearby_water() {
         let rules = BiomeRules::default();
         let lowland = |coast_distance_km| BiomeInput {
-            elevation: -0.05,
+            elevation: -0.13,
             moisture: 0.0,
             temperature: 20.0,
+            seasonality: 0.0,
             volcanic_zone: 0.0,
             coast_distance_km,
             lake: false,
@@ -719,6 +911,7 @@ mod tests {
             elevation: -0.5,
             moisture: 0.0,
             temperature: -15.0,
+            seasonality: 0.0,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
             lake: false,
@@ -729,11 +922,56 @@ mod tests {
     }
 
     #[test]
+    fn the_seasons_decide_ice_and_the_tropics() {
+        let rules = BiomeRules::default();
+        let land = |temperature: f32, seasonality: f32| {
+            rules.choose(BiomeInput {
+                elevation: -0.12,
+                moisture: 0.5,
+                temperature,
+                seasonality,
+                volcanic_zone: 0.0,
+                coast_distance_km: 1000.0,
+                lake: false,
+                river: false,
+                highland_offset: 0.0,
+            })
+        };
+        // Ice needs a summer below freezing: a polar coast at −12 °C with
+        // a summer at +8 °C is tundra (too cold a summer for trees), a
+        // steady −12 °C is ice; a summer at +15 °C grows a taiga.
+        assert_eq!(land(-12.0, 20.0), Biome::Tundra);
+        assert_eq!(land(-5.0, 20.0), Biome::Taiga);
+        assert_eq!(land(-12.0, 0.0), Biome::IceCap);
+        assert_eq!(land(-25.0, 20.0), Biome::IceCap);
+        // A warm annual mean with freezing winters (the pole of a world
+        // tilted by 90°) is not tropical.
+        assert_eq!(land(25.0, 2.0), Biome::Jungle);
+        assert_eq!(land(25.0, 50.0), Biome::Forest);
+        // Rivers freeze only where the summer does.
+        let river = |seasonality| BiomeInput {
+            river: true,
+            temperature: -5.0,
+            seasonality,
+            elevation: -0.12,
+            moisture: 0.5,
+            volcanic_zone: 0.0,
+            coast_distance_km: 1000.0,
+            lake: false,
+            highland_offset: 0.0,
+        };
+        assert!(rules.frozen(river(2.0)));
+        assert!(!rules.frozen(river(10.0)));
+        assert_eq!(rules.choose(river(10.0)), Biome::River);
+    }
+
+    #[test]
     fn deep_water_is_ocean_on_terran() {
         let input = BiomeInput {
             elevation: -0.9,
             moisture: 0.0,
             temperature: 20.0,
+            seasonality: 0.0,
             volcanic_zone: 0.0,
             coast_distance_km: 0.0,
             lake: false,

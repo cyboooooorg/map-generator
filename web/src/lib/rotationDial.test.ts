@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { libration, systemSky } from './systemSky';
+import { libration, librationAmplitude, systemSky } from './systemSky';
 import { dialFigureText, formatDayLength, formatDialAngle, formatLocalTime, rotationDial } from './rotationDial';
 import type { Vec3 } from './skyBodies';
 
@@ -33,8 +33,32 @@ describe('rotation dial', () => {
     expect(dial.state.pointerLongitude).toBeCloseTo(Math.PI, 12);
     expect(Math.abs(dial.state.reading)).toBeCloseTo(Math.abs(libration(orbit, d)), 6);
     expect(dial.figures.libration).toBeCloseTo(libration(orbit, d), 12);
-    expect(dial.figures.librationAmplitude).toBeCloseTo(0.4, 12);
+    expect(dial.figures.librationAmplitude).toBeCloseTo(librationAmplitude(0.2), 12);
     expect(dial.state.host).not.toBeNull();
+  });
+
+  it('gives the libration its exact amplitude, slightly above 2e', () => {
+    // 28.9° at e = 0.25 against the first-order 28.6°; ±6.3° for the Moon.
+    expect((librationAmplitude(0.25) * 180) / Math.PI).toBeCloseTo(28.86, 1);
+    expect((librationAmplitude(0.0549) * 180) / Math.PI).toBeCloseTo(6.3, 1);
+    expect(librationAmplitude(0)).toBe(0);
+    // The greatest swing of the libration over an orbit.
+    const orbit = { ...body('c-1').orbit, eccentricity: 0.3, mean_anomaly_deg: 0 };
+    const swing = Math.max(...Array.from({ length: 4000 }, (_, k) => libration(orbit, (k / 4000) * orbit.period_days)));
+    expect(swing).toBeCloseTo(librationAmplitude(0.3), 4);
+  });
+
+  it('gives a planet in the 3:2 resonance a free dial, its solar day two years', () => {
+    const resonant = structuredClone(system);
+    const b = resonant.bodies.find((x) => x.id === 'b')!;
+    b.orbit.eccentricity = 0.2;
+    b.spin = { ...b.spin, locked: false, spin_orbit_3_2: true, period_hours: (b.orbit.period_days * 24) / 1.5 };
+    const dial = rotationDial(resonant, 'b', 0, 0, systemSky(resonant, 'b', 0, textures))!;
+    expect(dial.state.locked).toBe(false);
+    expect(dial.figures.resonant).toBe(true);
+    expect(dial.figures.solarHours! / (b.orbit.period_days * 24)).toBeCloseTo(2, 6);
+    const text = dialFigureText(dial, { hour: 'h', minute: 'min', day: 'd' });
+    expect(text.locked === false && text.resonant).toBe(true);
   });
 
   it('gives the local time at the pointer’s meridian, noon under the sun, wrapping past midnight', () => {
@@ -96,6 +120,24 @@ describe('rotation dial', () => {
     expect(rotationDial(system, 'b', 0, 0, sky)!.state.sun).toBeNull();
   });
 
+  it('gives the sun’s height and each body of the sky, the host marked', () => {
+    const sky = { ...systemSky(system, 'c-1', 0, textures), sun: [0, 1, 1] as Vec3 };
+    const state = rotationDial(system, 'c-1', 0, 0, sky)!.state;
+    expect(state.sunAltitude).toBeCloseTo(Math.PI / 4, 12);
+    // Its planet and the other moon, not the other planet.
+    expect(state.bodies.map((b) => b.id).sort()).toEqual(['c', 'c-2']);
+    expect(state.bodies.filter((b) => b.host).map((b) => b.id)).toEqual(['c']);
+    for (const b of state.bodies) {
+      const d = sky.bodies[sky.ids.indexOf(b.id)]!.direction;
+      expect(b.altitude).toBeCloseTo(Math.asin(d[1] / Math.hypot(...d)), 12);
+      if (b.bearing) expect(b.bearing[1]).toBe(0);
+    }
+    // From the planet, its moons.
+    const planet = rotationDial(system, 'c', 0, 0, systemSky(system, 'c', 0, textures))!.state;
+    expect(planet.bodies.map((b) => b.id).sort()).toEqual(['c-1', 'c-2']);
+    expect(planet.bodies.some((b) => b.host)).toBe(false);
+  });
+
   it('has no dial for a body the system lacks', () => {
     expect(rotationDial(system, 'zz', 0, 0, systemSky(system, 'b', 0, textures))).toBeNull();
   });
@@ -145,7 +187,8 @@ describe('rotation dial figures', () => {
       if (!text.locked) continue;
       expect(text.libration).toBe(formatDialAngle(dial.state.reading, true));
       expect(text.libration.startsWith(dial.state.reading < 0 ? '−' : '+')).toBe(true);
-      expect(text.amplitude).toBe('22.9°');
+      // Exact: 23.0° at e = 0.2, where 2e gives 22.9°.
+      expect(text.amplitude).toBe('23.0°');
     }
   });
 

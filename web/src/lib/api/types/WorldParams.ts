@@ -109,4 +109,20 @@ given_rings?: GivenRings,
  * absent for every other world, whose rate comes from the giants its
  * seed draws.
  */
-impact_factor?: number, };
+impact_factor?: number, 
+/**
+ * Whether the star's tides locked the world, as it was generated: set
+ * when a stored world is reloaded, so that its tiles and epochs keep
+ * the lock its base map was made with, whatever the locking rule is
+ * today (see [`crate::spin::star_info`]). Absent on a world about to
+ * be generated, whose lock follows the current rule.
+ */
+locked_to_star?: boolean, 
+/**
+ * Surface gravity relative to Earth's, when the body's own is known:
+ * a moon's, from the density its system drew for it (the gravity of
+ * its card), or a reloaded world's, as it was generated. Absent for
+ * every other world, whose gravity follows from its size (see
+ * [`WorldParams::gravity_modifier`]).
+ */
+gravity?: number, };

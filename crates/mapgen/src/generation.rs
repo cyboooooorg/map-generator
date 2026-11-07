@@ -1,7 +1,7 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
-use crate::climate::LockedClimate;
+use crate::climate::{Belts, LockedClimate, Moisture, Seasons};
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
@@ -18,7 +18,7 @@ use crate::noise::{
     stream_seed,
 };
 use crate::rivers;
-use crate::star::{StarClimate, StarInfo, star_temperatures};
+use crate::star::{StarClimate, star_temperatures};
 use crate::world::*;
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -62,7 +62,7 @@ impl Sample {
 }
 
 /// Weight of the highland line jitter (about 0.09 of standard deviation).
-const HIGHLAND_JITTER: f32 = 0.50;
+const HIGHLAND_JITTER: f32 = 0.15;
 
 /// Lateral displacement of the continent outline, per octave of the coast
 /// warp, in units of the octave's wavelength (on the unit sphere).
@@ -126,24 +126,185 @@ const CONE_HEIGHT: f32 = 0.25;
 /// Depth below the waterline down to which the crust counts as
 /// continental (the continental shelf), elevation units.
 const CONTINENTAL_SHELF: f32 = 0.05;
-/// Share of the noise relief a body of `circumference_km` keeps: all of it
-/// above about 2 100 km in radius, below that [`SMALL_BODY_RELIEF`] of its
-/// radius over the noise's typical amplitude (half an elevation unit,
-/// 12.5 km).
-pub(crate) fn relief_share(circumference_km: f32) -> f32 {
-    let radius_km = circumference_km / (2.0 * std::f32::consts::PI);
-    (SMALL_BODY_RELIEF * radius_km / (0.5 * crate::craters::ELEVATION_KM)).min(1.0)
+/// Share of the noise relief the world `p` keeps, so that its span (from
+/// the old floor to its highest mountains, see [`noise_span_km`]) stays
+/// within
+///
+/// - [`SMALL_BODY_RELIEF`] of its radius: real bodies from Mars down to
+///   Vesta carry relief of tens of km whatever their size, a larger share
+///   of their radius the smaller they are, up to Vesta's 8 %;
+/// - on an airless body with a stagnant lid (a moon, a dead world), the
+///   relief impacts give it, [`IMPACT_RELIEF_KM`]: there neither plates
+///   nor volcanism build ranges near the `1/g` ceiling. Ice holds
+///   [`ICE_RELIEF`] of rock's.
+///
+/// 1 for planets, whose relief comes from their plates, mountains and
+/// volcanoes.
+pub(crate) fn relief_share(p: &WorldParams) -> f32 {
+    let radius_km = p.circumference_km / (2.0 * std::f32::consts::PI);
+    let mut cap = SMALL_BODY_RELIEF * radius_km;
+    let stagnant = p.planet.geology.regime == Regime::Stagnant;
+    if stagnant && p.pressure_bar <= AIRLESS_BAR {
+        let ice = if icy(p) { ICE_RELIEF } else { 1.0 };
+        cap = cap.min(IMPACT_RELIEF_KM * ice);
+    }
+    (cap / noise_span_km(p)).min(1.0)
 }
 
-/// Relief of a small body, as a share of its radius.
-const SMALL_BODY_RELIEF: f32 = 0.006;
+/// Span of the noise relief of the world `p`, km: from the old floor
+/// ([`ABYSS_KM`]) to the top of the platform and of the mountains at its
+/// gravity.
+fn noise_span_km(p: &WorldParams) -> f32 {
+    ABYSS_KM
+        + PLATFORM_KM
+        + MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()) * crate::craters::ELEVATION_KM
+}
+
+/// Whether the world `p` is mostly ice: a bulk density, from its gravity
+/// and size, under 2.5 g/cm³ (rock and iron bodies are denser, the Moon
+/// 3.34; icy moons 1.8–1.9, Ganymede and Callisto, NASA).
+pub(crate) fn icy(p: &WorldParams) -> bool {
+    let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
+    radius > 0.0 && 5.513 * p.gravity_modifier() / radius < 2.5
+}
+
+/// Largest relief of a small body, as a share of its radius: Vesta's
+/// central mound in Rheasilvia, about 22 km high (Yingst et al. 2012, EGU
+/// abstract, approximate) on a mean radius of about 262 km (NASA): 8 %.
+const SMALL_BODY_RELIEF: f32 = 0.08;
+/// Span of the noise relief of an airless body with a stagnant lid, km,
+/// so that a Moon-sized rocky moon spans about the Moon's 13 km (NASA fact
+/// sheet, as the mountains article gives it) with its craters.
+/// Calibration on that one body.
+const IMPACT_RELIEF_KM: f32 = 9.0;
+/// Relief ice holds against rock: complex craters on Ganymede are about
+/// 1.1 km deep at 26 km (Schenk 2002, doi:10.1038/417419a, read in the
+/// letter's NTRS copy), where Pike's lunar law gives 2.8 km at nearly the
+/// same gravity: 0.4. A calibration: taking that crater-depth ratio for
+/// the share of all relief ice holds is an extrapolation. Icy bodies'
+/// complex craters take it too (`craters::CraterField`).
+pub(crate) const ICE_RELIEF: f32 = 0.4;
+
+/// Height of the continents' noise above the waterline from which the
+/// mountains rise (over 0.4 more): measured from the waterline, so that a
+/// world with little land does not make most of it mountains.
+/// Calibration with [`MOUNTAIN_BLEND`] on Earth's hypsometry.
+const MOUNTAIN_ONSET: f32 = 0.15;
+
+/// Mountain blend at Earth's gravity: the weight of the ridged mountains
+/// in the elevation. Calibration, no source: with the floating platform
+/// (see [`floating`]), it puts about a tenth of an Earth-like world's land
+/// above 2 km and 2 % above 4 km, as on Earth (ETOPO 2022).
+const MOUNTAIN_BLEND: f32 = 0.45;
+/// Largest relief scale ([`relief_scale`]): Olympus Mons's 21.9 km of
+/// relief over its surroundings (Plescia 2004, doi:10.1029/2002JE002031)
+/// is 2.5 times Everest's 8.85 km, the tallest mountain known against
+/// Earth's tallest. Lighter bodies (the Moon, Io, Vesta) do not come near
+/// their `1/g` ceiling, and higher ranges would fill the elevation range
+/// (one unit is 25 km) with flat clipped summits.
+const MAX_RELIEF_SCALE: f32 = 2.0;
+
+/// How tall the relief built on a world of `gravity` (Earth's = 1) stands
+/// against Earth's: `1/g`, the height rock can bear under its own weight
+/// (`σ / ρ g`, Weisskopf 1975, doi:10.1126/science.187.4177.605), up to
+/// [`MAX_RELIEF_SCALE`]. Mars's size (0.34 g) reaches the cap; twice
+/// Earth's (3.2 g) keeps 31 %.
+///
+/// It scales what loads the crust: the mountains, the plate boundaries'
+/// ranges, arcs, trenches and ridges, and the volcanoes. The continents and
+/// the sea floor do not scale: they float on the mantle (Airy isostasy,
+/// Airy 1855, doi:10.1098/rstl.1855.0003), and the height of a floating
+/// crust, `t (1 − ρc/ρm)` for a crust `t` thick, does not depend on `g`.
+pub(crate) fn relief_scale(gravity: f32) -> f32 {
+    (1.0 / gravity.max(1e-3)).min(MAX_RELIEF_SCALE)
+}
+
+/// Height of the continental platform above the waterline, km: where the
+/// continents' crust floats (calibration on Earth's hypsometry, see
+/// [`floating`]).
+const PLATFORM_KM: f32 = 0.5;
+/// Rise of the platform inland, in units of the continents' noise above
+/// the waterline: `1 − 1/e` of its height at this.
+const PLATFORM_RISE: f32 = 0.1;
+/// Depth of the shelf's edge, km, and its width in the continents' noise
+/// below the waterline.
+const SHELF_KM: f32 = 0.2;
+const SHELF_NOISE: f32 = 0.03;
+/// Width of the continental slope in the noise, down to the old floor.
+const SLOPE_NOISE: f32 = 0.1;
+/// Depth of old ocean floor, km: from where Parsons & Sclater's floor is
+/// 18 Ma old (4 km, `plates::OLD_FLOOR_KM`) to their old floor's level,
+/// 6.4 km (Parsons & Sclater 1977, doi:10.1029/JB082i005p00803), reached
+/// as the noise falls further by about [`ABYSS_NOISE`].
+const ABYSS_KM: f32 = 6.4;
+const ABYSS_NOISE: f32 = 0.35;
+
+/// Height (negative: depth) of the crust above the waterline, elevation
+/// units, for the continents' noise `x` units above (below) it.
+///
+/// The crust floats on the mantle (Airy isostasy, Airy 1855,
+/// doi:10.1098/rstl.1855.0003): continental crust, thick and light,
+/// stands as a platform, oceanic crust as the floor of the basins, with
+/// little in between. The noise, a single smooth field, would make a
+/// ramp from the coast to 5–10 km inland and basins 15 km deep; it is
+/// mapped instead
+///
+/// - on land, to a platform rising to [`PLATFORM_KM`]: the high ground is
+///   left to the mountains, the plate boundaries and the volcanoes;
+/// - at sea, to a shelf down to [`SHELF_KM`], a slope down to the old
+///   floor at 4 km, and an abyss levelling off towards Parsons & Sclater's
+///   6.4 km; only trenches go deeper.
+///
+/// The platform's height, the widths in the noise and the mountains'
+/// weight ([`MOUNTAIN_BLEND`]) are calibrations, no source, on Earth's
+/// hypsometry (ETOPO 2022, NOAA NCEI, doi:10.25921/fd45-gt74; ice
+/// surface): land median about 0.42 km, 56 % of land under 500 m, 10.8 %
+/// above 2 km, 1.8 % above 4 km, 1 % of the sea floor deeper than 6 km.
+/// None depends on gravity: floating crust stands as high under any `g`.
+pub(crate) fn floating(x: f32) -> f32 {
+    let km = crate::craters::ELEVATION_KM;
+    if x >= 0.0 {
+        return PLATFORM_KM / km * (1.0 - (-x / PLATFORM_RISE).exp());
+    }
+    let u = -x;
+    let old_floor = crate::plates::OLD_FLOOR_KM;
+    let depth_km = if u < SHELF_NOISE {
+        SHELF_KM * u / SHELF_NOISE
+    } else if u < SHELF_NOISE + SLOPE_NOISE {
+        let t = smoothstep(0.0, 1.0, (u - SHELF_NOISE) / SLOPE_NOISE);
+        SHELF_KM + (old_floor - SHELF_KM) * t
+    } else {
+        let v = u - SHELF_NOISE - SLOPE_NOISE;
+        old_floor + (ABYSS_KM - old_floor) * (1.0 - (-v / ABYSS_NOISE).exp())
+    };
+    -depth_km / km
+}
+
+/// Elevation beyond which the relief is compressed into the range
+/// `[-1, 1]` rather than clipped, in units.
+const RANGE_KNEE: f32 = 0.85;
+
+/// An elevation brought within `[-1, 1]`: unchanged up to
+/// [`RANGE_KNEE`], compressed smoothly beyond, so that the tall relief of
+/// light worlds keeps its summits instead of flat clipped tops (on
+/// Earth-sized worlds, only the highest volcanoes reach the knee).
+fn within_range(e: f32) -> f32 {
+    let over = e.abs() - RANGE_KNEE;
+    if over <= 0.0 {
+        return e;
+    }
+    let room = 1.0 - RANGE_KNEE;
+    e.signum() * (RANGE_KNEE + room * (over / room).tanh())
+}
 
 /// Largest noise scale (relief features per Earth-sized ones), reached at
 /// about 5 000 km around.
 const MAX_NOISE_SCALE: f32 = 8.0;
 /// Depth of the crust formed where the plates part below the waterline, in
-/// continent-shape units, and the share of the fine octaves it keeps.
-const NEW_CRUST_DEPTH: f32 = 0.3;
+/// continent-shape units: the generator's old sea floor (4 km), the swell
+/// of the ridge it formed at standing on it by its age (see
+/// `plates::ridge_swell`). The share of the fine octaves it keeps.
+const NEW_CRUST_DEPTH: f32 = crate::plates::OLD_FLOOR_KM / crate::craters::ELEVATION_KM;
 const NEW_CRUST_ROUGHNESS: f32 = 0.5;
 /// Share of the noise's mountain weight kept on worlds with plate
 /// tectonics: the rest of their ranges follow the plate boundaries.
@@ -204,6 +365,31 @@ fn volcanic_threshold(intensity: f32) -> f32 {
     VOLCANIC_NOISE_SIGMA * z
 }
 
+/// Strength of the carbon cycle of a wet world with a stagnant lid, against
+/// a plate world's: Foley & Smye (2018, doi:10.1089/ast.2017.1695) find
+/// that volcanic outgassing can sustain one there for about 1 to 5 Gyr,
+/// though plates remain "the more favorable tectonic state for long-term
+/// climate stability" (Foley 2018, doi:10.1098/rsta.2017.0409). The half
+/// is a calibration, no source.
+const STAGNANT_LID_REGULATION: f32 = 0.5;
+
+/// How strongly a carbonate-silicate cycle steadies the climate of a world
+/// of `regime` and surface pressure `pressure_bar` (see
+/// [`StarClimate::regulation`]): fully with plates and liquid water, by
+/// [`STAGNANT_LID_REGULATION`] with a stagnant lid and liquid water, not
+/// at all otherwise (no rock weathers without water; the app gives none
+/// to episodic and heat-pipe worlds, Venus and Io having no water).
+pub fn carbon_cycle(regime: Regime, pressure_bar: f32) -> f32 {
+    if pressure_bar < LIQUID_WATER_BAR {
+        return 0.0;
+    }
+    match regime {
+        Regime::Plates => 1.0,
+        Regime::Stagnant => STAGNANT_LID_REGULATION,
+        Regime::Episodic | Regime::HeatPipe => 0.0,
+    }
+}
+
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
     grid: Grid,
@@ -224,6 +410,9 @@ pub struct Sampler {
     cone_seed: u32,
     arc_cone_seed: u32,
     mountain_blend: f32,
+    /// Height of the relief built on the crust against Earth's (see
+    /// [`relief_scale`]).
+    relief_scale: f32,
     volcanic_threshold: f32,
     elevation_noise: Perlin,
     moisture_noise: Perlin,
@@ -240,6 +429,13 @@ pub struct Sampler {
 
 impl Sampler {
     pub fn new(p: &WorldParams) -> Self {
+        Self::with_frame(p, None)
+    }
+
+    /// Like [`Self::new`], the plates of a world at the present taken from
+    /// `frame` when given (built for the same world, see
+    /// [`crate::plates::PlateFrame`]): only their crust is found again.
+    pub fn with_frame(p: &WorldParams, frame: Option<&crate::plates::PlateFrame>) -> Self {
         let seed = p.seed;
         // Scale noise frequencies by planet size: a larger circumference
         // stretches the unit-sphere coordinates, producing broader continents.
@@ -263,9 +459,9 @@ impl Sampler {
             plate_seed: stream_seed(seed, stream::PLATES),
             cone_seed: stream_seed(seed, stream::CONES),
             arc_cone_seed: stream_seed(seed, stream::ARC_CONES),
-            // Stronger gravity suppresses mountain relief; sqrt dampens the effect
-            // for extreme values. Baseline 0.35 at Earth gravity.
-            mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
+            // Stronger gravity lowers the mountains, as 1/g (capped).
+            mountain_blend: MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()),
+            relief_scale: relief_scale(p.gravity_modifier()),
             // The noise's quantile for the share of the surface the
             // intensity asks for (see `volcanic_threshold`).
             volcanic_threshold: volcanic_threshold(p.volcanic_intensity),
@@ -284,9 +480,13 @@ impl Sampler {
         if p.planet.geology.regime == crate::geology::Regime::Plates {
             // The crust of each side of a boundary: continental above the
             // edge of the shelf, from the continents' shape alone.
-            let map = crate::plates::PlateMap::at_epoch(p, f64::from(p.drift_ma), |q| {
-                sampler.continental(q)
-            });
+            let continental = |q| sampler.continental(q);
+            let map = match frame {
+                Some(frame) if p.drift_ma == 0.0 => {
+                    crate::plates::PlateMap::from_frame(frame, continental)
+                }
+                _ => crate::plates::PlateMap::at_epoch(p, f64::from(p.drift_ma), continental),
+            };
             sampler.tectonics = Some(map);
             sampler.noise_mountains = NOISE_MOUNTAINS_WITH_PLATES;
         }
@@ -441,7 +641,8 @@ impl Sampler {
         } else {
             (coarse, fine)
         };
-        let mountain_weight = ((coarse + fine - 0.2) * 2.5).clamp(0.0, 1.0);
+        let mountain_weight =
+            ((coarse + fine - self.waterline - MOUNTAIN_ONSET) * 2.5).clamp(0.0, 1.0);
         // Low ground inland keeps a share of the fine octaves: plains and
         // deserts are smooth, coasts keep their outline and mountains their
         // foothills.
@@ -453,7 +654,14 @@ impl Sampler {
             (coarse + fine - self.waterline).abs(),
         );
         let roughness = (1.0 - (1.0 - PLAIN_ROUGHNESS) * inland).max(mountain_weight);
-        let continent = coarse + fine * roughness;
+        // The crust floats: continents as a low platform, the sea floor
+        // between its shelf and the old floor (see `floating`). New crust
+        // is laid at the old floor already.
+        let continent = if origin.new_crust {
+            coarse + fine * roughness
+        } else {
+            floating(coarse + fine * roughness - self.waterline) + self.waterline
+        };
 
         // Ridged mountains blended only onto elevated terrain: a main ridge,
         // with two finer ridged octaves concentrated on it.
@@ -480,7 +688,9 @@ impl Sampler {
             .as_ref()
             .map_or(crate::plates::Relief::default(), |t| t.relief(map_point));
         // Relief scales with gravity as the mountains do.
-        let tectonic_uplift = plates.uplift * self.mountain_blend / 0.35;
+        // The young floor's swell is thermal isostasy: the same at any
+        // gravity.
+        let tectonic_uplift = plates.uplift * self.relief_scale + plates.swell;
         let mountain_weight = (mountain_weight * self.noise_mountains).max(plates.orogeny);
         let broad = ((volcanic_raw - self.volcanic_threshold) * 4.0)
             .clamp(0.0, 1.0)
@@ -506,16 +716,21 @@ impl Sampler {
         // cones of volcanic provinces: their summits reach the highland,
         // and become volcanoes and lava fields.
         let (cone, cone_height) = volcanoes(cone, arc_cone, plates.arc);
+        // Volcanoes load the crust as mountains do: the tallest stand on
+        // light worlds (Olympus Mons).
+        let cone_height = cone_height * self.relief_scale;
         let volcanic_zone = broad * (VOLCANIC_BACKGROUND + (1.0 - VOLCANIC_BACKGROUND) * cone);
 
-        let elevation = (continent
-            + tectonic_uplift
-            + mountain * mountain_weight * self.mountain_blend
-            + broad * cone_height)
-            .clamp(-1.0, 1.0);
+        let elevation = within_range(
+            continent
+                + tectonic_uplift
+                + mountain * mountain_weight * self.mountain_blend
+                + broad * cone_height,
+        );
         let cone_relief = elevation
-            - (continent + tectonic_uplift + mountain * mountain_weight * self.mountain_blend)
-                .clamp(-1.0, 1.0);
+            - within_range(
+                continent + tectonic_uplift + mountain * mountain_weight * self.mountain_blend,
+            );
 
         // Positive sea_level raises the waterline (more ocean); negative lowers it.
         let biome_elevation = (elevation - self.sea_level).clamp(-1.0, 1.0);
@@ -759,19 +974,24 @@ impl NoiseFields {
 }
 
 /// Size of the grid [`sea_level_for_land_fraction`] samples the relief on.
-const LAND_GRID: (u32, u32) = (512, 256);
-/// Most passes [`sea_level_for_land_fraction`] makes; each one samples the
-/// relief at the previous estimate, since the coast outline depends on it.
-const LAND_PASSES: usize = 4;
+const LAND_GRID: (u32, u32) = (256, 128);
+/// Most passes [`sea_level_for_land_fraction`] makes, and the land share
+/// within which of its target it stops.
+const LAND_PASSES: usize = 16;
+const LAND_TOLERANCE: f64 = 0.003;
 
 /// The sea level that leaves `fraction` of the planet's surface (by area,
 /// in `[0, 1]`) above the waterline, for the other parameters of `params`.
 ///
-/// Samples the relief on a coarse grid and takes the area-weighted quantile
-/// of its elevation. The coast outline shifts with the sea level, so this
-/// repeats from the new estimate until it settles. Erosion runs later and
-/// is not modelled, yet on test worlds the land share lands within about
-/// 0.1 point of the target.
+/// The land share falls as the sea level rises: the sea level is found by
+/// regula falsi (the Illinois variant) on the share, sampled on a coarse
+/// grid at each estimate (the floating crust, the coasts and the plates'
+/// crust all follow the waterline, so no single sampling gives it). The
+/// plates themselves are built once ([`crate::plates::PlateFrame`]); only
+/// the crust on their boundaries, and so their relief and slab pull, is
+/// found again at each pass. About 0.25 s on an Earth-like world.
+/// Erosion runs later and is not modelled, yet on test worlds the land
+/// share lands within about 0.02 of the target.
 pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     let limits = crate::request::SEA_LEVEL;
     let mut coarse = params.clone();
@@ -779,37 +999,111 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     let grid = coarse.grid();
     let weights: Vec<f64> = (0..grid.height).map(|y| grid.latitude(y).cos()).collect();
     let total: f64 = weights.iter().sum::<f64>() * grid.width as f64;
-    let waterline_shift = params.planet.rules.waterline;
-    for _ in 0..LAND_PASSES {
-        let sampler = Sampler::new(&coarse);
-        let mut samples: Vec<(f32, f64)> = (0..grid.height)
+    let target = f64::from(fraction.clamp(0.0, 1.0));
+    // The plates do not depend on the sea level, only their crust: built
+    // once (at the present; drifted plates move with their crust).
+    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+        .then(|| crate::plates::PlateFrame::new(&coarse));
+    // The land share minus the target, at a sea level.
+    let excess = |level: f32| {
+        let p = WorldParams {
+            sea_level: level,
+            ..coarse.clone()
+        };
+        let waterline = level + p.planet.rules.waterline;
+        let sampler = Sampler::with_frame(&p, frame.as_ref());
+        let land: f64 = (0..grid.height)
             .into_par_iter()
-            .flat_map_iter(|y| {
-                let sampler = &sampler;
+            .map(|y| {
                 let w = weights[y as usize];
-                (0..grid.width).map(move |x| (sampler.sample(x, y).elevation, w))
+                (0..grid.width)
+                    .filter(|&x| sampler.sample(x, y).elevation > waterline)
+                    .count() as f64
+                    * w
             })
-            .collect();
-        samples.par_sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
-        // Walk down from the highest ground until the target area is reached.
-        let target = fraction.clamp(0.0, 1.0) as f64 * total;
-        let mut area = 0.0;
-        let mut waterline = samples.last().map_or(-1.0, |s| s.0);
-        for &(elevation, w) in &samples {
-            area += w;
-            if area >= target {
-                waterline = elevation;
-                break;
-            }
-        }
-        let level = (waterline - waterline_shift).clamp(limits.min, limits.max);
-        let settled = (level - coarse.sea_level).abs() < 1e-3;
-        coarse.sea_level = level;
-        if settled {
+            .sum();
+        land / total - target
+    };
+    let (mut lo, mut hi) = (limits.min, limits.max);
+    let (mut f_lo, mut f_hi) = (excess(lo), excess(hi));
+    // Out of reach: the nearest limit.
+    if f_lo <= 0.0 {
+        return lo;
+    }
+    if f_hi >= 0.0 {
+        return hi;
+    }
+    let mut level = 0.5 * (lo + hi);
+    let mut side = 0;
+    for _ in 0..LAND_PASSES {
+        level = ((f64::from(lo) * f_hi - f64::from(hi) * f_lo) / (f_hi - f_lo)) as f32;
+        let f = excess(level);
+        if f.abs() < LAND_TOLERANCE {
             break;
         }
+        // More land than asked: raise the sea.
+        if f > 0.0 {
+            (lo, f_lo) = (level, f);
+            if side == 1 {
+                f_hi *= 0.5;
+            }
+            side = 1;
+        } else {
+            (hi, f_hi) = (level, f);
+            if side == -1 {
+                f_lo *= 0.5;
+            }
+            side = -1;
+        }
     }
-    coarse.sea_level
+    level
+}
+
+/// The host star's action on the climate of world `params`: its light,
+/// regulated by a carbon cycle on wet worlds (fully with plate tectonics,
+/// partly under a stagnant lid), and the planet's own heat.
+fn star_climate(params: &WorldParams) -> StarClimate {
+    let planet = &params.planet;
+    StarClimate {
+        star: params.star,
+        orbit_au: params.orbit_au,
+        eccentricity: params.eccentricity,
+        regulation: carbon_cycle(planet.geology.regime, params.pressure_bar),
+        // A giant's moon: its tidal heat adds to its own, as radiated power.
+        internal_heat_k: crate::exomoon::HostGiant::draw(params)
+            .map_or(planet.climate.internal_heat, |h| {
+                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
+            }),
+    }
+}
+
+/// The wind belts of world `params` (see [`Belts`]), from its day: the
+/// rotation its moons draw, its year if locked to its star (two thirds of
+/// it in the 3:2 resonance), Earth's 24 h for a world without moons.
+pub fn belts(params: &WorldParams) -> Belts {
+    let star = crate::spin::star_info(params);
+    let day_hours = if star.tidally_locked {
+        f64::from(star.year_days) * 24.0
+    } else if star.spin_orbit_3_2 {
+        // Three turns every two orbits.
+        f64::from(star.year_days) * 24.0 / f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
+    } else {
+        crate::moons::MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours))
+    };
+    Belts::new(day_hours, f64::from(params.circumference_km))
+}
+
+/// The seasonal cycle of world `params` (see [`Seasons`]): none on a
+/// planet locked to its star, whose sun never moves in its sky.
+pub fn seasons(params: &WorldParams) -> Seasons {
+    let grid = params.grid();
+    if crate::spin::star_info(params).tidally_locked {
+        return Seasons::none(grid.height);
+    }
+    let star = star_climate(params);
+    Seasons::new(&grid, params.axial_tilt_deg, params.pressure_bar, |rows| {
+        star_temperatures(rows, star)
+    })
 }
 
 /// Generates a world, running every pass in order, without debug layers.
@@ -823,6 +1117,13 @@ pub fn generate_with_progress(
     options: GenerateOptions,
     progress: impl Fn(Stage),
 ) -> Generated {
+    // Regenerating a world stored before the arid criterion: its rules
+    // meant the former moisture scale.
+    if params.planet.rules.is_legacy() {
+        let mut modern = params.clone();
+        modern.planet.rules = params.planet.rules.modernised();
+        return generate_with_progress(&modern, options, progress);
+    }
     // A giant has no ground: its cloud bands have a pipeline of their own.
     if params.giant_mass_earth.is_some() {
         return crate::giant_world::generate(params, &progress);
@@ -906,41 +1207,29 @@ pub fn generate_with_progress(
         variability_m,
         highland_offset,
     } = fields;
-    // Small bodies (moons) cannot hold the relief of a planet: it is
-    // flattened towards the sea level to a few percent of their radius,
-    // where craters shape them.
-    let flatten = relief_share(params.circumference_km);
+    // Small and airless bodies cannot hold the relief of a planet: it is
+    // flattened towards the waterline (see `relief_share`), and craters
+    // shape them.
+    let flatten = relief_share(params);
     if flatten < 1.0 {
-        let sea = params.sea_level;
+        // Towards the waterline, where the floating crust is measured
+        // from: the sea level itself sits above the altitude lines.
+        let waterline = params.sea_level + planet.rules.waterline;
         elevation
             .par_iter_mut()
-            .for_each(|e| *e = sea + (*e - sea) * flatten);
+            .for_each(|e| *e = waterline + (*e - waterline) * flatten);
     }
-    // Rows of sea-level temperature, evened out by dense air.
-    // The host star: its light, regulated by a carbon cycle on wet worlds
-    // with plate tectonics, and the planet's own heat.
-    let star_climate = StarClimate {
-        star: params.star,
-        orbit_au: params.orbit_au,
-        eccentricity: params.eccentricity,
-        regulated: planet.geology.regime == Regime::Plates
-            && params.pressure_bar >= LIQUID_WATER_BAR,
-        // A giant's moon: its tidal heat adds to its own, as radiated power.
-        internal_heat_k: crate::exomoon::HostGiant::draw(params)
-            .map_or(planet.climate.internal_heat, |h| {
-                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
-            }),
-    };
+    // Rows of sea-level temperature, evened out by dense air, then moved by
+    // the host star.
+    let star_climate = star_climate(params);
     // A tidally locked planet's climate follows the angle from the point
     // under its star instead of the latitude.
-    let locked = StarInfo::new(params.star, params.orbit_au, params.eccentricity)
-        .tidally_locked
-        .then(|| {
-            let mut locked = LockedClimate::new();
-            locked.transport_heat(params.pressure_bar);
-            star_temperatures(locked.profile_mut(), star_climate);
-            locked
-        });
+    let locked = crate::spin::star_info(params).tidally_locked.then(|| {
+        let mut locked = LockedClimate::new();
+        locked.transport_heat(params.pressure_bar);
+        star_temperatures(locked.profile_mut(), star_climate);
+        locked
+    });
     let row_temperature = match &locked {
         Some(locked) => locked.rows(&grid),
         None => {
@@ -950,9 +1239,11 @@ pub fn generate_with_progress(
             rows
         }
     };
+    let seasons = seasons(params);
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
-    let thaw = crate::erosion::thaw(&row_temperature, warming, rules.polar);
+    // Water carves where it thaws in summer.
+    let thaw = crate::erosion::thaw(&seasons.land_summer(&row_temperature), warming, rules.polar);
     // Impact craters: those of the wet era are worn by the erosion, the
     // younger ones are drawn over it. Their height change is only kept for
     // its debug map.
@@ -1029,6 +1320,7 @@ pub fn generate_with_progress(
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
+    let lapse = crate::climate::lapse_rate(params);
     let raw_temperature: Vec<f32> = elevation
         .par_iter()
         .enumerate()
@@ -1042,7 +1334,7 @@ pub fn generate_with_progress(
                 )),
                 None => row_temperature[i / width as usize],
             };
-            temperature(sea_level, above_water)
+            temperature(sea_level, above_water, lapse)
                 + temperature_anomaly(anomaly[i], above_water >= 0.0)
         })
         .collect();
@@ -1071,8 +1363,18 @@ pub fn generate_with_progress(
     progress(Stage::Moisture);
     // ── Pass 5: moisture ──────────────────────────────────────────────────────
     // Winds carry ocean evaporation inland; it rains out with distance and on
-    // windward slopes, leaving rain shadows behind mountains.
-    let (coast_distance_km, (raw_moisture, precipitation)) = rayon::join(
+    // windward slopes, leaving rain shadows behind mountains, where the air
+    // comes down warmer (foehn).
+    let belts = belts(params);
+    let (
+        coast_distance_km,
+        Moisture {
+            moisture: raw_moisture,
+            precipitation,
+            foehn,
+            ..
+        },
+    ) = rayon::join(
         || grid.distance_to(&open_water, COAST_DISTANCE_CAP_KM),
         || {
             moisture(&MoistureInput {
@@ -1080,6 +1382,7 @@ pub fn generate_with_progress(
                 height_above_water: &height_above_water,
                 temperature: &raw_temperature,
                 noise: &moisture_noise,
+                belts,
             })
         },
     );
@@ -1115,15 +1418,18 @@ pub fn generate_with_progress(
                 -1.0
             }
         });
+    // The foehn warms the lee of ranges where rain fell on the climb.
+    let foehn_share = if liquid_water { 1.0 } else { 0.0 };
     let mut temperature = raw_temperature;
     temperature
         .par_iter_mut()
         .zip(&variability_t)
-        .for_each(|(t, v)| {
-            *t = (*t + dt + regional_variability(*v, Field::Temperature))
+        .zip(&foehn)
+        .for_each(|((t, v), f)| {
+            *t = (*t + dt + regional_variability(*v, Field::Temperature) + foehn_share * f)
                 .clamp(TEMPERATURE_RANGE.0, TEMPERATURE_RANGE.1)
         });
-    drop((variability_t, variability_m));
+    drop((variability_t, variability_m, foehn));
 
     // ── Pass 6: rivers and lakes ──────────────────────────────────────────────
     progress(Stage::Rivers);
@@ -1139,11 +1445,28 @@ pub fn generate_with_progress(
         },
         cover_shift: planet.atmosphere.cloud_cover,
         precipitation: &precipitation,
+        belts,
         seed: params.seed,
     };
     let (clouds, mut water) = rayon::join(
         || crate::clouds::clouds(&cloud_input),
-        || hydrology(&grid, &height_above_water, &moisture, params.seed),
+        || {
+            // Lava does not depend on rain: the flows of a volcanic world
+            // run off everywhere alike.
+            let lava = planet.remap(Biome::River).is_lava();
+            let runoff: Vec<f32> = moisture
+                .par_iter()
+                .zip(&temperature)
+                .map(|(&m, &t)| {
+                    if lava {
+                        1.0
+                    } else {
+                        crate::hydrology::runoff_share(m, t)
+                    }
+                })
+                .collect();
+            hydrology(&grid, &height_above_water, &runoff, params.seed)
+        },
     );
     if let Some(sink) = sink {
         sink.layer(DebugLayer {
@@ -1213,10 +1536,12 @@ pub fn generate_with_progress(
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
+            let land = relief(elevation[i]) >= rules.waterline;
             let input = BiomeInput {
                 elevation: relief(elevation[i]),
                 moisture: moisture[i],
                 temperature: temperature[i],
+                seasonality: seasons.at((i / width as usize) as u32, land, coast_distance_km[i]),
                 volcanic_zone: volcanic_zone[i],
                 coast_distance_km: coast_distance_km[i],
                 lake: lake[i],
@@ -1243,6 +1568,8 @@ pub fn generate_with_progress(
             elevation_base,
             moisture,
             temperature,
+            seasons,
+            lapse_rate: lapse,
             flow_km2,
             volcanic_zone,
             coast_distance_km,
@@ -1259,7 +1586,7 @@ pub fn generate_with_progress(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::climate::EARTH_AXIAL_TILT_DEG;
     use crate::preset::Preset;
@@ -1313,6 +1640,8 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            locked_to_star: None,
+            gravity: None,
         }
     }
 
@@ -1370,7 +1699,7 @@ mod tests {
     }
 
     #[test]
-    fn gravity_is_earth_baseline_and_clamped() {
+    fn rocky_gravity_follows_the_mass_radius_relation() {
         let g = |circumference_km| {
             WorldParams {
                 circumference_km,
@@ -1379,8 +1708,269 @@ mod tests {
             .gravity_modifier()
         };
         assert!((g(EARTH_CIRCUMFERENCE_KM) - 1.0).abs() < 1e-6);
-        assert_eq!(g(1.0), 0.1);
-        assert_eq!(g(1e9), 5.0);
+        // Equatorial circumferences (NASA): Mars 0.38 g (Earth's density
+        // gave 0.53), Venus 0.90, the Moon 0.165.
+        let mars = g(21_344.0);
+        assert!((0.32..0.40).contains(&mars), "{mars}");
+        let venus = g(38_025.0);
+        assert!((0.88..0.95).contains(&venus), "{venus}");
+        let moon = g(10_921.0);
+        assert!((moon - 0.165).abs() < 0.005, "{moon}");
+        // Heavier with size, faster than the radius, up to 5 g.
+        assert!(g(2.0 * EARTH_CIRCUMFERENCE_KM) > 3.0);
+        assert_eq!(g(1_000_000.0), 5.0);
+    }
+
+    /// Heights (km) with the area of their pixel.
+    type Heights = Vec<(f32, f32)>;
+
+    /// Land heights and sea depths of a world above (below) its
+    /// waterline, km, each with its pixel's area.
+    fn hypsometry(w: &World) -> (Heights, Heights) {
+        let p = &w.params;
+        let waterline = p.sea_level + p.planet.rules.waterline;
+        let grid = p.grid();
+        let (mut land, mut sea) = (Vec::new(), Vec::new());
+        for (i, &e) in w.elevation.iter().enumerate() {
+            let a = grid.latitude((i / w.width as usize) as u32).cos() as f32;
+            let h = (e - waterline) * crate::craters::ELEVATION_KM;
+            if h >= 0.0 {
+                land.push((h, a));
+            } else {
+                sea.push((-h, a));
+            }
+        }
+        (land, sea)
+    }
+
+    /// Share of the area of `v` above `km`, %.
+    fn above(v: &[(f32, f32)], km: f32) -> f32 {
+        let total: f32 = v.iter().map(|x| x.1).sum();
+        100.0 * v.iter().filter(|x| x.0 > km).map(|x| x.1).sum::<f32>() / total
+    }
+
+    #[test]
+    fn earth_like_worlds_have_earths_hypsometry() {
+        // ETOPO 2022 (ice surface): land median 0.42 km, 56 % under 500 m,
+        // 10.8 % above 2 km, 1.8 % above 4 km; 1 % of the sea floor deeper
+        // than 6 km. Each seed within a band around them.
+        let earth = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/earth-like.toml"
+        );
+        for seed in [1u32, 2, 3] {
+            let request = crate::request::WorldRequest {
+                planet: Some(earth.into()),
+                seed: Some(seed),
+                width: Some(256),
+                height: Some(128),
+                ..Default::default()
+            };
+            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
+            let p = request.resolve(&mut rng).unwrap().params;
+            let (land, sea) = hypsometry(&generate(&p).world);
+            // The land the preset asks for (0.29).
+            let area = |v: &[(f32, f32)]| v.iter().map(|x| x.1).sum::<f32>();
+            let share = area(&land) / (area(&land) + area(&sea));
+            assert!((share - 0.29).abs() < 0.05, "seed {seed}: land {share}");
+            let lowland = 100.0 - above(&land, 0.5);
+            let (high, higher, deep) = (above(&land, 2.0), above(&land, 4.0), above(&sea, 6.0));
+            let report = format!("seed {seed}: {lowland} {high} {higher} {deep}");
+            assert!((45.0..75.0).contains(&lowland), "{report}");
+            assert!((4.0..15.0).contains(&high), "{report}");
+            assert!((0.5..4.0).contains(&higher), "{report}");
+            assert!(deep < 3.0, "{report}");
+            // The old ramp: a fifth of the land above 4 km.
+            assert!(above(&sea, 1.0) > 70.0, "{report}");
+        }
+    }
+
+    #[test]
+    fn earth_like_worlds_are_dry_where_earth_is_dry() {
+        // Köppen's arid climates B cover 30.2 % of Earth's land (Peel et al.
+        // 2007), the tropical ones 19.0 %. Four seeds together, as the
+        // calibration was made.
+        let earth = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/earth-like.toml"
+        );
+        let (mut land, mut arid, mut tropical) = (0.0f64, 0.0f64, 0.0f64);
+        // Mean rain of the 0-10° belt and of the 20-35° belts, mm.
+        let mut belt = [(0.0f64, 0.0f64); 2];
+        for seed in [1u32, 2, 3, 4] {
+            let request = crate::request::WorldRequest {
+                planet: Some(earth.into()),
+                seed: Some(seed),
+                width: Some(512),
+                height: Some(256),
+                ..Default::default()
+            };
+            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
+            let p = request.resolve(&mut rng).unwrap().params;
+            let w = generate(&p).world;
+            let grid = p.grid();
+            for i in 0..w.biomes.len() {
+                let latitude = grid
+                    .latitude((i / w.width as usize) as u32)
+                    .to_degrees()
+                    .abs();
+                let area = grid.latitude((i / w.width as usize) as u32).cos();
+                let rain = f64::from(crate::climate::rain_mm(w.moisture[i]));
+                if latitude < 10.0 {
+                    belt[0].0 += rain * area;
+                    belt[0].1 += area;
+                } else if (20.0..35.0).contains(&latitude) {
+                    belt[1].0 += rain * area;
+                    belt[1].1 += area;
+                }
+                let b = w.biomes[i];
+                if b.is_water() && !matches!(b, Biome::Lake | Biome::River) {
+                    continue;
+                }
+                land += area;
+                match b {
+                    Biome::Desert | Biome::Shrubland => arid += area,
+                    Biome::Jungle | Biome::Savanna => tropical += area,
+                    _ => {}
+                }
+            }
+        }
+        let (arid, tropical) = (arid / land, tropical / land);
+        assert!((0.25..0.36).contains(&arid), "arid {arid}");
+        assert!((0.12..0.24).contains(&tropical), "tropical {tropical}");
+        // The ITCZ is wet and the subtropical highs dry (GPCP: 1 900 mm at
+        // 5° N, 665 mm at 25° N).
+        let (itcz, highs) = (belt[0].0 / belt[0].1, belt[1].0 / belt[1].1);
+        assert!(itcz > 1.8 * highs, "{itcz} vs {highs}");
+    }
+
+    #[test]
+    fn the_crust_floats_as_a_platform_and_a_bounded_floor() {
+        let km = |x: f32| floating(x) * crate::craters::ELEVATION_KM;
+        assert_eq!(km(0.0), 0.0);
+        // The platform levels off at its height, however high the noise.
+        assert!(km(1.0) <= PLATFORM_KM && km(1.0) > 0.99 * PLATFORM_KM);
+        // The shelf, then the old floor between 4 and 6.4 km.
+        assert!((km(-SHELF_NOISE) + SHELF_KM).abs() < 1e-5);
+        assert!((km(-SHELF_NOISE - SLOPE_NOISE) + 4.0).abs() < 1e-4);
+        assert!(km(-2.0) >= -ABYSS_KM && km(-2.0) < -6.3);
+        // Monotonic.
+        let mut last = f32::MAX;
+        for k in 0..400 {
+            let v = km(1.0 - k as f32 / 200.0);
+            assert!(v <= last);
+            last = v;
+        }
+    }
+
+    #[test]
+    fn relief_stands_as_one_over_gravity_up_to_a_cap() {
+        assert_eq!(relief_scale(1.0), 1.0);
+        assert_eq!(relief_scale(2.0), 0.5);
+        // A Mars-sized world: 1/g is 2.9, capped below Olympus Mons's 2.5.
+        let mars = crate::world::rocky_gravity(21_344.0 / EARTH_CIRCUMFERENCE_KM);
+        assert_eq!(relief_scale(mars), MAX_RELIEF_SCALE);
+        // The volcanoes scale too: a light world's stand higher.
+        let cone = |gravity: f32| {
+            let p = WorldParams {
+                width: 256,
+                height: 128,
+                gravity: Some(gravity),
+                volcanic_intensity: 1.0,
+                ..params(5, "terran")
+            };
+            let s = Sampler::new(&p);
+            (0..p.height)
+                .flat_map(|y| (0..p.width).map(move |x| (x, y)))
+                .map(|(x, y)| s.sample(x, y).cone_relief)
+                .fold(0.0f32, f32::max)
+        };
+        let (light, earth) = (cone(0.6), cone(1.0));
+        assert!(earth > 0.0 && light > 1.5 * earth, "{light} {earth}");
+    }
+
+    #[test]
+    fn elevations_are_compressed_into_range_not_clipped() {
+        assert_eq!(within_range(0.5), 0.5);
+        assert_eq!(within_range(-0.85), -0.85);
+        let (a, b) = (within_range(1.1), within_range(1.4));
+        assert!(a < b && b < 1.0, "{a} {b}");
+        assert!(within_range(-3.0) >= -1.0);
+    }
+
+    #[test]
+    fn small_bodies_keep_relief_within_their_caps() {
+        // A moon of `radius_km` and `density` (g/cm³), its span of
+        // elevation as generated (craters included), km.
+        let span = |radius_km: f32, density: f64, composition| {
+            let planet = params(0, "terran");
+            let mut p = crate::moons::small_body_params(&planet, composition, radius_km, 7, None);
+            let r = f64::from(radius_km);
+            let mass = 4.0 / 3.0 * PI * r.powi(3) * density * 1e12;
+            p.gravity = Some((6.674e-20 * mass / (r * r) * 1000.0 / 9.81) as f32);
+            (p.width, p.height) = (256, 128);
+            let w = generate(&p).world;
+            let (lo, hi) = w
+                .elevation
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(a, b), &e| (a.min(e), b.max(e)));
+            (hi - lo) * crate::craters::ELEVATION_KM
+        };
+        use crate::moons::Composition::{Ice, Rock};
+        // A Moon: about the Moon's 13 km.
+        let moon = span(1737.0, 3.34, Rock);
+        assert!((9.0..18.0).contains(&moon), "Moon {moon}");
+        // An icy moon of Ganymede's size holds less than rock: its noise
+        // relief 0.4 of rock's; its simple craters are still rock's (the
+        // transition does not know ice).
+        let ice = span(2634.0, 1.94, Ice);
+        assert!(ice < 0.8 * moon, "ice {ice} rock {moon}");
+        // A moonlet: within 8 % of its radius, craters aside.
+        let p = crate::moons::small_body_params(&params(0, "terran"), Rock, 32.0, 7, None);
+        assert!(relief_share(&p) * noise_span_km(&p) <= SMALL_BODY_RELIEF * 32.0 + 1e-3);
+        // Planets keep their whole relief.
+        assert_eq!(relief_share(&params(0, "terran")), 1.0);
+    }
+
+    #[test]
+    fn an_icy_moon_asked_for_alone_has_ices_gravity() {
+        let file = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/moons/icy-moon.toml"
+        );
+        let p = WorldParams {
+            planet: Preset::load(file).unwrap(),
+            circumference_km: 9_800.0,
+            ..params(0, "terran")
+        };
+        let radius = 9_800.0 / EARTH_CIRCUMFERENCE_KM;
+        assert!((p.gravity_modifier() - 1.9 / 5.513 * radius).abs() < 1e-6);
+        assert!(icy(&p));
+    }
+
+    #[test]
+    fn a_moon_world_has_the_gravity_of_its_card() {
+        // The moons of small planets, which often have one (rocky and icy).
+        let mut seen = 0;
+        for seed in 0..40 {
+            let planet = WorldParams {
+                circumference_km: 20_000.0,
+                ..params(seed, "terran")
+            };
+            let Some(system) = crate::moons::MoonSystem::draw(&planet) else {
+                continue;
+            };
+            for moon in &system.moons {
+                let world = crate::moons::body_params(&planet, moon);
+                assert_eq!(world.gravity_modifier(), moon.gravity);
+                // Not the rocky planets' rule for its size.
+                let rule =
+                    crate::world::rocky_gravity(world.circumference_km / EARTH_CIRCUMFERENCE_KM);
+                assert_ne!(world.gravity_modifier(), rule);
+                seen += 1;
+            }
+        }
+        assert!(seen > 5, "{seen}");
     }
 
     #[test]

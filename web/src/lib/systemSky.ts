@@ -15,7 +15,9 @@
 // node line); it turns once per `spin.period_hours`, a locked body at a
 // steady pace, its longitude 180° towards what it orbits on average: its
 // host swings in its sky by the libration (true minus mean anomaly, about
-// +-2e radians).
+// +-2e radians). A planet in the 3:2 spin-orbit resonance turns 1.5 times
+// per orbit, its long axis (longitude 0 or 180°) towards the star at each
+// periapsis, as Mercury.
 import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
@@ -83,6 +85,27 @@ export function orbitPosition(orbit: Orbit, plane: Plane, days: number): Vec3 {
   return pointOnOrbit(plane, orbit.periapsis_deg * DEG + nu, r);
 }
 
+/** Turns per orbit of a planet in the 3:2 spin-orbit resonance (Mercury's). */
+export const RESONANCE_TURNS_PER_ORBIT = 1.5;
+
+/**
+ * The amplitude of the libration of a locked body on an orbit of
+ * eccentricity `e`, radians: the greatest true minus mean anomaly, exact
+ * (Kepler's equation) rather than the first-order 2e. It is reached where
+ * the orbital rate equals the mean motion, at r = a (1 - e^2)^(1/4) (from
+ * Kepler's second law, r^2 dnu/dt = n a^2 sqrt(1 - e^2)): 28.9° at e = 0.25
+ * against 2e = 28.6°.
+ */
+export function librationAmplitude(e: number): number {
+  const ecc = Math.min(Math.max(e, 0), 0.95);
+  if (ecc < 1e-9) return 0;
+  const r = Math.pow(1 - ecc * ecc, 0.25);
+  const eccentric = Math.acos(Math.min(Math.max((1 - r) / ecc, -1), 1));
+  const mean = eccentric - ecc * Math.sin(eccentric);
+  const nu = 2 * Math.atan2(Math.sqrt(1 + ecc) * Math.sin(eccentric / 2), Math.sqrt(1 - ecc) * Math.cos(eccentric / 2));
+  return nu - mean;
+}
+
 /**
  * The libration of a body locked to what it orbits after `days`, radians in
  * (-pi, pi]: the true anomaly minus the mean anomaly. A locked body turns at
@@ -140,11 +163,13 @@ export function placeSystem(
     const y = unit(rotate(plane.normal, plane.node, body.spin.axial_tilt_deg * DEG));
     // Its longitude 0 at the start, then turning on itself; a locked body
     // turns steadily, its longitude 180° towards the point of its orbit at
-    // the mean anomaly (its host is off that by the libration).
+    // the mean anomaly (its host is off that by the libration); one in the
+    // 3:2 resonance turns 1.5 times as fast from the same face at periapsis.
     const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
     let z: Vec3;
-    if (body.spin.locked) {
-      z = pointOnOrbit(plane, body.orbit.periapsis_deg * DEG + anomalies(body.orbit, days).mean, 1);
+    if (body.spin.locked || body.spin.spin_orbit_3_2) {
+      const turns = body.spin.locked ? 1 : RESONANCE_TURNS_PER_ORBIT;
+      z = pointOnOrbit(plane, body.orbit.periapsis_deg * DEG + turns * anomalies(body.orbit, days).mean, 1);
     } else {
       const turns = (days * 24) / Math.max(body.spin.period_hours, 1e-6);
       const offset = turned && turned.id === body.id ? turned.spinOffset : 0;
@@ -159,8 +184,12 @@ export function placeSystem(
   return placements;
 }
 
-/** Points sampled round an orbit line. */
-const ORBIT_SAMPLES = 160;
+/**
+ * Points sampled evenly round an orbit line by default (the light
+ * quality profile; see QualityProfile.orbitSamples): 2.25° apart, whose
+ * corners show where a line passes near the camera.
+ */
+export const ORBIT_SAMPLES = 160;
 
 /** Colours of a body drawn before its map loads (or when it has none). */
 const ROCK: Vec3 = [0.32, 0.3, 0.28];
@@ -173,7 +202,8 @@ const ROCK: Vec3 = [0.32, 0.3, 0.28];
  * round the star and of the moons of the shown body's planet; and the
  * star's direction, for the light, and its place and radius (in radii of
  * the body shown), to draw it there. `spinOffset` turns the body shown on
- * itself (see placeSystem).
+ * itself (see placeSystem). Each orbit line is `orbitSamples` points
+ * spread evenly round it, and more ever closer to its body (see below).
  */
 export function systemSky(
   system: System,
@@ -181,6 +211,7 @@ export function systemSky(
   days: number,
   textures: (id: string) => string | null,
   spinOffset = 0,
+  orbitSamples = ORBIT_SAMPLES,
 ): {
   bodies: SkyBody[];
   ids: string[];
@@ -237,18 +268,22 @@ export function systemSky(
       const parent = body.parent ? placements.get(body.parent)!.centre : ([0, 0, 0] as Vec3);
       const e = Math.min(Math.max(body.orbit.eccentricity, 0), 0.95);
       const a = body.orbit.semi_major_axis_km;
-      // Its true anomaly now, so the body shown's own orbit is sampled
-      // ever closer to it.
+      // Its angle now, from the node: each line sampled ever closer to its
+      // body, through its centre, from a step a fifth of the body's
+      // distance from the body shown (of the body shown's radius on its
+      // own orbit), growing by 1.4 to the even one. A chord of the even
+      // samples would miss it by up to 1.9e-4 of the orbit's radius at
+      // 160 (a giant's own orbit round its star by half its radius,
+      // beside it in its moon's sky), and corners would show near it.
       const rel = sub(there.centre, parent);
       const now = Math.atan2(dot(rel, there.plane.third), dot(rel, there.plane.node));
-      const angles: number[] = Array.from({ length: ORBIT_SAMPLES }, (_, i) => (2 * Math.PI * i) / ORBIT_SAMPLES);
-      if (body.id === shown) {
-        const size = self.physical.radius_km / a;
-        for (let step = 0.2 * size; step < (2 * Math.PI) / ORBIT_SAMPLES; step *= 1.4) {
-          angles.push(now + step, now - step);
-        }
-        angles.push(now);
+      const even = (2 * Math.PI) / orbitSamples;
+      const angles: number[] = Array.from({ length: orbitSamples }, (_, i) => even * i);
+      const from = Math.max(Math.hypot(...sub(there.centre, here.centre)), self.physical.radius_km);
+      for (let step = (0.2 * from) / a; step < even; step *= 1.4) {
+        angles.push(now + step, now - step);
       }
+      angles.push(now);
       const wrap = (x: number) => x - 2 * Math.PI * Math.floor(x / (2 * Math.PI));
       const periapsis = body.orbit.periapsis_deg * DEG;
       return angles

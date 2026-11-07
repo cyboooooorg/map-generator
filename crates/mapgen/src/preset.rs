@@ -402,7 +402,23 @@ impl Preset {
 
     /// Parses and validates a preset. `origin` names the source in errors.
     pub fn from_toml(text: &str, origin: &str) -> Result<Self, PresetError> {
-        toml::from_str(text).map_err(|e| PresetError(format!("{origin}: {e}")))
+        let mut preset: Self =
+            toml::from_str(text).map_err(|e| PresetError(format!("{origin}: {e}")))?;
+        // A preset file written for the former moisture scale: the world
+        // files keep theirs (see `BiomeRules::is_legacy`), a preset does not.
+        if preset.rules.is_legacy() {
+            eprintln!(
+                "warning: {origin}: shrubland_moisture and desert_moisture are ignored; \
+                 arid land follows Koppen's criterion B (steppe_ratio, desert_ratio), and \
+                 the moisture thresholds are now on the log scale of the annual rain"
+            );
+            preset.rules.shrubland_moisture = None;
+            preset.rules.desert_moisture = None;
+        }
+        // A lone legacy field means nothing alone.
+        preset.rules.shrubland_moisture = None;
+        preset.rules.desert_moisture = None;
+        Ok(preset)
     }
 
     /// Loads a built-in preset by name, or a preset file when `spec` ends
@@ -508,7 +524,10 @@ mod tests {
 
     #[test]
     fn old_presets_convert_to_the_celsius_thresholds() {
-        // The former [0, 1] defaults land on today's °C defaults.
+        // The former [0, 1] defaults land on the °C defaults of format
+        // version 4 to 10, when every threshold was an annual mean (ice
+        // and highland snow now compare with the summer, read without
+        // seasons on those worlds).
         let mut old = Preset::load("terran").unwrap();
         let r = &mut old.rules;
         (r.sea_ice_temperature, r.highland_snow_temperature) = (0.07, 0.35);
@@ -518,11 +537,8 @@ mod tests {
         let new = crate::biome::BiomeRules::default();
         for (a, b) in [
             (old.rules.sea_ice_temperature, new.sea_ice_temperature),
-            (
-                old.rules.highland_snow_temperature,
-                new.highland_snow_temperature,
-            ),
-            (old.rules.polar, new.polar),
+            (old.rules.highland_snow_temperature, 2.6),
+            (old.rules.polar, -11.6),
             (old.rules.boreal, new.boreal),
             (old.rules.temperate, new.temperate),
         ] {

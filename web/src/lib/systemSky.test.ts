@@ -123,6 +123,22 @@ describe('system sky', () => {
     giantFrom(eccentric, periapsis).forEach((v, i) => expect(v).toBeCloseTo([0, 0, -1][i]!, 4));
   });
 
+  it('turns a planet in the 3:2 resonance 1.5 times per orbit, its long axis to the star at periapsis', () => {
+    const resonant = structuredClone(system);
+    const b = resonant.bodies.find((x) => x.id === 'b')!;
+    b.orbit.eccentricity = 0.2;
+    b.spin = { ...b.spin, locked: false, spin_orbit_3_2: true, axial_tilt_deg: 0, period_hours: (b.orbit.period_days * 24) / 1.5 };
+    const periapsis = (((360 - b.orbit.mean_anomaly_deg) % 360) / 360) * b.orbit.period_days;
+    // At periapsis the star stands over longitude 180° or 0°, in turn.
+    const faces = [0, 1, 2].map((k) => systemSky(resonant, 'b', periapsis + k * b.orbit.period_days, () => null).sun);
+    faces.forEach((sun) => {
+      expect(sun[0]).toBeCloseTo(0, 6);
+      expect(Math.abs(sun[2])).toBeCloseTo(1, 6);
+    });
+    expect(faces[1]![2]).toBeCloseTo(-faces[0]![2], 6);
+    expect(faces[2]![2]).toBeCloseTo(faces[0]![2], 6);
+  });
+
   it('gives the libration its sign: ahead after periapsis, behind before it', () => {
     const eccentric = structuredClone(system);
     const orbit = eccentric.bodies.find((x) => x.id === 'c-1')!.orbit;
@@ -172,6 +188,60 @@ describe('system sky', () => {
     const back = at(period);
     back.forEach((v, i) => expect(v / length(a)).toBeCloseTo(a[i]! / length(a), 6));
     expect((a[0] * half[0] + a[2] * half[2]) / (length(a) * length(half))).toBeLessThan(-0.9);
+  });
+
+  // How far a point is from a closed line through `loop`'s points.
+  const fromLine = (point: Vec3, loop: readonly Vec3[]) =>
+    Math.min(
+      ...loop.map((a, i) => {
+        const b = loop[(i + 1) % loop.length]!;
+        const ab: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const ap: Vec3 = [point[0] - a[0], point[1] - a[1], point[2] - a[2]];
+        const t = Math.max(0, Math.min(1, (ab[0] * ap[0] + ab[1] * ap[1] + ab[2] * ap[2]) / Math.max(length(ab) ** 2, 1e-30)));
+        return length([ap[0] - t * ab[0], ap[1] - t * ab[1], ap[2] - t * ab[2]]);
+      }),
+    );
+
+  it('runs every orbit line through its body’s centre, the giant’s own round the star too', () => {
+    const sky = systemSky(system, 'c-1', 3, textures);
+    const orbiting = system.bodies.filter((b) => b.parent === null || b.parent === 'c').map((b) => b.id);
+    for (const id of orbiting.filter((x) => x !== 'c-1')) {
+      const body = sky.bodies[sky.ids.indexOf(id)]!;
+      // Within a millionth of the body's radius (the giant's line missed
+      // it by over a tenth of its radius when sampled evenly only).
+      expect(fromLine(body.position!, sky.orbits[orbiting.indexOf(id)]!)).toBeLessThan(1e-6 * body.radius!);
+    }
+  });
+
+  it('keeps the giant’s own orbit line on its curve near the giant', () => {
+    const sky = systemSky(system, 'c-1', 3, textures);
+    const giant = sky.bodies[sky.ids.indexOf('c')]!;
+    const at = system.bodies.filter((b) => b.parent === null || b.parent === 'c').findIndex((b) => b.id === 'c');
+    // Its curve, sampled finely: within 30 of the giant's radii of it, no
+    // point of the curve is further from the line than a thousandth of
+    // its distance from the giant (what a camera there would see off it).
+    const fine = systemSky(system, 'c-1', 3, textures, 0, 200_000).orbits[at]!;
+    const off = (p: Vec3) => length([p[0] - giant.position![0], p[1] - giant.position![1], p[2] - giant.position![2]]);
+    const near = fine.filter((p) => off(p) < 30 * giant.radius!);
+    expect(near.length).toBeGreaterThan(10);
+    for (const p of near) expect(fromLine(p, sky.orbits[at]!)).toBeLessThan(1e-3 * Math.max(off(p), giant.radius!));
+  });
+
+  it('samples the orbit lines evenly round what they orbit, as finely as asked at least', () => {
+    const orbiting = system.bodies.filter((b) => b.parent === null || b.parent === 'c');
+    for (const samples of [160, 720]) {
+      const sky = systemSky(system, 'c-1', 3, textures, 0, samples);
+      sky.orbits.forEach((loop, k) => {
+        expect(loop.length).toBeGreaterThanOrEqual(samples);
+        const parent = orbiting[k]!.parent ? sky.bodies[sky.ids.indexOf('c')]!.position! : sky.star.position;
+        const from = (p: Vec3): Vec3 => [p[0] - parent[0], p[1] - parent[1], p[2] - parent[2]];
+        loop.forEach((p, i) => {
+          const [u, v] = [from(p), from(loop[(i + 1) % loop.length]!)];
+          const angle = Math.acos(Math.min(1, (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (length(u) * length(v))));
+          expect(angle).toBeLessThan(((2 * Math.PI) / samples) * (1 + 1e-6));
+        });
+      });
+    }
   });
 });
 

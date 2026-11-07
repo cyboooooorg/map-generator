@@ -55,11 +55,19 @@ round planets. Every body has:
   stars, and its node's longitude is counted from the planet's equinox
   direction);
 - its **physical facts**: mass, radius, density, surface gravity, shape
-  (an irregular moon's axes);
+  (`axes_km`: an irregular moon's axes, or a round one's stretched by its
+  planet's tides);
 - its **spin**: rotation period, axial tilt, whether it is locked to its
-  parent (and to what). A locked body turns at a steady pace, facing its
-  host on average; the host swings in its sky by the libration (true
-  minus mean anomaly, about ±2e radians);
+  parent (and to what), and for a planet whether its star holds it in
+  the 3:2 spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
+  turns every two orbits, as Mercury, see `spin.rs`). A locked body turns
+  at a steady pace, facing its host on average; the host swings in its
+  sky by the libration (true minus mean anomaly, about ±2e radians; the
+  dial gives its exact amplitude, `librationAmplitude` in
+  `web/src/lib/systemSky.ts`). A
+  moon's axial tilt is its world's (`moons::moon_tilt_deg`: the Moon's
+  6.68° to its orbit for a giant-impact moon, 0 for the others). A planet
+  locked to its star turns on a circular orbit, upright;
 - its **surroundings**: equilibrium temperature, the starlight it gets,
   its place relative to the habitable zone, the tides it raises and feels;
 - its **preview**: what the viewer draws before its maps exist (see
@@ -206,10 +214,11 @@ their crater rates.
 
 ### Moons
 
-Each planet draws its moons as today: a rocky planet by `moons.rs`
-(impacts, captures, tides, the Hill sphere), a giant its regular moons
-by the chain `exomoon.rs` draws (two to four, about 10⁻⁴ of its mass, a
-1:2:4 resonance), plus captured irregular moons. A giant's large regular
+Each planet draws its moons as a world does, by `MoonSystem::draw` in
+`moons.rs`: a rocky planet's (impacts, captures, tides, the Hill
+sphere), a giant's regular moons (two to five, about 10⁻⁴ of its mass, a
+1:2:4 resonance, on some ice giants a captured Triton), one recipe for a
+giant of a system and a giant world. A giant's large regular
 moon may be a habitable world: in mode 2 that is the planet asked for; in
 mode 1 a request can ask for it (`moons of giants: terran`).
 

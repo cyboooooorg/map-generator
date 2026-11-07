@@ -70,7 +70,7 @@
   {#each placed as item, i (i)}
     <div bind:this={elements[i]} class="label" class:left={item.left} class:star={item.star} style:left={`${item.to.x}px`} style:top={`${item.to.y}px`}>
       <strong>{item.label.name}</strong>
-      <span>{item.label.detail}</span>
+      {#if item.label.detail}<span>{item.label.detail}</span>{/if}
     </div>
   {/each}
 </div>

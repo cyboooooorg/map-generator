@@ -41,23 +41,68 @@ highland: number,
  */
 snow_line: number, 
 /**
- * Below this temperature, highland is snow whatever its elevation.
+ * Below this summer temperature, highland is snow whatever its
+ * elevation: snow that lasts the year.
  */
 highland_snow_temperature: number, 
 /**
- * Below this temperature, land and shore are ice cap.
+ * Below this summer temperature, land and shore are ice cap, and
+ * rivers freeze: ice needs a summer below freezing (Köppen's frost
+ * climate EF, warmest month below 0 °C; Kottek et al. 2006,
+ * doi:10.1127/0941-2948/2006/0130).
  */
 polar: number, 
 /**
- * Below this temperature, land is boreal (tundra, taiga).
+ * Below this annual mean temperature, land is boreal (tundra, taiga).
  */
 boreal: number, 
 /**
- * Below this temperature, land is temperate; above, tropical.
+ * Below this summer temperature, boreal land is tundra whatever its
+ * moisture: too cold a summer for trees (Köppen's tundra climate ET,
+ * warmest month below 10 °C; Kottek et al. 2006).
+ */
+tundra_summer: number, 
+/**
+ * Below this annual mean temperature, land is temperate; above,
+ * tropical.
  */
 temperate: number, 
 /**
- * Shore wetter than this is wetland, otherwise beach.
+ * Below this winter temperature, land is never tropical: it is
+ * temperate at most. Köppen's tropical climates A need a coldest month
+ * of at least 18 °C (Kottek et al. 2006); warmer land with cooler
+ * winters is warm temperate (C) or dry (B). A high tilt gives its
+ * poles a warm annual mean but freezing winters.
+ */
+tropical_winter: number, 
+/**
+ * Former cut-off: temperate land with a moisture under it was
+ * shrubland. Only present in the rules stored with an older world,
+ * whose biomes are re-chosen with the former rules (see
+ * [`is_legacy`](Self::is_legacy)); in a preset it is dropped with a
+ * warning.
+ */
+shrubland_moisture?: number, 
+/**
+ * Former cut-off: tropical land with a moisture under it was desert
+ * (see [`shrubland_moisture`](Self::shrubland_moisture)).
+ */
+desert_moisture?: number, 
+/**
+ * Land with an annual rain under this many times its dryness
+ * threshold is arid: steppe (shrubland) or desert. Köppen's 10
+ * (Kottek et al. 2006, doi:10.1127/0941-2948/2006/0130, Table 1:
+ * `P_ann < 10 P_th`).
+ */
+steppe_ratio: number, 
+/**
+ * Arid land with an annual rain under this many times the dryness
+ * threshold is desert, otherwise steppe. Köppen's 5 (`P_ann ≤ 5 P_th`).
+ */
+desert_ratio: number, 
+/**
+ * Shore with a moisture index above this (1 000 mm of rain a year at
+ * 0) is wetland, otherwise beach.
  */
 wetland_moisture: number, 
 /**
@@ -65,17 +110,9 @@ wetland_moisture: number,
  */
 taiga_moisture: number, 
 /**
- * Temperate land drier than this is shrubland.
- */
-shrubland_moisture: number, 
-/**
  * Temperate land wetter than this is forest.
  */
 forest_moisture: number, 
-/**
- * Tropical land drier than this is desert.
- */
-desert_moisture: number, 
 /**
  * Tropical land wetter than this is jungle; between, savanna.
  */

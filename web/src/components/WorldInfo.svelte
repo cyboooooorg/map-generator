@@ -192,7 +192,8 @@
               size: `${formatUpTo(star.angular_diameter_deg, 2)}°`,
               sun: `${formatUpTo(0.53, 2)}°`,
             })}{#if star.tidally_locked}
-              · <span class="unit-help" title={t.worldInfo.lockedHelp}>{t.worldInfo.locked}</span>{/if}
+              · <span class="unit-help" title={t.worldInfo.lockedHelp}>{t.worldInfo.locked}</span>{:else if star.spin_orbit_3_2}
+              · <span class="unit-help" title={t.worldInfo.resonantHelp}>{t.worldInfo.resonant}</span>{/if}
           </dd>
         {:else}
           <dd>{t.worldInfo.theSun}</dd>
