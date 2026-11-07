@@ -88,13 +88,11 @@ After that, every new particle knocked off as many as stuck. The moonlet
 had grown to fill its Roche lobe and could grow no further.
 
 ```mermaid
-flowchart TD
-  A["A dense icy shard in the rings<br/>(a fragment of a broken-up body)"]
-  A --> B["Sweeps up porous ring particles"]
-  B --> C{"Its mean density still above<br/>the critical density?"}
+flowchart LR
+  A["A dense icy shard<br/>in the rings"] --> B["It sweeps up<br/>ring particles"]
+  B --> C{"Mean density above<br/>the critical density?"}
   C -- yes --> B
-  C -- no --> D["It fills its Roche lobe: as many<br/>particles knocked off as stick"]
-  D --> E["Final size: about 2 to 3 times the core"]
+  C -- no --> D["It fills its Roche lobe<br/>and stops: 2 to 3 times<br/>the size of the core"]
 ```
 
 The final long semi-axis $a$ of a moon grown from a core of radius $R_c$ and
