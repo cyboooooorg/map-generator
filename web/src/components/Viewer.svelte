@@ -9,7 +9,6 @@
   import AxesGizmo from './AxesGizmo.svelte';
   import type { ScreenAxis } from '../lib/viewer/axes';
   import { ApiFailure, api, followJob, systemBodyId, worldFile, worldThumbnail } from '../lib/api/client';
-  import type { BiomeInfo } from '../lib/api/types/BiomeInfo';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -30,7 +29,7 @@
   import { cloudTint, skyFromWorld } from '../lib/sky';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
-  import { starLitColour, vegetationShares } from '../lib/vegetation';
+  import { vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
   import DialLabels from './DialLabels.svelte';
@@ -40,14 +39,7 @@
   import { dialFigureText, formatDialAngle, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
-  import {
-    type CameraState,
-    giantTemperatureRange,
-    PlanetView,
-    SUN_STAR,
-    vegetationShift,
-    type ViewMode,
-  } from '../lib/viewer/PlanetView';
+  import { type CameraState, giantTemperatureRange, PlanetView, SUN_STAR, type ViewMode } from '../lib/viewer/PlanetView';
   import { currentProfile } from '../lib/viewer/quality';
   import { giantStorms } from '../lib/giantStorms';
   import { RING_ROCK_SCALES, ringRocks } from '../lib/ringRocks';
@@ -730,18 +722,6 @@
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setStars(stars));
   $effect(() => view?.setStarLight(starLight));
-  /**
-   * A biome's colour in the legend, as the globe shows it: under "Star
-   * light", recoloured for the star's vegetation and lit by its light.
-   */
-  function legendColour(biome: BiomeInfo): string {
-    const base = hexOn ? biome.color : surfaceColour(biome);
-    const star = meta?.star;
-    if (!starLight || !star) return base;
-    // The hex grid shows the classification colours, without the vegetation.
-    const plants = hexOn ? 0 : (vegetationShares([biome])[biome.id] ?? 0);
-    return starLitColour(base, plants, vegetationShift(star.teff_k), star.light);
-  }
   $effect(() => {
     const biomes = meta?.biomes;
     if (biomes) view?.setVegetation(vegetationShares(biomes));
@@ -2026,7 +2006,7 @@
                 aria-pressed={pinned === entry.biome.id}
                 title={t.viewer.highlightHelp}
               >
-                <span class="swatch" style:background={legendColour(entry.biome)}></span>
+                <span class="swatch" style:background={hexOn ? entry.biome.color : surfaceColour(entry.biome)}></span>
                 <span class="name">{biomeName(entry.biome)}</span>
                 <span class="value">{formatShare(entry.share)}</span>
               </button>
