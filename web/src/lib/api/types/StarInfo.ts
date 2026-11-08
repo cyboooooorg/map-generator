@@ -83,6 +83,14 @@ tidally_locked: boolean,
  */
 spin_orbit_3_2?: boolean, 
 /**
+ * Turns per orbit of a planet its star's tides hold in a spin-orbit
+ * resonance: 1.5 (3:2) or 2 (2:1), drawn by the
+ * eccentricity (see `crate::spin::capture`); 0 for a planet in none
+ * (free or locked). Worlds made before it: 1.5 when
+ * `spin_orbit_3_2`, else 0.
+ */
+spin_turns?: number, 
+/**
  * Colour of the star's light, linear RGB, the Sun white.
  */
 light: [number, number, number], 

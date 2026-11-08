@@ -59,6 +59,21 @@ describe('rotation dial', () => {
     expect(dial.figures.solarHours! / (b.orbit.period_days * 24)).toBeCloseTo(2, 6);
     const text = dialFigureText(dial, { hour: 'h', minute: 'min', day: 'd' });
     expect(text.locked === false && text.resonant).toBe(true);
+    expect(text.locked === false && text.ratio).toBe('3:2');
+  });
+
+  it('gives a planet in the 2:1 resonance a free dial that names its ratio, its solar day one year', () => {
+    const resonant = structuredClone(system);
+    const b = resonant.bodies.find((x) => x.id === 'b')!;
+    b.orbit.eccentricity = 0.4;
+    b.spin = { ...b.spin, locked: false, spin_orbit_3_2: false, resonance_turns: 2, period_hours: (b.orbit.period_days * 24) / 2 };
+    const dial = rotationDial(resonant, 'b', 0, 0, systemSky(resonant, 'b', 0, textures))!;
+    expect(dial.state.locked).toBe(false);
+    expect(dial.figures.resonant).toBe(true);
+    expect(dial.figures.resonance).toBe('2:1');
+    expect(dial.figures.solarHours! / (b.orbit.period_days * 24)).toBeCloseTo(1, 6);
+    const text = dialFigureText(dial, { hour: 'h', minute: 'min', day: 'd' });
+    expect(text.locked === false && text.ratio).toBe('2:1');
   });
 
   it('gives the local time at the pointer’s meridian, noon under the sun, wrapping past midnight', () => {

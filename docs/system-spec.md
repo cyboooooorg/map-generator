@@ -59,8 +59,11 @@ round planets. Every body has:
   planet's tides);
 - its **spin**: rotation period, axial tilt, whether it is locked to its
   parent (and to what), and for a planet whether its star holds it in
-  the 3:2 spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
-  turns every two orbits, as Mercury, see `spin.rs`). A locked body turns
+  a spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
+  turns every two orbits, as Mercury; `resonance_turns`, absent when 0:
+  the turns per orbit of any, 1.5 or 2, drawn by its eccentricity,
+  see `spin.rs`). A giant on an eccentric orbit turns at the
+  pseudo-synchronous rate and is not locked. A locked body turns
   at a steady pace, facing its host on average; the host swings in its
   sky by the libration (true minus mean anomaly, about ±2e radians; the
   dial gives its exact amplitude, `librationAmplitude` in
@@ -155,8 +158,9 @@ them today (metallicity and star mass), a hot Jupiter included: about
   are of similar size and evenly spaced in `log a`.
 - A hot Jupiter clears its neighbourhood: no other planet within a period
   ratio of 4 (Steffen et al. 2012).
-- Eccentricities follow Kipping's law, lower in packed systems (He et al.
-  2020); mutual inclinations a degree or two (Fabrycky et al. 2014).
+- Eccentricities follow Kipping's law for giants, lower in packed systems
+  (He et al. 2020), and Van Eylen et al.'s (2019) for the rocky planets of
+  a system (mean 0.05); mutual inclinations a degree or two (Fabrycky et al. 2014).
 - The letters follow the order from the star (`b`, `c`, `d`…), as the
   naming does today.
 - Rocky planets keep out of the first cold giant's belt zone, 0.40 to

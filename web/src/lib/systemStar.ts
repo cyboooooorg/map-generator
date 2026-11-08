@@ -101,6 +101,7 @@ export function systemStarView(
     angular_diameter_deg: (2 * Math.atan((SUN_RADIUS_AU * base.radius) / a)) / DEG,
     tidally_locked: planet.spin.locked,
     spin_orbit_3_2: planet.spin.spin_orbit_3_2 ?? false,
+    spin_turns: planet.spin.resonance_turns ?? 0,
   });
   const all = system.bodies.filter((b) => b.kind === 'planet');
   const moonsOf = (id: string) =>

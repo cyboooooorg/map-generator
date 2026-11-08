@@ -33,4 +33,11 @@ eccentricity?: ParamDefault,
  * Metallicity of the star, `[Fe/H]` in dex; left out, drawn like the
  * stars nearby (see `crate::giants`).
  */
-metallicity?: number, };
+metallicity?: number, 
+/**
+ * The spin-orbit state the planet is held in, `1:1` (locked), `3:2` or
+ * `2:1`, instead of the one its seed draws from its eccentricity (see
+ * `crate::spin::capture`): a preset named after a planet whose state
+ * is observed pins it (`mercury-like` is `3:2`).
+ */
+resonance?: string, };

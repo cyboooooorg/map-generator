@@ -15,4 +15,11 @@ locked: boolean,
  * star at each periapsis (see `crate::spin`). Systems drawn before it:
  * false.
  */
-spin_orbit_3_2?: boolean, };
+spin_orbit_3_2?: boolean, 
+/**
+ * Turns per orbit of the spin-orbit resonance its star's tides hold
+ * it in: 1.5 (3:2) or 2 (2:1), drawn by its eccentricity
+ * (see `crate::spin::capture`); absent for a body in none. Systems
+ * drawn before it: 1.5 when `spin_orbit_3_2`.
+ */
+resonance_turns?: number, };

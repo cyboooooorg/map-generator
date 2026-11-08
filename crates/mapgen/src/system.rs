@@ -242,6 +242,17 @@ pub struct Spin {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub spin_orbit_3_2: bool,
+    /// Turns per orbit of the spin-orbit resonance its star's tides hold
+    /// it in: 1.5 (3:2) or 2 (2:1), drawn by its eccentricity
+    /// (see `crate::spin::capture`); absent for a body in none. Systems
+    /// drawn before it: 1.5 when `spin_orbit_3_2`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<f32>", optional))]
+    pub resonance_turns: f32,
+}
+
+fn is_zero(x: &f32) -> bool {
+    *x == 0.0
 }
 
 /// What a body gets from its star.
@@ -728,9 +739,13 @@ fn draw_whole(
                 orbit_au: *a * (1.0 + 0.2 * (rng.random::<f64>() - 0.5)),
                 eccentricity: if body_type == "hot-jupiter" {
                     0.0
-                } else {
+                } else if is_giant(body_type) {
                     // Packed systems are calmer (He et al. 2020).
                     f64::from(draw_eccentricity(&mut rng)) * if packed { 0.4 } else { 1.0 }
+                } else {
+                    // A small planet with companions (Van Eylen et al.
+                    // 2019), calmer than a giant.
+                    f64::from(crate::star::draw_small_eccentricity(true, &mut rng))
                 },
                 fixed: false,
             })
@@ -1157,7 +1172,9 @@ fn tidal_eccentricity(slot: &Slot, star: f32) -> f64 {
             crate::giants::giant_radius(mass, at.equilibrium_k),
         )
     } else {
-        crate::spin::circularised(&at)
+        let (mass, radius) =
+            crate::spin::rocky_body(crate::world::rocky_circumference_km(slot.mass_earth));
+        crate::spin::rocky_circularised(&at, mass, radius)
     };
     if circular { 0.0 } else { slot.eccentricity }
 }
@@ -1230,29 +1247,36 @@ fn surroundings_at(star: &StarInfo, orbit_au: f64, eccentricity: f64) -> Surroun
 
 /// The body of a placed planet.
 fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, star: f32) -> Body {
-    let info = StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32);
-    let mut rng = StdRng::seed_from_u64(u64::from(body_seed(params.seed, "orbit")));
     let giant = is_giant(&slot.body_type);
+    // A rocky planet's tides scale with its own mass and radius, its
+    // resonance is drawn from its seed (see `crate::spin::star_info`).
+    let info = if giant {
+        StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32)
+    } else {
+        crate::spin::star_info(params)
+    };
+    let mut rng = StdRng::seed_from_u64(u64::from(body_seed(params.seed, "orbit")));
     // A giant locks with its own tides (a hot one always); a rocky planet
     // may be locked or held in the 3:2 resonance (see `crate::spin`), its
     // sidereal day then two thirds of its year.
     let (radius_km, mass_earth, period_hours, locked, resonant) = if giant {
         let look = crate::giant_world::Look::draw(params, slot.mass_earth as f32).info;
-        let locked =
-            look.hot || crate::spin::giant_locked(&info, look.mass_earth, look.radius_earth);
+        let locked = (look.hot
+            || crate::spin::giant_locked(&info, look.mass_earth, look.radius_earth))
+            && crate::spin::giant_stays_locked(slot.eccentricity as f32);
         (
             f64::from(look.radius_earth) * EARTH_M / 1000.0,
             f64::from(look.mass_earth),
             f64::from(look.rotation_hours),
             locked,
-            false,
+            0.0,
         )
     } else {
         let radius = f64::from(params.circumference_km) / (2.0 * PI);
         let day = MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours));
-        let resonant = info.spin_orbit_3_2;
-        let day = if resonant {
-            f64::from(info.year_days) * 24.0 / f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
+        let resonant = info.spin_turns;
+        let day = if resonant > 0.0 {
+            f64::from(info.year_days) * 24.0 / f64::from(resonant)
         } else {
             day
         };
@@ -1304,7 +1328,8 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
             },
             axial_tilt_deg: f64::from(params.axial_tilt_deg),
             locked,
-            spin_orbit_3_2: resonant,
+            spin_orbit_3_2: resonant == crate::spin::RESONANCE_TURNS_PER_ORBIT,
+            resonance_turns: resonant,
         },
         surroundings: surroundings_at(&info, slot.orbit_au, slot.eccentricity),
         preview: preview_of(&slot.body_type, params, star),
@@ -1381,6 +1406,7 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
             axial_tilt_deg: f64::from(tilt),
             locked,
             spin_orbit_3_2: false,
+            resonance_turns: 0.0,
         },
     )
 }
@@ -1572,6 +1598,7 @@ fn ring_moon_parts(
             axial_tilt_deg: 0.0,
             locked: true,
             spin_orbit_3_2: false,
+            resonance_turns: 0.0,
         },
     )
 }
@@ -1612,6 +1639,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                 axial_tilt_deg: f64::from(world.axial_tilt_deg),
                 locked: true,
                 spin_orbit_3_2: false,
+                resonance_turns: 0.0,
             },
         ),
     ));
@@ -1653,6 +1681,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                     axial_tilt_deg: 0.0,
                     locked: true,
                     spin_orbit_3_2: false,
+                    resonance_turns: 0.0,
                 },
             ),
         ));
@@ -2211,6 +2240,7 @@ mod tests {
                         given_rings: None,
                         impact_factor: None,
                         locked_to_star: None,
+                        resonance_to_star: None,
                         gravity: None,
                         ..body.params.clone()
                     };
@@ -2725,37 +2755,93 @@ mod spin_tests {
         draw(&request, &mut rand::rng()).unwrap()
     }
 
+    /// A rocky planet's day follows its spin state from `star_info`: a
+    /// year when locked, a year over the turns in a resonance. The moon
+    /// system once drew its own, on an Earth's mass, and could disagree.
+    #[test]
+    fn rocky_day_follows_the_one_spin_state() {
+        let (mut locked, mut resonant) = (0, 0);
+        for seed in 0..300 {
+            let system = red_dwarf_system(seed);
+            for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                if is_giant(&body.body_type) || body.params.giant_mass_earth.is_some() {
+                    continue;
+                }
+                let year_h = body.orbit.period_days * 24.0;
+                let want = if body.spin.locked {
+                    locked += 1;
+                    Some(year_h)
+                } else if body.spin.resonance_turns > 0.0 {
+                    resonant += 1;
+                    Some(year_h / f64::from(body.spin.resonance_turns))
+                } else {
+                    None
+                };
+                if let Some(want) = want {
+                    // The moon system, which sets the day of a planet not
+                    // despun, must agree with the card that says it is.
+                    if let Some(moons) = MoonSystem::draw(&body.params) {
+                        let day = f64::from(moons.planet_day_hours);
+                        assert!(
+                            (day - want).abs() <= 1e-4 * want,
+                            "{}: moons say {day} h, wanted {want} h",
+                            body.id
+                        );
+                    }
+                    assert!(
+                        (body.spin.period_hours - want).abs() <= 1e-6 * want,
+                        "{}: {} h, wanted {want} h",
+                        body.id,
+                        body.spin.period_hours
+                    );
+                }
+            }
+        }
+        assert!(
+            locked > 0 && resonant > 0,
+            "locked {locked}, resonant {resonant}"
+        );
+    }
+
     #[test]
     fn planets_locked_to_their_star_turn_on_circles_upright() {
         let (mut locked, mut resonant) = (0, 0);
         for seed in 0..60 {
             let system = red_dwarf_system(seed);
-            let star = parse_type(&system.star.spectral).unwrap();
             for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
                 if is_giant(&body.body_type) {
                     continue;
                 }
-                let info = StarInfo::new(
-                    star,
-                    body.orbit.semi_major_axis_au as f32,
-                    body.orbit.eccentricity as f32,
-                );
+                let info = crate::spin::star_info(&body.params);
                 assert_eq!(body.spin.locked, info.tidally_locked, "{}", body.id);
                 assert_eq!(body.spin.spin_orbit_3_2, info.spin_orbit_3_2, "{}", body.id);
+                assert_eq!(body.spin.resonance_turns, info.spin_turns, "{}", body.id);
                 if body.spin.locked {
                     locked += 1;
-                    assert!(body.orbit.eccentricity < 0.06, "{}", body.id);
+                    // Below 0.06 always; above it only when no resonance
+                    // caught the planet, the odds rising with e.
+                    assert!(
+                        body.orbit.eccentricity < 0.06
+                            || crate::spin::capture(
+                                body.orbit.eccentricity as f32,
+                                body.params.seed
+                            ) == 0.0,
+                        "{}",
+                        body.id
+                    );
                 }
                 // A circularised orbit is a circle, and its planet locked.
-                if crate::spin::circularised(&info) {
+                let (mass, radius) = crate::spin::rocky_body(body.params.circumference_km);
+                if crate::spin::rocky_circularised(&info, mass, radius) {
                     assert_eq!(body.orbit.eccentricity, 0.0, "{}", body.id);
                     assert!(body.spin.locked, "{}", body.id);
                 }
                 if body.spin.spin_orbit_3_2 {
                     resonant += 1;
-                    // Three turns every two orbits.
+                    // Three turns every two orbits (two per orbit in 2:1).
                     let year_h = body.orbit.period_days * 24.0;
-                    assert!((body.spin.period_hours * 1.5 / year_h - 1.0).abs() < 1e-3);
+                    let turns = f64::from(body.spin.resonance_turns);
+                    assert!((body.spin.period_hours * turns / year_h - 1.0).abs() < 1e-3);
                     assert!(body.orbit.eccentricity > 0.0);
                 }
                 if crate::spin::despun(&info) {

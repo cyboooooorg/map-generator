@@ -87,6 +87,15 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub locked_to_star: Option<bool>,
+    /// The turns per orbit of the spin-orbit resonance the star's tides
+    /// held the world in, as it was generated (0 for none), set with
+    /// [`Self::locked_to_star`] when a stored world is reloaded: the
+    /// resonance a seed draws is today's rule, the stored one is what its
+    /// day and climate were made with. Absent on a world about to be
+    /// generated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub resonance_to_star: Option<f32>,
     /// Surface gravity relative to Earth's, when the body's own is known:
     /// a moon's, from the density its system drew for it (the gravity of
     /// its card), or a reloaded world's, as it was generated. Absent for
