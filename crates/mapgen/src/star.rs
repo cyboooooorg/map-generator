@@ -505,8 +505,7 @@ pub struct StarInfo {
     pub radius: f32,
     /// Semi-major axis of the planet's orbit, AU.
     pub orbit_au: f32,
-    /// Eccentricity of the orbit (0 circular). Worlds made before it had
-    /// circular orbits.
+    /// Eccentricity of the orbit (0 circular).
     #[serde(default)]
     pub eccentricity: f32,
     /// Closest and farthest distances to the star, AU.
@@ -545,28 +544,24 @@ pub struct StarInfo {
     pub tidally_locked: bool,
     /// Whether the star's tides hold the planet in the 3:2 spin–orbit
     /// resonance instead, three turns every two orbits, as Mercury: despun
-    /// on an orbit of eccentricity 0.06 or more (see `crate::spin`). Worlds
-    /// made before it: false.
+    /// on an orbit of eccentricity 0.06 or more (see `crate::spin`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub spin_orbit_3_2: bool,
     /// Turns per orbit of a planet its star's tides hold in a spin-orbit
     /// resonance: 1.5 (3:2) or 2 (2:1), drawn by the
     /// eccentricity (see `crate::spin::capture`); 0 for a planet in none
-    /// (free or locked). Worlds made before it: 1.5 when
-    /// `spin_orbit_3_2`, else 0.
+    /// (free or locked).
     #[serde(default, skip_serializing_if = "is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<f32>", optional))]
     pub spin_turns: f32,
     /// Colour of the star's light, linear RGB, the Sun white.
     pub light: [f32; 3],
-    /// Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
-    /// have the Sun's.
+    /// Metallicity, `[Fe/H]` in dex (0 the Sun's).
     #[serde(default)]
     pub metallicity: f32,
     /// Longitude of the orbit's perihelion, degrees from the spring equinox
-    /// (see [`crate::world::WorldParams::perihelion_longitude_deg`]); absent
-    /// on worlds made before it.
+    /// (see [`crate::world::WorldParams::perihelion_longitude_deg`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub perihelion_longitude_deg: Option<f32>,

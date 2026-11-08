@@ -425,7 +425,7 @@ from the science. What changed:
   none; so does a giant its star has locked, with its own tides. A
   giant's chain ends at a third of its Hill radius. A moon's world is
   locked to its planet, not to the star.
-- **Worlds made before keep their lock.** A reloaded world takes the lock
+- **A reloaded world keeps its lock.** A reloaded world takes the lock
   its base map was made with, from the `tidally_locked` of its stored
   `world.json` (`WorldParams.locked_to_star`), not the rule above: its
   detail tiles and epochs (the craters of a world locked to its star

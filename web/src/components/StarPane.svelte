@@ -44,7 +44,7 @@
     /** Whether the planet and its largest moon are a binary. */
     binary?: boolean;
     planetRadiusKm?: number;
-    /** The giant planets of the system and their effects; null when not modelled (worlds made before them). */
+    /** The giant planets of the system and their effects; null when not modelled. */
     giantSystem?: GiantSystem | null;
     /** Whether the giants are drawn. */
     giants: boolean;

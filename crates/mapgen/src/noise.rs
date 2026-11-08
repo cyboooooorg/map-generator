@@ -154,6 +154,10 @@ pub mod stream {
     pub const RING_MOONS: u32 = 35;
     /// The dust rings its moons feed (see `crate::rings::dust_rings`).
     pub const DUST_RINGS: u32 = 36;
+    /// The edge moon whose 7:6 resonance sets a bright ring's outer edge.
+    pub const RING_EDGE: u32 = 37;
+    /// A faint D-like ring inside a bright ring.
+    pub const D_RING: u32 = 38;
     /// The longitude of a world's perihelion, when drawn (see
     /// `crate::request`).
     pub const PERIHELION: u32 = 39;

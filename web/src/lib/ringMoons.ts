@@ -16,6 +16,18 @@ export function dustOf(body: Body): DustRing[] {
   return body.params.given_rings?.dust ?? [];
 }
 
+/** What the giant's view draws of a faint ring: a dust ring's edges, peak, opacity and colour. */
+export type FaintRing = Pick<DustRing, 'inner' | 'outer' | 'peak' | 'opacity' | 'colour'>;
+
+/** Colour of a D-like ring: grey-brown dust (sRGB). */
+const INNER_RING_COLOUR: [number, number, number] = [0.55, 0.5, 0.45];
+
+/** The faint ring inside the bright rings of `body` (like Saturn's D ring), drawn as a smooth dust ring, or none. */
+export function innerRingOf(body: Body): FaintRing[] {
+  const d = ringsOf(body)?.d_ring;
+  return d ? [{ inner: d.inner, outer: d.outer, peak: (d.inner + d.outer) / 2, opacity: d.opacity, colour: INNER_RING_COLOUR }] : [];
+}
+
 /** The dust ring `moon` feeds round `planet`, if any. */
 export function dustFedBy(moon: Body, planet: Body | null): DustRing | null {
   return (planet ? dustOf(planet) : []).find((d) => d.source === moon.id) ?? null;

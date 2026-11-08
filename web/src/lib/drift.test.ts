@@ -5,7 +5,7 @@ import { setLocale } from './i18n/index.svelte';
 
 const meta = (overrides: Record<string, unknown> = {}) =>
   ({
-    format_version: 11,
+    format_version: 14,
     planet_type: 'terran',
     seed: 7,
     sea_level: 0.3,
@@ -14,6 +14,8 @@ const meta = (overrides: Record<string, unknown> = {}) =>
     erosion: 1,
     axial_tilt_deg: 23,
     pressure_bar: 1,
+    surface_age_ga: 4,
+    star: { type: 'G2V', orbit_au: 1, eccentricity: 0, metallicity: 0 },
     width: 1024,
     height: 512,
     preset: { geology: { regime: 'plates', wet_until: 0 } },

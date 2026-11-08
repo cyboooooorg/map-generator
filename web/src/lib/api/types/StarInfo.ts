@@ -22,8 +22,7 @@ luminosity: number, mass: number, radius: number,
  */
 orbit_au: number, 
 /**
- * Eccentricity of the orbit (0 circular). Worlds made before it had
- * circular orbits.
+ * Eccentricity of the orbit (0 circular).
  */
 eccentricity: number, 
 /**
@@ -78,16 +77,14 @@ tidally_locked: boolean,
 /**
  * Whether the star's tides hold the planet in the 3:2 spin–orbit
  * resonance instead, three turns every two orbits, as Mercury: despun
- * on an orbit of eccentricity 0.06 or more (see `crate::spin`). Worlds
- * made before it: false.
+ * on an orbit of eccentricity 0.06 or more (see `crate::spin`).
  */
 spin_orbit_3_2?: boolean, 
 /**
  * Turns per orbit of a planet its star's tides hold in a spin-orbit
  * resonance: 1.5 (3:2) or 2 (2:1), drawn by the
  * eccentricity (see `crate::spin::capture`); 0 for a planet in none
- * (free or locked). Worlds made before it: 1.5 when
- * `spin_orbit_3_2`, else 0.
+ * (free or locked).
  */
 spin_turns?: number, 
 /**
@@ -95,13 +92,11 @@ spin_turns?: number,
  */
 light: [number, number, number], 
 /**
- * Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
- * have the Sun's.
+ * Metallicity, `[Fe/H]` in dex (0 the Sun's).
  */
 metallicity: number, 
 /**
  * Longitude of the orbit's perihelion, degrees from the spring equinox
- * (see [`crate::world::WorldParams::perihelion_longitude_deg`]); absent
- * on worlds made before it.
+ * (see [`crate::world::WorldParams::perihelion_longitude_deg`]).
  */
 perihelion_longitude_deg?: number, };

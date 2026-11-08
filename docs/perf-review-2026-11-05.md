@@ -86,7 +86,7 @@ alone gains: N2 and X3 stay to be measured before they are kept. P1, E2
 and X2 (b) are left for later (P1 means reordering the export, E2 and
 X2 (b) change the output).
 
-N2 was done on 2026-11-08 (format version 13), on the five climate fields
+N2 was done on 2026-11-08 (format version 15), on the five climate fields
 of the map point only: moisture, temperature anomaly, the two variability
 fields and the highland jitter (21 Perlin calls a pixel). The domain warp
 and the volcanic zones stay per pixel: they are read at the plates'

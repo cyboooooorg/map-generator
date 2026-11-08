@@ -38,8 +38,7 @@ pub const DEFAULT_BUDGET_BYTES: usize = 1 << 30;
 
 /// Bytes a loaded world holds per base pixel (see [`DetailWorld::bytes`]):
 /// eight 16-bit layers, the biome, the 8-bit albedo, the lake and river
-/// flags and the 32-bit water depth. Worlds of older formats, with fewer
-/// layers, take less.
+/// flags and the 32-bit water depth.
 pub const LOADED_BYTES_PER_PIXEL: usize = 8 * 2 + 1 + 1 + 1 + 4;
 
 /// A loaded world, keyed by id, revision (the modification time of its
@@ -81,6 +80,9 @@ pub struct TileCache {
 pub enum TileError {
     /// A generation is running: retry later.
     Busy,
+    /// Made by an older generator than the oldest it reads: answered with
+    /// 410 Gone and the way out.
+    TooOld(String),
     Failed(String),
 }
 
@@ -176,11 +178,16 @@ impl TileCache {
                         drop(evicted);
                         memory::release();
                     }
-                    load(&dir, epoch_ma)
+                    if let Some(error) = std::fs::read_to_string(dir.join("raw_data/world.json"))
+                        .ok()
+                        .and_then(|text| mapgen::export::raw_data::old_format_error(&text))
+                    {
+                        return Err(TileError::TooOld(error));
+                    }
+                    load(&dir, epoch_ma).map_err(TileError::Failed)
                 })
                 .await
                 .map_err(|e| TileError::Failed(e.to_string()))?
-                .map_err(TileError::Failed)
             })
             .await?
             .clone();
@@ -290,8 +297,7 @@ fn load(dir: &Path, epoch_ma: Option<i32>) -> Result<Arc<DetailWorld>, String> {
     let Some(epoch_ma) = epoch_ma else {
         return Ok(Arc::new(DetailWorld::new(world)));
     };
-    let base = read_elevation_base(dir)?
-        .ok_or("the world has no elevation_base layer (made before format version 7)")?;
+    let base = read_elevation_base(dir)?.ok_or("the world has no elevation_base layer")?;
     let epoch_ga = f64::from(epoch_ma) / 1000.0;
     let world = mapgen::epoch::loaded_at(world, &base, epoch_ga);
     Ok(Arc::new(DetailWorld::at_epoch(world, epoch_ga)))

@@ -235,8 +235,9 @@ fn rocky_star(p: &crate::world::WorldParams) -> StarInfo {
 /// not to the star: never locked nor resonant against the star, whatever
 /// its planet's orbit (its world takes the planet's star and orbit). A
 /// reloaded world's [`locked_to_star`](crate::world::WorldParams::locked_to_star)
-/// overrides the lock, so the tiles and epochs of a world generated under
-/// an older rule agree with its stored map.
+/// and [`resonance_to_star`](crate::world::WorldParams::resonance_to_star)
+/// override the lock and the resonance, so its tiles and epochs agree with
+/// its stored map (and with a system that gave it its spin).
 pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
     let mut star = rocky_star(p);
     star.perihelion_longitude_deg = p.perihelion_longitude_deg;
@@ -263,13 +264,6 @@ pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
         } else if let Some(turns) = p.resonance_to_star {
             star.spin_turns = turns;
             star.spin_orbit_3_2 = turns == RESONANCE_TURNS_PER_ORBIT;
-        } else {
-            // Made before the resonances were drawn: 3:2 or nothing.
-            star.spin_turns = if star.spin_orbit_3_2 {
-                RESONANCE_TURNS_PER_ORBIT
-            } else {
-                0.0
-            };
         }
     }
     star
@@ -552,11 +546,9 @@ mod tests {
     }
 
     #[test]
-    fn worlds_made_before_the_resonances_keep_their_spin() {
-        // An eccentric world stored in the 3:2 resonance (`spin_orbit_3_2`
-        // and no `spin_turns`, as before the draw) keeps it whatever its
-        // seed; one stored with neither is free; one stored locked is
-        // locked.
+    fn a_stored_spin_overrides_the_draw() {
+        // An eccentric world stored in the 3:2 resonance keeps it whatever
+        // its seed; one stored free is free; one stored locked is locked.
         let red = parse_type("M5V").unwrap();
         let base = crate::request::WorldRequest {
             planet: Some("terran".into()),

@@ -193,7 +193,7 @@ pub struct MoonSystem {
     pub binary: bool,
     /// The range of the tides on the planet (moons and star), relative to
     /// Earth's; it sets the width of the tidal flats (see
-    /// [`PlanetEffects`]). Missing on worlds made before it: 0.
+    /// [`PlanetEffects`]).
     #[serde(default)]
     pub tide: f32,
     /// A large moon keeps the planet's axial tilt steady.
@@ -1268,6 +1268,7 @@ pub fn small_body_params(
         given_rings: None,
         impact_factor: None,
         locked_to_star: None,
+        ridge: None,
         perihelion_longitude_deg: None,
         resonance_to_star: None,
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
@@ -1294,7 +1295,27 @@ pub fn shape_at(p: &WorldParams, noise: &noise::Perlin, v: [f64; 3]) -> Option<f
     let irregular = 1.0 - c / a;
     let bumps = noise.get([v[0] * 1.5, v[1] * 1.5, v[2] * 1.5])
         + 0.5 * noise.get([v[0] * 3.0 + 7.0, v[1] * 3.0, v[2] * 3.0]);
-    Some((ellipsoid * (1.0 + SHAPE_BUMPS * irregular * bumps)) as f32)
+    let radius = ellipsoid * (1.0 + SHAPE_BUMPS * irregular * bumps);
+    Some((radius * p.ridge.map_or(1.0, |h| ridge_scale(f64::from(h), v[2]))) as f32)
+}
+
+/// Half-width of an equatorial ridge, in the sine of the latitude (about
+/// 17 degrees): a calibration, no source gives it for Pan or Atlas, whose
+/// ridges are "roughly symmetric about the equator" and hold 10 to 25 % of
+/// their volume (Charnoz et al. 2007, doi:10.1126/science.1148631).
+const RIDGE_WIDTH: f64 = 0.3;
+
+/// The factor a ridge of height `h` (a share of the radius) gives the
+/// radius at `sin_lat`: `1 + h exp(-(sin lat / w)²)`, over the cube root of
+/// the volume it adds, so that the body keeps its volume (the mean radius
+/// of its card): the volume gained is `½ ∫ ((1 + h g)³ - 1) d sin lat`,
+/// in closed form for a narrow ridge.
+fn ridge_scale(h: f64, sin_lat: f64) -> f64 {
+    let w = RIDGE_WIDTH;
+    let gain = 0.5
+        * w
+        * (3.0 * h * PI.sqrt() + 3.0 * h * h * (PI / 2.0).sqrt() + h.powi(3) * (PI / 3.0).sqrt());
+    (1.0 + h * (-(sin_lat / w).powi(2)).exp()) / (1.0 + gain).cbrt()
 }
 
 /// The shape of body `p` at every pixel (see [`shape_at`]), `None` for a
@@ -1418,6 +1439,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             gravity: None,
@@ -1783,6 +1805,7 @@ mod tests {
         dwarf.orbit_au = crate::star::orbit_at(dwarf.star, 0.5);
         assert!(crate::spin::despun(&crate::spin::star_info(&dwarf)));
         dwarf.locked_to_star = Some(false);
+        dwarf.resonance_to_star = Some(0.0);
         let year_h = crate::spin::star_info(&dwarf).year_days * 24.0;
         let day = MoonSystem::draw(&dwarf).unwrap().planet_day_hours;
         assert!(
@@ -2030,5 +2053,38 @@ mod tests {
         assert!((giant_moon_floor_radii(0.69, Some(2.27)) - 2.57).abs() < 1e-9);
         // Neptune: no bright rings, the Roche limit of an icy moon.
         assert!((giant_moon_floor_radii(1.64, None) - 2.32).abs() < 0.02);
+    }
+
+    #[test]
+    fn a_ring_moons_ridge_rings_its_equator_and_keeps_its_volume() {
+        let planet = params(5, 21_300.0);
+        let shape = Some(crate::rings::LOBE_SHAPE.map(|s| s as f32));
+        let plain = small_body_params(&planet, Composition::Ice, 15.0, 3, shape);
+        let ridged = WorldParams {
+            ridge: Some(0.2),
+            ..plain.clone()
+        };
+        let (flat, ridge) = (shape_layer(&plain).unwrap(), shape_layer(&ridged).unwrap());
+        let row = |layer: &[f32], y: u32| {
+            let at = (y * plain.width) as usize;
+            layer[at..at + plain.width as usize].iter().sum::<f32>() / plain.width as f32
+        };
+        // Higher on the equator than the same body without it, lower off it.
+        let equator = plain.height / 2;
+        assert!(row(&ridge, equator) > 1.1 * row(&flat, equator));
+        assert!(row(&ridge, 2) < row(&flat, 2));
+        // Symmetric about the equator.
+        assert!((row(&ridge, equator - 3) - row(&ridge, equator + 2)).abs() < 0.02);
+        // The volume, within the pixels' own error.
+        let volume = |layer: &[f32]| {
+            (0..plain.height)
+                .map(|y| {
+                    let lat = (f64::from(y) + 0.5) / f64::from(plain.height) * PI - PI / 2.0;
+                    lat.cos() * f64::from(row(layer, y).powi(3))
+                })
+                .sum::<f64>()
+        };
+        let ratio = volume(&ridge) / volume(&flat);
+        assert!((ratio - 1.0).abs() < 0.03, "{ratio}");
     }
 }

@@ -16,11 +16,13 @@
 //! | `surface.png`     | 8-bit RGB, `world.png` without its overlaid lines           |
 //!
 //! [`load_world`] (and the hex resampling) refuse a world whose
-//! `format_version` is newer than [`FORMAT_VERSION`], or whose layers do not
-//! have the size `world.json` announces.
+//! `format_version` is newer than [`FORMAT_VERSION`] or older than
+//! [`MIN_FORMAT_VERSION`], or whose layers do not have the size
+//! `world.json` announces. The generator keeps no code to re-derive a world
+//! of an older format: delete it (`mise run clean-systems`) and draw it again.
 use crate::biome::{biome_color, surface_color};
-use crate::climate::{TEMPERATURE_RANGE, celsius};
-use crate::generation::{COAST_DISTANCE_CAP_KM, Sampler};
+use crate::climate::TEMPERATURE_RANGE;
+use crate::generation::COAST_DISTANCE_CAP_KM;
 use crate::preset::Preset;
 use crate::rivers::{RiverLine, RiversFile};
 use crate::star::StarInfo;
@@ -32,51 +34,28 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
 
-fn earth_pressure() -> f32 {
-    1.0
-}
-
 /// Name of the river polylines file.
 pub const RIVERS_FILE: &str = "rivers.json";
 
-/// Bumped whenever the layout of `raw_data/` changes incompatibly.
-/// Version 2 adds the volcanic zone, coast distance and highland offset
-/// layers, and the river polylines; version 3 the floodplain layer;
-/// version 4 stores temperatures in °C instead of the former `[0, 1]`
-/// scale; version 5 adds the cloud cover; version 6 the surface render
-/// without overlaid lines; version 7 the elevation without the young
-/// impact craters, and its worlds have craters; version 8 the albedo of
-/// fresh craters; version 9 the moons (under `moons` in `world.json`, each
-/// one a world of its own, now a body of the system) and the shape of irregular
-/// bodies; version 10 the star's metallicity and the giant planets of the
-/// system (under `giants`), whose mass sets the crater rate; version 11
-/// reads the biomes with the seasonal cycle (no new file: the seasons
-/// come from the parameters, and the preset's `polar` and
-/// `highland_snow_temperature` are summer temperatures, see
-/// [`crate::climate::Seasons`]); older worlds keep their biomes without
-/// it. Version 11 also stores the moisture as the log of the annual rain
-/// and chooses arid land by Köppen's criterion B: an older world keeps
-/// its rules with the former `shrubland_moisture` and `desert_moisture`
-/// (see [`crate::biome::BiomeRules::is_legacy`]) and its linear moisture;
-/// version 12 gives the seasons of a world whose solar day lasts months the
-/// swing of its day (see [`crate::climate::DayCycle`]): version 11 worlds
-/// keep the seasons they were made with. Version 13 samples the smooth
-/// climate noise fields on a coarser grid and interpolates them (see
-/// [`crate::coarse`]): the same seed gives slightly different worlds from
-/// then on. Nothing reads a world differently by it.
-pub const FORMAT_VERSION: u32 = 13;
+/// Bumped whenever the layout of `raw_data/` changes incompatibly, or the
+/// generator changes what a stored world means (its biomes, seasons or
+/// temperatures): a world is read as the current format or not at all, see
+/// [`MIN_FORMAT_VERSION`]. Version 14 dropped the code that re-derived
+/// older worlds. Version 15 samples the smooth climate noise fields on a
+/// coarser grid and interpolates them (see [`crate::coarse`]): the same
+/// seed gives slightly different worlds from then on; version 14 worlds
+/// are still read as they are.
+pub const FORMAT_VERSION: u32 = 15;
 
-/// First format version whose biomes read the seasonal cycle.
-pub const SEASONS_VERSION: u32 = 11;
-
-/// First format version whose seasons include the swing of a long solar day.
-pub const DAY_CYCLE_VERSION: u32 = 12;
+/// The oldest format [`load_layers`] reads. Older worlds were made with
+/// algorithms the generator no longer carries (temperatures on a `[0, 1]`
+/// scale, biomes without seasons, a linear moisture, layers computed on
+/// load): they are refused with a message suggesting `mise run
+/// clean-systems`.
+pub const MIN_FORMAT_VERSION: u32 = 14;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
-
-/// First format version whose temperatures are in °C.
-const CELSIUS_VERSION: u32 = 4;
 
 /// Content of `raw_data/world.json`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -98,19 +77,14 @@ pub struct WorldMetadata {
     pub gravity_modifier: f32,
     pub axial_tilt_deg: f32,
     pub erosion: f32,
-    /// Surface pressure in bar. Worlds made before it existed had Earth's.
-    #[serde(default = "earth_pressure")]
+    /// Surface pressure in bar.
     pub pressure_bar: f32,
-    /// Age of the oldest surviving surface, in Ga. Worlds made before it
-    /// existed have none (and no craters).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub surface_age_ga: Option<f32>,
-    /// The host star and the orbit. Worlds made before it existed orbit
-    /// the Sun at 1 AU.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub star: Option<StarInfo>,
+    /// Age of the oldest surviving surface, in Ga.
+    pub surface_age_ga: f32,
+    /// The host star and the orbit.
+    pub star: StarInfo,
     /// Epoch of the plates, Ma from the present (negative in the past).
-    /// Left out at the present, as in the worlds made before it existed.
+    /// Left out at the present.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub drift_ma: f32,
     /// The crater rate its planetary system set (see
@@ -118,12 +92,11 @@ pub struct WorldMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub impact_factor: Option<f32>,
     /// The moons and what bounds them; left out when the request turned
-    /// them off, and in the worlds made before them.
+    /// them off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moons: Option<crate::moons::MoonSystem>,
     /// The giant planets of the system and what they do to the world; left
-    /// out when the request turned them off, and in the worlds made before
-    /// them.
+    /// out when the request turned them off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub giants: Option<crate::giants::GiantSystem>,
     /// What a giant world is (its mass, radius, spin, winds, colours and
@@ -138,10 +111,14 @@ pub struct WorldMetadata {
     /// (see `WorldParams::shape`); left out for a round one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shape: Option<[f32; 3]>,
-    pub layers: Layers,
-    /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
+    /// The height of an equatorial ridge of accreted ring material on an
+    /// irregular ring moon, as a share of its radius (see
+    /// `WorldParams::ridge`); left out for a body without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rivers: Option<String>,
+    pub ridge: Option<f32>,
+    pub layers: Layers,
+    /// River polylines file (`rivers.json`, a `RiversFile`).
+    pub rivers: String,
     /// Every biome, in id order.
     pub biomes: Vec<BiomeInfo>,
 }
@@ -152,43 +129,36 @@ pub struct WorldMetadata {
 pub struct Layers {
     pub elevation: ScalarLayerInfo,
     /// The elevation without the impact craters younger than the wet era,
-    /// same encoding as `elevation` (format version 7 and later).
+    /// same encoding as `elevation`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub elevation_base: Option<ScalarLayerInfo>,
     pub moisture: ScalarLayerInfo,
     pub temperature: ScalarLayerInfo,
     /// `log10(1 + km²)` of the drainage area.
     pub flow: ScalarLayerInfo,
-    /// Volcanic zone as biome selection sees it (format version 2 and later).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub volcanic_zone: Option<ScalarLayerInfo>,
-    /// Distance to open water in km, capped (format version 2 and later).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub coast_distance: Option<ScalarLayerInfo>,
-    /// Local shift of the highland line (format version 2 and later).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub highland_offset: Option<ScalarLayerInfo>,
-    /// Floodplain weight of the river valleys (format version 3 and later).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub floodplain: Option<ScalarLayerInfo>,
+    /// Volcanic zone as biome selection sees it.
+    pub volcanic_zone: ScalarLayerInfo,
+    /// Distance to open water in km, capped.
+    pub coast_distance: ScalarLayerInfo,
+    /// Local shift of the highland line.
+    pub highland_offset: ScalarLayerInfo,
+    /// Floodplain weight of the river valleys.
+    pub floodplain: ScalarLayerInfo,
     /// Brightness shift of the ground in `[-1, 1]`, 8 bits (`gray8`, as
-    /// `clouds`): fresh impact craters, their ejecta and rays (format
-    /// version 8 and later).
+    /// `clouds`): fresh impact craters, their ejecta and rays.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub albedo: Option<ScalarLayerInfo>,
     /// Radius of an irregular body as a share of its mean radius, 16 bits
-    /// in `[0, 2]`: the globe's shape, which the elevation details (format
-    /// version 9 and later, irregular moons only).
+    /// in `[0, 2]`: the globe's shape, which the elevation details (irregular
+    /// moons only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shape: Option<ScalarLayerInfo>,
     /// Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
-    /// (max − min)`); format version 5 and later, absent on worlds without
-    /// clouds.
+    /// (max − min)`); absent on worlds without clouds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clouds: Option<ScalarLayerInfo>,
     /// The hillshaded render of `world.png` without its reference and
-    /// contour lines, which the viewer draws itself (format version 6 and
-    /// later).
+    /// contour lines, which the viewer draws itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface: Option<ImageLayerInfo>,
     pub biomes: BiomeLayerInfo,
@@ -234,8 +204,7 @@ pub struct BiomeInfo {
     /// Classification colour, `#RRGGBB` (see [`biome_color`]).
     pub color: String,
     /// Surface colour of the hillshaded renders, `#RRGGBB` (see
-    /// [`surface_color`]). Empty in worlds written before it existed.
-    #[serde(default)]
+    /// [`surface_color`]).
     pub surface_color: String,
     /// Whether the biome is a water surface.
     pub water: bool,
@@ -488,11 +457,11 @@ pub fn export_raw_data(
         axial_tilt_deg: world.params.axial_tilt_deg,
         erosion: world.params.erosion,
         pressure_bar: world.params.pressure_bar,
-        surface_age_ga: Some(world.params.surface_age_ga),
-        star: Some(StarInfo {
+        surface_age_ga: world.params.surface_age_ga,
+        star: StarInfo {
             metallicity: world.params.metallicity,
             ..crate::spin::star_info(&world.params)
-        }),
+        },
         drift_ma: world.params.drift_ma,
         impact_factor: world.params.impact_factor,
         moons: crate::moons::MoonSystem::draw(&world.params),
@@ -500,16 +469,17 @@ pub fn export_raw_data(
         giant: crate::giant_world::info(&world.params),
         host: crate::exomoon::HostGiant::draw(&world.params),
         shape: world.params.shape,
+        ridge: world.params.ridge,
         layers: Layers {
             elevation,
             elevation_base,
             moisture,
             temperature,
             flow,
-            volcanic_zone: Some(volcanic_zone),
-            coast_distance: Some(coast_distance),
-            highland_offset: Some(highland_offset),
-            floodplain: Some(floodplain),
+            volcanic_zone,
+            coast_distance,
+            highland_offset,
+            floodplain,
             clouds,
             albedo,
             shape,
@@ -519,7 +489,7 @@ pub fn export_raw_data(
                 encoding: "gray8-biome-id".into(),
             },
         },
-        rivers: Some(RIVERS_FILE.into()),
+        rivers: RIVERS_FILE.into(),
         biomes: biome_table_for(&world.params),
     };
     let rivers = RiversFile::from_lines(&world.rivers, w, h);
@@ -564,12 +534,36 @@ pub fn biome_table() -> Vec<BiomeInfo> {
         .collect()
 }
 
+/// The message of a refused world when the `world.json` text says a format
+/// older than [`MIN_FORMAT_VERSION`], `None` otherwise (or when the text
+/// has no version). The server answers it with 410 Gone.
+pub fn old_format_error(world_json: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Head {
+        format_version: u32,
+    }
+    let head: Head = serde_json::from_str(world_json).ok()?;
+    (head.format_version < MIN_FORMAT_VERSION).then(|| {
+        format!(
+            "world.json: format version {} is older than the oldest supported version \
+             {MIN_FORMAT_VERSION}: the generator no longer re-derives older worlds, delete it \
+             (`mise run clean-systems`) and draw it again",
+            head.format_version
+        )
+    })
+}
+
 /// Reads and checks `world.json` of a `raw_data/` directory. Worlds written
-/// by a newer version of the generator are refused: their layers may not
-/// mean what this version expects.
+/// by a newer version of the generator are refused (their layers may not
+/// mean what this version expects), and so are worlds older than
+/// [`MIN_FORMAT_VERSION`].
 pub(crate) fn read_metadata(raw_dir: &Path) -> Result<WorldMetadata, String> {
     let path = raw_dir.join("world.json");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    // The version first: an older world may not even parse as today's.
+    if let Some(error) = old_format_error(&text) {
+        return Err(error);
+    }
     let meta: WorldMetadata =
         serde_json::from_str(&text).map_err(|e| format!("world.json: {e}"))?;
     if meta.format_version > FORMAT_VERSION {
@@ -649,16 +643,6 @@ impl Layer16 {
         }
     }
 
-    /// A layer of zeros (lower bound 0).
-    fn zeros(len: usize) -> Self {
-        Self {
-            raw: vec![0; len],
-            min: 0.0,
-            scale: 1.0 / 65535.0,
-            log: false,
-        }
-    }
-
     /// Value of pixel `i` (row-major).
     #[inline]
     pub fn get(&self, i: usize) -> f32 {
@@ -722,11 +706,10 @@ pub struct LoadedWorld {
     pub elevation: Layer16,
     pub moisture: Layer16,
     pub temperature: Layer16,
-    /// The seasonal cycle, from the parameters (none before
-    /// [`SEASONS_VERSION`]).
+    /// The seasonal cycle, from the parameters.
     pub seasons: crate::climate::Seasons,
     /// Cooling of the land per elevation unit the temperatures were made
-    /// with: the former one before [`SEASONS_VERSION`].
+    /// with, from the parameters.
     pub lapse_rate: f32,
     /// Drainage area in km² (stored on a log scale).
     pub flow_km2: Layer16,
@@ -735,8 +718,7 @@ pub struct LoadedWorld {
     pub highland_offset: Layer16,
     pub floodplain: Layer16,
     pub biomes: Vec<Biome>,
-    /// Albedo shift as stored (see [`albedo_of`]), empty for worlds of
-    /// format version 7 and older.
+    /// Albedo shift as stored (see [`albedo_of`]).
     pub albedo: Vec<u8>,
     pub rivers: Vec<RiverLine>,
 }
@@ -859,7 +841,7 @@ impl LoadedWorld {
 
 /// The elevation without the young impact craters of a world (see
 /// [`World::elevation_base`]), decoded from its `raw_data/`: `None` for a
-/// world of format version 6 or older, which has no such layer.
+/// world without such a layer.
 pub fn read_elevation_base(world_dir: &Path) -> Result<Option<Vec<f32>>, String> {
     let raw = world_dir.join("raw_data");
     let meta = read_metadata(&raw)?;
@@ -877,10 +859,8 @@ fn is_zero(v: &f32) -> bool {
 /// keeping its layers as stored (see [`LoadedWorld`]). The layer files are
 /// decoded in parallel.
 ///
-/// Worlds of format version 1, which lack the volcanic zone, highland offset
-/// and coast distance layers, get them recomputed from their parameters and
-/// elevation (then quantised like the stored ones); worlds before version 3
-/// get no floodplains.
+/// Worlds older than [`MIN_FORMAT_VERSION`] are refused (see
+/// [`read_metadata`]).
 pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
     let raw = world_dir.join("raw_data");
     let meta = read_metadata(&raw)?;
@@ -895,11 +875,10 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         axial_tilt_deg: meta.axial_tilt_deg,
         erosion: meta.erosion,
         pressure_bar: meta.pressure_bar,
-        // Worlds made before the surface age have no craters: a fresh surface.
-        surface_age_ga: meta.surface_age_ga.unwrap_or(0.0),
-        star: meta.star.as_ref().map_or(crate::star::SUN, StarInfo::code),
-        orbit_au: meta.star.as_ref().map_or(1.0, |s| s.orbit_au),
-        eccentricity: meta.star.as_ref().map_or(0.0, |s| s.eccentricity),
+        surface_age_ga: meta.surface_age_ga,
+        star: meta.star.code(),
+        orbit_au: meta.star.orbit_au,
+        eccentricity: meta.star.eccentricity,
         drift_ma: meta.drift_ma,
         moons: match &meta.moons {
             Some(system) => system.count_asked.map_or(
@@ -909,8 +888,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             None => crate::moons::MoonsMode::None,
         },
         shape: meta.shape,
-        metallicity: meta.star.as_ref().map_or(0.0, |s| s.metallicity),
-        // Worlds made before giants keep the Solar System's impact rate.
+        metallicity: meta.star.metallicity,
         giants: if meta.giants.is_some() {
             crate::giants::GiantsMode::Auto
         } else {
@@ -929,36 +907,26 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             dust: Vec::new(),
         }),
         impact_factor: meta.impact_factor,
-        // The lock the base map was made with, not today's rule: worlds made
-        // before the 3:2 resonance and the moons' locking to their planet
-        // were locked to the star at any eccentricity, moons included.
-        locked_to_star: meta.star.as_ref().map(|s| s.tidally_locked),
-        perihelion_longitude_deg: meta.star.as_ref().and_then(|s| s.perihelion_longitude_deg),
-        // Worlds made before the resonances were drawn had the 3:2 or none.
-        resonance_to_star: meta.star.as_ref().map(|s| {
-            if s.spin_turns > 0.0 {
-                s.spin_turns
-            } else if s.spin_orbit_3_2 {
-                crate::spin::RESONANCE_TURNS_PER_ORBIT
-            } else {
-                0.0
-            }
-        }),
-        // The gravity it was generated with (worlds made before the
-        // mass–radius relation keep theirs), so its epochs and detail tiles
+        // The lock and resonance the base map was made with, which a system
+        // can set and the draw of its seed does not tell.
+        locked_to_star: Some(meta.star.tidally_locked),
+        ridge: meta.ridge,
+        perihelion_longitude_deg: meta.star.perihelion_longitude_deg,
+        resonance_to_star: Some(meta.star.spin_turns),
+        // The gravity it was generated with, so its epochs and detail tiles
         // draw the craters it was drawn with.
         gravity: Some(meta.gravity_modifier),
     };
     let l = &meta.layers;
     let infos = [
-        Some(&l.elevation),
-        Some(&l.moisture),
-        Some(&l.temperature),
-        Some(&l.flow),
-        l.volcanic_zone.as_ref(),
-        l.coast_distance.as_ref(),
-        l.highland_offset.as_ref(),
-        l.floodplain.as_ref(),
+        &l.elevation,
+        &l.moisture,
+        &l.temperature,
+        &l.flow,
+        &l.volcanic_zone,
+        &l.coast_distance,
+        &l.highland_offset,
+        &l.floodplain,
     ];
     let read_biomes = || -> Result<Vec<Biome>, String> {
         read_biome_ids(&raw, &meta)?
@@ -972,11 +940,8 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             })
             .collect()
     };
-    // Version 1 worlds have no river polylines.
     let read_rivers = || -> Result<Vec<RiverLine>, String> {
-        let Some(file) = &meta.rivers else {
-            return Ok(Vec::new());
-        };
+        let file = &meta.rivers;
         let text = std::fs::read_to_string(raw.join(file)).map_err(|e| format!("{file}: {e}"))?;
         let rivers: RiversFile = serde_json::from_str(&text).map_err(|e| format!("{file}: {e}"))?;
         Ok(rivers.to_lines(meta.width, meta.height))
@@ -986,7 +951,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         || {
             infos
                 .par_iter()
-                .map(|info| info.map(|info| read_layer(&raw, info, &meta)).transpose())
+                .map(|info| read_layer(&raw, info, &meta))
                 .collect::<Result<Vec<_>, String>>()
         },
         || rayon::join(read_biomes, read_rivers),
@@ -1000,79 +965,9 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         coast_distance_km,
         highland_offset,
         floodplain,
-    ]: [Option<Layer16>; 8] = layers?.try_into().expect("eight layers");
-    let (elevation, moisture, temperature, flow_km2) = (
-        elevation.expect("required layer"),
-        moisture.expect("required layer"),
-        temperature.expect("required layer"),
-        flow_km2.expect("required layer"),
-    );
-    let n = elevation.len();
-
-    // Version 1 worlds: resample the noise-derived layers from the seed, in
-    // one parallel pass for both.
-    let (volcanic_zone, highland_offset) = match (volcanic_zone, highland_offset) {
-        (Some(v), Some(h)) => (v, h),
-        (v, h) => {
-            let sampler = Sampler::new(&params);
-            let shift = params.planet.climate.volcanic;
-            let width = params.width as usize;
-            let (volcanic, highland): (Vec<f32>, Vec<f32>) = (0..n)
-                .into_par_iter()
-                .map(|i| {
-                    let s = sampler.sample((i % width) as u32, (i / width) as u32);
-                    (
-                        (s.volcanic_zone + shift).clamp(0.0, 1.0),
-                        s.highland_offset(),
-                    )
-                })
-                .unzip();
-            (
-                v.unwrap_or_else(|| Layer16::quantise(&volcanic, VOLCANIC_ZONE)),
-                h.unwrap_or_else(|| Layer16::quantise(&highland, HIGHLAND_OFFSET)),
-            )
-        }
-    };
-    let coast_distance_km = coast_distance_km.unwrap_or_else(|| {
-        let waterline = params.sea_level + params.planet.rules.waterline;
-        let water: Vec<bool> = (0..n).map(|i| elevation.get(i) < waterline).collect();
-        let distance = params.grid().distance_to(&water, COAST_DISTANCE_CAP_KM);
-        Layer16::quantise(&distance, COAST_DISTANCE)
-    });
-    let floodplain = floodplain.unwrap_or_else(|| Layer16::zeros(n));
-    // Before version 4, temperatures were on a `[0, 1]` scale: convert the
-    // layer and the thresholds of the stored preset with the same curve,
-    // which keeps every biome.
-    let temperature = if meta.format_version < CELSIUS_VERSION {
-        let values: Vec<f32> = (0..n)
-            .into_par_iter()
-            .map(|i| celsius(temperature.get(i)))
-            .collect();
-        Layer16::quantise(&values, TEMPERATURE)
-    } else {
-        temperature
-    };
-    let mut params = params;
-    if meta.format_version < CELSIUS_VERSION {
-        params.planet.to_celsius();
-    }
-    // Worlds stored before the seasons chose their biomes without them, and
-    // made their temperatures with the former lapse rate.
-    let (seasons, lapse_rate) = if meta.format_version < SEASONS_VERSION {
-        (
-            crate::climate::Seasons::none(meta.height),
-            crate::climate::LEGACY_LAPSE_RATE,
-        )
-    } else {
-        (
-            if meta.format_version < DAY_CYCLE_VERSION {
-                crate::generation::seasons_without_day_cycle(&params)
-            } else {
-                crate::generation::seasons(&params)
-            },
-            crate::climate::lapse_rate(&params),
-        )
-    };
+    ]: [Layer16; 8] = layers?.try_into().expect("eight layers");
+    let seasons = crate::generation::seasons(&params);
+    let lapse_rate = crate::climate::lapse_rate(&params);
     let albedo = match &meta.layers.albedo {
         Some(layer) => {
             let img = image::open(raw.join(&layer.file))
@@ -1165,25 +1060,11 @@ mod tests {
             }
         }
 
-        // The same world labelled version 10: no seasons, the former lapse
-        // rate, as worlds of that version were made.
-        let mut meta: WorldMetadata =
-            serde_json::from_str(&std::fs::read_to_string(dir.join("world.json")).unwrap())
-                .unwrap();
-        meta.format_version = SEASONS_VERSION - 1;
-        std::fs::write(
-            dir.join("world.json"),
-            serde_json::to_string(&meta).unwrap(),
-        )
-        .unwrap();
-        let old = load_layers(&world_dir).unwrap();
-        assert_eq!(old.seasons, crate::climate::Seasons::none(16));
-        assert_eq!(old.lapse_rate, crate::climate::LEGACY_LAPSE_RATE);
         std::fs::remove_dir_all(&world_dir).unwrap();
     }
 
     #[test]
-    fn a_version_11_world_with_a_long_solar_day_keeps_its_seasons() {
+    fn a_world_with_a_long_solar_day_reads_the_swing_of_its_day() {
         // Mercury in its 3:2 resonance: a solar day of two years.
         let request = crate::request::WorldRequest {
             planet: Some(
@@ -1206,28 +1087,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         export_raw_data(&world, &dir, None).unwrap();
 
-        // Today's world: the swing of its day.
         let back = load_world(&world_dir).unwrap();
         assert_eq!(back.seasons, crate::generation::seasons(&back.params));
-        let today = back.seasons.half_range(8, true);
-        assert!(today > 20.0, "{today}");
-        // The same world labelled version 11 reads the seasons it was made
-        // with, so that its detail tiles agree with its stored map.
-        let mut meta: WorldMetadata =
-            serde_json::from_str(&std::fs::read_to_string(dir.join("world.json")).unwrap())
-                .unwrap();
-        meta.format_version = DAY_CYCLE_VERSION - 1;
-        std::fs::write(
-            dir.join("world.json"),
-            serde_json::to_string(&meta).unwrap(),
-        )
-        .unwrap();
-        let old = load_world(&world_dir).unwrap();
-        assert_eq!(
-            old.seasons,
-            crate::generation::seasons_without_day_cycle(&old.params)
-        );
-        assert!(old.seasons.half_range(8, true) < 0.2 * today);
+        assert!(back.seasons.half_range(8, true) > 20.0);
         std::fs::remove_dir_all(&world_dir).unwrap();
     }
 
@@ -1258,6 +1120,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             gravity: None,
@@ -1288,7 +1151,7 @@ mod tests {
         assert_eq!(meta.biomes.len(), Biome::ALL.len());
         assert_eq!(meta.layers.flow.encoding, "gray16-log10");
         // The star round-trips: a red dwarf at 0.1 AU.
-        let star = meta.star.as_ref().unwrap();
+        let star = &meta.star;
         assert_eq!(star.kind, "M4.5V");
         assert_eq!((star.code(), star.orbit_au), (64.5, 0.1));
 
@@ -1355,35 +1218,14 @@ mod tests {
         let error = load_world(&world_dir).err().unwrap();
         assert!(error.contains("announces"), "{error}");
 
-        // A version 1 world (without the new layers) gets them recomputed.
-        let mut v1 = meta;
-        v1.format_version = 1;
-        v1.layers.volcanic_zone = None;
-        v1.layers.coast_distance = None;
-        v1.layers.highland_offset = None;
-        v1.layers.floodplain = None;
-        v1.rivers = None;
-        std::fs::write(dir.join("world.json"), serde_json::to_string(&v1).unwrap()).unwrap();
-        let old = load_world(&world_dir).unwrap();
-        assert!(old.rivers.is_empty());
-        assert!(old.floodplain.iter().all(|&f| f == 0.0));
+        // A world older than the supported formats is refused, with the way out.
+        newer.format_version = MIN_FORMAT_VERSION - 1;
+        newer.width -= 1;
+        write_meta(&newer);
+        let error = load_world(&world_dir).err().unwrap();
         assert!(
-            old.volcanic_zone
-                .iter()
-                .zip(&world.volcanic_zone)
-                .all(|(a, b)| (a - b).abs() < 1e-3)
-        );
-        assert!(
-            old.coast_distance_km
-                .iter()
-                .zip(&world.coast_distance_km)
-                .all(|(a, b)| (a - b).abs() < 1.0)
-        );
-        assert!(
-            old.highland_offset
-                .iter()
-                .zip(&world.highland_offset)
-                .all(|(a, b)| (a - b).abs() < 1e-3)
+            error.contains("older") && error.contains("clean-systems"),
+            "{error}"
         );
         std::fs::remove_dir_all(world_dir).unwrap();
     }

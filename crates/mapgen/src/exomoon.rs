@@ -99,7 +99,6 @@ pub struct HostGiant {
     /// Hill radius of the giant, in its radii: the world stays within a third.
     pub hill_radii: f32,
     /// The giant's other regular moons, nearest first (see [`Sibling`]);
-    /// none in the worlds made before them.
     #[serde(default)]
     pub siblings: Vec<Sibling>,
 }
@@ -313,6 +312,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         given_rings: None,
         impact_factor: None,
         locked_to_star: None,
+        ridge: None,
         perihelion_longitude_deg: None,
         resonance_to_star: None,
         gravity: None,
@@ -350,6 +350,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             gravity: None,

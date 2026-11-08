@@ -6,7 +6,7 @@ import type { ApiError } from './types/ApiError';
 import type { FormSpec } from './types/FormSpec';
 import type { GenerateStarted } from './types/GenerateStarted';
 import type { SystemCreated } from './types/SystemCreated';
-import type { SystemNames } from './types/SystemNames';
+import type { SystemName } from './types/SystemName';
 import type { SystemQuery } from './types/SystemQuery';
 import type { SystemRequest } from './types/SystemRequest';
 import type { SystemSummary } from './types/SystemSummary';
@@ -75,13 +75,23 @@ export const api = {
       body: JSON.stringify(request),
     }),
   deleteSystem: (id: string) => call<void>(`/api/systems/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  /** Gives names to a system's bodies (by body id, `star` too), replacing those they had. */
-  renameSystem: (id: string, names: Record<string, string>) =>
-    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/names`, {
+  /** Names the system itself (the name of its star), keeping its bodies' names; empty brings the designation back. */
+  nameSystem: (id: string, name: string) =>
+    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/name`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ names } satisfies SystemNames),
+      body: JSON.stringify({ name: name.trim() === '' ? null : name.trim() } satisfies SystemName),
     }),
+  /** Names one body of a system (`star` too), keeping the other names; empty brings its designation back. */
+  nameBody: (id: string, body: string, name: string) =>
+    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/bodies/${encodeURIComponent(body)}/name`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() === '' ? null : name.trim() } satisfies SystemName),
+    }),
+  /** Pins a system in the main menu, or unpins it; answers its summary. */
+  pinSystem: (id: string, pinned: boolean) =>
+    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' }),
   /** Queues a body of a system and its neighbourhood; `job_id` null when they are all generated. */
   generateBody: (id: string, body: string) =>
     call<GenerateStarted>(`/api/systems/${encodeURIComponent(id)}/bodies/${encodeURIComponent(body)}/generate`, {

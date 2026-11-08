@@ -22,22 +22,20 @@ planet_type: string,
  */
 preset: Preset, sea_level: number, volcanic_intensity: number, circumference_km: number, gravity_modifier: number, axial_tilt_deg: number, erosion: number, 
 /**
- * Surface pressure in bar. Worlds made before it existed had Earth's.
+ * Surface pressure in bar.
  */
 pressure_bar: number, 
 /**
- * Age of the oldest surviving surface, in Ga. Worlds made before it
- * existed have none (and no craters).
+ * Age of the oldest surviving surface, in Ga.
  */
-surface_age_ga?: number | null, 
+surface_age_ga: number, 
 /**
- * The host star and the orbit. Worlds made before it existed orbit
- * the Sun at 1 AU.
+ * The host star and the orbit.
  */
-star?: StarInfo | null, 
+star: StarInfo, 
 /**
  * Epoch of the plates, Ma from the present (negative in the past).
- * Left out at the present, as in the worlds made before it existed.
+ * Left out at the present.
  */
 drift_ma?: number, 
 /**
@@ -47,13 +45,12 @@ drift_ma?: number,
 impact_factor?: number | null, 
 /**
  * The moons and what bounds them; left out when the request turned
- * them off, and in the worlds made before them.
+ * them off.
  */
 moons?: MoonSystem | null, 
 /**
  * The giant planets of the system and what they do to the world; left
- * out when the request turned them off, and in the worlds made before
- * them.
+ * out when the request turned them off.
  */
 giants?: GiantSystem | null, 
 /**
@@ -70,11 +67,17 @@ host?: HostGiant | null,
  * The semi-axes of an irregular body, as shares of its mean radius
  * (see `WorldParams::shape`); left out for a round one.
  */
-shape?: [number, number, number] | null, layers: Layers, 
+shape?: [number, number, number] | null, 
 /**
- * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
+ * The height of an equatorial ridge of accreted ring material on an
+ * irregular ring moon, as a share of its radius (see
+ * `WorldParams::ridge`); left out for a body without one.
  */
-rivers?: string | null, 
+ridge?: number | null, layers: Layers, 
+/**
+ * River polylines file (`rivers.json`, a `RiversFile`).
+ */
+rivers: string, 
 /**
  * Every biome, in id order.
  */

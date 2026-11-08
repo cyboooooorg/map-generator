@@ -108,6 +108,10 @@ export const fr: Messages = {
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
       `${p.kind === 'bright' ? 'brillants, glacés' : 'ténus, étroits'} · de ${p.inner} à ${p.outer} de ses rayons` +
       (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 division' : `${p.gaps} divisions`}` : ''),
+    dRingTitle: 'Anneau interne',
+    dRing: (p: { inner: string; outer: string }) => `un anneau ténu de poussière à l’intérieur, de ${p.inner} à ${p.outer} de ses rayons (comme l’anneau D de Saturne)`,
+    ridge: 'Équateur',
+    ridgeValue: (p: { height: string }) => `une crête de matière des anneaux qu’elle a balayée, haute de ${p.height} de son rayon, comme sur Pan et Atlas`,
     dustRings: 'Anneaux de poussière',
     dustRing: (p: { kind: 'gossamer' | 'plume'; moon: string; inner: string; outer: string }) =>
       `${p.kind === 'plume' ? 'glace des geysers de' : 'poussière arrachée à'} ${p.moon}, de ${p.inner} à ${p.outer} de ses rayons`,
@@ -124,6 +128,7 @@ export const fr: Messages = {
       edge: () => 'orbite juste au-delà des anneaux et en garde le bord externe net',
       shepherd: () => 'l’une des deux lunes bergères qui confinent l’anneau étroit',
       source: () => 'petite lune au-delà de l’anneau étroit, dont la poussière d’impacts peut alimenter un anneau ténu',
+      confining: () => 'orbite juste au-delà des anneaux ; sa résonance 7:6 en fixe le bord externe, comme Janus pour l’anneau A',
     },
     notGenerated: `Ses cartes ne sont pas encore faites${S}: voici ce que le tirage a fixé.`,
     generating: `Ses cartes sont en cours de fabrication${S}: suivez la progression sur la vue.`,
@@ -141,6 +146,16 @@ export const fr: Messages = {
     compareHelp: 'Sélectionnez exactement deux systèmes',
     stripLabel: 'Ses planètes, de l’étoile vers l’extérieur',
     notGenerated: 'pas encore générée',
+    pinLabel: (p) => `Épingler${S}: ${p.name}`,
+    pin: (p) => `Épingler ${p.name} en tête`,
+    unpin: (p) => `Désépingler ${p.name}`,
+    pinFailed: (p) => `Impossible de modifier l’épingle${S}: ${p.error}`,
+    rename: (p) => `Renommer ${p.name}`,
+    renameLabel: 'Nom du système',
+    renameSave: 'Enregistrer',
+    renameCancel: 'Annuler',
+    renamed: (p) => `Système nommé ${p.name}.`,
+    renameFailed: (p) => `Impossible de renommer le système${S}: ${p.error}`,
     details: (p) => `${p.star} · graine ${p.seed} · ${p.moons} lune${p.moons > 1 ? 's' : ''} · ${p.ago}`,
   },
   worldList: {
@@ -264,7 +279,6 @@ export const fr: Messages = {
     geology: 'Géologie',
     star: 'Étoile',
     starValue: (p) => `${p.type} · ${p.teff} · ${p.luminosity}`,
-    theSun: `le Soleil (G2V), à 1${S}UA${S}: monde antérieur aux étoiles`,
     orbit: 'Orbite',
     orbitValue: (p) => `${p.distance} · ${p.zone}`,
     hzInside: (p) => `dans la zone habitable (${p.position})`,
@@ -637,6 +651,7 @@ export const fr: Messages = {
       embedded: 'lune des anneaux',
       resonant: 'lune glacée, en résonance avec les anneaux',
       edge: 'lune des anneaux',
+      confining: 'lune des anneaux, fixant leur bord',
       shepherd: 'lune bergère',
       source: 'petite lune intérieure',
     },
@@ -889,7 +904,7 @@ export const fr: Messages = {
     planets: 'Planètes',
     giantsHelp:
       'Les autres planètes du système qui comptent pour ce monde, géantes gazeuses et glacées, tirées avec les fréquences observées autour des étoiles de ce type et de cette métallicité',
-    giantsOff: 'Non modélisées (un monde créé avant les planètes géantes, ou généré sans elles)',
+    giantsOff: 'Non modélisées (monde généré sans planètes géantes)',
     noGiants: `Aucune${S}: pas de géante dans ce système, comme autour de la plupart des naines rouges`,
     giantLine: (p) => `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
     hotGiant: 'Jupiter chaud',
@@ -1058,6 +1073,8 @@ export const fr: Messages = {
     about: (p) => `environ ${p.time}`,
   },
   world: {
+    outdated: (p) =>
+      `${p.id} a été fait par un ancien générateur${S}: supprimez-le (\`mise run clean-systems\`) et générez-le à nouveau`,
     loadFailed: (p) => `Impossible de charger ${p.id}${S}: ${p.error}`,
   },
   errors: {

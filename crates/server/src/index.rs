@@ -13,8 +13,12 @@
 //! The files stay where they are (the tree is the blob store: bodies are
 //! written by [`crate::staging`], served as files). The index is rebuilt
 //! from the tree when the database is missing or empty, and reconciled
-//! with it on every start ([`Index::reconcile`]), so today's data needs no
-//! migration step. Names are written to `names.json` too, so that the
+//! with it on every start ([`Index::reconcile`]), so the files need no
+//! migration step. The database itself has a layout version
+//! (`PRAGMA user_version`): an older file is migrated when opened (in one
+//! immediate transaction), a newer one is refused. What only the index
+//! holds (pins, last opened dates, job history) is not rebuilt from the
+//! tree. Names are written to `names.json` too, so that the
 //! tree stays self-sufficient for now.
 //!
 //! One connection behind a mutex: the server's writes are few and short,
@@ -47,7 +51,9 @@ pub const GENERATOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const GENERATOR_FORMAT: u32 = mapgen::export::raw_data::FORMAT_VERSION;
 
 /// Version of the database layout (`PRAGMA user_version`).
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
+/// Layout 1 -> 2: systems can be pinned in the main menu.
+const MIGRATE_1_TO_2: &str = "ALTER TABLE systems ADD COLUMN pinned_ms INTEGER;";
 /// Least time between two writes of a body's last opened date: a viewer
 /// asks for dozens of tiles a second.
 const TOUCH_EVERY: Duration = Duration::from_secs(60);
@@ -90,7 +96,10 @@ CREATE TABLE systems (
     -- names.json's modification time when it was last read or written
     names_modified_ms INTEGER,
     -- the request the system was drawn from, as JSON
-    request           TEXT
+    request           TEXT,
+    -- when the system was pinned in the main menu (ms), NULL if it is not;
+    -- only the index holds it (no file mirrors it)
+    pinned_ms         INTEGER
 );
 CREATE TABLE bodies (
     system_id         TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
@@ -248,14 +257,8 @@ impl Index {
         let journal = choose_journal(&conn)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version == 0 {
-            conn.execute_batch(&format!(
-                "BEGIN; {SCHEMA} PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
-            ))?;
-        } else if version != SCHEMA_VERSION {
-            return Err(rusqlite::Error::InvalidParameterName(format!(
-                "database layout {version}, this server knows {SCHEMA_VERSION}"
-            )));
+        if version != SCHEMA_VERSION {
+            migrate(&conn)?;
         }
         Ok(Self {
             journal,
@@ -379,7 +382,7 @@ impl Index {
         };
         let mut stmt = conn.prepare(&format!(
             "SELECT id, seed, width, height, star, designation, light_r, light_g, light_b,
-                    hz_inner_au, hz_outer_au, modified_ms
+                    hz_inner_au, hz_outer_au, modified_ms, pinned_ms
              FROM systems {filter} ORDER BY modified_ms DESC, id"
         ))?;
         let mut systems: Vec<SystemSummary> = stmt
@@ -399,6 +402,7 @@ impl Index {
                     bodies: Vec::new(),
                     names: BTreeMap::new(),
                     modified_ms: r.get::<_, i64>(11)? as u64,
+                    pinned: r.get::<_, Option<i64>>(12)?.is_some(),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -483,24 +487,120 @@ impl Index {
         id: &str,
         given: &GivenNames,
     ) -> std::result::Result<SystemSummary, systems::NamingError> {
-        let io = |e: IndexError| systems::NamingError::Io(e.to_string());
-        let current = self
-            .summary(id)
-            .map_err(io)?
-            .ok_or(systems::NamingError::NotFound)?;
-        let names = systems::checked_names(&current.bodies, given)?;
-        systems::write_names_file(root, id, &names)?;
-        let modified =
-            systems::modified_ms(&systems::system_dir(root, id).join(systems::NAMES_FILE));
+        self.edit_names(root, id, |_, bodies| systems::checked_names(bodies, given))
+    }
+
+    /// Sets (or, with `None` or a blank name, clears) the name of one body
+    /// of system `id` (`star` for the star) and returns the system's
+    /// summary. The other names are read and kept under the same lock as
+    /// the write, so a name given meanwhile (another tab, the viewer) is
+    /// not lost.
+    pub fn set_name(
+        &self,
+        root: &Path,
+        id: &str,
+        body: &str,
+        name: Option<&str>,
+    ) -> std::result::Result<SystemSummary, systems::NamingError> {
+        self.edit_names(root, id, |names, bodies| {
+            let mut names = names.clone();
+            match name.map(str::trim).filter(|n| !n.is_empty()) {
+                Some(name) => {
+                    let one: GivenNames = [(body.to_string(), name.to_string())].into();
+                    names.extend(systems::checked_names(bodies, &one)?);
+                }
+                None => {
+                    if body != systems::STAR && !bodies.iter().any(|b| b == body) {
+                        return Err(systems::NamingError::NoSuchBody(body.to_string()));
+                    }
+                    names.remove(body);
+                }
+            }
+            Ok(names)
+        })
+    }
+
+    /// Sets (or clears) the name of system `id` itself, the one given to
+    /// its star; see [`Index::set_name`].
+    pub fn set_system_name(
+        &self,
+        root: &Path,
+        id: &str,
+        name: Option<&str>,
+    ) -> std::result::Result<SystemSummary, systems::NamingError> {
+        self.set_name(root, id, systems::STAR, name)
+    }
+
+    /// Reads the names given to system `id` and the ids of its bodies, asks
+    /// `next` for the names to keep, writes them to `names.json` and to
+    /// the index, all under the connection lock: two edits never
+    /// interleave, and none works from a stale read.
+    fn edit_names(
+        &self,
+        root: &Path,
+        id: &str,
+        next: impl FnOnce(
+            &GivenNames,
+            &[String],
+        ) -> std::result::Result<GivenNames, systems::NamingError>,
+    ) -> std::result::Result<SystemSummary, systems::NamingError> {
+        let io = |e: rusqlite::Error| systems::NamingError::Io(e.to_string());
         {
             let mut conn = self.conn();
-            let tx = conn.transaction().map_err(|e| io(e.into()))?;
-            replace_names(&tx, id, &names, modified).map_err(|e| io(e.into()))?;
-            tx.commit().map_err(|e| io(e.into()))?;
+            let known = conn
+                .query_row("SELECT 1 FROM systems WHERE id = ?1", [id], |_| Ok(true))
+                .optional()
+                .map_err(io)?
+                .unwrap_or(false);
+            if !known {
+                return Err(systems::NamingError::NotFound);
+            }
+            let bodies: Vec<String> = {
+                let mut stmt = conn
+                    .prepare("SELECT id FROM bodies WHERE system_id = ?1")
+                    .map_err(io)?;
+                let rows = stmt.query_map([id], |r| r.get(0)).map_err(io)?;
+                rows.collect::<rusqlite::Result<_>>().map_err(io)?
+            };
+            let current: GivenNames = {
+                let mut stmt = conn
+                    .prepare("SELECT body_id, name FROM names WHERE system_id = ?1")
+                    .map_err(io)?;
+                let rows = stmt
+                    .query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .map_err(io)?;
+                rows.collect::<rusqlite::Result<_>>().map_err(io)?
+            };
+            let names = next(&current, &bodies)?;
+            systems::write_names_file(root, id, &names)?;
+            let modified =
+                systems::modified_ms(&systems::system_dir(root, id).join(systems::NAMES_FILE));
+            let tx = conn.transaction().map_err(io)?;
+            replace_names(&tx, id, &names, modified).map_err(io)?;
+            tx.commit().map_err(io)?;
         }
         self.summary(id)
-            .map_err(io)?
+            .map_err(|e| systems::NamingError::Io(e.to_string()))?
             .ok_or(systems::NamingError::NotFound)
+    }
+
+    // ------------------------------------------------------------------
+    // Pins
+    // ------------------------------------------------------------------
+
+    /// Pins (or unpins) system `id` in the main menu and returns its
+    /// summary, `None` when there is no such system. Pinning a pinned
+    /// system keeps its date. The pin lives in the index alone.
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> Result<Option<SystemSummary>> {
+        let changed = self.conn().execute(
+            "UPDATE systems SET pinned_ms = CASE WHEN ?2 THEN COALESCE(pinned_ms, ?3) END
+             WHERE id = ?1",
+            params![id, pinned, now_ms() as i64],
+        )?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        self.summary(id)
     }
 
     // ------------------------------------------------------------------
@@ -734,6 +834,37 @@ impl Index {
     }
 }
 
+/// Creates the layout or brings an older one up to date. The version is
+/// read again inside an immediate transaction, so that two processes
+/// opening the same old file at once migrate it once, not twice.
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        let mut version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version == 0 {
+            conn.execute_batch(SCHEMA)?;
+            version = SCHEMA_VERSION;
+        }
+        if version == 1 {
+            conn.execute_batch(MIGRATE_1_TO_2)?;
+            version = 2;
+        }
+        if version != SCHEMA_VERSION {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "database layout {version}, this server knows {SCHEMA_VERSION}"
+            )));
+        }
+        conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))
+    })();
+    match result {
+        Ok(()) => conn.execute_batch("COMMIT"),
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
 /// Turns WAL on and checks it works here, or falls back to the default
 /// rollback journal with a warning. Returns the mode in use.
 fn choose_journal(conn: &Connection) -> rusqlite::Result<String> {
@@ -855,9 +986,19 @@ fn world_format(body_dir: &Path) -> Option<u32> {
 /// (generator versions, last opened dates) of the bodies it already had.
 fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()> {
     let s = &loaded.summary;
+    let mut pinned_ms: Option<i64> = None;
     if cause == Cause::Drawn {
         // A system drawn again starts over, names included (its directory
-        // was replaced).
+        // was replaced), but stays pinned: the pin is the user's, and no
+        // file could bring it back.
+        pinned_ms = tx
+            .query_row(
+                "SELECT pinned_ms FROM systems WHERE id = ?1",
+                [&s.id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
         tx.execute("DELETE FROM systems WHERE id = ?1", [&s.id])?;
     }
     type Before = (bool, Option<String>, Option<i64>, Option<i64>);
@@ -873,8 +1014,8 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
     };
     tx.execute(
         "INSERT INTO systems (id, seed, width, height, star, designation, light_r, light_g,
-                              light_b, hz_inner_au, hz_outer_au, modified_ms, request)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
          ON CONFLICT(id) DO UPDATE SET
             seed = ?2, width = ?3, height = ?4, star = ?5, designation = ?6, light_r = ?7,
             light_g = ?8, light_b = ?9, hz_inner_au = ?10, hz_outer_au = ?11,
@@ -892,7 +1033,8 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
             s.hz_inner_au,
             s.hz_outer_au,
             s.modified_ms as i64,
-            loaded.request
+            loaded.request,
+            pinned_ms
         ],
     )?;
     tx.execute("DELETE FROM bodies WHERE system_id = ?1", [&s.id])?;
@@ -1160,6 +1302,203 @@ mod tests {
             .unwrap();
         assert!(!systems.join("mgs-1-1/names.json").exists());
         assert!(index.names("mgs-1-1").unwrap().is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_pin_is_kept_in_the_index_and_survives_a_redraw_and_a_reopen() {
+        let root = temp_root("pins");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1", "mgs-2-2"]);
+        let db = root.join("mapgen.sqlite");
+        let index = Index::open(&db).unwrap();
+        index.reconcile(&systems).unwrap();
+        assert!(index.list_systems().unwrap().iter().all(|s| !s.pinned));
+
+        assert!(index.set_pinned("mgs-1-1", true).unwrap().unwrap().pinned);
+        // Pinning again is a no-op; an unknown system is not found.
+        assert!(index.set_pinned("mgs-1-1", true).unwrap().unwrap().pinned);
+        assert_eq!(index.set_pinned("mgs-9-9", true).unwrap(), None);
+        let pinned: Vec<_> = index
+            .list_systems()
+            .unwrap()
+            .into_iter()
+            .filter(|s| s.pinned)
+            .map(|s| s.id)
+            .collect();
+        assert_eq!(pinned, ["mgs-1-1"]);
+
+        // A reopen and a reconcile (even after the files changed) keep it.
+        drop(index);
+        let index = Index::open(&db).unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(systems.join("mgs-1-1/names.json"), r#"{"c": "Terra"}"#).unwrap();
+        index.reconcile(&systems).unwrap();
+        assert!(index.summary("mgs-1-1").unwrap().unwrap().pinned);
+        assert!(!index.summary("mgs-2-2").unwrap().unwrap().pinned);
+
+        // A system drawn again stays pinned.
+        index
+            .refresh_system(&systems, "mgs-1-1", Cause::Drawn)
+            .unwrap();
+        assert!(index.summary("mgs-1-1").unwrap().unwrap().pinned);
+
+        assert!(!index.set_pinned("mgs-1-1", false).unwrap().unwrap().pinned);
+        drop(index);
+        let index = Index::open(&db).unwrap();
+        assert!(!index.summary("mgs-1-1").unwrap().unwrap().pinned);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_database_of_layout_1_gains_the_pin_column() {
+        let root = temp_root("migrate");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let db = root.join("mapgen.sqlite");
+        {
+            let index = Index::open(&db).unwrap();
+            index.reconcile(&systems).unwrap();
+        }
+        // Turn it back into a layout 1 database.
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "ALTER TABLE systems DROP COLUMN pinned_ms; PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let index = Index::open(&db).unwrap();
+        assert_eq!(index.list_systems().unwrap().len(), 1);
+        assert!(index.set_pinned("mgs-1-1", true).unwrap().unwrap().pinned);
+        drop(index);
+        let conn = Connection::open(&db).unwrap();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn renaming_a_system_keeps_the_names_of_its_bodies() {
+        let root = temp_root("system-name");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        index.reconcile(&systems).unwrap();
+
+        // A client took a snapshot of the names, then a planet was named.
+        let snapshot = index.summary("mgs-1-1").unwrap().unwrap();
+        assert!(snapshot.names.is_empty());
+        let planet: GivenNames = [("c".into(), "Gaia".into())].into();
+        index.give_names(&systems, "mgs-1-1", &planet).unwrap();
+
+        let s = index
+            .set_system_name(&systems, "mgs-1-1", Some("  Helia "))
+            .unwrap();
+        assert_eq!(s.names.get("star").map(String::as_str), Some("Helia"));
+        assert_eq!(s.names.get("c").map(String::as_str), Some("Gaia"));
+        assert_eq!(systems::given_names(&systems, "mgs-1-1"), s.names);
+
+        // Clearing brings the default back and keeps the planet's name.
+        for cleared in [None, Some("  ")] {
+            index
+                .set_system_name(&systems, "mgs-1-1", Some("Helia"))
+                .unwrap();
+            let s = index.set_system_name(&systems, "mgs-1-1", cleared).unwrap();
+            assert_eq!(s.names, planet);
+            assert_eq!(systems::given_names(&systems, "mgs-1-1"), planet);
+        }
+        assert_eq!(
+            index.set_system_name(&systems, "mgs-1-1", Some(&"x".repeat(200))),
+            Err(systems::NamingError::InvalidName("x".repeat(200)))
+        );
+        assert_eq!(
+            index.set_system_name(&systems, "mgs-9-9", Some("A")),
+            Err(systems::NamingError::NotFound)
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn names_given_at_once_never_clash() {
+        let root = temp_root("names-race");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let index = std::sync::Arc::new(Index::open(&root.join("mapgen.sqlite")).unwrap());
+        index.reconcile(&systems).unwrap();
+        let handles: Vec<_> = (0..8)
+            .map(|n| {
+                let (index, systems) = (index.clone(), systems.clone());
+                std::thread::spawn(move || {
+                    if n % 2 == 0 {
+                        index.set_system_name(&systems, "mgs-1-1", Some(&format!("S{n}")))
+                    } else {
+                        let given: GivenNames = [("c".into(), format!("P{n}"))].into();
+                        index.set_name(&systems, "mgs-1-1", "c", given.get("c").map(String::as_str))
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap().unwrap();
+        }
+        // Every write worked, and the file and the index agree.
+        let s = index.summary("mgs-1-1").unwrap().unwrap();
+        assert_eq!(systems::given_names(&systems, "mgs-1-1"), s.names);
+        assert!(s.names.contains_key("star") && s.names.contains_key("c"));
+        let leftovers = std::fs::read_dir(systems.join("mgs-1-1"))
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".tmp")
+            })
+            .count();
+        assert_eq!(leftovers, 0);
+        assert_eq!(
+            index.set_name(&systems, "mgs-1-1", "zz", Some("A")),
+            Err(systems::NamingError::NoSuchBody("zz".into()))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn two_processes_opening_an_old_file_migrate_it_once() {
+        let root = temp_root("migrate-race");
+        let db = root.join("mapgen.sqlite");
+        {
+            Index::open(&db).unwrap();
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "ALTER TABLE systems DROP COLUMN pinned_ms; PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let opened: Vec<_> = (0..4)
+            .map(|_| {
+                let db = db.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    Index::open(&db).map(drop)
+                })
+            })
+            .collect();
+        for handle in opened {
+            handle.join().unwrap().unwrap();
+        }
+        // A layout from the future is refused, and nothing is changed.
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch("PRAGMA user_version = 3").unwrap();
+        }
+        let refused = Index::open(&db).err().expect("refused");
+        assert!(refused.0.contains("database layout 3"), "{refused}");
         std::fs::remove_dir_all(root).unwrap();
     }
 

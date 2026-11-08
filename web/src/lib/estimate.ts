@@ -20,7 +20,7 @@ const SERVER_PEAK: readonly [number, number][] = [
 
 /**
  * Bytes per pixel a decoded world takes in the page, with the layers of
- * format version 2 and later (web/README.md), which every new world has.
+ * the extra layers (web/README.md), which every world has.
  */
 export const VIEWER_BYTES_PER_PIXEL = 19;
 

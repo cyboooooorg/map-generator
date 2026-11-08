@@ -8,7 +8,7 @@
 //! [`Downscaler`] is an area average (box filter) in linear light, fed one
 //! source row at a time: the export feeds it the rows of the image it is
 //! about to write as `world.png`, and the server feeds it the rows it
-//! decodes from the `world.png` of a world made before thumbnails, so both
+//! decodes from the `world.png` of a world whose `thumb.png` was deleted, so both
 //! give the same thumbnail without holding a second full-size image.
 use super::colour::{linear_to_srgb, srgb_to_linear};
 use image::RgbImage;

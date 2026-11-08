@@ -82,15 +82,14 @@
     event.preventDefault();
     const systemId = world.systemId;
     if (!systemId) return;
-    const next = { ...names };
-    const value = field.trim();
-    if (value === '' || value === designation) delete next[id];
-    else next[id] = value;
+    const value = field.trim() === designation ? '' : field.trim();
     saving = true;
     try {
-      const summary = await api.renameSystem(systemId, next);
+      // Only this name is sent: the server keeps the others, even those given since.
+      const summary = await api.nameBody(systemId, id, value);
       renaming = null;
-      world.loadSystem(systemId);
+      // The system shown may have changed while the name was saved.
+      if (world.systemId === systemId) world.loadSystem(systemId);
       onRenamed(summary);
       toasts.show(t.worldInfo.renamed({ name: value === '' ? designation : value }));
     } catch (e) {
@@ -211,6 +210,14 @@
             gaps: rings.gaps.length,
           })}
         </dd>
+      {/if}
+      {#if rings?.d_ring}
+        <dt>{t.card.dRingTitle}</dt>
+        <dd>{t.card.dRing({ inner: formatUpTo(rings.d_ring.inner, 2), outer: formatUpTo(rings.d_ring.outer, 2) })}</dd>
+      {/if}
+      {#if body.params.ridge}
+        <dt>{t.card.ridge}</dt>
+        <dd>{t.card.ridgeValue({ height: withUnit(formatInt(Math.round(body.params.ridge * 100)), '%') })}</dd>
       {/if}
       {#if dust.length > 0}
         <dt>{t.card.dustRings}</dt>

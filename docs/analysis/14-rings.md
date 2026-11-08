@@ -456,9 +456,32 @@ further than proposed:
   a small moon at 3.4–4.2 R wrapped in a faint belt (Mab and the μ ring,
   de Pater et al. 2006). A gossamer ring reaches 1 to 1.26 times its
   moon's distance (Thebe's extension).
-- **Not done:** a plume moon chosen by its tidal heating, a Phoebe ring
-  (systems have no irregular moons yet) and the Janus 7:6 edge of the A
-  ring (backlog item 18).
+- **The A ring's edge (2026-11-08).** The largest edge moon, if at least
+  40 km in radius, may sit where its 7:6 inner Lindblad resonance falls on
+  the rings' outer edge, which then lies at 0.88 to 0.99 of the Roche limit
+  (odds 50 %, a calibration on Saturn alone). The resonance is
+  `inner_lindblad(a, 7, J2)`; its Kepler form is `a (6/7)^(2/3)`. Checked
+  against Saturn: Janus at 151,460 km gives 136,668 km by Kepler alone and
+  about 136,780 km with `J2` = 0.0163, against an edge at 136,770 km and a
+  Janus 7:6 resonance at 136,785 km (El Moutamid et al. 2016; Spitale &
+  Porco 2009). Embedded moonlets left outside the new edge are dropped.
+  The moon is one of the edge moons moved, not an extra body; the ids of
+  moons past it can shift. Own stream `RING_EDGE`.
+- **A faint D-like ring (2026-11-08).** Half the bright rings get a smooth
+  ring of dust, `rings.d_ring`, from 1.11 to 1.15 radii (Saturn's D ring
+  starts at 1.11, Hedman et al. 2007; Mitchell et al. 2018) to the bright
+  rings' inner edge, at least 0.05 wide, at an opacity of 0.01 to 0.05
+  (the real optical depth is about 10⁻³, so the drawn one is a visible
+  hint). Own stream `D_RING`. Seen in the giant's view and in the sky of
+  its moons (`uRingFaint` in `skyRingDensityGlsl`).
+- **Equatorial ridges (2026-11-08).** An embedded moonlet, and an edge moon
+  of 30 km in radius or less, has a ridge of ring material it swept up
+  (Pan and Atlas, Charnoz et al. 2007; Daphnis, Buratti et al. 2019): its
+  shape layer gets `1 + h exp(-(sin φ / 0.3)²)` with `h` 0.12 to 0.25 from
+  the moon's seed, over the cube root of the volume it adds so the moon
+  keeps its volume. `WorldParams::ridge` carries it (and `meta.ridge`).
+- **Not done:** a plume moon chosen by its tidal heating, and a Phoebe ring
+  (systems have no irregular moons yet), both still in backlog item 18.
 
 ## Sources
 
@@ -539,6 +562,22 @@ further than proposed:
   Spitale & Porco 2009, "Time variability in the outer edge of Saturn's
   A-ring revealed by Cassini imaging", AJ 138, 1520 (the 7:6 Janus and
   Epimetheus resonance).
+- Equatorial ridges of Pan and Atlas: Charnoz, Brahic, Thomas & Porco 2007,
+  "The equatorial ridges of Pan and Atlas: terminal accretionary
+  ornaments?", Science 318, 1622, <https://doi.org/10.1126/science.1148631>
+  (ridges of 10 to 25 % of the volume: read in a secondary summary, the
+  paper itself was not read); Buratti et al. 2019, "Close Cassini flybys
+  of Saturn's ring moons Pan, Daphnis, Atlas, Pandora, and Epimetheus",
+  Science 364, eaat2349, <https://doi.org/10.1126/science.aat2349> (cited,
+  not read).
+- The D ring: Hedman et al. 2007, "Saturn's dynamic D ring", Icarus 188,
+  89, <https://doi.org/10.1016/j.icarus.2006.11.017> (extent about 66,000
+  to 74,500 km and optical depth about 10⁻³ from a review table and the
+  abstract; the paper's text could not be read).
+- The 7:6 resonance: El Moutamid et al. 2016, "How Janus' orbital swap
+  affects the edge of Saturn's A ring?", Icarus 279, 125,
+  <https://arxiv.org/abs/1510.00434> (Janus's 7:6 resonance at 136,785
+  km, 15 km outside the mean edge).
 - Neptune's arcs: Porco 1991, "An explanation for Neptune's ring
   arcs", Science 253, 995; Namouni & Porco 2002, Nature 417, 45.
 - J1407b: Mamajek et al. 2012, AJ 143, 72; Kenworthy & Mamajek 2015,

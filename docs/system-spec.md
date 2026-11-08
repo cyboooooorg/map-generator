@@ -245,6 +245,14 @@ keep their draws. They are `icy-moon` bodies marked with a `ring_role`:
   (Mimas, the B ring's edge and the Cassini Division);
 - `edge`: one to three moons of 10 to 100 km just beyond a bright ring's
   outer edge, the larger the farther out (Charnoz et al. 2010);
+- `confining`: on half the bright rings, the largest edge moon, if 40 km
+  or more in radius, moved to where its 7:6 inner Lindblad resonance
+  falls on the rings' outer edge, which it sets at 0.88 to 0.99 of the
+  Roche limit (Janus and the A ring); the embedded moonlets it leaves
+  outside are dropped. Bodies with a `ridge` in their params (embedded
+  moonlets and edge moons up to 30 km) have an equatorial ridge in their
+  shape layer (Pan, Atlas). A bright ring's `rings.d_ring` is an optional
+  faint D-like ring (`inner`, `outer`, `opacity`) inside it;
 - `shepherd`: on 70 % of faint rings, a pair of 10 to 25 km on either
   side of the ring;
 - `source`: beyond a faint ring, one or two small moons of 4 to 90 km at
@@ -461,6 +469,17 @@ addressed as `<system-id>/<body-id>` everywhere.
 - `PUT /api/systems/{id}/names`: replace the names given
   (`{"names": {"c": "Gaia"}}`), with today's rules (1 to 60 characters,
   422 otherwise).
+- `PUT /api/systems/{id}/name`: set only the system's own name, the one
+  given to its star (`{"name": "Sol"}`; null or blank clears it), merged
+  into the names given so that those of the bodies are kept (422 for an
+  invalid name).
+- `PUT /api/systems/{id}/bodies/{body}/name`: set (or, with null or blank,
+  clear) one body's name, `star` included, merged like `/name` (422 for
+  an invalid name or an unknown body, 400 for an invalid id).
+- `PUT /api/systems/{id}/pin` and `DELETE /api/systems/{id}/pin`: pin or
+  unpin a system in the main menu (idempotent, 404 for an unknown
+  system). Both answer its summary, whose `pinned` flag `GET /api/systems`
+  also gives. The pin lives in the index only.
 - `POST /api/systems/{id}/bodies/{body}/generate`: queue the body and its
   neighbourhood (see [Generating on demand](#generating-on-demand)) as
   one job. Asking for a body already queued answers that job; asking for
@@ -616,6 +635,21 @@ No migration, as decided: the worlds made before systems are deleted.
 - Browser state naming worlds (view links with `#world=`, the remembered
   form) is read once and dropped: an old link opens the library with a
   notice.
+
+### Older formats of a system
+
+The same rule holds for a system written by an older generator: the
+generator keeps no code to re-derive it.
+
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (14 at
+  the time of writing): its tiles, epochs and hex grids answer 410 Gone
+  with a message asking to delete it (`mise run clean-systems`) and draw it
+  again, and the viewer shows that message instead of requesting them.
+- A `system.json` that no longer parses (the body rules of systems before
+  format 11 carry `shrubland_moisture`, now an unknown field):
+  `GET /api/systems/{id}` and the generation of its bodies answer 410 Gone
+  with the same message, not 404. Only a missing `system.json` is 404.
+- The server still starts and lists these systems.
 
 ## Delivery
 

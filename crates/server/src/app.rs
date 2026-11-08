@@ -10,6 +10,10 @@
 //! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
 //! | `DELETE /api/systems/{id}`      | delete a system (409 while it is being generated)  |
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
+//! | `PUT /api/systems/{id}/name`   | name the system itself, keeping its bodies' names (`SystemName`; null clears) |
+//! | `PUT /api/systems/{id}/pin`     | pin it in the main menu (idempotent, answers its summary) |
+//! | `DELETE /api/systems/{id}/pin`  | unpin it (idempotent, answers its summary)         |
+//! | `PUT /api/systems/{id}/bodies/{body}/name` | name one body, the other names kept (`SystemName`; null clears) |
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
 //! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body |
 //! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates |
@@ -28,7 +32,7 @@
 //! sent as they are.
 use crate::api::{
     ApiError, ErrorDetail, FormSpec, GenerateStarted, HexRequest, JobInfo, JobStatus, ParamSpec,
-    PresetInfo, SystemCreated, SystemDetail, SystemNames, SystemQuery, SystemSummary,
+    PresetInfo, SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, Index};
@@ -202,6 +206,7 @@ fn world_failure(error: TileError, what: &str) -> Response {
             }),
         )
             .into_response(),
+        TileError::TooOld(e) => Failure(StatusCode::GONE, e).into_response(),
         TileError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }
@@ -263,6 +268,12 @@ pub fn router(config: Config) -> Router {
         .route("/api/systems", get(list_systems).post(create_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
         .route("/api/systems/{id}/names", put(rename_system))
+        .route("/api/systems/{id}/name", put(name_system))
+        .route("/api/systems/{id}/bodies/{body}/name", put(name_body))
+        .route(
+            "/api/systems/{id}/pin",
+            put(pin_system).delete(unpin_system),
+        )
         .route(
             "/api/systems/{id}/bodies/{body}/generate",
             post(generate_body),
@@ -644,7 +655,7 @@ async fn first_body_job(state: &Shared, id: &str) -> Result<Option<String>, Reje
     })
     .await
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    .map_err(|e| unreadable_system(&state.config.systems_dir, id, &e))?;
     match focus {
         Some(body) => queue_body(state, id, &body).await,
         None => Ok(None),
@@ -662,8 +673,8 @@ async fn get_system(
     let owned = id.clone();
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        let system = mapgen::system::read_system(&systems::system_dir(&root, &owned)).ok()?;
-        Some(SystemDetail {
+        let system = mapgen::system::read_system(&systems::system_dir(&root, &owned))?;
+        Ok::<_, String>(SystemDetail {
             system,
             names: index.names(&owned).unwrap_or_default(),
         })
@@ -671,7 +682,23 @@ async fn get_system(
     .await
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map(Json)
-    .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))
+    .map_err(|e| unreadable_system(&state.config.systems_dir, &id, &e))
+}
+
+/// The failure of a system whose `system.json` could not be read: 404 when
+/// there is none, else 410 Gone: it was made by an older generator (its
+/// file no longer parses) or is damaged, and the way out is the same.
+fn unreadable_system(root: &Path, id: &str, error: &str) -> Failure {
+    if !systems::system_dir(root, id).join("system.json").is_file() {
+        return Failure(StatusCode::NOT_FOUND, format!("no system {id}"));
+    }
+    Failure(
+        StatusCode::GONE,
+        format!(
+            "system {id} was made by an older generator or is damaged ({error}): delete it \
+             (`mise run clean-systems`) and draw it again"
+        ),
+    )
 }
 
 async fn delete_system(
@@ -711,6 +738,40 @@ async fn delete_system(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Pins a system in the main menu (`PUT /api/systems/{id}/pin`).
+async fn pin_system(
+    state: State<Shared>,
+    id: UrlPath<String>,
+) -> Result<Json<SystemSummary>, Failure> {
+    set_pin(state, id, true).await
+}
+
+/// Unpins a system (`DELETE /api/systems/{id}/pin`).
+async fn unpin_system(
+    state: State<Shared>,
+    id: UrlPath<String>,
+) -> Result<Json<SystemSummary>, Failure> {
+    set_pin(state, id, false).await
+}
+
+async fn set_pin(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    pinned: bool,
+) -> Result<Json<SystemSummary>, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    let index = state.index.clone();
+    let owned = id.clone();
+    tokio::task::spawn_blocking(move || index.set_pinned(&owned, pinned))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map(Json)
+        .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))
+}
+
 /// Gives names to the bodies of a system (`PUT /api/systems/{id}/names`),
 /// and answers its summary.
 async fn rename_system(
@@ -728,7 +789,56 @@ async fn rename_system(
         tokio::task::spawn_blocking(move || index.give_names(&root, &owned, &request.names))
             .await
             .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    result.map(Json).map_err(|e| match e {
+    result.map(Json).map_err(|e| naming_failure(e, &id))
+}
+
+/// Names the system itself (`PUT /api/systems/{id}/name`): merged into the
+/// names given, those of the bodies untouched.
+async fn name_system(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    Json(request): Json<SystemName>,
+) -> Result<Json<SystemSummary>, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    let root = state.config.systems_dir.clone();
+    let owned = id.clone();
+    let index = state.index.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        index.set_system_name(&root, &owned, request.name.as_deref())
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    result.map(Json).map_err(|e| naming_failure(e, &id))
+}
+
+/// Names one body (`PUT /api/systems/{id}/bodies/{body}/name`): merged into
+/// the names given, the others untouched. `star` works too.
+async fn name_body(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+    Json(request): Json<SystemName>,
+) -> Result<Json<SystemSummary>, Failure> {
+    if !systems::is_valid_system_id(&id) || !systems::is_valid_body_id(&body) {
+        return Err(Failure(
+            StatusCode::BAD_REQUEST,
+            "invalid system or body id".into(),
+        ));
+    }
+    let root = state.config.systems_dir.clone();
+    let owned = id.clone();
+    let index = state.index.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        index.set_name(&root, &owned, &body, request.name.as_deref())
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    result.map(Json).map_err(|e| naming_failure(e, &id))
+}
+
+fn naming_failure(e: systems::NamingError, id: &str) -> Failure {
+    match e {
         systems::NamingError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no system {id}")),
         systems::NamingError::InvalidName(name) => Failure(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -742,7 +852,7 @@ async fn rename_system(
             format!("system {id} has no body {body}"),
         ),
         systems::NamingError::Io(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
-    })
+    }
 }
 
 async fn system_tile(
@@ -838,7 +948,7 @@ async fn checked_epoch(
             StatusCode::NOT_FOUND,
             format!(
                 "world {id} offers no other epoch: it has liquid water, no craters, \
-                 or was made before format version 7"
+                 or was made by an older generator (delete it with `mise run clean-systems`)"
             ),
         ));
     };
@@ -1209,7 +1319,7 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
     let system = tokio::task::spawn_blocking(move || mapgen::system::read_system(&read))
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .map_err(|_| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))?;
+        .map_err(|e| unreadable_system(&state.config.systems_dir, id, &e))?;
     if !system.bodies.iter().any(|b| b.id == body) {
         return Err(Failure(
             StatusCode::NOT_FOUND,
@@ -1472,6 +1582,17 @@ mod tests {
         );
     }
 
+    #[test]
+    fn viewer_and_server_agree_on_the_oldest_format() {
+        let viewer = include_str!("../../../web/src/lib/formatVersion.ts");
+        let min = mapgen::export::raw_data::MIN_FORMAT_VERSION;
+        let expected = format!("export const MIN_FORMAT_VERSION = {min};");
+        assert!(
+            viewer.contains(&expected),
+            "formatVersion.ts must declare `{expected}`"
+        );
+    }
+
     fn temp_config(name: &str) -> Config {
         let root =
             std::env::temp_dir().join(format!("mapgen-server-{name}-{}", std::process::id()));
@@ -1566,6 +1687,42 @@ mod tests {
         let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
         let focus = detail["system"]["focus"].as_str().unwrap().to_string();
         (id, focus)
+    }
+
+    #[tokio::test]
+    async fn answers_410_for_what_an_older_generator_made() {
+        let config = temp_config("too-old");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        // A system whose file no longer parses, and a world below the
+        // oldest format: gone, with the way out, not "no system" or a 500.
+        let dir = root.join("mgs-1-1");
+        std::fs::create_dir_all(dir.join("bodies/b/raw_data")).unwrap();
+        std::fs::write(
+            dir.join("system.json"),
+            r#"{"format_version": 1, "bodies": 7}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("bodies/b/raw_data/world.json"),
+            r#"{"format_version": 10}"#,
+        )
+        .unwrap();
+        let (status, body) = call(&app, "GET", "/api/systems/mgs-1-1", None).await;
+        assert_eq!(status, StatusCode::GONE, "{body}");
+        assert!(body.contains("clean-systems"), "{body}");
+        let (status, body) = call(
+            &app,
+            "GET",
+            "/api/systems/mgs-1-1/bodies/b/tiles/0/0/0",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::GONE, "{body}");
+        assert!(body.contains("clean-systems"), "{body}");
+        // No such system stays a 404.
+        let (status, _) = call(&app, "GET", "/api/systems/mgs-2-2", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
@@ -1803,8 +1960,109 @@ mod tests {
             call(&app, "PUT", &uri, Some(&names)).await.0,
             StatusCode::OK
         );
+        // Naming the system keeps the names of its bodies, even those given
+        // after a client read them; null clears it.
+        let name = format!("/api/systems/{id}/name");
+        let (status, named) = call(&app, "PUT", &name, Some(r#"{"name": " Sol "}"#)).await;
+        assert_eq!(status, StatusCode::OK, "{named}");
+        let named: serde_json::Value = serde_json::from_str(&named).unwrap();
+        assert_eq!(named["names"]["star"], "Sol");
+        assert_eq!(named["names"][&first], "Gaia");
+        let (status, cleared) = call(&app, "PUT", &name, Some(r#"{"name": null}"#)).await;
+        assert_eq!(status, StatusCode::OK, "{cleared}");
+        let cleared: serde_json::Value = serde_json::from_str(&cleared).unwrap();
+        assert!(cleared["names"].get("star").is_none());
+        assert_eq!(cleared["names"][&first], "Gaia");
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &name,
+                Some(&format!(r#"{{"name": "{}"}}"#, "x".repeat(99)))
+            )
+            .await
+            .0,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                "/api/systems/mgs-0-0/name",
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+        // One body at a time: the others are kept.
+        let one = format!("/api/systems/{id}/bodies/{first}/name");
+        let (status, body_named) = call(&app, "PUT", &one, Some(r#"{"name": "Terra"}"#)).await;
+        assert_eq!(status, StatusCode::OK, "{body_named}");
+        let body_named: serde_json::Value = serde_json::from_str(&body_named).unwrap();
+        assert_eq!(body_named["names"][&first], "Terra");
+        let (_, back) = call(&app, "PUT", &one, Some(r#"{"name": "Gaia"}"#)).await;
+        assert!(back.contains("Gaia"), "{back}");
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &format!("/api/systems/{id}/bodies/zz/name"),
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &format!("/api/systems/{id}/bodies/QQ/name"),
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                "/api/systems/..x/name",
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        // The star was named "Helia" before: put it back for the rest.
+        call(&app, "PUT", &name, Some(r#"{"name": "Helia"}"#)).await;
+
+        // A pin is kept too.
+        let pin = format!("/api/systems/{id}/pin");
+        let (status, pinned) = call(&app, "PUT", &pin, None).await;
+        assert_eq!(status, StatusCode::OK, "{pinned}");
+        assert!(pinned.contains(r#""pinned":true"#), "{pinned}");
         let (status, _) = call(&app, "POST", "/api/systems?replace=true", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED);
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        assert!(list.contains(r#""pinned":true"#), "{list}");
+        let (status, unpinned) = call(&app, "DELETE", &pin, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(unpinned.contains(r#""pinned":false"#), "{unpinned}");
+        // Unpinning what is not pinned is fine.
+        let (status, again) = call(&app, "DELETE", &pin, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(again.contains(r#""pinned":false"#), "{again}");
+        assert_eq!(
+            call(&app, "PUT", "/api/systems/mgs-0-0/pin", None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(&app, "DELETE", "/api/systems/..x/pin", None).await.0,
+            StatusCode::BAD_REQUEST
+        );
         let kept = std::fs::read_to_string(root.join(&id).join("names.json")).unwrap();
         assert!(kept.contains("Gaia") && kept.contains("Helia"), "{kept}");
         let (_, list) = call(&app, "GET", "/api/systems", None).await;

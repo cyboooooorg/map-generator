@@ -2,16 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { liftSky, skyFromWorld, sunDeclinationDeg } from './sky';
 
-const world = (pressure: number | undefined, atmosphere?: object) =>
-  ({ pressure_bar: pressure, preset: { atmosphere } }) as unknown as WorldMetadata;
+const EARTH = { rayleigh: [0.17, 0.41, 1.0], haze: 0.1, haze_colour: [1, 1, 1], greenhouse: 0, clouds: 'water', cloud_cover: 0 };
+const world = (pressure: number, atmosphere: object = EARTH) =>
+  ({ pressure_bar: pressure, preset: { atmosphere: { ...EARTH, ...atmosphere } } }) as unknown as WorldMetadata;
 
 describe('skyFromWorld', () => {
   it('gives airless worlds no sky', () => {
     expect(skyFromWorld(world(0, { haze: 0 }))).toBeNull();
   });
 
-  it("gives worlds made before atmospheres Earth's blue sky", () => {
-    const sky = skyFromWorld(world(undefined))!;
+  it("gives an Earth-like atmosphere a blue sky", () => {
+    const sky = skyFromWorld(world(1))!;
     expect(sky.betaR[2]).toBeGreaterThan(sky.betaR[0] * 5);
     expect(sky.top).toBeGreaterThan(1);
   });

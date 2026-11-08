@@ -122,6 +122,10 @@ export const en = {
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
       `${p.kind === 'bright' ? 'bright, icy' : 'faint, narrow'} · ${p.inner} to ${p.outer} of its radii` +
       (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 gap' : `${p.gaps} gaps`}` : ''),
+    dRingTitle: 'Inner ring',
+    dRing: (p: { inner: string; outer: string }) => `a faint ring of dust inside, ${p.inner} to ${p.outer} of its radii (like Saturn's D ring)`,
+    ridge: 'Equator',
+    ridgeValue: (p: { height: string }) => `a ridge of ring material it swept up, ${p.height} of its radius high, as on Pan and Atlas`,
     dustRings: 'Dust rings',
     dustRing: (p: { kind: 'gossamer' | 'plume'; moon: string; inner: string; outer: string }) =>
       `${p.kind === 'plume' ? 'ice from the geysers of' : 'dust knocked off'} ${p.moon}, ${p.inner} to ${p.outer} of its radii`,
@@ -138,6 +142,7 @@ export const en = {
       edge: () => 'orbits just beyond the rings and keeps their outer edge sharp',
       shepherd: () => 'one of the pair of shepherd moons that confine the narrow ring',
       source: () => 'a small moon beyond the narrow ring, whose impact dust may feed a faint dust ring',
+      confining: () => 'orbits just beyond the rings; its 7:6 resonance sets their outer edge, as Janus does for the A ring',
     },
     notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
     generating: 'Its maps are being made: see the progress over the view.',
@@ -155,6 +160,16 @@ export const en = {
     compareHelp: 'Select exactly two systems',
     stripLabel: 'Its planets, from the star outwards',
     notGenerated: 'not generated yet',
+    pinLabel: (p: { name: string }) => `Pin: ${p.name}`,
+    pin: (p: { name: string }) => `Pin ${p.name} to the top`,
+    unpin: (p: { name: string }) => `Unpin ${p.name}`,
+    pinFailed: (p: { error: string }) => `Could not change the pin: ${p.error}`,
+    rename: (p: { name: string }) => `Rename ${p.name}`,
+    renameLabel: 'System name',
+    renameSave: 'Save',
+    renameCancel: 'Cancel',
+    renamed: (p: { name: string }) => `System named ${p.name}.`,
+    renameFailed: (p: { error: string }) => `Could not rename the system: ${p.error}`,
     details: (p: { star: string; seed: number; moons: number; ago: string }) =>
       `${p.star} · seed ${p.seed} · ${p.moons} moon${p.moons === 1 ? '' : 's'} · ${p.ago}`,
   },
@@ -287,7 +302,6 @@ export const en = {
     geology: 'Geology',
     star: 'Star',
     starValue: (p: { type: string; teff: string; luminosity: string }) => `${p.type} · ${p.teff} · ${p.luminosity}`,
-    theSun: 'the Sun (G2V), at 1 AU: made before stars',
     orbit: 'Orbit',
     orbitValue: (p: { distance: string; zone: string }) => `${p.distance} · ${p.zone}`,
     hzInside: (p: { position: string }) => `in the habitable zone (${p.position})`,
@@ -673,6 +687,7 @@ export const en = {
       embedded: 'ring moon',
       resonant: 'icy moon, resonant with the rings',
       edge: 'ring moon',
+      confining: 'ring moon, setting the rings’ edge',
       shepherd: 'shepherd moon',
       source: 'small inner moon',
     },
@@ -934,7 +949,7 @@ export const en = {
     planets: 'Planets',
     giantsHelp:
       'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
-    giantsOff: 'Not modelled (a world made before giant planets, or generated without them)',
+    giantsOff: 'Not modelled (generated without giant planets)',
     noGiants: 'None: no giant in this system, like most red dwarfs',
     giantLine: (p: { name: string; kind: string; mass: string; orbit: string; year: string }) =>
       `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
@@ -1115,6 +1130,8 @@ export const en = {
   },
   /** Loading of a world. */
   world: {
+    outdated: (p: { id: string }) =>
+      `${p.id} was made by an older generator: delete it (\`mise run clean-systems\`) and draw it again`,
     loadFailed: (p: { id: string; error: string }) => `Could not load ${p.id}: ${p.error}`,
   },
   /** Request errors the server explains with a code (see `ErrorDetail`). */

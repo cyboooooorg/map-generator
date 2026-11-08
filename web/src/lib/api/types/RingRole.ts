@@ -3,4 +3,4 @@
 /**
  * What a ring moon does to its giant's rings.
  */
-export type RingRole = "embedded" | "resonant" | "edge" | "shepherd" | "source";
+export type RingRole = "embedded" | "resonant" | "edge" | "confining" | "shepherd" | "source";
