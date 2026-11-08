@@ -502,7 +502,9 @@ impl MoonSystem {
             return Some(Self::of_giant(p, mass_earth));
         }
         let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
-        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        // The spin (despun, resonance) is the world's own, as its card and
+        // `planet_body` read it, not an Earth's against this star.
+        let star = crate::spin::star_info(p);
         let r_p = f64::from(p.circumference_km) / (2.0 * PI);
         let size = r_p / EARTH_RADIUS_KM;
         let m_p = EARTH_MASS_KG * f64::from(p.mass_earth());
@@ -1072,7 +1074,13 @@ impl PlanetEffects {
     /// locked to its star feels none from it, and a binary's moon, locked
     /// face to face with it, raises a bulge that never moves.
     pub fn of(p: &WorldParams, system: Option<&MoonSystem>) -> Self {
-        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        // A rocky world's lock is the one `spin::star_info` gives it, so a
+        // stored or resonant world agrees with its card.
+        let star = if p.giant_mass_earth.is_none() {
+            crate::spin::star_info(p)
+        } else {
+            StarInfo::new(p.star, p.orbit_au, p.eccentricity)
+        };
         let r_p = f64::from(p.circumference_km) / (2.0 * PI);
         let size = r_p / EARTH_RADIUS_KM;
         let m_p = EARTH_MASS_KG * f64::from(p.mass_earth());

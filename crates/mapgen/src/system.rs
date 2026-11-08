@@ -2755,6 +2755,54 @@ mod spin_tests {
         draw(&request, &mut rand::rng()).unwrap()
     }
 
+    /// A rocky planet's day follows its spin state from `star_info`: a
+    /// year when locked, a year over the turns in a resonance. The moon
+    /// system once drew its own, on an Earth's mass, and could disagree.
+    #[test]
+    fn rocky_day_follows_the_one_spin_state() {
+        let (mut locked, mut resonant) = (0, 0);
+        for seed in 0..300 {
+            let system = red_dwarf_system(seed);
+            for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                if is_giant(&body.body_type) || body.params.giant_mass_earth.is_some() {
+                    continue;
+                }
+                let year_h = body.orbit.period_days * 24.0;
+                let want = if body.spin.locked {
+                    locked += 1;
+                    Some(year_h)
+                } else if body.spin.resonance_turns > 0.0 {
+                    resonant += 1;
+                    Some(year_h / f64::from(body.spin.resonance_turns))
+                } else {
+                    None
+                };
+                if let Some(want) = want {
+                    // The moon system, which sets the day of a planet not
+                    // despun, must agree with the card that says it is.
+                    if let Some(moons) = MoonSystem::draw(&body.params) {
+                        let day = f64::from(moons.planet_day_hours);
+                        assert!(
+                            (day - want).abs() <= 1e-4 * want,
+                            "{}: moons say {day} h, wanted {want} h",
+                            body.id
+                        );
+                    }
+                    assert!(
+                        (body.spin.period_hours - want).abs() <= 1e-6 * want,
+                        "{}: {} h, wanted {want} h",
+                        body.id,
+                        body.spin.period_hours
+                    );
+                }
+            }
+        }
+        assert!(
+            locked > 0 && resonant > 0,
+            "locked {locked}, resonant {resonant}"
+        );
+    }
+
     #[test]
     fn planets_locked_to_their_star_turn_on_circles_upright() {
         let (mut locked, mut resonant) = (0, 0);
