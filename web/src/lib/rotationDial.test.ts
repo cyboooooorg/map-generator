@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
 import { libration, librationAmplitude, systemSky } from './systemSky';
-import { dialFigureText, formatDayLength, formatDialAngle, formatLocalTime, rotationDial } from './rotationDial';
+import { dialFigureText, formatDayLength, formatDialAngle, formatLocalTime, hostCompass, rotationDial } from './rotationDial';
 import type { Vec3 } from './skyBodies';
 
 // The system of systemSky.test.ts: b (terran), c (a gas giant) and its
@@ -210,5 +210,38 @@ describe('rotation dial figures', () => {
     if (!text.locked) return;
     expect(text.solar).toBeNull();
     expect(text.time).toBe(formatLocalTime(dial.figures.localHours));
+  });
+});
+
+describe('host compass', () => {
+  it('has the moon viewed as its only body, round the host, not the other moons', () => {
+    const compass = hostCompass(system, 'c-1', 3)!;
+    expect(compass.state.bodies.map((b) => b.id)).toEqual(['c-1']);
+    expect(compass.state.bodies[0]!.host).toBe(false);
+    // It is the host's own dial: locked to its star as the giant's own is.
+    const own = rotationDial(system, 'c', 3, 0, systemSky(system, 'c', 3, textures))!;
+    expect(compass.state.zero).toEqual(own.state.zero);
+    expect(compass.state.reading).toBeCloseTo(own.state.reading, 12);
+    expect(own.state.bodies.map((b) => b.id).sort()).toEqual(['c-1', 'c-2']);
+  });
+
+  it('puts the moon at its height over the host’s equator, from the moon’s own sky', () => {
+    const tilted = structuredClone(system);
+    tilted.bodies.find((x) => x.id === 'c')!.spin.axial_tilt_deg = 30;
+    tilted.bodies.find((x) => x.id === 'c-1')!.orbit.inclination_deg = 20;
+    const days = 2.5;
+    const sky = systemSky(tilted, 'c-1', days, textures);
+    const k = sky.ids.indexOf('c');
+    const host = sky.bodies[k]!;
+    const away = host.position!.map((v) => -v) as Vec3;
+    // The host's spin axis, as the moon's sky has it, against the direction from the host to the moon.
+    const sine = (away[0] * host.axes![1][0] + away[1] * host.axes![1][1] + away[2] * host.axes![1][2]) / Math.hypot(...away);
+    expect(Math.abs(sine)).toBeGreaterThan(0.05);
+    expect(hostCompass(tilted, 'c-1', days)!.state.bodies[0]!.altitude).toBeCloseTo(Math.asin(sine), 6);
+  });
+
+  it('is null for a body without a host', () => {
+    expect(hostCompass(system, 'b', 0)).toBeNull();
+    expect(hostCompass(system, 'nobody', 0)).toBeNull();
   });
 });
