@@ -136,6 +136,7 @@ pub fn upright(p: &crate::world::WorldParams, drawn: f32) -> f32 {
 /// an older rule agree with its stored map.
 pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
     let mut star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    star.perihelion_longitude_deg = p.perihelion_longitude_deg;
     if crate::moons::is_moon_world(p) || crate::exomoon::HostGiant::draw(p).is_some() {
         star.tidally_locked = false;
         star.spin_orbit_3_2 = false;

@@ -543,6 +543,12 @@ pub struct StarInfo {
     /// have the Sun's.
     #[serde(default)]
     pub metallicity: f32,
+    /// Longitude of the orbit's perihelion, degrees from the spring equinox
+    /// (see [`crate::world::WorldParams::perihelion_longitude_deg`]); absent
+    /// on worlds made before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub perihelion_longitude_deg: Option<f32>,
 }
 
 impl StarInfo {
@@ -584,6 +590,7 @@ impl StarInfo {
             spin_orbit_3_2: crate::spin::resonant(locking, AGE_GYR.min(lifetime), eccentricity),
             light: light_colour(v.teff_k),
             metallicity: 0.0,
+            perihelion_longitude_deg: None,
         }
     }
 

@@ -125,4 +125,13 @@ locked_to_star?: boolean,
  * every other world, whose gravity follows from its size (see
  * [`WorldParams::gravity_modifier`]).
  */
-gravity?: number, };
+gravity?: number, 
+/**
+ * Longitude of the orbit's perihelion, degrees from the spring
+ * equinox in `[0, 360)`: where in the seasons the planet is closest to
+ * its star (Earth ≈ 283°, a few days after the December solstice; Mars
+ * ≈ 251°). With an eccentric orbit it makes the seasons uneven (see
+ * [`crate::climate::EccentricOrbit`]). Absent on worlds made before
+ * it, whose seasonal swing ignores the distance to the star.
+ */
+perihelion_longitude_deg?: number, };

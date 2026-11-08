@@ -1,7 +1,7 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
-use crate::climate::{Belts, LockedClimate, Moisture, Seasons};
+use crate::climate::{Belts, EccentricOrbit, LockedClimate, Moisture, Seasons};
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
@@ -1101,9 +1101,22 @@ pub fn seasons(params: &WorldParams) -> Seasons {
         return Seasons::none(grid.height);
     }
     let star = star_climate(params);
-    Seasons::new(&grid, params.axial_tilt_deg, params.pressure_bar, |rows| {
-        star_temperatures(rows, star)
-    })
+    // Worlds made before the longitude of perihelion keep seasons that
+    // ignore the distance to the star.
+    let orbit = params
+        .perihelion_longitude_deg
+        .filter(|_| params.eccentricity > 0.0)
+        .map(|perihelion_longitude_deg| EccentricOrbit {
+            eccentricity: params.eccentricity,
+            perihelion_longitude_deg,
+        });
+    Seasons::new(
+        &grid,
+        params.axial_tilt_deg,
+        params.pressure_bar,
+        orbit,
+        |rows| star_temperatures(rows, star),
+    )
 }
 
 /// Generates a world, running every pass in order, without debug layers.
@@ -1641,6 +1654,7 @@ pub(crate) mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            perihelion_longitude_deg: None,
             gravity: None,
         }
     }

@@ -732,10 +732,16 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   The seasons now set summer and winter temperatures, but the wind and
   the rain are annual means: a monsoon needs a summer and a winter run of
   the moisture pass with winds driven by the land-sea contrast.
-- **Uneven seasons on eccentric orbits:** the annual mean keeps the
-  `1/sqrt(1 − e²)` factor, but the seasonal swing ignores the distance to
-  the star at the solstices (Mars: 46 % more light at perihelion). It
-  needs a longitude of perihelion, drawn or given, in `WorldParams`.
+- **Uneven seasons on eccentric orbits:** done (2026-11-08). The seasonal
+  swing reads the star's distance at each longitude of the orbit
+  (`EccentricOrbit::light_at`, Berger 1978, doi:10.1175/1520-0469(1978)035<2362:LTVODI>2.0.CO;2),
+  with a longitude of perihelion in `WorldParams` (`--perihelion`, drawn
+  from the seed on its own stream, Earth 283°, Mars 251°). Worlds without
+  it keep the circular swing. What remains: the swing is half the
+  difference between the sunniest and darkest days, damped like the
+  circular one, so the summer and the winter stay symmetric around the
+  annual mean; a real eccentric orbit gives a short hot season and a long
+  mild one (the temperature response of a month-by-month run would).
 - **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
   narrower Hadley cells under heavier atmospheres, without a scaling the
   app could use; the belts scale with rotation and size only.

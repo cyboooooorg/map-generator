@@ -924,6 +924,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         // before the 3:2 resonance and the moons' locking to their planet
         // were locked to the star at any eccentricity, moons included.
         locked_to_star: meta.star.as_ref().map(|s| s.tidally_locked),
+        perihelion_longitude_deg: meta.star.as_ref().and_then(|s| s.perihelion_longitude_deg),
         // The gravity it was generated with (worlds made before the
         // mass–radius relation keep theirs), so its epochs and detail tiles
         // draw the craters it was drawn with.
@@ -1185,6 +1186,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            perihelion_longitude_deg: None,
             gravity: None,
         })
         .world;

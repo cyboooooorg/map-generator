@@ -88,6 +88,13 @@ struct Args {
     #[arg(long, value_parser = parse_in(request::ECCENTRICITY))]
     eccentricity: Option<f32>,
 
+    /// Longitude of the orbit's perihelion, in degrees from the spring
+    /// equinox, in [0, 360] (Earth: 283, Mars: 251): where in the seasons
+    /// the planet is closest to its star; on an eccentric orbit it makes
+    /// the seasons uneven [default: drawn from the seed]
+    #[arg(long, value_parser = parse_in(request::PERIHELION_LONGITUDE_DEG))]
+    perihelion: Option<f32>,
+
     /// Epoch of the plates in Ma from the present, in [-300, 300], negative
     /// in the past: on worlds with plate tectonics, the continents as the
     /// plates have carried them by then (or will have). The world is written
@@ -354,6 +361,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         orbit_au: args.orbit_au,
         hz_position: args.hz_position,
         eccentricity: args.eccentricity,
+        perihelion_longitude_deg: args.perihelion,
         drift_ma: args.drift,
         moons: args.moons,
         metallicity: args.metallicity,
@@ -501,6 +509,9 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         format!("--eccentricity {}", p.eccentricity),
         format!("--metallicity {}", p.metallicity),
     ]);
+    if let Some(longitude) = p.perihelion_longitude_deg.filter(|_| p.eccentricity > 0.0) {
+        reproduce.push(format!("--perihelion {longitude}"));
+    }
     if p.drift_ma != 0.0 {
         reproduce.push(format!("--drift {}", p.drift_ma));
     }

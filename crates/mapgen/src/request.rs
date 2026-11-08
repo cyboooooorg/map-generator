@@ -58,6 +58,11 @@ pub const ORBIT_AU: Limits = Limits {
 /// Eccentricity of the planet's orbit: 0 circular; beyond 0.9 the planet
 /// would graze its star or leave its habitable zone for most of its year.
 pub const ECCENTRICITY: Limits = Limits { min: 0.0, max: 0.9 };
+/// Longitude of the perihelion, degrees from the spring equinox.
+pub const PERIHELION_LONGITUDE_DEG: Limits = Limits {
+    min: 0.0,
+    max: 360.0,
+};
 /// Mass of a giant planet, Earth masses: from a small ice giant to the
 /// deuterium-burning limit (13 Jupiter masses).
 pub const GIANT_MASS: Limits = Limits {
@@ -143,6 +148,11 @@ pub struct WorldRequest {
     pub hz_position: Option<f32>,
     /// Eccentricity of the orbit, in `[0, 0.9]`.
     pub eccentricity: Option<f32>,
+    /// Longitude of the orbit's perihelion, degrees from the spring equinox,
+    /// in `[0, 360]` (Earth: 283): where in the seasons the planet is
+    /// closest to its star. Drawn from the seed when left out; it matters
+    /// on eccentric orbits only.
+    pub perihelion_longitude_deg: Option<f32>,
     /// Epoch of the plates, Ma from the present (negative in the past), in
     /// `[-300, 300]`; the present when left out (never drawn).
     pub drift_ma: Option<f32>,
@@ -331,6 +341,11 @@ impl WorldRequest {
             ("orbit_au", self.orbit_au, ORBIT_AU),
             ("hz_position", self.hz_position, HZ_POSITION),
             ("eccentricity", self.eccentricity, ECCENTRICITY),
+            (
+                "perihelion_longitude_deg",
+                self.perihelion_longitude_deg,
+                PERIHELION_LONGITUDE_DEG,
+            ),
             ("drift_ma", self.drift_ma, DRIFT_MA),
             ("metallicity", self.metallicity, METALLICITY),
             ("mass_earth", self.mass_earth, GIANT_MASS),
@@ -540,6 +555,16 @@ impl WorldRequest {
             impact_factor: None,
             locked_to_star: None,
             gravity: None,
+            // Drawn from its own stream: the other draws keep their values.
+            perihelion_longitude_deg: Some(self.perihelion_longitude_deg.map_or_else(
+                || {
+                    use rand::SeedableRng;
+                    let stream = crate::noise::stream_seed(seed, crate::noise::stream::PERIHELION);
+                    let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(stream));
+                    rng.random::<f32>() * 360.0
+                },
+                |v| v.rem_euclid(360.0),
+            )),
         };
         // Moons asked for: the world is not a giant's moon, which keeps none
         // (an error when that is asked for too).

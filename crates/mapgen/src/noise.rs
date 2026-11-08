@@ -154,6 +154,9 @@ pub mod stream {
     pub const RING_MOONS: u32 = 35;
     /// The dust rings its moons feed (see `crate::rings::dust_rings`).
     pub const DUST_RINGS: u32 = 36;
+    /// The longitude of a world's perihelion, when drawn (see
+    /// `crate::request`).
+    pub const PERIHELION: u32 = 37;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;

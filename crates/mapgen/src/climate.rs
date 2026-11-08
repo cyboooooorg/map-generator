@@ -222,14 +222,49 @@ pub const SEA_SEASONS: f32 = 0.10;
 /// a few hundred km inland. Calibration, no source.
 pub const CONTINENTALITY_KM: f32 = 400.0;
 
+/// The shape of an eccentric orbit as the seasons see it: how far the planet
+/// is from its star at each longitude of its orbit.
+///
+/// The light falls as the square of the distance, `r = a (1 − e²) / (1 + e
+/// cos ν)`, with `ν = λ − ϖ` the true anomaly, the angle `λ` along the orbit
+/// from the spring equinox less the longitude of perihelion `ϖ` (Berger 1978,
+/// doi:10.1175/1520-0469(1978)035<2362:LTVODI>2.0.CO;2, eq. 1-3 for the daily
+/// insolation). Mars (`e` = 0.093) gets 46 % more light at perihelion than at
+/// aphelion, Earth (0.017) 7 % more (NASA fact sheets).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EccentricOrbit {
+    /// Eccentricity, in `[0, 1)`.
+    pub eccentricity: f32,
+    /// Longitude of perihelion, degrees from the spring equinox.
+    pub perihelion_longitude_deg: f32,
+}
+
+impl EccentricOrbit {
+    /// The light at orbital longitude `longitude` (radians), relative to
+    /// the mean light over the orbit: `(1 + e cos ν)² / (1 − e²)^(3/2)`.
+    ///
+    /// Averaged over time it is 1 (the planet lingers far from its star:
+    /// Kepler's second law, `dt ∝ r² dν`), so the mean light of the rows
+    /// stays the one [`crate::star::mean_flux_factor`] gives and only the
+    /// swing around it changes.
+    pub fn light_at(&self, longitude: f64) -> f64 {
+        let e = f64::from(self.eccentricity);
+        let nu = longitude - f64::from(self.perihelion_longitude_deg).to_radians();
+        (1.0 + e * nu.cos()).powi(2) / (1.0 - e * e).powf(1.5)
+    }
+}
+
 /// Swing of the daily-mean light at `latitude` over a year, as half the
 /// difference between its sunniest and darkest days, relative to the
-/// global mean (see [`daily_insolation`]).
-fn insolation_swing(latitude: f64, axial_tilt_deg: f32) -> f64 {
+/// global mean (see [`daily_insolation`]); on an eccentric `orbit` the
+/// light of each day follows the planet's distance from the star
+/// ([`EccentricOrbit::light_at`]), none on a circular one.
+fn insolation_swing(latitude: f64, axial_tilt_deg: f32, orbit: Option<EccentricOrbit>) -> f64 {
     let (mut most, mut least) = (f64::MIN, f64::MAX);
     for k in 0..ORBIT_STEPS {
         let longitude = (k as f64 + 0.5) / ORBIT_STEPS as f64 * TAU;
-        let q = daily_insolation(latitude, declination(axial_tilt_deg, longitude));
+        let q = daily_insolation(latitude, declination(axial_tilt_deg, longitude))
+            * orbit.map_or(1.0, |o| o.light_at(longitude));
         most = most.max(q);
         least = least.min(q);
     }
@@ -267,13 +302,16 @@ impl Seasons {
         }
     }
 
-    /// The seasons of the rows of `grid` for an axial tilt (degrees) and a
-    /// surface pressure (bar); `star` moves rows of sea-level temperature
-    /// as [`crate::star::star_temperatures`] does.
+    /// The seasons of the rows of `grid` for an axial tilt (degrees), a
+    /// surface pressure (bar) and an eccentric `orbit` (`None`: a circular
+    /// one, or a world made before the longitude of perihelion, whose
+    /// seasons ignore the distance to the star); `star` moves rows of
+    /// sea-level temperature as [`crate::star::star_temperatures`] does.
     pub fn new(
         grid: &Grid,
         axial_tilt_deg: f32,
         pressure_bar: f32,
+        orbit: Option<EccentricOrbit>,
         star: impl Fn(&mut [f32]),
     ) -> Self {
         let mut rows = row_temperatures(grid, axial_tilt_deg);
@@ -282,7 +320,8 @@ impl Seasons {
         let contrast = crate::atmosphere::heat_contrast(pressure_bar);
         let swing: Vec<f32> = (0..grid.height)
             .map(|y| {
-                let s = insolation_swing(grid.latitude(y), axial_tilt_deg) / (equator - pole);
+                let s =
+                    insolation_swing(grid.latitude(y), axial_tilt_deg, orbit) / (equator - pole);
                 s as f32 * DEGREES_PER_UNIT * contrast
             })
             .collect();
@@ -1242,7 +1281,7 @@ mod tests {
             circumference_km: 40_000.0,
         };
         // Row 29 is centred on 60.5° N, row 59 on 30.5° N.
-        let earth = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, |_| {});
+        let earth = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, |_| {});
         let (land60, sea60) = (earth.half_range(29, true), earth.half_range(29, false));
         assert!((land60 - 19.6).abs() < 1.0, "{land60}");
         assert!((sea60 - 4.4).abs() < 0.5, "{sea60}");
@@ -1252,18 +1291,80 @@ mod tests {
         // Tilted by 90°, the pole swings from a scorching summer to a
         // winter far below freezing.
         let rows = row_temperatures(&grid, 90.0);
-        let tipped = Seasons::new(&grid, 90.0, 1.0, |_| {});
+        let tipped = Seasons::new(&grid, 90.0, 1.0, None, |_| {});
         assert!(rows[0] - tipped.half_range(0, true) < -20.0);
         // Dense air damps the seasons; a dim star narrows them in degrees.
-        let dense = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 92.0, |_| {});
+        let dense = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 92.0, None, |_| {});
         assert!(dense.half_range(29, true) < 0.11 * land60);
-        let dim = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, |rows| {
+        let dim = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, |rows| {
             for t in rows {
                 *t = (*t + 273.15) * 0.8 - 273.15;
             }
         });
         assert!((dim.half_range(29, true) - 0.8 * land60).abs() < 1e-3);
         assert_eq!(Seasons::none(180).half_range(29, true), 0.0);
+    }
+
+    #[test]
+    fn an_eccentric_orbit_lights_mars_46_percent_more_at_perihelion() {
+        let mars = EccentricOrbit {
+            eccentricity: 0.0934,
+            perihelion_longitude_deg: 251.0,
+        };
+        let perihelion = mars.light_at(251.0_f64.to_radians());
+        let aphelion = mars.light_at(71.0_f64.to_radians());
+        assert!((perihelion / aphelion - 1.457).abs() < 0.005);
+        // Averaged over time (weights r², Kepler's second law) it is 1.
+        let steps = 20_000;
+        let (mut sum, mut weight) = (0.0, 0.0);
+        for k in 0..steps {
+            let nu = (k as f64 + 0.5) / steps as f64 * TAU;
+            let r = (1.0 - 0.0934 * 0.0934) / (1.0 + 0.0934 * nu.cos());
+            sum += mars.light_at(nu + 251.0_f64.to_radians()) * r * r;
+            weight += r * r;
+        }
+        assert!((sum / weight - 1.0).abs() < 1e-3, "{}", sum / weight);
+    }
+
+    #[test]
+    fn eccentric_orbits_make_uneven_seasons_where_the_perihelion_falls() {
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        let swing = |orbit: Option<EccentricOrbit>, tilt: f32, y: u32| {
+            Seasons::new(&grid, tilt, 1.0, orbit, |_| {}).half_range(y, true)
+        };
+        let mars = |perihelion_longitude_deg| {
+            Some(EccentricOrbit {
+                eccentricity: 0.0934,
+                perihelion_longitude_deg,
+            })
+        };
+        // No tilt: the distance alone makes the seasons, in both
+        // hemispheres at once, strongest at the equator where the light is.
+        assert_eq!(swing(None, 0.0, 89), 0.0);
+        assert!(swing(mars(251.0), 0.0, 89) > 4.0);
+        // Row 29 is centred on 60.5° N. With the perihelion at the northern
+        // summer solstice (90°) the northern summer is brighter and its
+        // winter, far from the star, darker; at the winter solstice (270°)
+        // the two are milder.
+        let (summer, none, winter) = (
+            swing(mars(90.0), 25.19, 29),
+            swing(None, 25.19, 29),
+            swing(mars(270.0), 25.19, 29),
+        );
+        assert!(
+            summer > none + 1.5 && winter < none - 1.5,
+            "{summer} {none} {winter}"
+        );
+        // A circular orbit has no perihelion.
+        let circular = EccentricOrbit {
+            eccentricity: 0.0,
+            perihelion_longitude_deg: 90.0,
+        };
+        assert_eq!(swing(Some(circular), 25.19, 29), none);
     }
 
     /// A row of ocean on the west half and flat land on the east half.

@@ -1251,6 +1251,7 @@ pub fn small_body_params(
         given_rings: None,
         impact_factor: None,
         locked_to_star: None,
+        perihelion_longitude_deg: None,
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -1399,6 +1400,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            perihelion_longitude_deg: None,
             gravity: None,
         }
     }
