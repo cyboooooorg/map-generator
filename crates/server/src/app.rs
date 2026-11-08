@@ -31,6 +31,7 @@ use crate::api::{
     PresetInfo, SystemCreated, SystemDetail, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
+use crate::index::{Cause, Index};
 use crate::memory;
 use crate::previews::{PreviewCache, PreviewKey};
 use crate::systems;
@@ -109,6 +110,9 @@ struct Cancelled;
 pub struct Config {
     /// Drawn systems (see [`systems`]).
     pub systems_dir: PathBuf,
+    /// The SQLite file of the index (see [`crate::index`]); created, with
+    /// its directory, when missing.
+    pub db_path: PathBuf,
     pub presets_dir: PathBuf,
     /// Built front-end (`web/dist`); missing in development, where Vite serves it.
     pub static_dir: PathBuf,
@@ -122,6 +126,8 @@ pub struct Config {
 pub struct AppState {
     config: Config,
     catalog: Catalog,
+    /// Systems, bodies, names and jobs, beside the tree of files.
+    index: Arc<Index>,
     jobs: Mutex<HashMap<String, Job>>,
     next_job: AtomicU64,
     /// One generation at a time: each one already uses every core.
@@ -204,10 +210,12 @@ pub fn router(config: Config) -> Router {
     // Exports a killed server left unfinished.
     systems::sweep(&config.systems_dir);
     let catalog = Catalog::load(&config.presets_dir);
+    let (index, jobs, next_job) = open_index(&config);
     let state = Arc::new(AppState {
         catalog,
-        jobs: Mutex::new(HashMap::new()),
-        next_job: AtomicU64::new(1),
+        index,
+        jobs: Mutex::new(jobs),
+        next_job: AtomicU64::new(next_job),
         queue: Semaphore::new(1),
         pending: Mutex::new(Vec::new()),
         tiles: TileCache::new(config.tile_cache_bytes),
@@ -236,6 +244,10 @@ pub fn router(config: Config) -> Router {
         ));
     let files = Router::new()
         .nest_service("/systems", ServeDir::new(&config.systems_dir))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            note_served,
+        ))
         .fallback_service(spa)
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
@@ -279,6 +291,90 @@ pub fn router(config: Config) -> Router {
         .merge(files)
         .with_state(state)
         .layer(compression)
+}
+
+/// Opens the index, fills it from the tree (all of it when the database
+/// was missing or empty, the difference otherwise), marks the jobs a
+/// stop left unfinished as failed, and brings back the job history.
+fn open_index(config: &Config) -> (Arc<Index>, HashMap<String, Job>, u64) {
+    let started = std::time::Instant::now();
+    let index = Index::open(&config.db_path)
+        .unwrap_or_else(|e| panic!("cannot open the index {}: {e}", config.db_path.display()));
+    let report = index
+        .reconcile(&config.systems_dir)
+        .unwrap_or_else(|e| panic!("cannot read the systems into the index: {e}"));
+    let interrupted = index.interrupt_unfinished().unwrap_or_else(|e| {
+        tracing::error!("{e}");
+        0
+    });
+    let stored = index.jobs().unwrap_or_else(|e| {
+        tracing::error!("{e}");
+        Vec::new()
+    });
+    let next_job = index.next_job_id().unwrap_or(1);
+    tracing::info!(
+        added = report.added,
+        updated = report.updated,
+        removed = report.removed,
+        interrupted_jobs = interrupted,
+        journal = index.journal_mode(),
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "index {} ready",
+        config.db_path.display()
+    );
+    // Jobs of an earlier run only show their final status: the sender is
+    // dropped, the receiver keeps the last value.
+    let jobs = stored
+        .into_iter()
+        .map(|job| {
+            let (_, status) = watch::channel(job.status);
+            (
+                job.id.to_string(),
+                Job {
+                    world_id: job.world_id,
+                    system: job.system,
+                    request: job.request,
+                    status,
+                    cancel: Arc::new(Cancel::default()),
+                },
+            )
+        })
+        .collect();
+    (Arc::new(index), jobs, next_job)
+}
+
+/// Records, without waiting for it, that a body's data was served or
+/// opened (at most once a minute per body, see [`Index::touch_due`]).
+fn note_opened(state: &Shared, system: &str, body: &str) {
+    if state.index.touch_due(system, body) {
+        let index = state.index.clone();
+        let (system, body) = (system.to_string(), body.to_string());
+        drop(tokio::task::spawn_blocking(move || {
+            if let Err(e) = index.write_opened(&system, &body, crate::index::now_ms()) {
+                tracing::warn!("last opened of {system}/{body} not recorded: {e}");
+            }
+        }));
+    }
+}
+
+/// Records, from a request for a file under `/systems/<id>/bodies/<body>/`
+/// (thumbnails excepted: the library asks for all of them), that the body
+/// was opened.
+async fn note_served(
+    State(state): State<Shared>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let path = request.uri().path().to_string();
+    let parts: Vec<&str> = path.split('/').skip(1).collect();
+    if let ["systems", id, "bodies", body, file, ..] = parts.as_slice()
+        && *file != "thumb.png"
+        && systems::is_valid_system_id(id)
+        && systems::is_valid_body_id(body)
+    {
+        note_opened(&state, id, body);
+    }
+    next.run(request).await
 }
 
 /// Whether an answer is worth compressing: text formats only. PNG images
@@ -346,11 +442,16 @@ fn pending_system(id: &str) -> String {
 }
 
 async fn list_systems(State(state): State<Shared>) -> Json<Vec<SystemSummary>> {
-    let root = state.config.systems_dir.clone();
+    let index = state.index.clone();
     Json(
-        tokio::task::spawn_blocking(move || systems::list(&root))
+        tokio::task::spawn_blocking(move || index.list_systems())
             .await
-            .unwrap_or_default(),
+            .map_err(|e| e.to_string())
+            .and_then(|r| r.map_err(|e| e.to_string()))
+            .unwrap_or_else(|e| {
+                tracing::error!("listing systems: {e}");
+                Vec::new()
+            }),
     )
 }
 
@@ -460,14 +561,35 @@ async fn create_system(
         ));
     }
     let written = id.clone();
+    let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
+        // A system replaced keeps the names that still fit one of its bodies.
+        let kept: systems::GivenNames = if replace {
+            index
+                .names(&written)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .filter(|(body, _)| {
+                    body == systems::STAR || system.bodies.iter().any(|b| &b.id == body)
+                })
+                .collect()
+        } else {
+            systems::GivenNames::new()
+        };
         let temp = crate::staging::TempDir::create(&root, &written)?;
         mapgen::system::write_system(temp.path(), &system)?;
         if replace {
-            temp.commit_replacing(&target)
+            temp.commit_replacing(&target)?;
         } else {
-            temp.commit(&target)
+            temp.commit(&target)?;
         }
+        if !kept.is_empty() {
+            systems::write_names_file(&root, &written, &kept).map_err(|e| format!("{e:?}"))?;
+        }
+        index
+            .refresh_system(&root, &written, Cause::Drawn)
+            .map(drop)
+            .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
@@ -538,11 +660,12 @@ async fn get_system(
     }
     let root = state.config.systems_dir.clone();
     let owned = id.clone();
+    let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
         let system = mapgen::system::read_system(&systems::system_dir(&root, &owned)).ok()?;
         Some(SystemDetail {
             system,
-            names: systems::given_names(&root, &owned),
+            names: index.names(&owned).unwrap_or_default(),
         })
     })
     .await
@@ -577,6 +700,11 @@ async fn delete_system(
     tokio::fs::remove_dir_all(&dir)
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let (index, owned) = (state.index.clone(), id.clone());
+    tokio::task::spawn_blocking(move || index.remove_system(&owned))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     if forgotten {
         let _ = tokio::task::spawn_blocking(memory::release).await;
     }
@@ -595,8 +723,9 @@ async fn rename_system(
     }
     let root = state.config.systems_dir.clone();
     let owned = id.clone();
+    let index = state.index.clone();
     let result =
-        tokio::task::spawn_blocking(move || systems::give_names(&root, &owned, &request.names))
+        tokio::task::spawn_blocking(move || index.give_names(&root, &owned, &request.names))
             .await
             .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     result.map(Json).map_err(|e| match e {
@@ -622,6 +751,7 @@ async fn system_tile(
     Query(query): Query<TileQuery>,
 ) -> Result<Response, Failure> {
     let loc = system_body_loc(&state, &id, &body).await?;
+    note_opened(&state, &id, &body);
     body_tile(state, loc, TileId { z, x, y }, query).await
 }
 
@@ -631,6 +761,7 @@ async fn system_epoch_layer(
     Query(query): Query<EpochQuery>,
 ) -> Result<Response, Failure> {
     let loc = system_body_loc(&state, &id, &body).await?;
+    note_opened(&state, &id, &body);
     body_epoch_layer(state, loc, epoch_ma, file, query).await
 }
 
@@ -640,6 +771,7 @@ async fn system_drift_preview(
     Query(query): Query<DriftQuery>,
 ) -> Result<Response, Failure> {
     let loc = system_body_loc(&state, &id, &body).await?;
+    note_opened(&state, &id, &body);
     body_drift_preview(state, &id, &body, loc, drift_ma, file, query).await
 }
 
@@ -658,6 +790,7 @@ async fn system_hex(
     Json(request): Json<HexRequest>,
 ) -> Result<Response, Failure> {
     let loc = system_body_loc(&state, &id, &body).await?;
+    note_opened(&state, &id, &body);
     body_hex(state, loc, request).await
 }
 
@@ -1084,6 +1217,7 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         )
         .into());
     }
+    note_opened(state, id, body);
     let key = pending_system(id);
     {
         let mut pending = state.pending.lock().expect("pending lock");
@@ -1101,9 +1235,29 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         pending.push(key.clone());
     }
 
-    let job_id = state.next_job.fetch_add(1, Ordering::Relaxed).to_string();
+    let job_number = state.next_job.fetch_add(1, Ordering::Relaxed);
+    let job_id = job_number.to_string();
     let (tx, rx) = watch::channel(JobStatus::Queued);
     let cancel = Arc::new(Cancel::default());
+    {
+        let (index, owned, owned_body) = (state.index.clone(), id.to_string(), body.to_string());
+        let queued = tokio::task::spawn_blocking(move || {
+            index.job_queued(
+                job_number,
+                &owned,
+                Some((&owned, &owned_body)),
+                &WorldRequest::default(),
+                FINISHED_JOBS_KEPT,
+            )
+        })
+        .await;
+        if let Err(e) = queued
+            .map_err(|e| e.to_string())
+            .and_then(|r| r.map_err(|e| e.to_string()))
+        {
+            tracing::error!("job {job_number} not stored: {e}");
+        }
+    }
     {
         let mut jobs = state.jobs.lock().expect("jobs lock");
         forget_old_jobs(&mut jobs);
@@ -1122,6 +1276,34 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
     let task_state = state.clone();
     let (task_system, task_body) = (id.to_string(), body.to_string());
     tokio::spawn(async move {
+        // Stored before it is announced, so that a restart right after
+        // finds what a client saw. `None` is a job that starts running.
+        let store = |status: Option<JobStatus>| {
+            let (index, root, system) = (
+                task_state.index.clone(),
+                task_state.config.systems_dir.clone(),
+                task_system.clone(),
+            );
+            async move {
+                let stored = tokio::task::spawn_blocking(move || match status {
+                    None => index.job_running(job_number),
+                    Some(status) => {
+                        // What the job generated is in the tree: read it.
+                        if status.is_finished() {
+                            index.refresh_system(&root, &system, Cause::Generated)?;
+                        }
+                        index.job_status(job_number, &status)
+                    }
+                })
+                .await;
+                if let Err(e) = stored
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| r.map_err(|e| e.to_string()))
+                {
+                    tracing::error!("job {job_number} not stored: {e}");
+                }
+            }
+        };
         let finish = |status: JobStatus| {
             if let JobStatus::Failed { error } = &status {
                 tracing::error!("generation of {task_system}/{task_body} failed: {error}");
@@ -1136,14 +1318,17 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         let _permit = tokio::select! {
             permit = task_state.queue.acquire() => permit,
             () = cancel.notify.notified() => {
+                store(Some(JobStatus::Cancelled)).await;
                 finish(JobStatus::Cancelled);
                 return;
             }
         };
         if cancel.is_requested() {
+            store(Some(JobStatus::Cancelled)).await;
             finish(JobStatus::Cancelled);
             return;
         }
+        store(None).await;
         let paused_tiles = task_state.tiles.suspend().await;
         let progress = tx.clone();
         let thread_cancel = cancel.clone();
@@ -1179,6 +1364,7 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         };
         let _ = tokio::task::spawn_blocking(memory::release).await;
         drop(paused_tiles);
+        store(Some(status.clone())).await;
         finish(status);
     });
     Ok(Some(job_id))
@@ -1293,6 +1479,7 @@ mod tests {
         std::fs::create_dir_all(root.join("systems")).unwrap();
         Config {
             systems_dir: root.join("systems"),
+            db_path: root.join("db").join("mapgen.sqlite"),
             presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets")),
             static_dir: root.join("static"),
             max_pixels: DEFAULT_MAX_PIXELS,
@@ -1602,8 +1789,27 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&body).unwrap()["detail"]["code"],
             "system_exists"
         );
+        // Names given are kept when the system is replaced, those of bodies
+        // it no longer has dropped.
+        let (_, drawn) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        let drawn: serde_json::Value = serde_json::from_str(&drawn).unwrap();
+        let first = drawn["system"]["bodies"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let names = format!(r#"{{"names": {{"{first}": "Gaia", "star": "Helia"}}}}"#);
+        let uri = format!("/api/systems/{id}/names");
+        assert_eq!(
+            call(&app, "PUT", &uri, Some(&names)).await.0,
+            StatusCode::OK
+        );
         let (status, _) = call(&app, "POST", "/api/systems?replace=true", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED);
+        let kept = std::fs::read_to_string(root.join(&id).join("names.json")).unwrap();
+        assert!(kept.contains("Gaia") && kept.contains("Helia"), "{kept}");
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        assert_eq!(list[0]["names"][&first], "Gaia");
 
         let (_, list) = call(&app, "GET", "/api/systems", None).await;
         let list: serde_json::Value = serde_json::from_str(&list).unwrap();
@@ -1703,6 +1909,95 @@ mod tests {
         let (status, _) = call(&app, "DELETE", &format!("/api/systems/{id}"), None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         assert!(!root.join(&id).exists());
+    }
+
+    #[tokio::test]
+    async fn the_index_keeps_names_jobs_and_openings_across_a_restart() {
+        let config = temp_config("restart");
+        let db = config.db_path.clone();
+        let app = router(config.clone());
+        let request = r#"{"around": {"planet": "barren", "seed": 8, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
+        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        wait_job(&app, &body).await;
+        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let (id, job) = (
+            created["system_id"].as_str().unwrap().to_string(),
+            created["job_id"].as_str().unwrap().to_string(),
+        );
+        let (_, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
+        let planet = detail["system"]["focus"].as_str().unwrap().to_string();
+
+        // The list tells the body is generated, from the index.
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        assert_eq!(list[0]["id"], id.as_str());
+        let generated = |list: &serde_json::Value| {
+            list[0]["bodies"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|b| b["id"] == planet.as_str() && b["generated"] == true)
+        };
+        assert!(generated(&list));
+
+        // A name, and a file of the body served.
+        let names = format!(r#"{{"names": {{"{planet}": "Gaia"}}}}"#);
+        let uri = format!("/api/systems/{id}/names");
+        assert_eq!(
+            call(&app, "PUT", &uri, Some(&names)).await.0,
+            StatusCode::OK
+        );
+        let file = get_gzip(
+            &app,
+            &format!("/systems/{id}/bodies/{planet}/raw_data/world.json"),
+        )
+        .await;
+        assert_eq!(file.status(), StatusCode::OK);
+        let (_, before) = call(&app, "GET", "/api/jobs", None).await;
+
+        // Without its database, the index is rebuilt from the tree.
+        let rebuilt = router(Config {
+            db_path: db.with_file_name("rebuilt.sqlite"),
+            ..config.clone()
+        });
+        let (_, again) = call(&rebuilt, "GET", "/api/systems", None).await;
+        let again: serde_json::Value = serde_json::from_str(&again).unwrap();
+        assert_eq!(again[0]["names"][&planet], "Gaia", "from names.json");
+        assert!(generated(&again));
+        assert_eq!(call(&rebuilt, "GET", "/api/jobs", None).await.1, "[]");
+
+        // A restart on the same database: the same list, the job history,
+        // and the date the body was opened.
+        drop(app);
+        let restarted = router(config);
+        let (_, after) = call(&restarted, "GET", "/api/systems", None).await;
+        let after: serde_json::Value = serde_json::from_str(&after).unwrap();
+        assert_eq!(after, list_with_name(&list, &planet, "Gaia"));
+        let (_, jobs) = call(&restarted, "GET", "/api/jobs", None).await;
+        assert_eq!(jobs, before);
+        assert!(jobs.contains(&format!("\"job_id\":\"{job}\"")), "{jobs}");
+        let index = Index::open(&db).unwrap();
+        // Written by a blocking task, a moment after the request.
+        for _ in 0..100 {
+            if index.last_opened(&id, &planet).unwrap().is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(index.last_opened(&id, &planet).unwrap().is_some());
+        // The next job does not reuse an id.
+        let generate = format!("/api/systems/{id}/bodies/{planet}/generate");
+        let (_, none) = call(&restarted, "POST", &generate, None).await;
+        assert!(serde_json::from_str::<serde_json::Value>(&none).unwrap()["job_id"].is_null());
+    }
+
+    /// `list` with the name `name` given to `body` of its first system.
+    fn list_with_name(list: &serde_json::Value, body: &str, name: &str) -> serde_json::Value {
+        let mut list = list.clone();
+        list[0]["names"][body] = name.into();
+        list
     }
 
     #[tokio::test]

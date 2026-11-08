@@ -5,6 +5,7 @@
 //! | Variable              | Default      | Purpose                                  |
 //! |-----------------------|--------------|------------------------------------------|
 //! | `MAPGEN_SYSTEMS_DIR`  | `systems`    | drawn systems and their bodies           |
+//! | `MAPGEN_DB`           | `db/mapgen.sqlite` | the index: systems, bodies, names, jobs |
 //! | `MAPGEN_PRESETS_DIR`  | `presets`    | extra planet presets (`*.toml`)          |
 //! | `MAPGEN_STATIC_DIR`   | `web/dist`   | built web front-end                      |
 //! | `MAPGEN_MAX_PIXELS`   | `8388608`    | largest map accepted (width × height)    |
@@ -12,6 +13,10 @@
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |
 //! | `MALLOC_ARENA_MAX`    | glibc's      | glibc arenas; the Docker image sets `2`  |
+//!
+//! The index (see [`index`]) is a SQLite file the server owns. It is filled
+//! from `MAPGEN_SYSTEMS_DIR` when missing or empty and reconciled with it
+//! at every start; keep it on a volume that survives restarts.
 //!
 //! After a generation and after evicting worlds from the tile cache, the
 //! server gives the freed memory back to the system (see [`memory`]).
@@ -25,6 +30,7 @@
 mod api;
 mod app;
 mod catalog;
+mod index;
 mod memory;
 mod previews;
 mod staging;
@@ -59,6 +65,7 @@ async fn main() -> std::io::Result<()> {
 
     let config = app::Config {
         systems_dir: PathBuf::from(env_or("MAPGEN_SYSTEMS_DIR", "systems")),
+        db_path: PathBuf::from(env_or("MAPGEN_DB", "db/mapgen.sqlite")),
         presets_dir: PathBuf::from(env_or("MAPGEN_PRESETS_DIR", "presets")),
         static_dir: PathBuf::from(env_or("MAPGEN_STATIC_DIR", "web/dist")),
         max_pixels: std::env::var("MAPGEN_MAX_PIXELS")

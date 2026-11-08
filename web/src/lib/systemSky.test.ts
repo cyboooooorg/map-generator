@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { hillRadiusKm, hillSphere, libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
+import { hillRadiusKm, hillReach, hillSphere, libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
 import type { Vec3 } from './skyBodies';
 
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
@@ -330,5 +330,26 @@ describe('Hill sphere', () => {
     // The moons orbit well inside it.
     expect(system.bodies.find((x) => x.id === 'c-2')!.orbit.semi_major_axis_km).toBeLessThan(own.radiusKm / 3);
     expect(hillSphere(system, 'nope')).toBeNull();
+  });
+});
+
+describe('Hill sphere reach', () => {
+  it('frames a sphere about the body whole in the 40 degree field', () => {
+    const reach = hillReach([0, 0, 0], 235);
+    // The limb is seen at asin(radius / reach), inside the 20 degree half field.
+    expect(Math.asin(235 / reach)).toBeLessThan((20 * Math.PI) / 180);
+    expect(reach).toBeLessThan(235 * 3.6);
+  });
+
+  it('counts the offset of the sphere from the body', () => {
+    expect(hillReach([100, 0, 0], 235)).toBeGreaterThan(hillReach([0, 0, 0], 235));
+  });
+
+  it('is steady while the centre moves a little', () => {
+    expect(hillReach([100, 0, 0], 235)).toBe(hillReach([100.5, 0, 0], 235));
+  });
+
+  it('is nothing for nothing', () => {
+    expect(hillReach([0, 0, 0], 0)).toBe(0);
   });
 });

@@ -82,7 +82,7 @@ import {
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
 import { MAX_NIGHT_SOURCES, NIGHT_CEILING, NIGHT_FLOOR, NIGHT_RATIO_MAX, NIGHT_RATIO_MIN, STARLIGHT_RATIO, type NightSource } from '../nightLight';
-import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, type ShadowCaster, type SkyBody, skyOccluders } from '../skyBodies';
+import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, type ShadowCaster, type SkyBody, skyOccluders } from '../skyBodies';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, sunDeclinationDeg, type Sky } from '../sky';
@@ -670,6 +670,8 @@ export class PlanetView {
   private skyRequest = 0;
   /** Half-size of a small sky body's marker this frame, radians (see drawSkyBodies). */
   private skySmallest = 0;
+  /** The angle one drawn pixel spans, radians (see drawSkyBodies). */
+  private skyPixelAngle = 0;
   /** The host star (see setHostStar); the Sun until a world sets it. */
   private host: HostStar = SUN_STAR;
   /**
@@ -1185,8 +1187,16 @@ export class PlanetView {
   }
 
   /**
+   * Colours the temperature layer from `low` to `high` °C: the base map and
+   * the detail tiles share the uniform. The legend states the same range.
+   */
+  setTemperatureRange(low: number, high: number): void {
+    this.u.uTempRange.value.set(low, Math.max(high - low, 1));
+  }
+
+  /**
    * Shows a giant planet (null for a rocky world): its globe flattened by
-   * its spin, its temperatures on a range of their own, its wind on the
+   * its spin, its wind on the
    * moisture layer, its bands drifting each with its wind (with the cloud
    * drift), and its rings.
    */
@@ -1198,8 +1208,6 @@ export class PlanetView {
     // Clouds above about 1 100 K glow red, brighter the hotter.
     const t = info ? Math.min(Math.max((info.effective_k - 1100) / 1100, 0), 1) : 0;
     this.u.uHotGlow.value = 0.6 * t * t * (3 - 2 * t);
-    const [low, high] = info ? giantTemperatureRange(info) : [-30, 40];
-    this.u.uTempRange.value.set(low, high - low);
     const reach = info ? Math.max(info.wind_east, info.wind_west, 1) : 1;
     // The wind every 2°: Jupiter's jets are only 4° to 8° wide, and turn
     // east and west in turn.
@@ -1235,7 +1243,7 @@ export class PlanetView {
             uGaps: { value: gaps },
             uGapCount: { value: Math.min(r.gaps.length, 4) },
             uGapPixels: { value: SKY_BODY_MIN_PX },
-            uSeed: { value: (info.mass_earth * 7.31) % 13 },
+            uRingSeed: { value: ringSeed(info.mass_earth) },
             uLightMode: this.u.uLightMode,
             uSunDir: this.u.uSunDir,
             uFade: { value: 1 },
@@ -1377,6 +1385,7 @@ export class PlanetView {
       (u['uColour']!.value as Color).setRGB(...rocks.rings.colour, SRGBColorSpace);
       // The rings' own gaps, not widened to a pixel: no rock in them.
       setRingUniforms(u, rocks.rings, 0);
+      u['uRingSeed']!.value = rocks.seed;
     }
     for (const [u] of lattices) {
       u['uBoulderM']!.value = rocks.rings.bright ? BOULDER_M.bright : BOULDER_M.faint;
@@ -1410,6 +1419,7 @@ export class PlanetView {
       uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
       uRingGapCount: { value: 0 },
       uRingGapLeast: { value: 0 },
+      uRingSeed: { value: 0 },
     };
   }
 
@@ -3005,6 +3015,7 @@ export class PlanetView {
     const radiansPerPixel = ((this.camera.fov * Math.PI) / 180) / Math.max(this.renderer.domElement.height, 1);
     const smallest = SKY_BODY_MIN_PX * this.renderer.getPixelRatio() * radiansPerPixel;
     this.skySmallest = smallest;
+    this.skyPixelAngle = radiansPerPixel;
     for (const entry of this.skyBodies) {
       const { mesh, body } = entry;
       mesh.visible = visible;
@@ -3099,6 +3110,8 @@ export class PlanetView {
             uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
             uRingGapCount: { value: 0 },
             uRingGapLeast: { value: 0 },
+            uRingSeed: { value: 0 },
+            uPixelAngle: { value: 0 },
           },
           transparent: true,
           depthWrite: false,
@@ -3115,6 +3128,8 @@ export class PlanetView {
     ring.renderOrder = mesh.renderOrder + 0.1;
     const u = ring.material.uniforms;
     setRingUniforms(u, rings, ringGapLeast(this.skySmallest, place.half));
+    u['uRingSeed']!.value = body.ringSeed ?? 0;
+    u['uPixelAngle']!.value = this.skyPixelAngle;
     // Its centre and radius from the camera: from its place when it has
     // one, else at infinity in its direction (one radius per sin(half)).
     if (body.position && body.radius !== undefined) {

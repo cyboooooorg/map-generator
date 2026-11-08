@@ -22,7 +22,7 @@ import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
 import { resonanceTurns } from './spinResonance';
-import { IDENTITY_AXES, pickShadowCasters, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
+import { IDENTITY_AXES, pickShadowCasters, ringSeed, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
 
 const AU_KM = 1.495_978_707e8;
 /** The Sun's radius, km. */
@@ -253,6 +253,7 @@ export function systemSky(
       texture,
       axes: [local(bx), local(by), local(bz)],
       axialTiltDeg: body.spin.axial_tilt_deg,
+      ringSeed: ringSeed(body.physical.mass_earth),
       // The star is at the origin: its light at that body, and its phase from here.
       phaseCos: dot(unit(scale(there.centre, -1)), unit(sub(here.centre, there.centre))),
       insolation: (Math.hypot(...here.centre) / Math.max(Math.hypot(...there.centre), 1)) ** 2,
@@ -334,6 +335,21 @@ export function systemReach(system: System, shown: string): number | null {
   const furthest = Math.max(own, ...moons.map((b) => own + apo(b.orbit)));
   if (furthest <= 0) return null;
   return (3 * furthest) / Math.max(self.physical.radius_km, 1e-6);
+}
+
+/**
+ * How far out the camera must be able to go, in radii of the body shown
+ * from its centre, to see a Hill sphere whole from outside: its farthest
+ * point from the body, `|centre| + radius`, over the sine of the view's
+ * half field (20 degrees of the 40 degree field, 2.9), plus a tenth for the
+ * margin, rounded up to a step of 10 % so that a host moving on its orbit
+ * does not move the limit every frame. `centre` and `radius` are in radii
+ * of the body shown.
+ */
+export function hillReach(centre: readonly [number, number, number], radius: number): number {
+  const farthest = Math.hypot(centre[0], centre[1], centre[2]) + Math.max(radius, 0);
+  const reach = (farthest * 1.1) / Math.sin((20 * Math.PI) / 180);
+  return reach > 0 ? 1.1 ** Math.ceil(Math.log(reach) / Math.log(1.1) - 1e-9) : 0;
 }
 
 /** Earth masses in a Sun's mass. */

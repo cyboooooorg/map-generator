@@ -17,7 +17,7 @@ export const fr: Messages = {
   },
   playback: {
     dayOfYear: (p) => `jour ${p.day} sur ${p.year}`,
-    yearHelp: `Le jour de l’année de la planète${S}: les saisons, l’heure et les lunes avancent avec lui`,
+    yearHelp: `Le jour de l’année de la planète, compté depuis son équinoxe de printemps boréal${S}: les saisons, l’heure et les lunes avancent avec lui`,
     toStart: 'Revenir au jour 1',
     label: 'Lecture',
     play: 'Lecture',
@@ -981,6 +981,7 @@ export const fr: Messages = {
     systemClockHelp:
       `Tout le système suit une même horloge, en jours terrestres par seconde, chaque planète à son vrai rythme. Sélectionner une autre planète n’y change rien. Le jour compte les jours terrestres depuis le début de l’animation.`,
     hours: (p) => `${p.hours}${S}h`,
+    systemScale: `Schéma${S}: les distances sont logarithmiques (chaque pas vers l’extérieur multiplie la distance, donc les planètes proches sont écartées et les lointaines rapprochées, la zone habitable ombrée à sa place)${S}; l’étoile et les planètes ne sont pas à l’échelle, et les marqueurs rétrécissent là où les orbites sont proches.`,
     schematic: `Schéma${S}: l’étoile n’est pas à l’échelle${S}; les distances sont proportionnelles.`,
   },
   planetCard: {
