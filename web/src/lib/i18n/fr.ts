@@ -545,7 +545,7 @@ export const fr: Messages = {
   viewer: {
     axesGizmo: 'Les axes du monde, x rouge, y vert, z bleu, tels que les voit la caméra',
     sunlightOff: 'Allumez l’éclairage (dans la barre d’icônes) pour éclairer l’astre par son étoile, avec ses saisons et son heure.',
-    hexesOff: 'Allumez la grille hexagonale dans la barre d’icônes pour la régler ici.',
+    hexesOff: 'Cochez Hexagones ci-dessus pour dessiner la grille hexagonale et la régler ici.',
     infoPanel: 'Fiche',
     mapPanel: 'Carte',
     lightPanel: 'Lumière et saison',

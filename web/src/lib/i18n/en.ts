@@ -581,7 +581,7 @@ export const en = {
   viewer: {
     axesGizmo: 'The world\'s axes, x red, y green, z blue, as the camera sees them',
     sunlightOff: 'Turn on Sunlight (in the icon bar) to light the body by its star, with its seasons and its hour.',
-    hexesOff: 'Turn on the hex grid in the icon bar to set it here.',
+    hexesOff: 'Tick Hexes above to draw the hex grid and set it here.',
     infoPanel: 'Info',
     mapPanel: 'Map',
     lightPanel: 'Light and season',

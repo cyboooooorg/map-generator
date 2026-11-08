@@ -311,6 +311,8 @@
   // follow the window as it is resized across the limit.
   const wideQuery = window.matchMedia('(min-width: 900px)');
   let wide = $state(wideQuery.matches);
+  /** Whether the icon bar shows its names (it widens, and the legend steps right of it). */
+  let barExpanded = $state(loadSetting('toggles.expanded', false));
   /** The legend and panel states chosen on a wide screen, saved as the preferences. */
   let wideChoice = { legendOpen: saved.legendOpen, panelOpen: saved.panelOpen };
   let legendOpen = $state(saved.legendOpen && wideQuery.matches);
@@ -2266,7 +2268,7 @@
   <div class="planet-chrome">
     <div class="gizmo"><AxesGizmo axes={planetAxes} /></div>
     <div class="toggles">
-      <ToggleBar label={t.viewer.display} groups={toggleGroups} />
+      <ToggleBar label={t.viewer.display} groups={toggleGroups} bind:expanded={barExpanded} />
     </div>
     <Dock kind="planet" panels={dockPanels} defaultActive="map" />
     <PlaybackBar
@@ -2301,7 +2303,7 @@
     {@const ramp = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown]}
     {@const range = giant && shown === 'temperature' ? giantTemperatureRange(giant) : null}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="legend" role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
+    <div class="legend" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
       <strong>{giant ? layerName(shown) : ramp.label}</strong>
       <div class="bar" style:background={cssGradient(windShown ? 'wind' : topsShown ? 'cloudTops' : shown)}></div>
       <div class="ends">
@@ -2325,7 +2327,7 @@
     </div>
   {:else if shown === 'biomes' && world.stats}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="legend biomes" role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.biomeLegend}>
+    <div class="legend biomes" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.biomeLegend}>
       <button class="legend-title" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen}>
         <strong>{t.viewer.biomes}</strong>
         <small class="muted">{legendOpen ? t.viewer.legendHide : t.viewer.legendShow({ count: world.stats.shares.length })}</small>
@@ -2621,9 +2623,12 @@
     /* Bottom left, above the playback bar and right of the icon bar (12 px
        from the edge, 40 px wide), so that a long biome list never covers
        it; the dock holds the right. */
-    left: 64px;
+    left: 80px;
     bottom: 76px;
     width: 240px;
+    /* Under the toolbar, whatever the list: it scrolls inside (see ul). */
+    max-height: calc(100% - 172px);
+    overflow: hidden;
     /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
     background: var(--frame-deco), var(--panel);
     clip-path: var(--frame-clip);
@@ -2637,6 +2642,13 @@
     cursor: grab;
     user-select: none;
     touch-action: none;
+  }
+  .legend.biomes {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  /* The icon bar showing its names is wider: the legend steps right of it. */
+  .legend.bar-wide {
+    left: 208px;
   }
   .legend ul {
     touch-action: pan-y;

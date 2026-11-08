@@ -43,9 +43,12 @@
   import { t } from '../../lib/i18n/index.svelte';
   import { loadSetting, saveSetting } from '../../lib/settings';
 
-  let { groups, label }: { groups: readonly (readonly Toggle[])[]; label: string } = $props();
+  let {
+    groups,
+    label,
+    expanded = $bindable(loadSetting('toggles.expanded', false)),
+  }: { groups: readonly (readonly Toggle[])[]; label: string; expanded?: boolean } = $props();
   /** Whether the bar shows each switch's name beside its icon (remembered). */
-  let expanded = $state(loadSetting('toggles.expanded', false));
   $effect(() => saveSetting('toggles.expanded', expanded));
 </script>
 
