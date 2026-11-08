@@ -157,7 +157,6 @@ export const en = {
     notGenerated: 'not generated yet',
     pin: (p: { name: string }) => `Pin ${p.name} to the top`,
     unpin: (p: { name: string }) => `Unpin ${p.name}`,
-    pinned: 'Pinned',
     pinFailed: (p: { error: string }) => `Could not change the pin: ${p.error}`,
     rename: (p: { name: string }) => `Rename ${p.name}`,
     renameLabel: 'System name',

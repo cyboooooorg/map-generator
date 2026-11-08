@@ -11,19 +11,6 @@ export const SYSTEM_NAME_KEY = 'star';
 export const systemName = (s: Pick<SystemSummary, 'names' | 'designation'>): string =>
   s.names[SYSTEM_NAME_KEY] ?? s.designation;
 
-/**
- * The names to send to rename a system: `names` with the system's name set
- * to `value`. An empty value, or the designation itself, removes it, so
- * the default comes back; the names of the bodies stay.
- */
-export function withSystemName(names: Record<string, string>, value: string, designation: string): Record<string, string> {
-  const next = { ...names };
-  const trimmed = value.trim();
-  if (trimmed === '' || trimmed === designation) delete next[SYSTEM_NAME_KEY];
-  else next[SYSTEM_NAME_KEY] = trimmed;
-  return next;
-}
-
 const planetCount = (s: SystemSummary) => s.bodies.filter((b) => b.kind === 'planet').length;
 const COMPARE: Record<Sort, (a: SystemSummary, b: SystemSummary) => number> = {
   newest: (a, b) => b.modified_ms - a.modified_ms,

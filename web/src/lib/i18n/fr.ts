@@ -143,7 +143,6 @@ export const fr: Messages = {
     notGenerated: 'pas encore générée',
     pin: (p) => `Épingler ${p.name} en tête`,
     unpin: (p) => `Désépingler ${p.name}`,
-    pinned: 'Épinglé',
     pinFailed: (p) => `Impossible de modifier l’épingle${S}: ${p.error}`,
     rename: (p) => `Renommer ${p.name}`,
     renameLabel: 'Nom du système',

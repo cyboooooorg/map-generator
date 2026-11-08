@@ -13,8 +13,12 @@
 //! The files stay where they are (the tree is the blob store: bodies are
 //! written by [`crate::staging`], served as files). The index is rebuilt
 //! from the tree when the database is missing or empty, and reconciled
-//! with it on every start ([`Index::reconcile`]), so today's data needs no
-//! migration step. Names are written to `names.json` too, so that the
+//! with it on every start ([`Index::reconcile`]), so the files need no
+//! migration step. The database itself has a layout version
+//! (`PRAGMA user_version`): an older file is migrated when opened (in one
+//! immediate transaction), a newer one is refused. What only the index
+//! holds (pins, last opened dates, job history) is not rebuilt from the
+//! tree. Names are written to `names.json` too, so that the
 //! tree stays self-sufficient for now.
 //!
 //! One connection behind a mutex: the server's writes are few and short,
@@ -253,18 +257,8 @@ impl Index {
         let journal = choose_journal(&conn)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version == 0 {
-            conn.execute_batch(&format!(
-                "BEGIN; {SCHEMA} PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
-            ))?;
-        } else if version == 1 {
-            conn.execute_batch(&format!(
-                "BEGIN; {MIGRATE_1_TO_2} PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
-            ))?;
-        } else if version != SCHEMA_VERSION {
-            return Err(rusqlite::Error::InvalidParameterName(format!(
-                "database layout {version}, this server knows {SCHEMA_VERSION}"
-            )));
+        if version != SCHEMA_VERSION {
+            migrate(&conn)?;
         }
         Ok(Self {
             journal,
@@ -510,6 +504,59 @@ impl Index {
         }
         self.summary(id)
             .map_err(io)?
+            .ok_or(systems::NamingError::NotFound)
+    }
+
+    /// Sets (or, with `None` or a blank name, clears) the name of system
+    /// `id` itself, the one given to its star, and returns its summary.
+    /// The names of the bodies are read and kept under the same lock as
+    /// the write, so a body named meanwhile (another tab, the viewer) is
+    /// not lost.
+    pub fn set_system_name(
+        &self,
+        root: &Path,
+        id: &str,
+        name: Option<&str>,
+    ) -> std::result::Result<SystemSummary, systems::NamingError> {
+        let io = |e: rusqlite::Error| systems::NamingError::Io(e.to_string());
+        {
+            let mut conn = self.conn();
+            let known: bool = conn
+                .query_row("SELECT 1 FROM systems WHERE id = ?1", [id], |_| Ok(true))
+                .optional()
+                .map_err(io)?
+                .unwrap_or(false);
+            if !known {
+                return Err(systems::NamingError::NotFound);
+            }
+            let mut names: GivenNames = {
+                let mut stmt = conn
+                    .prepare("SELECT body_id, name FROM names WHERE system_id = ?1")
+                    .map_err(io)?;
+                let rows = stmt
+                    .query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .map_err(io)?;
+                rows.collect::<rusqlite::Result<_>>().map_err(io)?
+            };
+            match name.map(str::trim).filter(|n| !n.is_empty()) {
+                Some(name) => {
+                    let one: GivenNames = [(systems::STAR.to_string(), name.to_string())].into();
+                    let checked = systems::checked_names(&[], &one)?;
+                    names.extend(checked);
+                }
+                None => {
+                    names.remove(systems::STAR);
+                }
+            }
+            systems::write_names_file(root, id, &names)?;
+            let modified =
+                systems::modified_ms(&systems::system_dir(root, id).join(systems::NAMES_FILE));
+            let tx = conn.transaction().map_err(io)?;
+            replace_names(&tx, id, &names, modified).map_err(io)?;
+            tx.commit().map_err(io)?;
+        }
+        self.summary(id)
+            .map_err(|e| systems::NamingError::Io(e.to_string()))?
             .ok_or(systems::NamingError::NotFound)
     }
 
@@ -765,6 +812,37 @@ impl Index {
 
 /// Turns WAL on and checks it works here, or falls back to the default
 /// rollback journal with a warning. Returns the mode in use.
+/// Creates the layout or brings an older one up to date. The version is
+/// read again inside an immediate transaction, so that two processes
+/// opening the same old file at once migrate it once, not twice.
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        let mut version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version == 0 {
+            conn.execute_batch(SCHEMA)?;
+            version = SCHEMA_VERSION;
+        }
+        if version == 1 {
+            conn.execute_batch(MIGRATE_1_TO_2)?;
+            version = 2;
+        }
+        if version != SCHEMA_VERSION {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "database layout {version}, this server knows {SCHEMA_VERSION}"
+            )));
+        }
+        conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))
+    })();
+    match result {
+        Ok(()) => conn.execute_batch("COMMIT"),
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
 fn choose_journal(conn: &Connection) -> rusqlite::Result<String> {
     if let Err(why) = try_wal(conn) {
         tracing::warn!("SQLite WAL is not usable here ({why}): using the rollback journal");
@@ -1275,6 +1353,78 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn renaming_a_system_keeps_the_names_of_its_bodies() {
+        let root = temp_root("system-name");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        index.reconcile(&systems).unwrap();
+
+        // A client took a snapshot of the names, then a planet was named.
+        let snapshot = index.summary("mgs-1-1").unwrap().unwrap();
+        assert!(snapshot.names.is_empty());
+        let planet: GivenNames = [("c".into(), "Gaia".into())].into();
+        index.give_names(&systems, "mgs-1-1", &planet).unwrap();
+
+        let s = index
+            .set_system_name(&systems, "mgs-1-1", Some("  Helia "))
+            .unwrap();
+        assert_eq!(s.names.get("star").map(String::as_str), Some("Helia"));
+        assert_eq!(s.names.get("c").map(String::as_str), Some("Gaia"));
+        assert_eq!(systems::given_names(&systems, "mgs-1-1"), s.names);
+
+        // Clearing brings the default back and keeps the planet's name.
+        for cleared in [None, Some("  ")] {
+            index
+                .set_system_name(&systems, "mgs-1-1", Some("Helia"))
+                .unwrap();
+            let s = index.set_system_name(&systems, "mgs-1-1", cleared).unwrap();
+            assert_eq!(s.names, planet);
+            assert_eq!(systems::given_names(&systems, "mgs-1-1"), planet);
+        }
+        assert_eq!(
+            index.set_system_name(&systems, "mgs-1-1", Some(&"x".repeat(200))),
+            Err(systems::NamingError::InvalidName("x".repeat(200)))
+        );
+        assert_eq!(
+            index.set_system_name(&systems, "mgs-9-9", Some("A")),
+            Err(systems::NamingError::NotFound)
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn two_processes_opening_an_old_file_migrate_it_once() {
+        let root = temp_root("migrate-race");
+        let db = root.join("mapgen.sqlite");
+        {
+            Index::open(&db).unwrap();
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "ALTER TABLE systems DROP COLUMN pinned_ms; PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let opened: Vec<_> = (0..4)
+            .map(|_| {
+                let db = db.clone();
+                std::thread::spawn(move || Index::open(&db).map(drop))
+            })
+            .collect();
+        for handle in opened {
+            handle.join().unwrap().unwrap();
+        }
+        // A layout from the future is refused, and nothing is changed.
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch("PRAGMA user_version = 3").unwrap();
+        }
+        let refused = Index::open(&db).err().expect("refused");
+        assert!(refused.0.contains("database layout 3"), "{refused}");
         std::fs::remove_dir_all(root).unwrap();
     }
 

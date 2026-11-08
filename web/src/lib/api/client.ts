@@ -6,6 +6,7 @@ import type { ApiError } from './types/ApiError';
 import type { FormSpec } from './types/FormSpec';
 import type { GenerateStarted } from './types/GenerateStarted';
 import type { SystemCreated } from './types/SystemCreated';
+import type { SystemName } from './types/SystemName';
 import type { SystemNames } from './types/SystemNames';
 import type { SystemQuery } from './types/SystemQuery';
 import type { SystemRequest } from './types/SystemRequest';
@@ -81,6 +82,13 @@ export const api = {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ names } satisfies SystemNames),
+    }),
+  /** Names the system itself (the name of its star), keeping its bodies' names; empty brings the designation back. */
+  nameSystem: (id: string, name: string) =>
+    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/name`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() === '' ? null : name.trim() } satisfies SystemName),
     }),
   /** Pins a system in the main menu, or unpins it; answers its summary. */
   pinSystem: (id: string, pinned: boolean) =>

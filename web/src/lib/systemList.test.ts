@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SystemSummary } from './api/types/SystemSummary';
-import { sortSystems, systemName, withSystemName } from './systemList';
+import { sortSystems, systemName } from './systemList';
 
 const system = (id: string, seed: number, modified_ms: number, pinned = false, planets = 0): SystemSummary => ({
   id,
@@ -55,14 +55,5 @@ describe('system names', () => {
   it('shows the name given to the star, else the designation', () => {
     expect(systemName({ names: {}, designation: 'MGS 1' })).toBe('MGS 1');
     expect(systemName({ names: { star: 'Helia' }, designation: 'MGS 1' })).toBe('Helia');
-  });
-
-  it('sets the name and keeps the names of the bodies', () => {
-    expect(withSystemName({ b: 'Gaia' }, '  Helia ', 'MGS 1')).toEqual({ b: 'Gaia', star: 'Helia' });
-  });
-
-  it('goes back to the default on an empty name or the designation', () => {
-    expect(withSystemName({ b: 'Gaia', star: 'Helia' }, '   ', 'MGS 1')).toEqual({ b: 'Gaia' });
-    expect(withSystemName({ star: 'Helia' }, 'MGS 1', 'MGS 1')).toEqual({});
   });
 });

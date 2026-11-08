@@ -8,11 +8,10 @@
   import { formatAgo } from '../lib/format';
   import { presetName } from '../lib/i18n/names.svelte';
   import { loadSetting, saveSetting } from '../lib/settings';
-  import { api } from '../lib/api/client';
-  import { errorText } from '../lib/i18n/errors';
-  import { toasts } from '../lib/toasts.svelte';
-  import { MAX_NAME_CHARS } from '../lib/names';
-  import { SORTS, sortSystems, systemName as nameOf, withSystemName, type Sort } from '../lib/systemList';
+  import { SORTS, sortSystems, systemName as nameOf, type Sort } from '../lib/systemList';
+  import { tick } from 'svelte';
+  import PinButton from './PinButton.svelte';
+  import RenameForm from './RenameForm.svelte';
   import SystemOrrery from './SystemOrrery.svelte';
 
   interface Props {
@@ -56,34 +55,28 @@
     }
   });
 
-  // Renaming a system: empty goes back to its designation.
+  // Renaming a system (`RenameForm`): a single form is open at a time.
   let renaming = $state<string | null>(null);
-  let field = $state('');
-  let busy = $state(false);
-  function startRenaming(s: SystemSummary): void {
-    field = s.names['star'] ?? '';
-    renaming = s.id;
+  let dirty = $state(false);
+  /** Back to the pencil of a card once its form is closed. */
+  async function focusPencil(id: string): Promise<void> {
+    await tick();
+    document.querySelector<HTMLElement>(`[data-rename="${CSS.escape(id)}"]`)?.focus();
   }
-  async function saveName(event: SubmitEvent, s: SystemSummary): Promise<void> {
-    event.preventDefault();
-    busy = true;
-    try {
-      const summary = await api.renameSystem(s.id, withSystemName(s.names, field, s.designation));
-      renaming = null;
-      onChanged(summary);
-      toasts.show(t.systemList.renamed({ name: nameOf(summary) }));
-    } catch (e) {
-      toasts.error(t.systemList.renameFailed({ error: errorText(e) }));
-    } finally {
-      busy = false;
+  function startRenaming(id: string): void {
+    // A form with text typed stays open (and gets the focus) rather than
+    // being dropped by another card's pencil.
+    if (renaming !== null && renaming !== id && dirty) {
+      document.querySelector<HTMLElement>('.editing input')?.focus();
+      return;
     }
+    renaming = id;
   }
-  async function togglePin(s: SystemSummary): Promise<void> {
-    try {
-      onChanged(await api.pinSystem(s.id, !s.pinned));
-    } catch (e) {
-      toasts.error(t.systemList.pinFailed({ error: errorText(e) }));
-    }
+  function stopRenaming(): void {
+    const id = renaming;
+    renaming = null;
+    dirty = false;
+    if (id) void focusPencil(id);
   }
 
   function toggle(id: string): void {
@@ -153,14 +146,9 @@
         {#if renaming === system.id}
           <div class="card editing">
             <SystemOrrery {system} width={240} height={120} radius={0} />
-            <form class="text rename" onsubmit={(e) => saveName(e, system)}>
-              <!-- svelte-ignore a11y_autofocus -->
-              <input bind:value={field} placeholder={system.designation} maxlength={MAX_NAME_CHARS} aria-label={t.systemList.renameLabel} autofocus />
-              <span class="actions">
-                <button type="submit" disabled={busy}>{t.systemList.renameSave}</button>
-                <button type="button" onclick={() => (renaming = null)}>{t.systemList.renameCancel}</button>
-              </span>
-            </form>
+            <div class="text">
+              <RenameForm {system} {onChanged} onClose={stopRenaming} bind:dirty />
+            </div>
           </div>
         {:else}
         <button
@@ -180,15 +168,8 @@
         {/if}
         {#if renaming !== system.id}
           <span class="marks">
-            <button
-              class="mark pin"
-              class:on={system.pinned}
-              aria-pressed={system.pinned}
-              onclick={() => togglePin(system)}
-              aria-label={system.pinned ? t.systemList.unpin({ name: nameOf(system) }) : t.systemList.pin({ name: nameOf(system) })}
-              title={system.pinned ? t.systemList.unpin({ name: nameOf(system) }) : t.systemList.pin({ name: nameOf(system) })}>{system.pinned ? '★' : '☆'}</button
-            >
-            <button class="mark rename-button" onclick={() => startRenaming(system)} aria-label={t.systemList.rename({ name: nameOf(system) })} title={t.systemList.rename({ name: nameOf(system) })}>✎</button>
+            <PinButton {system} {onChanged} />
+            <button class="mark rename-button" data-rename={system.id} onclick={() => startRenaming(system.id)} aria-label={t.systemList.rename({ name: nameOf(system) })} title={t.systemList.rename({ name: nameOf(system) })}>✎</button>
           </span>
         {/if}
         {#if selecting}
@@ -305,22 +286,12 @@
     padding: 0 7px;
     line-height: 1.5;
   }
-  .mark.pin.on {
-    color: var(--accent);
-  }
   .mark.rename-button {
     opacity: 0;
   }
   li:hover .rename-button,
   .rename-button:focus-visible {
     opacity: 1;
-  }
-  .editing .rename {
-    gap: 6px;
-  }
-  .editing .actions {
-    display: flex;
-    gap: 6px;
   }
   .delete,
   .choose {
@@ -354,7 +325,7 @@
   .danger {
     color: var(--danger);
   }
-  @media (hover: none) {
+  @media (hover: none), (pointer: coarse) {
     .delete,
     .mark.rename-button {
       opacity: 1;

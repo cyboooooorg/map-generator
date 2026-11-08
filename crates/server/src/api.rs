@@ -364,6 +364,16 @@ pub struct SystemNames {
     pub names: BTreeMap<String, String>,
 }
 
+/// Body of `PUT /api/systems/{id}/name`: the name of the system itself
+/// (the one given to its star); null or blank brings its designation back.
+/// The names of its bodies are left as they are.
+#[derive(Clone, Debug, Default, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct SystemName {
+    pub name: Option<String>,
+}
+
 /// Answer to `POST /api/systems/{id}/bodies/{body}/generate`: the job, or
 /// none when the body and its neighbourhood are generated already.
 #[derive(Clone, Debug, Serialize, TS)]

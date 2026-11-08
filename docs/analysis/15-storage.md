@@ -243,6 +243,18 @@ What was built, and where it departs from the plan above:
   a pin is a view preference, cheap to redo, and a mirror would add a
   second source of truth to reconcile. A lost database loses the pins,
   not the names. This is the first user data that only the database holds.
+  Pins are lost too when a start finds a system's directory absent
+  (`systems/` not mounted: the reconcile drops the system) and when a
+  corrupt file is set aside (the `.corrupt-<ms>` file still holds them).
+- **Layout versions:** an older file is migrated when opened, inside a
+  `BEGIN IMMEDIATE` transaction that reads `user_version` again, so two
+  processes opening a version 1 file migrate it once. A newer file is
+  refused. Downgrading: an older server stops with `database layout 2,
+  this server knows 1`; move the file (and `-wal`, `-shm`) aside, the
+  index is rebuilt, names come back from `names.json`, pins are lost.
+- **System name:** `PUT /api/systems/{id}/name` merges the name of the
+  star into the names under the connection lock (`names.json` first, then
+  the index), so a body named since a client read the list is kept.
 - **Location:** `MAPGEN_DB`, `/data/db/mapgen.sqlite` in the container,
   `./db` on the host (`compose.yaml`, `mise run up` creates it, `db/` is
   git-ignored).

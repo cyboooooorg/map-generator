@@ -10,6 +10,7 @@
 //! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
 //! | `DELETE /api/systems/{id}`      | delete a system (409 while it is being generated)  |
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
+//! | `PUT /api/systems/{id}/name`   | name the system itself, keeping its bodies' names (`SystemName`; null clears) |
 //! | `PUT /api/systems/{id}/pin`     | pin it in the main menu (idempotent, answers its summary) |
 //! | `DELETE /api/systems/{id}/pin`  | unpin it (idempotent, answers its summary)         |
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
@@ -30,7 +31,7 @@
 //! sent as they are.
 use crate::api::{
     ApiError, ErrorDetail, FormSpec, GenerateStarted, HexRequest, JobInfo, JobStatus, ParamSpec,
-    PresetInfo, SystemCreated, SystemDetail, SystemNames, SystemQuery, SystemSummary,
+    PresetInfo, SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, Index};
@@ -265,6 +266,7 @@ pub fn router(config: Config) -> Router {
         .route("/api/systems", get(list_systems).post(create_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
         .route("/api/systems/{id}/names", put(rename_system))
+        .route("/api/systems/{id}/name", put(name_system))
         .route(
             "/api/systems/{id}/pin",
             put(pin_system).delete(unpin_system),
@@ -768,7 +770,32 @@ async fn rename_system(
         tokio::task::spawn_blocking(move || index.give_names(&root, &owned, &request.names))
             .await
             .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    result.map(Json).map_err(|e| match e {
+    result.map(Json).map_err(|e| naming_failure(e, &id))
+}
+
+/// Names the system itself (`PUT /api/systems/{id}/name`): merged into the
+/// names given, those of the bodies untouched.
+async fn name_system(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    Json(request): Json<SystemName>,
+) -> Result<Json<SystemSummary>, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    let root = state.config.systems_dir.clone();
+    let owned = id.clone();
+    let index = state.index.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        index.set_system_name(&root, &owned, request.name.as_deref())
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    result.map(Json).map_err(|e| naming_failure(e, &id))
+}
+
+fn naming_failure(e: systems::NamingError, id: &str) -> Failure {
+    match e {
         systems::NamingError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no system {id}")),
         systems::NamingError::InvalidName(name) => Failure(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -782,7 +809,7 @@ async fn rename_system(
             format!("system {id} has no body {body}"),
         ),
         systems::NamingError::Io(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
-    })
+    }
 }
 
 async fn system_tile(
@@ -1843,6 +1870,44 @@ mod tests {
             call(&app, "PUT", &uri, Some(&names)).await.0,
             StatusCode::OK
         );
+        // Naming the system keeps the names of its bodies, even those given
+        // after a client read them; null clears it.
+        let name = format!("/api/systems/{id}/name");
+        let (status, named) = call(&app, "PUT", &name, Some(r#"{"name": " Sol "}"#)).await;
+        assert_eq!(status, StatusCode::OK, "{named}");
+        let named: serde_json::Value = serde_json::from_str(&named).unwrap();
+        assert_eq!(named["names"]["star"], "Sol");
+        assert_eq!(named["names"][&first], "Gaia");
+        let (status, cleared) = call(&app, "PUT", &name, Some(r#"{"name": null}"#)).await;
+        assert_eq!(status, StatusCode::OK, "{cleared}");
+        let cleared: serde_json::Value = serde_json::from_str(&cleared).unwrap();
+        assert!(cleared["names"].get("star").is_none());
+        assert_eq!(cleared["names"][&first], "Gaia");
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &name,
+                Some(&format!(r#"{{"name": "{}"}}"#, "x".repeat(99)))
+            )
+            .await
+            .0,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                "/api/systems/mgs-0-0/name",
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+        // The star was named "Helia" before: put it back for the rest.
+        call(&app, "PUT", &name, Some(r#"{"name": "Helia"}"#)).await;
+
         // A pin is kept too.
         let pin = format!("/api/systems/{id}/pin");
         let (status, pinned) = call(&app, "PUT", &pin, None).await;
@@ -1855,6 +1920,10 @@ mod tests {
         let (status, unpinned) = call(&app, "DELETE", &pin, None).await;
         assert_eq!(status, StatusCode::OK);
         assert!(unpinned.contains(r#""pinned":false"#), "{unpinned}");
+        // Unpinning what is not pinned is fine.
+        let (status, again) = call(&app, "DELETE", &pin, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(again.contains(r#""pinned":false"#), "{again}");
         assert_eq!(
             call(&app, "PUT", "/api/systems/mgs-0-0/pin", None).await.0,
             StatusCode::NOT_FOUND
