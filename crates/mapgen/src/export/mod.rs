@@ -74,20 +74,25 @@ pub fn export_world(
 
     let layers = MapLayers::with_coverage(world, river_coverage);
     let layers = &layers;
-    // The detailed render, shared by world.png (which adds the reference
-    // lines) and raw_data/surface.png (without them, for the viewer).
-    // A giant's cloud bands come rendered from its own pipeline.
+    // The detailed render: shaded for world.png (which adds the reference
+    // lines), unshaded with its relief normals for the viewer
+    // (raw_data/colour.png and normal.png). A giant's cloud bands come
+    // rendered from its own pipeline, with no relief.
     let giant = !world.surface.is_empty();
-    let surface = if giant {
-        world.surface.clone()
+    let rendered = if giant {
+        Rendered {
+            shaded: world.surface.clone(),
+            colour: world.surface.clone(),
+            normal: vec![relief::FLAT; world.surface.len()],
+        }
     } else {
-        render_pixels(world, layers, Style::Detailed)
+        render_both(world, layers)
     };
-    let surface = &surface;
+    let rendered = &rendered;
+    let surface = &rendered.shaded;
     type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
     let mut exports: Vec<Export> = vec![
         Box::new(|| {
-            // raw_data/surface.png needs the render without contours.
             let mut map = surface.clone();
             // Cloud tops have no contour lines.
             if !giant {
@@ -106,7 +111,11 @@ pub fn export_world(
     ];
     if options.raw_data {
         exports.push(Box::new(|| {
-            export_raw_data(world, &dir.join("raw_data"), Some(surface)).map_err(|e| e.to_string())
+            let maps = raw_data::SurfaceMaps {
+                colour: &rendered.colour,
+                normal: &rendered.normal,
+            };
+            export_raw_data(world, &dir.join("raw_data"), Some(&maps)).map_err(|e| e.to_string())
         }));
     }
     exports.par_iter().try_for_each(|export| export())
@@ -692,6 +701,77 @@ mod tests {
             }
         }
         assert!(water > 0 && lava > 0 && land > 0, "{water} {lava} {land}");
+    }
+
+    /// Exports `params`' world into a fresh directory and returns it.
+    fn exported(params: &crate::world::WorldParams, tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("mapgen-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let generated = crate::generation::generate(params);
+        super::export_world(generated, &dir, super::ExportOptions { raw_data: true }).unwrap();
+        dir
+    }
+
+    #[test]
+    fn exports_the_colour_and_the_normals_instead_of_the_surface() {
+        use crate::export::raw_data::read_metadata;
+        let params = crate::world::WorldParams {
+            width: 1024,
+            height: 512,
+            ..crate::generation::tests::params(3, "terran")
+        };
+        let dir = exported(&params, "colour-normal");
+        let raw = dir.join("raw_data");
+        let size = |f: &str| image::image_dimensions(raw.join(f)).unwrap();
+        assert_eq!(size("colour.png"), (1024, 512));
+        assert_eq!(size("normal.png"), (1024, 512));
+        assert_eq!(size("colour_small.png"), (512, 256));
+        assert_eq!(size("normal_small.png"), (512, 256));
+        assert!(!raw.join("surface.png").exists());
+        let meta = read_metadata(&raw).unwrap();
+        let colour = meta.layers.colour.as_ref().unwrap();
+        assert_eq!(
+            (colour.file.as_str(), colour.encoding.as_str()),
+            ("colour.png", "rgb8")
+        );
+        let normal = meta.layers.normal.as_ref().unwrap();
+        assert_eq!(
+            (normal.file.as_str(), normal.encoding.as_str()),
+            ("normal.png", "rgb8-normal")
+        );
+        assert_eq!(
+            meta.layers.colour_small.as_ref().unwrap().file,
+            "colour_small.png"
+        );
+        assert_eq!(
+            meta.layers.normal_small.as_ref().unwrap().file,
+            "normal_small.png"
+        );
+        // The flat images keep their hillshade: world.png is the shaded
+        // render, not the colour layer.
+        let world = image::open(dir.join("world.png")).unwrap().to_rgb8();
+        let colour = image::open(raw.join("colour.png")).unwrap().to_rgb8();
+        assert_ne!(world.as_raw(), colour.as_raw());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_giant_has_its_bands_as_colour_and_flat_normals() {
+        // A Jupiter: the giant's own pipeline draws its bands.
+        let params = crate::world::WorldParams {
+            giant_mass_earth: Some(317.8),
+            ..crate::generation::tests::params(3, "gas-giant")
+        };
+        let generated = crate::generation::generate(&params);
+        let bands = generated.world.surface.clone();
+        assert!(!bands.is_empty());
+        let dir = exported(&params, "giant-normal");
+        let raw = dir.join("raw_data");
+        let colour = image::open(raw.join("colour.png")).unwrap().to_rgb8();
+        assert_eq!(colour.as_raw().as_slice(), bands.as_flattened());
+        let normal = image::open(raw.join("normal.png")).unwrap().to_rgb8();
+        assert!(normal.pixels().all(|p| p.0 == super::relief::FLAT));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

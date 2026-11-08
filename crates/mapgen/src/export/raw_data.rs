@@ -13,7 +13,9 @@
 //! | `flow.png`        | 16-bit grey, `log10(1 + km²)` with the same formula          |
 //! | `biomes.png`      | 8-bit grey, pixel = biome id (see the `biomes` table)       |
 //! | `clouds.png`      | 8-bit grey, cloud cover `pixel / 255` (worlds with clouds)  |
-//! | `surface.png`     | 8-bit RGB, `world.png` without its overlaid lines           |
+//! | `colour.png`      | 8-bit RGB, the surface without hillshade or overlaid lines  |
+//! | `normal.png`      | 8-bit RGB relief normals (east, north, up), `(n + 1) / 2 · 255` |
+//! | `colour_small.png`, `normal_small.png` | the same at 512 pixels of width at most |
 //!
 //! [`load_world`] (and the hex resampling) refuse a world whose
 //! `format_version` is newer than [`FORMAT_VERSION`] or older than
@@ -43,16 +45,19 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// [`MIN_FORMAT_VERSION`]. Version 14 dropped the code that re-derived
 /// older worlds. Version 15 samples the smooth climate noise fields on a
 /// coarser grid and interpolates them (see [`crate::coarse`]): the same
-/// seed gives slightly different worlds from then on; version 14 worlds
-/// are still read as they are.
-pub const FORMAT_VERSION: u32 = 15;
+/// seed gives slightly different worlds from then on. Version 16 replaces
+/// `surface.png` (hillshaded) with `colour.png` and `normal.png` and their
+/// small copies: the viewer lights the relief itself, so older worlds,
+/// which have no normals, are refused.
+pub const FORMAT_VERSION: u32 = 16;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
 /// scale, biomes without seasons, a linear moisture, layers computed on
-/// load): they are refused with a message suggesting `mise run
+/// load, a hillshade baked into the surface instead of relief normals):
+/// they are refused with a message suggesting `mise run
 /// clean-systems`.
-pub const MIN_FORMAT_VERSION: u32 = 14;
+pub const MIN_FORMAT_VERSION: u32 = 16;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
@@ -157,10 +162,21 @@ pub struct Layers {
     /// (max − min)`); absent on worlds without clouds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clouds: Option<ScalarLayerInfo>,
-    /// The hillshaded render of `world.png` without its reference and
-    /// contour lines, which the viewer draws itself.
+    /// The render of `world.png` without its hillshade and its reference
+    /// and contour lines: the viewer lights it with [`Layers::normal`] and
+    /// draws its own lines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub surface: Option<ImageLayerInfo>,
+    pub colour: Option<ImageLayerInfo>,
+    /// The relief normals (see [`crate::export::relief`]), `rgb8-normal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal: Option<ImageLayerInfo>,
+    /// [`Layers::colour`] at [`SMALL_WIDTH`] pixels of width at most, for
+    /// the small planets of the star view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_small: Option<ImageLayerInfo>,
+    /// [`Layers::normal`] at [`SMALL_WIDTH`] pixels of width at most.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal_small: Option<ImageLayerInfo>,
     pub biomes: BiomeLayerInfo,
 }
 
@@ -169,8 +185,67 @@ pub struct Layers {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ImageLayerInfo {
     pub file: String,
-    /// `rgb8`.
+    /// `rgb8`, or `rgb8-normal` for normals.
     pub encoding: String,
+}
+
+/// Width of the small copies of the colour and the normals.
+pub const SMALL_WIDTH: u32 = 512;
+
+/// The size of a small copy of a `w` × `h` map: [`SMALL_WIDTH`] wide at
+/// most, the same shape.
+fn small_size(w: u32, h: u32) -> (u32, u32) {
+    let sw = w.min(SMALL_WIDTH);
+    (
+        sw,
+        ((u64::from(h) * u64::from(sw) + u64::from(w) / 2) / u64::from(w)).max(1) as u32,
+    )
+}
+
+/// Saves 8-bit RGB pixels as a PNG.
+fn save_rgb(path: &Path, pixels: &[[u8; 3]], w: u32, h: u32) -> Result<(), String> {
+    image::save_buffer(
+        path,
+        pixels.as_flattened(),
+        w,
+        h,
+        image::ExtendedColorType::Rgb8,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// A small copy of a colour map (see [`small_size`]), each pixel the mean
+/// of the pixels it covers.
+fn downscale_colour(pixels: &[[u8; 3]], w: u32, h: u32) -> (Vec<[u8; 3]>, u32, u32) {
+    let (sw, sh) = small_size(w, h);
+    let image = image::RgbImage::from_raw(w, h, pixels.as_flattened().to_vec()).expect("size");
+    let small = image::imageops::resize(&image, sw, sh, image::imageops::FilterType::Triangle);
+    (small.pixels().map(|p| p.0).collect(), sw, sh)
+}
+
+/// A small copy of a normal map: the normals averaged as vectors, then
+/// made unit again.
+fn downscale_normals(pixels: &[[u8; 3]], w: u32, h: u32) -> (Vec<[u8; 3]>, u32, u32) {
+    use crate::export::relief::{decode_normal, encode_normal};
+    let (sw, sh) = small_size(w, h);
+    let decoded: Vec<f32> = pixels.iter().flat_map(|&p| decode_normal(p)).collect();
+    let image = image::Rgb32FImage::from_raw(w, h, decoded).expect("size");
+    let small = image::imageops::resize(&image, sw, sh, image::imageops::FilterType::Triangle);
+    let normals = small
+        .pixels()
+        .map(|p| {
+            let [x, y, z] = p.0;
+            let len = (x * x + y * y + z * z).sqrt().max(1e-6);
+            encode_normal([x / len, y / len, z / len])
+        })
+        .collect();
+    (normals, sw, sh)
+}
+
+/// The viewer's maps of a world (see [`super::Rendered`]).
+pub struct SurfaceMaps<'a> {
+    pub colour: &'a [[u8; 3]],
+    pub normal: &'a [[u8; 3]],
 }
 
 /// A 16-bit layer: pixel `p` decodes to `min + p / 65535 × (max − min)`
@@ -259,13 +334,14 @@ fn quantise(v: f32, min: f32, max: f32) -> u16 {
     ((v.clamp(min, max) - min) / (max - min) * u16::MAX as f32).round() as u16
 }
 
-/// Writes `world.json` and one PNG per layer into `dir`. `surface`, the
-/// map's pixels without overlaid lines (see [`super::render_pixels`]), is
-/// written as `surface.png` when given.
+/// Writes `world.json` and one PNG per layer into `dir`. `maps`, the
+/// colour and the relief normals of the map (see [`super::render_both`]),
+/// are written as `colour.png` and `normal.png`, with their small copies,
+/// when given.
 pub fn export_raw_data(
     world: &World,
     dir: &Path,
-    surface: Option<&[[u8; 3]]>,
+    maps: Option<&SurfaceMaps>,
 ) -> Result<(), Box<dyn Error>> {
     let (w, h) = (world.width, world.height);
     let layer = |name, values, range| ScalarLayer {
@@ -401,32 +477,33 @@ pub fn export_raw_data(
         })
     };
 
-    let surface = match surface {
-        Some(pixels) => {
-            if pixels.len() != (w * h) as usize {
-                return Err("surface size does not match the world size".into());
+    let has_maps = match maps {
+        Some(maps) => {
+            if maps.colour.len() != (w * h) as usize || maps.normal.len() != (w * h) as usize {
+                return Err("colour or normal size does not match the world size".into());
             }
             // Saved from the borrowed pixels: no copy of the render. The
-            // largest file: first in the queue.
-            jobs.insert(
-                0,
-                Box::new(move || {
-                    image::save_buffer(
-                        dir.join("surface.png"),
-                        pixels.as_flattened(),
-                        w,
-                        h,
-                        image::ExtendedColorType::Rgb8,
-                    )
-                    .map_err(|e| e.to_string())
-                }),
-            );
-            Some(ImageLayerInfo {
-                file: "surface.png".into(),
-                encoding: "rgb8".into(),
-            })
+            // largest files: first in the queue.
+            for (file, pixels) in [("colour.png", maps.colour), ("normal.png", maps.normal)] {
+                jobs.insert(0, Box::new(move || save_rgb(&dir.join(file), pixels, w, h)));
+            }
+            jobs.push(Box::new(move || {
+                let (small, sw, sh) = downscale_colour(maps.colour, w, h);
+                save_rgb(&dir.join("colour_small.png"), &small, sw, sh)
+            }));
+            jobs.push(Box::new(move || {
+                let (small, sw, sh) = downscale_normals(maps.normal, w, h);
+                save_rgb(&dir.join("normal_small.png"), &small, sw, sh)
+            }));
+            true
         }
-        None => None,
+        None => false,
+    };
+    let image_layer = |file: &str, encoding: &str| {
+        has_maps.then(|| ImageLayerInfo {
+            file: file.into(),
+            encoding: encoding.into(),
+        })
     };
     write_jobs(jobs)?;
 
@@ -483,7 +560,10 @@ pub fn export_raw_data(
             clouds,
             albedo,
             shape,
-            surface,
+            colour: image_layer("colour.png", "rgb8"),
+            normal: image_layer("normal.png", "rgb8-normal"),
+            colour_small: image_layer("colour_small.png", "rgb8"),
+            normal_small: image_layer("normal_small.png", "rgb8-normal"),
             biomes: BiomeLayerInfo {
                 file: "biomes.png".into(),
                 encoding: "gray8-biome-id".into(),

@@ -3,4 +3,4 @@
 // test): a world below it is not shown, since the generator no longer
 // re-derives it.
 
-export const MIN_FORMAT_VERSION = 14;
+export const MIN_FORMAT_VERSION = 16;
