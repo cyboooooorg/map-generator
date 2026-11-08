@@ -207,7 +207,7 @@ export const surfaceVertex = /* glsl */ `
  * colour; LAVA_DAY_GLOW the light of their own they keep by day, so that a
  * flow on a slope turned away from the light still glows.
  */
-const lavaGlsl = /* glsl */ `
+export const lavaGlsl = /* glsl */ `
   const float LAVA_GLOW = 0.9;
   const float LAVA_DAY_GLOW = 0.25;
   float lavaShare(vec3 c) {

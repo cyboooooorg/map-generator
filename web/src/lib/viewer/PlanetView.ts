@@ -99,7 +99,7 @@ import {
   lonDelta,
 } from './viewTransfer';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH, sunDepthTable } from './sunDepth';
-import { downsample, fitFactor, releaseOnUpload } from './textures';
+import { downsample, emptyTexture, fitFactor, releaseOnUpload } from './textures';
 import { DETAIL_STENCIL, MAX_TEXTURES, TileLayer } from './TileLayer';
 import {
   atmosphereFragment,
@@ -337,12 +337,6 @@ function sunDepthTexture(top: number, heightR: number, heightM: number): DataTex
 function fileName(url: string): string {
   const path = url.split(/[?#]/)[0] ?? url;
   return path.slice(path.lastIndexOf('/') + 1) || path;
-}
-
-function emptyTexture(): DataTexture {
-  const texture = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
-  texture.needsUpdate = true;
-  return texture;
 }
 
 /**

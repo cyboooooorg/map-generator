@@ -15,6 +15,7 @@ import {
   LineSegments,
   Mesh,
   MeshBasicMaterial,
+  NoColorSpace,
   MOUSE,
   PerspectiveCamera,
   PlaneGeometry,
@@ -37,8 +38,9 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { Giant } from '../api/types/Giant';
-import type { SurfaceMaps } from '../skyBodies';
 import type { GiantInfo } from '../api/types/GiantInfo';
+import type { SurfaceMaps } from '../skyBodies';
+import { planetMarkerMaterial, setMarkerMaps } from './markerShaders';
 import type { StarInfo } from '../api/types/StarInfo';
 import type { Belt } from '../api/types/Belt';
 import { SmallBodiesLayer, type SmallBodiesLabels } from './smallBodiesLayer';
@@ -247,7 +249,7 @@ export class StarView {
   private giants: SystemGiant[] = [];
   /** A planetary system's moons, round every planet: by planet, its group, orbits and markers. */
   private systemMoons: { group: Group; orbits: MoonOrbit[]; markers: Mesh<SphereGeometry, MeshBasicMaterial>[] }[] = [];
-  private giantMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
+  private giantMarkers: Mesh<SphereGeometry, ShaderMaterial>[] = [];
   /** The giants' distances from the star now, AU (see placeGiants). */
   private giantDistances: number[] = [];
   /**
@@ -326,7 +328,7 @@ export class StarView {
   /** The giants highlighted, by index (see setHighlighted). */
   private highlighted: ReadonlySet<number> = new Set();
   /** The map wrapped round each giant's marker, by index, or null for its colour (see setPlanetMaps). */
-  private mapUrls: readonly (string | null)[] = [];
+  private mapUrls: readonly (SurfaceMaps | null)[] = [];
   /** Each giant's preview as a texture, by index, or null (see setPlanetPreviews). */
   private previewTextures: (DataTexture | null)[] = [];
   /** The maps loaded (or loading), by url. */
@@ -898,7 +900,7 @@ export class StarView {
       this.orbitHighlights.push(bright);
       this.giantGroup.add(bright);
       const size = giantMarkerSize(giant.radius_earth);
-      const marker = new Mesh(new SphereGeometry(size, 32, 16), new MeshBasicMaterial({ color: colour }));
+      const marker = new Mesh(new SphereGeometry(size, 32, 16), planetMarkerMaterial(colour));
       const ringsReach = giant.rings !== 'none' ? Math.max(SYMBOLIC_RINGS[1], giant.ringSystem?.outer ?? 0) : 0;
       if (giant.rings !== 'none') {
         marker.add(
@@ -939,16 +941,21 @@ export class StarView {
    * Maps no longer listed are let go.
    */
   setPlanetMaps(maps: readonly (SurfaceMaps | null)[]): void {
-    const urls = maps.map((m) => m?.colour ?? null);
-    this.mapUrls = urls;
-    const wanted = new Set(urls.filter((url): url is string => url !== null));
+    this.mapUrls = maps;
+    // Colour maps are sRGB; normal maps keep their values.
+    const wanted = new Map<string, typeof SRGBColorSpace | typeof NoColorSpace>();
+    for (const m of maps) {
+      if (!m) continue;
+      wanted.set(m.colour, SRGBColorSpace);
+      wanted.set(m.normal, NoColorSpace);
+    }
     for (const [url, map] of this.maps) {
       if (!wanted.has(url)) {
         map.dispose();
         this.maps.delete(url);
       }
     }
-    for (const url of wanted) {
+    for (const [url, colorSpace] of wanted) {
       if (this.maps.has(url)) continue;
       const map = this.loader.load(url, () => {
         // Loaded: shown, unless let go meanwhile.
@@ -956,7 +963,7 @@ export class StarView {
         this.applyMaps();
         this.requestRender();
       });
-      map.colorSpace = SRGBColorSpace;
+      map.colorSpace = colorSpace;
       this.maps.set(url, map);
     }
     this.applyMaps();
@@ -983,20 +990,18 @@ export class StarView {
 
   private applyMaps(): void {
     this.giantMarkers.forEach((marker, k) => {
-      const url = this.mapUrls[k] ?? null;
-      const map = url ? this.maps.get(url) : undefined;
+      const maps = this.mapUrls[k] ?? null;
       // A texture is ready once its image has loaded; until then, or
-      // without a map, the planet's preview.
-      const ready = (map && map.image ? map : null) ?? this.previewTextures[k] ?? null;
-      if (marker.material.map === ready) return;
-      marker.material.map = ready;
-      // The map shows its own colours; without one, the planet's colour.
-      if (ready) marker.material.color.set('#ffffff');
-      else {
-        const giant = this.giants[k];
-        if (giant) marker.material.color.setRGB(...giant.colour, SRGBColorSpace);
-      }
-      marker.material.needsUpdate = true;
+      // without maps, the planet's preview, flat.
+      const loaded = (url: string | undefined) => {
+        const map = url ? this.maps.get(url) : undefined;
+        return map && map.image ? map : null;
+      };
+      const colour = loaded(maps?.colour);
+      const normal = colour ? loaded(maps?.normal) : null;
+      const giant = this.giants[k];
+      const fallback = giant ? new Color().setRGB(...giant.colour, SRGBColorSpace) : new Color('#ffffff');
+      setMarkerMaps(marker.material, colour ?? this.previewTextures[k] ?? null, normal, fallback);
     });
   }
 
