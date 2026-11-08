@@ -487,7 +487,9 @@
    * further down, from the same clock the sun is drawn with).
    */
   const seasonLabel = $derived.by(() => {
-    const named = namedSeason(season, declination, meta?.axial_tilt_deg ?? 23.44);
+    // A moon's sun latitude follows the planet's clock but the moon's own
+    // axis: only a planet (or a lone world) gets the solstices named.
+    const named = sysBody?.parent ? null : namedSeason(season, declination, meta?.axial_tilt_deg ?? 23.44);
     if (named !== null) return t.viewer.seasons[named] ?? '';
     // In a system the day is the planet's own, counted from its spring equinox.
     return t.viewer.dayOfYear({ day: yearDay !== null ? Math.floor(yearDay) : Math.round(season * 365) % 365 });

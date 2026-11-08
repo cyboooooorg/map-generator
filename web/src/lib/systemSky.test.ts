@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
 import { hillRadiusKm, hillReach, hillSphere, libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
-import type { Vec3 } from './skyBodies';
+import { ringSeed, type Vec3 } from './skyBodies';
 
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
 // giant) and its two regular moons c-1 and c-2, locked to it.
@@ -18,6 +18,16 @@ describe('system sky', () => {
     expect(length(sky.star.position)).toBeCloseTo(far, 3);
     sky.star.position.forEach((v, i) => expect(v / far).toBeCloseTo(sky.sun[i]!, 9));
     expect(sky.star.radius).toBeCloseTo((system.star.info.radius * 695_700) / b.physical.radius_km, 6);
+  });
+
+  it("seeds a giant's ringlets in a moon's sky as its own view does, from its mass", () => {
+    // PlanetView seeds the giant's own rings with ringSeed(info.mass_earth),
+    // the mass its world stores, which is its system body's mass.
+    const sky = systemSky(system, 'c-1', 10, textures);
+    const c = system.bodies.find((x) => x.id === 'c')!;
+    const at = sky.ids.indexOf('c');
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(sky.bodies[at]!.ringSeed).toBe(ringSeed(c.physical.mass_earth));
   });
 
   it('reaches out to the furthest moon of the planet, from it or from a moon', () => {
