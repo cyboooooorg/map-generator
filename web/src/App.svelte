@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import DriftPanel from './components/DriftPanel.svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobsIndicator from './components/JobsIndicator.svelte';
@@ -10,6 +10,8 @@
   import Toasts from './components/Toasts.svelte';
   import WorldInfo from './components/WorldInfo.svelte';
   import BodyCard from './components/BodyCard.svelte';
+  import PinButton from './components/PinButton.svelte';
+  import RenameForm from './components/RenameForm.svelte';
   import SystemList from './components/SystemList.svelte';
   import WorldPane from './components/WorldPane.svelte';
   import { api } from './lib/api/client';
@@ -94,6 +96,23 @@
   const pendingDeletes = new Set<string>();
 
   const visible = $derived(systems.filter((s) => !hidden.includes(s.id)));
+  /** The viewer bar's name is being edited. */
+  let renamingTitle = $state(false);
+  /** Closes the bar's rename form, the focus going back to its pencil. */
+  async function closeTitleEditor(): Promise<void> {
+    renamingTitle = false;
+    await tick();
+    document.querySelector<HTMLElement>('.viewer-bar .rename-title')?.focus();
+  }
+  $effect(() => {
+    void selectedId;
+    renamingTitle = false;
+  });
+  /** A system was renamed or (un)pinned, here or in the menu: the viewer's star card reads the names again. */
+  const changed = (summary: SystemSummary) => {
+    systems = systems.map((s) => (s.id === summary.id ? summary : s));
+    if (primary.systemId === summary.id) primary.loadSystem(summary.id);
+  };
   const summaryOf = (id: string | null) => systems.find((s) => s.id === id) ?? null;
   /** A system's revision: when its file last changed (a body generated, its names). */
   const revision = (id: string | null) => summaryOf(id)?.modified_ms ?? null;
@@ -558,6 +577,7 @@
         onSelect={select}
         onDelete={removeWorlds}
         onCompare={compare}
+        onChanged={changed}
       />
     </section>
   </div>
@@ -567,7 +587,20 @@
       <button onclick={toMenu} title={t.menu.backHelp}>← {t.menu.back}</button>
       <span class="names">
         {#if summaryOf(selectedId)}<SystemOrrery system={summaryOf(selectedId)!} width={40} height={22} radius={3} />{/if}
-        <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
+        {#if summaryOf(selectedId) && renamingTitle}
+          <RenameForm system={summaryOf(selectedId)!} onChanged={changed} onClose={closeTitleEditor} />
+        {:else}
+          <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
+          {#if summaryOf(selectedId)}
+            <PinButton system={summaryOf(selectedId)!} onChanged={changed} />
+            <button
+              class="rename-title"
+              onclick={() => (renamingTitle = true)}
+              aria-label={t.systemList.rename({ name: titleOf(selectedId) ?? '' })}
+              title={t.systemList.rename({ name: titleOf(selectedId) ?? '' })}>✎</button
+            >
+          {/if}
+        {/if}
         {#if compareId}
           <span class="muted">{t.app.versus}</span>
           {#if summaryOf(compareId)}<SystemOrrery system={summaryOf(compareId)!} width={40} height={22} radius={3} />{/if}
@@ -742,6 +775,14 @@
   }
   .viewer-bar button {
     padding: 3px 10px;
+  }
+  .viewer-bar .names :global(.pin),
+  .viewer-bar .rename-title {
+    padding: 3px 8px;
+  }
+  .viewer-bar .names :global(.rename) {
+    flex: 1;
+    overflow: visible;
   }
   /* A world is being made from the Drift panel: the one shown waits, dimmed, under a notice. */
   .panes {

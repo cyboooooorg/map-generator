@@ -294,6 +294,9 @@ pub struct SystemSummary {
     /// When the system was drawn, in milliseconds since the Unix epoch.
     #[ts(type = "number")]
     pub modified_ms: u64,
+    /// Pinned in the main menu (`PUT`/`DELETE /api/systems/{id}/pin`): the
+    /// library lists pinned systems first. Kept in the index only.
+    pub pinned: bool,
 }
 
 /// A body of a system, as its summary lists it.
@@ -359,6 +362,16 @@ pub struct SystemDetail {
 #[ts(export)]
 pub struct SystemNames {
     pub names: BTreeMap<String, String>,
+}
+
+/// Body of `PUT /api/systems/{id}/name`: the name of the system itself
+/// (the one given to its star); null or blank brings its designation back.
+/// The names of its bodies are left as they are.
+#[derive(Clone, Debug, Default, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct SystemName {
+    pub name: Option<String>,
 }
 
 /// Answer to `POST /api/systems/{id}/bodies/{body}/generate`: the job, or

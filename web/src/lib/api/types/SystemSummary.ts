@@ -46,4 +46,9 @@ names: { [key in string]: string },
 /**
  * When the system was drawn, in milliseconds since the Unix epoch.
  */
-modified_ms: number, };
+modified_ms: number, 
+/**
+ * Pinned in the main menu (`PUT`/`DELETE /api/systems/{id}/pin`): the
+ * library lists pinned systems first. Kept in the index only.
+ */
+pinned: boolean, };
