@@ -69,3 +69,35 @@ the history.
 - Comment on issues and pull requests whenever it helps the next reader:
   what was found, what was decided, why an issue stays open or is split,
   what a review left for later (with the follow-up issue's number).
+
+## Subagents
+
+`.claude/agents/` holds the subagents for the recurring tasks of this
+repository, each with its model and effort fixed. Prefer them over generic
+agents:
+
+| Agent | Use it to | Model, effort |
+|---|---|---|
+| `codebase-mapper` | Find interfaces with `file:line` before a plan | sonnet, medium |
+| `repo-state-auditor` | Check branches, worktrees and PRs (read-only) | haiku, low |
+| `science-fixer` | Fix one science issue, test first, on a `fix/` branch | opus, high |
+| `branch-syncer` | Merge `main` into open branches and run the tests | sonnet, medium |
+| `branch-reviewer` | Review a whole branch before its PR (read-only) | opus, high |
+| `develop-rebuilder` | Rebuild `develop` from `main` with the listed PRs | sonnet, low |
+| `develop-deployer` | Deploy `develop` to planets.localhost and check it | sonnet, medium |
+| `viewer-visual-check` | Screenshot and measure the viewer in a GPU browser | sonnet, medium |
+| `generation-profiler` | Time and profile generation before and after | sonnet, medium |
+| `world-coherence-checker` | Compare worlds of two binaries | sonnet, medium |
+| `pr-shepherd` | Push, open the PR, watch CI, merge when approved | sonnet, low |
+| `issue-writer` | File a backlog issue from a review remark | sonnet, medium |
+
+The main session keeps what needs the conversation's context:
+
+- design and spec discussions with the user;
+- deciding to merge or push: `pr-shepherd` merges only when the request
+  quotes the user's explicit approval for that pull request;
+- warning the other sessions before `develop` is rebuilt, and agreeing on
+  `FORMAT_VERSION` numbers and branch overlap;
+- debugging driven by the user's screenshots: agents measure, the main
+  session decides what to fix;
+- judging whether a change that alters the generated worlds is acceptable.
