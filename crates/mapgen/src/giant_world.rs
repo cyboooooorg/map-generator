@@ -4,12 +4,21 @@
 //!
 //! **Bands.** Fast rotation turns the flow into zonal jets; their width
 //! follows the Rhines scale `√(2U/β)` (Scott & Polvani 2007), so the number
-//! of jets in each hemisphere grows as `√(ΩR/U)`: about five for Jupiter,
-//! four for Saturn, one for an ice giant (whose winds are fast and broad:
-//! retrograde at the equator, prograde at high latitudes), one or two for a
-//! locked hot Jupiter (its day is days long). Between the jets, pale zones
-//! (rising air, high ammonia clouds) alternate with dark belts (sinking
-//! air, deeper clouds), each hemisphere drawn on its own.
+//! of eastward jets in each hemisphere grows as `√(ΩR/U)`: about five for
+//! Jupiter. `U` here is the speed of the eddies that make the jets
+//! ([`eddy_speed`]), which grows with the flux the giant radiates (its
+//! internal heat, cooled with the age of its system, plus the starlight it
+//! absorbs) and falls with the spin, so a Saturn-like giant, colder and
+//! slower, gets as many jets as Jupiter, an ice giant (fast and broad winds:
+//! retrograde at the equator, prograde at high latitudes) one or two, a
+//! locked hot Jupiter (its day is days long) one or two. The peak wind of
+//! the jets is another number ([`peak_wind`]), a calibration on the four
+//! giants of the Solar System: Saturn's 400 m/s and its 20 jets go
+//! together. Between the jets, pale zones (rising air, high ammonia
+//! clouds) alternate with dark belts (sinking air, deeper clouds), each
+//! hemisphere drawn on its own. Which clouds are on top, and so the colours
+//! and the height between zones and belts, come from the decks that
+//! condense (`crate::giant_clouds`).
 //!
 //! **Texture.** The latitude a pixel samples is shifted by noise stretched
 //! along the bands, more where neighbouring jets shear (festoons and
@@ -37,7 +46,10 @@
 //! directly.
 use crate::biome::Biome;
 use crate::generation::{Generated, Stage};
-use crate::giants::{GiantKind, cloud_class, giant_radius};
+use crate::giant_clouds::Clouds;
+use crate::giants::{
+    GiantKind, giant_radius, internal_temperature, surface_gravity, system_age_gyr,
+};
 use crate::noise::{fbm, smoothstep, stream, stream_seed};
 use crate::star::StarInfo;
 use crate::world::{World, WorldParams};
@@ -54,13 +66,163 @@ pub const CLOUD_DECK: f32 = 0.3;
 /// Earth's radius (m) and `GM` (m³/s²).
 const EARTH_RADIUS_M: f64 = 6.371e6;
 const EARTH_GM: f64 = 3.986e14;
-/// Typical wind speeds setting the band count (m/s): Jupiter's jets, the
-/// broader ones of ice giants, a hot Jupiter's superrotation.
-const GAS_WIND: f64 = 100.0;
+/// Eddy speed of Jupiter, m/s: the speed many of its jets reach ("exceed
+/// 100 m s⁻¹", Ingersoll et al. 2004, the Cambridge chapter in the article's
+/// sources), the reference of [`eddy_speed`] and what its five jets per
+/// hemisphere need.
+const JUPITER_WIND: f64 = 100.0;
+/// Jupiter's total radiated flux, W/m²: 14.098, the 6.613 it absorbs and the
+/// 7.485 it makes (Li et al. 2018, Nature Communications 9, 3709,
+/// doi:10.1038/s41467-018-06107-2: emitted power 14.098, internal heat
+/// 7.485, absorbed 6.613 W/m²; T_eff 125.6 K).
+const JUPITER_FLUX: f64 = 14.098;
+/// Jupiter's `β = 2Ω/R` at the equator, 1/(m s): 9.925 h, 71 492 km (NASA
+/// Jupiter fact sheet).
+const JUPITER_BETA: f64 = 2.0 * 1.7585e-4 / 7.1492e7;
+/// An ice giant's reference eddy speed, flux and `β`: calibration, no
+/// source. The speed the jet count of Neptune needs (about 300 m/s), at the
+/// flux of an ice giant of effective temperature 60 K, and Neptune's `β`
+/// (16.11 h, 24 764 km, NASA Neptune fact sheet).
 const ICE_WIND: f64 = 300.0;
+const ICE_FLUX: f64 = 5.670_374e-8 * 60.0 * 60.0 * 60.0 * 60.0;
+const ICE_BETA: f64 = 2.0 * 1.0834e-4 / 2.4764e7;
+/// A hot Jupiter's superrotation, m/s at 1 500 K: calibration, no source (the
+/// kilometres per second of the circulation models in Showman et al. 2010).
 const HOT_WIND: f64 = 2000.0;
 /// Jets per hemisphere at `√(ΩR/U) = 1`: Jupiter (`ΩR/U` ≈ 126) gets five.
 const JET_FACTOR: f64 = 0.45;
+/// Peak winds over `ΩR` (the Rossby number of the strongest jet) of the gas
+/// giants: Jupiter's 150 m/s ("about 150 m/s on Jupiter", Showman et al.
+/// 2010) over `ΩR` = 12 570 m/s at its internal flux of 7.485 W/m² (Li et al.
+/// 2018). Calibration, with [`ROSSBY_EXPONENT`]: `Ro ∝ F_int^−0.5` puts the
+/// app's own Saturn analogue (a 95 M⊕ giant has 0.67 W/m² of internal heat in
+/// the cooling law of `giants::internal_temperature`, Saturn's real 2 W/m²
+/// being higher) at about 400 m/s against "over 400" (Showman et al. 2010);
+/// with Saturn's real internal flux it would give about 230 m/s. The
+/// internal flux, not the starlight, because the sunlight is absorbed high
+/// and drives the winds of a warm giant separately: [`IRRADIATED_WIND`].
+const GAS_ROSSBY: f64 = 150.0 / (1.7585e-4 * 7.1492e7);
+const ROSSBY_EXPONENT: f64 = 0.5;
+/// Jupiter's internal heat flux, W/m² (Li et al. 2018).
+const JUPITER_INTERNAL_FLUX: f64 = 7.485;
+/// Highest wind of the whole profile (the peak parameter and the jets added
+/// to it), as a share of the sound speed at the temperature of the
+/// cloud tops: Neptune's 400 m/s is 0.7 of the 560 m/s of sound at its 59 K,
+/// Jupiter's and Saturn's about 0.2 to 0.6. Calibration, no source: the
+/// supersonic winds that the Rossby law would give a cold light giant
+/// (2 000 m/s at 0.1 Jupiter masses and 60 AU) would shock. A very massive
+/// giant (10 Jupiter masses at 40 AU) has the opposite oddity: its large
+/// internal flux gives it a tiny Rossby number and winds of 20 to 30 m/s, an
+/// extrapolation of the calibration, kept.
+const MAX_MACH: f64 = 0.75;
+/// Peak winds over `ΩR` of the ice giants: 0.11, which gives 285 m/s for
+/// Uranus and Neptune alike (`ΩR` about 2 600 m/s) against "up to 200 and
+/// 400 m/s" (Soyuer, Neuenschwander & Helled 2022, arXiv:2210.17389).
+/// Calibration, no source for the number itself.
+const ICE_ROSSBY: f64 = 0.11;
+/// Irradiated giants: a floor to the peak wind, m/s at 1 500 K of
+/// equilibrium temperature, growing as its square: calibration, no source,
+/// so that a warm giant joins the hot ones' superrotation ([`HOT_WIND`]).
+const IRRADIATED_WIND: f64 = 2000.0;
+
+/// Speed of the eddies that set the width of the jets, m/s, from the energy
+/// they have and the spin: `U = U₀ (F/F₀)^(2/5) (β/β₀)^(−1/5)`, with `U₀`,
+/// `F₀` and `β₀` of Jupiter (gas giants) or Neptune (ice giants).
+///
+/// The energy is the flux `F = σT_eff⁴` the giant radiates, the sum of the
+/// sunlight it absorbs and its internal heat; that a fixed share of it feeds
+/// the eddies is an assumption (on Earth available potential energy is made
+/// at about 2 W/m², about 1 % of the 240 W/m² absorbed and radiated,
+/// Showman et al. 2010, section 3.1, but no share is known for the giants).
+/// In the turbulence that makes the jets the energy input `ε ~ U³/L_β` is
+/// carried at the Rhines scale `L_β = (U/β)^(1/2)` (Rhines 1975), which gives
+/// `U ∝ ε^(2/5) β^(−1/5)`: derived for the app, not taken from a paper. It
+/// is the speed of the eddies, not of the jets: the jets of Saturn blow at
+/// 400 m/s ([`peak_wind`]), which with the Rhines count would give a third of
+/// its 20 jets.
+///
+/// A hot giant is not driven this way: its eddies go at [`HOT_WIND`] scaled
+/// by its equilibrium temperature.
+fn eddy_speed(
+    kind: GiantKind,
+    hot: bool,
+    equilibrium_k: f32,
+    effective_k: f32,
+    omega: f64,
+    radius_m: f64,
+) -> f64 {
+    if hot {
+        return HOT_WIND * (f64::from(equilibrium_k) / 1500.0).clamp(0.6, 2.5);
+    }
+    let flux = 5.670_374e-8 * f64::from(effective_k).powi(4);
+    let beta = 2.0 * omega / radius_m;
+    let (u0, f0, b0) = match kind {
+        GiantKind::Gas => (JUPITER_WIND, JUPITER_FLUX, JUPITER_BETA),
+        GiantKind::Ice => (ICE_WIND, ICE_FLUX, ICE_BETA),
+    };
+    (u0 * (flux / f0).powf(0.4) * (beta / b0).powf(-0.2)).clamp(20.0, 3000.0)
+}
+
+/// Sound speed of a hydrogen–helium gas of `t` K, m/s: `√(γRT/μ)` with
+/// γ = 1.4 and μ = 2.22 g/mol.
+fn sound_speed(t: f64) -> f64 {
+    (1.4 * 8.314 * t / 2.22e-3).sqrt()
+}
+
+/// Peak wind of the jets, m/s: a calibration on the four giants of the Solar
+/// System, not a derivation. A gas giant's Rossby number `U/ΩR` falls as its
+/// internal heat flux rises (`Ro = 0.0119 (7.485 W/m² / F_int)^0.5`: Jupiter
+/// 150 m/s, the app's Saturn analogue about 400); an ice giant's is 0.11
+/// (Uranus 200, Neptune 400). Published scalings (Showman, Kaspi & Flierl
+/// 2011) are for the deep envelope and increase with the flux: none puts
+/// Saturn's cloud winds above Jupiter's, as observed. A giant warm from its
+/// star has at least an irradiation floor, which grows with the heating, so
+/// the wind never falls as a giant moves closer to its star at a fixed mass;
+/// a hot one has its superrotation. No peak passes [`MAX_MACH`] times the
+/// sound speed at the effective temperature.
+fn peak_wind(
+    kind: GiantKind,
+    hot: bool,
+    equilibrium_k: f32,
+    internal_k: f32,
+    effective_k: f32,
+    omega: f64,
+    radius_m: f64,
+) -> f64 {
+    if hot {
+        return HOT_WIND * (f64::from(equilibrium_k) / 1500.0).clamp(0.6, 2.5);
+    }
+    let irradiated = IRRADIATED_WIND * (f64::from(equilibrium_k) / 1500.0).powi(2);
+    let reach = omega * radius_m;
+    let law = match kind {
+        GiantKind::Gas => {
+            let flux = 5.670_374e-8 * f64::from(internal_k).powi(4);
+            GAS_ROSSBY * (JUPITER_INTERNAL_FLUX / flux).powf(ROSSBY_EXPONENT) * reach
+        }
+        GiantKind::Ice => ICE_ROSSBY * reach,
+    };
+    let ceiling = MAX_MACH * sound_speed(f64::from(effective_k));
+    law.max(irradiated).min(ceiling).clamp(20.0, 3000.0)
+}
+
+/// Shape of an ice giant's wind from the equator to the pole,
+/// `u(φ) = −398 + 0.188 φ² − 1.2×10⁻⁵ φ⁴` m/s (φ in degrees), fitted to the
+/// cloud tracking of Voyager 2 on Neptune (Sromovsky et al. 1993, as quoted
+/// by Fitzpatrick et al. 2014, arXiv:1312.2676, table 1), divided by 398:
+/// −1 at the equator, changing sign near 50°, +0.6 at 70°. It is Neptune's:
+/// westward equator, eastward high latitudes, the westward peak larger. Every
+/// ice giant uses it, Uranus too, whose eastward peak is the larger and whose
+/// westward flow is weaker (no readable table of its profile was found).
+fn ice_shape(lat: f32) -> f32 {
+    let phi = lat.abs().min(90.0);
+    (-398.0 + 0.188 * phi.powi(2) - 1.2e-5 * phi.powi(4)) / 398.0
+}
+
+/// Colour of the white ovals, sRGB.
+const OVAL_COLOUR: [f32; 3] = [0.97, 0.95, 0.9];
+/// Colour of the bright arms of a polar cyclone, sRGB (the brightest of
+/// `polar_look`).
+const CYCLONE_COLOUR: [f32; 3] = [0.96, 0.93, 0.86];
 
 /// One band of latitude, from `south` to `north` (degrees).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -233,7 +395,9 @@ pub struct GiantInfo {
     pub heat_ratio: f32,
     /// Cloud class of Sudarsky et al. (2000), 1 to 5.
     pub class: u8,
-    /// Jets in each hemisphere (the Rhines count).
+    /// Eastward jets in each hemisphere (the Rhines count). The wind profile
+    /// has `2 × jets − 1` alternating jets in each hemisphere, `jets` of them
+    /// eastward, besides the equatorial one.
     pub jets: u32,
     /// Strongest eastward and westward winds, m/s.
     pub wind_east: f32,
@@ -244,6 +408,10 @@ pub struct GiantInfo {
     /// Whether it has a great spot (gas) or a dark spot (ice), and a polar
     /// hexagon.
     pub great_spot: bool,
+    /// Longitude and latitude (degrees) of the great spot, when there is
+    /// one: the viewer finds the storm that drifts slowly by it.
+    #[serde(default)]
+    pub great_spot_at: Option<[f32; 2]>,
     pub hexagon: bool,
     /// The look of the north and south poles, and the cyclones ringing
     /// each (0 when none).
@@ -266,13 +434,45 @@ pub struct Look {
     polar: f32,
     /// The north and south poles.
     poles: [Pole; 2],
-    /// Typical wind speed, m/s, and the equatorial jet (gas giants).
+    /// Peak wind, m/s, and the equatorial jet.
     wind: f32,
     equatorial_jet: f32,
     /// Jets at the band edges: latitude, signed speed, half-width.
     jets_at: Vec<(f32, f32, f32)>,
     /// Eastward shift of a hot giant's hot spot from the substellar point, degrees.
     hot_spot_shift: f32,
+    /// Height between zones and belts relative to Jupiter's (see
+    /// [`Clouds::relief`]).
+    relief: f32,
+    /// Factor (at most 1) that keeps the whole wind profile under the
+    /// ceiling of [`MAX_MACH`] times the speed of sound: the jets add up to
+    /// more than the peak wind.
+    cap: f32,
+}
+
+/// Where the great spot of a gas giant sits: the centre latitude and the
+/// width (degrees) of a zone of the southern hemisphere between 12° and 45°
+/// (the Great Red Spot lies at 17° to 27.5° S, Ingersoll et al. 2004),
+/// chosen by `pick` in `[0, 1)`; the zone nearest 22° S when no zone is in
+/// that range.
+fn great_spot_site(bands: &[Band], pick: f32) -> (f32, f32) {
+    let zones: Vec<&Band> = bands
+        .iter()
+        .filter(|b| b.zone && b.north < 0.0 && (12.0..45.0).contains(&(-0.5 * (b.south + b.north))))
+        .collect();
+    let band = if zones.is_empty() {
+        bands
+            .iter()
+            .filter(|b| b.north < 0.0)
+            .min_by(|a, b| {
+                let off = |x: &Band| (-0.5 * (x.south + x.north) - 22.0).abs();
+                off(a).total_cmp(&off(b))
+            })
+            .unwrap_or(&bands[0])
+    } else {
+        zones[((pick * zones.len() as f32) as usize).min(zones.len() - 1)]
+    };
+    (0.5 * (band.south + band.north), band.north - band.south)
 }
 
 /// Radius of a giant world, Earth radii, from its parameters.
@@ -281,11 +481,32 @@ pub fn radius_earth(p: &WorldParams, mass_earth: f32) -> f32 {
     giant_radius(mass_earth, star.equilibrium_k)
 }
 
+/// The colours of a giant of `kind` and `clouds`, varied by `t` and `u` in
+/// `[0, 1]`: the palette of its class, blended with that of the next class
+/// by the share its top deck is thin (see [`Clouds::thin`]), so that a
+/// giant crossing a class bound changes colour gradually.
+fn palette(kind: GiantKind, clouds: Clouds, t: f32, u: f32) -> Palette {
+    let own = class_palette(kind, clouds.class, t, u);
+    if clouds.thin <= 0.0 {
+        return own;
+    }
+    let next = class_palette(kind, clouds.next, t, u);
+    let blend = |a: [f32; 3], b: [f32; 3]| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * clouds.thin);
+    Palette {
+        zone: blend(own.zone, next.zone),
+        belt: blend(own.belt, next.belt),
+        storm: blend(own.storm, next.storm),
+        polar: blend(own.polar, next.polar),
+    }
+}
+
 /// The colours of a giant of `kind` and cloud `class`, varied by `t` and
 /// `u` in `[0, 1]`: Jupiter's cream and ochre to Saturn's pale gold, cyan
-/// to deep blue ice giants, white water clouds, azure clear skies, dark
-/// roasters, grey silicate clouds.
-fn palette(kind: GiantKind, class: u8, t: f32, u: f32) -> Palette {
+/// to deep blue ice giants (methane absorbing the red, a tinge of it left
+/// on the warmer ones, classes II and III), white water clouds, azure clear
+/// skies, dark roasters, and the pale silicate clouds of class V, a Bond
+/// albedo of about 0.5 against 0.03 for class IV (Sudarsky et al. 2000).
+fn class_palette(kind: GiantKind, class: u8, t: f32, u: f32) -> Palette {
     let mix = |a: [f32; 3], b: [f32; 3], f: f32| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * f);
     let (zone, belt, storm, polar) = match (kind, class) {
         (GiantKind::Ice, 1) => (
@@ -319,11 +540,17 @@ fn palette(kind: GiantKind, class: u8, t: f32, u: f32) -> Palette {
             [0.18, 0.18, 0.22],
         ),
         _ => (
-            [0.4, 0.38, 0.34],
-            [0.25, 0.22, 0.2],
-            [0.48, 0.42, 0.36],
-            [0.3, 0.28, 0.26],
+            [0.78, 0.74, 0.68],
+            [0.6, 0.56, 0.5],
+            [0.88, 0.83, 0.76],
+            [0.7, 0.67, 0.62],
         ),
+    };
+    // Methane stays in the gas of a warmer ice giant and still absorbs red.
+    let [zone, belt, storm, polar] = if kind == GiantKind::Ice && (2..=3).contains(&class) {
+        [zone, belt, storm, polar].map(crate::giant_clouds::methane_tint)
+    } else {
+        [zone, belt, storm, polar]
     };
     // Some giants are more uniform than others (Saturn's muted bands).
     let belt = mix(belt, zone, 0.45 * u);
@@ -349,12 +576,10 @@ impl Look {
         let equilibrium = star.equilibrium_k;
         let hot = equilibrium > HOT_GIANT_K;
         let radius_earth = giant_radius(mass_earth, equilibrium);
-        let internal = match kind {
-            GiantKind::Gas => 100.0 * (mass_earth / 317.8).powf(0.4),
-            GiantKind::Ice => 40.0,
-        };
+        let internal = internal_temperature(kind, mass_earth, system_age_gyr(star.mass));
         let effective = (equilibrium.powi(4) + internal.powi(4)).powf(0.25);
-        let class = cloud_class(effective);
+        let clouds = Clouds::of(effective, surface_gravity(mass_earth, radius_earth));
+        let class = clouds.class;
 
         // Spin: Jupiter's and Saturn's 10 hours, the ice giants' 16 to 17;
         // a hot giant, or one its star's tides have locked (with a giant's
@@ -374,12 +599,9 @@ impl Look {
         let q = omega * omega * radius_m.powi(3) / gm;
         let flattening = (0.7 * q).min(0.12) as f32;
 
-        let wind = match (hot, kind) {
-            (true, _) => HOT_WIND * (f64::from(equilibrium) / 1500.0).clamp(0.6, 2.5),
-            (_, GiantKind::Gas) => GAS_WIND,
-            (_, GiantKind::Ice) => ICE_WIND,
-        };
-        let jets = ((JET_FACTOR * (omega * radius_m / wind).sqrt()).round() as u32).clamp(1, 8);
+        let eddies = eddy_speed(kind, hot, equilibrium, effective, omega, radius_m);
+        let wind = peak_wind(kind, hot, equilibrium, internal, effective, omega, radius_m);
+        let jets = ((JET_FACTOR * (omega * radius_m / eddies).sqrt()).round() as u32).clamp(1, 8);
 
         // The bands of each hemisphere, from the equator out to the polar
         // regions: an equatorial zone, then belts and zones in turn.
@@ -441,22 +663,31 @@ impl Look {
             } else {
                 -1.0
             };
-            let strength = rng.random_range(0.4..1.4) * (1.0 - lat.abs() / 90.0).sqrt();
+            // Off the equator the jets reach a third to two thirds of the
+            // peak wind (Jupiter's 50 to 100 m/s of its 150), with either
+            // sign: a Saturn-like giant's westward flank comes out too strong
+            // (see docs/backlog.md).
+            let strength = rng.random_range(0.3..0.7) * (1.0 - lat.abs() / 90.0).sqrt();
             jets_at.push((
                 lat,
                 sign * strength * wind as f32,
                 rng.random_range(2.0..4.0),
             ));
         }
+        // An ice giant with a single jet keeps the smooth profile of
+        // `wind_at`; with more it gets its jets at the band edges too, and
+        // its equatorial jet blows against the spin (Showman et al. 2010;
+        // Scott & Polvani 2007).
         let equatorial_jet = match (hot, kind) {
-            (false, GiantKind::Gas) => rng.random_range(0.8..4.0) * wind as f32,
+            (false, GiantKind::Gas) => rng.random_range(0.9..1.2) * wind as f32,
+            (false, GiantKind::Ice) if jets > 1 => -rng.random_range(0.9..1.2) * wind as f32,
             _ => 0.0,
         };
 
         // Storms: a great spot on some gas giants and white ovals on most;
         // dark spots with bright companions on some ice giants.
         let mut storms = Vec::new();
-        let colours = palette(kind, class, rng.random(), rng.random());
+        let colours = palette(kind, clouds, rng.random(), rng.random());
         let mut great_spot = false;
         if !hot {
             match kind {
@@ -464,11 +695,18 @@ impl Look {
                     if rng.random::<f32>() < 0.45 {
                         great_spot = true;
                         let size = rng.random_range(0.7..1.3);
+                        let lon = rng.random_range(0.0..360.0);
+                        // In a zone of the south, between two jets: the
+                        // zones are anticyclonic (Ingersoll et al. 2004).
+                        let (lat, width) = great_spot_site(&bands, rng.random());
+                        // Shrunk to fit a narrow zone, but never under the
+                        // white ovals, so that it stays the largest storm.
+                        let fit = (0.45 * width / (5.5 * size)).clamp(0.7, 1.0);
                         storms.push(Storm {
-                            lon: rng.random_range(0.0..360.0),
-                            lat: -rng.random_range(17.0..26.0),
-                            half_lon: 11.0 * size,
-                            half_lat: 5.5 * size,
+                            lon,
+                            lat,
+                            half_lon: 11.0 * size * fit,
+                            half_lat: 5.5 * size * fit,
                             colour: colours.storm,
                             companion: false,
                         });
@@ -482,7 +720,7 @@ impl Look {
                             lat,
                             half_lon: size * 1.6,
                             half_lat: size,
-                            colour: [0.97, 0.95, 0.9],
+                            colour: OVAL_COLOUR,
                             companion: false,
                         });
                     }
@@ -532,6 +770,7 @@ impl Look {
                 wind_west: 0.0,
                 wind_profile: Vec::new(),
                 great_spot,
+                great_spot_at: great_spot.then(|| [storms[0].lon, storms[0].lat]),
                 hexagon,
                 poles: [PoleStyle::Haze; 2],
                 polar_cyclones: [0; 2],
@@ -557,6 +796,8 @@ impl Look {
             } else {
                 0.0
             },
+            relief: clouds.relief,
+            cap: 1.0,
         };
         // The poles, drawn last so the rest keeps its draws: each its own
         // style, the cyclones sized like Juno's (5 000 to 8 000 km across).
@@ -615,6 +856,18 @@ impl Look {
             look.info.polar_cyclones[k] = ring;
         }
         look.info.hexagon = look.info.poles.contains(&PoleStyle::Hexagon);
+        // Cap the whole profile, not only the peak parameter (the equatorial
+        // jet and its neighbours add up to more): looked for every half
+        // degree.
+        if !hot {
+            let ceiling = MAX_MACH * sound_speed(f64::from(effective));
+            let top = (0..=360)
+                .map(|k| look.wind_at(-90.0 + 0.5 * k as f32).abs())
+                .fold(0.0, f32::max);
+            if f64::from(top) > ceiling {
+                look.cap = (ceiling / f64::from(top)) as f32;
+            }
+        }
         look.info.wind_profile = (0..91)
             .map(|k| look.wind_at(-90.0 + 2.0 * k as f32))
             .collect();
@@ -623,18 +876,53 @@ impl Look {
         look
     }
 
+    /// The colour the biome legend gives the storms: that of the largest
+    /// storm of the giant (the great spot when it has one, else the white
+    /// ovals), the polar cyclones' only when they are its only storms, and
+    /// the palette's storm colour when it has none.
+    pub fn storm_colour(&self) -> [f32; 3] {
+        let area = |s: &Storm| s.half_lon * s.half_lat;
+        if let Some(storm) = self
+            .storms
+            .iter()
+            .max_by(|a, b| area(a).total_cmp(&area(b)))
+        {
+            storm.colour
+        } else if self.poles.iter().any(|p| p.central) {
+            CYCLONE_COLOUR
+        } else {
+            self.info.palette.storm
+        }
+    }
+
+    /// The latitudes (degrees) of the edges of the bands, from the south
+    /// edge of the southern polar region to the north edge of the northern
+    /// one: one more than there are bands, ascending. The band between the
+    /// `k`-th and the next edge is a zone when `k` is odd (the equatorial
+    /// zone sits in the middle, at an odd rank).
+    pub fn band_edges(&self) -> Vec<f32> {
+        let mut edges = vec![self.bands[0].south];
+        edges.extend(self.bands.iter().map(|b| b.north));
+        edges
+    }
+
     /// The eastward wind at latitude `lat` (degrees), m/s.
     pub fn wind_at(&self, lat: f32) -> f32 {
+        self.cap * self.uncapped_wind_at(lat)
+    }
+
+    /// The wind before the cap of [`Look::cap`].
+    fn uncapped_wind_at(&self, lat: f32) -> f32 {
         let polar_fade = 1.0 - smoothstep(80.0, 90.0, lat.abs());
         if self.info.hot {
             return self.wind * (-(lat / 25.0).powi(2)).exp() * polar_fade;
         }
         match self.info.kind {
-            GiantKind::Ice => {
-                let s = (lat.to_radians() * 1.3).sin();
-                self.wind * (1.6 * s * s - 0.8) * polar_fade
-            }
-            GiantKind::Gas => {
+            // Three broad jets, westward at the equator, eastward at high
+            // latitudes: the profile of Neptune (see [`ice_shape`]) scaled
+            // by the giant's peak wind.
+            GiantKind::Ice if self.info.jets <= 1 => self.wind * ice_shape(lat) * polar_fade,
+            GiantKind::Ice | GiantKind::Gas => {
                 let jets: f32 = self
                     .jets_at
                     .iter()
@@ -739,7 +1027,7 @@ fn sample(look: &Look, noise: &Perlin, fine: &Perlin, lon: f32, lat: f32) -> Pix
     } else {
         Biome::GiantBelt
     };
-    let mut elevation = if band.zone { 0.06 } else { -0.06 };
+    let mut elevation = if band.zone { 0.06 } else { -0.06 } * look.relief;
     // Polar regions: the bands give way to the pole's own look.
     let haze = smoothstep(look.polar - 10.0, look.polar + 4.0, warped.abs());
     if haze > 0.0 {
@@ -978,15 +1266,18 @@ pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
 }
 
 /// The colours of the band biomes of the giant world `p`, sRGB bytes, for
-/// its `world.json` biome table; `None` for a rocky world.
+/// its `world.json` biome table; `None` for a rocky world. The storm colour
+/// is that of the giant's largest storm ([`Look::storm_colour`]), so the
+/// legend shows what is drawn.
 pub fn biome_colours(p: &WorldParams) -> Option<[(Biome, [u8; 3]); 4]> {
     let mass = p.giant_mass_earth?;
-    let palette = Look::draw(p, mass).info.palette;
+    let look = Look::draw(p, mass);
+    let palette = look.info.palette;
     let byte = |c: [f32; 3]| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
     Some([
         (Biome::GiantZone, byte(palette.zone)),
         (Biome::GiantBelt, byte(palette.belt)),
-        (Biome::GiantStorm, byte(palette.storm)),
+        (Biome::GiantStorm, byte(look.storm_colour())),
         (Biome::GiantPolar, byte(palette.polar)),
     ])
 }
@@ -1047,10 +1338,238 @@ mod tests {
         assert_eq!(neptune.jets, 1);
         // Retrograde at the equator, prograde at high latitudes.
         let profile = &neptune.wind_profile;
+        let east = profile.iter().copied().fold(0.0, f32::max);
+        assert!(profile[45] < -100.0 && east > 100.0, "{profile:?}");
+    }
+
+    #[test]
+    fn the_solar_giants_get_their_jets_and_peak_winds() {
+        // (name, mass ME, AU, jets per hemisphere, west peak m/s, east peak
+        // m/s) with the ranges the calibration allows (Showman et al. 2010:
+        // Jupiter 150 m/s, Saturn and Neptune over 400; Uranus about 200).
+        let wind = |preset: &str, mass: f32, au: f32, jets: (u32, u32), peak: (f32, f32)| {
+            for seed in 0..12 {
+                let i = Look::draw(&params(preset, seed, mass, au), mass).info;
+                assert!(
+                    (jets.0..=jets.1).contains(&i.jets),
+                    "{preset} {seed}: {} jets",
+                    i.jets
+                );
+                let top = i.wind_east.max(i.wind_west);
+                assert!(
+                    (peak.0..peak.1).contains(&top),
+                    "{preset} {seed}: {top} m/s"
+                );
+            }
+        };
+        wind("gas-giant", 317.8, 5.2, (4, 6), (85.0, 240.0));
+        // Saturn: about 20 jets in all, 4J − 1 for J per hemisphere; the
+        // old fixed wind gave it four, a wind of 80 m/s would give seven.
+        wind("gas-giant", 95.16, 9.58, (4, 7), (250.0, 700.0));
+        wind("ice-giant", 14.5, 19.2, (1, 2), (180.0, 450.0));
+        wind("ice-giant", 17.1, 30.07, (1, 2), (180.0, 450.0));
+    }
+
+    #[test]
+    fn a_neptune_like_giants_wind_is_westward_at_the_equator_and_peaks_there() {
+        let i = Look::draw(&params("ice-giant", 2, 17.1, 30.0), 17.1).info;
+        assert_eq!(i.jets, 1);
+        // Voyager's fit: −398 at the equator, +0.6 of it at 70°: the
+        // westward peak is larger than the eastward one.
         assert!(
-            profile[45] < -100.0 && profile[45 + 30] > 100.0,
-            "{profile:?}"
+            i.wind_west > 1.2 * i.wind_east,
+            "{} {}",
+            i.wind_west,
+            i.wind_east
         );
+        assert!(i.wind_east > 0.4 * i.wind_west);
+    }
+
+    #[test]
+    fn the_peak_wind_follows_the_spin_and_the_flux_it_radiates() {
+        let peak = |preset: &str, mass: f32, au: f32, seed: u32| {
+            Look::draw(&params(preset, seed, mass, au), mass).wind
+        };
+        // A gas giant with less internal heat blows faster (Ro ∝ F_int^−0.5).
+        let jupiter = peak("gas-giant", 317.8, 5.2, 1);
+        assert!((100.0..200.0).contains(&jupiter), "{jupiter}");
+        assert!(peak("gas-giant", 95.16, 9.58, 1) > jupiter * 1.5);
+        // Different spins give different winds.
+        let spins: Vec<f32> = (0..30).map(|s| peak("ice-giant", 17.1, 30.0, s)).collect();
+        let (lo, hi) = spins
+            .iter()
+            .fold((f32::MAX, 0f32), |(l, h), &w| (l.min(w), h.max(w)));
+        assert!(hi > 1.05 * lo, "{lo} {hi}");
+        // A giant close to its star keeps at least the irradiation floor.
+        assert!(peak("gas-giant", 317.8, 0.3, 1) > 150.0);
+    }
+
+    #[test]
+    fn no_wind_shown_passes_a_share_of_the_speed_of_sound() {
+        // The Rossby law alone gives a cold light gas giant about
+        // 2 000 m/s, and the jets add up to more than the peak: the profile
+        // itself, and what GiantInfo shows, stay under the ceiling.
+        for preset in ["gas-giant", "ice-giant"] {
+            for mass in [14.0, 31.8, 60.0, 95.16, 317.8, 1000.0] {
+                for au in [60.0, 30.0, 15.0, 8.0, 5.2, 3.0, 1.0, 0.7] {
+                    for seed in [1, 4] {
+                        let look = Look::draw(&params(preset, seed, mass, au), mass);
+                        if look.info.hot {
+                            continue;
+                        }
+                        let ceiling = MAX_MACH * sound_speed(f64::from(look.info.effective_k));
+                        let shown = f64::from(look.info.wind_east.max(look.info.wind_west));
+                        let profile = (0..=360)
+                            .map(|k| f64::from(look.wind_at(-90.0 + 0.5 * k as f32).abs()))
+                            .fold(0.0, f64::max);
+                        let what = format!("{preset} {mass} ME at {au} AU seed {seed}");
+                        assert!(
+                            shown <= ceiling + 1e-3,
+                            "{what}: shown {shown} over {ceiling}"
+                        );
+                        assert!(
+                            profile <= ceiling + 1e-3,
+                            "{what}: {profile} over {ceiling}"
+                        );
+                    }
+                }
+            }
+        }
+        // The case that showed 845 m/s, Mach 1.1: 0.1 MJ at 5.2 AU.
+        let look = Look::draw(&params("gas-giant", 1, 31.8, 5.2), 31.8);
+        let sound = sound_speed(f64::from(look.info.effective_k));
+        assert!(f64::from(look.info.wind_east.max(look.info.wind_west)) <= 0.75 * sound + 1e-3);
+    }
+
+    #[test]
+    fn a_giant_never_blows_slower_closer_in_except_where_it_locks() {
+        // Same mass, same seed (same spin), from far to near: the peak wind
+        // does not dip between the Rossby regime and the irradiated one.
+        // Where tidal locking takes the spin (a day of thousands of hours),
+        // the Rossby number of ΩR goes and the irradiation floor, a
+        // day-night driven wind, is all that is left: the wind drops once
+        // there, to that floor, and rises again closer in.
+        for (preset, mass) in [
+            ("gas-giant", 31.8),
+            ("gas-giant", 95.16),
+            ("gas-giant", 317.8),
+            ("gas-giant", 3178.0),
+            ("ice-giant", 17.1),
+        ] {
+            let mut last = 0.0f32;
+            let mut locked = false;
+            for au in [
+                60.0, 30.0, 15.0, 8.0, 5.2, 3.0, 2.0, 1.0, 0.7, 0.5, 0.4, 0.3,
+            ] {
+                let look = Look::draw(&params(preset, 4, mass, au), mass);
+                assert!(!look.info.hot);
+                let floor = (IRRADIATED_WIND
+                    * (f64::from(look.info.equilibrium_k) / 1500.0).powi(2))
+                    as f32;
+                if look.info.rotation_hours > 100.0 && !locked {
+                    locked = true;
+                    // The step: at least the floor, and only the floor.
+                    assert!(
+                        look.wind >= floor - 1e-3,
+                        "{preset} {mass}: {} < {floor}",
+                        look.wind
+                    );
+                    assert!(
+                        (look.wind - floor.max(20.0)).abs() < 1.0,
+                        "{preset} {mass}: {}",
+                        look.wind
+                    );
+                } else {
+                    assert!(
+                        look.wind >= last - 1e-3,
+                        "{preset} {mass} ME: {} m/s at {au} AU after {last}",
+                        look.wind
+                    );
+                }
+                last = look.wind;
+            }
+        }
+    }
+
+    #[test]
+    fn the_storm_legend_shows_the_colour_of_the_largest_storm() {
+        let byte = |c: [f32; 3]| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+        let storm_of = |p: &WorldParams| {
+            biome_colours(p)
+                .unwrap()
+                .into_iter()
+                .find(|(b, _)| *b == Biome::GiantStorm)
+                .unwrap()
+                .1
+        };
+        let (mut with, mut without) = (0, 0);
+        for seed in 0..60 {
+            let p = params("gas-giant", seed, 317.8, 5.2);
+            let look = Look::draw(&p, 317.8);
+            if look.info.great_spot {
+                // The spot is the largest storm: its palette colour.
+                assert_eq!(storm_of(&p), byte(look.info.palette.storm), "seed {seed}");
+                with += 1;
+            } else {
+                // Only the white ovals: the colour they are drawn in.
+                assert_eq!(storm_of(&p), byte([0.97, 0.95, 0.9]), "seed {seed}");
+                without += 1;
+            }
+        }
+        assert!(with > 5 && without > 5, "{with} {without}");
+        // An ice giant with a dark spot shows the spot's colour; one without
+        // any storm falls back to its polar cyclones or its palette.
+        for seed in 0..40 {
+            let p = params("ice-giant", seed, 17.1, 30.0);
+            let look = Look::draw(&p, 17.1);
+            if look.info.great_spot {
+                assert_eq!(storm_of(&p), byte(look.info.palette.storm));
+            }
+        }
+    }
+
+    #[test]
+    fn the_great_spot_sits_in_a_southern_zone_and_the_edges_follow_the_bands() {
+        let mut spots = 0;
+        for seed in 0..200 {
+            let look = Look::draw(&params("gas-giant", seed, 317.8, 5.2), 317.8);
+            let edges = look.band_edges();
+            assert_eq!(edges.len(), look.bands.len() + 1);
+            assert!(edges.windows(2).all(|w| w[0] < w[1]), "{edges:?}");
+            assert!((edges[0] + look.polar).abs() < 1e-3);
+            // Zones are the odd bands, the equatorial zone in the middle.
+            assert!(
+                look.bands
+                    .iter()
+                    .enumerate()
+                    .all(|(i, b)| b.zone == (i % 2 == 1))
+            );
+            if let Some(spot) = look.storms.first().filter(|_| look.info.great_spot) {
+                spots += 1;
+                assert!(spot.lat < -10.0, "{}", spot.lat);
+                let (i, across) = look.band_at(spot.lat).unwrap();
+                assert!(look.bands[i].zone, "seed {seed}: lat {}", spot.lat);
+                assert!((0.2..0.8).contains(&across), "{across}");
+            }
+        }
+        assert!(spots > 50, "{spots}");
+    }
+
+    #[test]
+    fn warmer_ice_giants_keep_a_tinge_of_methane_blue_and_class_v_is_pale() {
+        let red = |kind: GiantKind, class: u8| class_palette(kind, class, 0.5, 0.5).zone[0];
+        for class in [2, 3] {
+            assert!(
+                red(GiantKind::Ice, class) < red(GiantKind::Gas, class),
+                "{class}"
+            );
+        }
+        // Class V reflects far more than class IV (Sudarsky et al. 2000).
+        let lum = |class: u8| {
+            let z = class_palette(GiantKind::Gas, class, 0.5, 0.5).zone;
+            z[0] + z[1] + z[2]
+        };
+        assert!(lum(5) > 2.5 * lum(4), "{} {}", lum(5), lum(4));
     }
 
     #[test]

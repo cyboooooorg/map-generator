@@ -28,9 +28,11 @@
 //! the world (Laplace–Lagrange secular theory; the request raises a drawn
 //! eccentricity to it), and the giant outside the world's orbit sets how
 //! many impactors reach it (Horner & Jones 2008; see [`impact_factor`]).
+use crate::giant_clouds::Clouds;
 use crate::noise::{stream, stream_seed};
 use crate::star::{
-    StarValues, draw_eccentricity, equilibrium_k, mean_temperature_factor, values, year_days,
+    AGE_GYR, StarValues, draw_eccentricity, equilibrium_k, lifetime_gyr, mean_temperature_factor,
+    values, year_days,
 };
 use crate::world::WorldParams;
 use rand::rngs::StdRng;
@@ -160,8 +162,8 @@ pub struct Giant {
     pub equilibrium_k: f32,
     pub effective_k: f32,
     /// Cloud class of Sudarsky, Burrows & Pinto (2000), 1 to 5, from the
-    /// effective temperature: ammonia clouds, water clouds, clear, alkali
-    /// "roasters", silicate clouds.
+    /// effective temperature and the gravity: ammonia clouds, water clouds,
+    /// clear, alkali "roasters", silicate clouds (see [`Clouds::of`]).
     pub class: u8,
     /// A hot giant (`Teq` over 1 000 K): inflated, dark, locked.
     pub hot: bool,
@@ -269,30 +271,93 @@ pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
     cold * if m > 30.0 { inflation } else { 1.0 }
 }
 
-/// Sudarsky class (1 to 5) of a giant of effective temperature `teff`.
-pub fn cloud_class(teff: f32) -> u8 {
-    match teff {
-        t if t < 150.0 => 1,
-        t if t < 350.0 => 2,
-        t if t < 900.0 => 3,
-        t if t < 1500.0 => 4,
-        _ => 5,
+/// Sudarsky class (1 to 5) of a giant of effective temperature `teff` (K)
+/// and surface gravity `gravity` (m/s²): the decks that condense decide
+/// classes I to III, the temperature and the gravity IV and V (see
+/// [`Clouds::of`]).
+pub fn cloud_class(teff: f32, gravity: f32) -> u8 {
+    Clouds::of(teff, gravity).class
+}
+
+/// Jupiter's internal heat flux, W/m²: Li et al. 2018
+/// (doi:10.1038/s41467-018-06107-2), from Cassini.
+const JUPITER_INTERNAL_FLUX: f64 = 7.485;
+/// Stefan–Boltzmann constant, W/(m² K⁴).
+const STEFAN_BOLTZMANN: f64 = 5.670_374e-8;
+/// Youngest age the cooling law is applied at, Gyr: the Baraffe et al.
+/// (2003) tables start at 0.1 Gyr.
+const YOUNGEST_GYR: f32 = 0.1;
+/// Exponents of the cooling law: `T ∝ M^0.5 t^−0.29`, fitted to the COND
+/// evolution tables of Baraffe et al. (2003, A&A 402, 701,
+/// doi:10.1051/0004-6361:20030252, tables 2 to 5) for 1 to 10.5 Jupiter
+/// masses and 0.5 to 10 Gyr (least squares in the logs; the fit is within
+/// 10 % of every entry, 5 % for 3 to 10 Jupiter masses). The same T_eff at
+/// 4.6 Gyr extrapolates to about 100 K for Jupiter.
+const COOLING_MASS_EXPONENT: f32 = 0.5;
+const COOLING_AGE_EXPONENT: f32 = -0.29;
+/// Internal temperature of an ice giant, K: calibration, no source (little
+/// internal heat compared with the gas giants').
+const ICE_INTERNAL_K: f32 = 40.0;
+
+/// Age of the system, Gyr: the Sun's, or the whole main-sequence life of a
+/// shorter-lived star (the age the world's spin locking assumes too, see
+/// [`AGE_GYR`]).
+pub fn system_age_gyr(star_mass: f32) -> f32 {
+    AGE_GYR.min(lifetime_gyr(star_mass))
+}
+
+/// Temperature of the heat a giant of `mass_earth` radiates from its
+/// interior at `age_gyr`, K.
+///
+/// Giants cool as `T ∝ M^0.5 t^−0.29`, fitted to the evolution tables of
+/// Baraffe et al. (2003; see [`COOLING_MASS_EXPONENT`]) and normalised to
+/// Jupiter's own, 107.2 K at 4.6 Gyr (`7.485 W/m²`, Li et al. 2018,
+/// doi:10.1038/s41467-018-06107-2). Against the tables, ten Jupiter masses
+/// have about 340 K at 4.6 Gyr (Baraffe: 322 K at 5 Gyr), 530 K at 1 Gyr
+/// (491 K) and 1 000 K at 0.1 Gyr (953 K). The old rule `100 K × (M/MJ)^0.4`
+/// had no age. (Burrows et al. 2001, eq. 1, `L ∝ t^−1.3 M^2.64`,
+/// doi:10.1103/RevModPhys.73.719, normalised to Jupiter overshoots by half
+/// at ten Jupiter masses: its exponents belong to brown dwarfs.) Saturn
+/// comes out at 59 K, under its real internal heat (an extra source such as
+/// helium rain is not modelled).
+///
+/// An ice giant keeps [`ICE_INTERNAL_K`].
+pub fn internal_temperature(kind: GiantKind, mass_earth: f32, age_gyr: f32) -> f32 {
+    if kind == GiantKind::Ice {
+        return ICE_INTERNAL_K;
     }
+    let jupiter = (JUPITER_INTERNAL_FLUX / STEFAN_BOLTZMANN).powf(0.25) as f32;
+    let mass = mass_earth / JUPITER_EARTH_MASSES;
+    jupiter
+        * mass.powf(COOLING_MASS_EXPONENT)
+        * (age_gyr.max(YOUNGEST_GYR) / AGE_GYR).powf(COOLING_AGE_EXPONENT)
+}
+
+/// Surface gravity of a giant of `mass_earth` and `radius_earth`, m/s².
+pub fn surface_gravity(mass_earth: f32, radius_earth: f32) -> f32 {
+    9.806_65 * mass_earth / (radius_earth * radius_earth)
 }
 
 /// Colour of a giant's disk from its kind and class, varied by `t` in
 /// `[0, 1]`: cream to ochre Jovians, cyan to blue cold ice giants, white
-/// water clouds, azure clear skies, near-black roasters, dark grey silicate
-/// clouds.
+/// water clouds, azure clear skies, near-black roasters, and the pale
+/// silicate clouds of class V (a Bond albedo near 0.5 against 0.03 for class
+/// IV, Sudarsky et al. 2000). Ice giants keep a tinge of the methane that
+/// absorbs the red wherever it stays in the gas.
 pub fn giant_colour(kind: GiantKind, class: u8, t: f32) -> [f32; 3] {
     let mix = |a: [f32; 3], b: [f32; 3]| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * t);
-    match (kind, class) {
+    let colour = match (kind, class) {
         (GiantKind::Ice, 1) => mix([0.66, 0.85, 0.88], [0.32, 0.5, 0.88]),
         (_, 1) => mix([0.86, 0.79, 0.66], [0.76, 0.6, 0.44]),
         (_, 2) => mix([0.94, 0.94, 0.91], [0.86, 0.88, 0.9]),
         (_, 3) => mix([0.42, 0.6, 0.86], [0.3, 0.48, 0.82]),
         (_, 4) => mix([0.2, 0.22, 0.3], [0.16, 0.16, 0.2]),
-        _ => mix([0.34, 0.32, 0.29], [0.28, 0.25, 0.22]),
+        _ => mix([0.74, 0.7, 0.64], [0.68, 0.64, 0.6]),
+    };
+    if kind == GiantKind::Ice && (2..=3).contains(&class) {
+        crate::giant_clouds::methane_tint(colour)
+    } else {
+        colour
     }
 }
 
@@ -497,14 +562,11 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
     let eccentricity = track.eccentricity as f32;
     let flux = star.luminosity / (orbit_au * orbit_au);
     let equilibrium = equilibrium_k(flux) * mean_temperature_factor(eccentricity);
-    // Heat left from formation: Jupiter's internal temperature is about
-    // 100 K; less for smaller giants, little for ice giants.
-    let internal = match kind {
-        GiantKind::Gas => 100.0 * (mass_earth / JUPITER_EARTH_MASSES).powf(0.4),
-        GiantKind::Ice => 40.0,
-    };
+    // Heat left from formation, cooled over the age of the system.
+    let internal = internal_temperature(kind, mass_earth, system_age_gyr(star.mass));
     let effective = (equilibrium.powi(4) + internal.powi(4)).powf(0.25);
-    let class = cloud_class(effective);
+    let radius_earth = giant_radius(mass_earth, equilibrium);
+    let class = cloud_class(effective, surface_gravity(mass_earth, radius_earth));
     let hot = equilibrium > 1000.0;
     // The odds of the giant worlds' presets (`[giant] rings`): bright
     // rings only on cold gas giants, faint ones on most giants, rarely on
@@ -523,7 +585,7 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
         name: crate::naming::planet_letter(rank),
         kind,
         mass_earth,
-        radius_earth: giant_radius(mass_earth, equilibrium),
+        radius_earth,
         orbit_au,
         eccentricity,
         periapsis_angle: rng.random::<f32>() * std::f32::consts::TAU,
@@ -610,13 +672,51 @@ mod tests {
 
     #[test]
     fn the_solar_giants_get_their_classes_and_the_curve_its_peak() {
-        assert_eq!(cloud_class(124.0), 1);
-        assert_eq!(cloud_class(1200.0), 4);
+        assert_eq!(cloud_class(124.0, 24.8), 1);
+        assert_eq!(cloud_class(1200.0, 24.8), 4);
         assert_eq!(impact_factor(Some(1.0)), 1.0);
         assert!((impact_factor(Some(0.2)) - 1.8).abs() < 1e-5);
         assert!(impact_factor(None) < 1.0);
         // Jupiter (e = 0.049) forces about 0.012 on Earth.
         assert!((forced_eccentricity(1.0, 5.2, 0.049) - 0.0118).abs() < 0.001);
+    }
+
+    #[test]
+    fn a_giant_cools_with_age_and_grows_hotter_with_mass() {
+        // Jupiter's own: 7.485 W/m² of internal heat is 107 K.
+        let jupiter = internal_temperature(GiantKind::Gas, JUPITER_EARTH_MASSES, AGE_GYR);
+        assert!((jupiter - 107.2).abs() < 0.3, "{jupiter}");
+        // Saturn: the cooling law alone gives 59 K (it really has more).
+        let saturn = internal_temperature(GiantKind::Gas, 95.16, AGE_GYR);
+        assert!((54.0..64.0).contains(&saturn), "{saturn}");
+        // Baraffe et al. (2003) for ten Jupiter masses: 491 K at 1 Gyr,
+        // 322 K at 5 Gyr, 953 K at 0.1 Gyr; within 10 %.
+        let heavy = |age| internal_temperature(GiantKind::Gas, 10.0 * JUPITER_EARTH_MASSES, age);
+        for (age, table) in [(1.0, 491.0), (5.0, 322.0), (0.1, 953.0)] {
+            let got = heavy(age);
+            assert!(
+                (got / table - 1.0).abs() < 0.12,
+                "{age} Gyr: {got} vs {table}"
+            );
+        }
+        // And one Jupiter mass at 1 Gyr: 160 K.
+        let one = internal_temperature(GiantKind::Gas, JUPITER_EARTH_MASSES, 1.0);
+        assert!((one / 160.0 - 1.0).abs() < 0.2, "{one}");
+        // The Sun's age, or a short-lived star's whole life.
+        assert_eq!(system_age_gyr(1.0), AGE_GYR);
+        assert!(system_age_gyr(3.0) < 1.0);
+    }
+
+    #[test]
+    fn an_old_massive_giant_far_from_its_star_keeps_its_own_heat() {
+        // Ten Jupiter masses at 40 AU: it radiates its own 340 K, with no
+        // sunlight to speak of, and sits near the edge of the water clouds.
+        let star = values(42.0);
+        let internal = internal_temperature(GiantKind::Gas, 3178.0, system_age_gyr(star.mass));
+        let teq = equilibrium_k(star.luminosity / 1600.0);
+        let teff = (teq.powi(4) + internal.powi(4)).powf(0.25);
+        assert!((320.0..380.0).contains(&teff), "{teff}");
+        assert!((2..=3).contains(&cloud_class(teff, 60.0)));
     }
 
     #[test]

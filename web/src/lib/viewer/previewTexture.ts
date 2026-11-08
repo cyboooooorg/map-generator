@@ -4,6 +4,11 @@
 // polar caps, in the same colours and with the same cheap noise.
 import type { Preview } from '../api/types/Preview';
 
+/** Slots of the band-edge array in the shader: a giant has at most 31 bands. */
+export const PREVIEW_EDGES = 32;
+/** Latitude (degrees) where the polar regions of a preview with no edges start. */
+const OLD_POLAR = 64;
+
 const fract = (x: number) => x - Math.floor(x);
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -46,6 +51,24 @@ type Rgb = readonly [number, number, number];
 const blend = (a: Rgb, b: Rgb, t: number): Rgb => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
 
 /**
+ * The latitudes (degrees, ascending) of the edges of a giant's bands: those
+ * the generated globe will have, or, for a preview made before they were
+ * stored, `bands` equal bands between the polar regions.
+ */
+export function previewEdges(preview: Preview): number[] {
+  if (preview.bands < 1) return [];
+  if (preview.edges.length === preview.bands + 1) return preview.edges;
+  return Array.from({ length: preview.bands + 1 }, (_, k) => -OLD_POLAR + (2 * OLD_POLAR * k) / preview.bands);
+}
+
+/** The edges as the shader's fixed-size array, padded with the last edge. */
+export function previewEdgeUniform(preview: Preview): number[] {
+  const edges = previewEdges(preview).slice(0, PREVIEW_EDGES);
+  const pad = edges[edges.length - 1] ?? 0;
+  return Array.from({ length: PREVIEW_EDGES }, (_, k) => edges[k] ?? pad);
+}
+
+/**
  * The colour of a preview at the point of normal (x, y, z), linear RGB, as
  * previewColour in previewGlsl draws it.
  */
@@ -55,9 +78,19 @@ export function previewColourAt(preview: Preview, x: number, y: number, z: numbe
   const poles: Rgb = preview.colours[2] ?? [0, 0, 0];
   const lat = Math.asin(Math.min(1, Math.max(-1, y)));
   if (preview.bands > 0.5) {
-    const wave = 0.08 * Math.sin(Math.atan2(x, z) * 6 + lat * 9);
-    const band = 0.5 + 0.5 * Math.sin((lat + wave) * preview.bands);
-    return blend(blend(base, second, smoothstep(0.35, 0.65, band)), poles, smoothstep(1, 1.25, Math.abs(lat)));
+    // The band after an odd number of edges is a belt, after an even number a zone.
+    const edges = previewEdges(preview);
+    const d = (lat * 180) / Math.PI + 3 * Math.sin(Math.atan2(x, z) * 6 + lat * 9);
+    let below = 0;
+    let nearest = 90;
+    edges.forEach((e, i) => {
+      if (d >= e) below += 1;
+      if (i > 0 && i < edges.length - 1) nearest = Math.min(nearest, Math.abs(d - e));
+    });
+    const zone = below % 2 === 0;
+    const colour = blend(zone ? base : second, zone ? second : base, 0.5 * (1 - smoothstep(0, 1.2, nearest)));
+    const beyond = Math.max(edges[0]! - d, d - edges[edges.length - 1]!);
+    return blend(colour, poles, smoothstep(-3, 3, beyond));
   }
   let colour = base;
   if (preview.colours.length > 1) {

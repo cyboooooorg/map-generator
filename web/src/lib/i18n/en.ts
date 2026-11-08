@@ -247,10 +247,10 @@ export const en = {
     AcidRiver: 'Acid River',
     AcidShore: 'Acid Shore',
     FrozenLake: 'Frozen Lake',
-    GiantZone: 'Zone',
-    GiantBelt: 'Belt',
+    GiantZone: 'Bright band (zone)',
+    GiantBelt: 'Dark band (belt)',
     GiantStorm: 'Storm',
-    GiantPolar: 'Polar Region',
+    GiantPolar: 'Polar region',
   } satisfies Record<Biome, string>,
   /** Cloud kinds. */
   clouds: {
@@ -319,8 +319,8 @@ export const en = {
     giantClouds: 'Clouds',
     giantCloudsHelp: 'What the visible cloud deck is made of, from its temperature (Sudarsky et al. 2000), and the effective temperature',
     giantWinds: 'Winds',
-    giantWindsHelp: 'Jets in each hemisphere (Rhines scale: more on a large, fast-spinning planet), and the strongest westward and eastward winds at the cloud tops',
-    giantWindsValue: (p: { jets: number; west: string; east: string }) => `${p.jets} jets per hemisphere · ${p.west} west to ${p.east} east`,
+    giantWindsHelp: 'Eastward jets in each hemisphere (Rhines scale: more on a large, fast-spinning planet with slow winds; a westward jet lies between two of them, and one more blows at the equator), and the strongest westward and eastward winds at the cloud tops',
+    giantWindsValue: (p: { jets: number; west: string; east: string }) => `${p.jets} eastward jets per hemisphere · ${p.west} west to ${p.east} east`,
     giantHeat: 'Internal heat',
     giantHeatHelp: 'Heat it radiates over what it gets from its star: Jupiter 1.7, Neptune 2.6, Uranus about 1',
     giantHeatValue: (p: { ratio: string }) => `${p.ratio}× the starlight it absorbs`,
@@ -766,7 +766,7 @@ export const en = {
     au: 'AU',
     bandDrift: 'Band drift',
     bandDriftHelp:
-      "The bands turn each with its own wind, faster or slower than the planet's spin, some backwards: the fastest goes round in two minutes (not the true pace)",
+      "The bands turn each with its own wind, faster or slower than the planet's spin, some backwards: the fastest goes round in two minutes (not the true pace). A great spot barely moves, as the Great Red Spot does",
     cloudTops: 'Cloud tops',
     windLayer: 'Wind',
     windEnd: (p: { speed: string; side: string }) => `${p.speed} m/s ${p.side}`,
@@ -927,11 +927,11 @@ export const en = {
     giantHelp: (p: { clouds: string; radius: string; temperature: string; eccentricity: string; rings: string }) =>
       `${p.clouds} · radius ${p.radius} · ${p.temperature} · eccentricity ${p.eccentricity} · ${p.rings}`,
     cloudClasses: {
-      1: 'ammonia clouds, banded cream and brown (or blue methane, for an ice giant)',
-      2: 'water clouds, bright white',
+      1: 'ammonia clouds, banded cream and brown (or blue methane, for an ice giant; a warmer one keeps a blue tinge)',
+      2: 'water clouds, bright white (a thin veil near 350 K, clear above)',
       3: 'no clouds, deep azure',
       4: 'alkali metals absorb the light: very dark',
-      5: 'silicate clouds, dark grey, glowing red at night',
+      5: 'high silicate clouds, pale grey and bright, glowing red at night',
     } as Record<number, string>,
     rings: { none: 'no rings', faint: 'faint rings', bright: 'bright rings' } as Record<string, string>,
     forced: 'Forced eccentricity',
