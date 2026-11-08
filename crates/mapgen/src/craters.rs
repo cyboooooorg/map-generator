@@ -85,13 +85,21 @@ const MIN_PIXELS: f64 = 4.0;
 const EJECTA_RADII: f64 = 3.0;
 /// Simple-to-complex transition on the Moon, km, and the Moon's gravity,
 /// m/s²: the transition scales as `1/g` (Melosh & Ivanov 1999,
-/// doi:10.1146/annurev.earth.27.1.385). The target's strength is left out:
-/// Mercury turns complex at about 12 km where this gives 6.6, Earth at 3
-/// to 5 km (2.5), icy moons far sooner than rock (Barnouin et al. 2012,
+/// doi:10.1146/annurev.earth.27.1.385). The target's strength moves it
+/// (`[geology] transition_scale`, [`ICE_TRANSITION`]): Mercury turns
+/// complex at about 12 km where this gives 6.6 (Barnouin et al. 2012,
 /// doi:10.1016/j.icarus.2012.02.029).
 const MOON_TRANSITION_KM: f64 = 15.0;
 const MOON_GRAVITY: f64 = 1.62;
 const EARTH_GRAVITY: f64 = 9.81;
+/// How much sooner an icy crust turns complex than rock at the same
+/// gravity. Barnouin et al. 2012 (doi:10.1016/j.icarus.2012.02.029, read
+/// at the source) say the icy Galilean satellites show "small values of
+/// Dt ... relative to the Moon", their volatile-rich crust being weak
+/// (Schenk 2002), but give the values only in a figure. Calibration, no
+/// source: 0.15 puts Ganymede near 2.5 km (2 to 3 km in secondary
+/// sources, Schenk 1991 not read), against 17 km from the lunar law.
+const ICE_TRANSITION: f64 = 0.15;
 /// Depth of complex lunar craters, km, from the rim crest to the floor:
 /// `d = 1.044 D^0.301` above the transition (Pike 1977, as quoted by
 /// Feoktistova & Ipatov 2021, doi:10.1007/s11038-021-09538-y), 4.2 km at
@@ -563,7 +571,13 @@ impl CraterField {
             craters: Vec::new(),
             floods: Vec::new(),
             radius_km,
-            transition_km: MOON_TRANSITION_KM * MOON_GRAVITY / gravity,
+            transition_km: MOON_TRANSITION_KM * MOON_GRAVITY / gravity
+                * f64::from(p.planet.geology.transition_scale)
+                * if crate::generation::icy(p) {
+                    ICE_TRANSITION
+                } else {
+                    1.0
+                },
             complex_depth: if crate::generation::icy(p) {
                 f64::from(crate::generation::ICE_RELIEF)
             } else {
@@ -1745,6 +1759,43 @@ mod tests {
         // A young surface scales with the impact rate.
         let young = kept(1.0, 1.8) / kept(1.0, 0.7);
         assert!((young - 1.8 / 0.7).abs() < 1e-9, "{young}");
+    }
+
+    #[test]
+    fn strength_moves_the_transition_from_simple_to_complex() {
+        let km = |scale: f32, circumference: f32| {
+            let mut p = moon(3.5);
+            p.planet.geology.transition_scale = scale;
+            p.circumference_km = circumference;
+            CraterField::context(&p).transition_km
+        };
+        let load = |name: &str| {
+            crate::preset::Preset::load(&format!(
+                "{}/../../presets/examples/{name}.toml",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap()
+        };
+        // The Moon keeps its 15 km.
+        assert!((km(1.0, 10_917.0) - 15.0).abs() < 0.1);
+        // Mercury: about 12 km (Barnouin et al. 2012), not 6.6.
+        let mut mercury = moon(3.5);
+        mercury.planet = load("mercury-like");
+        mercury.circumference_km = 15_329.0;
+        let mercury = CraterField::context(&mercury).transition_km;
+        assert!((11.0..13.0).contains(&mercury), "{mercury}");
+        // Mars: 7 to 8 km.
+        let mut mars = moon(3.5);
+        mars.planet = load("mars-like");
+        mars.circumference_km = 21_344.0;
+        let mars = CraterField::context(&mars).transition_km;
+        assert!((7.0..8.0).contains(&mars), "{mars}");
+        // An icy body of Ganymede's size turns complex within a few km.
+        let mut ganymede = moon(3.5);
+        ganymede.circumference_km = 16_540.0;
+        ganymede.gravity = Some(1.43 / 9.81);
+        let ice = CraterField::context(&ganymede).transition_km;
+        assert!((2.0..3.5).contains(&ice), "{ice}");
     }
 
     #[test]

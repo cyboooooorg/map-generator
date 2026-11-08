@@ -131,6 +131,15 @@ pub struct Geology {
     /// 0.751 (Hartmann, as above).
     #[serde(default = "one", skip_serializing_if = "is_one")]
     pub crater_scale: f32,
+    /// Strength of the crust against the Moon's gravity law, as a factor
+    /// on the diameter where craters turn from simple to complex: 1
+    /// elsewhere. `mercury-like` 1.12: the transition is about 12 km
+    /// (Barnouin et al. 2012, doi:10.1016/j.icarus.2012.02.029), where the
+    /// law gives 10.7 at the gravity the app derives for its size. Mars
+    /// (7 to 8 km, same paper) needs none. Ice has its own factor, applied
+    /// on top (`craters::ICE_TRANSITION`).
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub transition_scale: f32,
 }
 
 fn one() -> f32 {
@@ -150,6 +159,7 @@ impl Default for Geology {
             maria: None,
             impact_ratio: 1.0,
             crater_scale: 1.0,
+            transition_scale: 1.0,
         }
     }
 }
@@ -167,6 +177,7 @@ impl Geology {
         for (name, v) in [
             ("impact_ratio", self.impact_ratio),
             ("crater_scale", self.crater_scale),
+            ("transition_scale", self.transition_scale),
         ] {
             if !(v.is_finite() && (0.1..=10.0).contains(&v)) {
                 return Err(format!("geology.{name}: must stay within [0.1, 10]"));
