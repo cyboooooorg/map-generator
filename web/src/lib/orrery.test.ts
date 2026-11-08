@@ -97,4 +97,17 @@ describe('cssColour', () => {
     expect(cssColour([1, 1, 1])).toBe('rgb(255 255 255)');
     expect(cssColour([0, 0, 0])).toBe('rgb(0 0 0)');
   });
+
+  it('spreads the inner orbits of a crowded system on the log scale, inside the box', () => {
+    const bodies = [0.02, 0.03, 0.05, 0.08, 0.5, 3].map((au, k) => body(`p${k}`, au));
+    const sqrt = orrery(system(bodies, [0.04, 0.09]), 124, 124);
+    const log = orrery(system(bodies, [0.04, 0.09]), 124, 124, 'log');
+    const gap = (o: ReturnType<typeof orrery>) => (o.planets[1]?.rx ?? 0) - (o.planets[0]?.rx ?? 0);
+    expect(gap(log)).toBeGreaterThan(gap(sqrt));
+    for (const p of log.planets) {
+      expect(p.rx).toBeLessThanOrEqual(124 / 2);
+      expect(p.rx).toBeGreaterThan(log.starR);
+    }
+    expect(log.starR).toBeLessThan(sqrt.starR);
+  });
 });

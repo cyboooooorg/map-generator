@@ -32,7 +32,7 @@
   }
 </script>
 
-<button class="pin" class:on={system.pinned} aria-pressed={system.pinned} aria-label={label} title={action} onclick={toggle}
+<button class="pin" data-pin={system.id} class:on={system.pinned} aria-pressed={system.pinned} aria-label={label} title={action} onclick={toggle}
   >{system.pinned ? '★' : '☆'}</button
 >
 

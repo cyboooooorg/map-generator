@@ -53,21 +53,33 @@ export function orbitRadius(au: number, maxAu: number, from: number, to: number)
 /**
  * The orrery of a system in a `width` × `height` box: every planet with a
  * known orbit, its dot where an angle fixed by the system's seed and its
- * place puts it (so a system always looks the same).
+ * place puts it (so a system always looks the same). `scaleKind` 'log'
+ * spaces the orbits by the logarithm of their distance, with a smaller
+ * star, so that the inner planets of a crowded system spread out (the
+ * compact cards use it; the default keeps the thumbnails as they were).
  */
-export function orrery(system: SystemSummary, width: number, height: number): Orrery {
+export function orrery(system: SystemSummary, width: number, height: number, scaleKind: 'sqrt' | 'log' = 'sqrt'): Orrery {
   const cx = width / 2;
   const cy = height / 2;
   const scale = Math.min(width, height) / 40;
-  const starR = 2.6 * scale;
-  const from = starR + 1.5 * scale;
+  const log = scaleKind === 'log';
+  const starR = (log ? 1.8 : 2.6) * scale;
+  const from = starR + (log ? 1.2 : 1.5) * scale;
   const planets = system.bodies.filter((b) => b.kind === 'planet' && b.orbit_au > 0);
   // The farthest point of any orbit sits at the edge.
   const maxAu = Math.max(0, ...planets.map((p) => p.orbit_au * (1 + Math.min(p.eccentricity, 0.99))));
   // The orbits fill the box: as wide as it is, as tall as it is.
   const toX = cx - PAD * scale;
   const toY = cy - PAD * scale;
-  const radii = (au: number): [number, number] => [orbitRadius(au, maxAu, from, toX), orbitRadius(au, maxAu, from, toY)];
+  // The log scale starts a little inside the innermost orbit or zone edge.
+  const inner = [...planets.map((p) => p.orbit_au * (1 - Math.min(p.eccentricity, 0.99))), ...(system.hz_inner_au > 0 ? [system.hz_inner_au] : [])];
+  const minAu = Math.min(...inner) * 0.7;
+  const radius = (au: number, to: number): number => {
+    if (!log || maxAu <= minAu) return orbitRadius(au, maxAu, from, to);
+    const f = (Math.log(Math.max(au, minAu)) - Math.log(minAu)) / (Math.log(maxAu) - Math.log(minAu));
+    return from + (to - from) * Math.min(1, f);
+  };
+  const radii = (au: number): [number, number] => [radius(au, toX), radius(au, toY)];
   const zone =
     system.hz_outer_au > 0 && maxAu > 0 && system.hz_inner_au < maxAu
       ? { inner: radii(system.hz_inner_au), outer: radii(Math.min(system.hz_outer_au, maxAu)) }
