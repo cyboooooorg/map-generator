@@ -645,9 +645,9 @@
     // the same epoch as the one before).
     const epochMa = untrack(() => epoch);
     textureEpoch = { id, epochMa, scale: 1 };
-    const surface = epochMa === 0 ? worldFile(id, 'raw_data/surface.png', rev) : epochSurface(id, epochMa, rev, 1);
+    const maps = epochMaps(id, epochMa, rev, 1);
     current
-      .setTexture(surface, controller.signal, progress)
+      .setMaps(maps.colour, maps.normal, controller.signal, progress)
       .catch((e: unknown) => {
         if (!controller.signal.aborted) error = t.viewer.mapFailed({ error: String(e) });
       })
@@ -680,10 +680,21 @@
   /** Whether the base map of another epoch is loading. */
   let epochMapLoading = $state(false);
 
-  /** URL of the base map of a world at an epoch (the render without lines, as raw_data/surface.png). */
-  function epochSurface(id: string, epochMa: number, rev: number | null, scale: 1 | 4): string {
-    return epochFile(id, epochMa, 'surface.png', rev, scale);
+  /**
+   * URLs of the maps of a world at an epoch: its colour (without lines or
+   * hillshade) and its relief normals, stored at the present, rendered by
+   * the server at another epoch.
+   */
+  function epochMaps(id: string, epochMa: number, rev: number | null, scale: 1 | 4): { colour: string; normal: string } {
+    if (epochMa === 0) {
+      return { colour: worldFile(id, 'raw_data/colour.png', rev), normal: worldFile(id, 'raw_data/normal.png', rev) };
+    }
+    return {
+      colour: epochFile(id, epochMa, 'colour.png', rev, scale),
+      normal: epochFile(id, epochMa, 'normal.png', rev, scale),
+    };
   }
+
 
   // The base map of another epoch of the world shown: reduced while the
   // slider moves (after a short pause), full once it is released.
@@ -702,10 +713,9 @@
     const controller = new AbortController();
     const show = () => {
       epochMapLoading = true;
-      const url =
-        epochMa === 0 ? worldFile(id, 'raw_data/surface.png', rev) : epochSurface(id, epochMa, rev, scale);
+      const maps = epochMaps(id, epochMa, rev, scale);
       current
-        .setTexture(url, controller.signal)
+        .setMaps(maps.colour, maps.normal, controller.signal)
         .then(() => {
           textureEpoch = { id, epochMa, scale };
         })

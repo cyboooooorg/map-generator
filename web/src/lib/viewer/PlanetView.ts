@@ -514,6 +514,7 @@ export class PlanetView {
   private readonly u = {
     uLift: { value: 0 } as IUniform<number>,
     uMap: { value: emptyTexture() } as IUniform<Texture>,
+    uNormalMap: { value: emptyTexture() } as IUniform<Texture>,
     uCloudsOn: { value: 0 } as IUniform<number>,
     // 1 draws the clouds' shadows on the ground (the profile's cloudShadows).
     uCloudShadows: { value: 1 } as IUniform<number>,
@@ -574,7 +575,8 @@ export class PlanetView {
   private referenceTilt: number | null = null;
   private referencesOn = false;
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
-  private texture: Texture | null = null;
+  /** The base map: its colour and its relief normals (see setMaps). */
+  private maps: { colour: Texture; normal: Texture } | null = null;
   /**
    * The world whose extra layers are not uploaded yet (with
    * the factor that fits them to the GPU), until a layer needs them.
@@ -591,7 +593,7 @@ export class PlanetView {
   private readonly lastQuaternion = new Quaternion();
   /** When the camera or the morph last moved (see pixelRatio). */
   private lastMotion = -Infinity;
-  /** Counts setTexture calls: only the latest one may set the map. */
+  /** Counts setMaps calls: only the latest one may set the maps. */
   private textureRequest = 0;
   private disposed = false;
   /** When the last frame was drawn (requestAnimationFrame's clock), for the frame cap. */
@@ -1503,11 +1505,16 @@ export class PlanetView {
     this.u.uClouds.value = emptyTexture();
   }
 
-  /** Downloads and decodes an equirectangular image, north up, within the GPU's texture size. */
+  /**
+   * Downloads and decodes an equirectangular image, north up, within the
+   * GPU's texture size. `data` images (normals) are decoded without colour
+   * management, so their values stay as stored.
+   */
   private async decodeImage(
     url: string,
     signal?: AbortSignal,
     onProgress?: (progress: LoadProgress) => void,
+    data = false,
   ): Promise<ImageBitmap> {
     const response = await fetch(url, signal ? { signal } : {});
     if (!response.ok) {
@@ -1525,7 +1532,8 @@ export class PlanetView {
     onProgress?.({ stage: 'decode', label, done: 0, total: null });
     // ImageBitmaps ignore texture.flipY: flip while decoding instead, so
     // row 0 (north) ends at the top of the texture, as geo.ts expects.
-    let bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+    const raw: ImageBitmapOptions = data ? { colorSpaceConversion: 'none', premultiplyAlpha: 'none' } : {};
+    let bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY', ...raw });
     const factor = fitFactor(bitmap.width, bitmap.height, this.renderer.capabilities.maxTextureSize);
     if (factor > 1) {
       // Too large for this GPU: decode again, scaled down.
@@ -1533,6 +1541,7 @@ export class PlanetView {
       bitmap.close();
       bitmap = await createImageBitmap(blob, {
         imageOrientation: 'flipY',
+        ...raw,
         resizeWidth: Math.ceil(width / factor),
         resizeHeight: Math.ceil(height / factor),
         resizeQuality: 'high',
@@ -1542,44 +1551,64 @@ export class PlanetView {
   }
 
   /**
-   * Shows a world map (an equirectangular image URL). The image is decoded
-   * off the main thread. Aborting `signal` drops the load: the promise
-   * rejects and the current map stays. A later call does not cancel an
-   * earlier one by itself, but the view keeps only the map of the latest call.
-   * `onProgress` follows the download (bytes received) and the decoding.
+   * Shows a world's maps: its colour (without hillshade) and its relief
+   * normals, two equirectangular image URLs. The images are decoded off the
+   * main thread, and swapped in together. Aborting `signal` drops the load:
+   * the promise rejects and the current maps stay. A later call does not
+   * cancel an earlier one by itself, but the view keeps only the maps of
+   * the latest call. `onProgress` follows the colour's download and
+   * decoding.
    */
-  async setTexture(url: string, signal?: AbortSignal, onProgress?: (progress: LoadProgress) => void): Promise<void> {
+  async setMaps(
+    colourUrl: string,
+    normalUrl: string,
+    signal?: AbortSignal,
+    onProgress?: (progress: LoadProgress) => void,
+  ): Promise<void> {
     this.textureRequest += 1;
     const request = this.textureRequest;
-    const bitmap = await this.decodeImage(url, signal, onProgress);
-    if (this.disposed || request !== this.textureRequest || signal?.aborted) {
-      bitmap.close();
+    const results = await Promise.allSettled([
+      this.decodeImage(colourUrl, signal, onProgress),
+      this.decodeImage(normalUrl, signal, undefined, true),
+    ]);
+    const bitmaps = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed || this.disposed || request !== this.textureRequest || signal?.aborted) {
+      for (const bitmap of bitmaps) bitmap.close();
       signal?.throwIfAborted();
+      if (failed) throw failed.reason;
       return;
     }
-    const texture = new Texture(bitmap);
-    texture.flipY = false;
-    texture.colorSpace = SRGBColorSpace;
-    // Repeated across longitudes: a giant's drifting bands read it past
-    // the seam (see the surface shader), continuously, so that no line of
-    // its coarsest mip level shows where they wrap.
-    texture.wrapS = RepeatWrapping;
-    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    texture.needsUpdate = true;
-    // The bitmap is closed once uploaded: only the GPU copy stays.
-    releaseOnUpload(texture);
-    this.disposeTexture();
-    this.texture = texture;
-    this.u.uMap.value = texture;
+    const [colourBitmap, normalBitmap] = bitmaps as [ImageBitmap, ImageBitmap];
+    const texture = (bitmap: ImageBitmap, colorSpace: typeof SRGBColorSpace | typeof NoColorSpace) => {
+      const map = new Texture(bitmap);
+      map.flipY = false;
+      map.colorSpace = colorSpace;
+      // Repeated across longitudes: a giant's drifting bands read it past
+      // the seam (see the surface shader), continuously, so that no line of
+      // its coarsest mip level shows where they wrap.
+      map.wrapS = RepeatWrapping;
+      map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      map.needsUpdate = true;
+      // The bitmap is closed once uploaded: only the GPU copy stays.
+      releaseOnUpload(map);
+      return map;
+    };
+    this.disposeMaps();
+    this.maps = { colour: texture(colourBitmap, SRGBColorSpace), normal: texture(normalBitmap, NoColorSpace) };
+    this.u.uMap.value = this.maps.colour;
+    this.u.uNormalMap.value = this.maps.normal;
     this.requestRender();
   }
 
-  /** Frees the GPU copy of the base map, and its decoded image if it was never uploaded. */
-  private disposeTexture(): void {
-    if (this.texture) {
-      this.texture.dispose();
-      (this.texture.image as ImageBitmap).close();
-      this.texture = null;
+  /** Frees the GPU copies of the base maps, and their decoded images if they were never uploaded. */
+  private disposeMaps(): void {
+    if (this.maps) {
+      for (const map of [this.maps.colour, this.maps.normal]) {
+        map.dispose();
+        (map.image as ImageBitmap).close();
+      }
+      this.maps = null;
     }
   }
 
@@ -2142,7 +2171,7 @@ export class PlanetView {
     this.travel = null;
     this.controls.dispose();
     this.tiles.dispose();
-    this.disposeTexture();
+    this.disposeMaps();
     this.disposeClouds();
     if (this.cloudDriftTimer !== null) {
       clearTimeout(this.cloudDriftTimer);

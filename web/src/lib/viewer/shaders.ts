@@ -202,6 +202,7 @@ export const surfaceVertex = /* glsl */ `
 export const surfaceFragment = /* glsl */ `
   ${common}
   uniform sampler2D uMap;
+  uniform sampler2D uNormalMap; // relief normals (east, north, up), row 0 = north at the top
   uniform int uLayer;
   uniform vec2 uTexel;
   uniform int uLightMode;      // 0 = headlight, 1 = sun
@@ -212,7 +213,7 @@ export const surfaceFragment = /* glsl */ `
   uniform vec4 uHexGrid;       // columns, rows, hex width (px), hex size (px)
   uniform vec2 uMapSize;       // map width and height in pixels
   uniform float uTileOn;       // 1 on a detail patch with a tile texture
-  uniform sampler2D uTile;     // detail tile, row 0 = north
+  uniform sampler2D uTile;     // detail tile, row 0 = north: colour above, normals below
   uniform vec4 uTexRect;       // part of uTile this patch shows (u0, v0, du, dv), v down
   uniform float uHasExtra;
   uniform sampler2D uExtra;
@@ -404,6 +405,13 @@ export const surfaceFragment = /* glsl */ `
 
   // Brightness of lava at night, relative to its day colour.
   const float LAVA_GLOW = 0.9;
+  // Light of its own lava keeps by day: a flow on a slope turned away from
+  // the light is lit at least this much.
+  const float LAVA_DAY_GLOW = 0.25;
+  // The relief's light relative to flat ground: at least this on slopes
+  // turned away from a low light, at most this facing it.
+  const float RELIEF_SHADOW = 0.12;
+  const float RELIEF_HIGHLIGHT = 2.2;
   // Sun glint on liquid seas: exponent of the lobe (lower is broader) and
   // peak brightness added.
   const float GLINT_SHARPNESS = 18.0;
@@ -518,8 +526,16 @@ export const surfaceFragment = /* glsl */ `
     // The surface colours (detail tile or base map), sampled once: they are
     // the biome layer, and tell lava and magma apart on every layer (below).
     // Detail tiles are drawn on the biome layer only.
+    // A tile holds its colour in its upper half and its normals in the
+    // lower one (in the texture's own space, v down): each read stays half
+    // a texel inside its half. The tile texture is not sRGB-decoded (the
+    // normals must keep their values): its colour is decoded here.
+    vec2 tileUv = uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw;
+    const float TILE_HALF_TEXEL = 0.5 / 512.0;
+    vec2 tileColourUv = vec2(tileUv.x, clamp(tileUv.y * 0.5, TILE_HALF_TEXEL, 0.5 - TILE_HALF_TEXEL));
+    vec2 tileNormalUv = vec2(tileUv.x, clamp(0.5 + tileUv.y * 0.5, 0.5 + TILE_HALF_TEXEL, 1.0 - TILE_HALF_TEXEL));
     vec3 surface = uTileOn > 0.5
-      ? texture2D(uTile, uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw).rgb
+      ? toLinear(texture2D(uTile, tileColourUv).rgb)
       : uGiant > 0.5 ? giantColour(vUv) : texture2D(uMap, vUv).rgb;
     vec3 colour;
     if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
@@ -610,42 +626,45 @@ export const surfaceFragment = /* glsl */ `
     // stays off magma on every layer too.
     float lava = (1.0 - smoothstep(0.12, 0.35, surface.g / max(surface.r, 1e-4))) * smoothstep(0.02, 0.1, surface.r);
     float glow = 0.0;
-    if (uLightMode == 1 && uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
-      float night = 1.0 - smoothstep(-0.08, 0.15, dot(normalize(vSphere), uSunDir));
-      glow = LAVA_GLOW * lava * night;
+    // The light lava gives off, by day as a floor (see below).
+    float ownLight = 0.0;
+    if (uHexOn < 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
+      ownLight = LAVA_DAY_GLOW * lava;
+      if (uLightMode == 1) {
+        float night = 1.0 - smoothstep(-0.08, 0.15, dot(normalize(vSphere), uSunDir));
+        glow = LAVA_GLOW * lava * night;
+      }
     }
     vec3 emitted = colour * glow;
+    vec3 unlit = colour;
     // A hot giant's clouds glow deep red on its night side, as hot coals.
     if (uHotGlow > 0.0 && uLightMode == 1 && uHexOn < 0.5) {
       float dark = 1.0 - smoothstep(-0.08, 0.15, dot(normalize(vSphere), uSunDir));
       emitted += vec3(0.9, 0.2, 0.05) * uHotGlow * dark;
     }
 
-    // Relief shading: tilt the normal by the elevation slope (land only).
-    // The biome map and the detail tiles are hillshaded already: shading
-    // them again would double every slope.
-    vec3 normal = normalize(vNormal);
-    bool shaded = uTileOn > 0.5 || uLayer == 0;
-    if (hasData && uRelief > 0.0 && !water && !shaded) {
-      // The slope over the span of a screen pixel at least, not a texel:
-      // finer differences shimmer once the map is minified. (Capped, as
-      // the longitude wraps at the seam.)
-      vec2 span = clamp(fwidth(vUv), uTexel, uTexel * 64.0);
-      float east = dataAt(vUv + vec2(span.x, 0.0)).r - dataAt(vUv - vec2(span.x, 0.0)).r;
-      float north = dataAt(vUv + vec2(0.0, span.y)).r - dataAt(vUv - vec2(0.0, span.y)).r;
-      // Rise over run, in radii per radian of arc, as displaced.
-      float rise = uRelief * uReliefScale;
-      float latitude = (vUv.y - 0.5) * PI;
-      float slopeEast = rise * east / (4.0 * PI * span.x * max(cos(latitude), 0.05));
-      float slopeNorth = rise * north / (2.0 * PI * span.y);
-      normal = normalize(normal - slopeEast * vEast - slopeNorth * vNorth);
+    // Relief: the normal map's normal (east, north, up) in the frame the
+    // surface is drawn in, on every layer. Water and giants are flat.
+    vec3 tangent = vec3(0.0, 0.0, 1.0);
+    if (uGiant < 0.5 && !water) {
+      vec3 encoded = uTileOn > 0.5 ? texture2D(uTile, tileNormalUv).rgb : texture2D(uNormalMap, vUv).rgb;
+      tangent = normalize(encoded * 2.0 - 1.0);
     }
+    vec3 normal = normalize(tangent.x * vEast + tangent.y * vNorth + tangent.z * vNormal);
 
-    // Relief is always shaded by the headlight, relative to flat ground, so
-    // slopes read the same in every view; the sun only sets day and night.
+    // The light in the same tangent frame: the sun in the sphere's own
+    // frame (on the globe and the map alike, as day and night), the
+    // headlight in the frame drawn on screen. The relief is lit relative
+    // to flat ground under the same light.
+    float lonAt = vUv.x * 2.0 * PI;
+    float latAt = (vUv.y - 0.5) * PI;
+    vec3 sphereEast = vec3(cos(lonAt), 0.0, -sin(lonAt));
+    vec3 sphereNorth = vec3(-sin(latAt) * sin(lonAt), cos(latAt), -sin(latAt) * cos(lonAt));
+    vec3 lightT = uLightMode == 1
+      ? vec3(dot(uSunDir, sphereEast), dot(uSunDir, sphereNorth), dot(uSunDir, normalize(vSphere)))
+      : vec3(dot(uLightDir, vEast), dot(uLightDir, vNorth), dot(uLightDir, normalize(vNormal)));
+    float relief = clamp(max(dot(tangent, lightT), 0.0) / max(lightT.z, 0.04), RELIEF_SHADOW, RELIEF_HIGHLIGHT);
     float lambert = max(dot(normal, uLightDir), 0.0);
-    float flatLambert = max(dot(normalize(vNormal), uLightDir), 0.2);
-    float relief = min(lambert / flatLambert, 1.5);
     float shade;
     float nightLevel = 0.0;
     if (uLightMode == 1) {
@@ -660,7 +679,8 @@ export const surfaceFragment = /* glsl */ `
       sunlit *= 1.0 - ringShadow(normalize(vSphere));
       float night = mix(nightShade(normalize(vSphere)), 0.45, uNightLift);
       nightLevel = night;
-      shade = (night + (1.0 - night) * day * strength * sunlit) * relief;
+      // The relief shapes the sunlight, not the night side's own light.
+      shade = night + (1.0 - night) * day * strength * sunlit * relief;
     } else {
       float globe = 0.35 + 0.75 * lambert;
       shade = mix(relief, globe, uMorph);
@@ -683,6 +703,8 @@ export const surfaceFragment = /* glsl */ `
     }
     colour *= shade * uLightTint;
     colour += emitted;
+    // Lava gives off light: the relief lighting never darkens it below it.
+    colour = max(colour, unlit * ownLight);
 
     // Sun glint on the sea, on the globe only, dimmed under clouds. Waves
     // spread it into a broad, faint sheen (a tight bright spot made the

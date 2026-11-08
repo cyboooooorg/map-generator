@@ -20,7 +20,7 @@ import {
   ReplaceStencilOp,
   type Scene,
   type ShaderMaterial,
-  SRGBColorSpace,
+  NoColorSpace,
   Sphere,
   Texture,
   Vector3,
@@ -359,13 +359,18 @@ export class TileLayer {
         status = response.status;
         throw new Error(`${response.status}`);
       }
-      const bitmap = await createImageBitmap(await response.blob());
+      // The lower half holds normals: decoded without colour management,
+      // and not sRGB-decoded on the GPU (the shader decodes the colour half).
+      const bitmap = await createImageBitmap(await response.blob(), {
+        colorSpaceConversion: 'none',
+        premultiplyAlpha: 'none',
+      });
       if (this.world !== world || controller.signal.aborted) {
         bitmap.close();
         return;
       }
       const texture = new Texture(bitmap);
-      texture.colorSpace = SRGBColorSpace;
+      texture.colorSpace = NoColorSpace;
       texture.flipY = false;
       texture.magFilter = LinearFilter;
       texture.minFilter = LinearMipmapLinearFilter;
