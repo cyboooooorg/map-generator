@@ -16,7 +16,7 @@
 pub const CATALOGUE: &str = "MGS";
 
 /// What naming needs to know of a system: the stored fields of
-/// `world.json`, so worlds made before names get theirs too.
+/// `world.json`.
 #[derive(Clone, Debug, Default)]
 pub struct Layout<'a> {
     pub seed: u32,

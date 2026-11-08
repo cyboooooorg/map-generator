@@ -9,7 +9,7 @@ import type { ScalarLayerInfo } from "./ScalarLayerInfo";
 export type Layers = { elevation: ScalarLayerInfo, 
 /**
  * The elevation without the impact craters younger than the wet era,
- * same encoding as `elevation` (format version 7 and later).
+ * same encoding as `elevation`.
  */
 elevation_base?: ScalarLayerInfo | null, moisture: ScalarLayerInfo, temperature: ScalarLayerInfo, 
 /**
@@ -17,42 +17,39 @@ elevation_base?: ScalarLayerInfo | null, moisture: ScalarLayerInfo, temperature:
  */
 flow: ScalarLayerInfo, 
 /**
- * Volcanic zone as biome selection sees it (format version 2 and later).
+ * Volcanic zone as biome selection sees it.
  */
-volcanic_zone?: ScalarLayerInfo | null, 
+volcanic_zone: ScalarLayerInfo, 
 /**
- * Distance to open water in km, capped (format version 2 and later).
+ * Distance to open water in km, capped.
  */
-coast_distance?: ScalarLayerInfo | null, 
+coast_distance: ScalarLayerInfo, 
 /**
- * Local shift of the highland line (format version 2 and later).
+ * Local shift of the highland line.
  */
-highland_offset?: ScalarLayerInfo | null, 
+highland_offset: ScalarLayerInfo, 
 /**
- * Floodplain weight of the river valleys (format version 3 and later).
+ * Floodplain weight of the river valleys.
  */
-floodplain?: ScalarLayerInfo | null, 
+floodplain: ScalarLayerInfo, 
 /**
  * Brightness shift of the ground in `[-1, 1]`, 8 bits (`gray8`, as
- * `clouds`): fresh impact craters, their ejecta and rays (format
- * version 8 and later).
+ * `clouds`): fresh impact craters, their ejecta and rays.
  */
 albedo?: ScalarLayerInfo | null, 
 /**
  * Radius of an irregular body as a share of its mean radius, 16 bits
- * in `[0, 2]`: the globe's shape, which the elevation details (format
- * version 9 and later, irregular moons only).
+ * in `[0, 2]`: the globe's shape, which the elevation details (irregular
+ * moons only).
  */
 shape?: ScalarLayerInfo | null, 
 /**
  * Cloud cover in `[0, 1]`, 8 bits (`gray8`: `min + pixel / 255 ×
- * (max − min)`); format version 5 and later, absent on worlds without
- * clouds.
+ * (max − min)`); absent on worlds without clouds.
  */
 clouds?: ScalarLayerInfo | null, 
 /**
  * The hillshaded render of `world.png` without its reference and
- * contour lines, which the viewer draws itself (format version 6 and
- * later).
+ * contour lines, which the viewer draws itself.
  */
 surface?: ImageLayerInfo | null, biomes: BiomeLayerInfo, };

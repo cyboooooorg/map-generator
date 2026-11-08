@@ -6,6 +6,7 @@ import { api, systemBodyId } from './api/client';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
+import { MIN_FORMAT_VERSION } from './formatVersion';
 import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
@@ -187,6 +188,12 @@ export class LoadedWorld {
     (async () => {
       const meta = await api.metadata(id, signal);
       if (!current()) return;
+      // Made by an older generator: nothing to request, tiles and epochs
+      // included.
+      if (meta.format_version < MIN_FORMAT_VERSION) {
+        this.error = t.world.outdated({ id });
+        return;
+      }
       this.meta = meta;
       if (id === this.worldId) {
         this.worldMeta = meta;

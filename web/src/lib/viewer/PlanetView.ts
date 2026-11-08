@@ -576,7 +576,7 @@ export class PlanetView {
   private atmosphereOpacity = { value: 1 } as IUniform<number>;
   private texture: Texture | null = null;
   /**
-   * The world whose layers of format version 2 are not uploaded yet (with
+   * The world whose extra layers are not uploaded yet (with
    * the factor that fits them to the GPU), until a layer needs them.
    */
   private pendingExtra: { packed: Uint16Array; width: number; height: number; factor: number } | null = null;
@@ -1632,7 +1632,7 @@ export class PlanetView {
     releaseOnUpload(biomes, factor > 1);
     this.u.uBiomes.value = biomes;
     this.u.uHasBiomes.value = 1;
-    // The layers of format version 2 are uploaded on first use: most views
+    // The extra layers are uploaded on first use: most views
     // never show them, and they take as much GPU memory as uData.
     this.pendingExtra = layers.extra
       ? { packed: layers.extra.packed, width: layers.width, height: layers.height, factor }
@@ -1660,7 +1660,7 @@ export class PlanetView {
     return extensions.has('EXT_color_buffer_half_float') || extensions.has('EXT_color_buffer_float');
   }
 
-  /** Uploads the layers of format version 2 when the layer shown needs them and they are not on the GPU yet. */
+  /** Uploads the extra layers when the layer shown needs them and they are not on the GPU yet. */
   private uploadExtraIfShown(): void {
     const pending = this.pendingExtra;
     if (!pending || !EXTRA_LAYERS.has(this.layer)) {

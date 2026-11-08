@@ -15,7 +15,7 @@ name: string,
 color: string, 
 /**
  * Surface colour of the hillshaded renders, `#RRGGBB` (see
- * [`surface_color`]). Empty in worlds written before it existed.
+ * [`surface_color`]).
  */
 surface_color: string, 
 /**

@@ -1,32 +1,31 @@
 // The epochs a world can be shown at (the time slider), mirroring the
 // server (mapgen::epoch and WorldSummary.epochs_ma): worlds without liquid
-// water today, of raw_data format version 7 or later, from 1 Ga ahead back
+// water today, from 1 Ga ahead back
 // to their surface age, or to the end of their wet era if more recent.
 // Epochs are whole Ma before present; negative ones are in the future.
 
 import { bodyApi } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { formatInt, formatUpTo, withUnit } from './format';
+import { MIN_FORMAT_VERSION } from './formatVersion';
 import { t } from './i18n/index.svelte';
 import { TILE_RENDER_VERSION } from './viewer/TileLayer';
 
 /** Below this surface pressure no water stays liquid (`atmosphere::LIQUID_WATER_BAR`). */
 const LIQUID_WATER_BAR = 0.01;
-/** First raw_data format with `elevation_base.png`, which epochs are drawn on. */
-const EPOCHS_VERSION = 7;
 /** How far ahead craters still to come are drawn, Ma (`craters::FUTURE_GA`). */
 export const FUTURE_MA = 1000;
 
 /** `[future, past]` in Ma, both included, or null when the world offers no other epoch. */
 export function epochRange(meta: WorldMetadata): [number, number] | null {
   const age = meta.surface_age_ga;
-  if (meta.format_version < EPOCHS_VERSION || age == null || age <= 0) {
+  if (meta.format_version < MIN_FORMAT_VERSION || age <= 0) {
     return null;
   }
-  if ((meta.pressure_bar ?? 1) >= LIQUID_WATER_BAR) {
+  if (meta.pressure_bar >= LIQUID_WATER_BAR) {
     return null;
   }
-  const wetUntil = meta.preset.geology?.wet_until ?? 0;
+  const wetUntil = meta.preset.geology.wet_until;
   return [-FUTURE_MA, Math.floor(Math.min(age, wetUntil) * 1000)];
 }
 

@@ -10,7 +10,7 @@ describe('moons', () => {
     expect(bodyFileName('systems/mgs-1-2/bodies/c-1')).toBe('systems-mgs-1-2-bodies-c-1');
   });
 
-  it('lists no moons for a world made before them', () => {
+  it('lists no moons for a world without them', () => {
     expect(moonsOf(null)).toEqual([]);
     expect(moonsOf({} as WorldMetadata)).toEqual([]);
   });

@@ -18,7 +18,7 @@ export interface PointSample {
   temperature: number;
   moisture: number;
   flowKm2: number;
-  /** Layers of raw_data format version 2 and later. */
+  /** The extra layers; null while they are not loaded. */
   coastKm: number | null;
   coastCapped: boolean;
   volcanic: number | null;

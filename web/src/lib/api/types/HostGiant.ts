@@ -40,6 +40,5 @@ inside_edge: boolean,
 hill_radii: number, 
 /**
  * The giant's other regular moons, nearest first (see [`Sibling`]);
- * none in the worlds made before them.
  */
 siblings: Array<Sibling>, };

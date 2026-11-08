@@ -8,7 +8,7 @@
 //
 // `uData` packs the decoded layers, row 0 = north (sampled at 1 − v):
 //   r = elevation, g = temperature, b = moisture, a = log10(1 + flow km²).
-// `uExtra` packs the layers of raw_data format version 2 and later:
+// `uExtra` packs the extra layers of raw_data:
 //   r = volcanic zone, g = distance to the sea (km), b = floodplain, a = highland offset.
 // `uBiomes` holds the biome id of each pixel (r × 255), for highlighting one biome.
 import { CLOUD_TOPS, glslRamp } from './colormaps';
