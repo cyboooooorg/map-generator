@@ -604,6 +604,24 @@ impl WorldRequest {
                 attempts += 1;
             }
         }
+        // A pinned spin-orbit state (`[star] resonance`) holds only for a
+        // rocky planet, not a moon, that its star has despun at the orbit
+        // now final; elsewhere it is ignored, the world spins as drawn.
+        if params.resonance_to_star.is_some() {
+            let free = WorldParams {
+                locked_to_star: None,
+                resonance_to_star: None,
+                ..params.clone()
+            };
+            let holds = !giant
+                && !crate::moons::is_moon_world(&params)
+                && crate::exomoon::HostGiant::draw(&params).is_none()
+                && crate::spin::despun(&crate::spin::star_info(&free));
+            if !holds {
+                params.locked_to_star = None;
+                params.resonance_to_star = None;
+            }
+        }
         let system = crate::moons::MoonSystem::draw(&params);
         let effects = crate::moons::PlanetEffects::of(&params, system.as_ref());
         if tilt_drawn && let ParamDefault::Range(range) = fallback::AXIAL_TILT_DEG {

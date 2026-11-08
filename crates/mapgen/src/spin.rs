@@ -461,6 +461,9 @@ mod tests {
         for seed in 0..60 {
             let request = crate::request::WorldRequest {
                 planet: Some(path.into()),
+                // Not as the moon of a giant, which a seed may draw: a moon
+                // is locked to its planet, never held by the star.
+                host: Some(crate::exomoon::HostMode::None),
                 seed: Some(seed),
                 width: Some(64),
                 height: Some(32),
@@ -470,7 +473,10 @@ mod tests {
             let star = star_info(&p);
             // Mercury's observed state, pinned by the preset's
             // `[star] resonance`, not drawn.
-            assert!(star.spin_orbit_3_2 && !star.tidally_locked, "{seed}");
+            assert!(
+                star.spin_orbit_3_2 && !star.tidally_locked,
+                "{seed}: {p:?} {star:?}"
+            );
             assert_eq!(star.spin_turns, 1.5, "{seed}");
             assert!((p.eccentricity - 0.2056).abs() < 1e-6);
             // Planets with moons: their day is the resonance's.
@@ -482,6 +488,52 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The world of the preset file `source` with `[star] resonance =
+    /// "3:2"` added, resolved with `extra`.
+    fn pinned_world(source: &str, orbit_au: Option<f32>, name: &str) -> crate::world::WorldParams {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets/");
+        let text = std::fs::read_to_string(format!("{root}{source}")).unwrap();
+        let text = if text.contains("resonance =") {
+            text
+        } else if text.contains("[star]") {
+            text.replacen("[star]", "[star]\nresonance = \"3:2\"", 1)
+        } else {
+            format!("{text}\n[star]\nresonance = \"3:2\"\n")
+        };
+        let file = std::env::temp_dir().join(format!("mg-pinned-{name}.toml"));
+        std::fs::write(&file, text).unwrap();
+        let request = crate::request::WorldRequest {
+            planet: Some(file.to_str().unwrap().into()),
+            orbit_au,
+            seed: Some(3),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        };
+        let params = request.resolve(&mut rand::rng()).unwrap().params;
+        std::fs::remove_file(&file).unwrap();
+        params
+    }
+
+    #[test]
+    fn a_pinned_resonance_holds_only_for_a_despun_rocky_planet() {
+        let mercury = "examples/mercury-like.toml";
+        // At its own orbit: 3:2.
+        let own = pinned_world(mercury, None, "own");
+        assert_eq!(star_info(&own).spin_turns, 1.5);
+        // At 1 AU the Sun's tides have not despun it: the pin is ignored
+        // and the world spins as drawn, free.
+        let far = pinned_world(mercury, Some(1.0), "far");
+        assert!(far.resonance_to_star.is_none() && far.locked_to_star.is_none());
+        let star = star_info(&far);
+        assert!(!despun(&star) && star.spin_turns == 0.0 && !star.tidally_locked);
+        // A giant and a moon world ignore it too.
+        let giant = pinned_world("gas-giant.toml", None, "giant");
+        assert!(giant.resonance_to_star.is_none() && giant.locked_to_star.is_none());
+        let moon = pinned_world("moons/rocky-moon.toml", None, "moon");
+        assert!(moon.resonance_to_star.is_none() && moon.locked_to_star.is_none());
     }
 
     #[test]
