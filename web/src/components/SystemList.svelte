@@ -1,13 +1,18 @@
 <script lang="ts">
   // The main menu's systems: a grid of cards, one per drawn system, each
   // with its orrery, its name, its star, its planets by type and its date,
-  // searched, sorted, selected to compare or delete (docs/system-spec.md,
-  // *Interface*).
+  // searched, sorted (the pinned ones first), renamed, selected to compare
+  // or delete (docs/system-spec.md, *Interface*).
   import { getLocale, t } from '../lib/i18n/index.svelte';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
   import { formatAgo } from '../lib/format';
   import { presetName } from '../lib/i18n/names.svelte';
   import { loadSetting, saveSetting } from '../lib/settings';
+  import { api } from '../lib/api/client';
+  import { errorText } from '../lib/i18n/errors';
+  import { toasts } from '../lib/toasts.svelte';
+  import { MAX_NAME_CHARS } from '../lib/names';
+  import { SORTS, sortSystems, systemName as nameOf, withSystemName, type Sort } from '../lib/systemList';
   import SystemOrrery from './SystemOrrery.svelte';
 
   interface Props {
@@ -17,21 +22,13 @@
     onSelect: (id: string) => void;
     onDelete: (ids: string[]) => void;
     onCompare: (a: string, b: string) => void;
+    /** A system was renamed or (un)pinned: its new summary. */
+    onChanged: (system: SystemSummary) => void;
     /** Ids of the systems shown, in their order (written by the list). */
     order?: string[];
   }
 
-  let { systems, selectedId, compareId, onSelect, onDelete, onCompare, order = $bindable([]) }: Props = $props();
-
-  type Sort = 'newest' | 'oldest' | 'planets' | 'seed';
-  const SORTS: Sort[] = ['newest', 'oldest', 'planets', 'seed'];
-  const planetCount = (s: SystemSummary) => s.bodies.filter((b) => b.kind === 'planet').length;
-  const COMPARE: Record<Sort, (a: SystemSummary, b: SystemSummary) => number> = {
-    newest: (a, b) => b.modified_ms - a.modified_ms,
-    oldest: (a, b) => a.modified_ms - b.modified_ms,
-    planets: (a, b) => planetCount(b) - planetCount(a) || b.modified_ms - a.modified_ms,
-    seed: (a, b) => a.seed - b.seed,
-  };
+  let { systems, selectedId, compareId, onSelect, onDelete, onCompare, onChanged, order = $bindable([]) }: Props = $props();
 
   const saved = loadSetting('systemList', { sort: 'newest' as string });
   let sort = $state<Sort>(SORTS.includes(saved.sort as Sort) ? (saved.sort as Sort) : 'newest');
@@ -40,8 +37,6 @@
   let chosen = $state<string[]>([]);
   $effect(() => saveSetting('systemList', { sort }));
 
-  /** A system's name: the one given to its star, else its designation. */
-  const nameOf = (s: SystemSummary) => s.names['star'] ?? s.designation;
   const shown = $derived.by(() => {
     const q = query.trim().toLowerCase();
     const matches = (s: SystemSummary) =>
@@ -49,7 +44,7 @@
       [s.id, s.designation, String(s.seed), ...Object.values(s.names), ...s.bodies.map((b) => b.designation)].some((text) =>
         text.toLowerCase().includes(q),
       );
-    return systems.filter(matches).sort(COMPARE[sort]);
+    return sortSystems(systems.filter(matches), sort);
   });
   $effect(() => {
     order = shown.map((s) => s.id);
@@ -60,6 +55,36 @@
       chosen = chosen.filter((id) => ids.has(id));
     }
   });
+
+  // Renaming a system: empty goes back to its designation.
+  let renaming = $state<string | null>(null);
+  let field = $state('');
+  let busy = $state(false);
+  function startRenaming(s: SystemSummary): void {
+    field = s.names['star'] ?? '';
+    renaming = s.id;
+  }
+  async function saveName(event: SubmitEvent, s: SystemSummary): Promise<void> {
+    event.preventDefault();
+    busy = true;
+    try {
+      const summary = await api.renameSystem(s.id, withSystemName(s.names, field, s.designation));
+      renaming = null;
+      onChanged(summary);
+      toasts.show(t.systemList.renamed({ name: nameOf(summary) }));
+    } catch (e) {
+      toasts.error(t.systemList.renameFailed({ error: errorText(e) }));
+    } finally {
+      busy = false;
+    }
+  }
+  async function togglePin(s: SystemSummary): Promise<void> {
+    try {
+      onChanged(await api.pinSystem(s.id, !s.pinned));
+    } catch (e) {
+      toasts.error(t.systemList.pinFailed({ error: errorText(e) }));
+    }
+  }
 
   function toggle(id: string): void {
     chosen = chosen.includes(id) ? chosen.filter((c) => c !== id) : [...chosen, id];
@@ -124,7 +149,20 @@
   {/if}
   <ul class="grid">
     {#each shown as system (system.id)}
-      <li class:selected={system.id === selectedId || chosen.includes(system.id)} class:compared={system.id === compareId}>
+      <li class:selected={system.id === selectedId || chosen.includes(system.id)} class:compared={system.id === compareId} class:pinned={system.pinned}>
+        {#if renaming === system.id}
+          <div class="card editing">
+            <SystemOrrery {system} width={240} height={120} radius={0} />
+            <form class="text rename" onsubmit={(e) => saveName(e, system)}>
+              <!-- svelte-ignore a11y_autofocus -->
+              <input bind:value={field} placeholder={system.designation} maxlength={MAX_NAME_CHARS} aria-label={t.systemList.renameLabel} autofocus />
+              <span class="actions">
+                <button type="submit" disabled={busy}>{t.systemList.renameSave}</button>
+                <button type="button" onclick={() => (renaming = null)}>{t.systemList.renameCancel}</button>
+              </span>
+            </form>
+          </div>
+        {:else}
         <button
           class="card"
           aria-pressed={selecting ? chosen.includes(system.id) : undefined}
@@ -139,6 +177,20 @@
             >
           </span>
         </button>
+        {/if}
+        {#if renaming !== system.id}
+          <span class="marks">
+            <button
+              class="mark pin"
+              class:on={system.pinned}
+              aria-pressed={system.pinned}
+              onclick={() => togglePin(system)}
+              aria-label={system.pinned ? t.systemList.unpin({ name: nameOf(system) }) : t.systemList.pin({ name: nameOf(system) })}
+              title={system.pinned ? t.systemList.unpin({ name: nameOf(system) }) : t.systemList.pin({ name: nameOf(system) })}>{system.pinned ? '★' : '☆'}</button
+            >
+            <button class="mark rename-button" onclick={() => startRenaming(system)} aria-label={t.systemList.rename({ name: nameOf(system) })} title={t.systemList.rename({ name: nameOf(system) })}>✎</button>
+          </span>
+        {/if}
         {#if selecting}
           <input
             class="choose"
@@ -239,6 +291,37 @@
     color: var(--muted);
     overflow-wrap: anywhere;
   }
+  li.pinned .card {
+    border-color: var(--accent);
+  }
+  .marks {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    display: flex;
+    gap: 4px;
+  }
+  .mark {
+    padding: 0 7px;
+    line-height: 1.5;
+  }
+  .mark.pin.on {
+    color: var(--accent);
+  }
+  .mark.rename-button {
+    opacity: 0;
+  }
+  li:hover .rename-button,
+  .rename-button:focus-visible {
+    opacity: 1;
+  }
+  .editing .rename {
+    gap: 6px;
+  }
+  .editing .actions {
+    display: flex;
+    gap: 6px;
+  }
   .delete,
   .choose {
     position: absolute;
@@ -272,7 +355,8 @@
     color: var(--danger);
   }
   @media (hover: none) {
-    .delete {
+    .delete,
+    .mark.rename-button {
       opacity: 1;
     }
   }

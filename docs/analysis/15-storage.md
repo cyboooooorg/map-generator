@@ -234,7 +234,15 @@ What was built, and where it departs from the plan above:
   `mapgen.sqlite`, `-wal` and `-shm`; back it up with the server stopped
   or with `sqlite3 .backup`. To be confirmed on the real Colima mount.
 - **Replacing a system** keeps the names that still match one of its
-  bodies (as the command line does), in `names.json` and the index.
+  bodies (as the command line does), in `names.json` and the index, and
+  its pin.
+- **Pins:** the user pins systems to the top of the main menu
+  (`PUT`/`DELETE /api/systems/{id}/pin`). Stored in the index only, in
+  `systems.pinned_ms` (layout version 2; a version 1 file gets the column
+  by `ALTER TABLE` when it is opened). Not mirrored to a file, by choice:
+  a pin is a view preference, cheap to redo, and a mirror would add a
+  second source of truth to reconcile. A lost database loses the pins,
+  not the names. This is the first user data that only the database holds.
 - **Location:** `MAPGEN_DB`, `/data/db/mapgen.sqlite` in the container,
   `./db` on the host (`compose.yaml`, `mise run up` creates it, `db/` is
   git-ignored).
@@ -249,7 +257,8 @@ What was built, and where it departs from the plan above:
   `worlds/` is not read by the server any more, so it is not scanned.
 - **Reads:** `GET /api/systems` and the name lookups read the index.
   `GET /api/systems/{id}` and job creation still read `system.json`
-  (the full system is what they answer). The API is byte-compatible.
+  (the full system is what they answer). The API only gained the
+  `pinned` flag of `GET /api/systems`.
 - **Names:** written to the index and, for now, to `names.json`, so the
   tree is self-sufficient. A `names.json` edited by hand is read again at
   the next start. Writing names to the database only is left for the

@@ -10,6 +10,8 @@
 //! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
 //! | `DELETE /api/systems/{id}`      | delete a system (409 while it is being generated)  |
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
+//! | `PUT /api/systems/{id}/pin`     | pin it in the main menu (idempotent, answers its summary) |
+//! | `DELETE /api/systems/{id}/pin`  | unpin it (idempotent, answers its summary)         |
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
 //! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body |
 //! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates |
@@ -263,6 +265,10 @@ pub fn router(config: Config) -> Router {
         .route("/api/systems", get(list_systems).post(create_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
         .route("/api/systems/{id}/names", put(rename_system))
+        .route(
+            "/api/systems/{id}/pin",
+            put(pin_system).delete(unpin_system),
+        )
         .route(
             "/api/systems/{id}/bodies/{body}/generate",
             post(generate_body),
@@ -709,6 +715,40 @@ async fn delete_system(
         let _ = tokio::task::spawn_blocking(memory::release).await;
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Pins a system in the main menu (`PUT /api/systems/{id}/pin`).
+async fn pin_system(
+    state: State<Shared>,
+    id: UrlPath<String>,
+) -> Result<Json<SystemSummary>, Failure> {
+    set_pin(state, id, true).await
+}
+
+/// Unpins a system (`DELETE /api/systems/{id}/pin`).
+async fn unpin_system(
+    state: State<Shared>,
+    id: UrlPath<String>,
+) -> Result<Json<SystemSummary>, Failure> {
+    set_pin(state, id, false).await
+}
+
+async fn set_pin(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+    pinned: bool,
+) -> Result<Json<SystemSummary>, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    let index = state.index.clone();
+    let owned = id.clone();
+    tokio::task::spawn_blocking(move || index.set_pinned(&owned, pinned))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map(Json)
+        .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))
 }
 
 /// Gives names to the bodies of a system (`PUT /api/systems/{id}/names`),
@@ -1803,8 +1843,26 @@ mod tests {
             call(&app, "PUT", &uri, Some(&names)).await.0,
             StatusCode::OK
         );
+        // A pin is kept too.
+        let pin = format!("/api/systems/{id}/pin");
+        let (status, pinned) = call(&app, "PUT", &pin, None).await;
+        assert_eq!(status, StatusCode::OK, "{pinned}");
+        assert!(pinned.contains(r#""pinned":true"#), "{pinned}");
         let (status, _) = call(&app, "POST", "/api/systems?replace=true", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED);
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        assert!(list.contains(r#""pinned":true"#), "{list}");
+        let (status, unpinned) = call(&app, "DELETE", &pin, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(unpinned.contains(r#""pinned":false"#), "{unpinned}");
+        assert_eq!(
+            call(&app, "PUT", "/api/systems/mgs-0-0/pin", None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(&app, "DELETE", "/api/systems/..x/pin", None).await.0,
+            StatusCode::BAD_REQUEST
+        );
         let kept = std::fs::read_to_string(root.join(&id).join("names.json")).unwrap();
         assert!(kept.contains("Gaia") && kept.contains("Helia"), "{kept}");
         let (_, list) = call(&app, "GET", "/api/systems", None).await;

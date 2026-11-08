@@ -461,6 +461,10 @@ addressed as `<system-id>/<body-id>` everywhere.
 - `PUT /api/systems/{id}/names`: replace the names given
   (`{"names": {"c": "Gaia"}}`), with today's rules (1 to 60 characters,
   422 otherwise).
+- `PUT /api/systems/{id}/pin` and `DELETE /api/systems/{id}/pin`: pin or
+  unpin a system in the main menu (idempotent, 404 for an unknown
+  system). Both answer its summary, whose `pinned` flag `GET /api/systems`
+  also gives. The pin lives in the index only.
 - `POST /api/systems/{id}/bodies/{body}/generate`: queue the body and its
   neighbourhood (see [Generating on demand](#generating-on-demand)) as
   one job. Asking for a body already queued answers that job; asking for

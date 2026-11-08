@@ -558,6 +558,7 @@
         onSelect={select}
         onDelete={removeWorlds}
         onCompare={compare}
+        onChanged={(changed) => (systems = systems.map((s) => (s.id === changed.id ? changed : s)))}
       />
     </section>
   </div>

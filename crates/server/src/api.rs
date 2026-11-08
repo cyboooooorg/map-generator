@@ -294,6 +294,9 @@ pub struct SystemSummary {
     /// When the system was drawn, in milliseconds since the Unix epoch.
     #[ts(type = "number")]
     pub modified_ms: u64,
+    /// Pinned in the main menu (`PUT`/`DELETE /api/systems/{id}/pin`): the
+    /// library lists pinned systems first. Kept in the index only.
+    pub pinned: bool,
 }
 
 /// A body of a system, as its summary lists it.

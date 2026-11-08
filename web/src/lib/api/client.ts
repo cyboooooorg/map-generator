@@ -82,6 +82,9 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ names } satisfies SystemNames),
     }),
+  /** Pins a system in the main menu, or unpins it; answers its summary. */
+  pinSystem: (id: string, pinned: boolean) =>
+    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' }),
   /** Queues a body of a system and its neighbourhood; `job_id` null when they are all generated. */
   generateBody: (id: string, body: string) =>
     call<GenerateStarted>(`/api/systems/${encodeURIComponent(id)}/bodies/${encodeURIComponent(body)}/generate`, {

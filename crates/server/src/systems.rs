@@ -219,6 +219,7 @@ pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummar
             .collect(),
         names: GivenNames::new(),
         modified_ms,
+        pinned: false,
     })
 }
 
