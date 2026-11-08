@@ -230,11 +230,9 @@ impl Index {
         }
         match Self::open_file(path) {
             Err(e) if is_not_a_database(&e) => {
-                let mut aside = path.as_os_str().to_owned();
-                aside.push(format!(".corrupt-{}", now_ms()));
-                tracing::warn!("{} is not a database: kept as {aside:?}", path.display());
-                std::fs::rename(path, &aside)
-                    .map_err(|e| IndexError(format!("{}: {e}", path.display())))?;
+                let suffix = format!(".corrupt-{}", now_ms());
+                tracing::warn!("{} is not a database: kept aside{suffix}", path.display());
+                set_aside(path, &suffix)?;
                 Self::open_file(path).map_err(IndexError::from)
             }
             other => other.map_err(IndexError::from),
@@ -772,6 +770,23 @@ fn try_wal(conn: &Connection) -> std::result::Result<(), String> {
     conn.execute_batch("DROP TABLE wal_check;").map_err(e)?;
     if back != 42 {
         return Err(format!("wrote 42, read {back}"));
+    }
+    Ok(())
+}
+
+/// Renames the database file and its WAL and shared memory files to
+/// `<name><suffix>`, so that a new database never meets a stale WAL.
+fn set_aside(path: &Path, suffix: &str) -> Result<()> {
+    for extra in ["", "-wal", "-shm"] {
+        let mut from = path.as_os_str().to_owned();
+        from.push(extra);
+        let mut to = from.clone();
+        to.push(suffix);
+        match std::fs::rename(&from, &to) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && !extra.is_empty() => {}
+            Err(e) => return Err(IndexError(format!("{from:?}: {e}"))),
+            Ok(()) => {}
+        }
     }
     Ok(())
 }
@@ -1327,12 +1342,33 @@ mod tests {
         .unwrap();
         let index = Index::open(&db).unwrap();
         assert!(index.list_systems().unwrap().is_empty());
+        assert_eq!(index.journal_mode(), "wal");
         let aside = std::fs::read_dir(&root)
             .unwrap()
             .flatten()
             .filter(|e| e.file_name().to_string_lossy().contains(".corrupt-"))
             .count();
         assert_eq!(aside, 1);
+    }
+
+    #[test]
+    fn the_wal_files_are_set_aside_with_the_database() {
+        let root = temp_root("aside");
+        let db = root.join("mapgen.sqlite");
+        for extra in ["", "-wal", "-shm"] {
+            std::fs::write(root.join(format!("mapgen.sqlite{extra}")), extra).unwrap();
+        }
+        set_aside(&db, ".corrupt-1").unwrap();
+        for extra in ["", "-wal", "-shm"] {
+            assert!(!root.join(format!("mapgen.sqlite{extra}")).exists());
+            let moved =
+                std::fs::read_to_string(root.join(format!("mapgen.sqlite{extra}.corrupt-1")));
+            assert_eq!(moved.unwrap(), extra);
+        }
+        // Without WAL files it is the database alone; without a database, an error.
+        std::fs::write(&db, "x").unwrap();
+        set_aside(&db, ".corrupt-2").unwrap();
+        assert!(set_aside(&db, ".corrupt-3").is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
 }
