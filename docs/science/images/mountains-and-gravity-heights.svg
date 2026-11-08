@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 520" width="860" height="520" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">The tallest mountains of five bodies against their surface gravity</title>
+  <desc id="desc">Height of the tallest mountain against surface gravity, gravity on a log scale. Earth, 9.82 m/s²: Everest, 8.85 km above sea level. Venus, 8.87 m/s²: Maxwell Montes, about 10 km above the mean radius. Mars, 3.73 m/s²: Olympus Mons, 21 km above the datum. Io, 1.80 m/s²: Boösaule Montes, 17.5 plus or minus 3 km. Vesta, 0.25 m/s²: the central mound of Rheasilvia, about 22 km. A curve of height inversely proportional to gravity, through Everest, passes close to Venus and Mars, but Io and Vesta stand far below it.</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .grid { stroke: #243042; stroke-width: 1; }
+    .axis { stroke: #6b7886; stroke-width: 1; }
+    .pt { fill: #9fd3ff; stroke: #0f1622; stroke-width: 1.5; }
+    .curve { stroke: #ffcc66; stroke-width: 2; fill: none; stroke-dasharray: 7 4; }
+  </style>
+  <rect width="860" height="520" fill="#0f1622"/>
+
+  <text class="h" x="20" y="30">Lower gravity, taller mountains</text>
+  <text class="s" x="20" y="48">Highest mountain of each body against its surface gravity. Heights to scale (linear); gravity on a log scale.</text>
+
+  <!-- Grid: y = 400 - 6.4 h (km); x = 90 + 308.6 (log10 g + 1). -->
+  <line class="grid" x1="90" y1="336" x2="800" y2="336"/>
+  <line class="grid" x1="90" y1="272" x2="800" y2="272"/>
+  <line class="grid" x1="90" y1="208" x2="800" y2="208"/>
+  <line class="grid" x1="90" y1="144" x2="800" y2="144"/>
+  <line class="grid" x1="90" y1="80" x2="800" y2="80"/>
+  <line class="grid" x1="398.6" y1="80" x2="398.6" y2="400"/>
+  <line class="grid" x1="707.2" y1="80" x2="707.2" y2="400"/>
+  <line class="axis" x1="90" y1="400" x2="800" y2="400"/>
+  <line class="axis" x1="90" y1="80" x2="90" y2="400"/>
+  <text class="s" x="82" y="404" text-anchor="end">0</text>
+  <text class="s" x="82" y="340" text-anchor="end">10</text>
+  <text class="s" x="82" y="276" text-anchor="end">20</text>
+  <text class="s" x="82" y="212" text-anchor="end">30</text>
+  <text class="s" x="82" y="148" text-anchor="end">40</text>
+  <text class="s" x="82" y="84" text-anchor="end">50 km</text>
+  <text class="s" x="90" y="418" text-anchor="middle">0.1</text>
+  <text class="s" x="182.9" y="418" text-anchor="middle">0.2</text>
+  <text class="s" x="305.7" y="418" text-anchor="middle">0.5</text>
+  <text class="s" x="398.6" y="418" text-anchor="middle">1</text>
+  <text class="s" x="491.5" y="418" text-anchor="middle">2</text>
+  <text class="s" x="614.3" y="418" text-anchor="middle">5</text>
+  <text class="s" x="707.2" y="418" text-anchor="middle">10</text>
+  <text class="s" x="800" y="418" text-anchor="middle">20</text>
+  <text class="t" x="445" y="440" text-anchor="middle">surface gravity (m/s², log scale)</text>
+  <text class="t" x="34" y="240" text-anchor="middle" transform="rotate(-90 34 240)">height of the tallest mountain (km)</text>
+
+  <!-- h = 86.9 km / g (m/s²): through Everest; clipped at 50 km. -->
+  <polyline class="curve" points="472.7,80.0 483.0,103.7 493.3,125.7 503.6,146.0 513.9,164.8 524.3,182.2 534.6,198.3 544.9,213.3 555.2,227.1 565.5,239.9 575.8,251.8 586.1,262.8 596.5,272.9 606.8,282.3 617.1,291.1 627.4,299.1 637.7,306.6 648.0,313.5 658.3,319.9 668.7,325.9 679.0,331.3 689.3,336.4 699.6,341.1 709.9,345.5 720.2,349.5 730.5,353.3 740.9,356.7 751.2,359.9 761.5,362.9 771.8,365.7 782.1,368.2 792.4,370.6 800.1,372.2"/>
+  <text class="t" x="482" y="72" style="fill:#ffcc66">height falling as 1/g, through Everest</text>
+  <text class="s" x="300" y="100" style="fill:#ffcc66">at Io's gravity: 48 km</text>
+  <text class="s" x="300" y="114" style="fill:#ffcc66">at Vesta's: 340 km, off the chart</text>
+
+  <!-- Bodies. -->
+  <circle class="pt" cx="704.8" cy="343.4" r="5"/>
+  <text class="t" x="714" y="378">Earth</text>
+  <text class="s" x="714" y="392">Everest, 8.85 km</text>
+  <circle class="pt" cx="691.1" cy="334.7" r="5"/>
+  <text class="t" x="684" y="374" text-anchor="end">Venus</text>
+  <text class="s" x="684" y="388" text-anchor="end">Maxwell Montes, ~10 km</text>
+  <circle class="pt" cx="575" cy="265" r="5"/>
+  <text class="t" x="585" y="226">Mars</text>
+  <text class="s" x="585" y="240">Olympus Mons, 21 km</text>
+  <line x1="477.2" y1="268.8" x2="477.2" y2="307.2" stroke="#9fd3ff" stroke-width="1.5"/>
+  <line x1="472" y1="268.8" x2="482.4" y2="268.8" stroke="#9fd3ff" stroke-width="1.5"/>
+  <line x1="472" y1="307.2" x2="482.4" y2="307.2" stroke="#9fd3ff" stroke-width="1.5"/>
+  <circle class="pt" cx="477.2" cy="288" r="5"/>
+  <text class="t" x="466" y="292" text-anchor="end">Io</text>
+  <text class="s" x="466" y="306" text-anchor="end">Boösaule Montes, 17.5 ± 3 km</text>
+  <circle class="pt" cx="214.4" cy="259.2" r="5"/>
+  <text class="t" x="226" y="250">Vesta</text>
+  <text class="s" x="226" y="264">Rheasilvia's central mound, ~22 km,</text>
+  <text class="s" x="226" y="278">on a body 262 km in radius</text>
+
+  <text class="s" x="20" y="476">Heights over each body's own reference: Everest above sea level (China–Nepal survey 2020); Maxwell Montes above Venus's mean radius (Pettengill et al. 1991);</text>
+  <text class="s" x="20" y="490">Olympus Mons above the Martian datum (Plescia 2004); Boösaule Montes (Schenk et al. 2001); Rheasilvia's mound (Yingst et al. 2012, abstract).</text>
+  <text class="s" x="20" y="504">Gravity: NASA fact sheets (Io and Vesta from their mass and mean radius). The curve is an order-of-magnitude scaling, not a fit.</text>
+</svg>

@@ -29,7 +29,8 @@
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
-  import { planetLook, type PlanetLook } from '../lib/skyBodies';
+  import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
+  import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
@@ -38,8 +39,8 @@
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
-  import { dialFigureText, formatDialAngle, rotationDial } from '../lib/rotationDial';
+  import { hillReach, hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
+  import { dialFigureText, formatDialAngle, hostCompass as hostCompassOf, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import {
@@ -150,7 +151,7 @@
   const HEX_RETRY_MS = 5000;
 
   /** Display preferences kept between visits. */
-  const saved = loadSetting('display', {
+  const savedDisplay = loadSetting('display', {
     mode: 'globe' as string,
     layer: 'biomes' as string,
     relief: RELIEF_DEFAULT as number,
@@ -166,22 +167,34 @@
     landContours: true,
     atmosphere: true,
     stars: true,
-    // The planet in a moon's sky, by its own switches.
+    // The planet in a moon's sky, by its own part of each switch (see lib/switches.ts).
     hostAtmosphere: true,
     hostClouds: true,
+    hostCloudDrift: false,
     hostGrid: false,
     hostTropics: false,
+    hostRings: true,
+    hostSpinAxes: false,
+    hostSpinDirection: false,
+    // Orbits, labels and small bodies: the flag without a suffix is the star system's, `Local` the host planet's and its moons'.
     orbitLines: false,
+    orbitLinesLocal: false,
     hillSphere: false,
     // The trojan swarms and belts ringed in the sky.
     smallBodies: false,
+    smallBodiesLocal: false,
     // The rocks of the rings round a ring moon: 0 none, else their drawn
     // size over their true size (1 true; more is not to scale).
     ringRocks: 100 as number,
-    // The spin axes of the globe and the bodies of the sky.
+    // The spin axes of the globe and the bodies of the sky, their spin
+    // arrows, and the link to the host planet (one switch before they split).
     spinAxes: false,
+    spinDirection: false,
+    hostLink: false,
     // The ring round the body shown, graduated in degrees, reading its turn.
     rotationDial: false,
+    // The same round the host planet in a moon's sky, following the moon.
+    hostCompass: false,
     // While the clock plays: the camera stays still against the sky, the
     // globe turning under it, or turns with the body (always the same
     // face, the sky turning). A new key: the former cameraFollowsSky
@@ -193,6 +206,7 @@
     cameraOnLockedBody: true,
     // Names tied to the bodies of the sky.
     skyLabels: true,
+    skyLabelsLocal: true,
     starLight: false,
     clouds: true,
     cloudDrift: false,
@@ -204,6 +218,8 @@
     legendOpen: true,
     panelOpen: true,
   });
+  /** What was saved, with the switches that split since taking the value of the one they came from. */
+  const saved = migrateDisplay(loadSetting<unknown>('display', null), savedDisplay);
 
   let canvas: HTMLCanvasElement;
   let view = $state<PlanetView | null>(null);
@@ -239,22 +255,34 @@
   /** The planet seen in a moon's sky (or the giant in its moon world's), drawn by its own switches. */
   let hostAtmosphere = $state(saved.hostAtmosphere);
   let hostClouds = $state(saved.hostClouds);
+  let hostCloudDrift = $state(saved.hostCloudDrift);
   let hostGrid = $state(saved.hostGrid);
   let hostTropics = $state(saved.hostTropics);
+  let hostRingsShown = $state(saved.hostRings);
+  let hostAxes = $state(saved.hostSpinAxes);
+  let hostSpinDirection = $state(saved.hostSpinDirection);
   /** The orbits of the moons (or of a giant's other moons) drawn in the sky. */
   let orbitLines = $state(saved.orbitLines);
+  let orbitLinesLocal = $state(saved.orbitLinesLocal);
   /** The Hill sphere of the body shown (its host planet's from a moon) drawn in the sky. */
   let hillOn = $state(saved.hillSphere);
   let smallBodies = $state(saved.smallBodies);
+  let smallBodiesLocal = $state(saved.smallBodiesLocal);
   let ringRockScale = $state(RING_ROCK_SCALES.includes(saved.ringRocks) ? saved.ringRocks : 100);
+  /** The body shown's spin axis (and the sky bodies' when it has no host), its spin arrow, and the link to its host planet. */
   let axesShown = $state(saved.spinAxes);
+  let spinDirection = $state(saved.spinDirection);
+  let hostLink = $state(saved.hostLink);
   let dialShown = $state(saved.rotationDial);
+  let hostCompassShown = $state(saved.hostCompass);
   let cameraOnBody = $state(saved.cameraOnBody);
   let cameraOnLockedBody = $state(saved.cameraOnLockedBody);
   $effect(() => view?.setSpinAxes(axesShown));
-  const hostShow = $derived({ atmosphere: hostAtmosphere, clouds: hostClouds, grid: hostGrid, tropics: hostTropics });
+  $effect(() => view?.setSpinDirection(spinDirection));
+  $effect(() => view?.setHostLink(hostLink));
   /** Labels on the bodies of the sky, and where those are on the screen. */
   let skyLabels = $state(saved.skyLabels);
+  let skyLabelsLocal = $state(saved.skyLabelsLocal);
   let skyPositions = $state<ReturnType<PlanetView['skyScreenPositions']> | null>(null);
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
@@ -283,6 +311,8 @@
   // follow the window as it is resized across the limit.
   const wideQuery = window.matchMedia('(min-width: 900px)');
   let wide = $state(wideQuery.matches);
+  /** Whether the icon bar shows its names (it widens, and the legend steps right of it). */
+  let barExpanded = $state(loadSetting('toggles.expanded', false));
   /** The legend and panel states chosen on a wide screen, saved as the preferences. */
   let wideChoice = { legendOpen: saved.legendOpen, panelOpen: saved.panelOpen };
   let legendOpen = $state(saved.legendOpen && wideQuery.matches);
@@ -475,17 +505,27 @@
       cloudDrift,
       hostAtmosphere,
       hostClouds,
+      hostCloudDrift,
       hostGrid,
       hostTropics,
+      hostRings: hostRingsShown,
+      hostSpinAxes: hostAxes,
+      hostSpinDirection,
       orbitLines,
+      orbitLinesLocal,
       hillSphere: hillOn,
       smallBodies,
+      smallBodiesLocal,
       ringRocks: ringRockScale,
       spinAxes: axesShown,
+      spinDirection,
+      hostLink,
       rotationDial: dialShown,
+      hostCompass: hostCompassShown,
       cameraOnBody,
       cameraOnLockedBody,
       skyLabels,
+      skyLabelsLocal,
       sun,
       season,
       sunLongitude,
@@ -790,6 +830,15 @@
   const sysBody = $derived(world.shownSystemBody);
   /** The planet of the body shown (itself, or the planet of a moon). */
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
+  /** Whether the body shown is a moon, its host planet then in its sky: the switches then have a part for each. */
+  const hasHost = $derived(Boolean(sysBody?.parent));
+  /** The local group of the body shown: its planet and the moons of its planet (itself left out). */
+  const localIds = $derived(sys && sysBody ? localGroup(sys.bodies, sysBody.id) : new Set<string>());
+  /** The system-wide switches' parts: the squares show only when there is a local group to tell from the rest. */
+  const hasLocalGroup = $derived(localIds.size > 0);
+  const labelScope = $derived<ScopePair>({ local: skyLabelsLocal, stellar: skyLabels });
+  const orbitScope = $derived<ScopePair>({ local: orbitLinesLocal, stellar: orbitLines });
+  const smallScope = $derived<ScopePair>({ local: smallBodiesLocal, stellar: smallBodies });
   /** The star view of a planetary system (lib/systemStar.ts). */
   /**
    * The planet picked in the star view (a click on it, or its row), by id:
@@ -885,7 +934,15 @@
     return systemSky(sys, sysBody.id, sysDays, sysTextures, skySpin, orbitSamples);
   });
   /** The trojan swarms and belts in that sky, while Small bodies is on. */
-  const smallSky = $derived(smallBodies && sys && sysBody && sysPlanet ? smallBodiesSky(sys, sysBody.id, sysDays, skySpin) : null);
+  const smallSky = $derived.by(() => {
+    if (!scopeOn(smallScope) || !sys || !sysBody || !sysPlanet) return null;
+    const all = smallBodiesSky(sys, sysBody.id, sysDays, skySpin);
+    // The planet's own trojans are local; the belts and the other planets' trojans are the star system's.
+    return {
+      swarms: all.swarms.filter((swarm) => (swarm.planet === sysPlanet.id ? smallScope.local : smallScope.stellar)),
+      belts: smallScope.stellar ? all.belts : [],
+    };
+  });
   $effect(() => view?.setSkyBelts(smallSky ? smallSky.belts.flatMap((b) => b.edges) : []));
   /** The rotation dial round the body shown, while its switch is on (see lib/rotationDial). */
   const dial = $derived(dialShown && sys && sysBody && sysSky ? rotationDial(sys, sysBody.id, sysDays, skySpin, sysSky) : null);
@@ -932,7 +989,7 @@
     }
     // The host's name and distance already hang on its line with the spin
     // axes: its marker then only gives its height.
-    const hostNamed = axesShown && skyPositions?.guides.host;
+    const hostNamed = hostLink && skyPositions?.guides.host;
     dialDrawn.bodies.forEach((b, k) => {
       const name = dialChoiceList.find((c) => c.id === b.id)?.name ?? b.id;
       const height = t.viewer.dialHeight({ angle: degrees(b.altitude) });
@@ -942,6 +999,47 @@
   });
   /** The pointer's reading on the ring: whole degrees, signed tenths for a locked body. */
   const dialReading = $derived(dial ? formatDialAngle(dial.state.reading, dial.state.locked, formatNumber) : '');
+  /**
+   * The host planet's compass, while its switch is on: the host's own
+   * rotation dial (see lib/rotationDial), drawn round it in the moon's sky,
+   * with the moon shown as the only body on it.
+   */
+  const hostCompass = $derived.by(() => {
+    if (!hostCompassShown || !sys || !sysBody?.parent || !sysSky) return null;
+    const index = sysSky.ids.indexOf(sysBody.parent);
+    const dial = index < 0 ? null : hostCompassOf(sys, sysBody.id, sysDays);
+    return dial ? { index, dial } : null;
+  });
+  $effect(() => view?.setHostCompass(hostCompass ? { index: hostCompass.index, state: hostCompass.dial.state } : null));
+  /** The compass's names and readings: the pointer's, the star's and the moon's. */
+  const hostCompassLabels = $derived.by((): { at: { x: number; y: number } | null; label: SkyLabel }[] => {
+    const at = skyPositions?.hostDial;
+    if (!hostCompass || !at || !sys || !sysBody) return [];
+    const { state } = hostCompass.dial;
+    const degrees = (radians: number) => formatDialAngle(radians, true, formatNumber);
+    const out: { at: { x: number; y: number } | null; label: SkyLabel }[] = [
+      {
+        at: at.pointer,
+        label: {
+          name: formatDialAngle(state.reading, state.locked, formatNumber),
+          detail: state.locked ? t.viewer.dialPointerLocked : t.viewer.dialPointerFree,
+        },
+      },
+    ];
+    if (state.sun) {
+      out.push({
+        at: at.sun,
+        label: { name: world.systemNames['star'] ?? sys.star.designation, detail: t.viewer.dialHeight({ angle: degrees(state.sunAltitude) }) },
+      });
+    }
+    state.bodies.forEach((b, k) => {
+      out.push({
+        at: at.bodies[k] ?? null,
+        label: { name: world.systemNames[sysBody.id] ?? sysBody.designation, detail: t.viewer.dialHeight({ angle: degrees(b.altitude) }) },
+      });
+    });
+    return out;
+  });
   /** The dial's figures, two lines for the Light and season panel. */
   const dialLines = $derived.by((): [string, string] | null => {
     if (!dial) return null;
@@ -1140,7 +1238,6 @@
   $effect(() => view?.setStarPlace(sysSky?.star ?? null));
   // Far enough out to see the moons of the shown body's planet whole.
   const reach = $derived(sys && sysBody ? systemReach(sys, sysBody.id) : null);
-  $effect(() => view?.setGlobeReach(reach ?? 0));
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   /**
@@ -1190,13 +1287,35 @@
     return () => controller.abort();
   });
   $effect(() => {
-    // The planet in its moon's sky, by its own switches (Host planet).
+    // The planet in its moon's sky, by its own part of each switch.
     const parent = sysBody?.parent ?? null;
     const planetTilt = sysPlanet?.spin.axial_tilt_deg ?? 0;
+    // The host by its own part of each switch; the other bodies of the sky
+    // (a planet's moons, a moon's siblings) by the host's, else the body's.
+    const hostShow: SkyBodyShow = {
+      atmosphere: hostAtmosphere,
+      clouds: hostClouds,
+      drift: hostCloudDrift,
+      grid: hostGrid,
+      tropics: hostTropics,
+      rings: hostRingsShown,
+      axis: hostAxes,
+      spin: hostSpinDirection,
+    };
+    const otherShow: SkyBodyShow = {
+      atmosphere: true,
+      clouds: true,
+      drift: false,
+      grid: false,
+      tropics: false,
+      rings: true,
+      axis: parent ? hostAxes : axesShown,
+      spin: parent ? hostSpinDirection : spinDirection,
+    };
     const bodies = (sysSky?.bodies ?? []).map((body, k) =>
       sysSky?.ids[k] === parent
         ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
-        : body,
+        : { ...body, show: otherShow },
     );
     view?.setSkyBodies(bodies);
     // What lights the night side: the light these bodies reflect (lib/nightLight.ts).
@@ -1204,17 +1323,23 @@
     view?.setShadowCasters(sysSky?.casters ?? []);
   });
   // The moons' orbits in the sky, seen from the body shown.
-  const skyOrbitLoops = $derived(orbitLines && sysSky ? sysSky.orbits : []);
+  const orbitKept = $derived(
+    (sysSky?.orbitBodies ?? []).flatMap((o, i) => ((o.local ? orbitScope.local : orbitScope.stellar) ? [i] : [])),
+  );
+  const skyOrbitLoops = $derived(sysSky ? orbitKept.map((i) => sysSky.orbits[i]!) : []);
   // The Hill sphere: the body's own, or its host planet's from a moon (round
   // the planet as it stands in the moon's sky).
   const hill = $derived(sys && sysBody ? hillSphere(sys, sysBody.id) : null);
-  $effect(() => {
+  const hillDrawn = $derived.by(() => {
     const k = hill && sysBody?.parent && sysSky ? sysSky.ids.indexOf(hill.id) : -1;
     const centre: [number, number, number] | null = !hill ? null : k >= 0 ? (sysSky?.bodies[k]?.position ?? null) : sysBody?.parent ? null : [0, 0, 0];
-    view?.setHillSphere(hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null);
+    return hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null;
   });
+  $effect(() => view?.setHillSphere(hillDrawn));
+  // With the Hill sphere on, the camera may go out to see it whole.
+  $effect(() => view?.setGlobeReach(Math.max(reach ?? 0, hillDrawn ? hillReach(hillDrawn.centre, hillDrawn.radius) : 0)));
   // The body shown's own orbit dashed: the body slides along it.
-  $effect(() => view?.setSkyOrbits(skyOrbitLoops, skyOrbitLoops.map((_, i) => i === sysSky?.ownOrbit)));
+  $effect(() => view?.setSkyOrbits(skyOrbitLoops, orbitKept.map((k) => k === sysSky?.ownOrbit)));
   // A moon goes round its orbit 2^speed times every ORBIT_SECONDS while
   // the orbits play (see orbitPeriod): its dashes lengthen to match.
   $effect(() => view?.setSkyOrbitPace(orbitsPlaying && sysBody?.parent ? 2 ** orbitSpeed / ORBIT_SECONDS : 0));
@@ -1223,7 +1348,7 @@
     const current = view;
     if (!current) return;
     // The guides' labels (spin, host) follow with the spin axes, the dial's with the dial.
-    const follow = skyLabels || axesShown || smallBodies || dial !== null;
+    const follow = scopeOn(labelScope) || spinDirection || hostLink || hostSpinDirection || scopeOn(smallScope) || dial !== null || hostCompass !== null;
     current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
     if (!follow) skyPositions = null;
     return () => {
@@ -1391,30 +1516,94 @@
     season = ((day % clockYear) + clockYear) % clockYear / clockYear;
     orbitDays = 0;
   }
+  /**
+   * A switch on something the body shown and its host planet both have:
+   * from a moon, a square beside it for each, and the main button sets both
+   * to the opposite of the moon's (see lib/switches.ts); else a plain switch.
+   * `hostDisabled`: the host has nothing of it to draw.
+   */
+  function perBody(
+    base: Omit<Toggle, 'on' | 'set' | 'subs'>,
+    body: boolean,
+    host: boolean,
+    setBody: (on: boolean) => void,
+    setHost: (on: boolean) => void,
+    hostDisabled = false,
+  ): Toggle {
+    if (!hasHost) return { ...base, on: body, set: setBody };
+    return {
+      ...base,
+      on: body,
+      set: () => {
+        const next = pressBody({ body, host });
+        setBody(next.body);
+        setHost(next.host);
+      },
+      subs: [
+        { key: `${base.key}-moon`, label: t.viewer.squareMoon({ what: base.label }), icon: 'moon', on: body, set: setBody },
+        { key: `${base.key}-host`, label: t.viewer.squareHost({ what: base.label }), icon: 'planet', on: host, set: setHost, disabled: hostDisabled },
+      ],
+    };
+  }
+  /**
+   * A system-wide switch: when the body shown has a local group (its planet
+   * and their moons), a square for it and one for the rest of the star
+   * system, and the main button sets both; else a plain switch.
+   */
+  function scoped(base: Omit<Toggle, 'on' | 'set' | 'subs'>, scope: ScopePair, setScope: (scope: ScopePair) => void): Toggle {
+    const main = { ...base, on: scopeOn(scope), set: () => setScope(pressScope(scope)) };
+    if (!hasLocalGroup) return main;
+    return {
+      ...main,
+      subs: [
+        { key: `${base.key}-local`, label: t.viewer.squareLocal({ what: base.label }), icon: 'host', on: scope.local, set: (on) => setScope({ ...scope, local: on }) },
+        { key: `${base.key}-stellar`, label: t.viewer.squareStellar({ what: base.label }), icon: 'star', on: scope.stellar, set: (on) => setScope({ ...scope, stellar: on }) },
+      ],
+    };
+  }
+  /** The drift row's reset button: the bands, storms and clouds back to where they were generated. */
+  const driftReset = $derived({ label: t.viewer.resetDrift, icon: 'start' as const, run: () => view?.resetDrift() });
+  /** Whether the host planet has an atmosphere halo, and clouds, to draw in a moon's sky. */
+  const hostHasAir = $derived(Boolean(hostLook?.look.halo));
+  const hostHasClouds = $derived(Boolean(hostLook?.look.clouds));
   /** The display switches, as the icon bar groups them: light, surface, sky. */
   const toggleGroups = $derived<Toggle[][]>([
     [
       { key: 'sun', label: t.viewer.sunlight, icon: 'sun', on: sun, set: (v) => (sun = v) },
       { key: 'starLight', label: t.viewer.starLight, help: t.viewer.starLightHelp, icon: 'starlight', on: starLight, set: (v) => (starLight = v) },
-      { key: 'atmosphere', label: t.viewer.atmosphere, icon: 'atmosphere', on: atmosphere, set: (v) => (atmosphere = v) },
+      perBody({ key: 'atmosphere', label: t.viewer.atmosphere, icon: 'atmosphere' }, atmosphere, hostAtmosphere, (v) => (atmosphere = v), (v) => (hostAtmosphere = v), !hostHasAir),
       { key: 'stars', label: t.viewer.stars, help: t.viewer.starsHelp, icon: 'sparkles', on: stars, set: (v) => (stars = v) },
     ],
     [
       ...(giant
-        ? [{ key: 'drift', label: t.viewer.bandDrift, help: t.viewer.bandDriftHelp, icon: 'drift' as const, on: cloudDrift, set: (v: boolean) => (cloudDrift = v) }]
+        ? [{ ...perBody({ key: 'drift', label: t.viewer.bandDrift, help: t.viewer.bandDriftHelp, icon: 'drift' }, cloudDrift, hostCloudDrift, (v) => (cloudDrift = v), (v) => (hostCloudDrift = v), !hostHasClouds), action: driftReset }]
         : [
-            { key: 'clouds', label: t.viewer.clouds, icon: 'clouds' as const, on: clouds, set: (v: boolean) => (clouds = v) },
-            { key: 'drift', label: t.viewer.drift, icon: 'drift' as const, on: cloudDrift, set: (v: boolean) => (cloudDrift = v) },
+            perBody({ key: 'clouds', label: t.viewer.clouds, icon: 'clouds' }, clouds, hostClouds, (v) => (clouds = v), (v) => (hostClouds = v), !hostHasClouds),
+            { ...perBody({ key: 'drift', label: t.viewer.drift, icon: 'drift' }, cloudDrift, hostCloudDrift, (v) => (cloudDrift = v), (v) => (hostCloudDrift = v), !hostHasClouds), action: driftReset },
           ]),
-      { key: 'grid', label: t.viewer.grid, icon: 'graticule', on: graticule, set: (v) => (graticule = v) },
-      { key: 'tropics', label: t.viewer.tropics, help: t.viewer.tropicsHelp, icon: 'tropics', on: referenceLines, set: (v) => (referenceLines = v) },
+      // The host's rings: the body shown has no ring switch, so no squares.
+      ...(hasHost && hostRings
+        ? [{ key: 'hostRings', label: t.viewer.hostRings, help: t.viewer.hostRingsHelp, icon: 'giants' as const, on: hostRingsShown, set: (v: boolean) => (hostRingsShown = v) }]
+        : []),
+      perBody({ key: 'grid', label: t.viewer.grid, icon: 'graticule' }, graticule, hostGrid, (v) => (graticule = v), (v) => (hostGrid = v)),
+      perBody({ key: 'tropics', label: t.viewer.tropics, help: t.viewer.tropicsHelp, icon: 'tropics' }, referenceLines, hostTropics, (v) => (referenceLines = v), (v) => (hostTropics = v)),
+      // Contours come from the body's elevation data, which the host's
+      // view of it does not have: no square for the host.
       { key: 'sea', label: t.viewer.depthContours, help: t.viewer.depthContoursHelp, icon: 'depth', on: seaContours, set: (v) => dataReady && (seaContours = v) },
       { key: 'land', label: t.viewer.elevationContours, help: t.viewer.elevationContoursHelp, icon: 'contours', on: landContours, set: (v) => dataReady && (landContours = v) },
     ],
     [
-      { key: 'labels', label: t.viewer.skyLabels, help: t.viewer.skyLabelsHelp, icon: 'tag', on: skyLabels, set: (v) => (skyLabels = v) },
+      scoped({ key: 'labels', label: t.viewer.skyLabels, help: t.viewer.skyLabelsHelp, icon: 'tag' }, labelScope, (s) => {
+        skyLabelsLocal = s.local;
+        skyLabels = s.stellar;
+      }),
       ...(sys && sys.bodies.length > 1
-        ? [{ key: 'orbits', label: t.viewer.orbitLines, help: t.viewer.orbitLinesHelp, icon: 'orbit' as const, on: orbitLines, set: (v: boolean) => (orbitLines = v) }]
+        ? [
+            scoped({ key: 'orbits', label: t.viewer.orbitLines, help: t.viewer.orbitLinesHelp, icon: 'orbit' }, orbitScope, (s) => {
+              orbitLinesLocal = s.local;
+              orbitLines = s.stellar;
+            }),
+          ]
         : []),
       ...(hill && sysBody
         ? [
@@ -1433,21 +1622,22 @@
           ]
         : []),
       ...(sys && ((sys.belts?.length ?? 0) > 0 || sys.bodies.some((b) => b.trojans))
-        ? [{ key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' as const, on: smallBodies, set: (v: boolean) => (smallBodies = v) }]
+        ? [
+            scoped({ key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' }, smallScope, (s) => {
+              smallBodiesLocal = s.local;
+              smallBodies = s.stellar;
+            }),
+          ]
         : []),
-      { key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis', on: axesShown, set: (v) => (axesShown = v) },
+      perBody({ key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis' }, axesShown, hostAxes, (v) => (axesShown = v), (v) => (hostAxes = v)),
+      perBody({ key: 'spin', label: t.viewer.spinDirection, help: t.viewer.spinDirectionHelp, icon: 'spin' }, spinDirection, hostSpinDirection, (v) => (spinDirection = v), (v) => (hostSpinDirection = v)),
+      ...(hasHost
+        ? [{ key: 'hostLink', label: t.viewer.hostLink, help: t.viewer.hostLinkHelp, icon: 'links' as const, on: hostLink, set: (v: boolean) => (hostLink = v) }]
+        : []),
+      // The body shown's rotation dial (the moon's square) and the host's compass (the host's).
       ...(sys && sysBody
-        ? [{ key: 'dial', label: t.viewer.rotationDial, help: t.viewer.rotationDialHelp, icon: 'dial' as const, on: dialShown, set: (v: boolean) => (dialShown = v) }]
+        ? [perBody({ key: 'dial', label: t.viewer.compass, help: t.viewer.compassHelp, icon: 'dial' }, dialShown, hostCompassShown, (v) => (dialShown = v), (v) => (hostCompassShown = v))]
         : []),
-      {
-        key: 'hexes',
-        label: t.viewer.hexes,
-        icon: 'hex',
-        on: hexOn,
-        set: (v) => {
-          if (worldId && sysBody?.kind === 'planet') hexOn = v;
-        },
-      },
     ],
   ]);
   /** The panels of the planet's dock. */
@@ -1457,7 +1647,6 @@
     { id: 'light', title: t.viewer.lightPanel, icon: 'sun', content: lightPanel },
     ...(epochs && epochStops.length > 1 ? [{ id: 'epoch', title: t.epochs.slider, icon: 'clock' as const, content: epochPanel }] : []),
     ...(drift ? [{ id: 'drift', title: t.drift.title, icon: 'clock' as const, content: drift }] : []),
-    ...(sysBody?.parent ? [{ id: 'host', title: t.viewer.host, icon: 'host' as const, content: hostPanel }] : []),
     { id: 'hex', title: t.viewer.hexes, icon: 'hex', content: hexPanel },
   ]);
 
@@ -1802,7 +1991,17 @@
         disabled={!dataReady || relief === RELIEF_DEFAULT}
         title={t.viewer.reliefResetHelp}>↺ {t.viewer.reliefTrue}</button
       >
-
+    {#if sysBody?.ring_role && drawsRingRocks}
+      <!-- The rocks of the rings round a ring moon, high quality only. -->
+      <label class="ring-rocks" title={t.viewer.ringRocksHelp}>
+        {t.viewer.ringRocks}
+        <select bind:value={ringRockScale}>
+          {#each RING_ROCK_SCALES as scale (scale)}
+            <option value={scale}>{t.viewer.ringRockScales[scale] ?? scale}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
   </div>
 {/snippet}
 {#snippet lightPanel()}
@@ -1880,6 +2079,15 @@
 {/snippet}
 {#snippet hexPanel()}
   <div class="panel-body">
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={hexOn}
+        disabled={!worldId || sysBody?.kind !== 'planet'}
+        onchange={(e) => (hexOn = e.currentTarget.checked)}
+      />
+      {t.viewer.hexes}
+    </label>
     {#if !hexOn}
       <p class="muted">{t.viewer.hexesOff}</p>
     {/if}
@@ -1903,29 +2111,6 @@
         </label>
         <button class="small" onclick={downloadHex} disabled={!hexMap}>{t.viewer.downloadHex}</button>
       {/if}
-  </div>
-{/snippet}
-{#snippet hostPanel()}
-  <div class="panel-body">
-        <!-- The planet in this body's sky has switches of its own. -->
-        <fieldset class="host" title={t.viewer.hostHelp}>
-          <legend>{t.viewer.host}</legend>
-          <label class="check"><input type="checkbox" bind:checked={hostAtmosphere} /> {t.viewer.atmosphere}</label>
-          <label class="check"><input type="checkbox" bind:checked={hostClouds} /> {t.viewer.clouds}</label>
-          <label class="check"><input type="checkbox" bind:checked={hostGrid} /> {t.viewer.grid}</label>
-          <label class="check"><input type="checkbox" bind:checked={hostTropics} /> {t.viewer.tropics}</label>
-        </fieldset>
-        {#if sysBody?.ring_role && drawsRingRocks}
-          <!-- The rocks of the rings round a ring moon, high quality only. -->
-          <label class="ring-rocks" title={t.viewer.ringRocksHelp}>
-            {t.viewer.ringRocks}
-            <select bind:value={ringRockScale}>
-              {#each RING_ROCK_SCALES as scale (scale)}
-                <option value={scale}>{t.viewer.ringRockScales[scale] ?? scale}</option>
-              {/each}
-            </select>
-          </label>
-        {/if}
   </div>
 {/snippet}
 {#snippet epochPanel()}
@@ -1958,7 +2143,7 @@
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
   {#if world.subject === 'planet' && skyPositions}
-    {@const guides = axesShown ? guideLabels.filter((g) => g.key !== 'pull' || !skyPositions!.guides.host) : []}
+    {@const guides = guideLabels.filter((g) => (g.key === 'spin' ? spinDirection : g.key === 'hostSpin' ? hostSpinDirection : hostLink) && (g.key !== 'pull' || !skyPositions!.guides.host))}
     {@const marks = smallSky ? skyPositions.marks : []}
     <!-- A dashed ring round each trojan swarm, too faint to see. -->
     {#each marks.slice(0, smallSky?.swarms.length ?? 0) as mark, k (k)}
@@ -1968,22 +2153,27 @@
     {/each}
     <SkyLabels
       positions={[
-        ...(skyLabels ? skyPositions.bodies : []),
+        ...skyPositions.bodies.map((at, k) => (inScope(labelScope, localIds, sysSky?.ids[k] ?? '') ? at : null)),
         ...guides.map((g) => skyPositions!.guides[g.key]),
         ...marks,
         ...dialLabels.map((d) => d.at),
+        ...hostCompassLabels.map((d) => d.at),
       ]}
       labels={[
-        ...(skyLabels ? skyLabelList : []),
+        ...skyLabelList,
         ...guides.map((g) => g.label),
         ...smallLabels.slice(0, marks.length),
         ...dialLabels.map((d) => d.label),
+        ...hostCompassLabels.map((d) => d.label),
       ]}
-      star={skyLabels ? skyPositions.star : null}
+      star={labelScope.stellar ? skyPositions.star : null}
       {starLabel}
     />
     {#if dial && skyPositions.dial}
       <DialLabels ticks={skyPositions.dial.ticks} arcTicks={skyPositions.dial.arcTicks} />
+    {/if}
+    {#if hostCompass && skyPositions.hostDial}
+      <DialLabels ticks={skyPositions.hostDial.ticks} arcTicks={skyPositions.hostDial.arcTicks} />
     {/if}
   {/if}
   {#if world.subject === 'star' && (worldId || sys)}
@@ -2080,7 +2270,7 @@
   <div class="planet-chrome">
     <div class="gizmo"><AxesGizmo axes={planetAxes} /></div>
     <div class="toggles">
-      <ToggleBar label={t.viewer.display} groups={toggleGroups} />
+      <ToggleBar label={t.viewer.display} groups={toggleGroups} bind:expanded={barExpanded} />
     </div>
     <Dock kind="planet" panels={dockPanels} defaultActive="map" />
     <PlaybackBar
@@ -2115,7 +2305,7 @@
     {@const ramp = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown]}
     {@const range = giant && shown === 'temperature' ? giantTemperatureRange(giant) : null}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="legend" role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
+    <div class="legend" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
       <strong>{giant ? layerName(shown) : ramp.label}</strong>
       <div class="bar" style:background={cssGradient(windShown ? 'wind' : topsShown ? 'cloudTops' : shown)}></div>
       <div class="ends">
@@ -2139,7 +2329,7 @@
     </div>
   {:else if shown === 'biomes' && world.stats}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="legend biomes" role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.biomeLegend}>
+    <div class="legend biomes" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.biomeLegend}>
       <button class="legend-title" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen}>
         <strong>{t.viewer.biomes}</strong>
         <small class="muted">{legendOpen ? t.viewer.legendHide : t.viewer.legendShow({ count: world.stats.shares.length })}</small>
@@ -2248,19 +2438,6 @@
     pointer-events: none;
     z-index: 1;
   }
-  fieldset.host {
-    margin: 4px 0 0;
-    padding: 4px 8px 6px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    display: grid;
-    gap: 2px;
-  }
-  fieldset.host legend {
-    font-size: 0.8rem;
-    color: var(--muted);
-    padding: 0 4px;
-  }
   .ring-rocks {
     margin-top: 8px;
     display: grid;
@@ -2318,6 +2495,10 @@
     position: absolute;
     left: 12px;
     top: 72px;
+    /* Clear of the playback bar: a long bar (a moon's switches) scrolls. */
+    bottom: 64px;
+    overflow-y: auto;
+    scrollbar-width: thin;
     pointer-events: auto;
   }
   .gizmo {
@@ -2444,9 +2625,12 @@
     /* Bottom left, above the playback bar and right of the icon bar (12 px
        from the edge, 40 px wide), so that a long biome list never covers
        it; the dock holds the right. */
-    left: 64px;
+    left: 80px;
     bottom: 76px;
     width: 240px;
+    /* Under the toolbar, whatever the list: it scrolls inside (see ul). */
+    max-height: calc(100% - 172px);
+    overflow: hidden;
     /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
     background: var(--frame-deco), var(--panel);
     clip-path: var(--frame-clip);
@@ -2460,6 +2644,13 @@
     cursor: grab;
     user-select: none;
     touch-action: none;
+  }
+  .legend.biomes {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  /* The icon bar showing its names is wider: the legend steps right of it. */
+  .legend.bar-wide {
+    left: 208px;
   }
   .legend ul {
     touch-action: pan-y;

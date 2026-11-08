@@ -247,10 +247,10 @@ export const en = {
     AcidRiver: 'Acid River',
     AcidShore: 'Acid Shore',
     FrozenLake: 'Frozen Lake',
-    GiantZone: 'Zone',
-    GiantBelt: 'Belt',
+    GiantZone: 'Bright band (zone)',
+    GiantBelt: 'Dark band (belt)',
     GiantStorm: 'Storm',
-    GiantPolar: 'Polar Region',
+    GiantPolar: 'Polar region',
   } satisfies Record<Biome, string>,
   /** Cloud kinds. */
   clouds: {
@@ -319,8 +319,8 @@ export const en = {
     giantClouds: 'Clouds',
     giantCloudsHelp: 'What the visible cloud deck is made of, from its temperature (Sudarsky et al. 2000), and the effective temperature',
     giantWinds: 'Winds',
-    giantWindsHelp: 'Jets in each hemisphere (Rhines scale: more on a large, fast-spinning planet), and the strongest westward and eastward winds at the cloud tops',
-    giantWindsValue: (p: { jets: number; west: string; east: string }) => `${p.jets} jets per hemisphere · ${p.west} west to ${p.east} east`,
+    giantWindsHelp: 'Eastward jets in each hemisphere (Rhines scale: more on a large, fast-spinning planet with slow winds; a westward jet lies between two of them, and one more blows at the equator), and the strongest westward and eastward winds at the cloud tops',
+    giantWindsValue: (p: { jets: number; west: string; east: string }) => `${p.jets} eastward jets per hemisphere · ${p.west} west to ${p.east} east`,
     giantHeat: 'Internal heat',
     giantHeatHelp: 'Heat it radiates over what it gets from its star: Jupiter 1.7, Neptune 2.6, Uranus about 1',
     giantHeatValue: (p: { ratio: string }) => `${p.ratio}× the starlight it absorbs`,
@@ -581,7 +581,7 @@ export const en = {
   viewer: {
     axesGizmo: 'The world\'s axes, x red, y green, z blue, as the camera sees them',
     sunlightOff: 'Turn on Sunlight (in the icon bar) to light the body by its star, with its seasons and its hour.',
-    hexesOff: 'Turn on the hex grid in the icon bar to set it here.',
+    hexesOff: 'Tick Hexes above to draw the hex grid and set it here.',
     infoPanel: 'Info',
     mapPanel: 'Map',
     lightPanel: 'Light and season',
@@ -678,6 +678,23 @@ export const en = {
     spinAxes: 'Spin axes',
     spinAxesHelp:
       'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
+    spinDirection: 'Spin direction',
+    spinDirectionHelp:
+      'Draws the way each body turns (on the globe): an arrow bent round its axis, or a closed ring for a body locked to what it orbits, which does not turn against it',
+    hostLink: 'Link to the host',
+    hostLinkHelp:
+      "From a moon: a dotted line to its host planet, with the host's pull on the moon and the moon's velocity as arrows, and their figures",
+    resetDrift: 'Reset the drift',
+    hostRings: 'Host rings',
+    hostRingsHelp: "The rings of the host planet in the moon's sky",
+    compass: 'Compass',
+    compassHelp:
+      "The rotation dial: a ring graduated in degrees, its pointer showing how far the body has turned. From a moon, the square for the host draws it round the host planet as the moon sees it: the ring graduated in degrees, the half-circle of the star's height, and the moon's bearing and height over the host's equator",
+    squareMoon: (p: { what: string }) => `${p.what} on the moon`,
+    squareHost: (p: { what: string }) => `${p.what} on the host`,
+    squareLocal: (p: { what: string }) => `${p.what} of the local system`,
+    squareStellar: (p: { what: string }) => `${p.what} of the star system`,
+    hostCompassMoon: 'Moon',
     rotationDial: 'Rotation dial',
     rotationDialHelp:
       'A ring round the equator, graduated in degrees: its pointer shows how far the body has turned, against the stars, or against what it orbits for a body locked to it',
@@ -712,7 +729,7 @@ export const en = {
         text: 'the solar day cut into 24 local hours, noon when the sun crosses the meridian (the convention of Mars missions).',
       },
       { term: 'Synchronous rotation:', text: 'the body turns once per orbit and always shows the same face to what it orbits.' },
-      { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by about ±2e radians.' },
+      { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by up to an amplitude that is about 2e radians (e the eccentricity), which the dial shows exactly next to the current angle.' },
       {
         term: '3:2 resonance:',
         text: 'three turns every two orbits, as Mercury: the star’s tides hold an eccentric planet there instead of locking it; its solar day lasts two of its years.',
@@ -747,8 +764,6 @@ export const en = {
     starsHelp: 'Stars around the globe, fixed in space: they turn with the planet when you move the camera',
     clouds: 'Clouds',
     drift: 'Drift',
-    host: 'Host planet',
-    hostHelp: "The planet seen in this body's sky (or the giant this world orbits), drawn by its own switches: those above apply to the body you are looking at",
     skyLabels: 'Labels',
     skyLabelsHelp: 'Names and basic facts of the bodies in the sky (moons, the planet seen from a moon, the star), tied to each by a line, to find even the smallest; with Sunlight',
     spinName: 'Spin',
@@ -766,7 +781,7 @@ export const en = {
     au: 'AU',
     bandDrift: 'Band drift',
     bandDriftHelp:
-      "The bands turn each with its own wind, faster or slower than the planet's spin, some backwards: the fastest goes round in two minutes (not the true pace)",
+      "The bands turn each with its own wind, faster or slower than the planet's spin, some backwards: the fastest goes round in two minutes (not the true pace). A great spot barely moves, as the Great Red Spot does",
     cloudTops: 'Cloud tops',
     windLayer: 'Wind',
     windEnd: (p: { speed: string; side: string }) => `${p.speed} m/s ${p.side}`,
@@ -927,11 +942,11 @@ export const en = {
     giantHelp: (p: { clouds: string; radius: string; temperature: string; eccentricity: string; rings: string }) =>
       `${p.clouds} · radius ${p.radius} · ${p.temperature} · eccentricity ${p.eccentricity} · ${p.rings}`,
     cloudClasses: {
-      1: 'ammonia clouds, banded cream and brown (or blue methane, for an ice giant)',
-      2: 'water clouds, bright white',
+      1: 'ammonia clouds, banded cream and brown (or blue methane, for an ice giant; a warmer one keeps a blue tinge)',
+      2: 'water clouds, bright white (a thin veil near 350 K, clear above)',
       3: 'no clouds, deep azure',
       4: 'alkali metals absorb the light: very dark',
-      5: 'silicate clouds, dark grey, glowing red at night',
+      5: 'high silicate clouds, pale grey and bright, glowing red at night',
     } as Record<number, string>,
     rings: { none: 'no rings', faint: 'faint rings', bright: 'bright rings' } as Record<string, string>,
     forced: 'Forced eccentricity',

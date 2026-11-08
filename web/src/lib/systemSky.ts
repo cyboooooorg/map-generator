@@ -217,6 +217,8 @@ export function systemSky(
   ids: string[];
   casters: ShadowCaster[];
   orbits: Vec3[][];
+  /** The body each of `orbits` belongs to, and whether it goes round the planet of the body shown (a moon's orbit) rather than the star. */
+  orbitBodies: { id: string; local: boolean }[];
   /** The index in `orbits` of the body shown's own orbit (dashed, so that the body slides along it), -1 when none. */
   ownOrbit: number;
   sun: Vec3;
@@ -226,7 +228,7 @@ export function systemSky(
   const self = system.bodies.find((b) => b.id === shown);
   const here = placements.get(shown);
   if (!self || !here) {
-    return { bodies: [], ids: [], casters: [], orbits: [], ownOrbit: -1, sun: [0, 0, 1], star: { position: [0, 0, 1e9], radius: 1 } };
+    return { bodies: [], ids: [], casters: [], orbits: [], orbitBodies: [], ownOrbit: -1, sun: [0, 0, 1], star: { position: [0, 0, 1e9], radius: 1 } };
   }
   const [ax, ay, az] = here.axes;
   const unitKm = Math.max(self.physical.radius_km, 1e-6);
@@ -309,6 +311,7 @@ export function systemSky(
     // planet, the planet's on its moon, whatever the far giants' sizes.
     casters: pickShadowCasters(casters, sun, Math.asin(starRadius / starDistance)),
     orbits,
+    orbitBodies: orbiting.map((b) => ({ id: b.id, local: b.parent === planet })),
     ownOrbit,
     sun: unit(local(scale(here.centre, -1))),
     star: { position: place([0, 0, 0]), radius: (system.star.info.radius * SUN_RADIUS_KM) / unitKm },
@@ -333,6 +336,21 @@ export function systemReach(system: System, shown: string): number | null {
   const furthest = Math.max(own, ...moons.map((b) => own + apo(b.orbit)));
   if (furthest <= 0) return null;
   return (3 * furthest) / Math.max(self.physical.radius_km, 1e-6);
+}
+
+/**
+ * How far out the camera must be able to go, in radii of the body shown
+ * from its centre, to see a Hill sphere whole from outside: its farthest
+ * point from the body, `|centre| + radius`, over the sine of the view's
+ * half field (20 degrees of the 40 degree field, 2.9), plus a tenth for the
+ * margin, rounded up to a step of 10 % so that a host moving on its orbit
+ * does not move the limit every frame. `centre` and `radius` are in radii
+ * of the body shown.
+ */
+export function hillReach(centre: readonly [number, number, number], radius: number): number {
+  const farthest = Math.hypot(centre[0], centre[1], centre[2]) + Math.max(radius, 0);
+  const reach = (farthest * 1.1) / Math.sin((20 * Math.PI) / 180);
+  return reach > 0 ? 1.1 ** Math.ceil(Math.log(reach) / Math.log(1.1) - 1e-9) : 0;
 }
 
 /** Earth masses in a Sun's mass. */

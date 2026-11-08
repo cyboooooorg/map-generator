@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { giantStorms, MAX_STORMS } from './giantStorms';
+import { giantStorms, greatSpotIndex, MAX_STORMS } from './giantStorms';
 
 const STORM = 7;
 
@@ -43,5 +43,22 @@ describe('giantStorms', () => {
     expect(giantStorms(map(200, 100, [[50, 50, 1, 1]]), 200, 100, STORM)).toHaveLength(0);
     const many: [number, number, number, number][] = Array.from({ length: 20 }, (_, k) => [5 + k * 10, 50, 3, 3]);
     expect(giantStorms(map(200, 100, many), 200, 100, STORM)).toHaveLength(MAX_STORMS);
+  });
+});
+
+describe('greatSpotIndex', () => {
+  const storms = [
+    { u: 0.5, v: 0.5, halfU: 0.02, halfV: 0.02 },
+    { u: 0.25, v: 0.5 - 22 / 180, halfU: 0.02, halfV: 0.02 },
+  ];
+  it('finds the storm at the great spot, whichever is the largest', () => {
+    // Longitude 90°, latitude -22°: the second storm.
+    expect(greatSpotIndex(storms, [90, -22])).toBe(1);
+    expect(greatSpotIndex(storms, [180, 0])).toBe(0);
+  });
+  it('is -1 with no great spot or no storm near it', () => {
+    expect(greatSpotIndex(storms, null)).toBe(-1);
+    expect(greatSpotIndex(storms, [300, 40])).toBe(-1);
+    expect(greatSpotIndex([], [90, -22])).toBe(-1);
   });
 });

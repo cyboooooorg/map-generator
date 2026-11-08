@@ -436,6 +436,45 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   in its sky with its phases and eclipses; tidal heating warming the
   climate and raising volcanism, watery worlds kept beyond the habitable
   edge.
+- **Science fixes (2026-11-07):** wind speed an outcome of the flux and
+  the spin, cloud decks deciding the Sudarsky class, class V with
+  gravity, internal heat cooling with the system's age, the great spot in
+  a southern zone drifting slowly, previews following the generated
+  bands (`giant_clouds.rs`, `giant_world.rs`). Left to do:
+  - The peak winds are a calibration on the four giants (Rossby number
+    against the flux), not a derivation: Showman et al. 2010 call the
+    winds of Saturn and Neptune, faster than Jupiter's on less energy,
+    not understood. A friction or depth term would need a model of the
+    deep flow. With Saturn's real flux the law gives about a third under
+    its winds, and Uranus comes out at 285 m/s against 200.
+  - The whole wind profile is held under 0.75 of the speed of sound and the
+    peak rises with the heating (calibrations, no source); a cold light
+    giant would otherwise reach 2 000 m/s. A giant that tidal locking
+    stops (the rule locks a Jupiter-mass giant at 0.5 AU of a G2V star,
+    which is doubtful) loses its Rossby wind and keeps the irradiation
+    floor (about 120 m/s at 360 K): a drop of several hundred m/s at the
+    step. A super-Jupiter (10 MJ at 40 AU) blows at only 20 to 30 m/s,
+    because its large internal heat flux gives a tiny Rossby number: an
+    extrapolation of the calibration. A Saturn-like giant's westward
+    flank (-130 to -170 m/s) is stronger than the real one (about
+    -50 to -100): the jets away from the equator take either sign at 0.3 to
+    0.7 of the peak. Uranus has Neptune's wind profile; its real
+    eastward peak is the larger and its westward flow weaker.
+  - The great spot drifts slowly but the hole that hides the map's copy of
+    it in `giantColour` (`shaders.ts`) still follows the band wind, a
+    patch of plain band riding along the zone. Check it in a browser with
+    Band drift on; making the hole follow the spot would freeze the band.
+  - Saturn's internal heat is above the cooling law (helium rain); ice
+    giants keep a fixed 40 K instead of Neptune's and Uranus's very
+    different heat.
+  - The decks use the Sun's composition; an ice giant's methane and
+    water enrichment (a methane ice deck on Neptune, water near 40 bar)
+    and the deep dry adiabat of its troposphere are not modelled.
+  - The great spot has the size it is drawn with; the real one shrinks
+    by 0.19° of longitude a year (Simon et al. 2018), which needs a
+    date in the viewer.
+  - Cloud tops only: no view of the depths where Juno sees the belt and
+    zone contrast change sign (Fletcher et al. 2021).
 
 ## 15. Names
 
@@ -476,13 +515,16 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     with its progress, skies and the star view from `system.json`);
   - the CLI writing systems (`systems/<id>/`) and the deployment
     mounting `systems/`.
-- **Next:** phase 6, a card for every body and renaming any of them;
-  phase 7, the clean-up of the world layout (`/api/worlds`, the moon and
-  host exports, `worlds/`).
+- **Done since:** phase 6, a card for every body (`751535e`) and
+  renaming any of them (`23f33c8`).
+- **Next:** phase 7, the clean-up of the world layout. The `/api/worlds`
+  routes are gone from the server; what remains is to check the moon and
+  host exports and the legacy `worlds/` directory.
 
 ## 17. Asteroid belts and Lagrange points
 
-- **Status:** in progress
+- **Status:** done (the four tasks of the plan: the draw, the system,
+  the star view, and the small bodies marked in a planet's sky)
 - **Plan:** [2026-11-06-asteroid-belts.md](superpowers/plans/2026-11-06-asteroid-belts.md)
 - **Analysis:** [13-asteroids.md](analysis/13-asteroids.md)
 - **Problem:** a system has a star, planets and moons, but no small
@@ -721,3 +763,24 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
 | 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
 | 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |
+
+## 23. Extreme trans-Neptunian objects (Sednoids)
+
+- **Status:** todo (study first)
+- **Problem:** a system's small bodies stop at the belts and the scattered
+  disk (item 17). Bodies like Sedna, 2012 VP113 and Leleākūhonua, on very
+  eccentric orbits whose perihelia lie far beyond the giants' reach
+  (detached objects, 50 to 80 AU and more, aphelia of hundreds to
+  thousands of AU), are not drawn.
+- **Study:** what they are and how many there are (the observed
+  Sednoids and other detached objects, with their perihelia, aphelia and
+  inclinations); the formation scenarios that place them (a passing star,
+  the Sun's birth cluster, a distant undiscovered planet, the inner Oort
+  cloud) and what each implies for other stars; their sizes and surfaces;
+  how often other systems could have them, and whether anything constrains
+  that from observations; how they show in the star view (orbits far
+  wider than the planets', the system's scale) and whether they get
+  cards and maps like dwarf planets.
+- **Then:** add them to the system draw on a stream of their own (so
+  existing systems keep their other bodies), show them in the star view,
+  and give the large ones a card and, if decided, a map.
