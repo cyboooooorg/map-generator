@@ -13,23 +13,31 @@ export const ringletsGlsl = /* glsl */ `
     return fract(sin(x * 127.1 + uRingSeed * 311.7) * 43758.5453);
   }
 
+  // How far a scale of noise fades to its mean when a pixel spans x of its
+  // cells: from nothing at two pixels a cell (Nyquist) to most of it at
+  // under one. A third of it is kept: sub-pixel ringlets still read as
+  // grain, as in the giant's own view, rather than as a plain sheet.
+  float ringletFade(float x) {
+    return 0.65 * smoothstep(0.5, 1.5, x);
+  }
+
   // The ringlets' scaling of the opacity at radius r (the giant's radii),
   // for a pixel spanning w of them (0: exact). Each scale of the noise
-  // fades to its mean once its cells are about as small as a pixel, so
-  // that rings seen from afar do not alias into a shimmer.
+  // fades towards its mean as its cells shrink under two pixels (see
+  // ringletFade), so that rings seen from afar do not alias into a shimmer.
   float ringlets(float r, float w) {
     float x = r * 180.0;
     float i = floor(x);
     float f = fract(x);
     f = f * f * (3.0 - 2.0 * f);
     float fine = mix(ringHash(i), ringHash(i + 1.0), f);
-    fine = mix(fine, 0.5, smoothstep(0.25, 0.9, w * 180.0));
+    fine = mix(fine, 0.5, ringletFade(w * 180.0));
     float y = r * 23.0;
     float j = floor(y);
     float g = fract(y);
     g = g * g * (3.0 - 2.0 * g);
     float broad = mix(ringHash(j + 50.0), ringHash(j + 51.0), g);
-    broad = mix(broad, 0.5, smoothstep(0.25, 0.9, w * 23.0));
+    broad = mix(broad, 0.5, ringletFade(w * 23.0));
     return 0.35 + 0.4 * broad + 0.25 * fine;
   }
 `;
