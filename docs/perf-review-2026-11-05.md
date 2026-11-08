@@ -86,7 +86,7 @@ alone gains: N2 and X3 stay to be measured before they are kept. P1, E2
 and X2 (b) are left for later (P1 means reordering the export, E2 and
 X2 (b) change the output).
 
-N2 was done on 2026-11-08 (format version 13), on the four climate fields
+N2 was done on 2026-11-08 (format version 13), on the five climate fields
 of the map point only: moisture, temperature anomaly, the two variability
 fields and the highland jitter (21 Perlin calls a pixel). The domain warp
 and the volcanic zones stay per pixel: they are read at the plates'
@@ -97,8 +97,10 @@ splines instead of bilinear interpolation, so biome borders stay smooth
 curves. On 9 worlds at 4096 × 2048 (terran ×5, volcanic, frozen,
 caustic, a small barren body): land unchanged, every biome's share of the
 land within 0.1 point, 0.00–0.10 % of land pixels changing biome,
-temperature within 0.07 °C. At 1920 × 1080 only the moisture and the
-anomaly are coarse (steps 4 and 10); the finer fields keep a step of 1.
+temperature within 0.07 °C. Which fields go coarse depends on the map:
+at 1920 × 1080 the moisture and the anomaly (steps 4 and 10); at 4096 ×
+2048 the highland jitter too; from about 7 300 pixels of width the two
+variability fields as well (step 2 at 8192).
 
 ## Findings
 

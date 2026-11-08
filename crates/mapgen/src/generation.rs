@@ -577,11 +577,12 @@ impl Sampler {
         self.sample_with(x, y, |p| ClimateField::ALL.map(|f| self.climate(f, p)))
     }
 
-    /// One climate noise field at a point of the unit sphere (the map
-    /// point: the climate does not move with the plates).
-    pub fn climate(&self, field: ClimateField, [nx, ny, nz]: [f64; 3]) -> f32 {
+    /// A climate field's noise, base frequency (per unit of the sphere's
+    /// radius), offset and octaves: the one table [`Self::climate`] and
+    /// [`Self::climate_frequency`] both read.
+    fn climate_spec(&self, field: ClimateField) -> (&Perlin, f64, [f64; 3], u32) {
         let s = self.noise_scale;
-        let (noise, f, offset, octaves) = match field {
+        match field {
             // Features of ~3 000 km: whole zones shift between continents.
             ClimateField::TemperatureAnomaly => (&self.anomaly_noise, 1.2 * s, [0.0; 3], 3),
             ClimateField::Moisture => (&self.moisture_noise, 1.5 * s, [0.0; 3], 4),
@@ -589,7 +590,13 @@ impl Sampler {
             ClimateField::VariabilityT => (&self.variability_noise, 6.0 * s, [0.0; 3], 5),
             ClimateField::VariabilityM => (&self.variability_noise, 6.0 * s, [17.3, -4.1, 9.7], 5),
             ClimateField::HighlandJitter => (&self.highland_noise, 4.0 * s, [0.0; 3], 4),
-        };
+        }
+    }
+
+    /// One climate noise field at a point of the unit sphere (the map
+    /// point: the climate does not move with the plates).
+    pub fn climate(&self, field: ClimateField, [nx, ny, nz]: [f64; 3]) -> f32 {
+        let (noise, f, offset, octaves) = self.climate_spec(field);
         fbm(
             noise,
             nx * f + offset[0],
@@ -600,15 +607,11 @@ impl Sampler {
     }
 
     /// The highest frequency of a climate field's noise, in cycles per unit
-    /// of the sphere's radius: its finest octave.
+    /// of the sphere's radius: its finest octave ([`fbm`] doubles the
+    /// frequency at each one).
     pub fn climate_frequency(&self, field: ClimateField) -> f64 {
-        let s = self.noise_scale;
-        match field {
-            ClimateField::TemperatureAnomaly => 1.2 * s * 4.0,
-            ClimateField::Moisture => 1.5 * s * 8.0,
-            ClimateField::VariabilityT | ClimateField::VariabilityM => 6.0 * s * 16.0,
-            ClimateField::HighlandJitter => 4.0 * s * 8.0,
-        }
+        let (_, f, _, octaves) = self.climate_spec(field);
+        f * f64::from(1u32 << (octaves - 1))
     }
 
     /// Like [`Self::sample`], with the climate fields (in [`ClimateField::ALL`]
@@ -624,11 +627,7 @@ impl Sampler {
         // Spherical mapping of the pixel centre: longitude 0..2π, latitude
         // +π/2 (row 0, north) to -π/2 (last row, south). Projects the flat map
         // onto a unit sphere → no seams, no mirror symmetry.
-        let lon = (x as f64 + 0.5) / self.grid.width as f64 * 2.0 * PI;
-        let lat = self.grid.latitude(y);
-        let nx = lat.cos() * lon.cos();
-        let ny = lat.cos() * lon.sin();
-        let nz = lat.sin();
+        let [nx, ny, nz] = self.grid.unit_vector_at(f64::from(x), f64::from(y));
         // The plates carry the crust: the relief of a point is that of its
         // crust where it lies today (the point itself at the present),
         // while the climate and the plate boundaries stay at the point.
@@ -1026,13 +1025,16 @@ struct ClimateGrids {
 
 impl ClimateGrids {
     fn new(sampler: &Sampler, width: u32, height: u32) -> Self {
+        let grid = Grid {
+            width,
+            height,
+            ..sampler.grid
+        };
         Self {
             fields: ClimateField::ALL.map(|field| {
                 let step = crate::coarse::step_for(sampler.climate_frequency(field), width);
                 (step > 1).then(|| {
-                    crate::coarse::CoarseField::new(width, height, step, |p| {
-                        sampler.climate(field, p)
-                    })
+                    crate::coarse::CoarseField::new(&grid, step, |p| sampler.climate(field, p))
                 })
             }),
         }
@@ -2123,6 +2125,66 @@ pub(crate) mod tests {
         };
         let (light, earth) = (cone(0.6), cone(1.0));
         assert!(earth > 0.0 && light > 1.5 * earth, "{light} {earth}");
+    }
+
+    /// The five climate values of a sample, in [`ClimateField::ALL`] order.
+    fn climate_of(s: &Sample) -> [f32; ClimateField::COUNT] {
+        [
+            s.temperature_anomaly,
+            s.moisture,
+            s.variability_t,
+            s.variability_m,
+            s.highland_jitter,
+        ]
+    }
+
+    /// Where every step is 1, the generation's grids are the per-pixel
+    /// sampling itself, bit for bit.
+    #[test]
+    fn climate_grids_at_step_one_are_the_exact_sampling() {
+        let p = params(5, "terran");
+        let sampler = Sampler::new(&p);
+        let grids = ClimateGrids::new(&sampler, p.width, p.height);
+        assert!(grids.fields.iter().all(Option::is_none));
+        for y in 0..p.height {
+            for x in 0..p.width {
+                let (a, b) = (grids.sample(&sampler, x, y), sampler.sample(x, y));
+                assert_eq!(
+                    climate_of(&a).map(f32::to_bits),
+                    climate_of(&b).map(f32::to_bits)
+                );
+                assert_eq!(a.elevation.to_bits(), b.elevation.to_bits());
+            }
+        }
+    }
+
+    /// On a large map, each climate field read from its coarse grid stays
+    /// within 1 % of its range of the field sampled at the pixel: the right
+    /// field in the right place.
+    #[test]
+    fn coarse_climate_grids_follow_each_exact_field() {
+        // At 8192 pixels every field is coarse: the variability fields'
+        // finest octave spans 13.6 pixels (step 2).
+        let p = WorldParams {
+            width: 8192,
+            height: 4096,
+            ..params(11, "terran")
+        };
+        let sampler = Sampler::new(&p);
+        let grids = ClimateGrids::new(&sampler, p.width, p.height);
+        assert!(grids.fields.iter().all(Option::is_some));
+        let mut worst = [0.0f32; ClimateField::COUNT];
+        for y in (0..p.height).step_by(73) {
+            for x in (0..p.width).step_by(59) {
+                let (a, b) = (grids.sample(&sampler, x, y), sampler.sample(x, y));
+                for (k, (u, v)) in climate_of(&a).iter().zip(climate_of(&b)).enumerate() {
+                    worst[k] = worst[k].max((u - v).abs());
+                }
+                assert_eq!(a.elevation.to_bits(), b.elevation.to_bits());
+            }
+        }
+        // fbm spans about [-0.7, 0.7].
+        assert!(worst.iter().all(|&w| w < 0.01), "{worst:?}");
     }
 
     #[test]

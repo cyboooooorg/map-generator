@@ -13,6 +13,7 @@
 //! The grid is equirectangular like the map: nodes evenly spaced in
 //! longitude (wrapping round), and in latitude from the first row's centre
 //! to the last one's.
+use crate::geo::Grid;
 use rayon::prelude::*;
 
 /// Nodes per wavelength of the finest octave, at least. Perlin noise
@@ -43,23 +44,19 @@ pub struct CoarseField {
 
 impl CoarseField {
     /// Samples `field` (of a point on the unit sphere) on nodes about
-    /// `step` pixels apart, for a `width` × `height` map.
-    pub fn new(width: u32, height: u32, step: u32, field: impl Fn([f64; 3]) -> f32 + Sync) -> Self {
-        let (w, h) = (f64::from(width), f64::from(height));
-        let nx = (width as usize).div_ceil(step as usize).max(4);
-        let ny = ((height as usize - 1).div_ceil(step as usize) + 1).max(2);
+    /// `step` pixels apart, over the map of `grid`, with its own mapping of
+    /// pixels to the sphere.
+    pub fn new(grid: &Grid, step: u32, field: impl Fn([f64; 3]) -> f32 + Sync) -> Self {
+        let (w, h) = (f64::from(grid.width), f64::from(grid.height));
+        let nx = (grid.width as usize).div_ceil(step as usize).max(4);
+        let ny = ((grid.height as usize - 1).div_ceil(step as usize) + 1).max(2);
         let sx = w / nx as f64;
         let sy = (h - 1.0) / (ny - 1) as f64;
         let values = (0..nx * ny)
             .into_par_iter()
             .map(|k| {
                 let (i, j) = (k % nx, k / nx);
-                // A node at a fractional pixel position: the pixel centres'
-                // mapping of Sampler::sample.
-                let lon = (i as f64 * sx + 0.5) / w * std::f64::consts::TAU;
-                let lat =
-                    std::f64::consts::FRAC_PI_2 - (j as f64 * sy + 0.5) / h * std::f64::consts::PI;
-                field([lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()])
+                field(grid.unit_vector_at(i as f64 * sx, j as f64 * sy))
             })
             .collect();
         Self {
@@ -71,7 +68,10 @@ impl CoarseField {
         }
     }
 
-    /// The field at pixel `(x, y)`.
+    /// The field at pixel `(x, y)`. Catmull-Rom splines overshoot the
+    /// nodes slightly (by well under the field's own error, see the tests):
+    /// the climate's consumers scale the fields linearly and clamp what
+    /// they derive from them.
     pub fn at(&self, x: u32, y: u32) -> f32 {
         let (u, v) = (f64::from(x) / self.sx, f64::from(y) / self.sy);
         let (i, j) = (u.floor(), v.floor());
@@ -140,14 +140,16 @@ mod tests {
                     octaves,
                 )
             };
-            let coarse = CoarseField::new(width, height, step, field);
+            let grid = Grid {
+                width,
+                height,
+                circumference_km: 40_075.0,
+            };
+            let coarse = CoarseField::new(&grid, step, field);
             let mut worst = 0.0f32;
             for y in (0..height).step_by(7) {
                 for x in (0..width).step_by(5) {
-                    let lon = (f64::from(x) + 0.5) / f64::from(width) * std::f64::consts::TAU;
-                    let lat = std::f64::consts::FRAC_PI_2
-                        - (f64::from(y) + 0.5) / f64::from(height) * std::f64::consts::PI;
-                    let exact = field([lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()]);
+                    let exact = field(grid.unit_vector_at(f64::from(x), f64::from(y)));
                     worst = worst.max((coarse.at(x, y) - exact).abs());
                 }
             }
