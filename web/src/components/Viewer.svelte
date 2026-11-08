@@ -39,7 +39,7 @@
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
+  import { hillReach, hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
   import { dialFigureText, formatDialAngle, hostCompass as hostCompassOf, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -1238,7 +1238,6 @@
   $effect(() => view?.setStarPlace(sysSky?.star ?? null));
   // Far enough out to see the moons of the shown body's planet whole.
   const reach = $derived(sys && sysBody ? systemReach(sys, sysBody.id) : null);
-  $effect(() => view?.setGlobeReach(reach ?? 0));
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   /**
@@ -1331,11 +1330,14 @@
   // The Hill sphere: the body's own, or its host planet's from a moon (round
   // the planet as it stands in the moon's sky).
   const hill = $derived(sys && sysBody ? hillSphere(sys, sysBody.id) : null);
-  $effect(() => {
+  const hillDrawn = $derived.by(() => {
     const k = hill && sysBody?.parent && sysSky ? sysSky.ids.indexOf(hill.id) : -1;
     const centre: [number, number, number] | null = !hill ? null : k >= 0 ? (sysSky?.bodies[k]?.position ?? null) : sysBody?.parent ? null : [0, 0, 0];
-    view?.setHillSphere(hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null);
+    return hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null;
   });
+  $effect(() => view?.setHillSphere(hillDrawn));
+  // With the Hill sphere on, the camera may go out to see it whole.
+  $effect(() => view?.setGlobeReach(Math.max(reach ?? 0, hillDrawn ? hillReach(hillDrawn.centre, hillDrawn.radius) : 0)));
   // The body shown's own orbit dashed: the body slides along it.
   $effect(() => view?.setSkyOrbits(skyOrbitLoops, orbitKept.map((k) => k === sysSky?.ownOrbit)));
   // A moon goes round its orbit 2^speed times every ORBIT_SECONDS while
