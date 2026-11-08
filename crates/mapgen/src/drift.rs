@@ -107,6 +107,10 @@ mod tests {
             planet: Some(planet.into()),
             seed: Some(11),
             sea_level: Some(0.3),
+            // Pinned: a random small or airless draw would lose the plates
+            // of a plate preset (see `crate::geology::regime_of`).
+            circumference_km: Some(40_000.0),
+            pressure_bar: Some(1.0),
             width: Some(1024),
             height: Some(512),
             moons: Some(MoonsMode::None),
