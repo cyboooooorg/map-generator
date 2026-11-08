@@ -66,6 +66,7 @@ bit-identical: the same output bytes as before for every test world.
 | X2a  | Done       | See X1                                                                                                                                  |
 | P2   | Dropped    | The clone is the `world.png` buffer itself                                                                                              |
 | P3   | Dropped    | Covered by X1's cap of four files at a time                                                                                             |
+| N2   | Done       | Noise 3.29 → 1.90 s at 4096 × 2048 (−15 % in total), 9.37 → 7.15 s at 8192 × 4096 (−10 %), on 4 threads (see below)                    |
 | S1   | Not needed | Already in place: moons are sized by their radius (at least 512 × 256, `MOON_MIN_WIDTH`), siblings at 512 × 256                         |
 
 All the items together, `main` at `50aa128` (before) against `6c8acdf`
@@ -84,6 +85,22 @@ N1 shows that the Perlin share of the profile overstates what faster noise
 alone gains: N2 and X3 stay to be measured before they are kept. P1, E2
 and X2 (b) are left for later (P1 means reordering the export, E2 and
 X2 (b) change the output).
+
+N2 was done on 2026-11-08 (format version 15), on the five climate fields
+of the map point only: moisture, temperature anomaly, the two variability
+fields and the highland jitter (21 Perlin calls a pixel). The domain warp
+and the volcanic zones stay per pixel: they are read at the plates'
+origin of the crust, which jumps across plate boundaries, and the volcanic
+zones place the cones. Each field takes its own step, about a sixth of
+its finest octave's wavelength (`coarse::step_for`), and Catmull-Rom
+splines instead of bilinear interpolation, so biome borders stay smooth
+curves. On 9 worlds at 4096 × 2048 (terran ×5, volcanic, frozen,
+caustic, a small barren body): land unchanged, every biome's share of the
+land within 0.1 point, 0.00–0.10 % of land pixels changing biome,
+temperature within 0.07 °C. Which fields go coarse depends on the map:
+at 1920 × 1080 the moisture and the anomaly (steps 4 and 10); at 4096 ×
+2048 the highland jitter too; from about 7 300 pixels of width the two
+variability fields as well (step 2 at 8192).
 
 ## Findings
 

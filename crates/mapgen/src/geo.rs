@@ -45,7 +45,25 @@ impl Grid {
 
     /// Latitude of row `y` in radians: `+π/2` at row 0 (north), `-π/2` at the bottom.
     pub fn latitude(&self, y: u32) -> f64 {
-        PI / 2.0 - (y as f64 + 0.5) / self.height as f64 * PI
+        self.latitude_at(y as f64)
+    }
+
+    /// Latitude of a fractional row `y` (pixel centres at whole rows), in
+    /// radians: the mapping of [`Self::latitude`].
+    pub fn latitude_at(&self, y: f64) -> f64 {
+        PI / 2.0 - (y + 0.5) / self.height as f64 * PI
+    }
+
+    /// Longitude of a fractional column `x` (pixel centres at whole
+    /// columns), in radians from 0 to 2π.
+    pub fn longitude_at(&self, x: f64) -> f64 {
+        (x + 0.5) / self.width as f64 * 2.0 * PI
+    }
+
+    /// The point of the unit sphere at fractional column `x`, row `y`.
+    pub fn unit_vector_at(&self, x: f64, y: f64) -> [f64; 3] {
+        let (lon, lat) = (self.longitude_at(x), self.latitude_at(y));
+        [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()]
     }
 
     /// East-west size of a pixel on row `y`, in km. Shrinks towards the poles.

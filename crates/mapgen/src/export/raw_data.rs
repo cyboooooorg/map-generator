@@ -41,8 +41,11 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// generator changes what a stored world means (its biomes, seasons or
 /// temperatures): a world is read as the current format or not at all, see
 /// [`MIN_FORMAT_VERSION`]. Version 14 dropped the code that re-derived
-/// older worlds.
-pub const FORMAT_VERSION: u32 = 14;
+/// older worlds. Version 15 samples the smooth climate noise fields on a
+/// coarser grid and interpolates them (see [`crate::coarse`]): the same
+/// seed gives slightly different worlds from then on; version 14 worlds
+/// are still read as they are.
+pub const FORMAT_VERSION: u32 = 15;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
