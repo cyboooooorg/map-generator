@@ -218,6 +218,12 @@ fn ice_shape(lat: f32) -> f32 {
     (-398.0 + 0.188 * phi.powi(2) - 1.2e-5 * phi.powi(4)) / 398.0
 }
 
+/// Colour of the white ovals, sRGB.
+const OVAL_COLOUR: [f32; 3] = [0.97, 0.95, 0.9];
+/// Colour of the bright arms of a polar cyclone, sRGB (the brightest of
+/// `polar_look`).
+const CYCLONE_COLOUR: [f32; 3] = [0.96, 0.93, 0.86];
+
 /// One band of latitude, from `south` to `north` (degrees).
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Band {
@@ -714,7 +720,7 @@ impl Look {
                             lat,
                             half_lon: size * 1.6,
                             half_lat: size,
-                            colour: [0.97, 0.95, 0.9],
+                            colour: OVAL_COLOUR,
                             companion: false,
                         });
                     }
@@ -868,6 +874,25 @@ impl Look {
         look.info.wind_east = look.info.wind_profile.iter().copied().fold(0.0, f32::max);
         look.info.wind_west = -look.info.wind_profile.iter().copied().fold(0.0, f32::min);
         look
+    }
+
+    /// The colour the biome legend gives the storms: that of the largest
+    /// storm of the giant (the great spot when it has one, else the white
+    /// ovals), the polar cyclones' only when they are its only storms, and
+    /// the palette's storm colour when it has none.
+    pub fn storm_colour(&self) -> [f32; 3] {
+        let area = |s: &Storm| s.half_lon * s.half_lat;
+        if let Some(storm) = self
+            .storms
+            .iter()
+            .max_by(|a, b| area(a).total_cmp(&area(b)))
+        {
+            storm.colour
+        } else if self.poles.iter().any(|p| p.central) {
+            CYCLONE_COLOUR
+        } else {
+            self.info.palette.storm
+        }
     }
 
     /// The latitudes (degrees) of the edges of the bands, from the south
@@ -1241,15 +1266,18 @@ pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
 }
 
 /// The colours of the band biomes of the giant world `p`, sRGB bytes, for
-/// its `world.json` biome table; `None` for a rocky world.
+/// its `world.json` biome table; `None` for a rocky world. The storm colour
+/// is that of the giant's largest storm ([`Look::storm_colour`]), so the
+/// legend shows what is drawn.
 pub fn biome_colours(p: &WorldParams) -> Option<[(Biome, [u8; 3]); 4]> {
     let mass = p.giant_mass_earth?;
-    let palette = Look::draw(p, mass).info.palette;
+    let look = Look::draw(p, mass);
+    let palette = look.info.palette;
     let byte = |c: [f32; 3]| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
     Some([
         (Biome::GiantZone, byte(palette.zone)),
         (Biome::GiantBelt, byte(palette.belt)),
-        (Biome::GiantStorm, byte(palette.storm)),
+        (Biome::GiantStorm, byte(look.storm_colour())),
         (Biome::GiantPolar, byte(palette.polar)),
     ])
 }
@@ -1459,6 +1487,43 @@ mod tests {
                     );
                 }
                 last = look.wind;
+            }
+        }
+    }
+
+    #[test]
+    fn the_storm_legend_shows_the_colour_of_the_largest_storm() {
+        let byte = |c: [f32; 3]| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+        let storm_of = |p: &WorldParams| {
+            biome_colours(p)
+                .unwrap()
+                .into_iter()
+                .find(|(b, _)| *b == Biome::GiantStorm)
+                .unwrap()
+                .1
+        };
+        let (mut with, mut without) = (0, 0);
+        for seed in 0..60 {
+            let p = params("gas-giant", seed, 317.8, 5.2);
+            let look = Look::draw(&p, 317.8);
+            if look.info.great_spot {
+                // The spot is the largest storm: its palette colour.
+                assert_eq!(storm_of(&p), byte(look.info.palette.storm), "seed {seed}");
+                with += 1;
+            } else {
+                // Only the white ovals: the colour they are drawn in.
+                assert_eq!(storm_of(&p), byte([0.97, 0.95, 0.9]), "seed {seed}");
+                without += 1;
+            }
+        }
+        assert!(with > 5 && without > 5, "{with} {without}");
+        // An ice giant with a dark spot shows the spot's colour; one without
+        // any storm falls back to its polar cyclones or its palette.
+        for seed in 0..40 {
+            let p = params("ice-giant", seed, 17.1, 30.0);
+            let look = Look::draw(&p, 17.1);
+            if look.info.great_spot {
+                assert_eq!(storm_of(&p), byte(look.info.palette.storm));
             }
         }
     }
