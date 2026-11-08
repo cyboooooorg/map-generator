@@ -268,8 +268,8 @@ of a giant (`Look::draw`), then samples it on every pixel:
    [`giant_clouds.rs`](../../crates/mapgen/src/giant_clouds.rs) turns
    $T_\text{eff}$ into a class (`Clouds::of`). Classes I to III come from
    cloud decks. The temperature profile is a dry adiabat,
-   $T = 1.32\,T_\text{eff}\,P^{2/7}$ with $P$ in bar (1.32 is Jupiter's
-   165 K at 1 bar over its $T_\text{eff}$). A deck forms where its gas
+   $T = 1.31\,T_\text{eff}\,P^{2/7}$ with $P$ in bar (1.31 is Jupiter's
+   165 K at 1 bar over its $T_\text{eff}$ of 125.6 K). A deck forms where its gas
    reaches saturation: ammonia, ammonium hydrosulphide and water, each with
    the Sun's nitrogen, sulphur and oxygen (Asplund et al. 2009). A deck
    that still reaches the tropopause, taken at 0.085 bar, is a top deck:
@@ -288,7 +288,7 @@ of a giant (`Look::draw`), then samples it on every pixel:
    scales with the energy the giant radiates, $F = \sigma T_\text{eff}^4$,
    and with $\beta = 2\Omega/R$:
    $U = U_0\,(F/F_0)^{2/5}\,(\beta/\beta_0)^{-1/5}$. The reference is
-   Jupiter's (100 m/s, 13.7 W/m²) for a gas giant and an ice giant's
+   Jupiter's (100 m/s, 14.1 W/m², Li et al. 2018) for a gas giant and an ice giant's
    (300 m/s, a $T_\text{eff}$ of 60 K, Neptune's $\beta$) for an ice giant.
    A hot giant takes 2,000 m/s scaled by $T_\text{eq}/1500$ K.
 3. **The bands.** An equatorial zone (±6° to 11° on a gas giant, ±18° to
@@ -326,7 +326,7 @@ The jets, trimmed (from `crates/mapgen/src/giant_world.rs`):
 
 ```rust
 const JUPITER_WIND: f64 = 100.0; // m/s, Jupiter's eddies
-const JUPITER_FLUX: f64 = 13.7; // W/m2 radiated
+const JUPITER_FLUX: f64 = 14.098; // W/m2 radiated
 const JET_FACTOR: f64 = 0.45;
 const MAX_MACH: f64 = 0.75;
 
@@ -421,13 +421,15 @@ edges were stored gets evenly spaced bands.
   by eye for each class.
 - **The decks are a rough model.** The composition is the Sun's: no
   methane deck on an ice giant, no enrichment, no water near 40 bar. The
-  profile is a dry adiabat from a 1-bar temperature fixed at 1.32 times
+  profile is a dry adiabat from a 1-bar temperature fixed at 1.31 times
   $T_\text{eff}$, and the tropopause pressure, 0.085 bar, is a knob set so
   that water leaves at 350 K (the profile puts Jupiter's tropopause at
-  81 K, against 110 K). The saturation laws of ammonia and of NH₄SH are
-  not read from the original papers: the NH₄SH one is Lewis (1969) as
-  quoted by Li, Ingersoll & Oyafuso (2018), extended in a straight line outside
-  180 to 300 K, and both are checked only by the bases they give Jupiter.
+  81 K, against about 110 K near 140 mbar, Lindal et al. 1981). The
+  saturation laws of ammonia and of NH₄SH are not read from the original
+  papers: the NH₄SH one is Lewis (1969) as quoted by Li, Ingersoll &
+  Oyafuso (2018), extended in a straight line outside 180 to 300 K (a
+  range the app chose, not the paper's), and both are checked only by the
+  bases they give Jupiter.
   The relief of classes IV and V (0.5) and the 100 K blends are
   calibrations.
 - **Class boundaries.** The model puts the end of class I at about 205 K,
@@ -444,9 +446,7 @@ edges were stored gets evenly spaced bands.
   (2003) for 1 to 10.5 Jupiter masses, so Saturn comes out at 59 K, under
   its real internal heat (helium rain is not modelled), and ice giants keep
   a fixed 40 K, a calibration, against the very different heat of Uranus and
-  Neptune. The Jupiter references use 13.7 W/m² radiated and a $T_\text{eff}$
-  of 124.7 K; adding Li et al.'s absorbed and internal heat gives 14.1 W/m²
-  and 125.6 K, 3 % apart.
+  Neptune.
 - **Only the cloud tops.** The app has nothing below them, so the reversal
   Juno sees below 4 to 10 bar never shows. It would matter only in a view of
   the depths, which the app does not have.
