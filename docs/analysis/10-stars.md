@@ -214,7 +214,7 @@ clamped and the world card marks the value as extrapolated.
   take the star's colour, white-balanced on the Sun (an Earth eye), so a
   Sun-like star changes nothing and a red dwarf turns the day side
   orange and the sky less blue. The base colours stay those of the
-  usual maps (`world.png`, `surface.png`).
+  usual maps (`world.png`, `colour.png`).
 - **World card:** star type and temperature, luminosity, distance in AU,
   insolation (× Earth), position in the habitable zone (inside, too
   close, too far), equilibrium temperature, year length, apparent size
