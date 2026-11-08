@@ -40,7 +40,7 @@
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
   import { hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
-  import { dialFigureText, formatDialAngle, rotationDial } from '../lib/rotationDial';
+  import { dialFigureText, formatDialAngle, hostCompass as hostCompassOf, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
   import {
@@ -193,6 +193,8 @@
     hostLink: false,
     // The ring round the body shown, graduated in degrees, reading its turn.
     rotationDial: false,
+    // The same round the host planet in a moon's sky, following the moon.
+    hostCompass: false,
     // While the clock plays: the camera stays still against the sky, the
     // globe turning under it, or turns with the body (always the same
     // face, the sky turning). A new key: the former cameraFollowsSky
@@ -272,6 +274,7 @@
   let spinDirection = $state(saved.spinDirection);
   let hostLink = $state(saved.hostLink);
   let dialShown = $state(saved.rotationDial);
+  let hostCompassShown = $state(saved.hostCompass);
   let cameraOnBody = $state(saved.cameraOnBody);
   let cameraOnLockedBody = $state(saved.cameraOnLockedBody);
   $effect(() => view?.setSpinAxes(axesShown));
@@ -516,6 +519,7 @@
       spinDirection,
       hostLink,
       rotationDial: dialShown,
+      hostCompass: hostCompassShown,
       cameraOnBody,
       cameraOnLockedBody,
       skyLabels,
@@ -993,6 +997,47 @@
   });
   /** The pointer's reading on the ring: whole degrees, signed tenths for a locked body. */
   const dialReading = $derived(dial ? formatDialAngle(dial.state.reading, dial.state.locked, formatNumber) : '');
+  /**
+   * The host planet's compass, while its switch is on: the host's own
+   * rotation dial (see lib/rotationDial), drawn round it in the moon's sky,
+   * with the moon shown as the only body on it.
+   */
+  const hostCompass = $derived.by(() => {
+    if (!hostCompassShown || !sys || !sysBody?.parent || !sysSky) return null;
+    const index = sysSky.ids.indexOf(sysBody.parent);
+    const dial = index < 0 ? null : hostCompassOf(sys, sysBody.id, sysDays);
+    return dial ? { index, dial } : null;
+  });
+  $effect(() => view?.setHostCompass(hostCompass ? { index: hostCompass.index, state: hostCompass.dial.state } : null));
+  /** The compass's names and readings: the pointer's, the star's and the moon's. */
+  const hostCompassLabels = $derived.by((): { at: { x: number; y: number } | null; label: SkyLabel }[] => {
+    const at = skyPositions?.hostDial;
+    if (!hostCompass || !at || !sys || !sysBody) return [];
+    const { state } = hostCompass.dial;
+    const degrees = (radians: number) => formatDialAngle(radians, true, formatNumber);
+    const out: { at: { x: number; y: number } | null; label: SkyLabel }[] = [
+      {
+        at: at.pointer,
+        label: {
+          name: formatDialAngle(state.reading, state.locked, formatNumber),
+          detail: state.locked ? t.viewer.dialPointerLocked : t.viewer.dialPointerFree,
+        },
+      },
+    ];
+    if (state.sun) {
+      out.push({
+        at: at.sun,
+        label: { name: world.systemNames['star'] ?? sys.star.designation, detail: t.viewer.dialHeight({ angle: degrees(state.sunAltitude) }) },
+      });
+    }
+    state.bodies.forEach((b, k) => {
+      out.push({
+        at: at.bodies[k] ?? null,
+        label: { name: world.systemNames[sysBody.id] ?? sysBody.designation, detail: t.viewer.dialHeight({ angle: degrees(b.altitude) }) },
+      });
+    });
+    return out;
+  });
   /** The dial's figures, two lines for the Light and season panel. */
   const dialLines = $derived.by((): [string, string] | null => {
     if (!dial) return null;
@@ -1299,7 +1344,7 @@
     const current = view;
     if (!current) return;
     // The guides' labels (spin, host) follow with the spin axes, the dial's with the dial.
-    const follow = scopeOn(labelScope) || spinDirection || hostLink || hostSpinDirection || scopeOn(smallScope) || dial !== null;
+    const follow = scopeOn(labelScope) || spinDirection || hostLink || hostSpinDirection || scopeOn(smallScope) || dial !== null || hostCompass !== null;
     current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
     if (!follow) skyPositions = null;
     return () => {
@@ -1585,6 +1630,9 @@
         : []),
       ...(sys && sysBody
         ? [{ key: 'dial', label: t.viewer.rotationDial, help: t.viewer.rotationDialHelp, icon: 'dial' as const, on: dialShown, set: (v: boolean) => (dialShown = v) }]
+        : []),
+      ...(hasHost && sys
+        ? [{ key: 'hostCompass', label: t.viewer.hostCompass, help: t.viewer.hostCompassHelp, icon: 'dial' as const, on: hostCompassShown, set: (v: boolean) => (hostCompassShown = v) }]
         : []),
       {
         key: 'hexes',
@@ -2105,18 +2153,23 @@
         ...guides.map((g) => skyPositions!.guides[g.key]),
         ...marks,
         ...dialLabels.map((d) => d.at),
+        ...hostCompassLabels.map((d) => d.at),
       ]}
       labels={[
         ...skyLabelList,
         ...guides.map((g) => g.label),
         ...smallLabels.slice(0, marks.length),
         ...dialLabels.map((d) => d.label),
+        ...hostCompassLabels.map((d) => d.label),
       ]}
       star={labelScope.stellar ? skyPositions.star : null}
       {starLabel}
     />
     {#if dial && skyPositions.dial}
       <DialLabels ticks={skyPositions.dial.ticks} arcTicks={skyPositions.dial.arcTicks} />
+    {/if}
+    {#if hostCompass && skyPositions.hostDial}
+      <DialLabels ticks={skyPositions.hostDial.ticks} arcTicks={skyPositions.hostDial.arcTicks} />
     {/if}
   {/if}
   {#if world.subject === 'star' && (worldId || sys)}
