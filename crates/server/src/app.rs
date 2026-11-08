@@ -1463,7 +1463,16 @@ mod tests {
     async fn previews_plates_at_other_epochs() {
         let config = temp_config("drift");
         let app = router(config);
-        let (plates, planet) = generated_planet(&app, "terran", 5, "").await;
+        // Size and air pinned: a random small or thin-air draw would turn
+        // the plates into a stagnant lid (see `mapgen::geology::regime_of`)
+        // and the route would answer 404.
+        let (plates, planet) = generated_planet(
+            &app,
+            "terran",
+            5,
+            r#", "circumference_km": 40000, "pressure_bar": 1.0"#,
+        )
+        .await;
         let (dry, rock) = generated_planet(&app, "examples/mercury-like.toml", 6, "").await;
         let get = |uri: String| {
             let app = app.clone();
