@@ -525,7 +525,16 @@ impl MoonSystem {
         // lies beyond its Hill sphere: every moon spirals in, the heavy
         // ones first. Only those light enough to outlast the system's age
         // remain (Barnes & O'Brien 2002, eq. 8, see `lasting_moon_kg`).
-        let despun = crate::spin::despun(&star);
+        // A planet of the star is despun when `star_info` locks it or puts
+        // it in a resonance, which also honours a stored world's lock and
+        // resonance. A moon's world is never so against the star, and keeps
+        // the despinning time alone.
+        let bound_to_star = !is_moon_world(p) && crate::exomoon::HostGiant::draw(p).is_none();
+        let despun = if bound_to_star {
+            star.tidally_locked || star.spin_turns > 0.0
+        } else {
+            crate::spin::despun(&star)
+        };
         let star_day = despun.then(|| {
             let turns = if star.spin_turns > 0.0 {
                 f64::from(star.spin_turns)
@@ -1751,6 +1760,33 @@ mod tests {
             }
         }
         assert!(checked > 600, "{checked}");
+    }
+
+    #[test]
+    fn a_stored_lock_sets_the_moon_system_s_day() {
+        // A world stored as locked turns once a year, even where its star
+        // would not despin it now; one stored as free keeps a day of its
+        // own (drawn, or its largest moon's), even where its star would.
+        let mut earth = params(1, 40_075.0);
+        earth.locked_to_star = Some(true);
+        let year_h = crate::spin::star_info(&earth).year_days * 24.0;
+        let day = MoonSystem::draw(&earth).unwrap().planet_day_hours;
+        assert!(
+            (day - year_h).abs() < 1e-3 * year_h,
+            "{day} h, year {year_h} h"
+        );
+
+        let mut dwarf = params(1, 40_075.0);
+        dwarf.star = crate::star::parse_type("M5V").unwrap();
+        dwarf.orbit_au = crate::star::orbit_at(dwarf.star, 0.5);
+        assert!(crate::spin::despun(&crate::spin::star_info(&dwarf)));
+        dwarf.locked_to_star = Some(false);
+        let year_h = crate::spin::star_info(&dwarf).year_days * 24.0;
+        let day = MoonSystem::draw(&dwarf).unwrap().planet_day_hours;
+        assert!(
+            (day - year_h).abs() > 0.01 * year_h,
+            "{day} h, year {year_h} h"
+        );
     }
 
     #[test]
