@@ -776,7 +776,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   The cold-current calibration: sea within 2 000 km west of land in the
   same row at 1°, anomaly against the sea mean of its row, annual mean,
   both hemispheres pooled (20-30°: -0.9 K north, -2.1 K south by a
-  second reading, by the review, with the SST package's own land mask), land mask of the
+  second reading, with the SST package's own land mask), land mask of the
   NCEP/NCAR reanalysis.
 - **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
   narrower Hadley cells under heavier atmospheres, without a scaling the

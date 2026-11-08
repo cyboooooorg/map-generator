@@ -307,7 +307,8 @@ const STEFAN_BOLTZMANN: f64 = 5.670_374e-8;
 /// temperature `teq_k`, Earth days: `t_rad = c_p p_s / (g σ T_eq³)` (Koll &
 /// Abbot 2016, doi:10.3847/0004-637X/825/2/99, who define it so; Showman &
 /// Guillot 2002, doi:10.1051/0004-6361:20020101, give the same column
-/// scaling). 126 days for Earth (1 bar, 9.8 m/s², 255 K), 0 for no air.
+/// scaling with a factor 4 in the denominator). 126 days for Earth (1 bar,
+/// 9.8 m/s², 255 K), 0 for no air.
 pub fn radiative_time_days(pressure_bar: f32, gravity: f32, teq_k: f32) -> f64 {
     let (p, g, t) = (
         f64::from(pressure_bar.max(0.0)) * 1e5,
@@ -324,7 +325,8 @@ pub fn radiative_time_days(pressure_bar: f32, gravity: f32, teq_k: f32) -> f64 {
 /// temperature gradients: "temperature gradients are large when t_wave/t_rad
 /// ≳ O(10⁻²)" and small for much less (Koll & Abbot 2016,
 /// doi:10.3847/0004-637X/825/2/99, Section 6, for dry tidally locked
-/// planets of 0.1 to 10 bar; applied here to the air of any slow rotator).
+/// planets of 0.1 to 10 bar in a steady state; applied here to the air of
+/// any slow rotator, whose day cycles, an extrapolation).
 const WAVE_TO_RADIATIVE_THRESHOLD: f64 = 1e-2;
 /// Gas constant of air, J/kg/K.
 const AIR_R: f64 = 287.0;
