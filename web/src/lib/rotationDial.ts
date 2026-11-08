@@ -207,7 +207,8 @@ export interface FigureFormat {
   number?: (value: number, digits: number) => string;
 }
 
-const plainNumber = (value: number, digits: number) => value.toFixed(digits);
+/** `toFixed`, but a negative number rounded to zero prints 0, never "-0.0". */
+const plainNumber = (value: number, digits: number) => value.toFixed(digits).replace(/^-(0(\.0*)?)$/, '$1');
 
 /**
  * A local time in hours [0, 24) as `HH:MM`: rounded to the second, then

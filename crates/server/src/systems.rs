@@ -9,7 +9,8 @@
 //! ```
 //!
 //! The library reads only what its summaries need from `system.json`; the
-//! system itself is `mapgen::system`'s.
+//! system itself is `mapgen::system`'s. The server lists systems from its
+//! index (see [`crate::index`]), which scans this tree.
 use crate::api::SystemSummary;
 use crate::staging;
 use serde::Deserialize;
@@ -152,7 +153,7 @@ pub fn given_names(root: &Path, id: &str) -> GivenNames {
 }
 
 /// Modification time of a file in milliseconds since the Unix epoch.
-fn modified_ms(path: &Path) -> Option<u64> {
+pub fn modified_ms(path: &Path) -> Option<u64> {
     let modified = std::fs::metadata(path).ok()?.modified().ok()?;
     Some(
         modified
@@ -176,10 +177,10 @@ pub fn body_params(root: &Path, id: &str, body: &str) -> Option<mapgen::world::W
     Some(mapgen::system::world_params(body))
 }
 
-/// Reads one system's summary from its `system.json` and `names.json`.
-pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
-    let file = system_dir(root, id).join(SYSTEM_FILE);
-    let meta: Meta = serde_json::from_slice(&std::fs::read(&file).ok()?).ok()?;
+/// A system's summary from the bytes of its `system.json` (modified at
+/// `modified_ms`); the names are the index's to fill in.
+pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummary> {
+    let meta: Meta = serde_json::from_slice(json).ok()?;
     let mut planets: BTreeMap<String, u32> = BTreeMap::new();
     for body in meta.bodies.iter().filter(|b| b.kind == "planet") {
         *planets.entry(body.preset.clone()).or_default() += 1;
@@ -216,27 +217,20 @@ pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
                 periapsis_deg: (b.orbit.node_deg + b.orbit.periapsis_deg).rem_euclid(360.0),
             })
             .collect(),
-        names: given_names(root, id),
-        modified_ms: modified_ms(&file).unwrap_or(0),
+        names: GivenNames::new(),
+        modified_ms,
     })
 }
 
-/// Every system under `root`, most recently drawn first.
-pub fn list(root: &Path) -> Vec<SystemSummary> {
+/// The ids of the systems under `root`: directories with a valid name.
+pub fn system_ids(root: &Path) -> Vec<String> {
     let Ok(read) = std::fs::read_dir(root) else {
         return Vec::new();
     };
-    let mut systems: Vec<SystemSummary> = read
-        .flatten()
-        .filter_map(|entry| {
-            let id = entry.file_name().to_string_lossy().into_owned();
-            is_valid_system_id(&id)
-                .then(|| summary(root, &id))
-                .flatten()
-        })
-        .collect();
-    systems.sort_by_key(|s| std::cmp::Reverse(s.modified_ms));
-    systems
+    read.flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|id| is_valid_system_id(id))
+        .collect()
 }
 
 /// Removes what a killed server left: unfinished systems under `root`,
@@ -278,17 +272,25 @@ fn checked_name(name: &str) -> Result<String, NamingError> {
     Ok(trimmed.to_string())
 }
 
-/// Gives the bodies of system `id` the names `given`, replacing those
-/// they had, and returns its summary. No names at all removes the file.
-pub fn give_names(root: &Path, id: &str, given: &GivenNames) -> Result<SystemSummary, NamingError> {
-    let current = summary(root, id).ok_or(NamingError::NotFound)?;
+/// Checks the names to give to the bodies of a system (`current`: its
+/// bodies, the star is always there) and returns them trimmed.
+pub fn checked_names(
+    current: &[crate::api::BodySummary],
+    given: &GivenNames,
+) -> Result<GivenNames, NamingError> {
     let mut names = GivenNames::new();
     for (body, name) in given {
-        if body != STAR && !current.bodies.iter().any(|b| &b.id == body) {
+        if body != STAR && !current.iter().any(|b| &b.id == body) {
             return Err(NamingError::NoSuchBody(body.clone()));
         }
         names.insert(body.clone(), checked_name(name)?);
     }
+    Ok(names)
+}
+
+/// Writes `names.json` of system `id` (the tree stays self-sufficient
+/// beside the index); no names at all removes the file.
+pub fn write_names_file(root: &Path, id: &str, names: &GivenNames) -> Result<(), NamingError> {
     let path = system_dir(root, id).join(NAMES_FILE);
     let io = |e: std::io::Error| NamingError::Io(e.to_string());
     if names.is_empty() {
@@ -299,11 +301,11 @@ pub fn give_names(root: &Path, id: &str, given: &GivenNames) -> Result<SystemSum
     } else {
         // Written aside, then renamed: a reader never sees half a file.
         let temp = system_dir(root, id).join(format!(".{NAMES_FILE}.tmp"));
-        let json = serde_json::to_vec_pretty(&names).map_err(|e| NamingError::Io(e.to_string()))?;
+        let json = serde_json::to_vec_pretty(names).map_err(|e| NamingError::Io(e.to_string()))?;
         std::fs::write(&temp, json).map_err(io)?;
         std::fs::rename(&temp, &path).map_err(io)?;
     }
-    summary(root, id).ok_or(NamingError::NotFound)
+    Ok(())
 }
 
 /// The fields of a body's `raw_data/world.json` its epochs need.
@@ -411,20 +413,12 @@ mod tests {
 
     #[test]
     fn summaries_count_planets_by_type_and_list_bodies() {
-        let root = temp_root("summary");
-        std::fs::create_dir_all(root.join("mgs-48213-42")).unwrap();
-        std::fs::write(root.join("mgs-48213-42").join(SYSTEM_FILE), SYSTEM).unwrap();
-        // Not a system: no system.json, or an invalid id.
-        std::fs::create_dir_all(root.join("empty-1")).unwrap();
-        std::fs::create_dir_all(root.join(".tmp-mgs-1-1")).unwrap();
-        let listed = list(&root);
-        assert_eq!(listed.len(), 1);
-        let s = &listed[0];
+        let s = summarize("mgs-48213-42", SYSTEM.as_bytes(), 7).unwrap();
         assert_eq!((s.seed, s.width, s.star.as_str()), (42, 1024, "K1V"));
         assert_eq!(s.designation, "MGS 48213");
         assert_eq!(s.planets.get("terran"), Some(&1));
         assert_eq!(s.planets.len(), 3);
-        assert_eq!(s.moons, 1);
+        assert_eq!((s.moons, s.modified_ms), (1, 7));
         let generated: Vec<&str> = s
             .bodies
             .iter()
@@ -441,38 +435,47 @@ mod tests {
             (s.bodies[1].eccentricity, s.bodies[1].periapsis_deg),
             (0.1, 30.0)
         );
+        assert!(summarize("x-1", b"not json", 0).is_none());
+    }
+
+    #[test]
+    fn only_directories_with_a_valid_id_are_systems() {
+        let root = temp_root("ids");
+        std::fs::create_dir_all(root.join("mgs-48213-42")).unwrap();
+        std::fs::create_dir_all(root.join(".tmp-mgs-1-1")).unwrap();
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        assert_eq!(system_ids(&root), ["mgs-48213-42"]);
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
-    fn names_are_given_by_body_id() {
+    fn names_are_checked_and_written_aside() {
         let root = temp_root("names");
         std::fs::create_dir_all(root.join("mgs-48213-42")).unwrap();
-        std::fs::write(root.join("mgs-48213-42").join(SYSTEM_FILE), SYSTEM).unwrap();
+        let bodies = summarize("mgs-48213-42", SYSTEM.as_bytes(), 0)
+            .unwrap()
+            .bodies;
         let given: GivenNames = [
             ("c".into(), " Gaia ".into()),
             ("star".into(), "Helia".into()),
         ]
         .into();
-        let s = give_names(&root, "mgs-48213-42", &given).unwrap();
-        assert_eq!(s.names.get("c").map(String::as_str), Some("Gaia"));
-        assert_eq!(s.names.get("star").map(String::as_str), Some("Helia"));
+        let names = checked_names(&bodies, &given).unwrap();
+        assert_eq!(names.get("c").map(String::as_str), Some("Gaia"));
         let unknown: GivenNames = [("z".into(), "Nyx".into())].into();
         assert_eq!(
-            give_names(&root, "mgs-48213-42", &unknown),
+            checked_names(&bodies, &unknown),
             Err(NamingError::NoSuchBody("z".into()))
         );
         let blank: GivenNames = [("c".into(), "  ".into())].into();
         assert!(matches!(
-            give_names(&root, "mgs-48213-42", &blank),
+            checked_names(&bodies, &blank),
             Err(NamingError::InvalidName(_))
         ));
-        assert_eq!(
-            give_names(&root, "mgs-1-1", &GivenNames::new()),
-            Err(NamingError::NotFound)
-        );
+        write_names_file(&root, "mgs-48213-42", &names).unwrap();
+        assert_eq!(given_names(&root, "mgs-48213-42"), names);
         // No names: the file goes.
-        give_names(&root, "mgs-48213-42", &GivenNames::new()).unwrap();
+        write_names_file(&root, "mgs-48213-42", &GivenNames::new()).unwrap();
         assert!(!root.join("mgs-48213-42").join(NAMES_FILE).exists());
         std::fs::remove_dir_all(root).unwrap();
     }

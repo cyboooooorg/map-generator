@@ -12,6 +12,7 @@
 // (19 with the layers of format version 2), instead of 4-byte floats per
 // layer next to the GPU copies.
 import { CELSIUS_VERSION, celsius } from '../climate';
+import { temperatureSpan } from '../temperatureRange';
 import { decodePng } from './png';
 import { DataUtils } from 'three';
 import type { ScalarLayerInfo } from '../api/types/ScalarLayerInfo';
@@ -39,6 +40,8 @@ export interface WorldLayers {
    * log10(1 + drainage area in km²).
    */
   surface: Uint16Array;
+  /** The coldest and hottest temperatures of the world, °C (see `temperatureSpan`). */
+  temperatureSpan: { min: number; max: number };
   /**
    * Layers of format version 2 and later, null on older worlds (or when a
    * world misses one of them).
@@ -171,7 +174,8 @@ export function decodeLayers(
   // Format version 3 and older stored temperatures on a [0, 1] scale.
   const toCelsius = meta.format_version < CELSIUS_VERSION ? celsius : undefined;
   step(layers.temperature.file);
-  packChannel(surface, SURFACE.temperature, decode16(files.temperature, width, height), layers.temperature, toCelsius);
+  const temperature = decode16(files.temperature, width, height);
+  packChannel(surface, SURFACE.temperature, temperature, layers.temperature, toCelsius);
   step(layers.moisture.file);
   packChannel(surface, SURFACE.moisture, decode16(files.moisture, width, height), layers.moisture);
   step(layers.flow.file);
@@ -186,6 +190,7 @@ export function decodeLayers(
     },
     biomes: biomes instanceof Uint8Array ? owned(biomes, (a) => a.slice()) : Uint8Array.from(biomes),
     surface,
+    temperatureSpan: temperatureSpan(temperature, layers.temperature, toCelsius),
     extra: decodeExtra(meta, files, step),
   };
 }

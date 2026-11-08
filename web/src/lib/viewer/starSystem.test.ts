@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
+import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -242,5 +242,118 @@ describe('star view', () => {
     const grid = sphereGrid(2, 16);
     expect(grid.length).toBe(11 * 16 * 2);
     for (const [x, y, z] of grid) expect(Math.hypot(x, y, z)).toBeCloseTo(2, 10);
+  });
+});
+
+const gapsOf = (at: (au: number) => number, planets: { orbit_au: number; eccentricity: number }[]) =>
+  orbitGaps(planets.map((p) => ({ near: at(p.orbit_au * (1 - p.eccentricity)), far: at(p.orbit_au * (1 + p.eccentricity)) })));
+
+describe('planetary system scale', () => {
+  // Semi-major axes (AU) and eccentricities of two crowded systems.
+  const compact = {
+    star: { hz_inner_au: 1.065, hz_outer_au: 1.873 },
+    planets: [
+      { orbit_au: 0.06957, eccentricity: 0.0638 },
+      { orbit_au: 0.08808, eccentricity: 0.0579 },
+      { orbit_au: 0.15003, eccentricity: 0.052 },
+    ],
+  };
+  const giants = {
+    star: { hz_inner_au: 0.271, hz_outer_au: 0.517 },
+    planets: [
+      [0.0383, 0],
+      [0.0552, 0.0072],
+      [2.266, 0.1068],
+      [3.832, 0.1218],
+      [6.142, 0.0637],
+      [9.263, 0.0154],
+      [13.831, 0.0337],
+    ].map(([orbit_au, eccentricity]) => ({ orbit_au: orbit_au!, eccentricity: eccentricity! })),
+  };
+
+  it('is continuous and increasing, from the star to beyond the farthest orbit', () => {
+    for (const { star, planets } of [compact, giants]) {
+      const at = systemLogScale(star, planets);
+      let last = at(0);
+      expect(last).toBe(0);
+      for (let au = 0.001; au < 40; au *= 1.01) {
+        const r = at(au);
+        expect(r).toBeGreaterThan(last);
+        // No jump: a 1% step in distance moves at most a few hundredths.
+        expect(r - last).toBeLessThan(0.1);
+        last = r;
+      }
+    }
+  });
+
+  it('keeps the innermost orbit off the star and the whole system within reach of the camera', () => {
+    for (const { star, planets } of [compact, giants]) {
+      const at = systemLogScale(star, planets);
+      const inner = Math.min(...planets.map((p) => p.orbit_au * (1 - p.eccentricity)));
+      expect(at(inner)).toBeGreaterThan(STAR_RADIUS * 1.6);
+      expect(at(Math.max(...planets.map((p) => p.orbit_au * (1 + p.eccentricity))))).toBeLessThan(18);
+    }
+  });
+
+  it('spreads a compact inner trio and gives outer giants room', () => {
+    const at = systemLogScale(compact.star, compact.planets);
+    const [b, c, d] = compact.planets.map((p) => at(p.orbit_au));
+    expect(c! - b!).toBeGreaterThan(0.4);
+    expect(d! - c!).toBeGreaterThan(c! - b!);
+    const far = systemLogScale(giants.star, giants.planets);
+    const places = giants.planets.map((p) => far(p.orbit_au));
+    const sizes = markerSizes(
+      giants.planets.map((p) => giantMarkerSize(p.orbit_au > 1 ? 4 : 1)),
+      gapsOf(far, giants.planets),
+    );
+    for (let k = 3; k < places.length; k++) {
+      // At least three marker diameters between neighbouring giants.
+      expect(places[k]! - places[k - 1]!).toBeGreaterThan(3 * 2 * sizes[k]!);
+    }
+  });
+
+  it('keeps the habitable zone in order and in its place', () => {
+    const at = systemLogScale(giants.star, giants.planets);
+    expect(at(giants.star.hz_inner_au)).toBeLessThan(at(giants.star.hz_outer_au));
+    expect(at(giants.star.hz_outer_au)).toBeLessThan(at(giants.planets[2]!.orbit_au));
+  });
+
+  it('draws markers that never overlap, nor the star', () => {
+    for (const { star, planets } of [compact, giants]) {
+      const at = systemLogScale(star, planets);
+      const places = planets.map((p) => at(p.orbit_au));
+      const gaps = gapsOf(at, planets);
+      const sizes = markerSizes(
+        planets.map(() => giantMarkerSize(11)),
+        gaps,
+        planets.map(() => 2.75),
+      );
+      sizes.forEach((size, k) => {
+        // Everything drawn round the planet (rings and halo, 2.75 radii) stays between the orbits,
+        // unless the minimum size forces it (never so in these systems).
+        expect(size * 2.75).toBeLessThanOrEqual(0.5 * gaps[k]! + 1e-9);
+        expect(size).toBeGreaterThanOrEqual(MARKER_MIN);
+        expect(size).toBeLessThanOrEqual(giantMarkerSize(11));
+        expect(places[k]! - size).toBeGreaterThan(STAR_RADIUS);
+        if (k > 0) expect(places[k]! - places[k - 1]!).toBeGreaterThan(size + sizes[k - 1]!);
+      });
+    }
+  });
+
+  it('measures the room between orbit curves, eccentricity included', () => {
+    // Two orbits 1 apart as circles; the inner one's apoapsis reaches 0.3 further out.
+    expect(orbitGaps([{ near: 3, far: 3 }, { near: 4, far: 4 }])[0]).toBeCloseTo(1);
+    expect(orbitGaps([{ near: 3, far: 3.3 }, { near: 4, far: 4 }])[1]).toBeCloseTo(0.7);
+    // The innermost is limited by the star's surface (radius 1).
+    expect(orbitGaps([{ near: 1.6, far: 1.6 }, { near: 5, far: 5 }])[0]).toBeCloseTo(0.6);
+    // Crossing orbits leave no room.
+    expect(orbitGaps([{ near: 3, far: 4 }, { near: 3.5, far: 5 }])).toEqual([0, 0]);
+  });
+
+  it('shrinks a marker to 0.4 of the room, what it draws round it to half, and no further than the minimum', () => {
+    expect(markerSizes([0.2, 0.2], [0.25, 0.25])).toEqual([0.1, 0.1]);
+    expect(markerSizes([0.2], [1], [4])[0]).toBeCloseTo(0.125);
+    expect(markerSizes([0.2, 0.2], [0.001, 0.001])).toEqual([MARKER_MIN, MARKER_MIN]);
+    expect(markerSizes([0.11, 0.11], [3, 6])).toEqual([0.11, 0.11]);
   });
 });

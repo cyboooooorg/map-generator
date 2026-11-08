@@ -115,6 +115,9 @@ pub struct Plates {
     /// Rotation vector of each plate: its Euler pole times its angular
     /// speed, radians per Ma.
     omegas: Vec<[f64; 3]>,
+    /// Speeds of the drift's other stages set by slab pull (see
+    /// [`pull_stages`]), by plate and stage; the drawn ones elsewhere.
+    staged: std::collections::BTreeMap<(usize, i64), [f64; 3]>,
     radius_km: f64,
 }
 
@@ -146,6 +149,7 @@ impl Plates {
             centres,
             weights,
             omegas,
+            staged: std::collections::BTreeMap::new(),
             radius_km,
         }
     }
@@ -225,6 +229,9 @@ impl Plates {
     fn stage_omega(&self, plate: usize, stage: i64) -> [f64; 3] {
         if stage == 0 {
             return self.omegas[plate];
+        }
+        if let Some(&omega) = self.staged.get(&(plate, stage)) {
+            return omega;
         }
         let mut h = mix(u64::from(self.seed) ^ 0x5354_4147_4553);
         for v in [plate as u64, stage as u64] {
@@ -549,6 +556,7 @@ impl PlateMap {
         // edge, found on the present boundaries.
         let present_cells = boundary_cells(&grid, &present, |k| continental(grid.point(k)));
         pull_by_slabs(&mut plates, &present_cells);
+        pull_stages(&mut plates, &present_cells, t_ma);
         let epoch = (t_ma != 0.0).then(|| plates.at_epoch(t_ma));
         // The plate and crust of each cell at the epoch (the crust of the
         // present map is only sampled on its boundaries, below).
@@ -930,41 +938,94 @@ const SLAB_FULL_SHARE: f64 = 0.3;
 /// continental crust, or under the other oceanic plate where that one
 /// rides over: the lower index), keeping its Euler pole. A plate with no
 /// sinking edge turns at the bottom of [`PLATE_SPEED`], one sinking along
-/// [`SLAB_FULL_SHARE`] of its boundary or more at the top. Only the
-/// present stage: the drift's other stages keep their drawn speeds.
+/// [`SLAB_FULL_SHARE`] of its boundary or more at the top. This is the
+/// present stage; [`pull_stages`] does the others.
 fn pull_by_slabs(plates: &mut Plates, cells: &[BoundaryCell]) {
-    let count = plates.count();
+    let speeds = sinking_speeds(plates.count(), cells, |c| {
+        (
+            plates.velocity(usize::from(c.plate), c.point),
+            plates.velocity(usize::from(c.other), c.point),
+            c.across,
+        )
+    });
+    for (k, speed_km) in speeds.into_iter().enumerate() {
+        plates.omegas[k] = at_speed(plates.omegas[k], speed_km, plates.radius_km);
+    }
+}
+
+/// Slab pull for the drift's other stages, out to `t_ma` from the present
+/// (stages [`STAGE_MA`] apart, at most six each way). Calibration of the
+/// geometry, no source: the present boundary cells are carried rigidly
+/// by each plate's rotation to the stage (gaps and overlaps ignored, the
+/// crust labels kept), the closing speed is taken from that stage's drawn
+/// Euler poles, and each plate's speed is then set from its sinking share
+/// as [`pull_by_slabs`] does. Stages go outward from the present, each
+/// reading the rotations built from the stages before it. One pass over
+/// the boundary cells per stage (a few thousand), not over the grid.
+fn pull_stages(plates: &mut Plates, cells: &[BoundaryCell], t_ma: f64) {
+    let last = ((t_ma.abs() / STAGE_MA).ceil() as i64).min(6);
+    let sign = if t_ma < 0.0 { -1 } else { 1 };
+    for i in 1..=last {
+        let stage = sign * i;
+        let epoch = plates.at_epoch(stage as f64 * STAGE_MA);
+        let speeds = sinking_speeds(plates.count(), cells, |c| {
+            let (a, b) = (usize::from(c.plate), usize::from(c.other));
+            let q = epoch.position(a, c.point);
+            (
+                epoch.velocity(a, q),
+                epoch.velocity(b, q),
+                epoch.position(a, c.across),
+            )
+        });
+        for (k, speed_km) in speeds.into_iter().enumerate() {
+            let omega = plates.stage_omega(k, stage);
+            plates
+                .staged
+                .insert((k, stage), at_speed(omega, speed_km, plates.radius_km));
+        }
+    }
+}
+
+/// `omega` turned to a speed of `speed_km` at the equator, same pole.
+fn at_speed(omega: [f64; 3], speed_km: f64, radius_km: f64) -> [f64; 3] {
+    let len = dot(omega, omega).sqrt();
+    if len > 0.0 {
+        omega.map(|c| c * speed_km / radius_km / len)
+    } else {
+        omega
+    }
+}
+
+/// The speed slab pull gives each plate, km per Ma, from the share of its
+/// boundary cells where it sinks; `motion` gives, for a cell, the
+/// velocities of its plate and the other at it and the direction across.
+fn sinking_speeds(
+    count: usize,
+    cells: &[BoundaryCell],
+    motion: impl Fn(&BoundaryCell) -> ([f64; 3], [f64; 3], [f64; 3]),
+) -> Vec<f64> {
     let mut edge = vec![0usize; count];
     let mut sinking = vec![0usize; count];
     for c in cells {
         let own = usize::from(c.plate);
-        let p = c.point;
-        let (va, vb) = (
-            plates.velocity(own, p),
-            plates.velocity(usize::from(c.other), p),
-        );
-        let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], c.across) * 0.1;
+        let (va, vb, across) = motion(c);
+        let closing = dot([va[0] - vb[0], va[1] - vb[1], va[2] - vb[2]], across) * 0.1;
         edge[own] += 1;
         let under = !c.continental && (c.other_continental || c.plate > c.other);
         if closing > f64::from(RELIEF_SPEED.0) && under {
             sinking[own] += 1;
         }
     }
-    for k in 0..count {
-        let share = if edge[k] > 0 {
-            sinking[k] as f64 / edge[k] as f64
-        } else {
-            0.0
-        };
-        let speed_km =
-            PLATE_SPEED.0 + (PLATE_SPEED.1 - PLATE_SPEED.0) * (share / SLAB_FULL_SHARE).min(1.0);
-        let omega = plates.omegas[k];
-        let len = dot(omega, omega).sqrt();
-        if len > 0.0 {
-            let target = speed_km / plates.radius_km;
-            plates.omegas[k] = omega.map(|c| c * target / len);
-        }
-    }
+    (0..count)
+        .map(|k| {
+            let share = if edge[k] > 0 {
+                sinking[k] as f64 / edge[k] as f64
+            } else {
+                0.0
+            };
+            PLATE_SPEED.0 + (PLATE_SPEED.1 - PLATE_SPEED.0) * (share / SLAB_FULL_SHARE).min(1.0)
+        })
+        .collect()
 }
 
 /// The plate and the crust (continental or not) of each cell of `grid` at
@@ -1222,6 +1283,39 @@ mod tests {
         // The map uses them.
         let map = PlateMap::with_crust(&p, continental);
         assert_eq!(map.plates.omegas, plates.omegas);
+    }
+
+    #[test]
+    fn other_stages_are_pulled_by_slabs_too() {
+        let p = params(5);
+        let continental = |q: [f64; 3]| q[0] > 0.0;
+        let mut plates = Plates::new(&p);
+        let grid = CubeGrid { size: COARSE_SIZE };
+        let present: Vec<u16> = (0..grid.cell_count())
+            .map(|k| plates.plate_at(grid.point(k)) as u16)
+            .collect();
+        let cells = boundary_cells(&grid, &present, |k| continental(grid.point(k)));
+        pull_by_slabs(&mut plates, &cells);
+        let drawn = plates.clone();
+        pull_stages(&mut plates, &cells, -120.0);
+        let speed = |o: [f64; 3]| dot(o, o).sqrt() * plates.radius_km;
+        let mut changed = 0;
+        for k in 0..plates.count() {
+            for stage in [-1, -2, -3] {
+                let (new, old) = (plates.stage_omega(k, stage), drawn.stage_omega(k, stage));
+                assert!(
+                    (PLATE_SPEED.0 - 1e-6..=PLATE_SPEED.1 + 1e-6).contains(&speed(new)),
+                    "{}",
+                    speed(new)
+                );
+                // The pole is kept.
+                assert!(dot(normalise(new), normalise(old)) > 1.0 - 1e-9);
+                changed += usize::from((speed(new) - speed(old)).abs() > 1.0);
+            }
+            // Stages beyond the epoch's keep their drawn speeds.
+            assert_eq!(plates.stage_omega(k, -4), drawn.stage_omega(k, -4));
+        }
+        assert!(changed > 0);
     }
 
     #[test]
