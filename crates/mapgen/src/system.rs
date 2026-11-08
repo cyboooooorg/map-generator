@@ -32,6 +32,7 @@
 //! stored, so a body generated later is the world it would have been at
 //! once.
 
+use crate::activity::{StarActivity, star_activity};
 use crate::exomoon::{EARTH_KG, EARTH_M, G, HostGiant, HostMode};
 use crate::giants::{
     GiantKind, GiantSystem, GiantsMode, HOT_JUPITERS, HOT_PERIOD_DAYS, JUPITER_EARTH_MASSES,
@@ -155,6 +156,13 @@ pub struct SystemStar {
     pub metallicity: f32,
     /// The ice line, AU.
     pub ice_line_au: f32,
+    /// The star's rotation, magnetic activity and surface
+    /// ([`crate::activity::star_activity`] of `info` and the system's
+    /// seed). Absent from systems drawn before it existed: [`read_system`]
+    /// derives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub activity: Option<StarActivity>,
 }
 
 /// A planet, or a moon of one.
@@ -336,10 +344,17 @@ pub fn write_system(dir: &std::path::Path, system: &System) -> Result<(), String
     std::fs::rename(&temp, dir.join("system.json")).map_err(|e| e.to_string())
 }
 
-/// Reads `system.json` from `dir`.
+/// Reads `system.json` from `dir`, deriving the star's activity when the
+/// file predates it.
 pub fn read_system(dir: &std::path::Path) -> Result<System, String> {
     let bytes = std::fs::read(dir.join("system.json")).map_err(|e| e.to_string())?;
-    serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    let mut system: System = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    // A system drawn before the star's activity existed gets it derived,
+    // the same as a draw would store.
+    if system.star.activity.is_none() {
+        system.star.activity = Some(star_activity(&system.star.info, system.seed));
+    }
+    Ok(system)
 }
 
 /// Draws the system a request asks for.
@@ -1184,6 +1199,7 @@ fn assemble(
         star: SystemStar {
             spectral: info.kind.clone(),
             designation,
+            activity: Some(star_activity(&info, seed)),
             info,
             metallicity,
             ice_line_au: ice,
@@ -2643,6 +2659,38 @@ mod tests {
             serde_json::to_string(&back).unwrap()
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn drawn_system_stores_activity() {
+        let system = draw(&whole(&[("terran", 1)], 5), &mut StdRng::seed_from_u64(5)).unwrap();
+        assert_eq!(
+            system.star.activity,
+            Some(crate::activity::star_activity(
+                &system.star.info,
+                system.seed
+            ))
+        );
+    }
+
+    #[test]
+    fn legacy_system_gets_activity_on_read() {
+        let system = draw(&whole(&[("terran", 1)], 6), &mut StdRng::seed_from_u64(6)).unwrap();
+        let mut json = serde_json::to_value(&system).unwrap();
+        json["star"]
+            .as_object_mut()
+            .unwrap()
+            .remove("activity")
+            .unwrap();
+        let dir = std::env::temp_dir().join(format!("mapgen-legacy-star-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("system.json"), serde_json::to_vec(&json).unwrap()).unwrap();
+        let back = read_system(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            back.star.activity,
+            Some(crate::activity::star_activity(&back.star.info, back.seed))
+        );
     }
 
     #[test]

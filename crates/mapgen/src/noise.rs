@@ -161,6 +161,9 @@ pub mod stream {
     /// The longitude of a world's perihelion, when drawn (see
     /// `crate::request`).
     pub const PERIHELION: u32 = 39;
+    /// A system star's activity: its rotation and cycle scatter, cycle
+    /// phase and region seed (see `crate::activity`).
+    pub const STAR_ACTIVITY: u32 = 40;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;
@@ -198,7 +201,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in (stream::ELEVATION..=stream::PERIHELION).chain([stream::SYSTEM]) {
+            for s in (stream::ELEVATION..=stream::STAR_ACTIVITY).chain([stream::SYSTEM]) {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }

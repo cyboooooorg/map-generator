@@ -84,6 +84,18 @@ round planets. Every body has:
   from their seed when generated);
 - whether its maps are **generated**.
 
+The star carries its **activity** (`star.activity`, `activity.rs`): its
+envelope, age, rotation period and differential rotation, convective
+turnover time, Rossby number and X-ray activity, its cycle (period, phase
+at day 0, depth), the latitudes of its active band, its spot coverage,
+facula ratio and the statistics of its active regions (rate, median area,
+spread, decay rate), its granulation and limb darkening, and the seed the
+viewer draws the regions from (see
+[the science](science/star-activity.md)). It is drawn from the system's
+seed and the star alone, on its own stream (`STAR_ACTIVITY`). A system
+drawn before it existed has none in its file: `read_system` derives it on
+read, the same value a new draw stores, and does not write the file back.
+
 The physics of today's draws stays where it is (`star.rs`, `giants.rs`,
 `moons.rs`, `exomoon.rs`, `giant_world.rs`): the system draw calls them
 and records their results. What the viewer draws from a seed today (a

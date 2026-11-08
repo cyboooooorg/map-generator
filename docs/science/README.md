@@ -21,6 +21,8 @@ wants to understand it, and link back to those studies.
   Jupiter?](giant-planet-placement.md)
 - [How close can two planets orbit?](planet-spacing.md)
 - [What does an eccentric orbit change?](eccentric-orbits.md)
+- [Why do some stars have spots, and how fast do they
+  turn?](star-activity.md)
 
 ### Planet view: the body and its moons
 
