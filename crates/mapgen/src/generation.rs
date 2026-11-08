@@ -1079,14 +1079,14 @@ fn star_climate(params: &WorldParams) -> StarClimate {
 
 /// The wind belts of world `params` (see [`Belts`]), from its day: the
 /// rotation its moons draw, its year if locked to its star (two thirds of
-/// it in the 3:2 resonance), Earth's 24 h for a world without moons.
+/// it in the 3:2 resonance, half in 2:1), Earth's 24 h for a world without moons.
 pub fn belts(params: &WorldParams) -> Belts {
     let star = crate::spin::star_info(params);
     let day_hours = if star.tidally_locked {
         f64::from(star.year_days) * 24.0
-    } else if star.spin_orbit_3_2 {
-        // Three turns every two orbits.
-        f64::from(star.year_days) * 24.0 / f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
+    } else if star.spin_turns > 0.0 {
+        // Three turns every two orbits in the 3:2 resonance, two in 2:1.
+        f64::from(star.year_days) * 24.0 / f64::from(star.spin_turns)
     } else {
         crate::moons::MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours))
     };
@@ -1641,6 +1641,7 @@ pub(crate) mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            resonance_to_star: None,
             gravity: None,
         }
     }

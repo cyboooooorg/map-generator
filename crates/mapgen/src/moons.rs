@@ -525,8 +525,8 @@ impl MoonSystem {
         // remain (Barnes & O'Brien 2002, eq. 8, see `lasting_moon_kg`).
         let despun = crate::spin::despun(&star);
         let star_day = despun.then(|| {
-            let turns = if star.spin_orbit_3_2 {
-                f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
+            let turns = if star.spin_turns > 0.0 {
+                f64::from(star.spin_turns)
             } else {
                 1.0
             };
@@ -1251,6 +1251,7 @@ pub fn small_body_params(
         given_rings: None,
         impact_factor: None,
         locked_to_star: None,
+        resonance_to_star: None,
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -1399,6 +1400,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            resonance_to_star: None,
             gravity: None,
         }
     }
@@ -1945,6 +1947,9 @@ mod tests {
         assert!(!star.tidally_locked && !star.spin_orbit_3_2);
         // A 3:2 planet's moon is not resonant either.
         p.eccentricity = 0.1;
+        p.seed = (0..)
+            .find(|&s| crate::spin::capture(0.1, s) == 1.5)
+            .unwrap();
         assert!(crate::spin::star_info(&p).spin_orbit_3_2);
         if let Some(moon) = MoonSystem::draw(&p).unwrap().moons.first() {
             assert!(!crate::spin::star_info(&body_params(&p, moon)).spin_orbit_3_2);

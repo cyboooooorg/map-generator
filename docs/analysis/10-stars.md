@@ -348,9 +348,12 @@ Orbits were circles; they are now ellipses of eccentricity `e`, the star
 at a focus. Solar System values: Venus 0.007, Earth 0.017, Mars 0.093,
 Mercury 0.206 (the example presets use them). Without a value, `e` is
 drawn from the beta distribution fitted by Kipping (2013) to
-radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.17),
-capped at 0.9; tidally locked planets get 0, their orbits circularised
-by the same tides. Over a year an elliptical orbit receives
+radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.17)
+for a giant, and from the ones Van Eylen et al. (2019, table 3) fitted
+to small Kepler planets for a rocky planet (a = 1.58, b = 4.4, mean 0.26,
+alone in its system; a = 1.52, b = 29, mean 0.05, with companions),
+capped at 0.9; planets whose orbits the tides circularised get 0. Over a year an elliptical
+orbit receives
 `1 / sqrt(1 − e²)` times the light of a circular one of the same
 semi-major axis: the climate uses that mean, so seasons stay annual
 means (the uneven seasons of an eccentric orbit would need a seasonal
@@ -385,6 +388,8 @@ light at each.
 - Kiang et al. 2007, "Spectral Signatures of Photosynthesis II:
   Coevolution with Other Stars and the Atmosphere on Extrasolar
   Worlds", Astrobiology 7, 252: <https://arxiv.org/abs/astro-ph/0701391>.
+- Van Eylen et al. 2019, "The orbital eccentricity of small planet
+  systems", AJ 157, 61, doi:10.3847/1538-3881/aaf22f (table 3).
 - Kipping 2013, "Parametrizing the exoplanet eccentricity distribution
   with the Beta distribution", MNRAS 434, L51.
 - Kiang & Hoehler 2021, photon absorption of photosynthetic organisms

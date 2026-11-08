@@ -455,7 +455,13 @@ impl WorldRequest {
                 (Some(e), _) => e,
                 (None, Some(e)) => e.pick(rng),
                 (None, None) => {
-                    let drawn = crate::star::draw_eccentricity(rng);
+                    // A giant follows Kipping 2013, a small planet alone
+                    // in its system Van Eylen et al. 2019.
+                    let drawn = if giant_mass_earth.is_some() {
+                        crate::star::draw_eccentricity(rng)
+                    } else {
+                        crate::star::draw_small_eccentricity(false, rng)
+                    };
                     let at = crate::star::StarInfo::new(star, orbit_au, 0.0);
                     let circular = match giant_mass_earth {
                         Some(mass) => crate::spin::giant_circularised(
@@ -463,7 +469,10 @@ impl WorldRequest {
                             mass,
                             crate::giants::giant_radius(mass, at.equilibrium_k),
                         ),
-                        None => crate::spin::circularised(&at),
+                        None => {
+                            let (mass, radius) = crate::spin::rocky_body(circumference_km);
+                            crate::spin::rocky_circularised(&at, mass, radius)
+                        }
                     };
                     if circular { 0.0 } else { drawn }
                 }
@@ -539,6 +548,7 @@ impl WorldRequest {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            resonance_to_star: None,
             gravity: None,
         };
         // Moons asked for: the world is not a giant's moon, which keeps none
@@ -603,11 +613,16 @@ impl WorldRequest {
         // Eccentric giants force an eccentricity on the world: a drawn one is
         // at least that (the giants are placed around the final orbit, which
         // the moons may have drawn again).
-        let circular = crate::spin::circularised(&crate::star::StarInfo::new(
-            params.star,
-            params.orbit_au,
-            0.0,
-        ));
+        let at = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0);
+        let circular = if giant {
+            crate::spin::circularised(&at)
+        } else {
+            crate::spin::rocky_circularised(
+                &at,
+                params.mass_earth(),
+                params.circumference_km / crate::noise::EARTH_CIRCUMFERENCE_KM,
+            )
+        };
         if eccentricity_drawn && !circular {
             for _ in 0..3 {
                 let forced = crate::giants::GiantSystem::draw(&params)
@@ -955,11 +970,7 @@ mod tests {
             // grows as the planet's mass to the 8/3 over its radius to the
             // fifth: a super-Earth of 11 Earth masses at 0.46 AU keeps moons
             // of a few thousandths of its mass.
-            if crate::spin::despun(&crate::star::StarInfo::new(
-                p.star,
-                p.orbit_au,
-                p.eccentricity,
-            )) {
+            if crate::spin::despun(&crate::spin::star_info(&p)) {
                 despun += 1;
                 assert!(
                     system

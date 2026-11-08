@@ -110,7 +110,7 @@ export const en = {
     lunarMasses: 'lunar masses',
     spin: 'Day',
     locked: 'locked to its parent',
-    resonant: (p: { day: string }) => `${p.day}, 3:2 resonance: three turns every two orbits`,
+    resonant: (p: { day: string; ratio: string }) => `${p.day}, ${p.ratio} spin–orbit resonance`,
     axes: (p: { a: string; b: string; c: string }) => `${p.a} × ${p.b} × ${p.c} across`,
     axesHelp: 'Its three diameters, the longest towards its planet when it is locked to it: an irregular moon, or a round one stretched by its planet’s tides',
     tilt: (p: { tilt: string }) => `tilt ${p.tilt}`,
@@ -302,9 +302,9 @@ export const en = {
     starSizeValue: (p: { size: string; sun: string }) => `${p.size} (the Sun from Earth: ${p.sun})`,
     locked: 'tidally locked',
     lockedHelp: 'One face always lit: the star does not move in its sky',
-    resonant: '3:2 spin–orbit resonance',
-    resonantHelp:
-      'Like Mercury: the star’s tides hold it at three turns every two orbits, its eccentric orbit keeping it from locking; its solar day lasts two years',
+    resonant: (p: { ratio: string }) => `${p.ratio} spin–orbit resonance`,
+    resonantHelp: (p: { ratio: string }) =>
+      `The star’s tides hold it in a ${p.ratio} resonance, turning ${p.ratio.split(':')[0]} times every ${p.ratio.split(':')[1]} orbits (Mercury’s is 3:2), its eccentric orbit keeping it from locking; the resonance a planet is caught in is drawn by its eccentricity`,
     moons: 'Moons',
     moonsHelp: 'Each one a world of its own: open it with Moon above the viewer (U)',
     noMoon: 'none',
@@ -521,7 +521,7 @@ export const en = {
       F: 'F: yellow-white, a little hotter and brighter than the Sun',
       G: 'G: like the Sun (G2V), 5 300 to 6 000 K',
       K: 'K: orange dwarf, dimmer than the Sun, lives tens of billions of years',
-      M: 'M: red dwarf, cool and dim, three quarters of all stars; its habitable planets orbit close, despun by its tides: locked, or in a 3:2 resonance on an eccentric orbit',
+      M: 'M: red dwarf, cool and dim, three quarters of all stars; its habitable planets orbit close, despun by its tides: locked, or in a spin–orbit resonance (3:2 as Mercury, 2:1) on an eccentric orbit',
     } as Record<string, string>,
     orbitBy: 'Set the orbit by',
     orbitPosition: 'Habitable zone position',
@@ -714,8 +714,8 @@ export const en = {
       { term: 'Synchronous rotation:', text: 'the body turns once per orbit and always shows the same face to what it orbits.' },
       { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by about ±2e radians.' },
       {
-        term: '3:2 resonance:',
-        text: 'three turns every two orbits, as Mercury: the star’s tides hold an eccentric planet there instead of locking it; its solar day lasts two of its years.',
+        term: 'Spin–orbit resonance:',
+        text: 'the star’s tides hold an eccentric planet at a simple ratio of turns to orbits instead of locking it: 3:2 as Mercury (three turns every two orbits, its solar day two of its years), or 2:1 and 5:2 on more eccentric orbits. The eccentricity sets the odds and the seed draws which one.',
       },
       {
         term: 'Longitude convention:',

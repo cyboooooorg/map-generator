@@ -6,33 +6,104 @@
 //! for a giant. A planet whose time is shorter than the star's age
 //! ([`AGE_GYR`], or the star's whole life when shorter) is despun.
 //!
-//! **Locked or resonant.** A despun rocky planet on an orbit of
-//! eccentricity [`RESONANCE_CAPTURE_ECCENTRICITY`] (0.06) or more is held
-//! in the 3:2 spin–orbit resonance, Mercury's three turns every two
-//! orbits; below it, the most probable state is one turn per orbit, locked
-//! with one face to its star (Ribas et al. 2016, for Proxima b, an Earth
-//! of a red dwarf's habitable zone; Makarov 2012 finds capture into 3:2
-//! inevitable for Mercury from e = 0.2 to 0.41, ever less likely below).
-//! The tides circularise the orbit far more slowly than they despin the
-//! planet ([`circularisation_gyr`]); a planet whose orbit they have
-//! circularised ends locked. Higher resonances (2:1, 5:2), which large
-//! eccentricities favour, are not modelled. Giants are fluid, with no
-//! lasting bulge for the star to hold: a despun giant is locked.
+//! **Locked or resonant.** A despun rocky planet on a circular orbit ends
+//! locked with one face to its star, one turn per orbit. On an eccentric
+//! one it may be caught on the way down in a spin-orbit resonance, Mercury's
+//! 3:2 (three turns every two orbits) or a higher one (2:1, 5:2): the odds
+//! of capture rise with the eccentricity ([`capture`], Makarov 2012; Ribas
+//! et al. 2016), and the world's seed draws the outcome. The tides
+//! circularise the orbit far more slowly than they despin the planet
+//! ([`circularisation_gyr`]); a planet whose orbit they have circularised
+//! ends locked. Both times scale with the planet's mass and radius
+//! ([`rocky_locking_gyr`], [`rocky_circularisation_gyr`]). Giants are
+//! fluid, with no lasting bulge for the star to hold: a despun giant on a
+//! round orbit is locked, on an eccentric one it settles at the
+//! pseudo-synchronous rate ([`pseudo_synchronous_turns`]).
 //!
 //! [`locking_gyr`]: crate::star::locking_gyr
 //! [`AGE_GYR`]: crate::star::AGE_GYR
 
+use crate::noise::EARTH_CIRCUMFERENCE_KM;
 use crate::star::{AGE_GYR, StarInfo};
 
-/// Eccentricity from which a despun rocky planet is held in the 3:2
-/// resonance rather than locked, from Ribas et al. 2016, §4.6
-/// (doi:10.1051/0004-6361/201629576), for an Earth-mass planet of a red
-/// dwarf with a Maxwell rheology: "the ω≈3n/2 rotation becomes stable for
-/// an eccentricity greater than 0.06–0.07"; "At eccentricities lower than
-/// 0.06, the most probable state becomes the synchronous one". Taken as a
-/// sharp line (in reality the odds of capture rise with the
-/// eccentricity: Makarov 2012, doi:10.1088/0004-637X/752/1/73).
-pub const RESONANCE_CAPTURE_ECCENTRICITY: f32 = 0.06;
+/// A spin-orbit resonance a despun planet may be captured in, and the
+/// eccentricities between which its capture goes from impossible to
+/// certain.
+struct Resonance {
+    /// Turns per orbit.
+    turns: f32,
+    /// Eccentricity below which the planet crosses it freely.
+    free_below: f32,
+    /// Eccentricity from which a planet crossing it is always caught.
+    certain_from: f32,
+}
+
+/// The resonances a spin crosses on its way down, highest first (the first
+/// that catches the planet holds it; one that catches none leaves it
+/// locked at 1:1).
+///
+/// 3:2: caught from 0.06 (Ribas et al. 2016, §4.6,
+/// doi:10.1051/0004-6361/201629576: "at eccentricities lower than 0.06,
+/// the most probable state becomes the synchronous one") and for certain
+/// from 0.20, "guaranteed to be captured at any eccentricity between 0.20
+/// and 0.41" (Makarov 2012, §3.2, doi:10.1088/0004-637X/752/1/73, whose
+/// Mercury is "always captured in the 3:2 resonance" at e = 0.2056).
+/// 2:1: certain from 0.34 ("entrapment in the 2:1 resonance is inevitable
+/// for 0.34 < e < 0.49", Makarov 2012, §3.1) and 0.23 likely at Mercury's
+/// 0.2056 (the 40 integrations of §3.1: 9 captures; the semi-analytic
+/// curve of his fig. 8 gives about 0.3), which a linear ramp reaches from
+/// 0.161. 5:2: no number for this planet in the paper (its fig. 8 only
+/// plots the curve): the ramp from 0.30 to 0.45 follows the spacing of the
+/// 2:1 one, calibration, no source. The ramps are linear between their
+/// ends, a calibration through these points. Makarov's values are for a
+/// Mercury-like triaxiality; a more symmetric planet (larger, "keeping all
+/// other parameters the same") is caught at lower eccentricities (his
+/// minimal certain ones drop to 0.08, 0.20 and 0.30), so these are the
+/// cautious side. Higher resonances (3:1 and over) are not modelled.
+const RESONANCES: [Resonance; 3] = [
+    Resonance {
+        turns: 2.5,
+        free_below: 0.30,
+        certain_from: 0.45,
+    },
+    Resonance {
+        turns: 2.0,
+        free_below: 0.161,
+        certain_from: 0.34,
+    },
+    Resonance {
+        turns: 1.5,
+        free_below: 0.06,
+        certain_from: 0.20,
+    },
+];
+
+/// A number in `[0, 1)` from `seed` and the `salt` of one draw
+/// (SplitMix64, Steele, Lea & Flood 2014, doi:10.1145/2714064.2660195).
+fn unit_draw(seed: u32, salt: u64) -> f32 {
+    let mut z = (u64::from(seed) << 8 | salt).wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    (z >> 40) as f32 / (1u64 << 24) as f32
+}
+
+/// The turns per orbit of a despun rocky planet on an orbit of
+/// `eccentricity`, drawn from `seed`: the resonance (3:2 as 1.5, 2:1 as 2,
+/// 5:2 as 2.5) that caught it on its way down, or 0 when none did and it
+/// ends locked, one turn per orbit. At each resonance (see
+/// [`RESONANCES`]) the odds of capture rise linearly from 0 to 1 with the
+/// eccentricity; each has its own draw from the seed.
+pub fn capture(eccentricity: f32, seed: u32) -> f32 {
+    for (k, r) in RESONANCES.iter().enumerate() {
+        let odds =
+            ((eccentricity - r.free_below) / (r.certain_from - r.free_below)).clamp(0.0, 1.0);
+        if unit_draw(seed, k as u64) < odds {
+            return r.turns;
+        }
+    }
+    0.0
+}
 
 /// Turns per orbit of a planet in the 3:2 resonance: its sidereal day is
 /// two thirds of its year, its solar day two years (Mercury: 58.65 and
@@ -52,10 +123,8 @@ const ROCKY_Q_PRIME: f64 = 3.0 * 100.0 / (2.0 * 0.3);
 /// `n` the mean motion. About 10⁸ Gyr × a^6.5 / M^1.5 (a in AU, M in solar
 /// masses), some 10⁵ to 10⁶ times the locking time: only the planets
 /// within about 0.05 AU of a red dwarf or 0.07 AU of the Sun are
-/// circularised in 4.6 Gyr. Every rocky planet is given Earth's mass and
-/// radius here, as in [`crate::star::locking_gyr`]: the time goes as
-/// `m / R⁵`, so a super-Earth of 5.5 Earth masses (1.76 radii) would
-/// circularise about three times faster.
+/// circularised in 4.6 Gyr. This is Earth's mass and radius, as in
+/// [`crate::star::locking_gyr`]; [`rocky_circularisation_gyr`] scales it.
 pub fn circularisation_gyr(orbit_au: f32, star_mass: f32) -> f32 {
     const G: f64 = 6.674e-11;
     const SUN_KG: f64 = 1.989e30;
@@ -70,6 +139,38 @@ pub fn circularisation_gyr(orbit_au: f32, star_mass: f32) -> f32 {
     (tau / GYR_S) as f32
 }
 
+/// [`circularisation_gyr`] for a rocky planet of `mass_earth` and
+/// `radius_earth` (Earth units): the time goes as `m / R⁵` (the planet's
+/// mass in the formula, its radius to the fifth), so a super-Earth of 5.5
+/// Earth masses (1.76 radii) circularises about three times faster.
+pub fn rocky_circularisation_gyr(
+    orbit_au: f32,
+    star_mass: f32,
+    mass_earth: f32,
+    radius_earth: f32,
+) -> f32 {
+    circularisation_gyr(orbit_au, star_mass) * mass_earth / radius_earth.max(1e-3).powi(5)
+}
+
+/// [`crate::star::locking_gyr`] for a rocky planet of `mass_earth` and
+/// `radius_earth` (Earth units): the despinning time of Gladman et al.
+/// 1996 (`t = ω a⁶ I Q / (3 G M² k₂ R⁵)`, doi:10.1006/icar.1996.0117) with
+/// `I = α m R²` goes as `m / R³`, Earth's `Q` and `k₂` kept (a calibration:
+/// no source gives them for other masses).
+pub fn rocky_locking_gyr(orbit_au: f32, star_mass: f32, mass_earth: f32, radius_earth: f32) -> f32 {
+    crate::star::locking_gyr(orbit_au, star_mass) * mass_earth / radius_earth.max(1e-3).powi(3)
+}
+
+/// The mass and radius (Earth units) of the rocky planet of a world of
+/// `circumference_km` (see [`crate::world::rocky_gravity`]).
+pub fn rocky_body(circumference_km: f32) -> (f32, f32) {
+    let radius = circumference_km / EARTH_CIRCUMFERENCE_KM;
+    (
+        crate::world::rocky_gravity(radius) * radius * radius,
+        radius,
+    )
+}
+
 /// The age the tides have had to work on a planet of `star`, Gyr: the
 /// Sun's, or the star's whole main-sequence life if shorter.
 pub fn tidal_age_gyr(star: &StarInfo) -> f32 {
@@ -82,29 +183,17 @@ pub fn despun(star: &StarInfo) -> bool {
     star.locking_gyr < tidal_age_gyr(star)
 }
 
-/// Whether the star's tides have circularised the orbit of a rocky planet
-/// of `star` (see [`circularisation_gyr`]).
+/// Whether the star's tides have circularised the orbit of an Earth-like
+/// rocky planet of `star` (see [`circularisation_gyr`]).
 pub fn circularised(star: &StarInfo) -> bool {
     circularisation_gyr(star.orbit_au, star.mass) < tidal_age_gyr(star)
 }
 
-/// The eccentricity a rocky planet of `star` keeps when `drawn` is drawn
-/// for it: none when the tides have circularised its orbit.
-pub fn tidal_eccentricity(star: &StarInfo, drawn: f32) -> f32 {
-    if circularised(star) { 0.0 } else { drawn }
-}
-
-/// Whether a rocky planet whose locking time is `locking_gyr`, round a
-/// star of `age_gyr`, on an orbit of `eccentricity`, is locked to its star:
-/// despun, below [`RESONANCE_CAPTURE_ECCENTRICITY`], one turn per orbit.
-pub fn locked(locking_gyr: f32, age_gyr: f32, eccentricity: f32) -> bool {
-    locking_gyr < age_gyr && eccentricity < RESONANCE_CAPTURE_ECCENTRICITY
-}
-
-/// Whether a rocky planet despun on an orbit of `eccentricity` turns three
-/// times every two orbits (see the module's doc).
-pub fn resonant(locking_gyr: f32, age_gyr: f32, eccentricity: f32) -> bool {
-    locking_gyr < age_gyr && eccentricity >= RESONANCE_CAPTURE_ECCENTRICITY
+/// Whether the star's tides have circularised the orbit of a rocky planet
+/// of `mass_earth` and `radius_earth` (see [`rocky_circularisation_gyr`]).
+pub fn rocky_circularised(star: &StarInfo, mass_earth: f32, radius_earth: f32) -> bool {
+    rocky_circularisation_gyr(star.orbit_au, star.mass, mass_earth, radius_earth)
+        < tidal_age_gyr(star)
 }
 
 /// The axial tilt of the rocky world `p` drawn as `drawn` degrees, once its
@@ -117,12 +206,20 @@ pub fn resonant(locking_gyr: f32, age_gyr: f32, eccentricity: f32) -> bool {
 /// & Barnes 2011, doi:10.1051/0004-6361/201015809). The moon of a giant
 /// keeps the giant's tilt.
 pub fn upright(p: &crate::world::WorldParams, drawn: f32) -> f32 {
-    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    let star = rocky_star(p);
     if despun(&star) && crate::exomoon::HostGiant::draw(p).is_none() {
         0.0
     } else {
         drawn
     }
+}
+
+/// The star of world `p` taken as a rocky planet of its own mass and
+/// radius, its resonance drawn from its seed.
+fn rocky_star(p: &crate::world::WorldParams) -> StarInfo {
+    let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
+    let mass = p.mass_earth();
+    StarInfo::for_planet(p.star, p.orbit_au, p.eccentricity, mass, radius, p.seed)
 }
 
 /// The star of world `p` with what its tides do to it: [`StarInfo::new`],
@@ -135,21 +232,38 @@ pub fn upright(p: &crate::world::WorldParams, drawn: f32) -> f32 {
 /// overrides the lock, so the tiles and epochs of a world generated under
 /// an older rule agree with its stored map.
 pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
-    let mut star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    let mut star = rocky_star(p);
     if crate::moons::is_moon_world(p) || crate::exomoon::HostGiant::draw(p).is_some() {
         star.tidally_locked = false;
         star.spin_orbit_3_2 = false;
+        star.spin_turns = 0.0;
     } else if let Some(mass) = p.giant_mass_earth {
         let radius = f64::from(p.circumference_km) / 40_075.0;
         star.locking_gyr = giant_locking_gyr(p.orbit_au, star.mass, mass, radius as f32);
-        star.tidally_locked = star.locking_gyr < tidal_age_gyr(&star)
-            || star.equilibrium_k > crate::giant_world::HOT_GIANT_K;
+        star.tidally_locked = (star.locking_gyr < tidal_age_gyr(&star)
+            || star.equilibrium_k > crate::giant_world::HOT_GIANT_K)
+            && giant_stays_locked(p.eccentricity);
         star.spin_orbit_3_2 = false;
+        star.spin_turns = 0.0;
     }
-    // A stored world keeps the lock it was generated with.
+    // A stored world keeps the lock and the resonance it was generated
+    // with.
     if let Some(locked) = p.locked_to_star {
         star.tidally_locked = locked;
-        star.spin_orbit_3_2 &= !locked;
+        if locked {
+            star.spin_orbit_3_2 = false;
+            star.spin_turns = 0.0;
+        } else if let Some(turns) = p.resonance_to_star {
+            star.spin_turns = turns;
+            star.spin_orbit_3_2 = turns == RESONANCE_TURNS_PER_ORBIT;
+        } else {
+            // Made before the resonances were drawn: 3:2 or nothing.
+            star.spin_turns = if star.spin_orbit_3_2 {
+                RESONANCE_TURNS_PER_ORBIT
+            } else {
+                0.0
+            };
+        }
     }
     star
 }
@@ -207,6 +321,36 @@ pub fn giant_circularised(star: &StarInfo, mass_earth: f32, radius_earth: f32) -
     circularisation_gyr(star.orbit_au, star.mass) * (scale as f32) < tidal_age_gyr(star)
 }
 
+/// Turns per orbit of a fluid planet the tides have brought to the
+/// pseudo-synchronous rate on an orbit of `eccentricity`: the rate at which
+/// the tidal torque averaged over the orbit vanishes, `N(e) / Ω(e)` of Hut
+/// 1981 (A&A 99, 126, bibcode 1981A&A....99..126H; no DOI), with
+/// `N = (1 + 15/2 e² + 45/8 e⁴ + 5/16 e⁶) / (1 − e²)^(3/2)` and
+/// `Ω = (1 + 3e² + 3/8 e⁴) / (1 − e²)^(3/2)`, as Levrard et al. 2007 and
+/// Leconte et al. 2010 (doi:10.1051/0004-6361/201014337, eq. 13 and
+/// appendix A) write it. To second order it is `1 + 6e²`, the value Leconte
+/// et al. give. A fluid giant has no lasting bulge to hold a resonance: it
+/// settles there, 1 on a circle, 1.06 at e = 0.1, 1.56 at e = 0.3.
+pub fn pseudo_synchronous_turns(eccentricity: f32) -> f32 {
+    let e2 = f64::from(eccentricity).powi(2);
+    let n = 1.0 + 7.5 * e2 + 45.0 / 8.0 * e2 * e2 + 5.0 / 16.0 * e2.powi(3);
+    let o = 1.0 + 3.0 * e2 + 3.0 / 8.0 * e2 * e2;
+    (n / (o * (1.0 - e2).powf(1.5))) as f32
+}
+
+/// How far from one turn per orbit a giant's pseudo-synchronous rate may
+/// be and still count as locked, one face to its star (a fifth of a turn
+/// in four years at this tolerance; calibration, no source).
+const LOCKED_TOLERANCE: f32 = 0.05;
+
+/// Whether a giant despun by its star on an orbit of `eccentricity` is
+/// locked: its pseudo-synchronous rate within [`LOCKED_TOLERANCE`] of one
+/// turn per orbit (see [`pseudo_synchronous_turns`]). A more eccentric one
+/// is despun but turns at that rate.
+pub fn giant_stays_locked(eccentricity: f32) -> bool {
+    pseudo_synchronous_turns(eccentricity) - 1.0 < LOCKED_TOLERANCE
+}
+
 /// Whether the star of `star` has locked a giant of `mass_earth` and
 /// `radius_earth` (see [`giant_locking_gyr`]).
 pub fn giant_locked(star: &StarInfo, mass_earth: f32, radius_earth: f32) -> bool {
@@ -218,28 +362,88 @@ mod tests {
     use super::*;
     use crate::star::{SUN, StarInfo, orbit_at, parse_type};
 
+    /// The share of 2000 seeds the eccentricity `e` leaves in each state:
+    /// locked, 3:2, 2:1, 5:2.
+    fn shares(e: f32) -> [f32; 4] {
+        let mut n = [0.0; 4];
+        for seed in 0..2000 {
+            let k = match capture(e, seed) {
+                0.0 => 0,
+                1.5 => 1,
+                2.0 => 2,
+                _ => 3,
+            };
+            n[k] += 1.0;
+        }
+        n.map(|x| x / 2000.0)
+    }
+
     #[test]
-    fn a_mercury_like_planet_is_held_in_the_three_two_resonance() {
+    fn the_odds_of_capture_rise_with_the_eccentricity() {
+        // A round orbit locks, whatever the seed (Ribas et al. 2016: below
+        // 0.06 the synchronous state is the most probable).
+        assert_eq!(shares(0.0), [1.0, 0.0, 0.0, 0.0]);
+        assert_eq!(shares(0.059)[0], 1.0);
+        // The odds of the 3:2 resonance climb from 0 at 0.06 to 1 at 0.20
+        // (Makarov 2012), 0.5 half way.
+        let half = shares(0.13);
+        assert!((half[1] - 0.5).abs() < 0.05, "{half:?}");
+        assert!(shares(0.1)[1] < half[1] && half[1] < shares(0.17)[1]);
+        // Mercury's e = 0.2056: the 2:1 resonance catches about a quarter
+        // of the planets (0.23 in Makarov's integrations), the 3:2 the rest.
+        let mercury = shares(0.2056);
+        assert!((0.2..0.32).contains(&mercury[2]), "{mercury:?}");
+        assert_eq!(mercury[0], 0.0);
+        // A very eccentric orbit is caught in the 5:2 or the 2:1 resonance
+        // before the 3:2 (the 2:1 is certain from 0.34).
+        let high = shares(0.4);
+        assert!(high[1] == 0.0 && high[2] > 0.2 && high[3] > 0.5, "{high:?}");
+        assert_eq!(shares(0.34)[1], 0.0);
+        // The same seed always gives the same state.
+        assert_eq!(capture(0.15, 7), capture(0.15, 7));
+    }
+
+    #[test]
+    fn a_despun_planet_on_a_round_orbit_is_locked_and_an_eccentric_one_may_not_be() {
         // Mercury: 0.387 AU from the Sun, e = 0.2056. Despun (0.56 Gyr),
-        // never circularised: three turns every two orbits.
+        // never circularised.
         let mercury = StarInfo::new(SUN, 0.387, 0.2056);
         assert!(despun(&mercury) && !circularised(&mercury));
-        assert!(mercury.spin_orbit_3_2 && !mercury.tidally_locked);
-        // On a circle, or on an orbit as round as Proxima b's, it would be
-        // locked (Ribas et al. 2016).
+        assert!(!mercury.tidally_locked && mercury.spin_turns >= 1.5);
+        assert_eq!(mercury.spin_orbit_3_2, mercury.spin_turns == 1.5);
+        // On a circle, or on an orbit as round as Proxima b's, it is locked.
         for e in [0.0, 0.0478, 0.059] {
             let round = StarInfo::new(SUN, 0.387, e);
-            assert!(round.tidally_locked && !round.spin_orbit_3_2, "{e}");
+            assert!(round.tidally_locked && round.spin_turns == 0.0, "{e}");
         }
-        // A habitable-zone Earth of an M5 dwarf at e = 0.0478 is locked,
-        // at 0.1 resonant.
+        // Seeds give both states at one eccentricity.
         let red = parse_type("M5V").unwrap();
         let a = orbit_at(red, 0.5);
-        assert!(StarInfo::new(red, a, 0.0478).tidally_locked);
-        assert!(StarInfo::new(red, a, 0.1).spin_orbit_3_2);
+        let states: Vec<f32> = (0..200)
+            .map(|seed| StarInfo::for_planet(red, a, 0.13, 1.0, 1.0, seed).spin_turns)
+            .collect();
+        assert!(states.contains(&0.0) && states.contains(&1.5));
         // Earth is neither.
         let earth = StarInfo::new(SUN, 1.0, 0.0167);
-        assert!(!earth.tidally_locked && !earth.spin_orbit_3_2);
+        assert!(!earth.tidally_locked && earth.spin_turns == 0.0);
+    }
+
+    #[test]
+    fn the_tides_scale_with_the_planets_mass_and_radius() {
+        // A super-Earth of 5.5 Earth masses, 1.76 radii: about three times
+        // faster to circularise, as heavy for its radius to despin.
+        let earth = circularisation_gyr(0.05, 1.0);
+        let big = rocky_circularisation_gyr(0.05, 1.0, 5.5, 1.76);
+        assert!((2.5..3.5).contains(&(earth / big)), "{earth} {big}");
+        let l = rocky_locking_gyr(0.3, 1.0, 5.5, 1.76) / crate::star::locking_gyr(0.3, 1.0);
+        assert!((0.9..1.2).contains(&l), "{l}");
+        // A Mars (0.107 masses, 0.53 radii) is slower to circularise: its
+        // time goes as m / R^5.
+        assert!(rocky_circularisation_gyr(0.05, 1.0, 0.107, 0.53) > earth);
+        // An orbit at the edge: the super-Earth's is circular where the
+        // Earth's is not.
+        let star = StarInfo::new(SUN, 0.08, 0.0);
+        assert!(!circularised(&star) && rocky_circularised(&star, 5.5, 1.76));
     }
 
     #[test]
@@ -259,6 +463,8 @@ mod tests {
         };
         let p = request.resolve(&mut rand::rng()).unwrap().params;
         let star = star_info(&p);
+        // Mercury's own orbit: the 3:2 resonance, which the seed draws
+        // (about three planets in four).
         assert!(star.spin_orbit_3_2 && !star.tidally_locked);
         assert!((p.eccentricity - 0.2056).abs() < 1e-6);
         let day = crate::moons::MoonSystem::draw(&p).unwrap().planet_day_hours;
@@ -283,7 +489,7 @@ mod tests {
             let p = red(seed).resolve(&mut rand::rng()).unwrap().params;
             assert_eq!(p.axial_tilt_deg, 0.0);
             let star = star_info(&p);
-            assert!(star.tidally_locked || star.spin_orbit_3_2);
+            assert!(star.tidally_locked || star.spin_turns > 0.0);
         }
         // Close in, the orbit is circularised: locked.
         let close = crate::request::WorldRequest {
@@ -314,9 +520,46 @@ mod tests {
         let red = parse_type("M5V").unwrap();
         let hz = StarInfo::new(red, orbit_at(red, 0.5), 0.0);
         assert!(despun(&hz) && !circularised(&hz));
-        assert_eq!(tidal_eccentricity(&hz, 0.1), 0.1);
-        let close = StarInfo::new(red, 0.02, 0.0);
-        assert_eq!(tidal_eccentricity(&close, 0.1), 0.0);
+        assert!(circularised(&StarInfo::new(red, 0.02, 0.0)));
+    }
+
+    #[test]
+    fn eccentric_giants_turn_pseudo_synchronously() {
+        // Hut 1981: one turn per orbit on a circle, 1 + 6e² to second
+        // order (Leconte et al. 2010), 1.56 at e = 0.3.
+        assert!((pseudo_synchronous_turns(0.0) - 1.0).abs() < 1e-6);
+        assert!((pseudo_synchronous_turns(0.05) - 1.015).abs() < 1e-3);
+        assert!((pseudo_synchronous_turns(0.3) - 1.557).abs() < 0.01);
+        assert!(giant_stays_locked(0.0) && giant_stays_locked(0.05));
+        assert!(!giant_stays_locked(0.2));
+        // A giant of 0.05 AU round the Sun with e = 0.3 is despun but
+        // turns 1.56 times per orbit, not once.
+        let mut p = crate::request::WorldRequest {
+            planet: Some("gas-giant".into()),
+            star: Some("G2V".into()),
+            orbit_au: Some(0.05),
+            eccentricity: Some(0.3),
+            seed: Some(2),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        }
+        .resolve(&mut rand::rng())
+        .unwrap()
+        .params;
+        let info = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let mass = p.giant_mass_earth.unwrap();
+        let look = crate::giant_world::Look::draw(&p, mass).info;
+        assert!(giant_locked(&info, mass, look.radius_earth));
+        assert!(!star_info(&p).tidally_locked);
+        let turns = info.year_days * 24.0 / look.rotation_hours;
+        assert!(
+            (turns - pseudo_synchronous_turns(0.3)).abs() < 1e-3,
+            "{turns}"
+        );
+        // On a circle it is locked.
+        p.eccentricity = 0.0;
+        assert!(star_info(&p).tidally_locked);
     }
 
     #[test]
