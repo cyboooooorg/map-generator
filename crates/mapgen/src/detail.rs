@@ -37,9 +37,7 @@ use crate::export::ecotone::ecotone_colour_around;
 use crate::export::raw_data::albedo_of;
 use crate::export::raw_data::{Layer16, LoadedWorld};
 use crate::export::variation::{SurfaceVariation, sphere};
-use crate::export::{
-    LIGHT, blend_river, relief_km, shade, water_colour, water_depths_of, with_albedo,
-};
+use crate::export::{blend_river, relief, relief_km, water_colour, water_depths_of, with_albedo};
 use crate::hex;
 use crate::rivers;
 use image::{Rgb, RgbImage};
@@ -54,7 +52,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 5;
+pub const RENDER_VERSION: u32 = 6;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -555,7 +553,7 @@ impl DetailWorld {
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
 
-        let pixels: Vec<[u8; 3]> = (0..n * n)
+        let pixels: Vec<([u8; 3], [u8; 3])> = (0..n * n)
             .into_par_iter()
             .map(|i| {
                 let (px, py) = (i % n, i / n);
@@ -599,7 +597,7 @@ impl DetailWorld {
                 };
                 let dry = planet.rules.choose(input);
                 let biome = planet.remap(dry);
-                let mut colour = if biome.is_water() {
+                let (mut colour, normal) = if biome.is_water() {
                     // Seas from the detailed elevation; lakes from the base
                     // depth below their surface.
                     let depth = if above < 0.0 {
@@ -607,42 +605,52 @@ impl DetailWorld {
                     } else {
                         sample(&self.depths)
                     };
-                    to_srgb(
-                        self.variation
-                            .sea(biome, water_colour(biome, depth), lon, lat),
-                    )
+                    let colour =
+                        to_srgb(
+                            self.variation
+                                .sea(biome, water_colour(biome, depth), lon, lat),
+                        );
+                    (colour, relief::FLAT)
                 } else {
-                    let mut shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
+                    // Unshaded: the viewer lights the relief with the
+                    // normals of the lower half.
+                    let mut normal = self.normal(&elevation, side, px + 1, py + 1, pixel_km, lat);
                     if dry.is_lava() {
-                        shade = 1.0 + (shade - 1.0) * LAVA_SHADE;
+                        normal = relief::soften(normal, LAVA_SHADE);
                     }
-                    let colour = self
-                        .variation
-                        .apply(ecotone_colour_around(planet, input, Some(biome)), lon, lat)
-                        .map(|c| c * shade);
-                    if dry.is_lava() || w.albedo.is_empty() {
+                    let colour = self.variation.apply(
+                        ecotone_colour_around(planet, input, Some(biome)),
+                        lon,
+                        lat,
+                    );
+                    let colour = if dry.is_lava() || w.albedo.is_empty() {
                         colour
                     } else {
                         // Fresh craters' ejecta and rays, at the base resolution.
                         let a = bilinear(&Albedo(&w.albedo), w.width, w.height, bx, by);
                         with_albedo(colour, a)
-                    }
+                    };
+                    (colour, relief::encode_normal(normal))
                 };
                 let c = coverage[i];
                 if c > 0.0 && !planet.rules.frozen(input) && !biome.is_water() && !dry.is_lava() {
                     colour = blend_river(colour, river_colour, c);
                 }
-                colour.map(|c| c.clamp(0.0, 255.0) as u8)
+                (colour.map(|c| c.clamp(0.0, 255.0) as u8), normal)
             })
             .collect();
 
-        RgbImage::from_fn(TILE_SIZE, TILE_SIZE, |x, y| {
-            Rgb(pixels[(y * TILE_SIZE + x) as usize])
+        RgbImage::from_fn(TILE_SIZE, 2 * TILE_SIZE, |x, y| {
+            let (colour, normal) = pixels[((y % TILE_SIZE) * TILE_SIZE + x) as usize];
+            Rgb(if y < TILE_SIZE { colour } else { normal })
         })
     }
 
-    /// Brightness of a land pixel lit from the north-west (as on the base map).
-    fn hillshade(
+    /// The relief normal (east, north, up) of a tile pixel, at the base
+    /// map's exaggeration, from the tile's elevation with its one-pixel
+    /// border: neighbouring tiles share their edge pixels, so their normals
+    /// meet without a seam.
+    fn normal(
         &self,
         elevation: &[f32],
         side: usize,
@@ -650,16 +658,13 @@ impl DetailWorld {
         y: usize,
         pixel_km: f64,
         lat: f64,
-    ) -> f32 {
+    ) -> [f32; 3] {
         let relief = relief_km(self.world().params.circumference_km);
         let at = |x: usize, y: usize| elevation[y * side + x] * relief;
         let dx_km = (pixel_km * lat.cos().max(0.05)) as f32;
         let dz_east = (at(x + 1, y) - at(x - 1, y)) / (2.0 * dx_km);
         let dz_north = (at(x, y - 1) - at(x, y + 1)) / (2.0 * pixel_km as f32);
-        let normal = [-dz_east, -dz_north, 1.0];
-        let len = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
-        let lit: f32 = normal.iter().zip(LIGHT).map(|(n, l)| n * l).sum::<f32>() / len;
-        shade(lit / LIGHT[2])
+        relief::normal_of(dz_east, dz_north)
     }
 
     /// Anti-aliased coverage of the rivers on a tile, drawn with the base
@@ -900,6 +905,47 @@ mod tests {
     }
 
     #[test]
+    fn tiles_stack_their_colour_over_their_normals() {
+        let d = detail_world();
+        let img = d.render_tile(TileId { z: 3, x: 5, y: 3 });
+        assert_eq!(img.dimensions(), (TILE_SIZE, 2 * TILE_SIZE));
+        // The lower half holds unit normals facing out of the ground.
+        for y in (TILE_SIZE..2 * TILE_SIZE).step_by(17) {
+            for x in (0..TILE_SIZE).step_by(13) {
+                let n = crate::export::relief::decode_normal(img.get_pixel(x, y).0);
+                assert!(n[2] > 0.0, "{x} {y}: {n:?}");
+            }
+        }
+    }
+
+    /// Mean step between two columns of normals, per channel.
+    fn column_step(a: &RgbImage, ax: u32, b: &RgbImage, bx: u32) -> f32 {
+        let mut sum = 0.0;
+        for y in TILE_SIZE..2 * TILE_SIZE {
+            let (p, q) = (a.get_pixel(ax, y), b.get_pixel(bx, y));
+            sum += (0..3)
+                .map(|c| (p[c] as f32 - q[c] as f32).abs())
+                .sum::<f32>();
+        }
+        sum / (TILE_SIZE as f32 * 3.0)
+    }
+
+    #[test]
+    fn tile_normals_agree_across_tile_borders() {
+        // The normals across the border of two tiles step no more than the
+        // normals one pixel apart inside a tile: the relief has no seam.
+        let d = detail_world();
+        let (left, right) = (TileId { z: 3, x: 5, y: 3 }, TileId { z: 3, x: 6, y: 3 });
+        let (a, b) = (d.render_tile(left), d.render_tile(right));
+        let across = column_step(&a, TILE_SIZE - 1, &b, 0);
+        let inside = column_step(&a, TILE_SIZE - 2, &a, TILE_SIZE - 1);
+        assert!(
+            across <= 1.5 * inside + 2.0,
+            "across {across}, inside {inside}"
+        );
+    }
+
+    #[test]
     fn coarse_tiles_agree_with_the_base_world() {
         // Level 0 tiles are 512 × 256 together: the size of this base world.
         let d = detail_world();
@@ -980,13 +1026,17 @@ mod tests {
         let (east, west) = (TileId { z: 2, x: 7, y: 1 }, TileId { z: 2, x: 0, y: 1 });
         let (a, b) = (d.render_tile(east), d.render_tile(west));
         let mut diff = 0.0;
-        for y in 0..TILE_SIZE {
+        // Both halves: the colour and the normals.
+        for y in 0..2 * TILE_SIZE {
             let (p, q) = (a.get_pixel(TILE_SIZE - 1, y), b.get_pixel(0, y));
             diff += (0..3)
                 .map(|c| (p[c] as f32 - q[c] as f32).abs())
                 .sum::<f32>();
         }
         // Neighbouring columns across the seam: similar colours.
-        assert!(diff / (TILE_SIZE as f32 * 3.0) < 20.0, "mean step {diff}");
+        assert!(
+            diff / (2.0 * TILE_SIZE as f32 * 3.0) < 20.0,
+            "mean step {diff}"
+        );
     }
 }
