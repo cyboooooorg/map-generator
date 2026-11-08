@@ -247,10 +247,10 @@ export const en = {
     AcidRiver: 'Acid River',
     AcidShore: 'Acid Shore',
     FrozenLake: 'Frozen Lake',
-    GiantZone: 'Zone',
-    GiantBelt: 'Belt',
+    GiantZone: 'Bright band (zone)',
+    GiantBelt: 'Dark band (belt)',
     GiantStorm: 'Storm',
-    GiantPolar: 'Polar Region',
+    GiantPolar: 'Polar region',
   } satisfies Record<Biome, string>,
   /** Cloud kinds. */
   clouds: {
