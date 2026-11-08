@@ -71,14 +71,19 @@ export interface LagrangePoint {
 /** Routh's limit on the mass share for stable L4 and L5 points. */
 export const ROUTH = 0.5 * (1 - Math.sqrt(23 / 27));
 
-/** The five Lagrange points of a planet at `a` AU with mass share `mu`. */
+/**
+ * The five Lagrange points of a planet at `a` AU from its star with mass
+ * share `mu`, distances from the star: L3 lies at `a (1 + 5μ/12)` from the
+ * system's centre of mass, which is `μa` from the star towards the planet,
+ * so `a (1 − 7μ/12)` from the star.
+ */
 export function lagrangePoints(a: number, mu: number): LagrangePoint[] {
   const hill = Math.cbrt(mu / 3);
   const stable = mu < ROUTH;
   return [
     { name: 'L1', angle: 0, au: a * (1 - hill), stable: false },
     { name: 'L2', angle: 0, au: a * (1 + hill), stable: false },
-    { name: 'L3', angle: Math.PI, au: a * (1 + (5 * mu) / 12), stable: false },
+    { name: 'L3', angle: Math.PI, au: a * (1 - (7 * mu) / 12), stable: false },
     { name: 'L4', angle: Math.PI / 3, au: a, stable },
     { name: 'L5', angle: -Math.PI / 3, au: a, stable },
   ];

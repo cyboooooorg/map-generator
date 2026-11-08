@@ -175,12 +175,21 @@
       </dd>
       <dt>{t.card.size}</dt>
       <dd>
-        {withUnit(formatInt(body.physical.radius_km), 'km')} · {mass(body)} · {withUnit(formatUpTo(body.physical.density, 2), 'g/cm³')}
+        {withUnit(formatInt(body.physical.radius_km), 'km')}{#if body.physical.axes_km}
+          (<span class="unit-help" title={t.card.axesHelp}>{t.card.axes({
+            a: withUnit(formatInt(2 * body.physical.axes_km[0]), 'km'),
+            b: formatInt(2 * body.physical.axes_km[1]),
+            c: formatInt(2 * body.physical.axes_km[2]),
+          })}</span>){/if} · {mass(body)} · {withUnit(formatUpTo(body.physical.density, 2), 'g/cm³')}
         · {withUnit(formatUpTo(body.physical.gravity, 2), 'g')}
       </dd>
       <dt>{t.card.spin}</dt>
       <dd>
-        {body.spin.locked ? t.card.locked : hours(body.spin.period_hours)} · {t.card.tilt({
+        {body.spin.locked
+          ? t.card.locked
+          : body.spin.spin_orbit_3_2
+            ? t.card.resonant({ day: hours(body.spin.period_hours) })
+            : hours(body.spin.period_hours)} · {t.card.tilt({
           tilt: `${formatUpTo(body.spin.axial_tilt_deg, 1)}°`,
         })}
       </dd>

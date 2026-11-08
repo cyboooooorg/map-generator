@@ -530,7 +530,7 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
             // Anti-aliased river on top, except where it is frozen or under
             // lava.
             let c = coverage[i];
-            if c > 0.0 && world.temperature[i] >= planet.rules.polar && !dry.is_lava() {
+            if c > 0.0 && !planet.rules.frozen(world.biome_input(i)) && !dry.is_lava() {
                 color = blend_river(color, river_colour, c);
             }
             color.map(|c| c.clamp(0.0, 255.0) as u8)

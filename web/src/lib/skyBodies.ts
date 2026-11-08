@@ -8,7 +8,8 @@
 // positions and radii are in radii of that body.
 import type { Preview } from './api/types/Preview';
 import type { RingSystem } from './api/types/RingSystem';
-import type { Sky } from './sky';
+import type { WorldMetadata } from './api/types/WorldMetadata';
+import { cloudTint, skyFromWorld, type Sky } from './sky';
 
 export type Vec3 = [number, number, number];
 
@@ -64,10 +65,35 @@ export interface SkyBody {
    * radii), with the shadow they cast on it; none for a body without.
    */
   rings?: RingSystem | null;
+  /**
+   * Cosine of its phase angle, the angle at it between the star and the body
+   * shown (1 full, -1 new); the sun's direction is used when absent.
+   */
+  phaseCos?: number;
+  /** The star's flux at it over its flux at the body shown (1 when absent). */
+  insolation?: number;
 }
 
 /** How the planet looks in a moon's sky: its clouds, its air, its marks and their switches. */
 export type PlanetLook = Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo' | 'axialTiltDeg' | 'show'>;
+
+/**
+ * The planet's look in a moon's sky, from the planet's own `world.json`:
+ * its air (the halo of its sky, as its own view scatters it), and its
+ * clouds (the layer its view draws, `file` resolved by `url`) in its
+ * cloud colour. A world without a sky or a cloud layer (an airless rock)
+ * gets none of them, and a giant, whose surface is its clouds, neither.
+ */
+export function planetLook(meta: WorldMetadata, url: (file: string) => string): PlanetLook {
+  const file = meta.layers.clouds?.file;
+  return {
+    // A giant has no sky to scatter (its pressure is nominal): the halo's
+    // limb mix and darkening would wash its bands out.
+    halo: meta.giant ? null : halo(skyFromWorld(meta)),
+    clouds: file ? url(file) : null,
+    cloudTint: cloudTint(meta),
+  };
+}
 
 /** The display switches of a body in the sky (its own, not the body shown's). */
 export interface SkyBodyShow {
@@ -137,6 +163,32 @@ export function inFrontOfGlobe(camera: Vec3, position: Vec3, radius: number): bo
     if (hit > 0) return distance - radius < hit;
   }
   return distance < Math.sqrt(c2 - 1);
+}
+
+/**
+ * The sky bodies the orbit lines are tested against (see skyOrbitFragment
+ * in lib/viewer/shaders.ts), at most `most`: those with a place, drawn at
+ * their size (the tangent of their angular radius from the camera at
+ * `camera` at least `least`; a smaller one is drawn as a marker, which
+ * the lines pass under as before), the largest from the camera first.
+ */
+export function skyOccluders(
+  camera: Vec3,
+  bodies: readonly Pick<SkyBody, 'position' | 'radius'>[],
+  least: number,
+  most: number,
+): ShadowCaster[] {
+  const found: { position: Vec3; radius: number; half: number }[] = [];
+  for (const { position, radius } of bodies) {
+    if (!position || radius === undefined) continue;
+    const distance = Math.hypot(position[0] - camera[0], position[1] - camera[1], position[2] - camera[2]);
+    const half = Math.asin(Math.min(radius / Math.max(distance, 1e-12), 0.999));
+    if (Math.tan(half) >= least) found.push({ position, radius, half });
+  }
+  return found
+    .sort((p, q) => q.half - p.half)
+    .slice(0, most)
+    .map(({ position, radius }) => ({ position, radius }));
 }
 
 /**

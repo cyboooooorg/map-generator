@@ -17,9 +17,9 @@ in km.
 ## Short answer
 
 - **Dense, bright rings have a maximum: the Roche limit**, about
-  2.0–2.5 R for icy particles round a giant. Beyond it, ring material
+  2.15–3.6 R for icy particles round a giant. Beyond it, ring material
   gathers into moons within a few orbits. Saturn's main rings end at
-  2.27 R, just inside its Roche limit for ice (about 2.2–2.3 R).
+  2.27 R, inside its Roche band for ice (2.15–2.62 R).
 - **Faint dust rings have no such limit.** They are not held up by
   anything: they are fed by a source (a geyser moon, impacts on small
   moons) and last only as long as it feeds them. Saturn's E ring spans
@@ -48,14 +48,19 @@ planet's tides inside the Roche limit:
   `d ≈ 1.26 R (ρ_planet / ρ_moon)^(1/3)`.
 
 Ring particles are porous water ice, about 0.5–0.9 g/cm³. The fluid
-limit for them is:
+limit for them is below, in equatorial radii, the unit ring distances
+are given in. The formula's `R` and `ρ_planet` must come from the same
+radius: the mean density (column 2) goes with the mean radius, so the
+limits here take the planet's density over a sphere of its equatorial
+radius instead (from NASA's masses and equatorial radii; Saturn: 0.62
+g/cm³ over 60,268 km).
 
-| Planet | Density (g/cm³) | Fluid limit, ice at 0.9 | Fluid limit, ice at 0.5 | Rigid limit, ice at 0.9 |
+| Planet | Mean ρ (g/cm³) | Fluid, ice 0.9 | Fluid, ice 0.5 | Rigid, ice 0.9 |
 | --- | --- | --- | --- | --- |
-| Jupiter | 1.33 | 2.78 R | 3.39 R | 1.44 R |
-| Saturn | 0.69 | 2.23 R | 2.72 R | 1.15 R |
-| Uranus | 1.27 | 2.73 R | 3.33 R | 1.41 R |
-| Neptune | 1.64 | 2.98 R | 3.62 R | 1.54 R |
+| Jupiter | 1.33 | 2.72 R | 3.30 R | 1.40 R |
+| Saturn | 0.69 | 2.15 R | 2.62 R | 1.11 R |
+| Uranus | 1.27 | 2.72 R | 3.30 R | 1.40 R |
+| Neptune | 1.64 | 2.96 R | 3.60 R | 1.53 R |
 
 Between the rigid and the fluid limit, small solid bodies survive (Pan
 and Daphnis inside Saturn's A ring, Metis and Adrastea in Jupiter's
@@ -88,7 +93,7 @@ collisions are very elastic (Morgado et al. 2023).
 | | E | about 3–8 | dust from Enceladus (3.95) |
 | | Phoebe | about 100–270 | dust from Phoebe, tilted, retrograde |
 | Uranus (R = 25,559 km) | 6, 5, 4, α, β, η, γ, δ | 1.64–1.90 | narrow, dark |
-| | ε | 1.95 | narrow, dense, shepherded by Cordelia and Ophelia |
+| | ε | 2.006 | narrow, dense, shepherded by Cordelia and Ophelia |
 | | ν | 2.6–2.7 | dust |
 | | μ | 3.4–4.0 | dust, round Mab |
 | Neptune (R = 24,764 km) | Galle | 1.69 | faint, broad |
@@ -100,9 +105,9 @@ So:
 
 - **Dense rings** (Saturn's B and A, Uranus's ε) stay inside about
   2.3 R.
-- **Narrow dark rings** (Uranus, Neptune) lie at 1.6–2.6 R. Some sit
-  slightly beyond the fluid limit for the least dense particles; they
-  are held there by shepherd moons.
+- **Narrow dark rings** (Uranus, Neptune) lie at 1.6–2.6 R, well inside
+  the fluid limit of their dense planets; shepherd moons hold them at
+  their places.
 - **Dust rings** reach as far as their sources: Thebe at 3.1 R,
   Enceladus at 4 R, Phoebe at 215 R.
 - **The inner edge** is set by the planet. Below about 1.1 R, its upper
@@ -151,9 +156,10 @@ rings go the other way: they are dust knocked off its four inner moons
 ### Is there a maximum? (answer)
 
 - **Bright, dense rings:** the fluid Roche limit for their particles,
-  about 2.0–2.5 R round a gas giant and 2.5–3 R round a denser ice
-  giant. Saturn's rings end at 2.27 R. A generator that wants Saturns
-  should keep its bright rings inside `2.44 R (ρ_p / 0.9)^(1/3)`.
+  2.15–2.62 R round Saturn, 2.7–3.3 R round Jupiter or Uranus and
+  3.0–3.6 R round Neptune. Saturn's rings end at 2.27 R. A generator
+  should keep its bright rings inside `2.44 R (ρ_p / ρ_particles)^(1/3)`,
+  `ρ_p` taken over the same radius `R`.
 - **Faint dust rings:** no physical maximum short of the Hill sphere.
   They sit where a moon feeds them: a gossamer ring out to an inner
   moon, an E-type ring round a geyser moon, a Phoebe-type ring round a
@@ -224,12 +230,17 @@ distance `a` has a Hill radius `r_H = a (μ / 3)^(1/3)`. In a dense ring:
 
 ### How many there are
 
-| Planet | Moons in or at the edge of its rings | Count |
-| --- | --- | --- |
-| Jupiter | Metis, Adrastea (in the main ring), Amalthea, Thebe (gossamer rings) | 4 |
-| Saturn | Pan, Daphnis (embedded); Atlas, Prometheus, Pandora (edges); Janus, Epimetheus (A ring edge); Aegaeon, Methone, Anthe (arcs); hundreds of propellers | about 10, plus propellers |
-| Uranus | Cordelia, Ophelia (ε shepherds), Mab (μ ring); about ten more small inner moons near the rings | 3 at least |
-| Neptune | Naiad, Thalassa, Despina (inside or among the rings), Galatea (Adams arcs) | 4 |
+Moons in or at the edge of each giant's rings:
+
+- **Jupiter, 4:** Metis, Adrastea (in the main ring), Amalthea, Thebe
+  (gossamer rings).
+- **Saturn, about 10, plus propellers:** Pan, Daphnis (embedded); Atlas,
+  Prometheus, Pandora (edges); Janus, Epimetheus (A ring edge); Aegaeon,
+  Methone, Anthe (arcs); hundreds of propellers.
+- **Uranus, 3 at least:** Cordelia, Ophelia (ε shepherds), Mab (μ ring);
+  about ten more small inner moons near the rings.
+- **Neptune, 4:** Naiad, Thalassa, Despina (inside or among the rings),
+  Galatea (Adams arcs).
 
 So **no giant of the Solar System has rings without ring moons.** These
 moons are small, 1 km to about 200 km (Janus is 180 km across, Amalthea
@@ -278,9 +289,9 @@ generated.
   and lies near the fluid Roche limit, but it does not depend on the
   giant's density. Inflated giants (low density, a lower limit) and
   dense ones get the same range. For a giant of Saturn's density the
-  limit for ice is 2.2–2.7 R; for one of Jupiter's, 2.8–3.4 R. The
-  current range stays inside both, so this is not wrong, only blind to
-  the planet.
+  limit for ice is 2.15–2.62 R; for one of Jupiter's, 2.72–3.30 R. The
+  current range stays inside both but for its lowest edges (2.1 against
+  2.15), so this is about right, only blind to the planet.
 - **Faint rings:** 1.5–2.2 R matches Uranus's and Neptune's narrow
   rings. There are no dust rings further out: no gossamer rings, no
   E-type or Phoebe-type ring.
@@ -411,6 +422,44 @@ output. Only realism fixes change it.
 3. Steps 2 to 4 together (ring moons and the gaps they clear).
 4. Step 5 later, if wanted.
 
+## 5. Since the study (2026-11-07)
+
+Steps 2 to 5 are in (`rings.rs`, `system.rs`), and follow the physics
+further than proposed:
+
+- **The Roche limit alone sets a bright ring's edge.** No cap at 2.5 R:
+  the edge is the fluid limit for particles of 0.5–0.9 g/cm³ from the
+  giant's density over its equatorial radius, 2.15–2.62 R round a
+  Saturn, past 3 R round a denser giant. Only physics bounds it: the
+  rings stay Hill stable inside the giant's innermost other moon
+  (Gladman 1993) and above its atmosphere (1.11 R, Saturn's D ring;
+  Mitchell et al. 2018). The giant asked for (`--planet gas-giant`) and
+  the giant a world of the request orbits are shaped as the others; the
+  first now has its own mass in its system, not Earth's density.
+- **The resonance cuts an edge.** The 2:1 inner Lindblad resonance of the
+  resonant moon, found with the giant's `J2` (from its flattening,
+  `f = 3/2 J2 + q/2`, Murray & Dermott 1999), is the inner edge of a
+  division 0.04–0.09 R wide: the B ring's edge and the Cassini Division.
+  Saturn's `J2` puts Mimas's 2:1 650 km outward of Kepler's, at 117,532
+  km (Spitale & Porco 2010, with the field's higher terms: 117,556).
+- **Ring moons grow.** A moonlet grows from a core of solid ice (1.5 to
+  10 km) under a mantle of ring particles with 65 % voids until it fills
+  its Roche lobe (Porco et al. 2007, eq. 3): it ends at the critical
+  density of its distance, `3M / (γ a³)`, in the lobe's 3 : 2 : 2 shape.
+  Edge moons and shepherds are no less dense than the critical density,
+  filling their lobes when raised to it; edge moons are larger the
+  farther out (Charnoz et al. 2010). The resonant moon is irregular below
+  200 km in radius (Lineweaver & Norman 2010).
+- **Dust-only ring systems.** A giant with faint rings gets one or two
+  small moons at 2–3.2 R (Amalthea, Thebe) whose dust spreads from the
+  narrow ring out to their orbit (Burns et al. 1999), and on half of them
+  a small moon at 3.4–4.2 R wrapped in a faint belt (Mab and the μ ring,
+  de Pater et al. 2006). A gossamer ring reaches 1 to 1.26 times its
+  moon's distance (Thebe's extension).
+- **Not done:** a plume moon chosen by its tidal heating, a Phoebe ring
+  (systems have no irregular moons yet) and the Janus 7:6 edge of the A
+  ring (backlog item 18).
+
 ## Sources
 
 - Roche limit, classical and for rubble piles: Murray & Dermott 1999,
@@ -453,6 +502,21 @@ output. Only realism fixes change it.
   Science 338, 1196.
 - Jupiter's rings from its inner moons: Burns et al. 1999, "The
   formation of Jupiter's faint rings", Science 284, 1146.
+- Uranus's μ ring: de Pater, Hammel, Gibbard & Showalter 2006, "New dust
+  belts of Uranus: one ring, two ring, red ring, blue ring", Science 312,
+  92, <https://doi.org/10.1126/science.1125110>.
+- The B ring's edge and Mimas's 2:1: Spitale & Porco 2010, "Free unstable
+  modes and massive bodies in Saturn's outer B ring", AJ 140, 1747,
+  <https://doi.org/10.1088/0004-6256/140/6/1747>.
+- The D ring's inner edge: Mitchell et al. 2018, "Dust grains fall from
+  Saturn's D-ring into its equatorial upper atmosphere", Science 362,
+  eaat2236, <https://doi.org/10.1126/science.aat2236>.
+- Hill stability: Gladman 1993, "Dynamics of systems of two close
+  planets", Icarus 106, 247, <https://doi.org/10.1006/icar.1993.1169>,
+  in the form of Obertas, Van Laerhoven & Tamayo 2017, Icarus 293, 52,
+  <https://doi.org/10.1016/j.icarus.2017.04.010>.
+- Round moons: Lineweaver & Norman 2010, "The potato radius: a lower
+  minimum size for dwarf planets", <https://arxiv.org/abs/1004.1091>.
 - Shepherding and ring edges: Goldreich & Tremaine 1979, "Towards a
   theory for the Uranian rings", Nature 277, 97; Goldreich & Tremaine
   1982, "The dynamics of planetary rings", ARA&A 20, 249.

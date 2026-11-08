@@ -34,6 +34,7 @@ pub mod preset;
 pub mod request;
 pub mod rings;
 pub mod rivers;
+pub mod spin;
 pub mod star;
 pub mod system;
 pub mod world;

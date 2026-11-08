@@ -45,12 +45,12 @@ export interface HostGuide {
 
 /**
  * The points the labels hang from, in the scene's frame (see
- * PlanetView.skyScreenPositions). The host's distance has no fixed point:
- * it goes on whatever part of the host line is in view, among `host`.
+ * PlanetView.skyScreenPositions). The host's is a fixed point on the line
+ * to it (see hostLabelRadius), merged with the pull's label.
  */
 export interface GuidePoints {
   spin: Vector3 | null;
-  host: Vector3[] | null;
+  host: Vector3 | null;
   pull: Vector3 | null;
   velocity: Vector3 | null;
 }
@@ -66,60 +66,18 @@ export function hostLineRadii(distance: number, count = HOST_LINE_POINTS): numbe
   return Array.from({ length: count }, (_, i) => far ** (i / (count - 1)));
 }
 
-/**
- * The index of the point to label among a line's points, given which are
- * in view: the middle of the longest run in view, or -1 if none is. The
- * label then stays on the line for as long as any of it shows.
- */
-export function labelIndex(inView: boolean[]): number {
-  let best = -1;
-  let bestLength = 0;
-  let start = -1;
-  inView.forEach((shown, i) => {
-    if (shown && start < 0) start = i;
-    if (start >= 0 && (!shown || i === inView.length - 1)) {
-      const end = shown ? i : i - 1;
-      if (end - start + 1 > bestLength) {
-        bestLength = end - start + 1;
-        best = Math.floor((start + end) / 2);
-      }
-      start = -1;
-    }
-  });
-  return best;
-}
-
-/** Where the host line's distance label prefers to sit, and how far out it may go, in radii of the body from its centre. */
-export const HOST_LABEL_AT = 2.5;
-export const HOST_LABEL_REACH = 12;
+/** How far beyond the surface the host's label hangs, in radii of the body: one diameter. */
+export const HOST_LABEL_BEYOND = 2;
 
 /**
- * Which point of the host line (`radii` from the body's centre, nearest
- * first) carries its distance label, given which are in view and which
- * leave its label `clear` of the other guides' labels (the pull's and the
- * velocity's, whose arrows start along the same line): the first point
- * from `HOST_LABEL_AT` outwards that is both, within `HOST_LABEL_REACH`,
- * so that the label holds still as the camera moves and moves out just
- * enough not to cover theirs; else the middle of the longest run of such
- * points; else of those in view within reach; else anywhere along it (see
- * labelIndex); -1 when none is in view.
+ * How far from the body's centre, in its radii, the host's distance label
+ * hangs along the line to the host: one diameter of the body beyond its
+ * `surface` there, or the tip of the pull arrow (`pullTip`, from the
+ * centre) when that lies farther out, never beyond the host (`distance`).
+ * It is fixed on the axis, wherever the camera goes.
  */
-export function hostLabelIndex(radii: readonly number[], inView: readonly boolean[], clear?: readonly boolean[]): number {
-  const free = (i: number) => inView[i] === true && clear?.[i] !== false;
-  const within = (i: number) => radii[i]! <= HOST_LABEL_REACH;
-  const first = radii.findIndex((r) => r >= HOST_LABEL_AT);
-  for (let i = Math.max(first, 0); i < radii.length && within(i); i++) {
-    if (free(i)) return i;
-  }
-  for (const pick of [
-    radii.map((_, i) => free(i)),
-    inView.map((shown, i) => shown && within(i)),
-    [...inView],
-  ]) {
-    const k = labelIndex(pick);
-    if (k >= 0) return k;
-  }
-  return -1;
+export function hostLabelRadius(surface: number, pullTip: number, distance: number): number {
+  return Math.min(Math.max(surface + HOST_LABEL_BEYOND, pullTip), Math.max(distance, surface));
 }
 
 export class BodyGuides {
@@ -134,7 +92,8 @@ export class BodyGuides {
   /** How far the surface reaches in a direction of the body's frame, in its radii (1: a sphere). */
   private surfaceAt: (direction: Vector3) => number = () => 1;
   private spinTip = new Vector3();
-  private hostLine: Vector3[] | null = null;
+  /** The host's direction (unit) and distance, in radii, from the body's centre; null without a host. */
+  private hostAxis: { direction: Vector3; distance: number } | null = null;
   private pullTip: Vector3 | null = null;
   private velocityTip: Vector3 | null = null;
   private locked: boolean | null = null;
@@ -214,7 +173,8 @@ export class BodyGuides {
   setHost(guide: HostGuide | null): void {
     clear(this.arrows);
     for (const child of [...this.host.children]) if (child !== this.arrows) clearOne(this.host, child);
-    this.hostLine = this.pullTip = this.velocityTip = null;
+    this.hostAxis = null;
+    this.pullTip = this.velocityTip = null;
     this.pull = this.velocity = null;
     if (!guide) return;
     const to = new Vector3(...guide.position);
@@ -225,7 +185,8 @@ export class BodyGuides {
     // host lies far beyond the camera's far plane, which only bounds the
     // globe's depth, so the line's depth is held at that plane instead of
     // being cut there (see clampToFarPlane).
-    this.hostLine = hostLineRadii(distance).map((r) => toward.clone().multiplyScalar(r));
+    this.hostAxis = { direction: toward, distance };
+    const hostLine = hostLineRadii(distance).map((r) => toward.clone().multiplyScalar(r));
     const material = new LineDashedMaterial({
       color: HOST_LINE_COLOUR,
       dashSize: 0.25,
@@ -234,7 +195,7 @@ export class BodyGuides {
       opacity: 0.75,
     });
     clampToFarPlane(material);
-    const line = new Line(new BufferGeometry().setFromPoints(this.hostLine), material);
+    const line = new Line(new BufferGeometry().setFromPoints(hostLine), material);
     line.computeLineDistances();
     line.frustumCulled = false;
     this.host.add(line);
@@ -264,12 +225,21 @@ export class BodyGuides {
     }
   }
 
+  /** The host label's point on the line to the host, in the host group's frame (see hostLabelRadius). */
+  private hostLabel(): Vector3 | null {
+    const axis = this.hostAxis;
+    if (!axis) return null;
+    const surface = this.surfaceAt(axis.direction);
+    const pull = this.pullTip?.length() ?? 0;
+    return axis.direction.clone().multiplyScalar(hostLabelRadius(surface, pull, axis.distance));
+  }
+
   /** The points their labels hang from, in the scene's frame; null for those not shown. */
   points(): GuidePoints {
     const scene = (v: Vector3 | null, group: Group) => (v && group.visible ? group.localToWorld(v.clone()) : null);
     return {
       spin: scene(this.spinTip, this.spin),
-      host: this.hostLine && this.host.visible ? this.hostLine.map((p) => this.host.localToWorld(p.clone())) : null,
+      host: scene(this.hostLabel(), this.host),
       pull: scene(this.pullTip, this.arrows),
       velocity: scene(this.velocityTip, this.arrows),
     };

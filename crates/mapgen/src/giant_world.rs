@@ -335,6 +335,10 @@ fn palette(kind: GiantKind, class: u8, t: f32, u: f32) -> Palette {
     }
 }
 
+/// Equilibrium temperature above which a giant is hot, K: locked to its
+/// star, inflated.
+pub const HOT_GIANT_K: f32 = 1000.0;
+
 impl Look {
     /// The look of the giant world `p` of mass `mass_earth`.
     pub fn draw(p: &WorldParams, mass_earth: f32) -> Self {
@@ -343,7 +347,7 @@ impl Look {
         let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(p.seed, stream::GIANT_LOOK)));
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
         let equilibrium = star.equilibrium_k;
-        let hot = equilibrium > 1000.0;
+        let hot = equilibrium > HOT_GIANT_K;
         let radius_earth = giant_radius(mass_earth, equilibrium);
         let internal = match kind {
             GiantKind::Gas => 100.0 * (mass_earth / 317.8).powf(0.4),
@@ -353,8 +357,10 @@ impl Look {
         let class = cloud_class(effective);
 
         // Spin: Jupiter's and Saturn's 10 hours, the ice giants' 16 to 17;
-        // a hot giant turns once a year, locked to its star.
-        let rotation_hours = if hot || star.tidally_locked {
+        // a hot giant, or one its star's tides have locked (with a giant's
+        // own tidal parameters, see `crate::spin::giant_locking_gyr`), turns
+        // once a year.
+        let rotation_hours = if hot || crate::spin::giant_locked(&star, mass_earth, radius_earth) {
             star.year_days * 24.0
         } else {
             match kind {
@@ -942,6 +948,8 @@ pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
         elevation_base: None,
         moisture: Vec::with_capacity(n),
         temperature: Vec::with_capacity(n),
+        seasons: crate::climate::Seasons::none(h),
+        lapse_rate: 0.0,
         flow_km2: vec![0.0; n],
         volcanic_zone: vec![0.0; n],
         coast_distance_km: vec![crate::generation::COAST_DISTANCE_CAP_KM; n],
@@ -1018,6 +1026,8 @@ mod tests {
             host: crate::exomoon::HostMode::None,
             given_rings: None,
             impact_factor: None,
+            locked_to_star: None,
+            gravity: None,
         }
     }
 

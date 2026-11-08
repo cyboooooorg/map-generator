@@ -107,6 +107,16 @@ export class LoadedWorld {
     if (!again) {
       this.subject = body ? 'planet' : 'star';
       this.pinnedPlanets = [];
+      // Nothing of the system left may stand under the new id: its file,
+      // names, body and layers would be read as the new system's until
+      // its own file arrives (moon ids requested under the wrong system).
+      this.system = null;
+      this.systemNames = {};
+      this.systemBody = null;
+      this.worldMeta = null;
+      this.worldStats = null;
+      this.worldRivers = null;
+      this.loadBody(null);
     }
     this.systemId = id;
     this.worldId = null;

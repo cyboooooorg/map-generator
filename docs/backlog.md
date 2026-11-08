@@ -146,12 +146,14 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Item                                                                                                                 | Status |
 | -------------------------------------------------------------------------------------------------------------------- | ------ |
 | Depression filling: neighbours by index (4.2 → 2.4 s at 8192 × 4096, same worlds); parallel land masses gave no gain | done   |
-| Picking on the globe ignores the relief displacement (error under a degree)                                          | todo   |
-| Night side lighting is a fixed 7 % floor, not physically calibrated                                                  | todo   |
+| Picking on the globe ignores the relief displacement (error under a degree)                                          | done   |
+| Night side lighting: the light the sky's bodies reflect on a log display curve, not a fixed 7 % floor                | done   |
 | Volcanoes on non-volcanic presets: quantile threshold, cones after erosion, lowland vents (lava 0 → 0.3–0.5 %)       | done   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
 | Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
+| Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | done   |
+| Planet view: from a moon, the host planet is drawn without its atmosphere and clouds                                 | done   |
 
 ## 5. Terrain realism, second round
 
@@ -546,3 +548,175 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   bright rings, and plume rings round an active icy moon; drawn faint in
   the planet view of the giant and listed on the cards. A Phoebe-type
   ring waits for the systems' irregular moons.
+- **Done (2026-11-07):** the rings follow the science more closely: the
+  Roche limit alone sets a bright ring's edge (no cap at 2.5 radii), the
+  giant asked for is shaped as the others, the 2:1 resonance cuts an
+  edge with a division outward of it, placed with the giant's `J2`,
+  moonlets grow from cores until they fill their Roche lobe, edge moons
+  grow with distance, and giants with faint rings get small dust-source
+  moons and dust rings (Jupiter's gossamer rings, Uranus's μ ring).
+- **Remaining:** a plume moon chosen by its tidal heating (an icy moon in
+  resonance, its eccentricity forced: Peale et al. 1979 for Io, Meyer &
+  Wisdom 2007 for Enceladus), not by drawn odds; a Phoebe-type ring, once
+  systems have irregular moons; the A ring's outer edge set by an outer
+  moon's 7:6 resonance (Janus); a faint D ring inside bright rings; the
+  equatorial ridges of Pan and Atlas.
+
+## 19. Tides, spin and moons: what the science fixes left
+
+- **Problem:** the science fixes of 2026-11-07 (`spin.rs`, `moons.rs`)
+  model the 3:2 spin–orbit resonance, circularisation, light moons of
+  despun planets and giants, and tidal shapes, but keep some
+  simplifications:
+  - a sharp line at e = 0.06 between locked and 3:2 (Ribas et al. 2016),
+    where the odds of capture rise with the eccentricity (Makarov 2012):
+    a draw keyed by the seed would be closer;
+  - only the 3:2 resonance: large eccentricities favour 2:1 and higher
+    (Makarov, Berghea & Efroimsky 2012; Correia & Laskar 2009, Table 3);
+  - giants are locked once despun, where a fluid planet on an eccentric
+    orbit settles into pseudo-synchronous rotation (Hut 1981);
+  - circularisation and despinning take Earth's mass and radius for every
+    rocky planet (a super-Earth circularises about three times faster);
+  - a 3:2 world takes the rotating climate whatever its solar day (two
+    years: 176 days for Mercury), not a slow rotator's;
+  - drawn eccentricities follow Kipping 2013, fitted mostly to giants:
+    small close-in planets are less eccentric, so too many despun
+    planets of red dwarfs come out in 3:2;
+  - a moon's tilt is the Moon's 6.68° for a giant-impact moon and 0 for
+    the others, not its own Cassini state from the precession rates;
+  - inclinations of moons are to the planet's equator, the stability
+    limits to its orbit;
+  - Elser et al. 2011's odds of a large moon apply round every star.
+- **Done when:** capture into 3:2 and higher resonances is drawn by
+  eccentricity, giants turn pseudo-synchronously, slow rotators get a
+  climate of their own, rocky planets' tides scale with their mass and
+  radius, and moons get their Cassini obliquity.
+- **Status:** todo
+
+## 20. Relief science, what remains
+
+- **Status:** todo
+- **Problem:** the science articles on craters, plates and mountains
+  (2026-11-07) list departures of the generator from the science. The
+  fixes of 2026-11-07 (rocky gravity, `1/g` relief, crater depths, peak
+  rings, diffusion, size law, saturation) leave these, each needing a
+  model the app does not have yet.
+- **Craters:**
+  - The transition from simple to complex craters follows gravity only:
+    a target's strength would move it (Mercury about 12 km where the app
+    gives 6.6, Earth 3 to 5 km against 2.5, Barnouin et al. 2012). Icy
+    moons turn complex far sooner than rock at the same gravity (2 to
+    3 km on Ganymede, Schenk 1991, 2002, a number read only in secondary
+    sources), so `icy-moon` worlds get a transition several times too
+    large. Done when the transition reads a strength per crust (rock,
+    volatile-rich rock, ice) from a checked source.
+  - No multi-ring basins (Orientale): their onset does not scale as
+    `1/g` and depends on a weak layer under the surface (Melosh &
+    Ivanov 1999), with no rule to scale it from the Moon.
+  - The lunar chronology on most worlds: `[geology] impact_ratio` and
+    `crater_scale` carry a body's flux and crater size against the
+    Moon's, set for `mars-like` from Hartmann's isochrons (2.6 and
+    0.751). Mercury, Venus and Earth keep 1: Le Feuvre & Wieczorek 2011
+    (doi:10.1016/j.icarus.2011.03.010) could not be read (paywall, HAL
+    behind a bot wall), and Marchi et al. 2009 give Mercury's production
+    function only in figures. A world of another system keeps the
+    Moon's flux, scaled by its giants and belts and by locking; a
+    general rule would need the flux of impactors and their speeds per
+    orbit (gravitational focusing included).
+- **Plates:**
+  - Slab pull sets the present speed of each plate from its sinking
+    edge (2026-11-07), on one pass over the present boundary cells; at
+    another epoch that pass is extra, about 5 % of a plate map (0.24 s
+    at −100 Ma). The drift's other stages keep drawn speeds: setting
+    theirs too means finding each stage's boundaries, a pass per stage.
+    The plate count does not follow the planet's size: no source scales
+    it (Bird 2003 counts Earth's).
+  - Isostasy: continents float as a platform and the sea floor is
+    bounded between the shelf and Parsons & Sclater's old floor
+    (`generation::floating`, 2026-11-07), calibrated on Earth's
+    hypsometry (ETOPO 2022). What remains: no crustal-thickness field
+    (the platform's height is a calibration rather than Airy's balance
+    of a thickness), no flexure (volcanoes and ranges do not bend the
+    lithosphere into moats), and the platform floats at the waterline,
+    so a sea level lowered on a world exposes platform, not old basins.
+  - The age of old ocean floor is unknown: floor older than about 18 Ma
+    lies between 4 and 6.4 km by the noise (`generation::floating`), not
+    by its age.
+- **Small bodies:** their noise relief is capped (8 % of the radius;
+  9 km on airless stagnant bodies, ice 0.4 of rock), but an icy body's
+  simple craters are still rock's bowls, under rock's transition (see
+  the craters' first point).
+
+## 21. Climate: what the model leaves out
+
+- **Status:** todo
+- **Source:** the science articles "How does axial tilt make climate zones
+  and seasons?" and "Why is one side of a mountain range dry?" (their
+  "Where it departs from the science" sections), after the climate fixes
+  of 2026-11-07 (exact insolation, seasons, Clausius-Clapeyron rain,
+  meridional winds, foehn).
+- **Cold eastern-boundary currents** (Humboldt, Benguela, California): the
+  sea off the west coasts of the subtropics is several degrees colder,
+  which dries the coast (the Atacama, the Namib). A rule cooling the sea
+  pixels west of a continent between about 10° and 40° would need a
+  sourced magnitude and width (SST climatologies), the ocean basins found
+  row by row, and the moisture pass to read the cooled sea; the
+  temperature anomaly noise stands in for it today.
+- **Monsoons:** the seasonal reversal of the wind between land and sea.
+  The seasons now set summer and winter temperatures, but the wind and
+  the rain are annual means: a monsoon needs a summer and a winter run of
+  the moisture pass with winds driven by the land-sea contrast.
+- **Uneven seasons on eccentric orbits:** the annual mean keeps the
+  `1/sqrt(1 − e²)` factor, but the seasonal swing ignores the distance to
+  the star at the solstices (Mars: 46 % more light at perihelion). It
+  needs a longitude of perihelion, drawn or given, in `WorldParams`.
+- **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
+  narrower Hadley cells under heavier atmospheres, without a scaling the
+  app could use; the belts scale with rotation and size only.
+- **Winter-rain climates and the season of the rain:** Köppen's dryness
+  threshold depends on the season of the rain (Kottek et al. 2006). The
+  app has annual rain only and takes the summer share from the air's
+  capacity at the half-years' temperatures, so rain peaking in winter
+  (the Mediterranean, BSk and Csa borders) is not modelled; deserts are
+  7.5 % of the land and steppes 22 %, where Earth's are about half and
+  half. A monthly moisture pass (see Monsoons) would give both.
+- **Absolute rain is calibrated, not derived:** the rain rate is scaled
+  to GPCP's land mean and zonal means with constants that have no source
+  (`MM_PER_RATE`, `COLD_RAIN_EXPONENT`, `CIRCULATION_OCTAVES`,
+  `ITCZ_OCTAVES`, `SUBSIDENCE_HUMIDITY`). Done when the rain comes from a
+  moisture budget (evaporation, convergence) in physical units.
+- **Circulation on tilted worlds:** the wind belts, the circulation
+  factor and the ITCZ follow the geographic latitude, whatever the
+  tilt. At 90° the poles are the warm annual-mean regions and the rain
+  there reaches 4 000 mm a year, from warm air over a nearby sea, while
+  the cells stay where a vertical axis would put them. A circulation
+  following the thermal equator (the latitude of the annual-mean
+  insolation maximum) would need a source for the Hadley cell's response
+  to the tilt (Kaspi & Showman 2015 vary obliquity). A world with no
+  tilt has ice on half of its 45-60° land: with no seasons the warmest
+  month is the annual mean, below 0 °C there (Köppen's EF), which is
+  physical.
+- **Storms, fronts and ENSO:** moisture is the annual mean of a steady
+  wind. Weather, interannual variability (El Niño, La Niña) and the storm
+  rain that makes most orographic precipitation are model limits, not
+  planned.
+
+## 22. Storage
+
+- **Status:** decided (2026-11-08)
+- **Analysis:** [analysis/15-storage.md](analysis/15-storage.md)
+- **Problem:** everything is files on one host's disk: listing systems
+  opens every `system.json`, jobs are lost on a restart, source data,
+  derived files and diagnostics share one directory (about 30 % of the
+  3.9 GB could be rebuilt or dropped), and the user's names sit next to
+  generated files.
+- **Decided:** tens to hundreds of systems, one user, one Docker host
+  (perhaps a server later); no object store. The steps, each its own pull
+  request:
+
+| Step | Change                                                                                                   | Status |
+| ---- | -------------------------------------------------------------------------------------------------------- | ------ |
+| 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing; its file on a host bind mount (`./db:/data/db`) so it survives restarts | todo   |
+| 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
+| 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
+| 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |

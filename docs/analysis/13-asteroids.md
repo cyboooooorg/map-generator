@@ -4,11 +4,19 @@ Backlog item 17. User request (2026-11-06): study scientifically asteroid
 fields, asteroid belts, and the Lagrange points with the asteroids they
 hold in theory.
 
-Today a system (`src/system.rs`, `system.json`) holds a star, its planets
-and their moons. Small bodies do not exist: there is no belt, no trojan
-swarm and no Lagrange point anywhere in the data or the viewers. The only
-trace of them is the crater rate, which `giants.rs` sets from the mass of
-the outermost giant (`impact_factor`, after Horner & Jones 2008).
+**Status (2026-11-07): implemented.** The proposal of section 4 is in
+the app: `src/belts.rs` draws the belts, their gaps, the trojans and the
+crater rate from the belts' mass, the star view draws them with the
+Lagrange points (`web/src/lib/viewer/smallBodies.ts`), and rocky planets
+keep out of a giant's belt zone. Co-orbital moons are not drawn. Section
+3 describes the app before this study.
+
+Before it, a system (`src/system.rs`, `system.json`) held a star, its
+planets and their moons. Small bodies did not exist: there was no belt,
+no trojan swarm and no Lagrange point anywhere in the data or the
+viewers. The only trace of them was the crater rate, which `giants.rs`
+set from the mass of the outermost giant (`impact_factor`, after Horner
+& Jones 2008).
 
 ## 1. What a belt is
 
@@ -134,7 +142,7 @@ the planet's pulls.
 | ------- | ------------------------ | -------------------------------------------------------------------------------------------- |
 | Jupiter | more than 10 000 known   | about 2.6 × 10⁵ larger than 1 km, a tenth of the main belt; L4 holds 1.4 times as many as L5 |
 | Neptune | about 30                 | thought to be as many as Jupiter's, or more                                                  |
-| Mars    | about ten                | mostly at L5, some of them fragments of one body                                             |
+| Mars    | 16, 15 of them stable    | mostly at L5, some of them fragments of one body                                             |
 | Uranus  | two, both temporary      | Saturn's and Jupiter's pulls destabilize them                                                |
 | Earth   | two (2010 TK7, 2020 XL5) | temporary, a few thousand years; tens to hundreds expected, not thousands                    |
 | Saturn  | none stable              | Jupiter, near a 5:2 resonance, empties its L4 and L5                                         |
@@ -159,7 +167,7 @@ the planet's pulls.
   by the orbit's motion after 2026). Co-orbital planets are allowed by
   dynamics but none is known.
 
-## 3. What our generator does, and what is missing
+## 3. What our generator did, and what was missing
 
 | Piece              | Today                                                 | Missing                                                                  |
 | ------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -207,8 +215,10 @@ planet.trojans: { l4: count, l5: count }   // bodies larger than 1 km
   - One FGK system in four gets one, and one M system in ten. These are
     observed rates; real belts are more common, since ours would go
     undetected.
-- **Trojans.** A planet gets swarms when no more massive planet orbits
-  within a period ratio of 3 of it.
+- **Trojans.** A planet gets swarms when no more massive giant orbits
+  within a period ratio of 3 of it. A rocky neighbour does not count: Mars
+  keeps its trojans (16 known, 15 stable, Christou et al. 2025) next to
+  the heavier Earth.
   - A giant: 10⁴ to 10⁶ bodies larger than 1 km, the L4 swarm a little
     richer.
   - An ice giant on the outside: as many as a gas giant.
