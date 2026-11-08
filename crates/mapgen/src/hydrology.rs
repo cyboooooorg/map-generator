@@ -1,5 +1,13 @@
 //! Rivers and lakes from rainfall runoff.
 //!
+//! The water drains to the **sea**: the bodies of water below the waterline
+//! of at least [`SEA_MIN_AREA_KM2`]. A smaller one, an impact crater or a
+//! pit whose floor dips under the waterline inland, is a depression like
+//! any other: it fills, and holds a lake if it is fed enough. Taken for
+//! the sea, a crater 100 km wide drained a basin of a million km² that
+//! would otherwise hold a lake; and since the map draws craters down to a
+//! few pixels, the lake was there at one resolution and gone at the next.
+//!
 //! 1. **Depression filling** (priority-flood, Barnes et al. 2014): starting
 //!    from the sea, the terrain is flooded upwards so every land pixel gets a
 //!    path down to the sea. Pits are filled to their spill level, plus a tiny
@@ -34,6 +42,13 @@ const ROUTE_WAVELENGTH_KM: f64 = 1200.0;
 /// Weight of the routing noise against the slope when choosing between
 /// lower neighbours (the steepest scores 1).
 const ROUTE_WEIGHT: f32 = 1.0;
+/// Smallest body of water below the waterline that the rivers drain to,
+/// km²: smaller ones are filled like any other pit. Between the largest
+/// lake (Superior, 82 000 km²) and the largest inland sea (the Caspian,
+/// 371 000 km²), and above the area of the craters a map draws at some
+/// resolutions only (at 4 pixels across, 160 km at 1024 pixels of width,
+/// about 20 000 km²). Calibration, no source.
+pub const SEA_MIN_AREA_KM2: f32 = 100_000.0;
 /// Filled pits shallower than this (elevation units) stay dry land.
 const LAKE_MIN_DEPTH: f32 = 0.004;
 /// A filled pit becomes a lake only if this much flow (km²) reaches it.
@@ -171,13 +186,13 @@ impl PartialOrd for Node {
 
 /// Computes rivers and lakes.
 ///
-/// `height` is the elevation above the waterline (negative on the sea);
+/// `height` is the elevation above the waterline (negative under water);
 /// `runoff` (see [`runoff_share`]) is the share of the rain that runs off
 /// each pixel, in wet-equivalent units.
 pub fn hydrology(grid: &Grid, height: &[f32], runoff: &[f32], seed: u32) -> Hydrology {
     let n = grid.pixel_count();
-    let noise = flat_noise(grid, seed);
-    let sea: Vec<bool> = height.par_iter().map(|&z| z < 0.0).collect();
+    // The sea's bodies are found serially, the flat noise beside them.
+    let (sea, noise) = rayon::join(|| sea(grid, height), || flat_noise(grid, seed));
 
     // The flood below is serial: the routing noise of step 2, which does
     // not depend on it, is computed beside it by the other threads.
@@ -263,6 +278,41 @@ pub fn hydrology(grid: &Grid, height: &[f32], runoff: &[f32], seed: u32) -> Hydr
         receivers,
         filled,
     }
+}
+
+/// The pixels the water drains to: below the waterline (`height < 0`), in
+/// a connected body (8 neighbours, wrapping in longitude) of at least
+/// [`SEA_MIN_AREA_KM2`].
+fn sea(grid: &Grid, height: &[f32]) -> Vec<bool> {
+    let n = grid.pixel_count();
+    let mut sea = vec![false; n];
+    let mut seen = vec![false; n];
+    let mut body = Vec::new();
+    for start in 0..n {
+        if seen[start] || height[start] >= 0.0 {
+            continue;
+        }
+        seen[start] = true;
+        body.clear();
+        body.push(start);
+        let mut area_km2 = 0.0f64;
+        let mut k = 0;
+        while k < body.len() {
+            let i = body[k];
+            k += 1;
+            area_km2 += f64::from(grid.dx_km((i / grid.width as usize) as u32) * grid.dy_km());
+            for j in grid.neighbour_indices(i) {
+                if !seen[j] && height[j] < 0.0 {
+                    seen[j] = true;
+                    body.push(j);
+                }
+            }
+        }
+        if area_km2 >= f64::from(SEA_MIN_AREA_KM2) {
+            body.iter().for_each(|&i| sea[i] = true);
+        }
+    }
+    sea
 }
 
 /// Step 1 of [`hydrology`], the priority-flood from the sea: the filled
@@ -382,7 +432,7 @@ mod tests {
     ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
         let n = grid.pixel_count();
         let noise = flat_noise(grid, seed);
-        let sea: Vec<bool> = height.iter().map(|&z| z < 0.0).collect();
+        let sea = sea(grid, height);
         let mut filled = height.to_vec();
         let mut spill = height.to_vec();
         let mut done = sea.clone();
@@ -533,6 +583,31 @@ mod tests {
         let h = hydrology(&g, &height, &vec![1.0; g.pixel_count()], 1);
         assert!(h.lake[16 * 64 + 40]);
         assert!(!h.lake[16 * 64 + 20]);
+    }
+
+    #[test]
+    fn a_small_pit_below_the_waterline_fills_with_its_basin() {
+        // 62.5 km pixels: the pit is 2 × 2 pixels, about 16 000 km².
+        let g = Grid {
+            circumference_km: 4_000.0,
+            ..grid()
+        };
+        let mut height = ramp(&g);
+        for y in 12..20 {
+            for x in 36..44 {
+                height[y * 64 + x] = 0.05;
+            }
+        }
+        for y in 15..17 {
+            for x in 39..41 {
+                height[y * 64 + x] = -0.01;
+            }
+        }
+        let h = hydrology(&g, &height, &vec![1.0; g.pixel_count()], 1);
+        assert!(h.lake[16 * 64 + 37], "the basin holds a lake");
+        assert!(h.lake[16 * 64 + 40], "the pit is part of it");
+        assert!(h.receiver(16 * 64 + 40).is_some(), "the pit is not the sea");
+        assert!(h.receiver(16 * 64 + 5).is_none(), "the sea stays the sea");
     }
 
     #[test]
