@@ -229,7 +229,8 @@ export const surfaceFragment = /* glsl */ `
   uniform vec4 uHexGrid;       // columns, rows, hex width (px), hex size (px)
   uniform vec2 uMapSize;       // map width and height in pixels
   uniform float uTileOn;       // 1 on a detail patch with a tile texture
-  uniform sampler2D uTile;     // detail tile, row 0 = north: colour above, normals below
+  uniform sampler2D uTile;     // detail tile's colour, row 0 = north
+  uniform sampler2D uTileNormal; // detail tile's relief normals, row 0 = north
   uniform vec4 uTexRect;       // part of uTile this patch shows (u0, v0, du, dv), v down
   uniform float uHasExtra;
   uniform sampler2D uExtra;
@@ -538,16 +539,9 @@ export const surfaceFragment = /* glsl */ `
     // The surface colours (detail tile or base map), sampled once: they are
     // the biome layer, and tell lava and magma apart on every layer (below).
     // Detail tiles are drawn on the biome layer only.
-    // A tile holds its colour in its upper half and its normals in the
-    // lower one (in the texture's own space, v down): each read stays half
-    // a texel inside its half. The tile texture is not sRGB-decoded (the
-    // normals must keep their values): its colour is decoded here.
     vec2 tileUv = uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw;
-    const float TILE_HALF_TEXEL = 0.5 / 512.0;
-    vec2 tileColourUv = vec2(tileUv.x, clamp(tileUv.y * 0.5, TILE_HALF_TEXEL, 0.5 - TILE_HALF_TEXEL));
-    vec2 tileNormalUv = vec2(tileUv.x, clamp(0.5 + tileUv.y * 0.5, 0.5 + TILE_HALF_TEXEL, 1.0 - TILE_HALF_TEXEL));
     vec3 surface = uTileOn > 0.5
-      ? toLinear(texture2D(uTile, tileColourUv).rgb)
+      ? texture2D(uTile, tileUv).rgb
       : uGiant > 0.5 ? giantColour(vUv) : texture2D(uMap, vUv).rgb;
     vec3 colour;
     if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
@@ -659,7 +653,7 @@ export const surfaceFragment = /* glsl */ `
     // surface is drawn in, on every layer. Water and giants are flat.
     vec3 tangent = vec3(0.0, 0.0, 1.0);
     if (uGiant < 0.5 && !water) {
-      vec3 encoded = uTileOn > 0.5 ? texture2D(uTile, tileNormalUv).rgb : texture2D(uNormalMap, vUv).rgb;
+      vec3 encoded = uTileOn > 0.5 ? texture2D(uTileNormal, tileUv).rgb : texture2D(uNormalMap, vUv).rgb;
       tangent = normalize(encoded * 2.0 - 1.0);
     }
     vec3 normal = normalize(tangent.x * vEast + tangent.y * vNorth + tangent.z * vNormal);
@@ -675,7 +669,13 @@ export const surfaceFragment = /* glsl */ `
     vec3 lightT = uLightMode == 1
       ? vec3(dot(uSunDir, sphereEast), dot(uSunDir, sphereNorth), dot(uSunDir, normalize(vSphere)))
       : vec3(dot(uLightDir, vEast), dot(uLightDir, vNorth), dot(uLightDir, normalize(vNormal)));
-    float relief = clamp(max(dot(tangent, lightT), 0.0) / max(lightT.z, 0.04), RELIEF_SHADOW, RELIEF_HIGHLIGHT);
+    // (The same small term added to both sides keeps flat ground at
+    // exactly 1, even where the light grazes it.)
+    float relief = clamp((max(dot(tangent, lightT), 0.0) + 0.04) / (max(lightT.z, 0.0) + 0.04), RELIEF_SHADOW, RELIEF_HIGHLIGHT);
+    // Where the light grazes the ground (the terminator), the ratio to flat
+    // ground loses its meaning: the relief fades out there, so flat ground
+    // keeps the day curve's twilight.
+    relief = mix(1.0, relief, smoothstep(-0.02, 0.06, lightT.z));
     float lambert = max(dot(normal, uLightDir), 0.0);
     float shade;
     float nightLevel = 0.0;
@@ -1165,7 +1165,7 @@ export const skyBodyFragment = /* glsl */ `
     // The relief shapes the sunlight relative to flat ground, on the day
     // side (as on the planet view).
     if (uHasNormal > 0.5) {
-      float ratio = clamp(max(dot(relief, uSunDir), 0.0) / max(sunCos, 0.04), 0.12, 2.2);
+      float ratio = clamp((max(dot(relief, uSunDir), 0.0) + 0.04) / (max(sunCos, 0.0) + 0.04), 0.12, 2.2);
       lit *= mix(1.0, ratio, smoothstep(-0.02, 0.06, sunCos));
     }
     // Its rings' shadow: where the ray from this point to the sun crosses

@@ -3,7 +3,7 @@
 //! The viewer lights the relief itself, by the sun or its headlight, from
 //! a normal per pixel in the tangent frame of the map: east, north and up.
 //! The slopes are those of the hillshade the flat images keep (see
-//! [`super::hillshade`]): central differences of the elevation, the
+//! `hillshade_of` in the export module): central differences of the elevation, the
 //! longitude wrapping and the latitude clamped at the poles, at the same
 //! exaggeration ([`super::relief_km`]).
 //!

@@ -30,13 +30,13 @@ export function ringSeed(massEarth: number): number {
   return (massEarth * 7.31) % 13;
 }
 
-/** A body drawn in the sky of the body shown. */
 /** URLs of a body's surface maps: its colour (without hillshade) and its relief normals. */
 export interface SurfaceMaps {
   colour: string;
   normal: string;
 }
 
+/** A body drawn in the sky of the body shown. */
 export interface SkyBody {
   direction: Vec3;
   /** Apparent diameter from the centre of the body shown, degrees. */

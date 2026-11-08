@@ -18,7 +18,9 @@
 //!   at a slightly warped position, so biome borders become irregular instead
 //!   of interpolated straight edges; temperature follows the new elevation.
 //! - **Biomes**: the generation's own rules and preset remap, with soft
-//!   borders, hillshading and the vector rivers drawn at the tile's scale.
+//!   borders and the vector rivers drawn at the tile's scale, without
+//!   hillshade: a tile holds its colour above and its relief normals below
+//!   (256 × 512), which the viewer lights.
 //!
 //! Tiles form an equirectangular quadtree: level `z` has `2^(z+1)` × `2^z`
 //! tiles of [`TILE_SIZE`] pixels, column 0 at longitude 0 and row 0 at the

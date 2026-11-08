@@ -547,6 +547,7 @@ export class PlanetView {
     uMeshSegments: { value: 720 } as IUniform<number>,
     uTileOn: { value: 0 } as IUniform<number>,
     uTile: { value: emptyTexture() } as IUniform<Texture>,
+    uTileNormal: { value: emptyTexture() } as IUniform<Texture>,
     uTexRect: { value: new Vector4(0, 0, 1, 1) } as IUniform<Vector4>,
     uHasExtra: { value: 0 } as IUniform<number>,
     uExtra: { value: emptyTexture() } as IUniform<Texture>,
@@ -986,6 +987,7 @@ export class PlanetView {
             uMeshSegments: { value: PATCH_SEGMENTS },
             uTileOn: { value: 0 },
             uTile: { value: null },
+            uTileNormal: { value: null },
             uTexRect: { value: new Vector4(0, 0, 1, 1) },
           },
           // Front faces only: with DoubleSide, the far side of a patch

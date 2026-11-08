@@ -696,7 +696,6 @@
     };
   }
 
-
   // The base map of another epoch of the world shown: reduced while the
   // slider moves (after a short pause), full once it is released.
   $effect(() => {

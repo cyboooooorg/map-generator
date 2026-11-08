@@ -50,7 +50,7 @@ const fragment = /* glsl */ `
     if (uHasNormal > 0.5) {
       vec3 t = normalize(texture2D(uNormalMap, vUv).rgb * 2.0 - 1.0);
       vec3 relief = normalize(t.x * east + t.y * north + t.z * n);
-      float ratio = clamp(max(dot(relief, star), 0.0) / max(h, 0.04), 0.12, 2.2);
+      float ratio = clamp((max(dot(relief, star), 0.0) + 0.04) / (max(h, 0.0) + 0.04), 0.12, 2.2);
       day *= mix(1.0, ratio, smoothstep(-0.02, 0.06, h));
     }
     vec3 lit = colour * (NIGHT_FLOOR + (1.0 - NIGHT_FLOOR) * day);

@@ -42,8 +42,8 @@
 //! hot Jupiter's day side far hotter than its night side, the hot spot
 //! shifted east); the moisture layer carries the eastward wind instead, as
 //! a share of the strongest (`GiantInfo::wind_east`, `wind_west`: the
-//! larger of the two is 1). The rendered colours go to `surface.png`
-//! directly.
+//! larger of the two is 1). The rendered colours go to `colour.png`
+//! directly, with flat normals (a giant has no relief).
 use crate::biome::Biome;
 use crate::generation::{Generated, Stage};
 use crate::giant_clouds::Clouds;
