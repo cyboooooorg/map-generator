@@ -21,6 +21,7 @@ import {
   LineBasicMaterial,
   LineLoop,
   LineSegments,
+  type Material,
   Mesh,
   MeshBasicMaterial,
   SphereGeometry,
@@ -85,7 +86,12 @@ export class RotationDial {
   private hostPoint: Vector3 | null = null;
   private bodyOrder: string[] = [];
 
-  constructor() {
+  /**
+   * `prepare` adjusts each material the dial makes (the host's compass, far
+   * away in a moon's sky, holds its depth at the far plane and hides behind
+   * the planet; see PlanetView.setHostCompass).
+   */
+  constructor(private readonly prepare: (material: Material) => void = () => {}) {
     this.group.visible = false;
     this.group.renderOrder = 2;
 
@@ -156,6 +162,7 @@ export class RotationDial {
   private material<M extends LineBasicMaterial | MeshBasicMaterial>(material: M, weight: number): M {
     material.transparent = true;
     material.depthWrite = false;
+    this.prepare(material);
     this.materials.push({ material, weight });
     return material;
   }

@@ -215,7 +215,8 @@ pub const LAND_SEASONS: f32 = 0.45;
 /// holds the heat of a whole season: a half-range of about 4 °C at 60°.
 /// Calibration, no source for the value; with λ = 5.4 W/m²/K (the slope
 /// of [`sea_level_celsius`] at Earth's light), a mixed layer 50 m deep
-/// would give 0.13.
+/// would give 0.13. North et al. 1981 (doi:10.1029/RG019i001p00091) use a
+/// 75 m mixed layer and 2.09 W/m²/K; the app's value is its own.
 pub const SEA_SEASONS: f32 = 0.10;
 /// Distance from the coast over which land goes ~63 % of the way from the
 /// sea's seasonal range to the interior's, km: the sea's mild air reaches

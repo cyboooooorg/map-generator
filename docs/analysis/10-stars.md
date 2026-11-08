@@ -320,7 +320,7 @@ A planet is locked when its locking time is shorter than its star's age
 dwarfs' planets lock (M0V: 1.4 Gyr), K5V's do not (12 Gyr). Its
 temperature follows the angle θ from the substellar point, at the map's
 centre: `4 cos θ` times the mean light on the day side (none at night),
-through Earth's scale and curve (34 °C under the star, −56 °C on the
+through Earth's scale and curve (41 °C under the star, −49 °C on the
 night side), the atmosphere's heat transport over the sphere, then the
 star. An M4V planet at 0.3 in its zone shows an open ocean and green
 continents around the substellar point inside a frozen night side. The
