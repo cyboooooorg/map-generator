@@ -539,6 +539,7 @@ impl WorldRequest {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             gravity: None,
         };
         // Moons asked for: the world is not a giant's moon, which keeps none

@@ -95,6 +95,12 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub gravity: Option<f32>,
+    /// Height of an equatorial ridge of ring material swept up by a small
+    /// ring moon (Pan, Atlas, Daphnis), as a share of its radius; it adds to
+    /// the `shape` layer. Absent for every other body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub ridge: Option<f32>,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

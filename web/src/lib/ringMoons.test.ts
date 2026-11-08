@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Body } from './api/types/Body';
-import { dustFedBy, dustOf, ringPart, ringsOf } from './ringMoons';
+import { dustFedBy, dustOf, innerRingOf, ringPart, ringsOf } from './ringMoons';
 
 const body = (over: Record<string, unknown>): Body =>
   ({
@@ -53,5 +53,21 @@ describe('dustFedBy', () => {
     expect(dustFedBy(body({ id: 'c-5' }), giant)?.kind).toBe('plume');
     expect(dustFedBy(body({ id: 'c-6' }), giant)).toBeNull();
     expect(dustOf(body({}))).toEqual([]);
+  });
+});
+
+describe('innerRingOf', () => {
+  const rings = (d_ring?: unknown) =>
+    body({ params: { given_rings: { rings: { inner: 1.24, outer: 2.27, gaps: [], opacity: 0.8, colour: [1, 1, 1], bright: true, d_ring } } } });
+
+  it('draws a D-like ring as a smooth dust ring peaking in its middle', () => {
+    const [d] = innerRingOf(rings({ inner: 1.12, outer: 1.24, opacity: 0.03 }));
+    expect(d).toMatchObject({ inner: 1.12, outer: 1.24, opacity: 0.03 });
+    expect(d?.peak).toBeCloseTo(1.18);
+  });
+
+  it('has none for rings without one, or a body without rings', () => {
+    expect(innerRingOf(rings())).toEqual([]);
+    expect(innerRingOf(body({}))).toEqual([]);
   });
 });

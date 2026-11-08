@@ -29,6 +29,7 @@
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { cloudTint, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
+import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
   import { toasts } from '../lib/toasts.svelte';
@@ -757,7 +758,7 @@
     view?.setGiantStorms(stormId !== undefined && layers ? giantStorms(layers.biomes, layers.width, layers.height, stormId) : []);
   });
   // The dust rings its system drew for the giant shown.
-  $effect(() => view?.setDustRings(giant && sysBody ? (sysBody.params.given_rings?.dust ?? []) : []));
+  $effect(() => view?.setDustRings(giant && sysBody ? [...dustOf(sysBody), ...innerRingOf(sysBody)] : []));
   $effect(() => {
     // No detail while the slider moves: the reduced preview shows through.
     // A giant has no ground to detail.

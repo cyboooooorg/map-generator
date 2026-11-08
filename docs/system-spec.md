@@ -241,6 +241,14 @@ keep their draws. They are `icy-moon` bodies marked with a `ring_role`:
   (Mimas, the B ring's edge and the Cassini Division);
 - `edge`: one to three moons of 10 to 100 km just beyond a bright ring's
   outer edge, the larger the farther out (Charnoz et al. 2010);
+- `confining`: on half the bright rings, the largest edge moon, if 40 km
+  or more in radius, moved to where its 7:6 inner Lindblad resonance
+  falls on the rings' outer edge, which it sets at 0.88 to 0.99 of the
+  Roche limit (Janus and the A ring); the embedded moonlets it leaves
+  outside are dropped. Bodies with a `ridge` in their params (embedded
+  moonlets and edge moons up to 30 km) have an equatorial ridge in their
+  shape layer (Pan, Atlas). A bright ring's `rings.d_ring` is an optional
+  faint D-like ring (`inner`, `outer`, `opacity`) inside it;
 - `shepherd`: on 70 % of faint rings, a pair of 10 to 25 km on either
   side of the ring;
 - `source`: beyond a faint ring, one or two small moons of 4 to 90 km at

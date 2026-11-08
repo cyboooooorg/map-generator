@@ -46,7 +46,7 @@
 //! Everything comes from a stream of its own, so a system's other bodies
 //! keep their draws. A giant whose regular moons would not fit (a hot one,
 //! its Hill sphere too small) keeps its rings without moons.
-use crate::giant_world::RingSystem;
+use crate::giant_world::{DRing, RingSystem};
 use crate::noise::{stream, stream_seed};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -65,6 +65,9 @@ pub enum RingRole {
     Resonant,
     /// Just beyond the outer edge, keeping it sharp (Atlas, Prometheus).
     Edge,
+    /// Just beyond the outer edge, whose 7:6 inner Lindblad resonance falls
+    /// on it and sets it (Janus and the A ring).
+    Confining,
     /// One of a pair confining a narrow ring (Cordelia, Ophelia).
     Shepherd,
     /// A small moon beyond a faint ring, whose impact dust feeds a faint
@@ -87,6 +90,9 @@ pub struct RingMoon {
     pub seed: u32,
     /// The gap it opens, an index into the rings' `gaps`.
     pub gap: Option<usize>,
+    /// Height of the equatorial ridge of ring material it accreted, as a
+    /// share of its radius (see [`ridge`]); none for most moons.
+    pub ridge: Option<f32>,
 }
 
 /// The giant whose rings [`shape`] shapes.
@@ -177,6 +183,47 @@ const SOURCE_KM: (f64, f64) = (4.0, 90.0);
 const OUTER_SOURCE_ODDS: f64 = 0.5;
 const OUTER_SOURCE_SPAN: (f64, f64) = (3.4, 4.2);
 const OUTER_SOURCE_KM: (f64, f64) = (5.0, 20.0);
+/// Odds that the largest edge moon, if it is big enough, sits where its
+/// 7:6 resonance sets the rings' outer edge (calibration, no source: Saturn
+/// is the one bright ring known, and Janus sets its A ring's edge).
+const CONFINING_ODDS: f64 = 0.5;
+/// Smallest mean radius of such a moon, km (calibration: Janus, 90 km, and
+/// Epimetheus, 58 km, torque the A ring's edge; Atlas, 15 km, and the
+/// 40 km Pandora and Prometheus, whose resonances are weaker, do not set
+/// one; Spitale & Porco 2009, doi:10.1088/0004-6256/138/6/1520).
+const CONFINING_KM: f64 = 40.0;
+/// Where the resonance falls, as a share of the Roche limit's edge: the
+/// rings are cut inside it, never outside (the A ring's edge, 2.27 radii,
+/// lies at 0.84 of the Roche limit of particles of 0.9 g/cm³).
+const CONFINING_SHARE: (f64, f64) = (0.88, 0.99);
+/// The first-order resonance of the edge moon: m = 7 (7:6).
+const CONFINING_M: u32 = 7;
+/// `(6/7)^(2/3)`: where the 7:6 resonance lies round a point mass, as a
+/// share of its moon's distance (Kepler's third law).
+pub const SEVEN_SIX_FACTOR: f64 = 0.902_337_085;
+/// Edge moons accrete a ridge only when small (calibration: Pan, 14 km,
+/// Atlas, 15 km and Daphnis, 4 km carry one; larger edge moons are taken
+/// not to (Prometheus, Pandora, Epimetheus and Janus, 40 to 90 km: not
+/// checked against the papers); Charnoz et al. 2007,
+/// doi:10.1126/science.1148631; Buratti et al. 2019,
+/// doi:10.1126/science.aat2349).
+const RIDGE_MAX_KM: f64 = 30.0;
+/// Height of an equatorial ridge over the radius, from the ridge that holds
+/// 10 to 25 % of the body's volume (Charnoz et al. 2007).
+const RIDGE_HEIGHT: (f64, f64) = (0.12, 0.25);
+/// Odds of a faint D-like ring inside a bright ring (calibration, no
+/// source: Saturn is the one bright ring known, and has one).
+const D_RING_ODDS: f64 = 0.5;
+/// Its inner edge above the atmosphere edge, in the giant's radii (Saturn:
+/// 66,900 km, 1.11; Hedman et al. 2007, doi:10.1016/j.icarus.2006.11.017).
+const D_RING_LIFT: f64 = 0.04;
+/// It must reach at least this far in the giant's radii, else it is not
+/// kept (calibration).
+const D_RING_LEAST: f64 = 0.05;
+/// Its opacity where densest (calibration: Saturn's D ring has an optical
+/// depth of about 1e-3, Hedman et al. 2007, far less than drawn here, which
+/// is a visible hint of it).
+const D_RING_OPACITY: (f64, f64) = (0.01, 0.05);
 /// Gravitational constant, SI.
 const G: f64 = 6.674e-11;
 
@@ -293,6 +340,47 @@ fn lobe_bound(
     }
 }
 
+/// A faint D-like ring from a giant's atmosphere edge to the inner edge of
+/// its bright rings, if it has one: the D ring of Saturn, 66,900 to 74,500
+/// km, joins the C ring and its optical depth is about 1e-3 (Hedman et al.
+/// 2007, doi:10.1016/j.icarus.2006.11.017; Mitchell et al. 2018 find its
+/// grains falling into the upper atmosphere). Odds and opacity are
+/// calibrations. Its own stream, so that nothing else changes.
+fn d_ring(inner: f64, seed: u32) -> Option<DRing> {
+    let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::D_RING)));
+    let on = rng.random::<f64>() < D_RING_ODDS;
+    let lift = rng.random_range(0.0..D_RING_LIFT);
+    let opacity = rng.random_range(D_RING_OPACITY.0..D_RING_OPACITY.1);
+    let from = ATMOSPHERE_EDGE + lift;
+    (on && inner - from >= D_RING_LEAST).then_some(DRing {
+        inner: from as f32,
+        outer: inner as f32,
+        opacity: opacity as f32,
+    })
+}
+
+/// The height of the equatorial ridge of a ring moon of `role` and
+/// `radius_km` seeded `seed`, as a share of its radius, if it has one: a
+/// moonlet in or at the edge of the rings, small enough, swept up ring
+/// particles on its equator (Pan, Atlas and Daphnis; Charnoz et al. 2007,
+/// doi:10.1126/science.1148631; Buratti et al. 2019,
+/// doi:10.1126/science.aat2349). The height comes from the moon's seed.
+pub fn ridge(role: RingRole, radius_km: f64, seed: u32) -> Option<f32> {
+    let ring_born = matches!(role, RingRole::Embedded | RingRole::Edge);
+    (ring_born && radius_km <= RIDGE_MAX_KM).then(|| {
+        let u = f64::from(stream_seed(seed, stream::RING_MOONS) >> 8) / f64::from(1u32 << 24);
+        (RIDGE_HEIGHT.0 + u * (RIDGE_HEIGHT.1 - RIDGE_HEIGHT.0)) as f32
+    })
+}
+
+/// Where the 7:6 resonance edge `edge` (the giant's radii) puts a moon: the
+/// distance whose inner Lindblad resonance falls there, round a giant of
+/// `j2`. Kepler's `edge / (6/7)^(2/3)`, corrected once for the oblateness.
+fn confining_distance(edge: f64, j2: f64) -> f64 {
+    let a = edge / SEVEN_SIX_FACTOR;
+    a * edge / inner_lindblad(a, CONFINING_M, j2)
+}
+
 /// Log-uniform between `range.0` and `range.1` from `u` in `[0, 1)`.
 fn log_uniform(range: (f64, f64), u: f64) -> f64 {
     (range.0.ln() + u * (range.1 / range.0).ln()).exp()
@@ -326,6 +414,7 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
         rings.inner = inner as f32;
         rings.outer = outer as f32;
         rings.gaps.clear();
+        rings.d_ring = d_ring(inner, seed);
         if !giant.moons {
             return (Some(rings), out);
         }
@@ -367,6 +456,7 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
                 density,
                 seed: next_seed(),
                 gap: Some(rings.gaps.len() - 1),
+                ridge: None,
             });
         }
         // A mid-sized moon outside: its 2:1 resonance cuts the edge of the
@@ -415,6 +505,7 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
                     density,
                     seed: next_seed(),
                     gap: Some(rings.gaps.len() - 1),
+                    ridge: None,
                 });
             }
         }
@@ -440,22 +531,61 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
         let mut sizes: Vec<f64> = edges.iter().map(|e| e.1).collect();
         sizes.sort_by(f64::total_cmp);
         edges.sort_by(|x, y| x.0.total_cmp(&y.0));
-        for ((a, _, density, draws), radius_km) in edges.into_iter().zip(sizes) {
+        // The largest, farthest edge moon may instead sit where its 7:6
+        // resonance cuts the rings' edge (Janus and the A ring): its own
+        // stream, drawn whether or not it is used.
+        let mut edge_rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::RING_EDGE)));
+        let wants = edge_rng.random::<f64>() < CONFINING_ODDS;
+        let share = edge_rng.random_range(CONFINING_SHARE.0..CONFINING_SHARE.1);
+        let mut confining = None;
+        if let (true, Some(&radius_km), Some(last)) = (wants, sizes.last(), edges.last())
+            && radius_km >= CONFINING_KM
+        {
+            let edge = outer * share;
+            let a = confining_distance(edge, giant.j2);
+            let (density, _) = lobe_bound(density_g, a, last.2, radius_km, last.3);
+            let others = edges[..edges.len() - 1]
+                .iter()
+                .all(|e| (e.0 - a).abs() > 0.05);
+            let division = !resonant_at.is_some()
+                || rings
+                    .gaps
+                    .last()
+                    .is_none_or(|g| f64::from(g[0] + g[1] / 2.0) + 0.05 < edge);
+            if others
+                && division
+                && edge > inner + 0.15
+                && a >= rigid_roche(density_g, density)
+                && a <= giant.room
+                && !resonant_at.is_some_and(|m| a > m - 0.15)
+            {
+                confining = Some(a);
+                rings.outer = edge as f32;
+                drop_beyond(&mut rings, &mut out, edge);
+            }
+        }
+        let last = edges.len() - 1;
+        for (k, ((a, _, density, draws), radius_km)) in edges.into_iter().zip(sizes).enumerate() {
+            let (a, role) = match confining {
+                Some(c) if k == last => (c, RingRole::Confining),
+                _ => (a, RingRole::Edge),
+            };
             let (density, shape) = lobe_bound(density_g, a, density, radius_km, draws);
-            if resonant_at.is_some_and(|m| a > m - 0.15)
+            if (role == RingRole::Edge && resonant_at.is_some_and(|m| a > m - 0.15))
                 || a < rigid_roche(density_g, density)
                 || a > giant.room
             {
                 continue;
             }
             out.push(RingMoon {
-                role: RingRole::Edge,
+                role,
                 a_radii: a,
                 radius_km,
                 shape,
                 density,
                 seed: next_seed(),
                 gap: None,
+                ridge: None,
             });
         }
     } else if giant.moons {
@@ -480,6 +610,7 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
                     density,
                     seed: next_seed(),
                     gap: None,
+                    ridge: None,
                 });
             }
         }
@@ -528,11 +659,31 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
                 density,
                 seed: next_seed(),
                 gap: None,
+                ridge: None,
             });
         }
     }
+    for moon in &mut out {
+        moon.ridge = ridge(moon.role, moon.radius_km, moon.seed);
+    }
     out.sort_by(|x, y| x.a_radii.total_cmp(&y.a_radii));
     (Some(rings), out)
+}
+
+/// Drops the embedded moonlets whose gaps the rings' new edge `edge` leaves
+/// outside them (or within 0.05 radii), and renumbers the gaps.
+fn drop_beyond(rings: &mut RingSystem, out: &mut Vec<RingMoon>, edge: f64) {
+    let gone: Vec<usize> = (0..rings.gaps.len())
+        .filter(|&k| f64::from(rings.gaps[k][0] + rings.gaps[k][1] / 2.0) + 0.05 > edge)
+        .collect();
+    out.retain(|m| !m.gap.is_some_and(|g| gone.contains(&g)));
+    let kept: Vec<usize> = (0..rings.gaps.len())
+        .filter(|k| !gone.contains(k))
+        .collect();
+    rings.gaps = kept.iter().map(|&k| rings.gaps[k]).collect();
+    for moon in out.iter_mut() {
+        moon.gap = moon.gap.and_then(|g| kept.iter().position(|&k| k == g));
+    }
 }
 
 /// Whether a gap `width` wide at `a` (giant radii) would overlap one of
@@ -724,6 +875,7 @@ mod tests {
             colour: [0.86, 0.8, 0.68],
             bright: true,
             gap_moons: Vec::new(),
+            d_ring: None,
         }
     }
 
@@ -736,6 +888,7 @@ mod tests {
             colour: [0.45, 0.43, 0.42],
             bright: false,
             gap_moons: Vec::new(),
+            d_ring: None,
         }
     }
 
@@ -786,7 +939,7 @@ mod tests {
             );
             let outer = f64::from(rings.outer);
             assert!(
-                outer >= roche.0 - 1e-5 && outer <= roche.1 + 1e-5,
+                outer >= roche.0 * CONFINING_SHARE.0 - 1e-5 && outer <= roche.1 + 1e-5,
                 "{outer}"
             );
             assert!(rings.gaps.len() <= 4);
@@ -825,7 +978,7 @@ mod tests {
                         assert!(m.a_radii > f64::from(rings.outer) + 0.49);
                         assert_eq!(m.shape == [1.0; 3], m.radius_km >= ROUND_ICE_KM);
                     }
-                    RingRole::Edge => {
+                    RingRole::Edge | RingRole::Confining => {
                         edges += 1;
                         assert!(m.a_radii > f64::from(rings.outer));
                     }
@@ -840,7 +993,7 @@ mod tests {
             assert!(edge.windows(2).all(|w| w[0].radius_km <= w[1].radius_km));
         }
         assert!(
-            embedded > 200 && resonant > 100 && edges > 300,
+            embedded > 150 && resonant > 100 && edges > 300,
             "{embedded} {resonant} {edges}"
         );
     }
@@ -851,8 +1004,9 @@ mod tests {
         for seed in 0..200 {
             let (rings, _) = shape(bright(), &giant, seed);
             let outer = f64::from(rings.unwrap().outer);
-            // 2.72 to 3.30 radii: past the old cap of 2.5.
-            assert!((2.70..3.31).contains(&outer), "{outer}");
+            // 2.72 to 3.30 radii, less the share a 7:6 edge may cut: past
+            // the old cap of 2.5.
+            assert!((2.37..3.31).contains(&outer), "{outer}");
         }
         let tight = Giant {
             room: 3.0,
@@ -1155,5 +1309,120 @@ mod tests {
         }
         assert!((280..360).contains(&gossamer), "{gossamer}");
         assert!((140..180).contains(&belts), "{belts}");
+    }
+
+    #[test]
+    fn the_7_6_resonance_of_janus_falls_on_the_a_rings_edge() {
+        // Janus at 151,460 km (NASA Saturnian satellite fact sheet); the A
+        // ring's edge at 136,770 km (Spitale & Porco 2009), with Janus's
+        // 7:6 resonance at 136,785 km (El Moutamid et al. 2016,
+        // arXiv:1510.00434). Kepler's alone gives 136,668 km.
+        let janus = 151_460.0 / SATURN_KM;
+        let kepler = janus * SEVEN_SIX_FACTOR * SATURN_KM;
+        assert!((kepler - 136_668.0).abs() < 10.0, "{kepler}");
+        assert!((SEVEN_SIX_FACTOR - (6.0f64 / 7.0).powf(2.0 / 3.0)).abs() < 1e-6);
+        let with_j2 = inner_lindblad(janus, 7, 0.016_3) * SATURN_KM;
+        assert!((with_j2 - 136_785.0).abs() < 60.0, "{with_j2}");
+        assert!((with_j2 - 136_770.0).abs() < 60.0, "{with_j2}");
+        // The moon placed for an edge puts its resonance on it.
+        let a = confining_distance(136_770.0 / SATURN_KM, 0.016_3);
+        assert!(
+            (a * SATURN_KM - 151_460.0).abs() < 100.0,
+            "{}",
+            a * SATURN_KM
+        );
+    }
+
+    #[test]
+    fn a_big_edge_moon_may_set_the_outer_edge_at_its_7_6_resonance() {
+        let giant = saturn();
+        let mut seen = 0;
+        for seed in 0..600 {
+            let (rings, moons) = shape(bright(), &giant, seed);
+            let rings = rings.unwrap();
+            let Some(moon) = moons.iter().find(|m| m.role == RingRole::Confining) else {
+                continue;
+            };
+            seen += 1;
+            let edge = inner_lindblad(moon.a_radii, 7, giant.j2);
+            assert!((edge - f64::from(rings.outer)).abs() < 2e-3, "{edge}");
+            assert!(moon.a_radii > f64::from(rings.outer));
+            assert!((moon.a_radii * SEVEN_SIX_FACTOR / f64::from(rings.outer) - 1.0).abs() < 0.01);
+            assert!(moon.radius_km >= CONFINING_KM);
+            assert!(moon.ridge.is_none());
+            // Every gap is inside the edge, and still some moon's.
+            for gap in &rings.gaps {
+                assert!(f64::from(gap[0] + gap[1] / 2.0) < f64::from(rings.outer));
+            }
+            let mut owned: Vec<usize> = moons.iter().filter_map(|m| m.gap).collect();
+            owned.sort_unstable();
+            assert_eq!(owned, (0..rings.gaps.len()).collect::<Vec<_>>());
+            // It is the largest edge moon.
+            assert!(
+                moons
+                    .iter()
+                    .filter(|m| m.role == RingRole::Edge)
+                    .all(|m| m.radius_km <= moon.radius_km)
+            );
+        }
+        assert!((60..400).contains(&seen), "{seen}");
+    }
+
+    #[test]
+    fn a_d_ring_lies_between_the_atmosphere_and_the_bright_rings() {
+        let mut with = 0;
+        for seed in 0..400 {
+            let (rings, _) = shape(bright(), &saturn(), seed);
+            let rings = rings.unwrap();
+            if let Some(d) = &rings.d_ring {
+                with += 1;
+                assert!(f64::from(d.inner) >= ATMOSPHERE_EDGE - 1e-6, "{}", d.inner);
+                assert!(f64::from(d.inner) <= ATMOSPHERE_EDGE + D_RING_LIFT + 1e-6);
+                assert_eq!(d.outer, rings.inner);
+                assert!(f64::from(d.outer - d.inner) >= D_RING_LEAST - 1e-6);
+                assert!((0.01..0.05).contains(&d.opacity), "{}", d.opacity);
+            }
+        }
+        // About half have one, calibrated.
+        assert!((120..280).contains(&with), "{with}");
+        // None where the bright ring starts too near the atmosphere, and
+        // none round faint rings.
+        let near = RingSystem {
+            inner: 1.13,
+            ..bright()
+        };
+        assert!((0..100).all(|seed| {
+            shape(near.clone(), &saturn(), seed)
+                .0
+                .unwrap()
+                .d_ring
+                .is_none()
+        }));
+        assert!((0..100).all(|seed| shape(faint(), &saturn(), seed).0.unwrap().d_ring.is_none()));
+    }
+
+    #[test]
+    fn small_moons_in_and_at_the_rings_get_an_equatorial_ridge() {
+        let mut ridged = 0;
+        for seed in 0..300 {
+            for m in shape(bright(), &saturn(), seed).1 {
+                match (m.role, m.ridge) {
+                    (RingRole::Embedded, h) => {
+                        let h = f64::from(h.expect("a moonlet accretes ring material"));
+                        assert!((RIDGE_HEIGHT.0..=RIDGE_HEIGHT.1).contains(&h), "{h}");
+                        ridged += 1;
+                    }
+                    (RingRole::Edge, Some(_)) => assert!(m.radius_km <= RIDGE_MAX_KM),
+                    (RingRole::Edge, None) => assert!(m.radius_km > RIDGE_MAX_KM),
+                    (_, h) => assert!(h.is_none(), "{:?}", m.role),
+                }
+            }
+        }
+        assert!(ridged > 100);
+        for seed in 0..100 {
+            for m in shape(faint(), &saturn(), seed).1 {
+                assert!(m.ridge.is_none());
+            }
+        }
     }
 }

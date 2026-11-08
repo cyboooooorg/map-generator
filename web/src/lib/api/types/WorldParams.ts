@@ -125,4 +125,10 @@ locked_to_star?: boolean,
  * every other world, whose gravity follows from its size (see
  * [`WorldParams::gravity_modifier`]).
  */
-gravity?: number, };
+gravity?: number, 
+/**
+ * Height of an equatorial ridge of ring material swept up by a small
+ * ring moon (Pan, Atlas, Daphnis), as a share of its radius; it adds to
+ * the `shape` layer. Absent for every other body.
+ */
+ridge?: number, };

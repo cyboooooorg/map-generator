@@ -595,12 +595,17 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   moonlets grow from cores until they fill their Roche lobe, edge moons
   grow with distance, and giants with faint rings get small dust-source
   moons and dust rings (Jupiter's gossamer rings, Uranus's μ ring).
+- **Done (2026-11-08):** the finishes: the A ring-like outer edge set by
+  an edge moon's 7:6 resonance (`ring_role` `confining`, checked against
+  Janus and Saturn's 136,770 km), a faint D-like ring inside bright rings
+  (`rings.d_ring`, shown in the giant's view and the moons' skies), and the
+  equatorial ridge of the small ring moons that accreted ring material
+  (Pan, Atlas, Daphnis) in the `shape` layer (`WorldParams::ridge`).
 - **Remaining:** a plume moon chosen by its tidal heating (an icy moon in
   resonance, its eccentricity forced: Peale et al. 1979 for Io, Meyer &
-  Wisdom 2007 for Enceladus), not by drawn odds; a Phoebe-type ring, once
-  systems have irregular moons; the A ring's outer edge set by an outer
-  moon's 7:6 resonance (Janus); a faint D ring inside bright rings; the
-  equatorial ridges of Pan and Atlas.
+  Wisdom 2007 for Enceladus), not by drawn odds, which needs the forced
+  eccentricities of `moons.rs`; a Phoebe-type ring, once systems have
+  irregular moons.
 
 ## 19. Tides, spin and moons: what the science fixes left
 

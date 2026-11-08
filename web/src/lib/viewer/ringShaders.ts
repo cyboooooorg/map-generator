@@ -143,8 +143,14 @@ export const skyRingDensityGlsl = /* glsl */ `
   // moonlet's gap shows round its marker. Set from the CPU: this runs in
   // branches, where fwidth is undefined.
   uniform float uRingGapLeast;
+  // A faint ring inside the bright ones (the D ring): inner and outer edge,
+  // opacity; zero opacity for none.
+  uniform vec3 uRingFaint;
   float ringDensity(float r) {
-    if (uRingOuter <= 0.0 || r < uRingInner || r > uRingOuter) return 0.0;
+    if (uRingOuter <= 0.0 || r < uRingInner || r > uRingOuter) {
+      float inside = (r - uRingFaint.x) / max(uRingFaint.y - uRingFaint.x, 1e-4);
+      return inside > 0.0 && inside < 1.0 ? uRingFaint.z * smoothstep(0.0, 0.15, inside) * smoothstep(1.0, 0.85, inside) : 0.0;
+    }
     float across = (r - uRingInner) / (uRingOuter - uRingInner);
     float density = uRingOpacity * smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
     for (int k = 0; k < 4; k++) {

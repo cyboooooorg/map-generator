@@ -151,7 +151,7 @@ import {
   ringRockVertex,
 } from './ringRockShaders';
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
-import type { DustRing } from '../api/types/DustRing';
+import type { FaintRing } from '../ringMoons';
 import type { RingSystem } from '../api/types/RingSystem';
 import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
@@ -1258,7 +1258,7 @@ export class PlanetView {
    * (`DustRing` in crates/mapgen/src/rings.rs): broad, smooth and faint, in
    * its equatorial plane like the main rings; none clears them.
    */
-  setDustRings(rings: readonly DustRing[]): void {
+  setDustRings(rings: readonly FaintRing[]): void {
     for (const mesh of this.dustRings) {
       this.scene.remove(mesh);
       mesh.geometry.dispose();
@@ -1410,6 +1410,7 @@ export class PlanetView {
       uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
       uRingGapCount: { value: 0 },
       uRingGapLeast: { value: 0 },
+      uRingFaint: { value: new Vector3() },
     };
   }
 
@@ -2380,6 +2381,7 @@ export class PlanetView {
             uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
             uRingGapCount: { value: 0 },
             uRingGapLeast: { value: 0 },
+      uRingFaint: { value: new Vector3() },
           },
           // Drawn with the star field and the host star (transparent ones
           // come after the surface), over them: a body hides the stars
@@ -3099,6 +3101,7 @@ export class PlanetView {
             uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
             uRingGapCount: { value: 0 },
             uRingGapLeast: { value: 0 },
+      uRingFaint: { value: new Vector3() },
           },
           transparent: true,
           depthWrite: false,
@@ -3608,6 +3611,8 @@ function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null, 
   u['uRingOpacity']!.value = rings?.opacity ?? 0;
   u['uRingGapCount']!.value = Math.min(rings?.gaps.length ?? 0, 4);
   u['uRingGapLeast']!.value = gapLeast;
+  const faint = rings?.d_ring;
+  (u['uRingFaint']!.value as Vector3).set(faint?.inner ?? 0, faint?.outer ?? 0, faint?.opacity ?? 0);
   (u['uRingGaps']!.value as Vector2[]).forEach((gap, k) => gap.set(...(rings?.gaps[k] ?? [0, 0])));
 }
 

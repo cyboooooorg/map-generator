@@ -129,6 +129,11 @@ pub struct WorldMetadata {
     /// (see `WorldParams::shape`); left out for a round one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shape: Option<[f32; 3]>,
+    /// The height of an equatorial ridge of accreted ring material on an
+    /// irregular ring moon, as a share of its radius (see
+    /// `WorldParams::ridge`); left out for a body without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ridge: Option<f32>,
     pub layers: Layers,
     /// River polylines file (`rivers.json`, a `RiversFile`), format version 2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -491,6 +496,7 @@ pub fn export_raw_data(
         giant: crate::giant_world::info(&world.params),
         host: crate::exomoon::HostGiant::draw(&world.params),
         shape: world.params.shape,
+        ridge: world.params.ridge,
         layers: Layers {
             elevation,
             elevation_base,
@@ -924,6 +930,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         // before the 3:2 resonance and the moons' locking to their planet
         // were locked to the star at any eccentricity, moons included.
         locked_to_star: meta.star.as_ref().map(|s| s.tidally_locked),
+        ridge: meta.ridge,
         // The gravity it was generated with (worlds made before the
         // mass–radius relation keep theirs), so its epochs and detail tiles
         // draw the craters it was drawn with.
@@ -1185,6 +1192,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             gravity: None,
         })
         .world;

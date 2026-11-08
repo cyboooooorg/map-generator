@@ -211,6 +211,14 @@
           })}
         </dd>
       {/if}
+      {#if rings?.d_ring}
+        <dt>{t.card.dRingTitle}</dt>
+        <dd>{t.card.dRing({ inner: formatUpTo(rings.d_ring.inner, 2), outer: formatUpTo(rings.d_ring.outer, 2) })}</dd>
+      {/if}
+      {#if body.params.ridge}
+        <dt>{t.card.ridge}</dt>
+        <dd>{t.card.ridgeValue({ height: withUnit(formatInt(Math.round(body.params.ridge * 100)), '%') })}</dd>
+      {/if}
       {#if dust.length > 0}
         <dt>{t.card.dustRings}</dt>
         <dd>

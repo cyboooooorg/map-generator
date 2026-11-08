@@ -313,6 +313,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         given_rings: None,
         impact_factor: None,
         locked_to_star: None,
+        ridge: None,
         gravity: None,
     }
 }
@@ -348,6 +349,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             gravity: None,
         }
     }

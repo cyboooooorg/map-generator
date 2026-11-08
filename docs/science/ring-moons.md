@@ -273,8 +273,13 @@ the smaller they are (`irregular` in the same file).
   drawn sizes in increasing order of distance. No mass–distance power law
   from Crida & Charnoz (2012) is applied, and the resonant moon is drawn
   apart. Moonlets, shepherds and sources get no such order.
-- **No equatorial ridges.** Pan and Atlas wear a ridge of ring material on
-  their equator; the lobe's shape has none.
+- **Ridges are a calibrated band.** Embedded moonlets and edge moons up to
+  30 km in radius wear an equatorial ridge of ring material, as Pan, Atlas
+  and Daphnis do (Charnoz et al. 2007; Buratti et al. 2019), 12 to 25 % of
+  the radius high in a band 0.3 wide in the sine of the latitude, holding
+  10 to 25 % of the volume. The limit of 30 km and the band's width are
+  calibrations; the real ridges differ between the moons (lobed, sloped,
+  hemispheric), which the app does not model.
 - **Small moons are raised to the critical density, not grown.** An edge
   moon, shepherd or source drawn below it takes the critical density and
   the lobe's shape without a core or a mantle. Where the critical density

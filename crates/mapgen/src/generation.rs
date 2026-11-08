@@ -1641,6 +1641,7 @@ pub(crate) mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             gravity: None,
         }
     }

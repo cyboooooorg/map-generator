@@ -70,7 +70,13 @@ host?: HostGiant | null,
  * The semi-axes of an irregular body, as shares of its mean radius
  * (see `WorldParams::shape`); left out for a round one.
  */
-shape?: [number, number, number] | null, layers: Layers, 
+shape?: [number, number, number] | null, 
+/**
+ * The height of an equatorial ridge of accreted ring material on an
+ * irregular ring moon, as a share of its radius (see
+ * `WorldParams::ridge`); left out for a body without one.
+ */
+ridge?: number | null, layers: Layers, 
 /**
  * River polylines file (`rivers.json`, a `RiversFile`), format version 2.
  */

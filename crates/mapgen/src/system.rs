@@ -1484,7 +1484,7 @@ fn ring_moon_inclination_deg(role: crate::rings::RingRole) -> f64 {
     use crate::rings::RingRole;
     match role {
         RingRole::Embedded => 0.001,
-        RingRole::Edge => 0.005,
+        RingRole::Edge | RingRole::Confining => 0.005,
         RingRole::Shepherd | RingRole::Resonant => 0.05,
         RingRole::Source => 1.1,
     }
@@ -1502,7 +1502,7 @@ fn ring_moon_eccentricity(role: crate::rings::RingRole, frac: f64) -> f64 {
     use crate::rings::RingRole;
     match role {
         RingRole::Embedded => 5e-5 * frac,
-        RingRole::Edge => 1.5e-3 * frac,
+        RingRole::Edge | RingRole::Confining => 1.5e-3 * frac,
         RingRole::Shepherd | RingRole::Resonant => 0.0002 + 0.002 * frac,
         RingRole::Source => 0.001 + 0.017 * frac,
     }
@@ -1531,6 +1531,7 @@ fn ring_moon_parts(
     let gravity = G * mass / (moon.radius_km * 1e3).powi(2) / 9.81;
     let params = WorldParams {
         gravity: Some(gravity as f32),
+        ridge: moon.ridge,
         ..crate::moons::small_body_params(
             giant,
             Composition::Ice,
@@ -2211,6 +2212,7 @@ mod tests {
                         given_rings: None,
                         impact_factor: None,
                         locked_to_star: None,
+                        ridge: None,
                         gravity: None,
                         ..body.params.clone()
                     };
@@ -2313,7 +2315,7 @@ mod tests {
                             assert!(off < 0.1, "{}: {off} of its gap's width off", m.id);
                         }
                         RingRole::Resonant => resonant += 1,
-                        RingRole::Edge | RingRole::Source => {
+                        RingRole::Edge | RingRole::Source | RingRole::Confining => {
                             edge += 1;
                             assert!(a > f64::from(rings.outer));
                         }

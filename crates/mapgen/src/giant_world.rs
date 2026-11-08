@@ -311,6 +311,22 @@ pub struct RingSystem {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
     pub gap_moons: Vec<String>,
+    /// A faint D-like ring between the giant's atmosphere and the bright
+    /// rings' inner edge (see `crate::rings`); none on rings drawn
+    /// otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub d_ring: Option<DRing>,
+}
+
+/// A faint ring inside the bright rings, in planet radii (Saturn's D ring).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct DRing {
+    pub inner: f32,
+    pub outer: f32,
+    /// Opacity where densest, a few hundredths at most.
+    pub opacity: f32,
 }
 
 /// A giant's rings as its planetary system drew them, or none (see
@@ -354,6 +370,7 @@ pub fn draw_rings(rng: &mut impl RngExt, rings_odds: [f32; 2]) -> Option<RingSys
             colour: [0.86, 0.8, 0.68],
             bright: true,
             gap_moons: Vec::new(),
+            d_ring: None,
         })
     } else if r < rings_odds[0] + rings_odds[1] {
         let inner = rng.random_range(1.5..1.9);
@@ -365,6 +382,7 @@ pub fn draw_rings(rng: &mut impl RngExt, rings_odds: [f32; 2]) -> Option<RingSys
             colour: [0.45, 0.43, 0.42],
             bright: false,
             gap_moons: Vec::new(),
+            d_ring: None,
         })
     } else {
         None
@@ -1318,6 +1336,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             gravity: None,
         }
     }
