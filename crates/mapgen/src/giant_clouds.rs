@@ -46,14 +46,14 @@ const DECKS: [Deck; 3] = [Deck::Ammonia, Deck::Hydrosulphide, Deck::Water];
 const KAPPA: f64 = 2.0 / 7.0;
 /// Temperature at 1 bar over the effective temperature: Jupiter's 165 K
 /// (NASA Space Science Data Coordinated Archive, Jupiter fact sheet) over
-/// its effective temperature of 124.7 K, from the 13.7 W/m² it radiates
-/// (absorbed 6.25 plus internal 7.485 W/m²; Li et al. 2018,
-/// doi:10.1038/s41467-018-06107-2).
+/// its effective temperature of 125.6 K, from the 14.098 W/m² it radiates
+/// (absorbed 6.613 plus internal 7.485 W/m²; Li et al. 2018, Nature
+/// Communications 9, 3709, doi:10.1038/s41467-018-06107-2).
 ///
 /// The profile puts the tropopause of Jupiter at 81 K for 0.085 bar (the real
 /// one is 110 K near 0.1 bar): the tropopause pressure is a knob that hides
 /// the cold top of a dry adiabat, not a measured level.
-const ONE_BAR_OVER_TEFF: f64 = 1.32;
+const ONE_BAR_OVER_TEFF: f64 = 1.31;
 /// Pressure of the tropopause, where the decks end, bar: calibration, no
 /// source (Jupiter's is near 0.1 bar). It is set so that the water deck
 /// leaves the troposphere at an effective temperature of 350 K, as Sudarsky
@@ -96,7 +96,7 @@ pub fn temperature_k(teff: f64, p_bar: f64) -> f64 {
 /// and 681 K more for the heat of fusion (5.66 kJ/mol) on the solid.
 /// Ammonium hydrosulphide: `log10 Kp = 14.82 − 4705 / T` with `Kp` in atm²
 /// for `NH₃ + H₂S ⇌ NH₄SH` as Lewis (1969,
-/// doi:10.1016/0019-1035(69)90091-8) gives it, as quoted by Li & Ingersoll
+/// doi:10.1016/0019-1035(69)90091-8) gives it, as quoted by Li, Ingersoll & Oyafuso
 /// (2018, arXiv:1801.05529) and checked by the base it gives Jupiter (not
 /// read from Lewis's paper). It is fitted to 180-300 K and extended in a
 /// straight line outside, which a colder giant needs; only the relief
@@ -188,7 +188,7 @@ pub struct Clouds {
 /// Reference relief: Jupiter's, from its effective temperature and gravity.
 fn jupiter_relief() -> f32 {
     static JUPITER: OnceLock<f32> = OnceLock::new();
-    *JUPITER.get_or_init(|| relief_of(124.7, 24.8, Some(Deck::Ammonia)))
+    *JUPITER.get_or_init(|| relief_of(125.6, 24.8, Some(Deck::Ammonia)))
 }
 
 /// Height between the top deck and the one below it, m.
@@ -279,9 +279,9 @@ mod tests {
 
     #[test]
     fn jupiters_decks_sit_where_atreya_and_wong_put_them() {
-        // Teff of Jupiter from Li et al. (2018): 124.7 K.
+        // Teff of Jupiter from Li et al. (2018): 125.6 K.
         let near = |deck, lo, hi| {
-            let p = base_bar(deck, 124.7).unwrap();
+            let p = base_bar(deck, 125.6).unwrap();
             assert!((lo..hi).contains(&p), "{deck:?} {p}");
         };
         near(Deck::Ammonia, 0.5, 0.9);
@@ -294,7 +294,7 @@ mod tests {
         // Saturn is colder than Jupiter: NH4SH near 5 bar, water 12.6 bar
         // (solar oxygen) in Atreya & Wong; the dry profile puts them
         // deeper than Jupiter's, within a factor of two of those.
-        let (j, s) = (95.0, 124.7);
+        let (j, s) = (95.0, 125.6);
         for deck in DECKS {
             assert!(base_bar(deck, j).unwrap() > base_bar(deck, s).unwrap());
         }
@@ -331,7 +331,7 @@ mod tests {
         assert!(class(345.0).thin > 0.9);
         assert!(class(125.0).thin < 0.1);
         // Jupiter sets the relief.
-        assert!((class(124.7).relief - 1.0).abs() < 0.05);
+        assert!((class(125.6).relief - 1.0).abs() < 0.05);
     }
 
     #[test]

@@ -71,9 +71,11 @@ const EARTH_GM: f64 = 3.986e14;
 /// sources), the reference of [`eddy_speed`] and what its five jets per
 /// hemisphere need.
 const JUPITER_WIND: f64 = 100.0;
-/// Jupiter's total radiated flux, W/m²: the 6.25 it absorbs and the 7.485
-/// it makes (Li et al. 2018, doi:10.1038/s41467-018-06107-2).
-const JUPITER_FLUX: f64 = 13.7;
+/// Jupiter's total radiated flux, W/m²: 14.098, the 6.613 it absorbs and the
+/// 7.485 it makes (Li et al. 2018, Nature Communications 9, 3709,
+/// doi:10.1038/s41467-018-06107-2: emitted power 14.098, internal heat
+/// 7.485, absorbed 6.613 W/m²; T_eff 125.6 K).
+const JUPITER_FLUX: f64 = 14.098;
 /// Jupiter's `β = 2Ω/R` at the equator, 1/(m s): 9.925 h, 71 492 km (NASA
 /// Jupiter fact sheet).
 const JUPITER_BETA: f64 = 2.0 * 1.7585e-4 / 7.1492e7;
@@ -128,15 +130,16 @@ const IRRADIATED_WIND: f64 = 2000.0;
 /// `F₀` and `β₀` of Jupiter (gas giants) or Neptune (ice giants).
 ///
 /// The energy is the flux `F = σT_eff⁴` the giant radiates, the sum of the
-/// sunlight it absorbs and its internal heat; a fixed share of it feeds the
-/// eddies, as on Earth, where about 1 % of the absorbed flux is converted
-/// (Showman et al. 2010, section 3.1). In the turbulence that makes the jets
-/// the energy input `ε ~ U³/L_β` is carried at the Rhines scale
-/// `L_β = (U/β)^(1/2)` (Rhines 1975), which gives `U ∝ ε^(2/5) β^(−1/5)`:
-/// derived here, not read from a paper (it is the balance of Vallis &
-/// Maltrud 1993 for a forced flow on a beta plane). It is the speed of the
-/// eddies, not of the jets: the jets of Saturn blow at 400 m/s ([`peak_wind`]),
-/// which with the Rhines count would give a third of its 20 jets.
+/// sunlight it absorbs and its internal heat; that a fixed share of it feeds
+/// the eddies is an assumption (on Earth available potential energy is made
+/// at about 2 W/m², about 1 % of the 240 W/m² absorbed and radiated,
+/// Showman et al. 2010, section 3.1, but no share is known for the giants).
+/// In the turbulence that makes the jets the energy input `ε ~ U³/L_β` is
+/// carried at the Rhines scale `L_β = (U/β)^(1/2)` (Rhines 1975), which gives
+/// `U ∝ ε^(2/5) β^(−1/5)`: derived for the app, not taken from a paper. It
+/// is the speed of the eddies, not of the jets: the jets of Saturn blow at
+/// 400 m/s ([`peak_wind`]), which with the Rhines count would give a third of
+/// its 20 jets.
 ///
 /// A hot giant is not driven this way: its eddies go at [`HOT_WIND`] scaled
 /// by its equilibrium temperature.
