@@ -252,6 +252,9 @@ export function systemSky(
       texture,
       axes: [local(bx), local(by), local(bz)],
       axialTiltDeg: body.spin.axial_tilt_deg,
+      // The star is at the origin: its light at that body, and its phase from here.
+      phaseCos: dot(unit(scale(there.centre, -1)), unit(sub(here.centre, there.centre))),
+      insolation: (Math.hypot(...here.centre) / Math.max(Math.hypot(...there.centre), 1)) ** 2,
       ...(texture ? {} : { preview: body.preview }),
     });
     ids.push(body.id);

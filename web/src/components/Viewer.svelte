@@ -1,6 +1,7 @@
 <script lang="ts">
   import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
+  import { nightSources } from '../lib/nightLight';
   import { biomeName } from '../lib/i18n/names.svelte';
   import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
@@ -1192,13 +1193,14 @@
     // The planet in its moon's sky, by its own switches (Host planet).
     const parent = sysBody?.parent ?? null;
     const planetTilt = sysPlanet?.spin.axial_tilt_deg ?? 0;
-    view?.setSkyBodies(
-      (sysSky?.bodies ?? []).map((body, k) =>
-        sysSky?.ids[k] === parent
-          ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
-          : body,
-      ),
+    const bodies = (sysSky?.bodies ?? []).map((body, k) =>
+      sysSky?.ids[k] === parent
+        ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
+        : body,
     );
+    view?.setSkyBodies(bodies);
+    // What lights the night side: the light these bodies reflect (lib/nightLight.ts).
+    view?.setNightSources(nightSources(bodies, sysSky?.sun ?? [0, 0, 1]));
     view?.setShadowCasters(sysSky?.casters ?? []);
   });
   // The moons' orbits in the sky, seen from the body shown.

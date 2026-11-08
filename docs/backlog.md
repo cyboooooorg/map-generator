@@ -147,7 +147,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | -------------------------------------------------------------------------------------------------------------------- | ------ |
 | Depression filling: neighbours by index (4.2 → 2.4 s at 8192 × 4096, same worlds); parallel land masses gave no gain | done   |
 | Picking on the globe ignores the relief displacement (error under a degree)                                          | done   |
-| Night side lighting is a fixed 7 % floor, not physically calibrated                                                  | todo   |
+| Night side lighting: the light the sky's bodies reflect on a log display curve, not a fixed 7 % floor                | done   |
 | Volcanoes on non-volcanic presets: quantile threshold, cones after erosion, lowland vents (lava 0 → 0.3–0.5 %)       | done   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
 | Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
@@ -701,3 +701,23 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   wind. Weather, interannual variability (El Niño, La Niña) and the storm
   rain that makes most orographic precipitation are model limits, not
   planned.
+
+## 22. Storage
+
+- **Status:** decided (2026-11-08)
+- **Analysis:** [analysis/15-storage.md](analysis/15-storage.md)
+- **Problem:** everything is files on one host's disk: listing systems
+  opens every `system.json`, jobs are lost on a restart, source data,
+  derived files and diagnostics share one directory (about 30 % of the
+  3.9 GB could be rebuilt or dropped), and the user's names sit next to
+  generated files.
+- **Decided:** tens to hundreds of systems, one user, one Docker host
+  (perhaps a server later); no object store. The steps, each its own pull
+  request:
+
+| Step | Change                                                                                                   | Status |
+| ---- | -------------------------------------------------------------------------------------------------------- | ------ |
+| 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing; its file on a host bind mount (`./db:/data/db`) so it survives restarts | todo   |
+| 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
+| 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
+| 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |
