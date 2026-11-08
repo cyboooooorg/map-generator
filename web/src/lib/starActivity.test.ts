@@ -12,9 +12,9 @@ import {
 } from "./starActivity";
 
 // Seed-1234 outputs of the Rust model (task 1), G2V, A0V and M5V.
-const SUN: StarActivity = {"envelope":"convective","age_gyr":4.6,"rotation_days":25.45958,"shear":0.22217314,"turnover_days":13.803839,"rossby":1.844384,"activity":0.00077597605,"cycle_years":8.780228,"cycle_phase":0.22184348,"cycle_depth":0.9,"band_deg":[28.0,7.0],"spot_coverage":0.0029878789,"facula_ratio":10.020264,"region_rate":0.5145347,"region_area":0.00015208183,"region_sigma":0.9466193,"decay_per_day":0.00001,"granule_size":0.0018903897,"granule_contrast":0.14989609,"granule_lifetime_days":0.005687718,"limb":[0.46191466,0.25807068],"seed":3214283846};
+const SUN: StarActivity = {"envelope":"convective","age_gyr":4.6,"rotation_days":25.45958,"shear":0.22217314,"turnover_days":13.803839,"rossby":1.844384,"activity":0.00077597605,"cycle_years":8.780228,"cycle_phase":0.22184348,"cycle_depth":0.9,"band_deg":[28.0,7.0],"spot_coverage":0.0029878789,"facula_ratio":10.020264,"region_rate":1.0290694,"region_area":0.00015208183,"region_sigma":0.9466193,"decay_per_day":0.00001,"granule_size":0.0018903897,"granule_contrast":0.14989609,"granule_lifetime_days":0.005687718,"limb":[0.46191466,0.25807068],"seed":3214283846};
 const HOT: StarActivity = {"envelope":"radiative","age_gyr":1.4346926,"rotation_days":0.71322525,"shear":0.5,"turnover_days":0.0,"rossby":0.0,"activity":0.0,"cycle_years":0.0,"cycle_phase":0.22184348,"cycle_depth":0.0,"band_deg":[0.0,0.0],"spot_coverage":0.0,"facula_ratio":0.0,"region_rate":0.0,"region_area":0.0,"region_sigma":0.0,"decay_per_day":0.00001,"granule_size":0.003158995,"granule_contrast":0.0,"granule_lifetime_days":0.020596515,"limb":[0.233016,0.32803598],"seed":3214283846};
-const M5V: StarActivity = {"envelope":"fully_convective","age_gyr":4.6,"rotation_days":72.5245,"shear":0.002209387,"turnover_days":124.49028,"rossby":0.58257157,"activity":0.017426249,"cycle_years":30.807196,"cycle_phase":0.22184348,"cycle_depth":0.7411045,"band_deg":[75.0,0.0],"spot_coverage":0.021889234,"facula_ratio":3.702076,"region_rate":0.786258,"region_area":0.00041163387,"region_sigma":0.9466193,"decay_per_day":0.00001,"granule_size":0.0011985536,"granule_contrast":0.042158145,"granule_lifetime_days":0.0006984249,"limb":[0.4385,0.346],"seed":3214283846};
+const M5V: StarActivity = {"envelope":"fully_convective","age_gyr":4.6,"rotation_days":72.5245,"shear":0.002209387,"turnover_days":124.49028,"rossby":0.58257157,"activity":0.017426249,"cycle_years":30.807196,"cycle_phase":0.22184348,"cycle_depth":0.7411045,"band_deg":[75.0,0.0],"spot_coverage":0.021889234,"facula_ratio":3.702076,"region_rate":1.572516,"region_area":0.00041163387,"region_sigma":0.9466193,"decay_per_day":0.00001,"granule_size":0.0011985536,"granule_contrast":0.042158145,"granule_lifetime_days":0.0006984249,"limb":[0.4385,0.346],"seed":3214283846};
 // M5V is not saturated (Ro 0.58): a saturated star derived from it, with a
 // rate above the normal-approximation threshold (30 per day).
 const SATURATED: StarActivity = {
@@ -97,14 +97,16 @@ describe('star activity timeline', () => {
   });
 
   it('covers spot_coverage at cycle maximum on average', () => {
+    // spot_coverage is a share of the visible hemisphere; regions spread
+    // evenly in longitude, so the whole star carries twice that area.
     const centre = maxDay();
     let sum = 0;
     for (let i = -182; i <= 182; i++) {
       for (const r of activeRegions(SUN, centre + i, Infinity)) sum += r.area;
     }
     const mean = sum / 365;
-    expect(mean).toBeGreaterThan(0.7 * SUN.spot_coverage);
-    expect(mean).toBeLessThan(1.3 * SUN.spot_coverage);
+    expect(mean).toBeGreaterThan(0.7 * 2 * SUN.spot_coverage);
+    expect(mean).toBeLessThan(1.3 * 2 * SUN.spot_coverage);
   });
 
   it('draws nothing on a radiative star', () => {
@@ -123,7 +125,7 @@ describe('star activity timeline', () => {
   });
 
   it('pins a vector', () => {
-    expect(activeRegions(SUN, 1000, 4).map((r) => r.region.id)).toEqual([2492798505, 535527016, 148732845, 252109775]);
+    expect(activeRegions(SUN, 1000, 4).map((r) => r.region.id)).toEqual([677345221, 1708615553, 2492798505, 2162515033]);
   });
 
   it('has no cycle on a star without one', () => {

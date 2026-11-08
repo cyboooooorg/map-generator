@@ -76,7 +76,9 @@ pub struct StarActivity {
     pub spot_coverage: f32,
     /// Facula area over spot area.
     pub facula_ratio: f32,
-    /// New regions per day at cycle maximum.
+    /// New regions per day at cycle maximum, over the whole star: their
+    /// mean total area is twice `spot_coverage`, half of it on the
+    /// visible hemisphere.
     pub region_rate: f32,
     /// Median peak spot area of a region, share of the hemisphere.
     pub region_area: f32,
@@ -339,9 +341,12 @@ pub fn star_activity(info: &StarInfo, system_seed: u32) -> StarActivity {
     let region_sigma = width.sqrt();
     let region_area =
         SUN_REGION_MEAN_MSH * SUN_REGION_WIDTH * MSH * (spot_coverage / SUN_SPOT_COVERAGE).sqrt();
-    // The rate keeps the mean spotted area at cycle maximum at
-    // `spot_coverage`: new regions per day times the area-days of one.
-    let region_rate = spot_coverage / mean_area_days(region_area, region_sigma, decay_per_day);
+    // New regions per day times the area-days of one is the mean spotted
+    // area of the whole star at cycle maximum. Regions spread evenly in
+    // longitude, so the whole star carries twice the visible
+    // hemisphere's `spot_coverage`.
+    let region_rate =
+        2.0 * spot_coverage / mean_area_days(region_area, region_sigma, decay_per_day);
     let granule_contrast = granule_contrast(teff);
     StarActivity {
         turnover_days,
@@ -661,5 +666,18 @@ mod tests {
         assert!((rotations_per_cycle(RO_SAT.sqrt()) - 230.0).abs() < 0.1);
         // The Sun: 160 rotations of 25.4 days.
         assert!((160.0 * 25.4 / 365.25 - 11.1_f32).abs() < 0.05);
+    }
+
+    #[test]
+    fn regions_cover_the_visible_hemisphere_twice_over_the_whole_star() {
+        for kind in ["G2V", "K5V", "M5V"] {
+            let a = star_activity(&star(kind), 1234);
+            let whole =
+                a.region_rate * mean_area_days(a.region_area, a.region_sigma, a.decay_per_day);
+            assert!(
+                (whole / (2.0 * a.spot_coverage) - 1.0).abs() < 1e-5,
+                "{kind}"
+            );
+        }
     }
 }

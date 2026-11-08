@@ -58,7 +58,9 @@ spot_coverage: number,
  */
 facula_ratio: number, 
 /**
- * New regions per day at cycle maximum.
+ * New regions per day at cycle maximum, over the whole star: their
+ * mean total area is twice `spot_coverage`, half of it on the
+ * visible hemisphere.
  */
 region_rate: number, 
 /**

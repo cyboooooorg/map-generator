@@ -11,6 +11,10 @@
  *
  * Days are Earth days from the system's t = 0 (f64, may be negative or
  * 1e7). Angles are radians, areas shares of the visible hemisphere.
+ * `spot_coverage` is the spotted share of the visible hemisphere, so the
+ * regions of the whole star add up to twice it at cycle maximum (they
+ * spread evenly in longitude, half facing the viewer): `region_rate`
+ * from `activity.rs` already carries that factor 2.
  * The science is in `docs/science/star-activity.md`; the Rust side that
  * supplies the parameters is `crates/mapgen/src/activity.rs`.
  */

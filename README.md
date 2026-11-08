@@ -123,7 +123,7 @@ Each moon is generated after its planet as a world of its own, a body of its sys
 
 A belt is drawn only where the planets leave it a span of 1.15 in ratio at least. The belts set every body's crater rate: the giant beyond it (Horner & Jones 2008) times four fifths of the asteroids (the inner belt against the Sun's) and a fifth of the comets (the outer belt and scattered disk against the Sun's 0.05 Earth masses), a twentieth at least; a moon strikes at its planet's rate. Systems drawn before keep their bodies and their crater rates.
 
-A request that cannot be met fails with its reason: more than 15 planets, more planets of a type than fit in its band (`zone_full`, with how many fit), an unknown type. Each body stores its orbit, size, mass, spin, the starlight it gets, the colours of the sphere the viewer draws until its maps exist, and the parameters its generation needs. `--body <id>` then generates a body's maps and its neighbourhood's (a planet and its moons; a moon, its planet and the planet's other moons), each into `systems/<id>/bodies/<body>/` with the layout of a world and its `world.json` naming its system and body, written into `bodies/.tmp-<body>/` and renamed into place once complete, then marked `generated` in `system.json`; with `--in-system <id>` it generates in a system already drawn (`map-generator --in-system mgs-48937-21 --body c-1`).
+A request that cannot be met fails with its reason: more than 15 planets, more planets of a type than fit in its band (`zone_full`, with how many fit), an unknown type. Each body stores its orbit, size, mass, spin, the starlight it gets, the colours of the sphere the viewer draws until its maps exist, and the parameters its generation needs. The star stores its activity (rotation, cycle, spots, granulation and limb darkening; see [docs/science/star-activity.md](docs/science/star-activity.md)), derived when reading a system drawn before it existed. `--body <id>` then generates a body's maps and its neighbourhood's (a planet and its moons; a moon, its planet and the planet's other moons), each into `systems/<id>/bodies/<body>/` with the layout of a world and its `world.json` naming its system and body, written into `bodies/.tmp-<body>/` and renamed into place once complete, then marked `generated` in `system.json`; with `--in-system <id>` it generates in a system already drawn (`map-generator --in-system mgs-48937-21 --body c-1`).
 
 ### Environment
 
@@ -338,7 +338,7 @@ Each run writes a system into `systems/<id>/` (`<id>`: the star's designation an
 
 ```text
 systems/<id>/
-├── system.json        ← the system as drawn: star, bodies, orbits, previews, parameters
+├── system.json        ← star and its activity, bodies, orbits, previews, parameters
 ├── names.json         ← names given in the web app, by body id (optional)
 └── bodies/
     └── c/             ← each body generated, with the layout below

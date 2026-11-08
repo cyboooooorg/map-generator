@@ -94,7 +94,9 @@ viewer draws the regions from (see
 [the science](science/star-activity.md)). It is drawn from the system's
 seed and the star alone, on its own stream (`STAR_ACTIVITY`). A system
 drawn before it existed has none in its file: `read_system` derives it on
-read, the same value a new draw stores, and does not write the file back.
+read, the same value a new draw stores, and it is saved with the system
+the next time its file is written (when a body is generated, for
+example).
 
 The physics of today's draws stays where it is (`star.rs`, `giants.rs`,
 `moons.rs`, `exomoon.rs`, `giant_world.rs`): the system draw calls them

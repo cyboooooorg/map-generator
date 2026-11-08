@@ -236,8 +236,13 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    **calibration**); its area rises and falls linearly, a triangle of
    base $T$ and height $A$, so it contributes $A\,T/2$ area-days
    ($A^2/(2W)$ when the cap does not bind). The rate of new regions at
-   cycle maximum is `spot_coverage` $/\,E[A\,T/2]$, so that the mean
-   spotted area equals `spot_coverage`. The expectation over the
+   cycle maximum, over the whole star, is
+   $2\,$`spot_coverage` $/\,E[A\,T/2]$. The factor 2 is because
+   `spot_coverage` is a share of the *visible* hemisphere, the way the
+   Sun's 0.3 % is measured, while regions spread evenly in longitude over
+   the whole star: their total area is twice the visible hemisphere's
+   spotted area, half of it facing the viewer at any time. The
+   expectation over the
    log-normal is a fixed-step sum over $\ln A$ within $\pm 6\sigma$
    (`mean_area_days`); the browser's timeline uses the same lifetime
    rule.
@@ -272,7 +277,9 @@ let activity = rossby_activity(rossby);
 let relative = activity / sun_activity();
 let spot_coverage = (SUN_SPOT_COVERAGE * relative.powf(SPOT_EXPONENT)).min(MAX_SPOT_COVERAGE);
 // A region of peak area A lives T = min(A / W, 120 d): A T / 2 area-days.
-let region_rate = spot_coverage / mean_area_days(region_area, region_sigma, decay_per_day);
+// The whole star carries twice the visible hemisphere's spot coverage.
+let region_rate =
+    2.0 * spot_coverage / mean_area_days(region_area, region_sigma, decay_per_day);
 ```
 
 A system drawn before this existed has no `activity` in its file:
@@ -280,8 +287,9 @@ A system drawn before this existed has no `activity` in its file:
 the same value a new draw stores, so the API always serves it.
 
 For the Sun's type (G2V) the medians over seeds are a rotation of 25.8
-days, $Ro = 1.87$, a cycle of 11.1 years, 0.29 % spotted at maximum and
-0.51 new regions per day.
+days, $Ro = 1.87$, a cycle of 11.1 years, 0.29 % of the visible
+hemisphere spotted at maximum and 1.03 new regions per day over the whole
+star, about half of them on the visible side.
 
 ### Where it departs from the science
 
@@ -297,9 +305,9 @@ days, $Ro = 1.87$, a cycle of 11.1 years, 0.29 % spotted at maximum and
 - **Active stars have larger regions, barely more of them.** Spot
   coverage scales the median region area by its square root, and without
   the lifetime cap the rate would go as the coverage over the area
-  squared, the same on every star (0.43 a day). The 120-day cap shortens
-  the largest regions, so the rate rises somewhat with activity: 0.51 a
-  day on the Sun, 0.79 on an old M5 dwarf.
+  squared, the same on every star (0.86 a day over the whole star). The
+  120-day cap shortens the largest regions, so the rate rises somewhat
+  with activity: 1.03 a day on the Sun, 1.57 on an old M5 dwarf.
 - **The lifetime cap is a calibration.** Real large spots can outlive
   several rotations; the cap keeps regions of a saturated star (median
   peak area about 1,500 MSH, 150 days at $W$) from lasting for half a
