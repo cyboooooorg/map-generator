@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
+import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
 
 describe('star view', () => {
   it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
@@ -245,6 +245,9 @@ describe('star view', () => {
   });
 });
 
+const gapsOf = (at: (au: number) => number, planets: { orbit_au: number; eccentricity: number }[]) =>
+  orbitGaps(planets.map((p) => ({ near: at(p.orbit_au * (1 - p.eccentricity)), far: at(p.orbit_au * (1 + p.eccentricity)) })));
+
 describe('planetary system scale', () => {
   // Semi-major axes (AU) and eccentricities of two crowded systems.
   const compact = {
@@ -301,7 +304,7 @@ describe('planetary system scale', () => {
     const places = giants.planets.map((p) => far(p.orbit_au));
     const sizes = markerSizes(
       giants.planets.map((p) => giantMarkerSize(p.orbit_au > 1 ? 4 : 1)),
-      places,
+      gapsOf(far, giants.planets),
     );
     for (let k = 3; k < places.length; k++) {
       // At least three marker diameters between neighbouring giants.
@@ -319,11 +322,16 @@ describe('planetary system scale', () => {
     for (const { star, planets } of [compact, giants]) {
       const at = systemLogScale(star, planets);
       const places = planets.map((p) => at(p.orbit_au));
+      const gaps = gapsOf(at, planets);
       const sizes = markerSizes(
         planets.map(() => giantMarkerSize(11)),
-        places,
+        gaps,
+        planets.map(() => 2.75),
       );
       sizes.forEach((size, k) => {
+        // Everything drawn round the planet (rings and halo, 2.75 radii) stays between the orbits,
+        // unless the minimum size forces it (never so in these systems).
+        expect(size * 2.75).toBeLessThanOrEqual(0.5 * gaps[k]! + 1e-9);
         expect(size).toBeGreaterThanOrEqual(MARKER_MIN);
         expect(size).toBeLessThanOrEqual(giantMarkerSize(11));
         expect(places[k]! - size).toBeGreaterThan(STAR_RADIUS);
@@ -332,9 +340,20 @@ describe('planetary system scale', () => {
     }
   });
 
-  it('shrinks a marker to 0.4 of the gap to the nearest orbit, and no further than the minimum', () => {
-    expect(markerSizes([0.2, 0.2], [3, 3.25])).toEqual([0.1, 0.1]);
-    expect(markerSizes([0.2, 0.2], [3, 3.001])).toEqual([MARKER_MIN, MARKER_MIN]);
+  it('measures the room between orbit curves, eccentricity included', () => {
+    // Two orbits 1 apart as circles; the inner one's apoapsis reaches 0.3 further out.
+    expect(orbitGaps([{ near: 3, far: 3 }, { near: 4, far: 4 }])[0]).toBeCloseTo(1);
+    expect(orbitGaps([{ near: 3, far: 3.3 }, { near: 4, far: 4 }])[1]).toBeCloseTo(0.7);
+    // The innermost is limited by the star's surface (radius 1).
+    expect(orbitGaps([{ near: 1.6, far: 1.6 }, { near: 5, far: 5 }])[0]).toBeCloseTo(0.6);
+    // Crossing orbits leave no room.
+    expect(orbitGaps([{ near: 3, far: 4 }, { near: 3.5, far: 5 }])).toEqual([0, 0]);
+  });
+
+  it('shrinks a marker to 0.4 of the room, what it draws round it to half, and no further than the minimum', () => {
+    expect(markerSizes([0.2, 0.2], [0.25, 0.25])).toEqual([0.1, 0.1]);
+    expect(markerSizes([0.2], [1], [4])[0]).toBeCloseTo(0.125);
+    expect(markerSizes([0.2, 0.2], [0.001, 0.001])).toEqual([MARKER_MIN, MARKER_MIN]);
     expect(markerSizes([0.11, 0.11], [3, 6])).toEqual([0.11, 0.11]);
   });
 });

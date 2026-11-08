@@ -118,25 +118,41 @@ export function systemLogScale(
 
 /** Smallest marker of a planet in a planetary system's view, view units: it stays visible (picking has its own tolerance). */
 export const MARKER_MIN = 0.035;
-/** Share of the gap to the nearest orbit a marker may fill. */
+/** Share of the gap to the nearest orbit a planet's body may fill. */
 const MARKER_GAP_SHARE = 0.4;
+/** Share of that gap everything drawn round a planet (rings, halo, moons) may fill: half, so it stays between the orbits. */
+export const FOOTPRINT_GAP_SHARE = 0.5;
+
+/**
+ * The room round each planet in a planetary system's view, view units: the
+ * distance, on screen, from its orbit curve to the nearest other orbit
+ * curve (the neighbour's periapsis to its apoapsis, so eccentric orbits
+ * count) or to the star's surface. `orbits` are the planets' periapsis
+ * and apoapsis on the view's scale (`systemLogScale`).
+ */
+export function orbitGaps(orbits: readonly { near: number; far: number }[]): number[] {
+  return orbits.map((own, k) => {
+    let gap = own.near - STAR_RADIUS;
+    orbits.forEach((other, j) => {
+      if (j === k) return;
+      gap = Math.min(gap, other.near >= own.far ? other.near - own.far : own.near >= other.far ? own.near - other.far : 0);
+    });
+    return Math.max(gap, 0);
+  });
+}
 
 /**
  * The sizes planets' markers are drawn with in a planetary system's view,
  * view units: each planet's own size (`natural`) at most, shrunk to
- * `MARKER_GAP_SHARE` of the gap, on screen, between its orbit and the
- * nearest one (or the star's surface), and never under `MARKER_MIN`, so
- * markers never touch however tight the system. `places` are the planets'
- * distances on the view's scale (`systemLogScale`).
+ * `MARKER_GAP_SHARE` of its `gaps` (see orbitGaps), and so that all it
+ * draws round it, `extent` times its radius (its rings, its highlight; 1
+ * for none), stays within `FOOTPRINT_GAP_SHARE` of the gap, and never
+ * under `MARKER_MIN`: nothing a planet draws reaches another's orbit.
  */
-export function markerSizes(natural: readonly number[], places: readonly number[]): number[] {
-  return natural.map((size, k) => {
-    let gap = places[k]! - STAR_RADIUS;
-    places.forEach((other, j) => {
-      if (j !== k) gap = Math.min(gap, Math.abs(other - places[k]!));
-    });
-    return Math.max(MARKER_MIN, Math.min(size, MARKER_GAP_SHARE * gap));
-  });
+export function markerSizes(natural: readonly number[], gaps: readonly number[], extent: readonly number[] = []): number[] {
+  return natural.map((size, k) =>
+    Math.max(MARKER_MIN, Math.min(size, MARKER_GAP_SHARE * gaps[k]!, (FOOTPRINT_GAP_SHARE * gaps[k]!) / Math.max(extent[k] ?? 1, 1))),
+  );
 }
 
 /** Where the star view starts compressing distances, AU: just beyond the world's orbit and the habitable zone. */

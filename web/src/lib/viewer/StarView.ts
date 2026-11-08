@@ -81,6 +81,9 @@ import {
   systemScale,
   systemLogScale,
   markerSizes,
+  meanOrbitalSpeed,
+  orbitGaps,
+  FOOTPRINT_GAP_SHARE,
   velocityScale,
   RING_MOON_SIZE,
   RING_TILT,
@@ -154,6 +157,8 @@ export const YEAR_S = 60;
 const START_ANOMALY = 0.6;
 /** How far out the farthest point of a system drawn to scale lies, view units. */
 const REAL_SPAN = 9;
+/** To scale, the length of a velocity vector at a planet's mean speed, as a share of its orbit's drawn radius. */
+const REAL_VECTOR_SHARE = 0.25;
 /** Kilometres in an AU. */
 const AU_KM = 149_597_870.7;
 /** Height of the pins up from the bodies drawn to scale, view units. */
@@ -283,6 +288,8 @@ export class StarView {
   private realScale = false;
   /** Drawn size of each planet's marker, view units (see markerSizes). */
   private markerSizeList: number[] = [];
+  /** Room round each planet's orbit on the view's scale, view units (see orbitGaps). */
+  private markerGaps: number[] = [];
   /** The star's drawn radius over STAR_RADIUS (1 but to scale). */
   private starScale = 1;
   /** The last setStar's arguments, to draw the system again on another scale. */
@@ -586,7 +593,18 @@ export class StarView {
     this.at = at;
     // Markers shrink where orbits are close, so they never touch.
     const natural = giants.map((g) => giantMarkerSize(g.radius_earth));
-    this.markerSizeList = system && !real ? markerSizes(natural, giants.map((g) => at(g.orbit_au))) : natural;
+    // The room round each planet: its orbit curve to the nearest other (periapsis to apoapsis).
+    this.markerGaps = orbitGaps(
+      giants.map((g) => ({ near: at(g.orbit_au * (1 - g.eccentricity)), far: at(g.orbit_au * (1 + g.eccentricity)) })),
+    );
+    this.markerSizeList =
+      system && !real
+        ? markerSizes(
+            natural,
+            this.markerGaps,
+            giants.map((g) => StarView.footprint(g)),
+          )
+        : natural;
     this.starScale = real ? Math.max((REAL_SPAN * SUN_RADIUS_AU * info.radius) / outer / STAR_RADIUS, 1e-4) : 1;
     this.star.scale.setScalar(this.starScale);
     this.arcs.scale.setScalar(this.starScale);
@@ -735,6 +753,11 @@ export class StarView {
         group.add(marker);
         return marker;
       });
+      // The moons' orbits, scaled to the planet's marker, shrink to stay
+      // between this planet's orbit and its neighbours'.
+      const reach = Math.max(0, ...orbits.map((o) => o.radius + o.size));
+      const room = this.markerGaps[k] !== undefined && !this.realScale ? (FOOTPRINT_GAP_SHARE * this.markerGaps[k]!) / Math.max(reach, 1e-9) : Infinity;
+      group.scale.setScalar(Math.min(this.markerSize(k) / PLANET_MARKER, room));
       this.giantGroup.add(group);
       this.systemMoons.push({ group, orbits, markers });
     }
@@ -1263,7 +1286,14 @@ export class StarView {
     };
     const mean = this.giantAnomaly(k);
     const direction = at(mean + 1e-3).sub(at(mean - 1e-3)).normalize();
-    const length = speed * this.arrowScale;
+    // To scale the planets are close to the star in view units: the arrow
+    // is a share of the orbit's drawn radius, longer the faster the planet
+    // goes against its mean speed (the schematic's one scale would cross
+    // the whole system).
+    const toScale = this.realScale && this.selected !== null;
+    const length = toScale
+      ? (REAL_VECTOR_SHARE * this.at(giant.orbit_au) * speed) / Math.max(meanOrbitalSpeed(this.info.mass, giant.orbit_au), 1e-9)
+      : speed * this.arrowScale;
     arrow.geometry.setPositions(StarView.arrowPoints(position, direction, length).flatMap((p) => [p.x, p.y, p.z]));
     this.arrowMids[k] = position.clone().addScaledVector(direction, length / 2);
     // The star's pull, towards the star; never longer than the way to it,
@@ -1275,7 +1305,10 @@ export class StarView {
     const inward = position.clone().negate();
     const room = Math.max(inward.length() - STAR_RADIUS * this.starScale * 1.2, 0.02);
     inward.normalize();
-    const pullLength = Math.min(Math.max(gravity * this.pullScale, 0.04), room);
+    // To scale, the pull is a share of the orbit's drawn radius too.
+    const pullLength = toScale
+      ? Math.min(REAL_VECTOR_SHARE * 0.6 * this.at(giant.orbit_au) * (giant.orbit_au / distanceAu) ** 2, room)
+      : Math.min(Math.max(gravity * this.pullScale, 0.04), room);
     pull.geometry.setPositions(StarView.arrowPoints(position, inward, pullLength).flatMap((p) => [p.x, p.y, p.z]));
     this.pullMids[k] = position.clone().addScaledVector(inward, pullLength / 2);
   }
@@ -1434,6 +1467,12 @@ export class StarView {
     // Room to zoom out past the fitted view, however far the system reaches.
     this.controls.maxDistance = Math.max(80, distance * 2);
     return { position: new Vector3(0, distance * 0.55, distance * 0.83), target: new Vector3() };
+  }
+
+  /** Radii of a planet's body that its rings or its highlight reach: all it draws round it fits in them. */
+  private static footprint(giant: SystemGiant): number {
+    const rings = giant.rings !== 'none' ? Math.max(SYMBOLIC_RINGS[1], giant.ringSystem?.outer ?? 0) : 0;
+    return rings > 0 ? rings + 0.45 : 1.8;
   }
 
   /** Drawn size of planet `index`'s marker, view units. */
