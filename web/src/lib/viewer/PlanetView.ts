@@ -638,6 +638,11 @@ export class PlanetView {
   /** Which body of the sky is the host planet, and whether it is locked to its star; null for none. */
   private hostSpinOf: { index: number; locked: boolean } | null = null;
   private hostGuideOn = false;
+  /** How far the clouds of the sky bodies have drifted, turns (shared: only the host has any). */
+  private readonly skyCloudShift = { value: 0 };
+  /** Whether the body shown's spin arrow (or locked ring) is drawn (see setSpinDirection), and the link to the host (see setHostLink). */
+  private spinArrowOn = false;
+  private hostLinkOn = false;
   /**
    * The Hill sphere drawn round a body of the sky (see setHillSphere): a
    * grid and a faint limb shell on a unit sphere, placed and scaled to it,
@@ -651,6 +656,15 @@ export class PlanetView {
   private dialState: DialState | null = null;
   /** The state and radius the dial was last placed with (see render). */
   private dialPlaced: { state: DialState; radius: number } | null = null;
+  /**
+   * The host planet's compass in a moon's sky (see setHostCompass): the
+   * same dial round the planet, far away, its depth held at the far plane
+   * and hidden where the planet stands in front of it.
+   */
+  private readonly hostDialUniforms = { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 1 } };
+  private readonly hostDial = new RotationDial((material) => farGuide(material, this.hostDialUniforms));
+  private hostDialOf: { index: number; state: DialState } | null = null;
+  private hostDialPlaced: DialState | null = null;
   /** Their near parts, drawn after the globe (see skyOrbitFragment). */
   private skyOrbitsNear: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
   private skyRequest = 0;
@@ -875,7 +889,7 @@ export class PlanetView {
     this.surface.material.stencilRef = DETAIL_STENCIL;
     this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
-    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin, this.dial.group);
+    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin, this.dial.group, this.hostDial.group);
 
     this.grid = new LineSegments(
       graticule(30),
@@ -1429,6 +1443,7 @@ export class PlanetView {
   resetDrift(): void {
     this.u.uCloudShift.value = NO_DRIFT.shift;
     this.u.uBandTime.value = NO_DRIFT.bandTime;
+    this.skyCloudShift.value = NO_DRIFT.shift;
     // The next frame measures its time from now, not from before.
     this.cloudDriftAt = null;
     this.requestRender();
@@ -1440,12 +1455,10 @@ export class PlanetView {
    */
   private driftClouds(): void {
     // A giant's bands drift too, each with its own wind.
-    const visible =
-      this.u.uCloudsOn.value > 0 ||
-      this.u.uGiant.value > 0 ||
-      // The clouds of a planet in a moon's sky drift as its own do.
-      this.skyBodies.some(({ mesh }) => mesh.visible && mesh.material.uniforms['uHasClouds']!.value > 0.5);
-    if (!this.cloudsDrifting || !visible) {
+    const own = this.cloudsDrifting && (this.u.uCloudsOn.value > 0 || this.u.uGiant.value > 0);
+    // The clouds of a planet in a moon's sky drift as its own do, by its own switch.
+    const sky = this.skyBodies.some(({ mesh, body }) => mesh.visible && body.show?.drift && mesh.material.uniforms['uHasClouds']!.value > 0.5);
+    if (!own && !sky) {
       this.cloudDriftAt = null;
       return;
     }
@@ -1453,13 +1466,16 @@ export class PlanetView {
     if (this.cloudDriftAt !== null) {
       // A hidden tab draws no frames: resume where the clouds were.
       const seconds = Math.min(now - this.cloudDriftAt, 1000) / 1000;
-      const drift = advanceDrift(
-        { shift: this.u.uCloudShift.value, bandTime: this.u.uBandTime.value },
-        seconds,
-        CLOUD_DRIFT_PERIOD_S,
-      );
-      this.u.uCloudShift.value = drift.shift;
-      this.u.uBandTime.value = drift.bandTime;
+      if (own) {
+        const drift = advanceDrift(
+          { shift: this.u.uCloudShift.value, bandTime: this.u.uBandTime.value },
+          seconds,
+          CLOUD_DRIFT_PERIOD_S,
+        );
+        this.u.uCloudShift.value = drift.shift;
+        this.u.uBandTime.value = drift.bandTime;
+      }
+      if (sky) this.skyCloudShift.value = (this.skyCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
     }
     this.cloudDriftAt = now;
     if (this.cloudDriftTimer === null) {
@@ -2143,6 +2159,7 @@ export class PlanetView {
     this.guides.dispose();
     this.hostSpin.dispose();
     this.dial.dispose();
+    this.hostDial.dispose();
     this.previewGlobe?.geometry.dispose();
     this.previewGlobe?.material.dispose();
     this.spinAxis?.material.dispose();
@@ -2341,8 +2358,8 @@ export class PlanetView {
             uHasClouds: { value: 0 },
             uClouds: { value: emptyTexture() },
             uCloudTint: { value: new Vector3(1, 1, 1) },
-            // Drifts with the body shown's own clouds (see driftClouds).
-            uCloudShift: this.u.uCloudShift,
+            // Drifts by the body's own switch (see driftClouds).
+            uCloudShift: this.skyCloudShift,
             uHaloColor: { value: new Vector3() },
             uHaloHeight: { value: 0 },
             uHaloStrength: { value: 0 },
@@ -2595,9 +2612,9 @@ export class PlanetView {
   private skyOrbitsOn = false;
 
   /**
-   * Draws the spin axes, on the globe: the body shown's out of its poles,
-   * and each sky body's out of its disk, along its own axis (see
-   * SkyBody.axes), so that their tilts show against their orbits.
+   * Draws the body shown's spin axis, on the globe, out of its poles. Each
+   * sky body's own is drawn along its axis (see SkyBody.axes) by its
+   * `show.axis`, so that their tilts show against their orbits.
    */
   setSpinAxes(on: boolean): void {
     this.spinAxesOn = on;
@@ -2617,6 +2634,21 @@ export class PlanetView {
     this.requestRender();
   }
 
+  /** Draws the body shown's spin arrow (or its closed ring when locked, see setSpinLocked). */
+  setSpinDirection(on: boolean): void {
+    this.spinArrowOn = on;
+    this.requestRender();
+  }
+
+  /**
+   * Draws the link to the host planet (see setHostGuide): the dotted line,
+   * the pull and the velocity arrows.
+   */
+  setHostLink(on: boolean): void {
+    this.hostLinkOn = on;
+    this.requestRender();
+  }
+
   /**
    * How the body shown turns, for its spin arrow: on its own (false), or
    * locked to what it orbits (true), drawn as a closed ring; null for none.
@@ -2629,7 +2661,7 @@ export class PlanetView {
   /**
    * The host planet of the body shown (a moon's planet), for a dotted line
    * to it and the arrows of its pull and of the body's velocity; null for
-   * none. Shown with the spin axes.
+   * none. Shown with the link to the host (see setHostLink).
    */
   setHostGuide(guide: HostGuide | null): void {
     this.guides.setHost(guide);
@@ -2647,6 +2679,17 @@ export class PlanetView {
     // DIAL_ELEVATION above it.
     if (state && !this.dialState && this.mode === 'globe') this.raiseOverEquator(10);
     this.dialState = state;
+    this.requestRender();
+  }
+
+  /**
+   * The rotation dial round the host planet (the body of the sky at
+   * `index`) as the moon shown sees it, `state` being the dial of the host
+   * itself, in its own frame, with the moon shown as its only body; null
+   * hides it.
+   */
+  setHostCompass(compass: { index: number; state: DialState } | null): void {
+    this.hostDialOf = compass;
     this.requestRender();
   }
 
@@ -2754,16 +2797,9 @@ export class PlanetView {
      * tip and markers are (see RotationDial.anchors), each null when hidden
      * by the globe; null when the dial is not drawn.
      */
-    dial: {
-      ticks: ({ x: number; y: number } | null)[];
-      /** The star's half-circle's numbers (see ARC_NUMBERS). */
-      arcTicks: ({ x: number; y: number } | null)[];
-      pointer: { x: number; y: number } | null;
-      sun: { x: number; y: number } | null;
-      host: { x: number; y: number } | null;
-      /** Each chosen body's marker, in the order of the dial state's bodies. */
-      bodies: ({ x: number; y: number } | null)[];
-    } | null;
+    dial: DialScreen | null;
+    /** The same for the host planet's compass (see setHostCompass). */
+    hostDial: DialScreen | null;
   } {
     const shown = this.u.uLightMode.value === 1 && this.morph > 0.99;
     const camera = this.camera.position;
@@ -2808,6 +2844,18 @@ export class PlanetView {
     const velocityAt = near(points.velocity);
     const hostAt = near(points.host);
     const dial = this.dialState && this.dial.group.visible ? this.dial.anchors() : null;
+    // The host's compass: its points in the scene's frame, hidden where the planet stands in front of them.
+    const hostDial = this.hostDialOf && this.hostDial.group.visible ? this.hostDial.anchors() : null;
+    if (hostDial) {
+      this.hostDial.group.updateMatrixWorld(true);
+      const world = (v: Vector3 | null) => (v ? this.hostDial.group.localToWorld(v.clone()) : null);
+      hostDial.ticks = hostDial.ticks.map((v) => world(v)!);
+      hostDial.arcTicks = hostDial.arcTicks.map(world);
+      hostDial.pointer = world(hostDial.pointer)!;
+      hostDial.sun = world(hostDial.sun);
+      hostDial.host = world(hostDial.host);
+      hostDial.bodies = hostDial.bodies.map(world);
+    }
     return {
       bodies: this.skyBodies.map(({ body }) => {
         const place = this.skyPlace(body);
@@ -2837,14 +2885,10 @@ export class PlanetView {
         }
         return best;
       }),
-      dial: dial && {
-        ticks: dial.ticks.map((point) => near(point)),
-        arcTicks: dial.arcTicks.map((point) => near(point)),
-        pointer: near(dial.pointer),
-        sun: near(dial.sun),
-        host: near(dial.host),
-        bodies: dial.bodies.map((point) => near(point)),
-      },
+      dial: dial && screenDial(dial, near),
+      hostDial:
+        hostDial &&
+        screenDial(hostDial, (point) => (point && this.behindPlanet(point, this.hostDialUniforms) ? null : near(point))),
     };
   }
 
@@ -2893,24 +2937,51 @@ export class PlanetView {
   /** Where the host planet's spin arrow ends on the screen, through `near`, null when it is not drawn or the planet hides it. */
   private hostSpinTip(near: (point: Vector3 | null, margin?: number) => { x: number; y: number } | null): { x: number; y: number } | null {
     const tip = this.hostSpin.points().spin;
-    if (!tip) return null;
-    // Behind the planet from the camera: hidden, as its arrow is.
-    const { uHostCentre, uHostRadius } = this.hostSpinUniforms;
-    const to = tip.clone().sub(this.camera.position);
+    if (!tip || this.behindPlanet(tip, this.hostSpinUniforms)) return null;
+    return near(tip);
+  }
+
+  /** Whether the planet (`uniforms`: its centre and radius) stands between the camera and `point`. */
+  private behindPlanet(point: Vector3, uniforms: { uHostCentre: { value: Vector3 }; uHostRadius: { value: number } }): boolean {
+    const to = point.clone().sub(this.camera.position);
     const distance = to.length();
     const d = to.divideScalar(distance);
-    const oc = this.camera.position.clone().sub(uHostCentre.value);
+    const oc = this.camera.position.clone().sub(uniforms.uHostCentre.value);
     const b = oc.dot(d);
-    const h = b * b - (oc.lengthSq() - uHostRadius.value ** 2);
-    if (h > 0 && -b - Math.sqrt(h) > 0 && -b - Math.sqrt(h) < distance) return null;
-    return near(tip);
+    const h = b * b - (oc.lengthSq() - uniforms.uHostRadius.value ** 2);
+    return h > 0 && -b - Math.sqrt(h) > 0 && -b - Math.sqrt(h) < distance;
+  }
+
+  /** Places the host planet's compass round it (see setHostCompass), turning with it. */
+  private drawHostDial(visible: boolean): void {
+    const compass = this.hostDialOf;
+    const entry = compass ? this.skyBodies[compass.index] : undefined;
+    const body = entry?.body;
+    const on = visible && !!compass && !!body?.position && body.radius !== undefined && entry!.mesh.visible;
+    if (on && compass && body?.position && body.radius !== undefined) {
+      const centre = new Vector3(...body.position);
+      const [x, y, z] = (body.axes ?? IDENTITY_AXES).map((a) => new Vector3(...a).normalize());
+      const group = this.hostDial.group;
+      group.position.copy(centre);
+      group.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(x!, y!, z!));
+      group.scale.setScalar(body.radius);
+      // Far beyond the far plane, which its depth is held short of: never culled by the camera's frustum.
+      group.traverse((object) => (object.frustumCulled = false));
+      this.hostDialUniforms.uHostCentre.value.copy(centre);
+      this.hostDialUniforms.uHostRadius.value = body.radius;
+      if (this.hostDialPlaced !== compass.state) {
+        this.hostDial.set(compass.state, DIAL_RADIUS);
+        this.hostDialPlaced = compass.state;
+      }
+    }
+    this.hostDial.update(on, this.morph);
   }
 
   /** Places the host planet's spin round it (see setHostSpin), its arc starting on the side facing the body shown. */
   private drawHostSpin(visible: boolean): void {
     const entry = this.hostSpinOf ? this.skyBodies[this.hostSpinOf.index] : undefined;
     const body = entry?.body;
-    const on = visible && this.spinAxesOn && !!body?.position && body.radius !== undefined && entry!.mesh.visible;
+    const on = visible && !!body?.show?.spin && !!body?.position && body.radius !== undefined && entry!.mesh.visible;
     if (on && body?.position && body.radius !== undefined) {
       const centre = new Vector3(...body.position);
       const y = new Vector3(...(body.axes ?? IDENTITY_AXES)[1]).normalize();
@@ -2975,9 +3046,11 @@ export class PlanetView {
       (u['uHaloColor']!.value as Vector3).set(...(halo?.colour ?? [0, 0, 0]));
       u['uHaloHeight']!.value = height;
       u['uHaloStrength']!.value = halo?.strength ?? 0;
-      u['uSpinAxis']!.value = this.spinAxesOn ? 1 : 0;
-      u['uSpinArrow']!.value = this.hostSpinOf?.index === this.skyBodies.indexOf(entry) ? 0 : 1;
-      u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, this.spinAxesOn ? SPIN_AXIS_LENGTH + 0.1 : 1);
+      const axis = show?.axis === true;
+      const arrow = show?.spin === true && this.hostSpinOf?.index !== this.skyBodies.indexOf(entry);
+      u['uSpinAxis']!.value = axis ? 1 : 0;
+      u['uSpinArrow']!.value = arrow ? 1 : 0;
+      u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, axis ? SPIN_AXIS_LENGTH + 0.1 : arrow ? 1.7 : 1);
       setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
     }
@@ -2987,6 +3060,7 @@ export class PlanetView {
     occluders.forEach(({ position, radius }, i) => this.skyOccluders.uOccluders.value[i]!.set(...position, radius));
     this.skyOccluders.uOccluderCount.value = occluders.length;
     this.drawHostSpin(visible);
+    this.drawHostDial(visible);
   }
 
   /**
@@ -2996,7 +3070,7 @@ export class PlanetView {
    */
   private drawSkyRings(entry: (typeof this.skyBodies)[number], place: { direction: Vector3; half: number }): void {
     const { body, mesh } = entry;
-    const rings = body.rings ?? null;
+    const rings = body.show?.rings === false ? null : (body.rings ?? null);
     if (!rings) {
       if (entry.rings) entry.rings.visible = false;
       return;
@@ -3173,7 +3247,7 @@ export class PlanetView {
       this.spinAxis.material.opacity = this.morph ** 3;
       this.spinAxis.scale.setScalar(poles);
     }
-    this.guides.update(this.spinAxesOn, this.spinAxesOn && this.hostGuideOn, this.morph);
+    this.guides.update(this.spinArrowOn, this.hostLinkOn && this.hostGuideOn, this.morph);
     // The dial's ring stands clear of the farthest of the shape, with its
     // relief as displayed (as the guides), else the surface hides it.
     if (this.dialState) {
@@ -3566,6 +3640,33 @@ function latticeSlots(rows: number, window: number, perCell: number): Float32Arr
     }
   }
   return slots;
+}
+
+/** A point of the screen, CSS px, or null where nothing is seen. */
+type ScreenPoint = { x: number; y: number } | null;
+
+/** Where a rotation dial's labelled points are on the screen (see PlanetView.skyScreenPositions). */
+export interface DialScreen {
+  ticks: ScreenPoint[];
+  /** The star's half-circle's numbers (see ARC_NUMBERS). */
+  arcTicks: ScreenPoint[];
+  pointer: ScreenPoint;
+  sun: ScreenPoint;
+  host: ScreenPoint;
+  /** Each chosen body's marker, in the order of the dial state's bodies. */
+  bodies: ScreenPoint[];
+}
+
+/** The dial's anchors (see RotationDial.anchors) on the screen, through `project`. */
+function screenDial(anchors: ReturnType<RotationDial['anchors']>, project: (point: Vector3 | null) => ScreenPoint): DialScreen {
+  return {
+    ticks: anchors.ticks.map((point) => project(point)),
+    arcTicks: anchors.arcTicks.map((point) => project(point)),
+    pointer: project(anchors.pointer),
+    sun: project(anchors.sun),
+    host: project(anchors.host),
+    bodies: anchors.bodies.map((point) => project(point)),
+  };
 }
 
 /**

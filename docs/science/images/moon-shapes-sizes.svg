@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 460" width="860" height="460" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Small bodies by mean radius: where icy and rocky bodies turn round</title>
+  <desc id="desc">Mean radius on a logarithmic axis from 4 to 700 km. Icy moons: Pan 14 km, Janus 89 km and Hyperion 135 km are irregular; Mimas, 198 km, is round; Proteus, 208 km, is irregular; Miranda, 236 km, and Enceladus, 252 km, are round. The transition for icy bodies lies near 200 km. Rocky bodies: Deimos, 6 km, Phobos, 11 km, and the asteroid Vesta, 261 km, are irregular; Ceres, 470 km, is round. The transition for rocky bodies lies near 300 km. The app makes icy moons round from 200 km and rocky ones from 300 km, on the observed transitions.</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .row { fill: #e6edf3; font-size: 13px; font-weight: 600; }
+    .axis { stroke: #6b7886; stroke-width: 1; }
+    .lead { stroke: #6b7886; stroke-width: 0.8; fill: none; }
+    .lim { stroke: #ffcc66; stroke-width: 1.4; }
+    .app { stroke: #9fd3ff; stroke-width: 1.4; stroke-dasharray: 5 4; }
+    .ice { fill: #cfe3ff; stroke: #0f1622; stroke-width: 0.8; }
+    .rock { fill: #d9b77a; stroke: #0f1622; stroke-width: 0.8; }
+  </style>
+  <rect width="860" height="460" fill="#0f1622"/>
+  <text class="h" x="20" y="28">Round or potato-shaped: small bodies by mean radius</text>
+  <text class="s" x="20" y="46">Logarithmic axis. Each body is a symbol: a disc when round, a lumpy oval when irregular; symbols are not to scale.</text>
+  <line class="axis" x1="50" y1="175" x2="830" y2="175"/>
+  <text class="row" x="50" y="72">Icy bodies</text>
+  <line class="lim" x1="640.8" y1="62" x2="640.8" y2="189"/>
+  <text class="s" x="645.8" y="72" text-anchor="start">about 200 km</text>
+  <line class="app" x1="640.8" y1="62" x2="640.8" y2="189"/>
+  <text class="s" x="645.8" y="72" text-anchor="start"></text>
+  <path class="ice" transform="translate(239.2 175) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
+  <path class="ice" transform="translate(518.9 175) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
+  <path class="ice" transform="translate(581.4 175) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
+  <circle class="ice" cx="639.4" cy="175" r="6.5"/>
+  <line class="axis" x1="646.7" y1="175" x2="646.7" y2="191"/>
+  <path class="ice" transform="translate(646.7 197) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
+  <circle class="ice" cx="665.7" cy="175" r="6.5"/>
+  <line class="axis" x1="675.8" y1="175" x2="675.8" y2="191"/>
+  <circle class="ice" cx="675.8" cy="197" r="6.5"/>
+  <path class="lead" d="M239.2 167 L239.2 149"/>
+  <text class="t" x="239.2" y="133" text-anchor="middle">Pan</text>
+  <text class="s" x="239.2" y="146" text-anchor="middle">14 km</text>
+  <path class="lead" d="M518.9 167 L488.9 149"/>
+  <text class="t" x="488.9" y="133" text-anchor="middle">Janus</text>
+  <text class="s" x="488.9" y="146" text-anchor="middle">89 km</text>
+  <path class="lead" d="M581.4 167 L586.4 149"/>
+  <text class="t" x="586.4" y="133" text-anchor="middle">Hyperion</text>
+  <text class="s" x="586.4" y="146" text-anchor="middle">135 km</text>
+  <path class="lead" d="M639.4 167 L569.4 116"/>
+  <text class="t" x="569.4" y="100" text-anchor="middle">Mimas</text>
+  <text class="s" x="569.4" y="113" text-anchor="middle">198 km, round</text>
+  <path class="lead" d="M646.7 205 L586.7 212"/>
+  <text class="t" x="586.7" y="226" text-anchor="middle">Proteus</text>
+  <text class="s" x="586.7" y="239" text-anchor="middle">208 km, not round</text>
+  <path class="lead" d="M665.7 167 L755.7 139"/>
+  <text class="t" x="755.7" y="123" text-anchor="middle">Miranda</text>
+  <text class="s" x="755.7" y="136" text-anchor="middle">236 km</text>
+  <path class="lead" d="M675.8 205 L745.8 212"/>
+  <text class="t" x="745.8" y="226" text-anchor="middle">Enceladus</text>
+  <text class="s" x="745.8" y="239" text-anchor="middle">252 km</text>
+  <line class="axis" x1="50" y1="335" x2="830" y2="335"/>
+  <text class="row" x="50" y="262">Rocky bodies</text>
+  <line class="lim" x1="702.0" y1="252" x2="702.0" y2="349"/>
+  <text class="s" x="697.0" y="262" text-anchor="end">about 300 km</text>
+  <line class="app" x1="702.0" y1="252" x2="702.0" y2="349"/>
+  <text class="s" x="707.0" y="262" text-anchor="start"></text>
+  <path class="rock" transform="translate(116.2 335) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
+  <path class="rock" transform="translate(203.9 335) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
+  <path class="rock" transform="translate(681.2 335) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
+  <circle class="rock" cx="769.7" cy="335" r="6.5"/>
+  <path class="lead" d="M116.2 327 L126.2 309"/>
+  <text class="t" x="126.2" y="293" text-anchor="middle">Deimos</text>
+  <text class="s" x="126.2" y="306" text-anchor="middle">6 km</text>
+  <path class="lead" d="M203.9 327 L233.9 309"/>
+  <text class="t" x="233.9" y="293" text-anchor="middle">Phobos</text>
+  <text class="s" x="233.9" y="306" text-anchor="middle">11 km</text>
+  <path class="lead" d="M681.2 327 L611.2 309"/>
+  <text class="t" x="611.2" y="293" text-anchor="middle">Vesta</text>
+  <text class="s" x="611.2" y="306" text-anchor="middle">261 km, not round</text>
+  <path class="lead" d="M769.7 327 L814.7 309"/>
+  <text class="t" x="814.7" y="293" text-anchor="middle">Ceres</text>
+  <text class="s" x="814.7" y="306" text-anchor="middle">470 km, round</text>
+  <line class="axis" x1="50" y1="375" x2="830" y2="375"/>
+  <line class="axis" x1="83.7" y1="375" x2="83.7" y2="380"/>
+  <text class="s" x="83.7" y="393" text-anchor="middle">5 km</text>
+  <line class="axis" x1="188.4" y1="375" x2="188.4" y2="380"/>
+  <text class="s" x="188.4" y="393" text-anchor="middle">10 km</text>
+  <line class="axis" x1="293.1" y1="375" x2="293.1" y2="380"/>
+  <text class="s" x="293.1" y="393" text-anchor="middle">20 km</text>
+  <line class="axis" x1="431.4" y1="375" x2="431.4" y2="380"/>
+  <text class="s" x="431.4" y="393" text-anchor="middle">50 km</text>
+  <line class="axis" x1="536.1" y1="375" x2="536.1" y2="380"/>
+  <text class="s" x="536.1" y="393" text-anchor="middle">100 km</text>
+  <line class="axis" x1="640.8" y1="375" x2="640.8" y2="380"/>
+  <text class="s" x="640.8" y="393" text-anchor="middle">200 km</text>
+  <line class="axis" x1="779.2" y1="375" x2="779.2" y2="380"/>
+  <text class="s" x="779.2" y="393" text-anchor="middle">500 km</text>
+  <text class="t" x="440.0" y="411" text-anchor="middle">mean radius (logarithmic)</text>
+  <line class="lim" x1="20" y1="429" x2="42" y2="429"/><text class="s" x="48" y="433">observed transition (Lineweaver &amp; Norman 2010)</text>
+  <line class="app" x1="330" y1="429" x2="352" y2="429"/><text class="s" x="358" y="433">the app's threshold (the same lines: ice 200 km, rock 300 km)</text>
+  <text class="s" x="20" y="451">Radii: NASA JPL satellite physical parameters; Vesta and Ceres: JPL Small-Body Database (Park et al. 2025, 2016). Shapes: NASA fact sheets.</text>
+</svg>

@@ -938,8 +938,9 @@ export const skyBodyFragment = /* glsl */ `
   uniform float uRing;
   // 1 to draw its spin axis out of its poles (see PlanetView.setSpinAxes).
   uniform float uSpinAxis;
-  // 0 when its spin arrow is drawn in 3D instead (the host planet in a
-  // moon's sky, see PlanetView.setHostSpin): only the axis is drawn here.
+  // 1 to draw its spin arrow (Spin direction); 0 when it is drawn in 3D
+  // instead (the host planet in a moon's sky, see PlanetView.setHostSpin),
+  // or not at all.
   uniform float uSpinArrow;
   uniform float uOpacity;
   // The body's own axes (its x, its spin axis, its z) in the viewer's
@@ -979,11 +980,12 @@ export const skyBodyFragment = /* glsl */ `
   // south): how much of it covers this point of the quad, and its colour.
   // An end pointing away is hidden behind the disk.
   vec4 spinAxis(vec2 p, float r2) {
-    if (uSpinAxis < 0.5) return vec4(0.0);
+    if (uSpinAxis < 0.5 && uSpinArrow < 0.5) return vec4(0.0);
     vec2 axis = vec2(dot(uAxisY, uRight), dot(uAxisY, uUp));
     float towards = dot(uAxisY, -uDir);
     vec4 mark = vec4(0.0);
     for (int i = 0; i < 2; i++) {
+      if (uSpinAxis < 0.5) break;
       float side = i == 0 ? 1.0 : -1.0;
       // The end seen behind the disk is hidden by it.
       if (r2 < 1.0 && side * towards < 0.0) continue;
@@ -1002,6 +1004,7 @@ export const skyBodyFragment = /* glsl */ `
     float arrow = 0.0;
     vec3 prev = centre + 0.3 * uAxisZ;
     for (int i = 1; i <= 21; i++) {
+      if (uSpinArrow < 0.5) break;
       float angle = 1.5 * PI * min(float(i), 18.0) / 18.0;
       vec3 q;
       vec3 from = prev;

@@ -582,7 +582,7 @@ export const en = {
   viewer: {
     axesGizmo: 'The world\'s axes, x red, y green, z blue, as the camera sees them',
     sunlightOff: 'Turn on Sunlight (in the icon bar) to light the body by its star, with its seasons and its hour.',
-    hexesOff: 'Turn on the hex grid in the icon bar to set it here.',
+    hexesOff: 'Tick Hexes above to draw the hex grid and set it here.',
     infoPanel: 'Info',
     mapPanel: 'Map',
     lightPanel: 'Light and season',
@@ -679,6 +679,23 @@ export const en = {
     spinAxes: 'Spin axes',
     spinAxesHelp:
       'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
+    spinDirection: 'Spin direction',
+    spinDirectionHelp:
+      'Draws the way each body turns (on the globe): an arrow bent round its axis, or a closed ring for a body locked to what it orbits, which does not turn against it',
+    hostLink: 'Link to the host',
+    hostLinkHelp:
+      "From a moon: a dotted line to its host planet, with the host's pull on the moon and the moon's velocity as arrows, and their figures",
+    resetDrift: 'Reset the drift',
+    hostRings: 'Host rings',
+    hostRingsHelp: "The rings of the host planet in the moon's sky",
+    compass: 'Compass',
+    compassHelp:
+      "The rotation dial: a ring graduated in degrees, its pointer showing how far the body has turned. From a moon, the square for the host draws it round the host planet as the moon sees it: the ring graduated in degrees, the half-circle of the star's height, and the moon's bearing and height over the host's equator",
+    squareMoon: (p: { what: string }) => `${p.what} on the moon`,
+    squareHost: (p: { what: string }) => `${p.what} on the host`,
+    squareLocal: (p: { what: string }) => `${p.what} of the local system`,
+    squareStellar: (p: { what: string }) => `${p.what} of the star system`,
+    hostCompassMoon: 'Moon',
     rotationDial: 'Rotation dial',
     rotationDialHelp:
       'A ring round the equator, graduated in degrees: its pointer shows how far the body has turned, against the stars, or against what it orbits for a body locked to it',
@@ -713,7 +730,7 @@ export const en = {
         text: 'the solar day cut into 24 local hours, noon when the sun crosses the meridian (the convention of Mars missions).',
       },
       { term: 'Synchronous rotation:', text: 'the body turns once per orbit and always shows the same face to what it orbits.' },
-      { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by about ±2e radians.' },
+      { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by up to an amplitude that is about 2e radians (e the eccentricity), which the dial shows exactly next to the current angle.' },
       {
         term: 'Spin–orbit resonance:',
         text: 'the star’s tides hold an eccentric planet at a simple ratio of turns to orbits instead of locking it: 3:2 as Mercury (three turns every two orbits, its solar day two of its years), or 2:1 on more eccentric orbits. The eccentricity sets the odds and the seed draws which one.',
@@ -748,8 +765,6 @@ export const en = {
     starsHelp: 'Stars around the globe, fixed in space: they turn with the planet when you move the camera',
     clouds: 'Clouds',
     drift: 'Drift',
-    host: 'Host planet',
-    hostHelp: "The planet seen in this body's sky (or the giant this world orbits), drawn by its own switches: those above apply to the body you are looking at",
     skyLabels: 'Labels',
     skyLabelsHelp: 'Names and basic facts of the bodies in the sky (moons, the planet seen from a moon, the star), tied to each by a line, to find even the smallest; with Sunlight',
     spinName: 'Spin',

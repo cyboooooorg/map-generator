@@ -837,7 +837,6 @@ impl MoonSystem {
         )
     }
 
-    /// The system with what it does to its planet filled in.
     /// The moons of a giant world: regular moons grown in its disk, about
     /// 10⁻⁴ of its mass together (Canup & Ward 2006), on a resonant chain
     /// from 4 to 8 of its radii outwards (periods doubling, as Io, Europa
@@ -990,6 +989,7 @@ impl MoonSystem {
         }
     }
 
+    /// The system with what it does to its planet filled in.
     fn with_effects(mut self, p: &WorldParams) -> Self {
         let effects = PlanetEffects::of(p, Some(&self));
         self.tide = effects.tide;

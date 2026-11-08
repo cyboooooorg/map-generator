@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 560" width="860" height="560" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Where a planet can keep moons: Earth, Mars and Jupiter in units of their Hill radius</title>
+  <desc id="desc">Distances from the planet on a logarithmic axis, in units of each planet's Hill radius, from a thousandth of it to the Hill radius itself. Moons last between the Roche limit, close to the planet, and about 0.36 to 0.5 Hill radii for prograde orbits, or 0.5 to 0.7 for retrograde ones. Earth's Moon sits at 0.26 Hill radii. Phobos orbits inside Mars's synchronous orbit and Deimos outside it. Jupiter's four large moons lie within 0.04 Hill radii; its small irregular moons reach 0.22 Hill radii on prograde orbits (Himalia) and 0.45 on retrograde ones (Sinope).</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .row { stroke: #6b7886; stroke-width: 1; }
+    .roche { stroke: #ffcc66; stroke-width: 1.4; stroke-dasharray: 4 3; }
+    .sync { stroke: #9fd3ff; stroke-width: 1.4; }
+    .grid { stroke: #2a3646; stroke-width: 1; }
+    .moon { fill: #cfe3ff; stroke: #0f1622; stroke-width: 0.8; }
+    .retro { fill: #0f1622; stroke: #cfe3ff; stroke-width: 1.4; }
+    .lead { stroke: #6b7886; stroke-width: 0.8; fill: none; }
+  </style>
+  <rect width="860" height="560" fill="#0f1622"/>
+  <text class="h" x="20" y="30">Where a planet can keep moons</text>
+  <text class="s" x="20" y="48">Distance from the planet in units of its Hill radius, on a logarithmic scale; each row to its own scale.</text>
+  <rect x="719.4" y="64" width="32.3" height="371" fill="#ffcc66" fill-opacity="0.13"/>
+  <rect x="751.8" y="64" width="33.1" height="371" fill="#9fd3ff" fill-opacity="0.12"/>
+  <rect x="784.9" y="64" width="35.1" height="371" fill="#c0504d" fill-opacity="0.12"/>
+  <line class="grid" x1="140.0" y1="64" x2="140.0" y2="435"/>
+  <line class="grid" x1="366.7" y1="64" x2="366.7" y2="435"/>
+  <line class="grid" x1="593.3" y1="64" x2="593.3" y2="435"/>
+  <line x1="820.0" y1="64" x2="820.0" y2="435" stroke="#e6edf3" stroke-width="1.2"/>
+  <text class="s" x="739.6" y="112" transform="rotate(-90 739.6 112)" text-anchor="middle">prograde limit</text>
+  <text class="s" x="772.3" y="112" transform="rotate(-90 772.3 112)" text-anchor="middle">retrograde limit</text>
+  <text class="s" x="806.4" y="112" transform="rotate(-90 806.4 112)" text-anchor="middle">rarely stable</text>
+  <text class="t" x="20" y="184">Earth</text>
+  <rect x="134.0" y="171" width="148.6" height="18" rx="3" fill="#3d6fa8"/>
+  <line class="row" x1="282.6" y1="180" x2="820.0" y2="180"/>
+  <line class="roche" x1="386.8" y1="166" x2="386.8" y2="194"/>
+  <line class="sync" x1="468.6" y1="170" x2="468.6" y2="190"/>
+  <text class="s" x="211.3" y="204" text-anchor="middle">planet</text>
+  <circle class="moon" cx="686.2" cy="180" r="5"/>
+  <text class="t" x="686.2" y="166" text-anchor="middle">Moon</text>
+  <text class="t" x="20" y="279">Mars</text>
+  <rect x="134.0" y="266" width="118.2" height="18" rx="3" fill="#b5653a"/>
+  <line class="row" x1="252.2" y1="275" x2="820.0" y2="275"/>
+  <line class="roche" x1="299.5" y1="261" x2="299.5" y2="289"/>
+  <line class="sync" x1="429.0" y1="265" x2="429.0" y2="285"/>
+  <text class="s" x="196.1" y="299" text-anchor="middle">planet</text>
+  <circle class="moon" cx="352.4" cy="275" r="5"/>
+  <text class="t" x="352.4" y="261" text-anchor="middle">Phobos</text>
+  <circle class="moon" cx="442.7" cy="275" r="5"/>
+  <text class="t" x="442.7" y="261" text-anchor="middle">Deimos</text>
+  <text class="t" x="20" y="379">Jupiter</text>
+  <rect x="134.0" y="366" width="33.0" height="18" rx="3" fill="#c9a46b"/>
+  <line class="row" x1="167.0" y1="375" x2="820.0" y2="375"/>
+  <line class="roche" x1="243.0" y1="361" x2="243.0" y2="389"/>
+  <line class="sync" x1="248.5" y1="365" x2="248.5" y2="385"/>
+  <text class="s" x="153.5" y="399" text-anchor="middle">planet</text>
+  <circle class="moon" cx="343.9" cy="375" r="5"/>
+  <text class="t" x="343.9" y="361" text-anchor="middle">Io</text>
+  <circle class="moon" cx="389.6" cy="375" r="5"/>
+  <text class="t" x="389.6" y="397" text-anchor="middle">Europa</text>
+  <circle class="moon" cx="435.6" cy="375" r="5"/>
+  <text class="t" x="435.6" y="361" text-anchor="middle">Ganymede</text>
+  <circle class="moon" cx="491.2" cy="375" r="5"/>
+  <text class="t" x="491.2" y="397" text-anchor="middle">Callisto</text>
+  <circle class="moon" cx="668.8" cy="375" r="5"/>
+  <text class="t" x="668.8" y="361" text-anchor="middle">Himalia</text>
+  <circle class="retro" cx="728.7" cy="375" r="4"/>
+  <circle class="retro" cx="738.2" cy="375" r="4"/>
+  <circle class="retro" cx="739.5" cy="375" r="4"/>
+  <circle class="retro" cx="740.4" cy="375" r="4"/>
+  <text class="t" x="739.2" y="361" text-anchor="middle">Sinope …</text>
+  <text class="s" x="726.0" y="397" text-anchor="start">and others,</text>
+  <text class="s" x="726.0" y="411" text-anchor="start">retrograde</text>
+  <text class="s" x="668.7" y="397" text-anchor="middle">prograde</text>
+  <text class="s" x="678.2" y="202" text-anchor="end">0.26 Hill radii,</text>
+  <text class="s" x="678.2" y="216" text-anchor="end">60 Earth radii</text>
+  <text class="s" x="399.8" y="301" text-anchor="middle">Phobos falls in, Deimos recedes</text>
+  <text class="s" x="416.0" y="343" text-anchor="middle">the four large moons, within 0.04</text>
+  <line class="roche" x1="20" y1="464" x2="20" y2="478"/>
+  <text class="s" x="30" y="475">Roche limit (fluid for a loose body, rigid for a solid one)</text>
+  <line class="sync" x1="400" y1="466" x2="400" y2="476"/>
+  <text class="s" x="410" y="475">synchronous orbit: a moon inside it spirals in</text>
+  <circle class="moon" cx="20" cy="493" r="4.5"/>
+  <text class="s" x="30" y="497">prograde moon</text>
+  <circle class="retro" cx="130" cy="493" r="4"/>
+  <text class="s" x="140" y="497">retrograde moon</text>
+  <text class="s" x="140.0" y="449" text-anchor="middle">0.001</text>
+  <text class="s" x="366.7" y="449" text-anchor="middle">0.01</text>
+  <text class="s" x="593.3" y="449" text-anchor="middle">0.1</text>
+  <text class="s" x="824.0" y="449" text-anchor="end">1: the Hill radius</text>
+  <text class="s" x="474.8" y="449" text-anchor="middle">Hill radii</text>
+  <text class="s" x="20" y="532">Hill radii from the semi-major axes and masses of the NASA planetary fact sheets; moon orbits: JPL mean elements. Stability limits:</text>
+  <text class="s" x="20" y="547">Barnes &amp; O'Brien 2002 (0.36, 0.5) to Shen &amp; Tremaine 2008 (0.5, 0.7). Roche limits: Murray &amp; Dermott 1999, densities from NASA and JPL.</text>
+</svg>

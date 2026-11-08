@@ -15,7 +15,7 @@
 // as a longitude does.
 import type { System } from './api/types/System';
 import { resonanceRatio, resonanceTurns } from './spinResonance';
-import { libration, librationAmplitude, placeSystem } from './systemSky';
+import { libration, librationAmplitude, placeSystem, systemSky } from './systemSky';
 import type { SkyBody, Vec3 } from './skyBodies';
 
 export interface DialState {
@@ -170,6 +170,26 @@ export function rotationDial(
 }
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/**
+ * The host planet's compass as `moon` sees it: the host's own dial (its
+ * ring graduated against its equinox or its star, the star's half-circle,
+ * in the host's frame) with the moon as the only body on it, at its
+ * bearing and height over the host's equator; null for a body without a
+ * host. The host's sky is read only for its directions: no maps, coarse
+ * orbit lines.
+ */
+export function hostCompass(
+  system: System,
+  moon: string,
+  days: number,
+): { state: DialState; figures: DialFigures } | null {
+  const host = system.bodies.find((b) => b.id === moon)?.parent;
+  if (!host) return null;
+  const dial = rotationDial(system, host, days, 0, systemSky(system, host, days, () => null, 0, 8));
+  if (!dial) return null;
+  return { ...dial, state: { ...dial.state, bodies: dial.state.bodies.filter((b) => b.id === moon) } };
+}
 
 /** The unit words of a day length (`h`, `min`, `d` in English). */
 export interface DayUnits {
