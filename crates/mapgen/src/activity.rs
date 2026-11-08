@@ -176,14 +176,16 @@ const SUN_FACULA_RATIO: f32 = 10.0;
 const FACULA_EXPONENT: f32 = -0.32;
 const FACULA_RATIO: (f32, f32) = (1.0, 15.0);
 
-/// Rotations per activity cycle, `P_cyc / P_rot`, on the inactive (I,
-/// Ro ≥ 1) and active (A, Ro < 1) sequences of Böhm-Vitense (2007, ApJ
-/// 657, 486): about 90 and about 300 (her Ab
-/// sequence; Aa runs at 400–500). Read from the summary of Distefano et
-/// al. (2017, A&A 606, A58, sect. 5.1); the paper itself was unreachable.
-/// The Sun (about 160) lies between the two sequences, so this model gives
-/// a Sun-like star a cycle of about 6.5 years, not 11.
-const INACTIVE_ROTATIONS_PER_CYCLE: f32 = 90.0;
+/// Rotations per activity cycle, `P_cyc / P_rot`. Böhm-Vitense (2007,
+/// ApJ 657, 486) finds it nearly constant along each of her sequences,
+/// about 90 on the inactive one and about 300 on the active one (Ab;
+/// 400–500 on Aa), as summarised by Distefano et al. (2017, A&A 606, A58,
+/// sect. 5.1); the paper itself was not reached. The Sun, at about 160,
+/// lies between them. **Calibration**: 160 (the Sun: 11.1 years at
+/// 25.4 days) for Ro ≥ 1, rising linearly in log10 Ro to 300 at Ro_sat,
+/// and 300 below: more rotations per cycle on active stars, without a
+/// jump ([`rotations_per_cycle`]).
+const SUN_ROTATIONS_PER_CYCLE: f32 = 160.0;
 const ACTIVE_ROTATIONS_PER_CYCLE: f32 = 300.0;
 /// σ of the log-normal scatter of cycle periods: **calibration**.
 const CYCLE_SCATTER: f64 = 0.15;
@@ -224,7 +226,9 @@ const MSH: f32 = 1e-6;
 /// spots, consistent with a constant W).
 const DECAY_MSH_PER_DAY: f32 = 10.0;
 
-/// Longest lifetime of a region, days (the timeline caps it).
+/// Longest lifetime of a region, days: **calibration**. A region of peak
+/// area A lives `T = min(A / W, MAX_LIFETIME_DAYS)` (the browser's
+/// timeline uses the same rule; see [`mean_area_days`]).
 pub const MAX_LIFETIME_DAYS: f32 = 120.0;
 
 /// Solar differential rotation, equator minus pole, rad/day (Snodgrass &
@@ -255,17 +259,17 @@ const GRANULE_FADE_K: f32 = 6_800.0;
 const SUN_GRANULE_MINUTES: f32 = 8.0;
 
 /// Quadratic limb darkening `(Teff, u1, u2)`: Claret & Bloemen (2011, A&A
-/// 529, A75, VizieR J/A+A/529/A75), Johnson V, log g = 4.5, [M/H] = 0,
-/// ATLAS. Not verified: the VizieR catalogue was unreachable, so these
-/// entries are approximate values of that table and must be checked.
+/// 529, A75), VizieR table J/A+A/529/A75/table-af, rows with Filt = V
+/// (Johnson V), log g = 4.5, Z = 0, ξ = 2 km/s, Met = L (least squares),
+/// Mod = A (ATLAS): its columns a and b, as read from the catalogue.
 const LIMB: [(f32, f32, f32); 7] = [
-    (3_500.0, 0.62, 0.17),
-    (4_000.0, 0.71, 0.07),
-    (5_000.0, 0.60, 0.15),
-    (5_750.0, 0.47, 0.24),
-    (6_500.0, 0.37, 0.29),
-    (7_500.0, 0.28, 0.33),
-    (10_000.0, 0.18, 0.37),
+    (3_500.0, 0.4385, 0.3460),
+    (4_000.0, 0.6137, 0.1603),
+    (5_000.0, 0.6566, 0.1202),
+    (5_750.0, 0.4650, 0.2565),
+    (6_500.0, 0.3493, 0.3154),
+    (7_500.0, 0.2742, 0.3503),
+    (10_000.0, 0.2274, 0.3250),
 ];
 
 /// The activity of a system's star, deterministic in `system_seed`.
@@ -328,25 +332,16 @@ pub fn star_activity(info: &StarInfo, system_seed: u32) -> StarActivity {
     let spot_coverage = (SUN_SPOT_COVERAGE * relative.powf(SPOT_EXPONENT)).min(MAX_SPOT_COVERAGE);
     let facula_ratio =
         (SUN_FACULA_RATIO * relative.powf(FACULA_EXPONENT)).clamp(FACULA_RATIO.0, FACULA_RATIO.1);
-    let rotations = if rossby >= 1.0 {
-        INACTIVE_ROTATIONS_PER_CYCLE
-    } else {
-        ACTIVE_ROTATIONS_PER_CYCLE
-    };
-    let cycle_years = rotations * rotation_days * cycle_scatter / 365.25;
-    // 0 at Ro_sat, 1 at Ro = 1, linear in log Ro.
-    let inactive = (rossby.max(RO_SAT).ln() - RO_SAT.ln()) / -RO_SAT.ln();
-    let cycle_depth = CYCLE_DEPTH.0 + (CYCLE_DEPTH.1 - CYCLE_DEPTH.0) * inactive.clamp(0.0, 1.0);
+    let cycle_years = rotations_per_cycle(rossby) * rotation_days * cycle_scatter / 365.25;
+    let cycle_depth = CYCLE_DEPTH.0 + (CYCLE_DEPTH.1 - CYCLE_DEPTH.0) * quietness(rossby);
     let band_deg = active_band(envelope, rossby);
     let width = SUN_REGION_WIDTH.ln();
     let region_sigma = width.sqrt();
     let region_area =
         SUN_REGION_MEAN_MSH * SUN_REGION_WIDTH * MSH * (spot_coverage / SUN_SPOT_COVERAGE).sqrt();
-    // A region of peak area A grows and decays linearly over A / W days:
-    // A² / (2W) area-days. The rate keeps the mean spotted area at cycle
-    // maximum at `spot_coverage`, with E[A²] = median² exp(2σ²).
-    let mean_square = region_area * region_area * (2.0 * width).exp();
-    let region_rate = spot_coverage * 2.0 * decay_per_day / mean_square;
+    // The rate keeps the mean spotted area at cycle maximum at
+    // `spot_coverage`: new regions per day times the area-days of one.
+    let region_rate = spot_coverage / mean_area_days(region_area, region_sigma, decay_per_day);
     let granule_contrast = granule_contrast(teff);
     StarActivity {
         turnover_days,
@@ -363,6 +358,43 @@ pub fn star_activity(info: &StarInfo, system_seed: u32) -> StarActivity {
         granule_contrast,
         ..quiet
     }
+}
+
+/// Where `ro` sits between saturation and inactivity: 0 at and below
+/// Ro_sat, 1 at and above Ro = 1, linear in log Ro between.
+fn quietness(ro: f32) -> f32 {
+    ((ro.max(RO_SAT).ln() - RO_SAT.ln()) / -RO_SAT.ln()).clamp(0.0, 1.0)
+}
+
+/// Rotations per activity cycle at Rossby number `ro`
+/// ([`SUN_ROTATIONS_PER_CYCLE`]).
+fn rotations_per_cycle(ro: f32) -> f32 {
+    ACTIVE_ROTATIONS_PER_CYCLE
+        + (SUN_ROTATIONS_PER_CYCLE - ACTIVE_ROTATIONS_PER_CYCLE) * quietness(ro)
+}
+
+/// Mean area-days of one region (share of the hemisphere × days), for a
+/// log-normal peak area A of median `median` and σ(ln A) `sigma`,
+/// decaying at `w` per day.
+///
+/// A region's area rises and falls linearly over its lifetime
+/// `T = min(A / w, MAX_LIFETIME_DAYS)`: a triangle of base T and height A,
+/// `A T / 2` area-days (`A² / (2w)` when the cap does not bind). The
+/// expectation is a fixed-step sum over ln A within ±6σ, so it is
+/// deterministic.
+fn mean_area_days(median: f32, sigma: f32, w: f32) -> f32 {
+    const STEPS: i32 = 600;
+    let (median, sigma, w) = (f64::from(median), f64::from(sigma), f64::from(w));
+    let cap = f64::from(MAX_LIFETIME_DAYS);
+    let (mut sum, mut weights) = (0.0, 0.0);
+    for i in 0..=STEPS {
+        let z = -6.0 + 12.0 * f64::from(i) / f64::from(STEPS);
+        let weight = (-0.5 * z * z).exp();
+        let area = median * (sigma * z).exp();
+        sum += weight * area * (area / w).min(cap) / 2.0;
+        weights += weight;
+    }
+    (sum / weights) as f32
 }
 
 /// The envelope of a star of `teff_k` and `mass` (M☉).
@@ -526,9 +558,7 @@ mod tests {
         let rossby = median(&g2v, |a| a.rossby);
         assert!((1.4..2.5).contains(&rossby), "{rossby}");
         let cycle = median(&g2v, |a| a.cycle_years);
-        // Böhm-Vitense's inactive sequence (90 rotations a cycle) gives the
-        // Sun about 6.5 years: it lies between her two sequences.
-        assert!((5.0..8.0).contains(&cycle), "{cycle}");
+        assert!((8.0..14.0).contains(&cycle), "{cycle}");
         let spots = median(&g2v, |a| a.spot_coverage);
         assert!((0.002..0.005).contains(&spots), "{spots}");
         let band = [
@@ -540,8 +570,10 @@ mod tests {
         assert!((band[1] - 7.0).abs() <= 3.0, "{band:?}");
         let activity = star_activity(&g2v, 1234);
         assert_eq!(activity.envelope, Envelope::Convective);
+        // Claret & Bloemen's u1 is 0.4650 at 5 750 K and 0.3493 at
+        // 6 500 K: G2V (5 770 K) sits just past the first node.
         assert!(
-            (0.4..0.6).contains(&activity.limb[0]),
+            (0.45..0.47).contains(&activity.limb[0]),
             "{:?}",
             activity.limb
         );
@@ -595,5 +627,39 @@ mod tests {
             star_activity(&g2v, 7).rotation_days,
             star_activity(&g2v, 8).rotation_days
         );
+    }
+
+    #[test]
+    fn limb_darkening_reads_claret_and_bloemen_nodes() {
+        assert_eq!(limb_quadratic(5_750.0), [0.4650, 0.2565]);
+        assert_eq!(limb_quadratic(10_000.0), [0.2274, 0.3250]);
+        assert_eq!(limb_quadratic(20_000.0), [0.2274, 0.3250]);
+    }
+
+    #[test]
+    fn mean_area_days_is_the_closed_form_until_the_cap_binds() {
+        let (sigma, w) = (0.9466_f32, 1e-5_f32);
+        let closed = |m: f32| m * m * (2.0 * sigma * sigma).exp() / (2.0 * w);
+        // Tiny regions never reach the cap: m² exp(2σ²) / (2W).
+        let tiny = 1e-8;
+        let rel = mean_area_days(tiny, sigma, w) / closed(tiny) - 1.0;
+        assert!(rel.abs() < 1e-3, "{rel}");
+        // A saturated star (30 % spotted) has a median peak area of
+        // 1.5e-3, 152 days at W: the cap shortens most of its regions.
+        let saturated = 152.4e-6 * (0.3_f32 / 0.003).sqrt();
+        let capped = mean_area_days(saturated, sigma, w);
+        assert!(capped < 0.8 * closed(saturated), "{capped}");
+    }
+
+    #[test]
+    fn cycle_runs_160_rotations_on_quiet_stars_300_when_saturated() {
+        assert_eq!(rotations_per_cycle(1.0), 160.0);
+        assert_eq!(rotations_per_cycle(2.0), 160.0);
+        assert!((rotations_per_cycle(RO_SAT) - 300.0).abs() < 1e-3);
+        assert_eq!(rotations_per_cycle(0.05), 300.0);
+        // Halfway in log Ro, halfway in rotations: no jump.
+        assert!((rotations_per_cycle(RO_SAT.sqrt()) - 230.0).abs() < 0.1);
+        // The Sun: 160 rotations of 25.4 days.
+        assert!((160.0 * 25.4 / 365.25 - 11.1_f32).abs() < 0.05);
     }
 }

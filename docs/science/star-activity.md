@@ -99,14 +99,39 @@ $A_{peak} = W\,T$, with $W \approx 10$ MSH per day (Petrovay & van
 Driel-Gesztelyi 1997). Giles et al. (2017) find longer lifetimes for
 larger spots on other stars, consistent with a constant $W$.
 
+### Inside an active region
+
+An active region emerges as a bipole: a leading spot of one magnetic
+polarity and a following one of the other, joined by coronal loops.
+
+- **Joy's law.** The axis of the bipole is tilted to the east–west line,
+  the leader nearer the equator, and the tilt grows with latitude
+  $\lambda$: $\text{tilt} = 32.1°\,\sin|\lambda|$ over 160,079 bipolar
+  regions of the SOHO/MDI magnetograms (Stenflo & Kosovichev 2012, as
+  given by Stenflo 2013). Hale's law sets the polarities: the leader's
+  polarity is opposite in the two hemispheres and flips each cycle.
+- **Separation and loops.** Larger regions have their two polarities
+  farther apart: about 10° of heliographic distance for a region of
+  1,000 MSH (Wang & Sheeley 1989). A coronal loop over the bipole is
+  close to a semicircle, so its height is half the separation of its
+  footpoints (Aschwanden 2004, ch. 3).
+- **Umbra and penumbra.** A spot has a dark core, the umbra, inside a
+  greyer penumbra; Solanki (2003) reviews their brightness, about 0.3
+  and 0.75 of the quiet photosphere in the visible, and the penumbra's
+  area, about four times the umbra's. Later counts give 4.7 (Nicholson
+  1933, as quoted by Jha et al. 2019) to 5.5 (Jha et al. 2019) for that
+  ratio.
+- **Faculae** are brightest near the limb, where we see the hot walls of
+  small magnetic flux tubes side-on (Solanki 2003).
+
 ### The cycle and the butterfly
 
 Böhm-Vitense (2007) found that stars with known cycles fall on two
 sequences in the plane of cycle period against rotation period, along
 each of which the number of rotations per cycle is nearly the same: about
 90 on the inactive sequence and about 300 to 500 on the active ones
-(as summarised by Distefano et al. 2017). The Sun, with about 160, lies
-between the two.
+(as summarised by Distefano et al. 2017). The Sun, with about 160 (an
+11-year cycle of 25.4-day rotations), lies between the two.
 
 During a solar cycle, spots emerge at about 28° of latitude at its start
 and drift towards the equator, stopping near 7°: the mean latitude
@@ -187,24 +212,48 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
 4. **Spots**: with $a_\odot$ the model's activity for the Sun (1 M☉, 25.4
    days), `spot_coverage` $= \min(0.3,\ 0.003\,(a/a_\odot)^{0.64})$ and
    `facula_ratio` $= 10\,(a/a_\odot)^{-0.32}$ within [1, 15].
-5. **Cycle**: `cycle_years` is 90 rotations if $Ro \ge 1$, 300 below,
-   times $e^{N(0,\,0.15)}$. `cycle_depth` is 0.3 at $Ro \le 0.13$ and 0.9
-   at $Ro \ge 1$, linear in $\log Ro$ between.
+5. **Cycle** (**calibration** on the Sun, with the shape of
+   Böhm-Vitense's sequences): `cycle_years` is 160 rotations for
+   $Ro \ge 1$ (the Sun: 11.1 years), rising linearly in $\log_{10} Ro$
+   to 300 at $Ro = 0.13$ and held at 300 below, times
+   $e^{N(0,\,0.15)}$. `cycle_depth` is 0.3 at $Ro \le 0.13$ and 0.9 at
+   $Ro \ge 1$, linear in $\log Ro$ between.
 6. **Band**: [28°, 7°], shifted poleward by up to 40° as $Ro$ falls from
    the Sun's to 0.13; [75°, 0°] for a fully convective star.
 7. **Regions**: the median peak area is 152 MSH times
-   $\sqrt{\text{spot\_coverage}/0.003}$, $\sigma(\ln A) = 0.95$, and
-   $W = 10$ MSH/day. A region grows and decays linearly over $A/W$ days,
-   so it contributes $A^2/(2W)$ area-days; the rate of new regions at
-   cycle maximum is set so that the mean spotted area equals
-   `spot_coverage`.
+   $\sqrt{\text{spot\_coverage}/0.003}$ (**calibration**),
+   $\sigma(\ln A) = 0.95$, and $W = 10$ MSH/day. A region of peak area
+   $A$ lives $T = \min(A/W,\ 120\ \text{days})$ (the cap is a
+   **calibration**); its area rises and falls linearly, a triangle of
+   base $T$ and height $A$, so it contributes $A\,T/2$ area-days
+   ($A^2/(2W)$ when the cap does not bind). The rate of new regions at
+   cycle maximum is `spot_coverage` $/\,E[A\,T/2]$, so that the mean
+   spotted area equals `spot_coverage`. The expectation over the
+   log-normal is a fixed-step sum over $\ln A$ within $\pm 6\sigma$
+   (`mean_area_days`); the browser's timeline uses the same lifetime
+   rule.
 8. **Surface**: `shear` $= \Delta\Omega/\Omega_{eq}$ within [0, 0.5],
    with $\Delta\Omega = 0.055\,(T/5772)^{8.92}$ rad/day; granule size
    $1.3\ \text{Mm}\,(T/5772)/(g/g_\odot)$ in star radii, contrast
    $0.15\,(T/5772)^2$ capped at 0.25 and fading to 0 from 6,800 to
    7,200 K, lifetime 8 minutes times the granule size over the Sun's;
-   limb darkening interpolated linearly in a table of Claret & Bloemen's
-   Johnson V coefficients.
+   limb darkening interpolated linearly in Teff between seven rows of
+   Claret & Bloemen's table (VizieR J/A+A/529/A75/table-af: Johnson V,
+   $\log g = 4.5$, solar metallicity, $\xi = 2$ km/s, least squares,
+   ATLAS), held beyond 3,500 and 10,000 K. G2V gets $u_1 = 0.462$,
+   $u_2 = 0.258$.
+9. **Each region, drawn in the browser** (from `seed`, in
+   `web/src/lib/starActivity.ts`, not in Rust): it grows over
+   $\min(0.1\,T,\ 3\ \text{days})$ (**calibration**), then decays
+   linearly; its tilt follows Joy's law, $32.1°\,\sin|\lambda|$, with
+   the leader equatorward, and Hale's law sets its polarity; its two
+   polarities are $4\sqrt{2A}$ radians apart (**calibration**, scaled to
+   Wang & Sheeley's 10° at 1,000 MSH), and its loops rise to half that
+   (Aschwanden 2004). The leader spot carries 0.6 of the area
+   (**calibration**). The shader draws umbrae at 0.3 and penumbrae at
+   0.75 of the photosphere, the penumbra four times the umbra's area
+   (Solanki 2003), and faculae with a contrast of $0.25\,(1-\mu)$
+   (**calibration**, brightest at the limb as Solanki 2003 describes).
 
 ```rust
 // crates/mapgen/src/activity.rs (trimmed)
@@ -213,9 +262,8 @@ let rossby = rotation_days / turnover_days;
 let activity = rossby_activity(rossby);
 let relative = activity / sun_activity();
 let spot_coverage = (SUN_SPOT_COVERAGE * relative.powf(SPOT_EXPONENT)).min(MAX_SPOT_COVERAGE);
-// A region of peak area A lives A / W days: A² / (2W) area-days.
-let mean_square = region_area * region_area * (2.0 * width).exp();
-let region_rate = spot_coverage * 2.0 * decay_per_day / mean_square;
+// A region of peak area A lives T = min(A / W, 120 d): A T / 2 area-days.
+let region_rate = spot_coverage / mean_area_days(region_area, region_sigma, decay_per_day);
 ```
 
 A system drawn before this existed has no `activity` in its file:
@@ -223,24 +271,30 @@ A system drawn before this existed has no `activity` in its file:
 the same value a new draw stores, so the API always serves it.
 
 For the Sun's type (G2V) the medians over seeds are a rotation of 25.8
-days, $Ro = 1.87$, a cycle of 6.2 years, 0.29 % spotted at maximum and
-0.43 new regions per day.
+days, $Ro = 1.87$, a cycle of 11.1 years, 0.29 % spotted at maximum and
+0.51 new regions per day.
 
 ### Where it departs from the science
 
-- **The cycle of a Sun-like star is about 6 years, not 11.** The model
-  puts every star with $Ro \ge 1$ on Böhm-Vitense's inactive sequence, and
-  the Sun lies between her sequences. The sequences themselves are
-  disputed.
-- **The jump at $Ro = 1$.** A star crossing $Ro = 1$ jumps from 90 to 300
-  rotations per cycle; real stars on both sequences overlap in $Ro$.
+- **The cycle is anchored on the Sun, not on a stellar sequence.** Every
+  star with $Ro \ge 1$ runs 160 rotations per cycle, the Sun's, which
+  lies between Böhm-Vitense's two sequences; real inactive-sequence stars
+  run about 90. The ramp to 300 at saturation only keeps the trend that
+  active stars need more rotations per cycle, without a jump. The
+  sequences themselves are disputed.
 - **The spot coverage law is a calibration.** Its exponent, 0.64, only
   joins the Sun (0.3 %) to the saturated stars (30 %); the facula ratio
   law, its exponent and bounds are calibrations too.
-- **Every star has the same number of new regions per day at maximum,
-  0.43.** Spot coverage scales the median region area by its square
-  root, and the rate goes as the coverage over the area squared, so the
-  two cancel: active stars have larger regions, not more of them.
+- **Active stars have larger regions, barely more of them.** Spot
+  coverage scales the median region area by its square root, and without
+  the lifetime cap the rate would go as the coverage over the area
+  squared, the same on every star (0.43 a day). The 120-day cap shortens
+  the largest regions, so the rate rises somewhat with activity: 0.51 a
+  day on the Sun, 0.79 on an old M5 dwarf.
+- **The lifetime cap is a calibration.** Real large spots can outlive
+  several rotations; the cap keeps regions of a saturated star (median
+  peak area about 1,500 MSH, 150 days at $W$) from lasting for half a
+  year.
 - **Solar region statistics everywhere.** The log-normal width and $W$
   are the Sun's on every star.
 - **The poleward shift of the band (40°) and the M-dwarf band
@@ -260,9 +314,6 @@ days, $Ro = 1.87$, a cycle of 6.2 years, 0.29 % spotted at maximum and
 The implementer checked the values below against the papers and could not
 reach these sources; they need checking:
 
-- the limb-darkening table (Claret & Bloemen 2011, VizieR
-  J/A+A/529/A75): the catalogue was unreachable, and the seven entries in
-  `activity.rs` are approximate;
 - the Sun's 0.3 % spotted area at maximum (Hathaway 2015);
 - the solar $\Delta\Omega = 0.055$ rad/day (Snodgrass & Ulrich 1990);
 - the 1.3 Mm solar granule size (Trampedach et al. 2013);
@@ -270,7 +321,13 @@ reach these sources; they need checking:
   of Distefano et al. (2017);
 - the typical $v \sin i$ of A stars (Royer et al. 2007), the M-dwarf
   spots at all latitudes (Morin et al. 2008), and $c = 0.71$ of Hathaway,
-  Wilson & Reichmann (1994).
+  Wilson & Reichmann (1994);
+- the umbral and penumbral brightness (0.3, 0.75) and the penumbra's four
+  umbral areas in Solanki (2003), and the 10° separation of a 1,000 MSH
+  region in Wang & Sheeley (1989).
+
+Joy's 32.1° was checked against Stenflo (2013), the limb-darkening rows
+against the VizieR catalogue.
 
 ## Sources
 
@@ -380,6 +437,24 @@ reach these sources; they need checking:
     Astrophysics* 603, A52.
 35. Boro Saikia, S. et al. 2018, "Chromospheric activity catalogue of
     4454 cool stars", *Astronomy & Astrophysics* 616, A108.
+
+36. Stenflo, J. O. & Kosovichev, A. G. 2012, "Bipolar magnetic regions on
+    the Sun: global analysis of the SOHO/MDI data set", *The Astrophysical
+    Journal* 745, 129, preprint
+    [arXiv:1112.5226](https://arxiv.org/abs/1112.5226).
+37. Stenflo, J. O. 2013, "Solar magnetic fields as revealed by Stokes
+    polarimetry", *Astronomy and Astrophysics Review* 21, 66, preprint
+    [arXiv:1309.5454](https://arxiv.org/abs/1309.5454).
+38. Wang, Y.-M. & Sheeley, N. R. Jr. 1989, *The Astrophysical Journal*
+    347, 529 (the reference the plan gives; not checked).
+39. Aschwanden, M. J. 2004, *Physics of the Solar Corona: An
+    Introduction*, Springer, ch. 3.
+40. Solanki, S. K. 2003, "Sunspots: an overview", *Astronomy and
+    Astrophysics Review* 11, 153,
+    [doi:10.1007/s00159-003-0018-4](https://doi.org/10.1007/s00159-003-0018-4).
+41. Jha, B. K. et al. 2019, "Study of sunspot penumbra to umbra area ratio
+    using Kodaikanal white-light digitized data", preprint
+    [arXiv:1905.06888](https://arxiv.org/abs/1905.06888).
 
 ## See also
 
