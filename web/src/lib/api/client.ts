@@ -7,7 +7,6 @@ import type { FormSpec } from './types/FormSpec';
 import type { GenerateStarted } from './types/GenerateStarted';
 import type { SystemCreated } from './types/SystemCreated';
 import type { SystemName } from './types/SystemName';
-import type { SystemNames } from './types/SystemNames';
 import type { SystemQuery } from './types/SystemQuery';
 import type { SystemRequest } from './types/SystemRequest';
 import type { SystemSummary } from './types/SystemSummary';
@@ -76,13 +75,6 @@ export const api = {
       body: JSON.stringify(request),
     }),
   deleteSystem: (id: string) => call<void>(`/api/systems/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  /** Gives names to a system's bodies (by body id, `star` too), replacing those they had. */
-  renameSystem: (id: string, names: Record<string, string>) =>
-    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/names`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ names } satisfies SystemNames),
-    }),
   /** Names the system itself (the name of its star), keeping its bodies' names; empty brings the designation back. */
   nameSystem: (id: string, name: string) =>
     call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/name`, {

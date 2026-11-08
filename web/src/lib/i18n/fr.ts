@@ -141,7 +141,7 @@ export const fr: Messages = {
     compareHelp: 'Sélectionnez exactement deux systèmes',
     stripLabel: 'Ses planètes, de l’étoile vers l’extérieur',
     notGenerated: 'pas encore générée',
-    pinLabel: (p) => `Épinglé${S}: ${p.name}`,
+    pinLabel: (p) => `Épingler${S}: ${p.name}`,
     pin: (p) => `Épingler ${p.name} en tête`,
     unpin: (p) => `Désépingler ${p.name}`,
     pinFailed: (p) => `Impossible de modifier l’épingle${S}: ${p.error}`,

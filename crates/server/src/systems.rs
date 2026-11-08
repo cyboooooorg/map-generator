@@ -304,7 +304,10 @@ pub fn write_names_file(root: &Path, id: &str, names: &GivenNames) -> Result<(),
         let temp =
             system_dir(root, id).join(format!(".{NAMES_FILE}.{}-{unique}.tmp", std::process::id()));
         let json = serde_json::to_vec_pretty(names).map_err(|e| NamingError::Io(e.to_string()))?;
-        std::fs::write(&temp, json).map_err(io)?;
+        if let Err(e) = std::fs::write(&temp, json) {
+            let _ = std::fs::remove_file(&temp);
+            return Err(io(e));
+        }
         if let Err(e) = std::fs::rename(&temp, &path) {
             let _ = std::fs::remove_file(&temp);
             return Err(io(e));
