@@ -585,8 +585,10 @@ impl Look {
         // a hot giant, or one its star's tides have locked (with a giant's
         // own tidal parameters, see `crate::spin::giant_locking_gyr`), turns
         // once a year.
+        // On an eccentric orbit a fluid giant turns at the pseudo-synchronous
+        // rate (Hut 1981), not once a year.
         let rotation_hours = if hot || crate::spin::giant_locked(&star, mass_earth, radius_earth) {
-            star.year_days * 24.0
+            star.year_days * 24.0 / crate::spin::pseudo_synchronous_turns(p.eccentricity)
         } else {
             match kind {
                 GiantKind::Gas => rng.random_range(9.0..12.0),
@@ -1319,6 +1321,7 @@ mod tests {
             impact_factor: None,
             locked_to_star: None,
             perihelion_longitude_deg: None,
+            resonance_to_star: None,
             gravity: None,
         }
     }

@@ -9,6 +9,7 @@
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
   import { moonsOf } from '../lib/moons';
+  import { resonanceRatio, resonanceTurns } from '../lib/spinResonance';
 
   interface Props {
     world: LoadedWorld;
@@ -192,8 +193,9 @@
               size: `${formatUpTo(star.angular_diameter_deg, 2)}°`,
               sun: `${formatUpTo(0.53, 2)}°`,
             })}{#if star.tidally_locked}
-              · <span class="unit-help" title={t.worldInfo.lockedHelp}>{t.worldInfo.locked}</span>{:else if star.spin_orbit_3_2}
-              · <span class="unit-help" title={t.worldInfo.resonantHelp}>{t.worldInfo.resonant}</span>{/if}
+              · <span class="unit-help" title={t.worldInfo.lockedHelp}>{t.worldInfo.locked}</span>{:else if resonanceTurns({ spin_orbit_3_2: star.spin_orbit_3_2, resonance_turns: star.spin_turns }) > 0}
+              {@const ratio = resonanceRatio(resonanceTurns({ spin_orbit_3_2: star.spin_orbit_3_2, resonance_turns: star.spin_turns }))}
+              · <span class="unit-help" title={t.worldInfo.resonantHelp({ ratio })}>{t.worldInfo.resonant({ ratio })}</span>{/if}
           </dd>
         {:else}
           <dd>{t.worldInfo.theSun}</dd>

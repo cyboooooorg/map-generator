@@ -635,32 +635,41 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 
 - **Problem:** the science fixes of 2026-11-07 (`spin.rs`, `moons.rs`)
   model the 3:2 spin–orbit resonance, circularisation, light moons of
-  despun planets and giants, and tidal shapes, but keep some
-  simplifications:
-  - a sharp line at e = 0.06 between locked and 3:2 (Ribas et al. 2016),
-    where the odds of capture rise with the eccentricity (Makarov 2012):
-    a draw keyed by the seed would be closer;
-  - only the 3:2 resonance: large eccentricities favour 2:1 and higher
-    (Makarov, Berghea & Efroimsky 2012; Correia & Laskar 2009, Table 3);
-  - giants are locked once despun, where a fluid planet on an eccentric
-    orbit settles into pseudo-synchronous rotation (Hut 1981);
-  - circularisation and despinning take Earth's mass and radius for every
-    rocky planet (a super-Earth circularises about three times faster);
-  - a 3:2 world takes the rotating climate whatever its solar day (two
-    years: 176 days for Mercury), not a slow rotator's;
-  - drawn eccentricities follow Kipping 2013, fitted mostly to giants:
-    small close-in planets are less eccentric, so too many despun
-    planets of red dwarfs come out in 3:2;
-  - a moon's tilt is the Moon's 6.68° for a giant-impact moon and 0 for
-    the others, not its own Cassini state from the precession rates;
-  - inclinations of moons are to the planet's equator, the stability
-    limits to its orbit;
-  - Elser et al. 2011's odds of a large moon apply round every star.
-- **Done when:** capture into 3:2 and higher resonances is drawn by
-  eccentricity, giants turn pseudo-synchronously, slow rotators get a
-  climate of their own, rocky planets' tides scale with their mass and
-  radius, and moons get their Cassini obliquity.
-- **Status:** todo
+  despun planets and giants, and tidal shapes. Second round (2026-11-08):
+  - done: capture into the 3:2 and 2:1 resonances is drawn from the
+    world's seed with odds that rise linearly with the eccentricity
+    (`spin::capture`: Ribas et al. 2016, Makarov 2012), `mercury-like`
+    pins 3:2 (`[star] resonance`), instead of a sharp line at e = 0.06;
+  - done: a despun giant on an eccentric orbit turns at the
+    pseudo-synchronous rate (Hut 1981), locked only within 5 % of one turn
+    per orbit;
+  - done: a rocky planet's locking and circularisation times scale with
+    its own mass and radius (`m / R³`, `m / R⁵`);
+  - done: rocky planets draw their eccentricity from Van Eylen et al.
+    2019 (Beta(1.58, 4.4) single-transiting, Beta(1.52, 29)
+    multi-transiting), giants
+    keep Kipping 2013;
+  - remains: resonances above 2:1 (5:2, 3:1 and over: Makarov gives no
+    threshold for them) and the Makarov
+    triaxiality dependence of the odds (the ramps are Mercury's, a more
+    symmetric planet is caught at lower eccentricities);
+  - remains: a 3:2 world takes the rotating climate whatever its solar
+    day (two years: 176 days for Mercury), not a slow rotator's (the
+    climate track);
+  - remains, not done for lack of a model: a moon's tilt is the Moon's
+    6.68° for a giant-impact moon and 0 for the others, not its own
+    Cassini state. The closed form needs the node's precession rate
+    (the star's and the other moons' perturbations), the moon's moments
+    of inertia and its `C22`, none of which the app draws;
+  - remains, decided to leave: inclinations of moons are to the
+    planet's equator, the stability limits to its orbit (the Laplace plane
+    would need the same precession model); Elser et al. 2011's odds of a
+    large moon apply round every star (the despun planets of cool stars
+    already lose their moons by `lasting_moon_kg`, and the paper's grid
+    does not extend the odds to other masses).
+- **Done when:** the remaining items are done: higher resonances, slow
+  rotators get a climate of their own, moons get their Cassini obliquity.
+- **Status:** in progress
 
 ## 20. Relief science, what remains
 

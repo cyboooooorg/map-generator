@@ -14,6 +14,7 @@
 // lat cos lon]`, y along its spin axis; angles about +y run from +z to +x,
 // as a longitude does.
 import type { System } from './api/types/System';
+import { resonanceRatio, resonanceTurns } from './spinResonance';
 import { libration, librationAmplitude, placeSystem, systemSky } from './systemSky';
 import type { SkyBody, Vec3 } from './skyBodies';
 
@@ -56,8 +57,10 @@ export interface DialFigures {
   /** Synchronous bodies only (null otherwise): the libration now and its amplitude (about 2e, exact), radians. */
   libration: number | null;
   librationAmplitude: number | null;
-  /** Held by its star's tides in the 3:2 spin-orbit resonance (a free dial, three turns every two orbits). */
+  /** Held by its star's tides in a spin-orbit resonance (a free dial: 3:2 is three turns every two orbits). */
   resonant: boolean;
+  /** The resonance as `3:2` or `2:1`; null for a body in none. */
+  resonance: string | null;
 }
 
 const TAU = 2 * Math.PI;
@@ -160,7 +163,8 @@ export function rotationDial(
       localHours,
       libration: locked ? libration(self.orbit, days) : null,
       librationAmplitude: locked ? librationAmplitude(self.orbit.eccentricity) : null,
-      resonant: !locked && (self.spin.spin_orbit_3_2 ?? false),
+      resonant: !locked && resonanceTurns(self.spin) > 0,
+      resonance: locked || resonanceTurns(self.spin) <= 0 ? null : resonanceRatio(resonanceTurns(self.spin)),
     },
   };
 }
@@ -243,7 +247,7 @@ export function formatDialAngle(radians: number, signed: boolean, number: (value
 
 /** The parameters of the dial's two lines of figures, written out (see the `dial…` messages). */
 export type DialFigureText =
-  | { locked: false; resonant: boolean; angle: string; time: string; sidereal: string; solar: string | null }
+  | { locked: false; resonant: boolean; ratio: string; angle: string; time: string; sidereal: string; solar: string | null }
   | { locked: true; libration: string; amplitude: string; time: string; solar: string | null };
 
 /**
@@ -274,6 +278,7 @@ export function dialFigureText(
   return {
     locked: false,
     resonant: figures.resonant,
+    ratio: figures.resonance ?? '',
     angle: formatDialAngle(state.reading, false, number),
     time,
     sidereal: formatDayLength(figures.siderealHours, units, format),

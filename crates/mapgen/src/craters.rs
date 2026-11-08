@@ -1733,6 +1733,7 @@ mod tests {
             impact_factor: None,
             locked_to_star: None,
             perihelion_longitude_deg: None,
+            resonance_to_star: None,
             gravity: None,
         }
     }
@@ -2345,10 +2346,15 @@ mod tests {
         // Made before the 3:2 resonance: e = 0.1 stored as locked. Today's
         // rule holds it in the resonance, but its tiles and epochs keep the
         // stored lock.
+        // A seed that draws the 3:2 resonance at this eccentricity.
+        let seed = (0..)
+            .find(|&s| crate::spin::capture(0.1, s) == 1.5)
+            .unwrap();
         let eccentric = WorldParams {
             star,
             orbit_au: hz,
             eccentricity: 0.1,
+            seed,
             ..moon(4.0)
         };
         assert!(crate::spin::star_info(&eccentric).spin_orbit_3_2);

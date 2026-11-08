@@ -13,6 +13,7 @@ type = "G2V"                           # the Sun
 orbit_au = 0.387
 eccentricity = 0.2056                    # like Mercury
 metallicity = 0.0                      # the Sun's
+resonance = "3:2"                      # Mercury's observed spin-orbit state, whatever the seed
 
 # A fixed value, or a [min, max] range drawn at random. Command-line options
 # still win over these. No water ever flowed: no erosion. The sea level only

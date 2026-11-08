@@ -1167,6 +1167,7 @@ mod tests {
             impact_factor: None,
             locked_to_star: None,
             perihelion_longitude_deg: None,
+            resonance_to_star: None,
             gravity: None,
         }
     }

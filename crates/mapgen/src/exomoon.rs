@@ -314,6 +314,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         impact_factor: None,
         locked_to_star: None,
         perihelion_longitude_deg: None,
+        resonance_to_star: None,
         gravity: None,
     }
 }
@@ -350,6 +351,7 @@ mod tests {
             impact_factor: None,
             locked_to_star: None,
             perihelion_longitude_deg: None,
+            resonance_to_star: None,
             gravity: None,
         }
     }

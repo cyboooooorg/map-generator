@@ -21,6 +21,7 @@
 import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
+import { resonanceTurns } from './spinResonance';
 import { IDENTITY_AXES, pickShadowCasters, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
 
 const AU_KM = 1.495_978_707e8;
@@ -84,9 +85,6 @@ export function orbitPosition(orbit: Orbit, plane: Plane, days: number): Vec3 {
   const r = orbit.semi_major_axis_km * (1 - e * Math.cos(eccentric));
   return pointOnOrbit(plane, orbit.periapsis_deg * DEG + nu, r);
 }
-
-/** Turns per orbit of a planet in the 3:2 spin-orbit resonance (Mercury's). */
-export const RESONANCE_TURNS_PER_ORBIT = 1.5;
 
 /**
  * The amplitude of the libration of a locked body on an orbit of
@@ -164,11 +162,12 @@ export function placeSystem(
     // Its longitude 0 at the start, then turning on itself; a locked body
     // turns steadily, its longitude 180° towards the point of its orbit at
     // the mean anomaly (its host is off that by the libration); one in the
-    // 3:2 resonance turns 1.5 times as fast from the same face at periapsis.
+    // 3:2 resonance turns 1.5 times as fast (2 in the 2:1) from the same face at periapsis.
     const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
     let z: Vec3;
-    if (body.spin.locked || body.spin.spin_orbit_3_2) {
-      const turns = body.spin.locked ? 1 : RESONANCE_TURNS_PER_ORBIT;
+    const resonance = resonanceTurns(body.spin);
+    if (body.spin.locked || resonance > 0) {
+      const turns = body.spin.locked ? 1 : resonance;
       z = pointOnOrbit(plane, body.orbit.periapsis_deg * DEG + turns * anomalies(body.orbit, days).mean, 1);
     } else {
       const turns = (days * 24) / Math.max(body.spin.period_hours, 1e-6);
