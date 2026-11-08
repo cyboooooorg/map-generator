@@ -51,13 +51,14 @@ const KAPPA: f64 = 2.0 / 7.0;
 /// Communications 9, 3709, doi:10.1038/s41467-018-06107-2).
 ///
 /// The profile puts the tropopause of Jupiter at 81 K for 0.085 bar (the real
-/// one is 110 K near 0.1 bar): the tropopause pressure is a knob that hides
+/// one is about 110 K near 140 mbar, Lindal et al. 1981,
+/// doi:10.1029/JA086iA10p08721): the tropopause pressure is a knob that hides
 /// the cold top of a dry adiabat, not a measured level.
 const ONE_BAR_OVER_TEFF: f64 = 1.31;
 /// Pressure of the tropopause, where the decks end, bar: calibration, no
-/// source (Jupiter's is near 0.1 bar). It is set so that the water deck
-/// leaves the troposphere at an effective temperature of 350 K, as Sudarsky
-/// et al. (2000) have it.
+/// source. It is tuned, not Jupiter's tropopause (about 140 mbar): it is set
+/// so that the water deck leaves the troposphere at an effective temperature
+/// of 350 K, as Sudarsky et al. (2000) have it.
 const TROPOPAUSE_BAR: f64 = 0.085;
 /// Deepest base looked for, bar.
 const DEEPEST_BAR: f64 = 1000.0;
@@ -96,11 +97,12 @@ pub fn temperature_k(teff: f64, p_bar: f64) -> f64 {
 /// and 681 K more for the heat of fusion (5.66 kJ/mol) on the solid.
 /// Ammonium hydrosulphide: `log10 Kp = 14.82 − 4705 / T` with `Kp` in atm²
 /// for `NH₃ + H₂S ⇌ NH₄SH` as Lewis (1969,
-/// doi:10.1016/0019-1035(69)90091-8) gives it, as quoted by Li, Ingersoll & Oyafuso
-/// (2018, arXiv:1801.05529) and checked by the base it gives Jupiter (not
-/// read from Lewis's paper). It is fitted to 180-300 K and extended in a
-/// straight line outside, which a colder giant needs; only the relief
-/// between decks uses it (the classes come from ammonia and water).
+/// doi:10.1016/0019-1035(69)90091-8) gives it, as quoted by Li, Ingersoll
+/// & Oyafuso (2018, arXiv:1801.05529) and checked by the base it gives
+/// Jupiter (not read from Lewis's paper). That paper gives no fit range:
+/// 180-300 K is the app's own, the law being extended in a straight line
+/// outside, which a colder giant needs; only the relief between decks uses
+/// it (the classes come from ammonia and water).
 fn excess(deck: Deck, p_bar: f64, t: f64) -> f64 {
     match deck {
         Deck::Water => {
