@@ -156,7 +156,7 @@ pub mod stream {
     pub const DUST_RINGS: u32 = 36;
     /// The longitude of a world's perihelion, when drawn (see
     /// `crate::request`).
-    pub const PERIHELION: u32 = 37;
+    pub const PERIHELION: u32 = 39;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;
