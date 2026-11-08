@@ -867,6 +867,7 @@ export const en = {
     loading: 'Drawing the preview…',
     busy: 'A generation is running: previews resume when it ends.',
     failed: (p: { error: string }) => `Could not draw the preview: ${p.error}`,
+    generating: (p: { epoch: string }) => `Generating the world ${p.epoch}…`,
     fromHere: (p: { epoch: string }) => `This world already shows ${p.epoch}.`,
   },
   /** The less common units, explained in tooltips and in the help panel. */

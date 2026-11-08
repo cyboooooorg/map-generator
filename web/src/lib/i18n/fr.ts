@@ -826,6 +826,7 @@ export const fr: Messages = {
     loading: 'Dessin de l’aperçu…',
     busy: `Une génération est en cours${S}: les aperçus reprennent à sa fin.`,
     failed: (p) => `Impossible de dessiner l’aperçu${S}: ${p.error}`,
+    generating: (p) => `Génération du monde ${p.epoch}…`,
     fromHere: (p) => `Ce monde montre déjà ${p.epoch}.`,
   },
   starView: {
