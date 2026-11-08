@@ -5,6 +5,9 @@ made by the two sessions, one half of the stages each. It lists
 candidates with estimated gains; the [Results](#results) section records
 which were done and what they measured.
 
+The items left open are tracked as GitHub issues: X3 #332, E2 #333,
+X2 (b) #334, P1 #335.
+
 ## Setup
 
 `map-generator --planet terran --seed 4242 --width 8192 --height 4096
