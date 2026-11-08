@@ -671,13 +671,13 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   - Slab pull sets the present speed of each plate from its sinking
     edge (2026-11-07), on one pass over the present boundary cells; at
     another epoch that pass is extra, about 5 % of a plate map (0.24 s
-    at −100 Ma). The drift's other stages keep drawn speeds (examined
-    2026-11-08, left): a stage's speed needs the boundaries at that
-    stage, so the epoch's plate and crust of every cell (`epoch_cells`,
-    each cell against every plate, far more than 5 %) for each of the
-    up to six stages, and the stage's boundaries depend on the rotation
-    through the speeds being set, so it would be iterated or
-    approximated with no source for the approximation.
+    at −100 Ma). The drift's other stages get slab pull too (2026-11-08,
+    `plates::pull_stages`): the present boundary cells are carried rigidly
+    by each plate's rotation to each stage, no gaps, overlaps or crust
+    changes, a calibration of the geometry with no source; one pass over
+    the boundary cells per stage, negligible against a plate map. What
+    remains: boundaries found at each epoch's own map would be exact but
+    cost `epoch_cells` per stage.
     The plate count does not follow the planet's size: no source scales
     it (Bird 2003 counts Earth's).
   - Isostasy: continents float as a platform and the sea floor is
