@@ -125,6 +125,7 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
+import { advanceDrift, NO_DRIFT } from './cloudDrift';
 import { PREVIEW_EDGES, previewEdgeUniform } from './previewTexture';
 import { PROFILES, type QualityProfile } from './quality';
 import {
@@ -1419,6 +1420,20 @@ export class PlanetView {
   }
 
   /**
+   * Puts the drifting clouds back where they were generated: the cloud map
+   * and, on a giant, its bands, storms and great spot (which all drift with
+   * the same clock), whether the drift runs or not. It keeps running from
+   * there when it was on.
+   */
+  resetDrift(): void {
+    this.u.uCloudShift.value = NO_DRIFT.shift;
+    this.u.uBandTime.value = NO_DRIFT.bandTime;
+    // The next frame measures its time from now, not from before.
+    this.cloudDriftAt = null;
+    this.requestRender();
+  }
+
+  /**
    * Moves the drifting clouds to the current time and, while they show,
    * schedules the next redraw; stops the clock otherwise.
    */
@@ -1437,8 +1452,13 @@ export class PlanetView {
     if (this.cloudDriftAt !== null) {
       // A hidden tab draws no frames: resume where the clouds were.
       const seconds = Math.min(now - this.cloudDriftAt, 1000) / 1000;
-      this.u.uCloudShift.value = (this.u.uCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
-      this.u.uBandTime.value += seconds;
+      const drift = advanceDrift(
+        { shift: this.u.uCloudShift.value, bandTime: this.u.uBandTime.value },
+        seconds,
+        CLOUD_DRIFT_PERIOD_S,
+      );
+      this.u.uCloudShift.value = drift.shift;
+      this.u.uBandTime.value = drift.bandTime;
     }
     this.cloudDriftAt = now;
     if (this.cloudDriftTimer === null) {
