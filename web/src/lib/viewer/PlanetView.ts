@@ -64,7 +64,7 @@ import { cameraPlanes } from './cameraPlanes';
 import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
 import { DIAL_RADIUS, RotationDial } from './rotationDial';
 import { sphereGrid } from './starSystem';
-import { hiddenByShape } from './occlusion';
+import { hiddenByShape, hiddenBySkyDisc } from './occlusion';
 import type { DialState } from '../rotationDial';
 import type { HexMap } from '../api/types/HexMap';
 import {
@@ -115,6 +115,7 @@ import {
   previewGlobeVertex,
   SKY_LINE_PASS,
   SKY_OCCLUDERS,
+  skyHiddenChunk,
   SKY_ORBIT_DASH,
   skyOrbitDash,
   skyOrbitFragment,
@@ -2446,7 +2447,7 @@ export class PlanetView {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new Float32BufferAttribute(sphereGrid(1, 96, 15).flat(), 3));
       const grid = new LineSegments(geometry, new LineBasicMaterial({ color: new Color(0.55, 0.85, 0.8), transparent: true, depthWrite: false }));
-      farGuide(grid.material, { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 0 } });
+      farGuide(grid.material, { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 0 } }, this.skyOccluders);
       const shell = new Mesh(
         new SphereGeometry(1, 64, 32),
         new ShaderMaterial({
@@ -2458,12 +2459,14 @@ export class PlanetView {
               gl_Position = projectionMatrix * viewMatrix * world;
               gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
             }`,
-          fragmentShader: `uniform float uOpacity; varying vec3 vNormal; varying vec3 vWorld;
+          fragmentShader: `${skyHiddenChunk}
+            uniform float uOpacity; varying vec3 vNormal; varying vec3 vWorld;
             void main() {
+              if (skyHidden(vWorld)) discard;
               float rim = 1.0 - abs(dot(normalize(vNormal), normalize(cameraPosition - vWorld)));
               gl_FragColor = vec4(0.55, 0.85, 0.8, uOpacity * (0.04 + 0.5 * pow(rim, 4.0)));
             }`,
-          uniforms: { uOpacity: { value: 0 } },
+          uniforms: { uOpacity: { value: 0 }, ...this.skyOccluders },
           transparent: true,
           depthWrite: false,
           side: DoubleSide,
@@ -2731,10 +2734,14 @@ export class PlanetView {
     this.camera.getWorldDirection(forward);
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
-    const at = (direction: Vector3, front = false): { x: number; y: number } | null => {
+    // The sky bodies drawn at their size cover what lies behind them.
+    const cam: [number, number, number] = [camera.x, camera.y, camera.z];
+    const discs = skyOccluders(cam, this.skyBodies.map(({ body }) => body), this.skySmallest, this.skyBodies.length);
+    const at = (direction: Vector3, front = false, distance = Infinity): { x: number; y: number } | null => {
       if (!shown) return null;
       const d = direction.clone().normalize();
       if (d.dot(forward) <= 0) return null;
+      if (hiddenBySkyDisc(cam, [d.x, d.y, d.z], distance, discs)) return null;
       // Hidden by the globe (radius 1 at the origin) along the ray, unless in front of it?
       const b = camera.dot(d);
       const disc = b * b - (camera.lengthSq() - 1);
@@ -2765,7 +2772,10 @@ export class PlanetView {
     const hostAt = near(points.host);
     const dial = this.dialState && this.dial.group.visible ? this.dial.anchors() : null;
     return {
-      bodies: this.skyBodies.map(({ body }) => at(this.skyPlace(body).direction, this.inFront(body))),
+      bodies: this.skyBodies.map(({ body }) => {
+        const place = this.skyPlace(body);
+        return at(place.direction, this.inFront(body), body.position ? Math.hypot(body.position[0] - cam[0], body.position[1] - cam[1], body.position[2] - cam[2]) : Infinity);
+      }),
       star: at(
         this.starPlace ? this.starPlace.position.clone().sub(this.camera.position) : this.u.uSunDir.value,
       ),
@@ -2780,7 +2790,7 @@ export class PlanetView {
         let best: { x: number; y: number } | null = null;
         let bestDistance = Infinity;
         for (const point of candidates) {
-          const p = at(new Vector3(...point).sub(camera));
+          const p = at(new Vector3(...point).sub(camera), false, Math.hypot(point[0] - cam[0], point[1] - cam[1], point[2] - cam[2]));
           if (!p) continue;
           const distance = Math.hypot(p.x - prefer[0] * width, p.y - prefer[1] * height);
           if (distance < bestDistance && Math.abs(p.x - width / 2) < 0.45 * width && Math.abs(p.y - height / 2) < 0.45 * height) {
@@ -3525,18 +3535,23 @@ function latticeSlots(rows: number, window: number, perCell: number): Float32Arr
  * dropped where the planet (`uniforms`: its centre and radius, in the
  * scene's frame) stands between them and the camera.
  */
-function farGuide(material: Material, uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> }): void {
+function farGuide(
+  material: Material,
+  uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> },
+  occluders?: { uOccluders: IUniform<Vector4[]>; uOccluderCount: IUniform<number> },
+): void {
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, uniforms, occluders);
     shader.vertexShader = `varying vec3 vFarWorld;\n${shader.vertexShader}`.replace(
       '#include <project_vertex>',
       `#include <project_vertex>
       vFarWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
       gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);`,
     );
-    shader.fragmentShader = `uniform vec3 uHostCentre;\nuniform float uHostRadius;\nvarying vec3 vFarWorld;\n${shader.fragmentShader}`.replace(
+    shader.fragmentShader = `uniform vec3 uHostCentre;\nuniform float uHostRadius;\nvarying vec3 vFarWorld;\n${occluders ? skyHiddenChunk : ''}\n${shader.fragmentShader}`.replace(
       'void main() {',
       `void main() {
+      ${occluders ? 'if (skyHidden(vFarWorld)) discard;' : ''}
       vec3 toPoint = vFarWorld - cameraPosition;
       float far = length(toPoint);
       vec3 ray = toPoint / far;
