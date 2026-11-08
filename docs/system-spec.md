@@ -549,12 +549,17 @@ addressed as `<system-id>/<body-id>` everywhere.
   right button pans the camera, and opening a planet flies to it (and
   back out on return).
 - **Main menu.** The app opens on a menu, and no viewer starts until a
-  system is opened. The menu shows the systems as a grid of cards, each
-  with its orrery, its star's designation (or given name), the count of
-  planets per type, the star and the date. Search matches designations,
-  names and seeds; selecting several to compare or delete works as
-  before. Opening a card opens its viewer, whose **Menu** button goes
-  back; the address is `#menu` (or empty) on the menu and `#system=…` in
+  system is opened. The menu shows the systems in sections (pinned,
+  today since the last local midnight, older; empty ones hidden), sorted
+  within each,
+  with filter chips (star class from the first letter of the spectral
+  type; a habitable world, i.e. a `terran` planet inside the habitable
+  zone) and a search that matches designations, names and seeds. Three
+  views, chosen in the cog's **Display** menu and remembered: cards (an
+  orbit strip, the name, the star, a chip per planet type, the moons and
+  the date), compact cards (a small orrery on the left) and a table.
+  Selecting several to compare or delete works in all three. Opening a
+  card opens its viewer, whose **Menu** button goes back; the address is `#menu` (or empty) on the menu and `#system=…` in
   a viewer, and the browser's Back returns from a viewer to the menu. A
   global indicator counts the generations under way and opens their
   list. A card's thumbnail, and the viewer bar's, is a small orrery
