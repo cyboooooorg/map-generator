@@ -823,6 +823,7 @@
   {/if}
   {#if mode === 'around'}
     <fieldset>
+      <legend>{t.form.aloneSummary}</legend>
       <label class="check">
         <input type="checkbox" bind:checked={giantChoice.alone} />
         {t.form.alone}

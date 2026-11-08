@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+import { driftRequest } from './drift';
+import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
 
 const meta = {
   planet_type: 'frozen',
@@ -125,5 +127,22 @@ describe('signed zero', () => {
     expect(formatNumber(-0.04, 1)).toBe('0.0');
     expect(formatUpTo(-0.001, 1)).toBe('0');
     expect(formatInt(-3)).toBe('-3');
+  });
+});
+
+describe('keepAlone', () => {
+  const stored = (request: unknown) => ({ request }) as unknown as System;
+  it('carries the lone flag of the system into the request of Vary, a reroll or an epoch', () => {
+    const lone = stored({ around: { planet: 'terran', alone: true } });
+    expect(keepAlone(requestFromWorld(meta), lone).alone).toBe(true);
+    expect(keepAlone(rerollRequest(meta, 5), lone).alone).toBe(true);
+    expect(keepAlone(driftRequest(meta, 250), lone)).toMatchObject({ alone: true });
+  });
+  it('leaves other systems alone', () => {
+    const request = requestFromWorld(meta);
+    expect(keepAlone(request, stored({ around: { planet: 'terran' } }))).toBe(request);
+    expect(keepAlone(request, stored({ around: { alone: false } }))).toBe(request);
+    expect(keepAlone(request, stored({ system: {} }))).toBe(request);
+    expect(keepAlone(request, null)).toBe(request);
   });
 });

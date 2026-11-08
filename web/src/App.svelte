@@ -21,7 +21,7 @@
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { driftRange, driftRequest, formatDrift } from './lib/drift';
-  import { requestFromWorld, rerollRequest } from './lib/format';
+  import { keepAlone, requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
   import { getLocale, t } from './lib/i18n/index.svelte';
@@ -480,7 +480,7 @@
     if (!primary.meta) {
       return;
     }
-    const request = rerollRequest(primary.meta);
+    const request = keepAlone(rerollRequest(primary.meta), primary.system);
     try {
       submitted(await api.createSystem({ around: request }), request);
     } catch (e) {
@@ -510,7 +510,7 @@
       world={primary}
       title={primary.shownSystemBody ? (primary.systemNames[primary.shownSystemBody.id] ?? primary.shownSystemBody.designation) : null}
       revision={revision(selectedId)}
-      onVary={() => primary.meta && openForm('around', requestFromWorld(primary.meta), primary.id)}
+      onVary={() => primary.meta && openForm('around', keepAlone(requestFromWorld(primary.meta), primary.system), primary.id)}
       onReroll={reroll}
       link={shareLink}
       onDelete={() => selectedId && removeWorlds([selectedId])}
@@ -527,7 +527,7 @@
         current={primary.meta.drift_ma ?? 0}
         onGenerate={(ma) => {
           if (!primary.meta) return;
-          openForm('around', driftRequest(primary.meta, ma), primary.id);
+          openForm('around', keepAlone(driftRequest(primary.meta, ma), primary.system), primary.id);
           if (form) form.fromDrift = { view: primaryPane?.viewState() ?? null, epoch: formatDrift(ma) };
         }}
       />
