@@ -1070,7 +1070,7 @@ async fn body_epoch_layer(
     let layer = tiles::EpochLayer::from_file(&file).ok_or_else(|| {
         Failure(
             StatusCode::NOT_FOUND,
-            format!("no layer {file}: surface.png, elevation.png or biomes.png"),
+            format!("no layer {file}: colour.png, normal.png, elevation.png or biomes.png"),
         )
     })?;
     let scale = query.scale.unwrap_or(1);
@@ -1090,10 +1090,11 @@ async fn body_epoch_layer(
         Ok(world) => world,
         Err(e) => return Ok(world_failure(e, "epochs")),
     };
-    // The surface decodes the whole world and renders it at full size,
-    // outside the tile cache's budget (several GB at 8192 x 4096 if four
-    // ran together): one at a time. The other layers read the cached world.
-    let semaphore = if layer == tiles::EpochLayer::Surface {
+    // The colour and the normals decode the whole world and render it at
+    // full size, outside the tile cache's budget (several GB at 8192 x 4096
+    // if four ran together): one at a time. The other layers read the
+    // cached world.
+    let semaphore = if matches!(layer, tiles::EpochLayer::Colour | tiles::EpochLayer::Normal) {
         &state.epoch_surfaces
     } else {
         &state.renders
@@ -1770,7 +1771,7 @@ mod tests {
             );
         }
         // Every layer, reduced for the slider.
-        for file in ["surface.png", "elevation.png", "biomes.png"] {
+        for file in ["colour.png", "normal.png", "elevation.png", "biomes.png"] {
             let (status, bytes) = png(format!("{base}/2000/{file}?scale=4")).await;
             assert_eq!(status, StatusCode::OK, "{file}");
             let image = image::load_from_memory(&bytes).unwrap();
@@ -1782,15 +1783,17 @@ mod tests {
         // Refused: outside the range, a body without epochs, unknown layer, bad scale.
         let wet_base = format!("/api/systems/{wet}/bodies/{sea}");
         for (uri, expected) in [
-            (format!("{base}/4100/surface.png"), StatusCode::BAD_REQUEST),
-            (format!("{base}/-1001/surface.png"), StatusCode::BAD_REQUEST),
+            (format!("{base}/4100/colour.png"), StatusCode::BAD_REQUEST),
+            (format!("{base}/-1001/colour.png"), StatusCode::BAD_REQUEST),
             (
-                format!("{wet_base}/epoch/100/surface.png"),
+                format!("{wet_base}/epoch/100/colour.png"),
                 StatusCode::NOT_FOUND,
             ),
             (format!("{base}/100/flow.png"), StatusCode::NOT_FOUND),
+            // The hillshaded surface is gone: the viewer lights the relief.
+            (format!("{base}/100/surface.png"), StatusCode::NOT_FOUND),
             (
-                format!("{base}/100/surface.png?scale=3"),
+                format!("{base}/100/colour.png?scale=3"),
                 StatusCode::BAD_REQUEST,
             ),
             (

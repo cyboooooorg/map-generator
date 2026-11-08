@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from './epochs';
+import { MIN_FORMAT_VERSION } from './formatVersion';
 import { setLocale } from './i18n/index.svelte';
 
 /** Narrow no-break space. */
@@ -8,7 +9,7 @@ const S = '\u202f';
 
 const meta = (overrides: Record<string, unknown>) =>
   ({
-    format_version: 14,
+    format_version: MIN_FORMAT_VERSION,
     pressure_bar: 0,
     surface_age_ga: 4,
     preset: { geology: { regime: 'stagnant', wet_until: 4.6 } },
@@ -54,8 +55,11 @@ describe('epochs', () => {
   });
 
   it('name their layers', () => {
-    expect(epochFile('systems/mgs-1-3/bodies/b', 2000, 'surface.png', 17, 4)).toBe(
-      '/api/systems/mgs-1-3/bodies/b/epoch/2000/surface.png?rev=17&render=5&scale=4',
+    expect(epochFile('systems/mgs-1-3/bodies/b', 2000, 'colour.png', 17, 4)).toBe(
+      '/api/systems/mgs-1-3/bodies/b/epoch/2000/colour.png?rev=17&render=6&scale=4',
+    );
+    expect(epochFile('systems/mgs-1-3/bodies/b', 2000, 'normal.png', null)).toBe(
+      '/api/systems/mgs-1-3/bodies/b/epoch/2000/normal.png?render=6',
     );
   });
 });
