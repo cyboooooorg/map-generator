@@ -98,4 +98,10 @@ light: [number, number, number],
  * Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
  * have the Sun's.
  */
-metallicity: number, };
+metallicity: number, 
+/**
+ * Longitude of the orbit's perihelion, degrees from the spring equinox
+ * (see [`crate::world::WorldParams::perihelion_longitude_deg`]); absent
+ * on worlds made before it.
+ */
+perihelion_longitude_deg?: number, };

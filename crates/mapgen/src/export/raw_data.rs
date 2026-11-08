@@ -57,11 +57,17 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// it. Version 11 also stores the moisture as the log of the annual rain
 /// and chooses arid land by Köppen's criterion B: an older world keeps
 /// its rules with the former `shrubland_moisture` and `desert_moisture`
-/// (see [`crate::biome::BiomeRules::is_legacy`]) and its linear moisture.
-pub const FORMAT_VERSION: u32 = 11;
+/// (see [`crate::biome::BiomeRules::is_legacy`]) and its linear moisture;
+/// version 12 gives the seasons of a world whose solar day lasts months the
+/// swing of its day (see [`crate::climate::DayCycle`]): version 11 worlds
+/// keep the seasons they were made with.
+pub const FORMAT_VERSION: u32 = 12;
 
 /// First format version whose biomes read the seasonal cycle.
 pub const SEASONS_VERSION: u32 = 11;
+
+/// First format version whose seasons include the swing of a long solar day.
+pub const DAY_CYCLE_VERSION: u32 = 12;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
@@ -924,6 +930,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         // before the 3:2 resonance and the moons' locking to their planet
         // were locked to the star at any eccentricity, moons included.
         locked_to_star: meta.star.as_ref().map(|s| s.tidally_locked),
+        perihelion_longitude_deg: meta.star.as_ref().and_then(|s| s.perihelion_longitude_deg),
         // Worlds made before the resonances were drawn had the 3:2 or none.
         resonance_to_star: meta.star.as_ref().map(|s| {
             if s.spin_turns > 0.0 {
@@ -1055,7 +1062,11 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         )
     } else {
         (
-            crate::generation::seasons(&params),
+            if meta.format_version < DAY_CYCLE_VERSION {
+                crate::generation::seasons_without_day_cycle(&params)
+            } else {
+                crate::generation::seasons(&params)
+            },
             crate::climate::lapse_rate(&params),
         )
     };
@@ -1169,6 +1180,55 @@ mod tests {
     }
 
     #[test]
+    fn a_version_11_world_with_a_long_solar_day_keeps_its_seasons() {
+        // Mercury in its 3:2 resonance: a solar day of two years.
+        let request = crate::request::WorldRequest {
+            planet: Some(
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../presets/examples/mercury-like.toml"
+                )
+                .into(),
+            ),
+            seed: Some(3),
+            width: Some(32),
+            height: Some(16),
+            ..Default::default()
+        };
+        let params = request.resolve(&mut rand::rng()).unwrap().params;
+        let world = generate(&params).world;
+        let world_dir =
+            std::env::temp_dir().join(format!("map-generator-day-test-{}", std::process::id()));
+        let dir = world_dir.join("raw_data");
+        std::fs::create_dir_all(&dir).unwrap();
+        export_raw_data(&world, &dir, None).unwrap();
+
+        // Today's world: the swing of its day.
+        let back = load_world(&world_dir).unwrap();
+        assert_eq!(back.seasons, crate::generation::seasons(&back.params));
+        let today = back.seasons.half_range(8, true);
+        assert!(today > 20.0, "{today}");
+        // The same world labelled version 11 reads the seasons it was made
+        // with, so that its detail tiles agree with its stored map.
+        let mut meta: WorldMetadata =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("world.json")).unwrap())
+                .unwrap();
+        meta.format_version = DAY_CYCLE_VERSION - 1;
+        std::fs::write(
+            dir.join("world.json"),
+            serde_json::to_string(&meta).unwrap(),
+        )
+        .unwrap();
+        let old = load_world(&world_dir).unwrap();
+        assert_eq!(
+            old.seasons,
+            crate::generation::seasons_without_day_cycle(&old.params)
+        );
+        assert!(old.seasons.half_range(8, true) < 0.2 * today);
+        std::fs::remove_dir_all(&world_dir).unwrap();
+    }
+
+    #[test]
     fn layers_round_trip() {
         let world = generate(&WorldParams {
             width: 32,
@@ -1195,6 +1255,7 @@ mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            perihelion_longitude_deg: None,
             resonance_to_star: None,
             gravity: None,
         })

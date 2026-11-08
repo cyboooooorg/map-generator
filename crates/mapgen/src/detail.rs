@@ -805,6 +805,7 @@ mod tests {
             star: Some("G2V".into()),
             orbit_au: Some(1.0),
             eccentricity: Some(0.0),
+            perihelion_longitude_deg: None,
             ..Default::default()
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
@@ -827,6 +828,7 @@ mod tests {
             star: Some("G2V".into()),
             orbit_au: Some(1.0),
             eccentricity: Some(0.0),
+            perihelion_longitude_deg: None,
             ..Default::default()
         };
         let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;

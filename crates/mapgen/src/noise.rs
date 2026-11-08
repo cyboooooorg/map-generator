@@ -154,6 +154,9 @@ pub mod stream {
     pub const RING_MOONS: u32 = 35;
     /// The dust rings its moons feed (see `crate::rings::dust_rings`).
     pub const DUST_RINGS: u32 = 36;
+    /// The longitude of a world's perihelion, when drawn (see
+    /// `crate::request`).
+    pub const PERIHELION: u32 = 39;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;
@@ -191,7 +194,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in stream::ELEVATION..=stream::MOONS {
+            for s in (stream::ELEVATION..=stream::PERIHELION).chain([stream::SYSTEM]) {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }

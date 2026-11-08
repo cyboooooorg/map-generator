@@ -239,6 +239,7 @@ fn rocky_star(p: &crate::world::WorldParams) -> StarInfo {
 /// an older rule agree with its stored map.
 pub fn star_info(p: &crate::world::WorldParams) -> StarInfo {
     let mut star = rocky_star(p);
+    star.perihelion_longitude_deg = p.perihelion_longitude_deg;
     if crate::moons::is_moon_world(p) || crate::exomoon::HostGiant::draw(p).is_some() {
         star.tidally_locked = false;
         star.spin_orbit_3_2 = false;
