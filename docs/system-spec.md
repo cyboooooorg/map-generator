@@ -414,6 +414,23 @@ systems/<system-id>/
 - **`names.json`** keeps the format of the names given today, keyed by
   body id (`{"c": "Gaia", "c-1": "Séléné", "star": "Helia"}`). Every body
   can be named, the star included.
+- **The index** (`db/mapgen.sqlite`, `MAPGEN_DB`) is a SQLite database the
+  server owns, beside the tree and mounted like it. It lists the systems
+  and bodies (what `GET /api/systems` answers), and keeps each body's
+  seed and parameters, the generator it was made with (crate version and
+  `world.json` format revision), when it was last served or opened, the
+  names, and the jobs. The tree stays the source of the files and of
+  `system.json`: the index is rebuilt from it when missing and
+  reconciled with it at every start (a system is read again when its
+  `system.json` or `names.json` modification time differs from the
+  recorded one, and dropped when its directory is gone). For now names
+  are written to `names.json` as well as to the index, so the tree is
+  self-sufficient; the last opened dates and the job history are in the
+  database only. WAL journal when the file system allows it (checked at
+  every start, with a fallback to the rollback journal and a warning), so
+  `db/` holds `mapgen.sqlite`, `-wal` and `-shm`: copy it with the server
+  stopped or with `sqlite3 .backup`. A system replaced keeps the names
+  that still match one of its bodies.
 
 ## API
 

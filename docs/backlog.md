@@ -759,7 +759,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 | Step | Change                                                                                                   | Status |
 | ---- | -------------------------------------------------------------------------------------------------------- | ------ |
-| 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing; its file on a host bind mount (`./db:/data/db`) so it survives restarts | todo   |
+| 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing; its file on a host bind mount (`./db:/data/db`) so it survives restarts | done   |
 | 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
 | 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
 | 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |
