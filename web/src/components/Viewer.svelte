@@ -457,7 +457,7 @@
    * leaves the Earth-like -30 to 40 °C.
    */
   const tempRange = $derived<[number, number]>(
-    giant ? giantTemperatureRange(giant) : meta ? temperatureRange(meta.layers.temperature, meta.format_version) : [-30, 40],
+    giant ? giantTemperatureRange(giant) : temperatureRange(layers?.temperatureSpan),
   );
   /** The layers a giant has: its bands, cloud tops, temperatures and winds (on the moisture layer). */
   const GIANT_LAYERS: readonly Layer[] = ['biomes', 'elevation', 'temperature', 'moisture'];
