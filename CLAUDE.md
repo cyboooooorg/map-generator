@@ -22,8 +22,8 @@ the pull requests being tried, rebuilt from `main` at every cycle.
 4. A change to make goes on the pull request's own branch, never on
    `develop`. Then start again from step 2.
 5. Once it works on `develop`, merge the pull request into `main` (with
-   the user's approval), delete its branch when the work is finished,
-   and reset `develop` to `main`:
+   the user's approval; GitHub then deletes its branch, see below) and
+   reset `develop` to `main`:
 
    ```bash
    git fetch origin
@@ -34,6 +34,12 @@ Rules that follow from it:
 
 - `develop` is rewritten at every cycle: never base a branch on it, never
   commit to it directly.
+- Branches are merged into `develop` locally, with `git merge` and a push
+  (step 2), never through GitHub: no pull request targets `develop`, and
+  a pull request's base is never switched to it. The repository deletes
+  a pull request's branch as soon as the pull request is merged
+  ("Automatically delete head branches"), so a pull request merged into
+  `develop` would delete a branch still under test.
 - Several pull requests can be on `develop` at once: step 2 merges each
   of them again on top of the new `main`.
 - Two sessions working at once tell each other before rebuilding
