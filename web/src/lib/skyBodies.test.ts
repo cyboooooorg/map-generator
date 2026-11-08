@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { skyFromWorld } from './sky';
-import { eclipse, halo, inFrontOfGlobe, pickShadowCasters, planetLook, skyOccluders } from './skyBodies';
+import { eclipse, halo, inFrontOfGlobe, pickShadowCasters, planetLook, ringSeed, skyOccluders } from './skyBodies';
 
 describe('eclipses', () => {
   it('darkens the ground in the umbra, less in the penumbra, not elsewhere', () => {
@@ -126,5 +126,15 @@ describe('skyOccluders', () => {
     const moon = { position: [10, 0, 0] as [number, number, number], radius: 1 };
     // The speck's angular radius is about 1e-6, under the marker's 1e-3.
     expect(skyOccluders(camera, [speck, {}, moon], 1e-3, 4)).toEqual([moon]);
+  });
+});
+
+describe('ringSeed', () => {
+  it('is the seed the giant\'s own view has always used, within [0, 13)', () => {
+    expect(ringSeed(100)).toBeCloseTo((100 * 7.31) % 13, 9);
+    for (const m of [0.5, 17, 318, 4000]) {
+      expect(ringSeed(m)).toBeGreaterThanOrEqual(0);
+      expect(ringSeed(m)).toBeLessThan(13);
+    }
   });
 });

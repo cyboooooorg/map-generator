@@ -25,6 +25,11 @@ export const IDENTITY_AXES: Axes = [
 
 
 
+/** The seed of a giant's ringlets, from its mass (Earth masses): its own view and its moons' skies draw the same ones. */
+export function ringSeed(massEarth: number): number {
+  return (massEarth * 7.31) % 13;
+}
+
 /** A body drawn in the sky of the body shown. */
 export interface SkyBody {
   direction: Vec3;
@@ -65,6 +70,8 @@ export interface SkyBody {
    * radii), with the shadow they cast on it; none for a body without.
    */
   rings?: RingSystem | null;
+  /** The seed of its rings' ringlets (`ringSeed`), so that they look in the sky as in its own view. */
+  ringSeed?: number;
   /**
    * Cosine of its phase angle, the angle at it between the star and the body
    * shown (1 full, -1 new); the sun's direction is used when absent.

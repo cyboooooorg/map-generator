@@ -21,7 +21,7 @@
 import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
-import { IDENTITY_AXES, pickShadowCasters, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
+import { IDENTITY_AXES, pickShadowCasters, ringSeed, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
 
 const AU_KM = 1.495_978_707e8;
 /** The Sun's radius, km. */
@@ -252,6 +252,7 @@ export function systemSky(
       texture,
       axes: [local(bx), local(by), local(bz)],
       axialTiltDeg: body.spin.axial_tilt_deg,
+      ringSeed: ringSeed(body.physical.mass_earth),
       // The star is at the origin: its light at that body, and its phase from here.
       phaseCos: dot(unit(scale(there.centre, -1)), unit(sub(here.centre, there.centre))),
       insolation: (Math.hypot(...here.centre) / Math.max(Math.hypot(...there.centre), 1)) ** 2,
