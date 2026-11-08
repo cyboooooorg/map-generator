@@ -774,8 +774,12 @@
       })}
     </dd>
   </dl>
-  <small class="muted">{t.starView.schematic}</small>
-  {#if compressed && (giants || selected !== null)}
+  {#if selected !== null && !realScale}
+    <small class="muted">{t.starView.systemScale}</small>
+  {:else}
+    <small class="muted">{t.starView.schematic}</small>
+  {/if}
+  {#if compressed && selected === null && giants}
     <small class="muted">{t.starView.compressed({ distance: formatAu(compressFrom) })}</small>
   {/if}
 {/snippet}
