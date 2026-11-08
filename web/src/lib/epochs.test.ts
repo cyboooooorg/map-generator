@@ -18,12 +18,11 @@ const meta = (overrides: Record<string, unknown>) =>
 describe('epochs', () => {
   afterEach(() => setLocale('en'));
 
-  it('are offered by dry worlds of format version 7 with craters', () => {
+  it('are offered by dry worlds with craters', () => {
     expect(epochRange(meta({}))).toEqual([-1000, 4000]);
     // Back to the end of the wet era when more recent.
     expect(epochRange(meta({ preset: { geology: { wet_until: 3.5 } } }))).toEqual([-1000, 3500]);
     expect(epochRange(meta({ pressure_bar: 1 }))).toBeNull();
-    expect(epochRange(meta({ format_version: 6 }))).toBeNull();
     expect(epochRange(meta({ surface_age_ga: undefined }))).toBeNull();
   });
 

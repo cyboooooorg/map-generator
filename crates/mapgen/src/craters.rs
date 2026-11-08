@@ -601,7 +601,7 @@ impl CraterField {
                     surface_age_ga: p.surface_age_ga as f64,
                 },
             },
-            // A world without craters (surface age 0, or made before them)
+            // A world without craters (surface age 0)
             // gets none in the future either.
             future: Population {
                 seed: stream_seed(p.seed, stream::FUTURE_CRATERS),
@@ -2344,9 +2344,8 @@ mod tests {
     fn a_reloaded_world_keeps_the_lock_its_map_was_made_with() {
         let star = crate::star::parse_type("M5V").unwrap();
         let hz = crate::star::orbit_at(star, 0.5);
-        // Made before the 3:2 resonance: e = 0.1 stored as locked. Today's
-        // rule holds it in the resonance, but its tiles and epochs keep the
-        // stored lock.
+        // e = 0.1 stored as locked. The draw would hold it in the
+        // resonance, but its tiles and epochs keep the stored lock.
         // A seed that draws the 3:2 resonance at this eccentricity.
         let seed = (0..)
             .find(|&s| crate::spin::capture(0.1, s) == 1.5)

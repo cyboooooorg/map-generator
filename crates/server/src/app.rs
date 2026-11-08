@@ -838,7 +838,7 @@ async fn checked_epoch(
             StatusCode::NOT_FOUND,
             format!(
                 "world {id} offers no other epoch: it has liquid water, no craters, \
-                 or was made before format version 7"
+                 or was made by an older generator (delete it with `mise run clean-systems`)"
             ),
         ));
     };

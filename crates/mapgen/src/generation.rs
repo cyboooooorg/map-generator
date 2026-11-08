@@ -1105,24 +1105,14 @@ fn sidereal_day_hours(params: &WorldParams) -> f64 {
 /// The seasonal cycle of world `params` (see [`Seasons`]): none on a
 /// planet locked to its star, whose sun never moves in its sky.
 pub fn seasons(params: &WorldParams) -> Seasons {
-    seasons_with(params, true)
-}
-
-/// The seasons of a world stored before the day cycle (format version 11),
-/// which were made without the swing of a long solar day.
-pub fn seasons_without_day_cycle(params: &WorldParams) -> Seasons {
-    seasons_with(params, false)
-}
-
-fn seasons_with(params: &WorldParams, day_cycle: bool) -> Seasons {
     let grid = params.grid();
     let info = crate::spin::star_info(params);
     if info.tidally_locked {
         return Seasons::none(grid.height);
     }
     let star = star_climate(params);
-    // Worlds made before the longitude of perihelion keep seasons that
-    // ignore the distance to the star.
+    // Without a longitude of perihelion, the seasons ignore the distance to
+    // the star.
     let orbit = params
         .perihelion_longitude_deg
         .filter(|_| params.eccentricity > 0.0)
@@ -1135,22 +1125,19 @@ fn seasons_with(params: &WorldParams, day_cycle: bool) -> Seasons {
         params.axial_tilt_deg,
         params.pressure_bar,
         orbit,
-        day_cycle
-            .then(|| DayCycle::new(sidereal_day_hours(params) / 24.0, f64::from(info.year_days)))
-            .flatten()
-            .map(|day| {
-                day.with_air(
-                    crate::climate::radiative_time_days(
-                        params.pressure_bar,
-                        params.gravity_modifier() * 9.81,
-                        info.equilibrium_k,
-                    ),
-                    crate::climate::wave_time_days(
-                        params.circumference_km / std::f32::consts::TAU,
-                        info.equilibrium_k,
-                    ),
-                )
-            }),
+        DayCycle::new(sidereal_day_hours(params) / 24.0, f64::from(info.year_days)).map(|day| {
+            day.with_air(
+                crate::climate::radiative_time_days(
+                    params.pressure_bar,
+                    params.gravity_modifier() * 9.81,
+                    info.equilibrium_k,
+                ),
+                crate::climate::wave_time_days(
+                    params.circumference_km / std::f32::consts::TAU,
+                    info.equilibrium_k,
+                ),
+            )
+        }),
         |rows| star_temperatures(rows, star),
     )
 }
@@ -1166,13 +1153,6 @@ pub fn generate_with_progress(
     options: GenerateOptions,
     progress: impl Fn(Stage),
 ) -> Generated {
-    // Regenerating a world stored before the arid criterion: its rules
-    // meant the former moisture scale.
-    if params.planet.rules.is_legacy() {
-        let mut modern = params.clone();
-        modern.planet.rules = params.planet.rules.modernised();
-        return generate_with_progress(&modern, options, progress);
-    }
     // A giant has no ground: its cloud bands have a pipeline of their own.
     if params.giant_mass_earth.is_some() {
         return crate::giant_world::generate(params, &progress);

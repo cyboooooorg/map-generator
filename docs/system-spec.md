@@ -625,6 +625,15 @@ No migration, as decided: the worlds made before systems are deleted.
   form) is read once and dropped: an old link opens the library with a
   notice.
 
+### Older formats of a system
+
+The same rule holds for the bodies of a system written by an older
+generator (`raw_data/world.json` below `MIN_FORMAT_VERSION`, 14 at the
+time of writing): the generator keeps no code to re-derive them. The
+server still starts and lists them, but their tiles, epochs and hex
+resampling answer with an error asking to delete the system
+(`mise run clean-systems`) and draw it again.
+
 ## Delivery
 
 One PR or a few per phase, each merged on green with its tests and docs,

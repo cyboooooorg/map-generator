@@ -113,8 +113,7 @@ impact_factor?: number,
 /**
  * Whether the star's tides locked the world, as it was generated: set
  * when a stored world is reloaded, so that its tiles and epochs keep
- * the lock its base map was made with, whatever the locking rule is
- * today (see [`crate::spin::star_info`]). Absent on a world about to
+ * the lock its base map was made with (see [`crate::spin::star_info`]). Absent on a world about to
  * be generated, whose lock follows the current rule.
  */
 locked_to_star?: boolean, 
@@ -122,8 +121,7 @@ locked_to_star?: boolean,
  * The turns per orbit of the spin-orbit resonance the star's tides
  * held the world in, as it was generated (0 for none), set with
  * [`Self::locked_to_star`] when a stored world is reloaded: the
- * resonance a seed draws is today's rule, the stored one is what its
- * day and climate were made with. Absent on a world about to be
+ * stored one is what its day and climate were made with. Absent on a world about to be
  * generated.
  */
 resonance_to_star?: number, 
@@ -146,7 +144,7 @@ ridge?: number,
  * equinox in `[0, 360)`: where in the seasons the planet is closest to
  * its star (Earth ≈ 283°, a few days after the December solstice; Mars
  * ≈ 251°). With an eccentric orbit it makes the seasons uneven (see
- * [`crate::climate::EccentricOrbit`]). Absent on worlds made before
- * it, whose seasonal swing ignores the distance to the star.
+ * [`crate::climate::EccentricOrbit`]). Absent on a circular orbit,
+ * whose seasonal swing ignores the distance to the star.
  */
 perihelion_longitude_deg?: number, };

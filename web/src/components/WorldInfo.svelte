@@ -193,8 +193,8 @@
               size: `${formatUpTo(star.angular_diameter_deg, 2)}°`,
               sun: `${formatUpTo(0.53, 2)}°`,
             })}{#if star.tidally_locked}
-              · <span class="unit-help" title={t.worldInfo.lockedHelp}>{t.worldInfo.locked}</span>{:else if resonanceTurns({ spin_orbit_3_2: star.spin_orbit_3_2, resonance_turns: star.spin_turns }) > 0}
-              {@const ratio = resonanceRatio(resonanceTurns({ spin_orbit_3_2: star.spin_orbit_3_2, resonance_turns: star.spin_turns }))}
+              · <span class="unit-help" title={t.worldInfo.lockedHelp}>{t.worldInfo.locked}</span>{:else if resonanceTurns({ resonance_turns: star.spin_turns }) > 0}
+              {@const ratio = resonanceRatio(resonanceTurns({ resonance_turns: star.spin_turns }))}
               · <span class="unit-help" title={t.worldInfo.resonantHelp({ ratio })}>{t.worldInfo.resonant({ ratio })}</span>{/if}
           </dd>
         {:else}

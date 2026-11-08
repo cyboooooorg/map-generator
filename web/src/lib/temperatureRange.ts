@@ -14,13 +14,11 @@ const TAIL = 0.002;
  * The coldest and the hottest temperature of a world, °C, from its raw
  * 16-bit layer: the 0.2th and 99.8th percentiles, so a few extreme pixels do
  * not stretch the scale. `info` is the layer's encoding in `world.json`
- * (`min` and `max` there are the range the 16 bits cover, not the data's);
- * `toCelsius` converts the old `[0, 1]` scale.
+ * (`min` and `max` there are the range the 16 bits cover, not the data's).
  */
 export function temperatureSpan(
   pixels: Uint16Array,
   info: { min: number; max: number },
-  toCelsius: (value: number) => number = (v) => v,
 ): { min: number; max: number } {
   const counts = new Uint32Array(65536);
   for (let i = 0; i < pixels.length; i += 1) counts[pixels[i]!]! += 1;
@@ -32,7 +30,7 @@ export function temperatureSpan(
   seen = 0;
   while (high > low && seen + counts[high]! <= cut) seen += counts[high--]!;
   const scale = (info.max - info.min) / 65535;
-  return { min: toCelsius(info.min + low * scale), max: toCelsius(info.min + high * scale) };
+  return { min: info.min + low * scale, max: info.min + high * scale };
 }
 
 /**

@@ -1,12 +1,10 @@
 /**
  * The spin-orbit resonance a planet is held in by its star's tides: Mercury's
  * 3:2, or the 2:1 that large eccentricities favour (see
- * docs/science/tidal-locking.md). Worlds and systems made before the others
- * were drawn have `spin_orbit_3_2` only.
+ * docs/science/tidal-locking.md).
  */
 export interface ResonantSpin {
   locked?: boolean | undefined;
-  spin_orbit_3_2?: boolean | undefined;
   resonance_turns?: number | undefined;
 }
 
@@ -14,7 +12,7 @@ export interface ResonantSpin {
 export function resonanceTurns(spin: ResonantSpin): number {
   if (spin.locked) return 0;
   if (spin.resonance_turns && spin.resonance_turns > 0) return spin.resonance_turns;
-  return spin.spin_orbit_3_2 ? 1.5 : 0;
+  return 0;
 }
 
 /** `3:2`, `2:1` or `5:2` for 1.5, 2 or 2.5 turns per orbit. */

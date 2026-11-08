@@ -54,9 +54,8 @@ so worlds change slightly; biome shares are compared before and after
 on every preset and the presets retuned where they drift.
 
 `raw_data` moves to `format_version` 4 with the temperature layer in
-°C; older worlds are converted on load through the same curve (applied
-to the layer and to the thresholds of their stored preset), which keeps
-their biomes. The viewer shows °C.
+°C (at the time, older worlds were converted on load; the generator no
+longer reads worlds of formats before 14). The viewer shows °C.
 
 ## 1. The atmosphere of a world
 
