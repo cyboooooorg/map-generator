@@ -444,9 +444,15 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     not understood. A friction or depth term would need a model of the
     deep flow. With Saturn's real flux the law gives about a third under
     its winds, and Uranus comes out at 285 m/s against 200.
-  - The peak wind is bounded by 0.75 of the speed of sound and rises
-    with the heating (calibrations, no source); a cold light giant
-    would otherwise reach 2 000 m/s. A Saturn-like giant's westward
+  - The whole wind profile is held under 0.75 of the speed of sound and the
+    peak rises with the heating (calibrations, no source); a cold light
+    giant would otherwise reach 2 000 m/s. A giant that tidal locking
+    stops (the rule locks a Jupiter-mass giant at 0.5 AU of a G2V star,
+    which is doubtful) loses its Rossby wind and keeps the irradiation
+    floor (about 120 m/s at 360 K): a drop of several hundred m/s at the
+    step. A super-Jupiter (10 MJ at 40 AU) blows at only 20 to 30 m/s,
+    because its large internal heat flux gives a tiny Rossby number: an
+    extrapolation of the calibration. A Saturn-like giant's westward
     flank (-130 to -170 m/s) is stronger than the real one (about
     -50 to -100): the jets away from the equator take either sign at 0.3 to
     0.7 of the peak. Uranus has Neptune's wind profile; its real

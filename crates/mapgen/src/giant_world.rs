@@ -103,11 +103,15 @@ const GAS_ROSSBY: f64 = 150.0 / (1.7585e-4 * 7.1492e7);
 const ROSSBY_EXPONENT: f64 = 0.5;
 /// Jupiter's internal heat flux, W/m² (Li et al. 2018).
 const JUPITER_INTERNAL_FLUX: f64 = 7.485;
-/// Highest peak wind, as a share of the sound speed at the temperature of the
+/// Highest wind of the whole profile (the peak parameter and the jets added
+/// to it), as a share of the sound speed at the temperature of the
 /// cloud tops: Neptune's 400 m/s is 0.7 of the 560 m/s of sound at its 59 K,
 /// Jupiter's and Saturn's about 0.2 to 0.6. Calibration, no source: the
 /// supersonic winds that the Rossby law would give a cold light giant
-/// (2 000 m/s at 0.1 Jupiter masses and 60 AU) would shock.
+/// (2 000 m/s at 0.1 Jupiter masses and 60 AU) would shock. A very massive
+/// giant (10 Jupiter masses at 40 AU) has the opposite oddity: its large
+/// internal flux gives it a tiny Rossby number and winds of 20 to 30 m/s, an
+/// extrapolation of the calibration, kept.
 const MAX_MACH: f64 = 0.75;
 /// Peak winds over `ΩR` of the ice giants: 0.11, which gives 285 m/s for
 /// Uranus and Neptune alike (`ΩR` about 2 600 m/s) against "up to 200 and
@@ -431,6 +435,10 @@ pub struct Look {
     /// Height between zones and belts relative to Jupiter's (see
     /// [`Clouds::relief`]).
     relief: f32,
+    /// Factor (at most 1) that keeps the whole wind profile under the
+    /// ceiling of [`MAX_MACH`] times the speed of sound: the jets add up to
+    /// more than the peak wind.
+    cap: f32,
 }
 
 /// Where the great spot of a gas giant sits: the centre latitude and the
@@ -774,6 +782,7 @@ impl Look {
                 0.0
             },
             relief: clouds.relief,
+            cap: 1.0,
         };
         // The poles, drawn last so the rest keeps its draws: each its own
         // style, the cyclones sized like Juno's (5 000 to 8 000 km across).
@@ -832,6 +841,18 @@ impl Look {
             look.info.polar_cyclones[k] = ring;
         }
         look.info.hexagon = look.info.poles.contains(&PoleStyle::Hexagon);
+        // Cap the whole profile, not only the peak parameter (the equatorial
+        // jet and its neighbours add up to more): looked for every half
+        // degree.
+        if !hot {
+            let ceiling = MAX_MACH * sound_speed(f64::from(effective));
+            let top = (0..=360)
+                .map(|k| look.wind_at(-90.0 + 0.5 * k as f32).abs())
+                .fold(0.0, f32::max);
+            if f64::from(top) > ceiling {
+                look.cap = (ceiling / f64::from(top)) as f32;
+            }
+        }
         look.info.wind_profile = (0..91)
             .map(|k| look.wind_at(-90.0 + 2.0 * k as f32))
             .collect();
@@ -853,6 +874,11 @@ impl Look {
 
     /// The eastward wind at latitude `lat` (degrees), m/s.
     pub fn wind_at(&self, lat: f32) -> f32 {
+        self.cap * self.uncapped_wind_at(lat)
+    }
+
+    /// The wind before the cap of [`Look::cap`].
+    fn uncapped_wind_at(&self, lat: f32) -> f32 {
         let polar_fade = 1.0 - smoothstep(80.0, 90.0, lat.abs());
         if self.info.hot {
             return self.wind * (-(lat / 25.0).powi(2)).exp() * polar_fade;
@@ -1338,28 +1364,50 @@ mod tests {
     }
 
     #[test]
-    fn no_wind_passes_a_share_of_the_speed_of_sound() {
-        // A cold light gas giant far out: the Rossby law alone would give
-        // it about 2 000 m/s.
-        for (mass, au) in [(31.8, 60.0), (31.8, 25.0), (60.0, 60.0), (14.0, 30.0)] {
-            for preset in ["gas-giant", "ice-giant"] {
-                let look = Look::draw(&params(preset, 1, mass, au), mass);
-                let ceiling = MAX_MACH * sound_speed(f64::from(look.info.effective_k));
-                assert!(
-                    f64::from(look.wind) <= ceiling + 1e-3,
-                    "{preset} {mass} ME at {au} AU: {} m/s over {ceiling}",
-                    look.wind
-                );
+    fn no_wind_shown_passes_a_share_of_the_speed_of_sound() {
+        // The Rossby law alone gives a cold light gas giant about
+        // 2 000 m/s, and the jets add up to more than the peak: the profile
+        // itself, and what GiantInfo shows, stay under the ceiling.
+        for preset in ["gas-giant", "ice-giant"] {
+            for mass in [14.0, 31.8, 60.0, 95.16, 317.8, 1000.0] {
+                for au in [60.0, 30.0, 15.0, 8.0, 5.2, 3.0, 1.0, 0.7] {
+                    for seed in [1, 4] {
+                        let look = Look::draw(&params(preset, seed, mass, au), mass);
+                        if look.info.hot {
+                            continue;
+                        }
+                        let ceiling = MAX_MACH * sound_speed(f64::from(look.info.effective_k));
+                        let shown = f64::from(look.info.wind_east.max(look.info.wind_west));
+                        let profile = (0..=360)
+                            .map(|k| f64::from(look.wind_at(-90.0 + 0.5 * k as f32).abs()))
+                            .fold(0.0, f64::max);
+                        let what = format!("{preset} {mass} ME at {au} AU seed {seed}");
+                        assert!(
+                            shown <= ceiling + 1e-3,
+                            "{what}: shown {shown} over {ceiling}"
+                        );
+                        assert!(
+                            profile <= ceiling + 1e-3,
+                            "{what}: {profile} over {ceiling}"
+                        );
+                    }
+                }
             }
         }
-        let cold = Look::draw(&params("gas-giant", 1, 31.8, 60.0), 31.8);
-        assert!(cold.wind < 400.0, "{}", cold.wind);
+        // The case that showed 845 m/s, Mach 1.1: 0.1 MJ at 5.2 AU.
+        let look = Look::draw(&params("gas-giant", 1, 31.8, 5.2), 31.8);
+        let sound = sound_speed(f64::from(look.info.effective_k));
+        assert!(f64::from(look.info.wind_east.max(look.info.wind_west)) <= 0.75 * sound + 1e-3);
     }
 
     #[test]
-    fn a_giant_never_blows_slower_as_it_moves_closer_to_its_star() {
+    fn a_giant_never_blows_slower_closer_in_except_where_it_locks() {
         // Same mass, same seed (same spin), from far to near: the peak wind
         // does not dip between the Rossby regime and the irradiated one.
+        // Where tidal locking takes the spin (a day of thousands of hours),
+        // the Rossby number of ΩR goes and the irradiation floor, a
+        // day-night driven wind, is all that is left: the wind drops once
+        // there, to that floor, and rises again closer in.
         for (preset, mass) in [
             ("gas-giant", 31.8),
             ("gas-giant", 95.16),
@@ -1368,21 +1416,35 @@ mod tests {
             ("ice-giant", 17.1),
         ] {
             let mut last = 0.0f32;
+            let mut locked = false;
             for au in [
                 60.0, 30.0, 15.0, 8.0, 5.2, 3.0, 2.0, 1.0, 0.7, 0.5, 0.4, 0.3,
             ] {
                 let look = Look::draw(&params(preset, 4, mass, au), mass);
                 assert!(!look.info.hot);
-                // Tidal locking slows the spin (and so the wind, a Rossby
-                // number of ΩR) close in: that is a change of spin, not a dip.
-                if look.info.rotation_hours > 100.0 {
-                    break;
+                let floor = (IRRADIATED_WIND
+                    * (f64::from(look.info.equilibrium_k) / 1500.0).powi(2))
+                    as f32;
+                if look.info.rotation_hours > 100.0 && !locked {
+                    locked = true;
+                    // The step: at least the floor, and only the floor.
+                    assert!(
+                        look.wind >= floor - 1e-3,
+                        "{preset} {mass}: {} < {floor}",
+                        look.wind
+                    );
+                    assert!(
+                        (look.wind - floor.max(20.0)).abs() < 1.0,
+                        "{preset} {mass}: {}",
+                        look.wind
+                    );
+                } else {
+                    assert!(
+                        look.wind >= last - 1e-3,
+                        "{preset} {mass} ME: {} m/s at {au} AU after {last}",
+                        look.wind
+                    );
                 }
-                assert!(
-                    look.wind >= last - 1e-3,
-                    "{preset} {mass} ME: {} m/s at {au} AU after {last}",
-                    look.wind
-                );
                 last = look.wind;
             }
         }
