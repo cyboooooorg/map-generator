@@ -649,9 +649,9 @@ export const fr: Messages = {
       'Depuis une lune : un trait pointillé vers sa planète hôte, avec l’attraction de l’hôte sur la lune et la vitesse de la lune en flèches, et leurs valeurs',
     hostRings: 'Anneaux de l’hôte',
     hostRingsHelp: 'Les anneaux de la planète hôte dans le ciel de la lune',
-    hostCompass: 'Boussole de l’hôte',
-    hostCompassHelp:
-      'La boussole de rotation autour de la planète hôte, telle que la lune la voit : l’anneau gradué en degrés, le demi-cercle de la hauteur de l’étoile, et la direction et la hauteur de la lune au-dessus de l’équateur de l’hôte',
+    compass: 'Boussole',
+    compassHelp:
+      'La boussole de rotation : un anneau gradué en degrés, dont le trait montre de combien l’astre a tourné. Depuis une lune, le carré de l’hôte la dessine autour de la planète hôte, telle que la lune la voit : l’anneau gradué en degrés, le demi-cercle de la hauteur de l’étoile, et la direction et la hauteur de la lune au-dessus de l’équateur de l’hôte',
     squareMoon: (p) => `${p.what} sur la lune`,
     squareHost: (p) => `${p.what} sur l’hôte`,
     squareLocal: (p) => `${p.what} du système local`,

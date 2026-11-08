@@ -1628,21 +1628,10 @@
       ...(hasHost
         ? [{ key: 'hostLink', label: t.viewer.hostLink, help: t.viewer.hostLinkHelp, icon: 'links' as const, on: hostLink, set: (v: boolean) => (hostLink = v) }]
         : []),
+      // The body shown's rotation dial (the moon's square) and the host's compass (the host's).
       ...(sys && sysBody
-        ? [{ key: 'dial', label: t.viewer.rotationDial, help: t.viewer.rotationDialHelp, icon: 'dial' as const, on: dialShown, set: (v: boolean) => (dialShown = v) }]
+        ? [perBody({ key: 'dial', label: t.viewer.compass, help: t.viewer.compassHelp, icon: 'dial' }, dialShown, hostCompassShown, (v) => (dialShown = v), (v) => (hostCompassShown = v))]
         : []),
-      ...(hasHost && sys
-        ? [{ key: 'hostCompass', label: t.viewer.hostCompass, help: t.viewer.hostCompassHelp, icon: 'dial' as const, on: hostCompassShown, set: (v: boolean) => (hostCompassShown = v) }]
-        : []),
-      {
-        key: 'hexes',
-        label: t.viewer.hexes,
-        icon: 'hex',
-        on: hexOn,
-        set: (v) => {
-          if (worldId && sysBody?.kind === 'planet') hexOn = v;
-        },
-      },
     ],
   ]);
   /** The panels of the planet's dock. */
@@ -2084,6 +2073,15 @@
 {/snippet}
 {#snippet hexPanel()}
   <div class="panel-body">
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={hexOn}
+        disabled={!worldId || sysBody?.kind !== 'planet'}
+        onchange={(e) => (hexOn = e.currentTarget.checked)}
+      />
+      {t.viewer.hexes}
+    </label>
     {#if !hexOn}
       <p class="muted">{t.viewer.hexesOff}</p>
     {/if}

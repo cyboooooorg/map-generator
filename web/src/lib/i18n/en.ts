@@ -686,9 +686,9 @@ export const en = {
       "From a moon: a dotted line to its host planet, with the host's pull on the moon and the moon's velocity as arrows, and their figures",
     hostRings: 'Host rings',
     hostRingsHelp: "The rings of the host planet in the moon's sky",
-    hostCompass: 'Host compass',
-    hostCompassHelp:
-      "The rotation dial round the host planet as the moon sees it: the ring graduated in degrees, the half-circle of the star's height, and the moon's bearing and height over the host's equator",
+    compass: 'Compass',
+    compassHelp:
+      "The rotation dial: a ring graduated in degrees, its pointer showing how far the body has turned. From a moon, the square for the host draws it round the host planet as the moon sees it: the ring graduated in degrees, the half-circle of the star's height, and the moon's bearing and height over the host's equator",
     squareMoon: (p: { what: string }) => `${p.what} on the moon`,
     squareHost: (p: { what: string }) => `${p.what} on the host`,
     squareLocal: (p: { what: string }) => `${p.what} of the local system`,
