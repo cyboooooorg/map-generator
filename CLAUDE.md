@@ -46,3 +46,20 @@ Rules that follow from it:
   `chore: merge fix/<branch> (#123) into develop` (`git merge -m`), and
   merge pull requests into `main` with a conventional subject
   (`gh pr merge --merge --subject "feat(web): … (#123)"`).
+
+## Backlog and issues
+
+The backlog lives in the repository's GitHub issues (label `backlog`, plus
+a theme label), not in `docs/backlog.md`, which keeps the decisions and
+the history.
+
+- A new backlog item, or a review remark left for later, becomes an issue
+  (`gh issue create --label backlog`).
+- A pull request that resolves an issue says so in its description with a
+  closing keyword, one per issue (`Closes #123`, `Fixes #124`), so that
+  GitHub closes the issue when the pull request is merged into `main`. A
+  pull request that only advances an issue writes `Refs #123` instead.
+  Commit footers may repeat them (`Closes: #123`).
+- Comment on issues and pull requests whenever it helps the next reader:
+  what was found, what was decided, why an issue stays open or is split,
+  what a review left for later (with the follow-up issue's number).
