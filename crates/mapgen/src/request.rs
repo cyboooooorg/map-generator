@@ -933,6 +933,8 @@ mod tests {
 
     #[test]
     fn moons_asked_for_get_a_star_and_orbit_with_room_for_them() {
+        use rand::SeedableRng;
+        let mut despun = 0;
         for seed in 0..40 {
             let request = WorldRequest {
                 planet: Some("terran".into()),
@@ -942,18 +944,39 @@ mod tests {
                 height: Some(32),
                 ..Default::default()
             };
-            let p = request.resolve(&mut rand::rng()).unwrap().params;
+            // The draws the seed leaves open come from a seeded generator,
+            // so that the test checks the same worlds on every run.
+            let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(seed));
+            let p = request.resolve(&mut rng).unwrap().params;
             let system = crate::moons::MoonSystem::draw(&p).unwrap();
             assert_eq!(system.moons.len(), 3);
-            // A planet its star despun keeps only light moons.
+            // A planet its star despun keeps only moons that spiral in, and
+            // an Earth-sized one only light ones. Barnes & O'Brien's bound
+            // grows as the planet's mass to the 8/3 over its radius to the
+            // fifth: a super-Earth of 11 Earth masses at 0.46 AU keeps moons
+            // of a few thousandths of its mass.
             if crate::spin::despun(&crate::star::StarInfo::new(
                 p.star,
                 p.orbit_au,
                 p.eccentricity,
             )) {
-                assert!(system.moons.iter().all(|m| m.mass_ratio < 1e-6));
+                despun += 1;
+                assert!(
+                    system
+                        .moons
+                        .iter()
+                        .all(|m| m.migration == crate::moons::Migration::Decaying),
+                    "seed {seed}"
+                );
+                if p.mass_earth() < 2.0 {
+                    assert!(
+                        system.moons.iter().all(|m| m.mass_ratio < 1e-6),
+                        "seed {seed}"
+                    );
+                }
             }
         }
+        assert!(despun > 0, "no planet despun by its star");
         // A planet locked to its star in the habitable zone of a red dwarf
         // keeps a moonlet light enough to outlast the system (Barnes &
         // O'Brien 2002); one in a close orbit has no room for any.
