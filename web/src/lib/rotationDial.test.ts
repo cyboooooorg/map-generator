@@ -8,7 +8,7 @@ import type { Vec3 } from './skyBodies';
 // The system of systemSky.test.ts: b (terran), c (a gas giant) and its
 // moons c-1 and c-2, locked to it.
 const system = fixture as unknown as System;
-const textures = (id: string) => `${id}.png`;
+const textures = (id: string) => ({ colour: `${id}-colour.png`, normal: `${id}-normal.png` });
 const body = (id: string) => system.bodies.find((x) => x.id === id)!;
 
 describe('rotation dial', () => {

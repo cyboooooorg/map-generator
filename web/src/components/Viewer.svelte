@@ -9,7 +9,8 @@
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
   import AxesGizmo from './AxesGizmo.svelte';
   import type { ScreenAxis } from '../lib/viewer/axes';
-  import { ApiFailure, api, followJob, systemBodyId, worldFile, worldThumbnail } from '../lib/api/client';
+  import type { SurfaceMaps } from '../lib/skyBodies';
+  import { ApiFailure, api, followJob, systemBodyId, worldFile } from '../lib/api/client';
   import type { BiomeInfo } from '../lib/api/types/BiomeInfo';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
@@ -913,10 +914,20 @@
     flyBack = index >= 0 ? index : null;
     world.subject = 'star';
   }
-  /** The map of each generated planet of the star view, for its marker: its thumbnail, at the system's revision. */
+  /**
+   * The maps of each generated planet of the star view, for its marker: the
+   * small copies of its colour and its relief normals, at the system's revision.
+   */
   const sysMaps = $derived(
     sysStar && world.systemId
-      ? sysStar.planets.map((p) => (p.generated ? worldThumbnail(systemBodyId(world.systemId!, p.id), revision) : null))
+      ? sysStar.planets.map((p): SurfaceMaps | null => {
+          if (!p.generated) return null;
+          const id = systemBodyId(world.systemId!, p.id);
+          return {
+            colour: worldFile(id, 'raw_data/colour_small.png', revision),
+            normal: worldFile(id, 'raw_data/normal_small.png', revision),
+          };
+        })
       : null,
   );
   /** What the star view shows: the system round the planet shown (or the moon's), the Sun's before one loads. */
@@ -947,7 +958,12 @@
   const sysDays = $derived(sysPlanet ? clockDays(sysPlanet.orbit, season, orbitDays) : orbitDays);
   /** The day of the planet's year the clock shows: days since its northern spring equinox. */
   const yearDay = $derived(sysPlanet ? yearDayAt(sysPlanet.orbit, sysDays) : null);
-  const sysTextures = (id: string) => (world.systemId ? worldFile(systemBodyId(world.systemId, id), 'raw_data/surface.png') : null);
+  /** The maps of a body of the system, for the sky. */
+  const sysTextures = (id: string): SurfaceMaps | null => {
+    if (!world.systemId) return null;
+    const body = systemBodyId(world.systemId, id);
+    return { colour: worldFile(body, 'raw_data/colour.png'), normal: worldFile(body, 'raw_data/normal.png') };
+  };
   /**
    * The hour: the sun at the slider's longitude over the body shown at the
    * season's start, then turning on itself as the orbit time goes.

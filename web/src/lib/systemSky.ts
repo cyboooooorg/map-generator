@@ -22,7 +22,7 @@ import type { Body } from './api/types/Body';
 import type { Orbit } from './api/types/Orbit';
 import type { System } from './api/types/System';
 import { resonanceTurns } from './spinResonance';
-import { IDENTITY_AXES, pickShadowCasters, ringSeed, type Axes, type ShadowCaster, type SkyBody, type Vec3 } from './skyBodies';
+import { IDENTITY_AXES, pickShadowCasters, ringSeed, type Axes, type ShadowCaster, type SkyBody, type SurfaceMaps, type Vec3 } from './skyBodies';
 
 const AU_KM = 1.495_978_707e8;
 /** The Sun's radius, km. */
@@ -208,7 +208,7 @@ export function systemSky(
   system: System,
   shown: string,
   days: number,
-  textures: (id: string) => string | null,
+  textures: (id: string) => SurfaceMaps | null,
   spinOffset = 0,
   orbitSamples = ORBIT_SAMPLES,
 ): {
@@ -243,21 +243,21 @@ export function systemSky(
     const radius = body.physical.radius_km / unitKm;
     const distance = Math.max(Math.hypot(...position), radius * 1.001);
     const [bx, by, bz] = there.axes;
-    const texture = body.generated ? textures(body.id) : null;
+    const maps = body.generated ? textures(body.id) : null;
     bodies.push({
       direction: unit(position),
       angularDiameterDeg: (2 * Math.asin(Math.min(radius / distance, 1)) * 180) / Math.PI,
       position,
       radius,
       colour: (body.preview.colours[0] as Vec3 | undefined) ?? ROCK,
-      texture,
+      maps,
       axes: [local(bx), local(by), local(bz)],
       axialTiltDeg: body.spin.axial_tilt_deg,
       ringSeed: ringSeed(body.physical.mass_earth),
       // The star is at the origin: its light at that body, and its phase from here.
       phaseCos: dot(unit(scale(there.centre, -1)), unit(sub(here.centre, there.centre))),
       insolation: (Math.hypot(...here.centre) / Math.max(Math.hypot(...there.centre), 1)) ** 2,
-      ...(texture ? {} : { preview: body.preview }),
+      ...(maps ? {} : { preview: body.preview }),
     });
     ids.push(body.id);
     casters.push({ position, radius });

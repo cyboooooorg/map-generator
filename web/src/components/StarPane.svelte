@@ -2,6 +2,7 @@
   // The star view of a world: its star as a globe, its system around it,
   // and the numbers of both (see StarView.ts).
   import { onMount, untrack } from 'svelte';
+  import type { SurfaceMaps } from '../lib/skyBodies';
   import PlanetCard from './PlanetCard.svelte';
   import { extremes, layoutCards, shownCards } from '../lib/planetCard';
   import type { Belt } from '../lib/api/types/Belt';
@@ -104,8 +105,8 @@
     onOpenMoon?: (id: string) => void;
     /** Opens a planet (a double click on its marker, or its card's button). */
     onOpenPlanet?: ((index: number) => void) | null;
-    /** The map wrapped round each planet's marker, in the giants' order, null for its colour. */
-    maps?: readonly (string | null)[] | null;
+    /** The maps wrapped round each planet's marker, in the giants' order, null for its colour. */
+    maps?: readonly (SurfaceMaps | null)[] | null;
   }
 
   let {

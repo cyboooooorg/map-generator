@@ -37,6 +37,7 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { Giant } from '../api/types/Giant';
+import type { SurfaceMaps } from '../skyBodies';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import type { StarInfo } from '../api/types/StarInfo';
 import type { Belt } from '../api/types/Belt';
@@ -937,7 +938,8 @@ export class StarView {
    * round giant `k`'s, its colour where it is null or still loading.
    * Maps no longer listed are let go.
    */
-  setPlanetMaps(urls: readonly (string | null)[]): void {
+  setPlanetMaps(maps: readonly (SurfaceMaps | null)[]): void {
+    const urls = maps.map((m) => m?.colour ?? null);
     this.mapUrls = urls;
     const wanted = new Set(urls.filter((url): url is string => url !== null));
     for (const [url, map] of this.maps) {

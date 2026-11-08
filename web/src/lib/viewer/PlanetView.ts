@@ -2359,7 +2359,11 @@ export class PlanetView {
       bodies.length === this.skyBodies.length &&
       bodies.every((b, i) => {
         const old = this.skyBodies[i]?.body;
-        return b.texture === old?.texture && (b.clouds ?? null) === (old?.clouds ?? null);
+        return (
+          b.maps?.colour === old?.maps?.colour &&
+          b.maps?.normal === old?.maps?.normal &&
+          (b.clouds ?? null) === (old?.clouds ?? null)
+        );
       });
     if (same) {
       bodies.forEach((body, i) => {
@@ -2395,6 +2399,8 @@ export class PlanetView {
             uGlow: { value: 0 },
             uHasMap: { value: 0 },
             uMap: { value: emptyTexture() },
+            uHasNormal: { value: 0 },
+            uNormalMap: { value: emptyTexture() },
             uHasClouds: { value: 0 },
             uClouds: { value: emptyTexture() },
             uCloudTint: { value: new Vector3(1, 1, 1) },
@@ -2435,7 +2441,7 @@ export class PlanetView {
       this.scene.add(mesh);
       const entry = { mesh, body, maps: [] as Texture[], rings: null as Mesh<BufferGeometry, ShaderMaterial> | null };
       const load = (url: string, map: string, has: string) => {
-        void this.decodeImage(url, signal)
+        void this.decodeImage(url, signal, undefined, map === 'uNormalMap')
           .then((bitmap) => {
             if (this.disposed || request !== this.skyRequest) {
               bitmap.close();
@@ -2458,7 +2464,10 @@ export class PlanetView {
           });
       };
       applyPreview(mesh.material.uniforms, body);
-      if (body.texture) load(body.texture, 'uMap', 'uHasMap');
+      if (body.maps) {
+        load(body.maps.colour, 'uMap', 'uHasMap');
+        load(body.maps.normal, 'uNormalMap', 'uHasNormal');
+      }
       if (body.clouds) load(body.clouds, 'uClouds', 'uHasClouds');
       return entry;
     });
