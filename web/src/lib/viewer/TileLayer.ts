@@ -73,7 +73,7 @@ export const DETAIL_STENCIL = 1;
  * part of the tile URL so that tiles cached for good are dropped when the
  * renderer changes. A server test checks both values agree.
  */
-export const TILE_RENDER_VERSION = 6;
+export const TILE_RENDER_VERSION = 7;
 
 /** Creates the material of a patch; uniforms come from the base surface. */
 export type PatchMaterialFactory = () => ShaderMaterial;

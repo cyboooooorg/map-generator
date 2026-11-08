@@ -54,7 +54,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 6;
+pub const RENDER_VERSION: u32 = 7;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -223,8 +223,12 @@ fn bilinear(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y:
     top * (1.0 - fy) + bottom * fy
 }
 
-/// Bicubic (Catmull-Rom) sample of a base layer: unlike bilinear, its slope
-/// is continuous, so hillshading shows no seams along base pixel edges.
+/// Bicubic (uniform cubic B-spline) sample of a base layer: its slope and
+/// its curvature are continuous, so the relief lit from the tiles' normals
+/// shows no crease along base pixel edges (Catmull-Rom's curvature jumped
+/// there, a washboard on every slope). It smooths the samples slightly
+/// rather than passing through them: a base pixel's own value moves by at
+/// most a third of its difference with the mean of its neighbours.
 fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f32 {
     let (w, h) = (width as i64, height as i64);
     let (x, y) = (x - 0.5, (y - 0.5).clamp(0.0, (h - 1) as f64));
@@ -232,11 +236,12 @@ fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: 
     let (fx, fy) = ((x - x0 as f64) as f32, (y - y0 as f64) as f32);
     let at = |xx: i64, yy: i64| layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize);
     let cubic = |p: [f32; 4], t: f32| {
-        p[1] + 0.5
-            * t
-            * (p[2] - p[0]
-                + t * (2.0 * p[0] - 5.0 * p[1] + 4.0 * p[2] - p[3]
-                    + t * (3.0 * (p[1] - p[2]) + p[3] - p[0])))
+        let (t2, t3, u) = (t * t, t * t * t, 1.0 - t);
+        (u * u * u * p[0]
+            + (3.0 * t3 - 6.0 * t2 + 4.0) * p[1]
+            + (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) * p[2]
+            + t3 * p[3])
+            / 6.0
     };
     let rows: [f32; 4] = std::array::from_fn(|j| {
         let yy = y0 - 1 + j as i64;
@@ -872,12 +877,47 @@ mod tests {
     }
 
     #[test]
-    fn bicubic_matches_the_samples_at_pixel_centres() {
-        let layer: Vec<f32> = (0..16).map(|i| (i * 7 % 5) as f32).collect();
-        for (i, v) in layer.iter().enumerate() {
-            let (x, y) = ((i % 4) as f64 + 0.5, (i / 4) as f64 + 0.5);
-            assert!((bicubic(&layer, 4, 4, x, y) - v).abs() < 1e-5);
+    fn bicubic_keeps_smooth_samples() {
+        // A plane is kept exactly; a sample is pulled towards its
+        // neighbours by at most a third of their difference.
+        let plane: Vec<f32> = (0..64)
+            .map(|i| (i % 8) as f32 * 0.1 + (i / 8) as f32 * 0.05)
+            .collect();
+        for (i, v) in plane
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| (2..6).contains(&(i % 8)) && (2..6).contains(&(i / 8)))
+        {
+            let (x, y) = ((i % 8) as f64 + 0.5, (i / 8) as f64 + 0.5);
+            assert!((bicubic(&plane, 8, 8, x, y) - v).abs() < 1e-5);
         }
+        let spike: Vec<f32> = (0..64).map(|i| if i == 27 { 1.0 } else { 0.0 }).collect();
+        let at = bicubic(&spike, 8, 8, 3.5, 3.5);
+        assert!((at - 4.0 / 9.0).abs() < 1e-5, "{at}");
+    }
+
+    /// The curvature of the interpolated base is continuous across the base
+    /// pixels: a jump there shows as a crease at every base pixel in the
+    /// lit relief of a tile (a washboard on every slope).
+    #[test]
+    fn interpolated_base_curvature_is_continuous_across_pixels() {
+        let layer: Vec<f32> = (0..64)
+            .map(|i| ((i * 37 % 17) as f32 * 0.37).sin())
+            .collect();
+        // Steps large enough for f32 rounding not to dominate the second
+        // difference.
+        let (h, eps) = (1e-2, 2e-2);
+        let curvature = |x: f64| {
+            let f = |x: f64| f64::from(bicubic(&layer, 16, 4, x, 1.5));
+            (f(x + h) - 2.0 * f(x) + f(x - h)) / (h * h)
+        };
+        let mut worst = 0.0f64;
+        for k in 3..12 {
+            // Base sample k sits at x = k + 0.5: the joint of two cubic pieces.
+            let c = k as f64 + 0.5;
+            worst = worst.max((curvature(c + eps) - curvature(c - eps)).abs());
+        }
+        assert!(worst < 0.05, "curvature jumps by {worst} at a base pixel");
     }
 
     #[test]

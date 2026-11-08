@@ -676,7 +676,6 @@ export const surfaceFragment = /* glsl */ `
     // ground loses its meaning: the relief fades out there, so flat ground
     // keeps the day curve's twilight.
     relief = mix(1.0, relief, smoothstep(-0.02, 0.06, lightT.z));
-    float lambert = max(dot(normal, uLightDir), 0.0);
     float shade;
     float nightLevel = 0.0;
     if (uLightMode == 1) {
@@ -694,8 +693,10 @@ export const surfaceFragment = /* glsl */ `
       // The relief shapes the sunlight, not the night side's own light.
       shade = night + (1.0 - night) * day * strength * sunlit * relief;
     } else {
-      float globe = 0.35 + 0.75 * lambert;
-      shade = mix(relief, globe, uMorph);
+      // The globe's own roundness under the headlight, from its smooth
+      // normal, and the relief on top of it, as on the map.
+      float globe = 0.35 + 0.75 * max(dot(normalize(vNormal), uLightDir), 0.0);
+      shade = mix(1.0, globe, uMorph) * relief;
     }
     // Clouds: their shadow on the ground, offset away from the light (on
     // the globe), then the cloud layer itself, lit like flat ground.

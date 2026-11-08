@@ -56,10 +56,10 @@ describe('epochs', () => {
 
   it('name their layers', () => {
     expect(epochFile('systems/mgs-1-3/bodies/b', 2000, 'colour.png', 17, 4)).toBe(
-      '/api/systems/mgs-1-3/bodies/b/epoch/2000/colour.png?rev=17&render=6&scale=4',
+      '/api/systems/mgs-1-3/bodies/b/epoch/2000/colour.png?rev=17&render=7&scale=4',
     );
     expect(epochFile('systems/mgs-1-3/bodies/b', 2000, 'normal.png', null)).toBe(
-      '/api/systems/mgs-1-3/bodies/b/epoch/2000/normal.png?render=6',
+      '/api/systems/mgs-1-3/bodies/b/epoch/2000/normal.png?render=7',
     );
   });
 });
