@@ -198,7 +198,7 @@ pub fn draw_metallicity(seed: u32) -> f32 {
 }
 
 /// A standard normal variate (Box–Muller).
-fn normal(rng: &mut impl RngExt) -> f64 {
+pub(crate) fn normal(rng: &mut impl RngExt) -> f64 {
     let (u1, u2): (f64, f64) = (rng.random::<f64>().max(1e-12), rng.random());
     (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
 }
