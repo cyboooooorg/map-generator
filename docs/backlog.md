@@ -774,7 +774,8 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   swing reads the star's distance at each longitude of the orbit
   (`EccentricOrbit::light_at`, Berger 1978, doi:10.1175/1520-0469(1978)035<2362:LTVODI>2.0.CO;2),
   with a longitude of perihelion in `WorldParams` (`--perihelion`, drawn
-  from the seed on its own stream, Earth 283°, Mars 251°). Worlds without
+  from the seed on its own stream, Earth 283°, Mars 251°; in a system, the
+  orbit's argument of periapsis, which is what the sky draws). Worlds without
   it keep the circular swing. What remains: the swing is half the
   difference between the sunniest and darkest days, damped like the
   circular one, so the summer and the winter stay symmetric around the

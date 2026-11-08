@@ -1056,6 +1056,10 @@ fn assemble(
         for (k, ((moon_type, moon_params, orbit, physical, spin), ring)) in
             moons.into_iter().enumerate()
         {
+            let mut moon_params = moon_params;
+            // A moon's seasons follow its planet's orbit around the star.
+            moon_params.perihelion_longitude_deg =
+                bodies[planet_index].params.perihelion_longitude_deg;
             let moon_id = format!("{id}-{}", k + 1);
             if let Some(gap) = ring.and_then(|r| r.gap) {
                 gap_moons[gap] = moon_id.clone();
@@ -1296,7 +1300,7 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
     } else {
         f64::from(params.gravity_modifier())
     };
-    Body {
+    let mut body = Body {
         id: id.to_string(),
         designation: designation.to_string(),
         kind: BodyKind::Planet,
@@ -1337,7 +1341,14 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
         generated: false,
         trojans: None,
         ring_role: None,
-    }
+    };
+    // The sky the viewer draws puts the planet on its node line (the spring
+    // equinox of its northern hemisphere) at an angle `periapsis_deg` before
+    // its periapsis, so the longitude of perihelion the climate's seasons
+    // read, from the equinox, is that argument of periapsis (see
+    // `web/src/lib/systemSky.ts`, `placeSystem`, and the test below).
+    body.params.perihelion_longitude_deg = Some(body.orbit.periapsis_deg.rem_euclid(360.0) as f32);
+    body
 }
 
 /// A moon's body fields: its type, parameters, orbit, physical facts and
@@ -2123,6 +2134,100 @@ mod tests {
             let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
             assert!(planets(&system).len() <= MAX_PLANETS);
         }
+    }
+
+    /// The sun's declination at angle `theta` along a body's orbit, from
+    /// the geometry of `web/src/lib/systemSky.ts` (`orbitPlane`,
+    /// `pointOnOrbit`, `placeSystem`): the plane's node line, normal and
+    /// third axis in a parent frame whose axes are the unit vectors, the
+    /// body's axis the normal tilted about the node line.
+    fn sky_declination(orbit: &Orbit, tilt_deg: f64, theta: f64) -> f64 {
+        type V = [f64; 3];
+        let dot = |a: V, b: V| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let cross = |a: V, b: V| {
+            [
+                a[1] * b[2] - a[2] * b[1],
+                a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0],
+            ]
+        };
+        let scale = |a: V, k: f64| [a[0] * k, a[1] * k, a[2] * k];
+        let add = |a: V, b: V| [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+        let rotate = |v: V, axis: V, angle: f64| {
+            let (c, s) = (angle.cos(), angle.sin());
+            add(
+                add(scale(v, c), scale(cross(axis, v), s)),
+                scale(axis, dot(axis, v) * (1.0 - c)),
+            )
+        };
+        let node_angle = orbit.node_deg.to_radians();
+        // pz cos(node) + px sin(node), with px = x, py = y, pz = z.
+        let node = [node_angle.sin(), 0.0, node_angle.cos()];
+        let normal = rotate([0.0, 1.0, 0.0], node, orbit.inclination_deg.to_radians());
+        let third = cross(normal, node);
+        let axis = rotate(normal, node, tilt_deg.to_radians());
+        // The body's place from the star; the sun is the other way.
+        let place = add(scale(node, theta.cos()), scale(third, theta.sin()));
+        (-dot(place, axis)).clamp(-1.0, 1.0).asin()
+    }
+
+    #[test]
+    fn a_body_perihelion_longitude_is_the_sky_s_argument_of_periapsis() {
+        use crate::climate::{EccentricOrbit, declination};
+        let system = draw(
+            &whole(&[("terran", 2), ("gas-giant", 1)], 7),
+            &mut StdRng::seed_from_u64(7),
+        )
+        .unwrap();
+        let mut checked = 0;
+        for body in &system.bodies {
+            let longitude = body.params.perihelion_longitude_deg.expect("drawn") as f64;
+            let planet = body.parent.as_ref().map_or(body, |id| {
+                system.bodies.iter().find(|b| &b.id == id).unwrap()
+            });
+            // A planet reads its own orbit, a moon its planet's.
+            assert!(
+                (longitude - planet.orbit.periapsis_deg.rem_euclid(360.0)).abs() < 1e-3,
+                "{}",
+                body.id
+            );
+            if body.kind != BodyKind::Planet {
+                continue;
+            }
+            // The climate's declination at that longitude from the equinox
+            // is the sky's at that angle along the orbit, at every angle.
+            let tilt = body.spin.axial_tilt_deg;
+            for k in 0..24 {
+                let theta = f64::from(k) / 24.0 * std::f64::consts::TAU;
+                let sky = sky_declination(&body.orbit, tilt, theta);
+                let climate = declination(tilt as f32, theta);
+                assert!((sky - climate).abs() < 1e-5, "{} {sky} {climate}", body.id);
+            }
+            checked += 1;
+        }
+        assert!(checked >= 3);
+        // A body whose periapsis is at 90 degrees (perihelion at the
+        // northern summer solstice): the sky's sun is north there, and the
+        // climate's light peaks in the northern summer.
+        let mut orbit = system.bodies[0].orbit.clone();
+        orbit.periapsis_deg = 90.0;
+        let tilt = 25.0;
+        let sky = sky_declination(&orbit, tilt, orbit.periapsis_deg.to_radians());
+        assert!((sky - tilt.to_radians()).abs() < 1e-5, "{sky}");
+        let mars = EccentricOrbit {
+            eccentricity: 0.09,
+            perihelion_longitude_deg: orbit.periapsis_deg as f32,
+        };
+        let solstice = std::f64::consts::FRAC_PI_2;
+        let north = crate::climate::daily_insolation(
+            60f64.to_radians(),
+            declination(tilt as f32, solstice),
+        ) * mars.light_at(solstice);
+        let south = crate::climate::daily_insolation(
+            (-60f64).to_radians(),
+            declination(tilt as f32, solstice),
+        ) * mars.light_at(solstice);
+        assert!(north > 2.0 * south, "{north} {south}");
     }
 
     #[test]
