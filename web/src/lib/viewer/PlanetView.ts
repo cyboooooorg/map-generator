@@ -61,6 +61,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { cameraPlanes } from './cameraPlanes';
+import { FrameStats } from './frameStats';
 import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
 import { DIAL_RADIUS, RotationDial } from './rotationDial';
 import { sphereGrid } from './starSystem';
@@ -453,6 +454,8 @@ export function giantTemperatureRange(info: Pick<GiantInfo, 'effective_k' | 'hot
 
 export class PlanetView {
   private readonly renderer: WebGLRenderer;
+  /** Frame-time probe (`?frames=1`); a plain draw call otherwise. */
+  private readonly frames = new FrameStats('planet');
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(40, 1, 0.01, 100);
   private readonly controls: OrbitControls;
@@ -2147,6 +2150,7 @@ export class PlanetView {
 
   dispose(): void {
     this.disposed = true;
+    this.frames.dispose();
     liveViews.delete(this);
     balanceTileBudgets();
     if (this.frame !== null) {
@@ -3357,7 +3361,9 @@ export class PlanetView {
         this.morphCentreLon(),
       );
     }
-    this.renderer.render(this.scene, this.camera);
+    this.frames.measure(this.renderer.getContext(), () =>
+      this.renderer.render(this.scene, this.camera),
+    );
     this.onSkyPositions?.(this.skyScreenPositions());
     this.onAxes(axesOnScreen(this.gizmoFrame()));
   }

@@ -157,6 +157,17 @@ when it is made (`QualityProfile`, in `lib/viewer/quality.ts`), as
 antialiasing is fixed with the WebGL context, so changing it reloads the
 page; the address keeps the system and body shown.
 
+## Measuring frame time
+
+Open the viewer with `?frames=1` before the hash (`/?frames=1#system=<id>`) to time every frame of the system view (`system`) and the planet view (`planet`). Each timed frame includes the GPU work, forced to finish by reading one pixel back, so the figures are slower than a normal run: compare them with each other, not with the browser's frame counter. The median and the 95th percentile over the last 300 frames are printed with `console.table` every 5 s and returned by `window.__frames()`. Without `?frames=1` the probe costs nothing: no timer, no readback, no allocation.
+
+To check that a visual change keeps the frame rate:
+
+1. Use a GPU browser (not a software renderer), the quality profile `high`, and a window of exactly 1920 x 1080, then 2560 x 1440.
+2. Create three fixed systems with `POST /api/systems`: `{"system":{"star":"G2V","seed":4242}}`, `{"system":{"star":"K5V","seed":4243}}` and `{"system":{"star":"M4V","seed":4244}}`.
+3. For each, open `/?frames=1#system=<id>`, let the animation run at its default speed for 20 s, and read `window.__frames()`. Then open the globe of the first planet with Sunlight on and the star in view, wait 20 s and read it again.
+4. Record view, resolution, median and p95 before and after the change, on the same machine and the same load, and compare the pairs.
+
 ## Themes
 
 The header's theme picker restyles the interface: **Default** (the original look), **Holo HUD** (cyan, cut corners, Orbitron and Rajdhani), **Orbital station** (amber, bracket corners, Exo 2), **Cyberpunk** (neon magenta and yellow, diagonal cuts, Audiowide and Chakra Petch, a short glitch on hovered buttons, off with reduced motion) and **Military** (phosphor green, scan lines, Share Tech Mono). The choice is remembered in the browser (`mapgen.theme`, Default when unknown or without storage).

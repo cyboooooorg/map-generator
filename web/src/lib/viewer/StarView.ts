@@ -33,6 +33,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { FrameStats } from './frameStats';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
@@ -192,6 +193,8 @@ function ringMeshes(size: number, rings: RingSystem | null, colour: Color, opaci
 
 export class StarView {
   private readonly renderer: WebGLRenderer;
+  /** Frame-time probe (`?frames=1`); a plain draw call otherwise. */
+  private readonly frames = new FrameStats('system');
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(40, 1, 0.05, 200);
   private readonly controls: OrbitControls;
@@ -1608,6 +1611,7 @@ export class StarView {
 
   dispose(): void {
     this.disposed = true;
+    this.frames.dispose();
     window.removeEventListener('keydown', this.endFlightOnKey);
     this.flight = null;
     for (const object of [this.selectedOrbit, this.frost]) {
@@ -1820,7 +1824,9 @@ export class StarView {
     this.glow.quaternion.copy(this.camera.quaternion);
     // So do the highlights (their markers do not turn).
     for (const halo of this.halos) if (halo.visible) halo.quaternion.copy(this.camera.quaternion);
-    this.renderer.render(this.scene, this.camera);
+    this.frames.measure(this.renderer.getContext(), () =>
+      this.renderer.render(this.scene, this.camera),
+    );
     this.onAxes(axesOnScreen(this.camera.quaternion));
     const giantsShown = this.giantsOn && this.giants.length > 0;
     if ((this.distancesOn || giantsShown) && this.info) {
