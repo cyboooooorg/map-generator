@@ -167,6 +167,15 @@ pub fn body_revision(root: &Path, id: &str, body: &str) -> Option<u64> {
     modified_ms(&body_dir(root, id, body).join("raw_data").join("world.json"))
 }
 
+/// The parameters a body of a system is generated with, from its
+/// `system.json`: `None` when the system or the body is not there or the
+/// file cannot be read.
+pub fn body_params(root: &Path, id: &str, body: &str) -> Option<mapgen::world::WorldParams> {
+    let system = mapgen::system::read_system(&system_dir(root, id)).ok()?;
+    let body = system.bodies.iter().find(|b| b.id == body)?;
+    Some(mapgen::system::world_params(body))
+}
+
 /// Reads one system's summary from its `system.json` and `names.json`.
 pub fn summary(root: &Path, id: &str) -> Option<SystemSummary> {
     let file = system_dir(root, id).join(SYSTEM_FILE);

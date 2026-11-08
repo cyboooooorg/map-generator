@@ -97,15 +97,16 @@ export class LoadedWorld {
   /**
    * Loads system `id` and shows its body `body`, or the body it was asked
    * around, else its first generated planet, else its first planet.
-   * Loading it again (after a generation or a rename) keeps the body shown.
+   * Loading it again (after a generation or a rename) keeps the body shown,
+   * unless `focus` asks for the planet it was drawn around, in the planet view.
    */
-  loadSystem(id: string, body: string | null = null): void {
+  loadSystem(id: string, body: string | null = null, focus = false): void {
     this.systemController?.abort();
     const controller = new AbortController();
     this.systemController = controller;
     const again = this.systemId === id;
     if (!again) {
-      this.subject = body ? 'planet' : 'star';
+      this.subject = body || focus ? 'planet' : 'star';
       this.pinnedPlanets = [];
       // Nothing of the system left may stand under the new id: its file,
       // names, body and layers would be read as the new system's until
@@ -125,7 +126,9 @@ export class LoadedWorld {
       if (controller.signal.aborted) return;
       this.system = system;
       this.systemNames = names;
-      const wanted = body ?? (again ? this.systemBody : null);
+      // `focus` shows the planet the system was drawn around, as a planet.
+      if (focus) this.subject = 'planet';
+      const wanted = body ?? (focus ? null : again ? this.systemBody : null);
       const known = (b: string | null | undefined) => (b && system.bodies.some((x) => x.id === b) ? b : null);
       const first =
         known(wanted) ??

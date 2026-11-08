@@ -1379,7 +1379,7 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
 /// moon or a rocky planet stored before they carried their gravity (a
 /// system made by an older version) taking its card's, from the mass and
 /// radius the system stored, not the gravity the radius alone gives.
-fn world_params(body: &Body) -> WorldParams {
+pub fn world_params(body: &Body) -> WorldParams {
     let mut params = body.params.clone();
     let rocky = body.kind == BodyKind::Moon || params.planet.giant.is_none();
     if rocky && params.gravity.is_none() {

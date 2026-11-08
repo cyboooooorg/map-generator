@@ -15,6 +15,7 @@ pub mod craters;
 pub mod cube;
 pub mod delta;
 pub mod detail;
+pub mod drift;
 pub mod epoch;
 pub mod erosion;
 pub mod exomoon;

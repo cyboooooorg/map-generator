@@ -31,6 +31,8 @@
     persistDisplay?: boolean;
     /** The body's details, shown as the first panel of the viewer's dock (see Viewer). */
     info?: Snippet | undefined;
+    /** The drift slider, shown as a panel of the viewer's dock. */
+    drift?: Snippet | undefined;
   }
 
   let {
@@ -44,6 +46,7 @@
     linkedDisplay = null,
     persistDisplay = true,
     info,
+    drift,
   }: Props = $props();
 
   let viewer = $state<Viewer | null>(null);
@@ -118,6 +121,7 @@
     bind:this={viewer}
     bind:hexMap
     {info}
+    {drift}
     {world}
     {revision}
     {path}
