@@ -9,7 +9,7 @@
 //! **Locked or resonant.** A despun rocky planet on a circular orbit ends
 //! locked with one face to its star, one turn per orbit. On an eccentric
 //! one it may be caught on the way down in a spin-orbit resonance, Mercury's
-//! 3:2 (three turns every two orbits) or a higher one (2:1, 5:2): the odds
+//! 3:2 (three turns every two orbits) or the 2:1: the odds
 //! of capture rise with the eccentricity ([`capture`], Makarov 2012; Ribas
 //! et al. 2016), and the world's seed draws the outcome. The tides
 //! circularise the orbit far more slowly than they despin the planet
@@ -49,23 +49,19 @@ struct Resonance {
 /// and 0.41" (Makarov 2012, §3.2, doi:10.1088/0004-637X/752/1/73, whose
 /// Mercury is "always captured in the 3:2 resonance" at e = 0.2056).
 /// 2:1: certain from 0.34 ("entrapment in the 2:1 resonance is inevitable
-/// for 0.34 < e < 0.49", Makarov 2012, §3.1) and 0.23 likely at Mercury's
+/// for 0.34 < e < 0.49", Makarov 2012, §3.2) and 0.23 likely at Mercury's
 /// 0.2056 (the 40 integrations of §3.1: 9 captures; the semi-analytic
 /// curve of his fig. 8 gives about 0.3), which a linear ramp reaches from
-/// 0.161. 5:2: no number for this planet in the paper (its fig. 8 only
-/// plots the curve): the ramp from 0.30 to 0.45 follows the spacing of the
-/// 2:1 one, calibration, no source. The ramps are linear between their
-/// ends, a calibration through these points. Makarov's values are for a
-/// Mercury-like triaxiality; a more symmetric planet (larger, "keeping all
-/// other parameters the same") is caught at lower eccentricities (his
-/// minimal certain ones drop to 0.08, 0.20 and 0.30), so these are the
-/// cautious side. Higher resonances (3:1 and over) are not modelled.
-const RESONANCES: [Resonance; 3] = [
-    Resonance {
-        turns: 2.5,
-        free_below: 0.30,
-        certain_from: 0.45,
-    },
+/// 0.161 (Ribas et al. find the 2:1 stable for Proxima b from about
+/// 0.16). The ramps are linear between their ends, a calibration through
+/// these points. Makarov's values are for a Mercury-like triaxiality; a
+/// more symmetric planet (larger, "keeping all other parameters the same")
+/// is caught at lower eccentricities (his minimal certain ones drop to 0.08
+/// for the 3:2 and 0.20 for the 2:1), so these are the cautious side. The
+/// 2:1 stays certain above 0.49, where the paper's decline of the odds is
+/// not modelled. The 5:2 and higher resonances are not modelled: Makarov
+/// gives no threshold for them that applies to this planet.
+const RESONANCES: [Resonance; 2] = [
     Resonance {
         turns: 2.0,
         free_below: 0.161,
@@ -78,6 +74,17 @@ const RESONANCES: [Resonance; 3] = [
     },
 ];
 
+/// Turns per orbit of the spin-orbit state named `name` in a preset's
+/// `[star] resonance`: `1:1` (locked, 1), `3:2` (1.5) or `2:1` (2).
+pub fn parse_resonance(name: &str) -> Option<f32> {
+    match name {
+        "1:1" => Some(1.0),
+        "3:2" => Some(RESONANCE_TURNS_PER_ORBIT),
+        "2:1" => Some(2.0),
+        _ => None,
+    }
+}
+
 /// A number in `[0, 1)` from `seed` and the `salt` of one draw
 /// (SplitMix64, Steele, Lea & Flood 2014, doi:10.1145/2714064.2660195).
 fn unit_draw(seed: u32, salt: u64) -> f32 {
@@ -89,8 +96,7 @@ fn unit_draw(seed: u32, salt: u64) -> f32 {
 }
 
 /// The turns per orbit of a despun rocky planet on an orbit of
-/// `eccentricity`, drawn from `seed`: the resonance (3:2 as 1.5, 2:1 as 2,
-/// 5:2 as 2.5) that caught it on its way down, or 0 when none did and it
+/// `eccentricity`, drawn from `seed`: the resonance (3:2 as 1.5, 2:1 as 2) that caught it on its way down, or 0 when none did and it
 /// ends locked, one turn per orbit. At each resonance (see
 /// [`RESONANCES`]) the odds of capture rise linearly from 0 to 1 with the
 /// eccentricity; each has its own draw from the seed.
@@ -325,8 +331,9 @@ pub fn giant_circularised(star: &StarInfo, mass_earth: f32, radius_earth: f32) -
 /// pseudo-synchronous rate on an orbit of `eccentricity`: the rate at which
 /// the tidal torque averaged over the orbit vanishes, `N(e) / Ω(e)` of Hut
 /// 1981 (A&A 99, 126, bibcode 1981A&A....99..126H; no DOI), with
-/// `N = (1 + 15/2 e² + 45/8 e⁴ + 5/16 e⁶) / (1 − e²)^(3/2)` and
-/// `Ω = (1 + 3e² + 3/8 e⁴) / (1 − e²)^(3/2)`, as Levrard et al. 2007 and
+/// `N = (1 + 15/2 e² + 45/8 e⁴ + 5/16 e⁶) / (1 − e²)⁶` and
+/// `Ω = (1 + 3e² + 3/8 e⁴) / (1 − e²)^(9/2)`, so that their ratio is the
+/// polynomials' over `(1 − e²)^(3/2)`, as Levrard et al. 2007 and
 /// Leconte et al. 2010 (doi:10.1051/0004-6361/201014337, eq. 13 and
 /// appendix A) write it. To second order it is `1 + 6e²`, the value Leconte
 /// et al. give. A fluid giant has no lasting bulge to hold a resonance: it
@@ -363,15 +370,14 @@ mod tests {
     use crate::star::{SUN, StarInfo, orbit_at, parse_type};
 
     /// The share of 2000 seeds the eccentricity `e` leaves in each state:
-    /// locked, 3:2, 2:1, 5:2.
-    fn shares(e: f32) -> [f32; 4] {
-        let mut n = [0.0; 4];
+    /// locked, 3:2, 2:1.
+    fn shares(e: f32) -> [f32; 3] {
+        let mut n = [0.0; 3];
         for seed in 0..2000 {
             let k = match capture(e, seed) {
                 0.0 => 0,
                 1.5 => 1,
-                2.0 => 2,
-                _ => 3,
+                _ => 2,
             };
             n[k] += 1.0;
         }
@@ -382,7 +388,7 @@ mod tests {
     fn the_odds_of_capture_rise_with_the_eccentricity() {
         // A round orbit locks, whatever the seed (Ribas et al. 2016: below
         // 0.06 the synchronous state is the most probable).
-        assert_eq!(shares(0.0), [1.0, 0.0, 0.0, 0.0]);
+        assert_eq!(shares(0.0), [1.0, 0.0, 0.0]);
         assert_eq!(shares(0.059)[0], 1.0);
         // The odds of the 3:2 resonance climb from 0 at 0.06 to 1 at 0.20
         // (Makarov 2012), 0.5 half way.
@@ -394,11 +400,11 @@ mod tests {
         let mercury = shares(0.2056);
         assert!((0.2..0.32).contains(&mercury[2]), "{mercury:?}");
         assert_eq!(mercury[0], 0.0);
-        // A very eccentric orbit is caught in the 5:2 or the 2:1 resonance
-        // before the 3:2 (the 2:1 is certain from 0.34).
-        let high = shares(0.4);
-        assert!(high[1] == 0.0 && high[2] > 0.2 && high[3] > 0.5, "{high:?}");
-        assert_eq!(shares(0.34)[1], 0.0);
+        // From 0.34 the 2:1 is certain (Makarov: inevitable to 0.49), and
+        // nothing higher is modelled.
+        for e in [0.34, 0.4, 0.6] {
+            assert_eq!(shares(e), [0.0, 0.0, 1.0], "{e}");
+        }
         // The same seed always gives the same state.
         assert_eq!(capture(0.15, 7), capture(0.15, 7));
     }
@@ -447,31 +453,86 @@ mod tests {
     }
 
     #[test]
-    fn the_mercury_like_preset_turns_three_times_in_two_years() {
-        let request = crate::request::WorldRequest {
-            planet: Some(
-                concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/../../presets/examples/mercury-like.toml"
-                )
-                .into(),
-            ),
-            seed: Some(3),
+    fn the_mercury_like_preset_is_in_the_three_two_resonance_whatever_the_seed() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../presets/examples/mercury-like.toml"
+        );
+        for seed in 0..60 {
+            let request = crate::request::WorldRequest {
+                planet: Some(path.into()),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            };
+            let p = request.resolve(&mut rand::rng()).unwrap().params;
+            let star = star_info(&p);
+            // Mercury's observed state, pinned by the preset's
+            // `[star] resonance`, not drawn.
+            assert!(star.spin_orbit_3_2 && !star.tidally_locked, "{seed}");
+            assert_eq!(star.spin_turns, 1.5, "{seed}");
+            assert!((p.eccentricity - 0.2056).abs() < 1e-6);
+            // Planets with moons: their day is the resonance's.
+            if let Some(system) = crate::moons::MoonSystem::draw(&p) {
+                let day = system.planet_day_hours;
+                assert!(
+                    (day * 1.5 / (star.year_days * 24.0) - 1.0).abs() < 1e-4,
+                    "{day}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_preset_resonance_is_checked() {
+        let spec = |r: &str| crate::star::StarSpec {
+            resonance: Some(r.into()),
+            ..Default::default()
+        };
+        for ok in ["1:1", "3:2", "2:1"] {
+            assert!(spec(ok).validate().is_ok(), "{ok}");
+        }
+        let err = spec("5:2").validate().unwrap_err();
+        assert!(err.contains("star.resonance"), "{err}");
+        assert!(spec("").validate().is_err());
+    }
+
+    #[test]
+    fn worlds_made_before_the_resonances_keep_their_spin() {
+        // An eccentric world stored in the 3:2 resonance (`spin_orbit_3_2`
+        // and no `spin_turns`, as before the draw) keeps it whatever its
+        // seed; one stored with neither is free; one stored locked is
+        // locked.
+        let red = parse_type("M5V").unwrap();
+        let base = crate::request::WorldRequest {
+            planet: Some("terran".into()),
+            host: Some(crate::exomoon::HostMode::None),
             width: Some(64),
             height: Some(32),
             ..Default::default()
+        }
+        .resolve(&mut rand::rng())
+        .unwrap()
+        .params;
+        let world = |seed: u32, locked: bool, turns: Option<f32>| crate::world::WorldParams {
+            star: red,
+            orbit_au: orbit_at(red, 0.5),
+            eccentricity: 0.1,
+            seed,
+            locked_to_star: Some(locked),
+            resonance_to_star: turns,
+            ..base.clone()
         };
-        let p = request.resolve(&mut rand::rng()).unwrap().params;
-        let star = star_info(&p);
-        // Mercury's own orbit: the 3:2 resonance, which the seed draws
-        // (about three planets in four).
-        assert!(star.spin_orbit_3_2 && !star.tidally_locked);
-        assert!((p.eccentricity - 0.2056).abs() < 1e-6);
-        let day = crate::moons::MoonSystem::draw(&p).unwrap().planet_day_hours;
-        assert!(
-            (day * 1.5 / (star.year_days * 24.0) - 1.0).abs() < 1e-4,
-            "{day}"
-        );
+        for seed in 0..50 {
+            let old = star_info(&world(seed, false, Some(RESONANCE_TURNS_PER_ORBIT)));
+            assert!(old.spin_orbit_3_2 && !old.tidally_locked, "{seed}");
+            assert_eq!(old.spin_turns, 1.5);
+            let free = star_info(&world(seed, false, Some(0.0)));
+            assert!(!free.spin_orbit_3_2 && !free.tidally_locked && free.spin_turns == 0.0);
+            let locked = star_info(&world(seed, true, Some(1.5)));
+            assert!(locked.tidally_locked && !locked.spin_orbit_3_2 && locked.spin_turns == 0.0);
+        }
     }
 
     #[test]

@@ -10,6 +10,7 @@ import type { Mouth } from '../api/types/Mouth';
 import type { Regime } from '../api/types/Regime';
 import type { Stage } from '../api/types/Stage';
 import type { Unit } from '../units';
+import { resonanceCycle } from '../spinResonance';
 import type { DataLayer } from '../viewer/colormaps';
 import type { Layer } from '../viewer/shaders';
 
@@ -304,7 +305,7 @@ export const en = {
     lockedHelp: 'One face always lit: the star does not move in its sky',
     resonant: (p: { ratio: string }) => `${p.ratio} spin–orbit resonance`,
     resonantHelp: (p: { ratio: string }) =>
-      `The star’s tides hold it in a ${p.ratio} resonance, turning ${p.ratio.split(':')[0]} times every ${p.ratio.split(':')[1]} orbits (Mercury’s is 3:2), its eccentric orbit keeping it from locking; the resonance a planet is caught in is drawn by its eccentricity`,
+      `The star’s tides hold it in a ${p.ratio} resonance, turning ${resonanceCycle(p.ratio).turns} times ${resonanceCycle(p.ratio).orbits === 1 ? 'every orbit' : `every ${resonanceCycle(p.ratio).orbits} orbits`} (Mercury’s is 3:2), its eccentric orbit keeping it from locking; the resonance a planet is caught in is drawn by its eccentricity`,
     moons: 'Moons',
     moonsHelp: 'Each one a world of its own: open it with Moon above the viewer (U)',
     noMoon: 'none',
@@ -682,8 +683,8 @@ export const en = {
     rotationDialHelp:
       'A ring round the equator, graduated in degrees: its pointer shows how far the body has turned, against the stars, or against what it orbits for a body locked to it',
     dialFree: (p: { angle: string; time: string }) => `Rotation ${p.angle} · Local time ${p.time} (meridian 0)`,
-    dialResonant: (p: { angle: string; time: string }) =>
-      `3:2 spin–orbit resonance · Rotation ${p.angle} · Local time ${p.time} (meridian 0)`,
+    dialResonant: (p: { angle: string; time: string; ratio: string }) =>
+      `${p.ratio} spin–orbit resonance · Rotation ${p.angle} · Local time ${p.time} (meridian 0)`,
     dialFreeDays: (p: { sidereal: string; solar: string | null }) =>
       p.solar === null
         ? `Sidereal day ${p.sidereal} · Solar day: none, the star stands still`
@@ -715,7 +716,7 @@ export const en = {
       { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by about ±2e radians.' },
       {
         term: 'Spin–orbit resonance:',
-        text: 'the star’s tides hold an eccentric planet at a simple ratio of turns to orbits instead of locking it: 3:2 as Mercury (three turns every two orbits, its solar day two of its years), or 2:1 and 5:2 on more eccentric orbits. The eccentricity sets the odds and the seed draws which one.',
+        text: 'the star’s tides hold an eccentric planet at a simple ratio of turns to orbits instead of locking it: 3:2 as Mercury (three turns every two orbits, its solar day two of its years), or 2:1 on more eccentric orbits. The eccentricity sets the odds and the seed draws which one.',
       },
       {
         term: 'Longitude convention:',

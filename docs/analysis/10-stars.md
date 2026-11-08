@@ -351,9 +351,10 @@ drawn from the beta distribution fitted by Kipping (2013) to
 radial-velocity planets (a = 0.867, b = 3.03: mean 0.22, median 0.17)
 for a giant, and from the ones Van Eylen et al. (2019, table 3) fitted
 to small Kepler planets for a rocky planet (a = 1.58, b = 4.4, mean 0.26,
-alone in its system; a = 1.52, b = 29, mean 0.05, with companions),
-capped at 0.9; planets whose orbits the tides circularised get 0. Over a year an elliptical
-orbit receives
+for single-transiting systems; a = 1.52, b = 29, mean 0.05, for
+multi-transiting ones; periods 5 to about 100 days, extrapolated),
+capped at 0.9; planets whose orbits the tides circularised get 0. Over a
+year an elliptical orbit receives
 `1 / sqrt(1 − e²)` times the light of a circular one of the same
 semi-major axis: the climate uses that mean, so seasons stay annual
 means (the uneven seasons of an eccentric orbit would need a seasonal

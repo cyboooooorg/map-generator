@@ -162,7 +162,7 @@ export function placeSystem(
     // Its longitude 0 at the start, then turning on itself; a locked body
     // turns steadily, its longitude 180° towards the point of its orbit at
     // the mean anomaly (its host is off that by the libration); one in the
-    // 3:2 resonance turns 1.5 times as fast (2 in the 2:1, 2.5 in the 5:2) from the same face at periapsis.
+    // 3:2 resonance turns 1.5 times as fast (2 in the 2:1) from the same face at periapsis.
     const start = unit(sub(plane.node, scale(y, dot(plane.node, y))));
     let z: Vec3;
     const resonance = resonanceTurns(body.spin);

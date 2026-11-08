@@ -243,7 +243,7 @@ pub struct Spin {
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub spin_orbit_3_2: bool,
     /// Turns per orbit of the spin-orbit resonance its star's tides hold
-    /// it in: 1.5 (3:2), 2 (2:1) or 2.5 (5:2), drawn by its eccentricity
+    /// it in: 1.5 (3:2) or 2 (2:1), drawn by its eccentricity
     /// (see `crate::spin::capture`); absent for a body in none. Systems
     /// drawn before it: 1.5 when `spin_orbit_3_2`.
     #[serde(default, skip_serializing_if = "is_zero")]

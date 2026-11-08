@@ -5,6 +5,7 @@
 // `?`, `!` and `%`, and between a number and its unit.
 
 import type { Messages } from './index.svelte';
+import { resonanceCycle } from '../spinResonance';
 
 /** Narrow no-break space. */
 const S = ' ';
@@ -281,7 +282,7 @@ export const fr: Messages = {
     lockedHelp: `Une face toujours éclairée${S}: l’étoile reste fixe dans son ciel`,
     resonant: (p) => `résonance spin-orbite ${p.ratio}`,
     resonantHelp: (p) =>
-      `Les marées de l’étoile la tiennent en résonance ${p.ratio}${S}: ${p.ratio.split(':')[0]} tours toutes les ${p.ratio.split(':')[1]} orbites (celle de Mercure est 3:2), son orbite excentrique l’empêchant d’être synchrone${S}; la résonance où une planète est capturée est tirée selon son excentricité`,
+      `Les marées de l’étoile la tiennent en résonance ${p.ratio}${S}: ${resonanceCycle(p.ratio).turns} tours ${resonanceCycle(p.ratio).orbits === 1 ? 'à chaque orbite' : `toutes les ${resonanceCycle(p.ratio).orbits} orbites`} (celle de Mercure est 3:2), son orbite excentrique l’empêchant d’être synchrone${S}; la résonance où une planète est capturée est tirée selon son excentricité`,
     moons: 'Lunes',
     moonsHelp: `Chacune un monde à part entière${S}: ouvrez-la avec Lune au-dessus de la visionneuse (U)`,
     noMoon: 'aucune',
@@ -646,7 +647,7 @@ export const fr: Messages = {
     rotationDialHelp:
       `Un anneau autour de l’équateur, gradué en degrés${S}: son trait montre de combien l’astre a tourné, par rapport aux étoiles, ou par rapport à ce qu’il orbite pour un astre en rotation synchrone`,
     dialFree: (p) => `Rotation ${p.angle} · Heure locale ${p.time} (méridien 0)`,
-    dialResonant: (p) => `Résonance spin-orbite 3:2 · Rotation ${p.angle} · Heure locale ${p.time} (méridien 0)`,
+    dialResonant: (p) => `Résonance spin-orbite ${p.ratio} · Rotation ${p.angle} · Heure locale ${p.time} (méridien 0)`,
     dialFreeDays: (p) =>
       p.solar === null
         ? `Jour sidéral ${p.sidereal} · Jour solaire${S}: aucun, l’étoile reste immobile`
@@ -680,7 +681,7 @@ export const fr: Messages = {
       { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’environ ±2e radians.' },
       {
         term: `Résonance spin-orbite${S}:`,
-        text: `les marées de l’étoile tiennent une planète excentrique à un rapport simple de tours par orbite au lieu de la rendre synchrone${S}: 3:2 comme Mercure (trois tours toutes les deux orbites, son jour solaire dure deux de ses années), ou 2:1 et 5:2 sur des orbites plus excentriques. L’excentricité fixe les chances et la graine tire laquelle.`,
+        text: `les marées de l’étoile tiennent une planète excentrique à un rapport simple de tours par orbite au lieu de la rendre synchrone${S}: 3:2 comme Mercure (trois tours toutes les deux orbites, son jour solaire dure deux de ses années), ou 2:1 sur des orbites plus excentriques. L’excentricité fixe les chances et la graine tire laquelle.`,
       },
       {
         term: `Convention de longitude${S}:`,

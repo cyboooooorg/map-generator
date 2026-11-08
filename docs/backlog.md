@@ -607,22 +607,23 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 - **Problem:** the science fixes of 2026-11-07 (`spin.rs`, `moons.rs`)
   model the 3:2 spin–orbit resonance, circularisation, light moons of
   despun planets and giants, and tidal shapes. Second round (2026-11-08):
-  - done: capture into the 3:2, 2:1 and 5:2 resonances is drawn from the
+  - done: capture into the 3:2 and 2:1 resonances is drawn from the
     world's seed with odds that rise linearly with the eccentricity
-    (`spin::capture`: Ribas et al. 2016, Makarov 2012; the 5:2 ramp is a
-    calibration), instead of a sharp line at e = 0.06;
+    (`spin::capture`: Ribas et al. 2016, Makarov 2012), `mercury-like`
+    pins 3:2 (`[star] resonance`), instead of a sharp line at e = 0.06;
   - done: a despun giant on an eccentric orbit turns at the
     pseudo-synchronous rate (Hut 1981), locked only within 5 % of one turn
     per orbit;
   - done: a rocky planet's locking and circularisation times scale with
     its own mass and radius (`m / R³`, `m / R⁵`);
   - done: rocky planets draw their eccentricity from Van Eylen et al.
-    2019 (Beta(1.58, 4.4) alone, Beta(1.52, 29) in a system), giants
+    2019 (Beta(1.58, 4.4) single-transiting, Beta(1.52, 29)
+    multi-transiting), giants
     keep Kipping 2013;
-  - remains: resonances above 5:2 (3:1 and over) and the Makarov
+  - remains: resonances above 2:1 (5:2, 3:1 and over: Makarov gives no
+    threshold for them) and the Makarov
     triaxiality dependence of the odds (the ramps are Mercury's, a more
-    symmetric planet is caught at lower eccentricities); the ends of the
-    5:2 ramp have no source;
+    symmetric planet is caught at lower eccentricities);
   - remains: a 3:2 world takes the rotating climate whatever its solar
     day (two years: 176 days for Mercury), not a slow rotator's (the
     climate track);

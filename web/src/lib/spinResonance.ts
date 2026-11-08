@@ -1,6 +1,6 @@
 /**
  * The spin-orbit resonance a planet is held in by its star's tides: Mercury's
- * 3:2, or the 2:1 and 5:2 that large eccentricities favour (see
+ * 3:2, or the 2:1 that large eccentricities favour (see
  * docs/science/tidal-locking.md). Worlds and systems made before the others
  * were drawn have `spin_orbit_3_2` only.
  */
@@ -21,4 +21,10 @@ export function resonanceTurns(spin: ResonantSpin): number {
 export function resonanceRatio(turns: number): string {
   const twice = Math.round(turns * 2);
   return twice % 2 === 0 ? `${twice / 2}:1` : `${twice}:2`;
+}
+
+/** The whole turns and orbits of a ratio such as `3:2` (3 turns every 2 orbits) or `2:1`. */
+export function resonanceCycle(ratio: string): { turns: number; orbits: number } {
+  const [turns, orbits] = ratio.split(':').map(Number);
+  return { turns: turns ?? 0, orbits: orbits ?? 1 };
 }

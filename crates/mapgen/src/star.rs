@@ -435,6 +435,12 @@ pub struct StarSpec {
     /// stars nearby (see `crate::giants`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metallicity: Option<f32>,
+    /// The spin-orbit state the planet is held in, `1:1` (locked), `3:2` or
+    /// `2:1`, instead of the one its seed draws from its eccentricity (see
+    /// `crate::spin::capture`): a preset named after a planet whose state
+    /// is observed pins it (`mercury-like` is `3:2`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resonance: Option<String>,
 }
 
 impl StarSpec {
@@ -454,6 +460,13 @@ impl StarSpec {
         if let Some(e) = self.eccentricity {
             e.check("eccentricity", ECCENTRICITY.min, ECCENTRICITY.max)
                 .map_err(|e| e.replacen("defaults.", "star.", 1))?;
+        }
+        if let Some(r) = &self.resonance
+            && crate::spin::parse_resonance(r).is_none()
+        {
+            return Err(format!(
+                "star.resonance: `{r}` is not one of \"1:1\", \"3:2\", \"2:1\""
+            ));
         }
         if let Some(m) = self.metallicity
             && !crate::request::METALLICITY.contains(m)
@@ -538,7 +551,7 @@ pub struct StarInfo {
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub spin_orbit_3_2: bool,
     /// Turns per orbit of a planet its star's tides hold in a spin-orbit
-    /// resonance: 1.5 (3:2), 2 (2:1) or 2.5 (5:2), drawn by the
+    /// resonance: 1.5 (3:2) or 2 (2:1), drawn by the
     /// eccentricity (see `crate::spin::capture`); 0 for a planet in none
     /// (free or locked). Worlds made before it: 1.5 when
     /// `spin_orbit_3_2`, else 0.
@@ -698,11 +711,13 @@ pub fn draw_eccentricity(rng: &mut impl RngExt) -> f32 {
 /// (radius under 6 Earth radii, period over 5 days): the beta
 /// distributions Van Eylen et al. (2019, table 3,
 /// doi:10.3847/1538-3881/aaf22f) fit to Kepler planets with asteroseismic
-/// stars, `a = 1.58`, `b = 4.4` (mean 0.26) for planets alone in their
-/// system (a single transiting planet) and `a = 1.52`, `b = 29` (mean
-/// 0.05) for planets with companions (multi-transiting systems), against
-/// Kipping's (2013) 0.22 fitted to mostly giant planets
-/// ([`draw_eccentricity`]). Kept within [`ECCENTRICITY`].
+/// stars, `a = 1.58`, `b = 4.4` (mean 0.26) for the planets of
+/// single-transiting systems (other planets may exist without transiting)
+/// and `a = 1.52`, `b = 29` (mean 0.05) for those of multi-transiting
+/// systems, against Kipping's (2013) 0.22 fitted to mostly giant planets
+/// ([`draw_eccentricity`]). Their sample has periods of 5 to about 100
+/// days: the app applies the fits at every distance (an extrapolation).
+/// Kept within [`ECCENTRICITY`].
 pub fn draw_small_eccentricity(in_system: bool, rng: &mut impl RngExt) -> f32 {
     let (a, b) = if in_system { (1.52, 29.0) } else { (1.58, 4.4) };
     let (x, y) = (gamma(a, rng), gamma(b, rng));

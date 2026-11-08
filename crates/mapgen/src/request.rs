@@ -514,6 +514,10 @@ impl WorldRequest {
             }
             None => circumference_km,
         };
+        let pinned = s
+            .resonance
+            .as_deref()
+            .and_then(crate::spin::parse_resonance);
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
             height: self.height.unwrap_or(fallback::HEIGHT),
@@ -547,8 +551,9 @@ impl WorldRequest {
             },
             given_rings: None,
             impact_factor: None,
-            locked_to_star: None,
-            resonance_to_star: None,
+            // A preset may pin the spin-orbit state (`[star] resonance`).
+            locked_to_star: pinned.map(|turns| turns == 1.0),
+            resonance_to_star: pinned.map(|turns| if turns == 1.0 { 0.0 } else { turns }),
             gravity: None,
         };
         // Moons asked for: the world is not a giant's moon, which keeps none

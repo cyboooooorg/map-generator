@@ -61,7 +61,7 @@ round planets. Every body has:
   parent (and to what), and for a planet whether its star holds it in
   a spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
   turns every two orbits, as Mercury; `resonance_turns`, absent when 0:
-  the turns per orbit of any, 1.5, 2 or 2.5, drawn by its eccentricity,
+  the turns per orbit of any, 1.5 or 2, drawn by its eccentricity,
   see `spin.rs`). A giant on an eccentric orbit turns at the
   pseudo-synchronous rate and is not locked. A locked body turns
   at a steady pace, facing its host on average; the host swings in its
