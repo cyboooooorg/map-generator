@@ -86,9 +86,10 @@ const EJECTA_RADII: f64 = 3.0;
 /// Simple-to-complex transition on the Moon, km, and the Moon's gravity,
 /// m/s²: the transition scales as `1/g` (Melosh & Ivanov 1999,
 /// doi:10.1146/annurev.earth.27.1.385). The target's strength moves it
-/// (`[geology] transition_scale`, [`ICE_TRANSITION`]): Mercury turns
-/// complex at about 12 km where this gives 6.6 (Barnouin et al. 2012,
-/// doi:10.1016/j.icarus.2012.02.029).
+/// ([`ICE_TRANSITION`] for ice). Rock is left at the law: at the gravity
+/// the app derives for Mercury's size (2.3 m/s², not the real 3.7) it
+/// gives 10.7 km, within the 10 to 12 km Barnouin et al. 2012 report
+/// (doi:10.1016/j.icarus.2012.02.029); Mars's 7.3 km is in their 7 to 8.
 const MOON_TRANSITION_KM: f64 = 15.0;
 const MOON_GRAVITY: f64 = 1.62;
 const EARTH_GRAVITY: f64 = 9.81;
@@ -99,6 +100,9 @@ const EARTH_GRAVITY: f64 = 9.81;
 /// (Schenk 2002), but give the values only in a figure. Calibration, no
 /// source: 0.15 puts Ganymede near 2.5 km (2 to 3 km in secondary
 /// sources, Schenk 1991 not read), against 17 km from the lunar law.
+/// Icy simple craters keep rock's bowl (Pike's `0.2 D`, rim `0.036 D`):
+/// Schenk 2002 (read) plots their depth-to-diameter in a figure and gives
+/// no value in text.
 const ICE_TRANSITION: f64 = 0.15;
 /// Depth of complex lunar craters, km, from the rim crest to the floor:
 /// `d = 1.044 D^0.301` above the transition (Pike 1977, as quoted by
@@ -572,7 +576,6 @@ impl CraterField {
             floods: Vec::new(),
             radius_km,
             transition_km: MOON_TRANSITION_KM * MOON_GRAVITY / gravity
-                * f64::from(p.planet.geology.transition_scale)
                 * if crate::generation::icy(p) {
                     ICE_TRANSITION
                 } else {
@@ -1763,12 +1766,6 @@ mod tests {
 
     #[test]
     fn strength_moves_the_transition_from_simple_to_complex() {
-        let km = |scale: f32, circumference: f32| {
-            let mut p = moon(3.5);
-            p.planet.geology.transition_scale = scale;
-            p.circumference_km = circumference;
-            CraterField::context(&p).transition_km
-        };
         let load = |name: &str| {
             crate::preset::Preset::load(&format!(
                 "{}/../../presets/examples/{name}.toml",
@@ -1776,19 +1773,21 @@ mod tests {
             ))
             .unwrap()
         };
+        let km = |preset: &str, circumference: f32| {
+            let mut p = moon(3.5);
+            p.planet = load(preset);
+            p.circumference_km = circumference;
+            CraterField::context(&p).transition_km
+        };
         // The Moon keeps its 15 km.
-        assert!((km(1.0, 10_917.0) - 15.0).abs() < 0.1);
-        // Mercury: about 12 km (Barnouin et al. 2012), not 6.6.
-        let mut mercury = moon(3.5);
-        mercury.planet = load("mercury-like");
-        mercury.circumference_km = 15_329.0;
-        let mercury = CraterField::context(&mercury).transition_km;
-        assert!((11.0..13.0).contains(&mercury), "{mercury}");
+        let mut lunar = moon(3.5);
+        lunar.circumference_km = 10_917.0;
+        assert!((CraterField::context(&lunar).transition_km - 15.0).abs() < 0.1);
+        // Mercury: 10 to 12 km (Barnouin et al. 2012).
+        let mercury = km("mercury-like", 15_329.0);
+        assert!((10.0..12.0).contains(&mercury), "{mercury}");
         // Mars: 7 to 8 km.
-        let mut mars = moon(3.5);
-        mars.planet = load("mars-like");
-        mars.circumference_km = 21_344.0;
-        let mars = CraterField::context(&mars).transition_km;
+        let mars = km("mars-like", 21_300.0);
         assert!((7.0..8.0).contains(&mars), "{mars}");
         // An icy body of Ganymede's size turns complex within a few km.
         let mut ganymede = moon(3.5);
@@ -1796,6 +1795,22 @@ mod tests {
         ganymede.gravity = Some(1.43 / 9.81);
         let ice = CraterField::context(&ganymede).transition_km;
         assert!((2.0..3.5).contains(&ice), "{ice}");
+    }
+
+    #[test]
+    fn icy_simple_craters_are_rocks_bowls_below_their_transition() {
+        // No value for icy simple craters could be read (Schenk 2002 gives
+        // a figure): they keep Pike's 0.2 D bowl, under the icy transition.
+        let crater = Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km: 1.0,
+            age_ga: 1.0,
+            shape: 0,
+        };
+        let ice = Profile::shaped(&crater, 2.5, f64::from(crate::generation::ICE_RELIEF), 0.0);
+        let rock = Profile::shaped(&crater, 2.5, 1.0, 0.0);
+        assert_eq!(ice.depth, rock.depth);
+        assert!((ice.depth - 0.2 / f64::from(ELEVATION_KM)).abs() < 1e-9);
     }
 
     #[test]

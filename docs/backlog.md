@@ -642,17 +642,16 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   rings, diffusion, size law, saturation) leave these, each needing a
   model the app does not have yet.
 - **Craters:**
-  - The transition from simple to complex craters reads a strength
-    (2026-11-08): `[geology] transition_scale` (`mercury-like` 1.12 gives
-    its 12 km, Barnouin et al. 2012, read at the source) and 0.15 on icy
-    bodies. What remains: the ice factor is a calibration (Ganymede
-    near 2.5 km): Barnouin et al. and Schenk 2002 give the icy
-    satellites' transitions only in a figure, Schenk 1991 was not
-    readable. Earth's 3 to 5 km (Melosh & Ivanov 1999) is not set; no
-    rule gives a crust's strength from the planet's composition.
-  - No multi-ring basins (Orientale): their onset does not scale as
-    `1/g` and depends on a weak layer under the surface (Melosh &
-    Ivanov 1999), with no rule to scale it from the Moon.
+  - The transition from simple to complex craters reads a strength for
+    ice only (2026-11-08): 0.15 of the lunar law, a calibration (Ganymede
+    near 2.5 km). Rock keeps the law: at the gravity the app derives for
+    Mercury's size it gives 10.7 km, in Barnouin et al. 2012's 10 to
+    12 km; Mars 7.3 km, in their 7 to 8. What remains: Barnouin et al.
+    and Schenk 2002 give the icy transitions and the icy simple craters'
+    depth-to-diameter only in figures (Schenk 1991 unreadable), so icy
+    simple craters keep rock's bowl (`0.2 D`); Earth's 3 to 5 km
+    (Melosh & Ivanov 1999) is not reached (2.5 km); no rule gives a
+    crust's strength from composition.
   - Multi-ring basins, crustal thickness, flexure and the other
     chronologies were weighed on 2026-11-08 and stay: the sources
     (Melosh & Ivanov 1999 for the weak layer, Le Feuvre & Wieczorek
@@ -702,8 +701,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     to the hypsometry calibrated on ETOPO, worth its own task.
 - **Small bodies:** their noise relief is capped (8 % of the radius;
   9 km on airless stagnant bodies, ice 0.4 of rock), and an icy body's
-  craters turn complex under their own transition (see the craters'
-  first point).
+  craters turn complex under their own transition, but its simple
+  craters are still rock's bowls (see the craters' first point).
 
 ## 21. Climate: what the model leaves out
 

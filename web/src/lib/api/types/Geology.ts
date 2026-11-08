@@ -38,14 +38,4 @@ impact_ratio?: number,
  * the Moon (impact speed and gravity): 1 elsewhere; `mars-like`
  * 0.751 (Hartmann, as above).
  */
-crater_scale?: number, 
-/**
- * Strength of the crust against the Moon's gravity law, as a factor
- * on the diameter where craters turn from simple to complex: 1
- * elsewhere. `mercury-like` 1.12: the transition is about 12 km
- * (Barnouin et al. 2012, doi:10.1016/j.icarus.2012.02.029), where the
- * law gives 10.7 at the gravity the app derives for its size. Mars
- * (7 to 8 km, same paper) needs none. Ice has its own factor, applied
- * on top (`craters::ICE_TRANSITION`).
- */
-transition_scale?: number, };
+crater_scale?: number, };

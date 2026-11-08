@@ -41,10 +41,6 @@ clouds = "none"
 regime = "stagnant"
 wet_until = 4.6                        # Ga: end of the era of liquid water
 maria = [4.0, 3.6]                     # Ga: its smooth plains, as inside Caloris
-# Simple craters turn complex at about 12 km (Barnouin et al. 2012,
-# doi:10.1016/j.icarus.2012.02.029); the lunar law gives 10.7 km at the 2.3 m/s2
-# the app's mass-radius relation gives a world of Mercury's size.
-transition_scale = 1.12
 
 # target = [biomes replaced by it]
 [remap]
