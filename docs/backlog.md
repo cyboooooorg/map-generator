@@ -715,7 +715,8 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 
 ## 21. Climate: what the model leaves out
 
-- **Status:** todo
+- **Status:** partly done (2026-11-08: eccentric seasons, slow
+  rotators' day, cold currents; the rest decided below)
 - **Source:** the science articles "How does axial tilt make climate zones
   and seasons?" and "Why is one side of a mountain range dry?" (their
   "Where it departs from the science" sections), after the climate fixes
@@ -727,8 +728,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   magnitude and width read in NOAA OI SST v2 (Reynolds et al. 2002; see
   the README). What remains: the cooling is a smooth offset read from 1°
   cells, so it is weaker and wider than the real coastal cold
-  tongue, which the 1° cells smooth out; it does not cool the coastal land air, which is
-  what keeps the Atacama rainless and foggy (an inversion the moisture
+  tongue; it does not cool the coastal land air, which is what keeps the Atacama rainless and foggy (an inversion the moisture
   pass does not have); the ocean basin is found by the land to the east
   in the row, not by the gyre; and the warm western boundary currents
   (Gulf Stream, Kuroshio), which balance the cold ones, are not modelled.
@@ -736,6 +736,11 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   The seasons now set summer and winter temperatures, but the wind and
   the rain are annual means: a monsoon needs a summer and a winter run of
   the moisture pass with winds driven by the land-sea contrast.
+  **Decision (2026-11-08): left.** It needs a summer and a winter
+  run of the moisture pass, winds driven by the land-sea contrast (a
+  pressure model the app does not have) and a source for the reversal's
+  strength; no bounded step is readable. The two-season passes would also
+  give the season of the rain below, so they are one project.
 - **Uneven seasons on eccentric orbits:** done (2026-11-08). The seasonal
   swing reads the star's distance at each longitude of the orbit
   (`EccentricOrbit::light_at`, Berger 1978, doi:10.1175/1520-0469(1978)035<2362:LTVODI>2.0.CO;2),
@@ -765,6 +770,8 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 - **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
   narrower Hadley cells under heavier atmospheres, without a scaling the
   app could use; the belts scale with rotation and size only.
+  **Decision: left.** No scaling the app could use (Kaspi &
+  Showman 2015 give simulations, not a law).
 - **Winter-rain climates and the season of the rain:** Köppen's dryness
   threshold depends on the season of the rain (Kottek et al. 2006). The
   app has annual rain only and takes the summer share from the air's
@@ -772,11 +779,13 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   (the Mediterranean, BSk and Csa borders) is not modelled; deserts are
   7.5 % of the land and steppes 22 %, where Earth's are about half and
   half. A monthly moisture pass (see Monsoons) would give both.
+  **Decision: left**, with the monsoons (a monthly moisture pass).
 - **Absolute rain is calibrated, not derived:** the rain rate is scaled
   to GPCP's land mean and zonal means with constants that have no source
   (`MM_PER_RATE`, `COLD_RAIN_EXPONENT`, `CIRCULATION_OCTAVES`,
   `ITCZ_OCTAVES`, `SUBSIDENCE_HUMIDITY`). Done when the rain comes from a
   moisture budget (evaporation, convergence) in physical units.
+  **Decision: left.** A moisture budget is a new model.
 - **Circulation on tilted worlds:** the wind belts, the circulation
   factor and the ITCZ follow the geographic latitude, whatever the
   tilt. At 90° the poles are the warm annual-mean regions and the rain
@@ -788,6 +797,8 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   tilt has ice on half of its 45-60° land: with no seasons the warmest
   month is the annual mean, below 0 °C there (Köppen's EF), which is
   physical.
+  **Decision: left.** No source for the Hadley cell's response
+  to the tilt beyond Kaspi & Showman's runs.
 - **Storms, fronts and ENSO:** moisture is the annual mean of a steady
   wind. Weather, interannual variability (El Niño, La Niña) and the storm
   rain that makes most orographic precipitation are model limits, not
