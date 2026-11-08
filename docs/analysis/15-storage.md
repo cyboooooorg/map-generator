@@ -209,9 +209,9 @@ The user's answers to the study's questions:
    it holds what the tree no longer does (names, last opened dates, the
    seeds of evicted bodies), losing it loses data, so it is the one file
    to export or copy. SQLite on a bind mount of the Colima VM (virtiofs):
-   one server process writes, so the default rollback journal is safe;
-   WAL mode needs shared memory across the mount and is to be checked
-   there before it is turned on.
+   one server process writes. First decided as the default rollback journal,
+   WAL being unchecked on the mount; revised (see *Step 1 done*): WAL is
+   tried at every start, with a self-check and a fallback.
 
 The steps that follow are in the backlog, item 22.
 
@@ -224,8 +224,17 @@ What was built, and where it departs from the plan above:
   no system library in the image). The server touches the database from
   a few short blocking tasks, so a synchronous driver behind a mutex fits;
   `sqlx` would add an async pool and its machinery for no gain.
-- **Journal:** the default rollback journal, set explicitly; no WAL, as
-  decided. Not tried on the Colima mount.
+- **Journal:** WAL (decision 7 revised at the user's request: readers do
+  not block the writer, commits are cheaper). WAL needs the `-wal` and
+  `-shm` files and shared memory on the mount, so at every open the index
+  sets `journal_mode=WAL`, checks that the pragma answers `wal`, and does
+  a write/read round-trip; if anything fails it logs a warning and uses
+  the rollback journal. `synchronous=NORMAL` in WAL mode: no corruption,
+  but a power cut may lose the last commits. `db/` then holds
+  `mapgen.sqlite`, `-wal` and `-shm`; back it up with the server stopped
+  or with `sqlite3 .backup`. To be confirmed on the real Colima mount.
+- **Replacing a system** keeps the names that still match one of its
+  bodies (as the command line does), in `names.json` and the index.
 - **Location:** `MAPGEN_DB`, `/data/db/mapgen.sqlite` in the container,
   `./db` on the host (`compose.yaml`, `mise run up` creates it, `db/` is
   git-ignored).

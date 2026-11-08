@@ -426,7 +426,11 @@ systems/<system-id>/
   recorded one, and dropped when its directory is gone). For now names
   are written to `names.json` as well as to the index, so the tree is
   self-sufficient; the last opened dates and the job history are in the
-  database only. Default rollback journal, not WAL (virtiofs).
+  database only. WAL journal when the file system allows it (checked at
+  every start, with a fallback to the rollback journal and a warning), so
+  `db/` holds `mapgen.sqlite`, `-wal` and `-shm`: copy it with the server
+  stopped or with `sqlite3 .backup`. A system replaced keeps the names
+  that still match one of its bodies.
 
 ## API
 

@@ -317,6 +317,7 @@ fn open_index(config: &Config) -> (Arc<Index>, HashMap<String, Job>, u64) {
         updated = report.updated,
         removed = report.removed,
         interrupted_jobs = interrupted,
+        journal = index.journal_mode(),
         elapsed_ms = started.elapsed().as_millis() as u64,
         "index {} ready",
         config.db_path.display()
@@ -562,12 +563,28 @@ async fn create_system(
     let written = id.clone();
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
+        // A system replaced keeps the names that still fit one of its bodies.
+        let kept: systems::GivenNames = if replace {
+            index
+                .names(&written)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .filter(|(body, _)| {
+                    body == systems::STAR || system.bodies.iter().any(|b| &b.id == body)
+                })
+                .collect()
+        } else {
+            systems::GivenNames::new()
+        };
         let temp = crate::staging::TempDir::create(&root, &written)?;
         mapgen::system::write_system(temp.path(), &system)?;
         if replace {
             temp.commit_replacing(&target)?;
         } else {
             temp.commit(&target)?;
+        }
+        if !kept.is_empty() {
+            systems::write_names_file(&root, &written, &kept).map_err(|e| format!("{e:?}"))?;
         }
         index
             .refresh_system(&root, &written, Cause::Drawn)
@@ -1772,8 +1789,27 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&body).unwrap()["detail"]["code"],
             "system_exists"
         );
+        // Names given are kept when the system is replaced, those of bodies
+        // it no longer has dropped.
+        let (_, drawn) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        let drawn: serde_json::Value = serde_json::from_str(&drawn).unwrap();
+        let first = drawn["system"]["bodies"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let names = format!(r#"{{"names": {{"{first}": "Gaia", "star": "Helia"}}}}"#);
+        let uri = format!("/api/systems/{id}/names");
+        assert_eq!(
+            call(&app, "PUT", &uri, Some(&names)).await.0,
+            StatusCode::OK
+        );
         let (status, _) = call(&app, "POST", "/api/systems?replace=true", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED);
+        let kept = std::fs::read_to_string(root.join(&id).join("names.json")).unwrap();
+        assert!(kept.contains("Gaia") && kept.contains("Helia"), "{kept}");
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+        assert_eq!(list[0]["names"][&first], "Gaia");
 
         let (_, list) = call(&app, "GET", "/api/systems", None).await;
         let list: serde_json::Value = serde_json::from_str(&list).unwrap();

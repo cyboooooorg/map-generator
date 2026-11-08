@@ -18,9 +18,16 @@
 //! tree stays self-sufficient for now.
 //!
 //! One connection behind a mutex: the server's writes are few and short,
-//! and always run on a blocking thread. The journal is SQLite's default
-//! rollback journal, not WAL: the file sits on a bind mount of the Docker
-//! VM (virtiofs), where WAL's shared memory is not to be relied on.
+//! and always run on a blocking thread.
+//!
+//! The journal is WAL when the file system allows it (readers do not block
+//! the writer, commits are cheaper), checked at every open: the mode must
+//! answer `wal` and a write must round-trip. The file may sit on a bind
+//! mount of the Docker VM (virtiofs), where WAL's shared memory is not a
+//! given; if the check fails, the index logs a warning and uses SQLite's
+//! default rollback journal. In WAL mode the database is the three files
+//! `mapgen.sqlite`, `-wal` and `-shm`: copy it with the server stopped,
+//! or with `sqlite3 mapgen.sqlite ".backup copy.sqlite"`.
 use crate::api::{BodySummary, JobStatus, SystemSummary};
 use crate::systems::{self, GivenNames};
 use mapgen::request::WorldRequest;
@@ -198,6 +205,8 @@ struct BodyDetail {
 }
 
 pub struct Index {
+    /// The journal mode in use: `wal`, or `delete` after a fallback.
+    journal: String,
     conn: Mutex<Connection>,
     /// When each body's last opened date was last written.
     touched: Mutex<HashMap<(String, String), Instant>>,
@@ -238,8 +247,7 @@ impl Index {
 
     fn init(conn: Connection) -> rusqlite::Result<Self> {
         conn.busy_timeout(Duration::from_secs(5))?;
-        // The default journal, said out loud (not WAL, see the module).
-        conn.query_row("PRAGMA journal_mode = DELETE", [], |_| Ok(()))?;
+        let journal = choose_journal(&conn)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version == 0 {
@@ -252,9 +260,15 @@ impl Index {
             )));
         }
         Ok(Self {
+            journal,
             conn: Mutex::new(conn),
             touched: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// The journal mode in use (`wal`, or the default `delete`).
+    pub fn journal_mode(&self) -> &str {
+        &self.journal
     }
 
     fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
@@ -720,6 +734,46 @@ impl Index {
             .query_row("SELECT COALESCE(MAX(id), 0) FROM jobs", [], |r| r.get(0))?;
         Ok(top as u64 + 1)
     }
+}
+
+/// Turns WAL on and checks it works here, or falls back to the default
+/// rollback journal with a warning. Returns the mode in use.
+fn choose_journal(conn: &Connection) -> rusqlite::Result<String> {
+    if let Err(why) = try_wal(conn) {
+        tracing::warn!("SQLite WAL is not usable here ({why}): using the rollback journal");
+        conn.query_row("PRAGMA journal_mode = DELETE", [], |r| {
+            r.get::<_, String>(0)
+        })?;
+    }
+    conn.query_row("PRAGMA journal_mode", [], |r| r.get::<_, String>(0))
+}
+
+/// Sets WAL, checks the pragma took, and round-trips a write.
+fn try_wal(conn: &Connection) -> std::result::Result<(), String> {
+    let e = |e: rusqlite::Error| e.to_string();
+    let mode: String = conn
+        .query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))
+        .map_err(e)?;
+    if !mode.eq_ignore_ascii_case("wal") {
+        return Err(format!("journal_mode answered {mode:?}"));
+    }
+    // Safe from corruption in WAL; a power cut may lose the last commits.
+    conn.execute_batch("PRAGMA synchronous = NORMAL;")
+        .map_err(e)?;
+    conn.execute_batch(
+        "DROP TABLE IF EXISTS wal_check;
+         CREATE TABLE wal_check (v INTEGER);
+         INSERT INTO wal_check VALUES (42);",
+    )
+    .map_err(e)?;
+    let back: i64 = conn
+        .query_row("SELECT v FROM wal_check", [], |r| r.get(0))
+        .map_err(e)?;
+    conn.execute_batch("DROP TABLE wal_check;").map_err(e)?;
+    if back != 42 {
+        return Err(format!("wrote 42, read {back}"));
+    }
+    Ok(())
 }
 
 fn is_not_a_database(e: &rusqlite::Error) -> bool {
@@ -1244,6 +1298,21 @@ mod tests {
         index.job_queued(5, "mgs-1-1", None, &request, 2).unwrap();
         let kept: Vec<u64> = index.jobs().unwrap().iter().map(|j| j.id).collect();
         assert_eq!(kept, [5, 4, 3]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn uses_wal_when_it_works_and_the_rollback_journal_when_it_does_not() {
+        let root = temp_root("journal");
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        assert_eq!(index.journal_mode(), "wal");
+        assert!(root.join("mapgen.sqlite-wal").exists());
+        // An in-memory database cannot be WAL: the check fails, and the
+        // index still works.
+        let fallback = Index::init(Connection::open_in_memory().unwrap()).unwrap();
+        assert_ne!(fallback.journal_mode(), "wal");
+        assert!(fallback.list_systems().unwrap().is_empty());
+        assert_eq!(fallback.next_job_id().unwrap(), 1);
         std::fs::remove_dir_all(root).unwrap();
     }
 
