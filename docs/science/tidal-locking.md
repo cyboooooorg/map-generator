@@ -1,9 +1,11 @@
 # Why does a world always show the same face to its host?
 
 Seen from: the planet view of a moon or of a planet close to a red dwarf:
-the world card ("tidally locked"), the body card in the **Info** panel ("Day:
-locked to its parent"), the *Light and season* panel, and the **Rotation
-dial**, whose figures read "Synchronous rotation · Libration".
+the world card ("tidally locked", or "3:2 spin–orbit resonance"), the body
+card in the **Info** panel ("Day: locked to its parent", or "3:2
+resonance"), the *Light and season* panel, and the **Rotation dial**, whose
+figures read "Synchronous rotation · Libration" or "3:2 spin–orbit
+resonance · Rotation".
 
 ## Short answer
 
@@ -15,8 +17,10 @@ fierce close in and feeble far out, which is why the Moon is locked to the
 Earth but the Earth is not locked to the Sun. Locked bodies on an
 elliptical orbit still turn at a steady pace while their orbital speed
 changes, so their host swings a little back and forth in their sky: the
-libration. A strongly eccentric orbit can trap the spin in another rhythm
-instead, like Mercury's three turns every two years.
+libration. A markedly eccentric orbit can trap the spin in another rhythm
+instead, like Mercury's three turns every two years. The same tides also
+round the orbit, but far more slowly than they brake the spin, so only the
+closest planets lose their eccentricity.
 
 ## The science
 
@@ -147,14 +151,52 @@ the time" (Correia & Laskar 2009, summarising Correia & Laskar 2004). Barnes
 (2017) puts the general case plainly: locked planets "on eccentric orbits
 will either librate or rotate super-synchronously".
 
+Where is the line between one turn per orbit and three turns every two?
+Ribas et al. (2016) follow the spin of Proxima b, an Earth-mass planet of
+a red dwarf, with a tidal model (a Maxwell rheology, as in Makarov 2012).
+"the ω≈3n/2 rotation becomes stable for an eccentricity greater than
+0.06–0.07", and "capture is rather unlikely for an eccentricity below
+0.06": "At eccentricities lower than 0.06, the most probable state becomes
+the synchronous one". Capture into 3:2 gets likelier as the eccentricity
+grows: Makarov (2012) finds "entrapment in the 3:2 resonance is inevitable
+at eccentricities between 0.2 and 0.41" for a Mercury-like planet. Above
+$e = 0.16$ the 2:1 rhythm becomes stable too (Ribas et al. 2016). The
+0.06 line is for Proxima b's orbital period and one tidal model.
+
+### Tides round the orbit too, but slowly
+
+The tides raised on a planet also damp its orbital eccentricity. For a
+planet of mass $m$ and radius $R$ on an orbit of semi-major axis $a$ and
+mean motion $n$ round a star of mass $M$, with the modified quality factor
+$Q' = 3Q/2k_2$, the time to round the orbit is (Goldreich & Soter 1966,
+as written by Jackson, Greenberg & Barnes 2008):
+
+```math
+\tau_e = \frac{4}{63}\,Q'\,\frac{m}{M}\left(\frac{a}{R}\right)^5\frac{1}{n}
+```
+
+**In words.** It grows as the 6.5th power of the distance, against the
+sixth for the spin: the tides round an orbit a hundred thousand to a
+million times more slowly than they despin the planet.
+
+**Orders of magnitude.** For an Earth with $Q = 100$ and $k_2 = 0.3$
+($Q' = 500$), this article's evaluation is about $10^8$ Gyr at 1 AU from
+the Sun. Only planets within about 0.05 AU of a red dwarf, or 0.07 AU of
+the Sun, are circularised in 4.6 Gyr. The habitable zone of a red dwarf is
+despun but keeps its eccentricity, which is why Mercury-like and
+red-dwarf planets can be in 3:2. The formula is the planetary term of
+Jackson et al.'s equation 4, read in their preprint; it is rewritten here
+with $Q'$ for their $Q_p$ (they fold the Love number into $Q$, "similar to
+the $Q'$ of Goldreich & Soter").
+
 ```mermaid
 flowchart LR
   A["A fast-spinning body<br/>close to its host"]
   B["Tides raise a bulge<br/>that lags behind"]
   C["The host pulls the bulge<br/>back: the spin slows"]
-  D{"Orbit nearly<br/>circular?"}
+  D{"Eccentricity<br/>under about 0.06?"}
   E["One turn per orbit:<br/>synchronous, with<br/>a libration of ±2e"]
-  F["Possibly trapped in<br/>a resonance such as<br/>3:2 (Mercury)"]
+  F["Likely held in a<br/>resonance such as<br/>3:2 (Mercury)"]
   A --> B --> C --> D
   D -- yes --> E
   D -- "no, and the body<br/>is not quite round" --> F
@@ -178,7 +220,10 @@ flowchart LR
   all.
 - **Which resonance.** Capture into 1:1, 3:2 or 2:1 depends on the
   eccentricity's history, which is chaotic for Mercury and unknown for
-  exoplanets (Correia & Laskar 2009).
+  exoplanets (Correia & Laskar 2009). Ribas et al. (2016) add: "This
+  highlights the need for further constraints on the eccentricity of the
+  planet, its possible evolution, and the existence of additional
+  planets".
 
 ## In the app
 
@@ -189,31 +234,49 @@ flowchart LR
   the star does not move in its sky". Its map has the point under the star
   at its centre, a hot day side and a frozen night side, and the *Light and
   season* panel says "Tidally locked: the star stays above the centre of
-  the map on average, with no seasons". It has no moons.
-- **A moon** is locked to its planet unless it was captured. Its body card
-  in the **Info** panel reads "Day: locked to its parent"; its sky label
-  "Locked: the same face to its planet: a turn per orbit". In its sky, the
-  planet hangs over longitude 180° of its map and swings slightly. A
-  captured moon says instead "This captured moon is not locked: it spins in
-  … h, its planet rising and setting".
+  the map on average, with no seasons". Its axis stands upright (a drawn
+  tilt is 0). It may keep a moonlet light enough to outlast the system's
+  age, never a large moon.
+- **A planet in the 3:2 resonance** (a despun planet on an orbit of
+  eccentricity 0.06 or more, such as the `mercury-like` preset) has "3:2
+  spin–orbit resonance" on its world card instead, with the tooltip "Like
+  Mercury: the star's tides hold it at three turns every two orbits, its
+  eccentric orbit keeping it from locking; its solar day lasts two years".
+  Its climate is that of a rotating planet, with seasons. Its body card
+  says "Day: …, 3:2 resonance: three turns every two orbits", and the dial
+  reads "3:2 spin–orbit resonance · Rotation …". The `mercury-like` preset
+  has a 176-day solar day, two of its 88-day years.
+- **A moon** is locked to its planet when the planet's tides have despun it
+  within the system's age, which is the case of the giant-impact and debris
+  moons, and usually of the regular moons of a giant. Its body card in the
+  **Info** panel reads "Day: locked to its parent"; its sky label "Locked:
+  the same face to its planet: a turn per orbit". In its sky, the planet
+  hangs over longitude 180° of its map and swings slightly. A small captured
+  moon far out, whose despinning would take longer than the age, says
+  instead "This captured moon is not locked: it spins in … h, its planet
+  rising and setting". The world of a moon is never locked to the star: it
+  keeps the climate of a rotating world, its star rising and setting.
 - **A planet with a heavy moon** (a binary such as Pluto and Charon) turns
-  with that moon: its day is the moon's month, and the moon hangs over the
-  same point of its sky.
+  with that moon when the moon's tides despin it within the age: its day
+  is the moon's month, and the moon hangs over the same point of its sky.
 - **The Rotation dial** (icon bar, sky group) draws a ring round the
   equator of a body of a system. On a locked body the ring is graduated
   against the host, 0° pointing at it; the pointer starts from the face
   turned to the host and swings round 0° by the libration. The *Light and
   season* panel then reads, for example, "Synchronous rotation · Libration
-  +0.3° (±0.4°)", and its glossary defines synchronous rotation and
-  libration. The camera turns with a locked body by default, so the host
-  stays still on screen.
+  +0.3° (±0.4°)", and its glossary defines synchronous rotation, libration
+  and the 3:2 resonance. The camera turns with a locked body by default, so
+  the host stays still on screen.
 
 ### How it computes them
 
-**Whether a planet is locked.** The generator keeps the scaling of the
-first equation for an Earth-like planet (`locking_gyr` in
-[star.rs](../../crates/mapgen/src/star.rs)), and compares it with the star's
-age, 4.6 Gyr or the star's whole main-sequence life if shorter:
+**Whether a planet is despun, locked or in 3:2.** The generator keeps the
+scaling of the first equation for an Earth-like planet (`locking_gyr` in
+[star.rs](../../crates/mapgen/src/star.rs)) and compares it with the star's
+age, 4.6 Gyr or the star's whole main-sequence life if shorter. A despun
+planet is then locked below an eccentricity of 0.06 and in the 3:2
+resonance from it (`locked` and `resonant` in
+[spin.rs](../../crates/mapgen/src/spin.rs), the rule of Ribas et al. 2016):
 
 ```rust
 /// Time for the star's tides to lock an Earth-like planet's spin, Gyr
@@ -226,37 +289,87 @@ pub fn locking_gyr(orbit_au: f32, mass: f32) -> f32 {
 
 // In StarInfo::new:
 let locking = locking_gyr(orbit_au, v.mass);
-let tidally_locked = locking < AGE_GYR.min(lifetime);
+tidally_locked: crate::spin::locked(locking, AGE_GYR.min(lifetime), eccentricity),
+spin_orbit_3_2: crate::spin::resonant(locking, AGE_GYR.min(lifetime), eccentricity),
+
+// spin.rs
+pub const RESONANCE_CAPTURE_ECCENTRICITY: f32 = 0.06;
+
+pub fn locked(locking_gyr: f32, age_gyr: f32, eccentricity: f32) -> bool {
+    locking_gyr < age_gyr && eccentricity < RESONANCE_CAPTURE_ECCENTRICITY
+}
+
+pub fn resonant(locking_gyr: f32, age_gyr: f32, eccentricity: f32) -> bool {
+    locking_gyr < age_gyr && eccentricity >= RESONANCE_CAPTURE_ECCENTRICITY
+}
 ```
 
-`a` is in AU and `M` in solar masses. A locked planet then:
+`a` is in AU and `M` in solar masses. The orbit's eccentricity is 0 only
+when the tides have circularised it: `circularisation_gyr` evaluates
+$\tau_e$ above for an Earth-like planet (`Q' = 500`) and compares it with
+the same age. Anything farther out than about 0.05 AU from a red dwarf, or
+0.07 AU from the Sun, keeps the eccentricity it was drawn or given, and
+those closer in end locked. A despun planet then:
 
-1. **Turns once a year.** Its day is its year in the system
-   ([system.rs](../../crates/mapgen/src/system.rs)); a hot or locked giant's
-   too ([giant_world.rs](../../crates/mapgen/src/giant_world.rs)).
-2. **Gets a substellar climate.** Its temperature follows the angle from
-   the point under the star instead of the latitude (`LockedClimate`, see
-   [generation.rs](../../crates/mapgen/src/generation.rs)).
-3. **Gets a circular orbit** when its eccentricity is drawn, tides having
-   circularised it
-   ([request.rs](../../crates/mapgen/src/request.rs)).
-4. **Keeps no moons**: its synchronous orbit lies beyond its Hill sphere
-   ([moons.rs](../../crates/mapgen/src/moons.rs); see
+1. **Turns once a year** (locked), or **three times every two years**
+   (3:2): its sidereal day is its year divided by 1 or by 1.5 in the
+   system ([system.rs](../../crates/mapgen/src/system.rs)) and in the moons
+   of a lone world ([moons.rs](../../crates/mapgen/src/moons.rs)). A hot or
+   locked giant turns once a year too
+   ([giant_world.rs](../../crates/mapgen/src/giant_world.rs)).
+2. **Gets a substellar climate if locked.** Its temperature follows the
+   angle from the point under the star instead of the latitude
+   (`LockedClimate`, see
+   [generation.rs](../../crates/mapgen/src/generation.rs)). A planet in
+   3:2 has the climate of a rotating one, with the wind belts of its
+   slow day.
+3. **Gets a circular orbit** when the tides have circularised it, in a
+   lone world and in a system alike
+   ([request.rs](../../crates/mapgen/src/request.rs),
+   `tidal_eccentricity` in
+   [system.rs](../../crates/mapgen/src/system.rs)).
+4. **Stands upright:** a drawn axial tilt becomes 0 (`spin::upright`, after
+   Heller et al. 2011: the Cassini state, Mercury's obliquity being 2
+   arcminutes). A tilt the user sets stays.
+5. **Keeps only the moons light enough to outlast its age** (Barnes &
+   O'Brien 2002, eq. 8; see
    [How many moons can a planet keep?](how-many-moons.md)).
-5. **Draws more craters on its leading side** since it locked
+6. **Draws more craters on its leading side** since it locked, if it is
+   locked, not in 3:2
    ([craters.rs](../../crates/mapgen/src/craters.rs)).
 
+**Giants.** A giant has its own constants in `giant_locking_gyr`: the Love
+number $k_2 = 0.565$ measured by Juno (Durante et al. 2020), $Q \approx
+5 \times 10^4$ from the $k_2/Q$ Lainey et al. (2009) measured in the
+Galilean moons' orbits, a moment of inertia of $0.254\,mR^2$ and a first
+day of 10 hours. Jupiter's density makes its locking time about 56 times
+a rocky planet's at the same place: a hot Jupiter locks in a hundred
+thousand years, a giant at 0.3 AU from the Sun never does. A despun giant
+is locked, never in 3:2, and its orbit is circularised by its own tides
+(`giant_circularised`).
+
 **Whether a moon is locked.** [moons.rs](../../crates/mapgen/src/moons.rs)
-does not compute a time: giant-impact, debris and disk moons are locked,
-captured ones are not (`tidally_locked: c.origin != MoonOrigin::Captured`).
-A moon of 0.05 of its planet's mass or more also locks the planet: the
-planet's day becomes the moon's month (`BINARY_MASS_RATIO`).
+computes the time with `despin_gyr`, Gladman et al.'s formula for the
+moon: a first day of 12 hours, $Q = 100$, a moment of inertia of
+$0.4\,mR^2$, and a Love number from the rigidity of rock
+($\mu = 3 \times 10^{10}$ Pa, at most 0.3). A moon is locked when that is
+shorter than the age. Phobos takes about 20,000 years; the Earth would
+take 35 Gyr to turn with the Moon, so only a heavy, close moon can lock its
+planet (a binary like Pluto and Charon: under 0.05 Gyr). A moon locked
+this way also gets the shape of a tidal ellipsoid (see
+[Why are small moons shaped like potatoes?](moon-shapes.md)).
+
+**The moon's tilt.** A moon's world and its spin in the system share one
+tilt (`moon_tilt_deg`): 6.68° for a giant-impact moon, the Moon's
+obliquity to its orbit, so that its planet swings north and south in its
+sky; 0 for the others (a calibration with no source).
 
 **The libration.** The viewer places each body from `system.json`
 ([systemSky.ts](../../web/src/lib/systemSky.ts)). A locked body turns
 steadily: its longitude 180° faces the point of its orbit at the mean
 anomaly, not the host itself, so the host is off by the true minus the mean
-anomaly:
+anomaly. A body in 3:2 turns at 1.5 times the mean anomaly from its
+periapsis, so its long axis faces the star at each periapsis:
 
 ```ts
 // placeSystem: a locked body faces where its host would be on a circular
@@ -275,52 +388,61 @@ export function libration(orbit: Orbit, days: number): number {
 
 The dial ([rotationDial.ts](../../web/src/lib/rotationDial.ts), drawn by
 [viewer/rotationDial.ts](../../web/src/lib/viewer/rotationDial.ts)) reads
-the host's bearing on the equator and shows the amplitude as $2e$.
+the host's bearing on the equator. It shows the exact amplitude
+(`librationAmplitude` in `systemSky.ts`, the greatest true minus mean
+anomaly from Kepler's equation: 28.9° at $e = 0.25$, against $2e = 28.6°$).
 
 ### Where it departs from the science
 
-- **One brake for every world.** The locking time uses Earth's $Q$, $k_2$,
-  moment of inertia and a 12-hour first day for every planet, giants
-  included. Real values vary by orders of magnitude between bodies (Barnes
-  2017), so the line between locked and free is only a rough one. Giants
-  deform and lose tidal energy quite differently from rock, yet get the same
-  rule.
+- **One brake for every rocky world.** The locking time uses Earth's $Q$,
+  $k_2$, moment of inertia and a 12-hour first day for every rocky planet,
+  and its circularisation Earth's mass and radius (a super-Earth of 5.5
+  Earth masses would circularise about three times faster). Real values
+  vary by orders of magnitude between bodies (Barnes 2017), so the line
+  between locked and free is only a rough one. Giants have their own
+  values, but one set for all of them: the $Q$ is Jupiter's, measured at
+  Io's tidal frequency. Jackson, Greenberg & Barnes (2008) find the best
+  fits to the eccentricities of close-in giants for a planetary $Q'$ of
+  about $10^{6.5}$, about 20 times the 1.4 × 10⁵ the app takes from
+  Jupiter, which would circularise them about 20 times more slowly.
 - **All or nothing.** A planet just outside the limit keeps a day drawn
   from 12 to 36 hours, as fast as one far out. Real planets slow down
   gradually before they lock.
-- **No spin–orbit resonances.** Every locked body is in 1:1. A world like
-  the `mercury-like` preset (the Sun, 0.387 AU, eccentricity 0.2056) comes
-  out locked, its locking time 0.56 Gyr, with a fixed substellar point.
-  The real Mercury turns three times every two orbits, with a 176-day solar
-  day. This would show on any locked planet with a large eccentricity.
-- **Eccentric locked planets in systems.** A lone world locked to its star
-  gets a circular orbit when its eccentricity is drawn, and the main README
-  says so. A planet of a planetary system keeps the eccentricity the system
-  drew for its slot, locked or not ([system.rs](../../crates/mapgen/src/system.rs)).
-  Its star then swings by $\pm 2e$ in its sky and on the dial, while its
-  climate keeps a fixed substellar point. At $e = 0.3$ the swing is about
-  ±35°.
-- **Tilted locked planets.** Tides should stand a locked planet upright
-  (Heller et al. 2011), but a planet locked to its star keeps its drawn
-  axial tilt, from 0 to 60° since it has no moon. Its climate ignores the
-  tilt; its sky in a system does not, so the star climbs and sinks by the
-  tilt over the year there.
-- **No libration in latitude for moons.** Moons of a system get an axial
-  tilt of 0 (`params_tilt` in
-  [system.rs](../../crates/mapgen/src/system.rs)), so their planet only
-  swings east and west, not north and south as the Earth does in the Moon's
-  sky. Their own worlds are generated with a tilt of 1.5°
-  (`MOON_TILT_DEG` in [moons.rs](../../crates/mapgen/src/moons.rs)): the two
-  disagree slightly.
-- **Moons locked by origin.** A moon's lock comes from how it formed, not
-  from a timescale. A small moon far out, formed in a debris disk, would be
-  locked even where tides are too weak to have done it.
-- **Binaries by mass ratio.** The planet turns with its moon from a mass
-  ratio of 0.05, a calibration choice: no time is computed for the planet's
-  own despinning.
-- **The amplitude is first order.** The dial shows $2e$; the true swing is
-  slightly larger at high eccentricity (28.9° rather than 28.6° at
-  $e = 0.25$). The angle drawn is exact.
+- **A sharp line at 0.06.** The app locks a despun planet below an
+  eccentricity of 0.06 and holds it in 3:2 above. In Ribas et al. (2016)
+  the odds of capture rise gradually, for Proxima b's period and one
+  rheology, and the seed could draw the state instead. A planet at 0.059
+  and one at 0.061 differ completely in the app.
+- **Only 3:2.** Mercury at 0.2056 could have been caught in 2:1 or 5:2
+  first; its chaotic eccentricity brought it to 3:2 (Correia & Laskar
+  2004, 2009; Makarov 2012 gives 2:1 a probability of about 0.23 for a
+  Mercury-like planet). Large
+  eccentricities favour the higher resonances, which the app does not
+  model.
+- **A rotating climate for 3:2 worlds.** Their solar day lasts two years,
+  so a night would last a year. The app gives them the rotating climate
+  (day-night average, seasons) regardless, as it does a planet that turns
+  freely.
+- **Most despun red-dwarf planets are in 3:2.** The eccentricities are
+  drawn from the distribution Kipping (2013) fitted to the known planets,
+  mostly giants: four draws in five are above 0.06 (this article's
+  evaluation of the distribution), though small close-in planets are
+  likely less eccentric. The circularisation reaches only the closest
+  planets, so few habitable-zone planets of M dwarfs come out locked,
+  against the common picture of locked red-dwarf planets. This follows
+  from the rule above and from Barnes (2017): locked planets "on eccentric
+  orbits will either librate or rotate super-synchronously", but it
+  changes how often a locked world turns up.
+- **Giants lock once despun.** A fluid planet on an eccentric orbit would
+  turn pseudo-synchronously, not exactly once per orbit.
+- **A moon's tilt is a rule, not a state.** A giant-impact moon takes the
+  Moon's 6.68° and the others 0, instead of the Cassini state each would
+  have for its own orbit and shape.
+- **Moons locked by timescale, with Earth's tides.** A moon's despinning
+  uses $Q = 100$ and the rigidity of rock, even for an icy moon, which
+  would lock a little slower than it should. A captured moon far out may
+  come out unlocked where a real one, spun by its capture, could be
+  locked.
 - **No atmospheric tides.** The thermal tides that may keep habitable-zone
   planets of K stars turning (Leconte et al. 2015) are not modelled.
 
@@ -378,6 +500,51 @@ the host's bearing on the equator and shows the amplitude as $2e$.
 12. JPL Solar System Dynamics, [planetary satellite mean
     elements](https://ssd.jpl.nasa.gov/sats/elem/) (Io's eccentricity,
     Charon's period).
+13. Ribas, I., Bolmont, E., Selsis, F., Reiners, A., Leconte, J., Raymond,
+    S. N. et al. 2016, "The habitability of Proxima Centauri b. I.
+    Irradiation, rotation and volatile inventory from formation to the
+    present", *Astronomy & Astrophysics* 596, A111,
+    [doi:10.1051/0004-6361/201629576](https://doi.org/10.1051/0004-6361/201629576),
+    preprint [arXiv:1608.06813](https://arxiv.org/abs/1608.06813). Section
+    4.6: the eccentricity above which the 3:2 resonance is likely (read
+    in the preprint).
+14. Makarov, V. V. 2012, "Conditions of passage and entrapment of
+    terrestrial planets in spin-orbit resonances", *The Astrophysical
+    Journal* 752, 73,
+    [doi:10.1088/0004-637X/752/1/73](https://doi.org/10.1088/0004-637X/752/1/73).
+    Capture into 3:2 and 2:1 for a Mercury-like planet (quoted from the
+    abstract).
+15. Goldreich, P. & Soter, S. 1966, "Q in the solar system", *Icarus* 5,
+    375–389,
+    [doi:10.1016/0019-1035(66)90051-0](https://doi.org/10.1016/0019-1035(66)90051-0).
+    The circularisation time. Not read (paywalled, no open copy found):
+    the formula is taken from equation 4 of source 16, which cites it.
+16. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
+    close-in extrasolar planets", *The Astrophysical Journal* 678,
+    1396–1406,
+    [doi:10.1086/529187](https://doi.org/10.1086/529187). The
+    circularisation time (equation 4, with the Love number folded into
+    $Q$) and the best-fit planetary $Q'$ of about $10^{6.5}$ (abstract),
+    read in the preprint
+    [arXiv:0801.0716](https://arxiv.org/abs/0801.0716).
+17. Kipping, D. M. 2013, "Parametrizing the exoplanet eccentricity
+    distribution with the beta distribution", *Monthly Notices of the Royal
+    Astronomical Society: Letters* 434, L51–L55,
+    [doi:10.1093/mnrasl/slt075](https://doi.org/10.1093/mnrasl/slt075).
+    The eccentricity distribution the app draws from.
+18. Durante, D. et al. 2020, "Jupiter's gravity field halfway through the
+    Juno mission", *Geophysical Research Letters* 47, e2019GL086572,
+    [doi:10.1029/2019GL086572](https://doi.org/10.1029/2019GL086572).
+    Jupiter's $k_2 = 0.565 \pm 0.006$ at perijove 17. Not read (the
+    publisher refuses automated access): the value is quoted from Idini &
+    Stevenson 2021, [arXiv:2102.09072](https://arxiv.org/abs/2102.09072),
+    which gives it as Juno's Love number and attributes it to this paper.
+19. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
+    tidal dissipation in Io and Jupiter from astrometric observations",
+    *Nature* 459, 957–959,
+    [doi:10.1038/nature08108](https://doi.org/10.1038/nature08108).
+    Jupiter's $k_2/Q = (1.102 \pm 0.203) \times 10^{-5}$, read in the
+    abstract.
 
 ## See also
 
@@ -385,6 +552,9 @@ the host's bearing on the equator and shows the amplitude as $2e$.
   behind locked planets and their climate.
 - [docs/analysis/11-moons.md](../analysis/11-moons.md): locked moons and
   binaries.
+- [docs/backlog.md](../backlog.md), item 19: what the tides and moons
+  fixes left open (higher resonances, a gradual capture, the slow-rotator
+  climate of 3:2 worlds).
 - [The rotation dial spec](../superpowers/specs/2026-11-06-rotation-dial-design.md):
   the steady spin of locked bodies and how the dial shows the libration.
 - [docs/system-spec.md](../system-spec.md): how a body's spin is stored.

@@ -189,7 +189,9 @@ establishing a carbon cycle that regulates climate", though plates remain
 ### What you see
 
 Each planet type records a regime in its preset (`[geology] regime`), shown
-on the world card's *Geology* line with the surface age:
+on the world card's *Geology* line with the surface age. A plate preset's
+world can lose its plates (see below): the card then shows the regime the
+world has, a stagnant lid.
 
 | Preset | Regime | Surface age (Ga) |
 | --- | --- | --- |
@@ -198,15 +200,17 @@ on the world card's *Geology* line with the surface age:
 | `caustic`, `venus-like` | episodic lid | 0.3–0.8 |
 | `volcanic` | heat pipe | 0.001–0.05 |
 
-Only the plate regime shapes the relief. A `terran` world has 10 to 15
-plates; along their boundaries rise collision ranges, coastal ranges with a
-chain of volcanoes behind them, island arcs beside deep trenches, and broad
-mid-ocean ridges on the sea floor (best seen on the *Elevation* layer, with
-the depth contours). Ranges follow the boundaries rather than falling at
-random. On the other regimes, the regime only sets how old the surface is,
-through the craters (see [How do impact craters form and
-fade?](impact-craters.md)): a stagnant-lid world keeps a 4 Ga surface
-covered in craters, a heat-pipe world almost none.
+A world of a plate preset has a stagnant lid instead when it is smaller
+than 0.3 Earth masses (about 29,000 km round) or has no liquid water (under
+0.01 bar). Only the plate regime shapes the relief. A `terran` world has 10
+to 15 plates; along their boundaries rise collision ranges, coastal ranges
+with a chain of volcanoes behind them, island arcs beside deep trenches, and
+mid-ocean ridges on the sea floor, broader where the plates part faster (best
+seen on the *Elevation* layer, with the depth contours). Ranges follow the
+boundaries rather than falling at random. On the other regimes, the regime
+only sets how old the surface is, through the craters (see [How do impact
+craters form and fade?](impact-craters.md)): a stagnant-lid world keeps a
+4 Ga surface covered in craters, a heat-pipe world almost none.
 
 The generator can also show a plate world as its plates carried it, up to
 300 million years in the past or the future (`--drift <Ma>` on the command
@@ -217,13 +221,22 @@ id that names it (`terran-past250ma-42`).
 
 [`plates.rs`](../../crates/mapgen/src/plates.rs) builds the plates, and
 [`generation.rs`](../../crates/mapgen/src/generation.rs) adds their relief
-when the preset says `regime = "plates"`:
+when the world's regime is plates. That regime is decided before the world
+is generated: `regime_of` in
+[`geology.rs`](../../crates/mapgen/src/geology.rs), called by
+`WorldRequest::resolve`, keeps a plate preset's plates unless the world is
+under 0.3 Earth masses or under `LIQUID_WATER_BAR`, and stores the result in
+the preset of `world.json`:
 
 1. **Plates.** About 300 jagged subplates (the cells of a jittered lattice,
    looked up at a position displaced by noise) each join the nearest of 10
    to 15 weighted plate centres.
-2. **Motion.** Each plate turns about a random Euler pole at 20 to 100 km
-   per Ma at its equator, 2 to 10 cm per year.
+2. **Motion.** Each plate turns about a random Euler pole. Its speed at its
+   equator runs from 20 km per Ma (2 cm per year) with no sinking edge to
+   100 km per Ma (10 cm per year) when it sinks along 30 % of its boundary
+   or more (slab pull, `pull_by_slabs`): a plate sinks where oceanic crust
+   goes under a continent, or under the oceanic plate of lower index, while
+   closing faster than 0.5 cm per year. The 30 % is a calibration.
 3. **Boundaries.** On a cube-sphere grid of six faces of 256 × 256 cells
    (about 40 km each on an Earth-sized planet), a cell next to another plate
    is on a boundary. Its convergence is the two plates' relative speed
@@ -233,7 +246,12 @@ when the preset says `regime = "plates"`:
 5. **Relief.** From the convergence and the crust on each side, a profile
    across the boundary, interpolated between cells. It grows from nothing at
    0.5 cm/yr to full height at 5 cm/yr (arcs at 2 cm/yr), and scales with
-   gravity like the noise's mountains, whose weight is halved.
+   gravity like the noise's mountains, whose weight is halved. Ridges are
+   the exception: their swell follows the age of the sea floor, not its
+   weight. The relief of the coarse cells is then blurred with their eight
+   neighbours (the ridges' swell excepted), so that where the nearest
+   boundary changes the relief does not step by several km from one cell to
+   the next.
 
 The relief of one boundary cell, trimmed (from
 `crates/mapgen/src/plates.rs`, `relief_of`; `d` is the distance to the
@@ -243,6 +261,11 @@ boundary in km, `bump(d, mu, sigma)` a bell `sigma` km wide at `mu` km):
 let closing = smooth(RELIEF_SPEED.0, RELIEF_SPEED.1, b.convergence);
 let parting = smooth(RELIEF_SPEED.0, RELIEF_SPEED.1, -b.convergence);
 let trench = || -0.16 * closing * bump(d, 40.0, 45.0);
+// A mid-ocean ridge: young floor, the younger the higher.
+if !mine && !theirs && b.convergence < 0.0 {
+    r.swell = smooth(0.0, RELIEF_SPEED.0, -b.convergence)
+        * ridge_swell(d, -b.convergence);
+}
 if closing > 0.0 {
     match (mine, theirs) {
         (true, true) => {
@@ -265,73 +288,91 @@ if closing > 0.0 {
         (false, false) => r.uplift = trench(),
     }
 } else if parting > 0.0 {
-    match (mine, theirs) {
-        // A mid-ocean ridge, or a rift valley between continents.
-        (false, false) => r.uplift = 0.1 * parting * bump(d, 0.0, 450.0),
-        (true, true) => {
-            r.uplift = parting * (0.02 * bump(d, 120.0, 60.0)
-                - 0.06 * bump(d, 0.0, 60.0));
-        }
-        _ => {}
+    // A rift valley between continents (the ridge is the swell above).
+    if let (true, true) = (mine, theirs) {
+        r.uplift = parting * (0.02 * bump(d, 120.0, 60.0)
+            - 0.06 * bump(d, 0.0, 60.0));
     }
 }
 ```
 
-Elevations are in the generator's units; the app reads one unit as 25 km
-(`ELEVATION_KM`), so a ridge stands about 2.5 km above the floor around it
-and a trench reaches about 4 km below it.
+The ridge's swell, from Parsons & Sclater's age–depth relation (`d` is the
+distance to the ridge in km, `spreading` the parting speed in cm per year,
+both plates together):
+
+```rust
+pub fn ridge_swell(d_km: f32, spreading: f32) -> f32 {
+    let half_km_per_ma = 5.0 * spreading.max(1e-3);
+    let age_ma = d_km.max(0.0) / half_km_per_ma;
+    let depth_km = RIDGE_CREST_KM + SUBSIDENCE_KM * age_ma.sqrt();
+    (OLD_FLOOR_KM - depth_km).max(0.0) / crate::craters::ELEVATION_KM
+}
+```
+
+The floor is `d / (v/2)` old, and its depth is $2.5 + 0.35\sqrt{t}$ km. The
+swell is how far that depth stands above the generator's old sea floor, 4 km
+(its median, the calibration of `ELEVATION_KM`). The crest is therefore 1.5 km
+above the floor at any spreading rate, 2.5 km deep (it fades in only under
+0.5 cm/yr); the ridge reaches the old floor when the floor is 18 Ma old,
+460 km from the ridge at 5 cm/yr and 180 km at 2 cm/yr. The swell is
+thermal isostasy, so gravity does not scale it. A trench reaches about 4 km
+below the floor around it (`ELEVATION_KM` is 25 km per unit).
 
 **Drift.** `PlateMap::at_epoch` gives every plate a new pole and speed each
 50 Ma stage and integrates the rotations in 1 Ma steps. A point at the epoch
 takes the relief of the crust that lies there, read where that crust is
 today; where no plate covers a point, the plates have parted and it becomes
-new ocean floor, 0.3 units below the waterline, with a ridge along the new
-boundary.
+new ocean floor at the old floor's depth (0.16 units, 4 km) plus the swell of
+the ridge it formed at, with a ridge along the new boundary. Slab-pull speeds
+are set for the present only; the other stages keep their drawn speeds.
 
-**Climate.** A world with plate tectonics and liquid water (0.01 bar or
-more) gets a carbon cycle that steadies its temperature against its star's
-light (`regulated` in `generation.rs`); the other regimes do not.
+**Climate.** A world with liquid water (0.01 bar or more) gets a carbon
+cycle that steadies its temperature against its star's light. The
+regulation (`carbon_cycle` in `generation.rs`) is 1 with plates, 0.5 with a
+stagnant lid and liquid water (Foley & Smye 2018; the half is a calibration),
+and 0 for the other regimes and without liquid water.
 
 ### Where it departs from the science
 
-- **The regime is chosen, not derived.** It comes from the preset alone.
-  A `terran` world keeps plates at any size it is drawn with (20 000 to
-  80 000 km round, half to twice Earth's) and whatever its pressure, while
-  the models above tie plates to size, water and surface temperature. A
-  Mars-sized `terran` world has plates; Mars has a stagnant lid.
+- **The size threshold is the app's choice.** A plate preset keeps its plates
+  unless the world is dry or under 0.3 Earth masses (about 0.72 Earth radii,
+  the geometric mean of Mars and Venus), after Foley, Bercovici & Landuyt
+  (2012) and Stern, Gerya & Tackley (2018). Korenaga (2010) finds size a
+  minor factor, which argues against any threshold. Super-Earths keep their
+  plates, following Valencia et al. (2007) against O'Neill & Lenardic (2007):
+  the split is not resolved. The inner edge of the habitable zone sets no
+  regime, since no source ties them. A stagnant preset never gains plates.
 - **Only plates have landforms.** Stagnant-lid worlds have no giant
   volcanic bulge like Mars's Tharsis and no contraction scarps like
   Mercury's; episodic and heat-pipe worlds have nothing of their own either.
   Their regime shows only through their surface age and craters.
 - **No ice tectonics.** `frozen` worlds are rocky worlds with plates under
   their ice, not Europa-like ice shells.
-- **Plates are not driven.** Poles and speeds are drawn at random, so plates
-  with long subducting edges are no faster than others (on Earth slab pull
-  sets their speed, Forsyth & Uyeda 1975), and the plate count does not
-  depend on the planet's size.
+- **Plates are only partly driven.** Slab pull sets the speed of the present
+  plates from their sinking edge, but the poles are drawn at random, the
+  other 50 Ma stages of a drift keep drawn speeds, and the plate count does
+  not depend on the planet's size (no source scales it). The 30 % of the
+  boundary that gives full speed is a calibration.
 - **Continents come before plates.** The continents are noise; the plates
   are laid over them. A boundary can run through the middle of a continent,
   and the crust on each side is read from the height of the noise, not from
   a history of what formed where.
-- **No age of the sea floor.** Real ocean floor deepens with age, from
-  2.5 km at the ridge to about 6.4 km. In the app the sea floor's depth is
-  noise, with a ridge profile on the boundaries; under drift, new crust is
-  laid flat at 0.3 units below the waterline (about 7.5 km on the app's
-  scale), deeper than real old floor, with a ridge on top.
+- **The sea floor has an age only near ridges.** Young floor follows
+  Parsons & Sclater's age–depth relation up to the generator's old floor
+  (4 km, reached 18 Ma after forming). Older floor keeps the noise's depth,
+  between 4 and 6.4 km, because the present floor has no age. Under drift,
+  new crust starts at the old floor and takes its ridge's swell.
 - **Drift carries today's continents.** Going back, they tear along plate
   boundaries instead of gathering into an older supercontinent;
   overlapping crust is hidden rather than piled into ranges. Volcanic
   provinces ride with their plate: no plume stays fixed beneath a moving
   plate to leave a chain of volcanoes.
-- **No carbon cycle without plates.** A stagnant-lid world with water gets
-  no climate regulation at all, where Foley (2018) leaves it possible,
-  though less favourable.
+- **The stagnant lid's carbon cycle is a calibration.** A wet stagnant-lid
+  world is regulated at half the strength of a plate world (Foley & Smye
+  2018 give a cycle lasting some 1 to 5 Gyr); the 0.5 has no source.
 - **Locked planets are not hemispheric.** Poles are random on a planet
   locked to its star too; the hemispheric tectonics of Meier et al. (2021)
   is not modelled.
-- **A comment out of date.** In `geology.rs`, the `regime` field still says
-  "Recorded for now: it does not shape the relief yet", though the plate
-  regime has shaped the relief since the plates were added.
 
 ## Sources
 
@@ -406,6 +447,9 @@ light (`regulated` in `generation.rs`); the other regimes do not.
     *Astrophysical Journal Letters* 908, L48,
     [doi:10.3847/2041-8213/abe400](https://doi.org/10.3847/2041-8213/abe400),
     preprint [arXiv:2103.02374](https://arxiv.org/abs/2103.02374).
+21. Foley, B. J. & Smye, A. J. 2018, "Carbon cycling and habitability of
+    Earth-sized stagnant lid planets", *Astrobiology* 18, 873–896,
+    [doi:10.1089/ast.2017.1695](https://doi.org/10.1089/ast.2017.1695).
 
 ## See also
 

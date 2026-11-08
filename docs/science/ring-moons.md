@@ -37,7 +37,7 @@ new one.
 
 **Orders of magnitude.** For Saturn (mean density 0.69 g/cm³) and ring ice
 (0.5 to 0.9 g/cm³, porous), the fluid limit lies 130,000 to 158,000 km from
-Saturn's centre: 2.16 to 2.62 equatorial radii. (The density is the mean one,
+Saturn's centre: 2.15 to 2.62 equatorial radii. (The density is the mean one,
 so $R$ is the mean radius, 58,232 km; the equatorial radius is 60,268 km.)
 Saturn's main rings end at 2.27 equatorial radii, inside that band. A solid
 ice body would hold down to 1.11 equatorial radii, inside the rings.
@@ -179,8 +179,11 @@ ring moons are bodies of the system:
 - **Moonlets** inside the rings, each clearing a gap.
 - **Edge moons** just beyond the rings' outer edge.
 - **Shepherds**: a pair on either side of a faint narrow ring.
-- **A resonant moon** outside the rings, which opens a gap at its 2:1
-  resonance (like Mimas and the Cassini Division).
+- **A resonant moon** outside the rings, which cuts an edge in them at its
+  2:1 resonance and clears a division outward of it (like Mimas and the
+  Cassini Division).
+- **Dust sources**: small inner moons beyond a faint ring, whose impact
+  dust may feed a faint dust ring (like Amalthea, Thebe and Mab).
 
 Each one's card tells its part ("orbits inside the rings and clears a gap
 40 km wide round its orbit"). The rules and their sources are in
@@ -193,68 +196,97 @@ The system draws a giant's rings, then
 giant's density and mass:
 
 1. **The outer edge** is the fluid Roche limit of the ring particles, their
-   density drawn between 0.5 and 0.9 g/cm³. It is kept between 2.0 and
-   2.5 giant radii (Saturn's rings end at 2.27).
-2. **Moonlets**, zero to two, sit in the outer 40 % of the rings. Each one
-   is kept outside the rigid Roche limit for its own density, so a solid
-   body could survive there.
-3. **Each moonlet's gap** is 7.5 to 17 of its Hill radii wide, the narrowest
-   for the lightest moonlet. The Hill radius is the long semi-axis of its
-   Roche lobe, from the second equation above.
+   density drawn between 0.5 and 0.9 g/cm³. Nothing keeps it near Saturn's
+   2.27 radii: only Hill stability inside the giant's other moons, a third
+   of its Hill radius and room above its atmosphere bound it.
+2. **Moonlets**, zero to two, sit in the outer 40 % of the rings, each
+   *grown*. A core of solid ice (0.9 g/cm³) of 1.5 to 10 km in radius,
+   log-uniform, lies under a mantle of the rings' particles packed at
+   35 % (65 % voids, Porco et al. 2007). The moonlet grows to fill its
+   Roche lobe, by the third equation above, 2.7 times the core at most. It
+   ends at the critical density of its distance, in the lobe's 3 : 2 : 2
+   shape with its long axis at the giant. Where the critical density
+   exceeds solid ice's, the core stays bare. The core is kept outside its
+   rigid Roche limit.
+3. **Each moonlet's gap** is 7.5 to 17 of its Hill radii wide, the
+   narrowest for the lightest moonlet. The Hill radius is the long
+   semi-axis of its Roche lobe, from the second equation above.
 4. **Edge moons and shepherds** are placed outside the rings or on either
-   side of the narrow ring, each outside its own rigid Roche limit.
+   side of the narrow ring, each outside its own rigid Roche limit. Edge
+   moons draw their sizes, then take them in increasing order of
+   distance. Edge moons, shepherds and sources denser than the critical
+   density at their distance keep their drawn density. Those below it are
+   raised to it, in the lobe's shape, as long as it does not exceed solid
+   ice's; where it does, they are bare solid ice of 0.9 g/cm³, irregular.
+5. **The resonant moon**, 150 to 250 km in radius, is irregular below
+   200 km and round above, where ice is round (Lineweaver & Norman 2010).
+6. **Dust sources** (faint rings only): one or two moons of 4 to 90 km at
+   2 to 3.2 radii, outside the narrow ring and their rigid Roche limit,
+   and with odds of 50 % one of 5 to 20 km at 3.4 to 4.2 radii.
 
-The moonlet draw, trimmed (from `crates/mapgen/src/rings.rs`):
+The critical density and the growth, trimmed (from
+`crates/mapgen/src/rings.rs`):
 
 ```rust
-// Diameter of a gap-clearing moonlet, km (Daphnis 8, Pan 28).
-const MOONLET_KM: (f64, f64) = (4.0, 30.0);
+pub fn critical_density(giant_density: f64, a_radii: f64) -> f64 {
+    4.0 * PI * giant_density / (LOBE_VOLUME * a_radii.powi(3))
+}
 
-// For each moonlet:
-let diameter = (MOONLET_KM.0.ln()
-    + rng.random::<f64>() * (MOONLET_KM.1 / MOONLET_KM.0).ln())
-.exp(); // log-uniform: as many from 4 to 11 km as from 11 to 30 km
-let density = rng.random_range(0.35..0.6); // g/cm³, porous ice
-let from = rigid_roche(giant_density, density).max(inner + 0.6 * (outer - inner));
-let a = from + at * (outer - 0.03 - from); // giant radii
-let mass = 4.0 / 3.0 * PI * (radius_km * 1e3).powi(3) * density * 1e3; // kg
-let hill = a * (mass / (3.0 * giant_mass_kg)).cbrt(); // giant radii
-// k: the log of the mass, from 0 (Daphnis) to 1 (Pan).
-let width = hill * (GAP_HILL.0 + k * (GAP_HILL.1 - GAP_HILL.0));
+fn grown(core_km: f64, mantle: f64, crit: f64, draws: [f64; 2])
+    -> (f64, f64, [f64; 3]) {
+    if crit >= CORE_DENSITY {
+        return (core_km, CORE_DENSITY, irregular(core_km, draws));
+    }
+    let growth =
+        (4.0 * PI / (3.0 * LOBE_VOLUME) * (CORE_DENSITY - mantle) / (crit - mantle)).cbrt();
+    let hill_km = core_km * growth;
+    let radius_km = hill_km * (3.0 * LOBE_VOLUME / (4.0 * PI)).cbrt();
+    let density = mantle + (CORE_DENSITY - mantle) * (core_km / radius_km).powi(3);
+    (radius_km, density, LOBE_SHAPE)
+}
 ```
 
-The sizes each kind of ring moon is drawn from:
+Round a Saturn, a 9 km core at Pan's distance ends 1.86 times its size, at
+0.449 g/cm³ (a test of the app). The sizes each kind of ring moon is
+drawn from:
 
-| Kind | Size | Density (g/cm³) | Solar System examples |
-| --- | --- | --- | --- |
-| Moonlet | 4 to 30 km across, log-uniform | 0.35–0.6 | Daphnis, Pan |
-| Edge moon | 10 to 100 km in radius, log-uniform | 0.4–0.7 | Atlas, Janus |
-| Shepherd | 10 to 25 km in radius | 0.5–1.0 | Cordelia, Ophelia |
-| Resonant moon | 150 to 250 km in radius | 1.1–1.3 | Mimas |
+- **Moonlet:** grown from a core of 1.5 to 10 km, 2 to 14 km in mean
+  radius round a Saturn, at the critical density (Daphnis, Pan).
+- **Edge moon:** 10 to 100 km in radius, larger farther out, 0.4 to 0.7
+  g/cm³ and at least the critical density (Atlas, Janus).
+- **Shepherd:** 10 to 25 km in radius, 0.5 to 1.0 g/cm³ and at least the
+  critical density (Cordelia, Ophelia).
+- **Resonant moon:** 150 to 250 km in radius, irregular below 200, 1.1 to
+  1.3 g/cm³ (Mimas).
+- **Source:** 4 to 90 km in radius (close) or 5 to 20 km (far), 0.4 to 0.9
+  g/cm³ and at least the critical density (Amalthea, Thebe, Mab).
 
-Small moons get irregular shapes, the more elongated the smaller they are
-(`irregular` in the same file).
+"At least the critical density" holds up to solid ice's 0.9 g/cm³. Small
+moons that do not fill their lobe get irregular shapes, the more elongated
+the smaller they are (`irregular` in the same file).
 
 ### Where it departs from the science
 
-- **The sizes are drawn, not grown.** The app draws each ring moon's size
-  from the range seen round Saturn and Uranus. It does not model a core or
-  the critical density. The result looks right because the ranges come from
-  the real moons, not because the app computes the limit.
-- **No growth with distance within a kind.** Moonlets are smaller than edge
-  moons, and edge moons smaller than the resonant moon. That keeps the trend
-  of Charnoz et al. (2010) between kinds. Within a kind, though, size and
-  distance are drawn independently: an edge moon far out can be smaller
-  than one close in.
-- **The density ignores the critical density.** A moonlet's density, 0.35
-  to 0.6 g/cm³, matches Saturn's moonlets. Round a Saturn-like giant the
-  critical density in the rings is about 0.4 to 0.5, so this is consistent.
-  Round a dense giant like Jupiter (1.33 g/cm³) it rises to about 0.75 at
-  2.4 radii. A moonlet of 0.35 there would take about twice the volume of
-  its Roche lobe: such a moon would lose its outer layers.
-- **Shapes are not Roche lobes.** Real moonlets that fill their lobe are
-  stretched towards the planet (3 : 2 : 2). Pan and Atlas also wear an
-  equatorial ridge of ring material. The app's irregular shapes have neither.
+- **The cores are drawn.** Their sizes, 1.5 to 10 km, are calibrated so
+  that the moonlets span Daphnis to Pan. Nobody has seen a core.
+- **Growth with distance is an order, not a law.** Edge moons take their
+  drawn sizes in increasing order of distance. No mass–distance power law
+  from Crida & Charnoz (2012) is applied, and the resonant moon is drawn
+  apart. Moonlets, shepherds and sources get no such order.
+- **No equatorial ridges.** Pan and Atlas wear a ridge of ring material on
+  their equator; the lobe's shape has none.
+- **Small moons are raised to the critical density, not grown.** An edge
+  moon, shepherd or source drawn below it takes the critical density and
+  the lobe's shape without a core or a mantle. Where the critical density
+  is above solid ice's, it is bare ice, kept by its strength, as Metis and
+  Adrastea are inside Jupiter's Roche zone.
+- **Moonlet swings are scaled by calibration.** A moonlet's eccentricity
+  is scaled down past Daphnis's distance (136,505 km) so that its swing
+  stays a few km in its gap round a larger giant. This rests on Daphnis
+  alone.
+- **Dust sources are drawn, not derived.** Their range (2 to 3.2 radii),
+  sizes and the odds of a far one (50 %) rest on Jupiter, Neptune and
+  Uranus, and a giant with no rings gets none.
 
 ## Sources
 
@@ -287,6 +319,9 @@ Small moons get irregular shapes, the more elongated the smaller they are
    and [Saturnian satellite fact
    sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturniansatfact.html)
    (ring edges; Mimas).
+9. Lineweaver, C. H. & Norman, M. 2010, "The potato radius: a lower minimum
+   size for dwarf planets", preprint
+   [arXiv:1004.1091](https://arxiv.org/abs/1004.1091).
 
 ## See also
 

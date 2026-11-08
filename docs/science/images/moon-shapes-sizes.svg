@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 460" width="860" height="460" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title id="title">Small bodies by mean radius: where icy and rocky bodies turn round</title>
-  <desc id="desc">Mean radius on a logarithmic axis from 4 to 700 km. Icy moons: Pan 14 km, Janus 89 km and Hyperion 135 km are irregular; Mimas, 198 km, is round; Proteus, 208 km, is irregular; Miranda, 236 km, and Enceladus, 252 km, are round. The transition for icy bodies lies near 200 km. Rocky bodies: Deimos, 6 km, Phobos, 11 km, and the asteroid Vesta, 261 km, are irregular; Ceres, 470 km, is round. The transition for rocky bodies lies near 300 km. The app makes icy moons round from 200 km and rocky ones from 450 km.</desc>
+  <desc id="desc">Mean radius on a logarithmic axis from 4 to 700 km. Icy moons: Pan 14 km, Janus 89 km and Hyperion 135 km are irregular; Mimas, 198 km, is round; Proteus, 208 km, is irregular; Miranda, 236 km, and Enceladus, 252 km, are round. The transition for icy bodies lies near 200 km. Rocky bodies: Deimos, 6 km, Phobos, 11 km, and the asteroid Vesta, 261 km, are irregular; Ceres, 470 km, is round. The transition for rocky bodies lies near 300 km. The app makes icy moons round from 200 km and rocky ones from 300 km, on the observed transitions.</desc>
   <style>
     .t { fill: #e6edf3; font-size: 13px; }
     .s { fill: #9aa7b4; font-size: 11px; }
@@ -56,8 +56,8 @@
   <text class="row" x="50" y="262">Rocky bodies</text>
   <line class="lim" x1="702.0" y1="252" x2="702.0" y2="349"/>
   <text class="s" x="697.0" y="262" text-anchor="end">about 300 km</text>
-  <line class="app" x1="763.3" y1="252" x2="763.3" y2="349"/>
-  <text class="s" x="768.3" y="262" text-anchor="start">app: 450 km</text>
+  <line class="app" x1="702.0" y1="252" x2="702.0" y2="349"/>
+  <text class="s" x="707.0" y="262" text-anchor="start"></text>
   <path class="rock" transform="translate(116.2 335) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
   <path class="rock" transform="translate(203.9 335) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
   <path class="rock" transform="translate(681.2 335) rotate(-18)" d="M-9 0 C-9 -4 -5 -6 -1 -5 C3 -6.5 9 -4 9 0 C9 4 4 5.5 0 4.5 C-4 6 -9 4 -9 0 Z"/>
@@ -91,6 +91,6 @@
   <text class="s" x="779.2" y="393" text-anchor="middle">500 km</text>
   <text class="t" x="440.0" y="411" text-anchor="middle">mean radius (logarithmic)</text>
   <line class="lim" x1="20" y1="429" x2="42" y2="429"/><text class="s" x="48" y="433">observed transition (Lineweaver &amp; Norman 2010)</text>
-  <line class="app" x1="330" y1="429" x2="352" y2="429"/><text class="s" x="358" y="433">the app's threshold (ice: 200 km, the same line)</text>
+  <line class="app" x1="330" y1="429" x2="352" y2="429"/><text class="s" x="358" y="433">the app's threshold (the same lines: ice 200 km, rock 300 km)</text>
   <text class="s" x="20" y="451">Radii: NASA JPL satellite physical parameters; Vesta and Ceres: JPL Small-Body Database (Park et al. 2025, 2016). Shapes: NASA fact sheets.</text>
 </svg>

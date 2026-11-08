@@ -1,7 +1,9 @@
 # Why are small moons shaped like potatoes?
 
 Seen from: the planet view of a small moon, whose globe is drawn with its
-lumpy shape, and its card, whose **Size** row gives its mean radius.
+lumpy shape, and its card, whose **Size** row gives its mean radius and,
+for an irregular moon or one stretched by its planet's tides, its three
+diameters.
 
 ## Short answer
 
@@ -139,6 +141,21 @@ the correction growing with $q = n^2R^3/(GM)$, the ratio of the spin's
 pull to the moon's own gravity, where $n$ is its orbital rate and $M$ its
 mass.
 
+For the simplest body, a homogeneous fluid whose surface follows the
+equal-gravity levels (a Love number $h_2 = 5/2$), the planet's tide
+raises $\tfrac{5}{2}\,qR$ along the line to it and lowers the surface by
+$\tfrac{5}{4}\,qR$ across it, and the synchronous spin flattens the
+poles. Adding the three, to first order in $q$ (this article's
+derivation, which gives the 1/4 above):
+
+```math
+a = R\left(1 + \tfrac{35}{12}\,q\right), \qquad
+b = R\left(1 - \tfrac{5}{6}\,q\right), \qquad
+c = R\left(1 - \tfrac{25}{12}\,q\right)
+```
+
+so that $a - c = 5\,qR$.
+
 **In words.** The stretch towards the planet is three times the
 flattening across the orbit: seen from the planet, the moon is nearly
 round; seen from the side, it is an egg pointing at the planet.
@@ -147,7 +164,10 @@ round; seen from the side, it is an egg pointing at the planet.
 semi-axes of 207.8, 196.7 and 190.6 km (Thomas 2010, as tabulated by
 Noyelles, Karatekin & Rambaux 2011): its long axis is 9 % longer than
 its short one. Its ratio $(b-c)/(a-c)$ is 0.35, above the 1/4 of
-equilibrium: Mimas is round, but not quite in equilibrium.
+equilibrium: Mimas is round, but not quite in equilibrium. The fluid
+formulas give $a - c = 5\,qR$, 18 km for Mimas's 198 km mean radius
+(this article's evaluation), against 17.2 km measured: a homogeneous fluid
+is a fair first guess, and an upper bound for a moon with a denser core.
 
 ### What we do not know
 
@@ -166,91 +186,111 @@ equilibrium: Mimas is round, but not quite in equilibrium.
 Every moon is a body of its system, generated as a world of its own. A
 moon too small to be round gets a lumpy shape, the more lumpy the smaller
 it is; the planet view draws its globe with that shape, lit by its
-slopes, its long axis towards its planet. A larger moon is a sphere.
-Moons drawn by the system are of three kinds: a rocky planet's moons
+slopes, its long axis towards its planet. A larger moon is a sphere,
+unless its planet's tides stretch it: a moon locked to its planet, of the
+size of Mimas, is drawn a little longer towards the planet. The card's
+**Size** row then gives the mean radius and, in brackets, the three
+diameters, longest first ("… across", with a tooltip: "Its three
+diameters, the longest towards its planet when it is locked to it: an
+irregular moon, or a round one stretched by its planet's tides"). Moons
+drawn by the system are of three kinds: a rocky planet's moons
 (giant-impact moons, debris moonlets, captured moons), a giant's regular
 moons, and a giant's ring moons.
 
 ### How it computes them
 
 [`MoonSystem`](../../crates/mapgen/src/moons.rs) decides from the mean
-radius and the composition whether a rocky planet's moon is round:
+radius and the composition whether a moon is round, for a rocky planet's
+moons and for a giant's regular moons alike (one function, `moon_axes`):
 
-1. **The threshold** is a diameter of 400 km for ice and 900 km for rock,
-   so a mean radius of 200 and 450 km.
-2. **Below it, the irregularity** is `1 − d / limit`, kept between 0.2
-   and 1: near 1 for a moonlet, 0.2 just under the threshold.
+1. **The threshold** is a diameter of 400 km for ice and 600 km for rock,
+   so a mean radius of 200 and 300 km: where Lineweaver & Norman (2010)
+   observe the change.
+2. **Below it, the irregularity** is `1 − d / limit`, between 0 and 1: 1
+   for a moonlet, 0 at the threshold, so that the axes are equal there and
+   the shape changes continuously.
 3. **The axes** follow from two draws: the middle axis is shortened by 5
    to 30 % of the irregularity, the short one by as much again, then the
    three are scaled so that their product is the mean radius cubed (the
    volume is kept). A tiny moon's short axis is 0.40 to 0.90 of its long
-   one; one just under the threshold, 0.88 to 0.98.
-4. **The surface** is the ellipsoid with low-frequency bumps: a noise of
+   one; one just under the threshold is nearly round.
+4. **The tides** stretch a locked moon (one whose planet's tides have
+   despun it within the age, see
+   [Why does a world always show the same face to its
+   host?](tidal-locking.md)) into the fluid ellipsoid above, with
+   $q = n^2R^3/(Gm)$ from its orbit, in full from the threshold up and
+   weighted by `1 − irregularity` below it: none for a moonlet, whose
+   strength holds its shape. $q$ is capped at 0.05, where a moon would be
+   near its Roche limit.
+5. **The surface** is the ellipsoid with low-frequency bumps: a noise of
    order one times 12 % of the radius times `1 − c/a`
    ([`shape_at`](../../crates/mapgen/src/moons.rs)), written as
-   `raw_data/shape.png`, with the long axis at longitude 180°, facing
-   the planet.
+   `raw_data/shape.png` for every irregular or stretched moon, with the
+   long axis at longitude 180°, facing the planet. The three axes are
+   stored in `world.json` and in the system (`axes_km`).
 
 The axes, trimmed (from `crates/mapgen/src/moons.rs`):
 
 ```rust
 /// Diameter below which a body is not round, km, for rock and ice.
-const ROUND_ROCK_KM: f64 = 900.0;
+const ROUND_ROCK_KM: f64 = 600.0;
 const ROUND_ICE_KM: f64 = 400.0;
 
-let axes = if round {
-    [radius; 3]
-} else {
-    // The smaller, the more unequal.
-    let irregular = (1.0 - 2.0 * radius / limit).clamp(0.2, 1.0);
-    let b = 1.0 - irregular * (0.05 + 0.25 * c.shape[0]);
-    let c_axis = b - irregular * (0.05 + 0.25 * c.shape[1]);
-    let scale = radius / (b * c_axis).cbrt();
-    [scale, scale * b, scale * c_axis]
-};
+fn moon_axes(composition, radius_km, draws: [f64; 2], locked) -> [f64; 3] {
+    let limit = round_limit_km(composition);
+    let irregular = (1.0 - 2.0 * radius_km / limit).clamp(0.0, 1.0);
+    let b = 1.0 - irregular * (0.05 + 0.25 * draws[0]);
+    let c = b - irregular * (0.05 + 0.25 * draws[1]);
+    let mut axes = [1.0, b, c];
+    if let Some((mass_kg, host_kg, a_km)) = locked {
+        let n2 = G * (host_kg + mass_kg) / a_km.powi(3);
+        let q = (n2 * radius_km.powi(3) / (G * mass_kg)).min(MAX_HYDROSTATIC_Q)
+            * (1.0 - irregular);
+        axes[0] *= 1.0 + 35.0 / 12.0 * q;
+        axes[1] *= 1.0 - 5.0 / 6.0 * q;
+        axes[2] *= 1.0 - 25.0 / 12.0 * q;
+    }
+    let scale = radius_km / (axes[0] * axes[1] * axes[2]).cbrt();
+    axes.map(|x| x * scale)
+}
 ```
 
-Ring moons are shaped by the same rule with the ice limit
-(`irregular` in [`rings.rs`](../../crates/mapgen/src/rings.rs)). The
-viewer reads `shape.png` and moves each vertex of the globe out to that
-radius, tilting its normal by the shape's slopes (`setShape` in
+Ring moons have their own copy of the rule with the ice limit
+(`irregular` and `ROUND_ICE_KM` in
+[`rings.rs`](../../crates/mapgen/src/rings.rs)). The viewer reads
+`shape.png` and moves each vertex of the globe out to that radius, tilting
+its normal by the shape's slopes (`setShape` in
 [`PlanetView.ts`](../../web/src/lib/viewer/PlanetView.ts), `shapeAt` in
 [`shaders.ts`](../../web/src/lib/viewer/shaders.ts)).
 
 ### Where it departs from the science
 
-- **Rock rounds later than observed.** The app makes rocky moons round
-  from 450 km in mean radius; the observed change is near 300 km
-  (Lineweaver & Norman 2010). A rocky moon of 300 to 450 km, the size of
-  Vesta to Ceres, comes out slightly lumpy (irregularity 0.2 to 0.33).
-  Only rocky moons that large show it, which are rare.
-- **A jump at the threshold.** Just under it, a moon keeps an
-  irregularity of 0.2: its short axis is 2 to 12 % shorter than its long
-  one, with bumps. Just over it, it is a perfect sphere. Real bodies
-  round off gradually, and some just above the line (Proteus) stay
-  lumpy.
 - **Composition, not density or strength.** The threshold depends only
   on ice or rock. The equation above makes it fall as density rises and
   depend on strength and history; the app ignores both.
-- **Round moons are perfect spheres.** Real round moons are flattened by
-  spin and stretched by tides, Mimas by 9 % between its axes. The app
-  flattens giant planets (`0.7 q`, Saturn 0.098), but never a round moon.
-- **Some small moons are always round.** The rule above applies to a
-  rocky planet's moons and to small ring moons. A giant's regular moons
-  are always spheres, whatever their size: in a giant world with a
-  captured Triton
-  ([`MoonSystem::of_giant`](../../crates/mapgen/src/moons.rs)), they
-  share a fiftieth of the usual mass and come out about 70 to 400 km in
-  radius, the smallest well under the ice limit. A system's regular
-  moons ([`regular_moons`](../../crates/mapgen/src/system.rs)) can be
-  rocky moons of about 310 km round a small, warm ice giant, under the
-  app's own rock limit. And the
-  resonant ring moon, 150 to 250 km in radius, is always round (Mimas is,
-  at 198 km).
-- **The card gives one size.** Its **Size** row shows the mean radius
-  only, not the three axes. The web README says a moon's panel gives
-  "its size (and three diameters when irregular)"; no component of the
-  web app reads the axes (`axes_km`) today.
+- **A line drawn through a band.** The app rounds a moon at 200 km (ice)
+  or 300 km (rock) in mean radius, from the observed change (Lineweaver &
+  Norman 2010). Real bodies round off gradually: Proteus, above the line
+  at 208 km, stays lumpy, and Vesta, a rock of 261 km, was perhaps round
+  once. The continuous irregularity softens the jump; its form
+  (`1 − d / limit`) and the axis draws are calibrations with no source.
+- **A homogeneous fluid.** The tidal shape is that of a homogeneous fluid
+  body ($h_2 = 5/2$), to first order in $q$: an upper bound for a
+  differentiated moon, whose core makes it deform less. Mimas comes out 18
+  km longer than wide against 17.2 measured; $q$ is capped at 0.05, a
+  calibration; and the weight `1 − irregularity` between a moonlet and
+  the round limit is a calibration too. The bumps scale with `1 − c/a`
+  (about 1 % on Mimas), a choice, not a measurement.
+- **Round moons are spheres except for the tides.** Real round moons are
+  also flattened by their own spin. The app flattens giant planets
+  (`0.7 q`, Saturn 0.098), but a moon only gets the tidal ellipsoid, and
+  one that is not locked, being a sphere, is not flattened at all.
+- **The ring moons keep a step.** A ring moon is irregular under 200 km in
+  mean radius and a perfect sphere above, with an irregularity of 0.2 at
+  least just under the limit: its short axis is 2 to 12 % shorter than
+  its long one there, against nearly equal for a moon of a system. A
+  resonant ring moon of 150 to 250 km is not stretched by its giant's
+  tides either (the rings' rule, not this article's).
 
 ## Sources
 

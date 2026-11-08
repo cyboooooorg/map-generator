@@ -165,15 +165,19 @@ renewed while their moons feed them.
 A giant drawn in a planetary system gets bright rings, faint narrow rings,
 or none, with the odds of its preset (`[giant] rings`: 25 % bright and
 50 % faint on gas giants, 70 % faint on ice giants, 5 % faint on hot
-ones). Its card gives their edges in its radii and their gaps. The planet
-view draws them round the globe, with the gaps their moons open.
+ones). The giant asked for (`--planet gas-giant`) is shaped like the
+others. Its card gives the rings' edges in its radii and their gaps. The
+planet view draws them round the globe, with the gaps and the divisions
+their moons open.
 
 On top of the main rings, some giants have dust rings, listed under
 **Dust rings** on the card and drawn as broad, smooth, faint annuli,
 densest along their source moon's orbit:
 
-- **Gossamer rings** from the outer edge of bright rings out to the small
-  moons just beyond them.
+- **Gossamer rings** from the main rings' outer edge out to the small
+  moons beyond them, bright rings or faint.
+- **A faint belt** round a small moon farther out, like the μ ring round
+  Mab.
 - **A plume ring** round an icy regular moon close in, like the E ring.
 
 The source moon's card says what it feeds.
@@ -185,46 +189,89 @@ The system first draws each giant's rings with its preset's odds
 from 1.2–1.5 to 2.1–2.5 radii, or a faint ring 0.05 to 0.3 radii wide
 starting at 1.5 to 1.9. Then
 [`shape_rings`](../../crates/mapgen/src/system.rs) computes the giant's
-mean density from its mass and radius and hands the rings to
+mean density from its mass and its equatorial radius, its $J_2$ from its
+flattening and spin, and the room its moons leave, and hands the rings to
 [`rings::shape`](../../crates/mapgen/src/rings.rs):
 
-1. **The outer edge of bright rings** becomes the fluid Roche limit for
-   particles of 0.5 to 0.9 g/cm³, kept between 2.0 and 2.5 radii.
-2. **A resonance gap**, on 60 % of bright rings: a moon of 150 to 250 km
-   outside the rings opens a gap 0.04 to 0.09 radii wide at its 2:1
-   resonance, `RESONANCE_FACTOR` (0.63) times its distance.
-3. **Faint rings** keep their drawn edges.
+1. **The outer edge of bright rings** is the fluid Roche limit for
+   particles of 0.5 to 0.9 g/cm³, with no cap: 2.15 to 2.62 radii round a
+   Saturn, 2.7 to 3.3 round Jupiter's density, up to about 5.9 round a
+   1,500 Earth-mass gas giant. Only physics bounds it. The rings stay
+   Hill stable inside the innermost other moon, $a_1 < a_2 / (1 + 2 \cdot
+   3^{1/6} \mu^{1/3})$ for a mass ratio $\mu$ (Gladman 1993, in the form
+   of Obertas et al. 2017), and within a third of the giant's Hill
+   radius, the app's bound for moons. The inner edge moves in to keep the
+   ring 0.3 radii wide (a calibration, no source); a ring whose inner
+   edge would fall below 1.11 radii, Saturn's D ring, is dropped.
+2. **A resonance edge**, on 60 % of bright rings: a moon of 150 to 250 km
+   outside the rings. Its 2:1 inner Lindblad resonance, found with the
+   giant's $J_2$, is the inner edge of a division 0.04 to 0.09
+   radii wide outward of it. Ring material runs up to the resonance and
+   resumes after the division.
+3. **Faint rings** keep their drawn edges. Beyond them come one or two
+   small *source* moons at 2 to 3.2 radii (Amalthea at 2.54 and Thebe at
+   3.10, Neptune's Despina to Larissa) and, with odds of 50 %, one at 3.4
+   to 4.2 (Mab at 3.82).
 
-Then [`rings::dust_rings`](../../crates/mapgen/src/rings.rs) adds the dust
-rings from the giant's moons:
+The resonance solves $m\,(\Omega - n_\text{moon}) = \kappa$ with the
+orbital and epicyclic frequencies to first order in $J_2$ (Murray &
+Dermott 1999):
 
-1. **Gossamer rings:** each of the one or two outermost edge moons beyond
-   bright rings feeds one, with odds of 80 %, from the rings' outer edge
-   out to 1.03 times the moon's distance.
-2. **A plume ring:** with odds of 25 %, the innermost icy regular moon
+```math
+\Omega^2 = \frac{GM}{r^3}\left(1 + \frac{3}{2}\frac{J_2}{r^2}\right),
+\qquad
+\kappa^2 = \frac{GM}{r^3}\left(1 - \frac{3}{2}\frac{J_2}{r^2}\right)
+```
+
+with $r$ in the giant's radii. For Mimas at 185,539 km and Saturn's
+$J_2$ of 0.01633 it gives 117,532 km: 650 km outward of Kepler's value,
+24 km short of Spitale & Porco's 117,556 km, which includes the higher
+terms of Saturn's field. The giant's $J_2$ comes from its flattening $f$
+and spin parameter $q = \Omega^2 R^3 / GM$ by the first-order relation of
+a fluid planet, $f = \tfrac{3}{2} J_2 + q/2$ (Murray & Dermott 1999,
+§4.5).
+
+Then [`rings::dust_rings`](../../crates/mapgen/src/rings.rs) adds the
+dust rings from the giant's moons:
+
+1. **Gossamer rings:** each of the one or two outermost edge moons or
+   sources beyond the main rings and within 3.3 radii feeds one, with
+   odds of 80 %, from the rings' outer edge out to 1.0 to 1.26 times the
+   moon's distance (Amalthea's ring ends at Amalthea, Thebe's extension
+   reaches 3.92 / 3.10 = 1.26 times Thebe's distance).
+2. **A belt:** a source beyond 3.3 radii keeps its dust round its orbit,
+   from 0.913 to 1.087 times its distance, with the same odds, bluish
+   (the μ ring: 17,000 km wide round 97,700 km, NASA).
+3. **A plume ring:** with odds of 25 %, the innermost icy regular moon
    within 12 radii feeds a ring from 0.75 to 2 times its distance (the E
-   ring spans 0.76 to 2.02 times Enceladus's).
+   ring spans 0.76 to 2.02 times Enceladus's). The moon is drawn: its
+   tidal heating is not computed.
 
-The outer edge and the resonance, trimmed (from
+The resonance and the outer edge, trimmed (from
 `crates/mapgen/src/rings.rs`):
 
 ```rust
-/// The 2:1 resonance of a moon lies at `2^(-2/3)` of its distance.
-pub const RESONANCE_FACTOR: f64 = 0.629_960_5;
-
 pub fn fluid_roche(giant_density: f64, density: f64) -> f64 {
     2.44 * (giant_density / density).cbrt()
 }
 
+pub fn inner_lindblad(a_moon: f64, m: u32, j2: f64) -> f64 {
+    let m = f64::from(m);
+    let omega = |r: f64| (r.powi(-3) * (1.0 + 1.5 * j2 / (r * r))).sqrt();
+    let kappa = |r: f64| (r.powi(-3) * (1.0 - 1.5 * j2 / (r * r))).sqrt();
+    let target = m * omega(a_moon);
+    // ... bisection on m Ω(r) − κ(r) = target, round Kepler's
+}
+
 // In `shape`, for bright rings:
-let particles = rng.random_range(PARTICLE_DENSITY.0..PARTICLE_DENSITY.1);
-let outer = fluid_roche(giant_density, particles)
-    .clamp(OUTER_EDGE.0, OUTER_EDGE.1); // 2.0 to 2.5 radii
-// The resonant moon: far enough out to be a moon, its 2:1 in the rings.
-let from = (outer + 0.5).max(fluid_roche(giant_density, density) + 0.1);
-let to = (outer - 0.1) / RESONANCE_FACTOR;
-let a = from + at * (to - from);
-let gap_at = a * RESONANCE_FACTOR;
+let outer = fluid_roche(density_g, particles).min(giant.room);
+let inner = f64::from(rings.inner).min(outer - BRIGHT_SPAN);
+if inner < ATMOSPHERE_EDGE {
+    return (None, out);
+}
+// The resonant moon: its 2:1 the edge, the division outward.
+let edge = inner_lindblad(a, 2, giant.j2);
+let centre = edge + width / 2.0;
 ```
 
 The giant's density comes from the same radius the rings are measured
@@ -237,47 +284,34 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
 
 ### Where it departs from the science
 
-- **The cap at 2.5 radii hides the Roche limit on most giants.** The
-  fluid limit for ice exceeds 2.5 radii round any giant denser than about
-  0.97 g/cm³. In the app that is every gas giant below about 43 or above
-  about 205 Earth masses: their bright rings always end at 2.5. Only
-  between those masses, round the least dense giants (0.62 g/cm³ for a
-  Saturn-mass giant, whose density the app takes from its equatorial
-  radius), does the edge follow the planet. The cap keeps the rings like
-  Saturn's, the only massive ones we know, rather than letting them grow
-  to the 3 to 3.6 radii the formula allows round a dense giant.
-- **A giant asked directly keeps unshaped rings.** When a giant is the
-  world asked for (a giant preset generated as a world, such as
-  `--planet gas-giant`), the system skips `shape_rings` for it. Its rings
-  keep the draw: an outer edge of 2.1 to 2.5 radii whatever its density,
-  and one to three gaps at random places, tied to no moon. Drawing that
-  preset with seeds 1 to 12 (`--draw-only`) gives three giants with bright
-  rings, ending at 2.14, 2.15 and 2.43 radii, their gaps owned by no
-  moon; shaped, the two above 1,000 Earth masses would end at 2.5. Only
-  the other giants of its system get the Roche edge and ring moons.
-- **The resonance opens a gap, not an edge.** Mimas's 2:1 sets the outer
-  edge of the dense B ring, and the Cassini Division lies outside it. The
-  app centres its gap on the resonance, with ring on both sides.
-- **The resonance is Keplerian.** `RESONANCE_FACTOR` ignores the giant's
-  flattening, which moves Saturn's real Mimas 2:1 about 690 km
-  outwards. That is 0.01 radii, smaller than the drawn gap.
 - **No other resonance edges.** The A ring's outer edge is set by the
   Janus 7:6 resonance; in the app, the edge moons sit beyond the rings
   without setting their edge, which the Roche limit alone places.
-- **Gossamer rings need bright rings.** Jupiter has no dense rings, yet
-  it has gossamer rings. In the app only the edge moons of bright rings
-  feed one, so a giant with faint rings or none never gets a dust ring
-  from its small moons, and no ring like Uranus's μ ring round Mab.
-  The gossamer ring also stops at 1.03 times its moon's distance, while
-  Jupiter's Thebe extension reaches 1.26 times Thebe's.
-- **The plume moon is not chosen by its heat.** The module's
-  documentation says the plume ring circles a moon "heated by the tides
-  of its resonant chain". The code does not compute any heating: it picks
-  the innermost icy regular moon within 12 radii, with odds of 25 %.
-- **No Phoebe ring.** Captured far moons feed no dust ring.
-- **No inner-edge physics.** A bright ring's inner edge is drawn between
-  1.2 and 1.5 radii, near Saturn's C ring (1.24); nothing ties it to the
-  atmosphere's drag, and there is no faint D ring inside it.
+- **$J_2$ comes from the app's flattening.** The app flattens a giant by
+  $0.7\,q$; with $f = \tfrac{3}{2} J_2 + q/2$ that gives
+  $J_2 = 0.133\,q$, 27 % above Saturn's real $J_2$ for Saturn's $q$ (and
+  19 % below Jupiter's). Saturn's Mimas 2:1 would move about 820 km
+  outward of Kepler's instead of 650. Past the globe's flattening cap
+  (0.12), $J_2$ takes the uncapped $0.7\,q$ and keeps rising with the
+  spin.
+- **The plume moon is not chosen by its heat.** The code draws the active
+  icy moon, innermost within 12 radii, with odds of 25 %. A real
+  criterion, a resonance that forces an eccentricity and so heats the
+  moon, is in [`docs/backlog.md`](../backlog.md), item 18.
+- **No Phoebe ring.** Captured far moons feed no dust ring: systems have
+  no irregular moons.
+- **Little inner-edge physics.** A bright ring's inner edge is drawn
+  between 1.2 and 1.5 radii, near Saturn's C ring (1.24), and moved in
+  only to keep the ring 0.3 radii wide and above 1.11 radii. Nothing ties
+  it to the atmosphere's drag, and there is no faint D ring inside it.
+- **A ringless giant gets no dust rings from small moons.** Only giants
+  with faint or bright rings get source or edge moons, so none feeds a
+  gossamer ring or a belt round a bare giant.
+- **Calibrations rest on two giants.** The split at 3.3 radii between a
+  gossamer ring and a belt rests on Jupiter and Uranus alone, as do the
+  odds (50 %) of a far source, the 0.3-radius minimum width of a bright
+  ring, and the source moons' range of 2 to 3.2 radii. None has a
+  source.
 - **Rings do not age.** They are drawn once and stay as they are: no
   mass, no darkening, no dust ring fading when its moon stops feeding it.
 
@@ -286,7 +320,7 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
 1. Murray, C. D. & Dermott, S. F. 1999, *Solar System Dynamics*, Cambridge
    University Press,
    [doi:10.1017/CBO9781139174817](https://doi.org/10.1017/CBO9781139174817),
-   §4.7 (Roche limits).
+   §4.5 (figure of a fluid planet, $J_2$), §4.7 (Roche limits).
 2. NASA Space Science Data Coordinated Archive, planetary fact sheets for
    [Jupiter](https://nssdc.gsfc.nasa.gov/planetary/factsheet/jupiterfact.html),
    [Saturn](https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturnfact.html),
@@ -352,6 +386,18 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
 16. Crida, A. et al. 2019, "Are Saturn's rings actually young?", *Nature
     Astronomy* 3, 967–970,
     [doi:10.1038/s41550-019-0876-y](https://doi.org/10.1038/s41550-019-0876-y).
+
+17. Gladman, B. 1993, "Dynamics of systems of two close planets", *Icarus*
+    106, 247–263,
+    [doi:10.1006/icar.1993.1169](https://doi.org/10.1006/icar.1993.1169).
+18. Obertas, A., Van Laerhoven, C. & Tamayo, D. 2017, "The stability of
+    tightly-packed, evenly-spaced systems of Earth-mass planets orbiting a
+    Sun-like star", *Icarus* 293, 52–58,
+    [doi:10.1016/j.icarus.2017.04.010](https://doi.org/10.1016/j.icarus.2017.04.010).
+19. de Pater, I., Hammel, H. B., Gibbard, S. G. & Showalter, M. R. 2006,
+    "New dust belts of Uranus: one ring, two ring, red ring, blue ring",
+    *Science* 312, 92–94,
+    [doi:10.1126/science.1125110](https://doi.org/10.1126/science.1125110).
 
 ## See also
 

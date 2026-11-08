@@ -60,7 +60,8 @@ from 1.4 to 64 km, −2.2 above 64 km, and −3.82 below 1.4 km, where
 secondary craters (thrown out by larger impacts) take over.
 
 **Orders of magnitude.** With $\beta = 2$, a 4 Ga Moon carries
-0.063 / 20² × 3.8 × 10⁷ ≈ 6 000 craters of 20 km or more. Head et al.
+0.063 / 20² × 3.8 × 10⁷ ≈ 6 000 craters of 20 km or more (about 5 500
+with Hartmann's −1.80 slope from 1.4 km). Head et al.
 (2010) catalogued more than 5 000 on the Moon from laser altimetry
 (NASA SVS).
 
@@ -248,50 +249,77 @@ regime.
 depends only on the planet and the seed:
 
 1. **How many.** `crater_density` is the lunar chronology above. The density
-   is multiplied by the giant planets' impact factor (0.7 to 1.8) and capped
-   at `SATURATION`, 0.115 craters of 1 km or more per km² (a tenth of the
-   hexagonal packing), which surfaces older than about 4.1 Ga reach.
+   is multiplied by the giant planets' impact factor (0.7 to 1.8) and, on a
+   preset with its own flux (`mars-like`), by the preset's `impact_ratio`
+   instead of the giants' factor.
 2. **Where and how large.** Diameters are split into octaves
    `[2^k, 2^(k+1)]` km, each with its own grid on a cube projected on the
-   sphere. Each cell holds a Poisson number of craters, $0.75\,N_1/D_k^2$
-   per km² (the octave's share of $N(>D) \propto D^{-2}$), placed and sized
-   at random from the cell's hash. The base map draws the craters of 4
-   pixels or more; the detail tiles add the smaller ones.
-3. **Ages** invert the chronology, so most craters of an old surface are
+   sphere. Each cell holds a Poisson number of craters, set by the octave's
+   share of Hartmann's piecewise law (`size_share`: slope −3.82 below
+   1.4 km, −1.80 to 64 km, −2.2 above), placed at random from the cell's
+   hash; within an octave, diameters follow the local slope. The base map
+   draws the craters of 4 pixels or more; the detail tiles add the smaller
+   ones.
+3. **Saturation.** Each octave is capped on its own at
+   $0.75 \times 0.115 / D^2$ craters per km² (`SATURATION`, 0.115: a tenth
+   of the hexagonal packing). The craters kept are the youngest formed: the
+   oldest are erased first. At an epoch, the craters formed by then are kept
+   youngest first, so erased ones come back in the past. Up to twice the
+   kept count is drawn (`ERASED_DRAWN`), so that the detail tiles stay
+   cheap.
+4. **Ages** invert the chronology, so most craters of an old surface are
    very old. A second population, at today's flux (the term $c$), holds the
    craters still to come, up to 1 Ga ahead.
-4. **Air.** No crater below `0.1 km × p^0.75` ($p$ in bar), and fewer up to
+5. **Air.** No crater below `0.1 km × p^0.75` ($p$ in bar), and fewer up to
    ten times that: 3 km and 30 km on Venus, 2 m on Mars.
-5. **Shape.** A radial profile, from Pike's laws and a transition at
-   `15 km × 1.62 / g`.
-6. **Superposition.** Craters are drawn oldest first. Inside a crater the
+6. **Shape.** A radial profile with a transition at
+   `15 km × 1.62 / g`. Below it, a bowl $0.2\,D$ deep. Above it, Pike's
+   complex depth law, written in transition diameters,
+   $0.157\,D_t\,(D/D_t)^{0.301}$ (4.2 km at 100 km on the Moon); the depth
+   passes from the bowl to that law as the crater turns complex, from 1 to
+   1.5 transitions, because Pike's two fits do not meet. On icy bodies
+   (bulk density under 2.5 g/cm³) complex craters are 0.4 as deep (a calibration:
+   Schenk 2002 measures 1.1 ± 0.3 km at 26 km across on Ganymede and
+   Callisto, against 2.8 km from Pike's law on the Moon, a ratio of
+   0.4). A central peak grows with the complex crater; a ring
+   replaces it from 137/15 = 9.1 transitions (protobasins) to
+   207/15 = 13.8 (peak-ring basins), the Moon's onsets of Baker et al. (2011)
+   over its 15 km transition. A rim of $0.036\,D$ and ejecta thinning as
+   $(r/R)^{-3}$ surround it, with irregular outlines.
+7. **Small craters.** The rim and ejecta of a crater only a few pixels wide
+   would be caught or missed by chance by the pixel under the crest, a ring
+   of dots. They fade in with the crater's size in pixels: nothing at 4
+   pixels across, full from 12. The floor keeps its depth.
+8. **Superposition.** Craters are drawn oldest first. Inside a crater the
    old relief is replaced (15 % of it kept); outside, ejecta thinning as
    $(r/R)^{-3}$ out to 3 radii bury it.
-7. **Wear.** Each crater keeps a share of its relief: the diffusion of small
-   impacts since it formed (`κ` = 5.5 m²/Ma), and on worlds that had water,
-   an exponential wear for the time it spent in the wet era
-   (`[geology] wet_until`). Craters of the wet era are drawn before the
-   hydraulic erosion, which wears them further; the others after it, fresh.
-   Craters on the floor of a sea that is still there leave nothing.
+9. **Wear.** Each crater keeps a share of its relief: the diffusion of small
+   impacts since it formed, and on worlds that had water, an exponential
+   wear for the time it spent in the wet era (`[geology] wet_until`).
+   Craters of the wet era are drawn before the hydraulic erosion, which wears
+   them further; the others after it, fresh. Craters on the floor of a sea
+   that is still there leave nothing.
 
 The profile and the wear, trimmed (from `crates/mapgen/src/craters.rs`):
 
 ```rust
-// Pike (1974, 1977): simple craters 0.2 D deep with a rim of
-// 0.036 D; complex ones grow shallower, continuously at the
-// transition.
-let (depth, rim) = if d < t {
-    (0.2 * d, 0.036 * d)
-} else {
-    (0.2 * t * (d / t).powf(0.3), 0.036 * t * (d / t).powf(0.4))
-};
+// Shape (Profile::shaped): Pike's complex depth law, in transition
+// diameters, blended from the simple bowl as the crater turns complex.
 let complex = f64::from(smoothstep(1.0, 1.5, (d / t) as f32));
-let ring = f64::from(smoothstep(5.0, 9.0, (d / t) as f32));
+let simple_depth = 0.2 * d;
+let complex_depth =
+    complex_depth * COMPLEX_DEPTH * t * (d / t).powf(COMPLEX_DEPTH_EXPONENT);
+let depth = simple_depth + complex * (complex_depth - simple_depth);
+let ring = f64::from(smoothstep(
+    PROTOBASIN_TRANSITIONS as f32,
+    PEAK_RING_TRANSITIONS as f32,
+    (d / t) as f32,
+));
 
 // fn wear: diffused since it formed, until the epoch shown.
 let since_ga = (crater.age_ga - self.epoch_ga).max(0.0);
 let diffused = DIFFUSIVITY_M2_PER_MA * since_ga * 1000.0;
-let mut wear = (-diffused / (DIFFUSION_SHARE * radius_m * radius_m)).exp();
+let mut wear = 1.0 / (1.0 + diffused / (DIFFUSION_SHARE * radius_m * radius_m));
 let exposure = (crater.age_ga - self.wet_until_ga).max(0.0);
 if exposure > 0.0 && self.erosion > 0.0 {
     let lasts = WEAR_GA * crater.diameter_km / WEAR_KM / self.erosion;
@@ -300,9 +328,28 @@ if exposure > 0.0 && self.erosion > 0.0 {
 ```
 
 `t` is the transition diameter, `MOON_TRANSITION_KM * MOON_GRAVITY /
-gravity`. `DIFFUSION_SHARE` is 0.05: a crater of radius $R$ keeps $1/e$ of
-its relief once $\kappa t = 0.05\,R^2$. `WEAR_GA` and `WEAR_KM` make a 20 km
-crater keep $1/e$ of its relief after 0.1 Ga of water at erosion 1.
+gravity`, and `complex_depth` is 1, or 0.4 on ice. Diffusion is that of a
+hollow spreading under $\partial h / \partial t = \kappa\,\nabla^2 h$: it
+keeps its volume, so its depth falls as the inverse of its widening area, not
+exponentially. A crater of radius $R$ keeps $1 / (1 + \kappa t / (s R^2))$ of
+its relief, with $\kappa$ = 5.5 m²/Ma and $s$ = `DIFFUSION_SHARE` = 0.0715,
+set so that a 1 km crater keeps 52 % after 3 Ga as Fassett & Thomson (2014)
+measure; a 300 m one keeps 8.9 % (they find about 7 %). `WEAR_GA` and
+`WEAR_KM` make a 20 km crater keep $1/e$ of its relief after 0.1 Ga of water
+at erosion 1.
+
+**Orders of magnitude.** A Moon-sized world with a 4 Ga surface has about
+5,500 craters of 20 km or more (Head et al. count more than 5,000 on the
+Moon). A
+crater of 170 m or less is worn out (below 3 % of its relief, `WORN_OUT`)
+after 3 Ga.
+
+**Mars's flux.** `mars-like` sets `[geology] impact_ratio = 2.6` and
+`crater_scale = 0.751`, read on Hartmann's isochron page (2.6 for asteroid
+impactors; Mars's craters against the Moon's for the same impactor, 0.865 ×
+0.868). Its craters of 1.4 to 64 km are 10^0.191 = 1.55 times the Moon's at
+equal age, the page's figure. Because the ratio already holds Mars's giants,
+the drawn giants' factor is not applied on top.
 
 **Epochs.** [`epoch.rs`](../../crates/mapgen/src/epoch.rs) shows the
 surface at another time $t$. The generation keeps the elevation without the
@@ -321,53 +368,52 @@ more are flooded flat at a date of that window and darkened.
 
 ### Where it departs from the science
 
-- **One size law for all sizes.** The app uses $\beta = 2$ everywhere. The
-  real lunar curve is steeper below 1.4 km (−3.82, Hartmann 2005), so deep
-  zooms on the detail tiles show far fewer small craters than a real surface
-  of that age.
-- **The lunar flux everywhere.** The chronology is the Moon's, scaled only by
-  the giant planets' impact factor and, on tidally locked planets, by the
-  leading side's excess. Impact rates and speeds that change with the
-  distance to the star are not modelled.
-- **Saturation thins every age alike.** The cap removes craters at random,
-  not the oldest ones. Going back in time on a saturated surface, the slider
-  shows fewer old craters than the surface had then.
 - **The transition follows gravity only.** `15 km × 1.62 / g` gives 6.6 km on
   Mercury, where the real transition is about 12 km, and 2.5 km on Earth,
   against 3 to 5 km. The Moon matches and Mars nearly does (6.6 km against
-  7 to 8). Rock strength, volatiles and impact speed are left out.
-- **Complex craters are about 27 % too deep.** The app joins the simple law
-  ($0.2\,D$) and the complex one at the transition, so that depths do not
-  jump. Pike's two fits do not meet there: at 15 km the simple law gives
-  3.0 km, the complex one 2.4 km. With Pike's exponent kept, every complex
-  lunar crater comes out 1.27 times deeper (5.3 km at 100 km instead of
-  4.2 km).
-- **Peak rings come too early.** The ring fades in from 5 to 9 transition
-  diameters: 75 to 135 km on the Moon, where protobasins start at 137 km and
-  peak-ring basins at 207 km. The README says "about seven times the
-  transition"; the study planned ten.
+  7 to 8). Rock strength, volatiles and impact speed are left out. Icy moons
+  turn complex far sooner than rock at the same gravity (about 2 to 3 km on
+  Ganymede, from secondary sources), so an `icy-moon` world gets a transition
+  several times too large, though its complex craters are shallower. The
+  backlog keeps this (item 20).
 - **No multi-ring basins.** The largest basins, up to the planet's radius,
-  are peak-ring craters scaled up. Orientale's rings of scarps are not drawn.
-- **Diffusion is about twice too strong.** With `DIFFUSION_SHARE` = 0.05, a
-  1 km crater keeps 27 % of its relief after 3 Ga, where Fassett & Thomson
-  (2014) measure 52 %, and craters up to about 600 m wear out (below 3 % of
-  their relief, `WORN_OUT`) where they find 200 to 300 m. A
-  `DIFFUSION_SHARE` near 0.1 would match their 1 km crater. It only shows
-  in the detail tiles of old surfaces: base-map craters lose under 1 %.
-- **The wet-era wear is a rule of thumb.** A 20 km crater keeping $1/e$ of
-  its relief after 0.1 Ga of water, larger ones in proportion, gives worn
-  Noachian craters on `mars-like`, but no source fixes these numbers.
+  are peak-ring craters scaled up. Orientale's rings of scarps are not drawn:
+  their onset does not scale as $1/g$ and no rule scales it from the Moon.
+- **The lunar flux on most worlds.** The chronology is the Moon's, scaled by
+  the giant planets' impact factor, by locking (the leading side's excess)
+  and, on `mars-like` only, by Hartmann's ratio. Mercury, Venus and Earth
+  keep the Moon's flux: the ratios of Le Feuvre & Wieczorek (2011) could not
+  be read, and Marchi et al. (2009) give Mercury's production only in
+  figures. Impact rates and speeds that change with the distance to the star
+  are not modelled.
+- **The deep past of old surfaces lacks its oldest craters.** At most twice
+  the kept count is drawn per octave. Where an octave formed more than that
+  (craters of 1 km on surfaces older than about 4.2 Ga, sub-km ones at
+  4 Ga), the oldest are never drawn, so going far back in time shows fewer
+  craters than equilibrium would.
+- **Small craters outlast Fassett & Thomson's.** The diffusion matches their
+  1 km crater (52 %) and nearly their 300 m one, but craters wear out (below
+  3 % of their relief) only under about 170 m, where they find craters
+  smaller than 200 to 300 m "degraded beyond recognition". It only shows in
+  the detail tiles of old surfaces: base-map craters lose under 1 %.
+- **Calibrations with no source.** The wet-era wear (a 20 km crater keeping
+  $1/e$ of its relief after 0.1 Ga of water, larger ones in proportion) gives
+  worn Noachian craters on `mars-like`, but no study fixes these numbers.
+  `SATURATION` (a tenth of hexagonal packing) is a choice: real equilibrium
+  densities vary. The rays fade with `1/e` in 250 Ma, gone in about 1 Ga,
+  chosen for the time scale of the Moon's young craters, not fitted. The ice
+  factor 0.4 is one crater depth ratio, 1.1 km on Ganymede against
+  2.8 km from Pike's law on the Moon at 26 km, which Schenk (2002) gives
+  as a depth that begins to fall below the complex-crater trend, applied to
+  every complex crater.
 - **The air filter is a fit.** `0.1 km × p^0.75` matches Venus's smallest
   craters (3 km against 1.5 km observed) and Mars's (2 m against craters of
   a few metres) roughly. It ignores what the impactor is made of: on Earth
   iron bodies get through where stony ones of the same size do not.
-- **Rays fade on a chosen clock.** `1/e` in 250 Ma, gone in about 1 Ga, is
-  set to make rays disappear on the time scale of the Moon's young craters,
-  not taken from a fit.
 - **Sea floors are cleared by the preset, not by plates.** A crater on the
   floor of a sea that still fills the basins leaves nothing on any world,
-  whatever its tectonic regime. The comment in `craters.rs` gives plate
-  recycling as one reason, but the rule reads only the sea.
+  whatever its tectonic regime: the rule reads only the sea, and plate
+  recycling is not modelled apart.
 - **The slider stops at the wet era.** Worlds with liquid water today offer
   no epochs, and dry worlds stop at the end of their wet era: before it,
   rivers and lakes would change too.
@@ -458,7 +504,14 @@ more are flooded flat at a date of that window and darkened.
 20. Boehnke, P. & Harrison, T. M. 2016, "Illusory Late Heavy
     Bombardments", *PNAS* 113, 10802–10806,
     [doi:10.1073/pnas.1611535113](https://doi.org/10.1073/pnas.1611535113).
-21. NASA, [Io](https://science.nasa.gov/jupiter/jupiter-moons/io/), and
+21. Schenk, P. M. 2002, "Thickness constraints on the icy shells of the
+    galilean satellites from a comparison of crater shapes", *Nature* 417,
+    419–421,
+    [doi:10.1038/417419a](https://doi.org/10.1038/417419a). Read in the
+    NASA NTRS copy: at a diameter of about 26 km on Ganymede and Callisto,
+    "crater depths begin to decrease slightly (d ≈ 1.1 ± 0.3 km)". The
+    ratio of 0.4 to the Moon is computed here from Pike's law.
+22. NASA, [Io](https://science.nasa.gov/jupiter/jupiter-moons/io/), and
     NASA Space Science Data Coordinated Archive, [planetary fact
     sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/) (surface
     gravities).

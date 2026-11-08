@@ -183,108 +183,175 @@ whole climate from the left of the chart above to the right.
 ### What you see
 
 - **The tilt.** The creation wizard has an **Axial tilt (°)** field (help:
-  "Earth: 23.4°"), from 0 to 90°. Left empty, the tilt is drawn. The world
-  card in the **Info** panel shows it on its **Axial tilt** line, and after
-  the tides "tilt steadied by its moon" or "tilt left free".
+  "Earth: 23.4°"), from 0 to 90°. Left empty, the tilt is drawn: from 5 to
+  40° with a large moon, from 0 to 85° without one. The world card in the
+  **Info** panel shows it on its **Axial tilt** line, and after the tides
+  "tilt steadied by its moon" or "tilt left free".
 - **Climate zones.** The **Temperature** layer (−30 °C to 40 °C) shows the
-  annual mean, and the **Biomes** layer its zones: ice caps, then tundra
-  and taiga, temperate land, tropical land towards the equator. A world
-  tilted past about 55° turns this upside down: warm poles and a cooler
-  equator.
-- **Seasons, in the light only.** The **Season** slider of the **Light and
-  season** panel ("Sun declination follows the axial tilt") and **Play**
-  (`S`) move the sun between the tropics with **Sunlight** on, and say where
-  it stands ("Summer solstice · sun over 23.4° N"). The temperatures and
-  biomes do not change with it.
+  annual mean. The **Biomes** layer shows the zones: ice caps, then tundra
+  and taiga, temperate land, tropical land towards the equator. The biomes
+  read the seasons as well as the mean: ice needs a summer below freezing,
+  and land with a cold winter is never tropical. A world tilted past about
+  54° has warm-annual poles, but their winters freeze, so they read as
+  temperate land, not jungle.
+- **The Season slider moves only the light.** The **Season** slider of the
+  **Light and season** panel ("Sun declination follows the axial tilt") and
+  **Play** (`S`) move the sun between the tropics with **Sunlight** on, and
+  say where it stands ("Summer solstice · sun over 23.4° N"). The
+  Temperature layer stays the annual mean whatever the season. On a world
+  alone, the sun's latitude follows $\sin\delta = \sin\varepsilon\sin\lambda$,
+  as in a system.
 
 ### How it computes them
 
 1. **The tilt.** A tilt asked for is kept. A drawn one comes from 5 to 40°.
    If no moon has at least 0.005 of the planet's mass (the Moon: 0.0123),
-   the draw is stretched to 0 to 60°, the range Laskar & Robutel (1993)
-   found for Mars. A moon of a giant keeps the 5 to 40° range: its tilt
-   follows the giant's.
-2. **The light of each row of the map**, relative to the global mean, from
-   the two-term formula above.
+   the draw is stretched to 0 to 85°, the chaotic zone of a moonless Earth
+   (Laskar, Joutel & Robutel 1993). A moon of a giant keeps the 5 to 40°
+   range: its tilt follows the giant's. A drawn tilt is 0 for a planet whose
+   star's tides have despun it (locked, or in the 3:2 resonance).
+2. **The light of each row of the map**, relative to the global mean: the
+   exact annual mean of the daily formula above (eq. 45–47), averaged over
+   360 steps of the orbit, with $\sin\delta = \sin\varepsilon\sin\lambda$.
 3. **Into a temperature.** The light is rescaled so that Earth's tilt gives
    0 at the poles and 1 at the equator. A curve fitted to Earth's annual
-   zonal mean turns it into degrees: −18 °C at the poles, 12 °C at 42°,
-   27 °C at the equator.
-4. **Atmosphere and star.** Dense air evens the rows out. The star then
+   zonal mean turns it into degrees: $T = -18 + 56.28\,t - 11.28\,t^2$,
+   which gives −18 °C at the poles, 12 °C at 42°, 27 °C at the equator.
+4. **The same global mean at every tilt.** The curve bends, so the rows
+   are then shifted to keep the global mean of Earth's tilt (14.5 °C),
+   averaged by area. The tilt moves the light between latitudes without
+   changing its global mean. In an energy balance model whose outgoing
+   radiation is linear in temperature, the mean temperature depends only on
+   the mean absorbed light (Budyko 1969; North et al. 1981).
+5. **Atmosphere and star.** Dense air evens the rows out. The star then
    moves them by the light the planet gets relative to Earth's, including
    the factor $1/\sqrt{1-e^2}$ of an eccentric orbit (see the README,
    "Temperature — axial tilt").
-5. **Each pixel** then cools with altitude on land and gets a large-scale
-   anomaly standing for ocean currents and continents.
+6. **Seasons.** Each row gets a seasonal half-range, on land and on the sea:
+   half the difference between its sunniest and darkest day, in the same
+   units as step 3, times 45 °C per unit (the mean slope of the curve), times
+   a damping for thermal inertia (0.45 on land, 0.10 on the sea), times the
+   atmosphere's heat contrast, then moved by the star. Summer is the mean
+   plus the half-range, winter the mean minus it. A land pixel near the sea
+   swings less: its range runs from the sea's at the coast to the interior's
+   over about 400 km. A planet locked to its star has no seasons.
+7. **Each pixel** cools with altitude on land and gets a large-scale
+   anomaly standing for ocean currents and continents. The lapse rate is
+   6.5 °C per km at 1 bar or more (the standard atmosphere, NASA Glenn),
+   and less in thinner air, down to none on an airless body.
+8. **Biomes.** Land is ice cap when its summer is below 0 °C (Köppen's EF,
+   warmest month below 0 °C), tundra when its summer is below 10 °C and
+   its mean below the boreal limit (ET). Land whose winter is below 18 °C is
+   not tropical, however warm its mean is: Köppen's tropical climates A
+   need a coldest month of at least 18 °C. Köppen limits are those of Kottek
+   et al. (2006), Table 1.
 
 The core, trimmed (from `crates/mapgen/src/climate.rs`):
 
 ```rust
 pub const EARTH_AXIAL_TILT_DEG: f32 = 23.44;
 
-pub fn celsius(t: f32) -> f32 {
-    -18.0 + 66.2 * t - 21.2 * t * t
+pub fn sea_level_celsius(t: f32) -> f32 {
+    -18.0 + 56.28 * t - 11.28 * t * t
 }
 
-fn insolation(latitude: f64, axial_tilt_deg: f32) -> f64 {
-    let s2 = -5.0 / 8.0 * p2((axial_tilt_deg as f64).to_radians().cos());
-    1.0 + s2 * p2(latitude.sin())
+pub fn annual_insolation(latitude: f64, axial_tilt_deg: f32) -> f64 {
+    (0..ORBIT_STEPS)
+        .map(|k| {
+            let longitude = (k as f64 + 0.5) / ORBIT_STEPS as f64 * TAU;
+            daily_insolation(latitude, declination(axial_tilt_deg, longitude))
+        })
+        .sum::<f64>()
+        / ORBIT_STEPS as f64
 }
 
 pub fn row_temperatures(grid: &Grid, axial_tilt_deg: f32) -> Vec<f32> {
-    // Earth's tilt sets the scale: 0 at its poles, 1 at its equator.
-    let pole = insolation(FRAC_PI_2, EARTH_AXIAL_TILT_DEG);
-    let equator = insolation(0.0, EARTH_AXIAL_TILT_DEG);
+    // Same global mean as Earth's tilt, whatever the tilt.
+    let shift = mean_latitude_temperature(EARTH_AXIAL_TILT_DEG)
+        - mean_latitude_temperature(axial_tilt_deg);
     (0..grid.height)
         .map(|y| {
-            let s = insolation(grid.latitude(y), axial_tilt_deg);
-            let t = ((s - pole) / (equator - pole)) as f32;
-            celsius(t.clamp(INSOLATION_RANGE.0, INSOLATION_RANGE.1))
+            latitude_temperature(grid.latitude(y), axial_tilt_deg) + shift
         })
         .collect()
 }
+
+// In Seasons::new: the swing of the daily light, in degrees, then
+// summer and winter rows for each damping.
+let s = insolation_swing(grid.latitude(y), axial_tilt_deg)
+    / (equator - pole);
+s as f32 * DEGREES_PER_UNIT * contrast
+// land: half_range(LAND_SEASONS), sea: half_range(SEA_SEASONS)
 ```
 
 The sea-level temperatures this gives, before the atmosphere and the star
-act on them:
+act on them (the shift that keeps the global mean is included):
 
 | Tilt | Equator | 45° | Pole |
 | --- | --- | --- | --- |
-| 0° | 29 °C | 7 °C | −33 °C |
+| 0° | 30 °C | 10 °C | −48 °C |
 | 23.44° (Earth) | 27 °C | 10 °C | −18 °C |
-| 45° | 21 °C | 15 °C | 7 °C |
-| 54.7° | 17 °C | 17 °C | 17 °C |
-| 90° | 7 °C | 21 °C | 29 °C |
+| 45° | 20 °C | 11 °C | 9 °C |
+| 54.7° | 16 °C | 13 °C | 17 °C |
+| 90° | 3 °C | 20 °C | 29 °C |
+
+The land's seasonal half-range, before the star, at Earth's air pressure:
+
+| Tilt | 30° | 60° | Pole |
+| --- | --- | --- | --- |
+| 23.44° (Earth) | 11 °C | 20 °C | 22 °C |
+| 45° | 20 °C | 35 °C | 40 °C |
+| 90° | 28 °C | 49 °C | 57 °C |
+
+The sea swings about a fifth as much as the land (0.10 against 0.45). At
+90° the land pole swings by ±57 °C around its mean of 29 °C, from a
+scorching summer to a winter far below freezing.
 
 The tilt is resolved with the moons in
 [`crates/mapgen/src/request.rs`](../../crates/mapgen/src/request.rs) and
 [`crates/mapgen/src/moons.rs`](../../crates/mapgen/src/moons.rs)
-(`PlanetEffects::tilt`). The rows are built in
-[`crates/mapgen/src/climate.rs`](../../crates/mapgen/src/climate.rs), and
-the star and the eccentric orbit act on them in
+(`PlanetEffects::tilt`). The rows and the seasons are built in
+[`crates/mapgen/src/climate.rs`](../../crates/mapgen/src/climate.rs)
+(`seasons` in
+[`crates/mapgen/src/generation.rs`](../../crates/mapgen/src/generation.rs)),
+and the star and the eccentric orbit act on them in
 [`crates/mapgen/src/star.rs`](../../crates/mapgen/src/star.rs)
-(`star_temperatures`, `mean_flux_factor`), called from
-[`crates/mapgen/src/generation.rs`](../../crates/mapgen/src/generation.rs).
+(`star_temperatures`, `mean_flux_factor`). Ice, tundra and the tropics are
+chosen in
+[`crates/mapgen/src/biome.rs`](../../crates/mapgen/src/biome.rs)
+(`BiomeRules`).
 
 ### Where it departs from the science
 
-- **No seasons in the climate.** Temperatures, ice and biomes come from
-  annual means. The **Season** slider moves only the light. On Earth-like
-  tilts this is what maps of climate zones show. At high tilt it hides the
-  real story: at 90°, a pole that gets 433 W/m² over a year spends half of
-  it in darkness, yet the app paints it as a warm, steady climate.
-- **Two terms of the series.** Close to Earth's tilt the two-term formula
-  stays within 5 % of the exact average. At other tilts it drifts. With no
-  tilt it gives the poles 128 W/m² instead of none, so they are less cold
-  than they would be (−33 °C rather than the −56 °C floor the clamp
-  allows). It makes the curve exactly flat at 54.7°, where the true one
-  dips by about 6 % at mid-latitudes, and moves the tilt where the poles
-  overtake the equator from 53.9° to 54.7°.
-- **Temperature from light by an Earth fit.** One curve, fitted to Earth,
-  turns light into temperature for every tilt. Because it bends, the
-  planet's mean temperature moves with the tilt even though the mean light
-  does not: 13.5 °C at 0°, 14.8 °C at Earth's tilt, 16.7 °C at 54.7°. Ice
-  and clouds, which would change with the tilt, are not modelled.
+- **Temperature from light by an Earth fit.** One curve, fitted to Earth
+  (calibration, no source), turns light into temperature for every tilt.
+  The global mean is held at Earth's 14.5 °C by a shift, which an energy
+  balance model with linear outgoing radiation justifies. Real planets
+  differ: ice and clouds, which would change with the tilt, are not
+  modelled, and neither is the heat carried to the poles.
+- **The seasons are a calibration.** The damping factors (0.45 on land,
+  0.10 on the sea) and the 400 km that a coast's mild air reaches inland
+  have no source. They were chosen so that continental interiors swing by
+  about ±10 °C at 30° and ±20 °C at 60°, the order of Phoenix's and
+  Fairbanks's ranges (not checked against station normals). A
+  mixed-layer sea 50 m deep, with a restoring rate of 5.4 W/m²/K (the
+  slope of the app's curve), would give 0.13 for the sea by the response
+  of a heat capacity to a yearly swing, $1/\sqrt{1+(\omega C/\lambda)^2}$;
+  that sum is the app's, not North et al.'s, who take a mixed layer of
+  75 m (which would give 0.09 here) and a restoring rate of 2.09 W/m²/K.
+- **Only ice, tundra and the tropics read the seasons.** The Temperature
+  layer and the other biome rules use the annual mean. The app has no
+  monthly temperatures: summer and winter are the mean plus or minus the
+  half-range.
+- **Land with a cold winter is called temperate.** Köppen puts land with a
+  coldest month below 18 °C in the warm temperate (C), cold (D) or dry (B)
+  climates. The app turns it into temperate forest or plain, or arid land
+  where it is dry.
+- **No uneven seasons on eccentric orbits.** The app adds the
+  $1/\sqrt{1-e^2}$ factor, which is right for annual means, but not the
+  uneven seasons it brings (46 % more light at perihelion on Mars). They
+  need a longitude of perihelion, which the parameters do not have
+  (`docs/backlog.md`).
 - **A steady tilt, set once.** Each world has one tilt for its whole life.
   Real tilts wander (by ±1.3° for Earth, by tens of degrees for Mars), and
   the ice ages follow such swings.
@@ -292,24 +359,17 @@ the star and the eccentric orbit act on them in
   more steadies the tilt, a lighter one does not. That cut is the app's
   choice, between the Moon and a moon too small to matter; the studies
   above computed only Earth with and without its Moon. Without a large
-  moon the tilt is drawn from 0 to 60°, Mars's range, while Laskar et al.
-  (1993) found up to 85° possible for a moonless Earth, and Lissauer et al.
-  (2012) a much narrower range over long times.
+  moon the tilt is drawn from 0 to 85°, the chaotic zone of a moonless
+  Earth (Laskar et al. 1993), while Lissauer et al. (2012) found a much
+  narrower range over long times.
 - **No tilt above 90°.** The app takes tilts from 0 to 90°. A planet that
   spins backwards, like Venus (177.4°) or Uranus (97.8°), can only be
-  entered as its mirror image (2.6°, 82.2°). For the annual light this
-  changes nothing, since the series depends on the tilt only through
-  $\cos^2\varepsilon$.
-- **Eccentric orbits: the year's mean only.** The app adds the
-  $1/\sqrt{1-e^2}$ factor, which is right for annual means, but not the
-  uneven seasons it brings (46 % more light at perihelion on Mars).
-- **The season slider on a lone world.** On a world that is not part of a
-  system, the sun's latitude is $\varepsilon\sin(2\pi\,\text{season})$,
-  not $\arcsin(\sin\varepsilon\sin\lambda)$. The two agree at the
-  equinoxes and solstices; between them the sun stands too far from the
-  equator, by up to 0.3° at Earth's tilt, 5° at 60° and 19° at 90°. In
-  a system the sun's direction comes from the orbit geometry and is
-  exact.
+  entered as its mirror image (2.6°, 82.2°). For the annual light and the
+  seasonal swing this changes nothing, since both depend on the tilt only
+  through the star's declination, which is symmetric.
+- **Tilt 90° pushes the model.** The wind belts, the rain bands and the
+  rain-shadow rules follow geographic latitude, while the warm poles
+  evaporate most (`docs/backlog.md`).
 
 ## Sources
 
@@ -354,6 +414,22 @@ the star and the eccentric orbit act on them in
     sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/) (obliquities
     and eccentricities of Mercury, Venus, Mars and Uranus; the masses of
     the Earth and the Moon).
+11. Budyko, M. I. 1969, "The effect of solar radiation variations on the
+    climate of the Earth", *Tellus* 21, 611–619,
+    [doi:10.3402/tellusa.v21i5.10109](https://doi.org/10.3402/tellusa.v21i5.10109).
+    The energy balance model with linear outgoing radiation.
+12. North, G. R., Cahalan, R. F. & Coakley, J. A. 1981, "Energy balance
+    climate models", *Reviews of Geophysics and Space Physics* 19, 91–121,
+    [doi:10.1029/RG019i001p00091](https://doi.org/10.1029/RG019i001p00091).
+    The mean temperature set by the mean absorbed light, and the thermal
+    inertia of land and sea against a yearly swing.
+13. Kottek, M., Grieser, J., Beck, C., Rudolf, B. & Rubel, F. 2006, "World
+    map of the Köppen-Geiger climate classification updated",
+    *Meteorologische Zeitschrift* 15, 259–263,
+    [doi:10.1127/0941-2948/2006/0130](https://doi.org/10.1127/0941-2948/2006/0130).
+    Table 1: the limits of the polar (EF: warmest month below 0 °C; ET:
+    below 10 °C), tropical (A: coldest month at least 18 °C) and cold
+    climates.
 
 The insolation values in the tables and the chart, and the app's
 temperatures, were computed for this article from sources 1 and 2 and

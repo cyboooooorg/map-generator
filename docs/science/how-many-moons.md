@@ -7,16 +7,16 @@ gravity holds moons against the star's.
 
 ## Short answer
 
-A moon can only last in a shell round its planet. Too close, inside the
-Roche limit, the planet's tides tear a loose body apart. Too far, beyond
-about a third to a half of the Hill radius, the star's pull wins and the
-orbit does not last; moons going round backwards can stay a little farther
-out. Tides then move moons inwards or outwards, and a planet locked to its
-star loses them. Rocky planets get their big moons from giant impacts,
-which can leave a moon of a hundredth (the Moon) to a tenth (Charon) of the
-planet's mass; about one rocky planet in twelve may have one. Giant planets
-grow whole families of moons in a disk, which together weigh about a
-ten-thousandth of the planet.
+A moon can only last in a shell round its planet. Too close, inside the Roche
+limit, the planet's tides tear a loose body apart. Too far, beyond about a
+third to a half of the Hill radius, the star's pull wins and the orbit does not
+last; moons going round backwards can stay a little farther out. Tides then
+move moons inwards or outwards, and a planet its star has despun loses all but
+its lightest. Rocky planets get their big moons from giant impacts, which can
+leave a moon of a hundredth (the Moon) to a tenth (Charon) of the planet's
+mass; about one rocky planet in twelve may have one. Giant planets grow whole
+families of moons in a disk, which together weigh about a ten-thousandth of the
+planet.
 
 ## The science
 
@@ -107,6 +107,34 @@ more quickly than less massive ones". A planet locked to its star turns
 once a year; by Kepler's third law its synchronous orbit then lies at
 $a\,(m/M)^{1/3}$, which is $3^{1/3} \approx 1.44$ Hill radii, outside its
 Hill sphere: every moon it could hold is below it.
+
+Time is what saves the lightest. A moon starting at the edge of the stable
+zone, a share $f$ of the Hill radius, spirals in at a rate that grows
+steeply with its mass. Setting its lifetime to the age $T$ of the system,
+Barnes & O'Brien (2002, eq. 8) get the heaviest moon that is still there:
+
+```math
+M_m \le \frac{2}{13}
+\left(\frac{(f\,a_p)^3}{3\,M_\star}\right)^{13/6}
+\frac{M_p^{8/3}\,Q_p}{3\,k_{2p}\,T\,R_p^5\sqrt{G}}
+```
+
+$a_p$ is the planet's orbital distance, $M_\star$ the star's mass, $M_p$,
+$R_p$, $Q_p$ and $k_{2p}$ the planet's mass, radius, tidal quality factor
+and Love number. Barnes & O'Brien wrote it for close-in giants; the app
+applies it to rocky planets too, with their own $Q_p$ and $k_{2p}$.
+
+**In words.** The farther the planet from its star, the larger the Hill
+sphere and the longer the fall: the limit climbs as the 6.5th power of the
+distance, and the heavier the planet, the heavier the moons that last.
+Close in, only moonlets remain.
+
+**Orders of magnitude.** With the app's $Q_p = 100$ and $k_{2p}$ of rock, this
+article's evaluation gives about $2 \times 10^{18}$ kg for an Earth at 0.07 AU
+from a red dwarf of type M5V: a moonlet of about 60 km at Phobos's density,
+nowhere near the Moon's $7 \times 10^{22}$ kg (NASA). With a giant's own tides
+(Juno's $k_2$, $Q \approx 5 \times 10^4$), a Jupiter locked to the Sun at 0.12
+AU keeps moons up to about $10^{22}$ kg: lighter than every Galilean moon.
 
 ### How large: giant impacts, debris and capture
 
@@ -212,7 +240,10 @@ $2^{2/3} \approx 1.59$ times the last.
   frequency above comes from the Solar System and from simulations.
 - **The odds of a giant impact.** Elser et al. (2011) give a range of a
   factor of eleven, and they modelled planets like the Earth round a star
-  of one solar mass, with Jupiter and Saturn.
+  of one solar mass, with Jupiter and Saturn. The paper says these systems
+  "do not represent general systems with terrestrial planets", and neither
+  its abstract nor its conclusion gives a dependence of the odds on the
+  star, the planet's mass or its distance.
 - **Where small moons come from.** Phobos and Deimos, impact debris or
   captured asteroids, is still argued; the disk models above are the
   current favourite.
@@ -227,9 +258,13 @@ $2^{2/3} \approx 1.59$ times the last.
 - The generation form's **Moons** field takes "auto" (the seed's moons),
   none, or 1 to 6. Its help reads "about one rocky planet in 12 has a large
   moon, small worlds often a companion, others small debris or captured
-  moons, planets locked to their star none". When a number is asked, a
-  drawn star and orbit that leave no room (a planet locked to its star, a
-  Hill sphere too small) are drawn again; set ones are refused.
+  moons, planets despun by their star only moonlets light enough to outlast
+  its tides". When a number is asked, a drawn star and orbit that leave no
+  room (a planet its star has despun, a Hill sphere too small) are drawn
+  again; set ones are refused ("No stable orbits for 2 moons: the star and
+  orbit chosen keep the planet too close to its star, whose tides pull down
+  all but the lightest moons"). A giant asked for more moons than it keeps
+  gets a similar message.
 - In the star view the moons circle their planet on orbits not to scale,
   retrograde ones backwards, and a binary planet swings round its
   barycentre. The **Hill spheres** switch draws each planet's Hill sphere
@@ -241,9 +276,17 @@ A rocky planet's moons come from `MoonSystem::draw` in
 [moons.rs](../../crates/mapgen/src/moons.rs), on a noise stream of their
 own:
 
-1. **The planet.** Its mass follows from its size at Earth's density. Its
-   Hill radius is taken at periapsis. A planet locked to its star gets no
-   moons.
+1. **The planet.** Its mass follows from its size by the mass–radius
+   relation of rocky planets (`rocky_gravity` in
+   [world.rs](../../crates/mapgen/src/world.rs), after Zeng et al. 2016).
+   Its Hill radius is taken at periapsis. A planet its star has despun
+   (locked, or in the 3:2 resonance: see
+   [Why does a world always show the same face to its
+   host?](tidal-locking.md)) keeps only the moons light enough to outlast
+   the system, by the equation above (`lasting_moon_kg`, with the Love
+   number of rock and $Q = 100$): a moonlet of 60 km round an Earth at
+   0.07 AU from an M5V dwarf, never a giant-impact moon. They are all
+   marked as decaying.
 2. **One draw per origin**, each with its odds:
    - **giant impact**: 1 in 12 from 0.4 Earth radii up, 1 in 2 below 0.25
      (linear in between); a mass ratio of 0.005 to 0.03, up to 0.15 on
@@ -252,49 +295,72 @@ own:
      moons 2.2 to 9 planet radii out, sized like Phobos round Mars and
      scaled with the planet;
    - **capture**: 15 %, about 1 in 7; one to three moons of 1 to 30 km,
-     0.05 to 0.3 Hill radii out, eccentric, half of them retrograde.
-
+     0.05 to 0.3 Hill radii out, eccentric, half of them retrograde, at
+     inclinations of 130 to 170° (retrograde) or 10 to 55°, outside the
+     unstable band of 55 to 130°.
 3. **The stable zone.** A moon is kept only from the Roche limit (fluid for
-   round moons, rigid for irregular ones) out to a third of the Hill radius,
-   or half for a retrograde one, from periapsis to apoapsis. A moon closer
-   than eight mutual Hill radii to a heavier one is dropped.
-4. **Tides.** The planet's day is drawn from 12 to 36 hours; a moon above
-   the synchronous orbit recedes, one below it or retrograde falls in, one
-   beyond a tenth of the Hill radius hardly moves. A moon of 0.05 of the
-   planet's mass or more locks the planet to it.
+   round moons, rigid for irregular ones) out to a third of the Hill
+   radius, or half for a retrograde one, from periapsis to apoapsis, and
+   only if it is light enough to last on a despun planet. A moon closer
+   than eight mutual Hill radii to a heavier one, or than 1.2 times its
+   orbit, is dropped.
+4. **Tides.** The planet's day is drawn from 12 to 36 hours (a despun
+   planet turns once a year, or three times every two years in 3:2). A
+   moon above the synchronous orbit recedes, one below it or retrograde
+   falls in, one beyond a tenth of the Hill radius hardly moves. The
+   planet turns with its largest moon when that moon's tides despin it
+   within the system's age (`despin_gyr`, the despinning time of
+   [Why does a world always show the same face to its
+   host?](tidal-locking.md)): the Earth would need 35 Gyr to do it for
+   the Moon, Pluto under 0.05 Gyr for Charon. A binary is a planet whose
+   barycentre with that moon lies outside it.
 
 The stable zone, trimmed (from `crates/mapgen/src/moons.rs`):
 
 ```rust
-// Stable orbits only: beyond the Roche limit, within the Hill sphere.
+// Stable orbits only: beyond the Roche limit, within the Hill sphere,
+// and light enough to outlast the age on a planet its star has despun.
 let stable = |c: &Candidate| {
     let roche = if c.round() {
-        2.44 * r_p * (PLANET_DENSITY / c.density).cbrt()
+        2.44 * r_p * (planet_density / c.density).cbrt()
     } else {
-        1.26 * r_p * (PLANET_DENSITY / c.density).cbrt()
+        1.26 * r_p * (planet_density / c.density).cbrt()
     };
-    let reach = if c.inclination_deg > 90.0 { 0.5 } else { 1.0 / 3.0 };
+    let reach = if c.inclination_deg > 90.0 {
+        RETROGRADE_REACH // 0.5
+    } else {
+        PROGRADE_REACH // 1/3
+    };
     c.a_km * (1.0 - c.eccentricity) > roche
         && c.a_km * (1.0 + c.eccentricity) < reach * hill
+        && c.mass_kg <= lasting(reach)
 };
 ```
 
-A giant of a planetary system gets two to four regular moons from
-`regular_moons` in [system.rs](../../crates/mapgen/src/system.rs). They share
-$10^{-4}$ of its mass (`SATELLITE_MASS_SHARE`) and sit on a resonant chain,
-each orbit $2^{2/3}$ times the last, from 6 to 12 giant radii outwards and
-within a third of the Hill radius. Icy beyond 12 radii or under a cold star,
-rocky closer in. A hot giant (above 1,000 K) keeps none:
+A giant draws its moons with `of_giant` in the same file, whether it is a
+giant world or a giant of a planetary system
+([system.rs](../../crates/mapgen/src/system.rs) calls `MoonSystem::draw`
+for it). Two to five regular moons share $10^{-4}$ of its mass, unevenly,
+on a resonant chain, each orbit $2^{2/3}$ times the last, from 4 to 8
+giant radii outwards: beyond the Roche limit and its rings, and within a
+third of the Hill radius, where the chain stops. Icy beyond 8 to 11 radii
+or round a very cold star, rocky closer in. On 35 % of ice giants
+(unless a number of moons is asked), a captured retrograde Triton, 1.5 to
+3 times $10^{-4}$ of the giant's mass, orbits 12 to 16 radii out; the
+regular moons then weigh a fiftieth of the usual and keep inside its
+orbit. A hot giant keeps none,
+and a giant its star has locked only the moons light enough to last
+(`giant_locked`, the same equation with a giant's own $k_2$ and $Q$):
 
 ```rust
-let count = 2 + (rng.random::<f64>() * 3.0) as usize;
-let first = 6.0 * (1.0 + rng.random::<f64>());
-for (k, share) in shares.iter().enumerate() {
-    let radii = first * SIBLING_SPACING.powi(k as i32); // 2^(2/3) apart
-    if radii > hill / 3.0 {
-        break;
-    }
-    let mass = SATELLITE_MASS_SHARE * mass_kg * share / total;
+let first = rng.uniform(4.0, 8.0);
+for (k, w) in weights.iter().enumerate() {
+    let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
+    let a = a_radii * r_g;
+    // The chain ends at the edge of the stable zone.
+    if a * 1.01 >= PROGRADE_REACH * hill { break; }
+    let mass = 1e-4 * m_g * w / total * if captured_triton { 0.02 } else { 1.0 };
+    let icy = a_radii > ice_line || star.equilibrium_k < 60.0;
     // ...
 }
 ```
@@ -308,35 +374,36 @@ chain round it. Ring moons are drawn apart (see
 
 - **The odds are calibrations.** Elser et al.'s 1 in 12 applies to every
   rocky planet from 0.4 Earth radii, round any star and at any distance,
-  though they simulated Earth-like planets of a Sun-like star. The odds of
-  debris and captured moons (1 in 5, about 1 in 7) are assumptions: no
-  statistics exist. The companion of one small world in two rests loosely
-  on Brown et al.'s three Kuiper belt objects in four.
+  though they simulated Earth-like planets of a Sun-like star, and the
+  paper gives no dependence on the star, the planet's mass or its
+  distance to scale by. The odds of debris and captured moons (1 in 5,
+  about 1 in 7) are assumptions: no statistics exist. The companion of one
+  small world in two rests loosely on Brown et al.'s three Kuiper belt
+  objects in four. The code labels all of them as calibrations.
 - **The stable zone is strict.** A third and a half of the Hill radius are
   the cautious end of the published range (Shen & Tremaine 2008 find
-  moons out to about 0.5 and 0.7). The app loses some far moons a real
-  planet could keep, never the reverse.
-- **Unstable inclinations.** Captured moons are drawn at 10 to 60° or 100
-  to 170°. Orbits between 55° and 130° are generally unstable (Carruba et
-  al. 2002, via Shen & Tremaine 2008), so some drawn moons would not last.
-  The app's inclinations are to the planet's equator, those limits to its
-  orbit; for a tilted planet the two differ.
-- **No moon at all on a locked planet.** Barnes & O'Brien (2002) find that
-  the lightest moons can outlast a planet's age even as the planet slows,
-  so a locked planet might keep a small moon. The app gives it none.
+  moons out to about 0.5 and 0.7; Barnes & O'Brien take 0.36 and 0.5). The
+  app loses some far moons a real planet could keep, never the reverse.
+- **Inclinations against the equator, limits against the orbit.** Captured
+  moons are drawn outside the unstable band of 55 to 130° (Carruba et al.
+  2002, via Shen & Tremaine 2008), but the app's inclinations are to the
+  planet's equator and those limits to its orbit; for a tilted planet the
+  two differ, so a drawn moon may sit in the unstable band.
+- **Light moons on despun planets, from one equation.** Barnes & O'Brien's
+  limit is for a moon starting at the edge of the stable zone and falling
+  in under the star's tides; the app applies it with one $Q$ and one
+  Love number for all rocky planets and drops the moons above it. A
+  despun planet may keep a moonlet in reality in more cases, or fewer
+  (the equation is only good to orders of magnitude).
 - **Present places, no history.** A giant-impact moon is placed 10 to 65
   planet radii out, as the Moon is now, without the tidal migration from
   much closer in that took it there (Canup 2005). Migration is a label,
   not a computed rate.
-- **Masses from size.** The planet's mass assumes Earth's density. A small
-  icy world comes out heavier than Pluto (1.85 g/cm³), which makes binaries
-  rarer than a Pluto-like density would.
-- **Two recipes for a giant's moons.** A giant in a planetary system gets
-  two to four moons from 6 to 12 radii, icy beyond 12 radii
-  (`regular_moons`). A giant generated as a lone world gets two to five from
-  4 to 8 radii, icy beyond 8 to 11 radii, and on some ice giants a captured
-  Triton (`of_giant` in [moons.rs](../../crates/mapgen/src/moons.rs)). The
-  same giant would have different moons in the two cases.
+- **Masses from size.** The planet's mass follows from the mass–radius
+  relation of rocky planets, never less dense than uncompressed rock (the
+  Moon's 3.34 g/cm³). A small icy world comes out almost twice as dense
+  as Pluto (1.85 g/cm³), so heavier, which makes binaries rarer than a
+  Pluto-like density would.
 - **An exact chain.** Every giant's moons sit on a 1:2:4… chain, however
   many there are. At Jupiter only Io, Europa and Ganymede do: Callisto's
   period is 2.33 times Ganymede's (JPL). And the moons' total mass varies
@@ -353,7 +420,7 @@ chain round it. Ring moons are drawn apart (see
    1087–1093, [doi:10.1086/341477](https://doi.org/10.1086/341477),
    preprint [arXiv:astro-ph/0205035](https://arxiv.org/abs/astro-ph/0205035).
    The Hill radius (eq. 5), the stability limits, moon loss by stellar
-   tides.
+   tides and the heaviest moon that lasts (eq. 8).
 2. Shen, Y. & Tremaine, S. 2008, "Stability of the distant satellites of the
    giant planets in the solar system", *The Astronomical Journal* 136,
    2453–2467,
@@ -404,6 +471,16 @@ chain round it. Ring moons are drawn apart (see
     elements](https://ssd.jpl.nasa.gov/sats/elem/) and [physical
     parameters](https://ssd.jpl.nasa.gov/sats/phys_par/) (orbits, periods,
     GMs).
+15. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass–radius
+    relation for rocky planets based on PREM", *The Astrophysical Journal*
+    819, 127,
+    [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).
+    The mass–radius relation the app gives a rocky planet, read in the
+    preprint [arXiv:1512.08827](https://arxiv.org/abs/1512.08827): $R/R_\oplus =
+    (1.07 - 0.21\,\mathrm{CMF})\,(M/M_\oplus)^{1/3.7}$ for 1 to 8 Earth
+    masses and a core mass fraction of 0 to 0.4. Earth's fraction, 0.33,
+    gives $M = R^{3.7}$, the app's form; the app also uses it below 1 Earth
+    mass, out of the range the authors give.
 
 ## See also
 

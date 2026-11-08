@@ -123,95 +123,140 @@ A rocky world's relief is drawn on the globe and the flat map, shaded by
 its slopes; the **Relief** slider exaggerates it for the eye. The **Info**
 panel gives the world's **Gravity**, in Earth's. A world of small
 circumference (the form's **Circumference (km)**; drawn worlds run from
-20,000 to 80,000 km) has low gravity and taller, more jagged mountains; a
-large one, flatter and rounder relief.
+20,000 to 80,000 km) has low gravity and taller, more jagged ranges and
+volcanoes, up to twice Earth's; a large one, lower and rounder relief. The
+continents themselves and the sea floor look alike at any gravity.
 
 ### How it computes them
 
 ```mermaid
 flowchart LR
-  C["Circumference"] --> G["Gravity<br/>C / C⊕, 0.1 to 5"]
-  G --> B["Mountain blend<br/>0.35 / √g"]
+  C["Circumference"] --> G["Gravity<br/>mass–radius<br/>relation (Zeng 2016)"]
+  G --> S["Relief scale<br/>min(1/g, 2)"]
+  S --> B["Mountain blend<br/>0.45 × scale"]
   B --> M["Mountain ridges"]
-  B --> P["Plate boundary<br/>uplift"]
+  S --> P["Plate boundary<br/>uplift"]
+  S --> V["Volcanic cones"]
   G --> K["Crater transition<br/>15 km × 1.62 / g"]
 ```
 
-1. **Gravity.** `WorldParams::gravity_modifier` in
-   [`world.rs`](../../crates/mapgen/src/world.rs) assumes every rocky world
-   has Earth's density. Then the mass grows as the radius cubed, and the
-   surface gravity as the radius: $g/g_\oplus = C / C_\oplus$, with
-   $C_\oplus = 40{,}075$ km, kept between 0.1 and 5.
-2. **Mountains.** The elevation before erosion is
-   `continent + plates + mountain × mountain_weight × mountain_blend`
-   ([`generation.rs`](../../crates/mapgen/src/generation.rs)). The blend
-   is $0.35/\sqrt{g}$: 0.35 at Earth's gravity, about 0.49 at half of it,
-   0.25 at twice.
-3. **Plate boundaries.** The ranges, trenches and ridges that
+1. **Gravity.** `rocky_gravity` in
+   [`world.rs`](../../crates/mapgen/src/world.rs) takes the mass of a rocky
+   world from the mass–radius relation $M \propto R^{3.7}$ (Zeng, Sasselov &
+   Jacobsen 2016, fitted from 1 to 8 Earth masses; its coefficient, 1.002 at
+   Earth's core, is taken as 1). With $r = C / C_\oplus$ and
+   $C_\oplus = 40{,}075$ km, the surface gravity is
+   $g/g_\oplus = \max(r^{1.7},\, 0.607\,r)$: the floor is the density of
+   uncompressed rock, the Moon's 3.344 g/cm³ over Earth's 5.513 (NASA fact
+   sheets), reached at 0.48 Earth radii. It is capped at 5 g (from 2.6 Earth
+   radii, far beyond the fit). A moon has the gravity of its card, from its
+   density (`WorldParams::gravity`), and a reloaded world keeps the gravity
+   it was generated with.
+2. **Mountains.** The elevation before erosion is the floating crust, plus
+   the plates' uplift, plus
+   `mountain × mountain_weight × mountain_blend`, plus the volcanoes
+   ([`generation.rs`](../../crates/mapgen/src/generation.rs)). The blend is
+   $0.45 \times \min(1/g,\ 2)$: 0.45 at Earth's gravity, 0.9 at the cap,
+   0.14 at 3.2 g (twice Earth's size). The 0.45 is a calibration on
+   Earth's hypsometry, with the platform below.
+3. **Plate boundaries.** The ranges, arcs and trenches that
    [`plates.rs`](../../crates/mapgen/src/plates.rs) raises at plate
-   boundaries are given "at Earth's gravity" and scaled by the same
-   blend.
-4. **Craters.** The size above which a crater gets a flat floor and a
+   boundaries are given "at Earth's gravity" and multiplied by the same
+   `relief_scale`. The swell of mid-ocean ridges is not: it comes from the
+   heat of young floor, not from weight (see [Do all rocky planets have
+   plate tectonics?](plate-tectonics.md)).
+4. **Volcanoes.** The height of cones, provincial and arc, is multiplied by
+   `relief_scale` as well.
+5. **Floating crust.** The continents and the sea floor are not scaled.
+   `floating` maps the continents' noise to a platform rising to 0.5 km
+   above the waterline on land, and at sea to a shelf (0.2 km), a slope down
+   to the generator's old floor (4 km) and an abyss levelling off towards
+   6.4 km (Parsons & Sclater 1977). Crust floats at the same height under
+   any $g$ (Airy), so none of it depends on gravity. The values are
+   calibrations on Earth's hypsometry (ETOPO 2022, NOAA NCEI,
+   doi:10.25921/fd45-gt74): about 0.42 km median land height, a tenth of the
+   land above 2 km, 2 % above 4 km.
+6. **Range.** Elevations beyond ±0.85 units are compressed with `tanh` into
+   $[-1, 1]$ (`within_range`), not clipped, so the tall relief of light
+   worlds keeps its summits.
+7. **Small bodies.** `relief_share` keeps the noise relief whole until its
+   span, from the old floor to the highest mountains, would pass 8 % of the
+   body's radius: a body of about 230 km in radius or more at Earth's
+   gravity, 370 km at the cap, keeps it all. Smaller ones have their relief
+   cut to 8 % of their radius. On an airless
+   stagnant body (a moon, a dead world) the span is also capped at 9 km
+   (`IMPACT_RELIEF_KM`), and at 0.4 of that on an icy one (bulk density
+   under 2.5 g/cm³).
+8. **Craters.** The size above which a crater gets a flat floor and a
    central peak is $15\,\text{km} \times 1.62 / g$ (g in m/s²), the Moon's
    15 km scaled as $1/g$
    ([`craters.rs`](../../crates/mapgen/src/craters.rs)).
-5. **Small bodies.** Below about 2,100 km in radius, a moon's relief is
-   flattened towards its sea level to about 0.6 % of its radius
-   (`relief_share` in `generation.rs`).
 
-The gravity and the mountain blend, trimmed (from
+The gravity and the relief scale, trimmed (from
 `crates/mapgen/src/world.rs` and `crates/mapgen/src/generation.rs`):
 
 ```rust
-/// Assumes constant density, so gravity scales linearly with radius (and
-/// thus circumference). Clamped to a plausible range for rocky planets.
-pub fn gravity_modifier(&self) -> f32 {
-    (self.circumference_km / EARTH_CIRCUMFERENCE_KM).clamp(0.1, 5.0)
+pub fn rocky_gravity(radius: f32) -> f32 {
+    let radius = radius.max(0.0);
+    let density = radius
+        .powf(ROCKY_MASS_RADIUS_EXPONENT - 3.0)
+        .max(UNCOMPRESSED_ROCK_DENSITY);
+    (density * radius).min(MAX_ROCKY_GRAVITY)
 }
 
-// Stronger gravity suppresses mountain relief; sqrt dampens the effect
-// for extreme values. Baseline 0.35 at Earth gravity.
-mountain_blend: 0.35 / p.gravity_modifier().sqrt(),
+pub(crate) fn relief_scale(gravity: f32) -> f32 {
+    (1.0 / gravity.max(1e-3)).min(MAX_RELIEF_SCALE)
+}
 
-// Relief scales with gravity as the mountains do.
-let tectonic_uplift = plates.uplift * self.mountain_blend / 0.35;
+// Sampler::new
+mountain_blend: MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()),
+// Sampler::sample
+let tectonic_uplift = plates.uplift * self.relief_scale + plates.swell;
+let cone_height = cone_height * self.relief_scale;
 ```
+
+Examples: Mars's size gives 0.34 g (Mars: 0.38), Venus's 0.92 (0.90), the
+Moon's 0.165 (0.165), twice Earth's size 3.2 g, which keeps 31 % of Earth's
+relief. A Mars-sized world and a Moon-sized moon both reach the cap and get
+ranges twice Earth's. Measured on a Mars-sized `terran` world at 29 % land:
+median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
 
 ### Where it departs from the science
 
-- **$1/\sqrt{g}$, not $1/g$.** The README says so: "The square-root
-  softens the curve so extreme planets remain visually interesting". At
-  twice Earth's gravity, mountains keep 71 % of Earth's height instead of
-  50 %; at half, they get 141 % instead of 200 %. A Mars-sized world gets
-  ranges 1.4 times Earth's, not 2.6 times.
-- **Only mountains and plate relief scale.** The continents' noise, the
-  depth of the sea floor and the volcanic cones (0.25 elevation units above
-  the terrain, 0.4 for arc volcanoes) keep the same height at any gravity.
-  The tallest volcanoes, which on Mars are the tallest mountains of all,
-  do not grow on light worlds.
-- **Heights in kilometres do not change.** One elevation unit is 25 km on
-  every world (`ELEVATION_KM`, calibrated on Earth-like worlds), so a
-  world's elevation range in kilometres changes only through the mountain
-  blend.
-- **Gravity from Earth's density.** Real rocky bodies differ in density:
-  Mars has 0.53 of Earth's radius but 0.38 of its gravity (NASA). The app
-  would give a Mars-sized world 0.53 g. The same rule applies to moons
-  generated as worlds: a Moon-sized moon gets 0.27 g instead of the Moon's
-  0.165 g, and an icy moon, far less dense than rock, gets two to three
-  times its true gravity. Its mountains and its crater transition follow
-  that gravity.
+- **The relief scale stops at 2.** Mars's size would give 2.9 by $1/g$, and
+  Olympus Mons stands 2.5 times as high as Everest (Plescia 2004). The cap
+  keeps the summits of light worlds inside the elevation range (one unit is
+  25 km). The Moon, Io and Vesta are far under their $1/g$ ceiling anyway.
+- **Mercury's gravity.** Mercury's size gives 0.23 g, where Mercury has
+  0.38: its iron core is large, and the relation is fitted on Earth-like
+  interiors. The relation is also extrapolated below one Earth mass, and
+  past 8 Earth masses.
+- **Heights in kilometres are a fixed unit.** One elevation unit is 25 km on
+  every world (`ELEVATION_KM`, calibrated on Earth-like worlds). Relief
+  scales with gravity; the unit does not.
+- **Isostasy is a calibration, not a balance.** The platform's height and
+  the shelf, slope and abyss of the sea floor are fitted on Earth's
+  hypsometry. There is no field of crustal thickness, so no root under a
+  range and no densities in the code; there is no flexure of the crust
+  under a volcano; and since the platform floats at the waterline, a world
+  with a lower sea level shows platform, not old basins. Sea floor older
+  than about 18 Ma lies between 4 and 6.4 km by the noise, not by its age.
 - **Erosion ignores gravity.** The droplets of the hydraulic erosion run
   with a fixed `gravity` of 4 (a constant of the droplet method, not the
   planet's); a heavier world is not worn faster or slower. There is no
   glacial erosion capping ranges at a snowline.
-- **No isostasy.** Mountains are heights added to a surface; no root,
-  no flexure of the crust under a volcano.
-- **Small bodies get flatter, not taller.** Real small bodies carry
-  relief that is a larger share of their radius the smaller they are
-  (Vesta's mound is a twelfth of its radius). The app flattens bodies under
-  2,100 km in radius to about 0.6 % of their radius, the opposite trend.
-  It shows on the moons of a system: the noise relief of a Vesta-sized moon
-  is cut to about 1.6 km, where Vesta has a mound of 22 km.
+- **Small bodies rest on weak numbers.** The 8 % comes from one figure,
+  Vesta's mound, in an EGU abstract that is not peer-reviewed. The 9 km cap
+  of airless stagnant bodies is a calibration on the Moon's 13 km span (it
+  gives a Moon-sized moon 15.7 km with its craters), and the 0.4 of ice
+  extrapolates one crater depth ratio to all relief (1.1 km on Ganymede
+  against 2.8 km on the Moon at 26 km across; Schenk 2002, see [How do
+  impact craters form and fade?](impact-craters.md)).
+  A Vesta-sized airless moon is therefore capped at 9 km where Vesta's mound
+  alone is 22 km. An icy moon's simple craters are still rock's bowls under
+  rock's transition, so its span is 0.75 of rock's, not 0.4. Dead planets
+  (`mercury-like`, airless `barren`) have the 9 km cap too, whatever their
+  gravity.
 
 ## Sources
 
