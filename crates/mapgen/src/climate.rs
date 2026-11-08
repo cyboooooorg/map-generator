@@ -471,6 +471,78 @@ impl LockedClimate {
     }
 }
 
+/// Peak cooling of the sea off the west coasts of the subtropics, K: the
+/// cold eastern-boundary currents (California, Canary, Humboldt, Benguela,
+/// Western Australia). In the annual mean of NOAA OI SST v2 on the 1991-2020
+/// normals (Reynolds et al. 2002, doi:10.1175/1520-0442(2002)015<1609:AIISAS>2.0.CO;2),
+/// the sea within 2 000 km west of a coast, from 20° to 30° of latitude in
+/// both hemispheres, is 1.2 to 2.0 K colder than the mean of its latitude
+/// (0.5 to 1.3 K from 30° to 40°, 0.4 to 1.3 K from 10° to 20°; sea and land
+/// of the NCEP/NCAR reanalysis mask, Kalnay et al. 1996,
+/// doi:10.1175/1520-0477(1996)077<0437:TNYRP>2.0.CO;2, 1° cells, so the
+/// narrow cold tongue of the coast itself is smoothed out: calibration to
+/// that table, no source for the value).
+pub const COLD_CURRENT_K: f32 = 1.7;
+/// Distance to the coast to the east up to which the cold current keeps its
+/// full cooling, km: the cooling of that table does not fall with the
+/// distance within 2 000 km. Calibration, no source.
+pub const COLD_CURRENT_FULL_KM: f32 = 1_000.0;
+/// Distance to the coast to the east at which the cooling has gone, km: the
+/// sea beyond 2 000 km of a coast is 0.3 to 0.5 K warmer than its latitude.
+pub const COLD_CURRENT_END_KM: f32 = 2_500.0;
+/// Centre and width (standard deviation) of the cooling in latitude, Earth
+/// degrees: the table's bands put the peak at 20-30° and about 0.6 of it at
+/// 15° and at 35° (calibration, no source for the shape).
+const COLD_CURRENT_LATITUDE_DEG: f64 = 25.0;
+const COLD_CURRENT_SPREAD_DEG: f64 = 10.0;
+
+/// Cooling of the sea by the cold eastern-boundary currents, K (zero or
+/// negative), of every pixel of `grid`: the sea with land to its east in the
+/// same row, within [`COLD_CURRENT_END_KM`], cooled by up to
+/// [`COLD_CURRENT_K`] in the latitudes of the trades ([`Belts::cold_current_share`]).
+/// A pixel is on the west coast of a continent when land lies to its east,
+/// the ocean basin's eastern boundary, in either hemisphere. The moisture
+/// pass reads the cooled sea: colder air holds less vapour, so the coast
+/// behind it is drier (the Atacama, the Namib).
+pub fn cold_currents(grid: &Grid, belts: &Belts, sea: &[bool]) -> Vec<f32> {
+    let w = grid.width as usize;
+    (0..grid.height)
+        .into_par_iter()
+        .flat_map_iter(|y| {
+            let row = &sea[y as usize * w..(y as usize + 1) * w];
+            let share = belts.cold_current_share(grid.latitude(y));
+            let step = grid.dx_km(y);
+            // Steps to the nearest land to the east, walking the row west
+            // to east twice so that the seam does not matter.
+            let mut distance = vec![f32::INFINITY; w];
+            let mut to_land = f32::INFINITY;
+            for k in (0..2 * w).rev() {
+                let x = k % w;
+                if !row[x] {
+                    to_land = 0.0;
+                } else {
+                    to_land += step;
+                }
+                if k < w {
+                    // Land is not cooled.
+                    distance[x] = if row[x] { to_land } else { f32::INFINITY };
+                }
+            }
+            distance.into_iter().map(move |d| {
+                if d.is_finite() && d < COLD_CURRENT_END_KM {
+                    let fade = ((d - COLD_CURRENT_FULL_KM)
+                        / (COLD_CURRENT_END_KM - COLD_CURRENT_FULL_KM))
+                        .clamp(0.0, 1.0);
+                    let smooth = 1.0 - fade * fade * (3.0 - 2.0 * fade);
+                    -COLD_CURRENT_K * share * smooth
+                } else {
+                    0.0
+                }
+            })
+        })
+        .collect()
+}
+
 /// Weight of the large-scale temperature anomaly noise on land, °C: about
 /// 3.6 °C of standard deviation, so climate zones move by up to ~15° of
 /// latitude between continents.
@@ -727,6 +799,17 @@ impl Belts {
             -(6.0 * (b - 60.0)).to_radians().sin()
         };
         MERIDIONAL_WIND * shape as f32
+    }
+
+    /// Share, in `[0, 1]`, of the cooling of the cold eastern-boundary
+    /// currents at `latitude` (radians): a Gaussian of
+    /// [`COLD_CURRENT_SPREAD_DEG`] centred on [`COLD_CURRENT_LATITUDE_DEG`],
+    /// both Earth degrees, stretched with the belts like the trade winds
+    /// that drive the upwelling (the currents sit in the trades and the
+    /// subtropical highs).
+    pub fn cold_current_share(&self, latitude: f64) -> f32 {
+        let e = self.earth_latitude(latitude);
+        (-((e - COLD_CURRENT_LATITUDE_DEG) / COLD_CURRENT_SPREAD_DEG).powi(2) / 2.0).exp() as f32
     }
 
     /// Octaves (doublings) by which the large-scale circulation raises or
@@ -1324,6 +1407,52 @@ mod tests {
             weight += r * r;
         }
         assert!((sum / weight - 1.0).abs() < 1e-3, "{}", sum / weight);
+    }
+
+    #[test]
+    fn the_sea_west_of_a_subtropical_coast_is_cold() {
+        let grid = Grid {
+            width: 360,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        // An ocean with one continent from 90° to 180° of longitude.
+        let sea: Vec<bool> = (0..grid.pixel_count())
+            .map(|i| !(90..180).contains(&(i % 360)))
+            .collect();
+        let belts = Belts::EARTH;
+        let cool = cold_currents(&grid, &belts, &sea);
+        let at = |lat: f64, x: usize| {
+            let y = (90.0 - lat).round() as usize;
+            cool[y * 360 + x]
+        };
+        // Off the west coast (longitude 89°) at 25° of both hemispheres.
+        assert!(
+            (at(25.0, 89) + COLD_CURRENT_K).abs() < 0.05,
+            "{}",
+            at(25.0, 89)
+        );
+        assert!((at(-25.0, 89) - at(25.0, 89)).abs() < 0.05);
+        // Still full 800 km out (about 9° at 25°), gone far out.
+        assert!(at(25.0, 80) < -0.9 * COLD_CURRENT_K);
+        assert_eq!(at(25.0, 0), 0.0);
+        // Weaker towards the equator and the pole, none on land, none off
+        // the continent's east coast, where the land lies behind.
+        assert!(at(5.0, 89).abs() < 0.2 * COLD_CURRENT_K && at(5.0, 89) <= 0.0);
+        assert!(at(70.0, 89).abs() < 0.01);
+        assert!(at(25.0, 120) == 0.0);
+        assert!(at(25.0, 185).abs() < 0.2, "{}", at(25.0, 185));
+    }
+
+    #[test]
+    fn the_cold_currents_follow_the_trades_of_slow_and_fast_worlds() {
+        // Twice Earth's rotation rate: the belts, and the currents under
+        // the trades, move halfway to the equator.
+        let fast = Belts::new(12.0, 40_075.0);
+        let share = |b: &Belts, deg: f64| b.cold_current_share(deg.to_radians());
+        assert!(share(&fast, 12.5) > 0.99);
+        assert!(share(&Belts::EARTH, 12.5) < 0.7);
+        assert!(share(&Belts::EARTH, 25.0) > 0.99);
     }
 
     #[test]

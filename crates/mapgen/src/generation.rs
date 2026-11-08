@@ -1334,7 +1334,7 @@ pub fn generate_with_progress(
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
     let lapse = crate::climate::lapse_rate(params);
-    let raw_temperature: Vec<f32> = elevation
+    let mut raw_temperature: Vec<f32> = elevation
         .par_iter()
         .enumerate()
         .map(|(i, &e)| {
@@ -1352,6 +1352,22 @@ pub fn generate_with_progress(
         })
         .collect();
     drop(anomaly);
+    // The sea off the west coasts of the subtropics, cooled by the
+    // eastern-boundary currents (the moisture pass reads it). A locked
+    // planet's winds do not blow along its coasts, and a world with no
+    // liquid sea has no currents.
+    let belts = belts(params);
+    if locked.is_none() && params.pressure_bar >= LIQUID_WATER_BAR {
+        let sea: Vec<bool> = elevation
+            .par_iter()
+            .map(|&e| relief(e) < rules.waterline)
+            .collect();
+        let cooling = crate::climate::cold_currents(&grid, &belts, &sea);
+        raw_temperature
+            .par_iter_mut()
+            .zip(&cooling)
+            .for_each(|(t, c)| *t += c);
+    }
     debug("temperature", Ramp::Unsigned, &|| {
         // −30 °C to 40 °C over the ramp.
         raw_temperature
@@ -1378,7 +1394,6 @@ pub fn generate_with_progress(
     // Winds carry ocean evaporation inland; it rains out with distance and on
     // windward slopes, leaving rain shadows behind mountains, where the air
     // comes down warmer (foehn).
-    let belts = belts(params);
     let (
         coast_distance_km,
         Moisture {

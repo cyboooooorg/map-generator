@@ -721,13 +721,17 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   "Where it departs from the science" sections), after the climate fixes
   of 2026-11-07 (exact insolation, seasons, Clausius-Clapeyron rain,
   meridional winds, foehn).
-- **Cold eastern-boundary currents** (Humboldt, Benguela, California): the
-  sea off the west coasts of the subtropics is several degrees colder,
-  which dries the coast (the Atacama, the Namib). A rule cooling the sea
-  pixels west of a continent between about 10° and 40° would need a
-  sourced magnitude and width (SST climatologies), the ocean basins found
-  row by row, and the moisture pass to read the cooled sea; the
-  temperature anomaly noise stands in for it today.
+- **Cold eastern-boundary currents** (Humboldt, Benguela, California):
+  first step done (2026-11-08): the sea with land to its east within
+  2 500 km is cooled by up to 1.7 K at 25° (`cold_currents`), the
+  magnitude and width read in NOAA OI SST v2 (Reynolds et al. 2002; see
+  the README). What remains: the cooling is a smooth offset read from 1°
+  cells, so it is weaker and wider than the real coastal cold
+  tongue, which the 1° cells smooth out; it does not cool the coastal land air, which is
+  what keeps the Atacama rainless and foggy (an inversion the moisture
+  pass does not have); the ocean basin is found by the land to the east
+  in the row, not by the gyre; and the warm western boundary currents
+  (Gulf Stream, Kuroshio), which balance the cold ones, are not modelled.
 - **Monsoons:** the seasonal reversal of the wind between land and sea.
   The seasons now set summer and winter temperatures, but the wind and
   the rain are annual means: a monsoon needs a summer and a winter run of
