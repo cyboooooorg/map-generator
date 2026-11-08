@@ -13,11 +13,13 @@
     width: number;
     height: number;
     radius?: number;
+    /** How the distances are scaled: 'log' spreads the inner orbits of a crowded system. */
+    scale?: 'sqrt' | 'log';
   }
 
-  let { system, width, height, radius = 4 }: Props = $props();
+  let { system, width, height, radius = 4, scale = 'sqrt' }: Props = $props();
 
-  const drawn = $derived(orrery(system, width, height));
+  const drawn = $derived(orrery(system, width, height, scale));
   const starColour = $derived(cssColour(system.star_light));
   /** The tooltip: how many planets, and the habitable zone when known. */
   const summary = $derived(

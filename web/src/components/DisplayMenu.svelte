@@ -96,12 +96,15 @@
   .display {
     position: relative;
     display: inline-flex;
+    /* As tall as the buttons beside it. */
+    align-self: stretch;
   }
+  /* The look of the toolbar's buttons (app.css), only centred. */
   .cog {
     display: grid;
     place-items: center;
-    width: 36px;
-    padding: 0;
+    min-height: 32px;
+    padding: 6px 10px;
   }
   .menu {
     position: absolute;
@@ -154,7 +157,8 @@
       min-height: 44px;
     }
     .cog {
-      width: 44px;
+      min-width: 44px;
+      min-height: 44px;
     }
   }
 </style>

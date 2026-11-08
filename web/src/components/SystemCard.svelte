@@ -49,6 +49,10 @@
     onToggle,
   }: Props = $props();
 
+  /** The compact card's orrery, px. */
+  const ORRERY = 124;
+  /** Chips shown in a compact card before "+N". */
+  const MAX_CHIPS = 4;
   const name = $derived(nameOf(system));
   const renamed = $derived(name !== system.designation);
   const starColour = $derived(cssColour(system.star_light));
@@ -70,7 +74,7 @@
 <article class="card" class:compact class:editing={renaming} title={t.systemList.seedTitle({ seed: system.seed })}>
   {#if renaming}
     {#if compact}
-      <SystemOrrery {system} width={104} height={104} radius={10} />
+      <SystemOrrery {system} width={ORRERY} height={ORRERY} radius={10} scale="log" />
     {:else}
       <OrbitStrip {system} />
     {/if}
@@ -78,7 +82,7 @@
   {:else}
     <button class="open" aria-pressed={selecting ? chosen : undefined} onclick={() => (selecting ? onToggle() : onOpen())}>
       {#if compact}
-        <SystemOrrery {system} width={104} height={104} radius={10} />
+        <SystemOrrery {system} width={ORRERY} height={ORRERY} radius={10} scale="log" />
       {:else}
         <OrbitStrip {system} />
       {/if}
@@ -91,20 +95,20 @@
           ><span class="dot" style:background={starColour} aria-hidden="true"></span><b>{system.star}</b> · {starKind}</span
         >
         <span class="chips">
-          {#each chips as chip (chip.type)}
+          {#each compact ? chips.slice(0, MAX_CHIPS) : chips as chip (chip.type)}
             <span class="chip"><span class="dot small" style:background={chip.colour} aria-hidden="true"></span>{chip.text}</span>
           {/each}
+          {#if compact && chips.length > MAX_CHIPS}
+            <span class="more" title={chips.slice(MAX_CHIPS).map((c) => c.text).join(', ')}>+{chips.length - MAX_CHIPS}</span>
+          {/if}
         </span>
         {#if habitable}
           <span class="habitable">● {compact ? t.systemList.habitableShort : t.systemList.habitableLine}</span>
         {/if}
-        {#if compact}
-          <small class="meta" title={when}>{meta}</small>
-        {/if}
       </span>
     </button>
     <span class="foot">
-      {#if !compact}<small class="meta" title={when}>{meta}</small>{/if}
+      <small class="meta" title={when}>{meta}</small>
       <SystemActions {system} {selecting} {chosen} {onChanged} {onPinned} {onRename} {onDelete} {onToggle} />
     </span>
   {/if}
@@ -226,17 +230,17 @@
     border-top: 1px solid var(--border);
   }
 
-  .compact {
-    flex-direction: row;
-    align-items: stretch;
-  }
+  /* Compact: the orrery on the left, the text beside it at the top, the footer in its own row. */
   .compact .open {
+    flex: none;
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
-    padding: 10px 0 10px 10px;
+    padding: 10px 12px 6px 10px;
   }
   .compact.editing {
+    flex-direction: row;
+    align-items: flex-start;
     gap: 12px;
     padding: 10px;
   }
@@ -246,21 +250,27 @@
   .compact .body {
     padding: 0;
     gap: 4px;
+    flex: 1;
   }
   .compact .name {
     font-size: 1.1em;
   }
-  .compact .foot {
-    flex-direction: column;
-    justify-content: flex-start;
-    border-top: 0;
-    padding: 6px 6px 6px 0;
-  }
   .compact .chips {
     gap: 2px 10px;
+    /* At most two lines: the rest is under "+N". */
+    max-height: 3.4em;
+    overflow: hidden;
   }
   .compact .chip {
     padding: 0;
     background: none;
+  }
+  .more {
+    color: var(--muted);
+    font-size: 0.9em;
+  }
+  .compact .foot {
+    padding-top: 0;
+    margin-top: auto;
   }
 </style>
