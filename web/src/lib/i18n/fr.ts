@@ -676,7 +676,7 @@ export const fr: Messages = {
         text: 'le jour solaire découpé en 24 heures locales, midi quand le soleil passe au méridien (convention des missions martiennes).',
       },
       { term: `Rotation synchrone${S}:`, text: 'l’astre fait un tour par orbite et montre toujours la même face à ce qu’il orbite.' },
-      { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’environ ±2e radians.' },
+      { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’une amplitude maximale voisine de 2e radians (e l’excentricité), que le cadran donne exactement à côté de l’angle courant.' },
       {
         term: `Résonance 3:2${S}:`,
         text: `trois tours toutes les deux orbites, comme Mercure${S}: les marées de l’étoile y tiennent une planète excentrique au lieu de la rendre synchrone${S}; son jour solaire dure deux de ses années.`,
