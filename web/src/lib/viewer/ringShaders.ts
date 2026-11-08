@@ -2,6 +2,46 @@
 // opacity varying with the radius (ringlets, gaps), lit by the sun and
 // darkened where the planet shadows it.
 
+// The radial structure shared by a giant's rings in its own view
+// (ringFragment) and in the sky of its moons (skyRingFragment): ringlets,
+// two scales of smooth noise along the radius, seeded by the giant
+// (`ringSeed` in lib/skyBodies.ts).
+export const ringletsGlsl = /* glsl */ `
+  uniform float uRingSeed;
+
+  float ringHash(float x) {
+    return fract(sin(x * 127.1 + uRingSeed * 311.7) * 43758.5453);
+  }
+
+  // How far a scale of noise fades to its mean when a pixel spans x of its
+  // cells: from nothing at two pixels a cell (Nyquist) to most of it at
+  // under one. A third of it is kept: sub-pixel ringlets still read as
+  // grain, as in the giant's own view, rather than as a plain sheet.
+  float ringletFade(float x) {
+    return 0.65 * smoothstep(0.5, 1.5, x);
+  }
+
+  // The ringlets' scaling of the opacity at radius r (the giant's radii),
+  // for a pixel spanning w of them (0: exact). Each scale of the noise
+  // fades towards its mean as its cells shrink under two pixels (see
+  // ringletFade), so that rings seen from afar do not alias into a shimmer.
+  float ringlets(float r, float w) {
+    float x = r * 180.0;
+    float i = floor(x);
+    float f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float fine = mix(ringHash(i), ringHash(i + 1.0), f);
+    fine = mix(fine, 0.5, ringletFade(w * 180.0));
+    float y = r * 23.0;
+    float j = floor(y);
+    float g = fract(y);
+    g = g * g * (3.0 - 2.0 * g);
+    float broad = mix(ringHash(j + 50.0), ringHash(j + 51.0), g);
+    broad = mix(broad, 0.5, ringletFade(w * 23.0));
+    return 0.35 + 0.4 * broad + 0.25 * fine;
+  }
+`;
+
 export const ringVertex = /* glsl */ `
   varying vec3 vLocal;
   varying vec3 vWorld;
@@ -23,31 +63,13 @@ export const ringFragment = /* glsl */ `
   // Half-width a gap keeps at least on screen, in drawn pixels (see main):
   // the half-size of a small moon's marker (see drawSkyBodies).
   uniform float uGapPixels;
-  uniform float uSeed;
   uniform int uLightMode;      // 0 = headlight, 1 = sun
   uniform vec3 uSunDir;        // world space
   uniform float uFade;         // the globe's morph: rings belong to the globe
   varying vec3 vLocal;
   varying vec3 vWorld;
 
-  float hash(float x) {
-    return fract(sin(x * 127.1 + uSeed * 311.7) * 43758.5453);
-  }
-
-  // Smooth noise along the radius: the ringlets.
-  float ringlets(float r) {
-    float x = r * 180.0;
-    float i = floor(x);
-    float f = fract(x);
-    f = f * f * (3.0 - 2.0 * f);
-    float fine = mix(hash(i), hash(i + 1.0), f);
-    float y = r * 23.0;
-    float j = floor(y);
-    float g = fract(y);
-    g = g * g * (3.0 - 2.0 * g);
-    float broad = mix(hash(j + 50.0), hash(j + 51.0), g);
-    return 0.35 + 0.4 * broad + 0.25 * fine;
-  }
+  ${ringletsGlsl}
 
   void main() {
     float r = length(vLocal.xy);
@@ -55,11 +77,12 @@ export const ringFragment = /* glsl */ `
     // afar, while the moonlet is drawn a few pixels across: the gap is
     // drawn at least as wide as it, so that it shows round it. (Taken
     // before the discard: fwidth needs every pixel of a quad.)
-    float least = uGapPixels * fwidth(r);
+    float footprint = fwidth(r);
+    float least = uGapPixels * footprint;
     if (r < uInner || r > uOuter) discard;
     float across = (r - uInner) / (uOuter - uInner);
     // Thinner towards both edges, densest in the middle-outer part.
-    float density = uOpacity * ringlets(r) * smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
+    float density = uOpacity * ringlets(r, footprint) * smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
     for (int k = 0; k < 4; k++) {
       if (k < uGapCount) {
         density *= smoothstep(0.0, 1.0, abs(r - uGaps[k].x) / max(max(uGaps[k].y * 0.5, least), 1e-4));
@@ -190,7 +213,11 @@ export const skyRingFragment = /* glsl */ `
   uniform float uFade;
   // The camera's projection (three.js gives fragment shaders none).
   uniform mat4 uProjection;
+  // The angle one drawn pixel spans, radians: the footprint of a pixel on
+  // the rings is worked out from it, as fwidth is undefined in branches.
+  uniform float uPixelAngle;
   ${skyRingDensityGlsl}
+  ${ringletsGlsl}
   varying vec3 vRay;
   // Most a sheet of them seen nearly edge on hides (see main).
   const float GRAZING_OPACITY = 0.55;
@@ -232,14 +259,45 @@ export const skyRingFragment = /* glsl */ `
       float t = -height / g;
       if (t > 0.0 && t < hit) {
         vec3 p = camera + t * ray;
-        float d = ringDensity(length(p) / uRadius);
-        // Seen slant, through more of them; seen nearly edge on, as from
-        // a ring moon a little off their plane, held at most half opaque
-        // (a choice, not physics: dense rings would hide the giant behind
-        // them, a uniform veil over half the sky).
+        float rp = length(p) / uRadius;
+        // The span of a pixel along the radius, from the radius met by the
+        // rays a pixel to the right and a pixel up (long across a ring seen
+        // slant, short along it); never beyond the footprint of a ray
+        // meeting the plane slant, which the pixel's neighbours may miss.
+        float widest = t * uPixelAngle / max(abs(g), 0.02) / uRadius;
+        vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+        vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+        float footprint = widest;
+        float gx = dot(ray + right * uPixelAngle, uNormal);
+        float gy = dot(ray + up * uPixelAngle, uNormal);
+        if (abs(gx) > 1e-7 && abs(gy) > 1e-7) {
+          float tx = -height / gx;
+          float ty = -height / gy;
+          if (tx > 0.0 && ty > 0.0) {
+            float rx = length(camera + tx * (ray + right * uPixelAngle)) / uRadius;
+            float ry = length(camera + ty * (ray + up * uPixelAngle)) / uRadius;
+            footprint = min(widest, max(abs(rx - rp), abs(ry - rp)));
+          }
+        }
+        float d = ringDensity(rp) * ringlets(rp, footprint);
+        // Seen nearly edge on, as from a ring moon a little off their
+        // plane, through more of them (their opacity to the power 1/mu),
+        // held at most half opaque (a choice, not physics: dense rings
+        // would hide the giant behind them, a uniform veil over half the
+        // sky). Opened up, from about 7 degrees over their plane, their
+        // opacity as the giant's own view draws it, scaled to that cap,
+        // not raised to 1/mu: that law drives every ringlet but the
+        // thinnest to full opacity from 20 degrees down, flattening them
+        // to a plain sheet where the giant's own view still shows them.
         float mu = abs(g);
-        float seen = 1.0 - pow(max(1.0 - d, 0.0), 1.0 / max(mu, 1e-3));
-        seen = min(seen, mix(GRAZING_OPACITY, 1.0, smoothstep(0.15, 0.45, mu)));
+        float cap = mix(GRAZING_OPACITY, 1.0, smoothstep(0.15, 0.45, mu));
+        float slant = min(1.0 - pow(max(1.0 - d, 0.0), 1.0 / max(mu, 1e-3)), cap);
+        float opened = d * min(1.0, cap / max(uRingOpacity, 1e-3));
+        // Where the ringlets are resolved (a pixel spans well under one
+        // of the broad ones), as along the rings round a ring moon down to
+        // the horizon, they show whatever the elevation.
+        float resolved = 1.0 - smoothstep(0.25, 0.8, footprint * 23.0);
+        float seen = mix(slant, opened, max(smoothstep(0.01, 0.12, mu), resolved));
         if (seen > 0.002) {
           colour = vec4(ringLight(p, mu, d), seen);
           depth = depthOf(t * ray);
@@ -306,9 +364,18 @@ export const skyRingFragment = /* glsl */ `
         // they make from the horizon down to their nearest part.
         float span = inside ? abs(height) / max(s, 1e-6) : outer * abs(height) / max(dot(camera, camera), outer * outer);
         cover *= 1.0 - smoothstep(1.5, 4.0, span / pixel);
-        float a = cover * min(1.0, 1.5 * uRingOpacity);
+        // Its brightness follows the rings' structure where the line of
+        // sight skims them: its ray's closest approach to the giant's axis,
+        // where it spends the longest among rings of the same radius (a gap
+        // there shows as a dip along the line), or, from over them, the
+        // radius at which it enters them.
+        vec3 p = foot + max(s, 0.0) * along;
+        float rLine = fc > outer * outer ? sqrt(max(fc - fb * fb, 0.0)) / uRadius : length(p) / uRadius;
+        float wLine = length(camera) * uPixelAngle / uRadius;
+        float structure = clamp(ringDensity(rLine) * ringlets(rLine, wLine) / max(uRingOpacity, 1e-3), 0.0, 1.0);
+        if (rLine < uRingInner) structure = 1.0;
+        float a = cover * min(1.0, 1.5 * uRingOpacity) * mix(1.0, structure, 0.8);
         if (a > colour.a) {
-          vec3 p = foot + max(s, 0.0) * along;
           colour = vec4(ringLight(p, abs(g), uRingOpacity), a);
           depth = depthOf(p - camera);
         }

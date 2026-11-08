@@ -77,6 +77,8 @@ export interface RingRocks {
   /** The moon's semi-major axis, km. */
   aKm: number;
   rings: RingSystem;
+  /** The seed of the rings' ringlets (`ringSeed`), as the giant's own view draws them. */
+  seed: number;
   /** The rocks' window (cells of CELL_KM, ROWS rows). */
   firstRow: number;
   rows: LatticeWindow['rows'];
@@ -92,7 +94,7 @@ export interface RingRocks {
  */
 export function ringRocks(
   moon: { orbit: { semi_major_axis_km: number; period_days: number }; physical: { radius_km: number } },
-  giant: Pick<SkyBody, 'position' | 'radius' | 'axes'>,
+  giant: Pick<SkyBody, 'position' | 'radius' | 'axes' | 'ringSeed'>,
   giantRadiusKm: number,
   rings: RingSystem,
   days: number,
@@ -120,6 +122,7 @@ export function ringRocks(
     moonRadiusKm,
     aKm,
     rings,
+    seed: giant.ringSeed ?? 0,
     firstRow,
     rows,
     grains: latticeWindow(aKm, moonDays, days, GRAIN_CELL_KM, GRAIN_WINDOW),
