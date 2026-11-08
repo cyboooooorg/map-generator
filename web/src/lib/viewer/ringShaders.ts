@@ -284,7 +284,7 @@ export const skyRingFragment = /* glsl */ `
         // plane, through more of them (their opacity to the power 1/mu),
         // held at most half opaque (a choice, not physics: dense rings
         // would hide the giant behind them, a uniform veil over half the
-        // sky). Opened up, from about 12 degrees over their plane, their
+        // sky). Opened up, from about 7 degrees over their plane, their
         // opacity as the giant's own view draws it, scaled to that cap,
         // not raised to 1/mu: that law drives every ringlet but the
         // thinnest to full opacity from 20 degrees down, flattening them
@@ -293,7 +293,11 @@ export const skyRingFragment = /* glsl */ `
         float cap = mix(GRAZING_OPACITY, 1.0, smoothstep(0.15, 0.45, mu));
         float slant = min(1.0 - pow(max(1.0 - d, 0.0), 1.0 / max(mu, 1e-3)), cap);
         float opened = d * min(1.0, cap / max(uRingOpacity, 1e-3));
-        float seen = mix(slant, opened, smoothstep(0.05, 0.2, mu));
+        // Where the ringlets are resolved (a pixel spans well under one
+        // of the broad ones), as along the rings round a ring moon down to
+        // the horizon, they show whatever the elevation.
+        float resolved = 1.0 - smoothstep(0.25, 0.8, footprint * 23.0);
+        float seen = mix(slant, opened, max(smoothstep(0.01, 0.12, mu), resolved));
         if (seen > 0.002) {
           colour = vec4(ringLight(p, mu, d), seen);
           depth = depthOf(t * ray);

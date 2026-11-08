@@ -1379,6 +1379,7 @@ export class PlanetView {
       (u['uColour']!.value as Color).setRGB(...rocks.rings.colour, SRGBColorSpace);
       // The rings' own gaps, not widened to a pixel: no rock in them.
       setRingUniforms(u, rocks.rings, 0);
+      u['uRingSeed']!.value = rocks.seed;
     }
     for (const [u] of lattices) {
       u['uBoulderM']!.value = rocks.rings.bright ? BOULDER_M.bright : BOULDER_M.faint;
@@ -1412,6 +1413,7 @@ export class PlanetView {
       uRingGaps: { value: Array.from({ length: 4 }, () => new Vector2()) },
       uRingGapCount: { value: 0 },
       uRingGapLeast: { value: 0 },
+      uRingSeed: { value: 0 },
     };
   }
 
