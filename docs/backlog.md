@@ -150,10 +150,36 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Night side lighting: the light the sky's bodies reflect on a log display curve, not a fixed 7 % floor                | done   |
 | Volcanoes on non-volcanic presets: quantile threshold, cones after erosion, lowland vents (lava 0 → 0.3–0.5 %)       | done   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
-| Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
+| Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D): no longer, see below       | done   |
 | Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
 | Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | done   |
 | Planet view: from a moon, the host planet is drawn without its atmosphere and clouds                                 | done   |
+
+Supercontinent interiors (measured 2026-11-08, after the climate fixes of
+2026-11-07; earth-like seeds 1-4, 1024 px, land weighted by area): the
+rain of land pixels by distance to the coast (the model's coast distance
+stops at 2 000 km), against Earth's, from GPCP version 2.3 (Adler et al.
+2018, doi:10.3390/atmos9040138, 1979-2013 mean) on the NCEP/NCAR
+reanalysis land-sea mask (Kalnay et al. 1996,
+doi:10.1175/1520-0477(1996)077<0437:TNYRP>2.0.CO;2), both read from
+NOAA PSL; Earth's coast distance is on a 1° grid, so its first bins are
+coarse.
+
+| Distance to the coast, km | Earth, mm | Model 29 % land, mm | Model 75 % land, mm |
+| ------------------------- | --------- | ------------------- | ------------------- |
+| 0-250                     | 943       | 1 111               | 693                 |
+| 250-500                   | 726       | 861                 | 545                 |
+| 500-1 000                 | 759       | 748                 | 452                 |
+| 1 000-1 500               | 766       | 637                 | 399                 |
+| 1 500-2 000               | 389       | 637                 | 374                 |
+| 2 000 and more            | 255       | 602                 | 342                 |
+
+The rain falls inland in the model too (by 46 % from the coast to 2 000
+km at Earth's land share, by 51 % at 75 %), and the arid share of the
+land does not grow inland: at 75 % land it is 38-44 % within 1 500 km of
+the coast and 20 % beyond 2 000 km. There is no desert belt in the
+interiors; the model's deepest interiors are wetter than Earth's, whose
+255 mm beyond 2 000 km cover only 1.3 % of its land. Nothing to fix.
 
 ## 5. Terrain realism, second round
 
