@@ -10,6 +10,8 @@ export interface GiantChoice {
   /** `[Fe/H]`, dex. */
   metallicity: number;
   giants: GiantsMode;
+  /** A lone planet: its system holds no other planet. */
+  alone: boolean;
   host: HostMode;
   massRandom: boolean;
   /** A giant world's mass, Earth masses. */
@@ -22,6 +24,7 @@ export function initialGiantChoice(initial: WorldRequest | null | undefined): Gi
     metallicityRandom: initial?.metallicity === undefined,
     metallicity: initial?.metallicity ?? 0,
     giants: initial?.giants ?? 'auto',
+    alone: initial?.alone === true,
     host: initial?.host ?? 'auto',
     massRandom: initial?.mass_earth === undefined,
     mass: initial?.mass_earth ?? 318,
@@ -30,16 +33,18 @@ export function initialGiantChoice(initial: WorldRequest | null | undefined): Gi
 
 /**
  * Writes the choice into a request: a giant world takes only its mass
- * (it has no giant neighbours and is nobody's moon).
+ * (it has no giant neighbours and is nobody's moon) and whether it is alone.
  */
 export function applyGiantChoice(request: WorldRequest, choice: GiantChoice, giantWorld: boolean): void {
   // A field emptied by the user holds no number: drawn, as when random.
   if (!choice.metallicityRandom && Number.isFinite(choice.metallicity)) request.metallicity = choice.metallicity;
+  // A lone planet has no giant neighbours: the server overrides `giants`.
+  if (choice.alone) request.alone = true;
   if (giantWorld) {
     if (!choice.massRandom && Number.isFinite(choice.mass) && choice.mass > 0) request.mass_earth = choice.mass;
     return;
   }
-  if (choice.giants !== 'auto') request.giants = choice.giants;
+  if (choice.giants !== 'auto' && !choice.alone) request.giants = choice.giants;
   if (choice.host !== 'auto') request.host = choice.host;
 }
 
@@ -55,6 +60,7 @@ export function parseGiantChoice(raw: unknown): GiantChoice {
   if (typeof r.metallicityRandom === 'boolean') choice.metallicityRandom = r.metallicityRandom;
   if (finite(r.metallicity)) choice.metallicity = r.metallicity;
   if (r.giants === 'auto' || r.giants === 'none') choice.giants = r.giants;
+  if (typeof r.alone === 'boolean') choice.alone = r.alone;
   if (r.host === 'auto' || r.host === 'none' || r.host === 'giant') choice.host = r.host;
   if (typeof r.massRandom === 'boolean') choice.massRandom = r.massRandom;
   if (finite(r.mass) && r.mass > 0) choice.mass = r.mass;

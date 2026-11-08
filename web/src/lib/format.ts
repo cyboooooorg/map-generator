@@ -2,6 +2,7 @@
 // reproduce a world.
 import type { BiomeInfo } from './api/types/BiomeInfo';
 import type { StarInfo } from './api/types/StarInfo';
+import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import type { WorldRequest } from './api/types/WorldRequest';
 import { getLocale, t } from './i18n/index.svelte';
@@ -116,6 +117,17 @@ export function randomSeed(): number {
  */
 export function rerollRequest(meta: WorldMetadata, seed: number = randomSeed()): WorldRequest {
   return { ...requestFromWorld(meta), seed };
+}
+
+/**
+ * The request with the lone-planet flag of the system it comes from: a
+ * world's metadata does not say whether its system is a lone planet, the
+ * system's stored request does. Varying, rerolling or moving to another
+ * epoch a lone planet gives a lone planet.
+ */
+export function keepAlone(request: WorldRequest, system: System | null | undefined): WorldRequest {
+  const asked = system?.request;
+  return asked && 'around' in asked && asked.around.alone === true ? { ...request, alone: true } : request;
 }
 
 /** Rounds a parameter as the CLI prints it, so commands stay readable. */

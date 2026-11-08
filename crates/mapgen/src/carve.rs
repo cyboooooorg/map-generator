@@ -376,6 +376,7 @@ mod tests {
             giants: None,
             mass_earth: None,
             host: None,
+            alone: None,
             width: Some(480),
             height: Some(240),
         };

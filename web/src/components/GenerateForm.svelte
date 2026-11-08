@@ -403,7 +403,8 @@
         fixed.push({ label: t.form.moons, value: moons === 'none' ? t.form.moonsNone : t.form.moonsCount({ count: moons }) });
       }
       if (giantWorld && !giantChoice.massRandom) fixed.push({ label: t.form.giantMass, value: formatInt(giantChoice.mass) });
-      if (!giantWorld && giantChoice.giants === 'none') fixed.push({ label: t.form.giants, value: t.form.giantsNone });
+      if (giantChoice.alone) fixed.push({ label: t.form.aloneSummary, value: t.form.aloneNone });
+      if (!giantWorld && !giantChoice.alone && giantChoice.giants === 'none') fixed.push({ label: t.form.giants, value: t.form.giantsNone });
       if (!giantWorld && giantChoice.host !== 'auto') {
         fixed.push({ label: t.form.host, value: giantChoice.host === 'giant' ? t.form.hostGiant : t.form.hostNone });
       }
@@ -820,6 +821,16 @@
     <p class="help">{t.form.moonsHelp}</p>
   </fieldset>
   {/if}
+  {#if mode === 'around'}
+    <fieldset>
+      <legend>{t.form.aloneSummary}</legend>
+      <label class="check">
+        <input type="checkbox" bind:checked={giantChoice.alone} />
+        {t.form.alone}
+      </label>
+      <p class="help">{t.form.aloneHelp}</p>
+    </fieldset>
+  {/if}
     {/if}
   {:else if step === 'advanced'}
     <details class="advanced">
@@ -877,11 +888,15 @@
       {:else if mode === 'around'}
         <fieldset>
           <legend>{t.form.giants}</legend>
-          <select bind:value={giantChoice.giants} aria-label={t.form.giants}>
-            <option value="auto">{t.form.giantsAuto}</option>
-            <option value="none">{t.form.giantsNone}</option>
-          </select>
-          <p class="help">{t.form.giantsHelp}</p>
+          {#if giantChoice.alone}
+            <p class="help">{t.form.giantsAlone}</p>
+          {:else}
+            <select bind:value={giantChoice.giants} aria-label={t.form.giants}>
+              <option value="auto">{t.form.giantsAuto}</option>
+              <option value="none">{t.form.giantsNone}</option>
+            </select>
+            <p class="help">{t.form.giantsHelp}</p>
+          {/if}
         </fieldset>
         <fieldset>
           <legend>{t.form.host}</legend>

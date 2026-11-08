@@ -2293,6 +2293,30 @@ mod tests {
         assert!(events.contains("\"status\":\"done\""), "{events}");
     }
 
+    #[tokio::test]
+    async fn a_lone_planet_system_is_named_lone_and_listed() {
+        let app = router(temp_config("lone"));
+        let request = r#"{"around": {"planet": "barren", "seed": 5, "width": 64, "height": 32, "moons": "none", "alone": true}}"#;
+        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let id = created["system_id"].as_str().expect("the system id");
+        assert!(id.contains("-lone-5"), "{id}");
+        assert!(systems::is_valid_system_id(id), "{id}");
+        let (status, system) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::OK, "{system}");
+        let system: serde_json::Value = serde_json::from_str(&system).unwrap();
+        let system = &system["system"];
+        let planets = system["bodies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|b| b["kind"] == "planet")
+            .count();
+        assert_eq!(planets, 1, "{system}");
+        assert_eq!(system["request"]["around"]["alone"], true);
+    }
+
     async fn wait_job(app: &Router, created: &str) -> String {
         let created: serde_json::Value = serde_json::from_str(created).unwrap();
         let uri = format!("/api/jobs/{}/events", created["job_id"].as_str().unwrap());

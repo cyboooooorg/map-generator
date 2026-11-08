@@ -76,4 +76,11 @@ mass_earth?: number,
  * `auto` (rarely the moon of a giant, as the seed draws, the default),
  * `giant` (always) or `none`.
  */
-host?: HostMode, width?: number, height?: number, };
+host?: HostMode, 
+/**
+ * Only meaningful for a system around this planet: the system then
+ * holds no other planet (a lone planet: its star, the planet and its
+ * moons, or the giant it orbits). The planet is then resolved with no
+ * giant neighbours, whatever `giants` says (it is overridden).
+ */
+alone?: boolean, width?: number, height?: number, };
