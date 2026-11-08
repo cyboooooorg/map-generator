@@ -275,7 +275,7 @@ the smaller they are (`irregular` in the same file).
   apart. Moonlets, shepherds and sources get no such order.
 - **Ridges are a calibrated band.** Embedded moonlets and edge moons up to
   30 km in radius wear an equatorial ridge of ring material, as Pan, Atlas
-  and Daphnis do (Charnoz et al. 2007; Buratti et al. 2019), 12 to 25 % of
+  and Daphnis do (Pan and Atlas: Charnoz et al. 2007; Daphnis: Buratti et al. 2019), 12 to 25 % of
   the radius high in a band 0.3 wide in the sine of the latitude, holding
   10 to 25 % of the volume. The limit of 30 km and the band's width are
   calibrations; the real ridges differ between the moons (lobed, sloped,

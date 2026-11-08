@@ -476,7 +476,7 @@ further than proposed:
   its moons (`uRingFaint` in `skyRingDensityGlsl`).
 - **Equatorial ridges (2026-11-08).** An embedded moonlet, and an edge moon
   of 30 km in radius or less, has a ridge of ring material it swept up
-  (Charnoz et al. 2007; Pan, Atlas and Daphnis, Buratti et al. 2019): its
+  (Pan and Atlas, Charnoz et al. 2007; Daphnis, Buratti et al. 2019): its
   shape layer gets `1 + h exp(-(sin φ / 0.3)²)` with `h` 0.12 to 0.25 from
   the moon's seed, over the cube root of the volume it adds so the moon
   keeps its volume. `WorldParams::ridge` carries it (and `meta.ridge`).

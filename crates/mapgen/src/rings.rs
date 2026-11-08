@@ -194,7 +194,8 @@ const CONFINING_ODDS: f64 = 0.5;
 const CONFINING_KM: f64 = 40.0;
 /// Where the resonance falls, as a share of the Roche limit's edge: the
 /// rings are cut inside it, never outside (the A ring's edge, 2.27 radii,
-/// lies at 0.84 of the Roche limit of particles of 0.9 g/cm³).
+/// lies at 0.84 of the Roche limit of particles of 0.9 g/cm³, by this
+/// module's Roche limit; calibration, no source gives the share).
 const CONFINING_SHARE: (f64, f64) = (0.88, 0.99);
 /// The first-order resonance of the edge moon: m = 7 (7:6).
 const CONFINING_M: u32 = 7;
@@ -204,12 +205,14 @@ pub const SEVEN_SIX_FACTOR: f64 = 0.902_337_085;
 /// Edge moons accrete a ridge only when small (calibration: Pan, 14 km,
 /// Atlas, 15 km and Daphnis, 4 km carry one; larger edge moons are taken
 /// not to (Prometheus, Pandora, Epimetheus and Janus, 40 to 90 km: not
-/// checked against the papers); Charnoz et al. 2007,
-/// doi:10.1126/science.1148631; Buratti et al. 2019,
+/// checked against the papers). Pan's and Atlas's ridges: Charnoz et al.
+/// 2007, doi:10.1126/science.1148631; Daphnis's: Buratti et al. 2019,
 /// doi:10.1126/science.aat2349).
 const RIDGE_MAX_KM: f64 = 30.0;
-/// Height of an equatorial ridge over the radius, from the ridge that holds
-/// 10 to 25 % of the body's volume (Charnoz et al. 2007).
+/// Height of an equatorial ridge over the radius. Calibration: Charnoz et
+/// al. 2007 give the ridge 10 to 25 % of the body's volume, not its
+/// height; a ridge of this height and 0.3 radii wide holds about 10 % of
+/// the volume at 0.125 and 20 % at 0.25, roughly that range.
 const RIDGE_HEIGHT: (f64, f64) = (0.12, 0.25);
 /// Odds of a faint D-like ring inside a bright ring (calibration, no
 /// source: Saturn is the one bright ring known, and has one).
@@ -362,8 +365,8 @@ fn d_ring(inner: f64, seed: u32) -> Option<DRing> {
 /// The height of the equatorial ridge of a ring moon of `role` and
 /// `radius_km` seeded `seed`, as a share of its radius, if it has one: a
 /// moonlet in or at the edge of the rings, small enough, swept up ring
-/// particles on its equator (Pan, Atlas and Daphnis; Charnoz et al. 2007,
-/// doi:10.1126/science.1148631; Buratti et al. 2019,
+/// particles on its equator (Pan and Atlas, Charnoz et al. 2007,
+/// doi:10.1126/science.1148631; Daphnis, Buratti et al. 2019,
 /// doi:10.1126/science.aat2349). The height comes from the moon's seed.
 pub fn ridge(role: RingRole, radius_km: f64, seed: u32) -> Option<f32> {
     let ring_born = matches!(role, RingRole::Embedded | RingRole::Edge);
@@ -531,7 +534,7 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
         let mut sizes: Vec<f64> = edges.iter().map(|e| e.1).collect();
         sizes.sort_by(f64::total_cmp);
         edges.sort_by(|x, y| x.0.total_cmp(&y.0));
-        // The largest, farthest edge moon may instead sit where its 7:6
+        // The largest edge moon may instead sit where its 7:6
         // resonance cuts the rings' edge (Janus and the A ring): its own
         // stream, drawn whether or not it is used.
         let mut edge_rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::RING_EDGE)));
@@ -547,7 +550,7 @@ pub fn shape(rings: RingSystem, giant: &Giant, seed: u32) -> (Option<RingSystem>
             let others = edges[..edges.len() - 1]
                 .iter()
                 .all(|e| (e.0 - a).abs() > 0.05);
-            let division = !resonant_at.is_some()
+            let division = resonant_at.is_none()
                 || rings
                     .gaps
                     .last()
