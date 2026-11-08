@@ -394,22 +394,6 @@ pub struct BiomeRules {
     /// poles a warm annual mean but freezing winters.
     pub tropical_winter: f32,
 
-    // Legacy fields, read from worlds and systems made before the arid
-    // criterion (format version 10 and older), never written
-    /// Former cut-off: temperate land with a moisture under it was
-    /// shrubland. Only present in the rules stored with an older world,
-    /// whose biomes are re-chosen with the former rules (see
-    /// [`is_legacy`](Self::is_legacy)); in a preset it is dropped with a
-    /// warning.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub shrubland_moisture: Option<f32>,
-    /// Former cut-off: tropical land with a moisture under it was desert
-    /// (see [`shrubland_moisture`](Self::shrubland_moisture)).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub desert_moisture: Option<f32>,
-
     // Dry land (Köppen's B)
     /// Land with an annual rain under this many times its dryness
     /// threshold is arid: steppe (shrubland) or desert. Köppen's 10
@@ -473,8 +457,6 @@ impl Default for BiomeRules {
             tropical_winter: 18.0,
             wetland_moisture: 0.0,
             taiga_moisture: -0.33,
-            shrubland_moisture: None,
-            desert_moisture: None,
             steppe_ratio: 10.0,
             desert_ratio: 5.0,
             forest_moisture: -0.25,
@@ -613,9 +595,6 @@ impl BiomeRules {
     /// Land from its annual mean `t`, moisture `m`, and its `summer` and
     /// `winter` temperatures.
     fn land(&self, t: f32, m: f32, summer: f32, winter: f32) -> Biome {
-        if let (Some(shrubland), Some(desert)) = (self.shrubland_moisture, self.desert_moisture) {
-            return self.legacy_land(t, m, shrubland, desert);
-        }
         if summer < self.polar {
             Biome::IceCap
         } else if summer < self.tundra_summer && t < self.boreal {
@@ -635,60 +614,6 @@ impl BiomeRules {
             } else {
                 Biome::Plain
             }
-        } else if m < self.jungle_moisture {
-            Biome::Savanna
-        } else {
-            Biome::Jungle
-        }
-    }
-
-    /// Whether these rules come from a world made before the arid
-    /// criterion: its moisture is the former linear index (not the log of
-    /// the annual rain), and its biomes were chosen by cut-offs on it.
-    pub fn is_legacy(&self) -> bool {
-        self.shrubland_moisture.is_some() && self.desert_moisture.is_some()
-    }
-
-    /// The same rules for the current model: the former moisture cut-offs
-    /// are dropped and the six moisture thresholds, which meant another
-    /// scale, take their current defaults.
-    pub fn modernised(&self) -> Self {
-        if !self.is_legacy() {
-            return self.clone();
-        }
-        let d = Self::default();
-        Self {
-            shrubland_moisture: None,
-            desert_moisture: None,
-            wetland_moisture: d.wetland_moisture,
-            taiga_moisture: d.taiga_moisture,
-            forest_moisture: d.forest_moisture,
-            jungle_moisture: d.jungle_moisture,
-            ..self.clone()
-        }
-    }
-
-    /// Land as chosen before the seasons and the arid criterion (format
-    /// version 10): annual mean `t` and linear moisture `m` only.
-    fn legacy_land(&self, t: f32, m: f32, shrubland: f32, desert: f32) -> Biome {
-        if t < self.polar {
-            Biome::IceCap
-        } else if t < self.boreal {
-            if m > self.taiga_moisture {
-                Biome::Taiga
-            } else {
-                Biome::Tundra
-            }
-        } else if t < self.temperate {
-            if m < shrubland {
-                Biome::Shrubland
-            } else if m > self.forest_moisture {
-                Biome::Forest
-            } else {
-                Biome::Plain
-            }
-        } else if m < desert {
-            Biome::Desert
         } else if m < self.jungle_moisture {
             Biome::Savanna
         } else {

@@ -40,8 +40,4 @@ describe('temperatureSpan', () => {
     const span = temperatureSpan(pixels, info);
     expect(span.max).toBeCloseTo(20, 0);
   });
-  it('converts the old scale', () => {
-    const span = temperatureSpan(new Uint16Array(10).fill(65535), { min: 0, max: 1 }, (v) => v * 100);
-    expect(span.max).toBeCloseTo(100);
-  });
 });

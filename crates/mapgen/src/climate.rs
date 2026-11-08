@@ -30,11 +30,6 @@ pub const LAPSE_RATE_K_PER_KM: f32 = 6.5;
 /// calibration, no source.
 const LAPSE_PRESSURE_EXPONENT: f32 = 0.378;
 
-/// The cooling per elevation unit worlds stored before format version 11
-/// were made with (0.54 °C per km): their detail tiles and epochs keep it,
-/// so that they match their stored temperatures.
-pub const LEGACY_LAPSE_RATE: f32 = 13.5;
-
 /// Cooling of the land with height on world `params`, °C per unit of
 /// elevation (elevation in `[-1, 1]`, [`crate::craters::ELEVATION_KM`] km
 /// per unit). Earth-like air of 1 bar or more cools at
@@ -70,15 +65,6 @@ const INSOLATION_RANGE: (f32, f32) = (-0.5, 1.5);
 /// mid-latitudes too cold. Its ends: −49 °C with no light, 41 °C at 1.5.
 pub fn sea_level_celsius(t: f32) -> f32 {
     -18.0 + 56.28 * t - 11.28 * t * t
-}
-
-/// The former curve of [`sea_level_celsius`], fitted to the two-term
-/// insolation series this module used before (`1 − 5/8 P2(cos ε) P2(sin
-/// φ)`): it converts temperatures stored on the former `[0, 1]` scale
-/// (worlds of format version 3 and older, and their presets), and must not
-/// change.
-pub fn celsius(t: f32) -> f32 {
-    -18.0 + 66.2 * t - 21.2 * t * t
 }
 
 /// Steps of the orbit [`annual_insolation`] averages over (midpoint rule):
@@ -467,9 +453,8 @@ pub struct Seasons {
 }
 
 impl Seasons {
-    /// No seasonal cycle: summer and winter are the annual mean. Worlds
-    /// stored before the seasons (format version 10 and older) read their
-    /// biomes this way, as they were made.
+    /// No seasonal cycle: summer and winter are the annual mean (a planet
+    /// locked to its star).
     pub fn none(height: u32) -> Self {
         Self {
             land: vec![0.0; height as usize],
@@ -479,8 +464,8 @@ impl Seasons {
 
     /// The seasons of the rows of `grid` for an axial tilt (degrees), a
     /// surface pressure (bar) and an eccentric `orbit` (`None`: a circular
-    /// one, or a world made before the longitude of perihelion, whose
-    /// seasons ignore the distance to the star), the `day` of a planet
+    /// one, or a world without a longitude of perihelion, whose seasons
+    /// ignore the distance to the star), the `day` of a planet
     /// whose solar day lasts months (see [`DayCycle`]; `None` for a fast
     /// one, or one locked); `star` moves rows of
     /// sea-level temperature as [`crate::star::star_temperatures`] does.

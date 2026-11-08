@@ -349,9 +349,6 @@ struct BodyGeology {
     wet_until: f32,
 }
 
-/// First format version with `elevation_base`, which epochs are drawn on.
-const EPOCHS_VERSION: u32 = 7;
-
 /// The epochs the body in `dir` can be shown at, in Ma before present
 /// (negative in the future), `[future, past]`, or `None` inside when it
 /// offers none (liquid water today, no craters); `None` outside when it
@@ -359,7 +356,7 @@ const EPOCHS_VERSION: u32 = 7;
 pub fn epochs_at(dir: &Path) -> Option<Option<[i32; 2]>> {
     let bytes = std::fs::read(dir.join("raw_data").join("world.json")).ok()?;
     let meta: BodyMeta = serde_json::from_slice(&bytes).ok()?;
-    if meta.format_version < EPOCHS_VERSION {
+    if meta.format_version < mapgen::export::raw_data::MIN_FORMAT_VERSION {
         return Some(None);
     }
     let range = meta.surface_age_ga.and_then(|age| {

@@ -16,7 +16,7 @@ function withOrbit(e: number): System {
         ? {
             ...b,
             orbit: { ...b.orbit, eccentricity: e, periapsis_deg: 70, mean_anomaly_deg: 200, inclination_deg: 3, node_deg: 40 },
-            spin: { ...b.spin, axial_tilt_deg: TILT, locked: false, spin_orbit_3_2: false },
+            spin: { ...b.spin, axial_tilt_deg: TILT, locked: false },
           }
         : b,
     ),

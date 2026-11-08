@@ -99,7 +99,6 @@ pub struct HostGiant {
     /// Hill radius of the giant, in its radii: the world stays within a third.
     pub hill_radii: f32,
     /// The giant's other regular moons, nearest first (see [`Sibling`]);
-    /// none in the worlds made before them.
     #[serde(default)]
     pub siblings: Vec<Sibling>,
 }

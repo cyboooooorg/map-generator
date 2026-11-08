@@ -81,18 +81,18 @@ pub struct WorldParams {
     pub impact_factor: Option<f32>,
     /// Whether the star's tides locked the world, as it was generated: set
     /// when a stored world is reloaded, so that its tiles and epochs keep
-    /// the lock its base map was made with, whatever the locking rule is
-    /// today (see [`crate::spin::star_info`]). Absent on a world about to
-    /// be generated, whose lock follows the current rule.
+    /// the lock its base map was made with (see [`crate::spin::star_info`]).
+    /// Stored together with [`Self::resonance_to_star`]: set one without the
+    /// other and a free world takes the resonance its seed draws. Absent on
+    /// a world about to be generated, whose lock follows the draw.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub locked_to_star: Option<bool>,
     /// The turns per orbit of the spin-orbit resonance the star's tides
     /// held the world in, as it was generated (0 for none), set with
     /// [`Self::locked_to_star`] when a stored world is reloaded: the
-    /// resonance a seed draws is today's rule, the stored one is what its
-    /// day and climate were made with. Absent on a world about to be
-    /// generated.
+    /// stored one is what its day and climate were made with. Absent on a
+    /// world about to be generated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub resonance_to_star: Option<f32>,
@@ -114,8 +114,10 @@ pub struct WorldParams {
     /// equinox in `[0, 360)`: where in the seasons the planet is closest to
     /// its star (Earth ≈ 283°, a few days after the December solstice; Mars
     /// ≈ 251°). With an eccentric orbit it makes the seasons uneven (see
-    /// [`crate::climate::EccentricOrbit`]). Absent on worlds made before
-    /// it, whose seasonal swing ignores the distance to the star.
+    /// [`crate::climate::EccentricOrbit`]). Always drawn for a planet of a
+    /// request; absent only on a moon world outside a system and on the
+    /// host of an exomoon, whose seasonal swing then ignores the distance to
+    /// the star.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub perihelion_longitude_deg: Option<f32>,
@@ -247,11 +249,10 @@ pub struct World {
     /// Annual mean temperature in °C, planet offset and greenhouse included.
     pub temperature: Vec<f32>,
     /// The seasonal cycle by row (see [`crate::climate::Seasons`]),
-    /// computed from the parameters (none for worlds stored before it).
+    /// computed from the parameters.
     pub seasons: crate::climate::Seasons,
     /// Cooling of the land per elevation unit the temperatures were made
-    /// with (see [`crate::climate::lapse_rate`]; the former rate for worlds
-    /// stored before format version 11).
+    /// with (see [`crate::climate::lapse_rate`]).
     pub lapse_rate: f32,
     /// Wet-equivalent drainage area in km² flowing through each pixel
     /// (0 on the sea): rivers are pixels above a threshold.

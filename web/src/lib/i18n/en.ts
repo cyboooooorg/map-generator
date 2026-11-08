@@ -302,7 +302,6 @@ export const en = {
     geology: 'Geology',
     star: 'Star',
     starValue: (p: { type: string; teff: string; luminosity: string }) => `${p.type} · ${p.teff} · ${p.luminosity}`,
-    theSun: 'the Sun (G2V), at 1 AU: made before stars',
     orbit: 'Orbit',
     orbitValue: (p: { distance: string; zone: string }) => `${p.distance} · ${p.zone}`,
     hzInside: (p: { position: string }) => `in the habitable zone (${p.position})`,
@@ -956,7 +955,7 @@ export const en = {
     planets: 'Planets',
     giantsHelp:
       'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
-    giantsOff: 'Not modelled (a world made before giant planets, or generated without them)',
+    giantsOff: 'Not modelled (generated without giant planets)',
     noGiants: 'None: no giant in this system, like most red dwarfs',
     giantLine: (p: { name: string; kind: string; mass: string; orbit: string; year: string }) =>
       `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
@@ -1137,6 +1136,8 @@ export const en = {
   },
   /** Loading of a world. */
   world: {
+    outdated: (p: { id: string }) =>
+      `${p.id} was made by an older generator: delete it (\`mise run clean-systems\`) and draw it again`,
     loadFailed: (p: { id: string; error: string }) => `Could not load ${p.id}: ${p.error}`,
   },
   /** Request errors the server explains with a code (see `ErrorDetail`). */

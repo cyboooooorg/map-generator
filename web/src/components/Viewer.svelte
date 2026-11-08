@@ -640,19 +640,14 @@
     const progress = (p: LoadProgress) => {
       if (!controller.signal.aborted) mapProgress = p;
     };
-    // The render without lines (format version 6), which the reference
-    // lines and contours are drawn over; world.png, which has them baked
-    // in, for older worlds. At another epoch, its render (a world shown at
+    // The render without lines, which the reference lines and contours are
+    // drawn over. At another epoch, its render (a world shown at
     // the same epoch as the one before).
     const epochMa = untrack(() => epoch);
     textureEpoch = { id, epochMa, scale: 1 };
     const surface = epochMa === 0 ? worldFile(id, 'raw_data/surface.png', rev) : epochSurface(id, epochMa, rev, 1);
     current
       .setTexture(surface, controller.signal, progress)
-      .catch((e: unknown) => {
-        if (controller.signal.aborted) throw e;
-        return current.setTexture(worldFile(id, 'world.png', rev), controller.signal, progress);
-      })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) error = t.viewer.mapFailed({ error: String(e) });
       })
@@ -736,7 +731,7 @@
     const next = Math.min(epochStops.length - 1, Math.max(0, i - steps));
     epochChoice = epochStops[next] ?? 0;
   }
-  // The cloud layer of worlds that have one (format version 5 and later).
+  // The cloud layer of worlds that have one.
   $effect(() => {
     const current = view;
     const id = worldId;

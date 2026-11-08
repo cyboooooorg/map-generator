@@ -206,6 +206,7 @@ fn world_failure(error: TileError, what: &str) -> Response {
             }),
         )
             .into_response(),
+        TileError::TooOld(e) => Failure(StatusCode::GONE, e).into_response(),
         TileError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }
@@ -654,7 +655,7 @@ async fn first_body_job(state: &Shared, id: &str) -> Result<Option<String>, Reje
     })
     .await
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    .map_err(|e| unreadable_system(&state.config.systems_dir, id, &e))?;
     match focus {
         Some(body) => queue_body(state, id, &body).await,
         None => Ok(None),
@@ -672,8 +673,8 @@ async fn get_system(
     let owned = id.clone();
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        let system = mapgen::system::read_system(&systems::system_dir(&root, &owned)).ok()?;
-        Some(SystemDetail {
+        let system = mapgen::system::read_system(&systems::system_dir(&root, &owned))?;
+        Ok::<_, String>(SystemDetail {
             system,
             names: index.names(&owned).unwrap_or_default(),
         })
@@ -681,7 +682,23 @@ async fn get_system(
     .await
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map(Json)
-    .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))
+    .map_err(|e| unreadable_system(&state.config.systems_dir, &id, &e))
+}
+
+/// The failure of a system whose `system.json` could not be read: 404 when
+/// there is none, else 410 Gone: it was made by an older generator (its
+/// file no longer parses) or is damaged, and the way out is the same.
+fn unreadable_system(root: &Path, id: &str, error: &str) -> Failure {
+    if !systems::system_dir(root, id).join("system.json").is_file() {
+        return Failure(StatusCode::NOT_FOUND, format!("no system {id}"));
+    }
+    Failure(
+        StatusCode::GONE,
+        format!(
+            "system {id} was made by an older generator or is damaged ({error}): delete it \
+             (`mise run clean-systems`) and draw it again"
+        ),
+    )
 }
 
 async fn delete_system(
@@ -931,7 +948,7 @@ async fn checked_epoch(
             StatusCode::NOT_FOUND,
             format!(
                 "world {id} offers no other epoch: it has liquid water, no craters, \
-                 or was made before format version 7"
+                 or was made by an older generator (delete it with `mise run clean-systems`)"
             ),
         ));
     };
@@ -1302,7 +1319,7 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
     let system = tokio::task::spawn_blocking(move || mapgen::system::read_system(&read))
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .map_err(|_| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))?;
+        .map_err(|e| unreadable_system(&state.config.systems_dir, id, &e))?;
     if !system.bodies.iter().any(|b| b.id == body) {
         return Err(Failure(
             StatusCode::NOT_FOUND,
@@ -1565,6 +1582,17 @@ mod tests {
         );
     }
 
+    #[test]
+    fn viewer_and_server_agree_on_the_oldest_format() {
+        let viewer = include_str!("../../../web/src/lib/formatVersion.ts");
+        let min = mapgen::export::raw_data::MIN_FORMAT_VERSION;
+        let expected = format!("export const MIN_FORMAT_VERSION = {min};");
+        assert!(
+            viewer.contains(&expected),
+            "formatVersion.ts must declare `{expected}`"
+        );
+    }
+
     fn temp_config(name: &str) -> Config {
         let root =
             std::env::temp_dir().join(format!("mapgen-server-{name}-{}", std::process::id()));
@@ -1659,6 +1687,42 @@ mod tests {
         let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
         let focus = detail["system"]["focus"].as_str().unwrap().to_string();
         (id, focus)
+    }
+
+    #[tokio::test]
+    async fn answers_410_for_what_an_older_generator_made() {
+        let config = temp_config("too-old");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        // A system whose file no longer parses, and a world below the
+        // oldest format: gone, with the way out, not "no system" or a 500.
+        let dir = root.join("mgs-1-1");
+        std::fs::create_dir_all(dir.join("bodies/b/raw_data")).unwrap();
+        std::fs::write(
+            dir.join("system.json"),
+            r#"{"format_version": 1, "bodies": 7}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("bodies/b/raw_data/world.json"),
+            r#"{"format_version": 10}"#,
+        )
+        .unwrap();
+        let (status, body) = call(&app, "GET", "/api/systems/mgs-1-1", None).await;
+        assert_eq!(status, StatusCode::GONE, "{body}");
+        assert!(body.contains("clean-systems"), "{body}");
+        let (status, body) = call(
+            &app,
+            "GET",
+            "/api/systems/mgs-1-1/bodies/b/tiles/0/0/0",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::GONE, "{body}");
+        assert!(body.contains("clean-systems"), "{body}");
+        // No such system stays a 404.
+        let (status, _) = call(&app, "GET", "/api/systems/mgs-2-2", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

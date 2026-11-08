@@ -656,6 +656,21 @@ No migration, as decided: the worlds made before systems are deleted.
   form) is read once and dropped: an old link opens the library with a
   notice.
 
+### Older formats of a system
+
+The same rule holds for a system written by an older generator: the
+generator keeps no code to re-derive it.
+
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (14 at
+  the time of writing): its tiles, epochs and hex grids answer 410 Gone
+  with a message asking to delete it (`mise run clean-systems`) and draw it
+  again, and the viewer shows that message instead of requesting them.
+- A `system.json` that no longer parses (the body rules of systems before
+  format 11 carry `shrubland_moisture`, now an unknown field):
+  `GET /api/systems/{id}` and the generation of its bodies answer 410 Gone
+  with the same message, not 404. Only a missing `system.json` is 404.
+- The server still starts and lists these systems.
+
 ## Delivery
 
 One PR or a few per phase, each merged on green with its tests and docs,

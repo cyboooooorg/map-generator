@@ -279,7 +279,6 @@ export const fr: Messages = {
     geology: 'Géologie',
     star: 'Étoile',
     starValue: (p) => `${p.type} · ${p.teff} · ${p.luminosity}`,
-    theSun: `le Soleil (G2V), à 1${S}UA${S}: monde antérieur aux étoiles`,
     orbit: 'Orbite',
     orbitValue: (p) => `${p.distance} · ${p.zone}`,
     hzInside: (p) => `dans la zone habitable (${p.position})`,
@@ -910,7 +909,7 @@ export const fr: Messages = {
     planets: 'Planètes',
     giantsHelp:
       'Les autres planètes du système qui comptent pour ce monde, géantes gazeuses et glacées, tirées avec les fréquences observées autour des étoiles de ce type et de cette métallicité',
-    giantsOff: 'Non modélisées (un monde créé avant les planètes géantes, ou généré sans elles)',
+    giantsOff: 'Non modélisées (monde généré sans planètes géantes)',
     noGiants: `Aucune${S}: pas de géante dans ce système, comme autour de la plupart des naines rouges`,
     giantLine: (p) => `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
     hotGiant: 'Jupiter chaud',
@@ -1079,6 +1078,8 @@ export const fr: Messages = {
     about: (p) => `environ ${p.time}`,
   },
   world: {
+    outdated: (p) =>
+      `${p.id} a été fait par un ancien générateur${S}: supprimez-le (\`mise run clean-systems\`) et générez-le à nouveau`,
     loadFailed: (p) => `Impossible de charger ${p.id}${S}: ${p.error}`,
   },
   errors: {

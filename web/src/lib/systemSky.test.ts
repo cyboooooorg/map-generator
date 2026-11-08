@@ -137,7 +137,7 @@ describe('system sky', () => {
     const resonant = structuredClone(system);
     const b = resonant.bodies.find((x) => x.id === 'b')!;
     b.orbit.eccentricity = 0.2;
-    b.spin = { ...b.spin, locked: false, spin_orbit_3_2: true, axial_tilt_deg: 0, period_hours: (b.orbit.period_days * 24) / 1.5 };
+    b.spin = { ...b.spin, locked: false, resonance_turns: 1.5, axial_tilt_deg: 0, period_hours: (b.orbit.period_days * 24) / 1.5 };
     const periapsis = (((360 - b.orbit.mean_anomaly_deg) % 360) / 360) * b.orbit.period_days;
     // At periapsis the star stands over longitude 180° or 0°, in turn.
     const faces = [0, 1, 2].map((k) => systemSky(resonant, 'b', periapsis + k * b.orbit.period_days, () => null).sun);

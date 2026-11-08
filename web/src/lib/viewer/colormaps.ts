@@ -52,7 +52,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
       [1.0, [225, 250, 255]],
     ],
   },
-  // Raw_data format version 2 and later.
   volcanic: {
     stops: [
       [0.0, [30, 30, 36]],
@@ -92,7 +91,6 @@ export const RAMPS: Record<DataLayer, Ramp> = {
       [1.0, [255, 255, 250]],
     ],
   },
-  // Raw_data format version 3 and later.
   floodplain: {
     stops: [
       [0.0, [24, 26, 32]],

@@ -64,7 +64,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       flow: buffer(l.flow.file),
       biomes: buffer(l.biomes.file),
     };
-    // Layers of later format versions: fetched when listed, skipped otherwise.
+    // The extra layers: fetched when listed, skipped otherwise.
     for (const name of EXTRA_FILES) {
       const info = l[name];
       if (info) {

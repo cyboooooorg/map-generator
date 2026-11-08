@@ -9,9 +9,8 @@
 // floats), and values are converted on read (see ../sample.ts). Only the
 // elevation keeps its exact 16-bit samples, for the readout of the height
 // above the coastline. That is 11 bytes per pixel on the main thread
-// (19 with the layers of format version 2), instead of 4-byte floats per
+// (19 with the extra layers), instead of 4-byte floats per
 // layer next to the GPU copies.
-import { CELSIUS_VERSION, celsius } from '../climate';
 import { temperatureSpan } from '../temperatureRange';
 import { decodePng } from './png';
 import { DataUtils } from 'three';
@@ -43,18 +42,16 @@ export interface WorldLayers {
   /** The coldest and hottest temperatures of the world, °C (see `temperatureSpan`). */
   temperatureSpan: { min: number; max: number };
   /**
-   * Layers of format version 2 and later, null on older worlds (or when a
-   * world misses one of them).
+   * The biome-selection layers, null when the files were not given.
    */
   extra: ExtraLayers | null;
 }
 
-/** The biome-selection layers exported since `raw_data` format version 2. */
+/** The biome-selection layers of `raw_data`. */
 export interface ExtraLayers {
   /**
    * RGBA half floats: volcanic zone in [0, 1], distance to open water in km
-   * (capped at `coastMaxKm`), floodplain weight in [0, 1] (format version 3;
-   * zeros before), local shift of the highland line in [-1, 1].
+   * (capped at `coastMaxKm`), floodplain weight in [0, 1], local shift of the highland line in [-1, 1].
    */
   packed: Uint16Array;
   coastMaxKm: number;
@@ -140,7 +137,7 @@ function decodeExtra(meta: WorldMetadata, files: LayerFiles, step: (file: string
   if (!volcanicInfo || !coastInfo || !highlandInfo || !files.volcanic_zone || !files.coast_distance || !files.highland_offset) {
     return null;
   }
-  // Zero-filled: half-float 0 is 0, the floodplain of version 2 worlds.
+  // Zero-filled: half-float 0 is 0, a world without floodplain.
   const packed = new Uint16Array(width * height * 4);
   step(volcanicInfo.file);
   packChannel(packed, EXTRA.volcanic, decode16(files.volcanic_zone, width, height), volcanicInfo);
@@ -171,11 +168,9 @@ export function decodeLayers(
   const elevation = decode16(files.elevation, width, height);
   const surface = new Uint16Array(width * height * 4);
   packChannel(surface, SURFACE.elevation, elevation, layers.elevation);
-  // Format version 3 and older stored temperatures on a [0, 1] scale.
-  const toCelsius = meta.format_version < CELSIUS_VERSION ? celsius : undefined;
   step(layers.temperature.file);
   const temperature = decode16(files.temperature, width, height);
-  packChannel(surface, SURFACE.temperature, temperature, layers.temperature, toCelsius);
+  packChannel(surface, SURFACE.temperature, temperature, layers.temperature);
   step(layers.moisture.file);
   packChannel(surface, SURFACE.moisture, decode16(files.moisture, width, height), layers.moisture);
   step(layers.flow.file);
@@ -190,7 +185,7 @@ export function decodeLayers(
     },
     biomes: biomes instanceof Uint8Array ? owned(biomes, (a) => a.slice()) : Uint8Array.from(biomes),
     surface,
-    temperatureSpan: temperatureSpan(temperature, layers.temperature, toCelsius),
+    temperatureSpan: temperatureSpan(temperature, layers.temperature),
     extra: decodeExtra(meta, files, step),
   };
 }

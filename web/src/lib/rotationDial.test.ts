@@ -52,7 +52,7 @@ describe('rotation dial', () => {
     const resonant = structuredClone(system);
     const b = resonant.bodies.find((x) => x.id === 'b')!;
     b.orbit.eccentricity = 0.2;
-    b.spin = { ...b.spin, locked: false, spin_orbit_3_2: true, period_hours: (b.orbit.period_days * 24) / 1.5 };
+    b.spin = { ...b.spin, locked: false, resonance_turns: 1.5, period_hours: (b.orbit.period_days * 24) / 1.5 };
     const dial = rotationDial(resonant, 'b', 0, 0, systemSky(resonant, 'b', 0, textures))!;
     expect(dial.state.locked).toBe(false);
     expect(dial.figures.resonant).toBe(true);
@@ -66,7 +66,7 @@ describe('rotation dial', () => {
     const resonant = structuredClone(system);
     const b = resonant.bodies.find((x) => x.id === 'b')!;
     b.orbit.eccentricity = 0.4;
-    b.spin = { ...b.spin, locked: false, spin_orbit_3_2: false, resonance_turns: 2, period_hours: (b.orbit.period_days * 24) / 2 };
+    b.spin = { ...b.spin, locked: false, resonance_turns: 2, period_hours: (b.orbit.period_days * 24) / 2 };
     const dial = rotationDial(resonant, 'b', 0, 0, systemSky(resonant, 'b', 0, textures))!;
     expect(dial.state.locked).toBe(false);
     expect(dial.figures.resonant).toBe(true);
