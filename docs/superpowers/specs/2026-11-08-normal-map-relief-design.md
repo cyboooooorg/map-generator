@@ -91,6 +91,19 @@ the baked path alive for them.
   previews, the sky bodies, the star view.
 - **No fallback**: worlds without the layers are refused by the format
   version.
+- **Lava and magma emit light** (the user, 2026-11-08). Their glow is
+  light they give off, not light they receive: it is added after the
+  relief lighting and is never darkened by it. A lava flow on a slope
+  turned away from the sun, or under the headlight on a far slope, still
+  glows. The app already has this glow on the night side
+  (`LAVA_GLOW` 0.9 of the day colour, lava told by its colour, red with
+  almost no green, which also works on detail tiles); it carries over to
+  every view of this design: the planet view, the tiles, the epochs, the
+  sky bodies and the star view (whose small planets, now lit, get a night
+  side where lava shows). The glow follows the night as today; on the day
+  side the lava keeps a small floor of its own light, so a flow in the
+  shade of its relief does not turn dark. Its relief stays attenuated by
+  `LAVA_SHADE`, as today.
 
 ## Calls made after the builder check
 
