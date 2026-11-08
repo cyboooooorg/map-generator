@@ -194,7 +194,7 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in stream::ELEVATION..=stream::MOONS {
+            for s in (stream::ELEVATION..=stream::PERIHELION).chain([stream::SYSTEM]) {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }

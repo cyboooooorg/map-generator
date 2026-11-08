@@ -766,7 +766,18 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   poles), and a slow rotator's circulation is organised around the
   substellar point, not by latitude. (c) The closure fails for days of
   hours (it would give Earth 0.2 K of day-night swing for its 10 K), so
-  days of a month or less add nothing.
+  days of a month or less add nothing. (d) The air's damping uses Koll &
+  Abbot's (2016) threshold for dry tidally locked planets, `t_wave / t_rad`
+  of about 10⁻², with a logistic shape of our own; Yang et al. 2014 give
+  no day-night contrast in text for a 1 bar air (only maps), so the
+  moderate swing of an earth-like 3:2 world (about 10 K at the equator)
+  is not checked against a number. The airless swing uses Earth's slope
+  of 45 °C per unit of light, too small for a real Mercury (about 300 K).
+  The cold-current calibration: sea within 2 000 km west of land in the
+  same row at 1°, anomaly against the sea mean of its row, annual mean,
+  both hemispheres pooled (20-30°: -0.9 K north, -2.1 K south by a
+  second reading, by the review, with the SST package's own land mask), land mask of the
+  NCEP/NCAR reanalysis.
 - **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
   narrower Hadley cells under heavier atmospheres, without a scaling the
   app could use; the belts scale with rotation and size only.

@@ -288,6 +288,54 @@ pub struct DayCycle {
     pub solar_day_days: f64,
     /// Length of the year, Earth days.
     pub year_days: f64,
+    /// Radiative time of the air, Earth days (see [`radiative_time_days`]):
+    /// 0 for a world with no air to keep the heat of its day.
+    pub air_tau_days: f64,
+    /// Time a gravity wave takes to cross the planet, Earth days (see
+    /// [`wave_time_days`]).
+    pub air_wave_days: f64,
+}
+
+/// Specific heat of air at constant pressure, J/kg/K (dry air, as the
+/// atmosphere of an Earth-like world; Koll & Abbot 2016 take N2's).
+const AIR_CP: f64 = 1004.0;
+/// Stefan-Boltzmann constant, W/m²/K⁴ (CODATA).
+const STEFAN_BOLTZMANN: f64 = 5.670_374e-8;
+
+/// Radiative cooling time of a column of air of surface pressure
+/// `pressure_bar` on a world of surface `gravity` (m/s²) at the equilibrium
+/// temperature `teq_k`, Earth days: `t_rad = c_p p_s / (g σ T_eq³)` (Koll &
+/// Abbot 2016, doi:10.3847/0004-637X/825/2/99, who define it so; Showman &
+/// Guillot 2002, doi:10.1051/0004-6361:20020101, give the same column
+/// scaling). 126 days for Earth (1 bar, 9.8 m/s², 255 K), 0 for no air.
+pub fn radiative_time_days(pressure_bar: f32, gravity: f32, teq_k: f32) -> f64 {
+    let (p, g, t) = (
+        f64::from(pressure_bar.max(0.0)) * 1e5,
+        f64::from(gravity),
+        f64::from(teq_k),
+    );
+    if p <= 0.0 || g <= 0.0 || t <= 0.0 {
+        return 0.0;
+    }
+    AIR_CP * p / (g * STEFAN_BOLTZMANN * t.powi(3)) / 86_400.0
+}
+
+/// Wave-to-radiative time ratio above which the air keeps large day-night
+/// temperature gradients: "temperature gradients are large when t_wave/t_rad
+/// ≳ O(10⁻²)" and small for much less (Koll & Abbot 2016,
+/// doi:10.3847/0004-637X/825/2/99, Section 6, for dry tidally locked
+/// planets of 0.1 to 10 bar; applied here to the air of any slow rotator).
+const WAVE_TO_RADIATIVE_THRESHOLD: f64 = 1e-2;
+/// Gas constant of air, J/kg/K.
+const AIR_R: f64 = 287.0;
+
+/// Time a gravity wave takes to cross a planet of `radius_km` with air at
+/// `teq_k`, Earth days: `t_wave = a / c`, `c = sqrt(R/c_p) sqrt(R T_eq)`
+/// (isothermal air, Koll & Abbot 2016). 0.5 day for Earth.
+pub fn wave_time_days(radius_km: f32, teq_k: f32) -> f64 {
+    let t = f64::from(teq_k).max(1.0);
+    let c = (AIR_R / AIR_CP).sqrt() * (AIR_R * t).sqrt();
+    f64::from(radius_km) * 1e3 / c / 86_400.0
 }
 
 /// Months in a year: the averaging window of a monthly mean.
@@ -302,7 +350,40 @@ impl DayCycle {
         (rate.abs() > 1e-9).then(|| Self {
             solar_day_days: 1.0 / rate.abs(),
             year_days,
+            air_tau_days: 0.0,
+            air_wave_days: 0.0,
         })
+    }
+
+    /// The same day under air that cools radiatively in `air_tau_days`,
+    /// whose waves cross the planet in `air_wave_days`.
+    pub fn with_air(self, air_tau_days: f64, air_wave_days: f64) -> Self {
+        Self {
+            air_tau_days,
+            air_wave_days,
+            ..self
+        }
+    }
+
+    /// Share of the swing the air lets through: a column that cools in
+    /// `t_rad` follows a cycle of period `D` by `1 / sqrt(1 + (2π t_rad /
+    /// D)²)`, the response of a heat reservoir to a periodic forcing (North
+    /// et al. 1981, as for the ground below): the air keeps the heat of
+    /// the day and carries it to the night side, as Koll & Abbot 2016 find
+    /// that atmospheres whose waves cross the planet in more than about
+    /// 10⁻² of their cooling time (an Earth's air: 4×10⁻³) have day-night
+    /// gradients that grow with that ratio. A world without air lets all of
+    /// it through, one under thick air (Venus: 10⁴ days) none.
+    fn air_factor(&self) -> f64 {
+        if self.air_tau_days <= 0.0 {
+            return 1.0;
+        }
+        let storage = 1.0 / (1.0 + (TAU * self.air_tau_days / self.solar_day_days).powi(2)).sqrt();
+        // Transport: the day-night gradient of the air is large when
+        // t_wave / t_rad exceeds about 10⁻² and small below it (Koll &
+        // Abbot 2016); the logistic shape between is the app's.
+        let ratio = self.air_wave_days / self.air_tau_days;
+        storage * ratio / (ratio + WAVE_TO_RADIATIVE_THRESHOLD)
     }
 
     /// Share of the day-night swing that a monthly mean keeps:
@@ -326,11 +407,12 @@ impl DayCycle {
     /// doi:10.1029/RG019i001p00091). It holds where the day is months long,
     /// near the year it is calibrated on; the ground of a day of hours is
     /// not a single heat capacity (it is far from this), which is why the
-    /// monthly window drops those days.
+    /// monthly window drops those days. The air of the world damps it too
+    /// ([`Self::air_factor`]).
     fn response(&self, damping: f32) -> f64 {
         let d = f64::from(damping);
         let k = (1.0 / (d * d) - 1.0).max(0.0).sqrt();
-        1.0 / (1.0 + (k * self.year_days / self.solar_day_days).powi(2)).sqrt()
+        self.air_factor() / (1.0 + (k * self.year_days / self.solar_day_days).powi(2)).sqrt()
     }
 
     /// Amplitude of the day-night swing of the light at `latitude` for
@@ -1596,6 +1678,32 @@ mod tests {
         // non-tilted planet the light is overhead at noon, none at the pole.
         let pole = Seasons::new(&grid, 0.0, 1.0, None, Some(day), |_| {}).half_range(0, true);
         assert!(pole < 0.2 * land, "{pole}");
+    }
+
+    #[test]
+    fn air_keeps_the_heat_of_a_long_day() {
+        // Earth's air cools in about four months; Mars's in days; Venus's
+        // in decades.
+        let earth = radiative_time_days(1.0, 9.81, 255.0);
+        assert!((earth - 126.0).abs() < 3.0, "{earth}");
+        assert!(radiative_time_days(0.006, 3.7, 210.0) < 5.0);
+        assert!(radiative_time_days(92.0, 8.9, 230.0) > 5_000.0);
+        assert_eq!(radiative_time_days(0.0, 9.81, 255.0), 0.0);
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        let day = DayCycle::new(58.646, 87.969).unwrap();
+        let swing = |day: DayCycle| {
+            Seasons::new(&grid, 0.0, 1.0, None, Some(day), |_| {}).half_range(89, true)
+        };
+        // A 1 bar atmosphere cuts the 89 C swing of a 176-day day to a
+        // quarter or less; an airless world keeps all of it.
+        let airless = swing(day);
+        let airy = swing(day.with_air(earth, 0.5));
+        assert!(airy < 0.1 * airless && airy > 1.0, "{airy} {airless}");
+        assert!(swing(day.with_air(0.1, 0.5)) > 0.98 * airless);
     }
 
     #[test]
