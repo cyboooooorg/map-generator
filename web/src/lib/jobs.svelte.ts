@@ -44,7 +44,7 @@ const TIMES_KEY = 'stageSecondsPerMegapixel';
 class Jobs {
   list = $state<TrackedJob[]>([]);
   /** Map size used when a request does not set one (the server default). */
-  defaultSize: [number, number] = [1920, 1080];
+  defaultSize: [number, number] = [2048, 1024];
   /** Called once per job when it finishes. */
   onFinished: (job: TrackedJob) => void = () => {};
   private times: StageTimes = loadNumbers(TIMES_KEY);

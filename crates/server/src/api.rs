@@ -67,6 +67,8 @@ pub struct FormSpec {
     pub giant_mass: Limits,
     pub default_width: u32,
     pub default_height: u32,
+    /// The map sizes the form offers, `[width, height]`, all 2:1.
+    pub size_presets: Vec<[u32; 2]>,
     /// Largest width or height the server accepts.
     pub max_size: u32,
     /// Largest map the server accepts, in pixels (width × height).

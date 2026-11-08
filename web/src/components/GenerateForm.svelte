@@ -149,14 +149,6 @@
   /** The sea is set either by its level or by the share of land it leaves. */
   type SeaBy = 'level' | 'land';
 
-  const SIZES: [number, number][] = [
-    [960, 540],
-    [1920, 1080],
-    [2048, 1024],
-    [4096, 2048],
-    [8192, 4096],
-  ];
-
   /** Each parameter: random (left to the preset or the server) or a fixed value. */
   type FieldState = Record<Field, { random: boolean; value: number }>;
 
@@ -276,7 +268,7 @@
   /** The fields a world of the chosen kind has. */
   const shownFields = $derived(giantWorld ? OTHER_FIELDS.filter((f) => f === 'axial_tilt_deg') : OTHER_FIELDS);
   const sizes = $derived.by(() => {
-    const list = [...SIZES];
+    const list = spec.size_presets.map(([w, h]): [number, number] => [w, h]);
     for (const extra of [size, `${spec.default_width}x${spec.default_height}`]) {
       const [w, h] = extra.split('x').map(Number);
       if (w && h && !list.some(([lw, lh]) => lw === w && lh === h)) {

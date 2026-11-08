@@ -98,6 +98,11 @@ pub const EROSION: Limits = Limits { min: 0.0, max: 5.0 };
 /// Map width and height in pixels.
 pub const MAP_SIZE: (u32, u32) = (2, 16_384);
 
+/// Map sizes the generation form offers, width and height in pixels. A
+/// planet map spans 360° by 180°: every size is 2:1 and the default
+/// ([`fallback::WIDTH`] × [`fallback::HEIGHT`]) is one of them.
+pub const SIZE_PRESETS: [(u32, u32); 4] = [(1024, 512), (2048, 1024), (4096, 2048), (8192, 4096)];
+
 /// Generator defaults for parameters that neither the request nor the
 /// preset sets.
 pub mod fallback {
@@ -115,8 +120,8 @@ pub mod fallback {
     pub const SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.2, 0.6]);
     /// Inside the habitable zone of the star.
     pub const HZ_POSITION: ParamDefault = ParamDefault::Range([0.1, 0.9]);
-    pub const WIDTH: u32 = 1920;
-    pub const HEIGHT: u32 = 1080;
+    pub const WIDTH: u32 = 2048;
+    pub const HEIGHT: u32 = 1024;
 }
 
 /// A request to generate a world. `None` fields come from the preset when it
@@ -908,6 +913,12 @@ mod tests {
     }
 
     #[test]
+    fn size_presets_are_two_to_one_and_include_the_default() {
+        assert!(SIZE_PRESETS.iter().all(|&(w, h)| w == 2 * h));
+        assert!(SIZE_PRESETS.contains(&(fallback::WIDTH, fallback::HEIGHT)));
+    }
+
+    #[test]
     fn sea_level_and_land_fraction_are_exclusive() {
         let request = WorldRequest {
             sea_level: Some(0.2),
@@ -929,7 +940,7 @@ mod tests {
         assert!((0.0..=85.0).contains(&p.axial_tilt_deg));
         // The planet is random: its preset may set its own range.
         assert!(SURFACE_AGE_GA.contains(p.surface_age_ga));
-        assert_eq!((p.width, p.height), (1920, 1080));
+        assert_eq!((p.width, p.height), (2048, 1024));
     }
 
     #[test]

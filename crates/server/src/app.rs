@@ -4,7 +4,7 @@
 //! |---------------------------------|---------------------------------------------------|
 //! | `GET /healthz`                  | liveness probe                                    |
 //! | `GET /api/presets`              | planet presets the form can offer                 |
-//! | `GET /api/form`                 | parameter limits and defaults                     |
+//! | `GET /api/form`                 | parameter limits, defaults and map sizes          |
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
 //! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
@@ -65,12 +65,12 @@ use tower_http::set_header::SetResponseHeaderLayer;
 
 /// Largest map side the server accepts.
 pub const MAX_SIZE: u32 = 8192;
-/// Default largest map the server accepts, in pixels (4096 × 2048). A
+/// Default largest map the server accepts, in pixels (8192 × 4096). A
 /// generation without noise maps, as the server runs it, peaks at about 70
 /// bytes per pixel (measured in Docker: 545 MiB here, 2.0 GiB at 8192 ×
 /// 4096): keep the limit under the memory the server can use, or it gets
 /// killed mid-job.
-pub const DEFAULT_MAX_PIXELS: u64 = 4096 * 2048;
+pub const DEFAULT_MAX_PIXELS: u64 = 8192 * 4096;
 /// Peak generation memory per pixel, for the error message.
 const BYTES_PER_PIXEL: u64 = 70;
 /// Finished jobs kept for `GET /api/jobs`; older ones are forgotten.
@@ -431,6 +431,7 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         giant_mass: request::GIANT_MASS,
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,
+        size_presets: request::SIZE_PRESETS.iter().map(|&(w, h)| [w, h]).collect(),
         max_size: MAX_SIZE,
         max_pixels: state.config.max_pixels,
         planet_types: mapgen::system::PLANET_TYPES
@@ -1880,13 +1881,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn form_offers_two_to_one_sizes_and_defaults_to_2048() {
+        let app = router(temp_config("form-sizes"));
+        let (status, body) = call(&app, "GET", "/api/form", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            body.contains(r#""size_presets":[[1024,512],[2048,1024],[4096,2048],[8192,4096]]"#)
+        );
+        assert!(body.contains(r#""default_width":2048"#));
+        assert!(body.contains(r#""default_height":1024"#));
+    }
+
+    #[tokio::test]
     async fn rejects_invalid_requests() {
         let app = router(temp_config("invalid"));
         for body in [
             r#"{"around": {"sea_level": 3.0}}"#,
             r#"{"around": {"planet": "/etc/passwd.toml"}}"#,
             r#"{"around": {"width": 100000}}"#,
-            r#"{"around": {"width": 8192, "height": 4096}}"#,
+            r#"{"around": {"width": 8192, "height": 8192}}"#,
             r#"{"around": {"unknown": 1}}"#,
             r#"{"elsewhere": {}}"#,
         ] {
