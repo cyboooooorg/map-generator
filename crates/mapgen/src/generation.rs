@@ -1,7 +1,7 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
-use crate::climate::{Belts, EccentricOrbit, LockedClimate, Moisture, Seasons};
+use crate::climate::{Belts, DayCycle, EccentricOrbit, LockedClimate, Moisture, Seasons};
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
@@ -1081,16 +1081,25 @@ fn star_climate(params: &WorldParams) -> StarClimate {
 /// rotation its moons draw, its year if locked to its star (two thirds of
 /// it in the 3:2 resonance), Earth's 24 h for a world without moons.
 pub fn belts(params: &WorldParams) -> Belts {
+    Belts::new(
+        sidereal_day_hours(params),
+        f64::from(params.circumference_km),
+    )
+}
+
+/// The time world `params` takes to turn once, hours: its year if locked
+/// to its star (two thirds of it in the 3:2 resonance), the rotation its
+/// moons draw, Earth's 24 h for a world without moons.
+fn sidereal_day_hours(params: &WorldParams) -> f64 {
     let star = crate::spin::star_info(params);
-    let day_hours = if star.tidally_locked {
+    if star.tidally_locked {
         f64::from(star.year_days) * 24.0
     } else if star.spin_orbit_3_2 {
         // Three turns every two orbits.
         f64::from(star.year_days) * 24.0 / f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
     } else {
         crate::moons::MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours))
-    };
-    Belts::new(day_hours, f64::from(params.circumference_km))
+    }
 }
 
 /// The seasonal cycle of world `params` (see [`Seasons`]): none on a
@@ -1115,6 +1124,10 @@ pub fn seasons(params: &WorldParams) -> Seasons {
         params.axial_tilt_deg,
         params.pressure_bar,
         orbit,
+        DayCycle::new(
+            sidereal_day_hours(params) / 24.0,
+            f64::from(crate::spin::star_info(params).year_days),
+        ),
         |rows| star_temperatures(rows, star),
     )
 }

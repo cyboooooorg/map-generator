@@ -746,6 +746,22 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   circular one, so the summer and the winter stay symmetric around the
   annual mean; a real eccentric orbit gives a short hot season and a long
   mild one (the temperature response of a month-by-month run would).
+- **Slow rotators and the solar day:** first step done (2026-11-08). A
+  world whose solar day lasts more than a month (the 3:2 resonance, a
+  slow rotator) gets the swing of its day in its seasons (`DayCycle`:
+  North et al. 1981 response at the day's period, a monthly window; Yang
+  et al. 2014 for the picture). What remains: (a) the clouds. Yang et al.
+  find that at a given stellar flux the global-mean surface temperature
+  falls by 20 K between a rotation period of 1 day and 256 days (a
+  thermal inertia of 50 m of water), through the albedo of the thick
+  substellar clouds; the app keeps the mean of a fast rotator, and the
+  shape between the two ends is not in the text. It also conflicts with
+  the carbon cycle that `star_temperatures` regulates. (b) The day-night
+  swing is zonal: a 3:2 world has hot longitudes (Mercury's two hot
+  poles), and a slow rotator's circulation is organised around the
+  substellar point, not by latitude. (c) The closure fails for days of
+  hours (it would give Earth 0.2 K of day-night swing for its 10 K), so
+  days of a month or less add nothing.
 - **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
   narrower Hadley cells under heavier atmospheres, without a scaling the
   app could use; the belts scale with rotation and size only.

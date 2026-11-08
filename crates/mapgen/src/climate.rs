@@ -271,6 +271,96 @@ fn insolation_swing(latitude: f64, axial_tilt_deg: f32, orbit: Option<EccentricO
     (most - least) / 2.0
 }
 
+/// The day of a slowly turning planet, as the seasons see it: how long the
+/// star takes to cross the sky again (the solar day) against the year.
+///
+/// A planet whose solar day lasts months (Mercury: 176 days, two of its
+/// years, in the 3:2 spin-orbit resonance) has a day-night cycle slow enough
+/// for the ground to follow: "if the day is long enough that the dayside is
+/// much warmer than the nightside" the circulation changes (Yang et al.
+/// 2014, doi:10.1088/2041-8205/787/1/L2, who simulate rotation periods up to
+/// 365 days). Its months are no longer averages over many days, so the
+/// coldest and warmest months differ by the day-night swing, which the
+/// seasons then include.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DayCycle {
+    /// Length of the solar day, Earth days.
+    pub solar_day_days: f64,
+    /// Length of the year, Earth days.
+    pub year_days: f64,
+}
+
+/// Months in a year: the averaging window of a monthly mean.
+const MONTHS_PER_YEAR: f64 = 12.0;
+
+impl DayCycle {
+    /// The solar day of a planet turning once in `sidereal_days` on an
+    /// orbit of `year_days` (prograde): `1 / (1/P_rot − 1/P_orb)`; `None`
+    /// when it never turns away from its star (locked).
+    pub fn new(sidereal_days: f64, year_days: f64) -> Option<Self> {
+        let rate = 1.0 / sidereal_days - 1.0 / year_days;
+        (rate.abs() > 1e-9).then(|| Self {
+            solar_day_days: 1.0 / rate.abs(),
+            year_days,
+        })
+    }
+
+    /// Share of the day-night swing that a monthly mean keeps:
+    /// `sin(x)/x` with `x = π (month / solar day)`, the mean of a sine over
+    /// a month, 0 when the day is a month or shorter (a month then averages
+    /// whole days away).
+    fn monthly_window(&self) -> f64 {
+        let month = self.year_days / MONTHS_PER_YEAR;
+        if self.solar_day_days <= month {
+            return 0.0;
+        }
+        let x = PI * month / self.solar_day_days;
+        x.sin() / x
+    }
+
+    /// Share of the equilibrium swing a ground of seasonal response
+    /// `damping` (the share it follows of the yearly one,
+    /// [`LAND_SEASONS`], [`SEA_SEASONS`]) follows at the period of the solar
+    /// day: `1 / sqrt(1 + (ω C / λ)²)` with `ω C / λ` fixed by the yearly
+    /// response and scaled as the year over the day (North et al. 1981,
+    /// doi:10.1029/RG019i001p00091). It holds where the day is months long,
+    /// near the year it is calibrated on; the ground of a day of hours is
+    /// not a single heat capacity (it is far from this), which is why the
+    /// monthly window drops those days.
+    fn response(&self, damping: f32) -> f64 {
+        let d = f64::from(damping);
+        let k = (1.0 / (d * d) - 1.0).max(0.0).sqrt();
+        1.0 / (1.0 + (k * self.year_days / self.solar_day_days).powi(2)).sqrt()
+    }
+
+    /// Amplitude of the day-night swing of the light at `latitude` for
+    /// `axial_tilt_deg`, in units of the global mean light: the first
+    /// harmonic of the daytime light (twice the cosine of the latitude at
+    /// the equinox), averaged over the year.
+    fn light_swing(latitude: f64, axial_tilt_deg: f32) -> f64 {
+        const HOURS: usize = 48;
+        const LONGITUDES: usize = 24;
+        let mut sum = 0.0;
+        for k in 0..LONGITUDES {
+            let longitude = (k as f64 + 0.5) / LONGITUDES as f64 * TAU;
+            let delta = declination(axial_tilt_deg, longitude);
+            let (a, b) = (latitude.sin() * delta.sin(), latitude.cos() * delta.cos());
+            // Light 4 max(0, a + b cos h) (relative to the global mean);
+            // its cos h component is the amplitude of the first harmonic.
+            let first: f64 = (0..HOURS)
+                .map(|j| {
+                    let h = (j as f64 + 0.5) / HOURS as f64 * TAU;
+                    4.0 * (a + b * h.cos()).max(0.0) * h.cos()
+                })
+                .sum::<f64>()
+                / HOURS as f64
+                * 2.0;
+            sum += first;
+        }
+        sum / LONGITUDES as f64
+    }
+}
+
 /// The seasonal cycle of a planet's climate: for each row, half the
 /// difference between its summer and its winter temperature, °C, on land
 /// and on the sea. Summer is the annual mean plus it, winter the mean
@@ -305,13 +395,16 @@ impl Seasons {
     /// The seasons of the rows of `grid` for an axial tilt (degrees), a
     /// surface pressure (bar) and an eccentric `orbit` (`None`: a circular
     /// one, or a world made before the longitude of perihelion, whose
-    /// seasons ignore the distance to the star); `star` moves rows of
+    /// seasons ignore the distance to the star), the `day` of a planet
+    /// whose solar day lasts months (see [`DayCycle`]; `None` for a fast
+    /// one, or one locked); `star` moves rows of
     /// sea-level temperature as [`crate::star::star_temperatures`] does.
     pub fn new(
         grid: &Grid,
         axial_tilt_deg: f32,
         pressure_bar: f32,
         orbit: Option<EccentricOrbit>,
+        day: Option<DayCycle>,
         star: impl Fn(&mut [f32]),
     ) -> Self {
         let mut rows = row_temperatures(grid, axial_tilt_deg);
@@ -325,17 +418,28 @@ impl Seasons {
                 s as f32 * DEGREES_PER_UNIT * contrast
             })
             .collect();
+        // The day-night swing of a slow rotator, per row, before the
+        // response of the ground.
+        let diurnal: Vec<f32> = (0..grid.height)
+            .map(|y| match day {
+                Some(day) => {
+                    let s = DayCycle::light_swing(grid.latitude(y), axial_tilt_deg)
+                        * day.monthly_window()
+                        / (equator - pole);
+                    s as f32 * DEGREES_PER_UNIT * contrast
+                }
+                None => 0.0,
+            })
+            .collect();
         let half_range = |damping: f32| {
-            let mut summer: Vec<f32> = rows
+            let slow = day.map_or(0.0, |d| d.response(damping) as f32);
+            let total: Vec<f32> = swing
                 .iter()
-                .zip(&swing)
-                .map(|(t, s)| t + s * damping)
+                .zip(&diurnal)
+                .map(|(s, d)| s * damping + d * slow)
                 .collect();
-            let mut winter: Vec<f32> = rows
-                .iter()
-                .zip(&swing)
-                .map(|(t, s)| t - s * damping)
-                .collect();
+            let mut summer: Vec<f32> = rows.iter().zip(&total).map(|(t, s)| t + s).collect();
+            let mut winter: Vec<f32> = rows.iter().zip(&total).map(|(t, s)| t - s).collect();
             star(&mut summer);
             star(&mut winter);
             summer
@@ -1364,7 +1468,7 @@ mod tests {
             circumference_km: 40_000.0,
         };
         // Row 29 is centred on 60.5° N, row 59 on 30.5° N.
-        let earth = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, |_| {});
+        let earth = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, None, |_| {});
         let (land60, sea60) = (earth.half_range(29, true), earth.half_range(29, false));
         assert!((land60 - 19.6).abs() < 1.0, "{land60}");
         assert!((sea60 - 4.4).abs() < 0.5, "{sea60}");
@@ -1374,12 +1478,12 @@ mod tests {
         // Tilted by 90°, the pole swings from a scorching summer to a
         // winter far below freezing.
         let rows = row_temperatures(&grid, 90.0);
-        let tipped = Seasons::new(&grid, 90.0, 1.0, None, |_| {});
+        let tipped = Seasons::new(&grid, 90.0, 1.0, None, None, |_| {});
         assert!(rows[0] - tipped.half_range(0, true) < -20.0);
         // Dense air damps the seasons; a dim star narrows them in degrees.
-        let dense = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 92.0, None, |_| {});
+        let dense = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 92.0, None, None, |_| {});
         assert!(dense.half_range(29, true) < 0.11 * land60);
-        let dim = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, |rows| {
+        let dim = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, None, |rows| {
             for t in rows {
                 *t = (*t + 273.15) * 0.8 - 273.15;
             }
@@ -1456,6 +1560,45 @@ mod tests {
     }
 
     #[test]
+    fn a_planet_with_a_solar_day_of_months_swings_with_its_day() {
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        // Mercury's 3:2 resonance: 58.6-day turn on an 87.97-day orbit, a
+        // solar day of 176 days.
+        let day = DayCycle::new(58.646, 87.969).unwrap();
+        assert!(
+            (day.solar_day_days - 175.9).abs() < 0.5,
+            "{}",
+            day.solar_day_days
+        );
+        // Locked: no solar day.
+        assert!(DayCycle::new(87.969, 87.969).is_none());
+        let swing = |day: Option<DayCycle>, land: bool| {
+            Seasons::new(&grid, 0.0, 1.0, None, day, |_| {}).half_range(89, land)
+        };
+        // With no tilt and no day cycle there are no seasons at the equator.
+        assert_eq!(swing(None, true), 0.0);
+        // The equator swings by tens of degrees on land, far less on the sea.
+        let (land, sea) = (swing(Some(day), true), swing(Some(day), false));
+        assert!(land > 30.0 && sea < 0.4 * land && sea > 5.0, "{land} {sea}");
+        // Earth's day: a month averages it away. So does a 20-day one.
+        let earth = DayCycle::new(0.9973, 365.25);
+        assert_eq!(swing(earth, true), 0.0);
+        let quick = DayCycle::new(20.0, 365.25);
+        assert_eq!(swing(quick, true), 0.0);
+        // A longer day swings more on land, towards a ceiling.
+        let slow = DayCycle::new(300.0, 365.25 * 10.0);
+        assert!(swing(slow, true) > 0.0);
+        // The poles are lit around a tilted year only; at the equator of a
+        // non-tilted planet the light is overhead at noon, none at the pole.
+        let pole = Seasons::new(&grid, 0.0, 1.0, None, Some(day), |_| {}).half_range(0, true);
+        assert!(pole < 0.2 * land, "{pole}");
+    }
+
+    #[test]
     fn eccentric_orbits_make_uneven_seasons_where_the_perihelion_falls() {
         let grid = Grid {
             width: 4,
@@ -1463,7 +1606,7 @@ mod tests {
             circumference_km: 40_000.0,
         };
         let swing = |orbit: Option<EccentricOrbit>, tilt: f32, y: u32| {
-            Seasons::new(&grid, tilt, 1.0, orbit, |_| {}).half_range(y, true)
+            Seasons::new(&grid, tilt, 1.0, orbit, None, |_| {}).half_range(y, true)
         };
         let mars = |perihelion_longitude_deg| {
             Some(EccentricOrbit {
