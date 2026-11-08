@@ -1033,6 +1033,7 @@ export const en = {
     systemClockHelp:
       'The whole system runs on one clock, in Earth days per second, every planet at its real pace. Selecting another planet does not change it. The day counts Earth days since the animation started.',
     hours: (p: { hours: string }) => `${p.hours} h`,
+    systemScale: 'Schematic: distances are logarithmic (each step outward multiplies the distance, so close-in planets are spread out and far ones drawn closer, the habitable zone shaded in its place); the star and the planets are not to scale, and markers shrink where orbits are close.',
     schematic: 'Schematic: the star is not to scale; distances are in proportion.',
   },
   planetCard: {

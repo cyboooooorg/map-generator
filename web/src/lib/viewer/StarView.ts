@@ -79,6 +79,8 @@ import {
   starGravity,
   systemCompressedFrom,
   systemScale,
+  systemLogScale,
+  markerSizes,
   velocityScale,
   RING_MOON_SIZE,
   RING_TILT,
@@ -279,6 +281,8 @@ export class StarView {
   private lagrangeOn = false;
   /** Whether a planetary system is drawn to scale: distances linear from the star, the star its true size. */
   private realScale = false;
+  /** Drawn size of each planet's marker, view units (see markerSizes). */
+  private markerSizeList: number[] = [];
   /** The star's drawn radius over STAR_RADIUS (1 but to scale). */
   private starScale = 1;
   /** The last setStar's arguments, to draw the system again on another scale. */
@@ -572,9 +576,17 @@ export class StarView {
     // To scale: linear from the star's centre, the farthest point REAL_SPAN out.
     const outer = Math.max(info.hz_outer_au, ...giants.map((g) => g.orbit_au * (1 + g.eccentricity)));
     const real = system && this.realScale;
-    if (real) this.from = Infinity;
-    const at = real ? (au: number) => (REAL_SPAN * au) / outer : systemScale(info, giants, 6, this.from);
+    // A planetary system is drawn on one logarithmic scale, with no boundary.
+    if (real || system) this.from = Infinity;
+    const at = real
+      ? (au: number) => (REAL_SPAN * au) / outer
+      : system
+        ? systemLogScale(info, giants)
+        : systemScale(info, giants, 6, this.from);
     this.at = at;
+    // Markers shrink where orbits are close, so they never touch.
+    const natural = giants.map((g) => giantMarkerSize(g.radius_earth));
+    this.markerSizeList = system && !real ? markerSizes(natural, giants.map((g) => at(g.orbit_au))) : natural;
     this.starScale = real ? Math.max((REAL_SPAN * SUN_RADIUS_AU * info.radius) / outer / STAR_RADIUS, 1e-4) : 1;
     this.star.scale.setScalar(this.starScale);
     this.arcs.scale.setScalar(this.starScale);
@@ -626,7 +638,9 @@ export class StarView {
     this.giantMarkers.forEach((marker, k) => {
       const giant = giants[k]!;
       const trueSize = (REAL_SPAN * (giant.radius_earth * 6371)) / AU_KM / outer;
-      marker.scale.setScalar(real ? Math.max(trueSize / giantMarkerSize(giant.radius_earth), 1e-4) : 1);
+      marker.scale.setScalar(
+        real ? Math.max(trueSize / giantMarkerSize(giant.radius_earth), 1e-4) : this.markerSize(k) / giantMarkerSize(giant.radius_earth),
+      );
     });
     for (const moons of this.systemMoons) moons.group.visible = !real;
     this.buildPins(real);
@@ -699,9 +713,9 @@ export class StarView {
     }
     this.systemMoons = [];
     if (this.selected === null) return;
-    for (const giant of this.giants) {
+    for (const [k, giant] of this.giants.entries()) {
       const group = new Group();
-      group.scale.setScalar(giantMarkerSize(giant.radius_earth) / PLANET_MARKER);
+      group.scale.setScalar(this.markerSize(k) / PLANET_MARKER);
       // A day a second at ×1: a year lasts its days in seconds.
       const orbits = moonOrbits(giant.moons ?? [], giant.radius_earth * 6371, giant.year_days, giant.year_days, false);
       const markers = orbits.map((orbit) => {
@@ -1193,7 +1207,7 @@ export class StarView {
       const moons = this.systemMoons[k];
       const reach =
         moons && !this.realScale ? Math.max(0, ...moons.orbits.map((o) => o.radius)) * moons.group.scale.x : 0;
-      const { radius, toScale } = hillShownRadius(true_, giantMarkerSize(giant.radius_earth), reach);
+      const { radius, toScale } = hillShownRadius(true_, this.markerSize(k), reach);
       const sphere = new LineSegments(
         new BufferGeometry().setFromPoints(sphereGrid(radius).map(([x, y, z]) => new Vector3(x, y, z))),
         toScale
@@ -1422,6 +1436,11 @@ export class StarView {
     return { position: new Vector3(0, distance * 0.55, distance * 0.83), target: new Vector3() };
   }
 
+  /** Drawn size of planet `index`'s marker, view units. */
+  private markerSize(index: number): number {
+    return this.markerSizeList[index] ?? giantMarkerSize(this.giants[index]?.radius_earth ?? 1);
+  }
+
   /** Where the camera stops close to planet `index`: in front of it, on the side the camera looks from. */
   private nearPose(index: number): { position: Vector3; target: Vector3 } | null {
     const marker = this.giantMarkers[index];
@@ -1429,7 +1448,7 @@ export class StarView {
     const target = marker.position.clone();
     const away = this.camera.position.clone().sub(target);
     if (away.lengthSq() < 1e-9) away.set(0, 1, 1);
-    const size = giantMarkerSize(this.giants[index]?.radius_earth ?? 1);
+    const size = this.markerSize(index);
     return { position: target.clone().addScaledVector(away.normalize(), size * 6), target };
   }
 
@@ -1699,7 +1718,7 @@ export class StarView {
       this.smallBodies.place(
         this.systemDay,
         this.giantMarkers.map((m) => m.position),
-        selected ? 2.5 * giantMarkerSize(selected.radius_earth) : 0,
+        selected ? 2.5 * this.markerSize(this.selected) : 0,
       );
     }
     this.hills.forEach((hill, k) => {

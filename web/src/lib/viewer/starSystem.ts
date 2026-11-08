@@ -86,6 +86,59 @@ export function systemScale(
   return (au) => (au <= farthest ? linear(au) : linear(farthest) + k * Math.log(au / farthest));
 }
 
+/** View units per e-fold of distance in a planetary system's scale: a doubling is about 1.8 units. */
+const SYSTEM_LOG_STEP = 2.6;
+/** Most view units a planetary system's scale reaches beyond the star's surface, so the camera can frame it. */
+const SYSTEM_LOG_SPAN = 14.5;
+
+/**
+ * Places distances (AU) on a planetary system's schematic, in view units:
+ * logarithmic in AU from just outside the star to the farthest orbit or
+ * edge of the habitable zone, so equal ratios of distance take equal room.
+ * A compact inner system (planets at 0.07, 0.09 and 0.15 AU) is as readable
+ * as giants tens of AU out, and the habitable zone keeps its place and its
+ * band, only its width is on the same log scale. The innermost orbit or
+ * zone edge sits 0.6 view units off the star's surface; closer than that
+ * the scale goes linearly down to the star's centre. Continuous and
+ * increasing; it depends on the system alone, so it does not change with
+ * the planet selected.
+ */
+export function systemLogScale(
+  star: Pick<StarInfo, 'hz_inner_au' | 'hz_outer_au'>,
+  planets: Pick<Giant, 'orbit_au' | 'eccentricity'>[],
+): (au: number) => number {
+  const nearest = Math.min(star.hz_inner_au, ...planets.map((p) => p.orbit_au * (1 - p.eccentricity)));
+  const farthest = Math.max(star.hz_outer_au, ...planets.map((p) => p.orbit_au * (1 + p.eccentricity)));
+  const origin = Math.max(nearest, 1e-6) * 0.85;
+  const r0 = STAR_RADIUS * 1.6;
+  const ratio = Math.log(Math.max(farthest, origin * 1.001) / origin);
+  const k = Math.min(SYSTEM_LOG_STEP, SYSTEM_LOG_SPAN / ratio);
+  return (au) => (au <= origin ? (r0 * Math.max(au, 0)) / origin : r0 + k * Math.log(au / origin));
+}
+
+/** Smallest marker of a planet in a planetary system's view, view units: it stays visible (picking has its own tolerance). */
+export const MARKER_MIN = 0.035;
+/** Share of the gap to the nearest orbit a marker may fill. */
+const MARKER_GAP_SHARE = 0.4;
+
+/**
+ * The sizes planets' markers are drawn with in a planetary system's view,
+ * view units: each planet's own size (`natural`) at most, shrunk to
+ * `MARKER_GAP_SHARE` of the gap, on screen, between its orbit and the
+ * nearest one (or the star's surface), and never under `MARKER_MIN`, so
+ * markers never touch however tight the system. `places` are the planets'
+ * distances on the view's scale (`systemLogScale`).
+ */
+export function markerSizes(natural: readonly number[], places: readonly number[]): number[] {
+  return natural.map((size, k) => {
+    let gap = places[k]! - STAR_RADIUS;
+    places.forEach((other, j) => {
+      if (j !== k) gap = Math.min(gap, Math.abs(other - places[k]!));
+    });
+    return Math.max(MARKER_MIN, Math.min(size, MARKER_GAP_SHARE * gap));
+  });
+}
+
 /** Where the star view starts compressing distances, AU: just beyond the world's orbit and the habitable zone. */
 export function compressedFrom(star: Pick<StarInfo, 'apoapsis_au' | 'hz_outer_au'>): number {
   return Math.max(star.apoapsis_au, star.hz_outer_au) * 1.15;
