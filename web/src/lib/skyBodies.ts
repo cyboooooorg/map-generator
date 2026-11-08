@@ -30,6 +30,12 @@ export function ringSeed(massEarth: number): number {
   return (massEarth * 7.31) % 13;
 }
 
+/** URLs of a body's surface maps: its colour (without hillshade) and its relief normals. */
+export interface SurfaceMaps {
+  colour: string;
+  normal: string;
+}
+
 /** A body drawn in the sky of the body shown. */
 export interface SkyBody {
   direction: Vec3;
@@ -45,8 +51,8 @@ export interface SkyBody {
   radius?: number;
   /** Colour of its surface, linear RGB, when it has no map. */
   colour: Vec3;
-  /** Its surface map (`surface.png`), or null for a plain colour. */
-  texture: string | null;
+  /** Its maps, colour and relief normals, or null for a plain colour. */
+  maps: SurfaceMaps | null;
   /**
    * Its own axes (its x, its spin axis, its z: its map's frame) in the
    * frame of the body shown, as it turns on itself; null for the frame of

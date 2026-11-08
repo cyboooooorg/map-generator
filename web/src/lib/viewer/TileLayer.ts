@@ -20,6 +20,7 @@ import {
   ReplaceStencilOp,
   type Scene,
   type ShaderMaterial,
+  NoColorSpace,
   SRGBColorSpace,
   Sphere,
   Texture,
@@ -72,13 +73,15 @@ export const DETAIL_STENCIL = 1;
  * part of the tile URL so that tiles cached for good are dropped when the
  * renderer changes. A server test checks both values agree.
  */
-export const TILE_RENDER_VERSION = 5;
+export const TILE_RENDER_VERSION = 7;
 
 /** Creates the material of a patch; uniforms come from the base surface. */
 export type PatchMaterialFactory = () => ShaderMaterial;
 
 interface CachedTile {
+  /** Its colour (sRGB) and its relief normals, the two halves of the tile image. */
   texture: Texture;
+  normal: Texture;
   lastUsed: number;
 }
 
@@ -104,10 +107,12 @@ export function retryDelay(attempts: number, status: number | null): number {
   return Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** Math.max(0, attempts - 1));
 }
 
-/** Frees a tile texture, and its decoded image if it was never uploaded. */
-function disposeTile(texture: Texture): void {
-  texture.dispose();
-  (texture.image as ImageBitmap).close();
+/** Frees a tile's textures, and their decoded images if they were never uploaded. */
+function disposeTile(tile: CachedTile): void {
+  for (const texture of [tile.texture, tile.normal]) {
+    texture.dispose();
+    (texture.image as ImageBitmap).close();
+  }
 }
 
 /** Position of a texture coordinate on the surface morphed round `centreLon` (see shaders.ts). */
@@ -359,21 +364,37 @@ export class TileLayer {
         status = response.status;
         throw new Error(`${response.status}`);
       }
-      const bitmap = await createImageBitmap(await response.blob());
+      // One image, two textures: the colour (upper half, sRGB) and the
+      // relief normals (lower half, decoded without colour management and
+      // kept linear). Apart, their mipmaps never blend one into the other.
+      const blob = await response.blob();
+      const raw: ImageBitmapOptions = { colorSpaceConversion: 'none', premultiplyAlpha: 'none' };
+      const [colourBitmap, normalBitmap] = await Promise.all([
+        createImageBitmap(blob, 0, 0, TILE_SIZE, TILE_SIZE),
+        createImageBitmap(blob, 0, TILE_SIZE, TILE_SIZE, TILE_SIZE, raw),
+      ]);
       if (this.world !== world || controller.signal.aborted) {
-        bitmap.close();
+        colourBitmap.close();
+        normalBitmap.close();
         return;
       }
-      const texture = new Texture(bitmap);
-      texture.colorSpace = SRGBColorSpace;
-      texture.flipY = false;
-      texture.magFilter = LinearFilter;
-      texture.minFilter = LinearMipmapLinearFilter;
-      texture.needsUpdate = true;
-      // The bitmap is closed once uploaded: a cached tile keeps only its
-      // GPU copy, and patches showing it share that copy.
-      releaseOnUpload(texture);
-      this.cache.set(index, { texture, lastUsed: this.frame });
+      const upload = (bitmap: ImageBitmap, colorSpace: typeof SRGBColorSpace | typeof NoColorSpace) => {
+        const texture = new Texture(bitmap);
+        texture.colorSpace = colorSpace;
+        texture.flipY = false;
+        texture.magFilter = LinearFilter;
+        texture.minFilter = LinearMipmapLinearFilter;
+        texture.needsUpdate = true;
+        // The bitmap is closed once uploaded: a cached tile keeps only its
+        // GPU copy, and patches showing it share that copy.
+        releaseOnUpload(texture);
+        return texture;
+      };
+      this.cache.set(index, {
+        texture: upload(colourBitmap, SRGBColorSpace),
+        normal: upload(normalBitmap, NoColorSpace),
+        lastUsed: this.frame,
+      });
       this.failed.delete(index);
       this.onChange();
     } catch {
@@ -425,6 +446,7 @@ export class TileLayer {
     const cached = this.cache.get(source)!;
     cached.lastUsed = this.frame;
     patch.material.uniforms['uTile']!.value = cached.texture;
+    patch.material.uniforms['uTileNormal']!.value = cached.normal;
     const texRect = patch.material.uniforms['uTexRect']!.value as Vector4;
     if (source === index) {
       texRect.set(0, 0, 1, 1);
@@ -461,6 +483,7 @@ export class TileLayer {
       if (!keep.has(index)) {
         this.scene.remove(patch);
         patch.material.uniforms['uTile']!.value = null;
+        patch.material.uniforms['uTileNormal']!.value = null;
         this.patches.delete(index);
         if (this.spare.length < MAX_SPARE) {
           this.spare.push(patch);
@@ -481,7 +504,7 @@ export class TileLayer {
       if (tile.lastUsed === this.frame) {
         break;
       }
-      disposeTile(tile.texture);
+      disposeTile(tile);
       this.cache.delete(index);
     }
   }
@@ -494,7 +517,7 @@ export class TileLayer {
     this.shown.clear();
     this.hidePatches(this.shown);
     for (const tile of this.cache.values()) {
-      disposeTile(tile.texture);
+      disposeTile(tile);
     }
     this.cache.clear();
     this.failed.clear();

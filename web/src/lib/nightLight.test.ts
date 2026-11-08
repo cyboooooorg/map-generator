@@ -17,7 +17,7 @@ const body = (diameterDeg: number, extra: Partial<SkyBody> = {}): SkyBody => ({
   direction: [0, 0, -1],
   angularDiameterDeg: diameterDeg,
   colour: [0.3, 0.3, 0.3],
-  texture: null,
+  maps: null,
   axes: null,
   ...extra,
 });

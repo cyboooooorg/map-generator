@@ -4,6 +4,7 @@ pub mod ecotone;
 pub mod noise_maps;
 pub mod png;
 pub mod raw_data;
+pub mod relief;
 pub mod svg;
 pub mod thumbnail;
 pub mod variation;
@@ -14,7 +15,6 @@ pub use raw_data::export_raw_data;
 pub use svg::export_svg;
 
 use crate::generation::Generated;
-use crate::geo::Grid;
 use crate::rivers;
 use crate::world::{Biome, World, WorldParams, biome_color, surface_color};
 use colour::{linear_of, mix, to_linear, to_srgb};
@@ -74,20 +74,25 @@ pub fn export_world(
 
     let layers = MapLayers::with_coverage(world, river_coverage);
     let layers = &layers;
-    // The detailed render, shared by world.png (which adds the reference
-    // lines) and raw_data/surface.png (without them, for the viewer).
-    // A giant's cloud bands come rendered from its own pipeline.
+    // The detailed render: shaded for world.png (which adds the reference
+    // lines), unshaded with its relief normals for the viewer
+    // (raw_data/colour.png and normal.png). A giant's cloud bands come
+    // rendered from its own pipeline, with no relief.
     let giant = !world.surface.is_empty();
-    let surface = if giant {
-        world.surface.clone()
+    let rendered = if giant {
+        Rendered {
+            shaded: world.surface.clone(),
+            colour: world.surface.clone(),
+            normal: vec![relief::FLAT; world.surface.len()],
+        }
     } else {
-        render_pixels(world, layers, Style::Detailed)
+        render_both(world, layers)
     };
-    let surface = &surface;
+    let rendered = &rendered;
+    let surface = &rendered.shaded;
     type Export<'a> = Box<dyn Fn() -> Result<(), String> + Send + Sync + 'a>;
     let mut exports: Vec<Export> = vec![
         Box::new(|| {
-            // raw_data/surface.png needs the render without contours.
             let mut map = surface.clone();
             // Cloud tops have no contour lines.
             if !giant {
@@ -106,7 +111,11 @@ pub fn export_world(
     ];
     if options.raw_data {
         exports.push(Box::new(|| {
-            export_raw_data(world, &dir.join("raw_data"), Some(surface)).map_err(|e| e.to_string())
+            let maps = raw_data::SurfaceMaps {
+                colour: &rendered.colour,
+                normal: &rendered.normal,
+            };
+            export_raw_data(world, &dir.join("raw_data"), Some(&maps)).map_err(|e| e.to_string())
         }));
     }
     exports.par_iter().try_for_each(|export| export())
@@ -160,16 +169,9 @@ pub(crate) const LIGHT: [f32; 3] = [-0.5, 0.5, std::f32::consts::FRAC_1_SQRT_2];
 
 /// Brightness factor of a land pixel lit from the north-west: 1.0 on flat
 /// ground, darker on slopes facing south-east, brighter facing north-west.
-fn hillshade(world: &World, grid: &Grid, x: u32, y: u32) -> f32 {
-    let (w, h) = (world.width, world.height);
-    let relief = relief_km(world.params.circumference_km);
-    let elev = |x: u32, y: u32| world.elevation[world.index(x, y)] * relief;
-    // Central differences; longitude wraps, latitude clamps at the poles.
-    let (west, east) = ((x + w - 1) % w, (x + 1) % w);
-    let (north, south) = (y.saturating_sub(1), (y + 1).min(h - 1));
-    let dz_east = (elev(east, y) - elev(west, y)) / (2.0 * grid.dx_km(y));
-    let dz_north =
-        (elev(x, north) - elev(x, south)) / ((south - north).max(1) as f32 * grid.dy_km());
+/// From the slopes of [`relief::slopes`] (central differences; longitude
+/// wraps, latitude clamps at the poles).
+fn hillshade_of(dz_east: f32, dz_north: f32) -> f32 {
     let normal = [-dz_east, -dz_north, 1.0];
     let len = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
     let lit: f32 = normal.iter().zip(LIGHT).map(|(n, l)| n * l).sum::<f32>() / len;
@@ -396,6 +398,13 @@ impl MapLayers {
         Self { coverage, depths }
     }
 
+    /// Whether pixel `i` is drawn as a river over land (a river biome the
+    /// coverage marks), not as water.
+    pub fn on_river(&self, world: &World, i: usize) -> bool {
+        let river_biome = world.params.planet.remap(Biome::River);
+        world.biomes[i] == river_biome && self.coverage[i] >= rivers::RIVER_COVERAGE
+    }
+
     /// Like [`MapLayers::new`], reusing the river coverage the generation
     /// computed ([`Generated::river_coverage`]).
     pub fn with_coverage(world: &World, coverage: Vec<f32>) -> Self {
@@ -409,7 +418,7 @@ impl MapLayers {
 /// Darkens the pixels on a contour line, under water only, as bathymetry:
 /// on land the hillshade shows the relief, and contours would draw rings.
 /// `pixels` come from [`render_pixels`]; the viewer draws its own contours
-/// over `raw_data/surface.png`, which has none.
+/// over `raw_data/colour.png`, which has none.
 pub fn draw_contours(world: &World, layers: &MapLayers, pixels: &mut [[u8; 3]]) {
     let (w, h) = (world.width, world.height);
     let river_biome = world.params.planet.remap(Biome::River);
@@ -464,6 +473,27 @@ pub(crate) fn with_albedo(colour: [f32; 3], a: f32) -> [f32; 3] {
 /// Computes the final colour of every pixel, in the same row-major order as
 /// the world layers, without contour lines (see [`draw_contours`]).
 pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8; 3]> {
+    match style {
+        Style::Detailed => render_both(world, layers).shaded,
+        Style::Flat => render_flat(world, layers),
+    }
+}
+
+/// The detailed render in its three forms, from one pass over the pixels.
+pub struct Rendered {
+    /// Hillshaded, lit from the north-west: the flat images (`world.png`,
+    /// the thumbnail, the drift previews).
+    pub shaded: Vec<[u8; 3]>,
+    /// The same without the hillshade (`raw_data/colour.png`): the viewer
+    /// lights it with [`Rendered::normal`].
+    pub colour: Vec<[u8; 3]>,
+    /// The relief normals (see [`relief`]): flat on water, softened on lava.
+    pub normal: Vec<[u8; 3]>,
+}
+
+/// The detailed render, shaded and unshaded, and its relief normals. Every
+/// step but the hillshade is computed once per pixel.
+pub fn render_both(world: &World, layers: &MapLayers) -> Rendered {
     let (w, h) = (world.width, world.height);
     let grid = world.params.grid();
     let planet = &world.params.planet;
@@ -475,8 +505,9 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
         std::f64::consts::TAU / w as f64,
         std::f64::consts::PI / h as f64,
     );
+    let to_u8 = |c: [f32; 3]| c.map(|c| c.clamp(0.0, 255.0) as u8);
 
-    (0..h)
+    let pixels: Vec<([u8; 3], [u8; 3], [u8; 3])> = (0..h)
         .into_par_iter()
         .flat_map_iter(|y| (0..w).map(move |x| (x, y)))
         .map(|(x, y)| {
@@ -486,54 +517,88 @@ pub fn render_pixels(world: &World, layers: &MapLayers, style: Style) -> Vec<[u8
             let lon = (x as f64 + 0.5) * lon_step;
             let lat = std::f64::consts::FRAC_PI_2 - (y as f64 + 0.5) * lat_step;
             if biome.is_water() && !on_river {
-                // The flat SVG keeps the classification colours, with no
-                // per-pixel variation, so its run-length encoding stays
-                // compact.
-                let color = match style {
-                    Style::Detailed => {
-                        to_srgb(variation.sea(biome, water_colour(biome, depths[i]), lon, lat))
-                    }
-                    Style::Flat => flat_water_colour(biome, depths[i]),
-                };
-                return color.map(|c| c.clamp(0.0, 255.0) as u8);
+                let c = to_u8(to_srgb(variation.sea(
+                    biome,
+                    water_colour(biome, depths[i]),
+                    lon,
+                    lat,
+                )));
+                return (c, c, relief::FLAT);
             }
             // The land under a river: the biome the pixel has without it.
             let input = world.biome_input(i);
             let dry = planet.rules.choose(input);
             let land = planet.remap(dry);
-            if style == Style::Flat {
-                // Rivers are drawn as vector paths over the flat SVG map.
-                return biome_color(if on_river { land } else { biome });
-            }
             // Lakes are not recomputed without their flag: a pixel whose
             // biome differs from its recomputed one keeps a flat colour.
-            let mut color = if land == biome || on_river {
+            let color = if land == biome || on_river {
                 ecotone_colour_around(planet, input, Some(land))
             } else {
                 surface_color(biome).map(f32::from)
             };
             // Lava varies too: switching the variation by the sharp lava
             // class would draw a step through the soft ecotone around it.
-            color = variation.apply(color, lon, lat);
-            let mut f = hillshade(world, &grid, x, y);
+            let color = variation.apply(color, lon, lat);
+            let (dz_east, dz_north) = relief::slopes(world, &grid, x, y);
+            let mut f = hillshade_of(dz_east, dz_north);
+            let mut normal = relief::normal_of(dz_east, dz_north);
             // Lava is fluid: its relief barely shows.
             if dry.is_lava() {
                 f = 1.0 + (f - 1.0) * crate::detail::LAVA_SHADE;
+                normal = relief::soften(normal, crate::detail::LAVA_SHADE);
             }
-            color = color.map(|c| c * f);
-            // Fresh craters: bright ejecta and rays, on rock (not on lava).
-            if let Some(&a) = world.albedo.get(i)
-                && !dry.is_lava()
-            {
-                color = with_albedo(color, a);
+            let frozen = planet.rules.frozen(world.biome_input(i));
+            let finish = |shade: f32| {
+                let mut color = color.map(|c| c * shade);
+                // Fresh craters: bright ejecta and rays, on rock (not on lava).
+                if let Some(&a) = world.albedo.get(i)
+                    && !dry.is_lava()
+                {
+                    color = with_albedo(color, a);
+                }
+                // Anti-aliased river on top, except where it is frozen or
+                // under lava.
+                let c = coverage[i];
+                if c > 0.0 && !frozen && !dry.is_lava() {
+                    color = blend_river(color, river_colour, c);
+                }
+                to_u8(color)
+            };
+            (finish(f), finish(1.0), relief::encode_normal(normal))
+        })
+        .collect();
+    let mut rendered = Rendered {
+        shaded: Vec::with_capacity(pixels.len()),
+        colour: Vec::with_capacity(pixels.len()),
+        normal: Vec::with_capacity(pixels.len()),
+    };
+    for (shaded, colour, normal) in pixels {
+        rendered.shaded.push(shaded);
+        rendered.colour.push(colour);
+        rendered.normal.push(normal);
+    }
+    rendered
+}
+
+/// The flat render of the SVG: classification colours, no per-pixel
+/// variation, so its run-length encoding stays compact; rivers are drawn
+/// as vector paths over it.
+fn render_flat(world: &World, layers: &MapLayers) -> Vec<[u8; 3]> {
+    let planet = &world.params.planet;
+    let river_biome = planet.remap(Biome::River);
+    (0..world.height)
+        .into_par_iter()
+        .flat_map_iter(|y| (0..world.width).map(move |x| (x, y)))
+        .map(|(x, y)| {
+            let i = world.index(x, y);
+            let biome = world.biomes[i];
+            let on_river = biome == river_biome && layers.coverage[i] >= rivers::RIVER_COVERAGE;
+            if biome.is_water() && !on_river {
+                return flat_water_colour(biome, layers.depths[i])
+                    .map(|c| c.clamp(0.0, 255.0) as u8);
             }
-            // Anti-aliased river on top, except where it is frozen or under
-            // lava.
-            let c = coverage[i];
-            if c > 0.0 && !planet.rules.frozen(world.biome_input(i)) && !dry.is_lava() {
-                color = blend_river(color, river_colour, c);
-            }
-            color.map(|c| c.clamp(0.0, 255.0) as u8)
+            let land = planet.remap(planet.rules.choose(world.biome_input(i)));
+            biome_color(if on_river { land } else { biome })
         })
         .collect()
 }
@@ -579,6 +644,138 @@ mod tests {
         let deep = to_srgb(water_colour(Biome::Ocean, 0.6));
         assert!(shelf[1] > deep[1] && shelf[2] > deep[2]);
         assert!(shelf[0] < shelf[2]);
+    }
+
+    /// The shaded render (world.png, the thumbnail, the drift previews)
+    /// is exactly the one drawn before the colour and the normals were
+    /// split out.
+    #[test]
+    fn the_shaded_render_is_unchanged() {
+        for (seed, planet) in [(3, "terran"), (7, "volcanic")] {
+            let world =
+                crate::generation::generate(&crate::generation::tests::params(seed, planet)).world;
+            let layers = super::MapLayers::new(&world);
+            let r = super::render_both(&world, &layers);
+            assert!(
+                r.shaded == super::reference::reference_render(&world, &layers),
+                "{planet}"
+            );
+        }
+    }
+
+    /// Water has no relief: its colour is the shaded one and its normal
+    /// faces up. On land the normals follow the relief, softened on lava.
+    #[test]
+    fn the_colour_and_the_normals_follow_the_shading() {
+        use super::relief::{FLAT, decode_normal, relief_normal, soften};
+        let world =
+            crate::generation::generate(&crate::generation::tests::params(7, "volcanic")).world;
+        let layers = super::MapLayers::new(&world);
+        let r = super::render_both(&world, &layers);
+        let grid = world.params.grid();
+        let (mut water, mut lava, mut land) = (0, 0, 0);
+        for y in 0..world.height {
+            for x in 0..world.width {
+                let i = world.index(x, y);
+                let biome = world.biomes[i];
+                if biome.is_water() && !layers.on_river(&world, i) {
+                    assert_eq!(r.colour[i], r.shaded[i]);
+                    assert_eq!(r.normal[i], FLAT);
+                    water += 1;
+                    continue;
+                }
+                let dry = world.params.planet.rules.choose(world.biome_input(i));
+                let expected = if dry.is_lava() {
+                    lava += 1;
+                    soften(
+                        relief_normal(&world, &grid, x, y),
+                        crate::detail::LAVA_SHADE,
+                    )
+                } else {
+                    land += 1;
+                    relief_normal(&world, &grid, x, y)
+                };
+                let got = decode_normal(r.normal[i]);
+                for k in 0..3 {
+                    assert!(
+                        (got[k] - expected[k]).abs() < 0.01,
+                        "pixel {i}: {got:?} vs {expected:?}"
+                    );
+                }
+            }
+        }
+        assert!(water > 0 && lava > 0 && land > 0, "{water} {lava} {land}");
+    }
+
+    /// Exports `params`' world into a fresh directory and returns it.
+    fn exported(params: &crate::world::WorldParams, tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("mapgen-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let generated = crate::generation::generate(params);
+        super::export_world(generated, &dir, super::ExportOptions { raw_data: true }).unwrap();
+        dir
+    }
+
+    #[test]
+    fn exports_the_colour_and_the_normals_instead_of_the_surface() {
+        use crate::export::raw_data::read_metadata;
+        let params = crate::world::WorldParams {
+            width: 1024,
+            height: 512,
+            ..crate::generation::tests::params(3, "terran")
+        };
+        let dir = exported(&params, "colour-normal");
+        let raw = dir.join("raw_data");
+        let size = |f: &str| image::image_dimensions(raw.join(f)).unwrap();
+        assert_eq!(size("colour.png"), (1024, 512));
+        assert_eq!(size("normal.png"), (1024, 512));
+        assert_eq!(size("colour_small.png"), (512, 256));
+        assert_eq!(size("normal_small.png"), (512, 256));
+        assert!(!raw.join("surface.png").exists());
+        let meta = read_metadata(&raw).unwrap();
+        let colour = meta.layers.colour.as_ref().unwrap();
+        assert_eq!(
+            (colour.file.as_str(), colour.encoding.as_str()),
+            ("colour.png", "rgb8")
+        );
+        let normal = meta.layers.normal.as_ref().unwrap();
+        assert_eq!(
+            (normal.file.as_str(), normal.encoding.as_str()),
+            ("normal.png", "rgb8-normal")
+        );
+        assert_eq!(
+            meta.layers.colour_small.as_ref().unwrap().file,
+            "colour_small.png"
+        );
+        assert_eq!(
+            meta.layers.normal_small.as_ref().unwrap().file,
+            "normal_small.png"
+        );
+        // The flat images keep their hillshade: world.png is the shaded
+        // render, not the colour layer.
+        let world = image::open(dir.join("world.png")).unwrap().to_rgb8();
+        let colour = image::open(raw.join("colour.png")).unwrap().to_rgb8();
+        assert_ne!(world.as_raw(), colour.as_raw());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_giant_has_its_bands_as_colour_and_flat_normals() {
+        // A Jupiter: the giant's own pipeline draws its bands.
+        let params = crate::world::WorldParams {
+            giant_mass_earth: Some(317.8),
+            ..crate::generation::tests::params(3, "gas-giant")
+        };
+        let generated = crate::generation::generate(&params);
+        let bands = generated.world.surface.clone();
+        assert!(!bands.is_empty());
+        let dir = exported(&params, "giant-normal");
+        let raw = dir.join("raw_data");
+        let colour = image::open(raw.join("colour.png")).unwrap().to_rgb8();
+        assert_eq!(colour.as_raw().as_slice(), bands.as_flattened());
+        let normal = image::open(raw.join("normal.png")).unwrap().to_rgb8();
+        assert!(normal.pixels().all(|p| p.0 == super::relief::FLAT));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -633,5 +830,107 @@ mod tests {
         assert_eq!(latitude_row(1080, -90.0), 1080.0);
         // Tropic of Cancer (northern hemisphere) sits above the equator.
         assert!(latitude_row(1080, 23.5) < latitude_row(1080, 0.0));
+    }
+}
+
+/// The detailed render as `main` drew it before the colour and the normals
+/// were split out, kept for one test: the shaded render must stay exactly
+/// the same, on any platform.
+#[cfg(test)]
+mod reference {
+    use super::*;
+    use crate::geo::Grid;
+
+    fn reference_hillshade(world: &World, grid: &Grid, x: u32, y: u32) -> f32 {
+        let (w, h) = (world.width, world.height);
+        let relief = relief_km(world.params.circumference_km);
+        let elev = |x: u32, y: u32| world.elevation[world.index(x, y)] * relief;
+        // Central differences; longitude wraps, latitude clamps at the poles.
+        let (west, east) = ((x + w - 1) % w, (x + 1) % w);
+        let (north, south) = (y.saturating_sub(1), (y + 1).min(h - 1));
+        let dz_east = (elev(east, y) - elev(west, y)) / (2.0 * grid.dx_km(y));
+        let dz_north =
+            (elev(x, north) - elev(x, south)) / ((south - north).max(1) as f32 * grid.dy_km());
+        let normal = [-dz_east, -dz_north, 1.0];
+        let len = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
+        let lit: f32 = normal.iter().zip(LIGHT).map(|(n, l)| n * l).sum::<f32>() / len;
+        shade(lit / LIGHT[2])
+    }
+
+    pub(super) fn reference_render(world: &World, layers: &MapLayers) -> Vec<[u8; 3]> {
+        let style = Style::Detailed;
+        let (w, h) = (world.width, world.height);
+        let grid = world.params.grid();
+        let planet = &world.params.planet;
+        let (coverage, depths) = (&layers.coverage, &layers.depths);
+        let river_biome = planet.remap(Biome::River);
+        let river_colour = linear_of(surface_color(river_biome));
+        let variation =
+            SurfaceVariation::new(world.params.seed, world.params.circumference_km as f64);
+        let (lon_step, lat_step) = (
+            std::f64::consts::TAU / w as f64,
+            std::f64::consts::PI / h as f64,
+        );
+
+        (0..h)
+            .into_par_iter()
+            .flat_map_iter(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let i = world.index(x, y);
+                let biome = world.biomes[i];
+                let on_river = biome == river_biome && coverage[i] >= rivers::RIVER_COVERAGE;
+                let lon = (x as f64 + 0.5) * lon_step;
+                let lat = std::f64::consts::FRAC_PI_2 - (y as f64 + 0.5) * lat_step;
+                if biome.is_water() && !on_river {
+                    // The flat SVG keeps the classification colours, with no
+                    // per-pixel variation, so its run-length encoding stays
+                    // compact.
+                    let color = match style {
+                        Style::Detailed => {
+                            to_srgb(variation.sea(biome, water_colour(biome, depths[i]), lon, lat))
+                        }
+                        Style::Flat => flat_water_colour(biome, depths[i]),
+                    };
+                    return color.map(|c| c.clamp(0.0, 255.0) as u8);
+                }
+                // The land under a river: the biome the pixel has without it.
+                let input = world.biome_input(i);
+                let dry = planet.rules.choose(input);
+                let land = planet.remap(dry);
+                if style == Style::Flat {
+                    // Rivers are drawn as vector paths over the flat SVG map.
+                    return biome_color(if on_river { land } else { biome });
+                }
+                // Lakes are not recomputed without their flag: a pixel whose
+                // biome differs from its recomputed one keeps a flat colour.
+                let mut color = if land == biome || on_river {
+                    ecotone_colour_around(planet, input, Some(land))
+                } else {
+                    surface_color(biome).map(f32::from)
+                };
+                // Lava varies too: switching the variation by the sharp lava
+                // class would draw a step through the soft ecotone around it.
+                color = variation.apply(color, lon, lat);
+                let mut f = reference_hillshade(world, &grid, x, y);
+                // Lava is fluid: its relief barely shows.
+                if dry.is_lava() {
+                    f = 1.0 + (f - 1.0) * crate::detail::LAVA_SHADE;
+                }
+                color = color.map(|c| c * f);
+                // Fresh craters: bright ejecta and rays, on rock (not on lava).
+                if let Some(&a) = world.albedo.get(i)
+                    && !dry.is_lava()
+                {
+                    color = with_albedo(color, a);
+                }
+                // Anti-aliased river on top, except where it is frozen or under
+                // lava.
+                let c = coverage[i];
+                if c > 0.0 && !planet.rules.frozen(world.biome_input(i)) && !dry.is_lava() {
+                    color = blend_river(color, river_colour, c);
+                }
+                color.map(|c| c.clamp(0.0, 255.0) as u8)
+            })
+            .collect()
     }
 }

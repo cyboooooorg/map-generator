@@ -307,8 +307,10 @@ fn load(dir: &Path, epoch_ma: Option<i32>) -> Result<Arc<DetailWorld>, String> {
 /// /api/worlds/{id}/epoch/{ma}/{file}`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EpochLayer {
-    /// The hillshaded render, as `raw_data/surface.png`.
-    Surface,
+    /// The render without hillshade, as `raw_data/colour.png`.
+    Colour,
+    /// The relief normals, as `raw_data/normal.png`.
+    Normal,
     /// 16-bit elevation, as `raw_data/elevation.png`.
     Elevation,
     /// 8-bit biome ids, as `raw_data/biomes.png`.
@@ -318,7 +320,8 @@ pub enum EpochLayer {
 impl EpochLayer {
     pub fn from_file(file: &str) -> Option<Self> {
         match file {
-            "surface.png" => Some(Self::Surface),
+            "colour.png" => Some(Self::Colour),
+            "normal.png" => Some(Self::Normal),
             "elevation.png" => Some(Self::Elevation),
             "biomes.png" => Some(Self::Biomes),
             _ => None,
@@ -327,11 +330,13 @@ impl EpochLayer {
 }
 
 /// A layer of `world` (loaded at its epoch) as PNG bytes, reduced `scale`
-/// times in each direction: averaged for the elevation and the render, the
-/// biome at the centre of each block for the biomes.
+/// times in each direction: averaged for the elevation and the colour (the
+/// normals averaged as vectors, then made unit again), the biome at the
+/// centre of each block for the biomes.
 pub fn epoch_png(world: &DetailWorld, layer: EpochLayer, scale: u32) -> Result<Vec<u8>, String> {
     use image::{GrayImage, ImageBuffer, Luma, RgbImage};
-    use mapgen::export::{MapLayers, Style, render_pixels};
+    use mapgen::export::relief::{decode_normal, encode_normal};
+    use mapgen::export::{MapLayers, render_both};
     let w = world.world();
     let (width, height) = (w.width, w.height);
     let (sw, sh) = ((width / scale).max(1), (height / scale).max(1));
@@ -363,21 +368,36 @@ pub fn epoch_png(world: &DetailWorld, layer: EpochLayer, scale: u32) -> Result<V
             };
             GrayImage::from_fn(sw, sh, |x, y| Luma([centre(x, y)])).write_to(&mut bytes, png)
         }
-        EpochLayer::Surface => {
+        EpochLayer::Colour | EpochLayer::Normal => {
             let decoded = w.to_world();
-            let pixels = render_pixels(&decoded, &MapLayers::new(&decoded), Style::Detailed);
+            let rendered = render_both(&decoded, &MapLayers::new(&decoded));
             drop(decoded);
-            let image = RgbImage::from_fn(sw, sh, |x, y| {
-                let mut sum = [0u32; 3];
-                let mut n = 0;
-                for i in block(x, y) {
-                    for (c, v) in sum.iter_mut().zip(pixels[i]) {
-                        *c += u32::from(v);
+            let image = if layer == EpochLayer::Colour {
+                let pixels = rendered.colour;
+                RgbImage::from_fn(sw, sh, |x, y| {
+                    let mut sum = [0u32; 3];
+                    let mut n = 0;
+                    for i in block(x, y) {
+                        for (c, v) in sum.iter_mut().zip(pixels[i]) {
+                            *c += u32::from(v);
+                        }
+                        n += 1;
                     }
-                    n += 1;
-                }
-                image::Rgb(sum.map(|c| (c / n.max(1)) as u8))
-            });
+                    image::Rgb(sum.map(|c| (c / n.max(1)) as u8))
+                })
+            } else {
+                let pixels = rendered.normal;
+                RgbImage::from_fn(sw, sh, |x, y| {
+                    let mut sum = [0f32; 3];
+                    for i in block(x, y) {
+                        for (c, v) in sum.iter_mut().zip(decode_normal(pixels[i])) {
+                            *c += v;
+                        }
+                    }
+                    let len = sum.iter().map(|c| c * c).sum::<f32>().sqrt().max(1e-6);
+                    image::Rgb(encode_normal(sum.map(|c| c / len)))
+                })
+            };
             image.write_to(&mut bytes, png)
         }
     }

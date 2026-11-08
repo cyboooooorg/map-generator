@@ -468,7 +468,7 @@ Giant worlds of their own (`src/giant_world.rs`), as presets
   polar region) in the giant's own colours, the cloud-top height as the
   elevation (above a deck at 0.3, never read as sea), the cloud-top
   temperature, and the wind in the moisture layer (a share of the
-  strongest). `surface.png` comes rendered from the pipeline.
+  strongest). `colour.png` comes rendered from the pipeline, with a flat `normal.png`.
 - **Bands** from the Rhines count of eastward jets (Jupiter five a
   hemisphere, Neptune one) from an eddy speed scaled with the flux the
   giant radiates and its spin, the peak wind calibrated on the four

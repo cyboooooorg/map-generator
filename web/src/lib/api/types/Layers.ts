@@ -49,7 +49,21 @@ shape?: ScalarLayerInfo | null,
  */
 clouds?: ScalarLayerInfo | null, 
 /**
- * The hillshaded render of `world.png` without its reference and
- * contour lines, which the viewer draws itself.
+ * The render of `world.png` without its hillshade and its reference
+ * and contour lines: the viewer lights it with [`Layers::normal`] and
+ * draws its own lines.
  */
-surface?: ImageLayerInfo | null, biomes: BiomeLayerInfo, };
+colour?: ImageLayerInfo | null, 
+/**
+ * The relief normals (see [`crate::export::relief`]), `rgb8-normal`.
+ */
+normal?: ImageLayerInfo | null, 
+/**
+ * [`Layers::colour`] at [`SMALL_WIDTH`] pixels of width at most, for
+ * the small planets of the star view.
+ */
+colour_small?: ImageLayerInfo | null, 
+/**
+ * [`Layers::normal`] at [`SMALL_WIDTH`] pixels of width at most.
+ */
+normal_small?: ImageLayerInfo | null, biomes: BiomeLayerInfo, };

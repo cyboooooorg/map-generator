@@ -1,5 +1,6 @@
 // Fitting world-sized images into the GPU's texture size limit: an 8192 ×
 // 4096 world exceeds the 4096 pixels some GPUs allow per side.
+import { DataTexture, RGBAFormat, UnsignedByteType } from 'three';
 
 /** Smallest integer factor that brings both sides within `max` pixels. */
 export function fitFactor(width: number, height: number, max: number): number {
@@ -70,4 +71,11 @@ export function releaseOnUpload(texture: UploadedTexture, ownsData = true): void
       (image as { data: unknown }).data = null;
     }
   };
+}
+
+/** A 1 × 1 transparent black texture: the value of a texture uniform with nothing to show. */
+export function emptyTexture(): DataTexture {
+  const texture = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
+  texture.needsUpdate = true;
+  return texture;
 }

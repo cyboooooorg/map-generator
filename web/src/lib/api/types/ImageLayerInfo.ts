@@ -5,6 +5,6 @@
  */
 export type ImageLayerInfo = { file: string, 
 /**
- * `rgb8`.
+ * `rgb8`, or `rgb8-normal` for normals.
  */
 encoding: string, };

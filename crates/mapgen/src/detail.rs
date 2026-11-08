@@ -18,7 +18,9 @@
 //!   at a slightly warped position, so biome borders become irregular instead
 //!   of interpolated straight edges; temperature follows the new elevation.
 //! - **Biomes**: the generation's own rules and preset remap, with soft
-//!   borders, hillshading and the vector rivers drawn at the tile's scale.
+//!   borders and the vector rivers drawn at the tile's scale, without
+//!   hillshade: a tile holds its colour above and its relief normals below
+//!   (256 × 512), which the viewer lights.
 //!
 //! Tiles form an equirectangular quadtree: level `z` has `2^(z+1)` × `2^z`
 //! tiles of [`TILE_SIZE`] pixels, column 0 at longitude 0 and row 0 at the
@@ -37,9 +39,7 @@ use crate::export::ecotone::ecotone_colour_around;
 use crate::export::raw_data::albedo_of;
 use crate::export::raw_data::{Layer16, LoadedWorld};
 use crate::export::variation::{SurfaceVariation, sphere};
-use crate::export::{
-    LIGHT, blend_river, relief_km, shade, water_colour, water_depths_of, with_albedo,
-};
+use crate::export::{blend_river, relief, relief_km, water_colour, water_depths_of, with_albedo};
 use crate::hex;
 use crate::rivers;
 use image::{Rgb, RgbImage};
@@ -54,7 +54,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 5;
+pub const RENDER_VERSION: u32 = 7;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -223,8 +223,12 @@ fn bilinear(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y:
     top * (1.0 - fy) + bottom * fy
 }
 
-/// Bicubic (Catmull-Rom) sample of a base layer: unlike bilinear, its slope
-/// is continuous, so hillshading shows no seams along base pixel edges.
+/// Bicubic (uniform cubic B-spline) sample of a base layer: its slope and
+/// its curvature are continuous, so the relief lit from the tiles' normals
+/// shows no crease along base pixel edges (Catmull-Rom's curvature jumped
+/// there, a washboard on every slope). It smooths the samples slightly
+/// rather than passing through them: a base pixel's own value moves by at
+/// most a third of its difference with the mean of its neighbours.
 fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f32 {
     let (w, h) = (width as i64, height as i64);
     let (x, y) = (x - 0.5, (y - 0.5).clamp(0.0, (h - 1) as f64));
@@ -232,11 +236,12 @@ fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: 
     let (fx, fy) = ((x - x0 as f64) as f32, (y - y0 as f64) as f32);
     let at = |xx: i64, yy: i64| layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize);
     let cubic = |p: [f32; 4], t: f32| {
-        p[1] + 0.5
-            * t
-            * (p[2] - p[0]
-                + t * (2.0 * p[0] - 5.0 * p[1] + 4.0 * p[2] - p[3]
-                    + t * (3.0 * (p[1] - p[2]) + p[3] - p[0])))
+        let (t2, t3, u) = (t * t, t * t * t, 1.0 - t);
+        (u * u * u * p[0]
+            + (3.0 * t3 - 6.0 * t2 + 4.0) * p[1]
+            + (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) * p[2]
+            + t3 * p[3])
+            / 6.0
     };
     let rows: [f32; 4] = std::array::from_fn(|j| {
         let yy = y0 - 1 + j as i64;
@@ -555,7 +560,7 @@ impl DetailWorld {
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
 
-        let pixels: Vec<[u8; 3]> = (0..n * n)
+        let pixels: Vec<([u8; 3], [u8; 3])> = (0..n * n)
             .into_par_iter()
             .map(|i| {
                 let (px, py) = (i % n, i / n);
@@ -599,7 +604,7 @@ impl DetailWorld {
                 };
                 let dry = planet.rules.choose(input);
                 let biome = planet.remap(dry);
-                let mut colour = if biome.is_water() {
+                let (mut colour, normal) = if biome.is_water() {
                     // Seas from the detailed elevation; lakes from the base
                     // depth below their surface.
                     let depth = if above < 0.0 {
@@ -607,42 +612,52 @@ impl DetailWorld {
                     } else {
                         sample(&self.depths)
                     };
-                    to_srgb(
-                        self.variation
-                            .sea(biome, water_colour(biome, depth), lon, lat),
-                    )
+                    let colour =
+                        to_srgb(
+                            self.variation
+                                .sea(biome, water_colour(biome, depth), lon, lat),
+                        );
+                    (colour, relief::FLAT)
                 } else {
-                    let mut shade = self.hillshade(&elevation, side, px + 1, py + 1, pixel_km, lat);
+                    // Unshaded: the viewer lights the relief with the
+                    // normals of the lower half.
+                    let mut normal = self.normal(&elevation, side, px + 1, py + 1, pixel_km, lat);
                     if dry.is_lava() {
-                        shade = 1.0 + (shade - 1.0) * LAVA_SHADE;
+                        normal = relief::soften(normal, LAVA_SHADE);
                     }
-                    let colour = self
-                        .variation
-                        .apply(ecotone_colour_around(planet, input, Some(biome)), lon, lat)
-                        .map(|c| c * shade);
-                    if dry.is_lava() || w.albedo.is_empty() {
+                    let colour = self.variation.apply(
+                        ecotone_colour_around(planet, input, Some(biome)),
+                        lon,
+                        lat,
+                    );
+                    let colour = if dry.is_lava() || w.albedo.is_empty() {
                         colour
                     } else {
                         // Fresh craters' ejecta and rays, at the base resolution.
                         let a = bilinear(&Albedo(&w.albedo), w.width, w.height, bx, by);
                         with_albedo(colour, a)
-                    }
+                    };
+                    (colour, relief::encode_normal(normal))
                 };
                 let c = coverage[i];
                 if c > 0.0 && !planet.rules.frozen(input) && !biome.is_water() && !dry.is_lava() {
                     colour = blend_river(colour, river_colour, c);
                 }
-                colour.map(|c| c.clamp(0.0, 255.0) as u8)
+                (colour.map(|c| c.clamp(0.0, 255.0) as u8), normal)
             })
             .collect();
 
-        RgbImage::from_fn(TILE_SIZE, TILE_SIZE, |x, y| {
-            Rgb(pixels[(y * TILE_SIZE + x) as usize])
+        RgbImage::from_fn(TILE_SIZE, 2 * TILE_SIZE, |x, y| {
+            let (colour, normal) = pixels[((y % TILE_SIZE) * TILE_SIZE + x) as usize];
+            Rgb(if y < TILE_SIZE { colour } else { normal })
         })
     }
 
-    /// Brightness of a land pixel lit from the north-west (as on the base map).
-    fn hillshade(
+    /// The relief normal (east, north, up) of a tile pixel, at the base
+    /// map's exaggeration, from the tile's elevation with its one-pixel
+    /// border: neighbouring tiles share their edge pixels, so their normals
+    /// meet without a seam.
+    fn normal(
         &self,
         elevation: &[f32],
         side: usize,
@@ -650,16 +665,13 @@ impl DetailWorld {
         y: usize,
         pixel_km: f64,
         lat: f64,
-    ) -> f32 {
+    ) -> [f32; 3] {
         let relief = relief_km(self.world().params.circumference_km);
         let at = |x: usize, y: usize| elevation[y * side + x] * relief;
         let dx_km = (pixel_km * lat.cos().max(0.05)) as f32;
         let dz_east = (at(x + 1, y) - at(x - 1, y)) / (2.0 * dx_km);
         let dz_north = (at(x, y - 1) - at(x, y + 1)) / (2.0 * pixel_km as f32);
-        let normal = [-dz_east, -dz_north, 1.0];
-        let len = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
-        let lit: f32 = normal.iter().zip(LIGHT).map(|(n, l)| n * l).sum::<f32>() / len;
-        shade(lit / LIGHT[2])
+        relief::normal_of(dz_east, dz_north)
     }
 
     /// Anti-aliased coverage of the rivers on a tile, drawn with the base
@@ -865,12 +877,47 @@ mod tests {
     }
 
     #[test]
-    fn bicubic_matches_the_samples_at_pixel_centres() {
-        let layer: Vec<f32> = (0..16).map(|i| (i * 7 % 5) as f32).collect();
-        for (i, v) in layer.iter().enumerate() {
-            let (x, y) = ((i % 4) as f64 + 0.5, (i / 4) as f64 + 0.5);
-            assert!((bicubic(&layer, 4, 4, x, y) - v).abs() < 1e-5);
+    fn bicubic_keeps_smooth_samples() {
+        // A plane is kept exactly; a sample is pulled towards its
+        // neighbours by at most a third of their difference.
+        let plane: Vec<f32> = (0..64)
+            .map(|i| (i % 8) as f32 * 0.1 + (i / 8) as f32 * 0.05)
+            .collect();
+        for (i, v) in plane
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| (2..6).contains(&(i % 8)) && (2..6).contains(&(i / 8)))
+        {
+            let (x, y) = ((i % 8) as f64 + 0.5, (i / 8) as f64 + 0.5);
+            assert!((bicubic(&plane, 8, 8, x, y) - v).abs() < 1e-5);
         }
+        let spike: Vec<f32> = (0..64).map(|i| if i == 27 { 1.0 } else { 0.0 }).collect();
+        let at = bicubic(&spike, 8, 8, 3.5, 3.5);
+        assert!((at - 4.0 / 9.0).abs() < 1e-5, "{at}");
+    }
+
+    /// The curvature of the interpolated base is continuous across the base
+    /// pixels: a jump there shows as a crease at every base pixel in the
+    /// lit relief of a tile (a washboard on every slope).
+    #[test]
+    fn interpolated_base_curvature_is_continuous_across_pixels() {
+        let layer: Vec<f32> = (0..64)
+            .map(|i| ((i * 37 % 17) as f32 * 0.37).sin())
+            .collect();
+        // Steps large enough for f32 rounding not to dominate the second
+        // difference.
+        let (h, eps) = (1e-2, 2e-2);
+        let curvature = |x: f64| {
+            let f = |x: f64| f64::from(bicubic(&layer, 16, 4, x, 1.5));
+            (f(x + h) - 2.0 * f(x) + f(x - h)) / (h * h)
+        };
+        let mut worst = 0.0f64;
+        for k in 3..12 {
+            // Base sample k sits at x = k + 0.5: the joint of two cubic pieces.
+            let c = k as f64 + 0.5;
+            worst = worst.max((curvature(c + eps) - curvature(c - eps)).abs());
+        }
+        assert!(worst < 0.05, "curvature jumps by {worst} at a base pixel");
     }
 
     #[test]
@@ -897,6 +944,47 @@ mod tests {
         let d = detail_world();
         let tile = TileId { z: 3, x: 5, y: 3 };
         assert_eq!(d.render_tile(tile), d.render_tile(tile));
+    }
+
+    #[test]
+    fn tiles_stack_their_colour_over_their_normals() {
+        let d = detail_world();
+        let img = d.render_tile(TileId { z: 3, x: 5, y: 3 });
+        assert_eq!(img.dimensions(), (TILE_SIZE, 2 * TILE_SIZE));
+        // The lower half holds unit normals facing out of the ground.
+        for y in (TILE_SIZE..2 * TILE_SIZE).step_by(17) {
+            for x in (0..TILE_SIZE).step_by(13) {
+                let n = crate::export::relief::decode_normal(img.get_pixel(x, y).0);
+                assert!(n[2] > 0.0, "{x} {y}: {n:?}");
+            }
+        }
+    }
+
+    /// Mean step between two columns of normals, per channel.
+    fn column_step(a: &RgbImage, ax: u32, b: &RgbImage, bx: u32) -> f32 {
+        let mut sum = 0.0;
+        for y in TILE_SIZE..2 * TILE_SIZE {
+            let (p, q) = (a.get_pixel(ax, y), b.get_pixel(bx, y));
+            sum += (0..3)
+                .map(|c| (p[c] as f32 - q[c] as f32).abs())
+                .sum::<f32>();
+        }
+        sum / (TILE_SIZE as f32 * 3.0)
+    }
+
+    #[test]
+    fn tile_normals_agree_across_tile_borders() {
+        // The normals across the border of two tiles step no more than the
+        // normals one pixel apart inside a tile: the relief has no seam.
+        let d = detail_world();
+        let (left, right) = (TileId { z: 3, x: 5, y: 3 }, TileId { z: 3, x: 6, y: 3 });
+        let (a, b) = (d.render_tile(left), d.render_tile(right));
+        let across = column_step(&a, TILE_SIZE - 1, &b, 0);
+        let inside = column_step(&a, TILE_SIZE - 2, &a, TILE_SIZE - 1);
+        assert!(
+            across <= 1.5 * inside + 2.0,
+            "across {across}, inside {inside}"
+        );
     }
 
     #[test]
@@ -980,13 +1068,17 @@ mod tests {
         let (east, west) = (TileId { z: 2, x: 7, y: 1 }, TileId { z: 2, x: 0, y: 1 });
         let (a, b) = (d.render_tile(east), d.render_tile(west));
         let mut diff = 0.0;
-        for y in 0..TILE_SIZE {
+        // Both halves: the colour and the normals.
+        for y in 0..2 * TILE_SIZE {
             let (p, q) = (a.get_pixel(TILE_SIZE - 1, y), b.get_pixel(0, y));
             diff += (0..3)
                 .map(|c| (p[c] as f32 - q[c] as f32).abs())
                 .sum::<f32>();
         }
         // Neighbouring columns across the seam: similar colours.
-        assert!(diff / (TILE_SIZE as f32 * 3.0) < 20.0, "mean step {diff}");
+        assert!(
+            diff / (2.0 * TILE_SIZE as f32 * 3.0) < 20.0,
+            "mean step {diff}"
+        );
     }
 }

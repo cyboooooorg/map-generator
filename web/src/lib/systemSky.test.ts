@@ -7,7 +7,7 @@ import { ringSeed, type Vec3 } from './skyBodies';
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
 // giant) and its two regular moons c-1 and c-2, locked to it.
 const system = fixture as unknown as System;
-const textures = (id: string) => `${id}.png`;
+const textures = (id: string) => ({ colour: `${id}-colour.png`, normal: `${id}-normal.png` });
 const length = (v: Vec3) => Math.hypot(...v);
 
 describe('system sky', () => {
@@ -55,7 +55,7 @@ describe('system sky', () => {
     expect(length(sky.bodies[0]!.position!)).toBeCloseTo(far, 3);
     expect(length(sky.sun)).toBeCloseTo(1, 9);
     // Not generated: drawn from its preview, no map.
-    expect(sky.bodies[0]!.texture).toBeNull();
+    expect(sky.bodies[0]!.maps).toBeNull();
     expect(sky.bodies[0]!.preview).toBeDefined();
   });
 

@@ -69,7 +69,7 @@ export function formatEpoch(ma: number): string {
 export function epochFile(
   id: string,
   ma: number,
-  file: 'surface.png' | 'elevation.png' | 'biomes.png',
+  file: 'colour.png' | 'normal.png' | 'elevation.png' | 'biomes.png',
   revision: number | null,
   scale: 1 | 2 | 4 = 1,
 ): string {

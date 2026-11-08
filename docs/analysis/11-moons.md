@@ -298,7 +298,7 @@ the other bodies of the system in the sky and their shadows:
   star, but a quad rather than a point (the planet seen from a Phobos
   spans about 40°, beyond the largest point size), lit as a sphere by the
   sun, so phases follow; the planet seen from a moon is mapped with its
-  `surface.png`, towards longitude 180° of the moon; the moons seen from
+  `colour.png` and `normal.png`, towards longitude 180° of the moon; the moons seen from
   their planet are plain rock or ice, full at the start of the season and
   turning at their period relative to the year as the seasons play.
 - **Eclipses:** up to four shadow casters (the largest moons, or the
