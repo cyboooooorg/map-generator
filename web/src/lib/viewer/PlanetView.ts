@@ -1185,8 +1185,16 @@ export class PlanetView {
   }
 
   /**
+   * Colours the temperature layer from `low` to `high` °C: the base map and
+   * the detail tiles share the uniform. The legend states the same range.
+   */
+  setTemperatureRange(low: number, high: number): void {
+    this.u.uTempRange.value.set(low, Math.max(high - low, 1));
+  }
+
+  /**
    * Shows a giant planet (null for a rocky world): its globe flattened by
-   * its spin, its temperatures on a range of their own, its wind on the
+   * its spin, its wind on the
    * moisture layer, its bands drifting each with its wind (with the cloud
    * drift), and its rings.
    */
@@ -1198,8 +1206,6 @@ export class PlanetView {
     // Clouds above about 1 100 K glow red, brighter the hotter.
     const t = info ? Math.min(Math.max((info.effective_k - 1100) / 1100, 0), 1) : 0;
     this.u.uHotGlow.value = 0.6 * t * t * (3 - 2 * t);
-    const [low, high] = info ? giantTemperatureRange(info) : [-30, 40];
-    this.u.uTempRange.value.set(low, high - low);
     const reach = info ? Math.max(info.wind_east, info.wind_west, 1) : 1;
     // The wind every 2°: Jupiter's jets are only 4° to 8° wide, and turn
     // east and west in turn.

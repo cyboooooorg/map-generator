@@ -28,7 +28,9 @@
   import { UNITS, unitTooltip } from '../lib/units';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
-  import { cloudTint, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
+  import { orbitReadout } from '../lib/orbitClock';
+  import { temperatureRange } from '../lib/temperatureRange';
+  import { cloudTint, namedSeason, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
   import { toasts } from '../lib/toasts.svelte';
@@ -449,6 +451,14 @@
   const dataReady = $derived(layers !== null);
   /** A giant planet: cloud bands, no ground (see GiantInfo). */
   const giant = $derived(meta?.giant ?? null);
+  /**
+   * The °C range of the temperature colours, for the globe, its detail tiles
+   * and the legend alike: a giant's cloud tops', else the world's own when it
+   * leaves the Earth-like -30 to 40 °C.
+   */
+  const tempRange = $derived<[number, number]>(
+    giant ? giantTemperatureRange(giant) : meta ? temperatureRange(meta.layers.temperature, meta.format_version) : [-30, 40],
+  );
   /** The layers a giant has: its bands, cloud tops, temperatures and winds (on the moisture layer). */
   const GIANT_LAYERS: readonly Layer[] = ['biomes', 'elevation', 'temperature', 'moisture'];
   /** A layer's name: a giant's cloud tops and winds are named as such. */
@@ -470,12 +480,14 @@
     const option = LAYERS.find((l) => l.id === layer);
     return dataReady && option && available(option.needs, option.id) ? layer : 'biomes';
   });
+  /**
+   * The season as the panel names it: the equinox or solstice when the sun
+   * truly is there, else the day of the year (the declination is defined
+   * further down, from the same clock the sun is drawn with).
+   */
   const seasonLabel = $derived.by(() => {
-    const quarter = season * 4;
-    const nearest = Math.round(quarter) % 4;
-    return Math.abs(quarter - Math.round(quarter)) < 0.12
-      ? (t.viewer.seasons[nearest] ?? '')
-      : t.viewer.dayOfYear({ day: Math.round(season * 365) % 365 });
+    const named = namedSeason(season, declination, meta?.axial_tilt_deg ?? 23.44);
+    return named !== null ? (t.viewer.seasons[named] ?? '') : t.viewer.dayOfYear({ day: Math.round(season * 365) % 365 });
   });
   const highlight = $derived(hovered ?? pinned);
 
@@ -751,6 +763,7 @@
   $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => view?.setCloudsDrifting(cloudDrift));
   $effect(() => view?.setGiant(giant));
+  $effect(() => view?.setTemperatureRange(tempRange[0], tempRange[1]));
   // A giant's storms, found in its biome map, each drifting whole.
   $effect(() => {
     const stormId = giant && meta ? meta.biomes.find((b) => b.key === 'GiantStorm')?.id : undefined;
@@ -1181,6 +1194,8 @@
     const moon = sys.bodies.find((b) => b.parent === sysBody.id);
     return moon?.orbit.period_days ?? (10 * sysBody.spin.period_hours) / 24;
   });
+  /** The orbit the Light and season panel states: the moon's own, or the planet's year (not the slider's span). */
+  const orbitClock = $derived(sysBody ? orbitReadout({ parent: sysBody.parent, orbitPeriodDays: sysBody.orbit.period_days }, season, orbitDays) : null);
   /**
    * The slowest orbit speed: ORBIT_SPEED_MIN, or slower for a short orbit,
    * down to real time (the power of two at or just below it).
@@ -2029,11 +2044,11 @@
           <small class="value">{sunLongitude}°</small>
         </label>
       {/if}
-    {#if sun && orbitPeriod && sysSky}
+    {#if sun && orbitClock && sysSky}
         <p class="muted">
           {t.viewer.orbitDay({
-            days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
-            period: formatNumber(orbitPeriod, orbitPeriod < 10 ? 2 : 1),
+            days: formatNumber(orbitClock.day, orbitClock.period < 10 ? 2 : 1),
+            period: formatNumber(orbitClock.period, orbitClock.period < 10 ? 2 : 1),
           })}{#if sysBody?.kind === 'moon'}<br />{sysBody.spin.locked
               ? t.viewer.moonSun
               : t.viewer.moonSunSpin({ hours: formatNumber(sysBody.spin.period_hours, 1) })}{/if}
@@ -2303,7 +2318,7 @@
     {@const windShown = giant !== null && shown === 'moisture'}
     {@const topsShown = giant !== null && shown === 'elevation'}
     {@const ramp = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown]}
-    {@const range = giant && shown === 'temperature' ? giantTemperatureRange(giant) : null}
+    {@const range = shown === 'temperature' ? tempRange : null}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="legend" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
       <strong>{giant ? layerName(shown) : ramp.label}</strong>
