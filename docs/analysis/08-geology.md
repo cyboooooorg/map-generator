@@ -275,7 +275,9 @@ tiles, and lets the time slider ask for the surface at any epoch.
   a rim, and an ejecta blanket in `(r/R)^−3`; depths and rim heights in
   km from Pike's laws; the simple–complex transition at
   `15 km × 1.62 / g` (g in m/s², from the gravity already derived from
-  the circumference); a peak ring above about ten times the transition.
+  the circumference), 0.15 of that on icy bodies (a calibration with no
+  readable source; their simple craters keep rock's bowl); a peak ring
+  above about ten times the transition.
   A low-frequency noise makes rims and ejecta irregular.
 - **Superposition:** craters are applied in age order, oldest first.
   Inside a crater the previous relief is replaced, not added to: the
