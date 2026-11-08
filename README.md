@@ -242,6 +242,7 @@ For development with hot reload, see [web/README.md](web/README.md) (`mise run d
 | `mise run web:check`            | Type-check and test the front-end                                                   |
 | `mise run hex`                  | Resample a generated world onto a hex grid, see [Hex grid export](#hex-grid-export) |
 | `mise run test`                 | Run the test suite                                                                  |
+| `mise run test:invariance`      | Check that a planet keeps its large-scale land and biomes at 1024 and 2048 pixels wide (slow, release build; skipped by `mise run test`) |
 | `mise run lint`                 | Check formatting and run clippy (`-D warnings`)                                     |
 | `mise run fmt`                  | Format the code                                                                     |
 | `mise run clean-worlds`         | Delete the worlds made before systems, under `worlds/` (no longer read)             |
