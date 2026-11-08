@@ -36,11 +36,29 @@ describe('giant form fields', () => {
       metallicityRandom: false,
       metallicity: -0.2,
       giants: 'none',
+      alone: false,
       host: 'giant',
       massRandom: false,
       mass: 17,
     });
     expect(parseGiantChoice({ metallicity: 'high', giants: 'many', host: 'moon', mass: -3 })).toEqual(initialGiantChoice(null));
     expect(parseGiantChoice(undefined)).toEqual(initialGiantChoice(null));
+  });
+
+  it('asks for a lone planet, which overrides the giant neighbours', () => {
+    expect(initialGiantChoice(null).alone).toBe(false);
+    expect(initialGiantChoice({ alone: true }).alone).toBe(true);
+    const alone = { ...initialGiantChoice(null), alone: true, giants: 'none' as const };
+    const rocky: WorldRequest = {};
+    applyGiantChoice(rocky, alone, false);
+    expect(rocky).toEqual({ alone: true });
+    const giant: WorldRequest = {};
+    applyGiantChoice(giant, alone, true);
+    expect(giant).toEqual({ alone: true });
+    const normal: WorldRequest = {};
+    applyGiantChoice(normal, { ...alone, alone: false }, false);
+    expect(normal).toEqual({ giants: 'none' });
+    expect(parseGiantChoice({ alone: true }).alone).toBe(true);
+    expect(parseGiantChoice({ alone: 'yes' }).alone).toBe(false);
   });
 });

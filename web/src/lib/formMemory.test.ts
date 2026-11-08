@@ -23,7 +23,7 @@ describe('parseFormMemory', () => {
         eccentricity: 0.05,
       },
       moons: 3,
-      giant: { metallicityRandom: false, metallicity: 0.3, giants: 'none', host: 'giant', massRandom: false, mass: 95 },
+      giant: { metallicityRandom: false, metallicity: 0.3, giants: 'none', alone: false, host: 'giant', massRandom: false, mass: 95 },
     };
     expect(parseFormMemory(stored, FIELDS)).toEqual(stored);
     expect(parseFormMemory({ ...stored, moons: 'none' }, FIELDS)?.moons).toBe('none');
@@ -54,7 +54,7 @@ describe('parseFormMemory', () => {
       star: null,
       moons: 'auto',
       // A form saved before the giant fields: all drawn.
-      giant: { metallicityRandom: true, metallicity: 0, giants: 'auto', host: 'auto', massRandom: true, mass: 318 },
+      giant: { metallicityRandom: true, metallicity: 0, giants: 'auto', alone: false, host: 'auto', massRandom: true, mass: 318 },
     });
   });
 

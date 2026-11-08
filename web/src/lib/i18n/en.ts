@@ -557,6 +557,12 @@ export const en = {
     giants: 'Giant planets',
     giantsAuto: 'Drawn by the seed',
     giantsNone: 'None (not modelled)',
+    giantsAlone: 'None: the planet is alone in its system',
+    alone: 'Lone planet (no other planets in its system)',
+    aloneHelp:
+      "The system holds only its star, the planet and its moons (or the giant it orbits): no other planet, no belt. The planet is generated with no giant neighbours, so its impact rate is the Solar System's",
+    aloneSummary: 'Other planets',
+    aloneNone: 'None (lone planet)',
     giantsHelp:
       "The gas and ice giants of the system, drawn with the odds observed for the star and its metallicity: they force an eccentricity on the world and set its impact rate. None keeps the Solar System's impact rate",
     host: "A giant's moon",
