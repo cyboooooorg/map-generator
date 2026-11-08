@@ -435,6 +435,12 @@ pub struct StarSpec {
     /// stars nearby (see `crate::giants`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metallicity: Option<f32>,
+    /// The spin-orbit state the planet is held in, `1:1` (locked), `3:2` or
+    /// `2:1`, instead of the one its seed draws from its eccentricity (see
+    /// `crate::spin::capture`): a preset named after a planet whose state
+    /// is observed pins it (`mercury-like` is `3:2`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resonance: Option<String>,
 }
 
 impl StarSpec {
@@ -454,6 +460,13 @@ impl StarSpec {
         if let Some(e) = self.eccentricity {
             e.check("eccentricity", ECCENTRICITY.min, ECCENTRICITY.max)
                 .map_err(|e| e.replacen("defaults.", "star.", 1))?;
+        }
+        if let Some(r) = &self.resonance
+            && crate::spin::parse_resonance(r).is_none()
+        {
+            return Err(format!(
+                "star.resonance: `{r}` is not one of \"1:1\", \"3:2\", \"2:1\""
+            ));
         }
         if let Some(m) = self.metallicity
             && !crate::request::METALLICITY.contains(m)
@@ -537,18 +550,57 @@ pub struct StarInfo {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub spin_orbit_3_2: bool,
+    /// Turns per orbit of a planet its star's tides hold in a spin-orbit
+    /// resonance: 1.5 (3:2) or 2 (2:1), drawn by the
+    /// eccentricity (see `crate::spin::capture`); 0 for a planet in none
+    /// (free or locked). Worlds made before it: 1.5 when
+    /// `spin_orbit_3_2`, else 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<f32>", optional))]
+    pub spin_turns: f32,
     /// Colour of the star's light, linear RGB, the Sun white.
     pub light: [f32; 3],
     /// Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
     /// have the Sun's.
     #[serde(default)]
     pub metallicity: f32,
+    /// Longitude of the orbit's perihelion, degrees from the spring equinox
+    /// (see [`crate::world::WorldParams::perihelion_longitude_deg`]); absent
+    /// on worlds made before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub perihelion_longitude_deg: Option<f32>,
+}
+
+fn is_zero(x: &f32) -> bool {
+    *x == 0.0
 }
 
 impl StarInfo {
-    /// The star of type `code` with a planet on an orbit of semi-major axis
-    /// `orbit_au` and `eccentricity`.
+    /// The star of type `code` with an Earth-like planet (Earth's mass and
+    /// radius) on an orbit of semi-major axis `orbit_au` and
+    /// `eccentricity`; the draw of its spin-orbit resonance is keyed by
+    /// the orbit (see [`Self::for_planet`]).
     pub fn new(code: f32, orbit_au: f32, eccentricity: f32) -> Self {
+        let key = orbit_au.to_bits() ^ eccentricity.to_bits().rotate_left(16) ^ code.to_bits();
+        Self::for_planet(code, orbit_au, eccentricity, 1.0, 1.0, key)
+    }
+
+    /// The star of type `code` with a rocky planet of `mass_earth` and
+    /// `radius_earth` (Earth units) on an orbit of semi-major axis
+    /// `orbit_au` and `eccentricity`: its tides lock or despin it in a
+    /// time that scales with the planet's mass and radius
+    /// ([`crate::spin::rocky_locking_gyr`]), and the resonance it is
+    /// captured in, if despun on an eccentric orbit, is drawn from `seed`
+    /// ([`crate::spin::capture`]).
+    pub fn for_planet(
+        code: f32,
+        orbit_au: f32,
+        eccentricity: f32,
+        mass_earth: f32,
+        radius_earth: f32,
+        seed: u32,
+    ) -> Self {
         let v = values(code);
         let at = |au: f32| v.luminosity / (au * au);
         let insolation = at(orbit_au) * mean_flux_factor(eccentricity);
@@ -558,7 +610,13 @@ impl StarInfo {
         );
         let (inner, outer) = habitable_fluxes(v.teff_k);
         let lifetime = lifetime_gyr(v.mass);
-        let locking = locking_gyr(orbit_au, v.mass);
+        let locking = crate::spin::rocky_locking_gyr(orbit_au, v.mass, mass_earth, radius_earth);
+        let age = AGE_GYR.min(lifetime);
+        let turns = if locking < age {
+            crate::spin::capture(eccentricity, seed)
+        } else {
+            0.0
+        };
         Self {
             kind: type_name(code),
             teff_k: v.teff_k,
@@ -580,10 +638,12 @@ impl StarInfo {
             angular_diameter_deg: angular_diameter_deg(v.radius, orbit_au),
             lifetime_gyr: lifetime,
             locking_gyr: locking,
-            tidally_locked: crate::spin::locked(locking, AGE_GYR.min(lifetime), eccentricity),
-            spin_orbit_3_2: crate::spin::resonant(locking, AGE_GYR.min(lifetime), eccentricity),
+            tidally_locked: locking < age && turns == 0.0,
+            spin_orbit_3_2: turns == crate::spin::RESONANCE_TURNS_PER_ORBIT,
+            spin_turns: turns,
             light: light_colour(v.teff_k),
             metallicity: 0.0,
+            perihelion_longitude_deg: None,
         }
     }
 
@@ -651,6 +711,23 @@ fn gamma(shape: f64, rng: &mut impl RngExt) -> f64 {
 /// [`ECCENTRICITY`].
 pub fn draw_eccentricity(rng: &mut impl RngExt) -> f32 {
     let (x, y) = (gamma(0.867, rng), gamma(3.03, rng));
+    ((x / (x + y)) as f32).min(ECCENTRICITY.max)
+}
+
+/// An orbital eccentricity drawn like those of the small planets known
+/// (radius under 6 Earth radii, period over 5 days): the beta
+/// distributions Van Eylen et al. (2019, table 3,
+/// doi:10.3847/1538-3881/aaf22f) fit to Kepler planets with asteroseismic
+/// stars, `a = 1.58`, `b = 4.4` (mean 0.26) for the planets of
+/// single-transiting systems (other planets may exist without transiting)
+/// and `a = 1.52`, `b = 29` (mean 0.05) for those of multi-transiting
+/// systems, against Kipping's (2013) 0.22 fitted to mostly giant planets
+/// ([`draw_eccentricity`]). Their sample has periods of 5 to about 100
+/// days: the app applies the fits at every distance (an extrapolation).
+/// Kept within [`ECCENTRICITY`].
+pub fn draw_small_eccentricity(in_system: bool, rng: &mut impl RngExt) -> f32 {
+    let (a, b) = if in_system { (1.52, 29.0) } else { (1.58, 4.4) };
+    let (x, y) = (gamma(a, rng), gamma(b, rng));
     ((x / (x + y)) as f32).min(ECCENTRICITY.max)
 }
 
@@ -933,6 +1010,22 @@ mod tests {
         let mean = draws.iter().sum::<f32>() / draws.len() as f32;
         assert!((0.19..0.25).contains(&mean), "mean eccentricity {mean}");
         assert!(draws.iter().all(|e| (0.0..=ECCENTRICITY.max).contains(e)));
+    }
+
+    #[test]
+    fn small_planets_are_less_eccentric_than_giants() {
+        let mean = |f: &dyn Fn(&mut rand::rngs::StdRng) -> f32| {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(5);
+            (0..20_000).map(|_| f(&mut rng)).sum::<f32>() / 20_000.0
+        };
+        // Van Eylen et al. 2019, table 3: Beta(1.58, 4.4) has mean 0.26,
+        // Beta(1.52, 29) mean 0.05; Kipping's giants 0.22.
+        let alone = mean(&|r| draw_small_eccentricity(false, r));
+        let together = mean(&|r| draw_small_eccentricity(true, r));
+        let giants = mean(&|r| draw_eccentricity(r));
+        assert!((0.24..0.28).contains(&alone), "{alone}");
+        assert!((0.04..0.06).contains(&together), "{together}");
+        assert!(together < giants && giants < alone + 0.05, "{giants}");
     }
 
     #[test]

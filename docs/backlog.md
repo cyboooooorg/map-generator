@@ -150,10 +150,36 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | Night side lighting: the light the sky's bodies reflect on a log display curve, not a fixed 7 % floor                | done   |
 | Volcanoes on non-volcanic presets: quantile threshold, cones after erosion, lowland vents (lava 0 → 0.3–0.5 %)       | done   |
 | The default random sea level (−0.30 to 0.50) mostly gives 60–95 % land and supercontinents                           | done   |
-| Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D)                            | todo   |
+| Supercontinent interiors stay desert belts: no moisture transport inland (analysis 02, D): no longer, see below       | done   |
 | Noise maps kept every debug layer until the export (OOM at 8192 × 4096): now streamed                                | done   |
 | Planet view: a switch to draw the planet's Hill sphere (from a moon, its host planet's)                              | done   |
 | Planet view: from a moon, the host planet is drawn without its atmosphere and clouds                                 | done   |
+
+Supercontinent interiors (measured 2026-11-08, after the climate fixes of
+2026-11-07; earth-like seeds 1-4, 1024 px, land weighted by area): the
+rain of land pixels by distance to the coast (the model's coast distance
+stops at 2 000 km), against Earth's, from GPCP version 2.3 (Adler et al.
+2018, doi:10.3390/atmos9040138, 1979-2013 mean) on the NCEP/NCAR
+reanalysis land-sea mask (Kalnay et al. 1996,
+doi:10.1175/1520-0477(1996)077<0437:TNYRP>2.0.CO;2), both read from
+NOAA PSL; Earth's coast distance is on a 1° grid, so its first bins are
+coarse.
+
+| Distance to the coast, km | Earth, mm | Model 29 % land, mm | Model 75 % land, mm |
+| ------------------------- | --------- | ------------------- | ------------------- |
+| 0-250                     | 943       | 1 111               | 693                 |
+| 250-500                   | 726       | 861                 | 545                 |
+| 500-1 000                 | 759       | 748                 | 452                 |
+| 1 000-1 500               | 766       | 637                 | 399                 |
+| 1 500-2 000               | 389       | 637                 | 374                 |
+| 2 000 and more            | 255       | 602                 | 342                 |
+
+The rain falls inland in the model too (by 46 % from the coast to 2 000
+km at Earth's land share, by 51 % at 75 %), and the arid share of the
+land does not grow inland: at 75 % land it is 38-44 % within 1 500 km of
+the coast and 20 % beyond 2 000 km. There is no desert belt in the
+interiors; the model's deepest interiors are wetter than Earth's, whose
+255 mm beyond 2 000 km cover only 1.3 % of its land. Nothing to fix.
 
 ## 5. Terrain realism, second round
 
@@ -614,32 +640,41 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 - **Problem:** the science fixes of 2026-11-07 (`spin.rs`, `moons.rs`)
   model the 3:2 spin–orbit resonance, circularisation, light moons of
-  despun planets and giants, and tidal shapes, but keep some
-  simplifications:
-  - a sharp line at e = 0.06 between locked and 3:2 (Ribas et al. 2016),
-    where the odds of capture rise with the eccentricity (Makarov 2012):
-    a draw keyed by the seed would be closer;
-  - only the 3:2 resonance: large eccentricities favour 2:1 and higher
-    (Makarov, Berghea & Efroimsky 2012; Correia & Laskar 2009, Table 3);
-  - giants are locked once despun, where a fluid planet on an eccentric
-    orbit settles into pseudo-synchronous rotation (Hut 1981);
-  - circularisation and despinning take Earth's mass and radius for every
-    rocky planet (a super-Earth circularises about three times faster);
-  - a 3:2 world takes the rotating climate whatever its solar day (two
-    years: 176 days for Mercury), not a slow rotator's;
-  - drawn eccentricities follow Kipping 2013, fitted mostly to giants:
-    small close-in planets are less eccentric, so too many despun
-    planets of red dwarfs come out in 3:2;
-  - a moon's tilt is the Moon's 6.68° for a giant-impact moon and 0 for
-    the others, not its own Cassini state from the precession rates;
-  - inclinations of moons are to the planet's equator, the stability
-    limits to its orbit;
-  - Elser et al. 2011's odds of a large moon apply round every star.
-- **Done when:** capture into 3:2 and higher resonances is drawn by
-  eccentricity, giants turn pseudo-synchronously, slow rotators get a
-  climate of their own, rocky planets' tides scale with their mass and
-  radius, and moons get their Cassini obliquity.
-- **Status:** todo
+  despun planets and giants, and tidal shapes. Second round (2026-11-08):
+  - done: capture into the 3:2 and 2:1 resonances is drawn from the
+    world's seed with odds that rise linearly with the eccentricity
+    (`spin::capture`: Ribas et al. 2016, Makarov 2012), `mercury-like`
+    pins 3:2 (`[star] resonance`), instead of a sharp line at e = 0.06;
+  - done: a despun giant on an eccentric orbit turns at the
+    pseudo-synchronous rate (Hut 1981), locked only within 5 % of one turn
+    per orbit;
+  - done: a rocky planet's locking and circularisation times scale with
+    its own mass and radius (`m / R³`, `m / R⁵`);
+  - done: rocky planets draw their eccentricity from Van Eylen et al.
+    2019 (Beta(1.58, 4.4) single-transiting, Beta(1.52, 29)
+    multi-transiting), giants
+    keep Kipping 2013;
+  - remains: resonances above 2:1 (5:2, 3:1 and over: Makarov gives no
+    threshold for them) and the Makarov
+    triaxiality dependence of the odds (the ramps are Mercury's, a more
+    symmetric planet is caught at lower eccentricities);
+  - remains: a 3:2 world takes the rotating climate whatever its solar
+    day (two years: 176 days for Mercury), not a slow rotator's (the
+    climate track);
+  - remains, not done for lack of a model: a moon's tilt is the Moon's
+    6.68° for a giant-impact moon and 0 for the others, not its own
+    Cassini state. The closed form needs the node's precession rate
+    (the star's and the other moons' perturbations), the moon's moments
+    of inertia and its `C22`, none of which the app draws;
+  - remains, decided to leave: inclinations of moons are to the
+    planet's equator, the stability limits to its orbit (the Laplace plane
+    would need the same precession model); Elser et al. 2011's odds of a
+    large moon apply round every star (the despun planets of cool stars
+    already lose their moons by `lasting_moon_kg`, and the paper's grid
+    does not extend the odds to other masses).
+- **Done when:** the remaining items are done: higher resonances, slow
+  rotators get a climate of their own, moons get their Cassini obliquity.
+- **Status:** in progress
 
 ## 20. Relief science, what remains
 
@@ -714,30 +749,75 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 21. Climate: what the model leaves out
 
-- **Status:** todo
+- **Status:** partly done (2026-11-08: eccentric seasons, slow
+  rotators' day, cold currents; the rest decided below)
 - **Source:** the science articles "How does axial tilt make climate zones
   and seasons?" and "Why is one side of a mountain range dry?" (their
   "Where it departs from the science" sections), after the climate fixes
   of 2026-11-07 (exact insolation, seasons, Clausius-Clapeyron rain,
   meridional winds, foehn).
-- **Cold eastern-boundary currents** (Humboldt, Benguela, California): the
-  sea off the west coasts of the subtropics is several degrees colder,
-  which dries the coast (the Atacama, the Namib). A rule cooling the sea
-  pixels west of a continent between about 10° and 40° would need a
-  sourced magnitude and width (SST climatologies), the ocean basins found
-  row by row, and the moisture pass to read the cooled sea; the
-  temperature anomaly noise stands in for it today.
+- **Cold eastern-boundary currents** (Humboldt, Benguela, California):
+  first step done (2026-11-08): the sea with land to its east within
+  2 500 km is cooled by up to 1.7 K at 25° (`cold_currents`), the
+  magnitude and width read in NOAA OI SST v2 (Reynolds et al. 2002; see
+  the README). What remains: the cooling is a smooth offset read from 1°
+  cells, so it is weaker and wider than the real coastal cold
+  tongue; it does not cool the coastal land air, which is what keeps the Atacama rainless and foggy (an inversion the moisture
+  pass does not have); the ocean basin is found by the land to the east
+  in the row, not by the gyre; and the warm western boundary currents
+  (Gulf Stream, Kuroshio), which balance the cold ones, are not modelled.
 - **Monsoons:** the seasonal reversal of the wind between land and sea.
   The seasons now set summer and winter temperatures, but the wind and
   the rain are annual means: a monsoon needs a summer and a winter run of
   the moisture pass with winds driven by the land-sea contrast.
-- **Uneven seasons on eccentric orbits:** the annual mean keeps the
-  `1/sqrt(1 − e²)` factor, but the seasonal swing ignores the distance to
-  the star at the solstices (Mars: 46 % more light at perihelion). It
-  needs a longitude of perihelion, drawn or given, in `WorldParams`.
+  **Decision (2026-11-08): left.** It needs a summer and a winter
+  run of the moisture pass, winds driven by the land-sea contrast (a
+  pressure model the app does not have) and a source for the reversal's
+  strength; no bounded step is readable. The two-season passes would also
+  give the season of the rain below, so they are one project.
+- **Uneven seasons on eccentric orbits:** done (2026-11-08). The seasonal
+  swing reads the star's distance at each longitude of the orbit
+  (`EccentricOrbit::light_at`, Berger 1978, doi:10.1175/1520-0469(1978)035<2362:LTVODI>2.0.CO;2),
+  with a longitude of perihelion in `WorldParams` (`--perihelion`, drawn
+  from the seed on its own stream, Earth 283°, Mars 251°; in a system, the
+  orbit's argument of periapsis, which is what the sky draws). Worlds without
+  it keep the circular swing. What remains: the swing is half the
+  difference between the sunniest and darkest days, damped like the
+  circular one, so the summer and the winter stay symmetric around the
+  annual mean; a real eccentric orbit gives a short hot season and a long
+  mild one (the temperature response of a month-by-month run would).
+- **Slow rotators and the solar day:** first step done (2026-11-08). A
+  world whose solar day lasts more than a month (the 3:2 resonance, a
+  slow rotator) gets the swing of its day in its seasons (`DayCycle`:
+  North et al. 1981 response at the day's period, a monthly window; Yang
+  et al. 2014 for the picture). What remains: (a) the clouds. Yang et al.
+  find that at a given stellar flux the global-mean surface temperature
+  falls by 20 K between a rotation period of 1 day and 256 days (a
+  thermal inertia of 50 m of water), through the albedo of the thick
+  substellar clouds; the app keeps the mean of a fast rotator, and the
+  shape between the two ends is not in the text. It also conflicts with
+  the carbon cycle that `star_temperatures` regulates. (b) The day-night
+  swing is zonal: a 3:2 world has hot longitudes (Mercury's two hot
+  poles), and a slow rotator's circulation is organised around the
+  substellar point, not by latitude. (c) The closure fails for days of
+  hours (it would give Earth 0.2 K of day-night swing for its 10 K), so
+  days of a month or less add nothing. (d) The air's damping uses Koll &
+  Abbot's (2016) threshold for dry tidally locked planets, `t_wave / t_rad`
+  of about 10⁻², with a logistic shape of our own; Yang et al. 2014 give
+  no day-night contrast in text for a 1 bar air (only maps), so the
+  moderate swing of an earth-like 3:2 world (about 10 K at the equator)
+  is not checked against a number. The airless swing uses Earth's slope
+  of 45 °C per unit of light, too small for a real Mercury (about 300 K).
+  The cold-current calibration: sea within 2 000 km west of land in the
+  same row at 1°, anomaly against the sea mean of its row, annual mean,
+  both hemispheres pooled (20-30°: -0.9 K north, -2.1 K south by a
+  second reading, with the SST package's own land mask), land mask of the
+  NCEP/NCAR reanalysis.
 - **Atmospheric mass and the wind belts:** Kaspi & Showman (2015) find
   narrower Hadley cells under heavier atmospheres, without a scaling the
   app could use; the belts scale with rotation and size only.
+  **Decision: left.** No scaling the app could use (Kaspi &
+  Showman 2015 give simulations, not a law).
 - **Winter-rain climates and the season of the rain:** Köppen's dryness
   threshold depends on the season of the rain (Kottek et al. 2006). The
   app has annual rain only and takes the summer share from the air's
@@ -745,11 +825,13 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   (the Mediterranean, BSk and Csa borders) is not modelled; deserts are
   7.5 % of the land and steppes 22 %, where Earth's are about half and
   half. A monthly moisture pass (see Monsoons) would give both.
+  **Decision: left**, with the monsoons (a monthly moisture pass).
 - **Absolute rain is calibrated, not derived:** the rain rate is scaled
   to GPCP's land mean and zonal means with constants that have no source
   (`MM_PER_RATE`, `COLD_RAIN_EXPONENT`, `CIRCULATION_OCTAVES`,
   `ITCZ_OCTAVES`, `SUBSIDENCE_HUMIDITY`). Done when the rain comes from a
   moisture budget (evaporation, convergence) in physical units.
+  **Decision: left.** A moisture budget is a new model.
 - **Circulation on tilted worlds:** the wind belts, the circulation
   factor and the ITCZ follow the geographic latitude, whatever the
   tilt. At 90° the poles are the warm annual-mean regions and the rain
@@ -761,6 +843,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   tilt has ice on half of its 45-60° land: with no seasons the warmest
   month is the annual mean, below 0 °C there (Köppen's EF), which is
   physical.
+  **Decision: left.** No source for the Hadley cell's response
+  to the tilt beyond Kaspi & Showman's runs.
 - **Storms, fronts and ENSO:** moisture is the annual mean of a steady
   wind. Weather, interannual variability (El Niño, La Niña) and the storm
   rain that makes most orographic precipitation are model limits, not

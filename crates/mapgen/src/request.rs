@@ -58,6 +58,11 @@ pub const ORBIT_AU: Limits = Limits {
 /// Eccentricity of the planet's orbit: 0 circular; beyond 0.9 the planet
 /// would graze its star or leave its habitable zone for most of its year.
 pub const ECCENTRICITY: Limits = Limits { min: 0.0, max: 0.9 };
+/// Longitude of the perihelion, degrees from the spring equinox.
+pub const PERIHELION_LONGITUDE_DEG: Limits = Limits {
+    min: 0.0,
+    max: 360.0,
+};
 /// Mass of a giant planet, Earth masses: from a small ice giant to the
 /// deuterium-burning limit (13 Jupiter masses).
 pub const GIANT_MASS: Limits = Limits {
@@ -143,6 +148,11 @@ pub struct WorldRequest {
     pub hz_position: Option<f32>,
     /// Eccentricity of the orbit, in `[0, 0.9]`.
     pub eccentricity: Option<f32>,
+    /// Longitude of the orbit's perihelion, degrees from the spring equinox,
+    /// in `[0, 360]` (Earth: 283): where in the seasons the planet is
+    /// closest to its star. Drawn from the seed when left out; it matters
+    /// on eccentric orbits only.
+    pub perihelion_longitude_deg: Option<f32>,
     /// Epoch of the plates, Ma from the present (negative in the past), in
     /// `[-300, 300]`; the present when left out (never drawn).
     pub drift_ma: Option<f32>,
@@ -331,6 +341,11 @@ impl WorldRequest {
             ("orbit_au", self.orbit_au, ORBIT_AU),
             ("hz_position", self.hz_position, HZ_POSITION),
             ("eccentricity", self.eccentricity, ECCENTRICITY),
+            (
+                "perihelion_longitude_deg",
+                self.perihelion_longitude_deg,
+                PERIHELION_LONGITUDE_DEG,
+            ),
             ("drift_ma", self.drift_ma, DRIFT_MA),
             ("metallicity", self.metallicity, METALLICITY),
             ("mass_earth", self.mass_earth, GIANT_MASS),
@@ -455,7 +470,13 @@ impl WorldRequest {
                 (Some(e), _) => e,
                 (None, Some(e)) => e.pick(rng),
                 (None, None) => {
-                    let drawn = crate::star::draw_eccentricity(rng);
+                    // A giant follows Kipping 2013, a small planet alone
+                    // in its system Van Eylen et al. 2019.
+                    let drawn = if giant_mass_earth.is_some() {
+                        crate::star::draw_eccentricity(rng)
+                    } else {
+                        crate::star::draw_small_eccentricity(false, rng)
+                    };
                     let at = crate::star::StarInfo::new(star, orbit_au, 0.0);
                     let circular = match giant_mass_earth {
                         Some(mass) => crate::spin::giant_circularised(
@@ -463,7 +484,10 @@ impl WorldRequest {
                             mass,
                             crate::giants::giant_radius(mass, at.equilibrium_k),
                         ),
-                        None => crate::spin::circularised(&at),
+                        None => {
+                            let (mass, radius) = crate::spin::rocky_body(circumference_km);
+                            crate::spin::rocky_circularised(&at, mass, radius)
+                        }
                     };
                     if circular { 0.0 } else { drawn }
                 }
@@ -505,6 +529,10 @@ impl WorldRequest {
             }
             None => circumference_km,
         };
+        let pinned = s
+            .resonance
+            .as_deref()
+            .and_then(crate::spin::parse_resonance);
         let mut params = WorldParams {
             width: self.width.unwrap_or(fallback::WIDTH),
             height: self.height.unwrap_or(fallback::HEIGHT),
@@ -538,9 +566,21 @@ impl WorldRequest {
             },
             given_rings: None,
             impact_factor: None,
-            locked_to_star: None,
+            // A preset may pin the spin-orbit state (`[star] resonance`).
+            locked_to_star: pinned.map(|turns| turns == 1.0),
+            resonance_to_star: pinned.map(|turns| if turns == 1.0 { 0.0 } else { turns }),
             ridge: None,
             gravity: None,
+            // Drawn from its own stream: the other draws keep their values.
+            perihelion_longitude_deg: Some(self.perihelion_longitude_deg.map_or_else(
+                || {
+                    use rand::SeedableRng;
+                    let stream = crate::noise::stream_seed(seed, crate::noise::stream::PERIHELION);
+                    let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(stream));
+                    rng.random::<f32>() * 360.0
+                },
+                |v| v.rem_euclid(360.0),
+            )),
         };
         // Moons asked for: the world is not a giant's moon, which keeps none
         // (an error when that is asked for too).
@@ -590,6 +630,24 @@ impl WorldRequest {
                 attempts += 1;
             }
         }
+        // A pinned spin-orbit state (`[star] resonance`) holds only for a
+        // rocky planet, not a moon, that its star has despun at the orbit
+        // now final; elsewhere it is ignored, the world spins as drawn.
+        if params.resonance_to_star.is_some() {
+            let free = WorldParams {
+                locked_to_star: None,
+                resonance_to_star: None,
+                ..params.clone()
+            };
+            let holds = !giant
+                && !crate::moons::is_moon_world(&params)
+                && crate::exomoon::HostGiant::draw(&params).is_none()
+                && crate::spin::despun(&crate::spin::star_info(&free));
+            if !holds {
+                params.locked_to_star = None;
+                params.resonance_to_star = None;
+            }
+        }
         let system = crate::moons::MoonSystem::draw(&params);
         let effects = crate::moons::PlanetEffects::of(&params, system.as_ref());
         if tilt_drawn && let ParamDefault::Range(range) = fallback::AXIAL_TILT_DEG {
@@ -604,11 +662,16 @@ impl WorldRequest {
         // Eccentric giants force an eccentricity on the world: a drawn one is
         // at least that (the giants are placed around the final orbit, which
         // the moons may have drawn again).
-        let circular = crate::spin::circularised(&crate::star::StarInfo::new(
-            params.star,
-            params.orbit_au,
-            0.0,
-        ));
+        let at = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0);
+        let circular = if giant {
+            crate::spin::circularised(&at)
+        } else {
+            crate::spin::rocky_circularised(
+                &at,
+                params.mass_earth(),
+                params.circumference_km / crate::noise::EARTH_CIRCUMFERENCE_KM,
+            )
+        };
         if eccentricity_drawn && !circular {
             for _ in 0..3 {
                 let forced = crate::giants::GiantSystem::draw(&params)
@@ -956,11 +1019,7 @@ mod tests {
             // grows as the planet's mass to the 8/3 over its radius to the
             // fifth: a super-Earth of 11 Earth masses at 0.46 AU keeps moons
             // of a few thousandths of its mass.
-            if crate::spin::despun(&crate::star::StarInfo::new(
-                p.star,
-                p.orbit_au,
-                p.eccentricity,
-            )) {
+            if crate::spin::despun(&crate::spin::star_info(&p)) {
                 despun += 1;
                 assert!(
                     system

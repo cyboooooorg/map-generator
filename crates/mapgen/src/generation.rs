@@ -1,7 +1,7 @@
 use crate::atmosphere::{AIRLESS_BAR, CloudKind, LIQUID_WATER_BAR, transport_heat};
 use crate::biome::BiomeInput;
 use crate::carve;
-use crate::climate::{Belts, LockedClimate, Moisture, Seasons};
+use crate::climate::{Belts, DayCycle, EccentricOrbit, LockedClimate, Moisture, Seasons};
 use crate::climate::{
     Field, MoistureInput, TEMPERATURE_RANGE, moisture, regional_variability, row_temperatures,
     temperature, temperature_anomaly,
@@ -1079,31 +1079,80 @@ fn star_climate(params: &WorldParams) -> StarClimate {
 
 /// The wind belts of world `params` (see [`Belts`]), from its day: the
 /// rotation its moons draw, its year if locked to its star (two thirds of
-/// it in the 3:2 resonance), Earth's 24 h for a world without moons.
+/// it in the 3:2 resonance, half in 2:1), Earth's 24 h for a world without moons.
 pub fn belts(params: &WorldParams) -> Belts {
+    Belts::new(
+        sidereal_day_hours(params),
+        f64::from(params.circumference_km),
+    )
+}
+
+/// The time world `params` takes to turn once, hours: its year if locked
+/// to its star (two thirds of it in the 3:2 resonance, half in 2:1), the
+/// rotation its moons draw, Earth's 24 h for a world without moons.
+fn sidereal_day_hours(params: &WorldParams) -> f64 {
     let star = crate::spin::star_info(params);
-    let day_hours = if star.tidally_locked {
+    if star.tidally_locked {
         f64::from(star.year_days) * 24.0
-    } else if star.spin_orbit_3_2 {
-        // Three turns every two orbits.
-        f64::from(star.year_days) * 24.0 / f64::from(crate::spin::RESONANCE_TURNS_PER_ORBIT)
+    } else if star.spin_turns > 0.0 {
+        // Three turns every two orbits in the 3:2 resonance, two in 2:1.
+        f64::from(star.year_days) * 24.0 / f64::from(star.spin_turns)
     } else {
         crate::moons::MoonSystem::draw(params).map_or(24.0, |m| f64::from(m.planet_day_hours))
-    };
-    Belts::new(day_hours, f64::from(params.circumference_km))
+    }
 }
 
 /// The seasonal cycle of world `params` (see [`Seasons`]): none on a
 /// planet locked to its star, whose sun never moves in its sky.
 pub fn seasons(params: &WorldParams) -> Seasons {
+    seasons_with(params, true)
+}
+
+/// The seasons of a world stored before the day cycle (format version 11),
+/// which were made without the swing of a long solar day.
+pub fn seasons_without_day_cycle(params: &WorldParams) -> Seasons {
+    seasons_with(params, false)
+}
+
+fn seasons_with(params: &WorldParams, day_cycle: bool) -> Seasons {
     let grid = params.grid();
-    if crate::spin::star_info(params).tidally_locked {
+    let info = crate::spin::star_info(params);
+    if info.tidally_locked {
         return Seasons::none(grid.height);
     }
     let star = star_climate(params);
-    Seasons::new(&grid, params.axial_tilt_deg, params.pressure_bar, |rows| {
-        star_temperatures(rows, star)
-    })
+    // Worlds made before the longitude of perihelion keep seasons that
+    // ignore the distance to the star.
+    let orbit = params
+        .perihelion_longitude_deg
+        .filter(|_| params.eccentricity > 0.0)
+        .map(|perihelion_longitude_deg| EccentricOrbit {
+            eccentricity: params.eccentricity,
+            perihelion_longitude_deg,
+        });
+    Seasons::new(
+        &grid,
+        params.axial_tilt_deg,
+        params.pressure_bar,
+        orbit,
+        day_cycle
+            .then(|| DayCycle::new(sidereal_day_hours(params) / 24.0, f64::from(info.year_days)))
+            .flatten()
+            .map(|day| {
+                day.with_air(
+                    crate::climate::radiative_time_days(
+                        params.pressure_bar,
+                        params.gravity_modifier() * 9.81,
+                        info.equilibrium_k,
+                    ),
+                    crate::climate::wave_time_days(
+                        params.circumference_km / std::f32::consts::TAU,
+                        info.equilibrium_k,
+                    ),
+                )
+            }),
+        |rows| star_temperatures(rows, star),
+    )
 }
 
 /// Generates a world, running every pass in order, without debug layers.
@@ -1321,7 +1370,7 @@ pub fn generate_with_progress(
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
     let lapse = crate::climate::lapse_rate(params);
-    let raw_temperature: Vec<f32> = elevation
+    let mut raw_temperature: Vec<f32> = elevation
         .par_iter()
         .enumerate()
         .map(|(i, &e)| {
@@ -1339,6 +1388,22 @@ pub fn generate_with_progress(
         })
         .collect();
     drop(anomaly);
+    // The sea off the west coasts of the subtropics, cooled by the
+    // eastern-boundary currents (the moisture pass reads it). A locked
+    // planet's winds do not blow along its coasts, and a world with no
+    // liquid sea has no currents.
+    let belts = belts(params);
+    if locked.is_none() && params.pressure_bar >= LIQUID_WATER_BAR {
+        let sea: Vec<bool> = elevation
+            .par_iter()
+            .map(|&e| relief(e) < rules.waterline)
+            .collect();
+        let cooling = crate::climate::cold_currents(&grid, &belts, &sea);
+        raw_temperature
+            .par_iter_mut()
+            .zip(&cooling)
+            .for_each(|(t, c)| *t += c);
+    }
     debug("temperature", Ramp::Unsigned, &|| {
         // −30 °C to 40 °C over the ramp.
         raw_temperature
@@ -1365,7 +1430,6 @@ pub fn generate_with_progress(
     // Winds carry ocean evaporation inland; it rains out with distance and on
     // windward slopes, leaving rain shadows behind mountains, where the air
     // comes down warmer (foehn).
-    let belts = belts(params);
     let (
         coast_distance_km,
         Moisture {
@@ -1642,8 +1706,104 @@ pub(crate) mod tests {
             impact_factor: None,
             locked_to_star: None,
             ridge: None,
+            perihelion_longitude_deg: None,
+            resonance_to_star: None,
             gravity: None,
         }
+    }
+
+    /// An example world resolved at a small size.
+    fn example_world(planet: &str, star: Option<&str>, orbit_au: Option<f32>) -> WorldParams {
+        let request = crate::request::WorldRequest {
+            planet: Some(format!(
+                "{}/../../presets/examples/{planet}.toml",
+                env!("CARGO_MANIFEST_DIR")
+            )),
+            seed: Some(1),
+            star: star.map(str::to_string),
+            orbit_au,
+            eccentricity: orbit_au.map(|_| 0.1),
+            width: Some(192),
+            height: Some(96),
+            moons: Some(crate::moons::MoonsMode::None),
+            giants: Some(crate::giants::GiantsMode::None),
+            host: Some(crate::exomoon::HostMode::None),
+            ..Default::default()
+        };
+        // A seeded generator, so that the draws the seed leaves open are
+        // the same on every run.
+        let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1);
+        request.resolve(&mut rng).unwrap().params
+    }
+
+    #[test]
+    fn air_tames_the_day_of_a_slow_rotator_and_an_airless_world_keeps_it() {
+        // An earth-like world in the 3:2 resonance (an M2V dwarf's habitable
+        // zone, e = 0.1), 1 bar of air: moderate swings and tropical biomes
+        // (the swing was 93 C at the equator without the air, 1.5 C
+        // before the day cycle).
+        // Capture into 3:2 is drawn by eccentricity: pin it, as a stored
+        // world would.
+        let mut params = example_world("earth-like", Some("M2V"), Some(0.2));
+        assert!(crate::spin::despun(&crate::spin::star_info(&params)));
+        params.locked_to_star = Some(false);
+        params.resonance_to_star = Some(crate::spin::RESONANCE_TURNS_PER_ORBIT);
+        assert!(crate::spin::star_info(&params).spin_orbit_3_2);
+        assert!(params.pressure_bar > 0.5);
+        let world = generate(&params).world;
+        let swing = world.seasons.half_range(96 / 2, true);
+        assert!((3.0..15.0).contains(&swing), "{swing}");
+        let land = world.biomes.iter().filter(|b| !b.is_water()).count().max(1) as f32;
+        let tropical = world
+            .biomes
+            .iter()
+            .filter(|b| matches!(b, Biome::Jungle | Biome::Savanna))
+            .count() as f32;
+        assert!(tropical / land > 0.01, "{}", tropical / land);
+        // Mercury, with no air to carry the heat, keeps the whole swing.
+        let mercury = example_world("mercury-like", None, None);
+        assert!(crate::spin::star_info(&mercury).spin_orbit_3_2);
+        assert!(seasons(&mercury).half_range(96 / 2, true) > 100.0);
+    }
+
+    #[test]
+    fn a_world_without_a_perihelion_keeps_its_circular_seasons() {
+        // Worlds stored before the longitude of perihelion: an eccentric
+        // orbit whose seasons ignore the distance to the star.
+        let mut old = params(5, "terran");
+        old.eccentricity = 0.2;
+        old.perihelion_longitude_deg = None;
+        let grid = old.grid();
+        let star = star_climate(&old);
+        let circular = Seasons::new(
+            &grid,
+            old.axial_tilt_deg,
+            old.pressure_bar,
+            None,
+            DayCycle::new(
+                sidereal_day_hours(&old) / 24.0,
+                f64::from(crate::spin::star_info(&old).year_days),
+            )
+            .map(|d| {
+                d.with_air(
+                    crate::climate::radiative_time_days(
+                        old.pressure_bar,
+                        old.gravity_modifier() * 9.81,
+                        crate::spin::star_info(&old).equilibrium_k,
+                    ),
+                    crate::climate::wave_time_days(
+                        old.circumference_km / std::f32::consts::TAU,
+                        crate::spin::star_info(&old).equilibrium_k,
+                    ),
+                )
+            }),
+            |rows| star_temperatures(rows, star),
+        );
+        assert_eq!(seasons(&old), circular);
+        // With a longitude the seasons change.
+        let mut dated = old.clone();
+        dated.perihelion_longitude_deg = Some(90.0);
+        assert_ne!(seasons(&dated), circular);
     }
 
     fn small_world(seed: u32, planet: &str) -> World {

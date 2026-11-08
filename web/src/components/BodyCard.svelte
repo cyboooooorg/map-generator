@@ -15,6 +15,7 @@
   import type { LoadedWorld } from '../lib/world.svelte';
   import { MAX_NAME_CHARS } from '../lib/names';
   import { jobs } from '../lib/jobs.svelte';
+  import { resonanceRatio, resonanceTurns } from '../lib/spinResonance';
   import { dustFedBy, dustOf, ringPart, ringsOf } from '../lib/ringMoons';
 
   interface Props {
@@ -187,8 +188,8 @@
       <dd>
         {body.spin.locked
           ? t.card.locked
-          : body.spin.spin_orbit_3_2
-            ? t.card.resonant({ day: hours(body.spin.period_hours) })
+          : resonanceTurns(body.spin) > 0
+            ? t.card.resonant({ day: hours(body.spin.period_hours), ratio: resonanceRatio(resonanceTurns(body.spin)) })
             : hours(body.spin.period_hours)} · {t.card.tilt({
           tilt: `${formatUpTo(body.spin.axial_tilt_deg, 1)}°`,
         })}

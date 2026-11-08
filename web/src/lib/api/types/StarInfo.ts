@@ -83,6 +83,14 @@ tidally_locked: boolean,
  */
 spin_orbit_3_2?: boolean, 
 /**
+ * Turns per orbit of a planet its star's tides hold in a spin-orbit
+ * resonance: 1.5 (3:2) or 2 (2:1), drawn by the
+ * eccentricity (see `crate::spin::capture`); 0 for a planet in none
+ * (free or locked). Worlds made before it: 1.5 when
+ * `spin_orbit_3_2`, else 0.
+ */
+spin_turns?: number, 
+/**
  * Colour of the star's light, linear RGB, the Sun white.
  */
 light: [number, number, number], 
@@ -90,4 +98,10 @@ light: [number, number, number],
  * Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
  * have the Sun's.
  */
-metallicity: number, };
+metallicity: number, 
+/**
+ * Longitude of the orbit's perihelion, degrees from the spring equinox
+ * (see [`crate::world::WorldParams::perihelion_longitude_deg`]); absent
+ * on worlds made before it.
+ */
+perihelion_longitude_deg?: number, };

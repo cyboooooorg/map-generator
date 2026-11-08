@@ -223,18 +223,227 @@ pub const SEA_SEASONS: f32 = 0.10;
 /// a few hundred km inland. Calibration, no source.
 pub const CONTINENTALITY_KM: f32 = 400.0;
 
+/// The shape of an eccentric orbit as the seasons see it: how far the planet
+/// is from its star at each longitude of its orbit.
+///
+/// The light falls as the square of the distance, `r = a (1 − e²) / (1 + e
+/// cos ν)`, with `ν = λ − ϖ` the true anomaly, the angle `λ` along the orbit
+/// from the spring equinox less the longitude of perihelion `ϖ` (Berger 1978,
+/// doi:10.1175/1520-0469(1978)035<2362:LTVODI>2.0.CO;2, eq. 1-3 for the daily
+/// insolation). Mars (`e` = 0.093) gets 46 % more light at perihelion than at
+/// aphelion, Earth (0.017) 7 % more (NASA fact sheets).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EccentricOrbit {
+    /// Eccentricity, in `[0, 1)`.
+    pub eccentricity: f32,
+    /// Longitude of perihelion, degrees from the spring equinox.
+    pub perihelion_longitude_deg: f32,
+}
+
+impl EccentricOrbit {
+    /// The light at orbital longitude `longitude` (radians), relative to
+    /// the mean light over the orbit: `(1 + e cos ν)² / (1 − e²)^(3/2)`.
+    ///
+    /// Averaged over time it is 1 (the planet lingers far from its star:
+    /// Kepler's second law, `dt ∝ r² dν`), so the mean light of the rows
+    /// stays the one [`crate::star::mean_flux_factor`] gives and only the
+    /// swing around it changes.
+    pub fn light_at(&self, longitude: f64) -> f64 {
+        let e = f64::from(self.eccentricity);
+        let nu = longitude - f64::from(self.perihelion_longitude_deg).to_radians();
+        (1.0 + e * nu.cos()).powi(2) / (1.0 - e * e).powf(1.5)
+    }
+}
+
 /// Swing of the daily-mean light at `latitude` over a year, as half the
 /// difference between its sunniest and darkest days, relative to the
-/// global mean (see [`daily_insolation`]).
-fn insolation_swing(latitude: f64, axial_tilt_deg: f32) -> f64 {
+/// global mean (see [`daily_insolation`]); on an eccentric `orbit` the
+/// light of each day follows the planet's distance from the star
+/// ([`EccentricOrbit::light_at`]), none on a circular one.
+fn insolation_swing(latitude: f64, axial_tilt_deg: f32, orbit: Option<EccentricOrbit>) -> f64 {
     let (mut most, mut least) = (f64::MIN, f64::MAX);
     for k in 0..ORBIT_STEPS {
         let longitude = (k as f64 + 0.5) / ORBIT_STEPS as f64 * TAU;
-        let q = daily_insolation(latitude, declination(axial_tilt_deg, longitude));
+        let q = daily_insolation(latitude, declination(axial_tilt_deg, longitude))
+            * orbit.map_or(1.0, |o| o.light_at(longitude));
         most = most.max(q);
         least = least.min(q);
     }
     (most - least) / 2.0
+}
+
+/// The day of a slowly turning planet, as the seasons see it: how long the
+/// star takes to cross the sky again (the solar day) against the year.
+///
+/// A planet whose solar day lasts months (Mercury: 176 days, two of its
+/// years, in the 3:2 spin-orbit resonance) has a day-night cycle slow enough
+/// for the ground to follow: "if the day is long enough that the dayside is
+/// much warmer than the nightside" the circulation changes (Yang et al.
+/// 2014, doi:10.1088/2041-8205/787/1/L2, who simulate rotation periods up to
+/// 365 days). Its months are no longer averages over many days, so the
+/// coldest and warmest months differ by the day-night swing, which the
+/// seasons then include.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DayCycle {
+    /// Length of the solar day, Earth days.
+    pub solar_day_days: f64,
+    /// Length of the year, Earth days.
+    pub year_days: f64,
+    /// Radiative time of the air, Earth days (see [`radiative_time_days`]):
+    /// 0 for a world with no air to keep the heat of its day.
+    pub air_tau_days: f64,
+    /// Time a gravity wave takes to cross the planet, Earth days (see
+    /// [`wave_time_days`]).
+    pub air_wave_days: f64,
+}
+
+/// Specific heat of air at constant pressure, J/kg/K (dry air, as the
+/// atmosphere of an Earth-like world; Koll & Abbot 2016 take N2's).
+const AIR_CP: f64 = 1004.0;
+/// Stefan-Boltzmann constant, W/m²/K⁴ (CODATA).
+const STEFAN_BOLTZMANN: f64 = 5.670_374e-8;
+
+/// Radiative cooling time of a column of air of surface pressure
+/// `pressure_bar` on a world of surface `gravity` (m/s²) at the equilibrium
+/// temperature `teq_k`, Earth days: `t_rad = c_p p_s / (g σ T_eq³)` (Koll &
+/// Abbot 2016, doi:10.3847/0004-637X/825/2/99, who define it so; Showman &
+/// Guillot 2002, doi:10.1051/0004-6361:20020101, give the same column
+/// scaling with a factor 4 in the denominator). 126 days for Earth (1 bar,
+/// 9.8 m/s², 255 K), 0 for no air.
+pub fn radiative_time_days(pressure_bar: f32, gravity: f32, teq_k: f32) -> f64 {
+    let (p, g, t) = (
+        f64::from(pressure_bar.max(0.0)) * 1e5,
+        f64::from(gravity),
+        f64::from(teq_k),
+    );
+    if p <= 0.0 || g <= 0.0 || t <= 0.0 {
+        return 0.0;
+    }
+    AIR_CP * p / (g * STEFAN_BOLTZMANN * t.powi(3)) / 86_400.0
+}
+
+/// Wave-to-radiative time ratio above which the air keeps large day-night
+/// temperature gradients: "temperature gradients are large when t_wave/t_rad
+/// ≳ O(10⁻²)" and small for much less (Koll & Abbot 2016,
+/// doi:10.3847/0004-637X/825/2/99, Section 6, for dry tidally locked
+/// planets of 0.1 to 10 bar in a steady state; applied here to the air of
+/// any slow rotator, whose day cycles, an extrapolation).
+const WAVE_TO_RADIATIVE_THRESHOLD: f64 = 1e-2;
+/// Gas constant of air, J/kg/K.
+const AIR_R: f64 = 287.0;
+
+/// Time a gravity wave takes to cross a planet of `radius_km` with air at
+/// `teq_k`, Earth days: `t_wave = a / c`, `c = sqrt(R/c_p) sqrt(R T_eq)`
+/// (isothermal air, Koll & Abbot 2016). 0.5 day for Earth.
+pub fn wave_time_days(radius_km: f32, teq_k: f32) -> f64 {
+    let t = f64::from(teq_k).max(1.0);
+    let c = (AIR_R / AIR_CP).sqrt() * (AIR_R * t).sqrt();
+    f64::from(radius_km) * 1e3 / c / 86_400.0
+}
+
+/// Months in a year: the averaging window of a monthly mean.
+const MONTHS_PER_YEAR: f64 = 12.0;
+
+impl DayCycle {
+    /// The solar day of a planet turning once in `sidereal_days` on an
+    /// orbit of `year_days` (prograde): `1 / (1/P_rot − 1/P_orb)`; `None`
+    /// when it never turns away from its star (locked).
+    pub fn new(sidereal_days: f64, year_days: f64) -> Option<Self> {
+        let rate = 1.0 / sidereal_days - 1.0 / year_days;
+        (rate.abs() > 1e-9).then(|| Self {
+            solar_day_days: 1.0 / rate.abs(),
+            year_days,
+            air_tau_days: 0.0,
+            air_wave_days: 0.0,
+        })
+    }
+
+    /// The same day under air that cools radiatively in `air_tau_days`,
+    /// whose waves cross the planet in `air_wave_days`.
+    pub fn with_air(self, air_tau_days: f64, air_wave_days: f64) -> Self {
+        Self {
+            air_tau_days,
+            air_wave_days,
+            ..self
+        }
+    }
+
+    /// Share of the swing the air lets through: a column that cools in
+    /// `t_rad` follows a cycle of period `D` by `1 / sqrt(1 + (2π t_rad /
+    /// D)²)`, the response of a heat reservoir to a periodic forcing (North
+    /// et al. 1981, as for the ground below): the air keeps the heat of
+    /// the day and carries it to the night side, as Koll & Abbot 2016 find
+    /// that atmospheres whose waves cross the planet in more than about
+    /// 10⁻² of their cooling time (an Earth's air: 4×10⁻³) have day-night
+    /// gradients that grow with that ratio. A world without air lets all of
+    /// it through, one under thick air (Venus: 10⁴ days) none.
+    fn air_factor(&self) -> f64 {
+        if self.air_tau_days <= 0.0 {
+            return 1.0;
+        }
+        let storage = 1.0 / (1.0 + (TAU * self.air_tau_days / self.solar_day_days).powi(2)).sqrt();
+        // Transport: the day-night gradient of the air is large when
+        // t_wave / t_rad exceeds about 10⁻² and small below it (Koll &
+        // Abbot 2016); the logistic shape between is the app's.
+        let ratio = self.air_wave_days / self.air_tau_days;
+        storage * ratio / (ratio + WAVE_TO_RADIATIVE_THRESHOLD)
+    }
+
+    /// Share of the day-night swing that a monthly mean keeps:
+    /// `sin(x)/x` with `x = π (month / solar day)`, the mean of a sine over
+    /// a month, 0 when the day is a month or shorter (a month then averages
+    /// whole days away).
+    fn monthly_window(&self) -> f64 {
+        let month = self.year_days / MONTHS_PER_YEAR;
+        if self.solar_day_days <= month {
+            return 0.0;
+        }
+        let x = PI * month / self.solar_day_days;
+        x.sin() / x
+    }
+
+    /// Share of the equilibrium swing a ground of seasonal response
+    /// `damping` (the share it follows of the yearly one,
+    /// [`LAND_SEASONS`], [`SEA_SEASONS`]) follows at the period of the solar
+    /// day: `1 / sqrt(1 + (ω C / λ)²)` with `ω C / λ` fixed by the yearly
+    /// response and scaled as the year over the day (North et al. 1981,
+    /// doi:10.1029/RG019i001p00091). It holds where the day is months long,
+    /// near the year it is calibrated on; the ground of a day of hours is
+    /// not a single heat capacity (it is far from this), which is why the
+    /// monthly window drops those days. The air of the world damps it too
+    /// ([`Self::air_factor`]).
+    fn response(&self, damping: f32) -> f64 {
+        let d = f64::from(damping);
+        let k = (1.0 / (d * d) - 1.0).max(0.0).sqrt();
+        self.air_factor() / (1.0 + (k * self.year_days / self.solar_day_days).powi(2)).sqrt()
+    }
+
+    /// Amplitude of the day-night swing of the light at `latitude` for
+    /// `axial_tilt_deg`, in units of the global mean light: the first
+    /// harmonic of the daytime light (twice the cosine of the latitude at
+    /// the equinox), averaged over the year.
+    fn light_swing(latitude: f64, axial_tilt_deg: f32) -> f64 {
+        const HOURS: usize = 48;
+        const LONGITUDES: usize = 24;
+        let mut sum = 0.0;
+        for k in 0..LONGITUDES {
+            let longitude = (k as f64 + 0.5) / LONGITUDES as f64 * TAU;
+            let delta = declination(axial_tilt_deg, longitude);
+            let (a, b) = (latitude.sin() * delta.sin(), latitude.cos() * delta.cos());
+            // Light 4 max(0, a + b cos h) (relative to the global mean);
+            // its cos h component is the amplitude of the first harmonic.
+            let first: f64 = (0..HOURS)
+                .map(|j| {
+                    let h = (j as f64 + 0.5) / HOURS as f64 * TAU;
+                    4.0 * (a + b * h.cos()).max(0.0) * h.cos()
+                })
+                .sum::<f64>()
+                / HOURS as f64
+                * 2.0;
+            sum += first;
+        }
+        sum / LONGITUDES as f64
+    }
 }
 
 /// The seasonal cycle of a planet's climate: for each row, half the
@@ -268,13 +477,19 @@ impl Seasons {
         }
     }
 
-    /// The seasons of the rows of `grid` for an axial tilt (degrees) and a
-    /// surface pressure (bar); `star` moves rows of sea-level temperature
-    /// as [`crate::star::star_temperatures`] does.
+    /// The seasons of the rows of `grid` for an axial tilt (degrees), a
+    /// surface pressure (bar) and an eccentric `orbit` (`None`: a circular
+    /// one, or a world made before the longitude of perihelion, whose
+    /// seasons ignore the distance to the star), the `day` of a planet
+    /// whose solar day lasts months (see [`DayCycle`]; `None` for a fast
+    /// one, or one locked); `star` moves rows of
+    /// sea-level temperature as [`crate::star::star_temperatures`] does.
     pub fn new(
         grid: &Grid,
         axial_tilt_deg: f32,
         pressure_bar: f32,
+        orbit: Option<EccentricOrbit>,
+        day: Option<DayCycle>,
         star: impl Fn(&mut [f32]),
     ) -> Self {
         let mut rows = row_temperatures(grid, axial_tilt_deg);
@@ -283,21 +498,33 @@ impl Seasons {
         let contrast = crate::atmosphere::heat_contrast(pressure_bar);
         let swing: Vec<f32> = (0..grid.height)
             .map(|y| {
-                let s = insolation_swing(grid.latitude(y), axial_tilt_deg) / (equator - pole);
+                let s =
+                    insolation_swing(grid.latitude(y), axial_tilt_deg, orbit) / (equator - pole);
                 s as f32 * DEGREES_PER_UNIT * contrast
             })
             .collect();
+        // The day-night swing of a slow rotator, per row, before the
+        // response of the ground.
+        let diurnal: Vec<f32> = (0..grid.height)
+            .map(|y| match day {
+                Some(day) => {
+                    let s = DayCycle::light_swing(grid.latitude(y), axial_tilt_deg)
+                        * day.monthly_window()
+                        / (equator - pole);
+                    s as f32 * DEGREES_PER_UNIT * contrast
+                }
+                None => 0.0,
+            })
+            .collect();
         let half_range = |damping: f32| {
-            let mut summer: Vec<f32> = rows
+            let slow = day.map_or(0.0, |d| d.response(damping) as f32);
+            let total: Vec<f32> = swing
                 .iter()
-                .zip(&swing)
-                .map(|(t, s)| t + s * damping)
+                .zip(&diurnal)
+                .map(|(s, d)| s * damping + d * slow)
                 .collect();
-            let mut winter: Vec<f32> = rows
-                .iter()
-                .zip(&swing)
-                .map(|(t, s)| t - s * damping)
-                .collect();
+            let mut summer: Vec<f32> = rows.iter().zip(&total).map(|(t, s)| t + s).collect();
+            let mut winter: Vec<f32> = rows.iter().zip(&total).map(|(t, s)| t - s).collect();
             star(&mut summer);
             star(&mut winter);
             summer
@@ -431,6 +658,78 @@ impl LockedClimate {
             .map(|y| self.at_angle(grid.latitude(y).abs()))
             .collect()
     }
+}
+
+/// Peak cooling of the sea off the west coasts of the subtropics, K: the
+/// cold eastern-boundary currents (California, Canary, Humboldt, Benguela,
+/// Western Australia). In the annual mean of NOAA OI SST v2 on the 1991-2020
+/// normals (Reynolds et al. 2002, doi:10.1175/1520-0442(2002)015<1609:AIISAS>2.0.CO;2),
+/// the sea within 2 000 km west of a coast, from 20° to 30° of latitude in
+/// both hemispheres, is 1.2 to 2.0 K colder than the mean of its latitude
+/// (0.5 to 1.3 K from 30° to 40°, 0.4 to 1.3 K from 10° to 20°; sea and land
+/// of the NCEP/NCAR reanalysis mask, Kalnay et al. 1996,
+/// doi:10.1175/1520-0477(1996)077<0437:TNYRP>2.0.CO;2, 1° cells, so the
+/// narrow cold tongue of the coast itself is smoothed out: calibration to
+/// that table, no source for the value).
+pub const COLD_CURRENT_K: f32 = 1.7;
+/// Distance to the coast to the east up to which the cold current keeps its
+/// full cooling, km: the cooling of that table does not fall with the
+/// distance within 2 000 km. Calibration, no source.
+pub const COLD_CURRENT_FULL_KM: f32 = 1_000.0;
+/// Distance to the coast to the east at which the cooling has gone, km: the
+/// sea beyond 2 000 km of a coast is 0.3 to 0.5 K warmer than its latitude.
+pub const COLD_CURRENT_END_KM: f32 = 2_500.0;
+/// Centre and width (standard deviation) of the cooling in latitude, Earth
+/// degrees: the table's bands put the peak at 20-30° and about 0.6 of it at
+/// 15° and at 35° (calibration, no source for the shape).
+const COLD_CURRENT_LATITUDE_DEG: f64 = 25.0;
+const COLD_CURRENT_SPREAD_DEG: f64 = 10.0;
+
+/// Cooling of the sea by the cold eastern-boundary currents, K (zero or
+/// negative), of every pixel of `grid`: the sea with land to its east in the
+/// same row, within [`COLD_CURRENT_END_KM`], cooled by up to
+/// [`COLD_CURRENT_K`] in the latitudes of the trades ([`Belts::cold_current_share`]).
+/// A pixel is on the west coast of a continent when land lies to its east,
+/// the ocean basin's eastern boundary, in either hemisphere. The moisture
+/// pass reads the cooled sea: colder air holds less vapour, so the coast
+/// behind it is drier (the Atacama, the Namib).
+pub fn cold_currents(grid: &Grid, belts: &Belts, sea: &[bool]) -> Vec<f32> {
+    let w = grid.width as usize;
+    (0..grid.height)
+        .into_par_iter()
+        .flat_map_iter(|y| {
+            let row = &sea[y as usize * w..(y as usize + 1) * w];
+            let share = belts.cold_current_share(grid.latitude(y));
+            let step = grid.dx_km(y);
+            // Steps to the nearest land to the east, walking the row west
+            // to east twice so that the seam does not matter.
+            let mut distance = vec![f32::INFINITY; w];
+            let mut to_land = f32::INFINITY;
+            for k in (0..2 * w).rev() {
+                let x = k % w;
+                if !row[x] {
+                    to_land = 0.0;
+                } else {
+                    to_land += step;
+                }
+                if k < w {
+                    // Land is not cooled.
+                    distance[x] = if row[x] { to_land } else { f32::INFINITY };
+                }
+            }
+            distance.into_iter().map(move |d| {
+                if d.is_finite() && d < COLD_CURRENT_END_KM {
+                    let fade = ((d - COLD_CURRENT_FULL_KM)
+                        / (COLD_CURRENT_END_KM - COLD_CURRENT_FULL_KM))
+                        .clamp(0.0, 1.0);
+                    let smooth = 1.0 - fade * fade * (3.0 - 2.0 * fade);
+                    -COLD_CURRENT_K * share * smooth
+                } else {
+                    0.0
+                }
+            })
+        })
+        .collect()
 }
 
 /// Weight of the large-scale temperature anomaly noise on land, °C: about
@@ -689,6 +988,17 @@ impl Belts {
             -(6.0 * (b - 60.0)).to_radians().sin()
         };
         MERIDIONAL_WIND * shape as f32
+    }
+
+    /// Share, in `[0, 1]`, of the cooling of the cold eastern-boundary
+    /// currents at `latitude` (radians): a Gaussian of
+    /// [`COLD_CURRENT_SPREAD_DEG`] centred on [`COLD_CURRENT_LATITUDE_DEG`],
+    /// both Earth degrees, stretched with the belts like the trade winds
+    /// that drive the upwelling (the currents sit in the trades and the
+    /// subtropical highs).
+    pub fn cold_current_share(&self, latitude: f64) -> f32 {
+        let e = self.earth_latitude(latitude);
+        (-((e - COLD_CURRENT_LATITUDE_DEG) / COLD_CURRENT_SPREAD_DEG).powi(2) / 2.0).exp() as f32
     }
 
     /// Octaves (doublings) by which the large-scale circulation raises or
@@ -1243,7 +1553,7 @@ mod tests {
             circumference_km: 40_000.0,
         };
         // Row 29 is centred on 60.5° N, row 59 on 30.5° N.
-        let earth = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, |_| {});
+        let earth = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, None, |_| {});
         let (land60, sea60) = (earth.half_range(29, true), earth.half_range(29, false));
         assert!((land60 - 19.6).abs() < 1.0, "{land60}");
         assert!((sea60 - 4.4).abs() < 0.5, "{sea60}");
@@ -1253,18 +1563,191 @@ mod tests {
         // Tilted by 90°, the pole swings from a scorching summer to a
         // winter far below freezing.
         let rows = row_temperatures(&grid, 90.0);
-        let tipped = Seasons::new(&grid, 90.0, 1.0, |_| {});
+        let tipped = Seasons::new(&grid, 90.0, 1.0, None, None, |_| {});
         assert!(rows[0] - tipped.half_range(0, true) < -20.0);
         // Dense air damps the seasons; a dim star narrows them in degrees.
-        let dense = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 92.0, |_| {});
+        let dense = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 92.0, None, None, |_| {});
         assert!(dense.half_range(29, true) < 0.11 * land60);
-        let dim = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, |rows| {
+        let dim = Seasons::new(&grid, EARTH_AXIAL_TILT_DEG, 1.0, None, None, |rows| {
             for t in rows {
                 *t = (*t + 273.15) * 0.8 - 273.15;
             }
         });
         assert!((dim.half_range(29, true) - 0.8 * land60).abs() < 1e-3);
         assert_eq!(Seasons::none(180).half_range(29, true), 0.0);
+    }
+
+    #[test]
+    fn an_eccentric_orbit_lights_mars_46_percent_more_at_perihelion() {
+        let mars = EccentricOrbit {
+            eccentricity: 0.0934,
+            perihelion_longitude_deg: 251.0,
+        };
+        let perihelion = mars.light_at(251.0_f64.to_radians());
+        let aphelion = mars.light_at(71.0_f64.to_radians());
+        assert!((perihelion / aphelion - 1.457).abs() < 0.005);
+        // Averaged over time (weights r², Kepler's second law) it is 1.
+        let steps = 20_000;
+        let (mut sum, mut weight) = (0.0, 0.0);
+        for k in 0..steps {
+            let nu = (k as f64 + 0.5) / steps as f64 * TAU;
+            let r = (1.0 - 0.0934 * 0.0934) / (1.0 + 0.0934 * nu.cos());
+            sum += mars.light_at(nu + 251.0_f64.to_radians()) * r * r;
+            weight += r * r;
+        }
+        assert!((sum / weight - 1.0).abs() < 1e-3, "{}", sum / weight);
+    }
+
+    #[test]
+    fn the_sea_west_of_a_subtropical_coast_is_cold() {
+        let grid = Grid {
+            width: 360,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        // An ocean with one continent from 90° to 180° of longitude.
+        let sea: Vec<bool> = (0..grid.pixel_count())
+            .map(|i| !(90..180).contains(&(i % 360)))
+            .collect();
+        let belts = Belts::EARTH;
+        let cool = cold_currents(&grid, &belts, &sea);
+        let at = |lat: f64, x: usize| {
+            let y = (90.0 - lat).round() as usize;
+            cool[y * 360 + x]
+        };
+        // Off the west coast (longitude 89°) at 25° of both hemispheres.
+        assert!(
+            (at(25.0, 89) + COLD_CURRENT_K).abs() < 0.05,
+            "{}",
+            at(25.0, 89)
+        );
+        assert!((at(-25.0, 89) - at(25.0, 89)).abs() < 0.05);
+        // Still full 800 km out (about 9° at 25°), gone far out.
+        assert!(at(25.0, 80) < -0.9 * COLD_CURRENT_K);
+        assert_eq!(at(25.0, 0), 0.0);
+        // Weaker towards the equator and the pole, none on land, none off
+        // the continent's east coast, where the land lies behind.
+        assert!(at(5.0, 89).abs() < 0.2 * COLD_CURRENT_K && at(5.0, 89) <= 0.0);
+        assert!(at(70.0, 89).abs() < 0.01);
+        assert!(at(25.0, 120) == 0.0);
+        assert!(at(25.0, 185).abs() < 0.2, "{}", at(25.0, 185));
+    }
+
+    #[test]
+    fn the_cold_currents_follow_the_trades_of_slow_and_fast_worlds() {
+        // Twice Earth's rotation rate: the belts, and the currents under
+        // the trades, move halfway to the equator.
+        let fast = Belts::new(12.0, 40_075.0);
+        let share = |b: &Belts, deg: f64| b.cold_current_share(deg.to_radians());
+        assert!(share(&fast, 12.5) > 0.99);
+        assert!(share(&Belts::EARTH, 12.5) < 0.7);
+        assert!(share(&Belts::EARTH, 25.0) > 0.99);
+    }
+
+    #[test]
+    fn a_planet_with_a_solar_day_of_months_swings_with_its_day() {
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        // Mercury's 3:2 resonance: 58.6-day turn on an 87.97-day orbit, a
+        // solar day of 176 days.
+        let day = DayCycle::new(58.646, 87.969).unwrap();
+        assert!(
+            (day.solar_day_days - 175.9).abs() < 0.5,
+            "{}",
+            day.solar_day_days
+        );
+        // Locked: no solar day.
+        assert!(DayCycle::new(87.969, 87.969).is_none());
+        let swing = |day: Option<DayCycle>, land: bool| {
+            Seasons::new(&grid, 0.0, 1.0, None, day, |_| {}).half_range(89, land)
+        };
+        // With no tilt and no day cycle there are no seasons at the equator.
+        assert_eq!(swing(None, true), 0.0);
+        // The equator swings by tens of degrees on land, far less on the sea.
+        let (land, sea) = (swing(Some(day), true), swing(Some(day), false));
+        assert!(land > 30.0 && sea < 0.4 * land && sea > 5.0, "{land} {sea}");
+        // Earth's day: a month averages it away. So does a 20-day one.
+        let earth = DayCycle::new(0.9973, 365.25);
+        assert_eq!(swing(earth, true), 0.0);
+        let quick = DayCycle::new(20.0, 365.25);
+        assert_eq!(swing(quick, true), 0.0);
+        // A longer day swings more on land, towards a ceiling.
+        let slow = DayCycle::new(300.0, 365.25 * 10.0);
+        assert!(swing(slow, true) > 0.0);
+        // The poles are lit around a tilted year only; at the equator of a
+        // non-tilted planet the light is overhead at noon, none at the pole.
+        let pole = Seasons::new(&grid, 0.0, 1.0, None, Some(day), |_| {}).half_range(0, true);
+        assert!(pole < 0.2 * land, "{pole}");
+    }
+
+    #[test]
+    fn air_keeps_the_heat_of_a_long_day() {
+        // Earth's air cools in about four months; Mars's in days; Venus's
+        // in decades.
+        let earth = radiative_time_days(1.0, 9.81, 255.0);
+        assert!((earth - 126.0).abs() < 3.0, "{earth}");
+        assert!(radiative_time_days(0.006, 3.7, 210.0) < 5.0);
+        assert!(radiative_time_days(92.0, 8.9, 230.0) > 5_000.0);
+        assert_eq!(radiative_time_days(0.0, 9.81, 255.0), 0.0);
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        let day = DayCycle::new(58.646, 87.969).unwrap();
+        let swing = |day: DayCycle| {
+            Seasons::new(&grid, 0.0, 1.0, None, Some(day), |_| {}).half_range(89, true)
+        };
+        // A 1 bar atmosphere cuts the 89 C swing of a 176-day day to a
+        // quarter or less; an airless world keeps all of it.
+        let airless = swing(day);
+        let airy = swing(day.with_air(earth, 0.5));
+        assert!(airy < 0.1 * airless && airy > 1.0, "{airy} {airless}");
+        assert!(swing(day.with_air(0.1, 0.5)) > 0.98 * airless);
+    }
+
+    #[test]
+    fn eccentric_orbits_make_uneven_seasons_where_the_perihelion_falls() {
+        let grid = Grid {
+            width: 4,
+            height: 180,
+            circumference_km: 40_000.0,
+        };
+        let swing = |orbit: Option<EccentricOrbit>, tilt: f32, y: u32| {
+            Seasons::new(&grid, tilt, 1.0, orbit, None, |_| {}).half_range(y, true)
+        };
+        let mars = |perihelion_longitude_deg| {
+            Some(EccentricOrbit {
+                eccentricity: 0.0934,
+                perihelion_longitude_deg,
+            })
+        };
+        // No tilt: the distance alone makes the seasons, in both
+        // hemispheres at once, strongest at the equator where the light is.
+        assert_eq!(swing(None, 0.0, 89), 0.0);
+        assert!(swing(mars(251.0), 0.0, 89) > 4.0);
+        // Row 29 is centred on 60.5° N. With the perihelion at the northern
+        // summer solstice (90°) the northern summer is brighter and its
+        // winter, far from the star, darker; at the winter solstice (270°)
+        // the two are milder.
+        let (summer, none, winter) = (
+            swing(mars(90.0), 25.19, 29),
+            swing(None, 25.19, 29),
+            swing(mars(270.0), 25.19, 29),
+        );
+        assert!(
+            summer > none + 1.5 && winter < none - 1.5,
+            "{summer} {none} {winter}"
+        );
+        // A circular orbit has no perihelion.
+        let circular = EccentricOrbit {
+            eccentricity: 0.0,
+            perihelion_longitude_deg: 90.0,
+        };
+        assert_eq!(swing(Some(circular), 25.19, 29), none);
     }
 
     /// A row of ocean on the west half and flat land on the east half.

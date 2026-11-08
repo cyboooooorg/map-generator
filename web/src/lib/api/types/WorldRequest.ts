@@ -43,6 +43,13 @@ hz_position?: number,
  */
 eccentricity?: number, 
 /**
+ * Longitude of the orbit's perihelion, degrees from the spring equinox,
+ * in `[0, 360]` (Earth: 283): where in the seasons the planet is
+ * closest to its star. Drawn from the seed when left out; it matters
+ * on eccentric orbits only.
+ */
+perihelion_longitude_deg?: number, 
+/**
  * Epoch of the plates, Ma from the present (negative in the past), in
  * `[-300, 300]`; the present when left out (never drawn).
  */
