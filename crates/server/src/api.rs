@@ -179,12 +179,15 @@ pub enum ErrorDetail {
     UnknownStar { star: String },
     /// Both `orbit_au` and `hz_position` are set.
     OrbitAndPosition,
-    /// The moons asked for find no stable orbits around the planet (locked
-    /// to its star or too close to it, with its star and orbit set).
+    /// The moons asked for find no stable orbits around the planet (too
+    /// close to its star: a Hill sphere too small, or despun by its star's
+    /// tides with no moon light enough to last; its star and orbit set).
     NoRoomForMoons { count: u8 },
     /// Moons asked for on the moon of a giant, which keeps none.
     MoonsOfAMoon,
-    /// Moons asked for on a hot giant, which keeps none.
+    /// More moons asked for than a giant this close to its star keeps: a
+    /// hot giant keeps none, one its star has locked only light ones, and
+    /// a small Hill sphere fewer.
     HotGiantMoons { count: u8 },
     /// More planets asked for than a system holds.
     TooManyPlanets { asked: u32, max: u32 },

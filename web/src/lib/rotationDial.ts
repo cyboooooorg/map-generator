@@ -14,7 +14,7 @@
 // lat cos lon]`, y along its spin axis; angles about +y run from +z to +x,
 // as a longitude does.
 import type { System } from './api/types/System';
-import { libration, placeSystem } from './systemSky';
+import { libration, librationAmplitude, placeSystem } from './systemSky';
 import type { SkyBody, Vec3 } from './skyBodies';
 
 export interface DialState {
@@ -30,6 +30,21 @@ export interface DialState {
   sun: Vec3 | null;
   /** The planet a moon orbits, projected on the equator (unit), null for a planet. */
   host: Vec3 | null;
+  /** The star's height above the equator, radians, −π/2 to π/2 (see the dial's vertical half-circle). */
+  sunAltitude: number;
+  /** The other bodies of the planet's system in the sky: from a moon its host and the other moons, from a planet its moons (see DialBody). */
+  bodies: DialBody[];
+}
+
+/** A body of the sky on the dial: a quarter-circle from the ring up or down to its height. */
+export interface DialBody {
+  id: string;
+  /** Its direction projected on the equator (unit), null when within 1° of the spin axis. */
+  bearing: Vec3 | null;
+  /** Its height above the equator, radians. */
+  altitude: number;
+  /** The planet the body shown orbits. */
+  host: boolean;
 }
 
 export interface DialFigures {
@@ -38,9 +53,11 @@ export interface DialFigures {
   solarHours: number | null;
   /** Local time at the pointer's meridian, in local hours [0, 24): noon when the sun crosses it. */
   localHours: number;
-  /** Synchronous bodies only (null otherwise): the libration now and its amplitude, 2e, radians. */
+  /** Synchronous bodies only (null otherwise): the libration now and its amplitude (about 2e, exact), radians. */
   libration: number | null;
   librationAmplitude: number | null;
+  /** Held by its star's tides in the 3:2 spin-orbit resonance (a free dial, three turns every two orbits). */
+  resonant: boolean;
 }
 
 const TAU = 2 * Math.PI;
@@ -67,6 +84,8 @@ const onEquator = (v: Vec3): Vec3 | null => {
 };
 /** The angle of a direction about +y, from +z towards +x. */
 const bearing = (v: Vec3) => Math.atan2(v[0], v[2]);
+/** A direction's height above the equatorial plane, radians. */
+export const altitudeOf = (v: Vec3) => Math.asin(Math.max(-1, Math.min(1, v[1] / (Math.hypot(...v) || 1))));
 
 /**
  * The dial of body `shown` after `days`, `spinOffset` radians of extra turn
@@ -116,13 +135,32 @@ export function rotationDial(
   const localHours = wrap(12 + (24 * (pointerLongitude - bearing(sky.sun))) / TAU, 24);
 
   return {
-    state: { locked, zero, pointerLongitude, reading, sun, host: parent ? host : null },
+    state: {
+      locked,
+      zero,
+      pointerLongitude,
+      reading,
+      sun,
+      host: parent ? host : null,
+      sunAltitude: altitudeOf(sky.sun),
+      // The planet's own system: from a moon, its planet and the other
+      // moons; from a planet, its moons. Other planets are left out.
+      bodies: sky.bodies.flatMap((body, k) => {
+        const id = sky.ids[k] ?? '';
+        const other = system.bodies.find((b) => b.id === id);
+        const local = parent ? id === parent.id || other?.parent === parent.id : other?.parent === self.id;
+        return local
+          ? [{ id, bearing: onEquator(body.direction), altitude: altitudeOf(body.direction), host: id === parent?.id }]
+          : [];
+      }),
+    },
     figures: {
       siderealHours,
       solarHours,
       localHours,
       libration: locked ? libration(self.orbit, days) : null,
-      librationAmplitude: locked ? 2 * self.orbit.eccentricity : null,
+      librationAmplitude: locked ? librationAmplitude(self.orbit.eccentricity) : null,
+      resonant: !locked && (self.spin.spin_orbit_3_2 ?? false),
     },
   };
 }
@@ -185,7 +223,7 @@ export function formatDialAngle(radians: number, signed: boolean, number: (value
 
 /** The parameters of the dial's two lines of figures, written out (see the `dial…` messages). */
 export type DialFigureText =
-  | { locked: false; angle: string; time: string; sidereal: string; solar: string | null }
+  | { locked: false; resonant: boolean; angle: string; time: string; sidereal: string; solar: string | null }
   | { locked: true; libration: string; amplitude: string; time: string; solar: string | null };
 
 /**
@@ -215,6 +253,7 @@ export function dialFigureText(
   }
   return {
     locked: false,
+    resonant: figures.resonant,
     angle: formatDialAngle(state.reading, false, number),
     time,
     sidereal: formatDayLength(figures.siderealHours, units, format),

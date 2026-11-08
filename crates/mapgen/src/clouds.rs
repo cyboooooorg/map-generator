@@ -16,7 +16,7 @@
 //! streets and bands. Its features are set in km, so they do not depend on
 //! the map size.
 use crate::atmosphere::CloudKind;
-use crate::climate::circulation_band;
+use crate::climate::Belts;
 use crate::geo::Grid;
 use crate::noise::{fbm, stream, stream_seed};
 use noise::Perlin;
@@ -37,6 +37,8 @@ pub struct CloudInput<'a> {
     pub cover_shift: f32,
     /// Precipitation term of the moisture model, in `[-1, 1]` (wet = 1).
     pub precipitation: &'a [f32],
+    /// The planet's wind belts, which set where air rises and sinks.
+    pub belts: Belts,
     pub seed: u32,
 }
 
@@ -62,7 +64,8 @@ pub fn clouds(input: &CloudInput) -> Vec<f32> {
             match input.kind {
                 CloudKind::Water => {
                     let rain = input.precipitation.get(i).copied().unwrap_or(0.0);
-                    water(&perlin, unit, lat, frequency, rain, shift)
+                    let band = input.belts.band(lat);
+                    water(&perlin, unit, lat, frequency, rain, band, shift)
                 }
                 CloudKind::Sulfuric | CloudKind::Dust => {
                     // The squeeze fades out towards the poles, where
@@ -104,7 +107,17 @@ pub fn clouds(input: &CloudInput) -> Vec<f32> {
 ///   stretched east-west only at mid-latitudes, where the westerlies draw
 ///   fronts into long bands; tropical clouds are convective clusters, polar
 ///   ones shapeless decks. A finer noise breaks the edges into cells.
-fn water(perlin: &Perlin, unit: [f64; 3], lat: f64, frequency: f64, rain: f32, shift: f32) -> f32 {
+///
+/// `band` is the circulation band at the point (see [`Belts::band`]).
+fn water(
+    perlin: &Perlin,
+    unit: [f64; 3],
+    lat: f64,
+    frequency: f64,
+    rain: f32,
+    band: f32,
+    shift: f32,
+) -> f32 {
     let at = |offset: f64, scale: f64, octaves: u32, p: [f64; 3]| {
         fbm(
             perlin,
@@ -132,7 +145,7 @@ fn water(perlin: &Perlin, unit: [f64; 3], lat: f64, frequency: f64, rain: f32, s
     let itcz = (-(lat_f / 0.14).powi(2)).exp();
     let polar = smoothstep(0.15, 0.5, lat.cos() as f32);
     let stratus = 0.3 * (1.0 - polar);
-    let rising = 0.12 * itcz + 0.15 * circulation_band(lat) + 0.25 * rain * polar + stratus;
+    let rising = 0.12 * itcz + 0.15 * band + 0.25 * rain * polar + stratus;
     let value = rising + 1.5 * systems + (0.6 + 0.3 * itcz) * cells + 0.5 * shift + 0.2;
     smoothstep(0.0, 0.9, value)
 }
@@ -151,6 +164,7 @@ mod tests {
             kind,
             cover_shift,
             precipitation: rain,
+            belts: Belts::EARTH,
             seed: 3,
         }
     }

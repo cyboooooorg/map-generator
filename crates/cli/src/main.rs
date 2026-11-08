@@ -47,7 +47,8 @@ struct Args {
     #[arg(long, value_parser = parse_in(request::CIRCUMFERENCE_KM))]
     circumference: Option<f32>,
 
-    /// Axial tilt in degrees, in [0, 90] [default: random in 5..40]
+    /// Axial tilt in degrees, in [0, 90] [default: random in 5..40, or 0..85
+    /// on a planet without a large moon to steady it]
     #[arg(long, value_parser = parse_in(request::AXIAL_TILT_DEG))]
     axial_tilt: Option<f32>,
 
@@ -82,7 +83,8 @@ struct Args {
     /// Eccentricity of the orbit, in [0, 0.9]: 0 circular (Earth: 0.017,
     /// Mercury: 0.206); it raises the light received over a year by
     /// 1/sqrt(1 − e²) [default: from the preset, else drawn like the planets
-    /// known, 0 for tidally locked planets]
+    /// known, 0 for the closest planets, whose orbits the tides have
+    /// circularised]
     #[arg(long, value_parser = parse_in(request::ECCENTRICITY))]
     eccentricity: Option<f32>,
 
@@ -96,7 +98,8 @@ struct Args {
 
     /// Moons: `auto`, those the seed draws (about one rocky planet in 12
     /// has a large moon, small worlds often a companion, others small
-    /// debris or captured moons, planets locked to their star none),
+    /// debris or captured moons, planets despun by their star only moonlets
+    /// light enough to last),
     /// `none`, or a number from 1 to 6: that many moons, the star and orbit
     /// drawn again if they leave no room for them [default: auto]
     #[arg(long)]

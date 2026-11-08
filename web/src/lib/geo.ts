@@ -73,6 +73,62 @@ export function raySphere(origin: Vec3, direction: Vec3, radius: number): number
   return t >= 0 ? t : null;
 }
 
+/**
+ * Distance along the ray to the first hit of a displaced surface, or null.
+ * `radiusAt` gives the surface's radius along a unit direction and
+ * `maxRadius` bounds it. The ray is marched through the shell of that
+ * bound, then the first step that ends below the surface is bisected. With
+ * a flat surface (`maxRadius` at the sphere's own radius) it is `raySphere`.
+ */
+export function rayRelief(
+  origin: Vec3,
+  direction: Vec3,
+  radiusAt: (x: number, y: number, z: number) => number,
+  maxRadius: number,
+  minRadius = 1,
+  steps = 48,
+): number | null {
+  const [ox, oy, oz] = origin;
+  const [dx, dy, dz] = direction;
+  const a = dx * dx + dy * dy + dz * dz;
+  const b = 2 * (ox * dx + oy * dy + oz * dz);
+  const c = ox * ox + oy * oy + oz * oz - maxRadius * maxRadius;
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return null;
+  const root = Math.sqrt(discriminant);
+  const enter = Math.max(0, (-b - root) / (2 * a));
+  const leave = (-b + root) / (2 * a);
+  if (leave < 0) return null;
+  // How far the ray is above the surface at `t` (negative below it).
+  const above = (t: number): number => {
+    const x = ox + dx * t;
+    const y = oy + dy * t;
+    const z = oz + dz * t;
+    const r = Math.hypot(x, y, z);
+    return r - radiusAt(x / r, y / r, z / r);
+  };
+  // Never needed past the sphere of the lowest surface: the ray is below it.
+  const low = raySphere(origin, direction, minRadius);
+  const end = low === null ? leave : Math.min(leave, low);
+  let previous = enter;
+  if (above(previous) <= 0) return previous;
+  for (let i = 1; i <= steps; i++) {
+    const t = enter + ((end - enter) * i) / steps;
+    if (above(t) <= 0) {
+      let lo = previous;
+      let hi = t;
+      for (let k = 0; k < 14; k++) {
+        const mid = (lo + hi) / 2;
+        if (above(mid) > 0) lo = mid;
+        else hi = mid;
+      }
+      return hi;
+    }
+    previous = t;
+  }
+  return null;
+}
+
 /** Distance along the ray to the plane z = 0, or null if parallel or behind. */
 export function rayPlaneZ0(origin: Vec3, direction: Vec3): number | null {
   if (Math.abs(direction[2]) < 1e-12) {

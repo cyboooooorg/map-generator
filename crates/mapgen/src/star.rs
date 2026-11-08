@@ -525,9 +525,18 @@ pub struct StarInfo {
     pub lifetime_gyr: f32,
     /// Time for the star's tides to lock the planet's spin, Gyr.
     pub locking_gyr: f32,
-    /// Whether the planet is tidally locked: its locking time is shorter
-    /// than the star's age ([`AGE_GYR`] or the star's lifetime).
+    /// Whether the planet is tidally locked, one face to its star: its
+    /// locking time is shorter than the star's age ([`AGE_GYR`] or the
+    /// star's lifetime) and its eccentricity under 0.06 (see
+    /// `crate::spin`).
     pub tidally_locked: bool,
+    /// Whether the star's tides hold the planet in the 3:2 spin–orbit
+    /// resonance instead, three turns every two orbits, as Mercury: despun
+    /// on an orbit of eccentricity 0.06 or more (see `crate::spin`). Worlds
+    /// made before it: false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub spin_orbit_3_2: bool,
     /// Colour of the star's light, linear RGB, the Sun white.
     pub light: [f32; 3],
     /// Metallicity, `[Fe/H]` in dex (0 the Sun's). Worlds made before it
@@ -571,7 +580,8 @@ impl StarInfo {
             angular_diameter_deg: angular_diameter_deg(v.radius, orbit_au),
             lifetime_gyr: lifetime,
             locking_gyr: locking,
-            tidally_locked: locking < AGE_GYR.min(lifetime),
+            tidally_locked: crate::spin::locked(locking, AGE_GYR.min(lifetime), eccentricity),
+            spin_orbit_3_2: crate::spin::resonant(locking, AGE_GYR.min(lifetime), eccentricity),
             light: light_colour(v.teff_k),
             metallicity: 0.0,
         }
@@ -658,9 +668,10 @@ pub struct StarClimate {
     pub star: f32,
     pub orbit_au: f32,
     pub eccentricity: f32,
-    /// Whether a carbonate-silicate cycle (plate tectonics and liquid
-    /// water) regulates the greenhouse, as on Earth.
-    pub regulated: bool,
+    /// How strongly a carbonate-silicate cycle regulates the greenhouse,
+    /// in `[0, 1]`: 1 as on Earth (plate tectonics and liquid water), less
+    /// on a wet stagnant-lid world, 0 without one.
+    pub regulation: f32,
     /// Internal heat, K (see `ClimateShift::internal_heat`).
     pub internal_heat_k: f32,
 }
@@ -673,7 +684,9 @@ pub struct StarClimate {
 /// - **regulated** planets keep a temperate climate across the habitable
 ///   zone, as their greenhouse grows when the light weakens: from +30 °C at
 ///   the inner edge through Earth's climate at Earth's place to −15 °C at
-///   the outer edge; beyond the edges they follow the flux like the others;
+///   the outer edge; beyond the edges they follow the flux like the others.
+///   A partial regulation takes that share of the way from the unregulated
+///   temperature to the regulated one;
 /// - **internal heat** adds as radiated power: `T = (T⁴ + T_int⁴)^(1/4)`.
 ///
 /// The Sun at 1 AU leaves the rows unchanged.
@@ -686,7 +699,14 @@ pub fn star_temperatures(rows: &mut [f32], climate: StarClimate) {
             *t = (*t + K) * f - K;
         }
     };
-    if climate.regulated {
+    if climate.regulation > 0.0 {
+        let free: Option<Vec<f32>> = (climate.regulation < 1.0).then(|| {
+            let mut free = rows.to_vec();
+            if s != 1.0 {
+                scale(&mut free, s);
+            }
+            free
+        });
         let teff = values(climate.star).teff_k;
         let (inner, outer) = habitable_fluxes(teff);
         // Positions relative to the model Sun's: Earth's place is exactly
@@ -708,6 +728,12 @@ pub fn star_temperatures(rows: &mut [f32], climate: StarClimate) {
         }
         if let Some(beyond) = beyond {
             scale(rows, beyond);
+        }
+        if let Some(free) = free {
+            let w = climate.regulation.min(1.0);
+            for (t, f) in rows.iter_mut().zip(free) {
+                *t = f + w * (*t - f);
+            }
         }
     } else if s != 1.0 {
         scale(rows, s);
@@ -815,7 +841,7 @@ mod tests {
     #[test]
     fn the_sun_at_one_au_keeps_the_climate() {
         let rows = vec![-18.0, 12.0, 27.0];
-        for regulated in [false, true] {
+        for regulation in [0.0, 0.5, 1.0] {
             let mut same = rows.clone();
             star_temperatures(
                 &mut same,
@@ -823,7 +849,7 @@ mod tests {
                     star: SUN,
                     orbit_au: 1.0,
                     eccentricity: 0.0,
-                    regulated,
+                    regulation,
                     internal_heat_k: 0.0,
                 },
             );
@@ -835,7 +861,7 @@ mod tests {
 
     #[test]
     fn the_star_warms_and_cools_planets() {
-        let at = |orbit_au: f32, regulated: bool, internal_heat_k: f32| {
+        let at = |orbit_au: f32, regulation: f32, internal_heat_k: f32| {
             let mut rows = vec![14.0];
             star_temperatures(
                 &mut rows,
@@ -843,7 +869,7 @@ mod tests {
                     star: SUN,
                     orbit_au,
                     eccentricity: 0.0,
-                    regulated,
+                    regulation,
                     internal_heat_k,
                 },
             );
@@ -851,24 +877,28 @@ mod tests {
         };
         // Mars, unregulated: 0.81 × 287 K.
         assert!(
-            (at(1.524, false, 0.0) - -40.5).abs() < 1.0,
+            (at(1.524, 0.0, 0.0) - -40.5).abs() < 1.0,
             "{}",
-            at(1.524, false, 0.0)
+            at(1.524, 0.0, 0.0)
         );
         // Venus before its greenhouse.
         assert!(
-            (at(0.723, false, 0.0) - 64.5).abs() < 1.0,
+            (at(0.723, 0.0, 0.0) - 64.5).abs() < 1.0,
             "{}",
-            at(0.723, false, 0.0)
+            at(0.723, 0.0, 0.0)
         );
         // A regulated planet stays temperate across the zone: −15 °C at most
         // at its outer edge, then cools.
         let outer_au = orbit_at(SUN, 1.0);
-        assert!((at(outer_au, true, 0.0) - -1.0).abs() < 0.1);
-        assert!(at(outer_au * 1.5, true, 0.0) < -30.0);
+        assert!((at(outer_au, 1.0, 0.0) - -1.0).abs() < 0.1);
+        assert!(at(outer_au * 1.5, 1.0, 0.0) < -30.0);
+        // A weaker cycle (a wet stagnant lid) goes part of the way.
+        let (free, half, full) = (at(1.3, 0.0, 0.0), at(1.3, 0.5, 0.0), at(1.3, 1.0, 0.0));
+        assert!(free < half && half < full, "{free} {half} {full}");
+        assert!((half - 0.5 * (free + full)).abs() < 1e-3);
         // Internal heat keeps a far world warm.
-        assert!(at(30.0, false, 0.0) < -200.0);
-        assert!(at(30.0, false, 290.0) > 10.0);
+        assert!(at(30.0, 0.0, 0.0) < -200.0);
+        assert!(at(30.0, 0.0, 290.0) > 10.0);
     }
 
     #[test]

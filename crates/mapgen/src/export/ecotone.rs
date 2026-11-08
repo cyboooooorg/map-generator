@@ -156,6 +156,7 @@ mod tests {
             elevation: 0.05,
             moisture: 0.6,
             temperature: 6.0,
+            seasonality: 10.0,
             volcanic_zone: 0.0,
             coast_distance_km: 1000.0,
             lake: false,
