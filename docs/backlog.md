@@ -515,13 +515,16 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     with its progress, skies and the star view from `system.json`);
   - the CLI writing systems (`systems/<id>/`) and the deployment
     mounting `systems/`.
-- **Next:** phase 6, a card for every body and renaming any of them;
-  phase 7, the clean-up of the world layout (`/api/worlds`, the moon and
-  host exports, `worlds/`).
+- **Done since:** phase 6, a card for every body (`751535e`) and
+  renaming any of them (`23f33c8`).
+- **Next:** phase 7, the clean-up of the world layout. The `/api/worlds`
+  routes are gone from the server; what remains is to check the moon and
+  host exports and the legacy `worlds/` directory.
 
 ## 17. Asteroid belts and Lagrange points
 
-- **Status:** in progress
+- **Status:** done (the four tasks of the plan: the draw, the system,
+  the star view, and the small bodies marked in a planet's sky)
 - **Plan:** [2026-11-06-asteroid-belts.md](superpowers/plans/2026-11-06-asteroid-belts.md)
 - **Analysis:** [13-asteroids.md](analysis/13-asteroids.md)
 - **Problem:** a system has a star, planets and moons, but no small
@@ -760,3 +763,24 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
 | 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
 | 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |
+
+## 23. Extreme trans-Neptunian objects (Sednoids)
+
+- **Status:** todo (study first)
+- **Problem:** a system's small bodies stop at the belts and the scattered
+  disk (item 17). Bodies like Sedna, 2012 VP113 and Leleākūhonua, on very
+  eccentric orbits whose perihelia lie far beyond the giants' reach
+  (detached objects, 50 to 80 AU and more, aphelia of hundreds to
+  thousands of AU), are not drawn.
+- **Study:** what they are and how many there are (the observed
+  Sednoids and other detached objects, with their perihelia, aphelia and
+  inclinations); the formation scenarios that place them (a passing star,
+  the Sun's birth cluster, a distant undiscovered planet, the inner Oort
+  cloud) and what each implies for other stars; their sizes and surfaces;
+  how often other systems could have them, and whether anything constrains
+  that from observations; how they show in the star view (orbits far
+  wider than the planets', the system's scale) and whether they get
+  cards and maps like dwarf planets.
+- **Then:** add them to the system draw on a stream of their own (so
+  existing systems keep their other bodies), show them in the star view,
+  and give the large ones a card and, if decided, a map.

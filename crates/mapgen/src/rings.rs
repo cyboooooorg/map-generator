@@ -13,7 +13,7 @@
 //!   the giant's other moons (Hill stable from the innermost, Gladman
 //!   1993) and above its upper atmosphere (1.11 radii, Saturn's D ring).
 //! - **Gaps belong to moons.** A moonlet in the outer 40 % of the rings
-//!   clears a gap round its orbit, 7 to 17 of its Hill radii wide, wider
+//!   clears a gap round its orbit, 7.5 to 17 of its Hill radii wide, wider
 //!   for the larger (Daphnis keeps the 40 km Keeler gap, Pan the 325 km
 //!   Encke gap). It grew from a dense core until it filled its Roche lobe
 //!   (Porco et al. 2007): its size follows from its core and its distance,
@@ -939,7 +939,8 @@ mod tests {
     #[test]
     fn a_moonlet_grows_from_its_core_until_it_fills_its_roche_lobe() {
         // A core of solid ice at Pan's distance under a mantle of 0.14
-        // g/cm³ ends at 1.9 times its size (Porco et al. 2007, eq. 3).
+        // g/cm³ ends at 1.86 times its size, at the critical density of
+        // 0.449 g/cm³ (Porco et al. 2007, eq. 3); the bound is loose.
         let a = 133_584.0 / SATURN_KM;
         let crit = critical_density(SATURN_DENSITY, a);
         let (radius_km, density, shape) = grown(9.0, 0.14, crit, [0.5, 0.5]);

@@ -337,6 +337,21 @@ export function systemReach(system: System, shown: string): number | null {
   return (3 * furthest) / Math.max(self.physical.radius_km, 1e-6);
 }
 
+/**
+ * How far out the camera must be able to go, in radii of the body shown
+ * from its centre, to see a Hill sphere whole from outside: its farthest
+ * point from the body, `|centre| + radius`, over the sine of the view's
+ * half field (20 degrees of the 40 degree field, 2.9), plus a tenth for the
+ * margin, rounded up to a step of 10 % so that a host moving on its orbit
+ * does not move the limit every frame. `centre` and `radius` are in radii
+ * of the body shown.
+ */
+export function hillReach(centre: readonly [number, number, number], radius: number): number {
+  const farthest = Math.hypot(centre[0], centre[1], centre[2]) + Math.max(radius, 0);
+  const reach = (farthest * 1.1) / Math.sin((20 * Math.PI) / 180);
+  return reach > 0 ? 1.1 ** Math.ceil(Math.log(reach) / Math.log(1.1) - 1e-9) : 0;
+}
+
 /** Earth masses in a Sun's mass. */
 const EARTH_PER_SUN = 332_946;
 
