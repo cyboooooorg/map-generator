@@ -21,7 +21,7 @@ export const en = {
   },
   playback: {
     dayOfYear: (p: { day: string; year: string }) => `day ${p.day} of ${p.year}`,
-    yearHelp: 'The day of the planet\'s year: the seasons, the hour and the moons move with it',
+    yearHelp: 'The day of the planet\'s year, counted from its northern spring equinox: the seasons, the hour and the moons move with it',
     toStart: 'Back to day 1',
     label: 'Playback',
     play: 'Play',
@@ -621,7 +621,7 @@ export const en = {
     reliefResetHelp: 'Back to the true relief (×1)',
     sunlight: 'Sunlight',
     season: 'Season',
-    seasonHelp: 'Sun declination follows the axial tilt',
+    seasonHelp: 'Sun declination follows the axial tilt: spring equinox at the start, summer solstice at a quarter (in a system, by the planet\'s orbit, the seasons unequal when it is eccentric)',
     play: 'Play',
     pause: 'Pause',
     playHelp: 'Play the seasons (S)',

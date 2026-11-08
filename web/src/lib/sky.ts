@@ -109,3 +109,19 @@ export function sunDeclinationDeg(axialTiltDeg: number, season: number): number 
   const tilt = (axialTiltDeg * Math.PI) / 180;
   return (Math.asin(Math.sin(tilt) * Math.sin(2 * Math.PI * season)) * 180) / Math.PI;
 }
+
+/**
+ * Which of the four named dates (0 spring equinox, 1 summer solstice, 2
+ * autumn equinox, 3 winter solstice) the sun's latitude shows, or null when
+ * it is between them. The slider position only says the date is near: the
+ * name is kept when the sun is truly there, over the tilt at a solstice
+ * (within `toleranceDeg`) and over the equator at an equinox, so a solstice
+ * label never states 22.8° on a world tilted 23.4°.
+ */
+export function namedSeason(season: number, declinationDeg: number, axialTiltDeg: number, toleranceDeg = 0.1): number | null {
+  const quarter = season * 4;
+  const nearest = Math.round(quarter);
+  if (Math.abs(quarter - nearest) >= 0.12) return null;
+  const expected = nearest % 2 === 0 ? 0 : Math.abs(axialTiltDeg);
+  return Math.abs(Math.abs(declinationDeg) - expected) <= toleranceDeg ? ((nearest % 4) + 4) % 4 : null;
+}
