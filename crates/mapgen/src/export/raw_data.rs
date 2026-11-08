@@ -60,8 +60,11 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// (see [`crate::biome::BiomeRules::is_legacy`]) and its linear moisture;
 /// version 12 gives the seasons of a world whose solar day lasts months the
 /// swing of its day (see [`crate::climate::DayCycle`]): version 11 worlds
-/// keep the seasons they were made with.
-pub const FORMAT_VERSION: u32 = 12;
+/// keep the seasons they were made with. Version 13 samples the smooth
+/// climate noise fields on a coarser grid and interpolates them (see
+/// [`crate::coarse`]): the same seed gives slightly different worlds from
+/// then on. Nothing reads a world differently by it.
+pub const FORMAT_VERSION: u32 = 13;
 
 /// First format version whose biomes read the seasonal cycle.
 pub const SEASONS_VERSION: u32 = 11;

@@ -25,6 +25,29 @@ use rayon::prelude::*;
 use serde::Serialize;
 use std::f64::consts::PI;
 
+/// The climate noise fields of [`Sampler::climate`]: smooth, sampled on a
+/// coarser grid by the generation (see [`crate::coarse`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClimateField {
+    TemperatureAnomaly,
+    Moisture,
+    VariabilityT,
+    VariabilityM,
+    HighlandJitter,
+}
+
+impl ClimateField {
+    pub const COUNT: usize = 5;
+    /// Every field, in the order [`Sampler::sample_with`] takes them.
+    pub const ALL: [ClimateField; Self::COUNT] = [
+        Self::TemperatureAnomaly,
+        Self::Moisture,
+        Self::VariabilityT,
+        Self::VariabilityM,
+        Self::HighlandJitter,
+    ];
+}
+
 /// Every intermediate noise value computed for one pixel.
 #[derive(Clone, Copy)]
 pub struct Sample {
@@ -551,6 +574,51 @@ impl Sampler {
 
     /// Samples every noise layer for the pixel at column `x`, row `y`.
     pub fn sample(&self, x: u32, y: u32) -> Sample {
+        self.sample_with(x, y, |p| ClimateField::ALL.map(|f| self.climate(f, p)))
+    }
+
+    /// One climate noise field at a point of the unit sphere (the map
+    /// point: the climate does not move with the plates).
+    pub fn climate(&self, field: ClimateField, [nx, ny, nz]: [f64; 3]) -> f32 {
+        let s = self.noise_scale;
+        let (noise, f, offset, octaves) = match field {
+            // Features of ~3 000 km: whole zones shift between continents.
+            ClimateField::TemperatureAnomaly => (&self.anomaly_noise, 1.2 * s, [0.0; 3], 3),
+            ClimateField::Moisture => (&self.moisture_noise, 1.5 * s, [0.0; 3], 4),
+            // Features from ~1 000 km down to ~60 km; two independent samples.
+            ClimateField::VariabilityT => (&self.variability_noise, 6.0 * s, [0.0; 3], 5),
+            ClimateField::VariabilityM => (&self.variability_noise, 6.0 * s, [17.3, -4.1, 9.7], 5),
+            ClimateField::HighlandJitter => (&self.highland_noise, 4.0 * s, [0.0; 3], 4),
+        };
+        fbm(
+            noise,
+            nx * f + offset[0],
+            ny * f + offset[1],
+            nz * f + offset[2],
+            octaves,
+        )
+    }
+
+    /// The highest frequency of a climate field's noise, in cycles per unit
+    /// of the sphere's radius: its finest octave.
+    pub fn climate_frequency(&self, field: ClimateField) -> f64 {
+        let s = self.noise_scale;
+        match field {
+            ClimateField::TemperatureAnomaly => 1.2 * s * 4.0,
+            ClimateField::Moisture => 1.5 * s * 8.0,
+            ClimateField::VariabilityT | ClimateField::VariabilityM => 6.0 * s * 16.0,
+            ClimateField::HighlandJitter => 4.0 * s * 8.0,
+        }
+    }
+
+    /// Like [`Self::sample`], with the climate fields (in [`ClimateField::ALL`]
+    /// order) given by `climate` at the pixel's map point.
+    pub fn sample_with(
+        &self,
+        x: u32,
+        y: u32,
+        climate: impl FnOnce([f64; 3]) -> [f32; ClimateField::COUNT],
+    ) -> Sample {
         let s = self.noise_scale;
 
         // Spherical mapping of the pixel centre: longitude 0..2π, latitude
@@ -736,37 +804,13 @@ impl Sampler {
         let biome_elevation = (elevation - self.sea_level).clamp(-1.0, 1.0);
 
         // The climate stays at the map point.
-        let [nx, ny, nz] = map_point;
-        let moisture = fbm(
-            &self.moisture_noise,
-            nx * 1.5 * s,
-            ny * 1.5 * s,
-            nz * 1.5 * s,
-            4,
-        );
-
-        // Features of ~3 000 km: whole zones shift between continents.
-        let temperature_anomaly = fbm(
-            &self.anomaly_noise,
-            nx * 1.2 * s,
-            ny * 1.2 * s,
-            nz * 1.2 * s,
-            3,
-        );
-
-        // Features from ~1 000 km down to ~60 km; two independent samples.
-        let f = 6.0 * s;
-        let variability_t = fbm(&self.variability_noise, nx * f, ny * f, nz * f, 5);
-        let variability_m = fbm(
-            &self.variability_noise,
-            nx * f + 17.3,
-            ny * f - 4.1,
-            nz * f + 9.7,
-            5,
-        );
-
-        let h = 4.0 * s;
-        let highland_jitter = fbm(&self.highland_noise, nx * h, ny * h, nz * h, 4);
+        let [
+            temperature_anomaly,
+            moisture,
+            variability_t,
+            variability_m,
+            highland_jitter,
+        ] = climate(map_point);
 
         Sample {
             warp_x: warp_x as f32,
@@ -933,15 +977,15 @@ impl NoiseFields {
             variability_m: vec![0.0; n],
             highland_offset: vec![0.0; n],
         };
+        let climate = ClimateGrids::new(sampler, width, height);
+        let climate = &climate;
         let mut band: Vec<Sample> = Vec::with_capacity(BAND_ROWS * w);
         for y0 in (0..height as usize).step_by(BAND_ROWS) {
             let y1 = (y0 + BAND_ROWS).min(height as usize);
             band.clear();
-            band.par_extend(
-                (y0..y1)
-                    .into_par_iter()
-                    .flat_map_iter(|y| (0..w).map(move |x| sampler.sample(x as u32, y as u32))),
-            );
+            band.par_extend((y0..y1).into_par_iter().flat_map_iter(|y| {
+                (0..w).map(move |x| climate.sample(sampler, x as u32, y as u32))
+            }));
             let range = y0 * w..y1 * w;
             let fill = |layer: &mut [f32], value: fn(&Sample) -> f32| {
                 layer[range.clone()]
@@ -970,6 +1014,38 @@ impl NoiseFields {
             }
         }
         f
+    }
+}
+
+/// The climate fields of a generation: each one on a coarse grid when its
+/// finest octave spans enough pixels (see [`crate::coarse::step_for`]),
+/// else sampled at every pixel.
+struct ClimateGrids {
+    fields: [Option<crate::coarse::CoarseField>; ClimateField::COUNT],
+}
+
+impl ClimateGrids {
+    fn new(sampler: &Sampler, width: u32, height: u32) -> Self {
+        Self {
+            fields: ClimateField::ALL.map(|field| {
+                let step = crate::coarse::step_for(sampler.climate_frequency(field), width);
+                (step > 1).then(|| {
+                    crate::coarse::CoarseField::new(width, height, step, |p| {
+                        sampler.climate(field, p)
+                    })
+                })
+            }),
+        }
+    }
+
+    /// The sample of pixel `(x, y)`, its climate from the grids.
+    fn sample(&self, sampler: &Sampler, x: u32, y: u32) -> Sample {
+        sampler.sample_with(x, y, |p| {
+            std::array::from_fn(|k| match &self.fields[k] {
+                Some(grid) => grid.at(x, y),
+                None => sampler.climate(ClimateField::ALL[k], p),
+            })
+        })
     }
 }
 
