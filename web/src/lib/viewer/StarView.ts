@@ -733,7 +733,6 @@ export class StarView {
     if (this.selected === null) return;
     for (const [k, giant] of this.giants.entries()) {
       const group = new Group();
-      group.scale.setScalar(this.markerSize(k) / PLANET_MARKER);
       // A day a second at ×1: a year lasts its days in seconds.
       const orbits = moonOrbits(giant.moons ?? [], giant.radius_earth * 6371, giant.year_days, giant.year_days, false);
       const markers = orbits.map((orbit) => {
