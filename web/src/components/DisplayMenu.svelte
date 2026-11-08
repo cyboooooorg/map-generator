@@ -38,8 +38,14 @@
       close();
       return;
     }
+    if (e.key === 'Tab') {
+      close(false);
+      return;
+    }
     const all = items();
     const at = all.indexOf(document.activeElement as HTMLElement);
+    // The arrows belong to the menu only while the focus is in it.
+    if (at < 0) return;
     const move = (to: number) => {
       e.preventDefault();
       all[(to + all.length) % all.length]?.focus();
@@ -48,7 +54,6 @@
     else if (e.key === 'ArrowUp') move(at - 1);
     else if (e.key === 'Home') move(0);
     else if (e.key === 'End') move(all.length - 1);
-    else if (e.key === 'Tab') close(false);
   }
   function onOutside(e: PointerEvent): void {
     if (open && e.target instanceof Node && !menu?.contains(e.target) && !cog?.contains(e.target)) close(false);
@@ -63,7 +68,7 @@
     class="cog"
     aria-haspopup="menu"
     aria-expanded={open}
-    aria-controls="display-menu"
+    aria-controls={open ? 'display-menu' : undefined}
     aria-label={t.systemList.displayLabel}
     title={t.systemList.displayLabel}
     onclick={() => (open ? close() : void show())}

@@ -91,12 +91,20 @@ export function presentClasses(systems: Pick<SystemSummary, 'star'>[]): StarClas
 /**
  * The body types (preset names, `presets/`) of a world that can hold liquid
  * water and life: the Earth-like `terran`, and `earth-like` (the example
- * preset modelled on it). `barren`, `frozen`, `volcanic` and `caustic` rocks
+ * preset modelled on it). These are the built-in preset names: a user
+ * preset with another name never matches, even if it describes a habitable
+ * world. `barren`, `frozen`, `volcanic` and `caustic` rocks
  * never count (dead, ice-bound, magma-covered, acid), nor do the giants.
  */
 export const HABITABLE_TYPES: ReadonlySet<string> = new Set(['terran', 'earth-like']);
 
-/** Whether a body is a planet of a habitable type on an orbit inside the zone [inner, outer] AU. */
+/**
+ * Whether a body is a planet of a habitable type whose semi-major axis lies
+ * inside the zone [inner, outer] AU. Only planets count: a moon of a giant
+ * in the zone does not (its `orbit_au` is round its planet), and a planet
+ * on an eccentric orbit that only passes through the zone is judged by its
+ * semi-major axis.
+ */
 export function isHabitableWorld(body: BodySummary, inner: number, outer: number): boolean {
   return (
     body.kind === 'planet' && HABITABLE_TYPES.has(body.body_type) && outer > 0 && body.orbit_au >= inner && body.orbit_au <= outer
@@ -110,6 +118,20 @@ export const habitableWorlds = (system: SystemSummary): BodySummary[] =>
 export const hasHabitableWorld = (system: SystemSummary): boolean => habitableWorlds(system).length > 0;
 
 // -- Filters and search ------------------------------------------------
+
+/** The selection kept to the systems still shown: what a filter hides is no longer selected. */
+export function pruneChosen(chosen: string[], shownIds: Iterable<string>): string[] {
+  const shown = new Set(shownIds);
+  const kept = chosen.filter((id) => shown.has(id));
+  return kept.length === chosen.length ? chosen : kept;
+}
+
+/** Ms from `now` to the next local midnight. */
+export function msToMidnight(now: number): number {
+  const d = new Date(now);
+  d.setHours(24, 0, 0, 0);
+  return d.getTime() - now;
+}
 
 export interface Filters {
   /** Empty for any star. */

@@ -13,6 +13,8 @@
     hasHabitableWorld,
     loadView,
     presentClasses,
+    msToMidnight,
+    pruneChosen,
     starClass,
     starLetter,
     toggleCompact,
@@ -71,16 +73,48 @@
   const shown = $derived(
     sortSystems(filterSystems(systems, query, { ...NO_FILTERS, classes: activeClasses, habitable: activeHabitable }), sort),
   );
-  const sections = $derived(groupSections(shown, Date.now()));
+  // "Today" follows the clock: refreshed at the next local midnight and when the tab is shown again.
+  let now = $state(Date.now());
+  $effect(() => {
+    const refresh = () => (now = Date.now());
+    let timer: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        refresh();
+        arm();
+      }, msToMidnight(Date.now()) + 1000);
+    };
+    const visible = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+        arm();
+      }
+    };
+    arm();
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  });
+  const sections = $derived(groupSections(shown, now));
   $effect(() => {
     order = sections.flatMap((g) => g.items.map((s) => s.id));
   });
+  // What a filter, a chip or the search hides, or a deletion removes, is no longer selected:
+  // Delete and Compare only act on systems that are shown.
   $effect(() => {
-    const ids = new Set(systems.map((s) => s.id));
-    if (chosen.some((id) => !ids.has(id))) {
-      chosen = chosen.filter((id) => ids.has(id));
-    }
+    const kept = pruneChosen(chosen, shown.map((s) => s.id));
+    if (kept !== chosen) chosen = kept;
   });
+
+  /** A pin moves its card to another section, which remounts it: put the focus back on its pin. */
+  async function pinChanged(system: SystemSummary): Promise<void> {
+    onChanged(system);
+    await tick();
+    document.querySelector<HTMLElement>(`[data-pin="${CSS.escape(system.id)}"]`)?.focus();
+  }
 
   function toggleClass(c: StarClass): void {
     classes = classes.includes(c) ? classes.filter((x) => x !== c) : [...classes, c];
@@ -130,7 +164,7 @@
   <div class="toolbar">
     <input type="search" placeholder={t.systemList.search} bind:value={query} aria-label={t.systemList.searchLabel} />
     {#if view !== 'list'}
-      <button class="compact-toggle" onclick={() => (view = toggleCompact(view))} aria-pressed={view === 'compact'} title={t.systemList.compactHelp}
+      <button class="compact-toggle" onclick={() => (view = toggleCompact(view))} aria-pressed={view === 'compact'} title={t.systemList.compactToggle}
         >{t.systemList.compactToggle}</button
       >
     {/if}
@@ -221,7 +255,7 @@
                   class:editing={renaming === system.id}
                   title={t.systemList.seedTitle({ seed: system.seed })}
                 >
-                  <td class="narrow"><span class="pin-cell"><PinButton {system} {onChanged} /></span></td>
+                  <td class="narrow"><span class="pin-cell"><PinButton {system} onChanged={pinChanged} /></span></td>
                   {#if renaming === system.id}
                     <td colspan="6"><RenameForm {system} {onChanged} onClose={stopRenaming} bind:dirty /></td>
                   {:else}
@@ -247,6 +281,7 @@
                         {selecting}
                         chosen={chosen.includes(system.id)}
                         {onChanged}
+                        onPinned={pinChanged}
                         onRename={() => startRenaming(system.id)}
                         onDelete={() => onDelete([system.id])}
                         onToggle={() => toggle(system.id)}
@@ -271,6 +306,7 @@
                 bind:dirty
                 onOpen={() => open(system.id)}
                 {onChanged}
+                onPinned={pinChanged}
                 onRename={() => startRenaming(system.id)}
                 onRenameClose={stopRenaming}
                 onDelete={() => onDelete([system.id])}

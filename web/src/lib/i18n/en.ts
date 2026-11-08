@@ -175,7 +175,6 @@ export const en = {
     displayHelp: 'Your choice is kept for the next visit.',
     views: { cards: 'Cards', compact: 'Compact cards', list: 'List' },
     compactToggle: 'Compact',
-    compactHelp: 'Compact cards',
     sections: { pinned: 'Pinned', today: 'Today', older: 'Older' },
     filtersLabel: 'Filters',
     allStars: 'All stars',
@@ -188,7 +187,6 @@ export const en = {
     moonsCount: (p: { count: number }) => (p.count === 0 ? 'no moons' : `${p.count} ${p.count === 1 ? 'moon' : 'moons'}`),
     columns: { pin: 'Pin', name: 'Name', star: 'Star', planets: 'Planets', moons: 'Moons', created: 'Created', actions: 'Actions' },
     listLabel: (p: { section: string }) => `Systems: ${p.section}`,
-    chooseOne: (p: { name: string }) => `Open ${p.name}`,
   },
   worldList: {
     sortLabel: 'Sort',

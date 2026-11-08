@@ -13,18 +13,20 @@
     selecting: boolean;
     chosen: boolean;
     onChanged: (system: SystemSummary) => void;
+    /** The pin was changed (defaults to `onChanged`). */
+    onPinned?: ((system: SystemSummary) => void) | undefined;
     onRename: () => void;
     onDelete: () => void;
     onToggle: () => void;
   }
 
-  let { system, showPin = true, selecting, chosen, onChanged, onRename, onDelete, onToggle }: Props = $props();
+  let { system, showPin = true, selecting, chosen, onChanged, onPinned, onRename, onDelete, onToggle }: Props = $props();
   const name = $derived(systemName(system));
 </script>
 
 <span class="actions">
   {#if showPin}
-    <PinButton {system} {onChanged} />
+    <PinButton {system} onChanged={onPinned ?? onChanged} />
   {/if}
   <button class="rename-button" data-rename={system.id} onclick={onRename} aria-label={t.systemList.rename({ name })} title={t.systemList.rename({ name })}
     >✎</button

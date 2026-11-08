@@ -161,7 +161,6 @@ export const fr: Messages = {
     displayHelp: 'Votre choix est gardé pour la prochaine visite.',
     views: { cards: 'Cartes', compact: 'Cartes compactes', list: 'Liste' },
     compactToggle: 'Compactes',
-    compactHelp: 'Cartes compactes',
     sections: { pinned: 'Épinglés', today: 'Aujourd’hui', older: 'Plus anciens' },
     filtersLabel: 'Filtres',
     allStars: 'Toutes les étoiles',
@@ -174,7 +173,6 @@ export const fr: Messages = {
     moonsCount: (p) => (p.count === 0 ? 'aucune lune' : `${p.count} ${p.count > 1 ? 'lunes' : 'lune'}`),
     columns: { pin: 'Épingle', name: 'Nom', star: 'Étoile', planets: 'Planètes', moons: 'Lunes', created: 'Créé', actions: 'Actions' },
     listLabel: (p) => `Systèmes${S}: ${p.section}`,
-    chooseOne: (p) => `Ouvrir ${p.name}`,
   },
   worldList: {
     sortLabel: 'Trier',

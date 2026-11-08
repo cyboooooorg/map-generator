@@ -554,7 +554,11 @@ addressed as `<system-id>/<body-id>` everywhere.
   within each,
   with filter chips (star class from the first letter of the spectral
   type; a habitable world, i.e. a `terran` planet inside the habitable
-  zone) and a search that matches designations, names and seeds. Three
+  zone; moons, including those of a giant in the zone, do not count,
+  and a planet is placed by its semi-major axis, so an eccentric orbit
+  that only passes through the zone does not; the types are the built-in
+  preset names `terran` and `earth-like`, a user preset with another
+  name never matches) and a search that matches designations, names and seeds. Three
   views, chosen in the cog's **Display** menu and remembered: cards (an
   orbit strip, the name, the star, a chip per planet type, the moons and
   the date), compact cards (a small orrery on the left) and a table.

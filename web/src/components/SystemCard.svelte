@@ -25,6 +25,8 @@
     dirty: boolean;
     onOpen: () => void;
     onChanged: (system: SystemSummary) => void;
+    /** The pin was changed (defaults to `onChanged`). */
+    onPinned?: ((system: SystemSummary) => void) | undefined;
     onRename: () => void;
     onRenameClose: () => void;
     onDelete: () => void;
@@ -40,6 +42,7 @@
     dirty = $bindable(false),
     onOpen,
     onChanged,
+    onPinned,
     onRename,
     onRenameClose,
     onDelete,
@@ -102,7 +105,7 @@
     </button>
     <span class="foot">
       {#if !compact}<small class="meta" title={when}>{meta}</small>{/if}
-      <SystemActions {system} {selecting} {chosen} {onChanged} onRename={onRename} {onDelete} {onToggle} />
+      <SystemActions {system} {selecting} {chosen} {onChanged} {onPinned} {onRename} {onDelete} {onToggle} />
     </span>
   {/if}
 </article>
