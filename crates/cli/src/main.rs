@@ -130,6 +130,14 @@ struct Args {
     #[arg(long)]
     host: Option<HostMode>,
 
+    /// A lone planet: the system drawn round the planet (the one written
+    /// to --systems-dir, whose id then carries `-lone-`) holds only its
+    /// star, the planet and its moons (or the giant it orbits), with no
+    /// belt; the planet is generated with no giant neighbours, whatever
+    /// --giants says
+    #[arg(long)]
+    alone: bool,
+
     /// Mass of a giant planet in Earth masses, in [5, 4131] (Jupiter: 318,
     /// Saturn: 95, Neptune: 17); giant presets only [default: drawn in the
     /// preset's range]
@@ -368,6 +376,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         giants: args.giants,
         mass_earth: args.mass,
         host: args.host,
+        alone: args.alone.then_some(true),
         width: Some(args.width),
         height: Some(args.height),
     };
@@ -515,7 +524,9 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     if p.drift_ma != 0.0 {
         reproduce.push(format!("--drift {}", p.drift_ma));
     }
-    if p.giants == GiantsMode::None && !giant {
+    if request.alone == Some(true) {
+        reproduce.push("--alone".into());
+    } else if p.giants == GiantsMode::None && !giant {
         reproduce.push("--giants none".into());
     }
     if let Some(m) = p.giant_mass_earth {

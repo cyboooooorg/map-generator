@@ -87,6 +87,14 @@ pub enum SystemRequest {
     Around(WorldRequest),
 }
 
+impl SystemRequest {
+    /// Whether this is a lone planet: a system around a planet that holds
+    /// no other planet (see [`WorldRequest::alone`]).
+    pub fn is_alone(&self) -> bool {
+        matches!(self, SystemRequest::Around(w) if w.alone == Some(true))
+    }
+}
+
 /// A whole system: a star and a number of planets of each type.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -294,7 +302,9 @@ pub struct Preview {
 /// with dashes (`mgs-48213-42`); a system around a planet whose plates are
 /// moved to another epoch names it too (`mgs-48213-past250ma-42`, see
 /// [`crate::export::drift_label`]), so that the epochs of one planet never
-/// collide. The seed stays last.
+/// collide. A lone planet's system names it too (`mgs-48213-lone-42`), so
+/// that it never collides with the full system of the same star and seed.
+/// The seed stays last.
 pub fn system_id(system: &System) -> String {
     let slug: String = system
         .star
@@ -308,9 +318,14 @@ pub fn system_id(system: &System) -> String {
         .as_ref()
         .and_then(|id| system.bodies.iter().find(|b| &b.id == id))
         .and_then(|b| crate::export::drift_label(b.params.drift_ma));
+    let lone = if system.request.is_alone() {
+        "-lone"
+    } else {
+        ""
+    };
     match drift {
-        Some(epoch) => format!("{slug}-{epoch}-{}", system.seed),
-        None => format!("{slug}-{}", system.seed),
+        Some(epoch) => format!("{slug}-{epoch}{lone}-{}", system.seed),
+        None => format!("{slug}{lone}-{}", system.seed),
     }
 }
 
@@ -855,6 +870,8 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
     let host = HostGiant::draw(&params);
+    // A lone planet: no giant and no rocky neighbour.
+    let alone = request.is_alone();
     // The planet asked, or the giant it orbits, on its orbit.
     let focus_slot = Slot {
         body_type: match &host {
@@ -875,7 +892,8 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
     };
     let mut slots = vec![focus_slot];
     // Its giants, as the world draws them today.
-    if params.giants != GiantsMode::None
+    if !alone
+        && params.giants != GiantsMode::None
         && let Some(giants) = GiantSystem::draw(&params)
     {
         for g in giants.giants {
@@ -895,7 +913,11 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
         }
     }
     // The rocky planets round them, those that do not fit dropped.
-    let mut rocky = drawn_types(&star, f64::from(params.metallicity), &mut rng);
+    let mut rocky = if alone {
+        Vec::new()
+    } else {
+        drawn_types(&star, f64::from(params.metallicity), &mut rng)
+    };
     rocky.retain(|(t, _)| !is_giant(t));
     for (body_type, a) in rocky {
         let mut slot = Slot {
@@ -1128,9 +1150,20 @@ fn assemble(
             eccentricity: slot.eccentricity,
         })
         .collect();
-    let belts = crate::belts::draw_belts(&info, f64::from(ice), &tracks, seed);
-    let trojans = crate::belts::draw_trojans(f64::from(info.mass), &tracks, seed);
-    for body in &mut bodies {
+    // A lone planet has none of them: no belt, no swarm, and its crater
+    // rate is the one its world was generated with.
+    let alone = request.is_alone();
+    let belts = if alone {
+        Vec::new()
+    } else {
+        crate::belts::draw_belts(&info, f64::from(ice), &tracks, seed)
+    };
+    let trojans = if alone {
+        vec![None; tracks.len()]
+    } else {
+        crate::belts::draw_trojans(f64::from(info.mass), &tracks, seed)
+    };
+    for body in bodies.iter_mut().filter(|_| !alone) {
         let planet = body.parent.as_deref().unwrap_or(&body.id);
         let Some(rank) = tracks.iter().position(|t| t.id == planet) else {
             continue;
@@ -3082,5 +3115,98 @@ mod gravity_tests {
         old.physical.gravity = 1.94;
         let g = world_params(&old).gravity_modifier();
         assert!((f64::from(g) - 1.94).abs() < 1e-6, "got {g}");
+    }
+}
+
+/// A lone planet: the star, the planet asked for and its moons.
+#[cfg(test)]
+mod lone_tests {
+    use super::*;
+
+    fn around(planet: &str, seed: u32, host: Option<HostMode>, alone: Option<bool>) -> System {
+        let world = WorldRequest {
+            planet: Some(planet.into()),
+            seed: Some(seed),
+            host,
+            alone,
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        draw(
+            &SystemRequest::Around(world),
+            &mut StdRng::seed_from_u64(u64::from(seed)),
+        )
+        .unwrap()
+    }
+
+    fn planets(system: &System) -> Vec<&Body> {
+        system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == BodyKind::Planet)
+            .collect()
+    }
+
+    #[test]
+    fn a_lone_planet_has_no_other_planet_belt_or_giant_neighbour() {
+        let mut crowded = 0;
+        for seed in 1..=30 {
+            let full = around("terran", seed, None, None);
+            let lone = around("terran", seed, None, Some(true));
+            if planets(&full).len() > 1 {
+                crowded += 1;
+            }
+            let only = planets(&lone);
+            assert_eq!(only.len(), 1, "seed {seed}");
+            assert_eq!(lone.focus.as_deref(), Some(only[0].id.as_str()));
+            assert!(lone.belts.is_empty() && only[0].trojans.is_none());
+            assert_eq!(only[0].params.giants, GiantsMode::None, "seed {seed}");
+            assert!(system_id(&lone).contains("-lone-"), "seed {seed}");
+            assert_ne!(system_id(&lone), system_id(&full));
+            assert!(!system_id(&full).contains("lone"));
+        }
+        assert!(crowded > 20, "{crowded} full systems with company");
+    }
+
+    #[test]
+    fn a_lone_moon_of_a_giant_keeps_its_host_and_nothing_else() {
+        for seed in 1..=10 {
+            let lone = around("terran", seed, Some(HostMode::Giant), Some(true));
+            let only = planets(&lone);
+            assert_eq!(only.len(), 1, "seed {seed}");
+            assert!(is_giant(&only[0].body_type));
+            let focus = lone.focus.as_deref().unwrap();
+            let moon = lone.bodies.iter().find(|b| b.id == focus).unwrap();
+            assert_eq!(moon.parent.as_deref(), Some(only[0].id.as_str()));
+            assert!(lone.belts.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_lone_giant_asked_for_is_alone_with_its_moons() {
+        let lone = around("gas-giant", 3, None, Some(true));
+        assert_eq!(planets(&lone).len(), 1);
+        assert!(lone.bodies.iter().any(|b| b.kind == BodyKind::Moon));
+    }
+
+    #[test]
+    fn a_request_without_alone_is_the_one_it_was() {
+        // Neither the flag left out nor false changes the system.
+        for seed in 1..=5 {
+            let a = serde_json::to_string(&around("terran", seed, None, None)).unwrap();
+            let b = serde_json::to_string(&around("terran", seed, None, Some(false))).unwrap();
+            let strip = |s: &str| s.replace("\"alone\":false,", "");
+            assert_eq!(strip(&b), a);
+        }
+    }
+
+    #[test]
+    fn a_stored_request_without_alone_loads_and_is_not_lone() {
+        let json = r#"{"around":{"planet":"terran","seed":3}}"#;
+        let request: SystemRequest = serde_json::from_str(json).unwrap();
+        assert!(!request.is_alone());
+        let out = serde_json::to_string(&request).unwrap();
+        assert!(!out.contains("alone"), "{out}");
     }
 }

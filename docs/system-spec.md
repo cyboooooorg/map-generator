@@ -316,6 +316,17 @@ the others are drawn around it with the same spacing, those that would
 crowd it moved or dropped. A giant's moon asked for (`host = giant`)
 puts the giant on that orbit and the world among its regular moons.
 
+**A lone planet.** With `"alone": true` in the `WorldRequest`, the system
+holds only its star, the planet asked and its moons; for a giant's moon,
+the giant (with its moons) and nothing else. No giant neighbour, no
+rocky sibling, no belt and no trojans are drawn. The planet is resolved
+with `giants = none` (a `giants` set in the request is overridden and
+listed in `ignored`), so that it is not generated as if giants existed
+that the system does not hold; its impact rate is then the Solar
+System's, as for any world with `giants = none`. The normal path
+(`alone` absent or false) is unchanged, and requests and stored systems
+without the field load as before.
+
 ### Errors
 
 A request the engine cannot meet answers with a code and the numbers
@@ -394,7 +405,9 @@ systems/<system-id>/
 
 - **System id**: the star's designation and the seed, lowercase with
   dashes: `mgs-48213-42`. It reads as `<anything>-<digits>`, as world ids
-  do today, so the same id check applies. The same request gives the
+  do today, so the same id check applies. A lone planet's system adds
+  `lone` before the seed (`mgs-48213-lone-42`), so that it never
+  collides with the full system of the same star and seed. The same request gives the
   same system and id (see [Model](#model)): creating it again is refused
   (409) unless the request asks to replace it, as worlds are today.
 - **Body id**: derived from the body's place, path-safe and stable once
@@ -456,7 +469,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   The body is a `SystemRequest`:
   - mode 1, `{"system": {"star": "K1V", "planets": {"terran": 2,
     "gas-giant": 1}, "seed": 42, "width": 4096, "height": 2048}}`;
-  - mode 2, `{"around": WorldRequest}`, today's request.
+  - mode 2, `{"around": WorldRequest}`, today's request; with
+    `"alone": true` in it, a lone planet (see
+    [Around one planet](#around-one-planet-mode-2)).
 
   The answer is `{system_id, job_id}`. The system file exists by then,
   since the draw takes milliseconds, so the library and the viewer show
@@ -555,7 +570,11 @@ addressed as `<system-id>/<body-id>` everywhere.
   - *Random system*: the star (type or drawn), a number per planet type
     (their sum at most 15, each one checked against the star's zones as
     it is typed), metallicity, seed, map size;
-  - *Around a planet*: the planet, as before, plus the map size.
+  - *Around a planet*: the planet, as before, plus the map size, and a
+    **Lone planet (no other planets in its system)** checkbox on the
+    planet step: it sends `alone: true`, replaces the giant-planets
+    choice with a note and adds a line to the summary. **Vary…** keeps
+    the flag of the system it varies.
 
   The wizard remembers its last mode and fields. **Vary…** opens it over
   the viewer, on its summary.

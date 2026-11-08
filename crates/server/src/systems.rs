@@ -401,7 +401,13 @@ mod tests {
 
     #[test]
     fn ids_follow_the_storage_rules() {
-        for good in ["mgs-48213-42", "a-1", "mgs-1-2-3"] {
+        for good in [
+            "mgs-48213-42",
+            "a-1",
+            "mgs-1-2-3",
+            "mgs-48213-lone-42",
+            "mgs-48213-past250ma-lone-42",
+        ] {
             assert!(is_valid_system_id(good), "{good}");
         }
         for bad in [

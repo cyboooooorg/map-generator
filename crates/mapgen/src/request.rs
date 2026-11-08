@@ -3,6 +3,7 @@
 //!
 //! Shared by the command-line tool and the web server, so both accept exactly
 //! the same parameters, ranges and defaults.
+use crate::giants::GiantsMode;
 use crate::preset::{ParamDefault, Preset, PresetError, built_in_names};
 use crate::world::WorldParams;
 use rand::RngExt;
@@ -169,6 +170,12 @@ pub struct WorldRequest {
     /// `auto` (rarely the moon of a giant, as the seed draws, the default),
     /// `giant` (always) or `none`.
     pub host: Option<crate::exomoon::HostMode>,
+    /// Only meaningful for a system around this planet: the system then
+    /// holds no other planet (a lone planet: its star, the planet and its
+    /// moons, or the giant it orbits). The planet is then resolved with no
+    /// giant neighbours, whatever `giants` says (it is overridden).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alone: Option<bool>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -517,10 +524,18 @@ impl WorldRequest {
             .into_iter()
             .filter_map(|(field, set)| set.then_some(field))
             .collect()
-        } else if self.mass_earth.is_some() {
-            vec!["mass_earth"]
         } else {
-            Vec::new()
+            // A lone planet has no giant neighbours: `giants` is overridden.
+            [
+                ("mass_earth", self.mass_earth.is_some()),
+                (
+                    "giants",
+                    self.alone == Some(true) && self.giants.is_some_and(|g| g != GiantsMode::None),
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(field, set)| set.then_some(field))
+            .collect()
         };
         let circumference_km = match giant_mass_earth {
             Some(mass) => {
@@ -553,7 +568,7 @@ impl WorldRequest {
             moons: self.moons.unwrap_or_default(),
             shape: None,
             metallicity,
-            giants: if giant {
+            giants: if giant || self.alone == Some(true) {
                 crate::giants::GiantsMode::None
             } else {
                 self.giants.unwrap_or_default()
