@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
-import { cliCommand, formatAgo, formatAtmosphere, formatArea, formatGeology, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+import { cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
 
 const meta = {
   planet_type: 'frozen',
@@ -115,5 +115,15 @@ describe('surfaceColour', () => {
   });
   it('falls back to the classification colour for older worlds', () => {
     expect(surfaceColour({ color: '#FF0000', surface_color: '' })).toBe('#FF0000');
+  });
+});
+
+describe('signed zero', () => {
+  it('prints a negative number rounded to zero as 0', () => {
+    expect(formatInt(-0)).toBe('0');
+    expect(formatInt(-0.2)).toBe('0');
+    expect(formatNumber(-0.04, 1)).toBe('0.0');
+    expect(formatUpTo(-0.001, 1)).toBe('0');
+    expect(formatInt(-3)).toBe('-3');
   });
 });

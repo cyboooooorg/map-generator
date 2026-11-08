@@ -14,7 +14,9 @@ function numberFormat(options: Intl.NumberFormatOptions): Intl.NumberFormat {
   const key = `${locale} ${JSON.stringify(options)}`;
   let format = numberFormats.get(key);
   if (!format) {
-    format = new Intl.NumberFormat(locale, options);
+    // signDisplay 'negative' prints a negative number rounded to zero (-0.2 as
+    // 0 digits, or -0) as a plain 0, never "-0".
+    format = new Intl.NumberFormat(locale, { signDisplay: 'negative', ...options });
     numberFormats.set(key, format);
   }
   return format;
