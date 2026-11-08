@@ -5,10 +5,10 @@ describe('orbitReadout', () => {
   it('states the year of a planet, not the ten-day slider span', () => {
     // A 6.9-day year read "69.3-day orbit" when the span was handed over.
     expect(orbitReadout({ parent: null, orbitPeriodDays: 6.9 }, 0, 0)).toEqual({ day: 0, period: 6.9 });
-    expect(orbitReadout({ parent: null, orbitPeriodDays: 33 }, 0.5, 0)?.period).toBe(33);
+    expect(orbitReadout({ parent: null, orbitPeriodDays: 33 }, 16, 0)?.period).toBe(33);
   });
-  it('counts the day of the year from the season and the orbit clock', () => {
-    const r = orbitReadout({ parent: null, orbitPeriodDays: 40 }, 0.5, 30);
+  it('states the day of the planet\'s year the clock shows', () => {
+    const r = orbitReadout({ parent: null, orbitPeriodDays: 40 }, 50, 30);
     expect(r?.day).toBeCloseTo(10);
   });
   it('states the orbit of a moon, past the season', () => {

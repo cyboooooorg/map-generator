@@ -29,6 +29,7 @@
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { orbitReadout } from '../lib/orbitClock';
+  import { clockDays, seasonOfYearDay, yearDayAt } from '../lib/seasonClock';
   import { temperatureRange } from '../lib/temperatureRange';
   import { cloudTint, namedSeason, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
@@ -487,7 +488,9 @@
    */
   const seasonLabel = $derived.by(() => {
     const named = namedSeason(season, declination, meta?.axial_tilt_deg ?? 23.44);
-    return named !== null ? (t.viewer.seasons[named] ?? '') : t.viewer.dayOfYear({ day: Math.round(season * 365) % 365 });
+    if (named !== null) return t.viewer.seasons[named] ?? '';
+    // In a system the day is the planet's own, counted from its spring equinox.
+    return t.viewer.dayOfYear({ day: yearDay !== null ? Math.floor(yearDay) : Math.round(season * 365) % 365 });
   });
   const highlight = $derived(hovered ?? pinned);
 
@@ -928,7 +931,14 @@
           }))
       : null,
   );
-  const sysDays = $derived((sysPlanet ? season * sysPlanet.orbit.period_days : 0) + orbitDays);
+  /**
+   * The clock, days from the system's epoch: the planet's place on its orbit
+   * at the season (the quarters are its equinoxes and solstices, see
+   * lib/seasonClock.ts), and the orbit time past it.
+   */
+  const sysDays = $derived(sysPlanet ? clockDays(sysPlanet.orbit, season, orbitDays) : orbitDays);
+  /** The day of the planet's year the clock shows: days since its northern spring equinox. */
+  const yearDay = $derived(sysPlanet ? yearDayAt(sysPlanet.orbit, sysDays) : null);
   const sysTextures = (id: string) => (world.systemId ? worldFile(systemBodyId(world.systemId, id), 'raw_data/surface.png') : null);
   /**
    * The hour: the sun at the slider's longitude over the body shown at the
@@ -1195,7 +1205,7 @@
     return moon?.orbit.period_days ?? (10 * sysBody.spin.period_hours) / 24;
   });
   /** The orbit the Light and season panel states: the moon's own, or the planet's year (not the slider's span). */
-  const orbitClock = $derived(sysBody ? orbitReadout({ parent: sysBody.parent, orbitPeriodDays: sysBody.orbit.period_days }, season, orbitDays) : null);
+  const orbitClock = $derived(sysBody ? orbitReadout({ parent: sysBody.parent, orbitPeriodDays: sysBody.orbit.period_days }, yearDay ?? 0, orbitDays) : null);
   /**
    * The slowest orbit speed: ORBIT_SPEED_MIN, or slower for a short orbit,
    * down to real time (the power of two at or just below it).
@@ -1528,7 +1538,7 @@
   /** Moves the clock to day `day` of the year: the season there, the orbit time from it. */
   function setClockDay(day: number): void {
     if (!clockYear) return;
-    season = ((day % clockYear) + clockYear) % clockYear / clockYear;
+    season = sysPlanet ? seasonOfYearDay(sysPlanet.orbit, ((day % clockYear) + clockYear) % clockYear) : 0;
     orbitDays = 0;
   }
   /**
@@ -1687,9 +1697,14 @@
     if (!playing || !sun || !canvasVisible || locked) {
       return;
     }
+    const orbit = sysPlanet?.orbit;
+    const year = clockYear;
     let last = performance.now();
     let frame = requestAnimationFrame(function step(now) {
-      season = (season + (now - last) / 1000 / YEAR_SECONDS) % 1;
+      const fraction = (now - last) / 1000 / YEAR_SECONDS;
+      // In a system a year of time passes in YEAR_SECONDS, not a year of angle:
+      // the seasons of an eccentric orbit are unequal.
+      season = orbit && year ? seasonOfYearDay(orbit, ((yearDayAt(orbit, clockDays(orbit, season)) + fraction * year) % year)) : (season + fraction) % 1;
       last = now;
       frame = requestAnimationFrame(step);
     });
@@ -2302,9 +2317,9 @@
         : null}
       time={clockYear
         ? {
-            value: sysDays % clockYear,
+            value: yearDay ?? 0,
             max: clockYear,
-            text: t.playback.dayOfYear({ day: formatInt(Math.floor(sysDays % clockYear) + 1), year: formatInt(Math.round(clockYear)) }),
+            text: t.playback.dayOfYear({ day: formatInt(Math.floor(yearDay ?? 0) + 1), year: formatInt(Math.round(clockYear)) }),
             help: t.playback.yearHelp,
             set: setClockDay,
           }

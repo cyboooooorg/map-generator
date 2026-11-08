@@ -16,7 +16,7 @@ export const fr: Messages = {
   },
   playback: {
     dayOfYear: (p) => `jour ${p.day} sur ${p.year}`,
-    yearHelp: `Le jour de l’année de la planète${S}: les saisons, l’heure et les lunes avancent avec lui`,
+    yearHelp: `Le jour de l’année de la planète, compté depuis son équinoxe de printemps boréal${S}: les saisons, l’heure et les lunes avancent avec lui`,
     toStart: 'Revenir au jour 1',
     label: 'Lecture',
     play: 'Lecture',
