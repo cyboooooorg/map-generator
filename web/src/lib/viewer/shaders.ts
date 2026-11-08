@@ -1163,6 +1163,35 @@ export const SKY_OCCLUDERS = 4;
 /** Passes of the orbit lines (see skyOrbitFragment), the value of its uPass. */
 export const SKY_LINE_PASS = { farUnder: 0, farOver: 1, near: 2 } as const;
 
+/**
+ * GLSL for a surface drawn far away (a Hill sphere): `skyHidden(point)`
+ * says whether a sky body of uOccluders stands between the camera and the
+ * point, the hit measured as in skyOrbitFragment. A sphere centred on a
+ * body then has its far half hidden by that body's disc and its near half
+ * passing in front.
+ */
+export const skyHiddenChunk = /* glsl */ `
+  uniform vec4 uOccluders[${SKY_OCCLUDERS}];
+  uniform int uOccluderCount;
+  bool skyHidden(vec3 point) {
+    vec3 toPoint = point - cameraPosition;
+    float pointDistance = length(toPoint);
+    vec3 ray = toPoint / max(pointDistance, 1e-9);
+    for (int i = 0; i < ${SKY_OCCLUDERS}; i++) {
+      if (i >= uOccluderCount) break;
+      vec4 body = uOccluders[i];
+      vec3 oc = cameraPosition - body.xyz;
+      float b = dot(oc, ray);
+      vec3 across = oc - b * ray;
+      float h = body.w * body.w - dot(across, across);
+      if (h <= 0.0) continue;
+      float hit = -b - sqrt(h);
+      if (hit > 0.0 && hit < pointDistance - 1e-4 * body.w) return true;
+    }
+    return false;
+  }
+`;
+
 export const skyOrbitVertex = /* glsl */ `
   attribute vec3 point;
   // Length along a dashed orbit from its start, in radii of the body
