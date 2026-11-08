@@ -684,6 +684,7 @@ export const en = {
     hostLink: 'Link to the host',
     hostLinkHelp:
       "From a moon: a dotted line to its host planet, with the host's pull on the moon and the moon's velocity as arrows, and their figures",
+    resetDrift: 'Reset the drift',
     hostRings: 'Host rings',
     hostRingsHelp: "The rings of the host planet in the moon's sky",
     compass: 'Compass',

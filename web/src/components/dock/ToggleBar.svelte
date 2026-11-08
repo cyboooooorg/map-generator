@@ -30,6 +30,8 @@
     on: boolean;
     set: (on: boolean) => void;
     subs?: readonly SubToggle[];
+    /** A small button after the squares, for an action rather than a state (reset the drift). */
+    action?: { label: string; icon: IconName; run: () => void };
   }
 </script>
 
@@ -63,6 +65,15 @@
               onclick={() => toggle.set(!toggle.on)}
               ><Icon name={toggle.icon} />{#if expanded}<span class="name">{toggle.label}</span>{/if}</button
             >
+            {#if toggle.action}
+              <button
+                type="button"
+                class="sub action"
+                aria-label={toggle.action.label}
+                title={toggle.action.label}
+                onclick={toggle.action.run}><Icon name={toggle.action.icon} size={expanded ? 13 : 9} /></button
+              >
+            {/if}
             {#if toggle.subs && toggle.subs.length > 0}
               <!-- Icons only: the squares shrink to dots stacked beside the icon. -->
               <div class="subs" role="group" aria-label={toggle.label}>
@@ -142,6 +153,9 @@
   }
   .sub:not(.on) {
     opacity: 0.55;
+  }
+  .sub.action {
+    color: var(--text);
   }
   .sub:disabled {
     opacity: 0.25;

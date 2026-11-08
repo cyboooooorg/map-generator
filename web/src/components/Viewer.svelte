@@ -1557,6 +1557,8 @@
       ],
     };
   }
+  /** The drift row's reset button: the bands, storms and clouds back to where they were generated. */
+  const driftReset = $derived({ label: t.viewer.resetDrift, icon: 'start' as const, run: () => view?.resetDrift() });
   /** Whether the host planet has an atmosphere halo, and clouds, to draw in a moon's sky. */
   const hostHasAir = $derived(Boolean(hostLook?.look.halo));
   const hostHasClouds = $derived(Boolean(hostLook?.look.clouds));
@@ -1570,10 +1572,10 @@
     ],
     [
       ...(giant
-        ? [perBody({ key: 'drift', label: t.viewer.bandDrift, help: t.viewer.bandDriftHelp, icon: 'drift' }, cloudDrift, hostCloudDrift, (v) => (cloudDrift = v), (v) => (hostCloudDrift = v), !hostHasClouds)]
+        ? [{ ...perBody({ key: 'drift', label: t.viewer.bandDrift, help: t.viewer.bandDriftHelp, icon: 'drift' }, cloudDrift, hostCloudDrift, (v) => (cloudDrift = v), (v) => (hostCloudDrift = v), !hostHasClouds), action: driftReset }]
         : [
             perBody({ key: 'clouds', label: t.viewer.clouds, icon: 'clouds' }, clouds, hostClouds, (v) => (clouds = v), (v) => (hostClouds = v), !hostHasClouds),
-            perBody({ key: 'drift', label: t.viewer.drift, icon: 'drift' }, cloudDrift, hostCloudDrift, (v) => (cloudDrift = v), (v) => (hostCloudDrift = v), !hostHasClouds),
+            { ...perBody({ key: 'drift', label: t.viewer.drift, icon: 'drift' }, cloudDrift, hostCloudDrift, (v) => (cloudDrift = v), (v) => (hostCloudDrift = v), !hostHasClouds), action: driftReset },
           ]),
       // The host's rings: the body shown has no ring switch, so no squares.
       ...(hasHost && hostRings

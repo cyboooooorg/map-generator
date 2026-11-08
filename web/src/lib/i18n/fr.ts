@@ -647,6 +647,7 @@ export const fr: Messages = {
     hostLink: 'Lien avec l’hôte',
     hostLinkHelp:
       'Depuis une lune : un trait pointillé vers sa planète hôte, avec l’attraction de l’hôte sur la lune et la vitesse de la lune en flèches, et leurs valeurs',
+    resetDrift: 'Réinitialiser la dérive',
     hostRings: 'Anneaux de l’hôte',
     hostRingsHelp: 'Les anneaux de la planète hôte dans le ciel de la lune',
     compass: 'Boussole',
