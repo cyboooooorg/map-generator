@@ -1729,7 +1729,10 @@ pub(crate) mod tests {
             host: Some(crate::exomoon::HostMode::None),
             ..Default::default()
         };
-        request.resolve(&mut rand::rng()).unwrap().params
+        // A seeded generator, so that the draws the seed leaves open are
+        // the same on every run.
+        let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1);
+        request.resolve(&mut rng).unwrap().params
     }
 
     #[test]
@@ -1738,7 +1741,12 @@ pub(crate) mod tests {
         // zone, e = 0.1), 1 bar of air: moderate swings and tropical biomes
         // (the swing was 93 C at the equator without the air, 1.5 C
         // before the day cycle).
-        let params = example_world("earth-like", Some("M2V"), Some(0.2));
+        // Capture into 3:2 is drawn by eccentricity: pin it, as a stored
+        // world would.
+        let mut params = example_world("earth-like", Some("M2V"), Some(0.2));
+        assert!(crate::spin::despun(&crate::spin::star_info(&params)));
+        params.locked_to_star = Some(false);
+        params.resonance_to_star = Some(crate::spin::RESONANCE_TURNS_PER_ORBIT);
         assert!(crate::spin::star_info(&params).spin_orbit_3_2);
         assert!(params.pressure_bar > 0.5);
         let world = generate(&params).world;
