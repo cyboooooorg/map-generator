@@ -729,7 +729,7 @@ export const en = {
         text: 'the solar day cut into 24 local hours, noon when the sun crosses the meridian (the convention of Mars missions).',
       },
       { term: 'Synchronous rotation:', text: 'the body turns once per orbit and always shows the same face to what it orbits.' },
-      { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by about ±2e radians.' },
+      { term: 'Libration:', text: 'on a slightly elliptical orbit the host swings in the sky of a synchronous body, by up to an amplitude that is about 2e radians (e the eccentricity), which the dial shows exactly next to the current angle.' },
       {
         term: '3:2 resonance:',
         text: 'three turns every two orbits, as Mercury: the star’s tides hold an eccentric planet there instead of locking it; its solar day lasts two of its years.',
