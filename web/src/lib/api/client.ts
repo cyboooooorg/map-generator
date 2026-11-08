@@ -90,6 +90,13 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: name.trim() === '' ? null : name.trim() } satisfies SystemName),
     }),
+  /** Names one body of a system (`star` too), keeping the other names; empty brings its designation back. */
+  nameBody: (id: string, body: string, name: string) =>
+    call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/bodies/${encodeURIComponent(body)}/name`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() === '' ? null : name.trim() } satisfies SystemName),
+    }),
   /** Pins a system in the main menu, or unpins it; answers its summary. */
   pinSystem: (id: string, pinned: boolean) =>
     call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' }),

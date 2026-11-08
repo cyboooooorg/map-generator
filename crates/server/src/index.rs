@@ -487,41 +487,67 @@ impl Index {
         id: &str,
         given: &GivenNames,
     ) -> std::result::Result<SystemSummary, systems::NamingError> {
-        let io = |e: IndexError| systems::NamingError::Io(e.to_string());
-        let current = self
-            .summary(id)
-            .map_err(io)?
-            .ok_or(systems::NamingError::NotFound)?;
-        let names = systems::checked_names(&current.bodies, given)?;
-        systems::write_names_file(root, id, &names)?;
-        let modified =
-            systems::modified_ms(&systems::system_dir(root, id).join(systems::NAMES_FILE));
-        {
-            let mut conn = self.conn();
-            let tx = conn.transaction().map_err(|e| io(e.into()))?;
-            replace_names(&tx, id, &names, modified).map_err(|e| io(e.into()))?;
-            tx.commit().map_err(|e| io(e.into()))?;
-        }
-        self.summary(id)
-            .map_err(io)?
-            .ok_or(systems::NamingError::NotFound)
+        self.edit_names(root, id, |_, bodies| systems::checked_names(bodies, given))
     }
 
-    /// Sets (or, with `None` or a blank name, clears) the name of system
-    /// `id` itself, the one given to its star, and returns its summary.
-    /// The names of the bodies are read and kept under the same lock as
-    /// the write, so a body named meanwhile (another tab, the viewer) is
+    /// Sets (or, with `None` or a blank name, clears) the name of one body
+    /// of system `id` (`star` for the star) and returns the system's
+    /// summary. The other names are read and kept under the same lock as
+    /// the write, so a name given meanwhile (another tab, the viewer) is
     /// not lost.
+    pub fn set_name(
+        &self,
+        root: &Path,
+        id: &str,
+        body: &str,
+        name: Option<&str>,
+    ) -> std::result::Result<SystemSummary, systems::NamingError> {
+        self.edit_names(root, id, |names, bodies| {
+            let mut names = names.clone();
+            match name.map(str::trim).filter(|n| !n.is_empty()) {
+                Some(name) => {
+                    let one: GivenNames = [(body.to_string(), name.to_string())].into();
+                    names.extend(systems::checked_names(bodies, &one)?);
+                }
+                None => {
+                    if body != systems::STAR && !bodies.iter().any(|b| b == body) {
+                        return Err(systems::NamingError::NoSuchBody(body.to_string()));
+                    }
+                    names.remove(body);
+                }
+            }
+            Ok(names)
+        })
+    }
+
+    /// Sets (or clears) the name of system `id` itself, the one given to
+    /// its star; see [`Index::set_name`].
     pub fn set_system_name(
         &self,
         root: &Path,
         id: &str,
         name: Option<&str>,
     ) -> std::result::Result<SystemSummary, systems::NamingError> {
+        self.set_name(root, id, systems::STAR, name)
+    }
+
+    /// Reads the names given to system `id` and the ids of its bodies, asks
+    /// `next` for the names to keep, writes them to `names.json` and to
+    /// the index, all under the connection lock: two edits never
+    /// interleave, and none works from a stale read.
+    fn edit_names(
+        &self,
+        root: &Path,
+        id: &str,
+        next: impl FnOnce(
+            &GivenNames,
+            &[String],
+        ) -> std::result::Result<GivenNames, systems::NamingError>,
+    ) -> std::result::Result<SystemSummary, systems::NamingError> {
         let io = |e: rusqlite::Error| systems::NamingError::Io(e.to_string());
         {
             let mut conn = self.conn();
-            let known: bool = conn
+            let known = conn
                 .query_row("SELECT 1 FROM systems WHERE id = ?1", [id], |_| Ok(true))
                 .optional()
                 .map_err(io)?
@@ -529,7 +555,14 @@ impl Index {
             if !known {
                 return Err(systems::NamingError::NotFound);
             }
-            let mut names: GivenNames = {
+            let bodies: Vec<String> = {
+                let mut stmt = conn
+                    .prepare("SELECT id FROM bodies WHERE system_id = ?1")
+                    .map_err(io)?;
+                let rows = stmt.query_map([id], |r| r.get(0)).map_err(io)?;
+                rows.collect::<rusqlite::Result<_>>().map_err(io)?
+            };
+            let current: GivenNames = {
                 let mut stmt = conn
                     .prepare("SELECT body_id, name FROM names WHERE system_id = ?1")
                     .map_err(io)?;
@@ -538,16 +571,7 @@ impl Index {
                     .map_err(io)?;
                 rows.collect::<rusqlite::Result<_>>().map_err(io)?
             };
-            match name.map(str::trim).filter(|n| !n.is_empty()) {
-                Some(name) => {
-                    let one: GivenNames = [(systems::STAR.to_string(), name.to_string())].into();
-                    let checked = systems::checked_names(&[], &one)?;
-                    names.extend(checked);
-                }
-                None => {
-                    names.remove(systems::STAR);
-                }
-            }
+            let names = next(&current, &bodies)?;
             systems::write_names_file(root, id, &names)?;
             let modified =
                 systems::modified_ms(&systems::system_dir(root, id).join(systems::NAMES_FILE));
@@ -810,8 +834,6 @@ impl Index {
     }
 }
 
-/// Turns WAL on and checks it works here, or falls back to the default
-/// rollback journal with a warning. Returns the mode in use.
 /// Creates the layout or brings an older one up to date. The version is
 /// read again inside an immediate transaction, so that two processes
 /// opening the same old file at once migrate it once, not twice.
@@ -843,6 +865,8 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     }
 }
 
+/// Turns WAL on and checks it works here, or falls back to the default
+/// rollback journal with a warning. Returns the mode in use.
 fn choose_journal(conn: &Connection) -> rusqlite::Result<String> {
     if let Err(why) = try_wal(conn) {
         tracing::warn!("SQLite WAL is not usable here ({why}): using the rollback journal");
@@ -1398,6 +1422,51 @@ mod tests {
     }
 
     #[test]
+    fn names_given_at_once_never_clash() {
+        let root = temp_root("names-race");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let index = std::sync::Arc::new(Index::open(&root.join("mapgen.sqlite")).unwrap());
+        index.reconcile(&systems).unwrap();
+        let handles: Vec<_> = (0..8)
+            .map(|n| {
+                let (index, systems) = (index.clone(), systems.clone());
+                std::thread::spawn(move || {
+                    if n % 2 == 0 {
+                        index.set_system_name(&systems, "mgs-1-1", Some(&format!("S{n}")))
+                    } else {
+                        let given: GivenNames = [("c".into(), format!("P{n}"))].into();
+                        index.set_name(&systems, "mgs-1-1", "c", given.get("c").map(String::as_str))
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap().unwrap();
+        }
+        // Every write worked, and the file and the index agree.
+        let s = index.summary("mgs-1-1").unwrap().unwrap();
+        assert_eq!(systems::given_names(&systems, "mgs-1-1"), s.names);
+        assert!(s.names.contains_key("star") && s.names.contains_key("c"));
+        let leftovers = std::fs::read_dir(systems.join("mgs-1-1"))
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".tmp")
+            })
+            .count();
+        assert_eq!(leftovers, 0);
+        assert_eq!(
+            index.set_name(&systems, "mgs-1-1", "zz", Some("A")),
+            Err(systems::NamingError::NoSuchBody("zz".into()))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn two_processes_opening_an_old_file_migrate_it_once() {
         let root = temp_root("migrate-race");
         let db = root.join("mapgen.sqlite");
@@ -1409,10 +1478,15 @@ mod tests {
             )
             .unwrap();
         }
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
         let opened: Vec<_> = (0..4)
             .map(|_| {
                 let db = db.clone();
-                std::thread::spawn(move || Index::open(&db).map(drop))
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    Index::open(&db).map(drop)
+                })
             })
             .collect();
         for handle in opened {

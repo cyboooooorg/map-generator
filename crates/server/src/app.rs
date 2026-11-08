@@ -13,6 +13,7 @@
 //! | `PUT /api/systems/{id}/name`   | name the system itself, keeping its bodies' names (`SystemName`; null clears) |
 //! | `PUT /api/systems/{id}/pin`     | pin it in the main menu (idempotent, answers its summary) |
 //! | `DELETE /api/systems/{id}/pin`  | unpin it (idempotent, answers its summary)         |
+//! | `PUT /api/systems/{id}/bodies/{body}/name` | name one body, the other names kept (`SystemName`; null clears) |
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
 //! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body |
 //! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates |
@@ -267,6 +268,7 @@ pub fn router(config: Config) -> Router {
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
         .route("/api/systems/{id}/names", put(rename_system))
         .route("/api/systems/{id}/name", put(name_system))
+        .route("/api/systems/{id}/bodies/{body}/name", put(name_body))
         .route(
             "/api/systems/{id}/pin",
             put(pin_system).delete(unpin_system),
@@ -788,6 +790,30 @@ async fn name_system(
     let index = state.index.clone();
     let result = tokio::task::spawn_blocking(move || {
         index.set_system_name(&root, &owned, request.name.as_deref())
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    result.map(Json).map_err(|e| naming_failure(e, &id))
+}
+
+/// Names one body (`PUT /api/systems/{id}/bodies/{body}/name`): merged into
+/// the names given, the others untouched. `star` works too.
+async fn name_body(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+    Json(request): Json<SystemName>,
+) -> Result<Json<SystemSummary>, Failure> {
+    if !systems::is_valid_system_id(&id) || !systems::is_valid_body_id(&body) {
+        return Err(Failure(
+            StatusCode::BAD_REQUEST,
+            "invalid system or body id".into(),
+        ));
+    }
+    let root = state.config.systems_dir.clone();
+    let owned = id.clone();
+    let index = state.index.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        index.set_name(&root, &owned, &body, request.name.as_deref())
     })
     .await
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -1904,6 +1930,47 @@ mod tests {
             .await
             .0,
             StatusCode::NOT_FOUND
+        );
+        // One body at a time: the others are kept.
+        let one = format!("/api/systems/{id}/bodies/{first}/name");
+        let (status, body_named) = call(&app, "PUT", &one, Some(r#"{"name": "Terra"}"#)).await;
+        assert_eq!(status, StatusCode::OK, "{body_named}");
+        let body_named: serde_json::Value = serde_json::from_str(&body_named).unwrap();
+        assert_eq!(body_named["names"][&first], "Terra");
+        let (_, back) = call(&app, "PUT", &one, Some(r#"{"name": "Gaia"}"#)).await;
+        assert!(back.contains("Gaia"), "{back}");
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &format!("/api/systems/{id}/bodies/zz/name"),
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &format!("/api/systems/{id}/bodies/QQ/name"),
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                "/api/systems/..x/name",
+                Some(r#"{"name": "A"}"#)
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
         );
         // The star was named "Helia" before: put it back for the rest.
         call(&app, "PUT", &name, Some(r#"{"name": "Helia"}"#)).await;

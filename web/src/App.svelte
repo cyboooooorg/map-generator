@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import DriftPanel from './components/DriftPanel.svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobsIndicator from './components/JobsIndicator.svelte';
@@ -98,6 +98,12 @@
   const visible = $derived(systems.filter((s) => !hidden.includes(s.id)));
   /** The viewer bar's name is being edited. */
   let renamingTitle = $state(false);
+  /** Closes the bar's rename form, the focus going back to its pencil. */
+  async function closeTitleEditor(): Promise<void> {
+    renamingTitle = false;
+    await tick();
+    document.querySelector<HTMLElement>('.viewer-bar .rename-title')?.focus();
+  }
   $effect(() => {
     void selectedId;
     renamingTitle = false;
@@ -582,7 +588,7 @@
       <span class="names">
         {#if summaryOf(selectedId)}<SystemOrrery system={summaryOf(selectedId)!} width={40} height={22} radius={3} />{/if}
         {#if summaryOf(selectedId) && renamingTitle}
-          <RenameForm system={summaryOf(selectedId)!} onChanged={changed} onClose={() => (renamingTitle = false)} />
+          <RenameForm system={summaryOf(selectedId)!} onChanged={changed} onClose={closeTitleEditor} />
         {:else}
           <strong title={selectedId ?? ''}>{titleOf(selectedId)}</strong>
           {#if summaryOf(selectedId)}

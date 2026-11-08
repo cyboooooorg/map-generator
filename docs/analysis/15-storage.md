@@ -252,9 +252,13 @@ What was built, and where it departs from the plan above:
   refused. Downgrading: an older server stops with `database layout 2,
   this server knows 1`; move the file (and `-wal`, `-shm`) aside, the
   index is rebuilt, names come back from `names.json`, pins are lost.
-- **System name:** `PUT /api/systems/{id}/name` merges the name of the
-  star into the names under the connection lock (`names.json` first, then
-  the index), so a body named since a client read the list is kept.
+- **Single names:** `PUT /api/systems/{id}/name` (the star) and
+  `PUT /api/systems/{id}/bodies/{body}/name` merge one name into the names
+  under the connection lock (`names.json` first, then the index), so a
+  name given since a client read the list is kept; `PUT /names` (bulk)
+  takes the same lock. `names.json` is written to a temp file of its own
+  (process id and counter) then renamed, so concurrent edits never share
+  it.
 - **Location:** `MAPGEN_DB`, `/data/db/mapgen.sqlite` in the container,
   `./db` on the host (`compose.yaml`, `mise run up` creates it, `db/` is
   git-ignored).

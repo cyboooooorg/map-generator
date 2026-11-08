@@ -465,6 +465,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   given to its star (`{"name": "Sol"}`; null or blank clears it), merged
   into the names given so that those of the bodies are kept (422 for an
   invalid name).
+- `PUT /api/systems/{id}/bodies/{body}/name`: set (or, with null or blank,
+  clear) one body's name, `star` included, merged like `/name` (422 for
+  an invalid name or an unknown body, 400 for an invalid id).
 - `PUT /api/systems/{id}/pin` and `DELETE /api/systems/{id}/pin`: pin or
   unpin a system in the main menu (idempotent, 404 for an unknown
   system). Both answer its summary, whose `pinned` flag `GET /api/systems`

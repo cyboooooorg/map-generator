@@ -155,6 +155,7 @@ export const en = {
     compareHelp: 'Select exactly two systems',
     stripLabel: 'Its planets, from the star outwards',
     notGenerated: 'not generated yet',
+    pinLabel: (p: { name: string }) => `Pinned: ${p.name}`,
     pin: (p: { name: string }) => `Pin ${p.name} to the top`,
     unpin: (p: { name: string }) => `Unpin ${p.name}`,
     pinFailed: (p: { error: string }) => `Could not change the pin: ${p.error}`,

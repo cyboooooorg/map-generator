@@ -17,7 +17,9 @@
 
   let { system, onChanged }: Props = $props();
 
-  const label = $derived(
+  // A fixed label with aria-pressed; the tooltip says what a click does.
+  const label = $derived(t.systemList.pinLabel({ name: systemName(system) }));
+  const action = $derived(
     system.pinned ? t.systemList.unpin({ name: systemName(system) }) : t.systemList.pin({ name: systemName(system) }),
   );
 
@@ -30,7 +32,7 @@
   }
 </script>
 
-<button class="pin" class:on={system.pinned} aria-pressed={system.pinned} aria-label={label} title={label} onclick={toggle}
+<button class="pin" class:on={system.pinned} aria-pressed={system.pinned} aria-label={label} title={action} onclick={toggle}
   >{system.pinned ? '★' : '☆'}</button
 >
 

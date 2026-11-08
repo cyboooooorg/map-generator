@@ -82,13 +82,11 @@
     event.preventDefault();
     const systemId = world.systemId;
     if (!systemId) return;
-    const next = { ...names };
-    const value = field.trim();
-    if (value === '' || value === designation) delete next[id];
-    else next[id] = value;
+    const value = field.trim() === designation ? '' : field.trim();
     saving = true;
     try {
-      const summary = await api.renameSystem(systemId, next);
+      // Only this name is sent: the server keeps the others, even those given since.
+      const summary = await api.nameBody(systemId, id, value);
       renaming = null;
       world.loadSystem(systemId);
       onRenamed(summary);

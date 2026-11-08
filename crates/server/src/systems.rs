@@ -273,15 +273,12 @@ fn checked_name(name: &str) -> Result<String, NamingError> {
     Ok(trimmed.to_string())
 }
 
-/// Checks the names to give to the bodies of a system (`current`: its
-/// bodies, the star is always there) and returns them trimmed.
-pub fn checked_names(
-    current: &[crate::api::BodySummary],
-    given: &GivenNames,
-) -> Result<GivenNames, NamingError> {
+/// Checks the names to give to the bodies of a system (`ids`: its bodies,
+/// the star is always there) and returns them trimmed.
+pub fn checked_names(ids: &[String], given: &GivenNames) -> Result<GivenNames, NamingError> {
     let mut names = GivenNames::new();
     for (body, name) in given {
-        if body != STAR && !current.iter().any(|b| &b.id == body) {
+        if body != STAR && !ids.contains(body) {
             return Err(NamingError::NoSuchBody(body.clone()));
         }
         names.insert(body.clone(), checked_name(name)?);
@@ -300,11 +297,18 @@ pub fn write_names_file(root: &Path, id: &str, names: &GivenNames) -> Result<(),
             _ => {}
         }
     } else {
-        // Written aside, then renamed: a reader never sees half a file.
-        let temp = system_dir(root, id).join(format!(".{NAMES_FILE}.tmp"));
+        // Written aside (under a name of its own: two writers never share
+        // the file), then renamed: a reader never sees half a file.
+        static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let unique = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let temp =
+            system_dir(root, id).join(format!(".{NAMES_FILE}.{}-{unique}.tmp", std::process::id()));
         let json = serde_json::to_vec_pretty(names).map_err(|e| NamingError::Io(e.to_string()))?;
         std::fs::write(&temp, json).map_err(io)?;
-        std::fs::rename(&temp, &path).map_err(io)?;
+        if let Err(e) = std::fs::rename(&temp, &path) {
+            let _ = std::fs::remove_file(&temp);
+            return Err(io(e));
+        }
     }
     Ok(())
 }
@@ -461,6 +465,7 @@ mod tests {
             ("star".into(), "Helia".into()),
         ]
         .into();
+        let bodies: Vec<String> = bodies.into_iter().map(|b| b.id).collect();
         let names = checked_names(&bodies, &given).unwrap();
         assert_eq!(names.get("c").map(String::as_str), Some("Gaia"));
         let unknown: GivenNames = [("z".into(), "Nyx".into())].into();
