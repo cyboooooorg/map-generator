@@ -515,13 +515,16 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     with its progress, skies and the star view from `system.json`);
   - the CLI writing systems (`systems/<id>/`) and the deployment
     mounting `systems/`.
-- **Next:** phase 6, a card for every body and renaming any of them;
-  phase 7, the clean-up of the world layout (`/api/worlds`, the moon and
-  host exports, `worlds/`).
+- **Done since:** phase 6, a card for every body (`751535e`) and
+  renaming any of them (`23f33c8`).
+- **Next:** phase 7, the clean-up of the world layout. The `/api/worlds`
+  routes are gone from the server; what remains is to check the moon and
+  host exports and the legacy `worlds/` directory.
 
 ## 17. Asteroid belts and Lagrange points
 
-- **Status:** in progress
+- **Status:** done (the four tasks of the plan: the draw, the system,
+  the star view, and the small bodies marked in a planet's sky)
 - **Plan:** [2026-11-06-asteroid-belts.md](superpowers/plans/2026-11-06-asteroid-belts.md)
 - **Analysis:** [13-asteroids.md](analysis/13-asteroids.md)
 - **Problem:** a system has a star, planets and moons, but no small
@@ -647,17 +650,21 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   rings, diffusion, size law, saturation) leave these, each needing a
   model the app does not have yet.
 - **Craters:**
-  - The transition from simple to complex craters follows gravity only:
-    a target's strength would move it (Mercury about 12 km where the app
-    gives 6.6, Earth 3 to 5 km against 2.5, Barnouin et al. 2012). Icy
-    moons turn complex far sooner than rock at the same gravity (2 to
-    3 km on Ganymede, Schenk 1991, 2002, a number read only in secondary
-    sources), so `icy-moon` worlds get a transition several times too
-    large. Done when the transition reads a strength per crust (rock,
-    volatile-rich rock, ice) from a checked source.
-  - No multi-ring basins (Orientale): their onset does not scale as
-    `1/g` and depends on a weak layer under the surface (Melosh &
-    Ivanov 1999), with no rule to scale it from the Moon.
+  - The transition from simple to complex craters reads a strength for
+    ice only (2026-11-08): 0.15 of the lunar law, a calibration (Ganymede
+    near 2.5 km). Rock keeps the law: at the gravity the app derives for
+    Mercury's size it gives 10.7 km, in Barnouin et al. 2012's 10 to
+    12 km; Mars 7.3 km, in their 7 to 8. What remains: Barnouin et al.
+    and Schenk 2002 give the icy transitions and the icy simple craters'
+    depth-to-diameter only in figures (Schenk 1991 unreadable), so icy
+    simple craters keep rock's bowl (`0.2 D`); Earth's 3 to 5 km
+    (Melosh & Ivanov 1999) is not reached (2.5 km); no rule gives a
+    crust's strength from composition.
+  - Multi-ring basins, crustal thickness, flexure and the other
+    chronologies were weighed on 2026-11-08 and stay: the sources
+    (Melosh & Ivanov 1999 for the weak layer, Le Feuvre & Wieczorek
+    2011, Marchi et al. 2009) give no rule that scales to other bodies
+    or no numbers in text, and each needs a model the app lacks.
   - The lunar chronology on most worlds: `[geology] impact_ratio` and
     `crater_scale` carry a body's flux and crater size against the
     Moon's, set for `mars-like` from Hartmann's isochrons (2.6 and
@@ -672,8 +679,13 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   - Slab pull sets the present speed of each plate from its sinking
     edge (2026-11-07), on one pass over the present boundary cells; at
     another epoch that pass is extra, about 5 % of a plate map (0.24 s
-    at −100 Ma). The drift's other stages keep drawn speeds: setting
-    theirs too means finding each stage's boundaries, a pass per stage.
+    at −100 Ma). The drift's other stages get slab pull too (2026-11-08,
+    `plates::pull_stages`): the present boundary cells are carried rigidly
+    by each plate's rotation to each stage, no gaps, overlaps or crust
+    changes, a calibration of the geometry with no source; one pass over
+    the boundary cells per stage, negligible against a plate map. What
+    remains: boundaries found at each epoch's own map would be exact but
+    cost `epoch_cells` per stage.
     The plate count does not follow the planet's size: no source scales
     it (Bird 2003 counts Earth's).
   - Isostasy: continents float as a platform and the sea floor is
@@ -686,11 +698,19 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
     so a sea level lowered on a world exposes platform, not old basins.
   - The age of old ocean floor is unknown: floor older than about 18 Ma
     lies between 4 and 6.4 km by the noise (`generation::floating`), not
-    by its age.
+    by its age. Examined 2026-11-08,
+    left: the drift gives no floor an age (gaps get new crust without a
+    date), and an age from the distance to the nearest ridge needs a
+    second multi-source pass over ridges only (the nearest boundary is
+    often a trench), beyond `MAX_BOUNDARY_KM`, then replacing the noise's
+    depth in `floating` with Parsons & Sclater's `6.4 − 3.2 e^(−t/62.8)`
+    km (t over 20 Ma, doi:10.1029/JB082i005p00803: it meets the 4 km of
+    the old floor at 20 Ma) without counting the noise twice. A change
+    to the hypsometry calibrated on ETOPO, worth its own task.
 - **Small bodies:** their noise relief is capped (8 % of the radius;
-  9 km on airless stagnant bodies, ice 0.4 of rock), but an icy body's
-  simple craters are still rock's bowls, under rock's transition (see
-  the craters' first point).
+  9 km on airless stagnant bodies, ice 0.4 of rock), and an icy body's
+  craters turn complex under their own transition, but its simple
+  craters are still rock's bowls (see the craters' first point).
 
 ## 21. Climate: what the model leaves out
 
@@ -761,7 +781,28 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 | Step | Change                                                                                                   | Status |
 | ---- | -------------------------------------------------------------------------------------------------------- | ------ |
-| 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing; its file on a host bind mount (`./db:/data/db`) so it survives restarts | todo   |
+| 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing; its file on a host bind mount (`./db:/data/db`) so it survives restarts | done   |
 | 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
 | 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
 | 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |
+
+## 23. Extreme trans-Neptunian objects (Sednoids)
+
+- **Status:** todo (study first)
+- **Problem:** a system's small bodies stop at the belts and the scattered
+  disk (item 17). Bodies like Sedna, 2012 VP113 and Leleākūhonua, on very
+  eccentric orbits whose perihelia lie far beyond the giants' reach
+  (detached objects, 50 to 80 AU and more, aphelia of hundreds to
+  thousands of AU), are not drawn.
+- **Study:** what they are and how many there are (the observed
+  Sednoids and other detached objects, with their perihelia, aphelia and
+  inclinations); the formation scenarios that place them (a passing star,
+  the Sun's birth cluster, a distant undiscovered planet, the inner Oort
+  cloud) and what each implies for other stars; their sizes and surfaces;
+  how often other systems could have them, and whether anything constrains
+  that from observations; how they show in the star view (orbits far
+  wider than the planets', the system's scale) and whether they get
+  cards and maps like dwarf planets.
+- **Then:** add them to the system draw on a stream of their own (so
+  existing systems keep their other bodies), show them in the star view,
+  and give the large ones a card and, if decided, a map.

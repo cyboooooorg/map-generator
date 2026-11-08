@@ -28,8 +28,11 @@
   import { UNITS, unitTooltip } from '../lib/units';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
-  import { cloudTint, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
-import { dustOf, innerRingOf } from '../lib/ringMoons';
+  import { orbitReadout } from '../lib/orbitClock';
+  import { clockDays, seasonOfYearDay, yearDayAt } from '../lib/seasonClock';
+  import { temperatureRange } from '../lib/temperatureRange';
+  import { cloudTint, namedSeason, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
+  import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
   import { toasts } from '../lib/toasts.svelte';
@@ -40,7 +43,7 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
+  import { hillReach, hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
   import { dialFigureText, formatDialAngle, hostCompass as hostCompassOf, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -450,6 +453,14 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
   const dataReady = $derived(layers !== null);
   /** A giant planet: cloud bands, no ground (see GiantInfo). */
   const giant = $derived(meta?.giant ?? null);
+  /**
+   * The °C range of the temperature colours, for the globe, its detail tiles
+   * and the legend alike: a giant's cloud tops', else the world's own when it
+   * leaves the Earth-like -30 to 40 °C.
+   */
+  const tempRange = $derived<[number, number]>(
+    giant ? giantTemperatureRange(giant) : temperatureRange(layers?.temperatureSpan),
+  );
   /** The layers a giant has: its bands, cloud tops, temperatures and winds (on the moisture layer). */
   const GIANT_LAYERS: readonly Layer[] = ['biomes', 'elevation', 'temperature', 'moisture'];
   /** A layer's name: a giant's cloud tops and winds are named as such. */
@@ -471,12 +482,16 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
     const option = LAYERS.find((l) => l.id === layer);
     return dataReady && option && available(option.needs, option.id) ? layer : 'biomes';
   });
+  /**
+   * The season as the panel names it: the equinox or solstice when the sun
+   * truly is there, else the day of the year (the declination is defined
+   * further down, from the same clock the sun is drawn with).
+   */
   const seasonLabel = $derived.by(() => {
-    const quarter = season * 4;
-    const nearest = Math.round(quarter) % 4;
-    return Math.abs(quarter - Math.round(quarter)) < 0.12
-      ? (t.viewer.seasons[nearest] ?? '')
-      : t.viewer.dayOfYear({ day: Math.round(season * 365) % 365 });
+    const named = namedSeason(season, declination, meta?.axial_tilt_deg ?? 23.44);
+    if (named !== null) return t.viewer.seasons[named] ?? '';
+    // In a system the day is the planet's own, counted from its spring equinox.
+    return t.viewer.dayOfYear({ day: yearDay !== null ? Math.floor(yearDay) : Math.round(season * 365) % 365 });
   });
   const highlight = $derived(hovered ?? pinned);
 
@@ -752,6 +767,7 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
   $effect(() => view?.setCloudsVisible(clouds));
   $effect(() => view?.setCloudsDrifting(cloudDrift));
   $effect(() => view?.setGiant(giant));
+  $effect(() => view?.setTemperatureRange(tempRange[0], tempRange[1]));
   // A giant's storms, found in its biome map, each drifting whole.
   $effect(() => {
     const stormId = giant && meta ? meta.biomes.find((b) => b.key === 'GiantStorm')?.id : undefined;
@@ -916,7 +932,14 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
           }))
       : null,
   );
-  const sysDays = $derived((sysPlanet ? season * sysPlanet.orbit.period_days : 0) + orbitDays);
+  /**
+   * The clock, days from the system's epoch: the planet's place on its orbit
+   * at the season (the quarters are its equinoxes and solstices, see
+   * lib/seasonClock.ts), and the orbit time past it.
+   */
+  const sysDays = $derived(sysPlanet ? clockDays(sysPlanet.orbit, season, orbitDays) : orbitDays);
+  /** The day of the planet's year the clock shows: days since its northern spring equinox. */
+  const yearDay = $derived(sysPlanet ? yearDayAt(sysPlanet.orbit, sysDays) : null);
   const sysTextures = (id: string) => (world.systemId ? worldFile(systemBodyId(world.systemId, id), 'raw_data/surface.png') : null);
   /**
    * The hour: the sun at the slider's longitude over the body shown at the
@@ -1182,6 +1205,8 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
     const moon = sys.bodies.find((b) => b.parent === sysBody.id);
     return moon?.orbit.period_days ?? (10 * sysBody.spin.period_hours) / 24;
   });
+  /** The orbit the Light and season panel states: the moon's own, or the planet's year (not the slider's span). */
+  const orbitClock = $derived(sysBody ? orbitReadout({ parent: sysBody.parent, orbitPeriodDays: sysBody.orbit.period_days }, yearDay ?? 0, orbitDays) : null);
   /**
    * The slowest orbit speed: ORBIT_SPEED_MIN, or slower for a short orbit,
    * down to real time (the power of two at or just below it).
@@ -1239,7 +1264,6 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
   $effect(() => view?.setStarPlace(sysSky?.star ?? null));
   // Far enough out to see the moons of the shown body's planet whole.
   const reach = $derived(sys && sysBody ? systemReach(sys, sysBody.id) : null);
-  $effect(() => view?.setGlobeReach(reach ?? 0));
   // Not aborted when the bodies move (every frame of the seasons): a map
   // still loading is kept, and a newer set of bodies drops an older one.
   /**
@@ -1332,11 +1356,14 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
   // The Hill sphere: the body's own, or its host planet's from a moon (round
   // the planet as it stands in the moon's sky).
   const hill = $derived(sys && sysBody ? hillSphere(sys, sysBody.id) : null);
-  $effect(() => {
+  const hillDrawn = $derived.by(() => {
     const k = hill && sysBody?.parent && sysSky ? sysSky.ids.indexOf(hill.id) : -1;
     const centre: [number, number, number] | null = !hill ? null : k >= 0 ? (sysSky?.bodies[k]?.position ?? null) : sysBody?.parent ? null : [0, 0, 0];
-    view?.setHillSphere(hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null);
+    return hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null;
   });
+  $effect(() => view?.setHillSphere(hillDrawn));
+  // With the Hill sphere on, the camera may go out to see it whole.
+  $effect(() => view?.setGlobeReach(Math.max(reach ?? 0, hillDrawn ? hillReach(hillDrawn.centre, hillDrawn.radius) : 0)));
   // The body shown's own orbit dashed: the body slides along it.
   $effect(() => view?.setSkyOrbits(skyOrbitLoops, orbitKept.map((k) => k === sysSky?.ownOrbit)));
   // A moon goes round its orbit 2^speed times every ORBIT_SECONDS while
@@ -1512,7 +1539,7 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
   /** Moves the clock to day `day` of the year: the season there, the orbit time from it. */
   function setClockDay(day: number): void {
     if (!clockYear) return;
-    season = ((day % clockYear) + clockYear) % clockYear / clockYear;
+    season = sysPlanet ? seasonOfYearDay(sysPlanet.orbit, ((day % clockYear) + clockYear) % clockYear) : 0;
     orbitDays = 0;
   }
   /**
@@ -1671,9 +1698,14 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
     if (!playing || !sun || !canvasVisible || locked) {
       return;
     }
+    const orbit = sysPlanet?.orbit;
+    const year = clockYear;
     let last = performance.now();
     let frame = requestAnimationFrame(function step(now) {
-      season = (season + (now - last) / 1000 / YEAR_SECONDS) % 1;
+      const fraction = (now - last) / 1000 / YEAR_SECONDS;
+      // In a system a year of time passes in YEAR_SECONDS, not a year of angle:
+      // the seasons of an eccentric orbit are unequal.
+      season = orbit && year ? seasonOfYearDay(orbit, ((yearDayAt(orbit, clockDays(orbit, season)) + fraction * year) % year)) : (season + fraction) % 1;
       last = now;
       frame = requestAnimationFrame(step);
     });
@@ -2028,11 +2060,11 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
           <small class="value">{sunLongitude}°</small>
         </label>
       {/if}
-    {#if sun && orbitPeriod && sysSky}
+    {#if sun && orbitClock && sysSky}
         <p class="muted">
           {t.viewer.orbitDay({
-            days: formatNumber(orbitDays % orbitPeriod, orbitPeriod < 10 ? 2 : 1),
-            period: formatNumber(orbitPeriod, orbitPeriod < 10 ? 2 : 1),
+            days: formatNumber(orbitClock.day, orbitClock.period < 10 ? 2 : 1),
+            period: formatNumber(orbitClock.period, orbitClock.period < 10 ? 2 : 1),
           })}{#if sysBody?.kind === 'moon'}<br />{sysBody.spin.locked
               ? t.viewer.moonSun
               : t.viewer.moonSunSpin({ hours: formatNumber(sysBody.spin.period_hours, 1) })}{/if}
@@ -2286,9 +2318,9 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
         : null}
       time={clockYear
         ? {
-            value: sysDays % clockYear,
+            value: yearDay ?? 0,
             max: clockYear,
-            text: t.playback.dayOfYear({ day: formatInt(Math.floor(sysDays % clockYear) + 1), year: formatInt(Math.round(clockYear)) }),
+            text: t.playback.dayOfYear({ day: formatInt(Math.floor(yearDay ?? 0) + 1), year: formatInt(Math.round(clockYear)) }),
             help: t.playback.yearHelp,
             set: setClockDay,
           }
@@ -2302,7 +2334,7 @@ import { dustOf, innerRingOf } from '../lib/ringMoons';
     {@const windShown = giant !== null && shown === 'moisture'}
     {@const topsShown = giant !== null && shown === 'elevation'}
     {@const ramp = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown]}
-    {@const range = giant && shown === 'temperature' ? giantTemperatureRange(giant) : null}
+    {@const range = shown === 'temperature' ? tempRange : null}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="legend" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
       <strong>{giant ? layerName(shown) : ramp.label}</strong>

@@ -4,7 +4,7 @@
 // a pixel wide per slot of a coarser window. Positions are in radii of
 // the moon.
 import { CELL_KM, GRAIN_CELL_KM, GRAIN_REACH_KM, GRAIN_ROWS, GRAINS_PER_CELL, ROCK_REACH_KM, ROCKS_PER_CELL, ROWS } from '../ringRocks';
-import { skyRingDensityGlsl } from './ringShaders';
+import { ringletsGlsl, skyRingDensityGlsl } from './ringShaders';
 
 // What the rocks and the grain share: a window of a lattice fixed in the
 // ring (`rows` rows), the hash of a slot, the gaps, and the place of a
@@ -32,6 +32,7 @@ const latticeGlsl = (rows: number) => /* glsl */ `
   uniform float uFar;          // the camera's far plane
   uniform float uFade;         // the globe's morph: rocks belong to the globe
   ${skyRingDensityGlsl}
+  ${ringletsGlsl}
 
   // A 32-bit integer hash (PCG, Jarzynski and Olano 2020), as a float in [0, 1).
   uint pcg(uint v) {
@@ -63,10 +64,13 @@ const latticeGlsl = (rows: number) => /* glsl */ `
     return false;
   }
 
-  // The ring's optical depth at r, out of its gaps.
+  // The ring's optical depth at r, out of its gaps, with the ringlets of
+  // the giant's own view (ringlets, at the exact radius: a rock is
+  // resolved where it is drawn), over their mean (0.675) so that the
+  // rocks are as many on the whole as before.
   float opticalDepth(float r) {
     if (inGap(r)) return 0.0;
-    return -log(1.0 - min(ringDensity(r), 0.95));
+    return -log(1.0 - min(ringDensity(r) * ringlets(r, 0.0) / 0.675, 0.95));
   }
 
   // The place of a slot at rKm from the giant, \`cells\` cells ahead of the

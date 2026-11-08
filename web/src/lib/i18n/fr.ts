@@ -16,7 +16,7 @@ export const fr: Messages = {
   },
   playback: {
     dayOfYear: (p) => `jour ${p.day} sur ${p.year}`,
-    yearHelp: `Le jour de l’année de la planète${S}: les saisons, l’heure et les lunes avancent avec lui`,
+    yearHelp: `Le jour de l’année de la planète, compté depuis son équinoxe de printemps boréal${S}: les saisons, l’heure et les lunes avancent avec lui`,
     toStart: 'Revenir au jour 1',
     label: 'Lecture',
     play: 'Lecture',
@@ -699,7 +699,7 @@ export const fr: Messages = {
         text: 'le jour solaire découpé en 24 heures locales, midi quand le soleil passe au méridien (convention des missions martiennes).',
       },
       { term: `Rotation synchrone${S}:`, text: 'l’astre fait un tour par orbite et montre toujours la même face à ce qu’il orbite.' },
-      { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’environ ±2e radians.' },
+      { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’une amplitude maximale voisine de 2e radians (e l’excentricité), que le cadran donne exactement à côté de l’angle courant.' },
       {
         term: `Résonance 3:2${S}:`,
         text: `trois tours toutes les deux orbites, comme Mercure${S}: les marées de l’étoile y tiennent une planète excentrique au lieu de la rendre synchrone${S}; son jour solaire dure deux de ses années.`,
@@ -985,6 +985,7 @@ export const fr: Messages = {
     systemClockHelp:
       `Tout le système suit une même horloge, en jours terrestres par seconde, chaque planète à son vrai rythme. Sélectionner une autre planète n’y change rien. Le jour compte les jours terrestres depuis le début de l’animation.`,
     hours: (p) => `${p.hours}${S}h`,
+    systemScale: `Schéma${S}: les distances sont logarithmiques (chaque pas vers l’extérieur multiplie la distance, donc les planètes proches sont écartées et les lointaines rapprochées, la zone habitable ombrée à sa place)${S}; l’étoile et les planètes ne sont pas à l’échelle, et les marqueurs rétrécissent là où les orbites sont proches.`,
     schematic: `Schéma${S}: l’étoile n’est pas à l’échelle${S}; les distances sont proportionnelles.`,
   },
   planetCard: {
