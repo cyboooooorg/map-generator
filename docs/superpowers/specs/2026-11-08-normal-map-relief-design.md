@@ -26,8 +26,8 @@ the baked path alive for them.
    uses in that mode, `uLightDir`).
 2. **Detail tiles:** the same lighting at every zoom level, so the relief
    does not change look when tiles replace the base map.
-3. **Other epochs:** the crater epochs and the plate-drift previews are lit
-   the same way.
+3. **Other epochs:** the crater epochs (shown on the globe) are lit the
+   same way.
 4. **Bodies in the sky** of the planet view (`skyBodies.ts`: the planet
    seen from its moon, the moons seen from their planet) use the same
    textures and lighting.
@@ -39,7 +39,9 @@ the baked path alive for them.
 
 - Flat images keep their baked hillshade: `world.png` (download, with its
   contours and reference lines), the library thumbnails (`thumb.png`, made
-  from `world.png`), the legend, the SVG. They have no light to follow.
+  from `world.png`), the legend, the SVG, and the plate-drift previews
+  (shown as a 2D image in the drift panel, not on the globe). They have no
+  light to follow.
 - No cast shadows (a slope does not darken the valley next to it).
 - No hybrid mix with the fixed north-west light (the user chose the pure
   normal map, knowing relief fades under a sun at the zenith).
@@ -86,9 +88,10 @@ the baked path alive for them.
   - `normal.png` (key `normal`): tangent-space normals (east, north, up),
     8 bits per channel, from the elevation's central differences at the
     hillshade's exaggeration.
-- **Every 3D consumer of `surface.png` moves to the pair**: the planet
-  view's base map, the detail tiles, the crater epochs, the drift
-  previews, the sky bodies, the star view.
+- **Every 3D consumer moves to the pair**: the planet view's base map,
+  the detail tiles, the crater epochs and the sky bodies (which read
+  `surface.png` today), and the star view (which wraps the `thumb.png`
+  thumbnail today, cut from `world.png`).
 - **No fallback**: worlds without the layers are refused by the format
   version.
 - **Lava and magma emit light** (the user, 2026-11-08). Their glow is
@@ -122,12 +125,11 @@ overrule any of them.
   rendered bands (what `surface.png` held) and `normal.png` is flat, or
   is omitted with the viewer treating a missing normal map as flat; the
   builder picks whichever keeps the viewer's code to one path.
-- **Epochs and drift previews**: the server renders them from the decoded
-  world (`render_pixels` in `crates/server/src/tiles.rs` and
-  `crates/mapgen/src/drift.rs`); its epoch and drift routes serve
-  `colour.png` and `normal.png` instead of `surface.png` (same `scale` and
-  `width` queries), from the epoch's own elevation, so the relief at an
-  epoch is lit like the present's.
+- **Epochs**: the server renders them from the decoded world
+  (`epoch_png` in `crates/server/src/tiles.rs`); its epoch route serves
+  `colour.png` and `normal.png` instead of `surface.png` (same `scale`
+  query), from the epoch's own elevation, so the relief at an epoch is lit
+  like the present's. The drift previews stay a hillshaded 2D image.
 - **Tangent frame**: east and north of the latitude/longitude grid, built
   in the shader from the point on the sphere, as the current elevation
   tilt does; on the flat map, east is +x and north +y. Near the poles the
@@ -141,9 +143,10 @@ overrule any of them.
   `TILE_RENDER_VERSION` go up.
 - **The other layers** (elevation, temperature…) use the normal map too,
   for one consistent look; the fragment-shader elevation tilt goes away.
-- **Star view textures** come downscaled from the server (a `width` query
-  on the two layers, as drift previews already have), not the full maps,
-  so a system with many bodies stays light.
+- **Star view textures** are small copies written at generation,
+  `raw_data/colour_small.png` and `raw_data/normal_small.png` (512 × 256,
+  like the thumbnail's width), so a system with many bodies stays light
+  and no new route is needed.
 
 ## Left to the builder
 
@@ -152,8 +155,6 @@ overrule any of them.
   side follows the current day curve (`smoothstep` on the sun's height,
   low sun dimmer); slopes facing away from a low light darken without
   turning pitch black. The mock-up's shader is a starting point.
-- The width of the star view's textures (planets there are a few to a
-  few dozen pixels wide).
 - Tests: Rust tests that the normals of a flat world are (0, 0, 1), that a
   known slope gives the expected normal, that the flat images are
   unchanged, that tiles' normals continue across tile borders; server
