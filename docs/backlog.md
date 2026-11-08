@@ -1,5 +1,9 @@
 # Backlog
 
+The open items now live in GitHub issues (label `backlog`). This file keeps
+the decisions and the history of what was done; each open item links to
+its issue as `moved to #N`.
+
 Open work on the generator and the planet viewer, in implementation order.
 Each item states the problem, what "done" means, the decision taken and its
 status. The analyses behind the decisions are in `docs/analysis/`.
@@ -56,7 +60,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   plane near the surface.
 - **Rejected:** a pre-generated pyramid (about 175 000 tiles, 20 GB and 15 min
   per world); detail in the shader as the main path (it would duplicate the
-  biome rules in GLSL and cannot draw rivers), kept for micro-relief later.
+  biome rules in GLSL and cannot draw rivers), kept for micro-relief later (moved to #291).
   WebAssembly in the browser stays possible later with the same Rust code.
 - **Done when:** zoom from the whole planet to a few hundred metres per screen
   pixel on the globe and the map, consistent with the base world, loading
@@ -139,7 +143,8 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   to 7.6–8.3 M km²) and moved seed 7's by 7 %. Sinuosity is slightly under the
   prototype's 1.45, which needed noise everywhere. Generation takes about
   2.6 s instead of 2.0 s. The uphill share was not re-measured: the valley
-  guard of the prototype is kept unchanged.
+  guard of the prototype is kept unchanged (re-measuring it: moved to
+  #292).
 
 ## 4. Smaller items
 
@@ -251,7 +256,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 
 - **Rejected:** a 2:1 map size for square pixels (the grid already scales
   slopes by latitude); rock and snow from the slope (later, with the tiles'
-  micro-relief).
+  micro-relief; moved to #291).
 
 ## 8. Impact craters and geological time
 
@@ -292,7 +297,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   (Cortial et al. 2019) replacing the coarse continent octaves, with a
   time slider over keyframes of the simulation.
 - **Deferred (2026-11-03):** too costly for now (a new subsystem, heavy
-  tuning, a full climate per epoch).
+  tuning, a full climate per epoch; moved to #293).
 - **Cheaper approach (research, 2026-11-04):** kinematic drift without
   simulation. Static Voronoi plates (as in frozenfractal's generator)
   turned by Euler poles constant per stage (as in GPlates): each pixel
@@ -467,13 +472,13 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   gravity, internal heat cooling with the system's age, the great spot in
   a southern zone drifting slowly, previews following the generated
   bands (`giant_clouds.rs`, `giant_world.rs`). Left to do:
-  - The peak winds are a calibration on the four giants (Rossby number
+  - (moved to #294) The peak winds are a calibration on the four giants (Rossby number
     against the flux), not a derivation: Showman et al. 2010 call the
     winds of Saturn and Neptune, faster than Jupiter's on less energy,
     not understood. A friction or depth term would need a model of the
     deep flow. With Saturn's real flux the law gives about a third under
     its winds, and Uranus comes out at 285 m/s against 200.
-  - The whole wind profile is held under 0.75 of the speed of sound and the
+  - (moved to #295) The whole wind profile is held under 0.75 of the speed of sound and the
     peak rises with the heating (calibrations, no source); a cold light
     giant would otherwise reach 2 000 m/s. A giant that tidal locking
     stops (the rule locks a Jupiter-mass giant at 0.5 AU of a G2V star,
@@ -486,20 +491,20 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     -50 to -100): the jets away from the equator take either sign at 0.3 to
     0.7 of the peak. Uranus has Neptune's wind profile; its real
     eastward peak is the larger and its westward flow weaker.
-  - The great spot drifts slowly but the hole that hides the map's copy of
+  - (moved to #296) The great spot drifts slowly but the hole that hides the map's copy of
     it in `giantColour` (`shaders.ts`) still follows the band wind, a
     patch of plain band riding along the zone. Check it in a browser with
     Band drift on; making the hole follow the spot would freeze the band.
-  - Saturn's internal heat is above the cooling law (helium rain); ice
+  - (moved to #297) Saturn's internal heat is above the cooling law (helium rain); ice
     giants keep a fixed 40 K instead of Neptune's and Uranus's very
     different heat.
-  - The decks use the Sun's composition; an ice giant's methane and
+  - (moved to #298) The decks use the Sun's composition; an ice giant's methane and
     water enrichment (a methane ice deck on Neptune, water near 40 bar)
     and the deep dry adiabat of its troposphere are not modelled.
-  - The great spot has the size it is drawn with; the real one shrinks
+  - (moved to #299) The great spot has the size it is drawn with; the real one shrinks
     by 0.19° of longitude a year (Simon et al. 2018), which needs a
     date in the viewer.
-  - Cloud tops only: no view of the depths where Juno sees the belt and
+  - (moved to #300) Cloud tops only: no view of the depths where Juno sees the belt and
     zone contrast change sign (Fletcher et al. 2021).
 
 ## 15. Names
@@ -516,8 +521,8 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   world's summary, computed from `world.json` (older worlds included),
   and `PUT /api/worlds/{id}/names` names the world and its moons
   (`names.json`), edited from the world card.
-- **Later:** naming the star and the giants too; keeping given names
-  across a regeneration with `replace`.
+- **Later:** naming the star and the giants too (moved to #301); keeping
+  given names across a regeneration with `replace` (moved to #302).
 
 ## 16. Planetary systems
 
@@ -543,7 +548,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     mounting `systems/`.
 - **Done since:** phase 6, a card for every body (`751535e`) and
   renaming any of them (`23f33c8`).
-- **Next:** phase 7, the clean-up of the world layout. The `/api/worlds`
+- **Next (moved to #303):** phase 7, the clean-up of the world layout. The `/api/worlds`
   routes are gone from the server; what remains is to check the moon and
   host exports and the legacy `worlds/` directory.
 
@@ -630,10 +635,10 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   (`rings.d_ring`, shown in the giant's view and the moons' skies), and the
   equatorial ridge of the small ring moons that accreted ring material
   (Pan, Atlas, Daphnis) in the `shape` layer (`WorldParams::ridge`).
-- **Remaining:** a plume moon chosen by its tidal heating (an icy moon in
+- **Remaining:** (moved to #304) a plume moon chosen by its tidal heating (an icy moon in
   resonance, its eccentricity forced: Peale et al. 1979 for Io, Meyer &
   Wisdom 2007 for Enceladus), not by drawn odds, which needs the forced
-  eccentricities of `moons.rs`; a Phoebe-type ring, once systems have
+  eccentricities of `moons.rs`; (moved to #305) a Phoebe-type ring, once systems have
   irregular moons.
 
 ## 19. Tides, spin and moons: what the science fixes left
@@ -654,14 +659,14 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     2019 (Beta(1.58, 4.4) single-transiting, Beta(1.52, 29)
     multi-transiting), giants
     keep Kipping 2013;
-  - remains: resonances above 2:1 (5:2, 3:1 and over: Makarov gives no
+  - remains (moved to #306): resonances above 2:1 (5:2, 3:1 and over: Makarov gives no
     threshold for them) and the Makarov
-    triaxiality dependence of the odds (the ramps are Mercury's, a more
+    triaxiality dependence of the odds (moved to #307) (the ramps are Mercury's, a more
     symmetric planet is caught at lower eccentricities);
-  - remains: a 3:2 world takes the rotating climate whatever its solar
+  - done by #282 (`DayCycle`): a 3:2 world takes the rotating climate whatever its solar
     day (two years: 176 days for Mercury), not a slow rotator's (the
     climate track);
-  - remains, not done for lack of a model: a moon's tilt is the Moon's
+  - remains, not done for lack of a model (moved to #308): a moon's tilt is the Moon's
     6.68° for a giant-impact moon and 0 for the others, not its own
     Cassini state. The closed form needs the node's precession rate
     (the star's and the other moons' perturbations), the moon's moments
@@ -672,7 +677,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     large moon apply round every star (the despun planets of cool stars
     already lose their moons by `lasting_moon_kg`, and the paper's grid
     does not extend the odds to other masses).
-  - remains, two small defects found by the cross-review of #281: a
+  - remains, two small defects found by the cross-review of #281 (moved to #309 and #310): a
     despun giant that `spin::giant_stays_locked` counts as locked (its
     pseudo-synchronous rate within 5 % of one turn per orbit, e below
     about 0.09) still turns at that rate in `giant_world.rs`
@@ -687,7 +692,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 
 ## 20. Relief science, what remains
 
-- **Status:** todo
+- **Status:** todo (open items moved to issues)
 - **Problem:** the science articles on craters, plates and mountains
   (2026-11-07) list departures of the generator from the science. The
   fixes of 2026-11-07 (rocky gravity, `1/g` relief, crater depths, peak
@@ -698,7 +703,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     ice only (2026-11-08): 0.15 of the lunar law, a calibration (Ganymede
     near 2.5 km). Rock keeps the law: at the gravity the app derives for
     Mercury's size it gives 10.7 km, in Barnouin et al. 2012's 10 to
-    12 km; Mars 7.3 km, in their 7 to 8. What remains: Barnouin et al.
+    12 km; Mars 7.3 km, in their 7 to 8. What remains (moved to #311 and #312): Barnouin et al.
     and Schenk 2002 give the icy transitions and the icy simple craters'
     depth-to-diameter only in figures (Schenk 1991 unreadable), so icy
     simple craters keep rock's bowl (`0.2 D`); Earth's 3 to 5 km
@@ -709,7 +714,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     (Melosh & Ivanov 1999 for the weak layer, Le Feuvre & Wieczorek
     2011, Marchi et al. 2009) give no rule that scales to other bodies
     or no numbers in text, and each needs a model the app lacks.
-  - The lunar chronology on most worlds: `[geology] impact_ratio` and
+  - The lunar chronology on most worlds (moved to #313): `[geology] impact_ratio` and
     `crater_scale` carry a body's flux and crater size against the
     Moon's, set for `mars-like` from Hartmann's isochrons (2.6 and
     0.751). Mercury, Venus and Earth keep 1: Le Feuvre & Wieczorek 2011
@@ -728,19 +733,19 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     by each plate's rotation to each stage, no gaps, overlaps or crust
     changes, a calibration of the geometry with no source; one pass over
     the boundary cells per stage, negligible against a plate map. What
-    remains: boundaries found at each epoch's own map would be exact but
+    remains (moved to #314): boundaries found at each epoch's own map would be exact but
     cost `epoch_cells` per stage.
     The plate count does not follow the planet's size: no source scales
     it (Bird 2003 counts Earth's).
   - Isostasy: continents float as a platform and the sea floor is
     bounded between the shelf and Parsons & Sclater's old floor
     (`generation::floating`, 2026-11-07), calibrated on Earth's
-    hypsometry (ETOPO 2022). What remains: no crustal-thickness field
+    hypsometry (ETOPO 2022). What remains (moved to #315 and #316): no crustal-thickness field
     (the platform's height is a calibration rather than Airy's balance
     of a thickness), no flexure (volcanoes and ranges do not bend the
     lithosphere into moats), and the platform floats at the waterline,
     so a sea level lowered on a world exposes platform, not old basins.
-  - The age of old ocean floor is unknown: floor older than about 18 Ma
+  - The age of old ocean floor is unknown (moved to #317): floor older than about 18 Ma
     lies between 4 and 6.4 km by the noise (`generation::floating`), not
     by its age. Examined 2026-11-08,
     left: the drift gives no floor an age (gaps get new crust without a
@@ -754,7 +759,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 - **Small bodies:** their noise relief is capped (8 % of the radius;
   9 km on airless stagnant bodies, ice 0.4 of rock), and an icy body's
   craters turn complex under their own transition, but its simple
-  craters are still rock's bowls (see the craters' first point).
+  craters are still rock's bowls (see the craters' first point; moved to #311).
 
 ## 21. Climate: what the model leaves out
 
@@ -769,13 +774,13 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   first step done (2026-11-08): the sea with land to its east within
   2 500 km is cooled by up to 1.7 K at 25° (`cold_currents`), the
   magnitude and width read in NOAA OI SST v2 (Reynolds et al. 2002; see
-  the README). What remains: the cooling is a smooth offset read from 1°
+  the README). What remains (moved to #319, #320 and #321): the cooling is a smooth offset read from 1°
   cells, so it is weaker and wider than the real coastal cold
   tongue; it does not cool the coastal land air, which is what keeps the Atacama rainless and foggy (an inversion the moisture
   pass does not have); the ocean basin is found by the land to the east
   in the row, not by the gyre; and the warm western boundary currents
   (Gulf Stream, Kuroshio), which balance the cold ones, are not modelled.
-  Any land to the east counts (cross-review of #282): a one-pixel island
+  Any land to the east counts (cross-review of #282; moved to #318): a one-pixel island
   in the subtropics casts a cold strip 1 000 to 2 500 km wide to its
   west, and the sea west of a lake or of an inland sea's far shore is
   cooled too. A minimum run of land (a few hundred km), or the land
@@ -796,30 +801,30 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   with a longitude of perihelion in `WorldParams` (`--perihelion`, drawn
   from the seed on its own stream, Earth 283°, Mars 251°; in a system, the
   orbit's argument of periapsis, which is what the sky draws). Worlds without
-  it keep the circular swing. What remains: the swing is half the
+  it keep the circular swing. What remains (moved to #322): the swing is half the
   difference between the sunniest and darkest days, damped like the
   circular one, so the summer and the winter stay symmetric around the
   annual mean; a real eccentric orbit gives a short hot season and a long
   mild one (the temperature response of a month-by-month run would).
-  A moon takes its planet's perihelion longitude but its own tilt: its
+  (Moved to #323.) A moon takes its planet's perihelion longitude but its own tilt: its
   equinoxes are not its planet's, so the phase of its uneven seasons is
   approximate (cross-review of #282).
 - **Slow rotators and the solar day:** first step done (2026-11-08). A
   world whose solar day lasts more than a month (the 3:2 resonance, a
   slow rotator) gets the swing of its day in its seasons (`DayCycle`:
   North et al. 1981 response at the day's period, a monthly window; Yang
-  et al. 2014 for the picture). What remains: (a) the clouds. Yang et al.
+  et al. 2014 for the picture). What remains: (a) the clouds (moved to #324). Yang et al.
   find that at a given stellar flux the global-mean surface temperature
   falls by 20 K between a rotation period of 1 day and 256 days (a
   thermal inertia of 50 m of water), through the albedo of the thick
   substellar clouds; the app keeps the mean of a fast rotator, and the
   shape between the two ends is not in the text. It also conflicts with
-  the carbon cycle that `star_temperatures` regulates. (b) The day-night
+  the carbon cycle that `star_temperatures` regulates. (b) (moved to #325) The day-night
   swing is zonal: a 3:2 world has hot longitudes (Mercury's two hot
   poles), and a slow rotator's circulation is organised around the
   substellar point, not by latitude. (c) The closure fails for days of
   hours (it would give Earth 0.2 K of day-night swing for its 10 K), so
-  days of a month or less add nothing. (d) The air's damping uses Koll &
+  days of a month or less add nothing. (d) (moved to #326) The air's damping uses Koll &
   Abbot's (2016) threshold for dry tidally locked planets, `t_wave / t_rad`
   of about 10⁻², with a logistic shape of our own; Yang et al. 2014 give
   no day-night contrast in text for a 1 bar air (only maps), so the
@@ -885,19 +890,19 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 | ---- | -------------------------------------------------------------------------------------------------------- | ------ |
 | 1    | SQLite index owned by the server: systems, bodies, seeds and requests, names, jobs, last opened, generator version; rebuilt from the tree when missing; its file on a host bind mount (`./db:/data/db`) so it survives restarts | done   |
 | 1b   | Systems can be renamed and pinned from the main menu; pins live in the index only (layout version 2), names stay in `names.json` too | done   |
-| 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | todo   |
-| 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | todo   |
-| 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | todo   |
+| 2    | `world.svg` and `noise_maps/` produced only on request: an "Export SVG" action and a debug option        | moved to #327 |
+| 3    | Eviction: a body not opened for 14 days loses its generated files; opening it again regenerates it, with the current generator (an older version draws differently) | moved to #328 |
+| 4    | Export: the seeds and requests (JSON) and the images (PNG) of a system, from the app                     | moved to #329 |
 
 ## 23. Extreme trans-Neptunian objects (Sednoids)
 
-- **Status:** todo (study first)
+- **Status:** todo (study first; moved to #330 and #331)
 - **Problem:** a system's small bodies stop at the belts and the scattered
   disk (item 17). Bodies like Sedna, 2012 VP113 and Leleākūhonua, on very
   eccentric orbits whose perihelia lie far beyond the giants' reach
   (detached objects, 50 to 80 AU and more, aphelia of hundreds to
   thousands of AU), are not drawn.
-- **Study:** what they are and how many there are (the observed
+- **Study (moved to #330):** what they are and how many there are (the observed
   Sednoids and other detached objects, with their perihelia, aphelia and
   inclinations); the formation scenarios that place them (a passing star,
   the Sun's birth cluster, a distant undiscovered planet, the inner Oort
@@ -906,6 +911,6 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   that from observations; how they show in the star view (orbits far
   wider than the planets', the system's scale) and whether they get
   cards and maps like dwarf planets.
-- **Then:** add them to the system draw on a stream of their own (so
+- **Then (moved to #331):** add them to the system draw on a stream of their own (so
   existing systems keep their other bodies), show them in the star view,
   and give the large ones a card and, if decided, a map.
