@@ -667,6 +667,15 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     large moon apply round every star (the despun planets of cool stars
     already lose their moons by `lasting_moon_kg`, and the paper's grid
     does not extend the odds to other masses).
+  - remains, two small defects found by the cross-review of #281: a
+    despun giant that `spin::giant_stays_locked` counts as locked (its
+    pseudo-synchronous rate within 5 % of one turn per orbit, e below
+    about 0.09) still turns at that rate in `giant_world.rs`
+    (`rotation_hours`), so its card says locked while its day is up to
+    5 % off its year (it should take the year exactly); and a rocky
+    planet locked to its star whose moons are turned off gets a 24 h day
+    in `system.rs` `planet_body` (`MoonSystem::draw(..).map_or(24.0, ..)`),
+    not its year.
 - **Done when:** the remaining items are done: higher resonances, slow
   rotators get a climate of their own, moons get their Cassini obliquity.
 - **Status:** in progress
@@ -761,6 +770,12 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   pass does not have); the ocean basin is found by the land to the east
   in the row, not by the gyre; and the warm western boundary currents
   (Gulf Stream, Kuroshio), which balance the cold ones, are not modelled.
+  Any land to the east counts (cross-review of #282): a one-pixel island
+  in the subtropics casts a cold strip 1 000 to 2 500 km wide to its
+  west, and the sea west of a lake or of an inland sea's far shore is
+  cooled too. A minimum run of land (a few hundred km), or the land
+  components already found for the continents, would keep the cooling to
+  the west coasts of continents.
 - **Monsoons:** the seasonal reversal of the wind between land and sea.
   The seasons now set summer and winter temperatures, but the wind and
   the rain are annual means: a monsoon needs a summer and a winter run of
@@ -781,6 +796,9 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   circular one, so the summer and the winter stay symmetric around the
   annual mean; a real eccentric orbit gives a short hot season and a long
   mild one (the temperature response of a month-by-month run would).
+  A moon takes its planet's perihelion longitude but its own tilt: its
+  equinoxes are not its planet's, so the phase of its uneven seasons is
+  approximate (cross-review of #282).
 - **Slow rotators and the solar day:** first step done (2026-11-08). A
   world whose solar day lasts more than a month (the 3:2 resonance, a
   slow rotator) gets the swing of its day in its seasons (`DayCycle`:
