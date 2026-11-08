@@ -39,6 +39,11 @@ run = "cargo fmt"
 description = "Delete the worlds made before systems, under worlds/ (no longer read)"
 run = "find ./worlds -mindepth 1 -not -name '.gitignore' -delete"
 
+[tasks.clean-systems]
+description = "Delete every generated system under systems/ (asks first); restart the server after it so its index drops them"
+confirm = "Delete every system under ./systems (names and pins included)?"
+run = "find ./systems -mindepth 1 -not -name '.gitignore' -delete"
+
 # ---------------------------------------------------------------------------------------------------- #
 # Web app (web/ front-end, crates/server back-end)
 # ---------------------------------------------------------------------------------------------------- #

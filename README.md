@@ -242,6 +242,7 @@ For development with hot reload, see [web/README.md](web/README.md) (`mise run d
 | `mise run lint`                 | Check formatting and run clippy (`-D warnings`)                                     |
 | `mise run fmt`                  | Format the code                                                                     |
 | `mise run clean-worlds`         | Delete the worlds made before systems, under `worlds/` (no longer read)             |
+| `mise run clean-systems`        | Delete every generated system under `systems/`, after a confirmation; restart the server (`docker restart map-generator`) so its index drops them |
 
 The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint`, `mise run test` (and checks the generated TypeScript types are committed) and `mise run web:check` / `web:build` on every push to `main` and on pull requests.
 
