@@ -34,8 +34,8 @@ year_days: number,
 equilibrium_k: number, effective_k: number, 
 /**
  * Cloud class of Sudarsky, Burrows & Pinto (2000), 1 to 5, from the
- * effective temperature: ammonia clouds, water clouds, clear, alkali
- * "roasters", silicate clouds.
+ * effective temperature and the gravity: ammonia clouds, water clouds,
+ * clear, alkali "roasters", silicate clouds (see [`Clouds::of`]).
  */
 class: number, 
 /**

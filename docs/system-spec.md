@@ -334,6 +334,13 @@ axis, orbit and labels:
 
 The system file stores each body's preview (its colours, or its band
 palette and layout), so the viewer draws it without knowing the presets.
+A preview's colours are linear RGB (a giant's sRGB palette is converted
+when the preview is made); a giant's `edges` are the latitudes of the
+bands it will be generated with, so the preview sphere shows the same
+belts and zones as the globe (`bands` is their number; a preview with no
+`edges`, made earlier, is drawn with evenly spaced bands).
+Such an earlier preview also keeps a giant's sRGB palette read as linear, so
+it stays washed out until the system is drawn again.
 
 ## Generating on demand
 
@@ -441,6 +448,13 @@ addressed as `<system-id>/<body-id>` everywhere.
 - Per generated body, as today per world:
   - `GET /api/systems/{id}/bodies/{body}/tiles/{z}/{x}/{y}?rev=&epoch=`;
   - `GET /api/systems/{id}/bodies/{body}/epoch/{ma}/{file}`;
+  - `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png?width=&rev=`:
+    a low-resolution preview of a planet with plate tectonics at
+    another epoch of its plates (`ma` from -300 to 300, negative in the
+    past; `width` 256 or 512, the default). The server generates the
+    planet again from its stored parameters with `drift_ma` set, at the
+    preview's size. 404 for a body without plates, 400 out of range,
+    503 while a generation runs;
   - `GET /api/systems/{id}/bodies/{body}/thumb?rev=`;
   - `POST /api/systems/{id}/bodies/{body}/hex`.
 - `GET /systems/{id}/...`: the files, `system.json` and

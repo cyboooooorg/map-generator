@@ -786,6 +786,32 @@ generates a world at an epoch of its plates, within ±300 Ma:
   into ranges (the collision boundary raises one); a quarter of the
   surface is new crust at 150 Ma, ten random plates moving independently.
 
+**Outcome (step 3, the drift slider, 2026-11-07).** The crater time
+slider could not be reused as it was: it redraws craters on a stored
+base map, while a drift changes the continents, and with them the
+climate, the rivers and the biomes. So the preview runs the whole
+pipeline again at a small size instead of reading a stored layer:
+
+- `mapgen::drift::preview` generates the planet from the parameters its
+  `system.json` stores, with `drift_ma` set and the map cut to 256 or 512
+  pixels wide at the world's aspect ratio, and renders its base map. The
+  seed and the epoch give the same pixels. It is not the full world
+  downscaled (rivers and small coasts differ), only a way to choose an
+  epoch; about 0.4 s at 512 on a 1024 × 512 world.
+- `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` serves
+  it, with a small cache in memory, one preview at a time, 503 while a
+  generation runs, 404 without plates. Previews never touch the files of
+  the world: it is not stored.
+- **Generate at this epoch** is the existing `drift_ma` request, as
+  *Vary* does for any parameter: the form opens on the same planet with
+  the epoch and creates a world of its own (`...-past150ma-<seed>`).
+- The slider reads like the request (negative in the past), unlike the
+  crater slider (positive in the past); the two never meet, since a
+  world with plates has liquid water and so no crater epochs.
+- Not done: the preview is a flat map beside the globe, not the globe's
+  texture; the climate of a locked world follows the drift as the whole
+  pipeline does, but no epoch is kept between the previews.
+
 **Order:**
 
 1. Static plates at the present on `plates` worlds: mountains and

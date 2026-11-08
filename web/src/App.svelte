@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import DriftPanel from './components/DriftPanel.svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobsIndicator from './components/JobsIndicator.svelte';
   import LanguageSelect from './components/LanguageSelect.svelte';
@@ -17,6 +18,7 @@
   import type { SystemSummary } from './lib/api/types/SystemSummary';
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
+  import { driftRange, driftRequest, formatDrift } from './lib/drift';
   import { requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
@@ -53,6 +55,8 @@
     variedFrom: string | null;
     entry: 'around' | 'system' | null;
     atSummary: boolean;
+    /** Opened from the Drift panel: the view to restore on the new world's planet once it is made. */
+    fromDrift?: { view: ViewLink | null; epoch: string };
   } | null>(null);
   /** Systems deleted but still restorable: hidden, and removed on the server once the undo delay ends. */
   let hidden = $state<string[]>([]);
@@ -77,6 +81,15 @@
   let secondaryPane = $state<WorldPane | null>(null);
   /** The job whose world opens when ready, if the selection has not changed meanwhile. */
   let autoOpen: { jobId: string; selection: string | null } | null = null;
+  /**
+   * A world being generated from the Drift panel: the planet shown stays, dimmed
+   * under a notice, until the job ends, then the new world's planet opens in the
+   * view the panel left (no detour through the new system's star view).
+   */
+  let driftJob = $state<{ jobId: string; from: string; epoch: string; view: ViewLink | null } | null>(null);
+  const driftStatus = $derived(driftJob ? jobs.list.find((j) => j.jobId === driftJob!.jobId)?.status : undefined);
+  /** Opens the planet view on the system's focus planet, for a world made from the Drift panel. */
+  let pendingFocus = false;
   /** Deletions waiting for their undo delay, flushed if the page closes. */
   const pendingDeletes = new Set<string>();
 
@@ -245,7 +258,8 @@
     const id = selectedId;
     untrack(() => {
       if (id) {
-        primary.loadSystem(id, pendingBody);
+        primary.loadSystem(id, pendingBody, pendingFocus);
+        pendingFocus = false;
         primary.pinnedPlanets = pendingPins;
         pendingBody = null;
         pendingPins = [];
@@ -279,7 +293,17 @@
         if (selectedId && status.world_id === compareId) {
           secondary.loadSystem(status.world_id);
         }
-        if (autoOpen?.jobId === job.jobId && autoOpen.selection === selectedId) {
+        if (driftJob?.jobId === job.jobId) {
+          // Still on the world it was made from: swap to the new planet, in the recorded view.
+          const open = driftJob;
+          driftJob = null;
+          if (selectedId === open.from) {
+            pendingFocus = true;
+            pendingView = open.view;
+            select(status.world_id);
+          }
+          toasts.show(t.app.ready({ id: titleOf(status.world_id) ?? status.world_id }));
+        } else if (autoOpen?.jobId === job.jobId && autoOpen.selection === selectedId) {
           select(status.world_id);
           toasts.show(t.app.ready({ id: titleOf(status.world_id) ?? status.world_id }));
         } else {
@@ -291,8 +315,10 @@
         // Finished jobs leave the list after a while.
         setTimeout(() => jobs.dismiss(job.jobId), 8000);
       } else if (status.status === 'failed') {
+        if (driftJob?.jobId === job.jobId) driftJob = null;
         toasts.error(t.app.failed({ id: job.worldId, error: status.error }));
       } else if (status.status === 'cancelled') {
+        if (driftJob?.jobId === job.jobId) driftJob = null;
         toasts.show(t.app.cancelled({ id: job.worldId }));
         setTimeout(() => jobs.dismiss(job.jobId), 4000);
       }
@@ -399,13 +425,21 @@
 
   /** A system drawn: shown at once (its bodies as spheres), its planet's maps following its job. */
   function submitted(created: SystemCreated, request: WorldRequest | null): void {
+    const fromDrift = form?.fromDrift;
     form = null;
-    void refresh().then(() => select(created.system_id));
+    // From the Drift panel the current planet stays shown until its job ends.
+    void refresh().then(() => {
+      if (!fromDrift || !created.job_id) select(created.system_id);
+    });
     if (created.ignored.length > 0) {
       toasts.show(t.app.ignored({ fields: created.ignored.join(', ') }));
     }
     if (created.job_id) {
-      autoOpen = { jobId: created.job_id, selection: created.system_id };
+      if (fromDrift && selectedId) {
+        driftJob = { jobId: created.job_id, from: selectedId, epoch: fromDrift.epoch, view: fromDrift.view };
+      } else {
+        autoOpen = { jobId: created.job_id, selection: created.system_id };
+      }
       jobs.track(created.job_id, created.system_id, request ?? {}, { status: 'queued' }, true);
     }
   }
@@ -462,6 +496,23 @@
       link={shareLink}
       onDelete={() => selectedId && removeWorlds([selectedId])}
     />
+  {/if}
+{/snippet}
+
+{#snippet drift()}
+  {#if primary.meta && primary.id}
+    {#key primary.id}
+      <DriftPanel
+        id={primary.id}
+        revision={revision(selectedId)}
+        current={primary.meta.drift_ma ?? 0}
+        onGenerate={(ma) => {
+          if (!primary.meta) return;
+          openForm('around', driftRequest(primary.meta, ma), primary.id);
+          if (form) form.fromDrift = { view: primaryPane?.viewState() ?? null, epoch: formatDrift(ma) };
+        }}
+      />
+    {/key}
   {/if}
 {/snippet}
 
@@ -535,7 +586,7 @@
       <LanguageSelect />
     </header>
     {@render fatalError()}
-    <main class="panes">
+    <main class="panes" class:drifting={driftJob !== null}>
       <WorldPane
         bind:this={primaryPane}
         world={primary}
@@ -543,6 +594,7 @@
         keyboard={form === null}
         label={compareId ? titleOf(selectedId) : null}
         {info}
+        drift={primary.meta && driftRange(primary.meta) ? drift : undefined}
         onStepWorld={step}
         onDisplayChange={(display) => (mainDisplay = display)}
         onCameraChange={cameraFrom(() => secondaryPane)}
@@ -558,6 +610,17 @@
           label={titleOf(compareId)}
           onCameraChange={cameraFrom(() => primaryPane)}
         />
+      {/if}
+      {#if driftJob}
+        <div class="drift-busy" role="status" aria-live="polite">
+          <p>{t.drift.generating({ epoch: driftJob.epoch })}</p>
+          {#if driftStatus?.status === 'running'}
+            <progress max={driftStatus.steps} value={driftStatus.step - 1}></progress>
+            <small>{t.jobs.stageStep({ stage: t.stages[driftStatus.stage], step: driftStatus.step, steps: driftStatus.steps })}</small>
+          {:else}
+            <small>{t.jobs.waiting}</small>
+          {/if}
+        </div>
       {/if}
     </main>
   </div>
@@ -679,6 +742,33 @@
   }
   .viewer-bar button {
     padding: 3px 10px;
+  }
+  /* A world is being made from the Drift panel: the one shown waits, dimmed, under a notice. */
+  .panes {
+    position: relative;
+  }
+  .drifting :global(.pane) {
+    filter: blur(4px) brightness(0.55);
+    pointer-events: none;
+  }
+  .drift-busy {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    z-index: 5;
+    pointer-events: none;
+    text-align: center;
+  }
+  .drift-busy p {
+    margin: 0;
+    font-size: 1.2em;
+  }
+  .drift-busy progress {
+    width: min(320px, 70%);
   }
   .panes {
     display: grid;

@@ -247,10 +247,10 @@ export const en = {
     AcidRiver: 'Acid River',
     AcidShore: 'Acid Shore',
     FrozenLake: 'Frozen Lake',
-    GiantZone: 'Zone',
-    GiantBelt: 'Belt',
+    GiantZone: 'Bright band (zone)',
+    GiantBelt: 'Dark band (belt)',
     GiantStorm: 'Storm',
-    GiantPolar: 'Polar Region',
+    GiantPolar: 'Polar region',
   } satisfies Record<Biome, string>,
   /** Cloud kinds. */
   clouds: {
@@ -319,8 +319,8 @@ export const en = {
     giantClouds: 'Clouds',
     giantCloudsHelp: 'What the visible cloud deck is made of, from its temperature (Sudarsky et al. 2000), and the effective temperature',
     giantWinds: 'Winds',
-    giantWindsHelp: 'Jets in each hemisphere (Rhines scale: more on a large, fast-spinning planet), and the strongest westward and eastward winds at the cloud tops',
-    giantWindsValue: (p: { jets: number; west: string; east: string }) => `${p.jets} jets per hemisphere · ${p.west} west to ${p.east} east`,
+    giantWindsHelp: 'Eastward jets in each hemisphere (Rhines scale: more on a large, fast-spinning planet with slow winds; a westward jet lies between two of them, and one more blows at the equator), and the strongest westward and eastward winds at the cloud tops',
+    giantWindsValue: (p: { jets: number; west: string; east: string }) => `${p.jets} eastward jets per hemisphere · ${p.west} west to ${p.east} east`,
     giantHeat: 'Internal heat',
     giantHeatHelp: 'Heat it radiates over what it gets from its star: Jupiter 1.7, Neptune 2.6, Uranus about 1',
     giantHeatValue: (p: { ratio: string }) => `${p.ratio}× the starlight it absorbs`,
@@ -532,6 +532,7 @@ export const en = {
     eccentricityHelp:
       '0: a circle · Venus: 0.007 · Earth: 0.017 · Mars: 0.09 · Mercury: 0.21. More gives more light over a year. Random: drawn like the planets known, circular for the closest planets, whose orbits the tides have rounded',
     moons: 'Moons',
+    drift: 'Epoch of the plates',
     metallicity: 'Star metallicity [Fe/H]',
     metallicityHelp:
       "Iron relative to hydrogen, in dex against the Sun's (0); drawn like the stars nearby (around −0.1). Metal-rich stars have many more giant planets: about 1.6 times more per 0.1 dex",
@@ -765,7 +766,7 @@ export const en = {
     au: 'AU',
     bandDrift: 'Band drift',
     bandDriftHelp:
-      "The bands turn each with its own wind, faster or slower than the planet's spin, some backwards: the fastest goes round in two minutes (not the true pace)",
+      "The bands turn each with its own wind, faster or slower than the planet's spin, some backwards: the fastest goes round in two minutes (not the true pace). A great spot barely moves, as the Great Red Spot does",
     cloudTops: 'Cloud tops',
     windLayer: 'Wind',
     windEnd: (p: { speed: string; side: string }) => `${p.speed} m/s ${p.side}`,
@@ -854,6 +855,21 @@ export const en = {
     failed: (p: { error: string }) => `Could not load the epoch: ${p.error}`,
     presentOnly: 'The biome statistics and the hex grid show the present.',
   },
+  /** The drift slider: a preview of the world as its plates carried it, and generating it. */
+  drift: {
+    title: 'Drift',
+    slider: 'Epoch of the plates',
+    help: 'Previews the whole world as its tectonic plates carried it, up to 300 Ma into the past or the future, at low resolution. Generate it to keep the world at that epoch.',
+    previewAlt: (p: { epoch: string }) => `Preview of the world ${p.epoch}`,
+    backToPresent: 'Present',
+    generate: 'Generate at this epoch',
+    generateHelp: 'Opens the generation form with this epoch and the same planet; the world is added next to the present one.',
+    loading: 'Drawing the preview…',
+    busy: 'A generation is running: previews resume when it ends.',
+    failed: (p: { error: string }) => `Could not draw the preview: ${p.error}`,
+    generating: (p: { epoch: string }) => `Generating the world ${p.epoch}…`,
+    fromHere: (p: { epoch: string }) => `This world already shows ${p.epoch}.`,
+  },
   /** The less common units, explained in tooltips and in the help panel. */
   /** The star view. */
   starView: {
@@ -911,11 +927,11 @@ export const en = {
     giantHelp: (p: { clouds: string; radius: string; temperature: string; eccentricity: string; rings: string }) =>
       `${p.clouds} · radius ${p.radius} · ${p.temperature} · eccentricity ${p.eccentricity} · ${p.rings}`,
     cloudClasses: {
-      1: 'ammonia clouds, banded cream and brown (or blue methane, for an ice giant)',
-      2: 'water clouds, bright white',
+      1: 'ammonia clouds, banded cream and brown (or blue methane, for an ice giant; a warmer one keeps a blue tinge)',
+      2: 'water clouds, bright white (a thin veil near 350 K, clear above)',
       3: 'no clouds, deep azure',
       4: 'alkali metals absorb the light: very dark',
-      5: 'silicate clouds, dark grey, glowing red at night',
+      5: 'high silicate clouds, pale grey and bright, glowing red at night',
     } as Record<number, string>,
     rings: { none: 'no rings', faint: 'faint rings', bright: 'bright rings' } as Record<string, string>,
     forced: 'Forced eccentricity',

@@ -255,8 +255,9 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 
 ## 9. Plate tectonics and continental drift
 
-- **Status:** in progress (step 1 done: static plates shape the relief,
-  on a cube-sphere grid that reaches the poles; step 2 done: `--drift`)
+- **Status:** done (step 1: static plates shape the relief, on a
+  cube-sphere grid that reaches the poles; step 2: `--drift`; step 3:
+  the viewer's Drift panel)
 - **Analysis:** [08-geology.md](analysis/08-geology.md), section 8
 - **Problem:** continents come from noise, not from plates: mountains
   and volcanoes are not tied to plate boundaries, and continents cannot
@@ -285,7 +286,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 | ---- | ------------------------------------------------------------------------------------------------------ | ------ | ------ |
 | 1    | Static plates on `plates` worlds: Voronoi subplates, velocities, boundary features (ranges, arcs)      | Change | done   |
 | 2    | Kinematic drift: Euler poles per stage, plate of each pixel at an epoch, boundary relief from geometry | Same   | done   |
-| 3    | Time slider for drift: low-resolution preview of the whole pipeline, "generate at this epoch"          | Same   | todo   |
+| 3    | Time slider for drift: low-resolution preview of the whole pipeline, "generate at this epoch"          | Same   | done   |
 
 ## 10. Internationalisation of the web app
 
@@ -435,6 +436,45 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
   in its sky with its phases and eclipses; tidal heating warming the
   climate and raising volcanism, watery worlds kept beyond the habitable
   edge.
+- **Science fixes (2026-11-07):** wind speed an outcome of the flux and
+  the spin, cloud decks deciding the Sudarsky class, class V with
+  gravity, internal heat cooling with the system's age, the great spot in
+  a southern zone drifting slowly, previews following the generated
+  bands (`giant_clouds.rs`, `giant_world.rs`). Left to do:
+  - The peak winds are a calibration on the four giants (Rossby number
+    against the flux), not a derivation: Showman et al. 2010 call the
+    winds of Saturn and Neptune, faster than Jupiter's on less energy,
+    not understood. A friction or depth term would need a model of the
+    deep flow. With Saturn's real flux the law gives about a third under
+    its winds, and Uranus comes out at 285 m/s against 200.
+  - The whole wind profile is held under 0.75 of the speed of sound and the
+    peak rises with the heating (calibrations, no source); a cold light
+    giant would otherwise reach 2 000 m/s. A giant that tidal locking
+    stops (the rule locks a Jupiter-mass giant at 0.5 AU of a G2V star,
+    which is doubtful) loses its Rossby wind and keeps the irradiation
+    floor (about 120 m/s at 360 K): a drop of several hundred m/s at the
+    step. A super-Jupiter (10 MJ at 40 AU) blows at only 20 to 30 m/s,
+    because its large internal heat flux gives a tiny Rossby number: an
+    extrapolation of the calibration. A Saturn-like giant's westward
+    flank (-130 to -170 m/s) is stronger than the real one (about
+    -50 to -100): the jets away from the equator take either sign at 0.3 to
+    0.7 of the peak. Uranus has Neptune's wind profile; its real
+    eastward peak is the larger and its westward flow weaker.
+  - The great spot drifts slowly but the hole that hides the map's copy of
+    it in `giantColour` (`shaders.ts`) still follows the band wind, a
+    patch of plain band riding along the zone. Check it in a browser with
+    Band drift on; making the hole follow the spot would freeze the band.
+  - Saturn's internal heat is above the cooling law (helium rain); ice
+    giants keep a fixed 40 K instead of Neptune's and Uranus's very
+    different heat.
+  - The decks use the Sun's composition; an ice giant's methane and
+    water enrichment (a methane ice deck on Neptune, water near 40 bar)
+    and the deep dry adiabat of its troposphere are not modelled.
+  - The great spot has the size it is drawn with; the real one shrinks
+    by 0.19° of longitude a year (Simon et al. 2018), which needs a
+    date in the viewer.
+  - Cloud tops only: no view of the depths where Juno sees the belt and
+    zone contrast change sign (Fletcher et al. 2021).
 
 ## 15. Names
 
