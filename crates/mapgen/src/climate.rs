@@ -453,9 +453,8 @@ pub struct Seasons {
 }
 
 impl Seasons {
-    /// No seasonal cycle: summer and winter are the annual mean. Worlds
-    /// stored before the seasons (format version 10 and older) read their
-    /// biomes this way, as they were made.
+    /// No seasonal cycle: summer and winter are the annual mean (a planet
+    /// locked to its star).
     pub fn none(height: u32) -> Self {
         Self {
             land: vec![0.0; height as usize],
@@ -465,8 +464,8 @@ impl Seasons {
 
     /// The seasons of the rows of `grid` for an axial tilt (degrees), a
     /// surface pressure (bar) and an eccentric `orbit` (`None`: a circular
-    /// one, or a world made before the longitude of perihelion, whose
-    /// seasons ignore the distance to the star), the `day` of a planet
+    /// one, or a world without a longitude of perihelion, whose seasons
+    /// ignore the distance to the star), the `day` of a planet
     /// whose solar day lasts months (see [`DayCycle`]; `None` for a fast
     /// one, or one locked); `star` moves rows of
     /// sea-level temperature as [`crate::star::star_temperatures`] does.

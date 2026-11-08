@@ -7,6 +7,7 @@
 import { bodyApi } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { formatInt, formatUpTo, withUnit } from './format';
+import { MIN_FORMAT_VERSION } from './formatVersion';
 import { t } from './i18n/index.svelte';
 import { TILE_RENDER_VERSION } from './viewer/TileLayer';
 
@@ -18,13 +19,13 @@ export const FUTURE_MA = 1000;
 /** `[future, past]` in Ma, both included, or null when the world offers no other epoch. */
 export function epochRange(meta: WorldMetadata): [number, number] | null {
   const age = meta.surface_age_ga;
-  if (age == null || age <= 0) {
+  if (meta.format_version < MIN_FORMAT_VERSION || age <= 0) {
     return null;
   }
-  if ((meta.pressure_bar ?? 1) >= LIQUID_WATER_BAR) {
+  if (meta.pressure_bar >= LIQUID_WATER_BAR) {
     return null;
   }
-  const wetUntil = meta.preset.geology?.wet_until ?? 0;
+  const wetUntil = meta.preset.geology.wet_until;
   return [-FUTURE_MA, Math.floor(Math.min(age, wetUntil) * 1000)];
 }
 

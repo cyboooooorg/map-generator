@@ -158,17 +158,13 @@
         <dd class="unit-help" title={unitTooltip('g')}>{withUnit(formatNumber(meta.gravity_modifier, 2), 'g')}</dd>
         {#if !meta.giant}
           <dt>{t.worldInfo.atmosphere}</dt>
-          {#if (meta.pressure_bar ?? 1) > 0}
+          {#if meta.pressure_bar > 0}
             <dd class="unit-help" title={unitTooltip('bar')}>{formatAtmosphere(meta)}</dd>
           {:else}
             <dd>{formatAtmosphere(meta)}</dd>
           {/if}
           <dt>{t.worldInfo.geology}</dt>
-          {#if meta.surface_age_ga != null}
-            <dd class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatGeology(meta)}</dd>
-          {:else}
-            <dd>{formatGeology(meta)}</dd>
-          {/if}
+          <dd class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatGeology(meta)}</dd>
         {/if}
         <dt>{t.worldInfo.star}</dt>
         {#if meta.star}
@@ -197,8 +193,6 @@
               {@const ratio = resonanceRatio(resonanceTurns({ resonance_turns: star.spin_turns }))}
               · <span class="unit-help" title={t.worldInfo.resonantHelp({ ratio })}>{t.worldInfo.resonant({ ratio })}</span>{/if}
           </dd>
-        {:else}
-          <dd>{t.worldInfo.theSun}</dd>
         {/if}
         {#if meta.moons}
           <dt title={t.worldInfo.moonsHelp}>{t.worldInfo.moons}</dt>

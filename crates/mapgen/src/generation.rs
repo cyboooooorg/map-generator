@@ -1748,8 +1748,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_world_without_a_perihelion_keeps_its_circular_seasons() {
-        // Worlds stored before the longitude of perihelion: an eccentric
-        // orbit whose seasons ignore the distance to the star.
+        // Without a longitude of perihelion, an eccentric orbit whose
+        // seasons ignore the distance to the star.
         let mut old = params(5, "terran");
         old.eccentricity = 0.2;
         old.perihelion_longitude_deg = None;

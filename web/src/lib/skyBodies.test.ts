@@ -22,8 +22,9 @@ describe('eclipses', () => {
 });
 
 describe('halo', () => {
-  const world = (pressure: number, atmosphere?: object) =>
-    ({ pressure_bar: pressure, preset: { atmosphere } }) as unknown as WorldMetadata;
+  const earth = { rayleigh: [0.17, 0.41, 1.0], haze: 0.1, haze_colour: [1, 1, 1], greenhouse: 0, clouds: 'water', cloud_cover: 0 };
+  const world = (pressure: number, atmosphere: object = {}) =>
+    ({ pressure_bar: pressure, preset: { atmosphere: { ...earth, ...atmosphere } } }) as unknown as WorldMetadata;
 
   it('gives an airless planet no halo', () => {
     expect(halo(skyFromWorld(world(0, { haze: 0 })))).toBeNull();

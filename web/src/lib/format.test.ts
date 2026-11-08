@@ -58,13 +58,6 @@ describe('format', () => {
     expect(requestFromWorld(giant)).not.toHaveProperty('volcanic');
     expect(cliCommand(giant)).not.toMatch(/--(volcanic|circumference|erosion) /);
     expect(cliCommand(giant)).toContain('--mass 318');
-    // Without a surface age, the preset's is left to apply.
-    const old = { ...meta, surface_age_ga: undefined } as unknown as WorldMetadata;
-    expect(requestFromWorld(old)).not.toHaveProperty('surface_age_ga');
-    expect(cliCommand(old)).not.toContain('--surface-age');
-    // Without a star, the Sun at 1 AU.
-    const sunlit = { ...meta, star: undefined } as unknown as WorldMetadata;
-    expect(cliCommand(sunlit)).toContain('--star G2V --orbit-au 1 --eccentricity 0 ');
   });
 
   it('rerolls a world with a new seed and every other parameter kept', () => {
@@ -74,18 +67,15 @@ describe('format', () => {
     expect(Number.isInteger(randomSeed())).toBe(true);
   });
 
-  it('describes the atmosphere, with Earth for worlds made before it', () => {
+  it('describes the atmosphere', () => {
     const preset = { atmosphere: { clouds: 'dust' } };
     expect(formatAtmosphere({ ...meta, pressure_bar: 0.006, preset } as unknown as WorldMetadata)).toBe(
       '0.0060 bar, dust clouds',
     );
     expect(formatAtmosphere({ ...meta, pressure_bar: 0, preset } as unknown as WorldMetadata)).toBe('none');
-    const old = { ...meta, preset: {} } as unknown as WorldMetadata;
-    delete (old as { pressure_bar?: number }).pressure_bar;
-    expect(formatAtmosphere(old)).toBe('1.00 bar, water clouds');
   });
 
-  it("describes the geology, with Earth's regime for worlds made before it", () => {
+  it("describes the geology", () => {
     const preset = { geology: { regime: 'stagnant', wet_until: 3.5 } };
     expect(formatGeology({ ...meta, surface_age_ga: 3.8, preset } as unknown as WorldMetadata)).toBe(
       'stagnant lid, surface 3.8 Ga',
@@ -93,8 +83,6 @@ describe('format', () => {
     expect(formatGeology({ ...meta, surface_age_ga: 0.02, preset } as unknown as WorldMetadata)).toBe(
       'stagnant lid, surface 20 Ma',
     );
-    const old = { ...meta, surface_age_ga: undefined, preset: {} } as unknown as WorldMetadata;
-    expect(formatGeology(old)).toBe('plate tectonics');
   });
 
   it('formats shares, areas, durations and ages', () => {
@@ -116,7 +104,7 @@ describe('surfaceColour', () => {
   it('prefers the surface colour', () => {
     expect(surfaceColour({ color: '#FF0000', surface_color: '#102030' })).toBe('#102030');
   });
-  it('falls back to the classification colour for older worlds', () => {
+  it('falls back to the classification colour without a surface colour', () => {
     expect(surfaceColour({ color: '#FF0000', surface_color: '' })).toBe('#FF0000');
   });
 });

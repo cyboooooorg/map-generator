@@ -80,6 +80,9 @@ pub struct TileCache {
 pub enum TileError {
     /// A generation is running: retry later.
     Busy,
+    /// Made by an older generator than the oldest it reads: answered with
+    /// 410 Gone and the way out.
+    TooOld(String),
     Failed(String),
 }
 
@@ -175,11 +178,16 @@ impl TileCache {
                         drop(evicted);
                         memory::release();
                     }
-                    load(&dir, epoch_ma)
+                    if let Some(error) = std::fs::read_to_string(dir.join("raw_data/world.json"))
+                        .ok()
+                        .and_then(|text| mapgen::export::raw_data::old_format_error(&text))
+                    {
+                        return Err(TileError::TooOld(error));
+                    }
+                    load(&dir, epoch_ma).map_err(TileError::Failed)
                 })
                 .await
                 .map_err(|e| TileError::Failed(e.to_string()))?
-                .map_err(TileError::Failed)
             })
             .await?
             .clone();

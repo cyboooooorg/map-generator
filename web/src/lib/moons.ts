@@ -4,7 +4,7 @@ import type { Moon } from './api/types/Moon';
 import type { MoonsMode } from './api/types/MoonsMode';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 
-/** The moons of a world, nearest first (none for a world made before them). */
+/** The moons of a world, nearest first (none for a world generated without them). */
 export function moonsOf(meta: WorldMetadata | null): readonly Moon[] {
   return meta?.moons?.moons ?? [];
 }

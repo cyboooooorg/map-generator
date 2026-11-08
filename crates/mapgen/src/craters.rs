@@ -2317,8 +2317,8 @@ mod tests {
     }
 
     /// Exports a small world to a fresh directory, with its stored star
-    /// `tidally_locked` set to `stored`, as a world generated under another
-    /// locking rule would have it, and reloads its parameters.
+    /// `tidally_locked` set to `stored`, as a system that gave it its lock
+    /// would have it, and reloads its parameters.
     fn reloaded_with_stored_lock(p: &WorldParams, name: &str, stored: bool) -> WorldParams {
         let small = WorldParams {
             width: 32,

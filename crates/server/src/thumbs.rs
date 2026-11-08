@@ -1,7 +1,7 @@
 //! World thumbnails (`thumb.png`, see [`mapgen::export::thumbnail`]).
 //!
-//! The export writes the thumbnail. A world made before thumbnails gets one
-//! on its first request: its `world.png` is decoded row by row into the
+//! The export always writes the thumbnail. This only repairs a deleted
+//! `thumb.png`: the world then gets one on its first request, its `world.png` is decoded row by row into the
 //! same downscaler the export uses, so a thumbnail costs a few MB of memory
 //! even for an 8192 × 4096 map (measured: 4 MB and 0.4 s; decoding the
 //! whole image would take 100 MB), then written into the world directory
@@ -185,7 +185,7 @@ mod tests {
         let params = request.resolve(&mut rand::rng()).unwrap().params;
         export_world(generate(&params), &dir, ExportOptions { raw_data: false }).unwrap();
         let exported = std::fs::read(dir.join(THUMB_FILE)).unwrap();
-        // A world made before thumbnails.
+        // A deleted thumbnail.
         std::fs::remove_file(dir.join(THUMB_FILE)).unwrap();
 
         let thumbnails = Thumbnails::default();

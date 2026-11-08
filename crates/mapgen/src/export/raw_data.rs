@@ -77,11 +77,9 @@ pub struct WorldMetadata {
     /// Surface pressure in bar.
     pub pressure_bar: f32,
     /// Age of the oldest surviving surface, in Ga.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub surface_age_ga: Option<f32>,
+    pub surface_age_ga: f32,
     /// The host star and the orbit.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub star: Option<StarInfo>,
+    pub star: StarInfo,
     /// Epoch of the plates, Ma from the present (negative in the past).
     /// Left out at the present.
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -456,11 +454,11 @@ pub fn export_raw_data(
         axial_tilt_deg: world.params.axial_tilt_deg,
         erosion: world.params.erosion,
         pressure_bar: world.params.pressure_bar,
-        surface_age_ga: Some(world.params.surface_age_ga),
-        star: Some(StarInfo {
+        surface_age_ga: world.params.surface_age_ga,
+        star: StarInfo {
             metallicity: world.params.metallicity,
             ..crate::spin::star_info(&world.params)
-        }),
+        },
         drift_ma: world.params.drift_ma,
         impact_factor: world.params.impact_factor,
         moons: crate::moons::MoonSystem::draw(&world.params),
@@ -533,6 +531,25 @@ pub fn biome_table() -> Vec<BiomeInfo> {
         .collect()
 }
 
+/// The message of a refused world when the `world.json` text says a format
+/// older than [`MIN_FORMAT_VERSION`], `None` otherwise (or when the text
+/// has no version). The server answers it with 410 Gone.
+pub fn old_format_error(world_json: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Head {
+        format_version: u32,
+    }
+    let head: Head = serde_json::from_str(world_json).ok()?;
+    (head.format_version < MIN_FORMAT_VERSION).then(|| {
+        format!(
+            "world.json: format version {} is older than the oldest supported version \
+             {MIN_FORMAT_VERSION}: the generator no longer re-derives older worlds, delete it \
+             (`mise run clean-systems`) and draw it again",
+            head.format_version
+        )
+    })
+}
+
 /// Reads and checks `world.json` of a `raw_data/` directory. Worlds written
 /// by a newer version of the generator are refused (their layers may not
 /// mean what this version expects), and so are worlds older than
@@ -541,18 +558,8 @@ pub(crate) fn read_metadata(raw_dir: &Path) -> Result<WorldMetadata, String> {
     let path = raw_dir.join("world.json");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     // The version first: an older world may not even parse as today's.
-    #[derive(Deserialize)]
-    struct Head {
-        format_version: u32,
-    }
-    let head: Head = serde_json::from_str(&text).map_err(|e| format!("world.json: {e}"))?;
-    if head.format_version < MIN_FORMAT_VERSION {
-        return Err(format!(
-            "world.json: format version {} is older than the oldest supported version \
-             {MIN_FORMAT_VERSION}: the generator no longer re-derives older worlds, delete it \
-             (`mise run clean-systems`) and draw it again",
-            head.format_version
-        ));
+    if let Some(error) = old_format_error(&text) {
+        return Err(error);
     }
     let meta: WorldMetadata =
         serde_json::from_str(&text).map_err(|e| format!("world.json: {e}"))?;
@@ -865,10 +872,10 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         axial_tilt_deg: meta.axial_tilt_deg,
         erosion: meta.erosion,
         pressure_bar: meta.pressure_bar,
-        surface_age_ga: meta.surface_age_ga.unwrap_or(0.0),
-        star: meta.star.as_ref().map_or(crate::star::SUN, StarInfo::code),
-        orbit_au: meta.star.as_ref().map_or(1.0, |s| s.orbit_au),
-        eccentricity: meta.star.as_ref().map_or(0.0, |s| s.eccentricity),
+        surface_age_ga: meta.surface_age_ga,
+        star: meta.star.code(),
+        orbit_au: meta.star.orbit_au,
+        eccentricity: meta.star.eccentricity,
         drift_ma: meta.drift_ma,
         moons: match &meta.moons {
             Some(system) => system.count_asked.map_or(
@@ -878,7 +885,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
             None => crate::moons::MoonsMode::None,
         },
         shape: meta.shape,
-        metallicity: meta.star.as_ref().map_or(0.0, |s| s.metallicity),
+        metallicity: meta.star.metallicity,
         giants: if meta.giants.is_some() {
             crate::giants::GiantsMode::Auto
         } else {
@@ -899,10 +906,10 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         impact_factor: meta.impact_factor,
         // The lock and resonance the base map was made with, which a system
         // can set and the draw of its seed does not tell.
-        locked_to_star: meta.star.as_ref().map(|s| s.tidally_locked),
+        locked_to_star: Some(meta.star.tidally_locked),
         ridge: meta.ridge,
-        perihelion_longitude_deg: meta.star.as_ref().and_then(|s| s.perihelion_longitude_deg),
-        resonance_to_star: meta.star.as_ref().map(|s| s.spin_turns),
+        perihelion_longitude_deg: meta.star.perihelion_longitude_deg,
+        resonance_to_star: Some(meta.star.spin_turns),
         // The gravity it was generated with, so its epochs and detail tiles
         // draw the craters it was drawn with.
         gravity: Some(meta.gravity_modifier),
@@ -1141,7 +1148,7 @@ mod tests {
         assert_eq!(meta.biomes.len(), Biome::ALL.len());
         assert_eq!(meta.layers.flow.encoding, "gray16-log10");
         // The star round-trips: a red dwarf at 0.1 AU.
-        let star = meta.star.as_ref().unwrap();
+        let star = &meta.star;
         assert_eq!(star.kind, "M4.5V");
         assert_eq!((star.code(), star.orbit_au), (64.5, 0.1));
 

@@ -9,7 +9,7 @@
 // floats), and values are converted on read (see ../sample.ts). Only the
 // elevation keeps its exact 16-bit samples, for the readout of the height
 // above the coastline. That is 11 bytes per pixel on the main thread
-// (19 with the layers of format version 2), instead of 4-byte floats per
+// (19 with the extra layers), instead of 4-byte floats per
 // layer next to the GPU copies.
 import { temperatureSpan } from '../temperatureRange';
 import { decodePng } from './png';
@@ -42,18 +42,16 @@ export interface WorldLayers {
   /** The coldest and hottest temperatures of the world, °C (see `temperatureSpan`). */
   temperatureSpan: { min: number; max: number };
   /**
-   * Layers of format version 2 and later, null on older worlds (or when a
-   * world misses one of them).
+   * The biome-selection layers, null when the files were not given.
    */
   extra: ExtraLayers | null;
 }
 
-/** The biome-selection layers exported since `raw_data` format version 2. */
+/** The biome-selection layers of `raw_data`. */
 export interface ExtraLayers {
   /**
    * RGBA half floats: volcanic zone in [0, 1], distance to open water in km
-   * (capped at `coastMaxKm`), floodplain weight in [0, 1] (format version 3;
-   * zeros before), local shift of the highland line in [-1, 1].
+   * (capped at `coastMaxKm`), floodplain weight in [0, 1], local shift of the highland line in [-1, 1].
    */
   packed: Uint16Array;
   coastMaxKm: number;

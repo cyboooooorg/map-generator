@@ -28,11 +28,11 @@ pressure_bar: number,
 /**
  * Age of the oldest surviving surface, in Ga.
  */
-surface_age_ga?: number | null, 
+surface_age_ga: number, 
 /**
  * The host star and the orbit.
  */
-star?: StarInfo | null, 
+star: StarInfo, 
 /**
  * Epoch of the plates, Ma from the present (negative in the past).
  * Left out at the present.

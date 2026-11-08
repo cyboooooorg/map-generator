@@ -32,16 +32,8 @@ const HAZE_DEPTH = 2.0;
 
 /** The sky of a world, or null when it has none. */
 export function skyFromWorld(meta: WorldMetadata): Sky | null {
-  // Worlds made before the atmosphere had Earth's.
-  const pressure = meta.pressure_bar ?? 1;
-  const atmosphere = meta.preset.atmosphere ?? {
-    rayleigh: [0.17, 0.41, 1.0],
-    haze: 0.1,
-    haze_colour: [1, 1, 1],
-    greenhouse: 0,
-    clouds: 'water',
-    cloud_cover: 0,
-  };
+  const pressure = meta.pressure_bar;
+  const atmosphere = meta.preset.atmosphere;
   if (pressure < AIRLESS_BAR) {
     return null;
   }

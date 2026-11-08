@@ -1805,6 +1805,7 @@ mod tests {
         dwarf.orbit_au = crate::star::orbit_at(dwarf.star, 0.5);
         assert!(crate::spin::despun(&crate::spin::star_info(&dwarf)));
         dwarf.locked_to_star = Some(false);
+        dwarf.resonance_to_star = Some(0.0);
         let year_h = crate::spin::star_info(&dwarf).year_days * 24.0;
         let day = MoonSystem::draw(&dwarf).unwrap().planet_day_hours;
         assert!(

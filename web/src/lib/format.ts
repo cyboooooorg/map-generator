@@ -139,11 +139,11 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
           erosion: round(meta.erosion, 2),
         }),
     axial_tilt_deg: round(meta.axial_tilt_deg, 2),
-    pressure_bar: round(meta.pressure_bar ?? 1, 4),
-    ...(meta.surface_age_ga == null ? {} : { surface_age_ga: round(meta.surface_age_ga, 3) }),
-    star: meta.star?.type ?? 'G2V',
-    orbit_au: round(meta.star?.orbit_au ?? 1, 5),
-    eccentricity: round(meta.star?.eccentricity ?? 0, 4),
+    pressure_bar: round(meta.pressure_bar, 4),
+    surface_age_ga: round(meta.surface_age_ga, 3),
+    star: meta.star.type,
+    orbit_au: round(meta.star.orbit_au, 5),
+    eccentricity: round(meta.star.eccentricity, 4),
     // A world away from the present of its plates (0 is left out).
     ...(meta.drift_ma ? { drift_ma: meta.drift_ma } : {}),
     // A world whose moons were turned off.
@@ -151,7 +151,7 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     // A number of moons asked for.
     ...(meta.moons?.count_asked != null ? { moons: { count: meta.moons.count_asked } } : {}),
     // The star's metallicity, and giants turned off.
-    metallicity: round(meta.star?.metallicity ?? 0, 4),
+    metallicity: round(meta.star.metallicity, 4),
     ...(meta.giants == null && !meta.giant ? { giants: 'none' as const } : {}),
     // A giant's moon stays one; a giant keeps its mass.
     ...(meta.host ? { host: 'giant' as const } : {}),
@@ -222,7 +222,7 @@ export function formatAtmosphere(meta: WorldMetadata): string {
   }
   const digits = pressure < 0.1 ? Math.max(0, 1 - Math.floor(Math.log10(pressure))) : 2;
   const bar = withUnit(formatNumber(pressure, digits), 'bar');
-  const clouds = meta.preset.atmosphere?.clouds ?? 'water';
+  const clouds = meta.preset.atmosphere.clouds;
   return clouds === 'none'
     ? t.worldInfo.pressureNoClouds({ pressure: bar })
     : t.worldInfo.pressureClouds({ pressure: bar, clouds: t.clouds[clouds] });
@@ -230,15 +230,11 @@ export function formatAtmosphere(meta: WorldMetadata): string {
 
 /**
  * The tectonic regime and surface age of a world, e.g. "stagnant lid,
- * surface 3.8 Ga", in the active locale. Worlds made before geology get
- * Earth's regime and no age.
+ * surface 3.8 Ga", in the active locale.
  */
 export function formatGeology(meta: WorldMetadata): string {
-  const regime = t.regimes[meta.preset.geology?.regime ?? 'plates'];
+  const regime = t.regimes[meta.preset.geology.regime];
   const age = meta.surface_age_ga;
-  if (age == null) {
-    return regime;
-  }
   const shown = age >= 1 ? withUnit(formatNumber(age, 1), 'Ga') : withUnit(formatNumber(age * 1000), 'Ma');
   return t.worldInfo.geologySurface({ regime, age: shown });
 }
