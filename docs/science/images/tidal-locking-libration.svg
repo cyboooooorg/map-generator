@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 605" width="860" height="605" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Libration in longitude of a tidally locked moon on an eccentric orbit</title>
+  <desc id="desc">A moon shown at eight moments one eighth of an orbit apart on an elliptical orbit of eccentricity 0.25 round its planet, which sits at one focus. The moon turns at a steady rate, once per orbit, so a marked meridian (an amber arrow) points where the planet would be on a circular orbit. Its true direction to the planet (a dashed line) differs from that by the true anomaly minus the mean anomaly: zero at periapsis and apoapsis, up to about 29 degrees between them, ahead on the way out and behind on the way in. The moon covers more of its orbit per eighth near periapsis, where it moves fastest (Kepler's second law).</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .a { fill: #ffcc66; font-size: 12px; font-weight: 600; }
+    .orbit { stroke: #6b7886; stroke-width: 1.2; fill: none; }
+    .host { stroke: #9fd3ff; stroke-width: 1; stroke-dasharray: 4 4; fill: none; opacity: 0.8; }
+    .mer { stroke: #ffcc66; stroke-width: 2.4; fill: none; }
+    .arc { stroke: #ffcc66; stroke-width: 1.4; fill: none; }
+    .moon { fill: #c9ced6; stroke: #0f1622; stroke-width: 1; }
+  </style>
+  <rect width="860" height="605" fill="#0f1622"/>
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ffcc66"/>
+    </marker>
+  </defs>
+  <text class="h" x="20" y="30">A locked moon keeps a steady spin; its planet swings in its sky</text>
+  <text class="s" x="20" y="48">The moon at eight moments one eighth of an orbit apart. Eccentricity 0.25, exaggerated so the swing shows.</text>
+  <ellipse class="orbit" cx="330.0" cy="320.0" rx="205.0" ry="198.5"/>
+  <line class="host" x1="535.0" y1="320.0" x2="381.2" y2="320.0"/>
+  <line class="host" x1="441.6" y1="153.5" x2="381.2" y2="320.0"/>
+  <line class="host" x1="280.7" y1="127.3" x2="381.2" y2="320.0"/>
+  <line class="host" x1="165.2" y1="202.0" x2="381.2" y2="320.0"/>
+  <line class="host" x1="125.0" y1="320.0" x2="381.2" y2="320.0"/>
+  <line class="host" x1="165.2" y1="438.0" x2="381.2" y2="320.0"/>
+  <line class="host" x1="280.7" y1="512.7" x2="381.2" y2="320.0"/>
+  <line class="host" x1="441.6" y1="486.5" x2="381.2" y2="320.0"/>
+  <circle cx="381.2" cy="320.0" r="26" fill="#3d6fa8"/>
+  <text class="t" x="381.2" y="366.0" text-anchor="middle">planet</text>
+  <text class="s" x="381.2" y="380.0" text-anchor="middle">(at a focus)</text>
+  <line class="mer" x1="535.0" y1="320.0" x2="485.0" y2="320.0" marker-end="url(#tip)"/>
+  <circle class="moon" cx="535.0" cy="320.0" r="11"/>
+  <text class="a" x="569.0" y="318.0" text-anchor="start">0°</text>
+  <text class="s" x="569.0" y="332.0" text-anchor="start">t = 0</text>
+  <line class="mer" x1="441.6" y1="153.5" x2="406.3" y2="188.9" marker-end="url(#tip)"/>
+  <path class="arc" d="M413.3 181.8 A40 40 0 0 0 428.0 191.1"/>
+  <circle class="moon" cx="441.6" cy="153.5" r="11"/>
+  <text class="a" x="460.5" y="123.3" text-anchor="start">+25°</text>
+  <text class="s" x="460.5" y="137.3" text-anchor="start">t = 1/8</text>
+  <line class="mer" x1="280.7" y1="127.3" x2="280.7" y2="177.3" marker-end="url(#tip)"/>
+  <path class="arc" d="M280.7 167.3 A40 40 0 0 0 299.2 162.8"/>
+  <circle class="moon" cx="280.7" cy="127.3" r="11"/>
+  <text class="a" x="272.3" y="92.4" text-anchor="middle">+28°</text>
+  <text class="s" x="272.3" y="106.4" text-anchor="middle">t = 2/8</text>
+  <line class="mer" x1="165.2" y1="202.0" x2="200.5" y2="237.3" marker-end="url(#tip)"/>
+  <path class="arc" d="M193.5 230.3 A40 40 0 0 0 200.3 221.2"/>
+  <circle class="moon" cx="165.2" cy="202.0" r="11"/>
+  <text class="a" x="137.5" y="180.2" text-anchor="end">+16°</text>
+  <text class="s" x="137.5" y="194.2" text-anchor="end">t = 3/8</text>
+  <line class="mer" x1="125.0" y1="320.0" x2="175.0" y2="320.0" marker-end="url(#tip)"/>
+  <circle class="moon" cx="125.0" cy="320.0" r="11"/>
+  <text class="a" x="91.0" y="318.0" text-anchor="end">0°</text>
+  <text class="s" x="91.0" y="332.0" text-anchor="end">t = 4/8</text>
+  <line class="mer" x1="165.2" y1="438.0" x2="200.5" y2="402.7" marker-end="url(#tip)"/>
+  <path class="arc" d="M193.5 409.7 A40 40 0 0 1 200.3 418.8"/>
+  <circle class="moon" cx="165.2" cy="438.0" r="11"/>
+  <text class="a" x="137.5" y="455.8" text-anchor="end">−16°</text>
+  <text class="s" x="137.5" y="469.8" text-anchor="end">t = 5/8</text>
+  <line class="mer" x1="280.7" y1="512.7" x2="280.7" y2="462.7" marker-end="url(#tip)"/>
+  <path class="arc" d="M280.7 472.7 A40 40 0 0 1 299.2 477.2"/>
+  <circle class="moon" cx="280.7" cy="512.7" r="11"/>
+  <text class="a" x="272.3" y="543.6" text-anchor="middle">−28°</text>
+  <text class="s" x="272.3" y="557.6" text-anchor="middle">t = 6/8</text>
+  <line class="mer" x1="441.6" y1="486.5" x2="406.3" y2="451.1" marker-end="url(#tip)"/>
+  <path class="arc" d="M413.3 458.2 A40 40 0 0 1 428.0 448.9"/>
+  <circle class="moon" cx="441.6" cy="486.5" r="11"/>
+  <text class="a" x="460.5" y="512.7" text-anchor="start">−25°</text>
+  <text class="s" x="460.5" y="526.7" text-anchor="start">t = 7/8</text>
+  <text class="s" x="586.2" y="354.0" text-anchor="middle">periapsis:</text>
+  <text class="s" x="586.2" y="368.0" text-anchor="middle">fastest</text>
+  <text class="s" x="176.2" y="354.0" text-anchor="middle">apoapsis:</text>
+  <text class="s" x="176.2" y="368.0" text-anchor="middle">slowest</text>
+  <defs>
+    <marker id="mv" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6b7886"/>
+    </marker>
+  </defs>
+  <path d="M525.0 258.7 L514.3 233.0" stroke="#6b7886" stroke-width="1.2" marker-end="url(#mv)"/>
+  <text class="s" x="528.3" y="241.0">motion</text>
+  <line class="mer" x1="625" y1="110" x2="661" y2="110" marker-end="url(#tip)"/>
+  <text class="t" x="673" y="114">marked meridian:</text>
+  <text class="s" x="673" y="130">the face turned to the planet</text>
+  <text class="s" x="673" y="144">on average, turning steadily,</text>
+  <text class="s" x="673" y="158">once per orbit</text>
+  <line class="host" x1="625" y1="194" x2="661" y2="194"/>
+  <text class="t" x="673" y="198">the planet's true direction</text>
+  <text class="a" x="625" y="240">+25°</text>
+  <text class="t" x="673" y="240">libration: true minus</text>
+  <text class="t" x="673" y="256">mean anomaly</text>
+  <text class="s" x="673" y="272">+ ahead in the sense of the orbit</text>
+  <text class="s" x="625" y="316">Equal times, unequal arcs: the moon</text>
+  <text class="s" x="625" y="330">runs ahead of its steady spin on the</text>
+  <text class="s" x="625" y="344">way out of periapsis and falls behind</text>
+  <text class="s" x="625" y="358">on the way back (Kepler's second law).</text>
+  <text class="s" x="625" y="388">Amplitude about 2e radians:</text>
+  <text class="s" x="625" y="402">±29° here; the Moon (e = 0.0549):</text>
+  <text class="s" x="625" y="416">±6.3°; Io (e = 0.004): ±0.5°.</text>
+  <text class="s" x="20" y="577">Positions from Kepler's equation at equal steps of mean anomaly; the orbit is to scale for e = 0.25, the bodies are not.</text>
+  <text class="s" x="20" y="592">Eccentricities: NASA Moon fact sheet (0.0549); JPL mean elements of the planetary satellites (Io 0.004).</text>
+</svg>
