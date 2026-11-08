@@ -284,9 +284,11 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
 
 ### Where it departs from the science
 
-- **No other resonance edges.** The A ring's outer edge is set by the
-  Janus 7:6 resonance; in the app, the edge moons sit beyond the rings
-  without setting their edge, which the Roche limit alone places.
+- **Few resonance edges.** The A ring's outer edge is set by the Janus
+  7:6 resonance; in the app, on half the bright rings the largest edge
+  moon (40 km or more in radius) does the same, and the others sit beyond
+  the rings without setting their edge, which the Roche limit alone
+  places. The odds and the size are calibrations on Saturn alone.
 - **$J_2$ comes from the app's flattening.** The app flattens a giant by
   $0.7\,q$; with $f = \tfrac{3}{2} J_2 + q/2$ that gives
   $J_2 = 0.133\,q$, 27 % above Saturn's real $J_2$ for Saturn's $q$ (and
@@ -303,7 +305,9 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
 - **Little inner-edge physics.** A bright ring's inner edge is drawn
   between 1.2 and 1.5 radii, near Saturn's C ring (1.24), and moved in
   only to keep the ring 0.3 radii wide and above 1.11 radii. Nothing ties
-  it to the atmosphere's drag, and there is no faint D ring inside it.
+  it to the atmosphere's drag. The faint D-like ring inside it (half the
+  bright rings, opacity 0.01 to 0.05 against a real optical depth of
+  about 10⁻³) rests on Saturn alone.
 - **A ringless giant gets no dust rings from small moons.** Only giants
   with faint or bright rings get source or edge moons, so none feeds a
   gossamer ring or a belt round a bare giant.

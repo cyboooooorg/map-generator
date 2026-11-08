@@ -569,6 +569,7 @@ impl WorldRequest {
             // A preset may pin the spin-orbit state (`[star] resonance`).
             locked_to_star: pinned.map(|turns| turns == 1.0),
             resonance_to_star: pinned.map(|turns| if turns == 1.0 { 0.0 } else { turns }),
+            ridge: None,
             gravity: None,
             // Drawn from its own stream: the other draws keep their values.
             perihelion_longitude_deg: Some(self.perihelion_longitude_deg.map_or_else(

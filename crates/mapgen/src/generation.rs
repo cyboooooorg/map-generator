@@ -1705,6 +1705,7 @@ pub(crate) mod tests {
             given_rings: None,
             impact_factor: None,
             locked_to_star: None,
+            ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             gravity: None,

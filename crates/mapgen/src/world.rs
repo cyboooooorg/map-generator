@@ -104,6 +104,12 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub gravity: Option<f32>,
+    /// Height of an equatorial ridge of ring material swept up by a small
+    /// ring moon (Pan, Atlas, Daphnis), as a share of its radius; it adds to
+    /// the `shape` layer. Absent for every other body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub ridge: Option<f32>,
     /// Longitude of the orbit's perihelion, degrees from the spring
     /// equinox in `[0, 360)`: where in the seasons the planet is closest to
     /// its star (Earth ≈ 283°, a few days after the December solstice; Mars

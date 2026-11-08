@@ -122,6 +122,10 @@ export const en = {
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
       `${p.kind === 'bright' ? 'bright, icy' : 'faint, narrow'} · ${p.inner} to ${p.outer} of its radii` +
       (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 gap' : `${p.gaps} gaps`}` : ''),
+    dRingTitle: 'Inner ring',
+    dRing: (p: { inner: string; outer: string }) => `a faint ring of dust inside, ${p.inner} to ${p.outer} of its radii (like Saturn's D ring)`,
+    ridge: 'Equator',
+    ridgeValue: (p: { height: string }) => `a ridge of ring material it swept up, ${p.height} of its radius high, as on Pan and Atlas`,
     dustRings: 'Dust rings',
     dustRing: (p: { kind: 'gossamer' | 'plume'; moon: string; inner: string; outer: string }) =>
       `${p.kind === 'plume' ? 'ice from the geysers of' : 'dust knocked off'} ${p.moon}, ${p.inner} to ${p.outer} of its radii`,
@@ -138,6 +142,7 @@ export const en = {
       edge: () => 'orbits just beyond the rings and keeps their outer edge sharp',
       shepherd: () => 'one of the pair of shepherd moons that confine the narrow ring',
       source: () => 'a small moon beyond the narrow ring, whose impact dust may feed a faint dust ring',
+      confining: () => 'orbits just beyond the rings; its 7:6 resonance sets their outer edge, as Janus does for the A ring',
     },
     notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
     generating: 'Its maps are being made: see the progress over the view.',
@@ -673,6 +678,7 @@ export const en = {
       embedded: 'ring moon',
       resonant: 'icy moon, resonant with the rings',
       edge: 'ring moon',
+      confining: 'ring moon, setting the rings’ edge',
       shepherd: 'shepherd moon',
       source: 'small inner moon',
     },

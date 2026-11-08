@@ -108,6 +108,10 @@ export const fr: Messages = {
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
       `${p.kind === 'bright' ? 'brillants, glacés' : 'ténus, étroits'} · de ${p.inner} à ${p.outer} de ses rayons` +
       (p.gaps > 0 ? ` · ${p.gaps === 1 ? '1 division' : `${p.gaps} divisions`}` : ''),
+    dRingTitle: 'Anneau interne',
+    dRing: (p: { inner: string; outer: string }) => `un anneau ténu de poussière à l’intérieur, de ${p.inner} à ${p.outer} de ses rayons (comme l’anneau D de Saturne)`,
+    ridge: 'Équateur',
+    ridgeValue: (p: { height: string }) => `une crête de matière des anneaux qu’elle a balayée, haute de ${p.height} de son rayon, comme sur Pan et Atlas`,
     dustRings: 'Anneaux de poussière',
     dustRing: (p: { kind: 'gossamer' | 'plume'; moon: string; inner: string; outer: string }) =>
       `${p.kind === 'plume' ? 'glace des geysers de' : 'poussière arrachée à'} ${p.moon}, de ${p.inner} à ${p.outer} de ses rayons`,
@@ -124,6 +128,7 @@ export const fr: Messages = {
       edge: () => 'orbite juste au-delà des anneaux et en garde le bord externe net',
       shepherd: () => 'l’une des deux lunes bergères qui confinent l’anneau étroit',
       source: () => 'petite lune au-delà de l’anneau étroit, dont la poussière d’impacts peut alimenter un anneau ténu',
+      confining: () => 'orbite juste au-delà des anneaux ; sa résonance 7:6 en fixe le bord externe, comme Janus pour l’anneau A',
     },
     notGenerated: `Ses cartes ne sont pas encore faites${S}: voici ce que le tirage a fixé.`,
     generating: `Ses cartes sont en cours de fabrication${S}: suivez la progression sur la vue.`,
@@ -637,6 +642,7 @@ export const fr: Messages = {
       embedded: 'lune des anneaux',
       resonant: 'lune glacée, en résonance avec les anneaux',
       edge: 'lune des anneaux',
+      confining: 'lune des anneaux, fixant leur bord',
       shepherd: 'lune bergère',
       source: 'petite lune intérieure',
     },
