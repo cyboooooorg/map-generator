@@ -214,12 +214,13 @@ fn poisson(mean: f64, rng: &mut impl RngExt) -> usize {
     k
 }
 
-/// Mass of a world in Earth masses: Earth's density, from its circumference;
-/// for the moon of a giant, its giant's (they share the orbit).
+/// Mass of a world in Earth masses: its own, as [`WorldParams::mass_earth`]
+/// weighs it (the rocky mass-radius relation); for the moon of a giant, its
+/// giant's (they share the orbit).
 fn world_mass_earth(p: &WorldParams) -> f64 {
     match crate::exomoon::HostGiant::draw(p) {
         Some(host) => f64::from(host.giant.mass_earth),
-        None => (f64::from(p.circumference_km) / 40_075.0).powi(3),
+        None => f64::from(p.mass_earth()),
     }
 }
 
@@ -653,6 +654,20 @@ mod tests {
             resonance_to_star: None,
             gravity: None,
         }
+    }
+
+    #[test]
+    fn a_rocky_world_weighs_with_its_mass_radius_relation() {
+        // Twice Earth's size: 3.2 g × 2² ≈ 12.8 Earth masses, not 2³ = 8.
+        let mut p = params(7, 1.0, 1.0, 0.0);
+        p.circumference_km = 2.0 * 40_075.0;
+        let mass = world_mass_earth(&p);
+        assert!(
+            (mass - f64::from(p.mass_earth())).abs() < 1e-6,
+            "{mass} against {}",
+            p.mass_earth()
+        );
+        assert!(mass > 10.0, "{mass}");
     }
 
     #[test]
