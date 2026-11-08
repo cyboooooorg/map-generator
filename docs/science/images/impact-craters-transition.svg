@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 520" width="860" height="520" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Simple-to-complex crater transition diameter against surface gravity</title>
+  <desc id="desc">Log-log chart. Horizontal axis: surface gravity from 1 to 12 metres per second squared. Vertical axis: the crater diameter above which craters are complex, from 1 to 30 kilometres. Measured ranges: the Moon, 1.62 m/s², 15 to 20 km; Mercury, 3.70 m/s², about 10 to 14 km; Mars, 3.71 m/s², 6 to 8 km; Earth, 9.8 m/s², 3 to 5 km. A line shows the rule the app uses, 15 km times 1.62 divided by g: 15 km on the Moon, 6.6 km on Mercury and Mars, 2.5 km on Earth. Mercury and Mars have the same gravity but different transitions.</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .grid { stroke: #2a3644; stroke-width: 1; }
+    .axis { stroke: #6b7886; stroke-width: 1; }
+    .app { stroke: #ffcc66; stroke-width: 2; stroke-dasharray: 7 5; fill: none; }
+    .bar { stroke: #7cc4ff; stroke-width: 3; stroke-linecap: round; }
+    .dot { fill: #7cc4ff; stroke: #0f1622; stroke-width: 1; }
+  </style>
+  <rect width="860" height="520" fill="#0f1622"/>
+  <text class="h" x="20" y="30">Where craters turn complex: the transition diameter against gravity</text>
+  <text class="s" x="20" y="48">Both axes logarithmic. Blue: measured ranges. Gold dashes: the app's rule, 15 km × 1.62 / g.</text>
+  <line class="grid" x1="110.0" y1="70" x2="110.0" y2="400"/>
+  <text class="s" x="110.0" y="418" text-anchor="middle">1</text>
+  <line class="grid" x1="280.2" y1="70" x2="280.2" y2="400"/>
+  <text class="s" x="280.2" y="418" text-anchor="middle">2</text>
+  <line class="grid" x1="379.7" y1="70" x2="379.7" y2="400"/>
+  <text class="s" x="379.7" y="418" text-anchor="middle">3</text>
+  <line class="grid" x1="505.1" y1="70" x2="505.1" y2="400"/>
+  <text class="s" x="505.1" y="418" text-anchor="middle">5</text>
+  <line class="grid" x1="675.2" y1="70" x2="675.2" y2="400"/>
+  <text class="s" x="675.2" y="418" text-anchor="middle">10</text>
+  <line class="grid" x1="110" y1="400.0" x2="720" y2="400.0"/>
+  <text class="s" x="102" y="404.0" text-anchor="end">1</text>
+  <line class="grid" x1="110" y1="332.7" x2="720" y2="332.7"/>
+  <text class="s" x="102" y="336.7" text-anchor="end">2</text>
+  <line class="grid" x1="110" y1="293.4" x2="720" y2="293.4"/>
+  <text class="s" x="102" y="297.4" text-anchor="end">3</text>
+  <line class="grid" x1="110" y1="243.8" x2="720" y2="243.8"/>
+  <text class="s" x="102" y="247.8" text-anchor="end">5</text>
+  <line class="grid" x1="110" y1="176.6" x2="720" y2="176.6"/>
+  <text class="s" x="102" y="180.6" text-anchor="end">10</text>
+  <line class="grid" x1="110" y1="109.3" x2="720" y2="109.3"/>
+  <text class="s" x="102" y="113.3" text-anchor="end">20</text>
+  <line class="grid" x1="110" y1="70.0" x2="720" y2="70.0"/>
+  <text class="s" x="102" y="74.0" text-anchor="end">30</text>
+  <line class="axis" x1="110" y1="400" x2="720" y2="400"/>
+  <line class="axis" x1="110" y1="70" x2="110" y2="400"/>
+  <text class="t" x="415" y="442" text-anchor="middle">Surface gravity g (m/s²)</text>
+  <text class="t" transform="translate(44 235) rotate(-90)" text-anchor="middle">Transition diameter (km)</text>
+  <polyline class="app" points="110.0,90.4 720.0,331.5"/>
+  <text class="t" x="122" y="225" style="fill:#ffcc66">app: 15 km × 1.62 / g</text>
+  <line class="bar" x1="228.4" y1="137.3" x2="228.4" y2="109.3"/>
+  <circle class="dot" cx="228.4" cy="125.1" r="4"/>
+  <text class="t" x="240.4" y="123.1" text-anchor="start">Moon</text>
+  <text class="s" x="240.4" y="137.1" text-anchor="start">15–20 km</text>
+  <line class="bar" x1="427.2" y1="176.6" x2="427.2" y2="143.9"/>
+  <circle class="dot" cx="427.2" cy="158.9" r="4"/>
+  <text class="t" x="415.2" y="156.9" text-anchor="end">Mercury</text>
+  <text class="s" x="415.2" y="170.9" text-anchor="end">10–14 km</text>
+  <line class="bar" x1="435.8" y1="226.2" x2="435.8" y2="198.2"/>
+  <circle class="dot" cx="435.8" cy="211.2" r="4"/>
+  <text class="t" x="449.8" y="209.2" text-anchor="start">Mars</text>
+  <text class="s" x="449.8" y="223.2" text-anchor="start">6–8 km</text>
+  <line class="bar" x1="670.3" y1="293.4" x2="670.3" y2="243.8"/>
+  <circle class="dot" cx="670.3" cy="268.0" r="4"/>
+  <text class="t" x="658.3" y="266.0" text-anchor="end">Earth</text>
+  <text class="s" x="658.3" y="280.0" text-anchor="end">3–5 km</text>
+  <text class="s" x="445.2" y="134.9">same gravity, 1.5 to 2 times the size:</text>
+  <text class="s" x="445.2" y="148.9">weaker, volatile-rich rock on Mars?</text>
+  <text class="s" x="20" y="480">Mercury and Mars are drawn a few pixels apart; their gravities differ by 0.3 %. Ranges, not error bars: estimates differ by method and terrain.</text>
+  <text class="s" x="20" y="500">Sources: Pike 1977, Silber et al. 2017 (Moon); Barnouin et al. 2012 (Mercury, Mars); Melosh &amp; Ivanov 1999 (Earth); NASA fact sheets (g).</text>
+</svg>
