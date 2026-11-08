@@ -407,7 +407,8 @@ systems/<system-id>/
   dashes: `mgs-48213-42`. It reads as `<anything>-<digits>`, as world ids
   do today, so the same id check applies. A lone planet's system adds
   `lone` before the seed (`mgs-48213-lone-42`), so that it never
-  collides with the full system of the same star and seed. The same request gives the
+  collides with the full system of the same star and seed. The same
+  request gives the
   same system and id (see [Model](#model)): creating it again is refused
   (409) unless the request asks to replace it, as worlds are today.
 - **Body id**: derived from the body's place, path-safe and stable once

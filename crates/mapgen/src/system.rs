@@ -3201,6 +3201,97 @@ mod lone_tests {
         }
     }
 
+    /// The bodies of a normal system around a planet, as main drew them:
+    /// id, type, orbit (AU), impact factor, belts and trojans.
+    fn signature(seed: u32) -> String {
+        let system = around("terran", seed, None, None);
+        let bodies: Vec<String> = system
+            .bodies
+            .iter()
+            .map(|b| {
+                format!(
+                    "{}:{}:{:.4}:{:.4}:{}",
+                    b.id,
+                    b.body_type,
+                    b.orbit.semi_major_axis_au,
+                    b.params.impact_factor.unwrap_or(-1.0),
+                    b.trojans.is_some()
+                )
+            })
+            .collect();
+        format!(
+            "{} belts={} {}",
+            system_id(&system),
+            system.belts.len(),
+            bodies.join(" ")
+        )
+    }
+
+    /// Drawn by origin/main before the lone planet existed (seeds 1 to 4).
+    const MAIN_SIGNATURES: [&str; 4] = [
+        "mgs-57979-1 belts=1 b:barren:0.0200:0.0920:true c:barren:0.1775:0.0920:true d:terran:0.3626:0.0920:true e:barren:0.6827:0.0920:true",
+        "mgs-59108-2 belts=0 b:barren:0.0212:0.0350:true c:terran:0.1137:0.0350:true d:frozen:0.3133:0.0350:true",
+        "mgs-83289-3 belts=0 b:caustic:0.0200:0.0350:true c:barren:0.0259:0.0350:true d:terran:0.0393:0.0350:true d-1:rocky-moon:0.0003:0.0350:false d-2:rocky-moon:0.0006:0.0350:false e:barren:0.0750:0.0350:true f:frozen:0.1536:0.0350:true g:frozen:0.4348:0.0350:true g-1:rocky-moon:0.0004:0.0350:false",
+        "mgs-33182-4 belts=0 b:barren:0.0339:0.0350:true c:barren:0.0931:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:terran:0.3711:0.0350:true e:barren:0.5515:0.0350:true e-1:rocky-moon:0.0004:0.0350:false e-2:rocky-moon:0.0004:0.0350:false e-3:rocky-moon:0.0007:0.0350:false f:frozen:2.5098:0.0350:true",
+    ];
+
+    #[test]
+    fn a_normal_system_is_the_one_main_drew() {
+        for (seed, expected) in (1..=4).zip(MAIN_SIGNATURES) {
+            assert_eq!(signature(seed), expected, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn a_lone_planet_keeps_the_world_impact_rate_and_no_giants_when_stored() {
+        use crate::world::WorldParams;
+        for (planet, host) in [
+            ("terran", None),
+            ("terran", Some(HostMode::Giant)),
+            ("gas-giant", None),
+        ] {
+            let lone = around(planet, 7, host, Some(true));
+            let json = serde_json::to_string(&lone).unwrap();
+            let stored: System = serde_json::from_str(&json).unwrap();
+            let focus = stored
+                .bodies
+                .iter()
+                .find(|b| Some(&b.id) == stored.focus.as_ref())
+                .unwrap();
+            // As the body is regenerated from its stored params.
+            let params: WorldParams = world_params(focus);
+            assert!(params.impact_factor.is_none(), "{planet} {host:?}");
+            assert_eq!(params.giants, GiantsMode::None, "{planet} {host:?}");
+            assert!(
+                focus.params.impact_factor.is_none() && focus.params.giants == GiantsMode::None
+            );
+        }
+    }
+
+    #[test]
+    fn a_lone_request_reports_the_giants_it_overrides() {
+        let resolve = |giants, alone| {
+            WorldRequest {
+                planet: Some("terran".into()),
+                seed: Some(3),
+                giants,
+                alone,
+                ..WorldRequest::default()
+            }
+            .resolve(&mut rand::rng())
+            .unwrap()
+        };
+        let lone = resolve(Some(GiantsMode::Auto), Some(true));
+        assert_eq!(lone.ignored, ["giants"]);
+        assert_eq!(lone.params.giants, GiantsMode::None);
+        assert!(
+            resolve(Some(GiantsMode::None), Some(true))
+                .ignored
+                .is_empty()
+        );
+        assert!(resolve(Some(GiantsMode::Auto), None).ignored.is_empty());
+    }
+
     #[test]
     fn a_stored_request_without_alone_loads_and_is_not_lone() {
         let json = r#"{"around":{"planet":"terran","seed":3}}"#;
