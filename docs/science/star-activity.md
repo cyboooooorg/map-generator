@@ -143,7 +143,16 @@ Doppler images of fully convective M dwarfs show spots at all latitudes
 
 The shape of a cycle in time is fitted by Hathaway, Wilson & Reichmann
 (1994) as $f(x) = x^3/(e^{x^2} - c)$; Hathaway (2015) gives $c = 0.8$ for
-the average cycle.
+the average cycle. The browser's timeline (`starActivity.ts`) uses
+$c = 0.71$, the value the plan takes from the 1994 paper (not checked
+against its text), normalises $f$ to a peak of 1 and maps one cycle onto
+$x \in [0, 2.6]$, where $f$ is back to 4 % of its peak (the 2.6 is a
+**calibration**). The latitude drift is $e^{-1.5\,u}$ over the cycle
+fraction $u$ (Hathaway 2011: 132 months / 90 months = 1.47), rescaled to
+end exactly at the band's end. A region's growth time is
+$\min(0.1\,T,\ 3\ \text{d})$ times a factor within $\pm 20\ \%$
+(a **calibration**, so that regions born in one slot do not all peak
+together).
 
 ### Differential rotation
 
