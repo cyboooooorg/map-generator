@@ -678,6 +678,22 @@ export const en = {
     spinAxes: 'Spin axes',
     spinAxesHelp:
       'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
+    spinDirection: 'Spin direction',
+    spinDirectionHelp:
+      'Draws the way each body turns (on the globe): an arrow bent round its axis, or a closed ring for a body locked to what it orbits, which does not turn against it',
+    hostLink: 'Link to the host',
+    hostLinkHelp:
+      "From a moon: a dotted line to its host planet, with the host's pull on the moon and the moon's velocity as arrows, and their figures",
+    hostRings: 'Host rings',
+    hostRingsHelp: "The rings of the host planet in the moon's sky",
+    hostCompass: 'Host compass',
+    hostCompassHelp:
+      "The rotation dial round the host planet as the moon sees it: the ring graduated in degrees, the half-circle of the star's height, and the moon's bearing and height over the host's equator",
+    squareMoon: (p: { what: string }) => `${p.what} on the moon`,
+    squareHost: (p: { what: string }) => `${p.what} on the host`,
+    squareLocal: (p: { what: string }) => `${p.what} of the local system`,
+    squareStellar: (p: { what: string }) => `${p.what} of the star system`,
+    hostCompassMoon: 'Moon',
     rotationDial: 'Rotation dial',
     rotationDialHelp:
       'A ring round the equator, graduated in degrees: its pointer shows how far the body has turned, against the stars, or against what it orbits for a body locked to it',
@@ -747,8 +763,6 @@ export const en = {
     starsHelp: 'Stars around the globe, fixed in space: they turn with the planet when you move the camera',
     clouds: 'Clouds',
     drift: 'Drift',
-    host: 'Host planet',
-    hostHelp: "The planet seen in this body's sky (or the giant this world orbits), drawn by its own switches: those above apply to the body you are looking at",
     skyLabels: 'Labels',
     skyLabelsHelp: 'Names and basic facts of the bodies in the sky (moons, the planet seen from a moon, the star), tied to each by a line, to find even the smallest; with Sunlight',
     spinName: 'Spin',

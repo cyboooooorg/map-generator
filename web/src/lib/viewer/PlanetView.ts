@@ -634,6 +634,11 @@ export class PlanetView {
   /** Which body of the sky is the host planet, and whether it is locked to its star; null for none. */
   private hostSpinOf: { index: number; locked: boolean } | null = null;
   private hostGuideOn = false;
+  /** How far the clouds of the sky bodies have drifted, turns (shared: only the host has any). */
+  private readonly skyCloudShift = { value: 0 };
+  /** Whether the body shown's spin arrow (or locked ring) is drawn (see setSpinDirection), and the link to the host (see setHostLink). */
+  private spinArrowOn = false;
+  private hostLinkOn = false;
   /**
    * The Hill sphere drawn round a body of the sky (see setHillSphere): a
    * grid and a faint limb shell on a unit sphere, placed and scaled to it,
@@ -1409,12 +1414,10 @@ export class PlanetView {
    */
   private driftClouds(): void {
     // A giant's bands drift too, each with its own wind.
-    const visible =
-      this.u.uCloudsOn.value > 0 ||
-      this.u.uGiant.value > 0 ||
-      // The clouds of a planet in a moon's sky drift as its own do.
-      this.skyBodies.some(({ mesh }) => mesh.visible && mesh.material.uniforms['uHasClouds']!.value > 0.5);
-    if (!this.cloudsDrifting || !visible) {
+    const own = this.cloudsDrifting && (this.u.uCloudsOn.value > 0 || this.u.uGiant.value > 0);
+    // The clouds of a planet in a moon's sky drift as its own do, by its own switch.
+    const sky = this.skyBodies.some(({ mesh, body }) => mesh.visible && body.show?.drift && mesh.material.uniforms['uHasClouds']!.value > 0.5);
+    if (!own && !sky) {
       this.cloudDriftAt = null;
       return;
     }
@@ -1422,8 +1425,11 @@ export class PlanetView {
     if (this.cloudDriftAt !== null) {
       // A hidden tab draws no frames: resume where the clouds were.
       const seconds = Math.min(now - this.cloudDriftAt, 1000) / 1000;
-      this.u.uCloudShift.value = (this.u.uCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
-      this.u.uBandTime.value += seconds;
+      if (own) {
+        this.u.uCloudShift.value = (this.u.uCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
+        this.u.uBandTime.value += seconds;
+      }
+      if (sky) this.skyCloudShift.value = (this.skyCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
     }
     this.cloudDriftAt = now;
     if (this.cloudDriftTimer === null) {
@@ -2304,8 +2310,8 @@ export class PlanetView {
             uHasClouds: { value: 0 },
             uClouds: { value: emptyTexture() },
             uCloudTint: { value: new Vector3(1, 1, 1) },
-            // Drifts with the body shown's own clouds (see driftClouds).
-            uCloudShift: this.u.uCloudShift,
+            // Drifts by the body's own switch (see driftClouds).
+            uCloudShift: this.skyCloudShift,
             uHaloColor: { value: new Vector3() },
             uHaloHeight: { value: 0 },
             uHaloStrength: { value: 0 },
@@ -2558,9 +2564,9 @@ export class PlanetView {
   private skyOrbitsOn = false;
 
   /**
-   * Draws the spin axes, on the globe: the body shown's out of its poles,
-   * and each sky body's out of its disk, along its own axis (see
-   * SkyBody.axes), so that their tilts show against their orbits.
+   * Draws the body shown's spin axis, on the globe, out of its poles. Each
+   * sky body's own is drawn along its axis (see SkyBody.axes) by its
+   * `show.axis`, so that their tilts show against their orbits.
    */
   setSpinAxes(on: boolean): void {
     this.spinAxesOn = on;
@@ -2580,6 +2586,21 @@ export class PlanetView {
     this.requestRender();
   }
 
+  /** Draws the body shown's spin arrow (or its closed ring when locked, see setSpinLocked). */
+  setSpinDirection(on: boolean): void {
+    this.spinArrowOn = on;
+    this.requestRender();
+  }
+
+  /**
+   * Draws the link to the host planet (see setHostGuide): the dotted line,
+   * the pull and the velocity arrows.
+   */
+  setHostLink(on: boolean): void {
+    this.hostLinkOn = on;
+    this.requestRender();
+  }
+
   /**
    * How the body shown turns, for its spin arrow: on its own (false), or
    * locked to what it orbits (true), drawn as a closed ring; null for none.
@@ -2592,7 +2613,7 @@ export class PlanetView {
   /**
    * The host planet of the body shown (a moon's planet), for a dotted line
    * to it and the arrows of its pull and of the body's velocity; null for
-   * none. Shown with the spin axes.
+   * none. Shown with the link to the host (see setHostLink).
    */
   setHostGuide(guide: HostGuide | null): void {
     this.guides.setHost(guide);
@@ -2873,7 +2894,7 @@ export class PlanetView {
   private drawHostSpin(visible: boolean): void {
     const entry = this.hostSpinOf ? this.skyBodies[this.hostSpinOf.index] : undefined;
     const body = entry?.body;
-    const on = visible && this.spinAxesOn && !!body?.position && body.radius !== undefined && entry!.mesh.visible;
+    const on = visible && !!body?.show?.spin && !!body?.position && body.radius !== undefined && entry!.mesh.visible;
     if (on && body?.position && body.radius !== undefined) {
       const centre = new Vector3(...body.position);
       const y = new Vector3(...(body.axes ?? IDENTITY_AXES)[1]).normalize();
@@ -2938,9 +2959,11 @@ export class PlanetView {
       (u['uHaloColor']!.value as Vector3).set(...(halo?.colour ?? [0, 0, 0]));
       u['uHaloHeight']!.value = height;
       u['uHaloStrength']!.value = halo?.strength ?? 0;
-      u['uSpinAxis']!.value = this.spinAxesOn ? 1 : 0;
-      u['uSpinArrow']!.value = this.hostSpinOf?.index === this.skyBodies.indexOf(entry) ? 0 : 1;
-      u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, this.spinAxesOn ? SPIN_AXIS_LENGTH + 0.1 : 1);
+      const axis = show?.axis === true;
+      const arrow = show?.spin === true && this.hostSpinOf?.index !== this.skyBodies.indexOf(entry);
+      u['uSpinAxis']!.value = axis ? 1 : 0;
+      u['uSpinArrow']!.value = arrow ? 1 : 0;
+      u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, axis ? SPIN_AXIS_LENGTH + 0.1 : arrow ? 1.7 : 1);
       setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
     }
@@ -2959,7 +2982,7 @@ export class PlanetView {
    */
   private drawSkyRings(entry: (typeof this.skyBodies)[number], place: { direction: Vector3; half: number }): void {
     const { body, mesh } = entry;
-    const rings = body.rings ?? null;
+    const rings = body.show?.rings === false ? null : (body.rings ?? null);
     if (!rings) {
       if (entry.rings) entry.rings.visible = false;
       return;
@@ -3134,7 +3157,7 @@ export class PlanetView {
       this.spinAxis.material.opacity = this.morph ** 3;
       this.spinAxis.scale.setScalar(poles);
     }
-    this.guides.update(this.spinAxesOn, this.spinAxesOn && this.hostGuideOn, this.morph);
+    this.guides.update(this.spinArrowOn, this.hostLinkOn && this.hostGuideOn, this.morph);
     // The dial's ring stands clear of the farthest of the shape, with its
     // relief as displayed (as the guides), else the surface hides it.
     if (this.dialState) {

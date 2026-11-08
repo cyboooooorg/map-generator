@@ -1,7 +1,27 @@
 <script lang="ts" module>
   import type { IconName } from '../../lib/icons';
 
-  /** A display switch of the icon bar: its icon, its name (the tooltip), its state and what flips it. */
+  /**
+   * A small square beside a switch, for one part of what it switches (the
+   * body shown or its host planet; the local group or the whole star
+   * system): its own state, named in full for the screen reader.
+   */
+  export interface SubToggle {
+    key: string;
+    label: string;
+    /** Its glyph: it tells which body or scope the square is for. */
+    icon: IconName;
+    on: boolean;
+    set: (on: boolean) => void;
+    /** Nothing for the square to switch (the host has no clouds to draw, say). */
+    disabled?: boolean;
+  }
+
+  /**
+   * A display switch of the icon bar: its icon, its name (the tooltip), its
+   * state and what flips it; and, for a switch with parts, its squares
+   * (`set` is then the main button's, which sets all of them).
+   */
   export interface Toggle {
     key: string;
     label: string;
@@ -9,6 +29,7 @@
     icon: IconName;
     on: boolean;
     set: (on: boolean) => void;
+    subs?: readonly SubToggle[];
   }
 </script>
 
@@ -31,15 +52,35 @@
     {#if group.length > 0}
       <div class="group">
         {#each group as toggle (toggle.key)}
-          <button
-            type="button"
-            class:on={toggle.on}
-            aria-pressed={toggle.on}
-            aria-label={toggle.label}
-            title={toggle.help ? `${toggle.label}: ${toggle.help}` : toggle.label}
-            onclick={() => toggle.set(!toggle.on)}
-            ><Icon name={toggle.icon} />{#if expanded}<span class="name">{toggle.label}</span>{/if}</button
-          >
+          <div class="row" class:collapsed={!expanded}>
+            <button
+              type="button"
+              class="main"
+              class:on={toggle.on}
+              aria-pressed={toggle.on}
+              aria-label={toggle.label}
+              title={toggle.help ? `${toggle.label}: ${toggle.help}` : toggle.label}
+              onclick={() => toggle.set(!toggle.on)}
+              ><Icon name={toggle.icon} />{#if expanded}<span class="name">{toggle.label}</span>{/if}</button
+            >
+            {#if toggle.subs && toggle.subs.length > 0}
+              <!-- Icons only: the squares shrink to dots stacked beside the icon. -->
+              <div class="subs" role="group" aria-label={toggle.label}>
+                {#each toggle.subs as sub (sub.key)}
+                  <button
+                    type="button"
+                    class="sub"
+                    class:on={sub.on}
+                    aria-pressed={sub.on}
+                    aria-label={sub.label}
+                    title={sub.label}
+                    disabled={sub.disabled}
+                    onclick={() => sub.set(!sub.on)}><Icon name={sub.icon} size={expanded ? 13 : 9} /></button
+                  >
+                {/each}
+              </div>
+            {/if}
+          </div>
         {/each}
       </div>
     {/if}
@@ -70,6 +111,41 @@
     box-shadow: var(--glow);
     border: 1px solid var(--border);
     border-radius: var(--radius);
+  }
+  .row {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+  }
+  .main {
+    flex: 1;
+  }
+  .subs {
+    display: flex;
+    gap: 2px;
+  }
+  .collapsed .subs {
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+  }
+  .sub {
+    width: 24px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 3px;
+    border-color: var(--border);
+  }
+  .collapsed .sub {
+    width: 14px;
+    height: 14px;
+  }
+  .sub:not(.on) {
+    opacity: 0.55;
+  }
+  .sub:disabled {
+    opacity: 0.25;
+    cursor: default;
   }
   button {
     display: flex;

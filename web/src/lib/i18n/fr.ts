@@ -641,6 +641,22 @@ export const fr: Messages = {
     spinAxes: 'Axes de rotation',
     spinAxesHelp:
       `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite`,
+    spinDirection: 'Sens de rotation',
+    spinDirectionHelp:
+      'Trace le sens dans lequel tourne chaque astre (sur le globe) : une flèche courbée autour de son axe, ou un anneau fermé pour un astre en rotation synchrone avec ce qu’il orbite, qui ne tourne pas par rapport à lui',
+    hostLink: 'Lien avec l’hôte',
+    hostLinkHelp:
+      'Depuis une lune : un trait pointillé vers sa planète hôte, avec l’attraction de l’hôte sur la lune et la vitesse de la lune en flèches, et leurs valeurs',
+    hostRings: 'Anneaux de l’hôte',
+    hostRingsHelp: 'Les anneaux de la planète hôte dans le ciel de la lune',
+    hostCompass: 'Boussole de l’hôte',
+    hostCompassHelp:
+      'La boussole de rotation autour de la planète hôte, telle que la lune la voit : l’anneau gradué en degrés, le demi-cercle de la hauteur de l’étoile, et la direction et la hauteur de la lune au-dessus de l’équateur de l’hôte',
+    squareMoon: (p) => `${p.what} sur la lune`,
+    squareHost: (p) => `${p.what} sur l’hôte`,
+    squareLocal: (p) => `${p.what} du système local`,
+    squareStellar: (p) => `${p.what} du système stellaire`,
+    hostCompassMoon: 'Lune',
     rotationDial: 'Boussole de rotation',
     rotationDialHelp:
       `Un anneau autour de l’équateur, gradué en degrés${S}: son trait montre de combien l’astre a tourné, par rapport aux étoiles, ou par rapport à ce qu’il orbite pour un astre en rotation synchrone`,
@@ -649,7 +665,7 @@ export const fr: Messages = {
     dialFreeDays: (p) =>
       p.solar === null
         ? `Jour sidéral ${p.sidereal} · Jour solaire${S}: aucun, l’étoile reste immobile`
-        : `Jour sidéral ${p.sidereal} · Jour solaire ${p.solar}`,
+        : `Jour sidéral ${p.sidereal} · Jour solaire ${p.solar}`,
     dialLocked: (p) => `Rotation synchrone · Libration ${p.libration} (±${p.amplitude})`,
     dialLockedTime: (p) =>
       p.solar === null
@@ -711,8 +727,6 @@ export const fr: Messages = {
     starsHelp: `Étoiles autour du globe, fixes dans l’espace${S}: elles tournent avec la planète quand vous déplacez la caméra`,
     clouds: 'Nuages',
     drift: 'Dérive',
-    host: 'Planète hôte',
-    hostHelp: `La planète vue dans le ciel de cet astre (ou la géante autour de laquelle tourne ce monde), dessinée selon ses propres réglages${S}: ceux du dessus s’appliquent à l’astre regardé`,
     skyLabels: 'Étiquettes',
     skyLabelsHelp: `Noms et données de base des astres du ciel (lunes, planète vue depuis une lune, étoile), reliés chacun par un trait, pour trouver même les plus petits${S}; avec la lumière du soleil`,
     spinName: 'Rotation',
