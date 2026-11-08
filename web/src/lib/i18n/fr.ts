@@ -545,7 +545,7 @@ export const fr: Messages = {
   viewer: {
     axesGizmo: 'Les axes du monde, x rouge, y vert, z bleu, tels que les voit la caméra',
     sunlightOff: 'Allumez l’éclairage (dans la barre d’icônes) pour éclairer l’astre par son étoile, avec ses saisons et son heure.',
-    hexesOff: 'Allumez la grille hexagonale dans la barre d’icônes pour la régler ici.',
+    hexesOff: 'Cochez Hexagones ci-dessus pour dessiner la grille hexagonale et la régler ici.',
     infoPanel: 'Fiche',
     mapPanel: 'Carte',
     lightPanel: 'Lumière et saison',
@@ -641,6 +641,23 @@ export const fr: Messages = {
     spinAxes: 'Axes de rotation',
     spinAxesHelp:
       `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite`,
+    spinDirection: 'Sens de rotation',
+    spinDirectionHelp:
+      'Trace le sens dans lequel tourne chaque astre (sur le globe) : une flèche courbée autour de son axe, ou un anneau fermé pour un astre en rotation synchrone avec ce qu’il orbite, qui ne tourne pas par rapport à lui',
+    hostLink: 'Lien avec l’hôte',
+    hostLinkHelp:
+      'Depuis une lune : un trait pointillé vers sa planète hôte, avec l’attraction de l’hôte sur la lune et la vitesse de la lune en flèches, et leurs valeurs',
+    resetDrift: 'Réinitialiser la dérive',
+    hostRings: 'Anneaux de l’hôte',
+    hostRingsHelp: 'Les anneaux de la planète hôte dans le ciel de la lune',
+    compass: 'Boussole',
+    compassHelp:
+      'La boussole de rotation : un anneau gradué en degrés, dont le trait montre de combien l’astre a tourné. Depuis une lune, le carré de l’hôte la dessine autour de la planète hôte, telle que la lune la voit : l’anneau gradué en degrés, le demi-cercle de la hauteur de l’étoile, et la direction et la hauteur de la lune au-dessus de l’équateur de l’hôte',
+    squareMoon: (p) => `${p.what} sur la lune`,
+    squareHost: (p) => `${p.what} sur l’hôte`,
+    squareLocal: (p) => `${p.what} du système local`,
+    squareStellar: (p) => `${p.what} du système stellaire`,
+    hostCompassMoon: 'Lune',
     rotationDial: 'Boussole de rotation',
     rotationDialHelp:
       `Un anneau autour de l’équateur, gradué en degrés${S}: son trait montre de combien l’astre a tourné, par rapport aux étoiles, ou par rapport à ce qu’il orbite pour un astre en rotation synchrone`,
@@ -649,7 +666,7 @@ export const fr: Messages = {
     dialFreeDays: (p) =>
       p.solar === null
         ? `Jour sidéral ${p.sidereal} · Jour solaire${S}: aucun, l’étoile reste immobile`
-        : `Jour sidéral ${p.sidereal} · Jour solaire ${p.solar}`,
+        : `Jour sidéral ${p.sidereal} · Jour solaire ${p.solar}`,
     dialLocked: (p) => `Rotation synchrone · Libration ${p.libration} (±${p.amplitude})`,
     dialLockedTime: (p) =>
       p.solar === null
@@ -676,7 +693,7 @@ export const fr: Messages = {
         text: 'le jour solaire découpé en 24 heures locales, midi quand le soleil passe au méridien (convention des missions martiennes).',
       },
       { term: `Rotation synchrone${S}:`, text: 'l’astre fait un tour par orbite et montre toujours la même face à ce qu’il orbite.' },
-      { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’environ ±2e radians.' },
+      { term: `Libration${S}:`, text: 'sur une orbite un peu elliptique, l’hôte oscille dans le ciel du corps synchrone, d’une amplitude maximale voisine de 2e radians (e l’excentricité), que le cadran donne exactement à côté de l’angle courant.' },
       {
         term: `Résonance 3:2${S}:`,
         text: `trois tours toutes les deux orbites, comme Mercure${S}: les marées de l’étoile y tiennent une planète excentrique au lieu de la rendre synchrone${S}; son jour solaire dure deux de ses années.`,
@@ -711,8 +728,6 @@ export const fr: Messages = {
     starsHelp: `Étoiles autour du globe, fixes dans l’espace${S}: elles tournent avec la planète quand vous déplacez la caméra`,
     clouds: 'Nuages',
     drift: 'Dérive',
-    host: 'Planète hôte',
-    hostHelp: `La planète vue dans le ciel de cet astre (ou la géante autour de laquelle tourne ce monde), dessinée selon ses propres réglages${S}: ceux du dessus s’appliquent à l’astre regardé`,
     skyLabels: 'Étiquettes',
     skyLabelsHelp: `Noms et données de base des astres du ciel (lunes, planète vue depuis une lune, étoile), reliés chacun par un trait, pour trouver même les plus petits${S}; avec la lumière du soleil`,
     spinName: 'Rotation',

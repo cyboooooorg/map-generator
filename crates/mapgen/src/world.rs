@@ -126,7 +126,9 @@ const MAX_ROCKY_GRAVITY: f32 = 5.0;
 /// dense than uncompressed rock (the Moon's density), up to
 /// [`MAX_ROCKY_GRAVITY`]. Mars's size gives 0.34 (Mars: 0.38, NASA), the
 /// Moon's 0.165 (0.165), Venus's 0.92 (0.90). Mercury, with its large iron
-/// core, has 0.38 where this gives 0.23.
+/// core, has 0.38 where this gives 0.23. Zeng et al. fitted the relation on
+/// 1 to 8 Earth masses; the app extends it below 1 Earth mass (Mars, the
+/// Moon), beyond the fit.
 pub fn rocky_gravity(radius: f32) -> f32 {
     let radius = radius.max(0.0);
     let density = radius

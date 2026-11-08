@@ -99,8 +99,16 @@ export function planetLook(meta: WorldMetadata, url: (file: string) => string): 
 export interface SkyBodyShow {
   atmosphere: boolean;
   clouds: boolean;
+  /** Its clouds drift (they stand still otherwise). */
+  drift: boolean;
   grid: boolean;
   tropics: boolean;
+  /** Its rings, when it has some. */
+  rings: boolean;
+  /** Its spin axis, out of its poles. */
+  axis: boolean;
+  /** Its spin arrow, or its ring when it is locked to what it orbits. */
+  spin: boolean;
 }
 
 /** An atmosphere seen from afar. */

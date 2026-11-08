@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 520" width="860" height="520" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Belts, zones and jets on a gas giant</title>
+  <desc id="desc">Left: a Jupiter-like globe with pale zones and dark belts alternating from the Equatorial Zone to the polar regions, the Great Red Spot in the southern hemisphere, and a jet on every band edge, eastward on the poleward edge of each zone and westward on its equatorward edge. Right: the northern bands seen edge-on: air rises in the zones, where the clouds stand high and white, and sinks in the belts, where the clouds are lower and darker. Below 4 to 10 bar Juno sees the contrast reversed. Schematic: band widths after Jupiter's, heights not to scale.</desc>
+  <style>
+    .t { fill: #e6edf3; font-size: 13px; }
+    .s { fill: #9aa7b4; font-size: 11px; }
+    .h { fill: #e6edf3; font-size: 15px; font-weight: 600; }
+    .dark { fill: #2a1d10; font-size: 11px; }
+    .light { fill: #fbf4e6; font-size: 11px; }
+    .zone { fill: #efe4cb; }
+    .belt { fill: #a9764c; }
+    .polar { fill: #8e8a84; }
+    .jet { stroke: #ffcc66; stroke-width: 2; fill: none; }
+    .up { stroke: #9fd3ff; stroke-width: 2; fill: none; }
+    .down { stroke: #ff9f80; stroke-width: 2; fill: none; }
+    .edge { stroke: #6b7886; stroke-width: 0.8; stroke-dasharray: 3 3; }
+  </style>
+  <defs>
+    <marker id="aj" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#ffcc66"/></marker>
+    <marker id="au" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#9fd3ff"/></marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#ff9f80"/></marker>
+    <clipPath id="disc"><circle cx="200" cy="272" r="175"/></clipPath>
+  </defs>
+  <rect width="860" height="520" fill="#0f1622"/>
+
+  <text class="h" x="20" y="30">Belts, zones and jets on a gas giant</text>
+  <text class="s" x="20" y="48">Schematic after Jupiter: the Equatorial Zone ends at ±7°, the other band edges are illustrative; heights not to scale.</text>
+
+  <!-- Globe: bands by latitude, y = 272 - 175 sin(lat). -->
+  <g clip-path="url(#disc)">
+    <rect class="polar" x="20" y="90" width="360" height="44.1"/>
+    <rect class="zone" x="20" y="134.1" width="360" height="16.3"/>
+    <rect class="belt" x="20" y="150.4" width="360" height="16.3"/>
+    <rect class="zone" x="20" y="166.7" width="360" height="15.2"/>
+    <rect class="belt" x="20" y="181.9" width="360" height="18.9"/>
+    <rect class="zone" x="20" y="200.8" width="360" height="20"/>
+    <rect class="belt" x="20" y="220.8" width="360" height="29.9"/>
+    <rect class="zone" x="20" y="250.7" width="360" height="42.6" style="fill:#f4ecda"/>
+    <rect class="belt" x="20" y="293.3" width="360" height="29.9"/>
+    <rect class="zone" x="20" y="323.2" width="360" height="20"/>
+    <rect class="belt" x="20" y="343.2" width="360" height="18.9"/>
+    <rect class="zone" x="20" y="362.1" width="360" height="15.2"/>
+    <rect class="belt" x="20" y="377.3" width="360" height="16.3"/>
+    <rect class="zone" x="20" y="393.6" width="360" height="16.3"/>
+    <rect class="polar" x="20" y="409.9" width="360" height="45"/>
+    <!-- Great Red Spot: 17 to 27.5 degrees south, about 17 000 km long. -->
+    <ellipse cx="250" cy="338" rx="21" ry="14.8" fill="#c0603e" stroke="#efe4cb" stroke-width="2"/>
+  </g>
+  <circle cx="200" cy="272" r="175" fill="none" stroke="#3a4656" stroke-width="1"/>
+  <text class="dark" x="200" y="276" text-anchor="middle">Equatorial Zone</text>
+  <text class="light" x="170" y="240" text-anchor="middle">North Equatorial Belt</text>
+  <text class="light" x="150" y="312" text-anchor="middle">South Equatorial Belt</text>
+  <text class="dark" x="150" y="214" text-anchor="middle">zone</text>
+  <text class="light" x="150" y="195" text-anchor="middle">belt</text>
+  <text class="dark" x="150" y="337" text-anchor="middle">zone, Great Red Spot →</text>
+
+  <!-- Jets on the band edges, outside the eastern limb: east = right. -->
+  <g>
+    <line class="jet" x1="388" y1="134.1" x2="418" y2="134.1" marker-end="url(#aj)"/>
+    <line class="jet" x1="418" y1="150.4" x2="388" y2="150.4" marker-end="url(#aj)"/>
+    <line class="jet" x1="388" y1="166.7" x2="418" y2="166.7" marker-end="url(#aj)"/>
+    <line class="jet" x1="418" y1="181.9" x2="388" y2="181.9" marker-end="url(#aj)"/>
+    <line class="jet" x1="388" y1="200.8" x2="418" y2="200.8" marker-end="url(#aj)"/>
+    <line class="jet" x1="418" y1="220.8" x2="388" y2="220.8" marker-end="url(#aj)"/>
+    <line class="jet" x1="388" y1="250.7" x2="418" y2="250.7" marker-end="url(#aj)"/>
+    <line class="jet" x1="388" y1="293.3" x2="418" y2="293.3" marker-end="url(#aj)"/>
+    <line class="jet" x1="418" y1="323.2" x2="388" y2="323.2" marker-end="url(#aj)"/>
+    <line class="jet" x1="388" y1="343.2" x2="418" y2="343.2" marker-end="url(#aj)"/>
+    <line class="jet" x1="418" y1="362.1" x2="388" y2="362.1" marker-end="url(#aj)"/>
+    <line class="jet" x1="388" y1="377.3" x2="418" y2="377.3" marker-end="url(#aj)"/>
+    <line class="jet" x1="418" y1="393.6" x2="388" y2="393.6" marker-end="url(#aj)"/>
+    <line class="jet" x1="388" y1="409.9" x2="418" y2="409.9" marker-end="url(#aj)"/>
+  </g>
+  <text class="s" x="403" y="90" text-anchor="middle">jets</text>
+  <text class="s" x="403" y="104" text-anchor="middle">east →</text>
+  <text class="s" x="403" y="118" text-anchor="middle">← west</text>
+
+  <!-- Cross-section of the northern bands, 0 to 37 degrees north. -->
+  <text class="t" x="660" y="90" text-anchor="middle">The northern bands, seen edge-on</text>
+  <text class="s" x="514" y="114" text-anchor="middle">EZ</text>
+  <text class="s" x="596" y="114" text-anchor="middle">NEB</text>
+  <text class="s" x="680" y="114" text-anchor="middle">NTrZ</text>
+  <text class="s" x="748" y="114" text-anchor="middle">NTB</text>
+  <text class="s" x="811" y="114" text-anchor="middle">NTZ</text>
+  <!-- Deeper cloud layers under all bands. -->
+  <rect x="480" y="250" width="360" height="50" fill="#5a5048"/>
+  <text class="light" x="555" y="292" text-anchor="middle">deeper clouds</text>
+  <!-- Zones: high white clouds. Belts: lower, darker. -->
+  <rect x="480" y="168" width="68" height="82" rx="10" fill="#f4ecda"/>
+  <rect x="645" y="168" width="69" height="82" rx="10" fill="#efe4cb"/>
+  <rect x="782" y="168" width="58" height="82" rx="10" fill="#efe4cb"/>
+  <rect x="548" y="212" width="97" height="38" fill="#a9764c"/>
+  <rect x="714" y="212" width="68" height="38" fill="#a9764c"/>
+  <!-- Rising air in the zones, sinking in the belts, closing at the top. -->
+  <line class="up" x1="514" y1="296" x2="514" y2="146" marker-end="url(#au)"/>
+  <line class="up" x1="680" y1="296" x2="680" y2="146" marker-end="url(#au)"/>
+  <line class="up" x1="811" y1="296" x2="811" y2="146" marker-end="url(#au)"/>
+  <line class="down" x1="596" y1="140" x2="596" y2="290" marker-end="url(#ad)"/>
+  <line class="down" x1="748" y1="140" x2="748" y2="290" marker-end="url(#ad)"/>
+  <line class="up" x1="522" y1="134" x2="586" y2="134" marker-end="url(#au)"/>
+  <line class="up" x1="672" y1="134" x2="606" y2="134" marker-end="url(#au)"/>
+  <line class="up" x1="688" y1="134" x2="738" y2="134" marker-end="url(#au)"/>
+  <line class="up" x1="803" y1="134" x2="758" y2="134" marker-end="url(#au)"/>
+  <!-- Band edges, where the jets blow. -->
+  <line class="edge" x1="548" y1="122" x2="548" y2="312"/>
+  <line class="edge" x1="645" y1="122" x2="645" y2="312"/>
+  <line class="edge" x1="714" y1="122" x2="714" y2="312"/>
+  <line class="edge" x1="782" y1="122" x2="782" y2="312"/>
+  <text class="s" x="548" y="326" text-anchor="middle">jet east</text>
+  <text class="s" x="645" y="326" text-anchor="middle">jet west</text>
+  <text class="s" x="714" y="326" text-anchor="middle">jet east</text>
+  <text class="s" x="782" y="326" text-anchor="middle">jet west</text>
+  <text class="s" x="480" y="342">equator</text>
+  <text class="s" x="840" y="342" text-anchor="end">37° N</text>
+
+  <line x1="480" y1="360" x2="840" y2="360" stroke="#9aa7b4" stroke-width="1" stroke-dasharray="6 4"/>
+  <text class="t" x="480" y="380">Deeper, at 4 to 10 bar, Juno's microwave radiometer</text>
+  <text class="t" x="480" y="397">sees the belt and zone contrast reversed.</text>
+
+  <!-- Legend. -->
+  <line class="up" x1="480" y1="424" x2="510" y2="424" marker-end="url(#au)"/>
+  <text class="t" x="518" y="428">rising air: zones, high white clouds</text>
+  <line class="down" x1="480" y1="446" x2="510" y2="446" marker-end="url(#ad)"/>
+  <text class="t" x="518" y="450">sinking air: belts, dry, deeper clouds seen</text>
+
+  <text class="s" x="20" y="496">Zones anticyclonic, jets on band edges, rising zones and sinking belts, Great Red Spot 17° to 27.5° S: Ingersoll et al. 2004.</text>
+  <text class="s" x="20" y="510">Belts dry and downwelling: Atreya &amp; Wong 2005. Reversal at depth: Fletcher et al. 2021. Colours illustrative.</text>
+</svg>
