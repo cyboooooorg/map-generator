@@ -126,6 +126,8 @@ import {
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
+import { advanceDrift, NO_DRIFT } from './cloudDrift';
+import { PREVIEW_EDGES, previewEdgeUniform } from './previewTexture';
 import { PROFILES, type QualityProfile } from './quality';
 import {
   BOULDER_M,
@@ -151,7 +153,7 @@ import {
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
 import type { DustRing } from '../api/types/DustRing';
 import type { RingSystem } from '../api/types/RingSystem';
-import { type GiantStorm, MAX_STORMS } from '../giantStorms';
+import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import { starField } from './stars';
 
@@ -526,6 +528,8 @@ export class PlanetView {
     // A giant's storms, each drifting whole (see setGiantStorms).
     uStorms: { value: Array.from({ length: MAX_STORMS }, () => new Vector4()) } as IUniform<Vector4[]>,
     uStormCount: { value: 0 } as IUniform<number>,
+    // Index of the storm that is the great spot (it drifts slowly), or -1.
+    uGreatSpot: { value: -1 } as IUniform<number>,
     uHotGlow: { value: 0 } as IUniform<number>,
     uRingInner: { value: 0 } as IUniform<number>,
     uRingOuter: { value: 0 } as IUniform<number>,
@@ -1166,7 +1170,18 @@ export class PlanetView {
     const slots = this.u.uStorms.value;
     storms.slice(0, MAX_STORMS).forEach((s, k) => slots[k]!.set(s.u, s.v, s.halfU, s.halfV));
     this.u.uStormCount.value = Math.min(storms.length, MAX_STORMS);
+    this.storms = storms.slice(0, MAX_STORMS);
+    this.updateGreatSpot();
     this.requestRender();
+  }
+
+  /** The storms found in the map, and where the giant says its great spot is. */
+  private storms: readonly GiantStorm[] = [];
+  private greatSpotAt: readonly [number, number] | null = null;
+
+  /** Points uGreatSpot at the storm nearest the great spot (none if none lies near it). */
+  private updateGreatSpot(): void {
+    this.u.uGreatSpot.value = greatSpotIndex(this.storms, this.greatSpotAt);
   }
 
   /**
@@ -1178,6 +1193,8 @@ export class PlanetView {
   setGiant(info: GiantInfo | null): void {
     this.shared.uFlattening.value = info?.flattening ?? 0;
     this.u.uGiant.value = info ? 1 : 0;
+    this.greatSpotAt = info?.great_spot_at ?? null;
+    this.updateGreatSpot();
     // Clouds above about 1 100 K glow red, brighter the hotter.
     const t = info ? Math.min(Math.max((info.effective_k - 1100) / 1100, 0), 1) : 0;
     this.u.uHotGlow.value = 0.6 * t * t * (3 - 2 * t);
@@ -1418,6 +1435,21 @@ export class PlanetView {
   }
 
   /**
+   * Puts the drifting clouds back where they were generated: the cloud map
+   * and, on a giant, its bands, storms and great spot (which all drift with
+   * the same clock), whether the drift runs or not. It keeps running from
+   * there when it was on.
+   */
+  resetDrift(): void {
+    this.u.uCloudShift.value = NO_DRIFT.shift;
+    this.u.uBandTime.value = NO_DRIFT.bandTime;
+    this.skyCloudShift.value = NO_DRIFT.shift;
+    // The next frame measures its time from now, not from before.
+    this.cloudDriftAt = null;
+    this.requestRender();
+  }
+
+  /**
    * Moves the drifting clouds to the current time and, while they show,
    * schedules the next redraw; stops the clock otherwise.
    */
@@ -1435,8 +1467,13 @@ export class PlanetView {
       // A hidden tab draws no frames: resume where the clouds were.
       const seconds = Math.min(now - this.cloudDriftAt, 1000) / 1000;
       if (own) {
-        this.u.uCloudShift.value = (this.u.uCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
-        this.u.uBandTime.value += seconds;
+        const drift = advanceDrift(
+          { shift: this.u.uCloudShift.value, bandTime: this.u.uBandTime.value },
+          seconds,
+          CLOUD_DRIFT_PERIOD_S,
+        );
+        this.u.uCloudShift.value = drift.shift;
+        this.u.uBandTime.value = drift.bandTime;
       }
       if (sky) this.skyCloudShift.value = (this.skyCloudShift.value + seconds / CLOUD_DRIFT_PERIOD_S) % 1;
     }
@@ -2312,6 +2349,7 @@ export class PlanetView {
             uColor2: { value: new Vector3() },
             uColor3: { value: new Vector3() },
             uBands: { value: 0 },
+            uEdges: { value: new Array<number>(PREVIEW_EDGES).fill(0) },
             uLand: { value: 0 },
             uPreview: { value: 0 },
             uGlow: { value: 0 },
@@ -3111,6 +3149,7 @@ export class PlanetView {
             uColor2: { value: new Vector3() },
             uColor3: { value: new Vector3() },
             uBands: { value: 0 },
+            uEdges: { value: new Array<number>(PREVIEW_EDGES).fill(0) },
             uLand: { value: 0 },
             uGlow: { value: 0 },
             uOpacity: { value: 1 },
@@ -3132,6 +3171,7 @@ export class PlanetView {
         (u['uColor2']!.value as Vector3).set(...(c[1] ?? [0, 0, 0]));
         (u['uColor3']!.value as Vector3).set(...(c[2] ?? [0, 0, 0]));
         u['uBands']!.value = preview.bands;
+        u['uEdges']!.value = previewEdgeUniform(preview);
         u['uLand']!.value = preview.bands === 0 && c.length > 1 ? 1 : 0;
         u['uGlow']!.value = preview.glow ? 1 : 0;
       }
@@ -3547,6 +3587,7 @@ function applyPreview(u: Record<string, IUniform>, body: SkyBody): void {
   (u['uColor3']!.value as Vector3).set(...(colours[2] ?? [0, 0, 0]));
   u['uPreview']!.value = preview ? 1 : 0;
   u['uBands']!.value = preview?.bands ?? 0;
+  u['uEdges']!.value = preview ? previewEdgeUniform(preview) : new Array<number>(PREVIEW_EDGES).fill(0);
   u['uLand']!.value = preview && preview.bands === 0 && colours.length > 1 ? 1 : 0;
   u['uGlow']!.value = preview?.glow ? 1 : 0;
 }

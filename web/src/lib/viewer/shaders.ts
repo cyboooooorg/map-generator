@@ -15,6 +15,7 @@ import { CLOUD_TOPS, glslRamp } from './colormaps';
 import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH } from './sunDepth';
 import { skyRingDensityGlsl } from './ringShaders';
 import { MAX_STORMS } from '../giantStorms';
+import { PREVIEW_EDGES } from './previewTexture';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
 export const LAYER_IDS = {
@@ -76,6 +77,13 @@ const common = /* glsl */ `
  * winds: a sight, not the true pace.
  */
 export const BAND_PERIOD_S = 120;
+/**
+ * Drift of a giant's great spot, as a share of the strongest wind, westward:
+ * the Great Red Spot moves west by about 0.36° of longitude a day (Simon et
+ * al. 2018, doi:10.3847/1538-3881/aaae01), 3.5 % of the 10.4° a day of
+ * Jupiter's fastest jets (150 m/s at the equator, Showman et al. 2010).
+ */
+export const GREAT_SPOT_DRIFT = -0.035;
 
 export const surfaceVertex = /* glsl */ `
   ${common}
@@ -242,6 +250,7 @@ export const surfaceFragment = /* glsl */ `
   // of its own latitude: centre and half-extents in uv.
   uniform vec4 uStorms[${MAX_STORMS}];
   uniform float uStormCount;
+  uniform float uGreatSpot;
   uniform float uHotGlow;      // a hot giant's night-side glow, 0 to 1
   // A giant's rings, for their shadow: edges and gaps in planet radii, in
   // the equatorial plane (y = 0); no rings when uRingOuter is 0.
@@ -289,10 +298,15 @@ export const surfaceFragment = /* glsl */ `
   }
 
   // A giant's colour at uv, its bands drifting each with its own wind, its
-  // storms each whole at the wind of its centre (a vortex keeps its shape:
+  // storms each whole at the wind of its centre, the great spot at its own
+  // slow drift (a vortex keeps its shape:
   // sheared with the bands, it would stretch round the planet). Where the
   // bands would bring a storm's sheared copy, the band just beside the
-  // storm shows instead. The map repeats across longitudes, and is read
+  // storm shows instead. That hole follows the band wind, so around the
+  // great spot, which drifts slower, the map's copy of it stays hidden but
+  // the hole separates from the spot: a patch of plain band colour rides
+  // along its zone (not checked in a browser, see docs/backlog.md). The map
+  // repeats across longitudes, and is read
   // with the derivatives of the continuous uv, so that no seam shows where
   // a reading point jumps.
   vec3 giantColour(vec2 uv) {
@@ -310,7 +324,10 @@ export const surfaceFragment = /* glsl */ `
     for (int k = 0; k < ${MAX_STORMS}; k++) {
       if (float(k) >= uStormCount) break;
       vec4 storm = uStorms[k];
-      vec2 at = vec2(uv.x - uBandTime * bandWind(storm.y) / ${BAND_PERIOD_S.toFixed(1)}, uv.y);
+      // The great spot (uGreatSpot, its index) drifts slowly; the others go
+      // with the wind where they sit.
+      float wind = float(k) == uGreatSpot ? ${GREAT_SPOT_DRIFT.toFixed(3)} : bandWind(storm.y);
+      vec2 at = vec2(uv.x - uBandTime * wind / ${BAND_PERIOD_S.toFixed(1)}, uv.y);
       float d = length(inStorm(at, storm));
       if (d < 1.0) colour = mix(colour, textureGrad(uMap, at, gx, gy).rgb, 1.0 - smoothstep(0.8, 1.0, d));
     }
@@ -784,6 +801,7 @@ export const previewGlsl = /* glsl */ `
   uniform vec3 uColor2;
   uniform vec3 uColor3;
   uniform float uBands;
+  uniform float uEdges[${PREVIEW_EDGES}];
   uniform float uLand;
   float previewHash(vec3 p) {
     p = fract(p * 0.3183099 + 0.1);
@@ -804,11 +822,26 @@ export const previewGlsl = /* glsl */ `
   vec3 previewColour(vec3 base, vec3 b) {
     float lat = asin(clamp(b.y, -1.0, 1.0));
     if (uBands > 0.5) {
-      // Belts and zones, wavy at their edges, the poles hazed.
-      float wave = 0.08 * sin(atan(b.x, b.z) * 6.0 + lat * 9.0);
-      float band = 0.5 + 0.5 * sin((lat + wave) * uBands);
-      vec3 colour = mix(base, uColor2, smoothstep(0.35, 0.65, band));
-      return mix(colour, uColor3, smoothstep(1.0, 1.25, abs(lat)));
+      // A giant's belts and zones between the edges they will be generated
+      // with (uEdges, degrees, ascending: uBands + 1 of them), wavy at their
+      // edges, the polar regions beyond the outer ones. The band after an
+      // odd number of edges is a belt, after an even number a zone.
+      float wave = 3.0 * sin(atan(b.x, b.z) * 6.0 + lat * 9.0);
+      float d = degrees(lat) + wave;
+      float below = 0.0;
+      float nearest = 90.0;
+      float first = uEdges[0];
+      float last = first;
+      for (int i = 0; i < ${PREVIEW_EDGES}; i++) {
+        if (float(i) > uBands) break;
+        float e = uEdges[i];
+        if (d >= e) below += 1.0;
+        last = e;
+        if (i > 0 && float(i) < uBands) nearest = min(nearest, abs(d - e));
+      }
+      bool zone = mod(below, 2.0) < 0.5;
+      vec3 colour = mix(zone ? base : uColor2, zone ? uColor2 : base, 0.5 * (1.0 - smoothstep(0.0, 1.2, nearest)));
+      return mix(colour, uColor3, smoothstep(-3.0, 3.0, max(first - d, d - last)));
     }
     vec3 colour = base;
     if (uLand > 0.5) {
