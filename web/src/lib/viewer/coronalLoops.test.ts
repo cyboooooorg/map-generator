@@ -1,7 +1,7 @@
 import { ShaderMaterial, type BufferGeometry, type Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ActiveRegion, RegionNow } from '../starActivity';
-import { CoronalLoops, diffRegions, loopArcs } from './coronalLoops';
+import { CoronalLoops, diffRegions, eruptionTurn, loopArcs } from './coronalLoops';
 import { PROFILES } from './quality';
 
 const REGION: ActiveRegion = {
@@ -121,5 +121,31 @@ describe('CoronalLoops', () => {
     expect(loops.largestArc()).toBeNull();
     expect(loops.largestId()).toBeNull();
     expect(loops.longitudeOf(1)).toBeNull();
+  });
+
+  it('turns an eruption with its region and cuts it when the region goes or the loops hide', () => {
+    const loops = new CoronalLoops(PROFILES.high, material);
+    loops.update([now(1, 0.002, 0.5)], 0);
+    expect(eruptionTurn(loops, 1, true)).toBe(0.5);
+    // Dragging the time bar moves the region: the eruption goes with it.
+    loops.update([now(1, 0.002, 2.0)], 40);
+    expect(eruptionTurn(loops, 1, true)).toBe(2.0);
+    expect(eruptionTurn(loops, 1, false)).toBeNull();
+    expect(eruptionTurn(loops, null, true)).toBeNull();
+    loops.update([], 80);
+    expect(eruptionTurn(loops, 1, true)).toBeNull();
+  });
+
+  it('seeds a region the same however many were built before it', () => {
+    const seeds: number[][] = [[], []];
+    const record = (into: number[]) => (seed: number) => {
+      into.push(seed);
+      return material();
+    };
+    const first = new CoronalLoops(PROFILES.light, record(seeds[0]!));
+    first.update([now(7, 0.002, 0)], 0);
+    const second = new CoronalLoops(PROFILES.light, record(seeds[1]!));
+    second.update([now(3, 0.002, 0), now(7, 0.001, 0)], 0);
+    expect(seeds[1]).toContain(seeds[0]![0]);
   });
 });

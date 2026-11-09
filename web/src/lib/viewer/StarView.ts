@@ -63,7 +63,7 @@ import { previewTexture } from './previewTexture';
 import type { Preview } from '../api/types/Preview';
 import { starField } from './stars';
 import { prominenceGeometry } from './prominenceGeometry';
-import { CoronalLoops } from './coronalLoops';
+import { CoronalLoops, eruptionTurn } from './coronalLoops';
 import {
   keplerPosition,
   type MoonOrbit,
@@ -1434,6 +1434,8 @@ export class StarView {
     } else if (!on && this.loop !== null) {
       cancelAnimationFrame(this.loop);
       this.loop = null;
+      // The eruption is an animation: paused, none hangs half-risen.
+      this.removeEruption();
     }
   }
 
@@ -1473,6 +1475,7 @@ export class StarView {
       : 0;
     this.surface.update(days, { radiusPx, daysPerSecond: this.speed * this.daysPerSecond });
     this.loops.update(this.arcs.visible ? this.surface.loopRegions : [], days, this.surface.loopFade);
+    this.followEruption();
   }
 
   /** Mean anomaly of the planet now, radians. */
@@ -1706,6 +1709,19 @@ export class StarView {
     });
   }
 
+  /**
+   * Keeps the eruption on its region, whoever moved the clock (the tick, the
+   * time bar, a zoom): it turns with the region, and is cut like the loops
+   * when they are withheld (a fast clock, a small star, the switch off) or
+   * when its region left the shown set.
+   */
+  private followEruption(): void {
+    if (!this.eruption) return;
+    const longitude = eruptionTurn(this.loops, this.eruptionRegion, this.arcs.visible);
+    if (longitude === null) this.removeEruption();
+    else this.eruption.rotation.y = longitude;
+  }
+
   private removeEruption(): void {
     if (!this.eruption) return;
     this.arcs.remove(this.eruption);
@@ -1726,10 +1742,7 @@ export class StarView {
     const cycle = Math.floor(this.time / ERUPTION_S);
     const phase = (this.time % ERUPTION_S) / ERUPTION_S;
     const active = this.klass === 'M' || this.klass === 'K' || this.klass === 'G';
-    // Like the loops: none when the clock is too fast, the star too small or
-    // the switch off; one whose region left the shown set is cut, not frozen.
-    const longitude = this.eruptionRegion === null ? null : this.loops.longitudeOf(this.eruptionRegion);
-    if (this.eruption && (!active || !this.arcs.visible || longitude === null)) this.removeEruption();
+    if (this.eruption && !active) this.removeEruption();
     if (!active || !this.arcs.visible) return;
     // One launch a cycle: an eruption cut mid-cycle does not start again.
     if (this.launchedCycle !== cycle) {
@@ -1748,8 +1761,6 @@ export class StarView {
       this.arcs.add(this.eruption);
     }
     if (!this.eruption) return;
-    // Turns with the region it left.
-    this.eruption.rotation.y = this.loops.longitudeOf(this.eruptionRegion!) ?? this.eruption.rotation.y;
     // Rises over the first half of the cycle, gone by its end.
     const u = this.eruption.material.uniforms;
     const rise = Math.min(phase * 1.6, 1) ** 1.5;
@@ -1849,6 +1860,8 @@ export class StarView {
     }
   }
 
+  /** Draws the scene; bound once so the frame probe gets no new closure each frame. */
+  private readonly draw = (): void => this.renderer.render(this.scene, this.camera);
   private readonly render = (now: number = performance.now()): void => {
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
@@ -1871,9 +1884,7 @@ export class StarView {
     this.glow.quaternion.copy(this.camera.quaternion);
     // So do the highlights (their markers do not turn).
     for (const halo of this.halos) if (halo.visible) halo.quaternion.copy(this.camera.quaternion);
-    this.frames.measure(this.renderer.getContext(), () =>
-      this.renderer.render(this.scene, this.camera),
-    );
+    this.frames.measure(this.renderer.getContext(), this.draw);
     this.onAxes(axesOnScreen(this.camera.quaternion));
     const giantsShown = this.giantsOn && this.giants.length > 0;
     if ((this.distancesOn || giantsShown) && this.info) {

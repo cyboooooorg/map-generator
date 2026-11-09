@@ -2260,6 +2260,8 @@ export class PlanetView {
     this.requestRender();
   }
 
+  /** Draws the scene; bound once so the frame probe gets no new closure each frame. */
+  private readonly drawScene = (): void => this.renderer.render(this.scene, this.camera);
   private readonly render = (now: number): void => {
     this.frame = null;
     // Hidden: keep the pending changes (`dirty`) for the frame that the
@@ -3361,9 +3363,7 @@ export class PlanetView {
         this.morphCentreLon(),
       );
     }
-    this.frames.measure(this.renderer.getContext(), () =>
-      this.renderer.render(this.scene, this.camera),
-    );
+    this.frames.measure(this.renderer.getContext(), this.drawScene);
     this.onSkyPositions?.(this.skyScreenPositions());
     this.onAxes(axesOnScreen(this.gizmoFrame()));
   }

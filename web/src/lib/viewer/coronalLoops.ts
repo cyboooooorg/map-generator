@@ -1,7 +1,9 @@
 // Coronal loops standing over the star's active regions: the arches of
-// hot plasma that follow the field lines joining a bipole's two spots
-// (the leader and the follower), as the Sun's X-ray and EUV images show
-// them. Each region gets a few loops, built once when the region appears
+// plasma that follow the field lines joining a bipole's two spots (the
+// leader and the follower). They are drawn in the red of H-alpha, as the
+// cool loops of a decaying region or after a flare look; the hot loops
+// that dominate the Sun's X-ray and EUV images are not (see
+// docs/science/star-activity.md). Each region gets a few loops, built once when the region appears
 // and dropped when it leaves; a frame only turns each region's group to
 // its longitude, sets its opacity and advances the strands' shimmer.
 import { Group, Mesh, type BufferGeometry, type ShaderMaterial } from 'three';
@@ -82,6 +84,16 @@ export function loopArcs(region: ActiveRegion, n: number): Prominence[] {
   return arcs;
 }
 
+/**
+ * Where an eruption launched from region `region` stands now: the region's
+ * longitude, or null when it must be cut (the loops are withheld or the
+ * region left the shown set, or the loops are hidden).
+ */
+export function eruptionTurn(loops: CoronalLoops, region: number | null, visible: boolean): number | null {
+  if (!visible || region === null) return null;
+  return loops.longitudeOf(region);
+}
+
 /** Which region ids to add and to remove, going from `shown` to `wanted`. */
 export function diffRegions(shown: readonly number[], wanted: readonly number[]): { add: number[]; remove: number[] } {
   const have = new Set(shown);
@@ -108,12 +120,12 @@ export class CoronalLoops {
   private readonly perRegion: number;
   private readonly maxRegions: number;
   private readonly strands: number;
-  private index = 0;
   private largest: { id: number } | null = null;
 
   /**
-   * `material` makes the material of the loops of a region, given a running
-   * index: a shader with a `uOpacity` and a `uTime` uniform (see
+   * `material` makes the material of the loops of a region, given a seed
+   * drawn from the region's id (so a region looks the same whenever it is
+   * built): a shader with a `uOpacity` and a `uTime` uniform (see
    * prominenceFragment). Each region owns its material, which `dispose` frees.
    */
   constructor(
@@ -194,7 +206,7 @@ export class CoronalLoops {
     const parts = arcs.map((arc, k) => prominenceGeometry(arc, STAR_RADIUS, hash32(region.id, k, 2) % 1_000_003, this.strands));
     const geometry = parts.length === 1 ? parts[0]! : mergeGeometries(parts)!;
     if (geometry !== parts[0]) for (const part of parts) part.dispose();
-    const mesh = new Mesh(geometry, this.material(this.index++));
+    const mesh = new Mesh(geometry, this.material(hash32(region.id, 3) % 997));
     mesh.renderOrder = 2;
     this.group.add(mesh);
     this.shown.set(region.id, { mesh, arc: arcs[0]!, peakArea: region.peakArea, longitude: 0 });
