@@ -69,6 +69,9 @@ export const fr: Messages = {
     ready: (p) => `${p.id} est prêt.`,
     olderWorld: (p) =>
       `${p.body} a été créé par une ancienne version du générateur et est recréé avec la version actuelle${S}: son aspect peut différer de celui d'avant.`,
+    evictedRemade: (p) => `${p.body}${S}: ses cartes ont été supprimées après un temps sans ouverture et sont refaites.`,
+    evictedRemadeOlder: (p) =>
+      `${p.body}${S}: ses cartes ont été supprimées après un temps sans ouverture et sont refaites avec la version actuelle du générateur (une ancienne version l'avait créé)${S}: son aspect peut différer de celui d'avant.`,
     open: 'Ouvrir',
     failed: (p) => `${p.id} a échoué${S}: ${p.error}`,
     cancelled: (p) => `${p.id} annulé.`,

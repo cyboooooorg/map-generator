@@ -38,7 +38,7 @@
   import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
-  import { bodyTitle, toTell } from '../lib/evicted';
+  import { bodyTitle, toTell, toTellEvicted } from '../lib/evicted';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
@@ -1260,8 +1260,18 @@
         // Bodies that lost their files, made by another generator (the one
         // asked for, and its family: a planet's job makes its moons): the
         // user hears it once each.
-        for (const named of toTell(systemId, started.regenerated)) {
-          toasts.show(t.app.olderWorld({ body: bodyTitle(sys, world.systemNames, named) }), { ms: 12000 });
+        // The body opened, if it lost its files, is told of once as it is
+        // made again; when it is also made by an older generator, one toast
+        // says both (the older-world one is not shown for it as well).
+        const remade = world.systemEvicted.includes(body) && toTellEvicted(systemId, body);
+        const older = toTell(systemId, started.regenerated);
+        for (const named of older) {
+          const title = bodyTitle(sys, world.systemNames, named);
+          if (remade && named === body) toasts.show(t.app.evictedRemadeOlder({ body: title }), { ms: 12000 });
+          else toasts.show(t.app.olderWorld({ body: title }), { ms: 12000 });
+        }
+        if (remade && !older.includes(body)) {
+          toasts.show(t.app.evictedRemade({ body: bodyTitle(sys, world.systemNames, body) }), { ms: 5000 });
         }
       }
       if (jobId !== null) followedJobs.add(jobId);

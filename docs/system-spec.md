@@ -732,7 +732,11 @@ addressed as `<system-id>/<body-id>` everywhere.
   current one (`regenerated` in the answer of `POST …/generate`, which also
   names the evicted moons or planet a job makes with it), a toast tells
   the user once per body that the world was made by an older version and
-  may look different from before. A moon's card shows its planet's, biomes and rivers
+  may look different from before. As the generation starts, a toast of
+  about 5 seconds tells the user once that the body's maps were deleted
+  after a while unopened and are being made again (without the number of
+  days); when the older-generator notice applies to the same body, the two
+  are one toast. A moon's card shows its planet's, biomes and rivers
   included (read as peeks when the moon is opened first, so that no body
   counts as opened); if they cannot be read the card says why.
 - **Progress bar.** While a job runs, the viewer shows a bar over the

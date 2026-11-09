@@ -80,6 +80,11 @@ export const en = {
     /** A body deleted for lack of use is made again by a newer generator. */
     olderWorld: (p: { body: string }) =>
       `${p.body} was made by an older version of the generator and is made again with the current one: it may look different from before.`,
+    /** An evicted body opened: its view queues its generation (a few seconds, it may be over before the card is read). */
+    evictedRemade: (p: { body: string }) => `${p.body}: its maps were deleted after a while unopened and are being made again.`,
+    /** The same, for a body made by an older generator too. */
+    evictedRemadeOlder: (p: { body: string }) =>
+      `${p.body}: its maps were deleted after a while unopened and are being made again, with the current version of the generator (it was made by an older one): it may look different from before.`,
     open: 'Open',
     failed: (p: { id: string; error: string }) => `${p.id} failed: ${p.error}`,
     cancelled: (p: { id: string }) => `${p.id} cancelled.`,
