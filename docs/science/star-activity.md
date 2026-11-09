@@ -121,6 +121,21 @@ polarity and a following one of the other, joined by coronal loops.
   area, about four times the umbra's. Later counts give 4.7 (Nicholson
   1933, as quoted by Jha et al. 2019) to 5.5 (Jha et al. 2019) for that
   ratio.
+- **Penumbral filaments.** A penumbra is not uniform: it is made of thin
+  bright and dark radial filaments, a few hundred kilometres wide, which
+  fray its outer edge (Solanki 2003).
+- **The Evershed flow.** Gas flows outward along the penumbral filaments
+  at about 1–2 km/s; Evershed (1909) found it from the Doppler shifts of
+  the spectral lines across a spot.
+- **Umbral dots and light bridges.** The umbra holds small bright dots,
+  a few hundred kilometres across, which live minutes to about an hour,
+  and a larger spot is often crossed by a bright lane, a light bridge,
+  most often while it develops or breaks up (Borrero & Ichimoto 2011).
+- **Pores and the moat.** Small dark pores, spots without a penumbra,
+  appear round a spot, and magnetic features stream away from it through
+  an annular "moat" (Sheeley 1969; Solanki 2003).
+- **Decay.** A spot decays by losing flux at its edge and by breaking up
+  into fragments, often along its light bridges (Solanki 2003).
 - **Faculae** are brightest near the limb, where we see the hot walls of
   small magnetic flux tubes side-on (Solanki 2003).
 
@@ -347,10 +362,12 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    polarities are $4\sqrt{2A}$ radians apart (**calibration**, scaled to
    Wang & Sheeley's 10° at 1,000 MSH), and its loops rise to half that
    (Aschwanden 2004). The leader spot carries 0.6 of the area
-   (**calibration**). The shader draws umbrae at 0.3 and penumbrae at
-   0.75 of the photosphere, the penumbra four times the umbra's area
-   (Solanki 2003), and faculae with a contrast of $0.25\,(1-\mu)$
-   (**calibration**, brightest at the limb as Solanki 2003 describes).
+   (**calibration**). Each spot is drawn with the area of a disc of its
+   share, its umbra about a fifth of it (the penumbra four times the
+   umbra's area, Solanki 2003), and shaped as prototype D drew it (see
+   *The spots' shapes* below). Faculae have a contrast of
+   $0.25\,(1-\mu)$ (**calibration**, brightest at the limb as Solanki
+   2003 describes).
    The plage is a disc of three times the region's spot radius round its
    centre, which covers nine spot areas; it is filled at
    `facula_ratio` / 9, at most 1, so that a Sun-like ratio of about 10
@@ -468,6 +485,99 @@ days, $Ro = 1.87$, a cycle of 11.1 years, 0.29 % of the visible
 hemisphere spotted at maximum and 1.03 new regions per day over the whole
 star, about half of them on the visible side.
 
+### The spots' shapes
+
+Each spot is drawn by `starSpotShaped` in
+`web/src/lib/viewer/starSurface.ts`, after prototype D's live path, in
+spot radii (so its shape grows and shrinks with the region's area). Its
+seed is `hash32(region id, 7) / 2^32`, the follower's that seed plus a
+half; its age is the region's age over its life. Every number below is a
+**calibration**, matched by eye to prototype D, unless a source is given.
+
+- **The outline.** Its second and third harmonics in angle (amplitude
+  0.05 young, 0.12 grown) and two octaves of value noise at 2 cycles per
+  spot radius (amplitude 0.35 young, 0.5 grown), both moving slowly with
+  age: compact and nearly round while it grows, torn and lobed from about
+  a quarter of its life. The harmonics keep the outline curved where a
+  contour of lattice noise alone draws straight runs.
+- **Under about a pixel** of radius a spot is part 1's round spot (umbra
+  0.3, penumbra 0.75), blended into the shaped one from 0.7 to 1.5 px of
+  radius: a spot being born, dying or seen small keeps part 1's area and
+  does not blink as it moves across pixels.
+- **The penumbra** at a mean 0.77 of the quiet photosphere (Solanki
+  2003's 0.75), its filaments between 0.7 and 0.88: none as dark as the
+  umbra, none as bright as the photosphere (Solanki 2003). They are value
+  noise on a ring round the spot, periodic so that it has no seam,
+  stretched along the radius. Faint bundles of 88 cells a turn, which
+  change only with age and show from afar; filaments of 251 and 565 cells
+  a turn (prototype D's circles of radius 40 and 90 noise units) up close,
+  drifting outward with the Evershed flow: 1.5 km/s (Evershed 1909
+  measured about 1–2 km/s) on a reference spot of 10 Mm, that is 13 spot
+  radii a day, whatever the spot's size. Each set is computed only once
+  its cells span about two pixels. The bundles shift the filaments round
+  the spot, so their width varies; the outline's noise varies their
+  length and bends them, by a curvature that changes round the edge; each
+  ends at its own radius, so the edge frays into the granules.
+- **The umbra** at about 0.3 (Solanki 2003), varying by ±0.03 with a
+  smooth noise (a gradient that followed its outline banded into
+  terraces on screen), 0.47 of the spot's radius (a little above a fifth
+  of its area, so that the dark area on screen matches part 1's). It
+  follows the outline at half its distortion, so its area varies little
+  from spot to spot.
+  Umbral dots (Borrero & Ichimoto 2011): round, soft points on a jittered
+  grid of 0.07 spot radii, one in about a third of the cells, each
+  twinkling with a 20-minute period, computed only inside the umbra.
+- **A light bridge** across the umbra (Borrero & Ichimoto 2011), between
+  0.30 and 0.80 of the region's life, at 0.8 of the photosphere, on about
+  a third of the spots (a draw of their own) and only on large ones, from
+  0.008 to 0.012 star radii (6 to 8 Mm on the Sun). The umbra widens by
+  8 % round it, so that it keeps its area.
+- **Fragmentation** in the decline (Solanki 2003): from 0.45 of the life,
+  a share of the spot growing to 0.35 at its death opens into gaps where a
+  breakup noise (two lattices, the second turned by 37°, so that no gap is
+  blocky) falls below the level of that share, and the spot spreads by
+  $1/\sqrt{1 - 0.78\,\text{share}}$, so its pieces keep its area. The
+  umbra is not cut and keeps its size (the penumbra, about 0.78 of the
+  area, breaks up around it). The timeline
+  already shrinks the area to 0 at the end of the life, so the decline is
+  not counted twice. Gaps too small to be seen (under about 1.5 to 5 px)
+  are not opened, and the spot does not spread for them.
+- **Pores in the moat** (Sheeley 1969; Solanki 2003), from 1.05 to 2.6
+  spot radii, from about a fifth of the life: on a jittered grid of half
+  spot radii, one in an eighth of the cells, 0.12 to 0.2 cell in radius,
+  darkened by half, computed only in the moat. Each lies inside its cell,
+  so the grid never cuts one.
+- **No granules** inside a spot or a pore: they fade out across its soft
+  edge and its brightest filaments (brightness 0.8 to 0.98), and are not
+  computed where they are gone.
+- **Softness and detail.** Every edge is at least about a pixel soft, and
+  each detail fades out before it is smaller than a couple of pixels, so
+  a small spot is a soft, irregular blot. The moving details (filaments,
+  umbral dots) fade as a frame of the clock outlasts 5 minutes (a quarter
+  of a dot's twinkle, `exposureFade`), as a long exposure averages them
+  out; the surface at a day stays a function of the activity, the day and
+  the view.
+- **The area.** The drawn dark area of a region stays within 20 % of
+  part 1's round spots at the same day (**calibration**), on two
+  measures: the brightness under 0.9 of the quiet photosphere (before the
+  limb law), and what reads as dark on screen, the displayed luminance
+  (after the exposure curve and sRGB) under 0.9 of the local surface's.
+  The second counts the umbra and pores only, since a penumbra of 0.75
+  displays at about 0.94 of the photosphere. A first version of these
+  shapes had a penumbra of mean 0.68, whose dark filaments crossed that
+  threshold: it drew 1.3 to 1.9 times part 1's dark area on an M dwarf.
+  The shape's scale (1.02, trimmed by 3 % once grown), the share the pores
+  take from the spot (5 %), the penumbra's mean and floor and the umbra's
+  radius were set so in a harness that renders a fixture region at ages
+  0.1 to 0.9, at four sizes on screen and for 16 seeds, with an M4V's
+  colour, limb and granulation. On the first measure the means lie within
+  0.93–0.98 and every seed within 0.84–1.08; on the second the means lie
+  within 0.87–1.13 (every seed within 0.84–1.20 down to spots of 40 px;
+  under 0.8 for a few seeds at 11 px, where the umbra covers a few dozen
+  pixels). A threshold between the two, at 0.95 of the photosphere's
+  luminance, sits at part 1's penumbra itself and counts 0.7–0.85 of
+  part 1's area: no filamentary penumbra matches a flat one there.
+
 ### Where it departs from the science
 
 - **Coronal loops are red.** The hot loops that dominate the Sun's corona
@@ -521,12 +631,52 @@ star, about half of them on the visible side.
   that the whole disc shows texture where granules are under a pixel.
   Its size on other stars scales with the granules. It turns with the
   star's equator, without the differential rotation the regions follow.
+- **The network flattens the drawn limb darkening** (**calibration**):
+  its faculae brighten the limb by a few percent more than the centre
+  (about 5 % at $\mu \approx 0.4$ against 2 %), so the limb is drawn a
+  little brighter than Claret & Bloemen's law; the price of a visible
+  network.
+- **A network ribbon is capped at 0.8 of a plage** at the same $\mu$
+  (**calibration**), so that the active regions' faculae stay the
+  brightest features near the limb.
+- **The mesogranular mottle is a calibration**: from afar, one octave of
+  value noise at 0.35 of the network's cell size adds $\pm c/4$ and
+  varies the ribbons' width and tone along their length.
+- **The granules' look switches with their size on screen**
+  (**calibration**): a continuous sum of round blobs up to 40 px per
+  granule, the cells with their lanes from 120 px, blended in between,
+  every lane edge at least 2.5 px soft.
 
+- **The granules' bright points are dropped.** Prototype D drew the
+  magnetic bright points of the lanes; cut by the lane they sat in, they
+  read as specks on screen.
+- **The cells move on a parabola wave.** Each centre wanders along
+  `starWave`, a parabola per half turn that stays within 0.056 of a sine
+  (**calibration**), because it is cheaper than a sine.
+- **Granules are skipped inside spots.** They fade out across a spot's or
+  a pore's edge and are not computed there, where real granulation is
+  broken up by the field rather than absent (**calibration** of the fade).
+- **The animated close-up is drawn at 0.75 pixel ratio** (**calibration**),
+  the star view under 1.1 radii while its clock runs, a softer frame for
+  about 44 % fewer pixels; once paused it is drawn sharp.
 - **Timeline and region shapes are calibrations.** One cycle maps onto
   $x \in [0, 2.6]$ of the Hathaway fit; a region grows over
   $\min(0.1\,T,\ 3\ \text{d})$ times a factor within $\pm 20\ \%$; its
   polarities are $4\sqrt{2A}$ radians apart; the leader spot carries 0.6
   of the area.
+- **The spot-area margin is a calibration.** A region's drawn dark area
+  stays within $\pm 20\ \%$ of part 1's round spots at the same day, on
+  the two measures of *The spots' shapes*; the margin itself is a choice,
+  not a measure.
+- **The spots' shapes are calibrations.** Their filaments, torn
+  outlines, umbral dots, light bridges, fragmentation and pores are a
+  picture drawn after prototype D, not a model of a spot's magnetic
+  structure; the Evershed flow has the measured speed only on a spot of
+  10 Mm, and the pores do not move out with the moat flow. The penumbra's
+  filaments keep to 0.7–0.88, a narrower contrast than real ones, so that
+  the dark area on screen stays part 1's; the umbra's radius, 0.47 of the
+  spot's, is a little above Solanki's fifth of the area for the same
+  reason.
 - **Region size and look are calibrations.** The median peak area
   scaling, $152\,\text{MSH}\sqrt{\text{spot\_coverage}/0.003}$; the
   faculae's $0.25\,(1-\mu)$ contrast; the plage's disc of three spot
@@ -561,7 +711,14 @@ checking:
   Wilson & Reichmann (1994);
 - the umbral and penumbral brightness (0.3, 0.75) and the penumbra's four
   umbral areas in Solanki (2003), and the 10° separation of a 1,000 MSH
-  region in Wang & Sheeley (1989).
+  region in Wang & Sheeley (1989);
+- the spots' structure: the Evershed flow of about 1–2 km/s (Evershed
+  1909; the reference was checked, not the value), the umbral dots'
+  lifetimes of minutes to about an hour and the light bridges' timing in
+  a spot's development and decay (Borrero & Ichimoto 2011), the
+  penumbral filaments and the decay by fragmentation (Solanki 2003), and
+  the pores and moat round a spot (Sheeley 1969; Solanki 2003): their
+  references exist as cited, their values were not read in them.
 
 Joy's 32.1° was checked against Stenflo (2013), the limb-darkening rows
 against the VizieR catalogue.
@@ -711,6 +868,15 @@ against the VizieR catalogue.
 47. November, L. J., Toomre, J., Gebbie, K. B. & Simon, G. W. 1981, "The
     detection of mesogranulation on the Sun", *The Astrophysical Journal*
     245, L123.
+48. Evershed, J. 1909, "Radial movement in sun-spots", *Monthly Notices
+    of the Royal Astronomical Society* 69, 454,
+    [doi:10.1093/mnras/69.5.454](https://doi.org/10.1093/mnras/69.5.454).
+49. Borrero, J. M. & Ichimoto, K. 2011, "Magnetic structure of sunspots",
+    *Living Reviews in Solar Physics* 8, 4,
+    [doi:10.12942/lrsp-2011-4](https://doi.org/10.12942/lrsp-2011-4).
+50. Sheeley, N. R. Jr. 1969, "The evolution of the photospheric network",
+    *Solar Physics* 9, 347,
+    [doi:10.1007/BF02391657](https://doi.org/10.1007/BF02391657).
 
 ## See also
 

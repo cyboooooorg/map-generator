@@ -1,7 +1,7 @@
 import type { Vector4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { StarActivity } from '../api/types/StarActivity';
-import { activeRegions, rotationPhase } from '../starActivity';
+import { activeRegions, hash32, rotationPhase } from '../starActivity';
 import { starSurfaceFragment, starSurfaceVertex } from './starShaders';
 import { SUN_SYSTEM } from './starSystem';
 import {
@@ -197,12 +197,14 @@ describe('star surface', () => {
   });
 
   it('draws the network outside STAR_NO_GRANULATION, behind its fade', () => {
-    const gate = STAR_SURFACE_GLSL.indexOf('#ifndef STAR_NO_GRANULATION\n  if (uGranule.w');
+    const gate = STAR_SURFACE_GLSL.indexOf('#ifndef STAR_NO_GRANULATION\n  // No granules inside a spot');
     const network = STAR_SURFACE_GLSL.indexOf('if (uNetwork.w > 0.0)');
     expect(network).toBeGreaterThan(0);
     expect(gate).toBeGreaterThan(0);
-    // After the granules' gated block in starBrightness, so not inside it.
-    expect(network).toBeGreaterThan(STAR_SURFACE_GLSL.indexOf('#endif', gate));
+    // Outside the granules' gated block in starBrightness (which comes
+    // after the regions, to skip the granules inside spots).
+    const end = STAR_SURFACE_GLSL.indexOf('#endif', gate);
+    expect(network < gate || network > end).toBe(true);
     expect(STAR_SURFACE_GLSL).toMatch(/0\.35 \+ 1\.4 \* edge/);
   });
 
@@ -279,6 +281,53 @@ describe('star surface', () => {
     expect(area / now.area).toBeCloseTo(1, 4);
   });
 
+  it('packs a seed per region', () => {
+    const u = starSurfaceUniforms(32);
+    const s = new StarSurfaceState(u, 32);
+    s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    s.update(1000, { radiusPx: 4000, daysPerSecond: 0 });
+    const c = u['uRegionC']!.value as Float32Array;
+    expect(s.regions.length).toBeGreaterThan(0);
+    s.regions.forEach((r, i) => expect(c[4 * i]!).toBeCloseTo(hash32(r.region.id, 7) / 2 ** 32, 6));
+  });
+
+  it('shapes the leader and the follower from the region seed and age', () => {
+    expect(STAR_SURFACE_GLSL).toMatch(/starSpotShaped\(local - axis, r \* 0\.7745967, seed, age, aa\)/);
+    expect(STAR_SURFACE_GLSL).toMatch(/starSpotShaped\(local \+ axis, r \* 0\.6324555, fract\(seed \+ 0\.5\), age, aa\)/);
+    expect(STAR_SURFACE_GLSL).toMatch(/float age = t \/ b\.z;/);
+    // The moat reaches 2.6 of the leader's radius: the region's reach covers it.
+    expect(STAR_SURFACE_GLSL).toMatch(/0\.5 \* a\.w \+ 2\.02 \* r/);
+  });
+
+  it("fades the spots' moving details with the clock's speed", () => {
+    const u = starSurfaceUniforms(8);
+    const s = new StarSurfaceState(u, 8);
+    s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    s.update(1000, BIG);
+    expect(u['uSpotMotion']!.value).toBe(1);
+    // A day a second: 48 minutes a frame, far beyond the details' 5 minutes.
+    s.update(1000, { radiusPx: 4000, daysPerSecond: 1 });
+    expect(u['uSpotMotion']!.value as number).toBeLessThan(0.5);
+  });
+
+  it('draws a spot under about a pixel as the round spot of part 1', () => {
+    expect(STAR_SURFACE_GLSL).toMatch(/float starSpotRound\(float d, float rs, float aa\)/);
+    expect(STAR_SURFACE_GLSL).toMatch(/float detail = smoothstep\(0\.7, 1\.5, rs \/ aa\);/);
+    expect(STAR_SURFACE_GLSL).toMatch(/return mix\(roundSpot, spot, detail\);/);
+    // The region's reach covers the shape's softness, and the shape's own
+    // cut lies beyond its farthest edge (no straight cut on a large spot).
+    expect(STAR_SURFACE_GLSL).toMatch(/0\.5 \* a\.w \+ 2\.02 \* r \+ 2\.0 \* aa/);
+    expect(STAR_SURFACE_GLSL).toMatch(/float core = 2\.0 \* scale \+ 2\.0 \* px;/);
+  });
+
+  it('grows light bridges on some large spots only', () => {
+    expect(STAR_SURFACE_GLSL).toMatch(/step\(fract\(seed \* 7\.31\), 0\.35\) \* smoothstep\(0\.008, 0\.012, rs\)/);
+    expect(STAR_SURFACE_GLSL).not.toMatch(/step\(0\.5, seed\)/);
+  });
+
+  it('draws shaped spots', () =>
+    expect(STAR_SURFACE_GLSL).toMatch(/float starSpotShaped\(vec2 local, float rs, float seed, float age, float aa\)/));
+
   it('offers loop regions only while the clock is slow enough for the spots', () => {
     const state = new StarSurfaceState(starSurfaceUniforms(32), 32);
     state.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
@@ -328,7 +377,7 @@ describe('star surface', () => {
   });
 
   it('draws granules as cells', () => {
-    expect(STAR_SURFACE_GLSL).toMatch(/vec2 starCells\(vec3 p, float phase\)/);
+    expect(STAR_SURFACE_GLSL).toMatch(/StarCell starCellDetail\(vec3 p, float phase, float blobs\)/);
     expect(STAR_SURFACE_GLSL).not.toMatch(/starNoise\(p \+ mod\(step3/); // the simplex cross-fade is gone
     expect(STAR_SURFACE_GLSL).toMatch(/float starGranules\(vec3 n\)/);
   });
@@ -370,7 +419,7 @@ describe('star surface', () => {
   it('keeps the cell helpers out of STAR_NO_GRANULATION, for the sky disc', () => {
     const gate = STAR_SURFACE_GLSL.indexOf('#ifndef STAR_NO_GRANULATION');
     expect(gate).toBeGreaterThan(0);
-    for (const helper of ['vec2 starCells(', 'float starFbm2(', 'float starHash(']) {
+    for (const helper of ['StarCell starCellDetail(', 'vec3 starFbm2x3(', 'vec3 starHash3(', 'vec3 starValueNoiseRing(']) {
       const at = STAR_SURFACE_GLSL.indexOf(helper);
       expect(at, helper).toBeGreaterThan(0);
       expect(at, helper).toBeLessThan(gate);

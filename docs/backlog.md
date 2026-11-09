@@ -930,3 +930,20 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   of the baseline and the star view's p95 under 13 ms at 2560 x
   1440. The calibrations and the app-side departures are listed in
   `docs/science/star-activity.md`.
+
+## 25. Living star: the close-up photosphere
+
+- **Status:** done (2026-11-09; PRs #410 and #412)
+- **Issues:** #391 (the project); #406, #407 and #409 are the open
+  follow-ups
+- **Shipped:** the star view up close shows moving granules, the
+  supergranule network and spots that take shape and evolve, drawn at a
+  lower pixel ratio while the clock runs. The calibrations and the
+  departures are listed in `docs/science/star-activity.md`.
+- **Cost decision:** the plan bound of p95 under 16.7 ms up close was
+  dropped, since `main` was already over it (p95 19 to 22 ms at
+  2560 x 1440 on an Apple M1 Pro, median 15 to 17 ms). The user accepted
+  the branch's p95 of 24 to 27 ms (median 19 to 21 ms), within about
+  5 ms of `main` and under the star view's 30 fps cap (33 ms). The
+  system and planet views stay within noise, so the system view keeps
+  its full pixel ratio.
