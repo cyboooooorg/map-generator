@@ -1,6 +1,6 @@
 # Planet viewer: the mapgen-server web server, the built front-end and the
 # command-line tools. Built and started by `mise run up` with compose.yaml.
-# Worlds and presets are not copied: they are bind-mounted at runtime.
+# Systems and presets are not copied: they are bind-mounted at runtime.
 
 # ---------------------------------------------------------------------------------------------------- #
 # Rust stage: server and command-line tools
@@ -42,8 +42,7 @@ COPY --from=web /web/dist /app/web
 # MALLOC_ARENA_MAX: fewer glibc arenas keep less freed memory after a
 # generation, at no measurable cost in generation time (see
 # crates/server/src/memory.rs)
-ENV MAPGEN_WORLDS_DIR=/data/worlds \
-	MAPGEN_SYSTEMS_DIR=/data/systems \
+ENV MAPGEN_SYSTEMS_DIR=/data/systems \
 	MAPGEN_DB=/data/db/mapgen.sqlite \
 	MALLOC_ARENA_MAX=2 \
 	MAPGEN_PRESETS_DIR=/data/presets \

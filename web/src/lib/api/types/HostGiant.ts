@@ -7,7 +7,7 @@ import type { Sibling } from "./Sibling";
  */
 export type HostGiant = { 
 /**
- * The giant itself, as its own world (`host/` beside the world).
+ * The giant itself, as a body of its own in the system.
  */
 giant: GiantInfo, 
 /**

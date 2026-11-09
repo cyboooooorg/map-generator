@@ -258,16 +258,15 @@ impl TileCache {
         guard
     }
 
-    /// Forgets a world (deleted or regenerated) and its moons.
+    /// Forgets a key and everything under it (a system and its bodies).
     /// Returns whether a loaded world was dropped.
     pub fn forget(&self, id: &str) -> bool {
         let mut state = self.lock();
         let before: usize = state.entries.iter().map(Entry::bytes).sum();
-        // Its moons too (`id/moons/n`).
-        let moons = format!("{id}/");
+        let below = format!("{id}/");
         state
             .entries
-            .retain(|e| e.id != id && !e.id.starts_with(&moons));
+            .retain(|e| e.id != id && !e.id.starts_with(&below));
         state.entries.iter().map(Entry::bytes).sum::<usize>() < before
     }
 
@@ -304,7 +303,7 @@ fn load(dir: &Path, epoch_ma: Option<i32>) -> Result<Arc<DetailWorld>, String> {
 }
 
 /// A layer of a world shown at an epoch (see `GET
-/// /api/worlds/{id}/epoch/{ma}/{file}`).
+/// /api/systems/{id}/bodies/{body}/epoch/{epoch}/{file}`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EpochLayer {
     /// The render without hillshade, as `raw_data/colour.png`.

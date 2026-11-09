@@ -8,9 +8,9 @@ below; the rest is not.
 
 ## Today
 
-Everything lives on the local disk, in two directories bind-mounted into
-the container (`compose.yaml`): `systems/` (`MAPGEN_SYSTEMS_DIR`) and the
-older `worlds/` (`MAPGEN_WORLDS_DIR`). The layout is in
+Everything lives on the local disk, in directories bind-mounted into
+the container (`compose.yaml`): `systems/` (`MAPGEN_SYSTEMS_DIR`) and
+`db/`. The old `worlds/` is gone (see #303). The layout is in
 `docs/system-spec.md`, *Storage*:
 
 ```text
@@ -49,7 +49,7 @@ Production on 2026-11-06 (17 systems, 1 765 files):
 | `world.png`   | 368 MB | the rendered map, read by older worlds and downloads           |
 | `noise_maps/` | 312 MB | diagnostic images, on one body only; never read by the app     |
 | JSON, thumbs… | small  | `system.json`, `world.json`, `names.json`, thumbnails          |
-| **Total**     | 3.9 GB | plus 113 MB of legacy `worlds/`                                |
+| **Total**     | 3.9 GB | measured before the old `worlds/` was dropped                                |
 
 A large body (e III of MGS 50909, 4096 × 2048) takes 659 MB, half of it
 diagnostics.
@@ -275,8 +275,8 @@ What was built, and where it departs from the plan above:
 - **Rebuilt, then reconciled:** one code path. At every start the tree is
   compared with the index by modification times: missing or changed
   systems are read again, removed ones dropped. An absent or empty
-  database is simply the case where everything is missing. Legacy
-  `worlds/` is not read by the server any more, so it is not scanned.
+  database is simply the case where everything is missing. The
+  old `worlds/` is neither mounted nor read, so it is not scanned.
 - **Reads:** `GET /api/systems` and the name lookups read the index.
   `GET /api/systems/{id}` and job creation still read `system.json`
   (the full system is what they answer). The API only gained the

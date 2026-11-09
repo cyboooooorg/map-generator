@@ -11,7 +11,6 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': server,
-      '/worlds': server,
       '/healthz': server,
     },
   },

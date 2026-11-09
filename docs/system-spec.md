@@ -7,7 +7,8 @@ pair on the project; the user decides the open points before any code.
 
 The generator makes one world today: a planet (or a giant's moon) with
 its moons, its drawn giants described in its `world.json`, and the giant
-it orbits, all stored under `worlds/<planet>-<seed>/`. It becomes a
+it orbits, all stored under `worlds/<planet>-<seed>/` (the layout before
+systems). It becomes a
 **system generator**: a star and every body around it, each with its own
 property card, the costly part (a body's maps) made only when someone
 wants to see that body.
@@ -402,8 +403,8 @@ nothing else is generated until a body is opened; a link naming a body
 
 ## Storage
 
-A system is one directory under `systems/` (`MAPGEN_SYSTEMS_DIR`, in place
-of `MAPGEN_WORLDS_DIR`):
+A system is one directory under `systems/` (`MAPGEN_SYSTEMS_DIR`;
+`MAPGEN_WORLDS_DIR` no longer exists):
 
 ```text
 systems/<system-id>/
@@ -693,12 +694,14 @@ addressed as `<system-id>/<body-id>` everywhere.
 
 No migration, as decided: the worlds made before systems are deleted.
 
-- The server stops reading `worlds/`. On its first start with systems,
-  if `worlds/` holds anything, it logs once that the directory is no
-  longer used. It never deletes it: `mise run clean-worlds` does, when
-  the user chooses to.
-- The routes under `/api/worlds` and `/worlds/` are removed in the same
-  release, with no compatibility layer: nothing else calls them.
+- Nothing reads, writes or mounts `worlds/` any more: the
+  server ignores it (no startup warning), `compose.yaml` does not mount
+  it, `MAPGEN_WORLDS_DIR` is gone and so is `mise run clean-worlds`. The
+  server never deletes user data; a `worlds/` directory left in a
+  checkout can be deleted by hand.
+- The routes under `/api/worlds` and `/worlds/` are removed, with no
+  compatibility layer: nothing else calls them (the Vite dev proxy no
+  longer forwards `/worlds`).
 - The code that only served the old layout goes:
   - the world library (`worlds.rs`, in favour of `systems.rs`);
   - the `moons/<n>` and `host/siblings/<n>` paths;
@@ -751,8 +754,8 @@ the app usable after each:
    skies built from `system.json`.
 6. **The cards** (web): one card for every body, renaming any body, the
    system summary.
-7. **Clean-up**: dead code, READMEs, backlog, analysis docs,
-   `clean-worlds`.
+7. **Clean-up**: dead code, READMEs, backlog, analysis docs, the
+   `worlds/` mount, startup warning and `clean-worlds` (done, #303).
 
 Phase 4 can start once phase 1 has frozen the types, beside phases 2 and
 3; phases 5 and 6 need phase 3. The two sessions can split as before:

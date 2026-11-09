@@ -16,7 +16,7 @@ depends = ["build"]
 run = "target/release/map-generator"
 
 [tasks.hex]
-description = "Resample a generated world onto a hex grid (e.g. mise run hex -- worlds/terran-42 --columns 96)"
+description = "Resample a generated world onto a hex grid (e.g. mise run hex -- systems/mgs-36196-42/bodies/d/sizes/2048x1024 --columns 96)"
 depends = ["build"]
 run = "target/release/hexgrid"
 
@@ -38,10 +38,6 @@ run = [
 [tasks.fmt]
 description = "Format the code"
 run = "cargo fmt"
-
-[tasks.clean-worlds]
-description = "Delete the worlds made before systems, under worlds/ (no longer read)"
-run = "find ./worlds -mindepth 1 -not -name '.gitignore' -delete"
 
 [tasks.clean-systems]
 description = "Delete every generated system under systems/ (asks first); restart the server after it so its index drops them"
@@ -71,7 +67,7 @@ dir = "web"
 run = "npm run build"
 
 [tasks."server:dev"]
-description = "Run the web server on http://localhost:3000 (worlds/ and presets/ of this checkout)"
+description = "Run the web server on http://localhost:3000 (systems/ and presets/ of this checkout)"
 run = "cargo run -p mapgen-server"
 
 [tasks.dev]

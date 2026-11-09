@@ -59,7 +59,7 @@ giants?: GiantSystem | null,
  */
 giant?: GiantInfo | null, 
 /**
- * The giant the world orbits, as a moon of it (its world in `host/`);
+ * The giant the world orbits, as a moon of it (its own body in the system);
  * left out for a world orbiting its star.
  */
 host?: HostGiant | null, 

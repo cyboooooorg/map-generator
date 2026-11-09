@@ -30,7 +30,7 @@ because the code looks right.
   ```bash
   cd <worktree>/web && npx vite build     # never npm ci: node_modules is a symlink
   cd <worktree>
-  MAPGEN_SYSTEMS_DIR=<scratch>/systems MAPGEN_WORLDS_DIR=<scratch>/worlds \
+  MAPGEN_SYSTEMS_DIR=<scratch>/systems \
     MAPGEN_DB=<scratch>/db MAPGEN_STATIC_DIR=web/dist PORT=<free port> \
     cargo run --release -p mapgen-server
   ```
