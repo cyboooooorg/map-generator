@@ -1946,15 +1946,10 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
 /// The job [`queue_body_job`] answers.
 struct QueuedBody {
     job_id: String,
-    /// The job generates `body`: it is the one asked for it (new, or
-    /// already queued for it), or the system's job for another body whose
-    /// neighbourhood includes it. Not the job of another body that leaves
-    /// `body` alone, which the one-job-at-a-time rule answered.
-    own: bool,
     /// The bodies of the family the job makes again that another
     /// generator made, read before the job could make them (once it is
     /// done they are generated, and nothing is said). Empty when the job
-    /// is not `body`'s ([`QueuedBody::own`]).
+    /// answered is another family's, which leaves `body` alone.
     regenerated: Vec<RegeneratedBody>,
 }
 
@@ -1994,7 +1989,6 @@ async fn queue_body_job(
                     .any(|b| b == body);
                 QueuedBody {
                     job_id,
-                    own,
                     regenerated: if own { regenerated } else { Vec::new() },
                 }
             }));
@@ -2008,7 +2002,6 @@ async fn queue_body_job(
     };
     Ok(Some(QueuedBody {
         job_id: job,
-        own: true,
         regenerated,
     }))
 }
