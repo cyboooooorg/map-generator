@@ -821,8 +821,12 @@ export const hostStarVertex = /* glsl */ `
 // (lib/viewer/hostStarSurface.ts discBasis), μ the sprite's z. Its
 // regions are skipped behind a uniform branch while uRegionFade is 0 (a
 // disc under 16 px, see hostStarDetail), leaving only the quadratic limb
-// law. Without a surface (uSurface 0, a world without a system) it keeps
-// the old 1 − 0.35 r² limb. The pixel angle the spots use against
+// law. It takes the star view's exposure (starSurfaceExposed: the soft
+// curve on the brightness, the limb law and the light linear), at the
+// same gain, so that its centre, penumbrae and plages read as the star
+// view's; the plain disc's 1.4 clipped the photosphere to white and left
+// only the umbrae. Without a surface (uSurface 0, a world without a
+// system) it keeps the old 1 − 0.35 r² limb, times 1.4. The pixel angle the spots use against
 // aliasing is measured before the branch on the disk, where fwidth is
 // defined.
 export const hostStarFragment = /* glsl */ `
@@ -855,10 +859,10 @@ export const hostStarFragment = /* glsl */ `
     vec3 disk = vec3(0.0);
     if (inside > 0.0) {
       disk = uSurface > 0.5
-        ? starSurfaceColour(n, mu)
-        : uColor * (1.0 - 0.35 * pow(clamp(r / max(radius, 1e-3), 0.0, 1.0), 2.0));
+        ? starSurfaceExposed(n, mu)
+        : uColor * (1.0 - 0.35 * pow(clamp(r / max(radius, 1e-3), 0.0, 1.0), 2.0)) * 1.4;
     }
-    vec3 colour = disk * inside * 1.4 + uColor * glow * (1.0 - inside);
+    vec3 colour = disk * inside + uColor * glow * (1.0 - inside);
     if (max(colour.r, max(colour.g, colour.b)) < 0.002) discard;
     gl_FragColor = vec4(colour * uOpacity, 1.0);
     #include <colorspace_fragment>

@@ -243,6 +243,18 @@ While the orbits play, the clock's speed fades the regions out as in the
 star views (a long exposure). A world without a system keeps the old
 plain disc.
 
+The disc takes the star view's exposure, not the plan's. The plan kept
+the plain disc's gain, the linear colour times 1.4, but that clips the
+quiet photosphere to white over most of a large disc (up to 0.85 of its
+radius on G2V b), and the penumbrae (0.75 of the photosphere, 1.05 after
+the gain) and the faculae disappear: only the umbrae showed, as grey
+dots. The disc now draws `starSurfaceExposed`, at the same gain as the
+star view: the soft curve $1 - e^{-1.6\,b}$ on the brightness, with the
+limb law and the light linear. For the G2V star of the test system, its
+sRGB values at 0, 0.5, 0.9 and 0.98 of the radius are 231, 224, 192 and
+166, against 231, 223, 194 and 174 in the star view seen from 50 radii.
+The plain disc keeps its 1.4.
+
 The disc is drawn on a square that the vertex shader places round the
 star's direction, not on a point sprite. A point is clamped to the GPU's
 largest point size (`ALIASED_POINT_SIZE_RANGE`, often 511 px), and the
