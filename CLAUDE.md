@@ -101,3 +101,49 @@ The main session keeps what needs the conversation's context:
 - debugging driven by the user's screenshots: agents measure, the main
   session decides what to fix;
 - judging whether a change that alters the generated worlds is acceptable.
+
+## Context and token economy
+
+Every turn resends the whole conversation, so a long context costs on every
+turn that follows. A session of 992 turns reached 831k tokens of context
+and reread 433M tokens from the cache.
+
+### Images
+
+- Never `Read` a full-resolution screenshot or render in the main session:
+  an image stays in the context until the session ends.
+  `viewer-visual-check` looks at the pixels and reports what it sees.
+- When the main session must see an image itself, downscale a copy in the
+  scratchpad first and read the copy:
+
+  ```bash
+  sips -Z 800 shot.png --out "$SCRATCH/shot-800.png"
+  ```
+
+### Large documents
+
+`README.md` (about 180 KB), `docs/backlog.md`, `docs/system-spec.md` and
+`docs/analysis/*.md` are too large to read whole. Find the section first
+(`grep -n '^#' README.md` or `grep -n '<term>'`), then read only that range
+with an offset and a limit. The same goes for subagents.
+
+### Implementation plans and reviews
+
+The agents of `.claude/agents/` replace the generic workflows. When a plan
+is executed with subagents (superpowers `subagent-driven-development` or
+otherwise):
+
+- implementers run on sonnet; opus only for a task the plan marks as hard
+  (physics, formats, concurrency) or for `science-fixer`;
+- no review subagent after each task: the implementer runs the tests, and
+  `branch-reviewer` reviews the whole branch once, before the PR;
+- after a fix following that review, re-run the tests, not a new full
+  review, unless the fix changes the design;
+- recon goes to `codebase-mapper`, never to `Explore` or `general-purpose`.
+
+### Session length
+
+One session per topic: once a PR is open or a topic is settled, tell the
+user it is a good point for `/clear`. Past about 200k tokens of context,
+suggest a `/compact` that keeps the decisions, the branch and the open
+questions.
