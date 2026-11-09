@@ -363,8 +363,9 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    lifetime, **calibration**), so that cells deform, split and merge
    over a few lifetimes; the warp drifts round a circle at 2 turns per
    289 lifetimes. Every motion turns a whole number of times in the 289
-   lifetimes at which the phase wraps, so the surface does not jump
-   there. The result is brought
+   lifetimes at which the phase wraps, and the day clock behind the
+   phase wraps at a whole number of those periods (near 10,000 days),
+   so the surface does not jump at either wrap. The result is brought
    to zero mean and unit rms (measured over the disc), then multiplied
    by a gain of 1.6 (**calibration**): prototype D, the approved look,
    drew an rms contrast of about 0.24 on the Sun, whose

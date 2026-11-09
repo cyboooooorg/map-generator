@@ -6,6 +6,8 @@ import { SUN_SYSTEM } from './starSystem';
 import {
   exposureFade,
   granuleMotionHarmonics,
+  granuleDaysWrap,
+  granulePhase,
   STAR_SURFACE_GLSL,
   StarSurfaceState,
   starLook,
@@ -195,6 +197,28 @@ describe('star surface', () => {
       // The chunk's rates are written from the list, not typed in again.
       expect(STAR_SURFACE_GLSL).toContain(((2 * Math.PI * k) / 289).toFixed(8));
     }
+  });
+
+  it('keeps the granule phase continuous where the day clock wraps', () => {
+    const lifetime = SUN_ACTIVITY.granule_lifetime_days;
+    const wrap = granuleDaysWrap(lifetime);
+    // A whole number of 289-lifetime periods, near 1e4 days.
+    const periods = wrap / (289 * lifetime);
+    expect(Math.abs(periods - Math.round(periods))).toBeLessThan(1e-9);
+    expect(Math.abs(wrap - 1e4)).toBeLessThan(289 * lifetime);
+    const eps = 1e-4;
+    for (const k of [1, 2, 7]) {
+      const before = granulePhase(k * wrap - eps, lifetime);
+      const after = granulePhase(k * wrap + eps, lifetime);
+      const step = (((after - before) % 289) + 289) % 289;
+      expect(step).toBeCloseTo((2 * eps) / lifetime, 6);
+    }
+    // The state sets that phase.
+    const uniforms = starSurfaceUniforms(8);
+    const state = new StarSurfaceState(uniforms, 8);
+    state.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    state.update(wrap + 0.3, BIG);
+    expect((uniforms['uGranule']!.value as { z: number }).z).toBeCloseTo(granulePhase(wrap + 0.3, lifetime), 9);
   });
 
   it('keeps the cell helpers out of STAR_NO_GRANULATION, for the sky disc', () => {

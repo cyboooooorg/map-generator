@@ -191,8 +191,30 @@ const GRANULE_RAW_RMS = 0.363;
  */
 const GRANULE_GAIN = 1.6;
 
-/** Days at which the granule clock wraps before its phase is computed (keeps it exact in f64). */
+/** About where the granule clock's days wrap before the phase is computed (keeps it exact in f64). */
 const GRANULE_DAYS_WRAP = 1e4;
+
+/**
+ * The days at which the granule clock wraps for granules living
+ * `lifetimeDays`: the whole number of phase periods (289 lifetimes)
+ * nearest `GRANULE_DAYS_WRAP`, at least one, so that the phase runs on
+ * across the wrap without a jump.
+ */
+export function granuleDaysWrap(lifetimeDays: number): number {
+  const period = GRANULE_PHASE_PERIOD * lifetimeDays;
+  return period * Math.max(1, Math.round(GRANULE_DAYS_WRAP / period));
+}
+
+/**
+ * The granule phase at `days`, in lifetimes, reduced modulo
+ * `GRANULE_PHASE_PERIOD`: continuous in `days` (the day clock wraps at
+ * `granuleDaysWrap`, a whole number of periods), and 0 without
+ * granule lifetime.
+ */
+export function granulePhase(days: number, lifetimeDays: number): number {
+  if (!(lifetimeDays > 0)) return 0;
+  return modulo(modulo(days, granuleDaysWrap(lifetimeDays)) / lifetimeDays, GRANULE_PHASE_PERIOD);
+}
 /** Days from the epoch after which the regions are packed again, to keep `uLocalDays` small. */
 const EPOCH_SPAN_DAYS = 20;
 /**
@@ -695,10 +717,7 @@ export class StarSurfaceState {
 
     const granuleFade =
       look.granuleContrast > 0 ? detail.granulation * exposureFade(daysPerFrame, look.granuleLifetimeDays) : 0;
-    const phase =
-      look.granuleLifetimeDays > 0
-        ? modulo(modulo(days, GRANULE_DAYS_WRAP) / look.granuleLifetimeDays, GRANULE_PHASE_PERIOD)
-        : 0;
+    const phase = granulePhase(days, look.granuleLifetimeDays);
     (u['uGranule']!.value as Vector4).set(look.granuleSize, look.granuleContrast, phase, granuleFade);
 
     const rotationDays = TWO_PI / look.omegaEq;
