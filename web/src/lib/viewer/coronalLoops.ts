@@ -97,9 +97,6 @@ interface Shown {
   longitude: number;
 }
 
-/** Regions kept past the `loopRegions` cap while they stay in the next ranks, so that a swap of ranks does not make a loop blink. */
-const KEEP_MARGIN = 2;
-
 /**
  * The loops of the largest active regions. Add `group` to the star's frame
  * (scaled like the star mesh) and call `update` as the clock moves. A
@@ -130,19 +127,18 @@ export class CoronalLoops {
   }
 
   /**
-   * Keeps one mesh per region among the `loopRegions` largest (a region
-   * already shown stays while it is in the `loopRegions + 2` largest);
-   * turns each to its longitude now, opacity ∝ sqrt(area / peakArea) times
+   * Keeps one mesh per region among the `loopRegions` largest, exactly: the
+   * shown set depends on `regions` alone, not on the frames before. Turns each to its longitude now, opacity ∝ sqrt(area / peakArea) times
    * `fade`. Allocates nothing when the set of regions is unchanged.
    */
   update(regions: readonly RegionNow[], days: number, fade = 1): void {
     void days; // Placement is a function of the regions alone; the day is already in their longitudes.
-    const limit = Math.min(regions.length, this.maxRegions + KEEP_MARGIN);
+    const limit = Math.min(regions.length, this.maxRegions);
     let present = 0;
     let missing = false;
     for (let i = 0; i < limit; i += 1) {
       if (this.shown.has(regions[i]!.region.id)) present += 1;
-      else if (i < this.maxRegions) missing = true;
+      else missing = true;
     }
     if (missing || present !== this.shown.size) this.restructure(regions, limit);
     for (let i = 0; i < limit; i += 1) {
@@ -157,12 +153,12 @@ export class CoronalLoops {
     this.largest = regions.length > 0 && this.shown.has(regions[0]!.region.id) ? { id: regions[0]!.region.id } : null;
   }
 
-  /** Drops the regions out of the kept ranks and builds those new in the top ones. */
+  /** Drops the regions out of the top ranks and builds those new in them. */
   private restructure(regions: readonly RegionNow[], limit: number): void {
     const kept = new Set<number>();
     for (let i = 0; i < limit; i += 1) kept.add(regions[i]!.region.id);
     for (const id of [...this.shown.keys()]) if (!kept.has(id)) this.drop(id);
-    for (let i = 0; i < Math.min(limit, this.maxRegions); i += 1) {
+    for (let i = 0; i < limit; i += 1) {
       const region = regions[i]!.region;
       if (!this.shown.has(region.id)) this.build(region);
     }

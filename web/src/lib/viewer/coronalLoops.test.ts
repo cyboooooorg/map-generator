@@ -82,20 +82,32 @@ describe('CoronalLoops', () => {
     expect(loops.largestArc()).toBeNull();
   });
 
-  it('keeps a region that slips just below the cap, and fades by the factor given', () => {
+  it('fades by the factor given', () => {
     const loops = new CoronalLoops(PROFILES.light, material);
-    const cap = PROFILES.light.loopRegions;
-    const ranked = Array.from({ length: cap + 1 }, (_, i) => now(i + 1, 0.01 - i * 0.001, 0));
-    loops.update(ranked.slice(0, cap), 0);
-    const [first, ...rest] = ranked.slice(0, cap);
-    // Region 1 slips to rank cap + 1: it stays; the one that rose does not make it blink.
-    loops.update([...rest, ranked[cap]!, first!], 1, 0.5);
-    expect(loops.longitudeOf(1)).not.toBeNull();
-    expect(loops.group.children).toHaveLength(cap + 1);
+    loops.update([now(1, 0.01, 0)], 0, 0.5);
     const mesh = loops.group.children[0] as unknown as Mesh<BufferGeometry, ShaderMaterial>;
-    expect(mesh.material.uniforms['uOpacity']!.value).toBeLessThanOrEqual(0.45);
-    // Beyond the kept ranks it goes.
-    loops.update([...rest, ranked[cap]!, now(90, 1e-4, 0), now(91, 1e-4, 0), now(92, 1e-4, 0), first!], 2);
-    expect(loops.longitudeOf(1)).toBeNull();
+    expect(mesh.material.uniforms['uOpacity']!.value).toBeCloseTo(0.45, 9);
+  });
+
+  it('shows the same loops at a day whichever way the clock got there', () => {
+    const cap = PROFILES.light.loopRegions;
+    const day = (shift: number): RegionNow[] =>
+      Array.from({ length: cap + 2 }, (_, i) => now(i + 1, 0.01 - i * 0.001 + shift * (i === 0 ? -0.0095 : 0), 0));
+    // Day A: region 1 is the largest; day B: it has slipped below the cap.
+    const fresh = new CoronalLoops(PROFILES.light, material);
+    fresh.update(day(1).sort((a, b) => b.area - a.area), 1);
+    const viaA = new CoronalLoops(PROFILES.light, material);
+    viaA.update(day(0), 0);
+    viaA.update(day(1).sort((a, b) => b.area - a.area), 1);
+    const from = (l: CoronalLoops) => Array.from({ length: cap + 2 }, (_, i) => l.longitudeOf(i + 1) !== null);
+    expect(from(viaA)).toEqual(from(fresh));
+    expect(from(fresh)).toEqual([false, true, true, true, false]);
+    // And back: later then earlier gives the same as earlier alone.
+    const back = new CoronalLoops(PROFILES.light, material);
+    back.update(day(1).sort((a, b) => b.area - a.area), 1);
+    back.update(day(0), 0);
+    const direct = new CoronalLoops(PROFILES.light, material);
+    direct.update(day(0), 0);
+    expect(from(back)).toEqual(from(direct));
   });
 });
