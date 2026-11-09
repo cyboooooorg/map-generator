@@ -281,7 +281,6 @@ export const fr: Messages = {
     copyRefused: 'Le navigateur a refusé la copie.',
     archiveFailed: (p) => `Impossible de créer l’archive${S}: ${p.error}`,
     seed: 'Graine',
-    map: 'Carte',
     seaLevel: 'Niveau de la mer',
     volcanism: 'Volcanisme',
     erosion: 'Érosion',
@@ -655,6 +654,14 @@ export const fr: Messages = {
       `Génération de ${p.body} (astre ${p.step} sur ${p.bodies})${S}: ${p.stage}, ${p.stageStep} sur ${p.stageSteps}`,
     generationFailed: ({ body, error }: { body: string; error: string }) => `Impossible de générer ${body}${S}: ${error}`,
     generationRetry: 'Réessayer',
+    sizes: 'Résolution',
+    sizesHelp: `Les résolutions de la planète montrée, sous la vue${S}: en montrer une, en générer une plus grande, ou supprimer une ajoutée`,
+    sizeTooLarge: 'Trop grande pour ce serveur',
+    generateSize: ({ size }: { size: string }) => `Générer la carte de ${size} px`,
+    deleteSize: ({ size }: { size: string }) => `Supprimer la carte de ${size} px`,
+    deleteSizeConfirm: ({ size }: { size: string }) =>
+      `Supprimer la carte de ${size} px de cet astre${S}? Sa carte d’origine reste.`,
+    sizeGenerating: ({ size }: { size: string }) => `Génération de la carte de ${size} px`,
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · non générée'}`,
     bodyTypes: {

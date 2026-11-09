@@ -8,6 +8,7 @@
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
   import AxesGizmo from './AxesGizmo.svelte';
+  import SizeChips from './SizeChips.svelte';
   import type { ScreenAxis } from '../lib/viewer/axes';
   import type { SurfaceMaps } from '../lib/skyBodies';
   import { ApiFailure, api, followJob, sizeName, systemBodyId, worldFile } from '../lib/api/client';
@@ -628,6 +629,8 @@
       view.onCameraChange = (state) => onCameraChange?.(state);
       canvasVisible = view.visible;
       view.onVisibilityChange = (visible) => (canvasVisible = visible);
+      // A detail tile of the resolution shown answered 404: deleted elsewhere, maybe.
+      view.onDetailMissing = () => world.fileMissing();
     } catch (e) {
       error = t.viewer.noWebgl({ error: String(e) });
     }
@@ -691,7 +694,10 @@
     current
       .setMaps(maps.colour, maps.normal, controller.signal, progress)
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) error = t.viewer.mapFailed({ error: String(e) });
+        if (controller.signal.aborted) return;
+        error = t.viewer.mapFailed({ error: String(e) });
+        // Its resolution deleted elsewhere, maybe: the world lists them again.
+        world.fileMissing();
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -761,7 +767,9 @@
           textureEpoch = { id, epochMa, scale };
         })
         .catch((e: unknown) => {
-          if (!controller.signal.aborted) toasts.error(t.epochs.failed({ error: String(e) }));
+          if (controller.signal.aborted) return;
+          toasts.error(t.epochs.failed({ error: String(e) }));
+          world.fileMissing();
         })
         .finally(() => {
           if (!controller.signal.aborted) epochMapLoading = false;
@@ -795,7 +803,9 @@
     current
       .setClouds(url, meta ? cloudTint(meta) : [1, 1, 1], controller.signal)
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) console.warn('Could not load the clouds', e);
+        if (controller.signal.aborted) return;
+        console.warn('Could not load the clouds', e);
+        if (url) world.fileMissing();
       });
     return () => controller.abort();
   });
@@ -812,7 +822,9 @@
         controller.signal,
       )
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) console.warn('Could not load the shape', e);
+        if (controller.signal.aborted) return;
+        console.warn('Could not load the shape', e);
+        if (id && shownSize && shape) world.fileMissing();
       });
     return () => controller.abort();
   });
@@ -1203,44 +1215,95 @@
    * The generation of the body shown and its neighbourhood, when it is not
    * generated yet (`POST /api/systems/{id}/bodies/{body}/generate`): queued
    * as soon as it is shown, followed until done, then the system reloaded.
+   * Or, with `size`, one more resolution of a generated body, asked for
+   * from its chips (`POST …/sizes/{W}x{H}`), shown once done.
    */
-  let generation = $state<{ body: string; status: JobStatus | null; error: string | null } | null>(null);
+  let generation = $state<{ body: string; size: string | null; status: JobStatus | null; error: string | null } | null>(null);
   /** A running status of a system job: the body being made and its place in the job. */
   type RunningBody = { body?: string | null; body_step?: number | null; bodies?: number | null; stage: Stage; step: number; steps: number };
   let stopFollowing: (() => void) | null = null;
-  async function generateShown(body: string): Promise<void> {
+  async function generateShown(body: string, size?: string): Promise<void> {
     const systemId = world.systemId;
     if (!systemId) return;
     stopFollowing?.();
     stopFollowing = null;
-    generation = { body, status: null, error: null };
+    const wanted = size ?? null;
+    generation = { body, size: wanted, status: null, error: null };
+    // Still this generation: another one (another body, another size) replaces it.
+    const mine = () => generation?.body === body && generation.size === wanted;
+    const id = systemBodyId(systemId, body);
+    /** Shows the resolution made, when its body is still the one shown. */
+    const showSize = async (made: string) => {
+      if (world.id !== id) return;
+      await world.refreshSizes();
+      if (world.id === id) await world.switchSize(made);
+    };
     try {
-      const response = await fetch(
-        `/api/systems/${encodeURIComponent(systemId)}/bodies/${encodeURIComponent(body)}/generate`,
-        { method: 'POST' },
-      );
-      if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
-      const { job_id: jobId } = (await response.json()) as { job_id: string | null };
+      let jobId: string | null;
+      if (wanted !== null) {
+        // Being generated already (from another tab): follow its job.
+        const pending = world.id === id ? world.sizes?.pending.find((p) => sizeName(p.width, p.height) === wanted) : undefined;
+        jobId = pending ? pending.job_id : (await api.generateSize(id, wanted)).job_id;
+      } else {
+        const response = await fetch(
+          `/api/systems/${encodeURIComponent(systemId)}/bodies/${encodeURIComponent(body)}/generate`,
+          { method: 'POST' },
+        );
+        if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+        jobId = ((await response.json()) as { job_id: string | null }).job_id;
+      }
       if (jobId === null) {
-        world.loadSystem(systemId);
+        if (!mine()) return;
+        generation = null;
+        if (wanted !== null) await showSize(wanted);
+        else world.loadSystem(systemId);
         return;
       }
       const stream = followJob(jobId, (status) => {
-        if (generation?.body === body) generation = { body, status, error: null };
+        if (mine()) generation = { body, size: wanted, status, error: null };
       });
       stopFollowing = stream.cancel;
       const final = await stream.done;
-      if (generation?.body !== body) return;
+      if (!mine()) return;
       if (final.status === 'done') {
         generation = null;
-        world.loadSystem(systemId);
+        if (wanted !== null) await showSize(wanted);
+        else world.loadSystem(systemId);
       } else {
-        generation = { body, status: final, error: final.status === 'failed' ? final.error : null };
+        generation = { body, size: wanted, status: final, error: final.status === 'failed' ? final.error : null };
       }
     } catch (e) {
-      if (generation?.body === body) generation = { body, status: null, error: String(e) };
+      if (mine()) generation = { body, size: wanted, status: null, error: errorText(e) };
+      else if (wanted !== null) toasts.error(t.viewer.generationFailed({ body: wanted, error: errorText(e) }));
     }
   }
+  /** Deletes resolution `size` of the body shown (its chip's ×), then lists the sizes again. */
+  async function deleteShownSize(size: string): Promise<void> {
+    const id = world.id;
+    if (!id) return;
+    try {
+      await api.deleteSize(id, size);
+    } catch (e) {
+      toasts.error(errorText(e));
+    }
+    // Deleted or not, the listing tells: the body loads at its displayed
+    // size when the one shown is gone.
+    await world.refreshSizes().catch((e: unknown) => console.warn('Could not list the resolutions', e));
+  }
+  /** Shows resolution `size` of the body shown (a chip on disk). */
+  function pickSize(size: string): void {
+    world.switchSize(size).catch((e: unknown) => toasts.error(errorText(e)));
+  }
+  /** The resolution chips under the planet, from the icon bar's Resolution switch. */
+  let sizesOpen = $state(false);
+  /** A generated body has resolutions to show: its listing is in. */
+  const sizesShown = $derived(world.subject === 'planet' && worldId !== null && world.sizes !== null);
+  /** The resolution this view is generating for the body shown, `WxH`. */
+  const sizeGenerating = $derived(
+    generation && generation.size !== null && !generation.error && worldId === systemBodyId(world.systemId ?? '', generation.body)
+      ? generation.size
+      : null,
+  );
   $effect(() => {
     // Only the body looked at is generated: the star view of a system
     // (its default) leaves its planets as spheres until one is opened.
@@ -1257,6 +1320,10 @@
     const name = (id: string) => world.systemNames[id] ?? sys.bodies.find((b) => b.id === id)?.designation ?? id;
     if (generation.error) return t.viewer.generationFailed({ body: name(generation.body), error: generation.error });
     const job = generation.status;
+    if (generation.size !== null) {
+      const width = generation.size.split('x')[0] ?? generation.size;
+      return !job || job.status === 'queued' || job.status === 'running' ? t.viewer.sizeGenerating({ size: width }) : null;
+    }
     if (!job || job.status === 'queued') return t.viewer.generationQueued({ body: name(generation.body) });
     if (job.status !== 'running') return null;
     const status = job as unknown as RunningBody;
@@ -1760,6 +1827,8 @@
         ? [perBody({ key: 'dial', label: t.viewer.compass, help: t.viewer.compassHelp, icon: 'dial' }, dialShown, hostCompassShown, (v) => (dialShown = v), (v) => (hostCompassShown = v))]
         : []),
     ],
+    // The resolutions of a generated body: chips under the planet.
+    ...(sizesShown ? [[{ key: 'sizes', label: t.viewer.sizes, help: t.viewer.sizesHelp, icon: 'resolution' as const, on: sizesOpen, set: (on: boolean) => (sizesOpen = on) }]] : []),
   ]);
   /** The panels of the planet's dock. */
   const dockPanels = $derived<DockPanel[]>([
@@ -2443,6 +2512,18 @@
       clock={locked ? t.viewer.lockedSun : ''}
       jumps={clockYear ? [{ key: 'start', label: t.playback.toStart, icon: 'start', run: () => setClockDay(0) }] : []}
     />
+    {#if sizesOpen && sizesShown && world.sizes}
+      <div class="sizes">
+        <SizeChips
+          sizes={world.sizes}
+          shown={size ?? ''}
+          generating={sizeGenerating}
+          onPick={pickSize}
+          onGenerate={(s) => sysBody && generateShown(sysBody.id, s)}
+          onDelete={(s) => void deleteShownSize(s)}
+        />
+      </div>
+    {/if}
   </div>
 
   {#if dataReady && shown !== 'biomes'}
@@ -2547,7 +2628,7 @@
         <span style:width={`${generationShare * 100}%`}></span>
       </div>
       {#if generation?.error}
-        <button onclick={() => generation && generateShown(generation.body)}>{t.viewer.generationRetry}</button>
+        <button onclick={() => generation && generateShown(generation.body, generation.size ?? undefined)}>{t.viewer.generationRetry}</button>
       {/if}
     </div>
   {/if}
@@ -2651,6 +2732,14 @@
     position: absolute;
     top: 4px;
     right: 12px;
+  }
+  /* The resolution chips: under the planet, clear of the playback bar. */
+  .sizes {
+    position: absolute;
+    left: 50%;
+    bottom: 64px;
+    transform: translateX(-50%);
+    max-width: calc(100% - 24px);
   }
   .panel-body {
     display: grid;

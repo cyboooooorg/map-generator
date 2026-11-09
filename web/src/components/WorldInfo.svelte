@@ -90,8 +90,6 @@
       <dl>
         <dt>{t.worldInfo.seed}</dt>
         <dd>{meta.seed}</dd>
-        <dt>{t.worldInfo.map}</dt>
-        <dd>{meta.width} × {meta.height} px</dd>
         {#if meta.giant}
           {@const g = meta.giant}
           <dt title={t.worldInfo.giantMassHelp}>{t.worldInfo.giantMass}</dt>

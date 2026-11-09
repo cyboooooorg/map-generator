@@ -178,4 +178,110 @@ describe('LoadedWorld sizes', () => {
     expect(world.meta?.width).toBe(4096);
     expect(requests).toContain('PUT /api/systems/a/bodies/d/displayed-size {"width":4096,"height":2048}');
   });
+
+  /** A request held until `release()`. */
+  function gate() {
+    let release = () => {};
+    const opened = new Promise<void>((r) => (release = r));
+    return { opened, release: () => release() };
+  }
+
+  it('never lets an older listing undo a newer switch', async () => {
+    const requests: string[] = [];
+    const both = sizes([2048, 1024], [[2048, 1024, 11], [4096, 2048, 22]]);
+    // The listing taken before 4096x2048 was on disk, answered late.
+    const stale = sizes([2048, 1024], [[2048, 1024, 11]]);
+    let held: ReturnType<typeof gate> | null = null;
+    serve(() => both, requests);
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd');
+    await settle();
+    const live = globalThis.fetch;
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url === '/api/systems/a/bodies/d/sizes' && held) {
+        const wait = held;
+        held = null;
+        await wait.opened;
+        return reply(200, stale);
+      }
+      return live(url, init);
+    });
+    held = gate();
+    const late = held;
+    const refreshed = world.refreshSizes();
+    await flush();
+    await world.switchSize('4096x2048');
+    await settle();
+    expect(world.size).toBe('4096x2048');
+    late.release();
+    await refreshed;
+    await settle();
+    expect(world.size).toBe('4096x2048');
+    expect(world.sizes?.present.map((p) => p.width)).toEqual([2048, 4096]);
+  });
+
+  it('remembers the last of two quick switches', async () => {
+    const requests: string[] = [];
+    serve(() => sizes([2048, 1024], [[1024, 512, 5], [2048, 1024, 11], [4096, 2048, 22]]), requests);
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd');
+    await settle();
+    const live = globalThis.fetch;
+    const puts: { body: string; done: ReturnType<typeof gate> }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        const done = gate();
+        puts.push({ body: String(init.body), done });
+        await done.opened;
+      }
+      return live(url, init);
+    });
+    const first = world.switchSize('4096x2048');
+    await flush();
+    const second = world.switchSize('1024x512');
+    const third = world.switchSize('2048x1024');
+    await settle();
+    // The second and third wait for the first PUT; the second is dropped.
+    expect(puts.map((p) => p.body)).toEqual(['{"width":4096,"height":2048}']);
+    puts[0]!.done.release();
+    await settle();
+    expect(puts.map((p) => p.body)).toEqual(['{"width":4096,"height":2048}', '{"width":2048,"height":1024}']);
+    puts[1]!.done.release();
+    await Promise.all([first, second, third]);
+    expect(world.size).toBe('2048x1024');
+  });
+
+  it('lists the sizes again, once, when a file of the size shown is missing', async () => {
+    const requests: string[] = [];
+    let deleted = false;
+    serve(
+      () =>
+        deleted
+          ? sizes([2048, 1024], [[2048, 1024, 11]])
+          : sizes([4096, 2048], [[2048, 1024, 11], [4096, 2048, 22]]),
+      requests,
+    );
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd');
+    await settle();
+    expect(world.size).toBe('4096x2048');
+    const listings = () => requests.filter((r) => r === 'GET /api/systems/a/bodies/d/sizes').length;
+    const before = listings();
+    // Deleted from another tab: a tile answers 404, then another.
+    deleted = true;
+    world.fileMissing();
+    world.fileMissing();
+    expect(listings()).toBe(before + 1);
+    await settle();
+    expect(world.size).toBe('2048x1024');
+    // Still there: a missing file of a size on disk is not listed again and again.
+    const after = listings();
+    world.fileMissing();
+    world.fileMissing();
+    await settle();
+    world.fileMissing();
+    await settle();
+    expect(listings()).toBe(after + 1);
+    expect(world.size).toBe('2048x1024');
+  });
 });

@@ -303,7 +303,6 @@ export const en = {
     copyRefused: 'The browser refused to copy.',
     archiveFailed: (p: { error: string }) => `Could not build the archive: ${p.error}`,
     seed: 'Seed',
-    map: 'Map',
     seaLevel: 'Sea level',
     volcanism: 'Volcanism',
     erosion: 'Erosion',
@@ -691,6 +690,13 @@ export const en = {
       `Generating ${p.body} (body ${p.step} of ${p.bodies}): ${p.stage}, ${p.stageStep} of ${p.stageSteps}`,
     generationFailed: ({ body, error }: { body: string; error: string }) => `Could not generate ${body}: ${error}`,
     generationRetry: 'Try again',
+    sizes: 'Resolution',
+    sizesHelp: 'The resolutions of the planet shown, under the view: show one, generate a larger one, or delete one added',
+    sizeTooLarge: 'Too large for this server',
+    generateSize: ({ size }: { size: string }) => `Generate the ${size} px map`,
+    deleteSize: ({ size }: { size: string }) => `Delete the ${size} px map`,
+    deleteSizeConfirm: ({ size }: { size: string }) => `Delete the ${size} px map of this body? Its original map stays.`,
+    sizeGenerating: ({ size }: { size: string }) => `Generating the ${size} px map`,
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · not generated'}`,
     bodyTypes: {

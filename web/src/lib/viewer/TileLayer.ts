@@ -177,11 +177,14 @@ export class TileLayer {
   /**
    * @param onChange called when the view should be drawn again: a tile
    *   arrived, or a failed one can be retried.
+   * @param onMissing called when a tile of the world shown answers 404:
+   *   its resolution may have been deleted elsewhere.
    */
   constructor(
     private readonly scene: Scene,
     private readonly makeMaterial: PatchMaterialFactory,
     private readonly onChange: () => void,
+    private readonly onMissing: () => void = () => {},
   ) {}
 
   /**
@@ -420,6 +423,7 @@ export class TileLayer {
         // ancestor for good. A tile the server refuses is not retried.
         const attempts = (this.failed.get(index)?.attempts ?? 0) + 1;
         const delay = retryDelay(attempts, status);
+        if (status === 404) this.onMissing();
         this.failed.set(index, { retryAt: performance.now() + delay, attempts });
         if (Number.isFinite(delay)) {
           const timer = setTimeout(() => {

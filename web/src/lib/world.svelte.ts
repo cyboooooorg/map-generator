@@ -103,6 +103,19 @@ export class LoadedWorld {
   /** Aborts the current load: its downloads and its decoding worker. */
   private controller: AbortController | null = null;
   private epochController: AbortController | null = null;
+  /**
+   * Counts the listings of the sizes asked for (each load, each refresh):
+   * an answer to an older one never overrides a newer one.
+   */
+  private listing = 0;
+  /** Counts the switches: a PUT of the displayed size superseded by a newer switch is skipped. */
+  private switches = 0;
+  /** The PUTs of the displayed size, one after the other, so that they land in order. */
+  private displayedPut: Promise<void> = Promise.resolve();
+  /** The size a switch asked for while its PUT has not landed: loads of the body keep it. */
+  private switchingTo: { id: string; size: string } | null = null;
+  /** The size shown whose missing file was reported (fileMissing): `id size revision`. */
+  private missingChecked: string | null = null;
 
   /**
    * Loads a world, or clears the pane with null. Earlier loads are aborted.
@@ -209,18 +222,40 @@ export class LoadedWorld {
   /**
    * Shows the body loaded at resolution `size` (`WxH`, one on disk) and
    * remembers it as the one displayed, in every browser. Resolves once the
-   * server has remembered it; the maps load meanwhile.
+   * server has remembered it (or a newer switch replaced this one); the
+   * maps load meanwhile. The PUTs go one after the other, so the last
+   * switch is the one remembered.
    */
   async switchSize(size: string): Promise<void> {
     const id = this.id;
-    const present = this.sizes?.present.find((p) => sizeName(p.width, p.height) === size);
-    if (!id || !present) {
-      throw new Error(`${size} is not generated`);
+    if (!id) throw new Error(`${size} is not generated`);
+    const switched = ++this.switches;
+    let present = this.sizes ? findSize(this.sizes, size) : null;
+    if (!present) {
+      // Just generated, and not in the listing yet (a refresh dropped for
+      // a newer one, say): list them again.
+      const listing = ++this.listing;
+      const sizes = await api.sizes(id);
+      if (this.id !== id || switched !== this.switches) return;
+      if (listing === this.listing) this.sizes = sizes;
+      present = findSize(sizes, size);
+      if (!present) throw new Error(`${size} is not generated`);
     }
+    const { width, height } = present;
+    this.switchingTo = { id, size };
     if (size !== this.size) {
       this.loadBody(id, size);
     }
-    await api.setDisplayedSize(id, present.width, present.height);
+    // After the PUTs sent before it; skipped when a newer switch follows.
+    const put = this.displayedPut
+      .then(async () => {
+        if (switched === this.switches) await api.setDisplayedSize(id, width, height);
+      })
+      .finally(() => {
+        if (switched === this.switches) this.switchingTo = null;
+      });
+    this.displayedPut = put.catch(() => undefined);
+    await put;
   }
 
   /**
@@ -231,8 +266,10 @@ export class LoadedWorld {
   async refreshSizes(): Promise<void> {
     const id = this.id;
     if (!id) return;
+    const listing = ++this.listing;
     const sizes = await api.sizes(id);
-    if (this.id !== id) return;
+    // A load or a refresh started meanwhile (a switch, say) knows better.
+    if (this.id !== id || listing !== this.listing) return;
     this.sizes = sizes;
     const shown = this.size;
     if (shown === null) return;
@@ -242,6 +279,21 @@ export class LoadedWorld {
     } else if (present.revision !== this.revision) {
       this.loadBody(id, shown);
     }
+  }
+
+  /**
+   * A file of the resolution shown could not be read (a tile answered 404,
+   * say): the resolution may have been deleted elsewhere. Lists the sizes
+   * again, which loads the displayed one when it is gone; once per
+   * resolution shown, so that files missing for another reason cause no loop.
+   */
+  fileMissing(): void {
+    const { id, size, revision } = this;
+    if (!id || size === null) return;
+    const key = `${id} ${size} ${revision}`;
+    if (this.missingChecked === key) return;
+    this.missingChecked = key;
+    this.refreshSizes().catch((e: unknown) => console.warn('Could not list the resolutions', e));
   }
 
   /**
@@ -261,6 +313,10 @@ export class LoadedWorld {
     const current = () => !signal.aborted;
     // The same body keeps its listing while it loads at another size.
     if (id !== this.id) this.sizes = null;
+    // A switch whose PUT has not landed yet: the listing would still
+    // display the size it left.
+    if (wanted === null && id !== null && this.switchingTo?.id === id) wanted = this.switchingTo.size;
+    const listing = ++this.listing;
     this.id = id;
     this.size = null;
     this.revision = null;
@@ -276,7 +332,7 @@ export class LoadedWorld {
     (async () => {
       const sizes = await api.sizes(id, signal);
       if (!current()) return;
-      this.sizes = sizes;
+      if (listing === this.listing) this.sizes = sizes;
       const shown = (wanted !== null ? findSize(sizes, wanted) : null) ?? displayedSize(sizes);
       if (!shown) throw new Error('no resolution on disk');
       const size = sizeName(shown.width, shown.height);
