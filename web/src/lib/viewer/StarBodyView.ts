@@ -27,6 +27,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { CameraSettling } from './cameraSettling';
 import type { StarActivity } from '../api/types/StarActivity';
 import type { StarInfo } from '../api/types/StarInfo';
 import { CoronalLoops } from './coronalLoops';
@@ -98,6 +99,7 @@ export class StarBodyView {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(40, 1, 0.002, 200);
   private readonly controls: OrbitControls;
+  private readonly settling = new CameraSettling();
   private readonly star: Mesh<SphereGeometry, ShaderMaterial>;
   private readonly surface: StarSurfaceState;
   private readonly glow: Mesh<PlaneGeometry, ShaderMaterial>;
@@ -150,6 +152,9 @@ export class StarBodyView {
       if (this.loop !== null) this.applyPixelRatio(true);
       this.requestRender();
     });
+    // Only frames that follow a drag or a wheel advance the damping (see CameraSettling).
+    this.controls.addEventListener('change', this.settling.mark);
+    this.controls.addEventListener('start', this.settling.mark);
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
     canvas.addEventListener('dblclick', (event) => {
       if (this.onOpenSystem && this.hitsStar(event.clientX, event.clientY)) this.onOpenSystem();
@@ -432,7 +437,7 @@ export class StarBodyView {
     // Close to the surface a drag turns the camera by about what it sees,
     // not by the whole star.
     this.controls.rotateSpeed = Math.min(1, Math.max(0.005, 0.5 * (distance - 1)));
-    const moving = this.controls.update();
+    const moving = this.settling.step(() => this.controls.update());
     // The surface's detail follows the surface's size on screen as the camera zooms.
     this.updateSurface();
     // The corona faces the camera, scaled to the disc as it appears: seen
