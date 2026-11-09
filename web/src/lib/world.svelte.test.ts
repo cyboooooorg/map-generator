@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { System } from './api/types/System';
+import type { WorldMetadata } from './api/types/WorldMetadata';
+import type { WorldStats } from './stats';
 import { LoadedWorld } from './world.svelte';
+
+// A moon's card reads its planet's biome statistics through a worker, which
+// the tests have not: only that call is replaced.
+const { peekStats } = vi.hoisted(() => ({ peekStats: vi.fn() }));
+vi.mock('./layers', async (original) => ({ ...(await original<typeof import('./layers')>()), loadPeekedStats: peekStats }));
 
 const body = (id: string, parent?: string) => ({ id, kind: parent ? 'moon' : 'planet', parent, generated: false });
 const files: Record<string, unknown> = {
@@ -286,5 +294,132 @@ describe('LoadedWorld sizes', () => {
     await settle();
     expect(listings()).toBe(after + 2);
     expect(world.size).toBe('2048x1024');
+  });
+});
+
+const SYSTEM = 'mgs-1-1';
+const planetMeta = { format_version: 99, giant: null, rivers: null } as unknown as WorldMetadata;
+
+function system(generated: Record<string, boolean>): System {
+  return {
+    focus: 'c',
+    bodies: [
+      { id: 'c', kind: 'planet', parent: null, generated: generated['c'] ?? true },
+      { id: 'c-1', kind: 'moon', parent: 'c', generated: generated['c-1'] ?? true },
+    ],
+  } as unknown as System;
+}
+
+const sizes = { original: [256, 128], displayed: [256, 128], present: [{ width: 256, height: 128, revision: 1 }], pending: [] };
+
+/** Answers the sizes and the metadata of the planet `c`; the files of the moon never arrive. */
+function serve(requested: string[], planet = true) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      requested.push(url);
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+      if (url.includes('/bodies/c-1/')) return new Promise<Response>(() => undefined);
+      if (!planet) return json({ error: 'not generated' }, 404);
+      if (url.endsWith('/sizes')) return json(sizes);
+      if (url.includes('world.json')) return json(planetMeta);
+      return new Promise<Response>(() => undefined);
+    }),
+  );
+}
+
+async function settled(until: () => boolean): Promise<void> {
+  for (let i = 0; i < 100 && !until(); i++) await new Promise((r) => setTimeout(r, 5));
+}
+
+
+describe("a moon's card", () => {
+  it("has its planet's metadata when the moon is opened first (a link, or its regeneration)", async () => {
+    const requested: string[] = [];
+    serve(requested);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldMeta !== null);
+    expect(world.worldMeta).toEqual(planetMeta);
+    expect(world.worldId).toBe(`systems/${SYSTEM}/bodies/c`);
+    // The planet is looked at from the moon's view: a peek, not an opening.
+    expect(requested.filter((u) => u.includes('/bodies/c/') && u.includes('world.json')).every((u) => u.includes('peek=1'))).toBe(true);
+  });
+
+  it("keeps its planet's metadata when the planet was shown first", async () => {
+    serve([]);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    const kept = { ...planetMeta, seed: 5 } as unknown as WorldMetadata;
+    world.worldId = `systems/${SYSTEM}/bodies/c`;
+    world.worldMeta = kept;
+    world.showSystemBody('c-1');
+    expect(world.worldMeta).toBe(kept);
+  });
+
+  it('says so when its planet cannot be read, instead of loading for ever', async () => {
+    serve([], false);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldError !== null);
+    expect(world.worldMeta).toBeNull();
+    expect(world.worldError).toContain('c');
+  });
+});
+
+describe("a moon's card biomes", () => {
+  const planetStats = { shares: [], land: 0.3, water: 0.7, surfaceKm2: 5e8 } as unknown as WorldStats;
+  const withBiomes = { ...planetMeta, rivers: 'rivers.json', layers: { biomes: { file: 'biomes.png' } } } as unknown as WorldMetadata;
+
+  function serveBiomes(requested: string[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        requested.push(url);
+        const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+        if (url.includes('/bodies/c-1/')) return new Promise<Response>(() => undefined);
+        if (url.endsWith('/sizes')) return json(sizes);
+        if (url.includes('world.json')) return json(withBiomes);
+        if (url.includes('rivers.json')) return json({ rivers: [] });
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+  }
+
+  it("has its planet's biome statistics when the moon is opened first, read as a peek", async () => {
+    const requested: string[] = [];
+    serveBiomes(requested);
+    peekStats.mockResolvedValueOnce(planetStats);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldStats !== null);
+    expect(world.worldStats).toBe(planetStats);
+    expect(peekStats).toHaveBeenCalledOnce();
+    const url = peekStats.mock.calls[0]![0] as string;
+    expect(url).toContain(`/bodies/c/`);
+    expect(url).toContain('biomes.png');
+    expect(url).toContain('peek=1');
+    expect(requested.filter((u) => u.includes('rivers.json')).every((u) => u.includes('peek=1'))).toBe(true);
+    await settled(() => world.worldRivers !== null);
+    expect(world.worldRivers).not.toBeNull();
+  });
+
+  it('says so when the statistics cannot be read, instead of measuring for ever', async () => {
+    serveBiomes([]);
+    peekStats.mockRejectedValueOnce(new Error('boom'));
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldError !== null);
+    expect(world.worldStats).toBeNull();
+    expect(world.worldError).toContain('boom');
   });
 });

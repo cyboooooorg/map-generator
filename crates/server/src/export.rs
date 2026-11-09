@@ -60,7 +60,7 @@ pub struct SystemExport {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExportGenerator {
-    /// The `mapgen-server` crate version that wrote the export.
+    /// The `mapgen-server` version (crate version and build id) that wrote the export.
     pub version: String,
     /// `system.json` layout of the stored system (`SYSTEM_FORMAT_VERSION`).
     pub system_format_version: u32,
@@ -103,7 +103,8 @@ pub struct ExportBody {
 /// The generator version a body was made with, as the index records it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MadeWith {
-    /// The crate version; `None` for a body found in the tree, made before
+    /// The generator version (crate version and build id, `0.1.0+<sha>`);
+    /// `None` for a body found in the tree, made before
     /// the index recorded it.
     pub version: Option<String>,
     /// `FORMAT_VERSION` of the body's `world.json`.
@@ -216,7 +217,7 @@ fn document(
         schema: EXPORT_SCHEMA,
         exported_at: iso8601_utc(now_ms),
         generator: ExportGenerator {
-            version: env!("CARGO_PKG_VERSION").to_owned(),
+            version: crate::index::GENERATOR_VERSION.to_owned(),
             system_format_version: system.format_version,
         },
         id: id.to_owned(),

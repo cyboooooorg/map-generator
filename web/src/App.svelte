@@ -21,6 +21,8 @@
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { driftRange, driftRequest, formatDrift } from './lib/drift';
+  import { bodyTitle, forgetTold, toTell } from './lib/evicted';
+  import { worldCardOwner } from './lib/moons';
   import { keepAlone, requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
@@ -305,6 +307,8 @@
     const status = job.status;
     void refresh().then(() => {
       if (status.status === 'done') {
+        // The system's evicted bodies are generated again: a later eviction tells again.
+        forgetTold(status.world_id);
         // A body generated in the system shown: load the system again,
         // which keeps the body shown and loads its maps.
         if (status.world_id === selectedId) {
@@ -464,12 +468,22 @@
     }
   }
 
-  /** Queues a body of a system and its neighbourhood, from its card. */
+  /**
+   * Queues a body of a system and its neighbourhood, from its card. (The view of a
+   * body not generated queues itself: see `generateShown` in Viewer.svelte.)
+   */
   async function generateBody(system: string, body: string): Promise<void> {
     try {
       const started = await api.generateBody(system, body);
       if (started.job_id) {
         jobs.track(started.job_id, system, {}, { status: 'queued' }, true);
+      }
+      // Evicted worlds made by an older generator: the user hears it once each.
+      const shown = primary.systemId === system;
+      for (const named of toTell(system, started.regenerated)) {
+        toasts.show(t.app.olderWorld({ body: bodyTitle(shown ? primary.system : null, shown ? primary.systemNames : {}, named) }), {
+          ms: 12000,
+        });
       }
     } catch (e) {
       toasts.error(t.app.failed({ id: titleOf(system) ?? system, error: errorText(e) }));
@@ -499,6 +513,7 @@
 </script>
 
 {#snippet info()}
+  {@const cardOwner = primary.system ? worldCardOwner(primary.system.bodies, primary.systemNames, primary.systemBody) : null}
   {#if primary.system}
     <BodyCard
       world={primary}
@@ -509,7 +524,8 @@
   {#if !primary.system || primary.shownSystemBody?.generated}
     <WorldInfo
       world={primary}
-      title={primary.shownSystemBody ? (primary.systemNames[primary.shownSystemBody.id] ?? primary.shownSystemBody.designation) : null}
+      title={cardOwner?.planet ?? null}
+      ofMoon={cardOwner?.ofMoon ?? false}
       revision={revision(selectedId)}
       onVary={() => primary.meta && openForm('around', keepAlone(requestFromWorld(primary.meta), primary.system), primary.id)}
       onReroll={reroll}

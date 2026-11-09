@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bodyPath } from './api/client';
-import { bodyFileName, moonChoiceOf, moonsOf, moonsRequest, parseMoonChoice } from './moons';
+import { bodyFileName, moonChoiceOf, moonsOf, moonsRequest, parseMoonChoice, worldCardOwner } from './moons';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 
 describe('moons', () => {
@@ -24,5 +24,22 @@ describe('moons', () => {
     expect(moonChoiceOf({ count: 2 })).toBe(2);
     expect(parseMoonChoice(4, 6)).toBe(4);
     expect(parseMoonChoice(0, 6)).toBe('auto');
+  });
+});
+
+describe('the world card of a body shown', () => {
+  const bodies = [
+    { id: 'f', designation: 'MGS 77749 f', parent: null },
+    { id: 'f-2', designation: 'MGS 77749 f II', parent: 'f' },
+  ];
+  it('names a planet with its own name', () => {
+    expect(worldCardOwner(bodies, { f: 'Gaia' }, 'f')).toEqual({ planet: 'Gaia', ofMoon: false });
+  });
+  it('names the planet, not the moon, for a moon: the card holds the planet’s data', () => {
+    expect(worldCardOwner(bodies, {}, 'f-2')).toEqual({ planet: 'MGS 77749 f', ofMoon: true });
+    expect(worldCardOwner(bodies, { f: 'Gaia', 'f-2': 'Luna' }, 'f-2')).toEqual({ planet: 'Gaia', ofMoon: true });
+  });
+  it('has no owner when no body is shown', () => {
+    expect(worldCardOwner(bodies, {}, null)).toBeNull();
   });
 });

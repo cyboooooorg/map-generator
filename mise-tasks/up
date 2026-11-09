@@ -13,6 +13,11 @@ HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 export HOST_UID HOST_GID
 
+# The commit the image is built from: the generator version recorded with each
+# body (empty outside git: the version is then the bare crate version)
+GIT_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+export GIT_SHA
+
 # Bind mount sources: create them as the host user, not as root by Docker
 mkdir -p worlds systems db
 

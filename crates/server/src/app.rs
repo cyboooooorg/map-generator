@@ -7,7 +7,7 @@
 //! | `GET /api/form`                 | parameter limits, defaults and map sizes          |
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
-//! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
+//! | `GET /api/systems/{id}`         | a system (`system.json`), the names given and the bodies evicted (`evicted`, see [`evict`]) |
 //! | `DELETE /api/systems/{id}`      | delete a system (409 while it or a resolution of a body is being generated) |
 //! | `GET /api/systems/{id}/export`  | a `.zip` of the system: `system.json` (seeds, requests, names, generator versions; see `crate::export`) and the PNGs of its generated bodies |
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
@@ -15,8 +15,8 @@
 //! | `PUT /api/systems/{id}/pin`     | pin it in the main menu (idempotent, answers its summary) |
 //! | `DELETE /api/systems/{id}/pin`  | unpin it (idempotent, answers its summary)         |
 //! | `PUT /api/systems/{id}/bodies/{body}/name` | name one body, the other names kept (`SystemName`; null clears) |
-//! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
-//! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body; `?size=<W>x<H>` picks a resolution (tiles, epoch, hex; default the displayed one, 404 when not generated, 400 for a bad name); the thumb is the original's |
+//! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`; `regenerated` names each evicted body of the family the job makes again that another generator made; an evicted body also comes back at its displayed size, its neighbours at their original one) |
+//! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body; `?size=<W>x<H>` picks a resolution (tiles, epoch, hex; default the displayed one, 404 when not generated, 400 for a bad name); the thumb is the original's, and an evicted body still answers it from its kept `thumb.png` (404 when it has none) |
 //! | `GET /api/systems/{id}/bodies/{body}/sizes` | its resolutions: original, displayed, present, pending, offered (`BodySizes`; 404 when not generated) |
 //! | `POST /api/systems/{id}/bodies/{body}/sizes/{W}x{H}` | queue that resolution (`GenerateStarted`: no job when present, the pending job when queued; the server marks it displayed when the job is done; 400 `size_not_offered` or `too_many_pixels`) |
 //! | `DELETE /api/systems/{id}/bodies/{body}/sizes/{W}x{H}` | delete an added resolution, its cached world and previews (204; 409 `original_size` or `being_generated`; 404 `size_not_generated`) |
@@ -36,12 +36,13 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted, HexRequest,
-    JobInfo, JobStatus, ParamSpec, PendingSize, PresentSize, PresetInfo, SystemCreated,
-    SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
+    ApiError, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted, GeneratorNote,
+    HexRequest, JobInfo, JobStatus, ParamSpec, PendingSize, PresentSize, PresetInfo,
+    RegeneratedBody, SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery,
+    SystemSummary,
 };
 use crate::catalog::Catalog;
-use crate::index::{Cause, Index};
+use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
 use crate::memory;
 use crate::previews::{PreviewCache, PreviewKey};
 use crate::systems;
@@ -69,6 +70,8 @@ use tower_http::compression::{CompressionLayer, CompressionLevel};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 
+pub mod evict;
+
 /// Largest map side the server accepts.
 pub const MAX_SIZE: u32 = 8192;
 /// Default largest map the server accepts, in pixels (8192 × 4096). A
@@ -77,6 +80,8 @@ pub const MAX_SIZE: u32 = 8192;
 /// 4096): keep the limit under the memory the server can use, or it gets
 /// killed mid-job.
 pub const DEFAULT_MAX_PIXELS: u64 = 8192 * 4096;
+/// Default days a body can stay unopened before its files are evicted.
+pub const DEFAULT_EVICT_AFTER_DAYS: u64 = 14;
 /// Peak generation memory per pixel, for the error message.
 const BYTES_PER_PIXEL: u64 = 70;
 /// Finished jobs kept for `GET /api/jobs`; older ones are forgotten.
@@ -138,6 +143,9 @@ pub struct Config {
     /// (`MAPGEN_NOISE_MAPS`); off by default. `world.svg` is never written
     /// by the server, see [`system_svg`].
     pub noise_maps: bool,
+    /// Days a body can stay unopened before its generated files are
+    /// evicted (`MAPGEN_EVICT_AFTER_DAYS`, see [`evict`]); 0 never evicts.
+    pub evict_after_days: u64,
 }
 
 pub struct AppState {
@@ -230,7 +238,9 @@ fn world_failure(error: TileError, what: &str) -> Response {
 }
 
 pub fn router(config: Config) -> Router {
-    routes(new_state(&config), &config)
+    let state = new_state(&config);
+    evict::spawn_sweeps(state.clone());
+    routes(state, &config)
 }
 
 /// The server's state: the tree swept, the index opened and reconciled.
@@ -408,9 +418,12 @@ fn note_opened(state: &Shared, system: &str, body: &str) {
     }
 }
 
-/// Records, from a request for a file under `/systems/<id>/bodies/<body>/`
-/// (thumbnails excepted: the library asks for all of them), that the body
-/// was opened.
+/// Records, from a request for a file under `/systems/<id>/bodies/<body>/`,
+/// that the body was opened. Not recorded: the thumbnails (the library asks
+/// for all of them) and any request with `?peek=1`, which the viewer adds
+/// when it takes a body's textures for the sky or the markers of another
+/// body's view (see `peeked` in `web/src/lib/api/client.ts`): looking at a body from
+/// elsewhere is not opening it.
 async fn note_served(
     State(state): State<Shared>,
     request: axum::extract::Request,
@@ -420,12 +433,18 @@ async fn note_served(
     let parts: Vec<&str> = path.split('/').skip(1).collect();
     if let ["systems", id, "bodies", body, file, ..] = parts.as_slice()
         && *file != "thumb.png"
+        && !is_peek(request.uri().query())
         && systems::is_valid_system_id(id)
         && systems::is_valid_body_id(body)
     {
         note_opened(&state, id, body);
     }
     next.run(request).await
+}
+
+/// Whether a query string says `peek=1`: the request does not open the body.
+fn is_peek(query: Option<&str>) -> bool {
+    query.is_some_and(|q| q.split('&').any(|pair| pair == "peek=1"))
 }
 
 /// Whether an answer is worth compressing: text formats only. PNG images
@@ -491,6 +510,40 @@ fn bad(message: String) -> Failure {
 /// ids): a system cannot be deleted, renamed away or replaced meanwhile.
 fn pending_system(id: &str) -> String {
     format!("systems/{id}")
+}
+
+/// System `id` held for a change of its directory (delete, replace): its
+/// pending key is in the list until the guard is dropped, so no job starts
+/// and no eviction (`evict::evict_body`, which checks the list under the
+/// same lock) touches the system meanwhile.
+struct SystemHold {
+    state: Shared,
+    key: String,
+}
+
+impl Drop for SystemHold {
+    fn drop(&mut self) {
+        let mut pending = self.state.pending.lock().expect("pending lock");
+        if let Some(at) = pending.iter().position(|k| *k == self.key) {
+            pending.remove(at);
+        }
+    }
+}
+
+/// Holds system `id` (see [`SystemHold`]); `None` when it has a generation
+/// queued or running, or is held already. The check and the claim are one
+/// step under the pending list's lock.
+fn hold_system(state: &Shared, id: &str) -> Option<SystemHold> {
+    let mut pending = state.pending.lock().expect("pending lock");
+    if system_is_pending(&pending, id) {
+        return None;
+    }
+    let key = pending_system(id);
+    pending.push(key.clone());
+    Some(SystemHold {
+        state: state.clone(),
+        key,
+    })
 }
 
 /// The key a resolution being added to a body takes in the list of
@@ -603,7 +656,9 @@ async fn create_system(
         .into());
     }
     let replace = query.replace.unwrap_or(false);
-    if system_is_pending(&state.pending.lock().expect("pending lock"), &id) {
+    // Held until the files are in place: nothing else touches the system
+    // directory meanwhile (a job, a deletion, an eviction).
+    let Some(hold) = hold_system(&state, &id) else {
         return Err(Rejection(
             Failure(
                 StatusCode::CONFLICT,
@@ -611,7 +666,7 @@ async fn create_system(
             ),
             Some(ErrorDetail::BeingGenerated { world: id }),
         ));
-    }
+    };
     let root = state.config.systems_dir.clone();
     let target = systems::system_dir(&root, &id);
     if !replace && target.exists() {
@@ -659,6 +714,8 @@ async fn create_system(
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     state.tiles.forget(&format!("systems/{id}"));
     state.originals.forget(&id);
+    // The first job claims the system's key itself.
+    drop(hold);
     let job_id = match &request {
         mapgen::system::SystemRequest::Around(_) => first_body_job(&state, &id).await?,
         mapgen::system::SystemRequest::System(_) => None,
@@ -730,6 +787,7 @@ async fn get_system(
         Ok::<_, String>(SystemDetail {
             system,
             names: index.names(&owned).unwrap_or_default(),
+            evicted: index.evicted_bodies(&owned).unwrap_or_default(),
         })
     })
     .await
@@ -761,12 +819,14 @@ async fn delete_system(
     if !systems::is_valid_system_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
     }
-    if system_is_pending(&state.pending.lock().expect("pending lock"), &id) {
+    // Held until the directory and the index rows are gone: an eviction
+    // or a job cannot recreate `system.json` in between.
+    let Some(_hold) = hold_system(&state, &id) else {
         return Err(Failure(
             StatusCode::CONFLICT,
             format!("system {id} is being generated: cancel its job first"),
         ));
-    }
+    };
     let dir = systems::system_dir(&state.config.systems_dir, &id);
     if !dir.is_dir() {
         return Err(Failure(StatusCode::NOT_FOUND, format!("no system {id}")));
@@ -982,9 +1042,26 @@ async fn system_thumbnail(
 ) -> Result<Response, Failure> {
     // Made from the original resolution, whichever one is displayed.
     let original = original_size(&state, &id, &body).await?;
-    let loc = system_body_loc(&state, &id, &body, Some(original)).await?;
     let thumb_dir = systems::body_dir(&state.config.systems_dir, &id, &body);
-    body_thumbnail(state, loc, &thumb_dir, query).await
+    match system_body_loc(&state, &id, &body, Some(original)).await {
+        Ok(loc) => body_thumbnail(state, loc, &thumb_dir, query).await,
+        // An evicted body keeps its thumbnail (see [`evict`]), so that
+        // its card still looks right.
+        Err(Failure(StatusCode::NOT_FOUND, message)) => {
+            match tokio::fs::read(thumb_dir.join(mapgen::export::thumbnail::THUMB_FILE)).await {
+                Ok(png) => Ok((
+                    [
+                        (header::CONTENT_TYPE, "image/png"),
+                        (header::CACHE_CONTROL, "no-cache"),
+                    ],
+                    png,
+                )
+                    .into_response()),
+                Err(_) => Err(Failure(StatusCode::NOT_FOUND, message)),
+            }
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Draws the `world.svg` of a body and sends it as a download
@@ -1061,8 +1138,17 @@ async fn generate_body(
     if !systems::is_valid_system_id(&id) || !systems::is_valid_body_id(&body) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid body".into()).into());
     }
-    let job_id = queue_body(&state, &id, &body).await?;
-    Ok(Json(GenerateStarted { job_id }))
+    let queued = queue_body_job(&state, &id, &body).await?;
+    Ok(Json(match queued {
+        Some(q) => GenerateStarted {
+            job_id: Some(q.job_id),
+            regenerated: q.regenerated,
+        },
+        None => GenerateStarted {
+            job_id: None,
+            regenerated: Vec::new(),
+        },
+    }))
 }
 
 /// The resolution a path segment names (`2048x1024`): 400 otherwise.
@@ -1161,7 +1247,10 @@ async fn generate_size(
     let size = path_size(&size)?;
     let original = generated_original(&state, &id, &body).await?;
     if size == original {
-        return Ok(Json(GenerateStarted { job_id: None }));
+        return Ok(Json(GenerateStarted {
+            job_id: None,
+            regenerated: Vec::new(),
+        }));
     }
     let (task_state, system, owned) = (state.clone(), id.clone(), body.clone());
     let job_id =
@@ -1169,7 +1258,10 @@ async fn generate_size(
             .await
             .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
     note_opened(&state, &id, &body);
-    Ok(Json(GenerateStarted { job_id }))
+    Ok(Json(GenerateStarted {
+        job_id,
+        regenerated: Vec::new(),
+    }))
 }
 
 /// Under the pending list's lock (so that a size is never both deleted
@@ -1848,6 +1940,25 @@ async fn body_hex(state: Shared, loc: BodyLoc, request: HexRequest) -> Result<Re
 /// they are all generated, the job already queued when the system has one
 /// (a system generates one job at a time).
 async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<String>, Rejection> {
+    Ok(queue_body_job(state, id, body).await?.map(|q| q.job_id))
+}
+
+/// The job [`queue_body_job`] answers.
+struct QueuedBody {
+    job_id: String,
+    /// The bodies of the family the job makes again that another
+    /// generator made, read before the job could make them (once it is
+    /// done they are generated, and nothing is said). Empty when the job
+    /// answered is another family's, which leaves `body` alone.
+    regenerated: Vec<RegeneratedBody>,
+}
+
+/// [`queue_body`], saying whether the job answered is for `body` itself.
+async fn queue_body_job(
+    state: &Shared,
+    id: &str,
+    body: &str,
+) -> Result<Option<QueuedBody>, Rejection> {
     let dir = systems::system_dir(&state.config.systems_dir, id);
     let read = dir.clone();
     let system = tokio::task::spawn_blocking(move || mapgen::system::read_system(&read))
@@ -1862,11 +1973,25 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         .into());
     }
     note_opened(state, id, body);
+    // Before the job: once it is made the bodies are generated, and
+    // nothing is said. While it runs they are still evicted, so every
+    // request for the family says it.
+    let regenerated = older_evicted(state, id, mapgen::system::family(&system, body)).await;
     let key = pending_system(id);
     let job = {
         let mut pending = state.pending.lock().expect("pending lock");
         if pending.contains(&key) {
-            return Ok(unfinished_job(state, id, None, None));
+            return Ok(unfinished_system_job(state, id).map(|(job_id, job_body)| {
+                // The job's family: it made the bodies it was started for
+                // already marked generated in `system.json` too.
+                let own = mapgen::system::family(&system, &job_body)
+                    .iter()
+                    .any(|b| b == body);
+                QueuedBody {
+                    job_id,
+                    regenerated: if own { regenerated } else { Vec::new() },
+                }
+            }));
         }
         if mapgen::system::neighbourhood(&system, body).is_empty() {
             return Ok(None);
@@ -1875,7 +2000,40 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         let job = register_job(state, id, body, None);
         start_job(state, key, job)
     };
-    Ok(Some(job))
+    Ok(Some(QueuedBody {
+        job_id: job,
+        regenerated,
+    }))
+}
+
+/// Of `bodies` of system `id`, those evicted whose generator is not the
+/// current one, with what made them.
+async fn older_evicted(state: &Shared, id: &str, bodies: Vec<String>) -> Vec<RegeneratedBody> {
+    let (index, system) = (state.index.clone(), id.to_string());
+    tokio::task::spawn_blocking(move || {
+        bodies
+            .into_iter()
+            .filter_map(|body| {
+                let old = index
+                    .evicted_generator(&system, &body)
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("generator of {system}/{body} not read: {e}");
+                        None
+                    })?;
+                old.differs_from_current().then(|| RegeneratedBody {
+                    body,
+                    from: GeneratorNote {
+                        version: old.version,
+                        format: old.format,
+                        current_version: GENERATOR_VERSION.to_string(),
+                        current_format: GENERATOR_FORMAT,
+                    },
+                })
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// The id of the unfinished job of system `id` generating `size` of
@@ -1896,6 +2054,17 @@ fn unfinished_job(
                 && !job.status.borrow().is_finished()
         })
         .map(|(job_id, _)| job_id.clone())
+}
+
+/// The unfinished job of system `id` for a body and its neighbourhood (not
+/// a resolution): its id and the body it was asked for.
+fn unfinished_system_job(state: &AppState, id: &str) -> Option<(String, String)> {
+    let jobs = state.jobs.lock().expect("jobs lock");
+    jobs.iter().find_map(|(job_id, job)| {
+        let (system, body) = job.system.as_ref()?;
+        (system == id && job.size.is_none() && !job.status.borrow().is_finished())
+            .then(|| (job_id.clone(), body.clone()))
+    })
 }
 
 /// A job listed (see [`register_job`]), not started yet.
@@ -2056,6 +2225,8 @@ fn start_job(state: &Shared, key: String, job: NewJob) -> String {
             svg: false,
             noise_maps: task_state.config.noise_maps,
         };
+        let index = task_state.index.clone();
+        let task_system_id = task_system.clone();
         let result = tokio::task::spawn_blocking(move || {
             let report = |p: mapgen::system::BodyProgress| {
                 // A cancelled job stops when the next stage starts; the
@@ -2079,6 +2250,11 @@ fn start_job(state: &Shared, key: String, job: NewJob) -> String {
                         .map(|()| vec![body.clone()])
                 }
                 None => {
+                    // Bodies that were evicted coming back do not move the
+                    // system in the library; put back when this ends,
+                    // however it ends.
+                    let _date =
+                        evict::KeptDate::when_only_restoring(&index, &dir, &task_system_id, &body);
                     mapgen::system::generate_neighbourhood_with(&dir, &body, diagnostics, report)
                 }
             }
@@ -2116,9 +2292,50 @@ fn start_job(state: &Shared, key: String, job: NewJob) -> String {
         let _ = tokio::task::spawn_blocking(memory::release).await;
         drop(paused_tiles);
         store(Some(status.clone())).await;
+        // The body asked for, made again after an eviction, comes back at
+        // the resolution it was displayed at, not only at its original.
+        // Its neighbours (moons, giant, siblings) made by the same job stay
+        // at their original size: nobody opened them.
+        let reopened = matches!(
+            (&status, size),
+            (JobStatus::Done { bodies, .. }, None) if bodies.contains(&task_body)
+        );
         finish(status);
+        if reopened {
+            let (state, system, opened) =
+                (task_state.clone(), task_system.clone(), task_body.clone());
+            let _ = tokio::task::spawn_blocking(move || {
+                regenerate_displayed_size(&state, &system, &opened);
+            })
+            .await;
+        }
     });
     job_id
+}
+
+/// Queues the displayed resolution of `body` when the index remembers one
+/// that is not on disk and not the original: a body generated again after
+/// its eviction (see [`evict`]) comes back at the size it was shown at.
+/// The job marks it displayed when it is done. Blocking; runs inside the
+/// runtime (it spawns the job's task).
+fn regenerate_displayed_size(state: &Shared, id: &str, body: &str) {
+    let root = &state.config.systems_dir;
+    let remembered = state.index.displayed_size(id, body).unwrap_or_else(|e| {
+        tracing::warn!("displayed size of {id}/{body} not read: {e}");
+        None
+    });
+    let Some(size) = remembered else {
+        return;
+    };
+    if systems::size_revision(root, id, body, size).is_some() {
+        return;
+    }
+    if let Err(Rejection(Failure(_, error), _)) = claim_size(state, id, body, size) {
+        tracing::warn!(
+            "{id}/{body} not generated again at {}: {error}",
+            mapgen::sizes::size_name(size.0, size.1)
+        );
+    }
 }
 
 /// Drops the oldest finished jobs beyond [`FINISHED_JOBS_KEPT`].
@@ -2248,6 +2465,7 @@ mod tests {
             max_pixels: DEFAULT_MAX_PIXELS,
             tile_cache_bytes: tiles::DEFAULT_BUDGET_BYTES,
             noise_maps: false,
+            evict_after_days: 0,
         }
     }
 
@@ -2857,6 +3075,827 @@ mod tests {
         let (status, body) = call(&tight, "POST", &post, None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert_eq!(json(&body)["detail"]["code"], "too_many_pixels");
+    }
+
+    /// A state and its routes (eviction off), with a generated planet:
+    /// the system's id and the planet's body id.
+    async fn evictable(name: &str, seed: u64) -> (Config, Shared, Router, String, String) {
+        let config = temp_config(name);
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (id, planet) = generated_planet(&app, "barren", seed, "").await;
+        wait_released(&state).await;
+        (config, state, app, id, planet)
+    }
+
+    fn json(text: &str) -> serde_json::Value {
+        serde_json::from_str(text).unwrap()
+    }
+
+    /// Waits until the body shown at `size` is listed as displayed: up to
+    /// three minutes, since it takes a regeneration and then a second job at
+    /// that size, which a shared CI runner can take well over 30 s to run.
+    async fn wait_displayed(app: &Router, base: &str, size: [u64; 2]) -> serde_json::Value {
+        for _ in 0..9000 {
+            let (status, body) = call(app, "GET", &format!("{base}/sizes"), None).await;
+            if status == StatusCode::OK && json(&body)["displayed"] == serde_json::json!(size) {
+                return json(&body);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("{base} never displayed at {size:?}");
+    }
+
+    #[tokio::test]
+    async fn eviction_deletes_every_size_and_keeps_the_rest() {
+        let (config, state, app, id, planet) = evictable("evict", 21).await;
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        let body_dir = systems::body_dir(&config.systems_dir, &id, &planet);
+        // A second size (displayed once done), a name and a pin.
+        let (_, started) = call(&app, "POST", &format!("{base}/sizes/1024x512"), None).await;
+        wait_job(&app, &started).await;
+        wait_released(&state).await;
+        let (status, _) = call(
+            &app,
+            "PUT",
+            &format!("{base}/name"),
+            Some(r#"{"name": "Gaia"}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let pin = format!("/api/systems/{id}/pin");
+        assert_eq!(call(&app, "PUT", &pin, None).await.0, StatusCode::OK);
+        let seed = state.index.regeneration_of(&id, &planet).unwrap();
+        assert!(seed.is_some());
+        let thumb = std::fs::read(body_dir.join("thumb.png")).unwrap();
+
+        let freed = evict::evict_body(&state, &id, &planet).unwrap();
+        assert_eq!(freed.sizes, 2, "the original and the added size");
+        assert!(freed.bytes > 0);
+
+        // Every generated file is gone, nothing is left aside; the thumbnail stays.
+        assert!(!body_dir.join("sizes").exists());
+        assert_eq!(std::fs::read(body_dir.join("thumb.png")).unwrap(), thumb);
+        let aside: Vec<_> = std::fs::read_dir(body_dir.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(aside, std::slice::from_ref(&planet), "no .tmp-evict left");
+        // system.json stays, the body marked not generated.
+        let system =
+            mapgen::system::read_system(&systems::system_dir(&config.systems_dir, &id)).unwrap();
+        assert!(
+            !system
+                .bodies
+                .iter()
+                .find(|b| b.id == planet)
+                .unwrap()
+                .generated
+        );
+        // The index keeps its rows: seed and parameters, displayed size, name, pin.
+        assert_eq!(state.index.regeneration_of(&id, &planet).unwrap(), seed);
+        assert_eq!(
+            state.index.displayed_size(&id, &planet).unwrap(),
+            Some((1024, 512))
+        );
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list = json(&list);
+        assert_eq!(list[0]["names"][&planet], "Gaia");
+        assert_eq!(list[0]["pinned"], true);
+        // Not generated in the library, listed as evicted in the system view.
+        assert_eq!(list[0]["bodies"][0]["generated"], false);
+        let (_, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(json(&detail)["evicted"], serde_json::json!([planet]));
+        // The view has nothing to show, the card still has its thumbnail.
+        assert_eq!(
+            call(&app, "GET", &format!("{base}/sizes"), None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        let request = Request::get(format!("{base}/thumb"))
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(bytes.as_ref(), thumb.as_slice());
+        // Evicting again is not an error.
+        assert_eq!(
+            evict::evict_body(&state, &id, &planet).unwrap(),
+            evict::Evicted::default()
+        );
+        // A body the system does not have.
+        assert!(matches!(
+            evict::evict_body(&state, &id, "zz"),
+            Err(evict::EvictError::Unknown(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_body_with_a_pending_job_is_not_evicted() {
+        let (config, state, _app, id, planet) = evictable("evict-pending", 22).await;
+        let sizes = systems::body_dir(&config.systems_dir, &id, &planet).join("sizes");
+        for key in [pending_size(&id, &planet, (1024, 512)), pending_system(&id)] {
+            state.pending.lock().unwrap().push(key.clone());
+            assert_eq!(
+                evict::evict_body(&state, &id, &planet),
+                Err(evict::EvictError::Pending)
+            );
+            assert!(sizes.is_dir(), "{key}: files untouched");
+            assert!(state.index.generator_of(&id, &planet).unwrap().is_some());
+            state.pending.lock().unwrap().retain(|k| *k != key);
+        }
+        assert_eq!(evict::evict_body(&state, &id, &planet).unwrap().sizes, 1);
+    }
+
+    #[tokio::test]
+    async fn eviction_takes_the_lock_that_job_starts_take() {
+        let (config, state, _app, id, planet) = evictable("evict-lock", 23).await;
+        let sizes = systems::body_dir(&config.systems_dir, &id, &planet).join("sizes");
+        // A job start holds the lock while it claims its key: an eviction
+        // meanwhile waits, and finds the key when it gets the lock.
+        let held = state.pending.lock().unwrap();
+        let task = {
+            let (state, id, planet) = (state.clone(), id.clone(), planet.clone());
+            std::thread::spawn(move || evict::evict_body(&state, &id, &planet))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(!task.is_finished(), "waits for the lock");
+        assert!(sizes.is_dir());
+        let mut held = held;
+        held.push(pending_size(&id, &planet, (1024, 512)));
+        drop(held);
+        assert_eq!(task.join().unwrap(), Err(evict::EvictError::Pending));
+        assert!(sizes.is_dir());
+    }
+
+    /// Dates `world.json` of the original resolution of a body, as if the
+    /// body had been generated `days` days ago.
+    fn age_body(config: &Config, id: &str, body: &str, days: u64) {
+        let dir =
+            mapgen::sizes::size_dir(&systems::body_dir(&config.systems_dir, id, body), 256, 128);
+        let file = std::fs::File::options()
+            .write(true)
+            .open(dir.join("raw_data/world.json"))
+            .unwrap();
+        file.set_modified(
+            std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400),
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_sweep_evicts_only_the_bodies_past_the_threshold() {
+        let config = temp_config("evict-sweep");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let mut bodies = Vec::new();
+        for seed in [31, 32, 33, 34] {
+            bodies.push(generated_planet(&app, "barren", seed, "").await);
+            wait_released(&state).await;
+        }
+        let [(a, a_body), (b, b_body), (c, c_body), (d, d_body)] = &bodies[..] else {
+            unreachable!()
+        };
+        let day = 86_400_000;
+        let now = crate::index::now_ms();
+        // a: opened 20 days ago. b: opened yesterday. c: never opened, generated
+        // 20 days ago. d: never opened, generated just now.
+        for (system, body, days) in [(a, a_body, 20), (b, b_body, 20), (c, c_body, 20)] {
+            age_body(&config, system, body, days);
+        }
+        state.index.write_opened(a, a_body, now - 20 * day).unwrap();
+        state.index.write_opened(b, b_body, now - day).unwrap();
+        // Written by a blocking task, a moment after the request.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let generated = |system: &String, body: &String| {
+            state.index.generator_of(system, body).unwrap().is_some()
+        };
+        for (system, body) in [(c, c_body), (d, d_body)] {
+            state.index.clear_opened(system, body).unwrap();
+        }
+
+        // 0 turns it off, whatever the dates.
+        let off = evict::sweep_unopened(&state, now, 0);
+        assert_eq!(off, evict::SweepReport::default());
+        assert!(bodies.iter().all(|(s, b)| generated(s, b)));
+
+        let report = evict::sweep_unopened(&state, now, 14);
+        assert_eq!(report.evicted, 2, "{report:?}");
+        assert!(report.bytes > 0);
+        assert_eq!((report.busy, report.failed), (0, 0));
+        assert!(!generated(a, a_body), "opened 20 days ago");
+        assert!(generated(b, b_body), "opened yesterday");
+        assert!(!generated(c, c_body), "never opened, generated 20 days ago");
+        assert!(generated(d, d_body), "never opened, generated just now");
+        // Nothing left to evict; a longer wait evicts the rest.
+        assert_eq!(evict::sweep_unopened(&state, now, 14).evicted, 0);
+        assert_eq!(evict::sweep_unopened(&state, now + 30 * day, 14).evicted, 2);
+    }
+
+    #[tokio::test]
+    async fn the_sweep_leaves_a_body_with_a_job_pending() {
+        let (config, state, _app, id, planet) = evictable("evict-sweep-busy", 35).await;
+        age_body(&config, &id, &planet, 40);
+        state.index.write_opened(&id, &planet, 1).unwrap();
+        state.pending.lock().unwrap().push(pending_system(&id));
+        let report = evict::sweep_unopened(&state, crate::index::now_ms(), 14);
+        assert_eq!((report.evicted, report.busy), (0, 1));
+        assert!(state.index.generator_of(&id, &planet).unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn opening_an_evicted_body_queues_it_at_its_displayed_size() {
+        let (config, state, app, id, planet) = evictable("evict-reopen", 41).await;
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        let sizes = systems::body_dir(&config.systems_dir, &id, &planet).join("sizes");
+        // Displayed at 1024x512 when it is evicted ...
+        let (_, started) = call(&app, "POST", &format!("{base}/sizes/1024x512"), None).await;
+        wait_job(&app, &started).await;
+        wait_released(&state).await;
+        evict::evict_body(&state, &id, &planet).unwrap();
+        // ... a listing or a card does not queue it ...
+        call(&app, "GET", "/api/systems", None).await;
+        call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        call(&app, "GET", &format!("{base}/thumb"), None).await;
+        assert!(state.pending.lock().unwrap().is_empty());
+        assert!(!sizes.exists());
+        // ... opening its view does, and the generator is the current one.
+        let (status, body) = call(&app, "POST", &format!("{base}/generate"), None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let started = json(&body);
+        assert!(started["job_id"].is_string(), "{body}");
+        assert_eq!(started["regenerated"], serde_json::json!([]), "{body}");
+        let listed = wait_displayed(&app, &base, [1024, 512]).await;
+        let present: Vec<[u64; 2]> = listed["present"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| [p["width"].as_u64().unwrap(), p["height"].as_u64().unwrap()])
+            .collect();
+        assert_eq!(present, [[256, 128], [1024, 512]]);
+        wait_released(&state).await;
+        let (_, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(json(&detail)["evicted"], serde_json::json!([]));
+        let generator = state.index.generator_of(&id, &planet).unwrap().unwrap();
+        assert_eq!(generator.version.as_deref(), Some(GENERATOR_VERSION));
+
+        // With no displayed size recorded, the original size alone.
+        let (id, planet) = generated_planet(&app, "barren", 42, "").await;
+        wait_released(&state).await;
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        evict::evict_body(&state, &id, &planet).unwrap();
+        assert_eq!(state.index.displayed_size(&id, &planet).unwrap(), None);
+        let (_, body) = call(&app, "POST", &format!("{base}/generate"), None).await;
+        wait_job(&app, &body).await;
+        wait_released(&state).await;
+        let (_, listed) = call(&app, "GET", &format!("{base}/sizes"), None).await;
+        let listed = json(&listed);
+        assert_eq!(listed["displayed"], serde_json::json!([256, 128]));
+        assert_eq!(listed["present"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn only_opening_a_body_marks_it_opened() {
+        let (config, _state, _app, id, planet) = evictable("evict-opened", 61).await;
+        // A fresh state: no date written lately, whatever the generation did.
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        state.index.clear_opened(&id, &planet).unwrap();
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        // The library, a system, a card and its thumbnail, the resolutions
+        // listed: nobody looks at the body.
+        for uri in [
+            "/api/systems".to_string(),
+            format!("/api/systems/{id}"),
+            format!("{base}/thumb"),
+            format!("/systems/{id}/bodies/{planet}/thumb.png"),
+            format!("{base}/sizes"),
+            format!("/systems/{id}/system.json"),
+        ] {
+            assert_eq!(
+                call(&app, "GET", &uri, None).await.0,
+                StatusCode::OK,
+                "{uri}"
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(state.index.last_opened(&id, &planet).unwrap(), None);
+        // Another body's sky and the star view's markers take its textures
+        // with `?peek=1`: seen from elsewhere, not opened.
+        let file = format!("/systems/{id}/bodies/{planet}/sizes/256x128/raw_data/world.json");
+        for uri in [
+            format!("{file}?peek=1"),
+            format!("{file}?v=3&peek=1"),
+            format!("/systems/{id}/bodies/{planet}/sizes/256x128/raw_data/colour_small.png?peek=1"),
+        ] {
+            let status = call(&app, "GET", &uri, None).await.0;
+            assert!(
+                status == StatusCode::OK || status == StatusCode::NOT_FOUND,
+                "{uri}"
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(
+            state.index.last_opened(&id, &planet).unwrap(),
+            None,
+            "peeked"
+        );
+        // `peek=10` or `unpeek=1` is not the flag.
+        assert!(!is_peek(Some("peek=10")) && !is_peek(Some("unpeek=1")) && !is_peek(None));
+        // Its view loads its files: opened.
+        assert_eq!(call(&app, "GET", &file, None).await.0, StatusCode::OK);
+        for _ in 0..100 {
+            if state.index.last_opened(&id, &planet).unwrap().is_some() {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("not marked opened");
+    }
+
+    /// A generator version that is not the current one: another build of
+    /// the same crate version when the build has an id, else another crate
+    /// version.
+    fn older_build() -> String {
+        match GENERATOR_VERSION.split_once('+') {
+            Some((crate_version, _)) => format!("{crate_version}+deadbeef0000"),
+            None => "0.0.1".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_api_says_when_an_older_world_is_made_again() {
+        let (_config, state, app, id, planet) = evictable("evict-notice", 51).await;
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        // Made by another build (an older one), then evicted.
+        let older = older_build();
+        state
+            .index
+            .set_generator(&id, &planet, Some(&older), Some(1))
+            .unwrap();
+        evict::evict_body(&state, &id, &planet).unwrap();
+        let (_, body) = call(&app, "POST", &format!("{base}/generate"), None).await;
+        let started = json(&body);
+        let regenerated = &started["regenerated"];
+        assert_eq!(regenerated.as_array().unwrap().len(), 1, "{body}");
+        assert_eq!(regenerated[0]["body"], planet.as_str());
+        let note = &regenerated[0]["from"];
+        assert!(started["job_id"].is_string(), "{body}");
+        assert_eq!(note["version"], older.as_str());
+        assert_eq!(note["format"], 1);
+        assert_eq!(note["current_version"], GENERATOR_VERSION);
+        assert_eq!(note["current_format"], GENERATOR_FORMAT);
+        // Said again while the job runs (the viewer tells the user once).
+        let (_, again) = call(&app, "POST", &format!("{base}/generate"), None).await;
+        assert_eq!(json(&again)["regenerated"], *regenerated);
+        wait_job(&app, &body).await;
+        wait_released(&state).await;
+        // Made again by the current generator: nothing more to say.
+        let (_, done) = call(&app, "POST", &format!("{base}/generate"), None).await;
+        assert!(json(&done)["job_id"].is_null());
+        assert_eq!(json(&done)["regenerated"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn a_body_opened_after_the_sweep_listed_it_survives() {
+        let (config, state, _app, id, planet) = evictable("evict-recheck", 71).await;
+        age_body(&config, &id, &planet, 40);
+        let now = crate::index::now_ms();
+        let cutoff = now - 14 * 86_400_000;
+        // The sweep listed the body as unopened (dated by its file) ...
+        state.index.clear_opened(&id, &planet).unwrap();
+        // ... then someone opened it: the check under the lock sees it.
+        state.index.write_opened(&id, &planet, now).unwrap();
+        assert_eq!(
+            evict::evict_body_unopened_since(&state, &id, &planet, cutoff),
+            Err(evict::EvictError::Opened)
+        );
+        let sizes = systems::body_dir(&config.systems_dir, &id, &planet).join("sizes");
+        assert!(sizes.is_dir());
+        assert!(state.index.generator_of(&id, &planet).unwrap().is_some());
+        // Generated again since (a fresh world.json) counts as well.
+        state.index.clear_opened(&id, &planet).unwrap();
+        age_body(&config, &id, &planet, 0);
+        assert_eq!(
+            evict::evict_body_unopened_since(&state, &id, &planet, cutoff),
+            Err(evict::EvictError::Opened)
+        );
+        // Unopened for good: evicted. And the unconditional entry point
+        // takes no age into account.
+        age_body(&config, &id, &planet, 40);
+        state.index.write_opened(&id, &planet, 1).unwrap();
+        assert_eq!(
+            evict::evict_body_unopened_since(&state, &id, &planet, cutoff)
+                .unwrap()
+                .sizes,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn evicting_a_body_does_not_move_its_system_in_the_library() {
+        let config = temp_config("evict-date");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (old, old_body) = generated_planet(&app, "barren", 81, "").await;
+        wait_released(&state).await;
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        let (new, _) = generated_planet(&app, "barren", 82, "").await;
+        wait_released(&state).await;
+        let order = |list: &str| -> Vec<(String, u64)> {
+            json(list)
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| {
+                    (
+                        s["id"].as_str().unwrap().to_string(),
+                        s["modified_ms"].as_u64().unwrap(),
+                    )
+                })
+                .collect()
+        };
+        let (_, before) = call(&app, "GET", "/api/systems", None).await;
+        let before = order(&before);
+        assert_eq!(before[0].0, new, "the newer system first");
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        evict::evict_body(&state, &old, &old_body).unwrap();
+
+        let (_, after) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(order(&after), before, "same order, same dates");
+        // Nor does a restart (a reconcile) read another date.
+        let state = new_state(&config);
+        let app = routes(state, &config);
+        let (_, restarted) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(order(&restarted), before);
+    }
+
+    #[tokio::test]
+    async fn a_rebuilt_index_does_not_evict_every_old_body() {
+        let (mut config, state, _app, id, planet) = evictable("evict-rebuild", 91).await;
+        age_body(&config, &id, &planet, 40);
+        drop(state);
+        // The index is lost (or its layout bumped): rebuilt from the tree,
+        // where the files are 40 days old.
+        std::fs::remove_dir_all(config.db_path.parent().unwrap()).unwrap();
+        config.evict_after_days = 14;
+        let state = new_state(&config);
+        let report = evict::sweep_unopened(&state, crate::index::now_ms(), 14);
+        assert_eq!(report.evicted, 0, "{report:?}");
+        assert!(state.index.generator_of(&id, &planet).unwrap().is_some());
+        // The body counts from when the index first saw it.
+        let report = evict::sweep_unopened(&state, crate::index::now_ms() + 15 * 86_400_000, 14);
+        assert_eq!(report.evicted, 1, "{report:?}");
+    }
+
+    #[tokio::test]
+    async fn a_failed_eviction_puts_system_json_back() {
+        use std::os::unix::fs::PermissionsExt;
+        let (config, state, _app, id, planet) = evictable("evict-rollback", 92).await;
+        let system_dir = systems::system_dir(&config.systems_dir, &id);
+        let file = system_dir.join("system.json");
+        let before = std::fs::metadata(&file).unwrap().modified().unwrap();
+        let body_dir = systems::body_dir(&config.systems_dir, &id, &planet);
+        // `sizes/` cannot be moved out of a directory that is read-only.
+        std::fs::set_permissions(&body_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let result = evict::evict_body(&state, &id, &planet);
+        std::fs::set_permissions(&body_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        if result.is_ok() {
+            // Running as root: permissions do not apply, nothing to check.
+            return;
+        }
+        assert!(
+            matches!(result, Err(evict::EvictError::Failed(_))),
+            "{result:?}"
+        );
+        let system = mapgen::system::read_system(&system_dir).unwrap();
+        assert!(
+            system
+                .bodies
+                .iter()
+                .find(|b| b.id == planet)
+                .unwrap()
+                .generated
+        );
+        assert_eq!(
+            std::fs::metadata(&file).unwrap().modified().unwrap(),
+            before
+        );
+        assert!(body_dir.join("sizes").is_dir());
+        assert!(state.index.generator_of(&id, &planet).unwrap().is_some());
+        // And once the problem is gone, the eviction works.
+        assert_eq!(evict::evict_body(&state, &id, &planet).unwrap().sizes, 1);
+    }
+
+    #[tokio::test]
+    async fn the_sweep_clears_the_evictions_a_crash_left() {
+        let (config, state, _app, id, planet) = evictable("evict-leftover", 93).await;
+        let bodies = systems::system_dir(&config.systems_dir, &id).join("bodies");
+        let now = crate::index::now_ms();
+        let old = bodies.join(format!(".tmp-evict-{planet}-{}", now - 2 * 3_600_000));
+        let young = bodies.join(format!(".tmp-evict-{planet}-{now}"));
+        let other = bodies.join(".tmp-other");
+        for dir in [&old, &young, &other] {
+            std::fs::create_dir_all(dir.join("x")).unwrap();
+        }
+        evict::sweep_unopened(&state, now, 14);
+        assert!(!old.exists(), "a leftover from hours ago");
+        assert!(young.exists(), "may still be being deleted");
+        assert!(other.exists(), "not an eviction's");
+        assert!(bodies.join(&planet).is_dir());
+    }
+
+    #[tokio::test]
+    async fn a_system_held_for_a_change_is_not_evicted_or_started() {
+        let (config, state, app, id, planet) = evictable("evict-hold", 94).await;
+        let hold = hold_system(&state, &id).expect("free");
+        assert!(hold_system(&state, &id).is_none(), "held once");
+        assert_eq!(
+            evict::evict_body(&state, &id, &planet),
+            Err(evict::EvictError::Pending)
+        );
+        // Deleting meanwhile is refused too, and nothing is touched.
+        let (status, _) = call(&app, "DELETE", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert!(systems::system_dir(&config.systems_dir, &id).is_dir());
+        drop(hold);
+        assert!(state.pending.lock().unwrap().is_empty(), "released");
+        // A delete holds the key while it works and releases it: an
+        // eviction right after finds no system, not a half-deleted one.
+        let (status, _) = call(&app, "DELETE", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert!(state.pending.lock().unwrap().is_empty());
+        assert!(matches!(
+            evict::evict_body(&state, &id, &planet),
+            Err(evict::EvictError::Unknown(_))
+        ));
+        assert!(!systems::system_dir(&config.systems_dir, &id).exists());
+    }
+
+    #[tokio::test]
+    async fn replacing_a_system_holds_it_and_survives_evictions() {
+        let (config, state, app, id, planet) = evictable("evict-replace", 95).await;
+        let evictions = {
+            let (state, id, planet) = (state.clone(), id.clone(), planet.clone());
+            std::thread::spawn(move || {
+                let mut pending = 0;
+                for _ in 0..200 {
+                    if evict::evict_body(&state, &id, &planet) == Err(evict::EvictError::Pending) {
+                        pending += 1;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+                pending
+            })
+        };
+        let request = r#"{"around": {"planet": "barren", "seed": 95, "width": 256, "height": 128, "moons": "none", "giants": "none"}}"#;
+        let (status, created) =
+            call(&app, "POST", "/api/systems?replace=true", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{created}");
+        wait_job(&app, &created).await;
+        wait_released(&state).await;
+        evictions.join().unwrap();
+        // The replacement is whole: its file reads, whatever the evictions did.
+        let system =
+            mapgen::system::read_system(&systems::system_dir(&config.systems_dir, &id)).unwrap();
+        assert!(system.bodies.iter().any(|b| b.id == planet));
+        assert!(
+            systems::system_dir(&config.systems_dir, &id)
+                .read_dir()
+                .unwrap()
+                .flatten()
+                .all(|e| !e.file_name().to_string_lossy().starts_with(".old-"))
+        );
+    }
+
+    /// A system with a planet and a moon, both generated: the system id,
+    /// the planet and the moon.
+    async fn system_with_a_moon(app: &Router, state: &Shared) -> (String, String, String) {
+        for seed in 101..140 {
+            let request = format!(
+                r#"{{"around": {{"planet": "terran", "seed": {seed}, "width": 256, "height": 128, "moons": "auto", "giants": "none"}}}}"#
+            );
+            let (status, created) = call(app, "POST", "/api/systems", Some(&request)).await;
+            if status != StatusCode::CREATED {
+                continue;
+            }
+            wait_job(app, &created).await;
+            wait_released(state).await;
+            let id = json(&created)["system_id"].as_str().unwrap().to_string();
+            let (_, detail) = call(app, "GET", &format!("/api/systems/{id}"), None).await;
+            let system = &json(&detail)["system"];
+            let focus = system["focus"].as_str().unwrap().to_string();
+            let moon = system["bodies"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|b| b["parent"] == focus.as_str())
+                .and_then(|b| b["id"].as_str());
+            if let Some(moon) = moon {
+                return (id, focus, moon.to_string());
+            }
+        }
+        panic!("no seed gave a planet with a moon");
+    }
+
+    #[tokio::test]
+    async fn only_the_opened_body_comes_back_at_its_displayed_size() {
+        let config = temp_config("evict-neighbours");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (id, planet, moon) = system_with_a_moon(&app, &state).await;
+        for body in [&planet, &moon] {
+            state
+                .index
+                .set_displayed_size(&id, body, Some((1024, 512)))
+                .unwrap();
+            evict::evict_body(&state, &id, body).unwrap();
+        }
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        let (_, started) = call(&app, "POST", &format!("{base}/generate"), None).await;
+        wait_job(&app, &started).await;
+        wait_displayed(&app, &base, [1024, 512]).await;
+        wait_released(&state).await;
+        // The moon was made by the same job, at its original size only.
+        let (status, sizes) = call(
+            &app,
+            "GET",
+            &format!("/api/systems/{id}/bodies/{moon}/sizes"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{sizes}");
+        let sizes = json(&sizes);
+        assert_eq!(sizes["present"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            sizes["displayed"], sizes["original"],
+            "the original size only"
+        );
+        assert!(
+            !systems::body_dir(&config.systems_dir, &id, &moon)
+                .join("sizes/1024x512")
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_job_names_each_older_body_it_makes_again() {
+        let config = temp_config("evict-notice-family");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (id, planet, moon) = system_with_a_moon(&app, &state).await;
+        let older = older_build();
+        state
+            .index
+            .set_generator(&id, &moon, Some(&older), Some(1))
+            .unwrap();
+        // Only the moon lost its files: the planet's own view makes it
+        // again (a planet's neighbourhood), and says so.
+        evict::evict_body(&state, &id, &moon).unwrap();
+        let busy = state.queue.acquire().await.unwrap();
+        let (_, first) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{planet}/generate"),
+            None,
+        )
+        .await;
+        let first = json(&first);
+        let regenerated = first["regenerated"].as_array().unwrap();
+        assert_eq!(regenerated.len(), 1, "{first}");
+        assert_eq!(regenerated[0]["body"], moon.as_str());
+        assert_eq!(regenerated[0]["from"]["version"], older.as_str());
+        // The moon's own request, while that job runs, says it too.
+        let (_, second) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{moon}/generate"),
+            None,
+        )
+        .await;
+        let second = json(&second);
+        assert_eq!(second["job_id"], first["job_id"]);
+        assert_eq!(second["regenerated"], first["regenerated"]);
+        drop(busy);
+        wait_job(&app, &serde_json::to_string(&first).unwrap()).await;
+        wait_released(&state).await;
+        // Made again by the current generator: nothing more to say.
+        let (_, done) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{moon}/generate"),
+            None,
+        )
+        .await;
+        assert_eq!(json(&done)["regenerated"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn a_body_made_by_the_current_generator_is_not_announced() {
+        let config = temp_config("evict-notice-same");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (id, planet, moon) = system_with_a_moon(&app, &state).await;
+        for body in [&planet, &moon] {
+            evict::evict_body(&state, &id, body).unwrap();
+        }
+        let (_, started) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{planet}/generate"),
+            None,
+        )
+        .await;
+        let started = json(&started);
+        assert!(started["job_id"].is_string(), "{started}");
+        assert_eq!(started["regenerated"], serde_json::json!([]));
+        wait_job(&app, &serde_json::to_string(&started).unwrap()).await;
+        wait_released(&state).await;
+    }
+
+    #[tokio::test]
+    async fn making_evicted_bodies_again_does_not_move_their_system() {
+        let config = temp_config("evict-regen-date");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (id, planet, moon) = system_with_a_moon(&app, &state).await;
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        let (newer, _) = generated_planet(&app, "barren", 83, "").await;
+        wait_released(&state).await;
+        let modified = |list: &str, id: &str| -> u64 {
+            json(list)
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["id"] == id)
+                .unwrap()["modified_ms"]
+                .as_u64()
+                .unwrap()
+        };
+        let (_, listing) = call(&app, "GET", "/api/systems", None).await;
+        let before = modified(&listing, &id);
+        assert!(modified(&listing, &newer) > before);
+        let file = systems::system_dir(&config.systems_dir, &id).join("system.json");
+        let file_date = std::fs::metadata(&file).unwrap().modified().unwrap();
+        for body in [&planet, &moon] {
+            evict::evict_body(&state, &id, body).unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        // Opened again: the whole family comes back.
+        let (_, started) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{moon}/generate"),
+            None,
+        )
+        .await;
+        wait_job(&app, &started).await;
+        wait_released(&state).await;
+        let (_, listing) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(modified(&listing, &id), before, "same date in the library");
+        assert_eq!(
+            std::fs::metadata(&file).unwrap().modified().unwrap(),
+            file_date
+        );
+        assert!(modified(&listing, &newer) > modified(&listing, &id));
+        // Nothing was lost: the bodies are generated again.
+        let system = mapgen::system::read_system(file.parent().unwrap()).unwrap();
+        for body in [&planet, &moon] {
+            assert!(
+                system.bodies.iter().any(|b| &b.id == body && b.generated),
+                "{body}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_body_never_generated_before_moves_its_system() {
+        let config = temp_config("evict-regen-first");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (id, planet, moon) = system_with_a_moon(&app, &state).await;
+        let file = systems::system_dir(&config.systems_dir, &id).join("system.json");
+        for body in [&planet, &moon] {
+            evict::evict_body(&state, &id, body).unwrap();
+        }
+        // The moon has no record of ever being generated (a first
+        // generation): the job is not only an eviction's undoing.
+        state.index.set_generator(&id, &moon, None, None).unwrap();
+        let before = std::fs::metadata(&file).unwrap().modified().unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        let (_, started) = call(
+            &app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/{planet}/generate"),
+            None,
+        )
+        .await;
+        wait_job(&app, &started).await;
+        wait_released(&state).await;
+        let after = std::fs::metadata(&file).unwrap().modified().unwrap();
+        assert!(after > before, "a first generation dates the system");
     }
 
     /// Waits until no generation is pending (a job frees its key just

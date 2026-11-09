@@ -26,7 +26,11 @@ services:
   # Reads and writes the worlds, systems and index (db/) of this checkout; reads its presets (built-in ones are embedded).
   # ---------------------------------------------------------------------------------------------------- #
   planets:
-    build: .
+    build:
+      context: .
+      args:
+        # The commit recorded as the generator's build id (`mise run up` exports it)
+        GIT_SHA: "${GIT_SHA:-}"
     image: map-generator:local
     container_name: map-generator
     restart: unless-stopped
@@ -38,6 +42,9 @@ services:
       # The image also sets MALLOC_ARENA_MAX=2, so the server keeps little memory
       # between generations (see crates/server/src/memory.rs).
       MAPGEN_MAX_PIXELS: "33554432"
+      # Days a body can stay unopened before its generated files are deleted
+      # (it is generated again when opened); 0 never deletes. See README.md.
+      MAPGEN_EVICT_AFTER_DAYS: "14"
     volumes:
       - ./systems:/data/systems
       # The index (SQLite): survives restarts and image rebuilds, back it up with systems/

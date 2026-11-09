@@ -21,11 +21,13 @@
     /** The link Copy link copies: the worlds shown and the view. */
     link: () => string;
     onDelete: () => void;
-    /** The title instead of the world's own: a system body's name. */
+    /** The title instead of the world's own: a system body's name (the planet's, for a moon). */
     title?: string | null;
+    /** The card is the planet's while one of its moons is shown: the heading says so. */
+    ofMoon?: boolean;
   }
 
-  let { world, revision = null, onVary, onReroll, link, onDelete, title: forcedTitle = null }: Props = $props();
+  let { world, revision = null, onVary, onReroll, link, onDelete, title: forcedTitle = null, ofMoon = false }: Props = $props();
 
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
@@ -90,7 +92,7 @@
   <details class="card" bind:open>
     <summary>
       <span class="title">
-        <strong>{title}</strong>
+        <strong>{ofMoon ? t.worldInfo.planetHeading({ name: title ?? '' }) : title}</strong>
         <small
           >{[meta ? presetName(meta.preset) : null, forcedTitle ? null : worldId]
             .filter(Boolean)
@@ -299,6 +301,9 @@
             {allBiomes ? t.worldInfo.showFewer : t.worldInfo.showAll({ count: stats.shares.length })}
           </button>
         {/if}
+      {:else if world.worldError || (world.id === worldId && world.error)}
+        <!-- The statistics will not come: say why rather than measuring for ever. -->
+        <p class="muted">{world.worldError ?? world.error}</p>
       {:else}
         <p class="muted">{t.worldInfo.measuring}</p>
       {/if}
@@ -330,8 +335,8 @@
         {/if}
         <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
       </div>
-    {:else if world.error}
-      <p class="error">{world.error}</p>
+    {:else if world.error || world.worldError}
+      <p class="error">{world.worldError ?? world.error}</p>
     {:else}
       <p class="muted">{t.worldInfo.loading}</p>
     {/if}

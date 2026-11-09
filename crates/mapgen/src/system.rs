@@ -1843,6 +1843,15 @@ pub struct BodyProgress {
 /// first: a planet and its moons; a moon, its planet and the planet's
 /// other moons. Empty when they all are (or the id is unknown).
 pub fn neighbourhood(system: &System, body_id: &str) -> Vec<String> {
+    let mut ids = family(system, body_id);
+    ids.retain(|id| system.bodies.iter().any(|b| &b.id == id && !b.generated));
+    ids
+}
+
+/// `body_id` first, then the bodies that go with it: a planet's moons; a
+/// moon's planet and the planet's other moons, generated or not. Empty when
+/// the id is unknown.
+pub fn family(system: &System, body_id: &str) -> Vec<String> {
     let Some(body) = system.bodies.iter().find(|b| b.id == body_id) else {
         return Vec::new();
     };
@@ -1854,7 +1863,6 @@ pub fn neighbourhood(system: &System, body_id: &str) -> Vec<String> {
             ids.push(other.id.clone());
         }
     }
-    ids.retain(|id| system.bodies.iter().any(|b| &b.id == id && !b.generated));
     ids
 }
 

@@ -485,6 +485,26 @@ systems/<system-id>/
   `db/` holds `mapgen.sqlite`, `-wal` and `-shm`: copy it with the server
   stopped or with `sqlite3 .backup`. A system replaced keeps the names
   that still match one of its bodies.
+- **Eviction.** A body not opened for `MAPGEN_EVICT_AFTER_DAYS` days
+  (14; 0 never) loses its generated files: all of `bodies/<body>/sizes/*`,
+  the original too. It keeps `system.json` (marked `generated: false`),
+  its index rows (seed and parameters, displayed size, generator, names,
+  pins) and `thumb.png`; `system.json` keeps its modification time, so
+  the library does not move the system. The server sweeps at startup and
+  every 6 hours, and never evicts a body while a job of its system is
+  queued or running (deleting or replacing a system holds the same key,
+  so neither races an eviction). The age is checked again under that lock
+  just before each eviction: a body opened since the sweep listed it
+  stays. A body counts from its last opened date or from when it was
+  generated, the later one, and at most from when the index first saw it
+  (a rebuilt index does not evict everything old). Only a body's own view
+  marks it opened; the textures of other bodies (the sky, the star view's
+  markers, the host planet) are fetched with `?peek=1` and do not. An
+  invalid `MAPGEN_EVICT_AFTER_DAYS` turns eviction off with a warning.
+  The generator recorded is `<crate version>+<git commit>`. An evicted body is "not generated" in the library and
+  the system view; opening its view queues its generation, at its
+  displayed size when one is remembered, else at the original one, with
+  the current generator (see [Generating on demand](#generating-on-demand)).
 
 ## API
 
@@ -507,7 +527,8 @@ addressed as `<system-id>/<body-id>` everywhere.
   the spheres at once. In mode 2 the job generates the planet asked and
   its neighbourhood; in mode 1 there is no job (`job_id` null) until a
   body is opened.
-- `GET /api/systems/{id}`: its `system.json`, with the names given.
+- `GET /api/systems/{id}`: its `system.json`, with the names given and
+  `evicted`, the bodies that lost their files (see Storage, *Eviction*).
 - `DELETE /api/systems/{id}`: delete a system; 409 while one of its
   bodies is being generated.
 - `PUT /api/systems/{id}/names`: replace the names given
@@ -548,7 +569,17 @@ addressed as `<system-id>/<body-id>` everywhere.
   neighbourhood (see [Generating on demand](#generating-on-demand)) as
   one job. Asking for a body already queued answers that job; asking for
   one generated with all its neighbours answers 200 with no job, so a
-  double click costs nothing.
+  double click costs nothing. For a body evicted and made by another
+  build of the generator than the current one, the answer carries
+  `regenerated` (one entry per body of the family, the planet and its
+  moons, that the job makes again and another build made: its id, the
+  version, build id and format recorded, and the current ones), only when
+  the job answered is the family's. Bringing evicted bodies back does not
+  move their system in the library (`system.json` keeps its date); a job
+  that makes a body never generated before dates it as ever. Once the
+  job is done, the body asked for, if it was displayed at another size
+  than its original, gets that size queued too; its neighbours made by
+  the same job (moons, giant, siblings) stay at their original size.
 - Per generated body, as today per world:
   - `GET /api/systems/{id}/bodies/{body}/tiles/{z}/{x}/{y}?rev=&epoch=`;
   - `GET /api/systems/{id}/bodies/{body}/epoch/{ma}/{file}`;
@@ -694,6 +725,20 @@ addressed as `<system-id>/<body-id>` everywhere.
   view (lit, with its axis and its sky) and its card, with **Generate**.
   Pressing it, or picking a body whose neighbourhood is not complete,
   queues the job; the view switches to the maps when it ends.
+- **A body evicted.** Its card says its maps were deleted after a while
+  unopened. Opening its view (the planet view, not the system view or a
+  card in a list) queues its generation by itself, as pressing
+  **Generate** would. When the generator that made it differs from the
+  current one (`regenerated` in the answer of `POST …/generate`, which also
+  names the evicted moons or planet a job makes with it), a toast tells
+  the user once per body that the world was made by an older version and
+  may look different from before. As the generation starts, a toast of
+  about 5 seconds tells the user once that the body's maps were deleted
+  after a while unopened and are being made again (without the number of
+  days); when the older-generator notice applies to the same body, the two
+  are one toast. A moon's card shows its planet's, biomes and rivers
+  included (read as peeks when the moon is opened first, so that no body
+  counts as opened); if they cannot be read the card says why.
 - **Progress bar.** While a job runs, the viewer shows a bar over the
   canvas, in the style of the loading bar, with the message of
   [Generating on demand](#generating-on-demand) and **Cancel**. Its share

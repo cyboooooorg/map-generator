@@ -11,6 +11,7 @@
 //! | `MAPGEN_MAX_PIXELS`   | `33554432`   | largest map accepted (width × height)    |
 //! | `MAPGEN_TILE_CACHE_MB`| `1024`       | memory for worlds loaded for tiles (MiB) |
 //! | `MAPGEN_NOISE_MAPS`  | off         | `true` (or `1`, `yes`, `on`): write the diagnostic `noise_maps/` of every body generated (debug) |
+//! | `MAPGEN_EVICT_AFTER_DAYS` | `14` | days a body can stay unopened before its generated files are deleted (it is generated again when opened); `0`: never; a value that is not a number of days turns it off, with a warning |
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |
 //! | `MALLOC_ARENA_MAX`    | glibc's      | glibc arenas; the Docker image sets `2`  |
@@ -56,6 +57,26 @@ fn env_flag(key: &str) -> bool {
     })
 }
 
+/// Days a body can stay unopened before its generated files are evicted
+/// (`MAPGEN_EVICT_AFTER_DAYS`): 14 unless set, 0 turns eviction off. A value
+/// that is not a whole number of days (`-1`, `off`) turns eviction off too,
+/// with a warning: a typo must not delete files on a schedule nobody chose.
+fn evict_after_days() -> u64 {
+    parse_evict_after_days(std::env::var("MAPGEN_EVICT_AFTER_DAYS").ok().as_deref())
+}
+
+fn parse_evict_after_days(value: Option<&str>) -> u64 {
+    let Some(value) = value else {
+        return app::DEFAULT_EVICT_AFTER_DAYS;
+    };
+    value.trim().parse().unwrap_or_else(|_| {
+        tracing::warn!(
+            "MAPGEN_EVICT_AFTER_DAYS={value:?} is not a number of days: eviction is off"
+        );
+        0
+    })
+}
+
 /// Stack of each rayon worker: room for hundreds of nested joins, even in a
 /// debug build (the default 2 MiB overflowed there under browser traffic).
 /// Reserved, not committed: a thread only uses what it touches.
@@ -89,6 +110,7 @@ async fn main() -> std::io::Result<()> {
             .and_then(|v| v.parse::<usize>().ok())
             .map_or(tiles::DEFAULT_BUDGET_BYTES, |mb| mb << 20),
         noise_maps: env_flag("MAPGEN_NOISE_MAPS"),
+        evict_after_days: evict_after_days(),
     };
     std::fs::create_dir_all(&config.systems_dir)?;
     let address = format!("{}:{}", env_or("HOST", "0.0.0.0"), env_or("PORT", "3000"));
@@ -100,4 +122,20 @@ async fn main() -> std::io::Result<()> {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bad_eviction_delay_turns_eviction_off() {
+        assert_eq!(parse_evict_after_days(None), 14);
+        assert_eq!(parse_evict_after_days(Some("30")), 30);
+        assert_eq!(parse_evict_after_days(Some(" 7 ")), 7);
+        assert_eq!(parse_evict_after_days(Some("0")), 0);
+        for bad in ["-1", "off", "", "1.5", "14 days"] {
+            assert_eq!(parse_evict_after_days(Some(bad)), 0, "{bad:?}");
+        }
+    }
 }

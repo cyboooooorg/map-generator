@@ -67,6 +67,11 @@ export const fr: Messages = {
     retrying: 'Nouvel essai…',
     dismiss: 'Fermer',
     ready: (p) => `${p.id} est prêt.`,
+    olderWorld: (p) =>
+      `${p.body} a été créé par une ancienne version du générateur et est recréé avec la version actuelle${S}: son aspect peut différer de celui d'avant.`,
+    evictedRemade: (p) => `${p.body}${S}: ses cartes ont été supprimées après un temps sans ouverture et sont refaites.`,
+    evictedRemadeOlder: (p) =>
+      `${p.body}${S}: ses cartes ont été supprimées après un temps sans ouverture et sont refaites avec la version actuelle du générateur (une ancienne version l'avait créé)${S}: son aspect peut différer de celui d'avant.`,
     open: 'Ouvrir',
     failed: (p) => `${p.id} a échoué${S}: ${p.error}`,
     cancelled: (p) => `${p.id} annulé.`,
@@ -131,6 +136,7 @@ export const fr: Messages = {
       confining: () => 'orbite juste au-delà des anneaux ; sa résonance 7:6 en fixe le bord externe, comme Janus pour l’anneau A',
     },
     notGenerated: `Ses cartes ne sont pas encore faites${S}: voici ce que le tirage a fixé.`,
+    evicted: `Ses cartes ont été supprimées après un temps sans ouverture${S}: elles sont refaites à l'ouverture.`,
     generating: `Ses cartes sont en cours de fabrication${S}: suivez la progression sur la vue.`,
     generate: 'Générer ses cartes',
   },
@@ -278,6 +284,7 @@ export const fr: Messages = {
     heat_pipe: 'caloduc',
   },
   worldInfo: {
+    planetHeading: (p) => `Planète${S}: ${p.name}`,
     copied: (p) => `Copié dans le presse-papiers${S}: ${p.what.toLowerCase()}.`,
     copyRefused: 'Le navigateur a refusé la copie.',
     archiveFailed: (p) => `Impossible de créer l’archive${S}: ${p.error}`,

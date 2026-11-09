@@ -2,14 +2,14 @@
 // statistics and rivers, loaded in that order (each step can take a while
 // on large maps, and the earlier ones are useful on their own).
 import { t } from './i18n/index.svelte';
-import { api, sizeName, systemBodyId } from './api/client';
+import { api, peeked, sizeName, systemBodyId, worldFile } from './api/client';
 import type { BodySizes } from './api/types/BodySizes';
 import type { PresentSize } from './api/types/PresentSize';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
 import { MIN_FORMAT_VERSION } from './formatVersion';
-import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
+import { loadEpochLayers, loadLayers, loadPeekedStats, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
 import type { WorldStats } from './stats';
@@ -27,6 +27,9 @@ export class LoadedWorld {
   /** The world's biome statistics and rivers, whichever body is shown. */
   worldStats = $state.raw<WorldStats | null>(null);
   worldRivers = $state.raw<RiverIndex | null>(null);
+  /** Why the planet's metadata could not be read while one of its moons is shown. */
+  worldError = $state<string | null>(null);
+  private planetController: AbortController | null = null;
   // Raw state: typed arrays and large JSON must not be proxied.
   meta = $state.raw<WorldMetadata | null>(null);
   layers = $state.raw<WorldLayers | null>(null);
@@ -67,6 +70,8 @@ export class LoadedWorld {
   system = $state.raw<System | null>(null);
   systemId = $state<string | null>(null);
   systemNames = $state.raw<Record<string, string>>({});
+  /** The bodies of the system that lost their files after a while unopened (see evicted.ts). */
+  systemEvicted = $state.raw<string[]>([]);
   systemBody = $state<string | null>(null);
   /**
    * What the viewer shows: the body (`planet`), or the star and its system
@@ -127,6 +132,7 @@ export class LoadedWorld {
     this.systemId = null;
     this.systemBody = null;
     this.systemNames = {};
+    this.systemEvicted = [];
     this.subject = 'planet';
     this.starMode = 'system';
     this.pinnedPlanets = [];
@@ -134,6 +140,7 @@ export class LoadedWorld {
     this.worldMeta = null;
     this.worldStats = null;
     this.worldRivers = null;
+    this.worldError = null;
     this.loadBody(id);
   }
 
@@ -161,6 +168,7 @@ export class LoadedWorld {
       // its own file arrives (moon ids requested under the wrong system).
       this.system = null;
       this.systemNames = {};
+      this.systemEvicted = [];
       this.systemBody = null;
       this.worldMeta = null;
       this.worldStats = null;
@@ -173,10 +181,11 @@ export class LoadedWorld {
     this.systemId = id;
     this.worldId = null;
     (async () => {
-      const { system, names } = await fetchSystem(id, controller.signal);
+      const { system, names, evicted } = await fetchSystem(id, controller.signal);
       if (controller.signal.aborted) return;
       this.system = system;
       this.systemNames = names;
+      this.systemEvicted = evicted;
       // `focus` shows the planet the system was drawn around, as a planet.
       if (focus) this.subject = 'planet';
       const wanted = body ?? (focus ? null : again ? this.systemBody : null);
@@ -207,16 +216,62 @@ export class LoadedWorld {
     this.systemBody = body;
     const entry = system.bodies.find((b) => b.id === body);
     const planet = entry?.parent ?? entry?.id ?? null;
+    const previous = this.worldId;
     this.worldId = planet ? systemBodyId(this.systemId, planet) : null;
     if (keep) {
       // Its resolutions may have changed meanwhile (one generated or deleted).
       this.refreshSizes().catch((e: unknown) => console.warn('Could not list the resolutions', e));
       return;
     }
-    this.worldMeta = null;
-    this.worldStats = null;
-    this.worldRivers = null;
+    const moon = entry !== undefined && planet !== null && entry.id !== planet;
+    // A moon's card is its planet's: kept when the planet is the one shown
+    // already (its biomes and rivers come with its maps), read otherwise.
+    if (!moon || previous !== this.worldId) {
+      this.worldMeta = null;
+      this.worldStats = null;
+      this.worldRivers = null;
+    }
+    this.worldError = null;
+    this.planetController?.abort();
+    this.planetController = null;
+    if (moon && this.worldId) this.loadPlanetMeta(this.worldId);
     this.loadBody(entry?.generated ? systemBodyId(this.systemId, entry.id) : null);
+  }
+
+  /**
+   * Reads the metadata, biome statistics and rivers of the planet `id` of a
+   * moon shown (its card is the planet's), at the resolution displayed. All
+   * peeks: the planet is not the body looked at, so the server does not
+   * count it opened. The card shows the planet's statistics, whichever of
+   * the two was shown first (the moon's own are not on its card).
+   */
+  private loadPlanetMeta(id: string): void {
+    const controller = new AbortController();
+    this.planetController = controller;
+    const { signal } = controller;
+    (async () => {
+      const sizes = await api.sizes(id, signal);
+      const shown = displayedSize(sizes);
+      if (!shown) throw new Error('no resolution on disk');
+      const meta = await api.peekMetadata(id, sizeName(shown.width, shown.height), signal);
+      if (signal.aborted || this.worldId !== id) return;
+      if (meta.format_version < MIN_FORMAT_VERSION) {
+        this.worldError = t.world.outdated({ id });
+        return;
+      }
+      this.worldMeta = meta;
+      const name = sizeName(shown.width, shown.height);
+      const [stats, rivers] = await Promise.all([
+        loadPeekedStats(peeked(worldFile(id, name, `raw_data/${meta.layers.biomes.file}`)), meta, signal),
+        meta.rivers ? api.peekRivers(id, name, meta.rivers, signal) : null,
+      ]);
+      if (signal.aborted || this.worldId !== id) return;
+      this.worldStats = stats;
+      if (rivers) this.worldRivers = new RiverIndex(rivers, meta.circumference_km);
+    })().catch((e: unknown) => {
+      if (signal.aborted || this.worldId !== id) return;
+      this.worldError = t.world.loadFailed({ id, error: String(e) });
+    });
   }
 
   /**
@@ -465,13 +520,13 @@ function displayedSize(sizes: BodySizes): PresentSize | null {
 async function fetchSystem(
   id: string,
   signal: AbortSignal,
-): Promise<{ system: System; names: Record<string, string> }> {
+): Promise<{ system: System; names: Record<string, string>; evicted: string[] }> {
   const response = await fetch(`/api/systems/${encodeURIComponent(id)}`, { signal, cache: 'no-cache' });
   if (response.ok) {
-    const body = (await response.json()) as { system: System; names?: Record<string, string> };
-    return { system: body.system, names: body.names ?? {} };
+    const body = (await response.json()) as { system: System; names?: Record<string, string>; evicted?: string[] };
+    return { system: body.system, names: body.names ?? {}, evicted: body.evicted ?? [] };
   }
   const file = await fetch(`/systems/${encodeURIComponent(id)}/system.json`, { signal, cache: 'no-cache' });
   if (!file.ok) throw new Error(`${file.status} ${file.statusText}`);
-  return { system: (await file.json()) as System, names: {} };
+  return { system: (await file.json()) as System, names: {}, evicted: [] };
 }

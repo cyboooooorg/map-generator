@@ -64,8 +64,17 @@ export const api = {
   /** The metadata of a body at resolution `size` (`WxH`, see sizeName). */
   metadata: (id: string, size: string, signal?: AbortSignal) =>
     call<WorldMetadata>(worldFile(id, size, 'raw_data/world.json'), fileInit(signal)),
+  /**
+   * The metadata of a body seen from another body's view (the planet in a
+   * moon's sky): a peek, which does not mark the body opened (see `peeked`).
+   */
+  peekMetadata: (id: string, size: string, signal?: AbortSignal) =>
+    call<WorldMetadata>(peeked(worldFile(id, size, 'raw_data/world.json')), fileInit(signal)),
   rivers: (id: string, size: string, file: string, signal?: AbortSignal) =>
     call<RiversFile>(worldFile(id, size, `raw_data/${file}`), fileInit(signal)),
+  /** The rivers of a body seen from another body's view: a peek, see `peekMetadata`. */
+  peekRivers: (id: string, size: string, file: string, signal?: AbortSignal) =>
+    call<RiversFile>(peeked(worldFile(id, size, `raw_data/${file}`)), fileInit(signal)),
   /** The resolutions of a generated body: on disk, displayed, being generated, offered. */
   sizes: (id: string, signal?: AbortSignal) =>
     call<BodySizes>(`${bodyApi(id)}/sizes`, signal ? { cache: 'no-cache', signal } : { cache: 'no-cache' }),
@@ -187,6 +196,22 @@ export function sizeName(width: number, height: number): string {
 export function worldFile(id: string, size: string, path: string, revision?: number | null): string {
   const url = `${bodyFiles(id)}/sizes/${encodeURIComponent(size)}/${path}`;
   return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
+}
+
+/** The query flag of a peek, see [`peeked`]. */
+export const PEEK = 'peek=1';
+
+/**
+ * `url` as a peek: a request for a file of a body that is not that body's
+ * view. The server records a body as opened (so that it is not evicted
+ * after 14 days, docs/analysis/15-storage.md) when its own view loads its
+ * files; the textures of other bodies in the sky, the star view's markers
+ * and the host planet of a moon carry `peek=1`, which the server does not
+ * count. A peek has its own URL, so the browser caches it apart from the
+ * body's own load of the same file.
+ */
+export function peeked(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}${PEEK}`;
 }
 
 /**

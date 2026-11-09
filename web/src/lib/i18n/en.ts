@@ -77,6 +77,14 @@ export const en = {
     retrying: 'Retrying…',
     dismiss: 'Dismiss',
     ready: (p: { id: string }) => `${p.id} is ready.`,
+    /** A body deleted for lack of use is made again by a newer generator. */
+    olderWorld: (p: { body: string }) =>
+      `${p.body} was made by an older version of the generator and is made again with the current one: it may look different from before.`,
+    /** An evicted body opened: its view queues its generation (a few seconds, it may be over before the card is read). */
+    evictedRemade: (p: { body: string }) => `${p.body}: its maps were deleted after a while unopened and are being made again.`,
+    /** The same, for a body made by an older generator too. */
+    evictedRemadeOlder: (p: { body: string }) =>
+      `${p.body}: its maps were deleted after a while unopened and are being made again, with the current version of the generator (it was made by an older one): it may look different from before.`,
     open: 'Open',
     failed: (p: { id: string; error: string }) => `${p.id} failed: ${p.error}`,
     cancelled: (p: { id: string }) => `${p.id} cancelled.`,
@@ -145,6 +153,7 @@ export const en = {
       confining: () => 'orbits just beyond the rings; its 7:6 resonance sets their outer edge, as Janus does for the A ring',
     },
     notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
+    evicted: 'Its maps were deleted after a while unopened: they are made again when it is opened.',
     generating: 'Its maps are being made: see the progress over the view.',
     generate: 'Generate its maps',
   },
@@ -300,6 +309,7 @@ export const en = {
   } satisfies Record<Regime, string>,
   /** The world card. */
   worldInfo: {
+    planetHeading: (p: { name: string }) => `Planet: ${p.name}`,
     copied: (p: { what: string }) => `${p.what} copied.`,
     copyRefused: 'The browser refused to copy.',
     archiveFailed: (p: { error: string }) => `Could not build the archive: ${p.error}`,

@@ -365,6 +365,11 @@ pub struct SystemCreated {
 pub struct SystemDetail {
     pub system: mapgen::system::System,
     pub names: BTreeMap<String, String>,
+    /// The bodies that were generated once and lost their files (evicted
+    /// after 14 days unopened, see `MAPGEN_EVICT_AFTER_DAYS`): not
+    /// generated, like a body never generated, but opening their view
+    /// generates them again.
+    pub evicted: Vec<String>,
 }
 
 /// The names given to a system's bodies (`PUT /api/systems/{id}/names`):
@@ -393,6 +398,41 @@ pub struct SystemName {
 #[ts(export)]
 pub struct GenerateStarted {
     pub job_id: Option<String>,
+    /// The bodies the job makes again that another generator than the
+    /// current one made before they lost their files: the worlds may look
+    /// different from the ones they replace. Every body of the family
+    /// (the planet and its moons) that is in this case is named, not only
+    /// the one asked for: a planet's job makes its evicted moons too.
+    /// Said on every answer while the job is queued or running; the
+    /// viewer tells the user once per body.
+    pub regenerated: Vec<RegeneratedBody>,
+}
+
+/// A body made again by another generator than the one that made it, see
+/// [`GenerateStarted::regenerated`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct RegeneratedBody {
+    /// The body's id in its system.
+    pub body: String,
+    /// The generator that made it and the current one.
+    pub from: GeneratorNote,
+}
+
+/// The generator that made a world, and the current one: what the user is
+/// told when an older world is made again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct GeneratorNote {
+    /// Version of the generator that made the world (`0.1.0+<git sha>`: crate
+    /// version and build id); null when it was not recorded.
+    pub version: Option<String>,
+    /// Revision of the data it wrote (`format_version` of its
+    /// `world.json`); 0 when not known.
+    pub format: Option<u32>,
+    /// The generator that makes the world now.
+    pub current_version: String,
+    pub current_format: u32,
 }
 
 /// The resolutions of a generated body

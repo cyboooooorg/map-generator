@@ -12,7 +12,7 @@
   import { parseSize, pendingToFollow } from '../lib/sizes';
   import type { ScreenAxis } from '../lib/viewer/axes';
   import type { SurfaceMaps } from '../lib/skyBodies';
-  import { ApiFailure, api, followJob, sizeName, systemBodyId, worldFile } from '../lib/api/client';
+  import { ApiFailure, api, followJob, peeked, sizeName, systemBodyId, worldFile } from '../lib/api/client';
   import type { BiomeInfo } from '../lib/api/types/BiomeInfo';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
@@ -38,6 +38,7 @@
   import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
+  import { bodyTitle, forgetTold, remadeToasts } from '../lib/evicted';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
@@ -993,8 +994,9 @@
           if (!p.generated || !original) return null;
           const id = systemBodyId(world.systemId!, p.id);
           return {
-            colour: worldFile(id, original, 'raw_data/colour_small.png', revision),
-            normal: worldFile(id, original, 'raw_data/normal_small.png', revision),
+            // Seen from the star view, not opened: a peek.
+            colour: peeked(worldFile(id, original, 'raw_data/colour_small.png', revision)),
+            normal: peeked(worldFile(id, original, 'raw_data/normal_small.png', revision)),
           };
         })
       : null,
@@ -1027,12 +1029,15 @@
   const sysDays = $derived(sysPlanet ? clockDays(sysPlanet.orbit, season, orbitDays) : orbitDays);
   /** The day of the planet's year the clock shows: days since its northern spring equinox. */
   const yearDay = $derived(sysPlanet ? yearDayAt(sysPlanet.orbit, sysDays) : null);
-  /** The maps of a body of the system, for the sky: its original resolution's. */
+  /** The maps of a body of the system, for the sky: its original resolution's. Peeks: the body is not opened. */
   const sysTextures = (id: string): SurfaceMaps | null => {
     const original = originalSize(id);
     if (!world.systemId || !original) return null;
     const body = systemBodyId(world.systemId, id);
-    return { colour: worldFile(body, original, 'raw_data/colour.png'), normal: worldFile(body, original, 'raw_data/normal.png') };
+    return {
+      colour: peeked(worldFile(body, original, 'raw_data/colour.png')),
+      normal: peeked(worldFile(body, original, 'raw_data/normal.png')),
+    };
   };
   /**
    * The hour: the sun at the slider's longitude over the body shown at the
@@ -1250,12 +1255,21 @@
         const pending = world.id === id ? world.sizes?.pending.find((p) => sizeName(p.width, p.height) === wanted) : undefined;
         jobId = pending ? pending.job_id : (await api.generateSize(id, wanted)).job_id;
       } else {
-        const response = await fetch(
-          `/api/systems/${encodeURIComponent(systemId)}/bodies/${encodeURIComponent(body)}/generate`,
-          { method: 'POST' },
-        );
-        if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
-        jobId = ((await response.json()) as { job_id: string | null }).job_id;
+        // Read before the request: the system may be listed again while it
+        // is in flight (a job ending), and no longer name the body.
+        const wasEvicted = world.systemEvicted.includes(body);
+        const started = await api.generateBody(systemId, body);
+        jobId = started.job_id;
+        // Bodies that lost their files, made by another generator (the one
+        // asked for, and its family: a planet's job makes its moons): the
+        // user hears it once each. The body opened, if it lost its files,
+        // is told of once as it is made again; when it is also made by an
+        // older generator, one toast says both.
+        for (const { kind, body: named } of remadeToasts(systemId, body, wasEvicted, started.regenerated)) {
+          const title = bodyTitle(sys, world.systemNames, named);
+          if (kind === 'evictedRemade') toasts.show(t.app.evictedRemade({ body: title }), { ms: 5000 });
+          else toasts.show(kind === 'evictedRemadeOlder' ? t.app.evictedRemadeOlder({ body: title }) : t.app.olderWorld({ body: title }), { ms: 12000 });
+        }
       }
       if (jobId !== null) followedJobs.add(jobId);
       if (jobId === null) {
@@ -1273,6 +1287,8 @@
       if (!mine()) return;
       if (final.status === 'done') {
         generation = null;
+        // Made again: a later eviction of these bodies tells again.
+        forgetTold(systemId);
         if (wanted !== null) await showSize(wanted);
         else world.loadSystem(systemId);
       } else {
@@ -1487,10 +1503,11 @@
     const id = systemBodyId(system, parent.id);
     const original = sizeName(parent.params.width, parent.params.height);
     const controller = new AbortController();
+    // The host planet in the moon's sky: a peek, the planet is not opened.
     api
-      .metadata(id, original, controller.signal)
+      .peekMetadata(id, original, controller.signal)
       .then((host) => {
-        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => worldFile(id, original, `raw_data/${file}`)) };
+        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => peeked(worldFile(id, original, `raw_data/${file}`))) };
       })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) console.warn("Could not load the host planet's world", e);
