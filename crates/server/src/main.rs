@@ -10,6 +10,7 @@
 //! | `MAPGEN_STATIC_DIR`   | `web/dist`   | built web front-end                      |
 //! | `MAPGEN_MAX_PIXELS`   | `33554432`   | largest map accepted (width × height)    |
 //! | `MAPGEN_TILE_CACHE_MB`| `1024`       | memory for worlds loaded for tiles (MiB) |
+//! | `MAPGEN_NOISE_MAPS`  | off         | `true` (or `1`, `yes`, `on`): write the diagnostic `noise_maps/` of every body generated (debug) |
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |
 //! | `MALLOC_ARENA_MAX`    | glibc's      | glibc arenas; the Docker image sets `2`  |
@@ -44,6 +45,16 @@ fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
+/// Whether `key` is set to `true`, `1`, `yes` or `on` (any case).
+fn env_flag(key: &str) -> bool {
+    std::env::var(key).is_ok_and(|v| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "true" | "1" | "yes" | "on"
+        )
+    })
+}
+
 /// Stack of each rayon worker: room for hundreds of nested joins, even in a
 /// debug build (the default 2 MiB overflowed there under browser traffic).
 /// Reserved, not committed: a thread only uses what it touches.
@@ -76,6 +87,7 @@ async fn main() -> std::io::Result<()> {
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .map_or(tiles::DEFAULT_BUDGET_BYTES, |mb| mb << 20),
+        noise_maps: env_flag("MAPGEN_NOISE_MAPS"),
     };
     std::fs::create_dir_all(&config.systems_dir)?;
     let address = format!("{}:{}", env_or("HOST", "0.0.0.0"), env_or("PORT", "3000"));

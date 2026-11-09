@@ -34,6 +34,7 @@
 
 use crate::activity::{StarActivity, star_activity};
 use crate::exomoon::{EARTH_KG, EARTH_M, G, HostGiant, HostMode};
+use crate::export::Diagnostics;
 use crate::giants::{
     GiantKind, GiantSystem, GiantsMode, HOT_JUPITERS, HOT_PERIOD_DAYS, JUPITER_EARTH_MASSES,
     hill_spacing,
@@ -1862,20 +1863,20 @@ const BODY_STAGES: usize = 8;
 
 /// Generates `params` (a body's, at the size they say) into `dir`, which
 /// it creates: the maps, `raw_data/` naming its system and body (`names`),
-/// and the diagnostic noise maps (`noise_maps/`) when `noise_maps` is set;
-/// the thumbnail into `thumb_dir` when given. Reports each stage to `at`.
+/// and, when `diagnostics` asks, `world.svg` and the diagnostic noise maps
+/// (`noise_maps/`); the thumbnail into `thumb_dir` when given. Reports each stage to `at`.
 fn generate_into(
     params: &WorldParams,
     dir: &std::path::Path,
     thumb_dir: Option<std::path::PathBuf>,
-    noise_maps: bool,
+    diagnostics: Diagnostics,
     names: (&str, &str),
     at: impl Fn(crate::generation::Stage),
 ) -> Result<(), String> {
     use crate::generation::{GenerateOptions, Stage, generate_with_progress};
     // The noise maps are written as the generation computes their
     // layers, each one freed once encoded.
-    let writer = if noise_maps {
+    let writer = if diagnostics.noise_maps {
         Some(
             crate::export::NoiseMapWriter::new(
                 &dir.join("noise_maps"),
@@ -1899,6 +1900,7 @@ fn generate_into(
         generated,
         dir,
         crate::export::ExportOptions {
+            svg: diagnostics.svg,
             raw_data: true,
             thumb_dir,
         },
@@ -1941,16 +1943,17 @@ pub fn generate_neighbourhood(
     body_id: &str,
     progress: impl FnMut(BodyProgress),
 ) -> Result<Vec<String>, String> {
-    generate_neighbourhood_with(system_dir, body_id, false, progress)
+    generate_neighbourhood_with(system_dir, body_id, Diagnostics::default(), progress)
 }
 
-/// [`generate_neighbourhood`], with the diagnostic noise maps of each body
+/// [`generate_neighbourhood`], with the extra files `diagnostics` asks for
+/// in each body: `world.svg` and the noise maps
 /// (`bodies/<id>/sizes/<W>x<H>/noise_maps/`, see
-/// [`crate::export::NoiseMapWriter`]) when `noise_maps` is set.
+/// [`crate::export::NoiseMapWriter`]).
 pub fn generate_neighbourhood_with(
     system_dir: &std::path::Path,
     body_id: &str,
-    noise_maps: bool,
+    diagnostics: Diagnostics,
     mut progress: impl FnMut(BodyProgress),
 ) -> Result<Vec<String>, String> {
     let system = read_system(system_dir)?;
@@ -1972,7 +1975,7 @@ pub fn generate_neighbourhood_with(
             &params,
             &size,
             Some(temp.clone()),
-            noise_maps,
+            diagnostics,
             (&system_name, id),
             body_stage(&report, id, k, ids.len()),
         )?;
@@ -1993,7 +1996,7 @@ pub fn generate_neighbourhood_with(
 /// the system written in `system_dir`: the same world at another size,
 /// into `bodies/<id>/sizes/<W>x<H>/` (see [`crate::sizes`]), written into
 /// `sizes/.tmp-<W>x<H>/` and renamed into place once complete. With the
-/// diagnostic noise maps when `noise_maps` is set. The body's thumbnail
+/// extra files `diagnostics` asks for. The body's thumbnail
 /// and `system.json` are left as they are.
 ///
 /// Refused when the body is unknown, not generated yet (its original
@@ -2004,7 +2007,7 @@ pub fn generate_size(
     body_id: &str,
     width: u32,
     height: u32,
-    noise_maps: bool,
+    diagnostics: Diagnostics,
     mut progress: impl FnMut(BodyProgress),
 ) -> Result<(), String> {
     use crate::request::MAP_SIZE;
@@ -2043,7 +2046,7 @@ pub fn generate_size(
         &params,
         &temp,
         None,
-        noise_maps,
+        diagnostics,
         (&system_id(&system), body_id),
         body_stage(&report, body_id, 0, 1),
     );
@@ -2052,6 +2055,36 @@ pub fn generate_size(
         return Err(e);
     }
     std::fs::rename(&temp, &target).map_err(|e| e.to_string())
+}
+
+/// The `world.svg` of body `body_id` at `width` × `height`, drawn on
+/// request, as bytes. From the body's stored raw data when it reads back;
+/// else the body is generated again from its seed and request (the same
+/// world, up to the 16-bit quantisation of the stored layers). Nothing is
+/// written. Fails when the system or the body is unknown.
+pub fn body_svg(
+    system_dir: &std::path::Path,
+    body_id: &str,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, String> {
+    let system = read_system(system_dir)?;
+    let body = system
+        .bodies
+        .iter()
+        .find(|b| b.id == body_id)
+        .ok_or_else(|| format!("no body {body_id} in this system"))?;
+    let size = crate::sizes::size_dir(&system_dir.join("bodies").join(body_id), width, height);
+    let world = match crate::export::raw_data::load_world(&size) {
+        Ok(world) => world,
+        Err(_) => {
+            let mut params = world_params(body);
+            params.width = width;
+            params.height = height;
+            crate::generation::generate(&params).world
+        }
+    };
+    crate::export::svg_bytes(&world).map_err(|e| e.to_string())
 }
 
 /// Adds the system and the body to a generated body's `world.json`.
@@ -2842,6 +2875,60 @@ mod tests {
     }
 
     #[test]
+    fn a_body_has_no_svg_and_no_noise_maps_unless_asked() {
+        use crate::export::Diagnostics;
+        use crate::sizes::size_dir;
+        let (dir, id) = lone_planet("system-diagnostics-off");
+        generate_neighbourhood(&dir, &id, |_| {}).unwrap();
+        let size = size_dir(&dir.join("bodies").join(&id), 256, 128);
+        assert!(size.join("world.png").is_file());
+        assert!(size.join("legend.png").is_file());
+        assert!(!size.join("world.svg").exists());
+        assert!(!size.join("noise_maps").exists());
+        // Another resolution follows the same rule.
+        generate_size(&dir, &id, 512, 256, Diagnostics::default(), |_| {}).unwrap();
+        let added = size_dir(&dir.join("bodies").join(&id), 512, 256);
+        assert!(added.join("world.png").is_file());
+        assert!(!added.join("world.svg").exists());
+        assert!(!added.join("noise_maps").exists());
+
+        // On request: the debug option writes the noise maps, the SVG
+        // is a separate switch.
+        let (dir, id) = lone_planet("system-diagnostics-on");
+        let debug = Diagnostics {
+            svg: false,
+            noise_maps: true,
+        };
+        generate_neighbourhood_with(&dir, &id, debug, |_| {}).unwrap();
+        let size = size_dir(&dir.join("bodies").join(&id), 256, 128);
+        assert!(size.join("noise_maps").read_dir().unwrap().next().is_some());
+        assert!(!size.join("world.svg").exists());
+        let (dir, id) = lone_planet("system-diagnostics-svg");
+        generate_neighbourhood_with(&dir, &id, Diagnostics::all(), |_| {}).unwrap();
+        let size = size_dir(&dir.join("bodies").join(&id), 256, 128);
+        assert!(size.join("world.svg").is_file());
+        assert!(size.join("noise_maps").is_dir());
+    }
+
+    #[test]
+    fn draws_the_svg_of_a_stored_body_and_of_a_missing_one() {
+        use crate::sizes::size_dir;
+        let (dir, id) = lone_planet("system-svg-on-demand");
+        generate_neighbourhood(&dir, &id, |_| {}).unwrap();
+        // From the stored raw data.
+        let stored = body_svg(&dir, &id, 256, 128).unwrap();
+        let text = String::from_utf8(stored).unwrap();
+        assert!(text.starts_with("<?xml") && text.contains("<svg"));
+        assert!(text.contains(r#"width="256" height="128""#));
+        // Without its raw data: regenerated from the seed and request.
+        let size = size_dir(&dir.join("bodies").join(&id), 256, 128);
+        std::fs::remove_dir_all(size.join("raw_data")).unwrap();
+        let regenerated = body_svg(&dir, &id, 256, 128).unwrap();
+        assert!(String::from_utf8(regenerated).unwrap().contains("<svg"));
+        assert!(body_svg(&dir, "zz", 256, 128).is_err());
+    }
+
+    #[test]
     fn each_resolution_of_a_body_has_its_own_directory() {
         use crate::sizes::size_dir;
         let (dir, id) = lone_planet("system-sizes");
@@ -2862,7 +2949,7 @@ mod tests {
         // Another resolution: a directory beside it, system.json untouched.
         let system_json = std::fs::read(dir.join("system.json")).unwrap();
         let thumb = std::fs::read(body.join("thumb.png")).unwrap();
-        generate_size(&dir, &id, 512, 256, false, |_| {}).unwrap();
+        generate_size(&dir, &id, 512, 256, Diagnostics::default(), |_| {}).unwrap();
         let added = size_dir(&body, 512, 256);
         let world: serde_json::Value = serde_json::from_slice(
             &std::fs::read(added.join("raw_data").join("world.json")).unwrap(),
@@ -2881,16 +2968,16 @@ mod tests {
         assert!(!body.join("sizes").join(".tmp-512x256").exists());
 
         // A size on disk already (the original too), an unknown body.
-        assert!(generate_size(&dir, &id, 512, 256, false, |_| {}).is_err());
-        assert!(generate_size(&dir, &id, 256, 128, false, |_| {}).is_err());
-        assert!(generate_size(&dir, "zz", 512, 256, false, |_| {}).is_err());
+        assert!(generate_size(&dir, &id, 512, 256, Diagnostics::default(), |_| {}).is_err());
+        assert!(generate_size(&dir, &id, 256, 128, Diagnostics::default(), |_| {}).is_err());
+        assert!(generate_size(&dir, "zz", 512, 256, Diagnostics::default(), |_| {}).is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn a_size_of_a_body_not_generated_is_refused() {
         let (dir, id) = lone_planet("system-size-ungenerated");
-        let error = generate_size(&dir, &id, 512, 256, false, |_| {}).unwrap_err();
+        let error = generate_size(&dir, &id, 512, 256, Diagnostics::default(), |_| {}).unwrap_err();
         assert!(error.contains("not generated"), "{error}");
         assert!(!dir.join("bodies").join(&id).exists());
         let _ = std::fs::remove_dir_all(dir);

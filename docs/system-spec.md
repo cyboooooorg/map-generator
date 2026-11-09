@@ -415,9 +415,9 @@ systems/<system-id>/
     │   ├── thumb.png       ← from its original resolution
     │   └── sizes/
     │       ├── 2048x1024/  ← a resolution: the files a world has
-    │       │   ├── world.png, world.svg, legend.png
+    │       │   ├── world.png, legend.png (world.svg only from the CLI)
     │       │   ├── raw_data/   ← world.json, layers, rivers…
-    │       │   └── noise_maps/ ← diagnostic images (optional)
+    │       │   └── noise_maps/ ← diagnostic images (optional: CLI, or the server with MAPGEN_NOISE_MAPS)
     │       └── 4096x2048/  ← another one, generated since
     ├── c-1/
     └── e/

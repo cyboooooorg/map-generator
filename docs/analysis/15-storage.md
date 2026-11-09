@@ -215,7 +215,7 @@ The user's answers to the study's questions:
    WAL being unchecked on the mount; revised (see *Step 1 done*): WAL is
    tried at every start, with a self-check and a fallback.
 
-The steps that follow are in the backlog, item 22.
+The steps that follow are in the backlog, item 22 (diagnostics on request: done, see *Step done: world.svg and noise_maps on request*).
 
 ## Step 1 done: the SQLite index
 
@@ -307,6 +307,28 @@ What was built, and where it departs from the plan above:
   files.
 - **Corrupt file:** a file that is not a database is kept aside as
   `mapgen.sqlite.corrupt-<ms>` and rebuilt from the tree.
+
+## Step done: world.svg and noise_maps on request
+
+Decision 5, implemented (backlog item 22, issue #327). Neither
+`world.svg` nor `noise_maps/` is written when the server generates a
+body, which saves about a quarter of today's disk on new bodies. Bodies
+already on disk keep the files they have.
+
+- **Switches:** `mapgen::export::Diagnostics { svg, noise_maps }`, off by
+  default, goes from the callers to `generate_neighbourhood_with` and
+  `generate_size`. `ExportOptions::svg` is off by default too.
+- **SVG:** `GET /api/systems/{id}/bodies/{body}/world.svg?size=WxH` draws
+  it on request and sends it as a download; nothing is stored. It is drawn
+  from the stored raw data (`load_world`, 16-bit layers) and, when those do
+  not read back, from the body's seed and request (`mapgen::system::body_svg`).
+  The world card has an "Export SVG" button in place of the old link to
+  the stored file.
+- **Noise maps:** the debug option is `MAPGEN_NOISE_MAPS=true` on the
+  server (about 10 bytes per pixel more memory during a generation).
+- **Command line:** keeps writing both by default, since whoever runs it
+  asked for files and has no app to export from; `--no-svg` and
+  `--no-noise-maps` (or `MAPGEN_NO_SVG`, `MAPGEN_NO_NOISE_MAPS`) skip them.
 
 ## Resolutions
 

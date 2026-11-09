@@ -16,11 +16,23 @@ use std::io::{BufWriter, Write};
 /// single wider `<rect>`, which keeps the file 10–40× smaller than one rect per pixel.
 /// The file is streamed to disk rather than built in memory.
 pub fn export_svg(world: &World, layers: &MapLayers, path: &str) -> std::io::Result<()> {
+    write_svg(world, layers, BufWriter::new(File::create(path)?))
+}
+
+/// The SVG of `world` in memory, for an export on request. Computes the
+/// river coverage itself, so it also draws a world reloaded from disk.
+pub fn svg_bytes(world: &World) -> std::io::Result<Vec<u8>> {
+    let layers = MapLayers::new(world);
+    let mut bytes = Vec::new();
+    write_svg(world, &layers, &mut bytes)?;
+    Ok(bytes)
+}
+
+fn write_svg<W: Write>(world: &World, layers: &MapLayers, mut out: W) -> std::io::Result<()> {
     let (w, h) = (world.width as usize, world.height as usize);
     let mut pixels = render_pixels(world, layers, Style::Flat);
     draw_contours(world, layers, &mut pixels);
 
-    let mut out = BufWriter::new(File::create(path)?);
     writeln!(out, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;
     writeln!(
         out,

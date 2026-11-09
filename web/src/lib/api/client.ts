@@ -159,6 +159,14 @@ export function bodyApi(id: string): string {
   return `/api/${bodyPath(id)}`;
 }
 
+/**
+ * URL of the SVG of a body at resolution `size`. The server draws it when
+ * asked and stores nothing: it is not among the body's files.
+ */
+export function bodySvg(id: string, size: string): string {
+  return `${bodyApi(id)}/world.svg?size=${encodeURIComponent(size)}`;
+}
+
 /** The name of a resolution, as URLs and `?size=` take it: `2048x1024`. */
 export function sizeName(width: number, height: number): string {
   return `${width}x${height}`;

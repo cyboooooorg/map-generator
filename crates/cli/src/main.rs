@@ -1,5 +1,6 @@
 use clap::Parser;
 use mapgen::exomoon::{HostGiant, HostMode};
+use mapgen::export::Diagnostics;
 use mapgen::giants::{GiantKind, GiantSystem, GiantsMode, JUPITER_EARTH_MASSES};
 use mapgen::moons::{MoonOrigin, MoonSystem, MoonsMode};
 use mapgen::preset::Preset;
@@ -16,7 +17,8 @@ use std::process::ExitCode;
 /// them back explicitly.
 ///
 /// Environment: MAPGEN_NO_NOISE_MAPS=true (or 1) skips the diagnostic noise
-/// maps, like --no-noise-maps.
+/// maps, like --no-noise-maps; MAPGEN_NO_SVG=true skips world.svg, like
+/// --no-svg.
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
@@ -169,6 +171,13 @@ struct Args {
           value_parser = clap::builder::BoolishValueParser::new())]
     no_noise_maps: bool,
 
+    /// Skip world.svg, the vector image of the map. The web app does not
+    /// write it either: it draws it on request ("SVG" in the world card).
+    /// Also set by MAPGEN_NO_SVG: true/false, 1/0, yes/no, on/off
+    #[arg(long, env = "MAPGEN_NO_SVG",
+          value_parser = clap::builder::BoolishValueParser::new())]
+    no_svg: bool,
+
     /// Draws a whole system (see docs/system-spec.md) instead of a world:
     /// the planets asked by type, `terran=2,gas-giant=1` (types: terran,
     /// barren, caustic, frozen, volcanic, gas-giant, ice-giant,
@@ -235,14 +244,25 @@ fn parse_planets(text: &str) -> Result<Option<std::collections::BTreeMap<String,
     Ok(Some(planets))
 }
 
+impl Args {
+    /// The extra files to write: both by default, as a command-line user
+    /// expects the whole output (the web server writes neither).
+    fn diagnostics(&self) -> Diagnostics {
+        Diagnostics {
+            svg: !self.no_svg,
+            noise_maps: !self.no_noise_maps,
+        }
+    }
+}
+
 /// Generates `body` and its neighbourhood in the system written in `dir`.
 fn generate_body(
     dir: &std::path::Path,
     body: &str,
-    noise_maps: bool,
+    diagnostics: Diagnostics,
 ) -> Result<(), Box<dyn Error>> {
     let mut last = None;
-    let done = mapgen::system::generate_neighbourhood_with(dir, body, noise_maps, |p| {
+    let done = mapgen::system::generate_neighbourhood_with(dir, body, diagnostics, |p| {
         if last.as_ref() != Some(&(p.body.clone(), p.step)) {
             eprintln!(
                 "[{}/{}] {} — {:?} ({}/{})",
@@ -269,10 +289,10 @@ fn generate_size(
     dir: &std::path::Path,
     body: &str,
     (width, height): (u32, u32),
-    noise_maps: bool,
+    diagnostics: Diagnostics,
 ) -> Result<(), Box<dyn Error>> {
     let mut last = None;
-    mapgen::system::generate_size(dir, body, width, height, noise_maps, |p| {
+    mapgen::system::generate_size(dir, body, width, height, diagnostics, |p| {
         if last != Some(p.step) {
             eprintln!(
                 "{} {width}x{height} — {:?} ({}/{})",
@@ -294,7 +314,7 @@ fn draw_system(
     request: mapgen::system::SystemRequest,
     dir: &std::path::Path,
     body: Option<&str>,
-    noise_maps: bool,
+    diagnostics: Diagnostics,
 ) -> Result<(), Box<dyn Error>> {
     use mapgen::system::{draw, system_id, write_system};
     let system = draw(&request, &mut rand::rng())?;
@@ -303,7 +323,7 @@ fn draw_system(
     print_bodies(&system);
     println!("→ {}", dir.join(&id).join("system.json").display());
     match body {
-        Some(body) => generate_body(&dir.join(&id), body, noise_maps),
+        Some(body) => generate_body(&dir.join(&id), body, diagnostics),
         None => Ok(()),
     }
 }
@@ -379,13 +399,9 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    let diagnostics = args.diagnostics();
     if let (Some(system), Some(body), Some(size)) = (&args.in_system, &args.body, args.size) {
-        return generate_size(
-            &args.systems_dir.join(system),
-            body,
-            size,
-            !args.no_noise_maps,
-        );
+        return generate_size(&args.systems_dir.join(system), body, size, diagnostics);
     }
     if let Some(planets) = &args.system {
         let request = mapgen::system::SystemRequest::System(mapgen::system::WholeSystemRequest {
@@ -400,11 +416,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
             request,
             &args.systems_dir,
             args.body.as_deref(),
-            !args.no_noise_maps,
+            diagnostics,
         );
     }
     if let (Some(system), Some(body)) = (&args.in_system, &args.body) {
-        return generate_body(&args.systems_dir.join(system), body, !args.no_noise_maps);
+        return generate_body(&args.systems_dir.join(system), body, diagnostics);
     }
 
     let request = WorldRequest {
@@ -438,7 +454,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
             mapgen::system::SystemRequest::Around(request),
             &args.systems_dir,
             args.body.as_deref(),
-            !args.no_noise_maps,
+            diagnostics,
         );
     }
     let resolved = request.resolve(&mut rand::rng())?;
@@ -545,7 +561,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         .clone()
         .ok_or("the system has no planet asked for")?;
     let body = args.body.as_deref().unwrap_or(&focus);
-    generate_body(&dir, body, !args.no_noise_maps)?;
+    generate_body(&dir, body, diagnostics)?;
     // Exact values (the summary above is rounded) so the world can be
     // regenerated; the size too, since the relief depends on the resolution.
     let giant = p.giant_mass_earth.is_some();

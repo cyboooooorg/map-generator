@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { bodyApi, parseSystemBody, sizeName, systemBodyId, worldFile, worldThumbnail } from './client';
+import { bodyApi, bodySvg, parseSystemBody, sizeName, systemBodyId, worldFile, worldThumbnail } from './client';
+
+describe('SVG export', () => {
+  it('is drawn on request by the server, at the size asked', () => {
+    const id = systemBodyId('mgs-1-7', 'b');
+    expect(bodySvg(id, '2048x1024')).toBe('/api/systems/mgs-1-7/bodies/b/world.svg?size=2048x1024');
+  });
+});
 
 describe('world URLs', () => {
   it('name the revision of the world', () => {
