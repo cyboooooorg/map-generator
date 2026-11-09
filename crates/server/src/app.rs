@@ -3092,9 +3092,11 @@ mod tests {
         serde_json::from_str(text).unwrap()
     }
 
-    /// Waits until the body shown at `size` is listed as displayed.
+    /// Waits until the body shown at `size` is listed as displayed: up to
+    /// three minutes, since it takes a regeneration and then a second job at
+    /// that size, which a shared CI runner can take well over 30 s to run.
     async fn wait_displayed(app: &Router, base: &str, size: [u64; 2]) -> serde_json::Value {
-        for _ in 0..1500 {
+        for _ in 0..9000 {
             let (status, body) = call(app, "GET", &format!("{base}/sizes"), None).await;
             if status == StatusCode::OK && json(&body)["displayed"] == serde_json::json!(size) {
                 return json(&body);
