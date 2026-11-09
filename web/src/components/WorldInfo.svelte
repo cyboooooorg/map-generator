@@ -2,7 +2,7 @@
   import { getLocale, t } from '../lib/i18n/index.svelte';
   import { biomeName, presetDescription, presetName } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
-  import { downloadRawData } from '../lib/download';
+  import { downloadRawData, downloadSvg } from '../lib/download';
   import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import { loadSetting, saveSetting } from '../lib/settings';
@@ -30,6 +30,7 @@
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
   let zipping = $state(false);
+  let drawingSvg = $state(false);
   let rerolling = $state(false);
   $effect(() => saveSetting('worldInfoOpen', open));
 
@@ -55,6 +56,19 @@
       await onReroll();
     } finally {
       rerolling = false;
+    }
+  }
+  async function exportSvg(): Promise<void> {
+    if (!worldId || !size) {
+      return;
+    }
+    drawingSvg = true;
+    try {
+      await downloadSvg(worldId, size);
+    } catch (e) {
+      toasts.error(t.worldInfo.svgFailed({ error: String(e) }));
+    } finally {
+      drawingSvg = false;
     }
   }
   async function zip(): Promise<void> {
@@ -307,8 +321,12 @@
         <span>{t.worldInfo.download}</span>
         {#if size}
           <a href={worldFile(worldId, size, 'world.png', world.revision)} download={`${worldId}.png`}>{t.worldInfo.mapPng}</a>
-          <a href={worldFile(worldId, size, 'world.svg', world.revision)} download={`${worldId}.svg`}>{t.worldInfo.svg}</a>
           <a href={worldFile(worldId, size, 'legend.png', world.revision)} download={`${worldId}-legend.png`}>{t.worldInfo.legend}</a>
+        {/if}
+        {#if size}
+          <button class="link" onclick={exportSvg} disabled={drawingSvg} title={t.worldInfo.exportSvgHelp}
+            >{drawingSvg ? t.worldInfo.drawingSvg : t.worldInfo.exportSvg}</button
+          >
         {/if}
         <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
       </div>

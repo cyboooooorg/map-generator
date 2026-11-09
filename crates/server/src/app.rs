@@ -133,6 +133,10 @@ pub struct Config {
     /// Memory budget of the worlds loaded for tiles and hex grids (see
     /// [`tiles`]).
     pub tile_cache_bytes: usize,
+    /// Write the diagnostic `noise_maps/` of every body generated
+    /// (`MAPGEN_NOISE_MAPS`); off by default. `world.svg` is never written
+    /// by the server, see [`system_svg`].
+    pub noise_maps: bool,
 }
 
 pub struct AppState {
@@ -327,6 +331,7 @@ fn routes(state: Shared, config: &Config) -> Router {
             "/api/systems/{id}/bodies/{body}/displayed-size",
             put(set_displayed_size),
         )
+        .route("/api/systems/{id}/bodies/{body}/world.svg", get(system_svg))
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
         .route("/api/jobs/{id}/events", get(job_events))
@@ -940,6 +945,59 @@ async fn system_thumbnail(
     let loc = system_body_loc(&state, &id, &body, Some(original)).await?;
     let thumb_dir = systems::body_dir(&state.config.systems_dir, &id, &body);
     body_thumbnail(state, loc, &thumb_dir, query).await
+}
+
+/// Draws the `world.svg` of a body and sends it as a download
+/// (`GET /api/systems/{id}/bodies/{body}/world.svg?size=WxH`, the displayed
+/// size without one). The server never writes this file: it is drawn here
+/// from the stored body, or from its seed and request when the stored data
+/// does not read back (see [`mapgen::system::body_svg`]).
+async fn system_svg(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+    Query(query): Query<SvgQuery>,
+) -> Result<Response, Failure> {
+    let size = query_size(query.size.as_deref())?;
+    let loc = system_body_loc(&state, &id, &body, size).await?;
+    let (width, height) = size.unwrap_or_else(|| {
+        // The location's own size, for the file name and the drawing.
+        loc.dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(mapgen::sizes::parse_size_name)
+            .unwrap_or((0, 0))
+    });
+    let system_dir = systems::system_dir(&state.config.systems_dir, &id);
+    let owned = body.clone();
+    let svg = tokio::task::spawn_blocking(move || {
+        mapgen::system::body_svg(&system_dir, &owned, width, height)
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    note_opened(&state, &id, &body);
+    let name = format!(
+        "{id}-{body}-{}.svg",
+        mapgen::sizes::size_name(width, height)
+    );
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/svg+xml".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{name}\""),
+            ),
+            (header::CACHE_CONTROL, "no-cache".to_string()),
+        ],
+        svg,
+    )
+        .into_response())
+}
+
+/// Query of an SVG export: the resolution, the displayed one without it.
+#[derive(serde::Deserialize)]
+struct SvgQuery {
+    size: Option<String>,
 }
 
 async fn system_hex(
@@ -1955,6 +2013,10 @@ fn start_job(state: &Shared, key: String, job: NewJob) -> String {
         let progress = tx.clone();
         let thread_cancel = cancel.clone();
         let body = task_body.clone();
+        let diagnostics = mapgen::export::Diagnostics {
+            svg: false,
+            noise_maps: task_state.config.noise_maps,
+        };
         let result = tokio::task::spawn_blocking(move || {
             let report = |p: mapgen::system::BodyProgress| {
                 // A cancelled job stops when the next stage starts; the
@@ -1974,10 +2036,12 @@ fn start_job(state: &Shared, key: String, job: NewJob) -> String {
             };
             match size {
                 Some((width, height)) => {
-                    mapgen::system::generate_size(&dir, &body, width, height, false, report)
+                    mapgen::system::generate_size(&dir, &body, width, height, diagnostics, report)
                         .map(|()| vec![body.clone()])
                 }
-                None => mapgen::system::generate_neighbourhood(&dir, &body, report),
+                None => {
+                    mapgen::system::generate_neighbourhood_with(&dir, &body, diagnostics, report)
+                }
             }
         })
         .await;
@@ -2144,6 +2208,7 @@ mod tests {
             static_dir: root.join("static"),
             max_pixels: DEFAULT_MAX_PIXELS,
             tile_cache_bytes: tiles::DEFAULT_BUDGET_BYTES,
+            noise_maps: false,
         }
     }
 
@@ -2436,6 +2501,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn generates_no_svg_and_no_noise_maps_by_default() {
+        let config = temp_config("no-diagnostics");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let size = mapgen::sizes::size_dir(&systems::body_dir(&root, &id, &planet), 256, 128);
+        assert!(size.join("world.png").is_file());
+        assert!(size.join("legend.png").is_file());
+        assert!(!size.join("world.svg").exists());
+        assert!(!size.join("noise_maps").exists());
+    }
+
+    #[tokio::test]
+    async fn the_debug_option_writes_the_noise_maps() {
+        let config = Config {
+            noise_maps: true,
+            ..temp_config("noise-maps")
+        };
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let size = mapgen::sizes::size_dir(&systems::body_dir(&root, &id, &planet), 256, 128);
+        assert!(size.join("noise_maps").read_dir().unwrap().next().is_some());
+        // The SVG stays on request.
+        assert!(!size.join("world.svg").exists());
+    }
+
+    #[tokio::test]
+    async fn exports_the_svg_of_a_body_on_request() {
+        let config = temp_config("svg-export");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let uri = format!("/api/systems/{id}/bodies/{planet}/world.svg");
+        let get = |uri: String| {
+            let app = app.clone();
+            async move {
+                let response = app
+                    .oneshot(Request::get(&uri).body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                let (status, headers) = (response.status(), response.headers().clone());
+                let bytes = response.into_body().collect().await.unwrap().to_bytes();
+                (status, headers, bytes)
+            }
+        };
+        let (status, headers, bytes) = get(uri.clone()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers["content-type"], "image/svg+xml");
+        assert!(
+            headers["content-disposition"]
+                .to_str()
+                .unwrap()
+                .contains(".svg")
+        );
+        let text = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(text.starts_with("<?xml") && text.contains(r#"width="256" height="128""#));
+        // Drawn on request: nothing is stored.
+        let size = mapgen::sizes::size_dir(&systems::body_dir(&root, &id, &planet), 256, 128);
+        assert!(!size.join("world.svg").exists());
+        // Unknown size, unknown body, bad size name.
+        assert_eq!(
+            get(format!("{uri}?size=1024x512")).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            get(format!("{uri}?size=x")).await.0,
+            StatusCode::BAD_REQUEST
+        );
+        let other = format!("/api/systems/{id}/bodies/zz/world.svg");
+        assert_eq!(get(other).await.0, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
     async fn serves_each_resolution_of_a_body() {
         let config = temp_config("sizes");
         let root = config.systems_dir.clone();
@@ -2444,7 +2583,14 @@ mod tests {
         let system_dir = systems::system_dir(&root, &id);
         let owned = planet.clone();
         tokio::task::spawn_blocking(move || {
-            mapgen::system::generate_size(&system_dir, &owned, 512, 256, false, |_| {})
+            mapgen::system::generate_size(
+                &system_dir,
+                &owned,
+                512,
+                256,
+                mapgen::export::Diagnostics::default(),
+                |_| {},
+            )
         })
         .await
         .unwrap()

@@ -3,8 +3,9 @@
 //! ```text
 //! bodies/<body>/
 //! ├── thumb.png            from the original resolution
-//! └── sizes/<W>x<H>/       one resolution: world.png, world.svg,
-//!                          legend.png, raw_data/, noise_maps/
+//! └── sizes/<W>x<H>/       one resolution: world.png,
+//!                          legend.png, raw_data/; world.svg and
+//!                          noise_maps/ only on request
 //! ```
 //!
 //! The original resolution (the size in `system.json`) is one of them, laid

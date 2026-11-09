@@ -1,7 +1,7 @@
 // Downloads of a world's files, including a ZIP of its raw data built in the
 // browser (the server only serves the files one by one).
 import { zipSync, type Zippable } from 'fflate';
-import { worldFile } from './api/client';
+import { bodySvg, worldFile } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { saveBlob } from './format';
 
@@ -37,6 +37,15 @@ export async function downloadRawData(id: string, size: string, meta: WorldMetad
   }
   const zip = zipSync({ [`${id}/raw_data`]: tree });
   saveBlob(new Blob([zip.buffer as ArrayBuffer], { type: 'application/zip' }), `${id}-raw_data.zip`);
+}
+
+/** Has the server draw the SVG of a body at resolution `size` and saves it as `<id>.svg`. */
+export async function downloadSvg(id: string, size: string): Promise<void> {
+  const response = await fetch(bodySvg(id, size), { cache: 'no-cache' });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  saveBlob(await response.blob(), `${id.split('/').pop()}-${size}.svg`);
 }
 
 /** Saves a JSON value as a file. */

@@ -184,6 +184,7 @@ mod tests {
         };
         let params = request.resolve(&mut rand::rng()).unwrap().params;
         let options = ExportOptions {
+            svg: false,
             raw_data: false,
             thumb_dir: Some(dir.clone()),
         };

@@ -12,7 +12,7 @@ pub mod variation;
 pub use noise_maps::NoiseMapWriter;
 pub use png::{export_legend_png, export_png, world_image};
 pub use raw_data::export_raw_data;
-pub use svg::export_svg;
+pub use svg::{export_svg, svg_bytes};
 
 use crate::generation::Generated;
 use crate::rivers;
@@ -24,12 +24,37 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use variation::SurfaceVariation;
 
-/// Which optional outputs [`export_world`] writes, and where. The maps
-/// (`world.png`, `world.svg`, `legend.png`) are always written. The
-/// diagnostic maps of `noise_maps/` are written during the generation, by a
-/// [`NoiseMapWriter`].
+/// The outputs a body is generated with only on request: they take disk
+/// and time and the app does not read them (see
+/// `docs/analysis/15-storage.md`, decision 5). `world.svg` can be drawn
+/// again at any time from the stored body (see `system::body_svg`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Diagnostics {
+    /// `world.svg`, the vector image of the map.
+    pub svg: bool,
+    /// `noise_maps/`, an image of every noise layer, written during the
+    /// generation by a [`NoiseMapWriter`].
+    pub noise_maps: bool,
+}
+
+impl Diagnostics {
+    /// Both outputs.
+    pub fn all() -> Self {
+        Self {
+            svg: true,
+            noise_maps: true,
+        }
+    }
+}
+
+/// Which optional outputs [`export_world`] writes, and where. `world.png`
+/// and `legend.png` are always written; `world.svg` only with
+/// [`ExportOptions::svg`]. The diagnostic maps of `noise_maps/` are written
+/// during the generation, by a [`NoiseMapWriter`].
 #[derive(Clone, Debug)]
 pub struct ExportOptions {
+    /// `world.svg`. Off by default: see [`Diagnostics`].
+    pub svg: bool,
     /// `raw_data/`: world.json and the layer PNGs.
     pub raw_data: bool,
     /// The directory that receives the thumbnail of `world.png`
@@ -42,6 +67,7 @@ pub struct ExportOptions {
 impl Default for ExportOptions {
     fn default() -> Self {
         Self {
+            svg: false,
             raw_data: true,
             thumb_dir: None,
         }
@@ -122,9 +148,13 @@ pub fn export_world(
                 None => Ok(()),
             }
         }),
-        Box::new(|| export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())),
         Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
     ];
+    if options.svg {
+        exports.push(Box::new(|| {
+            export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())
+        }));
+    }
     if options.raw_data {
         exports.push(Box::new(|| {
             let maps = raw_data::SurfaceMaps {
