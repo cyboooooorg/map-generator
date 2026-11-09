@@ -27,6 +27,9 @@ export class LoadedWorld {
   /** The world's biome statistics and rivers, whichever body is shown. */
   worldStats = $state.raw<WorldStats | null>(null);
   worldRivers = $state.raw<RiverIndex | null>(null);
+  /** Why the planet's metadata could not be read while one of its moons is shown. */
+  worldError = $state<string | null>(null);
+  private planetController: AbortController | null = null;
   // Raw state: typed arrays and large JSON must not be proxied.
   meta = $state.raw<WorldMetadata | null>(null);
   layers = $state.raw<WorldLayers | null>(null);
@@ -137,6 +140,7 @@ export class LoadedWorld {
     this.worldMeta = null;
     this.worldStats = null;
     this.worldRivers = null;
+    this.worldError = null;
     this.loadBody(id);
   }
 
@@ -212,16 +216,52 @@ export class LoadedWorld {
     this.systemBody = body;
     const entry = system.bodies.find((b) => b.id === body);
     const planet = entry?.parent ?? entry?.id ?? null;
+    const previous = this.worldId;
     this.worldId = planet ? systemBodyId(this.systemId, planet) : null;
     if (keep) {
       // Its resolutions may have changed meanwhile (one generated or deleted).
       this.refreshSizes().catch((e: unknown) => console.warn('Could not list the resolutions', e));
       return;
     }
-    this.worldMeta = null;
-    this.worldStats = null;
-    this.worldRivers = null;
+    const moon = entry !== undefined && planet !== null && entry.id !== planet;
+    // A moon's card is its planet's: kept when the planet is the one shown
+    // already (its biomes and rivers come with its maps), read otherwise.
+    if (!moon || previous !== this.worldId) {
+      this.worldMeta = null;
+      this.worldStats = null;
+      this.worldRivers = null;
+    }
+    this.worldError = null;
+    this.planetController?.abort();
+    this.planetController = null;
+    if (moon && this.worldId) this.loadPlanetMeta(this.worldId);
     this.loadBody(entry?.generated ? systemBodyId(this.systemId, entry.id) : null);
+  }
+
+  /**
+   * Reads the metadata of the planet `id` of a moon shown (its card is the
+   * planet's), at the resolution displayed. A peek: the planet is not the
+   * body looked at, so the server does not count it opened.
+   */
+  private loadPlanetMeta(id: string): void {
+    const controller = new AbortController();
+    this.planetController = controller;
+    const { signal } = controller;
+    (async () => {
+      const sizes = await api.sizes(id, signal);
+      const shown = displayedSize(sizes);
+      if (!shown) throw new Error('no resolution on disk');
+      const meta = await api.peekMetadata(id, sizeName(shown.width, shown.height), signal);
+      if (signal.aborted || this.worldId !== id) return;
+      if (meta.format_version < MIN_FORMAT_VERSION) {
+        this.worldError = t.world.outdated({ id });
+        return;
+      }
+      this.worldMeta = meta;
+    })().catch((e: unknown) => {
+      if (signal.aborted || this.worldId !== id) return;
+      this.worldError = t.world.loadFailed({ id, error: String(e) });
+    });
   }
 
   /**

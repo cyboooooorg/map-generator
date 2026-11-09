@@ -330,8 +330,8 @@
         {/if}
         <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
       </div>
-    {:else if world.error}
-      <p class="error">{world.error}</p>
+    {:else if world.error || world.worldError}
+      <p class="error">{world.worldError ?? world.error}</p>
     {:else}
       <p class="muted">{t.worldInfo.loading}</p>
     {/if}

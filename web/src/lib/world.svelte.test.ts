@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { System } from './api/types/System';
+import type { WorldMetadata } from './api/types/WorldMetadata';
 import { LoadedWorld } from './world.svelte';
 
 const body = (id: string, parent?: string) => ({ id, kind: parent ? 'moon' : 'planet', parent, generated: false });
@@ -286,5 +288,80 @@ describe('LoadedWorld sizes', () => {
     await settle();
     expect(listings()).toBe(after + 2);
     expect(world.size).toBe('2048x1024');
+  });
+});
+
+const SYSTEM = 'mgs-1-1';
+const planetMeta = { format_version: 99, giant: null, rivers: null } as unknown as WorldMetadata;
+
+function system(generated: Record<string, boolean>): System {
+  return {
+    focus: 'c',
+    bodies: [
+      { id: 'c', kind: 'planet', parent: null, generated: generated['c'] ?? true },
+      { id: 'c-1', kind: 'moon', parent: 'c', generated: generated['c-1'] ?? true },
+    ],
+  } as unknown as System;
+}
+
+const sizes = { original: [256, 128], displayed: [256, 128], present: [{ width: 256, height: 128, revision: 1 }], pending: [] };
+
+/** Answers the sizes and the metadata of the planet `c`; the files of the moon never arrive. */
+function serve(requested: string[], planet = true) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      requested.push(url);
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+      if (url.includes('/bodies/c-1/')) return new Promise<Response>(() => undefined);
+      if (!planet) return json({ error: 'not generated' }, 404);
+      if (url.endsWith('/sizes')) return json(sizes);
+      if (url.includes('world.json')) return json(planetMeta);
+      return new Promise<Response>(() => undefined);
+    }),
+  );
+}
+
+async function settled(until: () => boolean): Promise<void> {
+  for (let i = 0; i < 100 && !until(); i++) await new Promise((r) => setTimeout(r, 5));
+}
+
+
+describe("a moon's card", () => {
+  it("has its planet's metadata when the moon is opened first (a link, or its regeneration)", async () => {
+    const requested: string[] = [];
+    serve(requested);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldMeta !== null);
+    expect(world.worldMeta).toEqual(planetMeta);
+    expect(world.worldId).toBe(`systems/${SYSTEM}/bodies/c`);
+    // The planet is looked at from the moon's view: a peek, not an opening.
+    expect(requested.filter((u) => u.includes('/bodies/c/') && u.includes('world.json')).every((u) => u.includes('peek=1'))).toBe(true);
+  });
+
+  it("keeps its planet's metadata when the planet was shown first", async () => {
+    serve([]);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    const kept = { ...planetMeta, seed: 5 } as unknown as WorldMetadata;
+    world.worldId = `systems/${SYSTEM}/bodies/c`;
+    world.worldMeta = kept;
+    world.showSystemBody('c-1');
+    expect(world.worldMeta).toBe(kept);
+  });
+
+  it('says so when its planet cannot be read, instead of loading for ever', async () => {
+    serve([], false);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldError !== null);
+    expect(world.worldMeta).toBeNull();
+    expect(world.worldError).toContain('c');
   });
 });
