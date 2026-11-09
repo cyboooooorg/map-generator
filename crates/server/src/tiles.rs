@@ -303,7 +303,7 @@ fn load(dir: &Path, epoch_ma: Option<i32>) -> Result<Arc<DetailWorld>, String> {
 }
 
 /// A layer of a world shown at an epoch (see `GET
-/// /api/worlds/{id}/epoch/{ma}/{file}`).
+/// /api/systems/{id}/bodies/{body}/epoch/{epoch}/{file}`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EpochLayer {
     /// The render without hillshade, as `raw_data/colour.png`.
