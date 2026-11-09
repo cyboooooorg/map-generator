@@ -50,6 +50,13 @@ describe('host star surface', () => {
     expectClose(apply(m, [1, 0, 0]), [1, 0, 0]);
   });
 
+  it('writes into a reusable array', () => {
+    const out = new Array<number>(9).fill(NaN);
+    const m = discBasis([0, 0, 1], [0, 1, 0], IDENTITY, out);
+    expect(m).toBe(out);
+    expect(m).toEqual(discBasis([0, 0, 1], [0, 1, 0], IDENTITY));
+  });
+
   it('shows no detail on a small disc', () => {
     expect(hostStarDetail(14)).toBe(0);
     expect(hostStarDetail(30)).toBe(1);
@@ -73,7 +80,9 @@ describe('host star surface', () => {
 
   it('draws the living surface on a quad, not a capped point sprite', () => {
     expect(hostStarFragment).toContain('#define STAR_NO_GRANULATION');
-    expect(hostStarFragment).toContain('starSurfaceColour(');
+    // The star view's exposure on the disc, not the plain disc's 1.4 (which clipped it to white).
+    expect(hostStarFragment).toMatch(/\? starSurfaceExposed\(n, mu\)/);
+    expect(hostStarFragment).toMatch(/disk \* inside \+ uColor \* glow/);
     expect(hostStarFragment).toContain('uDiscBasis');
     // The old look without a surface.
     expect(hostStarFragment).toContain('0.35');

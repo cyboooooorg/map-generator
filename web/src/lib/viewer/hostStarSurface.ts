@@ -14,13 +14,6 @@
  */
 import type { Vec3 } from '../skyBodies';
 
-const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const unit = (a: Vec3): Vec3 => {
-  const l = Math.max(Math.hypot(a[0], a[1], a[2]), 1e-12);
-  return [a[0] / l, a[1] / l, a[2] / l];
-};
-
 /**
  * Maps the disc's point-sprite coordinates (x right, y up, z towards the
  * viewer, unit disc) to the star's inertial frame: columns = star-frame
@@ -28,18 +21,47 @@ const unit = (a: Vec3): Vec3 => {
  * camera). `toCamera` is the unit direction from the star to the camera,
  * `cameraUp` the screen's up in the world (made orthogonal to the line
  * of sight here), `starAxes` the star's x, y (spin) and z axes in the
- * world. Column-major, as `Matrix3.fromArray` and GLSL's `mat3` take it.
+ * world. Column-major, as `Matrix3.fromArray` and GLSL's `mat3` take it,
+ * written into `out` when given (the view calls it every frame) and
+ * returned.
  */
-export function discBasis(toCamera: Vec3, cameraUp: Vec3, starAxes: [Vec3, Vec3, Vec3]): number[] {
-  const z = unit(toCamera);
-  let up: Vec3 = [cameraUp[0] - z[0] * dot(cameraUp, z), cameraUp[1] - z[1] * dot(cameraUp, z), cameraUp[2] - z[2] * dot(cameraUp, z)];
-  // An up along the line of sight: any perpendicular will do.
-  if (Math.hypot(...up) < 1e-9) up = Math.abs(z[1]) < 0.9 ? cross(z, cross([0, 1, 0], z)) : cross(z, cross([1, 0, 0], z));
-  const y = unit(up);
-  const x = cross(y, z);
-  const [sx, sy, sz] = starAxes;
-  const inStar = (w: Vec3): Vec3 => [dot(w, sx), dot(w, sy), dot(w, sz)];
-  return [...inStar(x), ...inStar(y), ...inStar(z)];
+export function discBasis(toCamera: Vec3, cameraUp: Vec3, starAxes: [Vec3, Vec3, Vec3], out: number[] = new Array<number>(9)): number[] {
+  // z: the line of sight.
+  const zl = Math.max(Math.hypot(toCamera[0], toCamera[1], toCamera[2]), 1e-12);
+  const zx = toCamera[0] / zl;
+  const zy = toCamera[1] / zl;
+  const zz = toCamera[2] / zl;
+  // y: the up vector without its part along z; any perpendicular when
+  // it lies along the line of sight.
+  let ux = cameraUp[0];
+  let uy = cameraUp[1];
+  let uz = cameraUp[2];
+  let along = ux * zx + uy * zy + uz * zz;
+  let yx = ux - zx * along;
+  let yy = uy - zy * along;
+  let yz = uz - zz * along;
+  if (Math.hypot(yx, yy, yz) < 1e-9) {
+    [ux, uy, uz] = Math.abs(zy) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    along = ux * zx + uy * zy + uz * zz;
+    yx = ux - zx * along;
+    yy = uy - zy * along;
+    yz = uz - zz * along;
+  }
+  const yl = Math.hypot(yx, yy, yz);
+  yx /= yl;
+  yy /= yl;
+  yz /= yl;
+  // x = y × z.
+  const xx = yy * zz - yz * zy;
+  const xy = yz * zx - yx * zz;
+  const xz = yx * zy - yy * zx;
+  for (let k = 0; k < 3; k++) {
+    const a = starAxes[k]!;
+    out[k] = xx * a[0] + xy * a[1] + xz * a[2];
+    out[3 + k] = yx * a[0] + yy * a[1] + yz * a[2];
+    out[6 + k] = zx * a[0] + zy * a[1] + zz * a[2];
+  }
+  return out;
 }
 
 /** Disc diameter, CSS px, below which the sky disc shows no active region. */

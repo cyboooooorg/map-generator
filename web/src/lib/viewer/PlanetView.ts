@@ -486,6 +486,14 @@ export class PlanetView {
   private readonly hostSurface: StarSurfaceState;
   /** What setHostStarSurface last gave; null draws the plain disc. */
   private hostSurfaceOf: HostStarSurface | null = null;
+  /** Scratch of drawHostStar, which runs every frame: nothing allocated there. */
+  private readonly hostScratch = {
+    up: new Vector3(),
+    toCamera: [0, 0, 0] as SkyVec3,
+    cameraUp: [0, 0, 0] as SkyVec3,
+    basis: new Array<number>(9).fill(0),
+    view: { radiusPx: 0, daysPerSecond: 0, regionDetail: 0 },
+  };
   /** The atmosphere's ground (veil) and sky passes. */
   private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>[];
   private readonly resizeObserver: ResizeObserver;
@@ -3321,16 +3329,24 @@ export class PlanetView {
     if (surface) {
       // The disc's frame in the star's: the line of sight from the star,
       // the screen's up (the camera's own, not its orbit's pole).
-      const up = new Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
-      const basis = discBasis([-dir.x, -dir.y, -dir.z], [up.x, up.y, up.z], surface.axes);
-      (u['uDiscBasis']!.value as Matrix3).fromArray(basis);
+      // From the quaternion, which the controls have set this frame (the
+      // world matrix is only updated at render, a frame late while dragging).
+      const s = this.hostScratch;
+      const up = s.up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      s.toCamera[0] = -dir.x;
+      s.toCamera[1] = -dir.y;
+      s.toCamera[2] = -dir.z;
+      s.cameraUp[0] = up.x;
+      s.cameraUp[1] = up.y;
+      s.cameraUp[2] = up.z;
+      discBasis(s.toCamera, s.cameraUp, surface.axes, s.basis);
+      (u['uDiscBasis']!.value as Matrix3).fromArray(s.basis);
       // Detail by the disc's size in CSS pixels, as the star views measure theirs.
       const cssDisk = disk / ratio;
-      this.hostSurface.update(surface.days, {
-        radiusPx: cssDisk / 2,
-        daysPerSecond: surface.daysPerSecond,
-        regionDetail: hostStarDetail(cssDisk),
-      });
+      s.view.radiusPx = cssDisk / 2;
+      s.view.daysPerSecond = surface.daysPerSecond;
+      s.view.regionDetail = hostStarDetail(cssDisk);
+      this.hostSurface.update(surface.days, s.view);
     }
   }
 
