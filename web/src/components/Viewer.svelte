@@ -38,6 +38,7 @@
   import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
+  import { bodyTitle, evictedKey, shouldTell } from '../lib/evicted';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
@@ -1254,12 +1255,12 @@
         const pending = world.id === id ? world.sizes?.pending.find((p) => sizeName(p.width, p.height) === wanted) : undefined;
         jobId = pending ? pending.job_id : (await api.generateSize(id, wanted)).job_id;
       } else {
-        const response = await fetch(
-          `/api/systems/${encodeURIComponent(systemId)}/bodies/${encodeURIComponent(body)}/generate`,
-          { method: 'POST' },
-        );
-        if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
-        jobId = ((await response.json()) as { job_id: string | null }).job_id;
+        const started = await api.generateBody(systemId, body);
+        jobId = started.job_id;
+        // A body that lost its files, made by another generator: the user hears it once.
+        if (shouldTell(started.regenerated_from, evictedKey(systemId, body))) {
+          toasts.show(t.app.olderWorld({ body: bodyTitle(sys, world.systemNames, body) }), { ms: 12000 });
+        }
       }
       if (jobId !== null) followedJobs.add(jobId);
       if (jobId === null) {

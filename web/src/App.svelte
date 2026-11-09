@@ -21,7 +21,7 @@
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { driftRange, driftRequest, formatDrift } from './lib/drift';
-  import { evictedKey, regenerationToQueue, shouldTell } from './lib/evicted';
+  import { bodyTitle, evictedKey, forgetTold, shouldTell } from './lib/evicted';
   import { keepAlone, requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
@@ -306,13 +306,8 @@
     const status = job.status;
     void refresh().then(() => {
       if (status.status === 'done') {
-        // The system's evicted bodies are generated again: a later eviction asks again.
-        for (const key of [...askedEvicted, ...toldOlder]) {
-          if (key.startsWith(`${status.world_id}/`)) {
-            askedEvicted.delete(key);
-            toldOlder.delete(key);
-          }
-        }
+        // The system's evicted bodies are generated again: a later eviction tells again.
+        forgetTold(status.world_id);
         // A body generated in the system shown: load the system again,
         // which keeps the body shown and loads its maps.
         if (status.world_id === selectedId) {
@@ -472,23 +467,10 @@
     }
   }
 
-  /** The evicted bodies this session asked to generate when their view opened, and was told of. */
-  const askedEvicted = new Set<string>();
-  const toldOlder = new Set<string>();
-  // Opening the view of an evicted body (not a listing, a card or the system
-  // view) queues its generation again, at the resolution it was displayed at.
-  $effect(() => {
-    if (primary.subject !== 'planet') return;
-    const system = primary.systemId;
-    const body = primary.systemBody;
-    const key = regenerationToQueue(system, body, primary.systemEvicted, askedEvicted);
-    if (key && system && body) {
-      askedEvicted.add(key);
-      untrack(() => void generateBody(system, body));
-    }
-  });
-
-  /** Queues a body of a system and its neighbourhood, from its card. */
+  /**
+   * Queues a body of a system and its neighbourhood, from its card. (The view of a
+   * body not generated queues itself: see `generateShown` in Viewer.svelte.)
+   */
   async function generateBody(system: string, body: string): Promise<void> {
     try {
       const started = await api.generateBody(system, body);
@@ -496,9 +478,11 @@
         jobs.track(started.job_id, system, {}, { status: 'queued' }, true);
       }
       // An evicted world made by an older generator: the user hears it once.
-      if (shouldTell(started.regenerated_from, evictedKey(system, body), toldOlder)) {
-        const named = primary.systemId === system ? primary.systemNames[body] : undefined;
-        toasts.show(t.app.olderWorld({ body: named ?? body }), { ms: 12000 });
+      if (shouldTell(started.regenerated_from, evictedKey(system, body))) {
+        const shown = primary.systemId === system;
+        toasts.show(t.app.olderWorld({ body: bodyTitle(shown ? primary.system : null, shown ? primary.systemNames : {}, body) }), {
+          ms: 12000,
+        });
       }
     } catch (e) {
       toasts.error(t.app.failed({ id: titleOf(system) ?? system, error: errorText(e) }));
