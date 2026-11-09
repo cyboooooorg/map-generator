@@ -30,7 +30,50 @@ export type SystemGiant = Giant & {
    * globe is turned (see globeTurn). A world's giants have none.
    */
   axes?: (days: number) => Axes;
+  /**
+   * In a planetary system, its day (hours) when it turns freely, its axes
+   * then turning with it alone; absent for a locked planet or one in a
+   * spin-orbit resonance, whose turn follows its orbit (see spinLag).
+   */
+  spinHours?: number;
 };
+
+/** Turns per frame up to which a freely spinning globe is shown turning at its true rate. */
+const SPIN_SHOWN_TURNS = 0.15;
+/** Turns per frame from which it is held still: faster, the eye sees it strobe or turn backwards. */
+const SPIN_HELD_TURNS = 0.25;
+/** Turns of its true spin over which a globe held back catches up with its true hour (an e-fold). */
+const SPIN_CATCH_UP_TURNS = 4;
+
+/**
+ * The share of a free spinner's turn shown at `turnsPerFrame` (its true
+ * turns between two frames): all of it while slow enough to follow, none
+ * from SPIN_HELD_TURNS on, easing between so the globe never jumps.
+ */
+export function spinShare(turnsPerFrame: number): number {
+  const t = Math.min(Math.max((Math.abs(turnsPerFrame) - SPIN_SHOWN_TURNS) / (SPIN_HELD_TURNS - SPIN_SHOWN_TURNS), 0), 1);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/**
+ * How far (days) a free spinner's globe is held behind the system's clock
+ * after a frame of `stepDays` (the clock's advance, 0 when paused or for a
+ * jump of the clock) from `lag`: the globe is drawn at the day `day - lag`.
+ * A spin too fast for the frames (a 10 h day at 32 days a second is about
+ * one turn a frame) is held still, where it was; once slow enough again,
+ * the globe catches up with its true hour over a few of its turns, never
+ * while the clock is stopped. The lag is kept within half a turn, which
+ * changes nothing drawn.
+ */
+export function spinLag(lag: number, stepDays: number, periodDays: number): number {
+  if (!(periodDays > 0)) return 0;
+  const turns = stepDays / periodDays;
+  const shown = spinShare(turns);
+  let next = lag + stepDays * (1 - shown);
+  next *= Math.exp((-Math.abs(turns) * shown) / SPIN_CATCH_UP_TURNS);
+  next -= periodDays * Math.round(next / periodDays);
+  return next;
+}
 
 /**
  * The direction from the star of the point of giant `giant`'s orbit at a

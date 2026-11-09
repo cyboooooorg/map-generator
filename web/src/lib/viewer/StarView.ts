@@ -80,6 +80,7 @@ import {
   sphereGrid,
   type SystemGiant,
   globeTurn,
+  spinLag,
   orbitDirection,
   moonOrbits,
   gravityScale,
@@ -255,6 +256,8 @@ export class StarView {
   /** A planetary system's moons, round every planet: by planet, its group, orbits and markers. */
   private systemMoons: { group: Group; orbits: MoonOrbit[]; markers: Mesh<SphereGeometry, MeshBasicMaterial>[] }[] = [];
   private giantMarkers: Mesh<SphereGeometry, ShaderMaterial>[] = [];
+  /** How far each free spinner's globe is held behind the clock, days, by giant (see spinLag). */
+  private spinLags: number[] = [];
   /** The giants' distances from the star now, AU (see placeGiants). */
   private giantDistances: number[] = [];
   /**
@@ -564,7 +567,10 @@ export class StarView {
     const key = system ? `${info.type} ${giants.map((g) => `${g.orbit_au}:${g.eccentricity}:${g.phase}`).join(' ')}` : '';
     if (system) {
       // Another system: its planets start from their drawn places.
-      if (key !== this.systemKey) this.time = this.orbitTime = 0;
+      if (key !== this.systemKey) {
+        this.time = this.orbitTime = 0;
+        this.spinLags = [];
+      }
     } else if (this.info && (this.systemKey !== '' || this.info.type !== info.type || this.info.orbit_au !== info.orbit_au || this.omega !== omega)) {
       // Another system: its planet starts its orbit from the same point.
       this.time = this.orbitTime = 0;
@@ -1342,10 +1348,12 @@ export class StarView {
       const position = this.orbitPoint(giant, trueAnomaly, giant.orbit_au * distance);
       const marker = this.giantMarkers[k];
       marker?.position.copy(position);
-      // Its globe turned on itself as the planet view turns it: a locked
-      // planet keeps its longitude 180° towards the star.
+      // Its globe turned on itself on the system's clock, as placeSystem
+      // turns it: a locked planet keeps its longitude 180° towards the star;
+      // a free spinner too fast for the frames is held back (see spinLag).
       if (marker && giant.axes) {
-        (marker.material.uniforms['uTurn']!.value as Matrix3).fromArray(globeTurn(giant.axes(this.systemDay)).flat());
+        const day = this.systemDay - (giant.spinHours ? (this.spinLags[k] ?? 0) : 0);
+        (marker.material.uniforms['uTurn']!.value as Matrix3).fromArray(globeTurn(giant.axes(day)).flat());
       }
       this.placeVector(k, giant, position, giant.orbit_au * distance);
       const pin = this.pins[k];
@@ -1458,6 +1466,10 @@ export class StarView {
     const step = Math.min(elapsed / 1000, MAX_STEP_S);
     this.time += step;
     this.orbitTime += step * this.speed;
+    // A free spinner too fast for the frames is held still (see spinLag).
+    this.giants.forEach((giant, k) => {
+      if (giant.spinHours) this.spinLags[k] = spinLag(this.spinLags[k] ?? 0, step * this.speed * this.daysPerSecond, giant.spinHours / 24);
+    });
     this.animateProminences();
     this.placePlanet();
     const turn = this.meanAnomaly() / (2 * Math.PI);

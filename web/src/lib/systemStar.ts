@@ -12,6 +12,7 @@ import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
 import type { Belt } from './api/types/Belt';
 import type { Trojans } from './api/types/Trojans';
+import { resonanceTurns } from './spinResonance';
 import { placeSystem, type Placement } from './systemSky';
 import { type SystemGiant, withOrbitDefaults } from './viewer/starSystem';
 
@@ -151,6 +152,7 @@ export function systemStarView(
       node: body.orbit.node_deg * DEG,
       moons: moonsOf(body.id).map((m) => ({ ...m, barycentre_km: 0 })),
       axes: (days: number) => placeAt(days).get(body.id)!.axes,
+      ...(body.spin.locked || resonanceTurns(body.spin) > 0 ? {} : { spinHours: body.spin.period_hours }),
     };
   });
   return {
