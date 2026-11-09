@@ -343,26 +343,34 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    `facula_ratio` / 9, at most 1, so that a Sun-like ratio of about 10
    fills it and a spot-dominated star's plages are fainter
    (**calibration**). The granulation is moving cellular noise at the
-   granule size, as prototype D drew it: the distances $F_1$, $F_2$ to
-   the nearest and second-nearest cell centre, one centre per granule,
-   in a space warped by one octave of value noise. A cell is bright
-   in its middle, $\mathrm{smoothstep}(0.02, 0.30, F_2 - F_1)\,(1.15 -
-   0.55\,F_1)$, and dark in the lanes where $F_2 - F_1$ falls to 0;
-   about a fifth of the lanes carry bright points, weighted 0.35
-   against the cells' 0.62 (prototype D; Nordlund, Stein & Asplund 2009
-   for the cells and lanes, Sánchez Almeida et al. 2004 for the points;
-   the shapes and weights are **calibrations**). Each centre wanders
+   granule size, as prototype D drew it: one cell centre per unit cube,
+   in a space warped by one octave of value noise. A cell is bright in
+   its middle, $\mathrm{smoothstep}(0.02, 0.30, F_2 - F_1)\,(1.15 -
+   0.55\,F_1)$, and dark in the lanes where $F_2 - F_1$ falls to 0.
+   $F_1$ is the distance to the nearest centre. $F_2 - F_1$ is twice
+   the distance along the surface to the edge of that centre's cell,
+   not the 3D second-nearest distance: a sphere cutting a 3D cell
+   pattern runs nearly parallel to some faces between centres stacked
+   in depth, where the 3D $F_2 - F_1$ stays small over wide flat grey
+   patches with hard edges. About a fifth of the lanes carry a soft
+   bright point where the lane crosses the line between its two
+   centres, weighted 0.35 against the cells' 0.62 (prototype D;
+   Nordlund, Stein & Asplund 2009 for the cells and lanes, Sánchez
+   Almeida et al. 2004 for the points; the shapes and weights are
+   **calibrations**). Each centre wanders
    about its cell's middle by 0.3 of a cell along each axis, at 97, 103
    and 109 turns per 289 granule lifetimes (2.1 to 2.4 rad per
    lifetime, **calibration**), so that cells deform, split and merge
    over a few lifetimes; the warp drifts round a circle at 2 turns per
    289 lifetimes. Every motion turns a whole number of times in the 289
    lifetimes at which the phase wraps, so the surface does not jump
-   there. The result is brought to zero mean and unit rms (measured
-   over the disc), then multiplied by a gain of 1.6
-   (**calibration**): prototype D, the approved look, drew an rms
-   contrast of about 0.24 on the Sun, whose `granule_contrast` is 0.15.
-   The drawn rms contrast is therefore 1.6 times `granule_contrast`.
+   there. The result is brought
+   to zero mean and unit rms (measured over the disc), then multiplied
+   by a gain of 1.6 (**calibration**): prototype D, the approved look,
+   drew an rms contrast of about 0.24 on the Sun, whose
+   `granule_contrast` is 0.15. The drawn rms contrast of the brightness
+   is therefore 1.6 times `granule_contrast`, before the soft exposure
+   below compresses it on screen.
    The shader (`web/src/lib/viewer/starSurface.ts`) fades the
    regions and the granules out as the star shrinks on screen, and as a
    frame of the clock outlasts a twelfth of a rotation or a granule

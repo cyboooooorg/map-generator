@@ -30,9 +30,10 @@
  * with the clock's speed (`exposureFade`); the shader skips the region
  * loop and the granulation behind uniform branches when they are faded
  * out, so a small or fast-turning star costs only its limb darkening.
- * Where it is drawn, the granulation is the costliest term: a 20-cell
- * search and one octave of value noise per pixel (28 hashes, one more
- * in the lanes), about three times the two simplex fields it replaced.
+ * Where it is drawn, the granulation is the costliest term: two passes
+ * over 20 cells and one octave of value noise per pixel (48 hashes, one
+ * more in the lanes), about four and a half times the two simplex
+ * fields it replaced.
  *
  * The science (spot structure, facular contrast, limb law) is in
  * docs/science/star-activity.md.
@@ -176,14 +177,15 @@ const WARP_RADIUS = 0.08 / ((TWO_PI * WARP_HARMONIC) / GRANULE_PHASE_PERIOD);
 
 /**
  * Mean and rms of the raw granule brightness (cell plus bright points),
- * measured over the disc at several phases (see `starGranules`): they
- * bring it to zero mean and unit rms.
+ * measured on disc patches from the centre to 0.6 radii and at several
+ * phases (see `starGranules`): they bring it to zero mean and unit rms.
  */
-const GRANULE_RAW_MEAN = 0.5;
-const GRANULE_RAW_RMS = 0.38;
+const GRANULE_RAW_MEAN = 0.618;
+const GRANULE_RAW_RMS = 0.363;
 
 /**
- * **Calibration**: the drawn granulation's rms over `granule_contrast`.
+ * **Calibration**: the drawn granulation's rms over `granule_contrast`,
+ * on the brightness b before the soft exposure curve.
  * Prototype D, the approved look, drew 0.62 × the raw rms (about 0.236)
  * on the Sun, whose `granule_contrast` is 0.15: a gain of about 1.6.
  */
@@ -201,10 +203,14 @@ const EPOCH_SPAN_DAYS = 20;
 const WINDOW_DAYS = 21;
 
 /**
- * The surface's GLSL: its uniforms, the noise helpers (`vec2
- * starCells(vec3 p, float phase)`, `float starHash(vec3 p)`, `float
- * starFbm2(vec3 p)` and `vec3 starFbm2x3(vec3 p)`, kept under
- * `STAR_NO_GRANULATION` too), `float starLimb(float mu)`, `float
+ * The surface's GLSL: its uniforms; the noise helpers, compiled even
+ * when `STAR_NO_GRANULATION` is defined, so that a material without
+ * granules can still draw cells (`uint starHashU(vec3 c)`, `float
+ * starHash(vec3 p)`, `vec3 starHash3(vec3 c)`, `vec3
+ * starValueNoise3(vec3 x)`, `vec3 starFbm2x3(vec3 p)`, `float
+ * starFbm2(vec3 p)`, `vec3 starWave(vec3 x)`, `vec4 starCellDetail(vec3
+ * p, float phase)` and `vec2 starCells(vec3 p, float phase)`); `float
+ * starLimb(float mu)`, `float
  * starBrightness(vec3 n, float mu)`, `vec3 starSurfaceExposed(vec3 n,
  * float mu)` (for display, see there), `float starDither(vec2)` and
  * `vec3 starSurfaceColour(vec3 n, float mu)`, the linear colour of the photosphere at unit normal `n`
@@ -218,17 +224,20 @@ const WINDOW_DAYS = 21;
  * - Granulation (`starGranules`, prototype D): cellular noise at the
  *   granule size, warped by one octave of value noise (D's second octave
  *   cost a sixth of the term and did not show), bright in each
- *   cell's middle (`smoothstep(0.02, 0.30, F2 − F1) · (1.15 − 0.55 F1)`)
- *   and dark in the intergranular lanes, with bright points in about a
- *   fifth of the lanes. Granules are the tops of convective cells: hot
+ *   cell's middle (`smoothstep(0.02, 0.30, F2 − F1) · (1.15 − 0.55 F1)`,
+ *   F2 − F1 measured along the surface, see `starCellDetail`) and dark
+ *   in the intergranular lanes, with a soft bright point in the middle
+ *   of about a fifth of the lanes. Granules are the tops of convective cells: hot
  *   upflows, bright, ringed by cooler, darker downflow lanes (Nordlund,
  *   Stein & Asplund 2009, Living Rev. Sol. Phys. 6, 2), in which
  *   magnetic bright points sit (Sánchez Almeida et al. 2004, ApJ 609,
  *   L91). The cells' centres wander by 0.3 of a cell at 2.1 to 2.4 rad
  *   per lifetime (**calibration**), so cells deform, split and merge over
  *   a few lifetimes. It is brought to zero mean and unit rms, then times
- *   `GRANULE_GAIN` (**calibration**, prototype D's look): the drawn rms is
- *   1.6 × `granule_contrast`. `starGranules` is compiled out under
+ *   `GRANULE_GAIN` (**calibration**, prototype D's look): the rms of the
+ *   brightness b is 1.6 × `granule_contrast`, measured before the soft
+ *   exposure curve (`starSurfaceExposed`), which compresses it on
+ *   screen. `starGranules` is compiled out under
  *   `STAR_NO_GRANULATION`; the noise helpers are not.
  * - Each region: a leader (0.6 of the area, **calibration**) and a
  *   follower spot, at ±separation/2 along the region's tilt axis (the
@@ -338,41 +347,99 @@ const vec3 STAR_CELL_STEPS[20] = vec3[20](
   vec3(0.0, -1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(0.0, -1.0, 1.0), vec3(1.0, -1.0, 1.0),
   vec3(0.0, 0.0, -1.0), vec3(1.0, 0.0, -1.0), vec3(0.0, 1.0, -1.0), vec3(1.0, 1.0, -1.0));
 
+/** How far from a lane's middle its bright point reaches, in cells. */
+const float STAR_LANE_POINT_RADIUS = 0.10;
+
 /**
- * Cellular noise: (F1, F2), the distances from p to the nearest and
- * second-nearest cell centre, one centre per unit cell. Each centre
- * wanders about its cell's middle by 0.3 · starWave(rate · phase / 2π
- * + h) per axis, h the cell's hash and rate STAR_CELL_RATES, so the
- * cells deform, split and merge as the phase runs, and come back the
- * same after 289. With the wander bounded by 0.3, the nearest centre is
- * always among the 20 cells of STAR_CELL_STEPS and the second-nearest
- * all but about once in 10^5 points (as often as in a 27-cell search
- * with prototype D's 0.42), against 27 cells.
+ * Cellular noise on the surface through p (the sphere of radius |p|,
+ * one cell centre per unit cube). Each centre wanders about its cube's
+ * middle by 0.3 · starWave(rate · phase / 2π + h) per axis, h the
+ * cube's hash and rate STAR_CELL_RATES, so the cells deform, split and
+ * merge as the phase runs, and come back the same after 289. Returns
+ * (F1, F2, point, pair):
+ *
+ * - F1, the distance to the nearest centre;
+ * - F2 = F1 + 2 · the distance along the surface (in the tangent plane)
+ *   to the nearest edge of that centre's cell, so that F2 − F1 is the
+ *   lane width measure of a 2D cell pattern. Plain 3D Worley F2 − F1
+ *   stays small wherever the sphere runs nearly parallel to a face
+ *   between two centres stacked in depth, which drew flat grey patches
+ *   with hard, axis-aligned edges; the distance in the tangent plane to
+ *   the bisector, (d_k − d_1) / (2 |t_k − t_1|) with t the centres
+ *   projected on the plane, is large there. It is the exact distance to
+ *   the cell's edge, continuous, since the slice of a Voronoi diagram by
+ *   a plane is a power diagram in it and a cell is convex;
+ * - point, the distance to where the nearest edge crosses the segment
+ *   between the two centres (the same point from either cell), where
+ *   that edge may carry a bright point; 1e4 away from the lanes;
+ * - pair, a value in [0, 1) for that pair of cells.
+ *
+ * It takes two passes over the 20 cubes of STAR_CELL_STEPS: the nearest
+ * centre, then the nearest edge. With the wander bounded by 0.3 the
+ * result matched a 125-cube search on every one of 4.3 million test
+ * points. A 27-cube search, on an M1, cost two to four times as much.
  */
-vec2 starCells(vec3 p, float phase) {
+vec4 starCellDetail(vec3 p, float phase) {
   vec3 i = floor(p);
   vec3 f = p - i;
+  vec3 axis = normalize(p);
   vec3 side = sign(f - 0.5);
   side += 1.0 - abs(side);
   vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
-  float f1 = 9.0;
-  float f2 = 9.0;
+  float d1 = 1e4;
+  vec3 r1 = vec3(0.0);
+  float h1 = 0.0;
+  for (int k = 0; k < 20; k++) {
+    vec3 g = side * STAR_CELL_STEPS[k];
+    vec3 hv = starHash3(i + g);
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
+    float d = dot(r, r);
+    bool nearer = d < d1;
+    d1 = nearer ? d : d1;
+    r1 = nearer ? r : r1;
+    h1 = nearer ? hv.x : h1;
+  }
+  float edge = 1e4;
+  int across = 0;
   for (int k = 0; k < 20; k++) {
     vec3 g = side * STAR_CELL_STEPS[k];
     vec3 r = g + 0.5 + 0.3 * starWave(turns + starHash3(i + g)) - f;
-    float d = dot(r, r);
-    f2 = min(f2, max(f1, d));
-    f1 = min(f1, d);
+    vec3 dr = r - r1;
+    float along = dot(dr, axis);
+    float apart = dot(dr, dr) - along * along;
+    // The nearest centre itself (apart 0) is no edge.
+    float e = apart > 1e-8 ? 0.5 * (dot(r, r) - d1) * inversesqrt(apart) : 1e4;
+    bool nearer = e < edge;
+    edge = nearer ? e : edge;
+    across = nearer ? k : across;
   }
-  return sqrt(vec2(f1, f2));
+  float f1 = sqrt(d1);
+  float point = 1e4;
+  float pair = 0.0;
+  if (edge < STAR_LANE_POINT_RADIUS) {
+    // The neighbour across the nearest edge again, rather than carry it through the loop.
+    vec3 g = side * STAR_CELL_STEPS[across];
+    vec3 hv = starHash3(i + g);
+    vec3 dr = g + 0.5 + 0.3 * starWave(turns + hv) - f - r1;
+    vec3 normal = normalize(dr - dot(dr, axis) * axis);
+    vec3 t1 = r1 - dot(r1, axis) * axis;
+    point = length(t1 + (edge - dot(normal, t1)) * normal);
+    pair = fract(h1 + hv.x);
+  }
+  return vec4(f1, f1 + 2.0 * edge, point, pair);
+}
+
+/** (F1, F2) of starCellDetail: F2 − F1 is 0 on a cell's edge and grows into the cell. */
+vec2 starCells(vec3 p, float phase) {
+  return starCellDetail(p, phase).xy;
 }
 
 #ifndef STAR_NO_GRANULATION
 /**
  * Granulation at n, zero-mean with rms ${GRANULE_GAIN} (the gain, see
  * GRANULE_GAIN): cells of the granule size, warped by one octave of
- * value noise, bright in the middle and dark in the lanes between, with bright
- * points in some lanes (prototype D).
+ * value noise, bright in the middle and dark in the lanes between, with
+ * soft bright points in a fifth of the lanes (prototype D).
  */
 float starGranules(vec3 n) {
   float phase = uGranule.z;
@@ -380,12 +447,12 @@ float starGranules(vec3 n) {
   float drift = STAR_WARP_RATE * phase;
   // One octave of warp: D's second octave cost a sixth of the term and did not show.
   q += 1.4 * (starValueNoise3(0.15 * q + STAR_WARP_RADIUS * vec3(cos(drift), 0.0, sin(drift))) - 0.5);
-  vec2 cells = starCells(q, phase);
+  vec4 cells = starCellDetail(q, phase);
   float lane = cells.y - cells.x;
   float cell = smoothstep(0.02, 0.30, lane) * (1.15 - 0.55 * cells.x);
-  // Bright points only in the lanes: the hash is skipped everywhere else.
-  float points = 0.0;
-  if (lane < 0.035) points = (1.0 - smoothstep(0.0, 0.035, lane)) * step(0.82, starHash(1.7 * q));
+  // A soft bright point on a fifth of the lanes, where the lane crosses
+  // the segment between its two cells' centres.
+  float points = step(0.8, cells.w) * (1.0 - smoothstep(0.0, STAR_LANE_POINT_RADIUS, cells.z));
   // D's weights: 0.62 for the cell, 0.35 for the points.
   float raw = cell + 0.5645 * points;
   return ${GRANULE_GAIN.toFixed(4)} * (raw - ${GRANULE_RAW_MEAN.toFixed(4)}) / ${GRANULE_RAW_RMS.toFixed(4)};
