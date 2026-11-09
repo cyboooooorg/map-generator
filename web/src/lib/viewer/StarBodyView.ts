@@ -62,6 +62,23 @@ const MAX_STEP_S = 0.1;
 const GLOW_SIZE = 7;
 /** The red of hydrogen (H-alpha), linear RGB. */
 const H_ALPHA: [number, number, number] = [1, 0.2, 0.14];
+/** Least height of the camera above the surface the detail is measured from, star radii. */
+const MIN_ALTITUDE = 1e-3;
+
+/**
+ * Pixels per star radius at the point of the surface nearest the camera,
+ * `distance` star radii from the centre, in a view `heightPx` CSS px tall
+ * with a vertical field of view of `fovDeg`: that point lies `distance − 1`
+ * radii away. The star view's detail (granules from 1.5 px each, see
+ * surfaceDetail) follows it, so that up close, where the surface fills the
+ * view, granules show at full contrast; the system view measures from the
+ * centre instead, the same far away.
+ */
+export function surfaceRadiusPx(distance: number, fovDeg: number, heightPx: number): number {
+  if (!(heightPx > 0)) return 0;
+  const halfFov = ((fovDeg / 2) * Math.PI) / 180;
+  return (1 / (Math.max(distance - 1, MIN_ALTITUDE) * Math.tan(halfFov))) * (heightPx / 2);
+}
 
 export class StarBodyView {
   private readonly renderer: WebGLRenderer;
@@ -291,12 +308,9 @@ export class StarBodyView {
     this.render(now);
   };
 
-  /** The star's radius on screen, CSS px (as StarView's, from the distance to the centre). */
+  /** Pixels per star radius at the surface's nearest point (see surfaceRadiusPx). */
   private radiusPx(): number {
-    const height = this.canvas.clientHeight;
-    const distance = this.camera.position.length();
-    const halfFov = ((this.camera.fov / 2) * Math.PI) / 180;
-    return height > 0 && distance > 0 ? (STAR_RADIUS / (distance * Math.tan(halfFov))) * (height / 2) : 0;
+    return surfaceRadiusPx(this.camera.position.length() / STAR_RADIUS, this.camera.fov, this.canvas.clientHeight);
   }
 
   /** Brings the surface and the loops to the day, with the detail the star's size on screen allows. */
@@ -381,7 +395,7 @@ export class StarBodyView {
     // not by the whole star.
     this.controls.rotateSpeed = Math.min(1, Math.max(0.005, 0.5 * (distance - 1)));
     const moving = this.controls.update();
-    // The surface's detail follows the star's size on screen as the camera zooms.
+    // The surface's detail follows the surface's size on screen as the camera zooms.
     this.updateSurface();
     // The corona faces the camera, scaled to the disc as it appears: seen
     // from `d` radii, the limb lies d / sqrt(d² − 1) radii from the centre
