@@ -397,19 +397,30 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    survey measures other stars' networks). Its cells wander as the
    granules do, on their own phase, in supergranule lifetimes of
    `SUPERGRANULE_LIFETIME_DAYS` = 1 day (Hart 1956; Rieutord & Rincon
-   2010), wrapped at 289 lifetimes as the granule phase is. Its lanes,
-   $1 - \text{smoothstep}(0, 0.1, F_2 - F_1)$ with the lane distance
-   measured along the surface as for the granules, are brightened by
+   2010), wrapped at 289 lifetimes as the granule phase is, and turn
+   with the star: the network is sampled at the longitude minus the
+   equatorial rotation phase, without differential rotation over its
+   day of life. Its lanes, $F_2 - F_1$ with the lane distance measured
+   along the surface as for the granules, are drawn as soft, wide
+   ribbons of faculae: $1 - \text{smoothstep}(0, w, F_2 - F_1)$ with
+   $w = 0.6$ cells (**calibration**), widened up to 1.3 times at the
+   junctions of three cells and of a tone varying from lane to lane
+   (**calibration**). They are brightened by
    $c\,(0.35 + 1.4\,(1-\mu))$: faint at the disc centre, about five
    times brighter at the limb, as faculae are (Solanki 2003). Its
-   contrast is $c = \min(1, \text{granule\_contrast}/0.15) \times 0.07$,
-   0 on a radiative star. The 0.07 (**calibration**, prototype D) makes
-   the network a little stronger than the real one, so that the whole
-   disc, whose granules are under a pixel, does not look smooth. A
-   mesogranular mottle, one octave of value noise at 0.35 of the cell
-   size, adds $\pm c/4$ (**calibration**). The network is searched among
-   8 cells rather than the granules' 20, to keep it cheap over the whole
-   disc; it misses a short stub of lane near a junction on about 0.1 %
+   contrast is $c = \min(1, \text{granule\_contrast}/0.15) \times 0.15$,
+   0 on a radiative star. The 0.15 (**calibration**) makes the network
+   stronger than the real one in white light, so that the whole disc,
+   whose granules are under a pixel, does not look smooth: the disc
+   centre is about 2 % brighter on average with a 2.5 % rms, the limb
+   about 7 %. From afar, a mesogranular mottle, one octave of value
+   noise at 0.35 of the cell size, adds $\pm c/4$ and varies the
+   ribbons' width and tone along their length (**calibration**); it
+   fades out as the granules fade in, since they cover its scale up
+   close. The network is searched among 8 cells rather than the
+   granules' 20, to keep it cheap over the whole disc; it misses a
+   short stub of lane near a junction on about 0.1 % of the points,
+   hidden by the soft ribbons.
    of the points. It fades in from 3 to 8 pixels per network cell.
    The shader (`web/src/lib/viewer/starSurface.ts`) fades the
    regions and the granules out as the star shrinks on screen, and as a
@@ -490,12 +501,11 @@ star, about half of them on the visible side.
   the 0.15 the activity gives, so that the surface reads as agitated
   up close.
 - **The supergranule network is slightly exaggerated** (**calibration**):
-  its contrast of 0.07 on the Sun, rising five times towards the limb,
-  is a little above the real network's in white light, so that the
-  whole disc shows texture where granules are under a pixel. Its size
-  on other stars scales with the granules, and it does not turn with
-  the star (nor do the granules): over a supergranule's day of life a
-  Sun-like star turns by 14°.
+  its contrast of 0.15 on the Sun, rising five times towards the limb,
+  and its wide ribbons are above the real network's in white light, so
+  that the whole disc shows texture where granules are under a pixel.
+  Its size on other stars scales with the granules. It turns with the
+  star's equator, without the differential rotation the regions follow.
 
 - **Timeline and region shapes are calibrations.** One cycle maps onto
   $x \in [0, 2.6]$ of the Hathaway fit; a region grows over

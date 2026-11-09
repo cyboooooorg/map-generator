@@ -34,8 +34,9 @@
  * over 20 cells and one octave of value noise per pixel (48 hashes, one
  * more in the lanes), about four and a half times the two simplex
  * fields it replaced. The supergranule network, drawn over the whole
- * disc from afar, is kept to about a third of that: 8 cells and one
- * octave of value noise (16 hashes).
+ * disc from afar, is kept to about a third of that: 8 cells and, from
+ * afar only, one octave of value noise (16 hashes); up close, where
+ * the granules are drawn, the noise is skipped and the 8 cells remain.
  *
  * The science (spot structure, facular contrast, limb law) is in
  * docs/science/star-activity.md.
@@ -50,6 +51,7 @@ import {
   regionNow,
   regionsBornIn,
   type RegionNow,
+  rotationPhase,
 } from '../starActivity';
 
 const TWO_PI = 2 * Math.PI;
@@ -141,13 +143,22 @@ const SUN_GRANULE_SIZE_MM = 1.3;
  */
 export const SUPERGRANULE_LIFETIME_DAYS = 1;
 /**
- * **Calibration**: the network's brightening per unit `granule_contrast`
- * of the Sun's 0.15 (prototype D's 0.07), a little stronger than the
- * real network so that it shows on the whole disc, where granules are
- * under a pixel. Times `min(1, granule_contrast / 0.15)`: 0 on a
- * radiative star.
+ * **Calibration**: the network's brightening at the Sun's
+ * `granule_contrast` of 0.15, a little stronger than the real network
+ * (prototype D's thin lanes drew 0.07; the soft ribbons need 0.15 to be
+ * seen at the disc centre from the star view's opening distance): the
+ * disc centre about 2 % brighter on average with a 2.5 % rms, the limb
+ * about 7 %. Times `min(1, granule_contrast / 0.15)`: 0 on a radiative
+ * star.
  */
-const NETWORK_CONTRAST = 0.07;
+const NETWORK_CONTRAST = 0.15;
+/**
+ * **Calibration**: the half-width of the network's ribbons in F2 − F1
+ * (cells), before the junctions widen them and the mottle varies them:
+ * soft and wide, a picture of the network's faculae seen from afar
+ * rather than thin cell outlines.
+ */
+const NETWORK_LANE_WIDTH = 0.6;
 /** The Sun's granule contrast, against which the network's is scaled. */
 const SUN_GRANULE_CONTRAST = 0.15;
 
@@ -161,7 +172,7 @@ export function networkSize(granuleSize: number): number {
   return (granuleSize * SUPERGRANULE_SIZE_MM) / SUN_GRANULE_SIZE_MM;
 }
 
-/** The network's contrast for a granule contrast: `min(1, c / 0.15) · 0.07`, 0 when radiative. */
+/** The network's contrast for a granule contrast: `min(1, c / 0.15) · 0.15`, 0 when radiative. */
 export function networkContrast(granuleContrast: number): number {
   if (!(granuleContrast > 0)) return 0;
   return Math.min(1, granuleContrast / SUN_GRANULE_CONTRAST) * NETWORK_CONTRAST;
@@ -328,13 +339,21 @@ const WINDOW_DAYS = 21;
  * - The supergranule network (`uNetwork`): cells of `networkSize` (30 Mm
  *   on the Sun, Leighton, Noyes & Simon 1962) on their own phase, in
  *   supergranule lifetimes (a day, Hart 1956), whose lanes
- *   (`starCellLanes`) are brightened by c (0.35 + 1.4 (1 − μ)), faculae
- *   brightest at the limb (Solanki 2003), plus a mesogranular mottle of
- *   ±c/4 at 0.35 of the cell size. c is `networkContrast`, 0.07 on the
- *   Sun (**calibration**, slightly above the real network so that the
- *   whole disc is not smooth) and 0 on a radiative star. Not compiled
- *   out by `STAR_NO_GRANULATION`: the sky disc keeps it off with its
- *   fade (`hostStarDetail`).
+ *   (`starCellLanes`) are drawn as soft ribbons, `NETWORK_LANE_WIDTH` in
+ *   F2 − F1 and wider and brighter at junctions, of a tone varying from
+ *   lane to lane, brightened by c (0.35 + 1.4 (1 − μ)), faculae
+ *   brightest at the limb (Solanki 2003). From afar a mesogranular
+ *   mottle (one octave of value noise at 0.35 of the cell size) adds
+ *   ±c/4 and varies the ribbons' width and tone along their length; it
+ *   fades out as the granules fade in (1 − `uGranule.w`), behind a
+ *   uniform branch. c is `networkContrast`, 0.15 on the Sun
+ *   (**calibration**, slightly above the real network so that the whole
+ *   disc is not smooth) and 0 on a radiative star. The network is
+ *   sampled in the star's turning frame: n's longitude minus the
+ *   equatorial rotation phase (`uNetworkSpin`, `rotationPhase` reduced
+ *   in JS), with no shear over its day of life. Not compiled out by
+ *   `STAR_NO_GRANULATION`: the sky disc keeps it off with its fade
+ *   (`hostStarDetail`).
  * - Each region: a leader (0.6 of the area, **calibration**) and a
  *   follower spot, at ±separation/2 along the region's tilt axis (the
  *   leader east and equatorward, Joy's law), each an umbra at 0.3 of the
@@ -361,6 +380,8 @@ uniform vec2 uLimb;
 uniform vec4 uGranule;
 /** The supergranule network: cell size (star radii), contrast, phase (lifetimes, mod 289), fade. */
 uniform vec4 uNetwork;
+/** The star's equatorial rotation phase (rad, in [0, 2π)): the network turns with it. */
+uniform float uNetworkSpin;
 uniform float uRegionFade;
 uniform int uRegionCount;
 uniform vec4 uRegionA[STAR_REGIONS];
@@ -376,6 +397,9 @@ const vec3 STAR_CELL_RATES = vec3(${CELL_HARMONICS.map(glslRate).join(', ')});
 /** The granule warp's drift round a circle: its rate (2π·k/289) and radius, in noise units. */
 const float STAR_WARP_RATE = ${glslRate(WARP_HARMONIC)};
 const float STAR_WARP_RADIUS = ${WARP_RADIUS.toFixed(6)};
+/** The network's ribbons: half-width in F2 − F1 (cells) and the junction's reach (**calibrations**, NETWORK_LANE_WIDTH). */
+const float STAR_NETWORK_WIDTH = ${NETWORK_LANE_WIDTH.toFixed(4)};
+const float STAR_NETWORK_JUNCTION = 0.6;
 /** The warp's frequency (per cell) and amplitude (cells, **calibration**): enough to curve the cells' edges. */
 const float STAR_WARP_SCALE = 0.3;
 const float STAR_WARP_AMPLITUDE = 1.0;
@@ -564,15 +588,17 @@ vec2 starCells(vec3 p, float phase) {
 }
 
 /**
- * A cheaper lane measure for the network, drawn over the whole disc:
- * F2 − F1 = 2 · edge as starCells measures it (the same cells, wandering
- * the same way, the edges along the surface), but searched among the 8
- * cells of the 2×2×2 block on p's side only, in one pass whose centres
- * are kept for the edges. It costs about a third of starCells. Against
- * the 20-cell search it misses a short stub of lane near a junction on
- * about 0.1 % of the points, invisible at the network's faint contrast.
+ * The network's lanes, drawn over the whole disc: (F2 − F1, the same
+ * measure for the second-nearest edge line, a value in [0, 1) for the
+ * pair of cells across the nearest edge). F2 − F1 = 2 · edge as
+ * starCells measures it (the same cells, wandering the same way, the
+ * edges along the surface), but searched among the 8 cells of the
+ * 2×2×2 block on p's side only, in one pass whose centres are kept for
+ * the edges: about a third of starCells' cost. Against the 20-cell
+ * search it misses a short stub of lane near a junction on about 0.1 %
+ * of the points, which the network's soft, wide ribbons hide.
  */
-float starCellLanes(vec3 p, float phase) {
+vec3 starCellLanes(vec3 p, float phase) {
   vec3 i = floor(p);
   vec3 f = p - i;
   vec3 axis = normalize(p);
@@ -580,27 +606,38 @@ float starCellLanes(vec3 p, float phase) {
   side += 1.0 - abs(side);
   vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
   vec3 rs[8];
+  float hs[8];
   float d1 = 1e4;
   vec3 r1 = vec3(0.0);
+  float h1 = 0.0;
   // STAR_CELL_STEPS starts with the block's 8 cells.
   for (int k = 0; k < 8; k++) {
     vec3 g = side * STAR_CELL_STEPS[k];
-    vec3 r = g + 0.5 + 0.3 * starWave(turns + starHash3(i + g)) - f;
+    vec3 hv = starHash3(i + g);
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
     rs[k] = r;
+    hs[k] = hv.x;
     float d = dot(r, r);
     bool nearer = d < d1;
     d1 = nearer ? d : d1;
     r1 = nearer ? r : r1;
+    h1 = nearer ? hv.x : h1;
   }
   float edge = 1e4;
+  float edge2 = 1e4;
+  float across = 0.0;
   for (int k = 0; k < 8; k++) {
     vec3 r = rs[k];
     vec3 dr = r - r1;
     float along = dot(dr, axis);
     float apart = dot(dr, dr) - along * along;
-    edge = min(edge, apart > 1e-8 ? 0.5 * (dot(r, r) - d1) * inversesqrt(apart) : 1e4);
+    float e = apart > 1e-8 ? 0.5 * (dot(r, r) - d1) * inversesqrt(apart) : 1e4;
+    bool nearer = e < edge;
+    edge2 = min(edge2, max(edge, e));
+    edge = nearer ? e : edge;
+    across = nearer ? hs[k] : across;
   }
-  return 2.0 * edge;
+  return vec3(2.0 * edge, 2.0 * edge2, fract(h1 + across));
 }
 
 #ifndef STAR_NO_GRANULATION
@@ -668,13 +705,32 @@ float starBrightness(vec3 n, float mu) {
   if (uGranule.w > 0.0) brightness += uGranule.y * uGranule.w * starGranules(n);
 #endif
   if (uNetwork.w > 0.0) {
-    // The supergranule network: bright faculae along the cells' lanes,
-    // stronger towards the limb, and a mesogranular mottle a third of its
-    // size; both slightly exaggerated (calibration), seen from afar. The
-    // mottle takes one octave of value noise: a second (starFbm2) cost
-    // two and a half times as much in this term and could not be seen.
-    float net = 1.0 - smoothstep(0.0, 0.10, starCellLanes(n / uNetwork.x, uNetwork.z));
-    float mottle = 0.5 * (starValueNoise3(n / (0.35 * uNetwork.x)).x - 0.5);
+    // The supergranule network, sampled in the star's turning frame
+    // (longitude minus the equatorial rotation phase, no shear: a cell
+    // lives a day). Its lanes are soft, wide ribbons of faculae,
+    // stronger towards the limb, wider and brighter at the junctions,
+    // of a tone varying from one lane to the next; from afar a
+    // mesogranular mottle a third of the cell's size varies them along
+    // their length and mottles the cells. The mottle fades out as the
+    // granules, which cover its scale, fade in. All calibrations,
+    // slightly exaggerated so that the whole disc is not smooth.
+    float spinC = cos(uNetworkSpin);
+    float spinS = sin(uNetworkSpin);
+    vec3 q = vec3(n.x * spinC - n.z * spinS, n.y, n.x * spinS + n.z * spinC) / uNetwork.x;
+    vec3 lanes = starCellLanes(q, uNetwork.z);
+    float junction = 1.0 - smoothstep(0.0, STAR_NETWORK_JUNCTION, lanes.y);
+    float width = STAR_NETWORK_WIDTH * (0.7 + 0.6 * junction);
+    float tone = (0.6 + 0.4 * fract(lanes.z * 7.31)) * (0.8 + 0.4 * junction);
+    float mottle = 0.0;
+    float mottleFade = 1.0 - uGranule.w;
+    if (mottleFade > 0.0) {
+      vec3 v = starValueNoise3(q * (1.0 / 0.35));
+      mottle = mottleFade * 0.5 * (v.x - 0.5);
+      width *= mix(1.0, 0.5 + v.y, mottleFade);
+      tone *= mix(1.0, 0.3 + 1.4 * v.z, mottleFade);
+    }
+    float ribbon = 1.0 - smoothstep(0.0, width, lanes.x);
+    float net = tone * ribbon;
     brightness += uNetwork.w * uNetwork.y * (net * (0.35 + 1.4 * (1.0 - mu)) + mottle);
   }
   if (uRegionFade > 0.0 && uRegionCount > 0) {
@@ -750,7 +806,7 @@ float starDither(vec2 fragCoord) {
  * The uniforms of `STAR_SURFACE_GLSL`, the region arrays `maxRegions`
  * long (the material's `STAR_REGIONS`): uStarColour, uLimb (vec2),
  * uGranule (vec4: size, contrast, phase, fade), uNetwork (vec4: cell
- * size, contrast, phase, fade), uRegionFade,
+ * size, contrast, phase, fade), uNetworkSpin, uRegionFade,
  * uRegionCount, uRegionA and uRegionB (vec4 each), uLocalDays, uOmegaEq,
  * uShear, uFacula.
  */
@@ -760,6 +816,7 @@ export function starSurfaceUniforms(maxRegions: number): Record<string, IUniform
     uLimb: { value: new Vector2(0.6, 0.2) },
     uGranule: { value: new Vector4(SUN_GRANULE_SIZE, 0, 0, 0) },
     uNetwork: { value: new Vector4(networkSize(SUN_GRANULE_SIZE), 0, 0, 0) },
+    uNetworkSpin: { value: 0 },
     uRegionFade: { value: 0 },
     uRegionCount: { value: 0 },
     uRegionA: { value: new Float32Array(4 * maxRegions) },
@@ -908,6 +965,7 @@ export class StarSurfaceState {
         ? Math.min(detail.network, view.networkDetail ?? 1) * exposureFade(daysPerFrame, SUPERGRANULE_LIFETIME_DAYS)
         : 0;
     (u['uNetwork']!.value as Vector4).set(networkSize(look.granuleSize), contrast, networkPhase(days), networkFade);
+    u['uNetworkSpin']!.value = this.activity ? rotationPhase(this.activity, days) : modulo(look.omegaEq * days, TWO_PI);
 
     const rotationDays = TWO_PI / look.omegaEq;
     this.exposure = exposureFade(daysPerFrame, rotationDays / 12);

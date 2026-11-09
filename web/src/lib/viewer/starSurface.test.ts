@@ -1,7 +1,7 @@
 import type { Vector4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { StarActivity } from '../api/types/StarActivity';
-import { activeRegions } from '../starActivity';
+import { activeRegions, rotationPhase } from '../starActivity';
 import { starSurfaceFragment, starSurfaceVertex } from './starShaders';
 import { SUN_SYSTEM } from './starSystem';
 import {
@@ -94,7 +94,7 @@ describe('star surface', () => {
     s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
     s.update(100.3, { radiusPx: 500, daysPerSecond: 1 });
     const network = u.uNetwork!.value as Vector4;
-    expect(network.y).toBeCloseTo(0.07, 9);
+    expect(network.y).toBeCloseTo(0.15, 9);
     expect(network.z).toBeCloseTo(networkPhase(100.3), 9);
     expect(network.w).toBe(1);
     // The sky disc passes its own detail (hostStarDetail): 0 for the usual disc.
@@ -103,6 +103,23 @@ describe('star surface', () => {
     // A clock far faster than a supergranule lives averages it out.
     s.update(100.3, { radiusPx: 500, daysPerSecond: 4096 });
     expect(network.w).toBeLessThan(0.1);
+  });
+
+  it('turns the network with the star', () => {
+    const u = starSurfaceUniforms(8);
+    const s = new StarSurfaceState(u, 8);
+    s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    for (const day of [0, 3.7, 100.3, 2e4 + 0.25]) {
+      s.update(day, { radiusPx: 500, daysPerSecond: 1 });
+      expect(u.uNetworkSpin!.value).toBeCloseTo(rotationPhase(SUN_ACTIVITY, day), 9);
+    }
+    // n is taken to the star's frame: longitude minus the phase, as the regions add it.
+    expect(STAR_SURFACE_GLSL).toContain('vec3(n.x * spinC - n.z * spinS, n.y, n.x * spinS + n.z * spinC)');
+  });
+
+  it('fades the mottle out as the granules fade in', () => {
+    expect(STAR_SURFACE_GLSL).toContain('float mottleFade = 1.0 - uGranule.w;');
+    expect(STAR_SURFACE_GLSL).toMatch(/if \(mottleFade > 0\.0\) \{\n\s+vec3 v = starValueNoise3/);
   });
 
   it('keeps the network phase continuous where its day clock wraps', () => {
@@ -356,7 +373,7 @@ describe('star surface', () => {
       once.update(d, BIG);
       expect(state.regions).toEqual(activeRegions(SUN_ACTIVITY, d, 32));
       expect(state.regions).toEqual(once.regions);
-      for (const name of ['uRegionCount', 'uRegionFade']) expect(swept[name]!.value).toBe(fresh[name]!.value);
+      for (const name of ['uRegionCount', 'uRegionFade', 'uNetworkSpin']) expect(swept[name]!.value).toBe(fresh[name]!.value);
       for (const name of ['uGranule', 'uNetwork']) {
         expect((swept[name]!.value as { toArray(): number[] }).toArray()).toEqual(
           (fresh[name]!.value as { toArray(): number[] }).toArray(),
