@@ -172,6 +172,8 @@ To check that a visual change keeps the frame rate:
 3. For each, open `/?frames=1#system=<id>`, let the animation run at its default speed for 20 s, and read `window.__frames()`. Then open the globe of the first planet with Sunlight on and the star in view, wait 20 s and read it again.
 4. Record view, resolution, median and p95 before and after the change, on the same machine and the same load, and compare the pairs.
 
+Outcome of the living star's part 1: every existing view stayed within noise of the baseline, and the star view's p95 stays at or under about 12 ms at 2560 x 1440. The tables are posted on [#343](https://github.com/cyboooooorg/map-generator/issues/343).
+
 ## Themes
 
 The header's theme picker restyles the interface: **Default** (the original look), **Holo HUD** (cyan, cut corners, Orbitron and Rajdhani), **Orbital station** (amber, bracket corners, Exo 2), **Cyberpunk** (neon magenta and yellow, diagonal cuts, Audiowide and Chakra Petch, a short glitch on hovered buttons, off with reduced motion) and **Military** (phosphor green, scan lines, Share Tech Mono). The choice is remembered in the browser (`mapgen.theme`, Default when unknown or without storage).

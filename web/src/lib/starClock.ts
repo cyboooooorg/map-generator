@@ -11,8 +11,10 @@
  *   under half a second). Both clocks run forwards; the time bar and the
  *   jumps move the day either way.
  *
- * Switching views clamps the speed into the target view's range
- * (`clampSpeed`); the day itself is carried over unchanged.
+ * Each view keeps its own speed and the star view opens at
+ * `defaultStarSpeed`; nothing is carried over on a switch, so nothing is
+ * clamped. `clampSpeed` keeps each view's own setting in range. The day
+ * itself is shared and carried over unchanged.
  */
 import type { StarActivity } from './api/types/StarActivity';
 import { cycleLevel } from './starActivity';

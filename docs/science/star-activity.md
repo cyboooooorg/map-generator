@@ -414,6 +414,28 @@ star, about half of them on the visible side.
 - **Granule lifetime**: the 8 minutes is a calibration a little above
   the time constants Title et al. (1989) report.
 
+- **Timeline and region shapes are calibrations.** One cycle maps onto
+  $x \in [0, 2.6]$ of the Hathaway fit; a region grows over
+  $\min(0.1\,T,\ 3\ \text{d})$ times a factor within $\pm 20\ \%$; its
+  polarities are $4\sqrt{2A}$ radians apart; the leader spot carries 0.6
+  of the area.
+- **Region size and look are calibrations.** The median peak area
+  scaling, $152\,\text{MSH}\sqrt{\text{spot\_coverage}/0.003}$; the
+  faculae's $0.25\,(1-\mu)$ contrast; the plage's disc of three spot
+  radii filled at `facula_ratio` / 9.
+- **The loops' 3 per region, 20 % scatter and spacing are calibrations**:
+  they draw the picture, not a measure.
+- **The sky disc's detail thresholds are calibrations**, chosen for the
+  frame rate: limb darkening only under 16 px, regions from 16 to 24 px,
+  all of them from 24 px, no granulation.
+- **The sky disc uses the star view's exposure**, not the plan's gain of
+  1.4, which clipped the photosphere and hid the penumbrae and faculae.
+- **The sky disc's spot detail ramps from 16 to 24 px**, not in one step.
+- **The loops are drawn in H-alpha red**, whatever their temperature.
+- **Region ids are 32-bit hashes** of the star's seed, the slot and the
+  index in the slot, so a region keeps its look and its loops from one
+  run to the next; two regions can in principle share an id.
+
 ### Values not checked against their source
 
 The implementer checked the values below against the papers and could not
