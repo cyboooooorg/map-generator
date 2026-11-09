@@ -15,8 +15,8 @@
 //! | `DELETE /api/systems/{id}/pin`  | unpin it (idempotent, answers its summary)         |
 //! | `PUT /api/systems/{id}/bodies/{body}/name` | name one body, the other names kept (`SystemName`; null clears) |
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
-//! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body |
-//! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates |
+//! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body; `?size=<W>x<H>` picks a resolution (tiles, epoch, hex; default the original, 404 when not generated, 400 for a bad name); the thumb is the original's |
+//! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates (`?size=` as above, for its `rev`) |
 //! | `GET /systems/{id}/...`         | system files (`system.json`, `bodies/<body>/sizes/<W>x<H>/…`) |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
@@ -153,6 +153,9 @@ pub struct AppState {
     drift_previews: Semaphore,
     drift_cache: PreviewCache,
     thumbnails: Thumbnails,
+    /// The original resolution of each body, read from `system.json` once
+    /// per change of the file rather than on every tile.
+    originals: Arc<systems::OriginalSizes>,
 }
 
 /// Tiles rendered at once.
@@ -230,6 +233,7 @@ pub fn router(config: Config) -> Router {
         drift_previews: Semaphore::new(1),
         drift_cache: PreviewCache::default(),
         thumbnails: Thumbnails::default(),
+        originals: Arc::default(),
         config: config.clone(),
     });
     let spa = ServeDir::new(&config.static_dir)
@@ -725,6 +729,7 @@ async fn delete_system(
         return Err(Failure(StatusCode::NOT_FOUND, format!("no system {id}")));
     }
     let forgotten = state.tiles.forget(&format!("systems/{id}"));
+    state.originals.forget(&id);
     tokio::fs::remove_dir_all(&dir)
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -861,7 +866,8 @@ async fn system_tile(
     UrlPath((id, body, z, x, y)): UrlPath<(String, String, u32, u32, u32)>,
     Query(query): Query<TileQuery>,
 ) -> Result<Response, Failure> {
-    let loc = system_body_loc(&state, &id, &body).await?;
+    let size = query_size(query.size.as_deref())?;
+    let loc = system_body_loc(&state, &id, &body, size).await?;
     note_opened(&state, &id, &body);
     body_tile(state, loc, TileId { z, x, y }, query).await
 }
@@ -871,7 +877,8 @@ async fn system_epoch_layer(
     UrlPath((id, body, epoch_ma, file)): UrlPath<(String, String, i32, String)>,
     Query(query): Query<EpochQuery>,
 ) -> Result<Response, Failure> {
-    let loc = system_body_loc(&state, &id, &body).await?;
+    let size = query_size(query.size.as_deref())?;
+    let loc = system_body_loc(&state, &id, &body, size).await?;
     note_opened(&state, &id, &body);
     body_epoch_layer(state, loc, epoch_ma, file, query).await
 }
@@ -881,7 +888,8 @@ async fn system_drift_preview(
     UrlPath((id, body, drift_ma, file)): UrlPath<(String, String, i32, String)>,
     Query(query): Query<DriftQuery>,
 ) -> Result<Response, Failure> {
-    let loc = system_body_loc(&state, &id, &body).await?;
+    let size = query_size(query.size.as_deref())?;
+    let loc = system_body_loc(&state, &id, &body, size).await?;
     note_opened(&state, &id, &body);
     body_drift_preview(state, &id, &body, loc, drift_ma, file, query).await
 }
@@ -891,16 +899,21 @@ async fn system_thumbnail(
     UrlPath((id, body)): UrlPath<(String, String)>,
     Query(query): Query<ThumbQuery>,
 ) -> Result<Response, Failure> {
-    let loc = system_body_loc(&state, &id, &body).await?;
-    body_thumbnail(state, loc, query).await
+    // Made from the original resolution, whichever one is displayed.
+    let original = original_size(&state, &id, &body).await?;
+    let loc = system_body_loc(&state, &id, &body, Some(original)).await?;
+    let thumb_dir = systems::body_dir(&state.config.systems_dir, &id, &body);
+    body_thumbnail(state, loc, &thumb_dir, query).await
 }
 
 async fn system_hex(
     State(state): State<Shared>,
     UrlPath((id, body)): UrlPath<(String, String)>,
+    Query(query): Query<HexQuery>,
     Json(request): Json<HexRequest>,
 ) -> Result<Response, Failure> {
-    let loc = system_body_loc(&state, &id, &body).await?;
+    let size = query_size(query.size.as_deref())?;
+    let loc = system_body_loc(&state, &id, &body, size).await?;
     note_opened(&state, &id, &body);
     body_hex(state, loc, request).await
 }
@@ -919,13 +932,36 @@ async fn generate_body(
 }
 
 /// Query of a tile request: the world revision and the renderer version
-/// the client knows, and the epoch shown (Ma before present, negative in
-/// the future; the world as generated without it).
+/// the client knows, the epoch shown (Ma before present, negative in the
+/// future; the world as generated without it) and the resolution (see
+/// [`query_size`]).
 #[derive(serde::Deserialize)]
 struct TileQuery {
     rev: Option<u64>,
     render: Option<u32>,
     epoch: Option<i32>,
+    size: Option<String>,
+}
+
+/// Query of a hex grid request: the resolution (see [`query_size`]).
+#[derive(serde::Deserialize)]
+struct HexQuery {
+    size: Option<String>,
+}
+
+/// The resolution a `?size=<W>x<H>` query names (see
+/// [`mapgen::sizes::parse_size_name`]); `None` without one. 400 for a
+/// name that is not a size.
+fn query_size(size: Option<&str>) -> Result<Option<(u32, u32)>, Failure> {
+    size.map(|name| {
+        mapgen::sizes::parse_size_name(name).ok_or_else(|| {
+            Failure(
+                StatusCode::BAD_REQUEST,
+                format!("invalid size {name:?}: <width>x<height>, such as 2048x1024"),
+            )
+        })
+    })
+    .transpose()
 }
 
 /// Checks that world `id` offers `epoch_ma` (see
@@ -962,46 +998,74 @@ async fn checked_epoch(
     Ok(Some(epoch_ma))
 }
 
-/// Where a body's files are, the key of its world in the tile cache, and
-/// its revision (which keys its cached tiles in browsers).
+/// Where one resolution of a body is, the key of its world in the tile
+/// cache, and its revision (which keys its cached tiles in browsers).
 struct BodyLoc {
-    /// Its original resolution's directory (see [`systems::original_dir`]).
+    /// The resolution's directory, `bodies/<body>/sizes/<W>x<H>/`.
     dir: PathBuf,
-    /// The body's directory, which holds its `thumb.png`.
-    thumb_dir: PathBuf,
+    /// `systems/<id>/<body>/<W>x<H>`: each resolution is a world of its own
+    /// in the tile cache, and forgetting `systems/<id>` forgets them all.
     key: String,
     revision: u64,
+    /// The resolution, width and height in pixels.
+    #[allow(dead_code)]
+    size: (u32, u32),
 }
 
-/// A generated body of a system, in `systems/<id>/bodies/<body>/`: its own
-/// revision, so that generating another body keeps its tiles.
-async fn system_body_loc(state: &AppState, id: &str, body: &str) -> Result<BodyLoc, Failure> {
+/// The original resolution of body `body` of system `id` (see
+/// [`systems::OriginalSizes`]): 404 when the system has no such body,
+/// 404 or 410 when its `system.json` is missing or unreadable.
+async fn original_size(state: &AppState, id: &str, body: &str) -> Result<(u32, u32), Failure> {
     if !systems::is_valid_system_id(id) || !systems::is_valid_body_id(body) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid body".into()));
     }
+    let (originals, root) = (state.originals.clone(), state.config.systems_dir.clone());
+    let (system, owned) = (id.to_string(), body.to_string());
+    tokio::task::spawn_blocking(move || originals.original_size(&root, &system, &owned))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| unreadable_system(&state.config.systems_dir, id, &e))?
+        .ok_or_else(|| {
+            Failure(
+                StatusCode::NOT_FOUND,
+                format!("body {body} of {id} is not generated"),
+            )
+        })
+}
+
+/// The `size` resolution of a generated body of a system, in
+/// `systems/<id>/bodies/<body>/sizes/<W>x<H>/`, with its own revision, so
+/// that generating another body or another size keeps its tiles. Without
+/// a size, the original one. 404 when that size is not generated.
+async fn system_body_loc(
+    state: &AppState,
+    id: &str,
+    body: &str,
+    size: Option<(u32, u32)>,
+) -> Result<BodyLoc, Failure> {
+    let original = original_size(state, id, body).await?;
+    let size = size.unwrap_or(original);
     let root = state.config.systems_dir.clone();
     let (system, owned) = (id.to_string(), body.to_string());
-    let (dir, revision) = tokio::task::spawn_blocking(move || {
-        let dir = systems::original_dir(&root, &system, &owned)?;
-        Ok::<_, String>(dir.and_then(|dir| {
-            let revision = systems::body_revision(&dir)?;
-            Some((dir, revision))
-        }))
-    })
-    .await
-    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .map_err(|e| unreadable_system(&state.config.systems_dir, id, &e))?
-    .ok_or_else(|| {
-        Failure(
-            StatusCode::NOT_FOUND,
-            format!("body {body} of {id} is not generated"),
-        )
+    let revision =
+        tokio::task::spawn_blocking(move || systems::size_revision(&root, &system, &owned, size))
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let name = mapgen::sizes::size_name(size.0, size.1);
+    let revision = revision.ok_or_else(|| {
+        let message = if size == original {
+            format!("body {body} of {id} is not generated")
+        } else {
+            format!("size {name} of body {body} of {id} is not generated")
+        };
+        Failure(StatusCode::NOT_FOUND, message)
     })?;
+    let body_dir = systems::body_dir(&state.config.systems_dir, id, body);
     Ok(BodyLoc {
-        dir,
-        thumb_dir: systems::body_dir(&state.config.systems_dir, id, body),
-        key: format!("systems/{id}/{body}"),
+        dir: mapgen::sizes::size_dir(&body_dir, size.0, size.1),
+        key: format!("systems/{id}/{body}/{name}"),
         revision,
+        size,
     })
 }
 
@@ -1062,13 +1126,15 @@ async fn body_tile(
 }
 
 /// Query of an epoch layer request: the world revision and the renderer
-/// version the client knows, and a reduction factor (1, 2 or 4) for the
-/// lighter layers shown while the time slider moves.
+/// version the client knows, a reduction factor (1, 2 or 4) for the
+/// lighter layers shown while the time slider moves, and the resolution
+/// (see [`query_size`]).
 #[derive(serde::Deserialize)]
 struct EpochQuery {
     rev: Option<u64>,
     render: Option<u32>,
     scale: Option<u32>,
+    size: Option<String>,
 }
 
 /// A layer of a body (see [`body_tile`]) at an epoch.
@@ -1135,12 +1201,15 @@ async fn body_epoch_layer(
         .into_response())
 }
 
-/// Query of a drift preview request: the width (256 or 512, default 512)
-/// and the world revision the client knows.
+/// Query of a drift preview request: the width (256 or 512, default 512),
+/// the world revision the client knows and the resolution whose revision
+/// it is (see [`query_size`]; the preview itself is generated from the
+/// body's parameters, whatever the resolution).
 #[derive(serde::Deserialize)]
 struct DriftQuery {
     rev: Option<u64>,
     width: Option<u32>,
+    size: Option<String>,
 }
 
 /// A low-resolution preview of a body at `drift_ma` Ma from the present
@@ -1256,17 +1325,18 @@ struct ThumbQuery {
 async fn body_thumbnail(
     state: Shared,
     loc: BodyLoc,
+    thumb_dir: &Path,
     query: ThumbQuery,
 ) -> Result<Response, Failure> {
     let BodyLoc {
         dir,
-        thumb_dir,
         key: id,
         revision,
+        ..
     } = loc;
     let png = state
         .thumbnails
-        .get(&thumb_dir, &dir)
+        .get(thumb_dir, &dir.join("world.png"))
         .await
         .map_err(|e| match e {
             ThumbError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no map for {id}")),
@@ -1802,10 +1872,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         let now = image::load_from_memory(&now).unwrap().into_luma16();
         let stored = image::open(
-            systems::original_dir(&root, &old, &rock)
-                .unwrap()
-                .unwrap()
-                .join("raw_data/elevation.png"),
+            systems::body_dir(&root, &old, &rock).join("sizes/256x128/raw_data/elevation.png"),
         )
         .unwrap()
         .into_luma16();
@@ -1917,6 +1984,95 @@ mod tests {
             let (status, _, _) = get(uri.clone()).await;
             assert_eq!(status, expected, "{uri}");
         }
+    }
+
+    #[tokio::test]
+    async fn serves_each_resolution_of_a_body() {
+        let config = temp_config("sizes");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let system_dir = systems::system_dir(&root, &id);
+        let owned = planet.clone();
+        tokio::task::spawn_blocking(move || {
+            mapgen::system::generate_size(&system_dir, &owned, 512, 256, false, |_| {})
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        let get = |uri: String| {
+            let app = app.clone();
+            async move {
+                let request = Request::get(&uri).body(Body::empty()).unwrap();
+                let response = app.oneshot(request).await.unwrap();
+                let status = response.status();
+                let bytes = response.into_body().collect().await.unwrap().to_bytes();
+                (status, bytes)
+            }
+        };
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        let tile = |size: &str| format!("{base}/tiles/0/0/0?size={size}");
+        // Each size its own tiles, whatever the order they are asked in:
+        // the tile cache keys a world by its size.
+        let (status, large) = get(tile("512x256")).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, small) = get(tile("256x128")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_ne!(large, small);
+        assert_eq!(get(tile("512x256")).await.1, large);
+        assert_eq!(get(tile("256x128")).await.1, small);
+        // Without a size, the original one.
+        assert_eq!(get(format!("{base}/tiles/0/0/0")).await.1, small);
+        // A size not generated, and a name that is not a size.
+        for (uri, expected) in [
+            (tile("1024x512"), StatusCode::NOT_FOUND),
+            (tile("512X256"), StatusCode::BAD_REQUEST),
+            (tile("0512x256"), StatusCode::BAD_REQUEST),
+            (
+                format!("{base}/epoch/0/elevation.png?size=1024x512"),
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                format!("{base}/epoch/0/elevation.png?size=x"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                format!("{base}/drift/10/surface.png?size=512X256"),
+                StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            assert_eq!(get(uri.clone()).await.0, expected, "{uri}");
+        }
+        // The layers of a size are that size's.
+        let (status, layer) = get(format!("{base}/epoch/0/elevation.png?size=512x256")).await;
+        assert_eq!(status, StatusCode::OK);
+        let layer = image::load_from_memory(&layer).unwrap();
+        assert_eq!((layer.width(), layer.height()), (512, 256));
+        // The hex grid of a size.
+        let hex = |size: &str| {
+            let app = app.clone();
+            let uri = format!("{base}/hex?size={size}");
+            async move {
+                let request = Request::post(&uri)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"columns": 8}"#))
+                    .unwrap();
+                app.oneshot(request).await.unwrap().status()
+            }
+        };
+        assert_eq!(hex("512x256").await, StatusCode::OK);
+        assert_eq!(hex("1024x512").await, StatusCode::NOT_FOUND);
+        assert_eq!(hex("512X256").await, StatusCode::BAD_REQUEST);
+        // The thumbnail is the body's, beside its sizes, and made again
+        // from the original size when it is gone.
+        let thumb = systems::body_dir(&root, &id, &planet).join("thumb.png");
+        let (status, bytes) = get(format!("{base}/thumb")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(bytes, std::fs::read(&thumb).unwrap());
+        std::fs::remove_file(&thumb).unwrap();
+        let (status, _) = get(format!("{base}/thumb")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(thumb.is_file());
     }
 
     #[tokio::test]
@@ -2166,10 +2322,8 @@ mod tests {
         );
         assert!(events.contains("\"status\":\"done\""), "{events}");
         assert!(
-            systems::original_dir(&root, &id, &planet)
-                .unwrap()
-                .unwrap()
-                .join("raw_data/world.json")
+            systems::body_dir(&root, &id, &planet)
+                .join("sizes/64x32/raw_data/world.json")
                 .exists()
         );
         // Generated: nothing left to do, and its files and tiles are served.

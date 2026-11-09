@@ -19,8 +19,9 @@
 use crate::api::SystemSummary;
 use crate::staging;
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
 /// The file of a system, in its directory.
@@ -211,22 +212,86 @@ pub fn original_sizes(json: &[u8]) -> Result<BTreeMap<String, (u32, u32)>, Strin
         .collect())
 }
 
-/// The directory of the original resolution of body `body` of system `id`:
-/// `bodies/<body>/sizes/<W>x<H>/` (see [`original_sizes`]). `None` inside
-/// when the system has no such body; an error when its `system.json`
-/// cannot be read.
-pub fn original_dir(root: &Path, id: &str, body: &str) -> Result<Option<PathBuf>, String> {
-    let bytes = std::fs::read(system_dir(root, id).join(SYSTEM_FILE)).map_err(|e| e.to_string())?;
-    let sizes = original_sizes(&bytes)?;
-    Ok(sizes
-        .get(body)
-        .map(|&(width, height)| mapgen::sizes::size_dir(&body_dir(root, id, body), width, height)))
+/// The original resolution of each system's bodies (see
+/// [`original_sizes`]), read again only when its `system.json` changes:
+/// body routes ask for it on every request (each tile), and parsing the
+/// file each time would cost more than the stat that checks it.
+#[derive(Default)]
+pub struct OriginalSizes {
+    /// By system id: the modification time and length of the
+    /// `system.json` read, and what it said.
+    systems: Mutex<HashMap<String, CachedSizes>>,
 }
 
-/// A body's revision: the modification time of the `raw_data/world.json`
-/// of its original resolution (in `dir`, from [`original_dir`]), which
-/// keys its cached tiles. `None` while it is not generated.
-pub fn body_revision(dir: &Path) -> Option<u64> {
+/// Each body's original size, by body id.
+type Sizes = Arc<BTreeMap<String, (u32, u32)>>;
+
+/// What a `system.json` said of its bodies' original sizes, and which
+/// version of the file said it.
+struct CachedSizes {
+    stamp: (u64, u64),
+    sizes: Result<Sizes, String>,
+}
+
+impl OriginalSizes {
+    /// The original resolution of body `body` of system `id` under
+    /// `root`: `None` inside when the system has no such body, an error
+    /// when its `system.json` cannot be read or is of another version.
+    /// Blocking (a stat, and a read when the file changed).
+    pub fn original_size(
+        &self,
+        root: &Path,
+        id: &str,
+        body: &str,
+    ) -> Result<Option<(u32, u32)>, String> {
+        let file = system_dir(root, id).join(SYSTEM_FILE);
+        let metadata = std::fs::metadata(&file).map_err(|e| e.to_string())?;
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos() as u64);
+        let stamp = (modified, metadata.len());
+        let cached = {
+            let systems = self.systems.lock().expect("original sizes lock");
+            systems
+                .get(id)
+                .filter(|c| c.stamp == stamp)
+                .map(|c| c.sizes.clone())
+        };
+        let sizes = match cached {
+            Some(sizes) => sizes,
+            None => {
+                // A file rewritten between the stat and the read is read
+                // again on the next request: its stamp changed.
+                let sizes = std::fs::read(&file)
+                    .map_err(|e| e.to_string())
+                    .and_then(|bytes| original_sizes(&bytes))
+                    .map(Arc::new);
+                self.systems.lock().expect("original sizes lock").insert(
+                    id.to_string(),
+                    CachedSizes {
+                        stamp,
+                        sizes: sizes.clone(),
+                    },
+                );
+                sizes
+            }
+        };
+        Ok(sizes?.get(body).copied())
+    }
+
+    /// Forgets system `id` (deleted).
+    pub fn forget(&self, id: &str) {
+        self.systems.lock().expect("original sizes lock").remove(id);
+    }
+}
+
+/// The revision of the `size` resolution of body `body` of system `id`:
+/// the modification time of its `raw_data/world.json`, which keys its
+/// cached tiles. `None` while that resolution is not on disk.
+pub fn size_revision(root: &Path, id: &str, body: &str, size: (u32, u32)) -> Option<u64> {
+    let dir = mapgen::sizes::size_dir(&body_dir(root, id, body), size.0, size.1);
     modified_ms(&dir.join("raw_data").join("world.json"))
 }
 
@@ -596,19 +661,38 @@ mod tests {
         assert_eq!(sizes["c"], (1024, 512));
         assert_eq!(sizes["c-1"], (512, 256));
         assert_eq!(sizes["d"], (1024, 512));
-        let root = temp_root("original-dir");
+        let root = temp_root("original-size");
+        let file = root.join("mgs-1-1").join(SYSTEM_FILE);
         std::fs::create_dir_all(root.join("mgs-1-1")).unwrap();
-        std::fs::write(root.join("mgs-1-1").join(SYSTEM_FILE), json).unwrap();
+        std::fs::write(&file, json).unwrap();
+        let originals = OriginalSizes::default();
         assert_eq!(
-            original_dir(&root, "mgs-1-1", "c-1").unwrap(),
-            Some(body_dir(&root, "mgs-1-1", "c-1").join("sizes/512x256"))
+            originals.original_size(&root, "mgs-1-1", "c-1"),
+            Ok(Some((512, 256)))
         );
-        assert_eq!(original_dir(&root, "mgs-1-1", "zz").unwrap(), None);
-        assert!(original_dir(&root, "mgs-2-2", "c").is_err());
-        // A system of the layout before sizes is refused.
+        assert_eq!(originals.original_size(&root, "mgs-1-1", "zz"), Ok(None));
+        assert!(originals.original_size(&root, "mgs-2-2", "c").is_err());
+        // The file rewritten (a system drawn again under its id) is read
+        // again, here one of the layout before sizes, which is refused.
         let old = json.replace(r#""format_version": 2"#, r#""format_version": 1"#);
         let error = original_sizes(old.as_bytes()).unwrap_err();
         assert!(error.contains("format version 1"), "{error}");
+        // (A length of its own: some file systems stamp in coarse ticks.)
+        std::fs::write(&file, format!("{old}\n")).unwrap();
+        let error = originals.original_size(&root, "mgs-1-1", "c").unwrap_err();
+        assert!(error.contains("format version 1"), "{error}");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_size_has_a_revision_once_on_disk() {
+        let root = temp_root("size-revision");
+        assert_eq!(size_revision(&root, "mgs-1-1", "b", (64, 32)), None);
+        let raw = body_dir(&root, "mgs-1-1", "b").join("sizes/64x32/raw_data");
+        std::fs::create_dir_all(&raw).unwrap();
+        std::fs::write(raw.join("world.json"), "{}").unwrap();
+        assert!(size_revision(&root, "mgs-1-1", "b", (64, 32)).is_some());
+        assert_eq!(size_revision(&root, "mgs-1-1", "b", (128, 64)), None);
         std::fs::remove_dir_all(root).unwrap();
     }
 

@@ -540,6 +540,14 @@ addressed as `<system-id>/<body-id>` everywhere.
     503 while a generation runs;
   - `GET /api/systems/{id}/bodies/{body}/thumb?rev=`;
   - `POST /api/systems/{id}/bodies/{body}/hex`.
+
+  The tiles, epoch layers, drift previews and hex grids take
+  `?size=<W>x<H>` (`2048x1024`), the resolution to read
+  (`bodies/<body>/sizes/<W>x<H>/`); without it, the original one. A size
+  not generated answers 404, a name that is not a size 400. Each
+  resolution is a world of its own in the tile cache, with its own
+  revision (`rev=`). The thumbnail is the body's, made from its original
+  resolution.
 - `GET /systems/{id}/...`: the files, `system.json` and
   `bodies/<body>/...`.
 - `GET /api/jobs`, `DELETE /api/jobs/{id}` and

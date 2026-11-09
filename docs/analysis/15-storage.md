@@ -276,7 +276,11 @@ What was built, and where it departs from the plan above:
 - **Reads:** `GET /api/systems` and the name lookups read the index.
   `GET /api/systems/{id}` and job creation still read `system.json`
   (the full system is what they answer). The API only gained the
-  `pinned` flag of `GET /api/systems`.
+  `pinned` flag of `GET /api/systems`. Body routes (tiles, epochs, hex
+  grids, thumbnails) need each body's original resolution, from its
+  params in `system.json`: the server keeps it in memory per system and
+  reads the file again only when its modification time or length
+  changes, so a tile costs one `stat` of `system.json`, not a parse.
 - **Names:** written to the index and, for now, to `names.json`, so the
   tree is self-sufficient. A `names.json` edited by hand is read again at
   the next start. Writing names to the database only is left for the
