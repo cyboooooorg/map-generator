@@ -531,14 +531,16 @@ addressed as `<system-id>/<body-id>` everywhere.
   and, per resolution on disk, `bodies/<body>/sizes/<W>x<H>/world.png`
   and `legend.png`; tiles, raw data, SVG and noise maps are not in it.
   The document gives the system's `request`, `seed`, `create` (the
-  request with the seed filled in, the body of the `POST` that draws the
-  system again), the star's and the bodies' names, and per body its
+  body of the `POST` that draws the system again: the request with the
+  seed filled in and, around a planet, the focus body's resolved
+  parameters pinned), the star's and the bodies' names, and per body its
   `seed`, its `request` (the `WorldParams` of `system.json`), whether it
   is `generated`, `made_with` (crate version and `format_version`, from
   the index) and its `files`. A body never generated, or whose files are
-  gone, is still listed. A whole system drawn again from `create` is
-  identical; a system around a planet keeps its id and seed, but what
-  its request leaves open comes from the random generator, not the seed.
+  gone, is still listed. A system drawn again from `create` is
+  identical, a whole system or one around a planet: what a request
+  around a planet leaves open comes from the random generator, not the
+  seed, so `create` sets each of those fields to the focus body's value.
   Format and rationale: the README, *Export of a system*, and
   `docs/analysis/15-storage.md`, *Export done*. The main menu's
   **Export** button downloads it.
