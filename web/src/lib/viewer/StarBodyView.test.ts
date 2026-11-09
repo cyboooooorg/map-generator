@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { surfaceDetail } from './starSurface';
-import { surfaceRadiusPx } from './StarBodyView';
+import { isCloseUp, surfaceRadiusPx } from './StarBodyView';
 
 /** The Sun fixture's granule size, star radii (starActivity.test.ts). */
 const GRANULE = 0.0018903897;
@@ -21,6 +21,13 @@ describe('star view detail', () => {
     expect(far * GRANULE).toBeLessThan(1.5);
     expect(surfaceDetail(far, GRANULE).granulation).toBe(0);
     expect(surfaceDetail(far, GRANULE).regions).toBe(1);
+  });
+
+  it('counts a camera closer than 1.1 radii as a close-up', () => {
+    expect(isCloseUp(1.02)).toBe(true);
+    expect(isCloseUp(1.0999)).toBe(true);
+    expect(isCloseUp(1.1)).toBe(false);
+    expect(isCloseUp(3.24)).toBe(false);
   });
 
   it('draws nothing without a size', () => {

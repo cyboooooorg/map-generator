@@ -73,8 +73,9 @@ const DETAIL_FULL_PX = 24;
  * Detail on the sky disc, from its diameter in CSS pixels: the active
  * regions fade in from 16 to 24 px and are off below, so that the usual
  * disc (the Sun from Earth is about 14 px at 1080p) skips the region loop
- * and costs only its limb law. Granulation is never drawn there: compiled
- * out (`STAR_NO_GRANULATION`).
+ * and costs only its limb law. The supergranule network is capped by it
+ * too (it only shows on a far larger disc, see surfaceDetail).
+ * Granulation is never drawn there: compiled out (`STAR_NO_GRANULATION`).
  */
 export function hostStarDetail(diskPx: number): number {
   return Math.min(1, Math.max(0, (diskPx - DETAIL_FROM_PX) / (DETAIL_FULL_PX - DETAIL_FROM_PX)));
