@@ -215,6 +215,43 @@ loops. The loops are drawn in the red of H-alpha, which is a departure
 (see below). The 3 loops, the 20 % scatter and the side-by-side spacing are
 **calibration**: they draw the picture, not a measure.
 
+### In a planet's sky
+
+The star's disc in a planet's sky is the same living star: the planet
+view draws it with the star views' surface (`starSurface.ts`), at the
+system's day, so it shows the spots the star view shows at that day and
+the same quadratic limb darkening, Claret & Bloemen's for the star. The
+disc is a flat sprite on screen; `lib/viewer/hostStarSurface.ts` turns
+each point of it into a point of the star's visible hemisphere, in the
+star's own frame (its spin axis the system's +y, longitude 0 the
+system's +x at day 0), so the spots sit where they are on the star, seen
+from the planet, whatever the camera does.
+
+What the disc shows depends on its size on screen (**calibration**, for
+the frame rate):
+
+- under 16 CSS pixels across, the limb darkening only. The Sun from
+  Earth is about 14 px at 1080p, so the usual disc skips the region loop
+  entirely, behind a uniform branch, and costs what the old disc cost;
+- from 16 to 24 px, the active regions fade in, and from 24 px they are
+  all drawn, as from a close-in planet;
+- never the granulation, compiled out of this shader: a granule is
+  about a five-hundredth of a Sun-like star's radius, a pixel or less
+  on any disc a planet's sky shows.
+
+While the orbits play, the clock's speed fades the regions out as in the
+star views (a long exposure). A world without a system keeps the old
+plain disc.
+
+The disc is drawn on a square that the vertex shader places round the
+star's direction, not on a point sprite. A point is clamped to the GPU's
+largest point size (`ALIASED_POINT_SIZE_RANGE`, often 511 px), and the
+square was also capped at 512 px, while the star of a close-in planet
+spans several hundred pixels: the disc filled the whole square, an
+opaque white square behind the globe. The square now grows to twice the
+disc and a margin, so that the glow round it, which fades out between a
+quarter and half of the square's side, always starts outside the disc.
+
 ### How it computes them
 
 [`activity.rs`](../../crates/mapgen/src/activity.rs) derives a

@@ -1305,6 +1305,20 @@
   $effect(() => view?.setGizmoOnSky(Boolean(sysBody) && !cameraTurnsWithBody));
   // The star drawn at its place, at the centre of the planets' orbits.
   $effect(() => view?.setStarPlace(sysSky?.star ?? null));
+  // Its living surface at the system's day, the clock's speed for the fades.
+  $effect(() =>
+    view?.setHostStarSurface(
+      sys && sysSky
+        ? {
+            info: sys.star.info,
+            activity: sys.star.activity ?? null,
+            days: sysDays,
+            daysPerSecond: orbitsPlaying && orbitPeriod ? (orbitPeriod * 2 ** orbitSpeed) / ORBIT_SECONDS : 0,
+            axes: sysSky.star.axes,
+          }
+        : null,
+    ),
+  );
   // Far enough out to see the moons of the shown body's planet whole.
   const reach = $derived(sys && sysBody ? systemReach(sys, sysBody.id) : null);
   // Not aborted when the bodies move (every frame of the seasons): a map

@@ -221,13 +221,18 @@ export function systemSky(
   /** The index in `orbits` of the body shown's own orbit (dashed, so that the body slides along it), -1 when none. */
   ownOrbit: number;
   sun: Vec3;
-  star: { position: Vec3; radius: number };
+  /**
+   * The star's place and radius, and its axes in the frame of the body
+   * shown: the system's +x, +y (the star's spin axis) and +z, the frame
+   * its surface is drawn in (lib/viewer/hostStarSurface.ts).
+   */
+  star: { position: Vec3; radius: number; axes: [Vec3, Vec3, Vec3] };
 } {
   const placements = placeSystem(system, days, { id: shown, spinOffset });
   const self = system.bodies.find((b) => b.id === shown);
   const here = placements.get(shown);
   if (!self || !here) {
-    return { bodies: [], ids: [], casters: [], orbits: [], orbitBodies: [], ownOrbit: -1, sun: [0, 0, 1], star: { position: [0, 0, 1e9], radius: 1 } };
+    return { bodies: [], ids: [], casters: [], orbits: [], orbitBodies: [], ownOrbit: -1, sun: [0, 0, 1], star: { position: [0, 0, 1e9], radius: 1, axes: IDENTITY_AXES } };
   }
   const [ax, ay, az] = here.axes;
   const unitKm = Math.max(self.physical.radius_km, 1e-6);
@@ -313,7 +318,11 @@ export function systemSky(
     orbitBodies: orbiting.map((b) => ({ id: b.id, local: b.parent === planet })),
     ownOrbit,
     sun: unit(local(scale(here.centre, -1))),
-    star: { position: place([0, 0, 0]), radius: (system.star.info.radius * SUN_RADIUS_KM) / unitKm },
+    star: {
+      position: place([0, 0, 0]),
+      radius: (system.star.info.radius * SUN_RADIUS_KM) / unitKm,
+      axes: [local([1, 0, 0]), local([0, 1, 0]), local([0, 0, 1])],
+    },
   };
 }
 
