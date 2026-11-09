@@ -917,13 +917,15 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 
 ## 24. Living star, part 1
 
-- **Status:** done (2026-11-09; PRs #350, #373 and this one)
-- **Issues:** #343 (the project), #344 and #345
+- **Status:** done (2026-11-09; PRs #350, #373 and #388)
+- **Issues:** #343 (the project); #344 and #345 are parts 2 and 3, still
+  open; #387 is the open follow-up (the planet view's clock is not synced
+  with the star views)
 - **Shipped:** an activity model for each star and a timeline of its
   spotted regions (#350); the living surface, with granulation, spots,
   faculae and coronal loops in the star view, the system view and the
   planet's sky (#373); a frame-time probe (`?frames=1`) and the
   before/after measurement, which kept every existing view within noise
-  of the baseline and the star view's p95 under about 12 ms at 2560 x
+  of the baseline and the star view's p95 under 13 ms at 2560 x
   1440. The calibrations and the app-side departures are listed in
   `docs/science/star-activity.md`.

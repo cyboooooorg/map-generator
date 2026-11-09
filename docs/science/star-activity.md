@@ -144,7 +144,7 @@ Doppler images of fully convective M dwarfs show spots at all latitudes
 The shape of a cycle in time is fitted by Hathaway, Wilson & Reichmann
 (1994) as $f(x) = x^3/(e^{x^2} - c)$; Hathaway (2015) gives $c = 0.8$ for
 the average cycle. The browser's timeline (`starActivity.ts`) uses
-$c = 0.71$, the value the plan takes from the 1994 paper (not checked
+$c = 0.71$, the value taken from the 1994 paper (not checked
 against its text), normalises $f$ to a peak of 1 and maps one cycle onto
 $x \in [0, 2.6]$, where $f$ is back to 4 % of its peak (the 2.6 is a
 **calibration**). The latitude drift is $e^{-1.5\,u}$ over the cycle
@@ -240,12 +240,10 @@ the frame rate):
   on any disc a planet's sky shows.
 
 While the orbits play, the clock's speed fades the regions out as in the
-star views (a long exposure). A world without a system keeps the old
-plain disc.
+star views (a long exposure).
 
-The disc takes the star view's exposure, not the plan's. The plan kept
-the plain disc's gain, the linear colour times 1.4, but that clips the
-quiet photosphere to white over most of a large disc (up to 0.85 of its
+The disc takes the star view's exposure, not the plain disc's gain (the
+linear colour times 1.4), which clips the quiet photosphere to white over most of a large disc (up to 0.85 of its
 radius on G2V b), and the penumbrae (0.75 of the photosphere, 1.05 after
 the gain) and the faculae disappear: only the umbrae showed, as grey
 dots. The disc now draws `starSurfaceExposed`, at the same gain as the
@@ -379,7 +377,7 @@ star, about half of them on the visible side.
   only cool loops, such as the post-flare loops of a decaying region, show
   in H-alpha. The view draws every loop in H-alpha red, as an eye-catching
   convention that keeps the old prominences' look, not as what a camera
-  would record.
+  would record. Whatever their temperature, they are red.
 
 - **The cycle is anchored on the Sun, not on a stellar sequence.** Every
   star with $Ro \ge 1$ runs 160 rotations per cycle, the Sun's, which
@@ -426,20 +424,19 @@ star, about half of them on the visible side.
 - **The loops' 3 per region, 20 % scatter and spacing are calibrations**:
   they draw the picture, not a measure.
 - **The sky disc's detail thresholds are calibrations**, chosen for the
-  frame rate: limb darkening only under 16 px, regions from 16 to 24 px,
-  all of them from 24 px, no granulation.
-- **The sky disc uses the star view's exposure**, not the plan's gain of
-  1.4, which clipped the photosphere and hid the penumbrae and faculae.
-- **The sky disc's spot detail ramps from 16 to 24 px**, not in one step.
-- **The loops are drawn in H-alpha red**, whatever their temperature.
+  frame rate: limb darkening only under 16 px, regions fading in from 16
+  to 24 px (not in one step), all of them from 24 px, no granulation.
+- **The sky disc uses the star view's exposure**, not the plain disc's
+  gain of 1.4, which clips the photosphere and hides the penumbrae and
+  faculae.
 - **Region ids are 32-bit hashes** of the star's seed, the slot and the
   index in the slot, so a region keeps its look and its loops from one
   run to the next; two regions can in principle share an id.
 
 ### Values not checked against their source
 
-The implementer checked the values below against the papers and could not
-reach these sources; they need checking:
+These values could not be checked against their source; they need
+checking:
 
 - the Sun's 0.3 % spotted area at maximum (Hathaway 2015);
 - the solar $\Delta\Omega = 0.055$ rad/day (Snodgrass & Ulrich 1990);

@@ -145,9 +145,10 @@
   /**
    * The address says what is shown: no hash, or `#menu`, is the menu, and
    * `#system=<id>&body=<id>&compare=<id>&pins=…` a system's viewer
-   * (`body=star` its star view, no body its system view), so a reload, a shared link or the browser's Back and Forward show it. A
-   * copied link also carries the view (see lib/link.ts), applied once to
-   * the main pane; the address then names only the systems.
+   * (`body=star` its star view, no body its system view), so a reload, a
+   * shared link or the browser's Back and Forward show it. A copied link
+   * also carries the view (see lib/link.ts), applied once to the main
+   * pane; the address then names only the systems.
    */
   function applyHash(): void {
     const params = new URLSearchParams(location.hash.slice(1));
