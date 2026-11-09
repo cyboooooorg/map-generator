@@ -1,13 +1,18 @@
 // Shaders of the star view (StarView.ts): the star's surface and its glow.
 import { STAR_SURFACE_GLSL } from './starSurface';
 
+// The star's sphere: its point in the star's own frame (for the surface)
+// and in the world, with its normal (for μ, the cosine to the eye).
 export const starSurfaceVertex = /* glsl */ `
   varying vec3 vObject;
-  varying vec3 vViewNormal;
+  varying vec3 vWorld;
+  varying vec3 vWorldNormal;
   void main() {
     vObject = position;
-    vViewNormal = normalize(normalMatrix * normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
 
@@ -15,13 +20,17 @@ export const starSurfaceVertex = /* glsl */ `
 // the active regions of the star's activity, turned by the system clock.
 // The soft exposure acts on the brightness only (starSurfaceExposed), so
 // the disk keeps its colour and its limb; a dither of half an 8-bit step
-// keeps the smooth gradient from banding.
+// keeps the smooth gradient from banding. μ is the cosine between the
+// normal and the direction to the eye: the view-space normal's z is not,
+// close to the star, where the limb seen is far from where that z is 0
+// (from 1.4 radii it never falls below 0.7, and the limb looked flat).
 export const starSurfaceFragment = /* glsl */ `
   varying vec3 vObject;
-  varying vec3 vViewNormal;
+  varying vec3 vWorld;
+  varying vec3 vWorldNormal;
   ${STAR_SURFACE_GLSL}
   void main() {
-    float mu = clamp(normalize(vViewNormal).z, 0.0, 1.0);
+    float mu = clamp(dot(normalize(vWorldNormal), normalize(cameraPosition - vWorld)), 0.0, 1.0);
     gl_FragColor = vec4(starSurfaceExposed(normalize(vObject), mu), 1.0);
     #include <colorspace_fragment>
     gl_FragColor.rgb += starDither(gl_FragCoord.xy) / 255.0;

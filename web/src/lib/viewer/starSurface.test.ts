@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StarActivity } from '../api/types/StarActivity';
 import { activeRegions } from '../starActivity';
+import { starSurfaceFragment, starSurfaceVertex } from './starShaders';
 import { SUN_SYSTEM } from './starSystem';
 import {
   exposureFade,
@@ -221,5 +222,14 @@ describe('star surface', () => {
       expect(x.length).toBe(y.length);
       x.forEach((row, i) => row.forEach((v, k) => expect(v).toBeCloseTo(y[i]![k]!, k === 5 ? 9 : 4)));
     }
+  });
+
+  it('takes μ towards the eye, not from the view-space normal', () => {
+    // From a camera d radii from the centre, the limb seen has a
+    // view-space normal z of about 1/d: z as μ never reaches the limb
+    // (from 3.2 radii, the M4V close-up, the edge stopped at μ ≈ 0.3).
+    expect(starSurfaceFragment).toMatch(/dot\(normalize\(vWorldNormal\), normalize\(cameraPosition - vWorld\)\)/);
+    expect(starSurfaceFragment).not.toContain('vViewNormal');
+    expect(starSurfaceVertex).toContain('vWorld = world.xyz');
   });
 });
