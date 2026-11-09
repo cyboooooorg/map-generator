@@ -126,6 +126,11 @@ export const api = {
     }),
 };
 
+/** The download of a system's export (`.zip`: seeds, requests, names and PNG images), see `crate::export` on the server. */
+export function systemExportUrl(id: string): string {
+  return `/api/systems/${encodeURIComponent(id)}/export`;
+}
+
 /**
  * A body id as a URL path: a world id, or a moon's `<world>/moons/<n>`
  * (see lib/moons.ts), each segment encoded.
@@ -157,11 +162,6 @@ export function bodyFiles(id: string): string {
 /** Where a body's routes are: `/api/systems/<system>/bodies/<body>`. */
 export function bodyApi(id: string): string {
   return `/api/${bodyPath(id)}`;
-}
-
-/** The download of a system's export (`.zip`: seeds, requests, names and PNG images), see `crate::export` on the server. */
-export function systemExportUrl(id: string): string {
-  return `/api/systems/${encodeURIComponent(id)}/export`;
 }
 
 /** The name of a resolution, as URLs and `?size=` take it: `2048x1024`. */
