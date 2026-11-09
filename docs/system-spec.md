@@ -410,9 +410,14 @@ systems/<system-id>/
 ├── system.json      ← the system as drawn: star, bodies, orbits, previews
 ├── names.json       ← names given by the user, by body id (optional)
 └── bodies/
-    ├── c/           ← a generated body: the files a world has today
-    │   ├── world.png, world.svg, legend.png, thumb.png
-    │   └── raw_data/   ← world.json, layers, rivers…
+    ├── c/           ← a generated body
+    │   ├── thumb.png       ← from its original resolution
+    │   └── sizes/
+    │       ├── 2048x1024/  ← a resolution: the files a world has
+    │       │   ├── world.png, world.svg, legend.png
+    │       │   ├── raw_data/   ← world.json, layers, rivers…
+    │       │   └── noise_maps/ ← diagnostic images (optional)
+    │       └── 4096x2048/  ← another one, generated since
     ├── c-1/
     └── e/
 ```
@@ -436,7 +441,9 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (1), the request, the seed and the map size;
+  - `format_version` (2), the request, the seed and the map size. A
+    system of another version is refused, not migrated: version 1 kept a
+    body's files directly in `bodies/<id>/`;
   - `star`: today's `StarInfo` and its designation;
   - `bodies`: one entry per planet and moon, with the fields of
     [Model](#model): id, designation, kind, type, parent, orbit, physical
@@ -444,13 +451,19 @@ systems/<system-id>/
 
   The server rewrites it (temporary file, then rename) only to set a
   body's `generated` once its directory is complete.
-- **A body's directory** holds what a world's holds today. Its
+- **A body's directory** holds its thumbnail and, under `sizes/`, one
+  directory per resolution named `<width>x<height>`
+  (`crates/mapgen/src/sizes.rs`): the original one, at the size of the
+  body's parameters, and any other generated since (`map-generator
+  --in-system <id> --body <body> --size 4096x2048`, which leaves
+  `system.json` as it is). Each holds what a world's holds today. Its
   `world.json` keeps its format with two more fields, `system` and
   `body`. Its `moons`, `giants` and `host` blocks go: the system file
   describes the neighbours, and the generator reads them from it.
 - **Writes** keep today's safety: a body is generated into
-  `bodies/.tmp-<id>/` and renamed into place once complete, and the
-  startup sweep removes what a killed server left.
+  `bodies/.tmp-<id>/` and renamed into place once complete, another
+  resolution into `bodies/<id>/sizes/.tmp-<W>x<H>/`, and the startup
+  sweep removes what a killed server left.
 - **`names.json`** keeps the format of the names given today, keyed by
   body id (`{"c": "Gaia", "c-1": "Séléné", "star": "Helia"}`). Every body
   can be named, the star included.

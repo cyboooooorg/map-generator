@@ -17,7 +17,7 @@
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
 //! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body |
 //! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates |
-//! | `GET /systems/{id}/...`         | system files (`system.json`, `bodies/<body>/…`)   |
+//! | `GET /systems/{id}/...`         | system files (`system.json`, `bodies/<body>/sizes/<W>x<H>/…`) |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
 //! | `DELETE /api/jobs/{id}`         | cancel a queued or running generation             |
 //! | `GET /api/jobs/{id}/events`     | job progress as server-sent events (`JobStatus`)  |
@@ -965,7 +965,10 @@ async fn checked_epoch(
 /// Where a body's files are, the key of its world in the tile cache, and
 /// its revision (which keys its cached tiles in browsers).
 struct BodyLoc {
+    /// Its original resolution's directory (see [`systems::original_dir`]).
     dir: PathBuf,
+    /// The body's directory, which holds its `thumb.png`.
+    thumb_dir: PathBuf,
     key: String,
     revision: u64,
 }
@@ -978,18 +981,25 @@ async fn system_body_loc(state: &AppState, id: &str, body: &str) -> Result<BodyL
     }
     let root = state.config.systems_dir.clone();
     let (system, owned) = (id.to_string(), body.to_string());
-    let revision =
-        tokio::task::spawn_blocking(move || systems::body_revision(&root, &system, &owned))
-            .await
-            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-            .ok_or_else(|| {
-                Failure(
-                    StatusCode::NOT_FOUND,
-                    format!("body {body} of {id} is not generated"),
-                )
-            })?;
+    let (dir, revision) = tokio::task::spawn_blocking(move || {
+        let dir = systems::original_dir(&root, &system, &owned)?;
+        Ok::<_, String>(dir.and_then(|dir| {
+            let revision = systems::body_revision(&dir)?;
+            Some((dir, revision))
+        }))
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| unreadable_system(&state.config.systems_dir, id, &e))?
+    .ok_or_else(|| {
+        Failure(
+            StatusCode::NOT_FOUND,
+            format!("body {body} of {id} is not generated"),
+        )
+    })?;
     Ok(BodyLoc {
-        dir: systems::body_dir(&state.config.systems_dir, id, body),
+        dir,
+        thumb_dir: systems::body_dir(&state.config.systems_dir, id, body),
         key: format!("systems/{id}/{body}"),
         revision,
     })
@@ -1010,6 +1020,7 @@ async fn body_tile(
         dir,
         key: id,
         revision,
+        ..
     } = loc;
     let epoch = checked_epoch(&dir, &id, query.epoch).await?;
     let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
@@ -1085,6 +1096,7 @@ async fn body_epoch_layer(
         dir,
         key: id,
         revision,
+        ..
     } = loc;
     let epoch = checked_epoch(&dir, &id, Some(epoch_ma)).await?;
     let world = match state.tiles.world_at(&dir, &id, revision, epoch).await {
@@ -1248,13 +1260,18 @@ async fn body_thumbnail(
 ) -> Result<Response, Failure> {
     let BodyLoc {
         dir,
+        thumb_dir,
         key: id,
         revision,
     } = loc;
-    let png = state.thumbnails.get(&dir).await.map_err(|e| match e {
-        ThumbError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no map for {id}")),
-        ThumbError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
-    })?;
+    let png = state
+        .thumbnails
+        .get(&thumb_dir, &dir)
+        .await
+        .map_err(|e| match e {
+            ThumbError::NotFound => Failure(StatusCode::NOT_FOUND, format!("no map for {id}")),
+            ThumbError::Failed(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
+        })?;
     // Like a tile: a URL naming the current revision never changes.
     let cache = if query.rev == Some(revision) {
         IMMUTABLE
@@ -1287,6 +1304,7 @@ async fn body_hex(state: Shared, loc: BodyLoc, request: HexRequest) -> Result<Re
         dir,
         key: id,
         revision,
+        ..
     } = loc;
     let river_flow = request.river_flow_km2.unwrap_or(DEFAULT_RIVER_FLOW_KM2);
     let _turn = state
@@ -1725,6 +1743,32 @@ mod tests {
         // No such system stays a 404.
         let (status, _) = call(&app, "GET", "/api/systems/mgs-2-2", None).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+        // A system of today's format holding a world below the oldest one.
+        let dir = root.join("mgs-3-3");
+        std::fs::create_dir_all(dir.join("bodies/b/sizes/64x32/raw_data")).unwrap();
+        let version = mapgen::system::SYSTEM_FORMAT_VERSION;
+        std::fs::write(
+            dir.join("system.json"),
+            format!(
+                r#"{{"format_version": {version}, "width": 64, "height": 32,
+                     "bodies": [{{"id": "b", "params": {{"width": 64, "height": 32}}}}]}}"#
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("bodies/b/sizes/64x32/raw_data/world.json"),
+            r#"{"format_version": 10}"#,
+        )
+        .unwrap();
+        let (status, body) = call(
+            &app,
+            "GET",
+            "/api/systems/mgs-3-3/bodies/b/tiles/0/0/0",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::GONE, "{body}");
+        assert!(body.contains("clean-systems"), "{body}");
     }
 
     #[tokio::test]
@@ -1757,10 +1801,14 @@ mod tests {
         let (status, now) = png(format!("{base}/0/elevation.png")).await;
         assert_eq!(status, StatusCode::OK);
         let now = image::load_from_memory(&now).unwrap().into_luma16();
-        let stored =
-            image::open(systems::body_dir(&root, &old, &rock).join("raw_data/elevation.png"))
+        let stored = image::open(
+            systems::original_dir(&root, &old, &rock)
                 .unwrap()
-                .into_luma16();
+                .unwrap()
+                .join("raw_data/elevation.png"),
+        )
+        .unwrap()
+        .into_luma16();
         assert_eq!(now, stored);
         // Back in time and ahead, the relief changes.
         for epoch in [3900, -1000] {
@@ -2118,9 +2166,9 @@ mod tests {
         );
         assert!(events.contains("\"status\":\"done\""), "{events}");
         assert!(
-            root.join(&id)
-                .join("bodies")
-                .join(&planet)
+            systems::original_dir(&root, &id, &planet)
+                .unwrap()
+                .unwrap()
                 .join("raw_data/world.json")
                 .exists()
         );
@@ -2138,7 +2186,7 @@ mod tests {
         assert_eq!(list[0]["bodies"][0]["generated"], true);
         let file = get_gzip(
             &app,
-            &format!("/systems/{id}/bodies/{planet}/raw_data/world.json"),
+            &format!("/systems/{id}/bodies/{planet}/sizes/64x32/raw_data/world.json"),
         )
         .await;
         assert_eq!(file.status(), StatusCode::OK);
@@ -2225,7 +2273,7 @@ mod tests {
         );
         let file = get_gzip(
             &app,
-            &format!("/systems/{id}/bodies/{planet}/raw_data/world.json"),
+            &format!("/systems/{id}/bodies/{planet}/sizes/64x32/raw_data/world.json"),
         )
         .await;
         assert_eq!(file.status(), StatusCode::OK);

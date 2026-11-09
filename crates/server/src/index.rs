@@ -956,8 +956,17 @@ fn load(root: &Path, id: &str) -> Option<Loaded> {
             );
         }
     }
+    // The original resolution of each body; none in a system of another
+    // version, whose bodies are laid out otherwise.
+    let sizes = systems::original_sizes(&bytes).unwrap_or_default();
     for body in summary.bodies.iter().filter(|b| b.generated) {
-        let format = world_format(&systems::body_dir(root, id, &body.id));
+        let format = sizes.get(&body.id).and_then(|&(width, height)| {
+            world_format(&mapgen::sizes::size_dir(
+                &systems::body_dir(root, id, &body.id),
+                width,
+                height,
+            ))
+        });
         details.entry(body.id.clone()).or_default().format = format;
     }
     let names = systems::modified_ms(&dir.join(systems::NAMES_FILE))
@@ -970,13 +979,14 @@ fn load(root: &Path, id: &str) -> Option<Loaded> {
     })
 }
 
-/// The `format_version` a generated body's `world.json` says.
-fn world_format(body_dir: &Path) -> Option<u32> {
+/// The `format_version` the `world.json` of a body's resolution (in
+/// `dir`) says.
+fn world_format(dir: &Path) -> Option<u32> {
     #[derive(serde::Deserialize)]
     struct Head {
         format_version: u32,
     }
-    let bytes = std::fs::read(body_dir.join("raw_data").join("world.json")).ok()?;
+    let bytes = std::fs::read(dir.join("raw_data").join("world.json")).ok()?;
     serde_json::from_slice::<Head>(&bytes)
         .ok()
         .map(|h| h.format_version)
@@ -1120,7 +1130,7 @@ mod tests {
     use std::path::PathBuf;
 
     const SYSTEM: &str = r#"{
-        "format_version": 1, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 2, "seed": 42, "width": 1024, "height": 512,
         "request": {"system": {"star": null, "metallicity": null, "planets": null, "seed": 42, "width": 1024, "height": 512}},
         "star": {"type": "K1V", "designation": "MGS 48213", "metallicity": 0.0, "ice_line_au": 2.0,
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
@@ -1144,10 +1154,10 @@ mod tests {
     fn tree(root: &Path, ids: &[&str]) {
         for id in ids {
             let dir = root.join(id);
-            std::fs::create_dir_all(dir.join("bodies/c/raw_data")).unwrap();
+            std::fs::create_dir_all(dir.join("bodies/c/sizes/1024x512/raw_data")).unwrap();
             std::fs::write(dir.join("system.json"), SYSTEM).unwrap();
             std::fs::write(
-                dir.join("bodies/c/raw_data/world.json"),
+                dir.join("bodies/c/sizes/1024x512/raw_data/world.json"),
                 r#"{"format_version": 9}"#,
             )
             .unwrap();

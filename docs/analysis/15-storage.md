@@ -18,9 +18,11 @@ systems/<system-id>/
 ├── system.json        the system as drawn (written once)
 ├── names.json         names the user gave, by body id (rewritten on rename)
 └── bodies/<body-id>/
-    ├── world.png, world.svg, legend.png, thumb.png
-    ├── raw_data/      world.json and the layers, 16-bit PNGs (+ rivers…)
-    └── noise_maps/    diagnostic images of every noise layer (optional)
+    ├── thumb.png      from the original resolution
+    └── sizes/<W>x<H>/ one per resolution, the original included
+        ├── world.png, world.svg, legend.png
+        ├── raw_data/      world.json and the layers, 16-bit PNGs (+ rivers…)
+        └── noise_maps/    diagnostic images of every noise layer (optional)
 ```
 
 How it is used:

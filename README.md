@@ -50,6 +50,7 @@ Reproduce with: --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 
 | `--systems-dir <path>`  | directory receiving the systems (`systems/<id>/`; a system drawn again replaces the one there, keeping the names given in the web app)                                                             | `systems`                                                                           |
 | `--body <id>`           | the body generated with its neighbourhood: the planet asked by default; with `--system` or `--draw-only` none unless given; with `--in-system`, required                                           | the planet asked                                                                    |
 | `--in-system <id>`      | the system, in `--systems-dir`, that `--body` generates in                                                                                                                                         | —                                                                                   |
+| `--size <WxH>`          | another resolution of `--body` in `--in-system`, generated already: the same world at `WxH` (`4096x2048`), into `bodies/<body>/sizes/<WxH>/`; `system.json` is left as it is                       | —                                                                                   |
 | `--seed <u32>`          | any 32-bit unsigned integer                                                                                                                                                                        | random                                                                              |
 | `--sea-level <f32>`     | float in `[-1.0, 1.0]`                                                                                                                                                                             | random in `[0.10, 0.40)`                                                            |
 | `--land-fraction <f32>` | share of the surface that is land, `[0.0, 1.0]`; sets the sea level to match, so it cannot be combined with `--sea-level`                                                                          | —                                                                                   |
@@ -171,12 +172,12 @@ For games and other tile-based uses, an existing world can be resampled onto a h
 
 ```bash
 mise run gen -- --seed 42 --planet terran
-mise run hex -- systems/mgs-36196-42/bodies/d --columns 96
+mise run hex -- systems/mgs-36196-42/bodies/d/sizes/2048x1024 --columns 96
 ```
 
 | Option               | Description                                                                | Default  |
 | -------------------- | -------------------------------------------------------------------------- | -------- |
-| `<world>`            | a generated body's directory (`systems/<id>/bodies/<body>`)                | required |
+| `<world>`            | a body resolution (`systems/<id>/bodies/<body>/sizes/<WxH>`)               | required |
 | `--columns <n>`      | hex columns around the planet, `4`–`1024`; rows follow from the map height | `96`     |
 | `--river-flow <km²>` | land hexes whose largest river drains at least this area get a river flag  | `500000` |
 
@@ -337,7 +338,7 @@ To make a dry world, remap its oceans rather than lowering `sea_level`: biome el
 
 ### Output
 
-Each run writes a system into `systems/<id>/` (`<id>`: the star's designation and the seed, lowercase, `mgs-36196-42`): its `system.json` (the star and every body, see `src/system.rs` and `docs/system-spec.md`) and one directory per body generated, under `bodies/<body>/` (`c`, `c-1`), with the layout of a world below. A system drawn again into the same directory replaces it, keeping the names given in the web app (`names.json`).
+Each run writes a system into `systems/<id>/` (`<id>`: the star's designation and the seed, lowercase, `mgs-36196-42`): its `system.json` (the star and every body, see `src/system.rs` and `docs/system-spec.md`) and one directory per body generated, under `bodies/<body>/` (`c`, `c-1`), with the layout of a world below. A system drawn again into the same directory replaces it, keeping the names given in the web app (`names.json`). A system of an older layout (`system.json` format version 1, its bodies' files not in `sizes/`) is refused: delete it (`mise run clean-systems`) and draw it again.
 
 ```text
 systems/<id>/
@@ -347,10 +348,22 @@ systems/<id>/
     └── c/             ← each body generated, with the layout below
 ```
 
+Each resolution of a body has a directory of its own under `sizes/`, named
+`<width>x<height>`: the original one, at the size the system was drawn with
+(a moon's map is narrower than its planet's), and any other generated since
+(`--size`). The thumbnail, made from the original, sits beside them. A
+resolution is written into `sizes/.tmp-<WxH>/` and renamed into place once
+complete.
+
 ```text
 bodies/<body>/
+├── thumb.png          ← the original world.png, 512 pixels wide, for lists
+└── sizes/<W>x<H>/     ← one resolution (`2048x1024`), with the layout below
+```
+
+```text
+sizes/<W>x<H>/
 ├── world.png          ← hillshaded biome map with soft borders, bathymetry and reference lines
-├── thumb.png          ← world.png scaled down to 512 pixels wide, for lists
 ├── world.svg          ← equivalent vector image
 ├── legend.png         ← biome legend with planet metadata
 ├── raw_data/

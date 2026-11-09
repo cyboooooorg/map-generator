@@ -20,22 +20,31 @@ use crate::world::{Biome, World, WorldParams, biome_color, surface_color};
 use colour::{linear_of, mix, to_linear, to_srgb};
 use ecotone::ecotone_colour_around;
 use rayon::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use variation::SurfaceVariation;
 
-/// Which optional outputs [`export_world`] writes. The maps (`world.png`,
-/// its thumbnail `thumb.png`, `world.svg`, `legend.png`) are always written. The diagnostic maps of
-/// `noise_maps/` are written during the generation, by a [`NoiseMapWriter`].
-#[derive(Clone, Copy, Debug)]
+/// Which optional outputs [`export_world`] writes, and where. The maps
+/// (`world.png`, `world.svg`, `legend.png`) are always written. The
+/// diagnostic maps of `noise_maps/` are written during the generation, by a
+/// [`NoiseMapWriter`].
+#[derive(Clone, Debug)]
 pub struct ExportOptions {
     /// `raw_data/`: world.json and the layer PNGs.
     pub raw_data: bool,
+    /// The directory that receives the thumbnail of `world.png`
+    /// (`thumb.png`): a body keeps one for all its resolutions, beside its
+    /// `sizes/` (see [`crate::sizes`]). None writes no thumbnail; it is
+    /// never written into the export's own directory.
+    pub thumb_dir: Option<PathBuf>,
 }
 
 impl Default for ExportOptions {
     fn default() -> Self {
-        Self { raw_data: true }
+        Self {
+            raw_data: true,
+            thumb_dir: None,
+        }
     }
 }
 
@@ -52,7 +61,8 @@ pub fn drift_label(drift_ma: f32) -> Option<String> {
     Some(format!("{side}{ma}ma"))
 }
 
-/// Writes every output of a generated world into `dir` (created if needed).
+/// Writes every output of a generated world into `dir` (created if needed),
+/// its thumbnail into `options.thumb_dir` (created if needed) when set.
 /// The exports are independent and dominated by PNG encoding, so they run in
 /// parallel.
 pub fn export_world(
@@ -68,6 +78,9 @@ pub fn export_world(
     let path = |sub: &str| dir.join(sub).to_string_lossy().into_owned();
     let io = |e: std::io::Error| e.to_string();
     std::fs::create_dir_all(dir).map_err(io)?;
+    if let Some(thumb_dir) = &options.thumb_dir {
+        std::fs::create_dir_all(thumb_dir).map_err(io)?;
+    }
     if options.raw_data {
         std::fs::create_dir_all(dir.join("raw_data")).map_err(io)?;
     }
@@ -102,9 +115,12 @@ pub fn export_world(
             // full-size copy.
             let image = world_image(world, map);
             image.save(path("world.png")).map_err(|e| e.to_string())?;
-            thumbnail::thumbnail(&image)
-                .save(path(thumbnail::THUMB_FILE))
-                .map_err(|e| e.to_string())
+            match &options.thumb_dir {
+                Some(thumb_dir) => thumbnail::thumbnail(&image)
+                    .save(thumb_dir.join(thumbnail::THUMB_FILE))
+                    .map_err(|e| e.to_string()),
+                None => Ok(()),
+            }
         }),
         Box::new(|| export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())),
         Box::new(|| export_legend_png(world, &path("legend.png")).map_err(|e| e.to_string())),
@@ -712,7 +728,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mapgen-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let generated = crate::generation::generate(params);
-        super::export_world(generated, &dir, super::ExportOptions { raw_data: true }).unwrap();
+        super::export_world(generated, &dir, super::ExportOptions::default()).unwrap();
         dir
     }
 
@@ -805,9 +821,10 @@ mod tests {
         let done = crate::system::generate_neighbourhood(&dir, &planet, |_| {}).unwrap();
         assert_eq!(done.len(), 3);
         for (k, moon) in system.moons.iter().enumerate() {
-            let raw = dir
-                .join("bodies")
-                .join(format!("{planet}-{}", k + 1))
+            let id = format!("{planet}-{}", k + 1);
+            let body = drawn.bodies.iter().find(|b| b.id == id).unwrap();
+            let (width, height) = (body.params.width, body.params.height);
+            let raw = crate::sizes::size_dir(&dir.join("bodies").join(&id), width, height)
                 .join("raw_data");
             let meta: WorldMetadata = read_metadata(&raw).unwrap();
             assert_eq!(meta.planet_type, "icy-moon");
