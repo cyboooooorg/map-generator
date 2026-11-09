@@ -218,6 +218,26 @@ export function velocityScale(
   return fastest > 0 ? maxLength / fastest : 0;
 }
 
+/** Shortest a true-scale vector is bounded to, view units: shorter would hide it when two orbits are drawn almost on each other. */
+export const REAL_VECTOR_FLOOR = 0.02;
+
+/**
+ * The length the longest velocity (or pull) vector of a system drawn to
+ * scale may have, view units: half the narrowest gap between the star and
+ * the orbits' drawn radii (`orbitRadii`, semi-major axes on the view's
+ * scale), so a vector reaches at most the middle of the way to the
+ * neighbouring orbit. At most the schematic's VELOCITY_MAX_LENGTH, at
+ * least REAL_VECTOR_FLOOR. Use it as `maxLength` of velocityScale and
+ * gravityScale: one scale for all the planets, the fastest (strongest) at
+ * this length.
+ */
+export function realVectorBound(orbitRadii: readonly number[]): number {
+  const sorted = [0, ...orbitRadii].sort((a, b) => a - b);
+  let gap = Infinity;
+  for (let i = 1; i < sorted.length; i++) gap = Math.min(gap, sorted[i]! - sorted[i - 1]!);
+  return Math.min(VELOCITY_MAX_LENGTH, Math.max(REAL_VECTOR_FLOOR, gap / 2));
+}
+
 /**
  * Seconds of animation a planetary system's innermost planet takes to go
  * round at the default speed (see defaultSystemSpeed).

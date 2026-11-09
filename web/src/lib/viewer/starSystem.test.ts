@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
+import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, realVectorBound, REAL_VECTOR_FLOOR, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
 
 describe('star view', () => {
   it('lays the system out outside the star, in proportion', () => {
@@ -221,6 +221,36 @@ describe('star view', () => {
     expect(hillShownRadius(0.001, 0.1, 0, true)).toEqual({ radius: 0.001, toScale: true });
     // The schematic default keeps its floor.
     expect(hillShownRadius(0.001, 0.1, 0.5).toScale).toBe(false);
+  });
+
+  it('bounds the true-scale vectors by half the narrowest gap between the star and the drawn orbits', () => {
+    // Orbits drawn at 1, 1.5 and 4 view units: the narrowest gap is 0.5.
+    expect(realVectorBound([4, 1, 1.5])).toBeCloseTo(0.25, 10);
+    // One planet: the gap to the star.
+    expect(realVectorBound([0.8])).toBeCloseTo(0.4, 10);
+    // Never longer than the schematic's, never invisible.
+    expect(realVectorBound([50])).toBe(VELOCITY_MAX_LENGTH);
+    expect(realVectorBound([1, 1.0001])).toBe(REAL_VECTOR_FLOOR);
+    expect(realVectorBound([])).toBe(VELOCITY_MAX_LENGTH);
+  });
+
+  it('makes true-scale velocity vectors longer the faster the planet goes, the longest at the bound', () => {
+    const orbits = [
+      { orbit_au: 0.4, eccentricity: 0 },
+      { orbit_au: 1, eccentricity: 0.0167 },
+      { orbit_au: 5.2, eccentricity: 0.05 },
+      { orbit_au: 30, eccentricity: 0.01 },
+    ];
+    const bound = realVectorBound(orbits.map((o) => (9 * o.orbit_au) / 30));
+    const k = velocityScale(1, orbits, bound);
+    const lengths = orbits.map((o) => orbitalSpeed(1, o.orbit_au, o.orbit_au * (1 - o.eccentricity)) * k);
+    for (let i = 1; i < lengths.length; i++) expect(lengths[i]!).toBeLessThan(lengths[i - 1]!);
+    expect(Math.max(...lengths)).toBeCloseTo(bound, 10);
+    // Same for the star's pull: the closest is the strongest and longest.
+    const g = gravityScale(1, orbits, bound);
+    const pulls = orbits.map((o) => starGravity(1, o.orbit_au * (1 - o.eccentricity)) * g);
+    for (let i = 1; i < pulls.length; i++) expect(pulls[i]!).toBeLessThan(pulls[i - 1]!);
+    expect(Math.max(...pulls)).toBeCloseTo(bound, 10);
   });
 
   it('builds a sphere grid whose points all lie on the sphere', () => {
