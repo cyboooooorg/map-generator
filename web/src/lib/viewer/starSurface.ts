@@ -962,9 +962,12 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
   float moatAge = smoothstep(0.15, 0.4, age);
   float cellPx = 0.5 * radius / aa;
   scale *= sqrt(1.0 - ${SPOT_PORE_SHARE.toFixed(3)} * moatAge * smoothstep(1.0, 2.0, 0.12 * cellPx));
-  // The shape reaches 1.7 of its scale plus two pixels of softness, the
-  // moat 2.6 spot radii; the round spot is inside both.
-  float core = 1.7 * scale + 2.0 * px;
+  // The shape reaches 2 of its scale plus two pixels of softness (its
+  // edge at most about 1.85 of it, where the lobes and the noise both pull
+  // rd in), the moat 2.6 spot radii; the round spot is inside both. At
+  // the largest scale, 1.19, that is 1.84 r for the leader (0.775 r), inside
+  // the region's reach of 2.02 r.
+  float core = 2.0 * scale + 2.0 * px;
   if (rho >= max(core, 2.6)) return 1.0;
   vec3 so = vec3(173.0, 91.0, 57.0) * seed;
   float spot = 1.0;

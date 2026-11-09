@@ -314,8 +314,10 @@ describe('star surface', () => {
     expect(STAR_SURFACE_GLSL).toMatch(/float starSpotRound\(float d, float rs, float aa\)/);
     expect(STAR_SURFACE_GLSL).toMatch(/float detail = smoothstep\(0\.7, 1\.5, rs \/ aa\);/);
     expect(STAR_SURFACE_GLSL).toMatch(/return mix\(roundSpot, spot, detail\);/);
-    // The region's reach covers the shape's softness.
+    // The region's reach covers the shape's softness, and the shape's own
+    // cut lies beyond its farthest edge (no straight cut on a large spot).
     expect(STAR_SURFACE_GLSL).toMatch(/0\.5 \* a\.w \+ 2\.02 \* r \+ 2\.0 \* aa/);
+    expect(STAR_SURFACE_GLSL).toMatch(/float core = 2\.0 \* scale \+ 2\.0 \* px;/);
   });
 
   it('grows light bridges on some large spots only', () => {
