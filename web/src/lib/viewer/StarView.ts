@@ -34,6 +34,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { CameraSettling } from './cameraSettling';
 import { FrameStats } from './frameStats';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -316,6 +317,7 @@ export class StarView {
   private reach = 6.8;
   /** Whether the user moved the camera since the view was last fitted. */
   private userMoved = false;
+  private readonly settling = new CameraSettling();
   private moonOrbits: MoonOrbit[] = [];
   private moonMarkers: Mesh<SphereGeometry, MeshBasicMaterial>[] = [];
   /** A ring round each giant's marker, facing the camera, shown while it is highlighted. */
@@ -387,6 +389,9 @@ export class StarView {
     this.controls.addEventListener('change', () => this.requestRender());
     // Only the user's drags and wheels start the controls, not resetView.
     this.controls.addEventListener('start', () => (this.userMoved = true));
+    // Only frames that follow a drag or a wheel advance the damping (see CameraSettling).
+    this.controls.addEventListener('change', this.settling.mark);
+    this.controls.addEventListener('start', this.settling.mark);
     // A click on a planet's marker picks it (a drag turns the view).
     canvas.addEventListener('pointerdown', (event) => (this.pressAt = { x: event.clientX, y: event.clientY }));
     canvas.addEventListener('pointermove', (event) => {
@@ -1805,7 +1810,7 @@ export class StarView {
     }
     this.lastDrawn = now;
     const flying = this.stepFlight(performance.now());
-    const moving = flying || (this.flight === null && this.controls.update());
+    const moving = flying || (this.flight === null && this.settling.step(() => this.controls.update()));
     // The surface's detail follows the star's size on screen as the camera
     // zooms (the regions are asked for again only on another day).
     this.updateSurface(this.clockDays());
