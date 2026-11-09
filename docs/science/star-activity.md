@@ -632,6 +632,18 @@ half; its age is the region's age over its life. Every number below is a
   Its size on other stars scales with the granules. It turns with the
   star's equator, without the differential rotation the regions follow.
 
+- **The granules' bright points are dropped.** Prototype D drew the
+  magnetic bright points of the lanes; cut by the lane they sat in, they
+  read as specks on screen.
+- **The cells move on a parabola wave.** Each centre wanders along
+  `starWave`, a parabola per half turn that stays within 0.056 of a sine
+  (**calibration**), because it is cheaper than a sine.
+- **Granules are skipped inside spots.** They fade out across a spot's or
+  a pore's edge and are not computed there, where real granulation is
+  broken up by the field rather than absent (**calibration** of the fade).
+- **The animated close-up is drawn at 0.75 pixel ratio** (**calibration**),
+  the star view under 1.1 radii while its clock runs, a softer frame for
+  about 44 % fewer pixels; once paused it is drawn sharp.
 - **Timeline and region shapes are calibrations.** One cycle maps onto
   $x \in [0, 2.6]$ of the Hathaway fit; a region grows over
   $\min(0.1\,T,\ 3\ \text{d})$ times a factor within $\pm 20\ \%$; its
