@@ -344,17 +344,22 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    fills it and a spot-dominated star's plages are fainter
    (**calibration**). The granulation is moving cellular noise at the
    granule size, as prototype D drew it: one cell centre per unit cube,
-   in a space warped by one octave of value noise. A cell is bright in
-   its middle, $\mathrm{smoothstep}(0.02, 0.30, F_2 - F_1)\,(1.15 -
-   0.55\,F_1)$, and dark in the lanes where $F_2 - F_1$ falls to 0.
-   $F_1$ is the distance to the nearest centre. $F_2 - F_1$ is twice
-   the distance along the surface to the edge of that centre's cell,
-   not the 3D second-nearest distance: a sphere cutting a 3D cell
-   pattern runs nearly parallel to some faces between centres stacked
-   in depth, where the 3D $F_2 - F_1$ stays small over wide flat grey
-   patches with hard edges. About a fifth of the lanes carry a soft
-   bright point where the lane crosses the line between its two
-   centres, weighted 0.35 against the cells' 0.62 (prototype D;
+   in a space warped by one octave of value noise, strong enough to
+   curve the cells' edges. Each cell is a dome, bright at its centre and
+   falling towards its edge as $1.2 - 0.75\,s^2$, with $s$ the distance
+   to the centre over the sum of the distances to the centre and to the
+   edge, both measured along the surface. Its tone varies from cell to
+   cell (0.75 to 1.2), it is dimmer while its centre lies deep (a
+   granule being born or dying), and a quarter of the large cells have
+   a darker middle, as exploding granules do. The intergranular lanes
+   are dark with soft edges, narrow along long edges and widening into
+   pools at the junctions of three cells. The distances are taken
+   along the surface, not as the 3D second-nearest distance: a sphere
+   cutting a 3D cell pattern runs nearly parallel to some faces between
+   centres stacked in depth, where the 3D $F_2 - F_1$ stays small over
+   wide flat grey patches with hard edges. About a fifth of the lanes
+   carry a soft bright point where the lane crosses the line between
+   its two centres, weighted 0.35 against the cells' 0.62 (prototype D;
    Nordlund, Stein & Asplund 2009 for the cells and lanes, Sánchez
    Almeida et al. 2004 for the points; the shapes and weights are
    **calibrations**). Each centre wanders
