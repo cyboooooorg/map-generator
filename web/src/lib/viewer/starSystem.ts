@@ -263,9 +263,17 @@ export function hillRadiusAu(orbitAu: number, eccentricity: number, massEarth: n
  * view, and whether that is to scale: `trueRadius` (its Hill radius on the
  * view's scale), unless that is smaller than the planet's marker
  * (`markerSize`) or than its outermost moon's ring (`moonReach`, 0 for
- * none), both drawn larger than to scale: then just outside those.
+ * none), both drawn larger than to scale: then just outside those. In the
+ * true-scale view (`realScale`) the planets are drawn at their true size
+ * and the moons are hidden: no floor, the true radius always.
  */
-export function hillShownRadius(trueRadius: number, markerSize: number, moonReach: number): { radius: number; toScale: boolean } {
+export function hillShownRadius(
+  trueRadius: number,
+  markerSize: number,
+  moonReach: number,
+  realScale = false,
+): { radius: number; toScale: boolean } {
+  if (realScale) return { radius: trueRadius, toScale: true };
   const floor = Math.max(markerSize * 1.6, moonReach * 1.15);
   return trueRadius >= floor ? { radius: trueRadius, toScale: true } : { radius: floor, toScale: false };
 }

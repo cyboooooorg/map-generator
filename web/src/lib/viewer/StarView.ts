@@ -1218,9 +1218,11 @@ export class StarView {
 
   /**
    * A grid sphere round each planet of a planetary system, as wide as its
-   * Hill sphere on the view's scale, or dashed just outside its marker and
-   * its moons' rings where those are drawn larger than that (see
-   * hillShownRadius).
+   * Hill sphere on the view's scale. In the schematic view, one smaller than
+   * its marker and its moons' rings (drawn larger than to scale) is dashed
+   * just outside them instead (see hillShownRadius); drawn to scale it is
+   * always the true radius, solid. Rebuilt by setStar, hence whenever the
+   * scale mode toggles (setRealScale).
    */
   private buildHills(): void {
     for (const hill of this.hills) {
@@ -1230,6 +1232,9 @@ export class StarView {
     }
     this.hills = [];
     if (this.selected === null || !this.info) return;
+    // To scale the planets are drawn at their true size and the moons are
+    // hidden: the Hill sphere is its true radius, solid, with no floor.
+    const real = this.realScale;
     this.giants.forEach((giant, k) => {
       const a = giant.orbit_au * (1 - giant.eccentricity);
       const hill = hillRadiusAu(giant.orbit_au, giant.eccentricity, giant.mass_earth, this.info!.mass);
@@ -1239,8 +1244,8 @@ export class StarView {
       // Its moons' rings, round the marker and scaled to it (hidden to scale).
       const moons = this.systemMoons[k];
       const reach =
-        moons && !this.realScale ? Math.max(0, ...moons.orbits.map((o) => o.radius)) * moons.group.scale.x : 0;
-      const { radius, toScale } = hillShownRadius(true_, this.markerSize(k), reach);
+        moons && !real ? Math.max(0, ...moons.orbits.map((o) => o.radius)) * moons.group.scale.x : 0;
+      const { radius, toScale } = hillShownRadius(true_, this.markerSize(k), reach, real);
       const sphere = new LineSegments(
         new BufferGeometry().setFromPoints(sphereGrid(radius).map(([x, y, z]) => new Vector3(x, y, z))),
         toScale

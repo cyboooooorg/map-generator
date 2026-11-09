@@ -215,6 +215,14 @@ describe('star view', () => {
     expect(bare.radius).toBeCloseTo(0.16, 10);
   });
 
+  it('draws a Hill sphere to scale and solid in the true-scale view, whatever the marker and the moons', () => {
+    // Under the schematic marker and the moons' reach: still its true radius.
+    expect(hillShownRadius(0.001, 0.1, 0.5, true)).toEqual({ radius: 0.001, toScale: true });
+    expect(hillShownRadius(0.001, 0.1, 0, true)).toEqual({ radius: 0.001, toScale: true });
+    // The schematic default keeps its floor.
+    expect(hillShownRadius(0.001, 0.1, 0.5).toScale).toBe(false);
+  });
+
   it('builds a sphere grid whose points all lie on the sphere', () => {
     const grid = sphereGrid(2, 16);
     expect(grid.length).toBe(11 * 16 * 2);
