@@ -957,9 +957,9 @@ export const en = {
       `${p.mean} on average, ${p.fastest} at periapsis, ${p.slowest} at apoapsis`,
     equilibriumHelp:
       "Temperature the surface would have without a greenhouse effect, with Earth's albedo (Earth: −18 °C; its greenhouse brings it to 15 °C)",
-    prominences: 'Prominences',
+    prominences: 'Coronal loops',
     prominencesHelp:
-      'Arcs of plasma held above the surface by magnetic fields, glowing in the red of hydrogen; on active stars, an eruption now and then while animated',
+      "Arches of plasma standing over the star's active regions, along the magnetic field lines that join each region's two spots, glowing in the red of hydrogen; they appear, turn and fade with the regions. On active stars, an eruption now and then while animated",
     size: 'Radius · mass',
     sizeValue: (p: { radius: string; mass: string }) => `${p.radius} · ${p.mass}`,
     metallicity: 'Metallicity',

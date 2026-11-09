@@ -41,7 +41,7 @@
     /** Whether the orbit line and the habitable zone are drawn. */
     orbit: boolean;
     zone: boolean;
-    /** Whether the prominences (and eruptions) are drawn. */
+    /** Whether the coronal loops (and eruptions) are drawn. */
     prominences: boolean;
     /** The planet's moons, nearest first, drawn around it. */
     moons?: readonly Moon[];
@@ -587,7 +587,11 @@
     [
       { key: 'orbit', label: t.starView.showOrbit, icon: 'orbit', on: orbit, set: (v) => (orbit = v) },
       { key: 'zone', label: t.starView.showZone, icon: 'zone', on: zone, set: (v) => (zone = v) },
-      { key: 'prominences', label: t.starView.prominences, help: t.starView.prominencesHelp, icon: 'prominence', on: prominences, set: (v) => (prominences = v) },
+      // A star without activity, or a radiative one (no convective zone, no
+      // field to hold loops), has none to show.
+      ...(activity !== null && activity.envelope !== 'radiative'
+        ? [{ key: 'prominences', label: t.starView.prominences, help: t.starView.prominencesHelp, icon: 'prominence' as const, on: prominences, set: (v: boolean) => (prominences = v) }]
+        : []),
       ...(giantList.length > 0 && selected === null
         ? [{ key: 'giants', label: t.starView.showGiants, help: t.starView.showGiantsHelp, icon: 'giants' as const, on: giants, set: (v: boolean) => (giants = v) }]
         : []),

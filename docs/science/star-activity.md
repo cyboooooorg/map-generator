@@ -198,6 +198,22 @@ less than a day and shows a smooth disc; an old M dwarf turns in about 75
 days, is twenty times more active than the Sun, and spots at every
 latitude.
 
+### Coronal loops
+
+Above the spots stand coronal loops: arches of plasma that follow the
+field lines joining a region's leader to its follower
+(`lib/viewer/coronalLoops.ts`). A loop is drawn between points on the
+bipole's axis, so its feet sit on the two spots, and its height is half
+the distance between its feet, as for the semicircular loops of
+Aschwanden (2004, *Physics of the Solar Corona*), within a deterministic
+scatter of 20 %. A region is drawn with 3 loops in the high quality
+profile (the 8 largest regions) and 1 in the light one (the 3 largest);
+they turn with the region's longitude, grow dim as it decays (opacity
+proportional to the square root of its area over its peak area) and go
+with it. A star with no activity, or with a radiative envelope, has no
+loops. The 3 loops, the 20 % scatter and the side-by-side spacing are
+**calibration**: they draw the picture, not a measure.
+
 ### How it computes them
 
 [`activity.rs`](../../crates/mapgen/src/activity.rs) derives a

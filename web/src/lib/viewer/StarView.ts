@@ -63,6 +63,7 @@ import { previewTexture } from './previewTexture';
 import type { Preview } from '../api/types/Preview';
 import { starField } from './stars';
 import { prominenceGeometry } from './prominenceGeometry';
+import { CoronalLoops } from './coronalLoops';
 import {
   keplerPosition,
   type MoonOrbit,
@@ -70,8 +71,6 @@ import {
   PLANET_MARKER,
   compressedFrom,
   giantMarkerSize,
-  type Prominence,
-  prominences,
   STAR_RADIUS,
   frostLineAu,
   hillRadiusAu,
@@ -223,8 +222,9 @@ export class StarView {
   private omega = 0;
   private at: (au: number) => number = (au) => au;
   private distancesOn = false;
-  /** The prominences, turning with the surface; the eruption under way. */
+  /** The coronal loops over the active regions, turning with the surface; the eruption under way. */
   private readonly arcs = new Group();
+  private loops!: CoronalLoops;
   private eruption: Mesh<BufferGeometry, ShaderMaterial> | null = null;
   private klass = 'G';
   private seed = 0;
@@ -471,6 +471,7 @@ export class StarView {
     this.glow.renderOrder = 1;
     this.scene.add(this.glow);
     this.scene.add(this.arcs);
+    this.buildProminences();
 
     // The system in the orbital plane (x, z).
     this.zone = new Mesh(
@@ -1372,9 +1373,10 @@ export class StarView {
     this.requestRender();
   }
 
-  /** Shows or hides the prominences and eruptions. */
+  /** Shows or hides the coronal loops and eruptions. */
   setProminences(on: boolean): void {
     this.arcs.visible = on;
+    this.loops.update(on ? this.surface.regions : [], this.systemDay);
     this.requestRender();
   }
 
@@ -1467,6 +1469,7 @@ export class StarView {
       ? ((this.starScale * STAR_RADIUS) / (distance * Math.tan(halfFov))) * (height / 2)
       : 0;
     this.surface.update(days, { radiusPx, daysPerSecond: this.speed * this.daysPerSecond });
+    this.loops.update(this.arcs.visible ? this.surface.regions : [], days);
   }
 
   /** Mean anomaly of the planet now, radians. */
@@ -1644,10 +1647,10 @@ export class StarView {
       mesh.geometry?.dispose();
       mesh.material?.dispose();
     });
-    for (const child of this.arcs.children) {
-      const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+    this.loops.dispose();
+    if (this.eruption) {
+      this.eruption.geometry.dispose();
+      this.eruption.material.dispose();
     }
     this.setAnimated(false);
     this.disposeMoons();
@@ -1665,63 +1668,66 @@ export class StarView {
     this.renderer.forceContextLoss();
   }
 
-  /** A prominence: a bundle of glowing strands along its arc (see prominenceGeometry). */
-  private arcMesh(arc: Prominence, index: number): Mesh<BufferGeometry, ShaderMaterial> {
-    const mesh = new Mesh(
-      prominenceGeometry(arc, STAR_RADIUS, this.seed * 13 + index, this.quality.prominenceStrands),
-      new ShaderMaterial({
-        vertexShader: prominenceVertex,
-        fragmentShader: prominenceFragment,
-        uniforms: {
-          uColor: { value: new Vector3(...H_ALPHA) },
-          uOpacity: { value: 0.9 },
-          uLift: { value: 1 },
-          uFray: { value: 0 },
-          uTime: { value: this.time },
-          uSeed: { value: index * 1.7 },
-          uRadius: { value: STAR_RADIUS },
-        },
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    mesh.renderOrder = 2;
-    return mesh;
-  }
-
   private buildProminences(): void {
+    this.eruption = null;
     for (const child of [...this.arcs.children]) {
+      this.arcs.remove(child);
+      if (child === this.loops?.group) continue;
       const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
       mesh.geometry.dispose();
       mesh.material.dispose();
-      this.arcs.remove(mesh);
     }
-    this.eruption = null;
-    prominences(this.klass, this.seed).forEach((arc, i) => this.arcs.add(this.arcMesh(arc, i)));
+    this.loops?.dispose();
+    this.loops = new CoronalLoops(this.quality, (index) => this.loopMaterial(index));
+    this.arcs.add(this.loops.group);
+  }
+
+  /** The material of a loop (and of an eruption): glowing H-alpha strands. */
+  private loopMaterial(index: number): ShaderMaterial {
+    return new ShaderMaterial({
+      vertexShader: prominenceVertex,
+      fragmentShader: prominenceFragment,
+      uniforms: {
+        uColor: { value: new Vector3(...H_ALPHA) },
+        uOpacity: { value: 0.9 },
+        uLift: { value: 1 },
+        uFray: { value: 0 },
+        uTime: { value: this.time },
+        uSeed: { value: index * 1.7 },
+        uRadius: { value: STAR_RADIUS },
+      },
+      transparent: true,
+      depthWrite: false,
+    });
   }
 
   /**
-   * Turns the prominences with the surface (the surface shader turns by
-   * 0.02 rad/s), flickers them and, now and then on active stars, blows one
-   * off: it rises and fades out over a few seconds.
+   * Shimmers the loops and, now and then on active stars, blows one off:
+   * the loop of the largest region rises and fades out over a few seconds.
+   * The loops turn with the surface through their regions' longitudes
+   * (see CoronalLoops.update, called with the surface).
    */
   private animateProminences(): void {
-    this.arcs.rotation.y = -this.time * 0.02;
-    for (const child of this.arcs.children) {
-      ((child as Mesh<BufferGeometry, ShaderMaterial>).material.uniforms['uTime']!).value = this.time;
-    }
+    this.loops.setTime(this.time);
     const cycle = Math.floor(this.time / ERUPTION_S);
     const phase = (this.time % ERUPTION_S) / ERUPTION_S;
     const active = this.klass === 'M' || this.klass === 'K' || this.klass === 'G';
-    if (!active) return;
+    if (!active || !this.arcs.visible) return;
     if (!this.eruption || this.eruption.userData['cycle'] !== cycle) {
       if (this.eruption) {
         this.arcs.remove(this.eruption);
         this.eruption.geometry.dispose();
         this.eruption.material.dispose();
+        this.eruption = null;
       }
-      const arc = prominences('M', this.seed + 31 * (cycle + 1))[0]!;
-      this.eruption = this.arcMesh({ ...arc, height: arc.height + 0.15 }, cycle);
+      const arc = this.loops.largestArc();
+      if (!arc) return;
+      this.eruption = new Mesh(
+        prominenceGeometry({ ...arc, height: arc.height + 0.15 }, STAR_RADIUS, this.seed * 13 + cycle, this.quality.prominenceStrands),
+        this.loopMaterial(cycle),
+      );
+      this.eruption.renderOrder = 2;
+      this.eruption.rotation.y = this.loops.largestLongitude();
       this.eruption.userData['cycle'] = cycle;
       this.arcs.add(this.eruption);
     }

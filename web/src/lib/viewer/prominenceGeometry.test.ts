@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { prominenceGeometry, STRANDS } from './prominenceGeometry';
-import { prominences } from './starSystem';
+import type { Prominence } from './starSystem';
 
 describe('prominence geometry', () => {
-  const arc = prominences('M', 7)[0]!;
+  // Two feet 0.2 rad apart on the equator, a loop 0.1 radii high.
+  const arc: Prominence = {
+    from: [Math.cos(0.1), 0, Math.sin(0.1)],
+    to: [Math.cos(0.1), 0, -Math.sin(0.1)],
+    height: 0.1,
+    thickness: 0.016,
+  };
   const geometry = prominenceGeometry(arc, 1, 3);
 
   it('makes a bundle of strands, each with its own look and fraying direction', () => {

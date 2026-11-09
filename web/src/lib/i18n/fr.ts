@@ -913,9 +913,9 @@ export const fr: Messages = {
     speedCircular: (p) => `${p.mean} (Terre${S}: ${p.earth})`,
     speedRange: (p) => `${p.mean} en moyenne, ${p.fastest} au périastre, ${p.slowest} à l’apoastre`,
     equilibriumHelp: `Température qu’aurait la surface sans effet de serre, avec l’albédo de la Terre (Terre${S}: −18${S}°C${S}; son effet de serre la porte à 15${S}°C)`,
-    prominences: 'Protubérances',
+    prominences: 'Boucles coronales',
     prominencesHelp:
-      `Arcs de plasma tenus au-dessus de la surface par le champ magnétique, rougeoyant dans la lumière de l’hydrogène${S}; sur les étoiles actives, une éruption de temps en temps pendant l’animation`,
+      `Arches de plasma dressées au-dessus des régions actives de l’étoile, le long des lignes de champ magnétique qui relient les deux taches de chaque région, rougeoyant dans la lumière de l’hydrogène${S}; elles apparaissent, tournent et s’effacent avec les régions. Sur les étoiles actives, une éruption de temps en temps pendant l’animation`,
     size: 'Rayon · masse',
     sizeValue: (p) => `${p.radius} · ${p.mass}`,
     metallicity: 'Métallicité',
