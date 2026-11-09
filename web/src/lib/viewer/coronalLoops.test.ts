@@ -110,4 +110,16 @@ describe('CoronalLoops', () => {
     direct.update(day(0), 0);
     expect(from(back)).toEqual(from(direct));
   });
+
+  it('has no region to launch an eruption from, or to follow, when the loops are withheld', () => {
+    const loops = new CoronalLoops(PROFILES.high, material);
+    loops.update([now(1, 0.002, 0.5)], 0);
+    expect(loops.largestArc()).not.toBeNull();
+    expect(loops.longitudeOf(1)).toBe(0.5);
+    // A fast clock, a tiny star or the switch off pass no regions.
+    loops.update([], 1);
+    expect(loops.largestArc()).toBeNull();
+    expect(loops.largestId()).toBeNull();
+    expect(loops.longitudeOf(1)).toBeNull();
+  });
 });

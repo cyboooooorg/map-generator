@@ -226,8 +226,9 @@ export class StarView {
   private readonly arcs = new Group();
   private loops!: CoronalLoops;
   private eruption: Mesh<BufferGeometry, ShaderMaterial> | null = null;
-  /** The region the eruption launched from: it follows that region's longitude. */
+  /** The region the eruption launched from: it follows that region's longitude and ends with it. */
   private eruptionRegion: number | null = null;
+  private launchedCycle = -1;
   private klass = 'G';
   private seed = 0;
   private orbitOn = true;
@@ -1672,6 +1673,8 @@ export class StarView {
 
   private buildProminences(): void {
     this.eruption = null;
+    this.eruptionRegion = null;
+    this.launchedCycle = -1;
     for (const child of [...this.arcs.children]) {
       this.arcs.remove(child);
       if (child === this.loops?.group) continue;
@@ -1703,6 +1706,15 @@ export class StarView {
     });
   }
 
+  private removeEruption(): void {
+    if (!this.eruption) return;
+    this.arcs.remove(this.eruption);
+    this.eruption.geometry.dispose();
+    this.eruption.material.dispose();
+    this.eruption = null;
+    this.eruptionRegion = null;
+  }
+
   /**
    * Shimmers the loops and, now and then on active stars, blows one off:
    * the loop of the largest region rises and fades out over a few seconds.
@@ -1714,16 +1726,17 @@ export class StarView {
     const cycle = Math.floor(this.time / ERUPTION_S);
     const phase = (this.time % ERUPTION_S) / ERUPTION_S;
     const active = this.klass === 'M' || this.klass === 'K' || this.klass === 'G';
+    // Like the loops: none when the clock is too fast, the star too small or
+    // the switch off; one whose region left the shown set is cut, not frozen.
+    const longitude = this.eruptionRegion === null ? null : this.loops.longitudeOf(this.eruptionRegion);
+    if (this.eruption && (!active || !this.arcs.visible || longitude === null)) this.removeEruption();
     if (!active || !this.arcs.visible) return;
-    if (!this.eruption || this.eruption.userData['cycle'] !== cycle) {
-      if (this.eruption) {
-        this.arcs.remove(this.eruption);
-        this.eruption.geometry.dispose();
-        this.eruption.material.dispose();
-        this.eruption = null;
-      }
+    // One launch a cycle: an eruption cut mid-cycle does not start again.
+    if (this.launchedCycle !== cycle) {
+      this.removeEruption();
       const arc = this.loops.largestArc();
       if (!arc) return;
+      this.launchedCycle = cycle;
       this.eruption = new Mesh(
         prominenceGeometry({ ...arc, height: arc.height + 0.15 }, STAR_RADIUS, this.seed * 13 + cycle, this.quality.prominenceStrands),
         this.loopMaterial(cycle),
@@ -1734,16 +1747,16 @@ export class StarView {
       this.eruption.userData['cycle'] = cycle;
       this.arcs.add(this.eruption);
     }
-    // Turns with the region it left (the last longitude once that is gone).
-    const longitude = this.eruptionRegion === null ? null : this.loops.longitudeOf(this.eruptionRegion);
-    if (longitude !== null) this.eruption.rotation.y = longitude;
+    if (!this.eruption) return;
+    // Turns with the region it left.
+    this.eruption.rotation.y = this.loops.longitudeOf(this.eruptionRegion!) ?? this.eruption.rotation.y;
     // Rises over the first half of the cycle, gone by its end.
     const u = this.eruption.material.uniforms;
     const rise = Math.min(phase * 1.6, 1) ** 1.5;
     u['uLift']!.value = 1 + 9 * rise;
     // The strands come apart as the arc blows off, as torn field lines.
     u['uFray']!.value = 0.35 * rise;
-    u['uOpacity']!.value = 1.1 * (1 - phase) ** 2;
+    u['uOpacity']!.value = 1.1 * (1 - phase) ** 2 * this.surface.loopFade;
   }
 
   /** A point of the orbital plane at a true anomaly and distance (AU), in view units. */
