@@ -489,10 +489,19 @@ systems/<system-id>/
   (14; 0 never) loses its generated files: all of `bodies/<body>/sizes/*`,
   the original too. It keeps `system.json` (marked `generated: false`),
   its index rows (seed and parameters, displayed size, generator, names,
-  pins) and `thumb.png`. The server sweeps at startup and every 6 hours,
-  and never evicts a body while a job of its system is queued or running.
-  A body counts from its last opened date or from when it was generated,
-  the later one. An evicted body is "not generated" in the library and
+  pins) and `thumb.png`; `system.json` keeps its modification time, so
+  the library does not move the system. The server sweeps at startup and
+  every 6 hours, and never evicts a body while a job of its system is
+  queued or running (deleting or replacing a system holds the same key,
+  so neither races an eviction). The age is checked again under that lock
+  just before each eviction: a body opened since the sweep listed it
+  stays. A body counts from its last opened date or from when it was
+  generated, the later one, and at most from when the index first saw it
+  (a rebuilt index does not evict everything old). Only a body's own view
+  marks it opened; the textures of other bodies (the sky, the star view's
+  markers, the host planet) are fetched with `?peek=1` and do not. An
+  invalid `MAPGEN_EVICT_AFTER_DAYS` turns eviction off with a warning.
+  The generator recorded is `<crate version>+<git commit>`. An evicted body is "not generated" in the library and
   the system view; opening its view queues its generation, at its
   displayed size when one is remembered, else at the original one, with
   the current generator (see [Generating on demand](#generating-on-demand)).
@@ -561,10 +570,12 @@ addressed as `<system-id>/<body-id>` everywhere.
   one job. Asking for a body already queued answers that job; asking for
   one generated with all its neighbours answers 200 with no job, so a
   double click costs nothing. For a body evicted and made by another
-  generator than the current one, the answer carries `regenerated_from`
-  (the version and format recorded, and the current ones). Once the job
-  is done, a body that was displayed at another size than its original
-  gets that size queued too.
+  build of the generator than the current one, the answer carries
+  `regenerated_from` (the version, build id and format recorded, and the
+  current ones), only when the job answered generates that body. Once the
+  job is done, the body asked for, if it was displayed at another size
+  than its original, gets that size queued too; its neighbours made by
+  the same job (moons, giant, siblings) stay at their original size.
 - Per generated body, as today per world:
   - `GET /api/systems/{id}/bodies/{body}/tiles/{z}/{x}/{y}?rev=&epoch=`;
   - `GET /api/systems/{id}/bodies/{body}/epoch/{ma}/{file}`;

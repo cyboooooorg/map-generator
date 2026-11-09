@@ -340,9 +340,15 @@ Decisions 3 and 4, implemented (issue #328, step 3 of the plan). Code in
   generated file of one body (`bodies/<body>/sizes/*`, originals
   included) and keeps `system.json` (the body marked `generated: false`),
   the index rows, the names and pins, and `bodies/<body>/thumb.png`. It
-  is the one eviction path: the sweep calls it, and the "reduce a system"
+  is the one eviction path, whatever the body's age: the "reduce a system"
   action must call it for every body of a system (see the planet
-  resolutions design, *Reduce and #328*). Its doc comment says how.
+  resolutions design, *Reduce and #328*; its doc comment says how). The
+  sweep calls `evict_body_unopened_since(state, system, body, cutoff)`
+  instead, the same eviction behind an age check (next point).
+  `system.json` is rewritten with its previous modification time: the
+  index dates a system (and the library sorts and groups) by that file,
+  and an eviction is no change of the system. If the files cannot be
+  moved aside, `system.json` is put back as it was (`generated: true`).
 - **No race with jobs:** it checks and deletes under the same
   `AppState::pending` lock that `claim_size` and `queue_body` take to
   start a job, and refuses (`EvictError::Pending`) when any key of the
@@ -352,23 +358,44 @@ Decisions 3 and 4, implemented (issue #328, step 3 of the plan). Code in
   sizes directory is renamed away, `system.json` and the index updated,
   and only then is the lock released and the files removed. Tests: a
   pending key refuses the eviction, and an eviction waits for the lock.
+  Deleting a system and replacing it (`POST /api/systems?replace=true`)
+  hold the system's key (`hold_system`) from their check to the end of
+  their work, so an eviction (or a job) cannot recreate or overwrite
+  `system.json` in between.
+- **Age checked under the lock:** the sweep lists the candidate bodies
+  from a snapshot and evicts them one by one, for minutes. The age (last
+  opened date, `world.json` time) is read again inside the eviction,
+  under the lock, against the sweep's cutoff: a body opened since stays
+  (`EvictError::Opened`, counted as "opened meanwhile" in the log).
 - **Schedule:** a tokio task started by `router()` sweeps at startup,
   then every 6 hours (`evict::SWEEP_EVERY`). `MAPGEN_EVICT_AFTER_DAYS`
-  (default 14; 0 turns it off). Each sweep logs bodies evicted, MiB
-  freed, bodies left because a job was pending, and failures.
+  (default 14; 0 turns it off; a value that is not a number of days, such
+  as `-1` or `off`, turns it off too, with a warning). Each sweep logs
+  bodies evicted, MiB freed, bodies left because a job was pending or
+  because they were opened meanwhile, and failures. It first removes the
+  `bodies/.tmp-evict-*` directories older than an hour that a killed
+  server left (the startup sweep removes them all).
 - **Age of a body:** the later of its `last_opened_ms` and the
   modification time of its original `world.json` (when it was generated).
-  The index stores no creation time of a body (`systems.modified_ms` is
-  rewritten by every generation), and a body never opened since the index
-  exists has a NULL date: the file's time stands for it. A body whose
-  age cannot be told is left alone.
-- **Last opened:** already written by `note_opened` for the files under
+  A body whose age cannot be told is left alone. Floor after a rebuild:
+  a body the index finds already generated and did not know (rebuilt
+  index after a layout bump or a lost `db/`, restored or copied tree)
+  starts with `last_opened_ms` = that moment (`store()`, cause `Scan`;
+  no new column, `SCHEMA_VERSION` stays 3). Its age counts at most from
+  when the current index first saw it, so a rebuild never evicts every
+  body older than 14 days at the next start.
+- **What counts as opened:** only a body's own view. `note_opened` writes
+  the date (at most once a minute per body) for the files under
   `/systems/<id>/bodies/<body>/` (not `thumb.png`), tiles, epochs, drift
-  previews, hex grids, `world.svg`, `generate` and the resolutions' POST,
-  at most once a minute per body. Not by the library, `GET
-  /api/systems/{id}`, the thumbnail route or the resolutions listing. A
-  test pins it. (Opening a planet's view also loads its moons' textures,
-  which marks the moons opened.)
+  previews, hex grids, `world.svg`, `generate` and the resolutions' POST.
+  Not the library, `GET /api/systems/{id}`, the thumbnail route or the
+  resolutions listing, and not a **peek**: a request for a file with
+  `?peek=1`, which the middleware `note_served` ignores. The viewer adds
+  it (`peeked` in `web/src/lib/api/client.ts`) to the textures of other
+  bodies in the sky, the star view's `colour_small.png` markers and the
+  host planet of a moon (its `world.json` and layers): seen from
+  elsewhere, not opened. A peek has its own URL, so the browser caches it
+  apart from the body's own load. Tests pin both sides.
 - **Evicted state:** the index keeps `generator_version` and
   `generator_format` of a body that is no longer generated (`store()`
   used to clear them), with format 0 (`UNKNOWN_FORMAT`) when the body had
@@ -379,16 +406,34 @@ Decisions 3 and 4, implemented (issue #328, step 3 of the plan). Code in
 - **Regeneration:** opening the view of an evicted body makes the viewer
   call `POST …/generate`, which noted the body opened and queues the
   neighbourhood job (the original resolution, from `system.json`). When
-  that job is done and the index remembers a displayed size that is not on
-  disk, `start_job` queues that size too (`regenerate_displayed_size`);
-  the size job marks it displayed. Moons and giants are bodies like the
-  others: opening a moon regenerates its neighbourhood as on-demand
-  generation does.
+  that job is done and the index remembers a displayed size for **the body
+  opened** that is not on disk, `start_job` queues that size too
+  (`regenerate_displayed_size`); the size job marks it displayed. Its
+  neighbours made by the same job (moons, giant, siblings) stay at their
+  original size: nobody opened them, and a later open brings them back at
+  theirs. Opening a moon regenerates its neighbourhood as on-demand
+  generation does. The Viewer queues it once (`generateShown`); the card's
+  button uses `generateBody` of `App.svelte`.
 - **Generator notice:** `POST …/generate` answers `regenerated_from` (the
   recorded version and format and the current ones) when the body was
   evicted and its generator differs, on every answer while the job
-  lives; the viewer toasts once per body and session. Compared: crate
-  version and `format_version`, whichever are recorded.
+  lives (and only when the job answered generates that body: a job of
+  another body of the system that leaves it alone carries no note); the
+  viewer toasts once per body and session, naming the body by its name or
+  designation.
+- **Build id:** `GENERATOR_VERSION` is `<crate version>+<git commit>`
+  (`0.1.0+1a2b3c4d5e6f`), recorded in `generator_version` (no schema
+  change). `crates/server/build.rs` takes the commit from `GIT_SHA` of
+  the environment, else `git rev-parse HEAD`; with neither, the version is
+  the bare crate version. The Docker image has no `.git` (`.dockerignore`):
+  `compose.yaml` passes `GIT_SHA` as a build argument (`mise run up`
+  exports it from `git rev-parse HEAD`), which the `Dockerfile` hands to
+  the Rust stage. The notice fires when the recorded and the current
+  versions differ: other crate versions, or both build ids known and
+  different. A version without a build id (no git at build time, or
+  recorded before build ids) is only compared by crate version, so a build
+  without git never announces "older world" on every regeneration.
+  `format_version` is compared as before.
 - **Thumbnail:** `GET …/thumb` serves `thumb.png` of an evicted body
   (no-cache), so cards look as before.
 
