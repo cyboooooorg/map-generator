@@ -11,6 +11,7 @@
 //! | `MAPGEN_MAX_PIXELS`   | `33554432`   | largest map accepted (width × height)    |
 //! | `MAPGEN_TILE_CACHE_MB`| `1024`       | memory for worlds loaded for tiles (MiB) |
 //! | `MAPGEN_NOISE_MAPS`  | off         | `true` (or `1`, `yes`, `on`): write the diagnostic `noise_maps/` of every body generated (debug) |
+//! | `MAPGEN_EVICT_AFTER_DAYS` | `14` | days a body can stay unopened before its generated files are deleted (it is generated again when opened); `0`: never |
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |
 //! | `MALLOC_ARENA_MAX`    | glibc's      | glibc arenas; the Docker image sets `2`  |
@@ -56,6 +57,22 @@ fn env_flag(key: &str) -> bool {
     })
 }
 
+/// Days a body can stay unopened before its generated files are evicted
+/// (`MAPGEN_EVICT_AFTER_DAYS`): 14 unless set, 0 turns eviction off. A value
+/// that is not a whole number of days is refused with a warning.
+fn evict_after_days() -> u64 {
+    let Ok(value) = std::env::var("MAPGEN_EVICT_AFTER_DAYS") else {
+        return app::DEFAULT_EVICT_AFTER_DAYS;
+    };
+    value.trim().parse().unwrap_or_else(|_| {
+        tracing::warn!(
+            "MAPGEN_EVICT_AFTER_DAYS={value:?} is not a number of days: using {}",
+            app::DEFAULT_EVICT_AFTER_DAYS
+        );
+        app::DEFAULT_EVICT_AFTER_DAYS
+    })
+}
+
 /// Stack of each rayon worker: room for hundreds of nested joins, even in a
 /// debug build (the default 2 MiB overflowed there under browser traffic).
 /// Reserved, not committed: a thread only uses what it touches.
@@ -89,6 +106,7 @@ async fn main() -> std::io::Result<()> {
             .and_then(|v| v.parse::<usize>().ok())
             .map_or(tiles::DEFAULT_BUDGET_BYTES, |mb| mb << 20),
         noise_maps: env_flag("MAPGEN_NOISE_MAPS"),
+        evict_after_days: evict_after_days(),
     };
     std::fs::create_dir_all(&config.systems_dir)?;
     let address = format!("{}:{}", env_or("HOST", "0.0.0.0"), env_or("PORT", "3000"));

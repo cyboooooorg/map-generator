@@ -51,6 +51,12 @@ pub const GENERATOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// had.
 pub const GENERATOR_FORMAT: u32 = mapgen::export::raw_data::FORMAT_VERSION;
 
+/// The `generator_format` of a body evicted whose generator was never
+/// known: it differs from every real revision, so the user is told that
+/// the regenerated world may look different, and the body counts as
+/// evicted (see [`Index::evicted_generator`]).
+pub const UNKNOWN_FORMAT: i64 = 0;
+
 /// Version of the database layout (`PRAGMA user_version`). A file of
 /// another layout is set aside and a new one made (no migration): what
 /// only the index held (pins, last opened dates, displayed sizes, the job
@@ -198,15 +204,25 @@ pub struct StoredJob {
 }
 
 /// A body's generator, as recorded.
-#[allow(
-    dead_code,
-    reason = "read by the eviction and regeneration of step 3, tested now"
-)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeneratorOf {
     /// Crate version; `None` when the body predates the index.
     pub version: Option<String>,
+    /// Revision of the data it wrote ([`GENERATOR_FORMAT`] when current),
+    /// 0 when unknown ([`UNKNOWN_FORMAT`]).
     pub format: Option<u32>,
+}
+
+impl GeneratorOf {
+    /// Whether the current generator is not the one recorded: a body made
+    /// again would not look the same. What is not recorded is not
+    /// compared (a crate version missing says nothing).
+    pub fn differs_from_current(&self) -> bool {
+        self.version
+            .as_deref()
+            .is_some_and(|version| version != GENERATOR_VERSION)
+            || self.format.is_some_and(|format| format != GENERATOR_FORMAT)
+    }
 }
 
 /// A system read from the tree, ready to be stored.
@@ -671,12 +687,37 @@ impl Index {
         }
     }
 
+    /// Forgets when a body was opened, as if it never was.
+    #[cfg(test)]
+    pub fn clear_opened(&self, system: &str, body: &str) -> Result<()> {
+        self.conn().execute(
+            "UPDATE bodies SET last_opened_ms = NULL WHERE system_id = ?1 AND id = ?2",
+            params![system, body],
+        )?;
+        Ok(())
+    }
+
+    /// Sets the generator recorded for a body, as an older release would
+    /// have.
+    #[cfg(test)]
+    pub fn set_generator(
+        &self,
+        system: &str,
+        body: &str,
+        version: Option<&str>,
+        format: Option<u32>,
+    ) -> Result<()> {
+        self.conn().execute(
+            "UPDATE bodies SET generator_version = ?3, generator_format = ?4
+             WHERE system_id = ?1 AND id = ?2",
+            params![system, body, version, format],
+        )?;
+        Ok(())
+    }
+
     /// Records that a body's data was served or opened, at most once a
     /// minute; whether it wrote.
-    #[allow(
-        dead_code,
-        reason = "read by the eviction and regeneration of step 3, tested now"
-    )]
+    #[allow(dead_code, reason = "kept with the index API, tested")]
     pub fn touch_body(&self, system: &str, body: &str) -> Result<bool> {
         if !self.touch_due(system, body) {
             return Ok(false);
@@ -697,7 +738,7 @@ impl Index {
     /// When a body was last served or opened, ms since the Unix epoch.
     #[allow(
         dead_code,
-        reason = "read by the eviction and regeneration of step 3, tested now"
+        reason = "read by the tests; the sweep lists bodies in one query"
     )]
     pub fn last_opened(&self, system: &str, body: &str) -> Result<Option<u64>> {
         Ok(self
@@ -714,10 +755,6 @@ impl Index {
 
     /// The generator a body was made with; `None` when it is not
     /// generated (or unknown).
-    #[allow(
-        dead_code,
-        reason = "read by the eviction and regeneration of step 3, tested now"
-    )]
     pub fn generator_of(&self, system: &str, body: &str) -> Result<Option<GeneratorOf>> {
         Ok(self
             .conn()
@@ -735,10 +772,69 @@ impl Index {
             .optional()?)
     }
 
+    /// The generator that made a body whose files were evicted (or lost):
+    /// `None` when the body is generated, was never generated, or has no
+    /// record. Kept by [`Index::refresh_system`] while the body has no
+    /// files, and replaced when it is generated again.
+    pub fn evicted_generator(&self, system: &str, body: &str) -> Result<Option<GeneratorOf>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT generator_version, generator_format FROM bodies
+                 WHERE system_id = ?1 AND id = ?2 AND generated = 0
+                   AND (generator_version IS NOT NULL OR generator_format IS NOT NULL)",
+                params![system, body],
+                |r| {
+                    Ok(GeneratorOf {
+                        version: r.get(0)?,
+                        format: r.get::<_, Option<i64>>(1)?.map(|v| v as u32),
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// The bodies of system `id` that are evicted (see
+    /// [`Index::evicted_generator`]), in the system's order.
+    pub fn evicted_bodies(&self, system: &str) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id FROM bodies
+             WHERE system_id = ?1 AND generated = 0
+               AND (generator_version IS NOT NULL OR generator_format IS NOT NULL)
+             ORDER BY position",
+        )?;
+        let ids = stmt
+            .query_map([system], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(ids)
+    }
+
+    /// Every generated body and when it was last opened (ms since the
+    /// Unix epoch, `None` if never since the index exists): what the
+    /// eviction sweep goes through.
+    pub fn generated_bodies(&self) -> Result<Vec<(String, String, Option<u64>)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT system_id, id, last_opened_ms FROM bodies WHERE generated = 1
+             ORDER BY system_id, position",
+        )?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+                ))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     /// What generates a body again: its seed and its parameters (JSON).
     #[allow(
         dead_code,
-        reason = "read by the eviction and regeneration of step 3, tested now"
+        reason = "read by the tests; the sweep lists bodies in one query"
     )]
     pub fn regeneration_of(&self, system: &str, body: &str) -> Result<Option<(u32, String)>> {
         Ok(self
@@ -1187,7 +1283,20 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
         let detail = loaded.details.get(&body.id);
         let old = before.get(&body.id);
         let (version, format) = if !body.generated {
-            (None, None)
+            // Evicted (or lost from the tree): the generator that made the
+            // body is kept, to tell the user when it is made again by
+            // another one. A body that was never generated has none.
+            match old {
+                Some((was_generated, version, format, ..)) => {
+                    let known = version.is_some() || format.is_some();
+                    if *was_generated && !known {
+                        (None, Some(UNKNOWN_FORMAT))
+                    } else {
+                        (version.clone(), *format)
+                    }
+                }
+                None => (None, None),
+            }
         } else if let Some((true, version, format, ..)) = old {
             (version.clone(), *format)
         } else if cause == Cause::Generated {
@@ -1356,6 +1465,81 @@ mod tests {
                 version: None,
                 format: Some(9)
             })
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_evicted_body_keeps_the_generator_that_made_it() {
+        let root = temp_root("evicted");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        index.reconcile(&systems).unwrap();
+        // The crate version `c` was made with, as a job would have said.
+        index
+            .conn()
+            .execute(
+                "UPDATE bodies SET generator_version = '0.0.1' WHERE id = 'c'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            index.evicted_bodies("mgs-1-1").unwrap(),
+            Vec::<String>::new()
+        );
+
+        // Evicted: `system.json` no longer says they are generated.
+        let file = systems.join("mgs-1-1/system.json");
+        let evicted = SYSTEM.replace("\"generated\": true", "\"generated\": false");
+        std::fs::write(&file, evicted).unwrap();
+        index
+            .refresh_system(&systems, "mgs-1-1", Cause::Scan)
+            .unwrap();
+        // Recorded, so that making it again can say it may look different.
+        let kept = index.evicted_generator("mgs-1-1", "c").unwrap().unwrap();
+        assert_eq!(kept.version.as_deref(), Some("0.0.1"));
+        assert_eq!(kept.format, Some(9));
+        assert!(kept.differs_from_current());
+        // Never recorded: unknown, which counts as different.
+        let unknown = index.evicted_generator("mgs-1-1", "c-1").unwrap().unwrap();
+        assert_eq!(unknown.format, Some(UNKNOWN_FORMAT as u32));
+        assert!(unknown.differs_from_current());
+        // Never generated: not evicted. Evicted bodies are no longer generated.
+        assert_eq!(index.evicted_generator("mgs-1-1", "b").unwrap(), None);
+        assert_eq!(index.generator_of("mgs-1-1", "c").unwrap(), None);
+        assert_eq!(
+            index.evicted_bodies("mgs-1-1").unwrap(),
+            ["c", "c-1"].map(String::from)
+        );
+
+        // Generated again: the current generator, nothing evicted.
+        std::fs::write(&file, SYSTEM).unwrap();
+        index
+            .refresh_system(&systems, "mgs-1-1", Cause::Generated)
+            .unwrap();
+        let now = index.generator_of("mgs-1-1", "c").unwrap().unwrap();
+        assert_eq!(now.version.as_deref(), Some(GENERATOR_VERSION));
+        assert_eq!(now.format, Some(GENERATOR_FORMAT));
+        assert!(!now.differs_from_current());
+        assert_eq!(index.evicted_generator("mgs-1-1", "c").unwrap(), None);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lists_the_generated_bodies_with_their_last_opened_date() {
+        let root = temp_root("generated-bodies");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        index.reconcile(&systems).unwrap();
+        index.write_opened("mgs-1-1", "c", 5).unwrap();
+        assert_eq!(
+            index.generated_bodies().unwrap(),
+            [
+                ("mgs-1-1".to_string(), "c".to_string(), Some(5)),
+                ("mgs-1-1".to_string(), "c-1".to_string(), None),
+            ]
         );
         std::fs::remove_dir_all(root).unwrap();
     }

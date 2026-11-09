@@ -5,4 +5,11 @@ import type { System } from "./System";
  * A system as `GET /api/systems/{id}` gives it: its `system.json` and the
  * names given to its bodies.
  */
-export type SystemDetail = { system: System, names: { [key in string]: string }, };
+export type SystemDetail = { system: System, names: { [key in string]: string }, 
+/**
+ * The bodies that were generated once and lost their files (evicted
+ * after 14 days unopened, see `MAPGEN_EVICT_AFTER_DAYS`): not
+ * generated, like a body never generated, but opening their view
+ * generates them again.
+ */
+evicted: Array<string>, };

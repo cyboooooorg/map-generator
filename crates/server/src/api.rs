@@ -365,6 +365,11 @@ pub struct SystemCreated {
 pub struct SystemDetail {
     pub system: mapgen::system::System,
     pub names: BTreeMap<String, String>,
+    /// The bodies that were generated once and lost their files (evicted
+    /// after 14 days unopened, see `MAPGEN_EVICT_AFTER_DAYS`): not
+    /// generated, like a body never generated, but opening their view
+    /// generates them again.
+    pub evicted: Vec<String>,
 }
 
 /// The names given to a system's bodies (`PUT /api/systems/{id}/names`):
@@ -393,6 +398,28 @@ pub struct SystemName {
 #[ts(export)]
 pub struct GenerateStarted {
     pub job_id: Option<String>,
+    /// Set when the body asked for was generated before by another
+    /// generator than the current one (it lost its files and is made
+    /// again): the world may look different from the one it replaces.
+    /// Said on every answer while the job is queued or running; the
+    /// viewer tells the user once.
+    pub regenerated_from: Option<GeneratorNote>,
+}
+
+/// The generator that made a world, and the current one: what the user is
+/// told when an older world is made again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct GeneratorNote {
+    /// Crate version of the generator that made the world; null when it
+    /// was not recorded.
+    pub version: Option<String>,
+    /// Revision of the data it wrote (`format_version` of its
+    /// `world.json`); 0 when not known.
+    pub format: Option<u32>,
+    /// The generator that makes the world now.
+    pub current_version: String,
+    pub current_format: u32,
 }
 
 /// The resolutions of a generated body

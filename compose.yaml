@@ -38,6 +38,9 @@ services:
       # The image also sets MALLOC_ARENA_MAX=2, so the server keeps little memory
       # between generations (see crates/server/src/memory.rs).
       MAPGEN_MAX_PIXELS: "33554432"
+      # Days a body can stay unopened before its generated files are deleted
+      # (it is generated again when opened); 0 never deletes. See README.md.
+      MAPGEN_EVICT_AFTER_DAYS: "14"
     volumes:
       - ./systems:/data/systems
       # The index (SQLite): survives restarts and image rebuilds, back it up with systems/
