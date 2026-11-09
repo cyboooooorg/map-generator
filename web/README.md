@@ -141,7 +141,8 @@ hidden on screens narrower than 480 px) chooses what the views draw:
   - in the star view, a coarser star (48 segments instead of 128), the
     12 largest active regions drawn on it instead of 32, loops over the 3
     largest regions (one each) instead of the 8 largest (three each), and
-    4 strands in each loop instead of 12;
+    4 strands in each loop instead of 8 (the eruption's arc has 12 strands
+    in high, 4 in light);
   - no ring rocks round a ring moon (about 1.3 ms a frame on an Apple M1
     Pro at 2560 × 1516).
   - coarser orbit lines in the planet view's sky: 160 points round each

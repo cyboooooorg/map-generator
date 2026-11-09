@@ -211,7 +211,8 @@ profile (the 8 largest regions) and 1 in the light one (the 3 largest);
 they turn with the region's longitude, grow dim as it decays (opacity
 proportional to the square root of its area over its peak area) and go
 with it. A star with no activity, or with a radiative envelope, has no
-loops. The 3 loops, the 20 % scatter and the side-by-side spacing are
+loops. The loops are drawn in the red of H-alpha, which is a departure
+(see below). The 3 loops, the 20 % scatter and the side-by-side spacing are
 **calibration**: they draw the picture, not a measure.
 
 ### How it computes them
@@ -323,6 +324,13 @@ hemisphere spotted at maximum and 1.03 new regions per day over the whole
 star, about half of them on the visible side.
 
 ### Where it departs from the science
+
+- **Coronal loops are red.** The hot loops that dominate the Sun's corona
+  glow in the EUV and X-rays (millions of kelvin), invisible to the eye;
+  only cool loops, such as the post-flare loops of a decaying region, show
+  in H-alpha. The view draws every loop in H-alpha red, as an eye-catching
+  convention that keeps the old prominences' look, not as what a camera
+  would record.
 
 - **The cycle is anchored on the Sun, not on a stellar sequence.** Every
   star with $Ro \ge 1$ runs 160 rotations per cycle, the Sun's, which

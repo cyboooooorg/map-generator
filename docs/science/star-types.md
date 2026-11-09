@@ -205,8 +205,10 @@ The star view's card names the type and the kind of star ("G2V · yellow
 dwarf, like the Sun"), then its surface temperature, luminosity, radius
 and mass, metallicity, lifetime and habitable zone. The star in the middle
 of the view is drawn in the colour of its light, darker at its limb, with
-spots on cool stars, flares on M dwarfs, and a glow that grows with its
-luminosity.
+granules, spots and faculae where its envelope convects (the living surface,
+see [Why do some stars have spots?](star-activity.md); flares are gone until
+the second part of that work, issue #344), coronal loops over its spots, and
+a glow that grows with its luminosity.
 
 ### How it computes them
 
@@ -295,11 +297,13 @@ What the model gives for a few types:
 
 Light colours: linear RGB, the Sun white, as `light_colour` returns them.
 
-The star view reads the class letter for its looks
-([`starSurface`](../../web/src/lib/viewer/starSystem.ts)): limb darkening
-from the temperature, granulation below 7,500 K, spots on F to M stars
-(strongest on M), flares on M dwarfs only. Its glow grows with the log of
-the luminosity, within bounds
+The star view draws its surface from the star's activity
+([`starSurface.ts`](../../web/src/lib/viewer/starSurface.ts); the science is
+in [star-activity.md](star-activity.md)): limb darkening from the
+temperature, and granules, spots and faculae only where the envelope is not
+radiative (below 7,200 K; hotter stars are smooth discs). There are no
+flares for now: they come back with ejections in the second part (#344).
+Its glow grows with the log of the luminosity, within bounds
 ([`StarView.ts`](../../web/src/lib/viewer/StarView.ts)).
 
 ### Where it departs from the science
