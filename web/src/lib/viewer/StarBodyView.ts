@@ -30,9 +30,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { StarActivity } from '../api/types/StarActivity';
 import type { StarInfo } from '../api/types/StarInfo';
 import { CoronalLoops } from './coronalLoops';
+import { Eruption, eruptive } from './eruption';
 import { FrameStats } from './frameStats';
 import { fullPixelRatio } from './pixelRatio';
-import { prominenceGeometry } from './prominenceGeometry';
 import { PROFILES, type QualityProfile } from './quality';
 import { starsFragment, starsVertex } from './shaders';
 import {
@@ -60,8 +60,6 @@ const FRAME_MS = 1000 / 30;
 const MAX_STEP_S = 0.1;
 /** Width of the corona's quad, in radii of the star's apparent disc. */
 const GLOW_SIZE = 7;
-/** Seconds between two eruptions, while animated (as StarView). */
-const ERUPTION_S = 9;
 /** The red of hydrogen (H-alpha), linear RGB. */
 const H_ALPHA: [number, number, number] = [1, 0.2, 0.14];
 
@@ -78,10 +76,7 @@ export class StarBodyView {
   private readonly sky: Points<BufferGeometry, ShaderMaterial>;
   private readonly arcs = new Group();
   private loops!: CoronalLoops;
-  private eruption: Mesh<BufferGeometry, ShaderMaterial> | null = null;
-  /** The region the eruption launched from: it follows that region's longitude and ends with it. */
-  private eruptionRegion: number | null = null;
-  private launchedCycle = -1;
+  private readonly eruption: Eruption;
   private klass = 'G';
   private seed = 0;
   private readonly resizeObserver: ResizeObserver;
@@ -182,6 +177,7 @@ export class StarBodyView {
     this.glow.renderOrder = 1;
     this.scene.add(this.glow);
     this.scene.add(this.arcs);
+    this.eruption = new Eruption(this.arcs, quality.prominenceStrands, (seed) => this.loopMaterial(seed));
     this.buildLoops();
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -237,6 +233,8 @@ export class StarBodyView {
     } else if (!on && this.loop !== null) {
       cancelAnimationFrame(this.loop);
       this.loop = null;
+      // The eruption is an animation: paused, none hangs half-risen.
+      this.eruption.remove();
     }
   }
 
@@ -244,7 +242,7 @@ export class StarBodyView {
   setLoops(on: boolean): void {
     this.arcs.visible = on;
     this.loops.update(on ? this.surface.loopRegions : [], this.days, this.surface.loopFade);
-    if (!on) this.removeEruption();
+    this.eruption.follow(this.loops);
     this.requestRender();
   }
 
@@ -266,7 +264,7 @@ export class StarBodyView {
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.frame = null;
     this.frames.dispose();
-    this.removeEruption();
+    this.eruption.remove();
     this.loops.dispose();
     this.resizeObserver.disconnect();
     this.controls.dispose();
@@ -287,7 +285,8 @@ export class StarBodyView {
     this.time += step;
     this.days += step * this.daysPerSecond;
     this.updateSurface();
-    this.animateEruption();
+    this.loops.setTime(this.time);
+    this.eruption.animate(this.loops, this.time, this.hasActivity && eruptive(this.klass), this.seed, this.surface.loopFade);
     this.onClock(this.days);
     this.render(now);
   };
@@ -304,6 +303,8 @@ export class StarBodyView {
   private updateSurface(): void {
     this.surface.update(this.days, { radiusPx: this.radiusPx(), daysPerSecond: this.daysPerSecond });
     this.loops.update(this.arcs.visible ? this.surface.loopRegions : [], this.days, this.surface.loopFade);
+    // Whoever moved the clock (the tick, setDay, a zoom), the eruption stays on its region.
+    this.eruption.follow(this.loops);
   }
 
   /** Whether the ray through a point of the screen (client px) meets the star. */
@@ -319,8 +320,7 @@ export class StarBodyView {
   }
 
   private buildLoops(): void {
-    this.removeEruption();
-    this.launchedCycle = -1;
+    this.eruption.reset();
     if (this.loops) {
       this.arcs.remove(this.loops.group);
       this.loops.dispose();
@@ -348,51 +348,6 @@ export class StarBodyView {
     });
   }
 
-  private removeEruption(): void {
-    if (!this.eruption) return;
-    this.arcs.remove(this.eruption);
-    this.eruption.geometry.dispose();
-    this.eruption.material.dispose();
-    this.eruption = null;
-    this.eruptionRegion = null;
-  }
-
-  /**
-   * Shimmers the loops and, now and then on active stars, blows the largest
-   * region's loop off, as StarView does: it follows its region's longitude
-   * and ends with it, and one starts at most once every ERUPTION_S seconds.
-   */
-  private animateEruption(): void {
-    this.loops.setTime(this.time);
-    const cycle = Math.floor(this.time / ERUPTION_S);
-    const phase = (this.time % ERUPTION_S) / ERUPTION_S;
-    const active = this.hasActivity && (this.klass === 'M' || this.klass === 'K' || this.klass === 'G');
-    const longitude = this.eruptionRegion === null ? null : this.loops.longitudeOf(this.eruptionRegion);
-    if (this.eruption && (!active || !this.arcs.visible || longitude === null)) this.removeEruption();
-    if (!active || !this.arcs.visible) return;
-    if (this.launchedCycle !== cycle) {
-      this.removeEruption();
-      const arc = this.loops.largestArc();
-      if (!arc) return;
-      this.launchedCycle = cycle;
-      this.eruption = new Mesh(
-        prominenceGeometry({ ...arc, height: arc.height + 0.15 }, STAR_RADIUS, this.seed * 13 + cycle, this.quality.prominenceStrands),
-        this.loopMaterial(cycle),
-      );
-      this.eruption.renderOrder = 2;
-      this.eruptionRegion = this.loops.largestId();
-      this.eruption.rotation.y = this.loops.longitudeOf(this.eruptionRegion!) ?? 0;
-      this.arcs.add(this.eruption);
-    }
-    if (!this.eruption) return;
-    this.eruption.rotation.y = this.loops.longitudeOf(this.eruptionRegion!) ?? this.eruption.rotation.y;
-    const u = this.eruption.material.uniforms;
-    const rise = Math.min(phase * 1.6, 1) ** 1.5;
-    u['uLift']!.value = 1 + 9 * rise;
-    u['uFray']!.value = 0.35 * rise;
-    u['uOpacity']!.value = 1.1 * (1 - phase) ** 2 * this.surface.loopFade;
-  }
-
   private resize(): void {
     const { clientWidth, clientHeight } = this.canvas;
     if (clientWidth === 0 || clientHeight === 0) return;
@@ -407,6 +362,8 @@ export class StarBodyView {
     if (this.frame === null && !this.disposed) this.frame = requestAnimationFrame(this.render);
   }
 
+  /** Draws the scene; bound once so the frame probe gets no new closure each frame. */
+  private readonly draw = (): void => this.renderer.render(this.scene, this.camera);
   private readonly render = (now: number = performance.now()): void => {
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
@@ -431,7 +388,7 @@ export class StarBodyView {
     // in the plane through it.
     this.glow.quaternion.copy(this.camera.quaternion);
     this.glow.scale.setScalar(distance / Math.sqrt(Math.max(distance * distance - 1, 1e-6)));
-    this.frames.measure(this.renderer.getContext(), () => this.renderer.render(this.scene, this.camera));
+    this.frames.measure(this.renderer.getContext(), this.draw);
     if (moving) this.requestRender();
   };
 }
