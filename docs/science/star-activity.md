@@ -170,7 +170,13 @@ Granules, the tops of convective cells, scale with the pressure scale
 height $H_p \propto T/g$ (Trampedach et al. 2013; Magic et al. 2013). On
 the Sun they are about 1.3 Mm across and live minutes: Title et al.
 (1989) find exponential lifetime distributions with time constants of 2.5
-to 6 minutes, depending on how granules are tracked.
+to 6 minutes, depending on how granules are tracked. Seen from above,
+granulation is a network of cells: each granule is a hot, bright
+upflow, ringed by narrow, cooler and darker intergranular lanes where
+the gas sinks back (Nordlund, Stein & Asplund 2009). Small magnetic
+bright points sit in the lanes; in the quiet Sun they last a few
+minutes and reach 0.8 to 1.8 times the mean photosphere (Sánchez
+Almeida et al. 2004).
 
 A star's disc is darker at its edge, because there we see higher, cooler
 layers. The quadratic law $I(\mu) = 1 - u_1(1-\mu) - u_2(1-\mu)^2$, with
@@ -336,10 +342,28 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    centre, which covers nine spot areas; it is filled at
    `facula_ratio` / 9, at most 1, so that a Sun-like ratio of about 10
    fills it and a spot-dominated star's plages are fainter
-   (**calibration**). The granulation is simplex noise at the granule
-   size, cross-faded between two fields over each granule lifetime: a
-   texture with the right scale, contrast and lifetime, not convection
-   cells. The shader (`web/src/lib/viewer/starSurface.ts`) fades the
+   (**calibration**). The granulation is moving cellular noise at the
+   granule size, as prototype D drew it: the distances $F_1$, $F_2$ to
+   the nearest and second-nearest cell centre, one centre per granule,
+   in a space warped by two octaves of value noise. A cell is bright
+   in its middle, $\mathrm{smoothstep}(0.02, 0.30, F_2 - F_1)\,(1.15 -
+   0.55\,F_1)$, and dark in the lanes where $F_2 - F_1$ falls to 0;
+   about a fifth of the lanes carry bright points, weighted 0.35
+   against the cells' 0.62 (prototype D; Nordlund, Stein & Asplund 2009
+   for the cells and lanes, Sánchez Almeida et al. 2004 for the points;
+   the shapes and weights are **calibrations**). Each centre wanders
+   about its cell's middle by 0.3 of a cell along each axis, at 97, 103
+   and 109 turns per 289 granule lifetimes (2.1 to 2.4 rad per
+   lifetime, **calibration**), so that cells deform, split and merge
+   over a few lifetimes; the warp drifts round a circle at 2 turns per
+   289 lifetimes. Every motion turns a whole number of times in the 289
+   lifetimes at which the phase wraps, so the surface does not jump
+   there. The result is brought to zero mean and unit rms (measured
+   over the disc), then multiplied by a gain of 1.6
+   (**calibration**): prototype D, the approved look, drew an rms
+   contrast of about 0.24 on the Sun, whose `granule_contrast` is 0.15.
+   The drawn rms contrast is therefore 1.6 times `granule_contrast`.
+   The shader (`web/src/lib/viewer/starSurface.ts`) fades the
    regions and the granules out as the star shrinks on screen, and as a
    frame of the clock outlasts a twelfth of a rotation or a granule
    lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
@@ -411,6 +435,12 @@ star, about half of them on the visible side.
   clamped to 0.5, which radiative stars all reach.
 - **Granule lifetime**: the 8 minutes is a calibration a little above
   the time constants Title et al. (1989) report.
+- **The drawn granulation is a picture of convection, not a model of
+  it.** Its cells, lanes, bright points, wander speeds and the gain of
+  1.6 on `granule_contrast` are calibrations matched to prototype D;
+  the gain makes the drawn contrast (0.24 rms on the Sun) higher than
+  the 0.15 the activity gives, so that the surface reads as agitated
+  up close.
 
 - **Timeline and region shapes are calibrations.** One cycle maps onto
   $x \in [0, 2.6]$ of the Hathaway fit; a region grows over
@@ -579,6 +609,13 @@ against the VizieR catalogue.
 41. Jha, B. K. et al. 2019, "Study of sunspot penumbra to umbra area ratio
     using Kodaikanal white-light digitized data", preprint
     [arXiv:1905.06888](https://arxiv.org/abs/1905.06888).
+42. Nordlund, Å., Stein, R. F. & Asplund, M. 2009, "Solar surface
+    convection", *Living Reviews in Solar Physics* 6, 2,
+    [doi:10.12942/lrsp-2009-2](https://doi.org/10.12942/lrsp-2009-2).
+43. Sánchez Almeida, J., Márquez, I., Bonet, J. A., Domínguez Cerdeña,
+    I. & Muller, R. 2004, "Bright points in the internetwork quiet Sun",
+    *The Astrophysical Journal* 609, L91, preprint
+    [arXiv:astro-ph/0405515](https://arxiv.org/abs/astro-ph/0405515).
 
 ## See also
 

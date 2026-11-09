@@ -7,7 +7,10 @@
  * - `STAR_SURFACE_GLSL` is a GLSL chunk with its uniforms and
  *   `vec3 starSurfaceColour(vec3 n, float mu)`; a material includes it,
  *   defines `STAR_REGIONS` (the length of the region arrays) and, for a
- *   disc too small to show granules, `STAR_NO_GRANULATION`.
+ *   disc too small to show granules, `STAR_NO_GRANULATION`. The
+ *   granulation is moving cellular noise (`starCells`): bright cells,
+ *   dark lanes between them and bright points in the lanes, whose
+ *   centres wander with the granule phase.
  * - `StarSurfaceState` keeps the uniforms in step with the clock: it asks
  *   the region timeline (lib/starActivity.ts) for the regions alive at a
  *   day and packs them into two small uniform arrays, again only when the
@@ -16,6 +19,9 @@
  *
  * Time: the shader sees only `uLocalDays`, days since the last repack
  * (under 21), and the granule phase reduced in JS: never an absolute day.
+ * The phase wraps at 289 lifetimes, and every motion on it turns a whole
+ * number of times per wrap (`granuleMotionHarmonics`), so the cells do
+ * not jump there.
  * The surface at a day depends only on the activity (which carries the
  * seed), the day, and the nominal speed of the clock (the fades), never
  * on frame history or wall time.
@@ -24,6 +30,9 @@
  * with the clock's speed (`exposureFade`); the shader skips the region
  * loop and the granulation behind uniform branches when they are faded
  * out, so a small or fast-turning star costs only its limb darkening.
+ * Where it is drawn, the granulation is the costliest term: a 20-cell
+ * search and two octaves of value noise per pixel (about 36 hashes),
+ * three to four times the two simplex fields it replaced.
  *
  * The science (spot structure, facular contrast, limb law) is in
  * docs/science/star-activity.md.
@@ -129,12 +138,57 @@ export function surfaceDetail(radiusPx: number, granuleSize: number): { granulat
 }
 
 /**
- * Period of the granule pattern's phase: the shader offsets field k by
- * `mod(k · (17, 31, 7), 289)`, so the fields for k and k + 289 are the
- * same, and the phase can be reduced modulo 289 in JS without a jump
- * (the cross-fade from field 288 goes on to field 289, which is field 0).
+ * Period of the granule pattern's phase, in granule lifetimes: the
+ * phase is reduced modulo 289 in JS, so every motion the shader drives
+ * with it turns a whole number of times per period (see
+ * `granuleMotionHarmonics`) and the pattern does not jump at the wrap.
  */
 const GRANULE_PHASE_PERIOD = 289;
+
+/**
+ * The cells' wander, as whole turns per `GRANULE_PHASE_PERIOD`: the
+ * centres move along x, y and z at 97, 103 and 109 turns (2.1 to 2.4
+ * rad per lifetime, as prototype D's 2.4; **calibration**), the domain
+ * warp drifts round a circle at 2 turns.
+ */
+const CELL_HARMONICS = [97, 103, 109] as const;
+const WARP_HARMONIC = 2;
+
+/**
+ * Every angular rate the shader puts on the granule phase is
+ * 2π·k/`GRANULE_PHASE_PERIOD` for one of these integers k (the chunk's
+ * rates are written from them), so the surface is periodic in the
+ * phase's wrap: the three axes of the cells' wander, then the warp's
+ * drift.
+ */
+export function granuleMotionHarmonics(): readonly number[] {
+  return [...CELL_HARMONICS, WARP_HARMONIC];
+}
+
+/** The angular rate of harmonic k on the granule phase, rad per lifetime, as a GLSL literal. */
+const glslRate = (k: number): string => ((TWO_PI * k) / GRANULE_PHASE_PERIOD).toFixed(8);
+
+/**
+ * Prototype D's warp drifted 0.08 noise units per lifetime; on a circle
+ * turning at the warp's rate, that is its radius.
+ */
+const WARP_RADIUS = 0.08 / ((TWO_PI * WARP_HARMONIC) / GRANULE_PHASE_PERIOD);
+
+/**
+ * Mean and rms of the raw granule brightness (cell plus bright points),
+ * measured over the disc at several phases (see `starGranules`): they
+ * bring it to zero mean and unit rms.
+ */
+const GRANULE_RAW_MEAN = 0.5;
+const GRANULE_RAW_RMS = 0.38;
+
+/**
+ * **Calibration**: the drawn granulation's rms over `granule_contrast`.
+ * Prototype D, the approved look, drew 0.62 × the raw rms (about 0.236)
+ * on the Sun, whose `granule_contrast` is 0.15: a gain of about 1.6.
+ */
+const GRANULE_GAIN = 1.6;
+
 /** Days at which the granule clock wraps before its phase is computed (keeps it exact in f64). */
 const GRANULE_DAYS_WRAP = 1e4;
 /** Days from the epoch after which the regions are packed again, to keep `uLocalDays` small. */
@@ -147,7 +201,10 @@ const EPOCH_SPAN_DAYS = 20;
 const WINDOW_DAYS = 21;
 
 /**
- * The surface's GLSL: its uniforms, `float starLimb(float mu)`, `float
+ * The surface's GLSL: its uniforms, the noise helpers (`vec2
+ * starCells(vec3 p, float phase)`, `float starHash(vec3 p)`, `float
+ * starFbm2(vec3 p)` and `vec3 starFbm2x3(vec3 p)`, kept under
+ * `STAR_NO_GRANULATION` too), `float starLimb(float mu)`, `float
  * starBrightness(vec3 n, float mu)`, `vec3 starSurfaceExposed(vec3 n,
  * float mu)` (for display, see there), `float starDither(vec2)` and
  * `vec3 starSurfaceColour(vec3 n, float mu)`, the linear colour of the photosphere at unit normal `n`
@@ -158,9 +215,20 @@ const WINDOW_DAYS = 21;
  * The photosphere's brightness is the quadratic limb law times the
  * granulation, the spots and the faculae, times `uStarColour`:
  *
- * - Granulation: simplex noise at the granule size, cross-faded between
- *   two fields over each granule lifetime (it boils rather than slides).
- *   Compiled out under `STAR_NO_GRANULATION` (noise and all).
+ * - Granulation (`starGranules`, prototype D): cellular noise at the
+ *   granule size, warped by two octaves of value noise, bright in each
+ *   cell's middle (`smoothstep(0.02, 0.30, F2 − F1) · (1.15 − 0.55 F1)`)
+ *   and dark in the intergranular lanes, with bright points in about a
+ *   fifth of the lanes. Granules are the tops of convective cells: hot
+ *   upflows, bright, ringed by cooler, darker downflow lanes (Nordlund,
+ *   Stein & Asplund 2009, Living Rev. Sol. Phys. 6, 2), in which
+ *   magnetic bright points sit (Sánchez Almeida et al. 2004, ApJ 609,
+ *   L91). The cells' centres wander by 0.3 of a cell at 2.1 to 2.4 rad
+ *   per lifetime (**calibration**), so cells deform, split and merge over
+ *   a few lifetimes. It is brought to zero mean and unit rms, then times
+ *   `GRANULE_GAIN` (**calibration**, prototype D's look): the drawn rms is
+ *   1.6 × `granule_contrast`. `starGranules` is compiled out under
+ *   `STAR_NO_GRANULATION`; the noise helpers are not.
  * - Each region: a leader (0.6 of the area, **calibration**) and a
  *   follower spot, at ±separation/2 along the region's tilt axis (the
  *   leader east and equatorward, Joy's law), each an umbra at 0.3 of the
@@ -195,63 +263,128 @@ uniform float uOmegaEq;
 uniform float uShear;
 uniform float uFacula;
 
-#ifndef STAR_NO_GRANULATION
-// 3D simplex noise (Ashima Arts / Stefan Gustavson, MIT), in [-1, 1];
-// renamed so that it never clashes with a host shader's own noise.
-vec3 starMod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 starMod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 starPermute(vec4 x) { return starMod289(((x * 34.0) + 10.0) * x); }
-vec4 starTaylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-float starNoise(vec3 v) {
-  const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
-  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-  vec3 i = floor(v + dot(v, C.yyy));
-  vec3 x0 = v - i + dot(i, C.xxx);
-  vec3 g = step(x0.yzx, x0.xyz);
-  vec3 l = 1.0 - g;
-  vec3 i1 = min(g.xyz, l.zxy);
-  vec3 i2 = max(g.xyz, l.zxy);
-  vec3 x1 = x0 - i1 + C.xxx;
-  vec3 x2 = x0 - i2 + C.yyy;
-  vec3 x3 = x0 - D.yyy;
-  i = starMod289(i);
-  vec4 p = starPermute(starPermute(starPermute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-  float n_ = 0.142857142857;
-  vec3 ns = n_ * D.wyz - D.xzx;
-  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-  vec4 x_ = floor(j * ns.z);
-  vec4 y_ = floor(j - 7.0 * x_);
-  vec4 x = x_ * ns.x + ns.yyyy;
-  vec4 y = y_ * ns.x + ns.yyyy;
-  vec4 h = 1.0 - abs(x) - abs(y);
-  vec4 b0 = vec4(x.xy, y.xy);
-  vec4 b1 = vec4(x.zw, y.zw);
-  vec4 s0 = floor(b0) * 2.0 + 1.0;
-  vec4 s1 = floor(b1) * 2.0 + 1.0;
-  vec4 sh = -step(h, vec4(0.0));
-  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-  vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-  vec3 p0 = vec3(a0.xy, h.x);
-  vec3 p1 = vec3(a0.zw, h.y);
-  vec3 p2 = vec3(a1.xy, h.z);
-  vec3 p3 = vec3(a1.zw, h.w);
-  vec4 norm = starTaylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
-  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-  vec4 m = max(0.5 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
-  m = m * m;
-  return 105.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+/** Angular rates of the cells' wander along x, y, z on a phase, rad per lifetime: 2π·k/289. */
+const vec3 STAR_CELL_RATES = vec3(${CELL_HARMONICS.map(glslRate).join(', ')});
+/** The granule warp's drift round a circle: its rate (2π·k/289) and radius, in noise units. */
+const float STAR_WARP_RATE = ${glslRate(WARP_HARMONIC)};
+const float STAR_WARP_RADIUS = ${WARP_RADIUS.toFixed(6)};
+
+/**
+ * A 32-bit hash of the integer point c (lowbias32, Wellons 2018, of the
+ * coordinates' weighted sum). The offset keeps the coordinates positive
+ * for |c| < 32768, i.e. cells larger than 3e-5 star radii.
+ */
+uint starHashU(vec3 c) {
+  uvec3 v = uvec3(ivec3(c) + 32768);
+  uint h = v.x * 0x8da6b343u + v.y * 0xd8163841u + v.z * 0xcb1ab31fu;
+  h ^= h >> 16u;
+  h *= 0x7feb352du;
+  h ^= h >> 15u;
+  h *= 0x846ca68bu;
+  h ^= h >> 16u;
+  return h;
 }
 
-/** Granulation at n, about zero-mean with unit contrast: two noise fields cross-faded over a lifetime. */
+/** A value in [0, 1) for the unit cell holding p. */
+float starHash(vec3 p) {
+  return float(starHashU(floor(p)) >> 8u) * (1.0 / 16777216.0);
+}
+
+/** Three values in [0, 1) for the integer point c, ten bits each. */
+vec3 starHash3(vec3 c) {
+  uint h = starHashU(c);
+  return vec3(uvec3(h, h >> 10u, h >> 20u) & 1023u) * (1.0 / 1024.0);
+}
+
+/** Three channels of value noise in [0, 1], one hash per lattice corner. */
+vec3 starValueNoise3(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = x - i;
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(starHash3(i), starHash3(i + vec3(1.0, 0.0, 0.0)), f.x),
+        mix(starHash3(i + vec3(0.0, 1.0, 0.0)), starHash3(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+    mix(mix(starHash3(i + vec3(0.0, 0.0, 1.0)), starHash3(i + vec3(1.0, 0.0, 1.0)), f.x),
+        mix(starHash3(i + vec3(0.0, 1.0, 1.0)), starHash3(i + vec3(1.0, 1.0, 1.0)), f.x), f.y),
+    f.z);
+}
+
+/** Two octaves of value noise, three channels in [0, 1] about 0.5 (prototype D's cheap fbm). */
+vec3 starFbm2x3(vec3 p) {
+  return (0.5 * starValueNoise3(p) + 0.25 * starValueNoise3(p * 2.03 + 1.7)) * (4.0 / 3.0);
+}
+
+/** One channel of starFbm2x3. */
+float starFbm2(vec3 p) {
+  return starFbm2x3(p).x;
+}
+
+/** sin(2π x) within 0.056, a parabola per half turn: smooth, and cheaper than sin. */
+vec3 starWave(vec3 x) {
+  vec3 f = 1.0 - 2.0 * fract(x);
+  return 4.0 * f * (1.0 - abs(f));
+}
+
+/**
+ * The 20 cells searched round p's cell, as steps towards p's side of
+ * its cell on each axis (1), none (0) or away (−1): the 27 neighbours
+ * but the 7 away on two or three axes.
+ */
+const vec3 STAR_CELL_STEPS[20] = vec3[20](
+  vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0),
+  vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), vec3(1.0, 1.0, 1.0),
+  vec3(-1.0, 0.0, 0.0), vec3(-1.0, 1.0, 0.0), vec3(-1.0, 0.0, 1.0), vec3(-1.0, 1.0, 1.0),
+  vec3(0.0, -1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(0.0, -1.0, 1.0), vec3(1.0, -1.0, 1.0),
+  vec3(0.0, 0.0, -1.0), vec3(1.0, 0.0, -1.0), vec3(0.0, 1.0, -1.0), vec3(1.0, 1.0, -1.0));
+
+/**
+ * Cellular noise: (F1, F2), the distances from p to the nearest and
+ * second-nearest cell centre, one centre per unit cell. Each centre
+ * wanders about its cell's middle by 0.3 · starWave(rate · phase / 2π
+ * + h) per axis, h the cell's hash and rate STAR_CELL_RATES, so the
+ * cells deform, split and merge as the phase runs, and come back the
+ * same after 289. With the wander bounded by 0.3, the nearest centre is
+ * always among the 20 cells of STAR_CELL_STEPS and the second-nearest
+ * all but about once in 10^5 points (as often as in a 27-cell search
+ * with prototype D's 0.42), against 27 cells.
+ */
+vec2 starCells(vec3 p, float phase) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 side = sign(f - 0.5);
+  side += 1.0 - abs(side);
+  vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
+  float f1 = 9.0;
+  float f2 = 9.0;
+  for (int k = 0; k < 20; k++) {
+    vec3 g = side * STAR_CELL_STEPS[k];
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + starHash3(i + g)) - f;
+    float d = dot(r, r);
+    f2 = min(f2, max(f1, d));
+    f1 = min(f1, d);
+  }
+  return sqrt(vec2(f1, f2));
+}
+
+#ifndef STAR_NO_GRANULATION
+/**
+ * Granulation at n, zero-mean with rms ${GRANULE_GAIN} (the gain, see
+ * GRANULE_GAIN): cells of the granule size, warped by two octaves of
+ * noise, bright in the middle and dark in the lanes between, with bright
+ * points in some lanes (prototype D).
+ */
 float starGranules(vec3 n) {
-  float k = floor(uGranule.z);
-  float w = smoothstep(0.0, 1.0, uGranule.z - k);
-  vec3 p = n / uGranule.x;
-  vec3 step3 = vec3(17.0, 31.0, 7.0);
-  float g = mix(starNoise(p + mod(step3 * k, 289.0)), starNoise(p + mod(step3 * (k + 1.0), 289.0)), w);
-  // Keep the contrast through the cross-fade (two independent fields).
-  g /= sqrt((1.0 - w) * (1.0 - w) + w * w);
-  return clamp(3.0 * g, -2.0, 2.0);
+  float phase = uGranule.z;
+  vec3 q = n / uGranule.x;
+  float drift = STAR_WARP_RATE * phase;
+  q += 1.4 * (starFbm2x3(0.15 * q + STAR_WARP_RADIUS * vec3(cos(drift), 0.0, sin(drift))) - 0.5);
+  vec2 cells = starCells(q, phase);
+  float lane = cells.y - cells.x;
+  float cell = smoothstep(0.02, 0.30, lane) * (1.15 - 0.55 * cells.x);
+  float points = (1.0 - smoothstep(0.0, 0.035, lane)) * step(0.82, starHash(1.7 * q));
+  // D's weights: 0.62 for the cell, 0.35 for the points.
+  float raw = cell + 0.5645 * points;
+  return ${GRANULE_GAIN.toFixed(4)} * (raw - ${GRANULE_RAW_MEAN.toFixed(4)}) / ${GRANULE_RAW_RMS.toFixed(4)};
 }
 #endif
 

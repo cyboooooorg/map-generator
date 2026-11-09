@@ -5,6 +5,7 @@ import { starSurfaceFragment, starSurfaceVertex } from './starShaders';
 import { SUN_SYSTEM } from './starSystem';
 import {
   exposureFade,
+  granuleMotionHarmonics,
   STAR_SURFACE_GLSL,
   StarSurfaceState,
   starLook,
@@ -176,6 +177,35 @@ describe('star surface', () => {
     expect(STAR_SURFACE_GLSL).toContain('vec3 starSurfaceColour(vec3 n, float mu)');
     expect(STAR_SURFACE_GLSL).toContain('STAR_NO_GRANULATION');
     expect((uniforms['uRegionA']!.value as Float32Array).length).toBe(32);
+  });
+
+  it('draws granules as cells', () => {
+    expect(STAR_SURFACE_GLSL).toMatch(/vec2 starCells\(vec3 p, float phase\)/);
+    expect(STAR_SURFACE_GLSL).not.toMatch(/starNoise\(p \+ mod\(step3/); // the simplex cross-fade is gone
+    expect(STAR_SURFACE_GLSL).toMatch(/float starGranules\(vec3 n\)/);
+  });
+
+  it('keeps every cell motion periodic in the phase wrap', () => {
+    // Each angular rate on the phase is 2π·k/GRANULE_PHASE_PERIOD for an integer k.
+    const harmonics = granuleMotionHarmonics();
+    expect(harmonics.length).toBeGreaterThan(0);
+    for (const k of harmonics) {
+      expect(Number.isInteger(k)).toBe(true);
+      expect(k).toBeGreaterThan(0);
+      // The chunk's rates are written from the list, not typed in again.
+      expect(STAR_SURFACE_GLSL).toContain(((2 * Math.PI * k) / 289).toFixed(8));
+    }
+  });
+
+  it('keeps the cell helpers out of STAR_NO_GRANULATION, for the sky disc', () => {
+    const gate = STAR_SURFACE_GLSL.indexOf('#ifndef STAR_NO_GRANULATION');
+    expect(gate).toBeGreaterThan(0);
+    for (const helper of ['vec2 starCells(', 'float starFbm2(', 'float starHash(']) {
+      const at = STAR_SURFACE_GLSL.indexOf(helper);
+      expect(at, helper).toBeGreaterThan(0);
+      expect(at, helper).toBeLessThan(gate);
+    }
+    expect(STAR_SURFACE_GLSL.indexOf('float starGranules(vec3 n)')).toBeGreaterThan(gate);
   });
 
   it('re-packs after 20 days even when the same regions are alive', () => {
