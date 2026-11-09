@@ -417,9 +417,12 @@ fn note_opened(state: &Shared, system: &str, body: &str) {
     }
 }
 
-/// Records, from a request for a file under `/systems/<id>/bodies/<body>/`
-/// (thumbnails excepted: the library asks for all of them), that the body
-/// was opened.
+/// Records, from a request for a file under `/systems/<id>/bodies/<body>/`,
+/// that the body was opened. Not recorded: the thumbnails (the library asks
+/// for all of them) and any request with `?peek=1`, which the viewer adds
+/// when it takes a body's textures for the sky or the markers of another
+/// body's view (see `peeked` in `web/src/lib/api/client.ts`): looking at a body from
+/// elsewhere is not opening it.
 async fn note_served(
     State(state): State<Shared>,
     request: axum::extract::Request,
@@ -429,12 +432,18 @@ async fn note_served(
     let parts: Vec<&str> = path.split('/').skip(1).collect();
     if let ["systems", id, "bodies", body, file, ..] = parts.as_slice()
         && *file != "thumb.png"
+        && !is_peek(request.uri().query())
         && systems::is_valid_system_id(id)
         && systems::is_valid_body_id(body)
     {
         note_opened(&state, id, body);
     }
     next.run(request).await
+}
+
+/// Whether a query string says `peek=1`: the request does not open the body.
+fn is_peek(query: Option<&str>) -> bool {
+    query.is_some_and(|q| q.split('&').any(|pair| pair == "peek=1"))
 }
 
 /// Whether an answer is worth compressing: text formats only. PNG images
@@ -3257,8 +3266,29 @@ mod tests {
         }
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         assert_eq!(state.index.last_opened(&id, &planet).unwrap(), None);
-        // Its view loads its files: opened.
+        // Another body's sky and the star view's markers take its textures
+        // with `?peek=1`: seen from elsewhere, not opened.
         let file = format!("/systems/{id}/bodies/{planet}/sizes/256x128/raw_data/world.json");
+        for uri in [
+            format!("{file}?peek=1"),
+            format!("{file}?v=3&peek=1"),
+            format!("/systems/{id}/bodies/{planet}/sizes/256x128/raw_data/colour_small.png?peek=1"),
+        ] {
+            let status = call(&app, "GET", &uri, None).await.0;
+            assert!(
+                status == StatusCode::OK || status == StatusCode::NOT_FOUND,
+                "{uri}"
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(
+            state.index.last_opened(&id, &planet).unwrap(),
+            None,
+            "peeked"
+        );
+        // `peek=10` or `unpeek=1` is not the flag.
+        assert!(!is_peek(Some("peek=10")) && !is_peek(Some("unpeek=1")) && !is_peek(None));
+        // Its view loads its files: opened.
         assert_eq!(call(&app, "GET", &file, None).await.0, StatusCode::OK);
         for _ in 0..100 {
             if state.index.last_opened(&id, &planet).unwrap().is_some() {

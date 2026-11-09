@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bodyApi, bodySvg, parseSystemBody, sizeName, systemBodyId, worldFile, worldThumbnail } from './client';
+import { bodyApi, bodySvg, parseSystemBody, peeked, sizeName, systemBodyId, worldFile, worldThumbnail } from './client';
 
 describe('SVG export', () => {
   it('is drawn on request by the server, at the size asked', () => {
@@ -42,5 +42,13 @@ describe('system export', () => {
   it('is one download named after the system', () => {
     expect(systemExportUrl('mgs-48213-42')).toBe('/api/systems/mgs-48213-42/export');
     expect(systemExportUrl('a b')).toBe('/api/systems/a%20b/export');
+  });
+
+  it('marks a look from another body as a peek, which the server does not count as opening', () => {
+    const colour = worldFile('systems/a/bodies/b', '2048x1024', 'raw_data/colour.png');
+    expect(peeked(colour)).toBe('/systems/a/bodies/b/sizes/2048x1024/raw_data/colour.png?peek=1');
+    expect(peeked(worldFile('systems/a/bodies/b', '2048x1024', 'raw_data/colour_small.png', 7))).toBe(
+      '/systems/a/bodies/b/sizes/2048x1024/raw_data/colour_small.png?rev=7&peek=1',
+    );
   });
 });

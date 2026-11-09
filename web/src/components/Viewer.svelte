@@ -12,7 +12,7 @@
   import { parseSize, pendingToFollow } from '../lib/sizes';
   import type { ScreenAxis } from '../lib/viewer/axes';
   import type { SurfaceMaps } from '../lib/skyBodies';
-  import { ApiFailure, api, followJob, sizeName, systemBodyId, worldFile } from '../lib/api/client';
+  import { ApiFailure, api, followJob, peeked, sizeName, systemBodyId, worldFile } from '../lib/api/client';
   import type { BiomeInfo } from '../lib/api/types/BiomeInfo';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
@@ -993,8 +993,9 @@
           if (!p.generated || !original) return null;
           const id = systemBodyId(world.systemId!, p.id);
           return {
-            colour: worldFile(id, original, 'raw_data/colour_small.png', revision),
-            normal: worldFile(id, original, 'raw_data/normal_small.png', revision),
+            // Seen from the star view, not opened: a peek.
+            colour: peeked(worldFile(id, original, 'raw_data/colour_small.png', revision)),
+            normal: peeked(worldFile(id, original, 'raw_data/normal_small.png', revision)),
           };
         })
       : null,
@@ -1027,12 +1028,15 @@
   const sysDays = $derived(sysPlanet ? clockDays(sysPlanet.orbit, season, orbitDays) : orbitDays);
   /** The day of the planet's year the clock shows: days since its northern spring equinox. */
   const yearDay = $derived(sysPlanet ? yearDayAt(sysPlanet.orbit, sysDays) : null);
-  /** The maps of a body of the system, for the sky: its original resolution's. */
+  /** The maps of a body of the system, for the sky: its original resolution's. Peeks: the body is not opened. */
   const sysTextures = (id: string): SurfaceMaps | null => {
     const original = originalSize(id);
     if (!world.systemId || !original) return null;
     const body = systemBodyId(world.systemId, id);
-    return { colour: worldFile(body, original, 'raw_data/colour.png'), normal: worldFile(body, original, 'raw_data/normal.png') };
+    return {
+      colour: peeked(worldFile(body, original, 'raw_data/colour.png')),
+      normal: peeked(worldFile(body, original, 'raw_data/normal.png')),
+    };
   };
   /**
    * The hour: the sun at the slider's longitude over the body shown at the
@@ -1487,10 +1491,11 @@
     const id = systemBodyId(system, parent.id);
     const original = sizeName(parent.params.width, parent.params.height);
     const controller = new AbortController();
+    // The host planet in the moon's sky: a peek, the planet is not opened.
     api
-      .metadata(id, original, controller.signal)
+      .peekMetadata(id, original, controller.signal)
       .then((host) => {
-        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => worldFile(id, original, `raw_data/${file}`)) };
+        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => peeked(worldFile(id, original, `raw_data/${file}`))) };
       })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) console.warn("Could not load the host planet's world", e);
