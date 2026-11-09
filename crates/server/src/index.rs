@@ -140,7 +140,9 @@ CREATE TABLE bodies (
     generator_version TEXT,
     generator_format  INTEGER,
     -- when its data was last served or opened (ms), NULL if never since
-    -- the index exists
+    -- the index exists; a body the index first finds already generated
+    -- (rebuilt index, restored tree) starts at that moment, so that the
+    -- eviction never counts its age from before the index existed
     last_opened_ms    INTEGER,
     -- the resolution the viewer shows (pixels), NULL for the original;
     -- only the index holds it
@@ -1330,6 +1332,15 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
         } else {
             (None, detail.and_then(|d| d.format).map(i64::from))
         };
+        // A body found generated that the index did not know (a rebuilt
+        // index, a restored tree, a copied system) starts "opened" now: the
+        // eviction counts its age from when the index first saw it, not
+        // from the dates of its files.
+        let last_opened = match old {
+            Some(old) => old.3,
+            None if body.generated && cause == Cause::Scan => Some(now_ms() as i64),
+            None => None,
+        };
         tx.execute(
             "INSERT INTO bodies (system_id, id, position, designation, kind, body_type,
                                  colour_r, colour_g, colour_b, generated, orbit_au,
@@ -1356,7 +1367,7 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
                 detail.and_then(|d| d.params.as_deref()),
                 version,
                 format,
-                old.and_then(|o| o.3),
+                last_opened,
                 old.and_then(|o| o.4),
                 old.and_then(|o| o.5),
             ],
@@ -1522,7 +1533,7 @@ mod tests {
             .unwrap();
         // Recorded, so that making it again can say it may look different.
         let kept = index.evicted_generator("mgs-1-1", "c").unwrap().unwrap();
-        assert_eq!(kept.version.as_deref(), Some("0.0.1"));
+        assert_eq!(kept.version.as_deref(), Some(older.as_str()));
         assert_eq!(kept.format, Some(9));
         assert!(kept.differs_from_current());
         // Never recorded: unknown, which counts as different.
@@ -1558,13 +1569,13 @@ mod tests {
         let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
         index.reconcile(&systems).unwrap();
         index.write_opened("mgs-1-1", "c", 5).unwrap();
-        assert_eq!(
-            index.generated_bodies().unwrap(),
-            [
-                ("mgs-1-1".to_string(), "c".to_string(), Some(5)),
-                ("mgs-1-1".to_string(), "c-1".to_string(), None),
-            ]
-        );
+        let listed = index.generated_bodies().unwrap();
+        assert_eq!(listed[0], ("mgs-1-1".to_string(), "c".to_string(), Some(5)));
+        // Never opened since the index found it: counted from that moment.
+        let (system, body, seen) = &listed[1];
+        assert_eq!((system.as_str(), body.as_str()), ("mgs-1-1", "c-1"));
+        assert!(seen.unwrap().abs_diff(now_ms()) < 60_000);
+        assert_eq!(listed.len(), 2);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1962,7 +1973,15 @@ mod tests {
         let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
         index.reconcile(&systems).unwrap();
 
-        assert_eq!(index.last_opened("mgs-1-1", "c").unwrap(), None);
+        // Found in the tree: it counts as opened when the index first saw it.
+        let seen = index.last_opened("mgs-1-1", "c").unwrap().unwrap();
+        assert!(seen.abs_diff(now_ms()) < 60_000);
+        assert_eq!(
+            index.last_opened("mgs-1-1", "b").unwrap(),
+            None,
+            "not generated"
+        );
+        index.clear_opened("mgs-1-1", "c").unwrap();
         assert!(index.touch_body("mgs-1-1", "c").unwrap());
         let first = index.last_opened("mgs-1-1", "c").unwrap().unwrap();
         assert!(first > 0);
