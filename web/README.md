@@ -176,7 +176,7 @@ To check that a visual change keeps the frame rate:
 
 Outcome of the living star's part 1: every existing view stayed within noise of the baseline, and the star view's p95 stays under 13 ms at 2560 x 1440 (the K5V close-up's p95 is 12.3 ms). The change is [#388](https://github.com/cyboooooorg/map-generator/pull/388); the tables are posted on [#343](https://github.com/cyboooooorg/map-generator/issues/343).
 
-Outcome of the close-up photosphere ([#391](https://github.com/cyboooooorg/map-generator/issues/391), #410 and this PR): up close at 2560 x 1440 on an Apple M1 Pro, at pixel ratio 1, `main` is at 15 to 17 ms median (p95 19 to 22 ms) and the branch at 19 to 21 ms (p95 24 to 27 ms). `main` is itself over the 16.7 ms the plan asked for, so the user accepted the cost: the bound is now no more than about 5 ms above `main` and under the star view's 30 fps cap (33 ms). At ratio 2 the branch is often faster, as it draws the animated close-up at a pixel ratio of 0.75. The system and planet views stay within noise.
+Outcome of the close-up photosphere ([#391](https://github.com/cyboooooorg/map-generator/issues/391), #410 and #412): up close at 2560 x 1440 on an Apple M1 Pro, at pixel ratio 1, `main` is at 15 to 17 ms median (p95 19 to 22 ms) and the branch at 19 to 21 ms (p95 24 to 27 ms). `main` is itself over the 16.7 ms the plan asked for, so the user accepted the cost: the bound is now no more than about 5 ms above `main` and under the star view's 30 fps cap (33 ms). At ratio 2 the branch is often faster, as it draws the animated close-up at a pixel ratio of 0.75. The system and planet views stay within noise.
 
 ## Themes
 

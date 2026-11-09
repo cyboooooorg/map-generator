@@ -933,7 +933,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 
 ## 25. Living star: the close-up photosphere
 
-- **Status:** done (2026-11-09; PRs #410 and this PR)
+- **Status:** done (2026-11-09; PRs #410 and #412)
 - **Issues:** #391 (the project); #406, #407 and #409 are the open
   follow-ups
 - **Shipped:** the star view up close shows moving granules, the
