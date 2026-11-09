@@ -20,6 +20,25 @@ describe('system sky', () => {
     expect(sky.star.radius).toBeCloseTo((system.star.info.radius * 695_700) / b.physical.radius_km, 6);
   });
 
+  it('gives the star its axes in the frame of the body shown', () => {
+    const dotOf = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    for (const id of ['b', 'c', 'c-1']) {
+      const { axes } = systemSky(system, id, 37, textures).star;
+      expect(axes).toHaveLength(3);
+      for (const axis of axes) expect(length(axis)).toBeCloseTo(1, 9);
+      expect(dotOf(axes[0], axes[1])).toBeCloseTo(0, 9);
+      expect(dotOf(axes[1], axes[2])).toBeCloseTo(0, 9);
+      expect(dotOf(axes[0], axes[2])).toBeCloseTo(0, 9);
+    }
+    // A body with no tilt on an orbit with no inclination: its axis is the star's.
+    const flat = structuredClone(system);
+    const b = flat.bodies.find((x) => x.id === 'b')!;
+    b.spin.axial_tilt_deg = 0;
+    b.orbit.inclination_deg = 0;
+    const { axes } = systemSky(flat, 'b', 37, textures).star;
+    axes[1].forEach((v, i) => expect(v).toBeCloseTo([0, 1, 0][i]!, 9));
+  });
+
   it("seeds a giant's ringlets in a moon's sky as its own view does, from its mass", () => {
     // PlanetView seeds the giant's own rings with ringSeed(info.mass_earth),
     // the mass its world stores, which is its system body's mass.

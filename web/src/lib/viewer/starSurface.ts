@@ -64,7 +64,7 @@ export interface StarLook {
 /** The Sun's granule size, 1.3 Mm over its 695.7 Mm radius (Trampedach et al. 2013). */
 const SUN_GRANULE_SIZE = 1.3 / 695.7;
 /** The Sun's granule lifetime, 8 minutes (Title et al. 1989). */
-const SUN_GRANULE_LIFETIME_DAYS = 8 / 1440;
+export const SUN_GRANULE_LIFETIME_DAYS = 8 / 1440;
 
 /**
  * The look of `info`'s surface. Without an activity (a system file read
@@ -278,8 +278,14 @@ float starBrightness(vec3 n, float mu) {
 #endif
   if (uRegionFade > 0.0 && uRegionCount > 0) {
     float latitude = asin(clamp(n.y, -1.0, 1.0));
-    // About a pixel on the sphere, to keep small spots from aliasing.
+    // About a pixel on the sphere, to keep small spots from aliasing; a
+    // material calling this in non-uniform control flow, where fwidth is
+    // undefined, defines STAR_PIXEL_ANGLE as the angle it measured outside.
+#ifdef STAR_PIXEL_ANGLE
+    float aa = STAR_PIXEL_ANGLE;
+#else
     float aa = length(fwidth(n));
+#endif
     float spot = 1.0;
     float facula = 0.0;
     for (int i = 0; i < STAR_REGIONS; i++) {
@@ -472,9 +478,11 @@ export class StarSurfaceState {
    * Sets the uniforms for `days` (the system clock), the star `radiusPx`
    * pixels in radius on screen and the clock running `daysPerSecond`;
    * repacks the region arrays only when the drawn set's ids change or
-   * |days − epoch| > 20. Returns whether it repacked.
+   * |days − epoch| > 20. Returns whether it repacked. `regionDetail`, when
+   * given, replaces the regions' ramp with the star's size (see
+   * `surfaceDetail`): the sky disc has its own (`hostStarDetail`).
    */
-  update(days: number, view: { radiusPx: number; daysPerSecond: number }): boolean {
+  update(days: number, view: { radiusPx: number; daysPerSecond: number; regionDetail?: number }): boolean {
     const look = this.look;
     if (!look) return false;
     const u = this.uniforms;
@@ -491,8 +499,8 @@ export class StarSurfaceState {
 
     const rotationDays = TWO_PI / look.omegaEq;
     this.exposure = exposureFade(daysPerFrame, rotationDays / 12);
-    this.sizeFade = detail.regions;
-    const regionFade = detail.regions * this.exposure;
+    this.sizeFade = view.regionDetail ?? detail.regions;
+    const regionFade = this.sizeFade * this.exposure;
     u['uRegionFade']!.value = regionFade;
 
     const activity = this.activity;

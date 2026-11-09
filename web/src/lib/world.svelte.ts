@@ -60,6 +60,20 @@ export class LoadedWorld {
    */
   subject = $state<'planet' | 'star'>('planet');
   /**
+   * Which view of the star `subject === 'star'` shows: the system round it
+   * (StarPane) or the star alone, close up (StarSurfacePane). The system
+   * view by default and with every new system; `loadSystem(id, 'star')`
+   * opens the star view (`#system=<id>&body=star`).
+   */
+  starMode = $state<'system' | 'star'>('system');
+  /**
+   * The `body` of the address: the body shown, `'star'` in the star view,
+   * none in the system view. `'star'` is never a body id: the server
+   * reserves it for the star (`STAR`, see SYSTEM_NAME_KEY), and bodies are
+   * lettered (`b`, `c-1`).
+   */
+  linkBody = $derived(this.subject === 'star' ? (this.starMode === 'star' ? 'star' : null) : this.systemBody);
+  /**
    * The planets of the system shown whose cards are pinned in the star
    * view, by body id, in pinning order. They last for the session while
    * the same system is shown (opening a planet and coming back keeps
@@ -87,6 +101,7 @@ export class LoadedWorld {
     this.systemBody = null;
     this.systemNames = {};
     this.subject = 'planet';
+    this.starMode = 'system';
     this.pinnedPlanets = [];
     this.worldId = id;
     this.worldMeta = null;
@@ -100,14 +115,19 @@ export class LoadedWorld {
    * around, else its first generated planet, else its first planet.
    * Loading it again (after a generation or a rename) keeps the body shown,
    * unless `focus` asks for the planet it was drawn around, in the planet view.
+   * `body` `'star'` opens the star view (see starMode), on the body it
+   * would open without one.
    */
-  loadSystem(id: string, body: string | null = null, focus = false): void {
+  loadSystem(id: string, asked: string | null = null, focus = false): void {
     this.systemController?.abort();
     const controller = new AbortController();
     this.systemController = controller;
     const again = this.systemId === id;
+    const starView = asked === 'star' && !focus;
+    const body = asked === 'star' ? null : asked;
     if (!again) {
       this.subject = body || focus ? 'planet' : 'star';
+      this.starMode = starView ? 'star' : 'system';
       this.pinnedPlanets = [];
       // Nothing of the system left may stand under the new id: its file,
       // names, body and layers would be read as the new system's until
@@ -119,6 +139,9 @@ export class LoadedWorld {
       this.worldStats = null;
       this.worldRivers = null;
       this.loadBody(null);
+    } else if (starView) {
+      this.subject = 'star';
+      this.starMode = 'star';
     }
     this.systemId = id;
     this.worldId = null;

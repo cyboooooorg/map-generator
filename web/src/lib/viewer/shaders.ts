@@ -16,6 +16,7 @@ import { SUN_DEPTH_HEIGHT, SUN_DEPTH_WIDTH } from './sunDepth';
 import { skyRingDensityGlsl } from './ringShaders';
 import { MAX_STORMS } from '../giantStorms';
 import { PREVIEW_EDGES } from './previewTexture';
+import { STAR_SURFACE_GLSL } from './starSurface';
 
 /** Layer ids shared with PlanetView (`uLayer`). */
 export const LAYER_IDS = {
@@ -795,34 +796,73 @@ export const starsFragment = /* glsl */ `
   }
 `;
 
-// The host star: one point at infinity in the sun's direction, like the
-// star field, sized in drawing-buffer pixels. A disk of the star's apparent
-// diameter, slightly darker at its limb, inside a glow.
+// The host star: a square at infinity in the sun's direction, like the
+// star field, `uSize` drawing-buffer pixels across. A disk of the star's
+// apparent diameter inside a glow. A quad rather than a point sprite: a
+// point is clamped to the GPU's ALIASED_POINT_SIZE_RANGE (often 511 px or
+// less), and a close-in planet's star is wider than that.
 export const hostStarVertex = /* glsl */ `
-  uniform float uSize;
+  uniform vec3 uDir;       // the star's direction, world space
+  uniform float uSize;     // side of the square, px
+  uniform vec2 uViewport;  // drawing buffer, px
+  varying vec2 vCoord;     // px from the star's centre, x right, y up
   void main() {
-    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position * 10.0, 1.0);
-    gl_Position = clip.xyww;
-    gl_PointSize = uSize;
+    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * uDir * 10.0, 1.0);
+    clip = clip.xyww;
+    // position.xy: the square's corners, -1 or 1.
+    vCoord = position.xy * 0.5 * uSize;
+    clip.xy += position.xy * uSize / uViewport * clip.w;
+    gl_Position = clip;
   }
 `;
 
+// The disk is the star's living surface (starSurface.ts), granulation
+// compiled out: n rebuilt on the visible hemisphere through uDiscBasis
+// (lib/viewer/hostStarSurface.ts discBasis), μ the sprite's z. Its
+// regions are skipped behind a uniform branch while uRegionFade is 0 (a
+// disc under 16 px, see hostStarDetail), leaving only the quadratic limb
+// law. It takes the star view's exposure (starSurfaceExposed: the soft
+// curve on the brightness, the limb law and the light linear), at the
+// same gain, so that its centre, penumbrae and plages read as the star
+// view's; the plain disc's 1.4 clipped the photosphere to white and left
+// only the umbrae. Without a surface (uSurface 0, a world without a
+// system) it keeps the old 1 − 0.35 r² limb, times 1.4. The pixel angle the spots use against
+// aliasing is measured before the branch on the disk, where fwidth is
+// defined.
 export const hostStarFragment = /* glsl */ `
+  #define STAR_NO_GRANULATION
+  #define STAR_PIXEL_ANGLE hostPixelAngle
+  float hostPixelAngle;
+  ${STAR_SURFACE_GLSL}
   uniform vec3 uColor;
-  uniform float uSize;     // point size, px
+  uniform float uSize;     // side of the square, px
   uniform float uDisk;     // disk diameter, px
   uniform float uGlow;     // glow strength
   uniform float uOpacity;
+  uniform float uSurface;  // 1: the living surface; 0: the plain disk
+  uniform mat3 uDiscBasis; // disc (x right, y up, z to the eye) to the star's frame
+  varying vec2 vCoord;
   void main() {
     // Distance from the centre in px.
-    float r = length(gl_PointCoord - 0.5) * uSize;
+    float r = length(vCoord);
     float radius = 0.5 * uDisk;
     float inside = 1.0 - smoothstep(radius - 0.75, radius + 0.75, r);
-    float limb = 1.0 - 0.35 * pow(clamp(r / max(radius, 1e-3), 0.0, 1.0), 2.0);
-    // Fades to nothing before the edge of the square point.
+    // On the unit disc, held to it in the antialiased rim.
+    vec2 p = vCoord / max(radius, 1e-3);
+    p /= max(length(p), 1.0);
+    float mu = sqrt(max(1.0 - dot(p, p), 0.0));
+    vec3 n = normalize(uDiscBasis * vec3(p, mu));
+    hostPixelAngle = length(fwidth(n));
+    // Fades to nothing before the edge of the square.
     float fade = 1.0 - smoothstep(0.25 * uSize, 0.5 * uSize, r);
     float glow = uGlow * exp(-max(r - radius, 0.0) / max(0.08 * uSize, 1.0)) * fade;
-    vec3 colour = uColor * (inside * limb * 1.4 + glow * (1.0 - inside));
+    vec3 disk = vec3(0.0);
+    if (inside > 0.0) {
+      disk = uSurface > 0.5
+        ? starSurfaceExposed(n, mu)
+        : uColor * (1.0 - 0.35 * pow(clamp(r / max(radius, 1e-3), 0.0, 1.0), 2.0)) * 1.4;
+    }
+    vec3 colour = disk * inside + uColor * glow * (1.0 - inside);
     if (max(colour.r, max(colour.g, colour.b)) < 0.002) discard;
     gl_FragColor = vec4(colour * uOpacity, 1.0);
     #include <colorspace_fragment>

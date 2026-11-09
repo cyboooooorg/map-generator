@@ -29,6 +29,7 @@ import {
   LineBasicMaterial,
   LineSegments,
   type Material,
+  Matrix3,
   Matrix4,
   Mesh,
   NoColorSpace,
@@ -83,7 +84,11 @@ import {
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
 import { MAX_NIGHT_SOURCES, NIGHT_CEILING, NIGHT_FLOOR, NIGHT_RATIO_MAX, NIGHT_RATIO_MIN, STARLIGHT_RATIO, type NightSource } from '../nightLight';
-import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, type ShadowCaster, type SkyBody, skyOccluders } from '../skyBodies';
+import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, type ShadowCaster, type SkyBody, skyOccluders, type Vec3 as SkyVec3 } from '../skyBodies';
+import type { StarActivity } from '../api/types/StarActivity';
+import type { StarInfo } from '../api/types/StarInfo';
+import { discBasis, hostStarDetail, hostStarSpriteSize } from './hostStarSurface';
+import { StarSurfaceState, starLook, starSurfaceUniforms } from './starSurface';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
 import { liftSky, sunDeclinationDeg, type Sky } from '../sky';
@@ -439,6 +444,18 @@ export function vegetationShift(teffK: number): [number, number] {
   return [clamp((4900 - teffK) / 1500), clamp((teffK - 5772) / 1500)];
 }
 
+/** The host star's living surface, as PlanetView.setHostStarSurface takes it. */
+export interface HostStarSurface {
+  info: StarInfo;
+  activity: StarActivity | null;
+  /** The system clock, days from the system's epoch. */
+  days: number;
+  /** The clock's nominal speed, days per second; 0 while paused. */
+  daysPerSecond: number;
+  /** The star's x, y (spin axis) and z in the frame of the body shown (systemSky's star.axes). */
+  axes: [SkyVec3, SkyVec3, SkyVec3];
+}
+
 /** The Sun from Earth: worlds made before stars. */
 export const SUN_STAR: HostStar = { colour: [1, 1, 1], angularDiameterDeg: 0.533, insolation: 1, teffK: 5772 };
 
@@ -463,8 +480,20 @@ export class PlanetView {
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
   /** The star field (see stars.ts). */
   private readonly stars: Points<BufferGeometry, ShaderMaterial>;
-  /** The host star, drawn with Sunlight at the sun's direction. */
-  private readonly hostStar: Points<BufferGeometry, ShaderMaterial>;
+  /** The host star, drawn with Sunlight at the sun's direction (a square at infinity, see hostStarVertex). */
+  private readonly hostStar: Mesh<PlaneGeometry, ShaderMaterial>;
+  /** The host star's living surface (see setHostStarSurface). */
+  private readonly hostSurface: StarSurfaceState;
+  /** What setHostStarSurface last gave; null draws the plain disc. */
+  private hostSurfaceOf: HostStarSurface | null = null;
+  /** Scratch of drawHostStar, which runs every frame: nothing allocated there. */
+  private readonly hostScratch = {
+    up: new Vector3(),
+    toCamera: [0, 0, 0] as SkyVec3,
+    cameraUp: [0, 0, 0] as SkyVec3,
+    basis: new Array<number>(9).fill(0),
+    view: { radiusPx: 0, daysPerSecond: 0, regionDetail: 0 },
+  };
   /** The atmosphere's ground (veil) and sky passes. */
   private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>[];
   private readonly resizeObserver: ResizeObserver;
@@ -845,20 +874,25 @@ export class PlanetView {
     this.stars.renderOrder = -3;
     this.scene.add(this.stars);
 
-    // The host star, at the sun's direction (see hostStarVertex).
-    const hostGeometry = new BufferGeometry();
-    hostGeometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 1]), 3));
-    this.hostStar = new Points(
-      hostGeometry,
+    // The host star, at the sun's direction (see hostStarVertex): a
+    // square whose corners the vertex shader places round it on screen.
+    this.hostStar = new Mesh(
+      new PlaneGeometry(2, 2),
       new ShaderMaterial({
+        defines: { STAR_REGIONS: quality.starRegions },
         vertexShader: hostStarVertex,
         fragmentShader: hostStarFragment,
         uniforms: {
+          ...starSurfaceUniforms(quality.starRegions),
+          uDir: { value: new Vector3(0, 0, 1) },
+          uViewport: { value: new Vector2(1, 1) },
           uColor: { value: new Vector3(1, 1, 1) },
           uSize: { value: 64 },
           uDisk: { value: 8 },
           uGlow: { value: 0.5 },
           uOpacity: { value: 1 },
+          uSurface: { value: 0 },
+          uDiscBasis: { value: new Matrix3() },
         },
         blending: AdditiveBlending,
         transparent: true,
@@ -869,6 +903,7 @@ export class PlanetView {
     this.hostStar.renderOrder = -2;
     this.hostStar.visible = false;
     this.scene.add(this.hostStar);
+    this.hostSurface = new StarSurfaceState(this.hostStar.material.uniforms, quality.starRegions);
 
     // 2 vertices per degree in the high profile: enough for the relief to
     // follow the data. On a CPU renderer the vertices cost more than the
@@ -1748,6 +1783,25 @@ export class PlanetView {
     const u = this.hostStar.material.uniforms;
     (u['uColor']!.value as Vector3).set(...star.colour);
     this.applyLightTint();
+  }
+
+  /**
+   * The host star's living surface (docs/science/star-activity.md, "In
+   * the app"): the same spots as the star view at the same day, the same
+   * limb darkening; the active regions from a disc 16 px across (see
+   * hostStarDetail), granulation never. `days` is the system clock (days
+   * from the system's epoch), `daysPerSecond` its nominal speed (0 while
+   * paused), `axes` the star's axes in the frame of the body shown (see
+   * systemSky). Null, for a world without a system, draws the plain disc.
+   */
+  setHostStarSurface(surface: HostStarSurface | null): void {
+    const before = this.hostSurfaceOf;
+    this.hostSurfaceOf = surface;
+    this.hostStar.material.uniforms['uSurface']!.value = surface ? 1 : 0;
+    if (surface && (!before || before.info !== surface.info || before.activity !== surface.activity)) {
+      this.hostSurface.setStar(starLook(surface.info, surface.activity), surface.activity);
+    }
+    this.requestRender();
   }
 
   /**
@@ -3248,28 +3302,52 @@ export class PlanetView {
     if (!visible) {
       return;
     }
-    const position = this.hostStar.geometry.getAttribute('position') as BufferAttribute;
+    const u = this.hostStar.material.uniforms;
+    const dir = u['uDir']!.value as Vector3;
     // From its place when it has one, so that it stays at the centre of
     // the planets' orbits wherever the camera goes; else at infinity.
     let diameterDeg = this.host.angularDiameterDeg;
     if (this.starPlace) {
-      const d = this.starPlace.position.clone().sub(this.camera.position);
-      const distance = Math.max(d.length(), 1e-9);
-      position.setXYZ(0, ...d.divideScalar(distance).toArray());
+      dir.copy(this.starPlace.position).sub(this.camera.position);
+      const distance = Math.max(dir.length(), 1e-9);
+      dir.divideScalar(distance);
       diameterDeg = (2 * Math.asin(Math.min(this.starPlace.radius / distance, 0.999)) * 180) / Math.PI;
     } else {
-      position.setXYZ(0, ...this.u.uSunDir.value.toArray());
+      dir.copy(this.u.uSunDir.value);
     }
-    position.needsUpdate = true;
-    const pixelsPerDegree = this.renderer.domElement.height / this.camera.fov;
+    const canvas = this.renderer.domElement;
+    (u['uViewport']!.value as Vector2).set(canvas.width, canvas.height);
+    const pixelsPerDegree = canvas.height / this.camera.fov;
     const ratio = this.renderer.getPixelRatio();
     const disk = Math.max(diameterDeg * pixelsPerDegree, 3 * ratio);
     const glow = Math.min(1.2, 0.55 * this.host.insolation ** 0.25);
-    const u = this.hostStar.material.uniforms;
     u['uDisk']!.value = disk;
-    u['uSize']!.value = Math.min(disk * 6 + 24 * ratio, 512);
+    u['uSize']!.value = hostStarSpriteSize(disk, ratio);
     u['uGlow']!.value = glow;
     u['uOpacity']!.value = this.morph ** 3;
+    const surface = this.hostSurfaceOf;
+    if (surface) {
+      // The disc's frame in the star's: the line of sight from the star,
+      // the screen's up (the camera's own, not its orbit's pole).
+      // From the quaternion, which the controls have set this frame (the
+      // world matrix is only updated at render, a frame late while dragging).
+      const s = this.hostScratch;
+      const up = s.up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      s.toCamera[0] = -dir.x;
+      s.toCamera[1] = -dir.y;
+      s.toCamera[2] = -dir.z;
+      s.cameraUp[0] = up.x;
+      s.cameraUp[1] = up.y;
+      s.cameraUp[2] = up.z;
+      discBasis(s.toCamera, s.cameraUp, surface.axes, s.basis);
+      (u['uDiscBasis']!.value as Matrix3).fromArray(s.basis);
+      // Detail by the disc's size in CSS pixels, as the star views measure theirs.
+      const cssDisk = disk / ratio;
+      s.view.radiusPx = cssDisk / 2;
+      s.view.daysPerSecond = surface.daysPerSecond;
+      s.view.regionDetail = hostStarDetail(cssDisk);
+      this.hostSurface.update(surface.days, s.view);
+    }
   }
 
   private draw(): void {

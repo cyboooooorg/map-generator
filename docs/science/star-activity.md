@@ -144,7 +144,7 @@ Doppler images of fully convective M dwarfs show spots at all latitudes
 The shape of a cycle in time is fitted by Hathaway, Wilson & Reichmann
 (1994) as $f(x) = x^3/(e^{x^2} - c)$; Hathaway (2015) gives $c = 0.8$ for
 the average cycle. The browser's timeline (`starActivity.ts`) uses
-$c = 0.71$, the value the plan takes from the 1994 paper (not checked
+$c = 0.71$, the value taken from the 1994 paper (not checked
 against its text), normalises $f$ to a peak of 1 and maps one cycle onto
 $x \in [0, 2.6]$, where $f$ is back to 4 % of its peak (the 2.6 is a
 **calibration**). The latitude drift is $e^{-1.5\,u}$ over the cycle
@@ -214,6 +214,53 @@ with it. A star with no activity, or with a radiative envelope, has no
 loops. The loops are drawn in the red of H-alpha, which is a departure
 (see below). The 3 loops, the 20 % scatter and the side-by-side spacing are
 **calibration**: they draw the picture, not a measure.
+
+### In a planet's sky
+
+The star's disc in a planet's sky is the same living star: the planet
+view draws it with the star views' surface (`starSurface.ts`), at the
+system's day, so it shows the spots the star view shows at that day and
+the same quadratic limb darkening, Claret & Bloemen's for the star. The
+disc is a flat sprite on screen; `lib/viewer/hostStarSurface.ts` turns
+each point of it into a point of the star's visible hemisphere, in the
+star's own frame (its spin axis the system's +y, longitude 0 the
+system's +x at day 0), so the spots sit where they are on the star, seen
+from the planet, whatever the camera does.
+
+What the disc shows depends on its size on screen (**calibration**, for
+the frame rate):
+
+- under 16 CSS pixels across, the limb darkening only. The Sun from
+  Earth is about 14 px at 1080p, so the usual disc skips the region loop
+  entirely, behind a uniform branch, and costs what the old disc cost;
+- from 16 to 24 px, the active regions fade in, and from 24 px they are
+  all drawn, as from a close-in planet;
+- never the granulation, compiled out of this shader: a granule is
+  about a five-hundredth of a Sun-like star's radius, a pixel or less
+  on any disc a planet's sky shows.
+
+While the orbits play, the clock's speed fades the regions out as in the
+star views (a long exposure).
+
+The disc takes the star view's exposure, not the plain disc's gain (the
+linear colour times 1.4), which clips the quiet photosphere to white over most of a large disc (up to 0.85 of its
+radius on G2V b), and the penumbrae (0.75 of the photosphere, 1.05 after
+the gain) and the faculae disappear: only the umbrae showed, as grey
+dots. The disc now draws `starSurfaceExposed`, at the same gain as the
+star view: the soft curve $1 - e^{-1.6\,b}$ on the brightness, with the
+limb law and the light linear. For the G2V star of the test system, its
+sRGB values at 0, 0.5, 0.9 and 0.98 of the radius are 231, 224, 192 and
+166, against 231, 223, 194 and 174 in the star view seen from 50 radii.
+The plain disc keeps its 1.4.
+
+The disc is drawn on a square that the vertex shader places round the
+star's direction, not on a point sprite. A point is clamped to the GPU's
+largest point size (`ALIASED_POINT_SIZE_RANGE`, often 511 px), and the
+square was also capped at 512 px, while the star of a close-in planet
+spans several hundred pixels: the disc filled the whole square, an
+opaque white square behind the globe. The square now grows to twice the
+disc and a margin, so that the glow round it, which fades out between a
+quarter and half of the square's side, always starts outside the disc.
 
 ### How it computes them
 
@@ -330,7 +377,7 @@ star, about half of them on the visible side.
   only cool loops, such as the post-flare loops of a decaying region, show
   in H-alpha. The view draws every loop in H-alpha red, as an eye-catching
   convention that keeps the old prominences' look, not as what a camera
-  would record.
+  would record. Whatever their temperature, they are red.
 
 - **The cycle is anchored on the Sun, not on a stellar sequence.** Every
   star with $Ro \ge 1$ runs 160 rotations per cycle, the Sun's, which
@@ -365,10 +412,31 @@ star, about half of them on the visible side.
 - **Granule lifetime**: the 8 minutes is a calibration a little above
   the time constants Title et al. (1989) report.
 
+- **Timeline and region shapes are calibrations.** One cycle maps onto
+  $x \in [0, 2.6]$ of the Hathaway fit; a region grows over
+  $\min(0.1\,T,\ 3\ \text{d})$ times a factor within $\pm 20\ \%$; its
+  polarities are $4\sqrt{2A}$ radians apart; the leader spot carries 0.6
+  of the area.
+- **Region size and look are calibrations.** The median peak area
+  scaling, $152\,\text{MSH}\sqrt{\text{spot\_coverage}/0.003}$; the
+  faculae's $0.25\,(1-\mu)$ contrast; the plage's disc of three spot
+  radii filled at `facula_ratio` / 9.
+- **The loops' 3 per region, 20 % scatter and spacing are calibrations**:
+  they draw the picture, not a measure.
+- **The sky disc's detail thresholds are calibrations**, chosen for the
+  frame rate: limb darkening only under 16 px, regions fading in from 16
+  to 24 px (not in one step), all of them from 24 px, no granulation.
+- **The sky disc uses the star view's exposure**, not the plain disc's
+  gain of 1.4, which clips the photosphere and hides the penumbrae and
+  faculae.
+- **Region ids are 32-bit hashes** of the star's seed, the slot and the
+  index in the slot, so a region keeps its look and its loops from one
+  run to the next; two regions can in principle share an id.
+
 ### Values not checked against their source
 
-The implementer checked the values below against the papers and could not
-reach these sources; they need checking:
+These values could not be checked against their source; they need
+checking:
 
 - the Sun's 0.3 % spotted area at maximum (Hathaway 2015);
 - the solar $\Delta\Omega = 0.055$ rad/day (Snodgrass & Ulrich 1990);

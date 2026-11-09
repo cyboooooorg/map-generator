@@ -154,6 +154,18 @@ describe('star surface', () => {
     expect(state.update(1000, BIG)).toBe(false);
   });
 
+  it("takes a view's own region detail over the radius ramp", () => {
+    const uniforms = starSurfaceUniforms(12);
+    const state = new StarSurfaceState(uniforms, 12);
+    state.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    // 7 px of radius would show a sixth of the regions; the sky disc says none.
+    expect(state.update(1000, { radiusPx: 7, daysPerSecond: 0, regionDetail: 0 })).toBe(false);
+    expect(uniforms['uRegionFade']!.value).toBe(0);
+    expect(uniforms['uRegionCount']!.value).toBe(0);
+    state.update(1000, { radiusPx: 7, daysPerSecond: 0, regionDetail: 1 });
+    expect(uniforms['uRegionFade']!.value).toBe(1);
+  });
+
   it('declares every uniform the chunk uses', () => {
     const uniforms = starSurfaceUniforms(8);
     for (const name of Object.keys(uniforms)) {

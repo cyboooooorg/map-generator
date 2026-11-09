@@ -62,8 +62,8 @@ import {
 import { previewTexture } from './previewTexture';
 import type { Preview } from '../api/types/Preview';
 import { starField } from './stars';
-import { prominenceGeometry } from './prominenceGeometry';
-import { CoronalLoops, eruptionTurn } from './coronalLoops';
+import { CoronalLoops } from './coronalLoops';
+import { Eruption, eruptive } from './eruption';
 import {
   keplerPosition,
   type MoonOrbit,
@@ -99,8 +99,6 @@ import type { RingSystem } from '../api/types/RingSystem';
 /** Size of a preview's texture on a marker, pixels (a marker is a few pixels to a few dozen wide). */
 const PREVIEW_WIDTH = 64;
 const PREVIEW_HEIGHT = 32;
-/** Seconds between two eruptions, while animated. */
-const ERUPTION_S = 9;
 /** The red of hydrogen (H-alpha), linear RGB. */
 const H_ALPHA: [number, number, number] = [1, 0.2, 0.14];
 
@@ -225,10 +223,7 @@ export class StarView {
   /** The coronal loops over the active regions, turning with the surface; the eruption under way. */
   private readonly arcs = new Group();
   private loops!: CoronalLoops;
-  private eruption: Mesh<BufferGeometry, ShaderMaterial> | null = null;
-  /** The region the eruption launched from: it follows that region's longitude and ends with it. */
-  private eruptionRegion: number | null = null;
-  private launchedCycle = -1;
+  private eruption!: Eruption;
   private klass = 'G';
   private seed = 0;
   private orbitOn = true;
@@ -353,6 +348,8 @@ export class StarView {
   onHoverPlanet: ((index: number | null) => void) | null = null;
   /** Called with a giant's index when its marker is double-clicked; null ignores double clicks. */
   onOpenPlanet: ((index: number) => void) | null = null;
+  /** Called when the star is double-clicked (no planet there): opens the star view; null ignores it. */
+  onOpenStar: (() => void) | null = null;
   /**
    * A planetary system's selected planet, by its index in `giants`, or
    * null for a lone world's view. With one, every planet is drawn as a
@@ -408,9 +405,10 @@ export class StarView {
     });
     canvas.addEventListener('pointerleave', () => this.hover(null));
     canvas.addEventListener('dblclick', (event) => {
-      if (!this.onOpenPlanet) return;
-      const index = this.pickPlanet(event.clientX, event.clientY);
-      if (index !== null) this.onOpenPlanet(index);
+      const index = this.onOpenPlanet ? this.pickPlanet(event.clientX, event.clientY) : null;
+      if (index !== null) this.onOpenPlanet?.(index);
+      // No planet there: the star itself opens the star view.
+      else if (this.onOpenStar && this.hitsStar(event.clientX, event.clientY)) this.onOpenStar();
     });
     canvas.addEventListener('pointerup', (event) => {
       const at = this.pressAt;
@@ -1435,7 +1433,7 @@ export class StarView {
       cancelAnimationFrame(this.loop);
       this.loop = null;
       // The eruption is an animation: paused, none hangs half-risen.
-      this.removeEruption();
+      this.eruption.remove();
     }
   }
 
@@ -1475,7 +1473,7 @@ export class StarView {
       : 0;
     this.surface.update(days, { radiusPx, daysPerSecond: this.speed * this.daysPerSecond });
     this.loops.update(this.arcs.visible ? this.surface.loopRegions : [], days, this.surface.loopFade);
-    this.followEruption();
+    this.eruption.follow(this.loops);
   }
 
   /** Mean anomaly of the planet now, radians. */
@@ -1637,6 +1635,18 @@ export class StarView {
     return best;
   }
 
+  /** Whether the ray through a point of the screen (client px) meets the star's sphere. */
+  private hitsStar(clientX: number, clientY: number): boolean {
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    const ray = new Raycaster();
+    ray.setFromCamera(
+      new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1),
+      this.camera,
+    );
+    return ray.intersectObject(this.star, false).length > 0;
+  }
+
   dispose(): void {
     this.disposed = true;
     this.frames.dispose();
@@ -1654,10 +1664,7 @@ export class StarView {
       mesh.material?.dispose();
     });
     this.loops.dispose();
-    if (this.eruption) {
-      this.eruption.geometry.dispose();
-      this.eruption.material.dispose();
-    }
+    this.eruption.remove();
     this.setAnimated(false);
     this.disposeMoons();
     if (this.frame !== null) cancelAnimationFrame(this.frame);
@@ -1675,16 +1682,9 @@ export class StarView {
   }
 
   private buildProminences(): void {
-    this.eruption = null;
-    this.eruptionRegion = null;
-    this.launchedCycle = -1;
-    for (const child of [...this.arcs.children]) {
-      this.arcs.remove(child);
-      if (child === this.loops?.group) continue;
-      const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
-      mesh.geometry.dispose();
-      mesh.material.dispose();
-    }
+    this.eruption?.reset();
+    this.eruption ??= new Eruption(this.arcs, this.quality.prominenceStrands, (seed) => this.loopMaterial(seed));
+    if (this.loops) this.arcs.remove(this.loops.group);
     this.loops?.dispose();
     this.loops = new CoronalLoops(this.quality, (index) => this.loopMaterial(index));
     this.arcs.add(this.loops.group);
@@ -1710,28 +1710,6 @@ export class StarView {
   }
 
   /**
-   * Keeps the eruption on its region, whoever moved the clock (the tick, the
-   * time bar, a zoom): it turns with the region, and is cut like the loops
-   * when they are withheld (a fast clock, a small star, the switch off) or
-   * when its region left the shown set.
-   */
-  private followEruption(): void {
-    if (!this.eruption) return;
-    const longitude = eruptionTurn(this.loops, this.eruptionRegion, this.arcs.visible);
-    if (longitude === null) this.removeEruption();
-    else this.eruption.rotation.y = longitude;
-  }
-
-  private removeEruption(): void {
-    if (!this.eruption) return;
-    this.arcs.remove(this.eruption);
-    this.eruption.geometry.dispose();
-    this.eruption.material.dispose();
-    this.eruption = null;
-    this.eruptionRegion = null;
-  }
-
-  /**
    * Shimmers the loops and, now and then on active stars, blows one off:
    * the loop of the largest region rises and fades out over a few seconds.
    * The loops turn with the surface through their regions' longitudes
@@ -1739,35 +1717,7 @@ export class StarView {
    */
   private animateProminences(): void {
     this.loops.setTime(this.time);
-    const cycle = Math.floor(this.time / ERUPTION_S);
-    const phase = (this.time % ERUPTION_S) / ERUPTION_S;
-    const active = this.klass === 'M' || this.klass === 'K' || this.klass === 'G';
-    if (this.eruption && !active) this.removeEruption();
-    if (!active || !this.arcs.visible) return;
-    // One launch a cycle: an eruption cut mid-cycle does not start again.
-    if (this.launchedCycle !== cycle) {
-      this.removeEruption();
-      const arc = this.loops.largestArc();
-      if (!arc) return;
-      this.launchedCycle = cycle;
-      this.eruption = new Mesh(
-        prominenceGeometry({ ...arc, height: arc.height + 0.15 }, STAR_RADIUS, this.seed * 13 + cycle, this.quality.prominenceStrands),
-        this.loopMaterial(cycle),
-      );
-      this.eruption.renderOrder = 2;
-      this.eruptionRegion = this.loops.largestId();
-      this.eruption.rotation.y = this.loops.longitudeOf(this.eruptionRegion!) ?? 0;
-      this.eruption.userData['cycle'] = cycle;
-      this.arcs.add(this.eruption);
-    }
-    if (!this.eruption) return;
-    // Rises over the first half of the cycle, gone by its end.
-    const u = this.eruption.material.uniforms;
-    const rise = Math.min(phase * 1.6, 1) ** 1.5;
-    u['uLift']!.value = 1 + 9 * rise;
-    // The strands come apart as the arc blows off, as torn field lines.
-    u['uFray']!.value = 0.35 * rise;
-    u['uOpacity']!.value = 1.1 * (1 - phase) ** 2 * this.surface.loopFade;
+    this.eruption.animate(this.loops, this.time, eruptive(this.klass), this.seed, this.surface.loopFade);
   }
 
   /** A point of the orbital plane at a true anomaly and distance (AU), in view units. */

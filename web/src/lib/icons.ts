@@ -23,6 +23,8 @@ export const ICONS = {
   play: 'M7 4l13 8l-13 8z',
   pause: 'M7 4h3v16H7zM14 4h3v16h-3z',
   start: 'M6 4v16M20 4L9 12l11 8z',
+  peak: 'M3 19c4 0 5-13 9-13s5 13 9 13',
+  trough: 'M3 5c4 0 5 13 9 13s5-13 9-13',
   periapsis: 'M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M3 12c0-5 4-8 9-8M14 6l4 1-1 4',
   detach: 'M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   dock: 'M15 3h5a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-5zM3 12h9M8 8l4 4l-4 4',
