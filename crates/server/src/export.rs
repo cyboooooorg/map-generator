@@ -44,10 +44,13 @@ pub struct SystemExport {
     pub id: String,
     pub seed: u32,
     /// The request the system was drawn from, as stored: a seed left to
-    /// chance is not in it (see `create`).
+    /// chance is not in it, nor what a request around a planet left open
+    /// (see `create`).
     pub request: SystemRequest,
-    /// `request` with `seed` filled in: the body of the `POST /api/systems`
-    /// that draws this system again with the same seeds.
+    /// The body of the `POST /api/systems` that draws this system again,
+    /// with the same id and the same seeds: `request` with its seed filled
+    /// in and, around a planet, the parameters the planet asked for was
+    /// resolved to (its star, orbit and world) pinned, see [`create`].
     pub create: SystemRequest,
     /// The star's designation (`MGS 48213`) and spectral type.
     pub star: ExportStar,
@@ -125,6 +128,26 @@ pub fn with_seed(request: &SystemRequest, seed: u32) -> SystemRequest {
     request
 }
 
+/// The request that draws `system` again, with the same id and seeds: its
+/// request with the seed filled in. Around a planet, the fields the request
+/// left open (its star, orbit, world parameters) were resolved by a random
+/// generator, not by the seed: they are pinned to the values the planet
+/// asked for was resolved to, as its body stores them
+/// ([`mapgen::request::WorldRequest::pinned`]).
+pub fn create(system: &System) -> SystemRequest {
+    let focus = system
+        .focus
+        .as_ref()
+        .and_then(|id| system.bodies.iter().find(|b| b.id == *id));
+    match (&system.request, focus) {
+        (SystemRequest::Around(world), Some(body)) => with_seed(
+            &SystemRequest::Around(world.pinned(&body.params, &body.params.planet.name)),
+            system.seed,
+        ),
+        (request, _) => with_seed(request, system.seed),
+    }
+}
+
 /// Builds the archive of system `id` under `root`. Blocking: reads the
 /// system's files.
 pub fn build_archive(
@@ -191,7 +214,7 @@ fn document(
         id: id.to_owned(),
         seed: system.seed,
         request: system.request.clone(),
-        create: with_seed(&system.request, system.seed),
+        create: create(system),
         star: ExportStar {
             designation: system.star.designation.clone(),
             spectral: system.star.spectral.clone(),

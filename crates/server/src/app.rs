@@ -3599,26 +3599,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_export_of_a_system_round_a_planet_keeps_its_seeds_and_id() {
+    async fn the_export_of_a_system_round_a_planet_draws_the_same_system_again() {
         let app = router(temp_config("export-around"));
-        // The star is pinned: its designation, hence the id, comes from the
-        // seed and the star's type. What a request leaves open besides the
-        // seed (the orbit, the other planets) comes from the random
-        // generator, not from the seed, so only the planet asked for and
-        // the system keep their seeds.
-        let request = r#"{"around": {"planet": "barren", "star": "K1V", "width": 64, "height": 32, "moons": {"count": 2}, "giants": "none"}}"#;
-        let (document, before, after) = drawn_again_from_its_export(&app, request).await;
-        assert_eq!(document["create"]["around"]["seed"], document["seed"]);
-        assert_eq!(after["system"]["seed"], before["system"]["seed"]);
-        let focus = |detail: &serde_json::Value| {
-            let focus = detail["system"]["focus"].as_str().unwrap().to_string();
-            body_seeds(detail)
-                .into_iter()
-                .find(|(id, _)| *id == focus)
-                .unwrap()
-                .1
-        };
-        assert_eq!(focus(&after), focus(&before));
+        // What a request around a planet leaves open (the star, the orbit,
+        // the world's parameters) is resolved by the random generator, not
+        // by the seed: the export's `create` pins the values they took.
+        // A planet with neighbours and moons, then the moon of a giant.
+        for request in [
+            r#"{"around": {"planet": "barren", "width": 64, "height": 32, "moons": {"count": 2}}}"#,
+            r#"{"around": {"planet": "terran", "width": 64, "height": 32, "host": "giant"}}"#,
+        ] {
+            let (document, before, after) = drawn_again_from_its_export(&app, request).await;
+            assert!(document["request"]["around"]["seed"].is_null());
+            assert_eq!(document["create"]["around"]["seed"], document["seed"]);
+            assert_eq!(after["system"]["seed"], before["system"]["seed"]);
+            assert_eq!(after["system"]["focus"], before["system"]["focus"]);
+            assert_eq!(body_seeds(&after), body_seeds(&before), "{request}");
+            // The whole draw is the same, not only its seeds (the request
+            // stored is the export's `create`, open fields pinned).
+            let (mut after, mut before) = (after["system"].clone(), before["system"].clone());
+            for system in [&mut after, &mut before] {
+                system["request"] = serde_json::Value::Null;
+            }
+            assert_eq!(after, before, "{request}");
+        }
     }
 
     #[tokio::test]

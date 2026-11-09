@@ -400,16 +400,18 @@ downloads it. What it does, and where it departs from the plan above:
 - **Generator version:** each generated body gives `made_with`, read
   from the index (decision 4): the crate version, `null` for a body found
   in the tree, and the `format_version` of its `world.json`.
-- **Reproducing a system:** the export's `create` field is the stored
-  request with its seed filled in. Posted to `POST /api/systems` it
-  draws a *whole system* (`{"system": …}`) again exactly: the same id,
-  the same bodies and seeds, the same `system.json`. A system *around a
-  planet* (`{"around": …}`) keeps its id and its seed (when the request
-  fixes the star), but whatever the request leaves open besides the seed
-  (orbit, the other planets, the parameters of the world) is drawn from
-  the random generator of the request, not from the seed, so a second
-  draw gives other values. Its exact parameters are in `bodies[].request`.
-  An import is not built: `create` is the whole of what a future one would
-  need for a whole system.
+- **Reproducing a system:** the export's `create` field, posted to
+  `POST /api/systems`, draws the system again exactly: the same id, the
+  same bodies and seeds, the same `system.json` (besides its stored
+  request). For a *whole system* (`{"system": …}`) it is the stored
+  request with its seed filled in. A system *around a planet*
+  (`{"around": …}`) resolves what its request leaves open (the star, the
+  orbit, the parameters of the world) with the random generator, not
+  the seed (issue #402): its `create` also pins the focus body's resolved
+  parameters, read from its `params` in `system.json`
+  (`WorldRequest::pinned`, which the CLI's "Reproduce with" line uses
+  too). Resolving from the seed instead was set aside: it would change
+  which systems new requests draw. An import is not built: `create` is
+  the whole of what a future one would need.
 - **Not exported:** the pin and the displayed sizes (view preferences, see
   *Step 1 done*), and the job history.

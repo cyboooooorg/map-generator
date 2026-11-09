@@ -725,6 +725,79 @@ impl WorldRequest {
             ignored,
         })
     }
+
+    /**
+     * This request with every field it left open pinned to the value
+     * `params` resolved it to, `planet_spec` naming the preset when the
+     * request left it to chance: a request that resolves to the same
+     * parameters whatever the random generator (the CLI's "Reproduce
+     * with" line, the `create` of an export around a planet).
+     *
+     * The values asked for are kept as they are: a land fraction or a
+     * position in the habitable zone stays, the sea level or orbit it gave
+     * stays open. A giant gets no ground (volcanism, circumference,
+     * erosion), giant neighbours or host pinned, a rocky world no giant's
+     * mass: [`resolve`](Self::resolve) would ignore them.
+     */
+    pub fn pinned(&self, params: &WorldParams, planet_spec: &str) -> WorldRequest {
+        let giant = params.giant_mass_earth.is_some();
+        let rocky = |asked: Option<f32>, resolved: f32| {
+            if giant {
+                asked
+            } else {
+                asked.or(Some(resolved))
+            }
+        };
+        WorldRequest {
+            planet: Some(self.planet.clone().unwrap_or_else(|| planet_spec.into())),
+            seed: Some(params.seed),
+            sea_level: match self.land_fraction {
+                Some(_) => self.sea_level,
+                None => self.sea_level.or(Some(params.sea_level)),
+            },
+            land_fraction: self.land_fraction,
+            volcanic: rocky(self.volcanic, params.volcanic_intensity),
+            circumference_km: rocky(self.circumference_km, params.circumference_km),
+            axial_tilt_deg: self.axial_tilt_deg.or(Some(params.axial_tilt_deg)),
+            erosion: rocky(self.erosion, params.erosion),
+            pressure_bar: self.pressure_bar.or(Some(params.pressure_bar)),
+            surface_age_ga: self.surface_age_ga.or(Some(params.surface_age_ga)),
+            star: self
+                .star
+                .clone()
+                .or_else(|| Some(crate::star::type_name(params.star))),
+            orbit_au: match self.hz_position {
+                Some(_) => self.orbit_au,
+                None => self.orbit_au.or(Some(params.orbit_au)),
+            },
+            hz_position: self.hz_position,
+            eccentricity: self.eccentricity.or(Some(params.eccentricity)),
+            perihelion_longitude_deg: self
+                .perihelion_longitude_deg
+                .or(params.perihelion_longitude_deg),
+            drift_ma: self.drift_ma.or(Some(params.drift_ma)),
+            moons: self.moons.or(Some(params.moons)),
+            metallicity: self.metallicity.or(Some(params.metallicity)),
+            giants: if giant {
+                self.giants
+            } else {
+                self.giants.or(Some(params.giants))
+            },
+            mass_earth: if giant {
+                self.mass_earth.or(params.giant_mass_earth)
+            } else {
+                self.mass_earth
+            },
+            host: if giant {
+                self.host
+            } else {
+                self.host.or(Some(params.host))
+            },
+            alone: self.alone,
+            width: Some(params.width),
+            height: Some(params.height),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1198,5 +1271,52 @@ mod tests {
             hot.resolve(&mut rand::rng()),
             Err(RequestError::HotGiantMoons { count: 2 })
         ));
+    }
+
+    #[test]
+    fn a_pinned_request_resolves_to_the_same_parameters_whatever_the_draws() {
+        use rand::SeedableRng;
+        let open = |planet: Option<&str>| WorldRequest {
+            planet: planet.map(Into::into),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        };
+        let requests = [
+            open(None),
+            open(Some("barren")),
+            open(Some("gas-giant")),
+            open(Some("hot-jupiter")),
+            WorldRequest {
+                moons: Some(crate::moons::MoonsMode::Count(2)),
+                ..open(Some("terran"))
+            },
+            WorldRequest {
+                host: Some(crate::exomoon::HostMode::Giant),
+                ..open(Some("terran"))
+            },
+            // A position asked for stays one (the orbit it gives is not
+            // pinned beside it, which the request would refuse).
+            WorldRequest {
+                hz_position: Some(0.3),
+                ..open(Some("frozen"))
+            },
+        ];
+        for request in requests {
+            for draw in 0..4u64 {
+                let rng = &mut rand::rngs::StdRng::seed_from_u64(draw);
+                let resolved = request.resolve(rng).unwrap();
+                let pinned = request.pinned(&resolved.params, &resolved.planet_spec);
+                let again = pinned
+                    .resolve(&mut rand::rngs::StdRng::seed_from_u64(draw + 1000))
+                    .unwrap();
+                assert!(again.ignored.is_empty(), "{pinned:?}: {:?}", again.ignored);
+                assert_eq!(
+                    serde_json::to_value(&again.params).unwrap(),
+                    serde_json::to_value(&resolved.params).unwrap(),
+                    "{pinned:?}"
+                );
+            }
+        }
     }
 }

@@ -564,55 +564,63 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     generate_body(&dir, body, diagnostics)?;
     // Exact values (the summary above is rounded) so the world can be
     // regenerated; the size too, since the relief depends on the resolution.
-    let giant = p.giant_mass_earth.is_some();
+    // Every value pinned, as the export of a system around a planet pins
+    // them; the defaults left out.
+    let pinned = WorldRequest::default().pinned(p, &resolved.planet_spec);
+    let set = |value: Option<f32>| value.expect("pinned");
     let mut reproduce = vec![
-        format!("--planet {}", resolved.planet_spec),
-        format!("--seed {}", p.seed),
-        format!("--sea-level {}", p.sea_level),
+        format!("--planet {}", pinned.planet.as_deref().expect("pinned")),
+        format!("--seed {}", pinned.seed.expect("pinned")),
+        format!("--sea-level {}", set(pinned.sea_level)),
     ];
     // A giant has no ground: no volcanism, circumference or erosion to set.
-    if !giant {
-        reproduce.push(format!("--volcanic {}", p.volcanic_intensity));
-        reproduce.push(format!("--circumference {}", p.circumference_km));
+    if let Some(volcanic) = pinned.volcanic {
+        reproduce.push(format!("--volcanic {volcanic}"));
     }
-    reproduce.push(format!("--axial-tilt {}", p.axial_tilt_deg));
-    if !giant {
-        reproduce.push(format!("--erosion {}", p.erosion));
+    if let Some(circumference) = pinned.circumference_km {
+        reproduce.push(format!("--circumference {circumference}"));
+    }
+    reproduce.push(format!("--axial-tilt {}", set(pinned.axial_tilt_deg)));
+    if let Some(erosion) = pinned.erosion {
+        reproduce.push(format!("--erosion {erosion}"));
     }
     reproduce.extend([
-        format!("--pressure {}", p.pressure_bar),
-        format!("--surface-age {}", p.surface_age_ga),
-        format!("--star {}", star.kind),
-        format!("--orbit-au {}", p.orbit_au),
-        format!("--eccentricity {}", p.eccentricity),
-        format!("--metallicity {}", p.metallicity),
+        format!("--pressure {}", set(pinned.pressure_bar)),
+        format!("--surface-age {}", set(pinned.surface_age_ga)),
+        format!("--star {}", pinned.star.as_deref().expect("pinned")),
+        format!("--orbit-au {}", set(pinned.orbit_au)),
+        format!("--eccentricity {}", set(pinned.eccentricity)),
+        format!("--metallicity {}", set(pinned.metallicity)),
     ]);
-    if let Some(longitude) = p.perihelion_longitude_deg.filter(|_| p.eccentricity > 0.0) {
+    if let Some(longitude) = pinned
+        .perihelion_longitude_deg
+        .filter(|_| p.eccentricity > 0.0)
+    {
         reproduce.push(format!("--perihelion {longitude}"));
     }
-    if p.drift_ma != 0.0 {
-        reproduce.push(format!("--drift {}", p.drift_ma));
+    if let Some(drift) = pinned.drift_ma.filter(|d| *d != 0.0) {
+        reproduce.push(format!("--drift {drift}"));
     }
     if request.alone == Some(true) {
         reproduce.push("--alone".into());
-    } else if p.giants == GiantsMode::None && !giant {
+    } else if pinned.giants == Some(GiantsMode::None) {
         reproduce.push("--giants none".into());
     }
-    if let Some(m) = p.giant_mass_earth {
+    if let Some(m) = pinned.mass_earth {
         reproduce.push(format!("--mass {m}"));
     }
-    match p.host {
-        HostMode::Giant => reproduce.push("--host giant".into()),
-        HostMode::None if !giant => reproduce.push("--host none".into()),
+    match pinned.host {
+        Some(HostMode::Giant) => reproduce.push("--host giant".into()),
+        Some(HostMode::None) => reproduce.push("--host none".into()),
         _ => {}
     }
-    match p.moons {
-        MoonsMode::Auto => {}
-        MoonsMode::None => reproduce.push("--moons none".into()),
-        MoonsMode::Count(n) => reproduce.push(format!("--moons {n}")),
+    match pinned.moons {
+        Some(MoonsMode::None) => reproduce.push("--moons none".into()),
+        Some(MoonsMode::Count(n)) => reproduce.push(format!("--moons {n}")),
+        _ => {}
     }
-    reproduce.push(format!("--width {}", p.width));
-    reproduce.push(format!("--height {}", p.height));
+    reproduce.push(format!("--width {}", pinned.width.expect("pinned")));
+    reproduce.push(format!("--height {}", pinned.height.expect("pinned")));
     println!("Reproduce with: {}", reproduce.join(" "));
     Ok(())
 }
