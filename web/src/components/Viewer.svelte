@@ -2253,6 +2253,7 @@
       bind:this={starPane}
       planetName={sysPlanet ? (world.systemNames[sysPlanet.id] ?? sysPlanet.designation) : null}
       star={system.star}
+      activity={sysStar ? (sys?.star.activity ?? null) : null}
       omega={system.omega}
       moons={(sysMoons ?? []) as unknown as Moon[]}
       binary={false}

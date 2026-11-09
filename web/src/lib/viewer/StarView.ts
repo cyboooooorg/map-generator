@@ -33,6 +33,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { FrameStats } from './frameStats';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
@@ -42,6 +43,8 @@ import type { GiantInfo } from '../api/types/GiantInfo';
 import type { SurfaceMaps } from '../skyBodies';
 import { planetMarkerMaterial, setMarkerMaps } from './markerShaders';
 import type { StarInfo } from '../api/types/StarInfo';
+import type { StarActivity } from '../api/types/StarActivity';
+import { StarSurfaceState, starLook, starSurfaceUniforms } from './starSurface';
 import type { Belt } from '../api/types/Belt';
 import { SmallBodiesLayer, type SmallBodiesLabels } from './smallBodiesLayer';
 import { fullPixelRatio } from './pixelRatio';
@@ -60,6 +63,7 @@ import { previewTexture } from './previewTexture';
 import type { Preview } from '../api/types/Preview';
 import { starField } from './stars';
 import { prominenceGeometry } from './prominenceGeometry';
+import { CoronalLoops, eruptionTurn } from './coronalLoops';
 import {
   keplerPosition,
   type MoonOrbit,
@@ -67,10 +71,7 @@ import {
   PLANET_MARKER,
   compressedFrom,
   giantMarkerSize,
-  type Prominence,
-  prominences,
   STAR_RADIUS,
-  starSurface,
   frostLineAu,
   hillRadiusAu,
   hillShownRadius,
@@ -192,10 +193,14 @@ function ringMeshes(size: number, rings: RingSystem | null, colour: Color, opaci
 
 export class StarView {
   private readonly renderer: WebGLRenderer;
+  /** Frame-time probe (`?frames=1`); a plain draw call otherwise. */
+  private readonly frames = new FrameStats('system');
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(40, 1, 0.05, 200);
   private readonly controls: OrbitControls;
   private readonly star: Mesh<SphereGeometry, ShaderMaterial>;
+  /** The star's living surface: its uniforms kept in step with the clock (see starSurface.ts). */
+  private readonly surface: StarSurfaceState;
   private readonly glow: Mesh<PlaneGeometry, ShaderMaterial>;
   private readonly zone: Mesh<RingGeometry, MeshBasicMaterial>;
   private readonly orbit: Line<BufferGeometry, LineBasicMaterial>;
@@ -217,9 +222,13 @@ export class StarView {
   private omega = 0;
   private at: (au: number) => number = (au) => au;
   private distancesOn = false;
-  /** The prominences, turning with the surface; the eruption under way. */
+  /** The coronal loops over the active regions, turning with the surface; the eruption under way. */
   private readonly arcs = new Group();
+  private loops!: CoronalLoops;
   private eruption: Mesh<BufferGeometry, ShaderMaterial> | null = null;
+  /** The region the eruption launched from: it follows that region's longitude and ends with it. */
+  private eruptionRegion: number | null = null;
+  private launchedCycle = -1;
   private klass = 'G';
   private seed = 0;
   private orbitOn = true;
@@ -296,7 +305,7 @@ export class StarView {
   /** The star's drawn radius over STAR_RADIUS (1 but to scale). */
   private starScale = 1;
   /** The last setStar's arguments, to draw the system again on another scale. */
-  private lastStar: [StarInfo, number, SystemGiant[], number | null] | null = null;
+  private lastStar: [StarInfo, number, SystemGiant[], number | null, StarActivity | null] | null = null;
   private gravities: number[] = [];
   private pullMids: Vector3[] = [];
   /** View units per m/s² of the pull vectors (see gravityScale). */
@@ -434,19 +443,13 @@ export class StarView {
     this.star = new Mesh(
       new SphereGeometry(STAR_RADIUS, quality.starSegments, quality.starSegments / 2),
       new ShaderMaterial({
+        defines: { STAR_REGIONS: quality.starRegions },
         vertexShader: starSurfaceVertex,
         fragmentShader: starSurfaceFragment,
-        uniforms: {
-          uColor: { value: new Vector3(1, 1, 1) },
-          uTime: { value: 0 },
-          uLimb: { value: 0.6 },
-          uGranulation: { value: 0.12 },
-          uSpots: { value: 0.05 },
-          uFlares: { value: 0 },
-          uSeed: { value: 0 },
-        },
+        uniforms: starSurfaceUniforms(quality.starRegions),
       }),
     );
+    this.surface = new StarSurfaceState(this.star.material.uniforms, quality.starRegions);
     this.scene.add(this.star);
 
     this.glow = new Mesh(
@@ -471,6 +474,7 @@ export class StarView {
     this.glow.renderOrder = 1;
     this.scene.add(this.glow);
     this.scene.add(this.arcs);
+    this.buildProminences();
 
     // The system in the orbital plane (x, z).
     this.zone = new Mesh(
@@ -543,10 +547,18 @@ export class StarView {
    * planetary system, `giants` lists every planet and `selected` is the
    * index of the one `info` describes: it keeps its orbit, its apsides and
    * its moons, on its own marker, while the scale, the clock and the
-   * camera stay as they are when the selection changes.
+   * camera stay as they are when the selection changes. `activity` is the
+   * star's (see starSurface.ts): its surface turns, spots and boils with
+   * the system clock; without one it shows only its limb and granules.
    */
-  setStar(info: StarInfo, omega = 0, giants: SystemGiant[] = [], selected: number | null = null): void {
-    this.lastStar = [info, omega, giants, selected];
+  setStar(
+    info: StarInfo,
+    omega = 0,
+    giants: SystemGiant[] = [],
+    selected: number | null = null,
+    activity: StarActivity | null = null,
+  ): void {
+    this.lastStar = [info, omega, giants, selected, activity];
     // A planetary system, with a planet selected or none (-1).
     const system = selected !== null && selected < giants.length;
     const picked = system && selected >= 0;
@@ -567,15 +579,8 @@ export class StarView {
     this.moonGroup.scale.setScalar(picked ? giantMarkerSize(giants[selected]!.radius_earth) / PLANET_MARKER : 1);
     this.info = info;
     this.omega = omega;
-    const u = this.star.material.uniforms;
-    (u['uColor']!.value as Vector3).set(...info.light);
     (this.glow.material.uniforms['uColor']!.value as Vector3).set(...info.light);
-    const surface = starSurface(info.teff_k, info.type[0] ?? 'G');
-    u['uLimb']!.value = surface.limb;
-    u['uGranulation']!.value = surface.granulation;
-    u['uSpots']!.value = surface.spots;
-    u['uFlares']!.value = surface.flares;
-    u['uSeed']!.value = (info.teff_k * 0.37) % 17;
+    this.surface.setStar(starLook(info, activity), activity);
     this.klass = info.type[0] ?? 'G';
     this.seed = Math.round(info.teff_k * 7 + info.orbit_au * 1000);
     this.buildProminences();
@@ -1191,6 +1196,7 @@ export class StarView {
     if (this.selected === null || this.daysPerSecond <= 0) return;
     this.orbitTime = Math.max(0, days) / this.daysPerSecond;
     this.placePlanet();
+    this.updateSurface(this.systemDay);
     const turn = this.meanAnomaly() / (2 * Math.PI);
     this.onClock(turn - Math.floor(turn), this.systemDay);
     this.requestRender();
@@ -1370,9 +1376,10 @@ export class StarView {
     this.requestRender();
   }
 
-  /** Shows or hides the prominences and eruptions. */
+  /** Shows or hides the coronal loops and eruptions. */
   setProminences(on: boolean): void {
     this.arcs.visible = on;
+    this.loops.update(on ? this.surface.loopRegions : [], this.systemDay, this.surface.loopFade);
     this.requestRender();
   }
 
@@ -1427,6 +1434,8 @@ export class StarView {
     } else if (!on && this.loop !== null) {
       cancelAnimationFrame(this.loop);
       this.loop = null;
+      // The eruption is an animation: paused, none hangs half-risen.
+      this.removeEruption();
     }
   }
 
@@ -1438,14 +1447,36 @@ export class StarView {
     const step = Math.min(elapsed / 1000, MAX_STEP_S);
     this.time += step;
     this.orbitTime += step * this.speed;
-    this.star.material.uniforms['uTime']!.value = this.time;
     this.animateProminences();
     this.placePlanet();
     const turn = this.meanAnomaly() / (2 * Math.PI);
-    const days = this.selected !== null ? this.orbitTime * this.daysPerSecond : (this.time / YEAR_S) * (this.info?.year_days ?? 365.25);
+    const days = this.clockDays();
+    this.updateSurface(days);
     this.onClock(turn - Math.floor(turn), days);
     this.render();
   };
+
+  /** The clock's day: a planetary system's day, or a lone world's days since its planet started. */
+  private clockDays(): number {
+    return this.selected !== null ? this.orbitTime * this.daysPerSecond : (this.time / YEAR_S) * (this.info?.year_days ?? 365.25);
+  }
+
+  /**
+   * Brings the star's surface to `days`, with the detail its size on
+   * screen allows and the fades of the clock's nominal speed (see
+   * StarSurfaceState.update; the regions are asked for once per day).
+   */
+  private updateSurface(days: number): void {
+    const height = this.canvas.clientHeight;
+    const distance = this.camera.position.distanceTo(this.star.position);
+    const halfFov = ((this.camera.fov / 2) * Math.PI) / 180;
+    const radiusPx = height > 0 && distance > 0
+      ? ((this.starScale * STAR_RADIUS) / (distance * Math.tan(halfFov))) * (height / 2)
+      : 0;
+    this.surface.update(days, { radiusPx, daysPerSecond: this.speed * this.daysPerSecond });
+    this.loops.update(this.arcs.visible ? this.surface.loopRegions : [], days, this.surface.loopFade);
+    this.followEruption();
+  }
 
   /** Mean anomaly of the planet now, radians. */
   private meanAnomaly(): number {
@@ -1608,6 +1639,7 @@ export class StarView {
 
   dispose(): void {
     this.disposed = true;
+    this.frames.dispose();
     window.removeEventListener('keydown', this.endFlightOnKey);
     this.flight = null;
     for (const object of [this.selectedOrbit, this.frost]) {
@@ -1621,10 +1653,10 @@ export class StarView {
       mesh.geometry?.dispose();
       mesh.material?.dispose();
     });
-    for (const child of this.arcs.children) {
-      const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+    this.loops.dispose();
+    if (this.eruption) {
+      this.eruption.geometry.dispose();
+      this.eruption.material.dispose();
     }
     this.setAnimated(false);
     this.disposeMoons();
@@ -1642,73 +1674,100 @@ export class StarView {
     this.renderer.forceContextLoss();
   }
 
-  /** A prominence: a bundle of glowing strands along its arc (see prominenceGeometry). */
-  private arcMesh(arc: Prominence, index: number): Mesh<BufferGeometry, ShaderMaterial> {
-    const mesh = new Mesh(
-      prominenceGeometry(arc, STAR_RADIUS, this.seed * 13 + index, this.quality.prominenceStrands),
-      new ShaderMaterial({
-        vertexShader: prominenceVertex,
-        fragmentShader: prominenceFragment,
-        uniforms: {
-          uColor: { value: new Vector3(...H_ALPHA) },
-          uOpacity: { value: 0.9 },
-          uLift: { value: 1 },
-          uFray: { value: 0 },
-          uTime: { value: this.time },
-          uSeed: { value: index * 1.7 },
-          uRadius: { value: STAR_RADIUS },
-        },
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    mesh.renderOrder = 2;
-    return mesh;
-  }
-
   private buildProminences(): void {
+    this.eruption = null;
+    this.eruptionRegion = null;
+    this.launchedCycle = -1;
     for (const child of [...this.arcs.children]) {
+      this.arcs.remove(child);
+      if (child === this.loops?.group) continue;
       const mesh = child as Mesh<BufferGeometry, ShaderMaterial>;
       mesh.geometry.dispose();
       mesh.material.dispose();
-      this.arcs.remove(mesh);
     }
-    this.eruption = null;
-    prominences(this.klass, this.seed).forEach((arc, i) => this.arcs.add(this.arcMesh(arc, i)));
+    this.loops?.dispose();
+    this.loops = new CoronalLoops(this.quality, (index) => this.loopMaterial(index));
+    this.arcs.add(this.loops.group);
+  }
+
+  /** The material of a loop (and of an eruption): glowing H-alpha strands. */
+  private loopMaterial(index: number): ShaderMaterial {
+    return new ShaderMaterial({
+      vertexShader: prominenceVertex,
+      fragmentShader: prominenceFragment,
+      uniforms: {
+        uColor: { value: new Vector3(...H_ALPHA) },
+        uOpacity: { value: 0.9 },
+        uLift: { value: 1 },
+        uFray: { value: 0 },
+        uTime: { value: this.time },
+        uSeed: { value: index * 1.7 },
+        uRadius: { value: STAR_RADIUS },
+      },
+      transparent: true,
+      depthWrite: false,
+    });
   }
 
   /**
-   * Turns the prominences with the surface (the surface shader turns by
-   * 0.02 rad/s), flickers them and, now and then on active stars, blows one
-   * off: it rises and fades out over a few seconds.
+   * Keeps the eruption on its region, whoever moved the clock (the tick, the
+   * time bar, a zoom): it turns with the region, and is cut like the loops
+   * when they are withheld (a fast clock, a small star, the switch off) or
+   * when its region left the shown set.
+   */
+  private followEruption(): void {
+    if (!this.eruption) return;
+    const longitude = eruptionTurn(this.loops, this.eruptionRegion, this.arcs.visible);
+    if (longitude === null) this.removeEruption();
+    else this.eruption.rotation.y = longitude;
+  }
+
+  private removeEruption(): void {
+    if (!this.eruption) return;
+    this.arcs.remove(this.eruption);
+    this.eruption.geometry.dispose();
+    this.eruption.material.dispose();
+    this.eruption = null;
+    this.eruptionRegion = null;
+  }
+
+  /**
+   * Shimmers the loops and, now and then on active stars, blows one off:
+   * the loop of the largest region rises and fades out over a few seconds.
+   * The loops turn with the surface through their regions' longitudes
+   * (see CoronalLoops.update, called with the surface).
    */
   private animateProminences(): void {
-    this.arcs.rotation.y = -this.time * 0.02;
-    for (const child of this.arcs.children) {
-      ((child as Mesh<BufferGeometry, ShaderMaterial>).material.uniforms['uTime']!).value = this.time;
-    }
+    this.loops.setTime(this.time);
     const cycle = Math.floor(this.time / ERUPTION_S);
     const phase = (this.time % ERUPTION_S) / ERUPTION_S;
     const active = this.klass === 'M' || this.klass === 'K' || this.klass === 'G';
-    if (!active) return;
-    if (!this.eruption || this.eruption.userData['cycle'] !== cycle) {
-      if (this.eruption) {
-        this.arcs.remove(this.eruption);
-        this.eruption.geometry.dispose();
-        this.eruption.material.dispose();
-      }
-      const arc = prominences('M', this.seed + 31 * (cycle + 1))[0]!;
-      this.eruption = this.arcMesh({ ...arc, height: arc.height + 0.15 }, cycle);
+    if (this.eruption && !active) this.removeEruption();
+    if (!active || !this.arcs.visible) return;
+    // One launch a cycle: an eruption cut mid-cycle does not start again.
+    if (this.launchedCycle !== cycle) {
+      this.removeEruption();
+      const arc = this.loops.largestArc();
+      if (!arc) return;
+      this.launchedCycle = cycle;
+      this.eruption = new Mesh(
+        prominenceGeometry({ ...arc, height: arc.height + 0.15 }, STAR_RADIUS, this.seed * 13 + cycle, this.quality.prominenceStrands),
+        this.loopMaterial(cycle),
+      );
+      this.eruption.renderOrder = 2;
+      this.eruptionRegion = this.loops.largestId();
+      this.eruption.rotation.y = this.loops.longitudeOf(this.eruptionRegion!) ?? 0;
       this.eruption.userData['cycle'] = cycle;
       this.arcs.add(this.eruption);
     }
+    if (!this.eruption) return;
     // Rises over the first half of the cycle, gone by its end.
     const u = this.eruption.material.uniforms;
     const rise = Math.min(phase * 1.6, 1) ** 1.5;
     u['uLift']!.value = 1 + 9 * rise;
     // The strands come apart as the arc blows off, as torn field lines.
     u['uFray']!.value = 0.35 * rise;
-    u['uOpacity']!.value = 1.1 * (1 - phase) ** 2;
+    u['uOpacity']!.value = 1.1 * (1 - phase) ** 2 * this.surface.loopFade;
   }
 
   /** A point of the orbital plane at a true anomaly and distance (AU), in view units. */
@@ -1801,6 +1860,8 @@ export class StarView {
     }
   }
 
+  /** Draws the scene; bound once so the frame probe gets no new closure each frame. */
+  private readonly draw = (): void => this.renderer.render(this.scene, this.camera);
   private readonly render = (now: number = performance.now()): void => {
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
@@ -1816,11 +1877,14 @@ export class StarView {
     this.lastDrawn = now;
     const flying = this.stepFlight(performance.now());
     const moving = flying || (this.flight === null && this.controls.update());
+    // The surface's detail follows the star's size on screen as the camera
+    // zooms (the regions are asked for again only on another day).
+    this.updateSurface(this.clockDays());
     // The glow faces the camera.
     this.glow.quaternion.copy(this.camera.quaternion);
     // So do the highlights (their markers do not turn).
     for (const halo of this.halos) if (halo.visible) halo.quaternion.copy(this.camera.quaternion);
-    this.renderer.render(this.scene, this.camera);
+    this.frames.measure(this.renderer.getContext(), this.draw);
     this.onAxes(axesOnScreen(this.camera.quaternion));
     const giantsShown = this.giantsOn && this.giants.length > 0;
     if ((this.distancesOn || giantsShown) && this.info) {

@@ -198,6 +198,23 @@ less than a day and shows a smooth disc; an old M dwarf turns in about 75
 days, is twenty times more active than the Sun, and spots at every
 latitude.
 
+### Coronal loops
+
+Above the spots stand coronal loops: arches of plasma that follow the
+field lines joining a region's leader to its follower
+(`lib/viewer/coronalLoops.ts`). A loop is drawn between points on the
+bipole's axis, so its feet sit on the two spots, and its height is half
+the distance between its feet, as for the semicircular loops of
+Aschwanden (2004, *Physics of the Solar Corona*), within a deterministic
+scatter of 20 %. A region is drawn with 3 loops in the high quality
+profile (the 8 largest regions) and 1 in the light one (the 3 largest);
+they turn with the region's longitude, grow dim as it decays (opacity
+proportional to the square root of its area over its peak area) and go
+with it. A star with no activity, or with a radiative envelope, has no
+loops. The loops are drawn in the red of H-alpha, which is a departure
+(see below). The 3 loops, the 20 % scatter and the side-by-side spacing are
+**calibration**: they draw the picture, not a measure.
+
 ### How it computes them
 
 [`activity.rs`](../../crates/mapgen/src/activity.rs) derives a
@@ -268,6 +285,21 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    0.75 of the photosphere, the penumbra four times the umbra's area
    (Solanki 2003), and faculae with a contrast of $0.25\,(1-\mu)$
    (**calibration**, brightest at the limb as Solanki 2003 describes).
+   The plage is a disc of three times the region's spot radius round its
+   centre, which covers nine spot areas; it is filled at
+   `facula_ratio` / 9, at most 1, so that a Sun-like ratio of about 10
+   fills it and a spot-dominated star's plages are fainter
+   (**calibration**). The granulation is simplex noise at the granule
+   size, cross-faded between two fields over each granule lifetime: a
+   texture with the right scale, contrast and lifetime, not convection
+   cells. The shader (`web/src/lib/viewer/starSurface.ts`) fades the
+   regions and the granules out as the star shrinks on screen, and as a
+   frame of the clock outlasts a twelfth of a rotation or a granule
+   lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
+   exposure's averaging). Its soft exposure, $1 - e^{-1.6\,b}$, acts on
+   the brightness $b$ of granules, spots and faculae only; the limb law
+   and the star's colour multiply the result linearly, so the limb keeps
+   Claret & Bloemen's darkening and the disc its colour.
 
 ```rust
 // crates/mapgen/src/activity.rs (trimmed)
@@ -292,6 +324,13 @@ hemisphere spotted at maximum and 1.03 new regions per day over the whole
 star, about half of them on the visible side.
 
 ### Where it departs from the science
+
+- **Coronal loops are red.** The hot loops that dominate the Sun's corona
+  glow in the EUV and X-rays (millions of kelvin), invisible to the eye;
+  only cool loops, such as the post-flare loops of a decaying region, show
+  in H-alpha. The view draws every loop in H-alpha red, as an eye-catching
+  convention that keeps the old prominences' look, not as what a camera
+  would record.
 
 - **The cycle is anchored on the Sun, not on a stellar sequence.** Every
   star with $Ro \ge 1$ runs 160 rotations per cycle, the Sun's, which

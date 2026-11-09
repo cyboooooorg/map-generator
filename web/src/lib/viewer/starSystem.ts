@@ -1,34 +1,10 @@
-// What the star view draws, from a world's star: the look of its surface
-// and the layout of its system.
+// What the star view draws, from a world's star: the layout of its system
+// (the look of its surface is in starSurface.ts).
 import type { Trojans } from '../api/types/Trojans';
 import type { Moon } from '../api/types/Moon';
 import type { Giant } from '../api/types/Giant';
 import type { RingSystem } from '../api/types/RingSystem';
 import type { StarInfo } from '../api/types/StarInfo';
-
-/** The surface of a star as the star view draws it (see starSurfaceFragment). */
-export interface StarSurface {
-  /** Linear limb darkening coefficient: stronger on cool stars. */
-  limb: number;
-  /** Contrast of the convective granules; none on hot stars (above about 7 500 K). */
-  granulation: number;
-  /** About the share of the surface under spots: large on red dwarfs, none on hot stars. */
-  spots: number;
-  /** 1 on red dwarfs, which flare. */
-  flares: number;
-}
-
-/** The surface of a star of effective temperature `teffK` and spectral class `klass`. */
-export function starSurface(teffK: number, klass: string): StarSurface {
-  const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
-  const spots: Record<string, number> = { M: 0.25, K: 0.12, G: 0.05, F: 0.02 };
-  return {
-    limb: clamp(0.6 + (5772 - teffK) / 5000, 0.3, 0.85),
-    granulation: teffK > 7500 ? 0 : 0.12,
-    spots: spots[klass] ?? 0,
-    flares: klass === 'M' ? 1 : 0,
-  };
-}
 
 /**
  * A planet of a planetary system as the star view draws it: a giant, with
@@ -347,43 +323,13 @@ export function meanOrbitalSpeed(mass: number, orbitAu: number): number {
   return EARTH_SPEED_KMS * Math.sqrt(mass / orbitAu);
 }
 
-/** A prominence: an arc of plasma between two points of the surface (unit vectors), `height` star radii high. */
+/** A coronal loop (or the prominence an eruption lifts): an arc of plasma between two points of the surface (unit vectors), `height` star radii high. */
 export interface Prominence {
   from: [number, number, number];
   to: [number, number, number];
   height: number;
   /** Thickness of the arc, star radii. */
   thickness: number;
-}
-
-/** Prominences by spectral class: magnetically active cool stars have many, hot stars none. */
-const PROMINENCES: Record<string, number> = { M: 7, K: 5, G: 4, F: 2 };
-
-/** The prominences of a star of spectral class `klass`, placed from `seed`. */
-export function prominences(klass: string, seed: number): Prominence[] {
-  let state = (seed * 2654435761) >>> 0;
-  const next = () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let z = state;
-    z = Math.imul(z ^ (z >>> 15), z | 1);
-    z ^= z + Math.imul(z ^ (z >>> 7), z | 61);
-    return ((z ^ (z >>> 14)) >>> 0) / 4_294_967_296;
-  };
-  return Array.from({ length: PROMINENCES[klass] ?? 0 }, () => {
-    // A foot anywhere on the sphere, the other 10° to 30° away.
-    const y = 2 * next() - 1;
-    const lon = next() * 2 * Math.PI;
-    const r = Math.sqrt(1 - y * y);
-    const from: [number, number, number] = [r * Math.cos(lon), y, r * Math.sin(lon)];
-    const spread = ((10 + 20 * next()) * Math.PI) / 180;
-    const heading = next() * 2 * Math.PI;
-    // Turn `from` by `spread` towards `heading` on the sphere.
-    const east = [-Math.sin(lon), 0, Math.cos(lon)];
-    const north = [-y * Math.cos(lon), r, -y * Math.sin(lon)];
-    const d = [0, 1, 2].map((k) => Math.cos(heading) * east[k]! + Math.sin(heading) * north[k]!);
-    const to = [0, 1, 2].map((k) => Math.cos(spread) * from[k]! + Math.sin(spread) * d[k]!) as [number, number, number];
-    return { from, to, height: 0.08 + 0.22 * next() ** 2, thickness: 0.012 + 0.014 * next() };
-  });
 }
 
 /**
