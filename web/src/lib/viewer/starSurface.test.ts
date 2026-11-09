@@ -91,7 +91,7 @@ describe('star surface', () => {
   });
 
   it('keeps granules off until they span 2.5 pixels', () => {
-    // The star view's default distance puts G2V granules near 2.4 px.
+    // The star view's default distance puts G2V granules under 2 px.
     expect(surfaceDetail(1200, 0.002).granulation).toBe(0);
     expect(surfaceDetail(1250, 0.002).granulation).toBe(0);
     expect(surfaceDetail(1875, 0.002).granulation).toBeCloseTo(0.5, 6);

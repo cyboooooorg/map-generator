@@ -262,15 +262,15 @@ While the orbits play, the clock's speed fades the regions out as in the
 star views (a long exposure).
 
 The disc takes the star view's exposure, not the plain disc's gain (the
-linear colour times 1.4), which clips the quiet photosphere to white over most of a large disc (up to 0.85 of its
-radius on G2V b), and the penumbrae (0.75 of the photosphere, 1.05 after
-the gain) and the faculae disappear: only the umbrae showed, as grey
-dots. The disc now draws `starSurfaceExposed`, at the same gain as the
-star view: the soft curve $1 - e^{-1.6\,b}$ on the brightness, with the
-limb law and the light linear. For the G2V star of the test system, its
-sRGB values at 0, 0.5, 0.9 and 0.98 of the radius are 231, 224, 192 and
-166, against 231, 223, 194 and 174 in the star view seen from 50 radii.
-The plain disc keeps its 1.4.
+linear colour times 1.4), which clips the quiet photosphere to white
+over most of a large disc (up to 0.85 of its radius on G2V b), and the penumbrae
+(0.75 of the photosphere, 1.05 after the gain) and the faculae disappear: only
+the umbrae showed, as grey dots. The disc now draws `starSurfaceExposed`, at the
+same gain as the star view: the soft curve $1 - e^{-1.6\,b}$ on the brightness,
+with the limb law and the light linear. For the G2V star of the test system, its
+sRGB values at 0, 0.5, 0.9 and 0.98 of the radius are 231, 224, 192 and 166,
+against 231, 223, 194 and 174 in the star view seen from 50 radii. The plain
+disc keeps its 1.4.
 
 The disc is drawn on a square that the vertex shader places round the
 star's direction, not on a point sprite. A point is clamped to the GPU's
@@ -385,74 +385,66 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    lifetimes at which the phase wraps, and the day clock behind the
    phase wraps at a whole number of those periods (near 10,000 days),
    so the surface does not jump at either wrap. The result is brought
-   to zero mean and unit rms (measured over the disc), then multiplied
-   by a gain of 1.6 (**calibration**): prototype D, the approved look,
-   drew an rms contrast of about 0.24 on the Sun, whose
-   `granule_contrast` is 0.15. The drawn rms contrast of the brightness
-   is therefore 1.6 times `granule_contrast`, before the soft exposure
-   below compresses it on screen. The shading follows a granule's size
-   on screen (**calibration**): from 120 pixels across it is the one
-   above; at 40 pixels or fewer the cells are a sum of round blobs, one
-   per centre, each of its cell's tone (0.45 to 1.45) times
+   to zero mean and unit rms (measured over disc patches from the
+   centre to 0.6 radii), then multiplied by a gain of 1.6
+   (**calibration**): prototype D, the approved look, drew an rms
+   contrast of about 0.24 on the Sun, whose `granule_contrast` is 0.15. The
+   drawn rms contrast of the brightness is therefore 1.6 times
+   `granule_contrast`, before the soft exposure below compresses it on screen.
+   The shading follows a granule's size on screen (**calibration**): from 120
+   pixels across it is the one above; at 40 pixels or fewer the cells are a sum
+   of round blobs, one per centre, each of its cell's tone (0.45 to 1.45) times
    $e^{-d^2/(2\sigma^2)}$ with $\sigma = 0.3$ cell and $d^2$ the squared
-   distance along the surface plus 0.4 of the squared depth
-   (**calibrations**). The field is continuous everywhere, no edge is
-   drawn, and the dips between centres are the lanes, wide where
-   centres are far apart. Between the two it blends, and every lane
-   edge is at least about 2.5 pixels soft. At mid zoom, about 1.1 radii,
-   thin crisp lanes round flat cells read as cracked glass, and any
-   edge drawn among the blobs as a thin seam. Both ends are brought to
-   zero mean and the same rms.
-   The supergranule network is a second cell pattern, at
-   `SUPERGRANULE_SIZE_MM` = 30 Mm on the Sun (Leighton, Noyes & Simon
-   1962): its cell size is the granule size times 30/1.3, so that it
-   scales with the convection on other stars (**calibration**; no
-   survey measures other stars' networks). Its cells wander as the
-   granules do, on their own phase, in supergranule lifetimes of
-   `SUPERGRANULE_LIFETIME_DAYS` = 1 day (Hart 1956; Rieutord & Rincon
-   2010), wrapped at 289 lifetimes as the granule phase is, and turn
-   with the star: the network is sampled at the longitude minus the
-   equatorial rotation phase, without differential rotation over its
-   day of life. Its lanes, $F_2 - F_1$ with the lane distance measured
-   along the surface as for the granules, are drawn as soft, wide
-   ribbons of faculae: $1 - \text{smoothstep}(0, w, F_2 - F_1)$ with
-   $w = 0.6$ cells (**calibration**), widened up to 1.3 times at the
-   junctions of three cells and of a tone varying from lane to lane
-   (**calibration**), blended to a common tone where lanes meet. They
-   are brightened by $c\,L(\mu)$, with
-   $L = \max(0.35, \min(0.35 + 1.4\,(1-\mu),\ 1.33\,(1-\mu)))$:
-   faint at the disc centre, about four times brighter at the limb, as
-   faculae are (Solanki 2003). The cap $1.33\,(1-\mu)$ keeps a
-   ribbon's peak, $0.15 \times 1.33\,(1-\mu) = 0.2\,(1-\mu)$, at
-   0.8 of a full plage's $0.25\,(1-\mu)$ (**calibration**), so that the
-   active regions' faculae stay the brightest features near the limb. Its
-   contrast is $c = \min(1, \text{granule\_contrast}/0.15) \times 0.15$,
-   0 on a radiative star. The 0.15 (**calibration**) makes the network
-   stronger than the real one in white light, so that the whole disc,
-   whose granules are under a pixel, does not look smooth: the disc
-   centre is about 2 % brighter on average with a 2.3 % rms, and near
-   the limb ($\mu \approx 0.4$) about 5 % brighter with a 5 % rms. From afar, a mesogranular mottle, one octave of value
-   noise at 0.35 of the cell size, adds $\pm c/4$ and varies the
-   ribbons' width and tone along their length (**calibration**); it
-   fades out as the granules fade in, since they cover its scale up
-   close. The network is searched among 8 cells rather than the
-   granules' 20, to keep it cheap over the whole disc; it misses a
-   short stub of lane near a junction on about 0.1 % of the points,
-   hidden by the soft ribbons. It fades in from 3 to 8 pixels per
-   network cell.
-   The shader (`web/src/lib/viewer/starSurface.ts`) fades the
-   regions and the granules out as the star shrinks on screen, and as a
-   frame of the clock outlasts a twelfth of a rotation, a granule
-   lifetime or, for the network, which turns with the star, a
-   supergranule lifetime or a twelfth of a rotation (as $\sqrt{\text{timescale}/\text{frame}}$, a long
-   exposure's averaging). Its soft exposure, $1 - e^{-1.6\,b}$, acts on
-   the brightness $b$ of granules, spots and faculae only; the limb law
-   and the star's colour multiply the result linearly, so the limb keeps
-   Claret & Bloemen's darkening and the disc its colour, but for the
-   network's faculae: on average they brighten the limb by a few
-   percent more than the centre (about 5 % at $\mu \approx 0.4$
-   against 2 %), which flattens the drawn limb darkening a little
-   (**calibration**, the price of a visible network).
+   distance along the surface plus 0.4 of the squared depth (**calibrations**).
+   The field is continuous everywhere, no edge is drawn, and the dips between
+   centres are the lanes, wide where centres are far apart. Between the two it
+   blends, and every lane edge is at least about 2.5 pixels soft. At mid zoom,
+   about 1.1 radii, thin crisp lanes round flat cells read as cracked glass, and
+   any edge drawn among the blobs as a thin seam. Both ends are brought to zero
+   mean and the same rms. The supergranule network is a second cell pattern, at
+   `SUPERGRANULE_SIZE_MM` = 30 Mm on the Sun (Leighton, Noyes & Simon 1962): its
+   cell size is the granule size times 30/1.3, so that it scales with the
+   convection on other stars (**calibration**; no survey measures other stars'
+   networks). Its cells wander as the granules do, on their own phase, in
+   supergranule lifetimes of `SUPERGRANULE_LIFETIME_DAYS` = 1 day (Hart 1956;
+   Rieutord & Rincon 2010), wrapped at 289 lifetimes as the granule phase is,
+   and turn with the star: the network is sampled at the longitude minus the
+   equatorial rotation phase, without differential rotation over its day of
+   life. Its lanes, $F_2 - F_1$ with the lane distance measured along the
+   surface as for the granules, are drawn as soft, wide ribbons of faculae: $1 -
+   \text{smoothstep}(0, w, F_2 - F_1)$ with $w = 0.6$ cells (**calibration**),
+   widened up to 1.3 times at the junctions of three cells and of a tone varying
+   from lane to lane (**calibration**), blended to a common tone where lanes
+   meet. They are brightened by $c\,L(\mu)$, with $L = \max(0.35, \min(0.35 +
+   1.4\,(1-\mu),\ 1.33\,(1-\mu)))$: faint at the disc centre, about four times
+   brighter at the limb, as faculae are (Solanki 2003). The cap $1.33\,(1-\mu)$
+   keeps a ribbon's peak, $0.15 \times 1.33\,(1-\mu) = 0.2\,(1-\mu)$, at 0.8 of
+   a full plage's $0.25\,(1-\mu)$ (**calibration**), so that the active regions'
+   faculae stay the brightest features near the limb. Its contrast is $c =
+   \min(1, \text{granule\_contrast}/0.15) \times 0.15$, 0 on a radiative star.
+   The 0.15 (**calibration**) makes the network stronger than the real one in
+   white light, so that the whole disc, whose granules are under a pixel, does
+   not look smooth: the disc centre is about 2 % brighter on average with a 2.3
+   % rms, and near the limb ($\mu \approx 0.4$) about 5 % brighter with a 5 %
+   rms. From afar, a mesogranular mottle, one octave of value noise at 0.35 of
+   the cell size, adds $\pm c/4$ and varies the ribbons' width and tone along
+   their length (**calibration**); it fades out as the granules fade in, since
+   they cover its scale up close. The network is searched among 8 cells rather
+   than the granules' 20, to keep it cheap over the whole disc; it misses a
+   short stub of lane near a junction on about 0.1 % of the points, hidden by
+   the soft ribbons. It fades in from 3 to 8 pixels per network cell. The shader
+   (`web/src/lib/viewer/starSurface.ts`) fades the regions and the granules out
+   as the star shrinks on screen, and as a frame of the clock outlasts a twelfth
+   of a rotation, a granule lifetime or, for the network, which turns with the
+   star, a supergranule lifetime or a twelfth of a rotation (as
+   $\sqrt{\text{timescale}/\text{frame}}$, a long exposure's averaging). Its
+   soft exposure, $1 - e^{-1.6\,b}$, acts on the brightness $b$ of granules,
+   spots and faculae only; the limb law and the star's colour multiply the
+   result linearly, so the limb keeps Claret & Bloemen's darkening and the disc
+   its colour, but for the network's faculae: on average they brighten the limb
+   by a few percent more than the centre (about 5 % at $\mu \approx 0.4$ against
+   2 %), which flattens the drawn limb darkening a little (**calibration**, the
+   price of a visible network).
 
 ```rust
 // crates/mapgen/src/activity.rs (trimmed)
@@ -524,7 +516,7 @@ star, about half of them on the visible side.
   the 0.15 the activity gives, so that the surface reads as agitated
   up close.
 - **The supergranule network is slightly exaggerated** (**calibration**):
-  its contrast of 0.15 on the Sun, rising five times towards the limb,
+  its contrast of 0.15 on the Sun, rising about four times towards the limb,
   and its wide ribbons are above the real network's in white light, so
   that the whole disc shows texture where granules are under a pixel.
   Its size on other stars scales with the granules. It turns with the

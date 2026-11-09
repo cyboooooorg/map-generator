@@ -31,12 +31,12 @@
  * loop and the granulation behind uniform branches when they are faded
  * out, so a small or fast-turning star costs only its limb darkening.
  * Where it is drawn, the granulation is the costliest term: two passes
- * over 20 cells and one octave of value noise per pixel (48 hashes, one
- * more in the lanes), about four and a half times the two simplex
- * fields it replaced. The supergranule network, drawn over the whole
- * disc from afar, is kept to about a third of that: 8 cells and, from
- * afar only, one octave of value noise (16 hashes); up close, where
- * the granules are drawn, the noise is skipped and the 8 cells remain.
+ * over 20 cells (the second reuses the first's `rs[]`) and the warp's
+ * 8 hashes, 28 hashes per pixel, one more in the lanes. The supergranule
+ * network, drawn over the whole disc from afar, is kept much cheaper:
+ * 8 cells and, from afar only, one octave of value noise (16 hashes);
+ * up close, where the granules are drawn, the noise is skipped and the
+ * 8 cells remain.
  *
  * The science (spot structure, facular contrast, limb law) is in
  * docs/science/star-activity.md.
@@ -147,8 +147,9 @@ export const SUPERGRANULE_LIFETIME_DAYS = 1;
  * `granule_contrast` of 0.15, a little stronger than the real network
  * (prototype D's thin lanes drew 0.07; the soft ribbons need 0.15 to be
  * seen at the disc centre from the star view's opening distance): the
- * disc centre about 2 % brighter on average with a 2.5 % rms, the limb
- * about 7 %. Times `min(1, granule_contrast / 0.15)`: 0 on a radiative
+ * disc centre about 2 % brighter on average with a 2.3 % rms, the limb
+ * about 5 % brighter with a 5 % rms (the figures after the limb cap, as in
+ * the science doc). Times `min(1, granule_contrast / 0.15)`: 0 on a radiative
  * star.
  */
 const NETWORK_CONTRAST = 0.15;
@@ -322,14 +323,15 @@ const WINDOW_DAYS = 21;
  * granules can still draw cells (`uint starHashU(vec3 c)`, `float
  * starHash(vec3 p)`, `vec3 starHash3(vec3 c)`, `vec3
  * starValueNoise3(vec3 x)`, `vec3 starFbm2x3(vec3 p)`, `float
- * starFbm2(vec3 p)`, `vec3 starWave(vec3 x)`, `StarCell starCellDetail(vec3
- * p, float phase)`, `float starCellBlobs(vec3 p, float phase)`, `vec2 starCells(vec3 p, float phase)` and `float
- * starCellLanes(vec3 p, float phase)`); `float
- * starLimb(float mu)`, `float
- * starBrightness(vec3 n, float mu)`, `vec3 starSurfaceExposed(vec3 n,
- * float mu)` (for display, see there), `float starDither(vec2)` and
- * `vec3 starSurfaceColour(vec3 n, float mu)`, the linear colour of the photosphere at unit normal `n`
- * in the star's inertial frame (y the spin axis, longitude increasing
+ * starFbm2(vec3 p)`, `vec3 starWave(vec3 x)`, `StarCell
+ * starCellDetail(vec3 p, float phase, float blobs)`, `float
+ * starCellBlobs(vec3 p, float phase)`, `vec2 starCells(vec3 p, float
+ * phase)` and `float starCellLanes(vec3 p, float phase)`); `float
+ * starLimb(float mu)`, `float starBrightness(vec3 n, float mu)`, `vec3
+ * starSurfaceExposed(vec3 n, float mu)` (for display, see there),
+ * `float starDither(vec2)` and `vec3 starSurfaceColour(vec3 n, float
+ * mu)`, the linear colour of the photosphere at unit normal `n` in the
+ * star's inertial frame (y the spin axis, longitude increasing
  * anticlockwise seen from +y, as the orbits go) and `mu` the cosine of
  * the angle to the line of sight.
  *

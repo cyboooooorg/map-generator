@@ -3,12 +3,14 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Up close, the star view looks like a high-resolution image of the Sun:
+
 - granulation as moving bright cells with dark lanes;
 - the supergranule network seen from afar;
 - irregular, filamentary spots that change shape over their life;
 - no visible frame drop.
 
 **Architecture:** Everything stays in the shared surface chunk `STAR_SURFACE_GLSL` (`web/src/lib/viewer/starSurface.ts`), gated by size on screen as in part 1.
+
 - The simplex granulation is replaced by moving cellular noise.
 - A network term is added.
 - `starSpot` becomes a shaped spot that reads a per-region seed from a new uniform array.
@@ -59,11 +61,13 @@
 ### Task 2: Star view pixel ratio while animating
 
 **Files:**
+
 - Modify: `web/src/lib/viewer/pixelRatio.ts`, `web/src/lib/viewer/StarBodyView.ts` (constructor `setPixelRatio` at about line 128, `setAnimated`, the frame loop)
 - Test: `web/src/lib/viewer/pixelRatio.test.ts` (create it if it does not exist)
 - Docs: `web/README.md`, the star-view bullet: it renders softer while animated and sharp when paused.
 
 **Interfaces:**
+
 - Produces: `export function animatedPixelRatio(deviceRatio: number, animated: boolean, caps?: PixelRatioCaps): number`. It returns `min(full, caps.movingPixelRatio)` when animated, else `fullPixelRatio(deviceRatio, caps)`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -87,11 +91,13 @@ it('draws an animated star at the moving ratio', () => {
 ### Task 3: Granulation as moving cells
 
 **Files:**
+
 - Modify: `web/src/lib/viewer/starSurface.ts`. Replace `starGranules` and its simplex helpers. Update the module doc comment and the `STAR_SURFACE_GLSL` doc.
 - Test: `web/src/lib/viewer/starSurface.test.ts`
 - Docs: `docs/science/star-activity.md` § granulation (cells, lanes, bright points; sources and calibrations).
 
 **Interfaces:**
+
 - Consumes: `uGranule` = (size in star radii, contrast, phase in granule lifetimes reduced mod `GRANULE_PHASE_PERIOD`, fade), unchanged.
 - Produces, in GLSL inside `#ifndef STAR_NO_GRANULATION`:
   - `vec2 starCells(vec3 p, float phase)`: F1 and F2 distances to cell centres that wander with `phase`;
@@ -132,11 +138,13 @@ it('keeps every cell motion periodic in the phase wrap', () => {
 ### Task 4: Supergranule network and mottle
 
 **Files:**
+
 - Modify: `web/src/lib/viewer/starSurface.ts`: a uniform, a GLSL term in `starBrightness`, `StarSurfaceState.update` (its fade), `surfaceDetail` (a `network` field)
 - Test: `web/src/lib/viewer/starSurface.test.ts`
 - Docs: `docs/science/star-activity.md` § network (size about 30 Mm, Leighton, Noyes & Simon 1962; faculae brighter at the limb; the slight exaggeration labelled **calibration**). Also `web/README.md`, the star-view bullet.
 
 **Interfaces:**
+
 - Produces:
   - `uniform vec4 uNetwork` = (cell size in star radii, contrast, phase in supergranule lifetimes, fade);
   - `surfaceDetail(radiusPx, granuleSize)` returns `{ granulation, regions, network }`, with `network = ramp(radiusPx · networkSize, 3, 8)`;
@@ -177,6 +185,7 @@ it('keeps a radiative star plain', () => {
 **Branch:** `feat/living-star-spots`, from `main` after PR 1 merges (or stacked locally until then, opened only after).
 
 **Files:**
+
 - Modify: `web/src/lib/viewer/starSurface.ts`:
   - `starSpot` becomes the shaped spot;
   - a new `uRegionC` array;
@@ -194,6 +203,7 @@ it('keeps a radiative star plain', () => {
   Every shape number is labelled **calibration**.
 
 **Interfaces:**
+
 - Consumes:
   - `ActiveRegion.id` (32-bit hash) from `starActivity.ts`;
   - `RegionNow`;
@@ -236,6 +246,7 @@ it('draws shaped spots', () => expect(STAR_SURFACE_GLSL).toMatch(/float starSpot
 ### Task 6: After-measurement and closing docs
 
 **Files:**
+
 - Modify: `web/README.md` § "Measuring frame time" (the outcome line, a link to the PR), `docs/science/star-activity.md` ("Where it departs from the science": the new calibrations), `docs/backlog.md` (the history line).
 
 - [ ] **Step 1: Measure** every Task 1 case on the PR 2 branch: three runs, against the Task 1 baseline and the Global Constraints bounds. If a bound fails, cut cost in the order given there, then measure again.
