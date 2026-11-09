@@ -287,29 +287,31 @@ fn sea(grid: &Grid, height: &[f32]) -> Vec<bool> {
     let n = grid.pixel_count();
     let mut sea = vec![false; n];
     let mut seen = vec![false; n];
-    let mut body = Vec::new();
+    // `u32` indices: the largest body of water can hold most of the map,
+    // and a map has fewer than `u32::MAX` pixels.
+    let mut body: Vec<u32> = Vec::new();
     for start in 0..n {
         if seen[start] || height[start] >= 0.0 {
             continue;
         }
         seen[start] = true;
         body.clear();
-        body.push(start);
+        body.push(start as u32);
         let mut area_km2 = 0.0f64;
         let mut k = 0;
         while k < body.len() {
-            let i = body[k];
+            let i = body[k] as usize;
             k += 1;
             area_km2 += f64::from(grid.dx_km((i / grid.width as usize) as u32) * grid.dy_km());
             for j in grid.neighbour_indices(i) {
                 if !seen[j] && height[j] < 0.0 {
                     seen[j] = true;
-                    body.push(j);
+                    body.push(j as u32);
                 }
             }
         }
         if area_km2 >= f64::from(SEA_MIN_AREA_KM2) {
-            body.iter().for_each(|&i| sea[i] = true);
+            body.iter().for_each(|&i| sea[i as usize] = true);
         }
     }
     sea
