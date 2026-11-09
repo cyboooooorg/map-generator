@@ -45,7 +45,30 @@ const SUN_ACTIVITY: StarActivity = {
 };
 
 /** An A-type star's activity (starActivity.test.ts): radiative, no granules. */
-const HOT: StarActivity = {"envelope":"radiative","age_gyr":1.4346926,"rotation_days":0.71322525,"shear":0.5,"turnover_days":0.0,"rossby":0.0,"activity":0.0,"cycle_years":0.0,"cycle_phase":0.22184348,"cycle_depth":0.0,"band_deg":[0.0,0.0],"spot_coverage":0.0,"facula_ratio":0.0,"region_rate":0.0,"region_area":0.0,"region_sigma":0.0,"decay_per_day":0.00001,"granule_size":0.003158995,"granule_contrast":0.0,"granule_lifetime_days":0.020596515,"limb":[0.233016,0.32803598],"seed":3214283846};
+const HOT: StarActivity = {
+  envelope: 'radiative',
+  age_gyr: 1.4346926,
+  rotation_days: 0.71322525,
+  shear: 0.5,
+  turnover_days: 0,
+  rossby: 0,
+  activity: 0,
+  cycle_years: 0,
+  cycle_phase: 0.22184348,
+  cycle_depth: 0,
+  band_deg: [0, 0],
+  spot_coverage: 0,
+  facula_ratio: 0,
+  region_rate: 0,
+  region_area: 0,
+  region_sigma: 0,
+  decay_per_day: 1e-5,
+  granule_size: 0.003158995,
+  granule_contrast: 0,
+  granule_lifetime_days: 0.020596515,
+  limb: [0.233016, 0.32803598],
+  seed: 3214283846,
+};
 const HOT_INFO = { ...SUN_SYSTEM, teff_k: 9700 };
 
 /** A view where the star is large and the clock slow: every detail on. */
@@ -117,7 +140,38 @@ describe('star surface', () => {
     expect(STAR_SURFACE_GLSL).toContain('vec3(n.x * spinC - n.z * spinS, n.y, n.x * spinS + n.z * spinC)');
   });
 
+  it('fades the network out on a fast rotator, as the regions', () => {
+    const fast: StarActivity = { ...SUN_ACTIVITY, rotation_days: 0.5 };
+    const u = starSurfaceUniforms(8);
+    const s = new StarSurfaceState(u, 8);
+    s.setStar(starLook(SUN_SYSTEM, fast), fast);
+    s.update(100, { radiusPx: 500, daysPerSecond: 4 });
+    const fade = (u.uNetwork!.value as Vector4).w;
+    // A frame of 4/30 day outlasts a twelfth of a 0.5-day rotation.
+    expect(fade).toBeCloseTo(exposureFade(4 / 30, 0.5 / 12), 9);
+    expect(fade).toBeLessThan(0.6);
+    expect(fade).toBeCloseTo(u.uRegionFade!.value as number, 9);
+  });
+
+  it('caps the network below the plages at the limb', () => {
+    expect(STAR_SURFACE_GLSL).toMatch(/float limb = max\(0\.35, min\(0\.35 \+ 1\.4 \* edge, STAR_NETWORK_LIMB_CAP \* edge\)\);/);
+    const cap = Number(/const float STAR_NETWORK_LIMB_CAP = ([\d.]+);/.exec(STAR_SURFACE_GLSL)![1]);
+    // A ribbon's peak (contrast 0.15 times at most 1) under a full plage's 0.25 (1 − μ).
+    expect(0.15 * cap).toBeLessThan(0.25);
+  });
+
+  it('shades granules by their size on screen', () => {
+    const u = starSurfaceUniforms(8);
+    const s = new StarSurfaceState(u, 8);
+    s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    s.update(100, { radiusPx: 20000, daysPerSecond: 0 });
+    expect(u.uGranulePx!.value).toBeCloseTo(20000 * SUN_ACTIVITY.granule_size, 9);
+    expect(STAR_SURFACE_GLSL).toMatch(/float small = 1\.0 - smoothstep\(30\.0, 120\.0, uGranulePx\);/);
+  });
+
   it('fades the mottle out as the granules fade in', () => {
+    // Without granules compiled in (the sky disc), uGranule.w is not read.
+    expect(STAR_SURFACE_GLSL).toMatch(/#ifdef STAR_NO_GRANULATION\n\s+float mottleFade = 1\.0;/);
     expect(STAR_SURFACE_GLSL).toContain('float mottleFade = 1.0 - uGranule.w;');
     expect(STAR_SURFACE_GLSL).toMatch(/if \(mottleFade > 0\.0\) \{\n\s+vec3 v = starValueNoise3/);
   });
@@ -140,7 +194,7 @@ describe('star surface', () => {
     expect(gate).toBeGreaterThan(0);
     // After the granules' gated block in starBrightness, so not inside it.
     expect(network).toBeGreaterThan(STAR_SURFACE_GLSL.indexOf('#endif', gate));
-    expect(STAR_SURFACE_GLSL).toMatch(/0\.35 \+ 1\.4 \* \(1\.0 - mu\)/);
+    expect(STAR_SURFACE_GLSL).toMatch(/0\.35 \+ 1\.4 \* edge/);
   });
 
   it('starLook falls back without activity', () => {

@@ -389,7 +389,17 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    drew an rms contrast of about 0.24 on the Sun, whose
    `granule_contrast` is 0.15. The drawn rms contrast of the brightness
    is therefore 1.6 times `granule_contrast`, before the soft exposure
-   below compresses it on screen.
+   below compresses it on screen. The shading follows a granule's size
+   on screen (**calibration**): from 120 pixels across it is the one
+   above; at 30 pixels or fewer each cell is drawn as a round blob,
+   falling with its distance from the cell's centre as much as towards
+   its edge, over a floor shared by every cell, with a wider spread of
+   tones (0.45 to 1.45) and no bright points or drawn lanes, so that the
+   dark between granules is wide where their centres are far apart.
+   Between the two it blends, and every lane edge is at least about 2.5
+   pixels soft. At mid zoom, about 1.1 radii, thin crisp lanes round
+   flat cells otherwise read as cracked glass. Both ends are brought to
+   zero mean and the same rms.
    The supergranule network is a second cell pattern, at
    `SUPERGRANULE_SIZE_MM` = 30 Mm on the Sun (Leighton, Noyes & Simon
    1962): its cell size is the granule size times 30/1.3, so that it
@@ -405,31 +415,41 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    ribbons of faculae: $1 - \text{smoothstep}(0, w, F_2 - F_1)$ with
    $w = 0.6$ cells (**calibration**), widened up to 1.3 times at the
    junctions of three cells and of a tone varying from lane to lane
-   (**calibration**). They are brightened by
-   $c\,(0.35 + 1.4\,(1-\mu))$: faint at the disc centre, about five
-   times brighter at the limb, as faculae are (Solanki 2003). Its
+   (**calibration**), blended to a common tone where lanes meet. They
+   are brightened by $c\,L(\mu)$, with
+   $L = \max(0.35, \min(0.35 + 1.4\,(1-\mu),\ 1.33\,(1-\mu)))$:
+   faint at the disc centre, about four times brighter at the limb, as
+   faculae are (Solanki 2003). The cap $1.33\,(1-\mu)$ keeps a
+   ribbon's peak, $0.15 \times 1.33\,(1-\mu) = 0.2\,(1-\mu)$, at
+   0.8 of a full plage's $0.25\,(1-\mu)$ (**calibration**), so that the
+   active regions' faculae stay the brightest features near the limb. Its
    contrast is $c = \min(1, \text{granule\_contrast}/0.15) \times 0.15$,
    0 on a radiative star. The 0.15 (**calibration**) makes the network
    stronger than the real one in white light, so that the whole disc,
    whose granules are under a pixel, does not look smooth: the disc
-   centre is about 2 % brighter on average with a 2.5 % rms, the limb
-   about 7 %. From afar, a mesogranular mottle, one octave of value
+   centre is about 2 % brighter on average with a 2.3 % rms, and near
+   the limb ($\mu \approx 0.4$) about 5 % brighter with a 5 % rms. From afar, a mesogranular mottle, one octave of value
    noise at 0.35 of the cell size, adds $\pm c/4$ and varies the
    ribbons' width and tone along their length (**calibration**); it
    fades out as the granules fade in, since they cover its scale up
    close. The network is searched among 8 cells rather than the
    granules' 20, to keep it cheap over the whole disc; it misses a
    short stub of lane near a junction on about 0.1 % of the points,
-   hidden by the soft ribbons.
-   of the points. It fades in from 3 to 8 pixels per network cell.
+   hidden by the soft ribbons. It fades in from 3 to 8 pixels per
+   network cell.
    The shader (`web/src/lib/viewer/starSurface.ts`) fades the
    regions and the granules out as the star shrinks on screen, and as a
    frame of the clock outlasts a twelfth of a rotation, a granule
-   lifetime or, for the network, a supergranule lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
+   lifetime or, for the network, which turns with the star, a
+   supergranule lifetime or a twelfth of a rotation (as $\sqrt{\text{timescale}/\text{frame}}$, a long
    exposure's averaging). Its soft exposure, $1 - e^{-1.6\,b}$, acts on
    the brightness $b$ of granules, spots and faculae only; the limb law
    and the star's colour multiply the result linearly, so the limb keeps
-   Claret & Bloemen's darkening and the disc its colour.
+   Claret & Bloemen's darkening and the disc its colour, but for the
+   network's faculae: on average they brighten the limb by a few
+   percent more than the centre (about 5 % at $\mu \approx 0.4$
+   against 2 %), which flattens the drawn limb darkening a little
+   (**calibration**, the price of a visible network).
 
 ```rust
 // crates/mapgen/src/activity.rs (trimmed)

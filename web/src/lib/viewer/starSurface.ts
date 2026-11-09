@@ -159,6 +159,14 @@ const NETWORK_CONTRAST = 0.15;
  * rather than thin cell outlines.
  */
 const NETWORK_LANE_WIDTH = 0.6;
+/** The plages' brightening at the limb, 0.25 (1 − μ) at most (see STAR_SURFACE_GLSL). */
+const PLAGE_LIMB_CONTRAST = 0.25;
+/**
+ * **Calibration**: a network ribbon's peak is at most this share of a
+ * full plage's at the same μ (away from the disc centre), so that the
+ * active regions' faculae stay the brightest features at the limb.
+ */
+const NETWORK_PLAGE_SHARE = 0.8;
 /** The Sun's granule contrast, against which the network's is scaled. */
 const SUN_GRANULE_CONTRAST = 0.15;
 
@@ -243,6 +251,17 @@ const WARP_RADIUS = 0.08 / ((TWO_PI * WARP_HARMONIC) / GRANULE_PHASE_PERIOD);
  */
 const GRANULE_RAW_MEAN = 0.576;
 const GRANULE_RAW_RMS = 0.354;
+
+/**
+ * **Calibration**: granules this many pixels across or fewer are shaded
+ * as small (wider, softer lanes and pools, round blobs of more varied
+ * tone, no bright points), and from the second as close up: in between,
+ * at 1.1 R, thin crisp lanes round flat cells read as cracked glass.
+ */
+const GRANULE_SMALL_PX = [30, 120] as const;
+/** The raw brightness's mean and rms with the small shading, measured as GRANULE_RAW_MEAN. */
+const GRANULE_SMALL_RAW_MEAN = 0.712;
+const GRANULE_SMALL_RAW_RMS = 0.49;
 
 /**
  * **Calibration**: the drawn granulation's rms over `granule_contrast`,
@@ -342,7 +361,8 @@ const WINDOW_DAYS = 21;
  *   (`starCellLanes`) are drawn as soft ribbons, `NETWORK_LANE_WIDTH` in
  *   F2 − F1 and wider and brighter at junctions, of a tone varying from
  *   lane to lane, brightened by c (0.35 + 1.4 (1 − μ)), faculae
- *   brightest at the limb (Solanki 2003). From afar a mesogranular
+ *   brightest at the limb (Solanki 2003), capped so that a ribbon's
+ *   peak stays at 0.8 of a plage's at the same μ. From afar a mesogranular
  *   mottle (one octave of value noise at 0.35 of the cell size) adds
  *   ±c/4 and varies the ribbons' width and tone along their length; it
  *   fades out as the granules fade in (1 − `uGranule.w`), behind a
@@ -378,6 +398,8 @@ uniform vec3 uStarColour;
 uniform vec2 uLimb;
 /** Granules: size (star radii), contrast, phase (lifetimes, mod 289), fade. */
 uniform vec4 uGranule;
+/** A granule's size on screen, pixels (the star's radius in pixels times the granule size): its shading follows it. */
+uniform float uGranulePx;
 /** The supergranule network: cell size (star radii), contrast, phase (lifetimes, mod 289), fade. */
 uniform vec4 uNetwork;
 /** The star's equatorial rotation phase (rad, in [0, 2π)): the network turns with it. */
@@ -400,6 +422,8 @@ const float STAR_WARP_RADIUS = ${WARP_RADIUS.toFixed(6)};
 /** The network's ribbons: half-width in F2 − F1 (cells) and the junction's reach (**calibrations**, NETWORK_LANE_WIDTH). */
 const float STAR_NETWORK_WIDTH = ${NETWORK_LANE_WIDTH.toFixed(4)};
 const float STAR_NETWORK_JUNCTION = 0.6;
+/** The network's limb slope at most: its peak, c times this times (1 − μ), at most NETWORK_PLAGE_SHARE of a plage's 0.25 (1 − μ). */
+const float STAR_NETWORK_LIMB_CAP = ${((NETWORK_PLAGE_SHARE * PLAGE_LIMB_CONTRAST) / NETWORK_CONTRAST).toFixed(4)};
 /** The warp's frequency (per cell) and amplitude (cells, **calibration**): enough to curve the cells' edges. */
 const float STAR_WARP_SCALE = 0.3;
 const float STAR_WARP_AMPLITUDE = 1.0;
@@ -525,6 +549,8 @@ StarCell starCellDetail(vec3 p, float phase) {
   vec3 side = sign(f - 0.5);
   side += 1.0 - abs(side);
   vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
+  // The centres are kept from the first pass for the second.
+  vec3 rs[20];
   float d1 = 1e4;
   vec3 r1 = vec3(0.0);
   float h1 = 0.0;
@@ -532,6 +558,7 @@ StarCell starCellDetail(vec3 p, float phase) {
     vec3 g = side * STAR_CELL_STEPS[k];
     vec3 hv = starHash3(i + g);
     vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
+    rs[k] = r;
     float d = dot(r, r);
     bool nearer = d < d1;
     d1 = nearer ? d : d1;
@@ -542,8 +569,7 @@ StarCell starCellDetail(vec3 p, float phase) {
   float edge2 = 1e4;
   int across = 0;
   for (int k = 0; k < 20; k++) {
-    vec3 g = side * STAR_CELL_STEPS[k];
-    vec3 r = g + 0.5 + 0.3 * starWave(turns + starHash3(i + g)) - f;
+    vec3 r = rs[k];
     vec3 dr = r - r1;
     float along = dot(dr, axis);
     float apart = dot(dr, dr) - along * along;
@@ -656,6 +682,11 @@ vec3 starCellLanes(vec3 p, float phase) {
  *   and wider and darker at junctions;
  * - a soft bright point in the middle of a fifth of the lanes.
  *
+ * That is the look from 120 px per granule (uGranulePx). At 30 px or
+ * fewer, each cell is a round blob of more varied tone over a shared
+ * floor, without drawn lanes or points, and in between the two blend,
+ * every lane edge at least 2.5 px soft (GRANULE_SMALL_PX).
+ *
  * The shapes and weights are **calibrations** matched by eye to
  * prototype D.
  */
@@ -666,20 +697,39 @@ float starGranules(vec3 n) {
   // One octave of warp, as D's second octave cost a sixth of the term.
   q += STAR_WARP_AMPLITUDE * (starValueNoise3(STAR_WARP_SCALE * q + STAR_WARP_RADIUS * vec3(cos(drift), 0.0, sin(drift))) - 0.5);
   StarCell cell = starCellDetail(q, phase);
+  // How small the granules are on screen: 1 up to ${GRANULE_SMALL_PX[0]} px, 0 from
+  // ${GRANULE_SMALL_PX[1]} px; and a pixel, in cells.
+  float small = 1.0 - smoothstep(${GRANULE_SMALL_PX[0].toFixed(1)}, ${GRANULE_SMALL_PX[1].toFixed(1)}, uGranulePx);
+  float pixel = 1.0 / max(uGranulePx, 1.0);
   float s = cell.centre / (cell.centre + cell.edge + 1e-4);
-  float tone = 0.75 + 0.45 * fract(cell.id * 13.7);
+  float shade = fract(cell.id * 13.7);
+  float tone = mix(0.75 + 0.45 * shade, 0.45 + 1.0 * shade, small);
   tone *= 1.0 - 0.35 * smoothstep(0.15, 0.5, cell.depth);
+  // Close up, D's dome: bright at the centre, falling towards the edge.
   float dome = 1.2 - 0.75 * s * s;
   // A dark middle in a few large cells.
   float large = smoothstep(0.45, 0.7, cell.centre + cell.edge) * step(0.75, fract(cell.id * 7.31));
   dome -= 0.35 * large * (1.0 - smoothstep(0.0, 0.35, s));
+  // Small on screen, a round blob: falling with the distance from the
+  // centre as much as towards the edge, so that the dark between cells
+  // is wide where centres are far apart and the cells read as irregular
+  // blobs, not polygons; its lanes are that soft dark alone.
+  // The floor between blobs is the same for every cell (over the tone), so
+  // that cells of different tones meet without a step.
+  float blob = 1.6 * (1.0 - smoothstep(0.05, 0.8, cell.centre)) * (1.0 - smoothstep(0.35, 1.0, s)) + 0.3 / tone;
+  dome = mix(dome, blob, small);
   // Only the width varies (edge2 may differ across a lane, where edge is 0).
+  // Every lane edge is at least about 2.5 px soft.
   float junction = 1.0 - smoothstep(0.0, 0.45, cell.edge2);
-  float lane = 1.0 - smoothstep(0.0, mix(0.045, 0.22, junction * junction), cell.edge);
-  float points = step(0.8, cell.pair) * (1.0 - smoothstep(0.0, STAR_LANE_POINT_RADIUS, cell.point));
+  float width = mix(0.045, 0.22, junction * junction) + 2.5 * pixel;
+  float lane = (1.0 - smoothstep(0.0, width, cell.edge)) * (1.0 - small);
+  float points = (1.0 - small) * step(0.8, cell.pair) * (1.0 - smoothstep(0.0, STAR_LANE_POINT_RADIUS, cell.point));
   // D's weights: the cells, then the points at 0.35 / 0.62 of them.
   float raw = tone * dome * (1.0 - lane) + 0.5645 * points;
-  return ${GRANULE_GAIN.toFixed(4)} * (raw - ${GRANULE_RAW_MEAN.toFixed(4)}) / ${GRANULE_RAW_RMS.toFixed(4)};
+  // Brought to zero mean and unit rms at either end of the size range.
+  float mean = mix(${GRANULE_RAW_MEAN.toFixed(4)}, ${GRANULE_SMALL_RAW_MEAN.toFixed(4)}, small);
+  float rms = mix(${GRANULE_RAW_RMS.toFixed(4)}, ${GRANULE_SMALL_RAW_RMS.toFixed(4)}, small);
+  return ${GRANULE_GAIN.toFixed(4)} * (raw - mean) / rms;
 }
 #endif
 
@@ -720,9 +770,15 @@ float starBrightness(vec3 n, float mu) {
     vec3 lanes = starCellLanes(q, uNetwork.z);
     float junction = 1.0 - smoothstep(0.0, STAR_NETWORK_JUNCTION, lanes.y);
     float width = STAR_NETWORK_WIDTH * (0.7 + 0.6 * junction);
-    float tone = (0.6 + 0.4 * fract(lanes.z * 7.31)) * (0.8 + 0.4 * junction);
+    // Each lane's own tone, blended to a common one at the junctions,
+    // where lanes of different tones meet.
+    float tone = mix(0.6 + 0.4 * fract(lanes.z * 7.31), 0.8, junction) * (0.8 + 0.4 * junction);
     float mottle = 0.0;
+#ifdef STAR_NO_GRANULATION
+    float mottleFade = 1.0;
+#else
     float mottleFade = 1.0 - uGranule.w;
+#endif
     if (mottleFade > 0.0) {
       vec3 v = starValueNoise3(q * (1.0 / 0.35));
       mottle = mottleFade * 0.5 * (v.x - 0.5);
@@ -730,8 +786,12 @@ float starBrightness(vec3 n, float mu) {
       tone *= mix(1.0, 0.3 + 1.4 * v.z, mottleFade);
     }
     float ribbon = 1.0 - smoothstep(0.0, width, lanes.x);
-    float net = tone * ribbon;
-    brightness += uNetwork.w * uNetwork.y * (net * (0.35 + 1.4 * (1.0 - mu)) + mottle);
+    float net = min(tone * ribbon, 1.0);
+    // Brighter towards the limb, but capped so that a ribbon's peak stays
+    // below a plage's at the same μ (STAR_NETWORK_LIMB_CAP), except near
+    // the disc centre, where plages vanish and the network keeps 0.35.
+    float limb = max(0.35, min(0.35 + 1.4 * edge, STAR_NETWORK_LIMB_CAP * edge));
+    brightness += uNetwork.w * uNetwork.y * (net * limb + mottle);
   }
   if (uRegionFade > 0.0 && uRegionCount > 0) {
     float latitude = asin(clamp(n.y, -1.0, 1.0));
@@ -775,7 +835,7 @@ float starBrightness(vec3 n, float mu) {
     }
     brightness *= mix(1.0, spot, uRegionFade);
     float fill = min(uFacula / 9.0, 1.0);
-    brightness += uRegionFade * 0.25 * edge * fill * facula * smoothstep(0.75, 1.0, spot);
+    brightness += uRegionFade * ${PLAGE_LIMB_CONTRAST.toFixed(2)} * edge * fill * facula * smoothstep(0.75, 1.0, spot);
   }
   return brightness;
 }
@@ -805,7 +865,7 @@ float starDither(vec2 fragCoord) {
 /**
  * The uniforms of `STAR_SURFACE_GLSL`, the region arrays `maxRegions`
  * long (the material's `STAR_REGIONS`): uStarColour, uLimb (vec2),
- * uGranule (vec4: size, contrast, phase, fade), uNetwork (vec4: cell
+ * uGranule (vec4: size, contrast, phase, fade), uGranulePx, uNetwork (vec4: cell
  * size, contrast, phase, fade), uNetworkSpin, uRegionFade,
  * uRegionCount, uRegionA and uRegionB (vec4 each), uLocalDays, uOmegaEq,
  * uShear, uFacula.
@@ -815,6 +875,7 @@ export function starSurfaceUniforms(maxRegions: number): Record<string, IUniform
     uStarColour: { value: new Vector3(1, 1, 1) },
     uLimb: { value: new Vector2(0.6, 0.2) },
     uGranule: { value: new Vector4(SUN_GRANULE_SIZE, 0, 0, 0) },
+    uGranulePx: { value: 0 },
     uNetwork: { value: new Vector4(networkSize(SUN_GRANULE_SIZE), 0, 0, 0) },
     uNetworkSpin: { value: 0 },
     uRegionFade: { value: 0 },
@@ -958,17 +1019,21 @@ export class StarSurfaceState {
       look.granuleContrast > 0 ? detail.granulation * exposureFade(daysPerFrame, look.granuleLifetimeDays) : 0;
     const phase = granulePhase(days, look.granuleLifetimeDays);
     (u['uGranule']!.value as Vector4).set(look.granuleSize, look.granuleContrast, phase, granuleFade);
+    u['uGranulePx']!.value = view.radiusPx * look.granuleSize;
 
+    const rotationDays = TWO_PI / look.omegaEq;
+    const rotationExposure = exposureFade(daysPerFrame, rotationDays / 12);
     const contrast = networkContrast(look.granuleContrast);
+    // It boils on its own lifetime and turns with the star: either can smear it.
     const networkFade =
       contrast > 0
-        ? Math.min(detail.network, view.networkDetail ?? 1) * exposureFade(daysPerFrame, SUPERGRANULE_LIFETIME_DAYS)
+        ? Math.min(detail.network, view.networkDetail ?? 1) *
+          Math.min(exposureFade(daysPerFrame, SUPERGRANULE_LIFETIME_DAYS), rotationExposure)
         : 0;
     (u['uNetwork']!.value as Vector4).set(networkSize(look.granuleSize), contrast, networkPhase(days), networkFade);
     u['uNetworkSpin']!.value = this.activity ? rotationPhase(this.activity, days) : modulo(look.omegaEq * days, TWO_PI);
 
-    const rotationDays = TWO_PI / look.omegaEq;
-    this.exposure = exposureFade(daysPerFrame, rotationDays / 12);
+    this.exposure = rotationExposure;
     this.sizeFade = view.regionDetail ?? detail.regions;
     const regionFade = this.sizeFade * this.exposure;
     u['uRegionFade']!.value = regionFade;
