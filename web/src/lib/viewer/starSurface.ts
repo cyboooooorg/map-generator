@@ -302,6 +302,16 @@ const UMBRAL_DOT_RATE = 1440 / 20;
  * (`exposureFade`), as a long exposure averages them out.
  */
 const SPOT_MOTION_DAYS = 0.25 / Math.max(EVERSHED_RATE, UMBRAL_DOT_RATE);
+/** **Calibration**: the penumbra's mean brightness (Solanki 2003 gives about 0.75). */
+const SPOT_PENUMBRA = 0.77;
+/**
+ * **Calibration**: the umbra's mean radius in the shape's units, a little
+ * above sqrt(1/5) = 0.447 (Solanki 2003's penumbra four times the umbra),
+ * so that the dark area on screen matches part 1's round umbra.
+ */
+const SPOT_UMBRA_RADIUS = 0.47;
+/** **Calibration**: the share of the (large) spots that grow a light bridge in mid-life. */
+const SPOT_BRIDGE_SHARE = 0.35;
 /** **Calibration**: the share of a spot opened into gaps at its death; its pieces spread to keep its area. */
 const SPOT_FRAGMENT_LOST = 0.35;
 /**
@@ -850,6 +860,14 @@ float starGranules(vec3 n) {
 }
 #endif
 
+/** Brightness of a round spot of radius rs at distance d: umbra 0.3, penumbra 0.75 (Solanki 2003), part 1's spot. */
+float starSpotRound(float d, float rs, float aa) {
+  float ru = rs * 0.4472136; // umbra: a fifth of the spot's area
+  float penumbra = 1.0 - smoothstep(rs - max(0.15 * rs, aa), rs + max(0.15 * rs, aa), d);
+  float umbra = 1.0 - smoothstep(ru - max(0.2 * ru, aa), ru + max(0.2 * ru, aa), d);
+  return mix(mix(1.0, 0.75, penumbra), 0.3, umbra);
+}
+
 /**
  * Days since the birth of the region whose spots starSpotShaped draws.
  * starBrightness sets it before each call: the Evershed flow and the
@@ -889,29 +907,40 @@ float starProbit(float p) {
  * - The outline: its second and third angular harmonics and two octaves
  *   of noise, so that it stays curved (lattice noise alone draws straight
  *   runs).
- * - Umbral dots (computed only inside the umbra) and, on seeds above 0.5
- *   between 0.30 and 0.80 of the life, a light bridge across the umbra.
- * - From 0.45 of its life it fragments: a share of the spot, up to
- *   ${SPOT_FRAGMENT_LOST} at its death, opens into gaps of photosphere, and the
- *   spot spreads by 1 / sqrt(1 − share) so that its pieces keep its area.
+ * - The penumbra about ${SPOT_PENUMBRA} (filaments 0.7 to 0.88), the umbra about 0.3,
+ *   as part 1's (Solanki 2003): on screen only the umbra and the pores
+ *   read as dark, as with part 1's spots.
+ * - Umbral dots (computed only inside the umbra) and, on about a third of
+ *   the large spots between 0.30 and 0.80 of the life, a light bridge
+ *   across the umbra.
+ * - From 0.45 of its life its penumbra fragments: a share of it, up to
+ *   ${SPOT_FRAGMENT_LOST} of the spot at its death, opens into gaps of photosphere,
+ *   and the spot spreads by 1 / sqrt(1 − 0.78 share) so that its pieces
+ *   keep its area; the umbra keeps its size and is not cut.
  * - Pores in the moat, 1.05 to 2.6 rs from its centre (computed only
  *   there), on a jittered grid of half spot radii; they take their area
  *   from the spot (SPOT_PORE_SHARE).
  *
  * Every edge is at least about a pixel soft, and every detail fades out
  * before it is smaller than a couple of pixels, so a small spot is a soft,
- * irregular blot. The moving details (filaments, dots) fade with the
+ * irregular blot; under about a pixel of radius it is part 1's round spot
+ * (starSpotRound). The moving details (filaments, dots) fade with the
  * clock's speed (uSpotMotion), as a long exposure averages them out.
  * The shape's numbers are **calibrations**, matched by eye to prototype D
  * and scaled so that the drawn dark area stays within 20 % of a round
  * spot's (STAR_SPOT_SCALE).
  */
 float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
+  // Under about a pixel the shape cannot be seen: the round spot of part 1,
+  // blended into the shaped one from 0.7 to 1.5 px of radius, so that a
+  // spot being born, dying or seen small keeps its area and does not blink.
+  float detail = smoothstep(0.7, 1.5, rs / aa);
+  float roundSpot = starSpotRound(length(local), rs, aa);
+  if (detail <= 0.0) return roundSpot;
   float radius = max(rs, 1e-7);
   vec2 sp = local / radius;
   float rho = length(sp);
-  if (rho >= 2.6) return 1.0;
-  // About a pixel, in spot radii.
+  // About a pixel, in spot radii (at most 1 / 0.7 here).
   float px = aa / radius;
   // Compact while growing, spread out from about a quarter of the life.
   float grown = smoothstep(0.02, 0.25, age);
@@ -922,7 +951,8 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
   // not lighten the spot, and its spread would add area.
   float gapPx = 0.2 * radius * STAR_SPOT_SCALE / aa;
   float lost = ${SPOT_FRAGMENT_LOST.toFixed(2)} * smoothstep(0.45, 1.0, age) * smoothstep(1.5, 5.0, gapPx);
-  float spread = inversesqrt(1.0 - lost);
+  // The umbra (a fifth of the area, held at its size) is not cut.
+  float spread = inversesqrt(1.0 - 0.78 * lost);
   // The torn, lobed outline of a grown spot covers a little more than its
   // mean radius: brought back.
   float scale = STAR_SPOT_SCALE * spread * (1.0 - ${SPOT_GROWN_TRIM.toFixed(3)} * grown);
@@ -932,9 +962,13 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
   float moatAge = smoothstep(0.15, 0.4, age);
   float cellPx = 0.5 * radius / aa;
   scale *= sqrt(1.0 - ${SPOT_PORE_SHARE.toFixed(3)} * moatAge * smoothstep(1.0, 2.0, 0.12 * cellPx));
+  // The shape reaches 1.7 of its scale plus two pixels of softness, the
+  // moat 2.6 spot radii; the round spot is inside both.
+  float core = 1.7 * scale + 2.0 * px;
+  if (rho >= max(core, 2.6)) return 1.0;
   vec3 so = vec3(173.0, 91.0, 57.0) * seed;
   float spot = 1.0;
-  if (rho < 1.7 * scale) {
+  if (rho < core) {
     // Shape coordinates: 1 at the (mean) outer edge of the penumbra.
     vec2 q = sp / scale;
     float r = rho / scale;
@@ -942,8 +976,9 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
     // The torn edges, the umbra's edge and the coarse breakup: three
     // channels of two octaves of noise, evolving with age.
     vec3 shape = starFbm2x3(vec3(q * 2.0, 2.0 * age) + so);
-    // The angle round the spot, in turns, twisted a little with the radius.
-    float turns = atan(q.y, q.x) * 0.15915494 + 0.0286 * r;
+    // The angle round the spot, in turns, twisted with the radius by a
+    // curvature that varies round the edge (the outline's noise).
+    float turns = atan(q.y, q.x + 1e-12) * 0.15915494 + (0.0286 + 0.08 * (shape.x - 0.5)) * r;
     // Filaments: noise periodic round the spot (no seam), stretched along
     // the radius. Three sets: bundles (88 cells a turn), which change only
     // with age and show from afar; filaments (251 and 565 cells a turn, as
@@ -952,13 +987,17 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
     // two pixels (at 0.7 of the radius) and faded with the clock's speed.
     float width = 0.7 * 6.2831853 * radius * scale / aa;
     float salt = floor(seed * 997.0);
-    float bundle = starValueNoiseRing(vec2(88.0 * (turns + seed), r * 2.5 + 4.0 * age), 88.0, salt).z - 0.5;
+    float bundle = starValueNoiseRing(vec2(88.0 * (turns + seed), r * 1.2 + 4.0 * age), 88.0, salt).z - 0.5;
     float flow = STAR_EVERSHED_RATE * starSpotDays;
     float fade1 = smoothstep(1.5, 3.5, width / 251.0);
     float fade2 = smoothstep(1.5, 3.5, width / 565.0);
     float fine = 0.0;
-    if (fade1 > 0.0) fine += 0.6 * fade1 * (starValueNoiseRing(vec2(251.0 * turns, r * 3.0 - flow), 251.0, salt + 1.0).x - 0.5);
-    if (fade2 > 0.0) fine += 0.4 * fade2 * (starValueNoiseRing(vec2(565.0 * turns, r * 5.0 - 1.3 * flow), 565.0, salt + 2.0).y - 0.5);
+    // The bundles shift the filaments' phase round the spot, so their
+    // width varies (squeezed here, spread there); the radial frequency
+    // varies with the outline's noise, so their length does.
+    float stretch = 1.0 + 0.8 * (shape.y - 0.5);
+    if (fade1 > 0.0) fine += 0.6 * fade1 * (starValueNoiseRing(vec2(251.0 * turns + 2.5 * bundle, r * 3.0 * stretch - flow), 251.0, salt + 1.0).x - 0.5);
+    if (fade2 > 0.0) fine += 0.4 * fade2 * (starValueNoiseRing(vec2(565.0 * turns + 5.5 * bundle, r * 5.0 * stretch - 1.3 * flow), 565.0, salt + 2.0).y - 0.5);
     fine *= uSpotMotion;
     // Bundles faint, filaments strong; the young penumbra is fainter in
     // structure.
@@ -971,15 +1010,32 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
     // Compact while young (a little torn), lobed and torn when grown, the
     // edge frayed a little by the bundles and filaments.
     float rd = r * (1.0 + mix(0.05, 0.12, grown) * lobes + mix(0.35, 0.5, grown) * (shape.x - 0.5));
-    float outer = 1.0 + mix(0.3, 0.6, grown) * (0.15 * bundle + 0.3 * fine);
+    // Each filament ends at its own radius: the edge frays into the
+    // granules (they come back between the filaments' ends).
+    float outer = 1.0 + mix(0.3, 0.6, grown) * (0.05 * bundle + 0.6 * fine);
     // At least a pixel soft on either side, about the same midpoint.
     float pen = 1.0 - smoothstep(outer - 0.05 - pxQ, outer + pxQ, rd);
-    float ru = 0.447 * (1.0 + 0.5 * (shape.y - 0.5) - 0.1 * lobes);
-    float umb = 1.0 - smoothstep(ru - 0.05 - pxQ, ru + 0.01 + pxQ, rd * (1.0 + 0.15 * (filament - 0.5)));
-    // Dark and bright filaments about the penumbra's 0.68, below 0.9.
-    float penB = min(0.68 + 0.9 * (filament - 0.5), 0.88);
-    // The umbra darkest at its core.
-    float umbB = 0.2 + 0.08 * smoothstep(0.0, ru, rd);
+    // The umbra, about a fifth of the area (${SPOT_UMBRA_RADIUS} of the radius), follows
+    // the outline at half its distortion, so that its own area varies
+    // little from spot to spot: it is what reads as dark on screen.
+    // A light bridge across the umbra, in mid-life, on about a third of
+    // the spots (a draw of their own) and only on large ones (from about
+    // 0.008 to 0.012 star radii, 6 to 8 Mm on the Sun). The umbra widens a
+    // little round it, so that it keeps its area.
+    float bridgeOn = step(fract(seed * 7.31), ${SPOT_BRIDGE_SHARE.toFixed(2)}) * smoothstep(0.008, 0.012, rs)
+      * smoothstep(0.30, 0.40, age) * (1.0 - smoothstep(0.70, 0.80, age));
+    // The umbra keeps its size as the spot spreads in its decline: its
+    // pieces are the penumbra's.
+    float ru = ${SPOT_UMBRA_RADIUS.toFixed(3)} * (1.0 + 0.08 * bridgeOn) / spread * (1.0 + 0.3 * (shape.y - 0.5) - 0.06 * lobes);
+    float ra = 0.5 * (r + rd);
+    float umb = 1.0 - smoothstep(ru - 0.04 - pxQ, ru + 0.02 + pxQ, ra * (1.0 + 0.1 * (filament - 0.5)));
+    // Dark and bright filaments about the penumbra's ${SPOT_PENUMBRA.toFixed(2)} (Solanki
+    // 2003's 0.75), between 0.7 and 0.88: no filament as dark as the
+    // umbra, none as bright as the photosphere.
+    float penB = clamp(${SPOT_PENUMBRA.toFixed(2)} + 0.6 * (filament - 0.5), 0.7, 0.88);
+    // The umbra about 0.3 (Solanki 2003), varying smoothly over it: no
+    // gradient that follows its outline, which banded into terraces.
+    float umbB = 0.3 + 0.06 * (shape.z - 0.5);
     if (umb > 0.0) {
       // Umbral dots: round, soft points on a jittered grid of 0.07 spot
       // radii turned by the seed, one in about a third of the cells, 0.12
@@ -998,13 +1054,11 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
       if (dotFade > 0.0) {
         float softD = min(max(0.4 * dr, 1.0 / cellPx), 0.08);
         float d = length(dq - cell - 0.5 - 0.4 * (h.xy - 0.5));
-        float twinkle = 0.6 + 0.4 * sin(STAR_UMBRAL_DOT_RATE * 6.2831853 * starSpotDays + 6.2831853 * fract(h.z * 13.0));
+        float twinkle = 0.6 + 0.4 * sin(6.2831853 * fract(STAR_UMBRAL_DOT_RATE * starSpotDays + h.z * 13.0));
         // A soft blob, brightest at its centre: no rim.
         umbB += 0.25 * dotFade * twinkle * (1.0 - smoothstep(0.0, dr + softD, d));
       }
     }
-    // A light bridge across the umbra, on half the seeds, in mid-life.
-    float bridgeOn = step(0.5, seed) * smoothstep(0.30, 0.40, age) * (1.0 - smoothstep(0.70, 0.80, age));
     float bridge = 0.0;
     if (bridgeOn > 0.0) {
       float angle = 12.566371 * seed;
@@ -1025,7 +1079,7 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
       float breakup = 0.5 * (shape.z + starValueNoise3(vec3(qt * 5.0, 2.0 * age) + so.zxy).x);
       float level = ${SPOT_BREAKUP_MEDIAN.toFixed(3)} + ${SPOT_BREAKUP_SD.toFixed(3)} * starProbit(lost);
       float w = max(0.06, 1.2 * pxQ);
-      pen *= smoothstep(level - w, level + w, breakup);
+      pen = max(pen * smoothstep(level - w, level + w, breakup), umb);
     }
     spot = mix(1.0, inner, pen);
   }
@@ -1048,7 +1102,7 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
       spot *= 1.0 - 0.5 * moat * poreFade * (1.0 - smoothstep(pr - soft, pr + soft, d));
     }
   }
-  return spot;
+  return mix(roundSpot, spot, detail);
 }
 
 /** The quadratic limb law, I(μ) = 1 − u1 (1 − μ) − u2 (1 − μ)². */
@@ -1122,8 +1176,9 @@ float starBrightness(vec3 n, float mu) {
       // Radius of a disc of the region's spot area (2π · area steradians).
       float r = sqrt(2.0 * area);
       float plage = 3.0 * r;
-      // The leader's moat reaches 2.6 of its radius (0.775 r): 2.02 r.
-      float reach = max(plage, 0.5 * a.w + 2.02 * r) + aa;
+      // The leader's moat reaches 2.6 of its radius (0.775 r): 2.02 r; its
+      // shape, two pixels of softness more.
+      float reach = max(plage, 0.5 * a.w + 2.02 * r + 2.0 * aa) + aa;
       if (abs(latitude - a.x) > reach) continue;
       float sinLat = sin(a.x);
       float cosLat = cos(a.x);
@@ -1186,8 +1241,8 @@ float starDither(vec2 fragCoord) {
  * long (the material's `STAR_REGIONS`): uStarColour, uLimb (vec2),
  * uGranule (vec4: size, contrast, phase, fade), uGranulePx, uNetwork (vec4: cell
  * size, contrast, phase, fade), uNetworkSpin, uRegionFade,
- * uRegionCount, uRegionA and uRegionB (vec4 each, packed in a Float32Array),
- * uRegionC (vec4 each, an array of Vector4), uSpotMotion, uLocalDays,
+ * uRegionCount, uRegionA, uRegionB and uRegionC (vec4 each, packed in a
+ * Float32Array), uSpotMotion, uLocalDays,
  * uOmegaEq, uShear, uFacula.
  */
 export function starSurfaceUniforms(maxRegions: number): Record<string, IUniform> {
@@ -1202,7 +1257,7 @@ export function starSurfaceUniforms(maxRegions: number): Record<string, IUniform
     uRegionCount: { value: 0 },
     uRegionA: { value: new Float32Array(4 * maxRegions) },
     uRegionB: { value: new Float32Array(4 * maxRegions) },
-    uRegionC: { value: Array.from({ length: maxRegions }, () => new Vector4()) },
+    uRegionC: { value: new Float32Array(4 * maxRegions) },
     uSpotMotion: { value: 1 },
     uLocalDays: { value: 0 },
     uOmegaEq: { value: TWO_PI / 25 },
@@ -1387,9 +1442,9 @@ export class StarSurfaceState {
   private pack(now: readonly RegionNow[], days: number): void {
     const a = this.uniforms['uRegionA']!.value as Float32Array;
     const b = this.uniforms['uRegionB']!.value as Float32Array;
-    const c = this.uniforms['uRegionC']!.value as Vector4[];
+    const c = this.uniforms['uRegionC']!.value as Float32Array;
     now.forEach(({ region, longitude }, i) => {
-      c[i]!.set(hash32(region.id, SPOT_SEED_KEY) / 2 ** 32, 0, 0, 0);
+      c[4 * i] = hash32(region.id, SPOT_SEED_KEY) / 2 ** 32;
       a[4 * i] = region.latitude;
       a[4 * i + 1] = longitude;
       a[4 * i + 2] = region.tilt;

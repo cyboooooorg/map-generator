@@ -286,9 +286,9 @@ describe('star surface', () => {
     const s = new StarSurfaceState(u, 32);
     s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
     s.update(1000, { radiusPx: 4000, daysPerSecond: 0 });
-    const c = u['uRegionC']!.value as Vector4[];
+    const c = u['uRegionC']!.value as Float32Array;
     expect(s.regions.length).toBeGreaterThan(0);
-    s.regions.forEach((r, i) => expect(c[i]!.x).toBeCloseTo(hash32(r.region.id, 7) / 2 ** 32, 6));
+    s.regions.forEach((r, i) => expect(c[4 * i]!).toBeCloseTo(hash32(r.region.id, 7) / 2 ** 32, 6));
   });
 
   it('shapes the leader and the follower from the region seed and age', () => {
@@ -308,6 +308,19 @@ describe('star surface', () => {
     // A day a second: 48 minutes a frame, far beyond the details' 5 minutes.
     s.update(1000, { radiusPx: 4000, daysPerSecond: 1 });
     expect(u['uSpotMotion']!.value as number).toBeLessThan(0.5);
+  });
+
+  it('draws a spot under about a pixel as the round spot of part 1', () => {
+    expect(STAR_SURFACE_GLSL).toMatch(/float starSpotRound\(float d, float rs, float aa\)/);
+    expect(STAR_SURFACE_GLSL).toMatch(/float detail = smoothstep\(0\.7, 1\.5, rs \/ aa\);/);
+    expect(STAR_SURFACE_GLSL).toMatch(/return mix\(roundSpot, spot, detail\);/);
+    // The region's reach covers the shape's softness.
+    expect(STAR_SURFACE_GLSL).toMatch(/0\.5 \* a\.w \+ 2\.02 \* r \+ 2\.0 \* aa/);
+  });
+
+  it('grows light bridges on some large spots only', () => {
+    expect(STAR_SURFACE_GLSL).toMatch(/step\(fract\(seed \* 7\.31\), 0\.35\) \* smoothstep\(0\.008, 0\.012, rs\)/);
+    expect(STAR_SURFACE_GLSL).not.toMatch(/step\(0\.5, seed\)/);
   });
 
   it('draws shaped spots', () =>

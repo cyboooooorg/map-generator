@@ -500,29 +500,45 @@ half; its age is the region's age over its life. Every number below is a
   age: compact and nearly round while it grows, torn and lobed from about
   a quarter of its life. The harmonics keep the outline curved where a
   contour of lattice noise alone draws straight runs.
-- **The penumbra** at a mean 0.68 of the quiet photosphere, at most 0.88,
-  with radial filaments (Solanki 2003): value noise on a ring round the
-  spot, periodic so that it has no seam, stretched along the radius. Faint
-  bundles of 88 cells a turn, which change only with age and show from
-  afar; filaments of 251 and 565 cells a turn (prototype D's circles of
-  radius 40 and 90 noise units) up close, drifting outward with the
-  Evershed flow: 1.5 km/s (Evershed 1909 measured about 1–2 km/s) on a
-  reference spot of 10 Mm, that is 13 spot radii a day, whatever the
-  spot's size. Each set is computed only once its cells span about two
-  pixels. The filaments fray the outer edge a little.
-- **The umbra** at 0.2 in its core to 0.28 at its edge, about 0.45 of the
-  spot's radius (a fifth of its area), its edge torn by its own noise.
+- **Under about a pixel** of radius a spot is part 1's round spot (umbra
+  0.3, penumbra 0.75), blended into the shaped one from 0.7 to 1.5 px of
+  radius: a spot being born, dying or seen small keeps part 1's area and
+  does not blink as it moves across pixels.
+- **The penumbra** at a mean 0.77 of the quiet photosphere (Solanki
+  2003's 0.75), its filaments between 0.7 and 0.88: none as dark as the
+  umbra, none as bright as the photosphere (Solanki 2003). They are value
+  noise on a ring round the spot, periodic so that it has no seam,
+  stretched along the radius. Faint bundles of 88 cells a turn, which
+  change only with age and show from afar; filaments of 251 and 565 cells
+  a turn (prototype D's circles of radius 40 and 90 noise units) up close,
+  drifting outward with the Evershed flow: 1.5 km/s (Evershed 1909
+  measured about 1–2 km/s) on a reference spot of 10 Mm, that is 13 spot
+  radii a day, whatever the spot's size. Each set is computed only once
+  its cells span about two pixels. The bundles shift the filaments round
+  the spot, so their width varies; the outline's noise varies their
+  length and bends them, by a curvature that changes round the edge; each
+  ends at its own radius, so the edge frays into the granules.
+- **The umbra** at about 0.3 (Solanki 2003), varying by ±0.03 with a
+  smooth noise (a gradient that followed its outline banded into
+  terraces on screen), 0.47 of the spot's radius (a little above a fifth
+  of its area, so that the dark area on screen matches part 1's). It
+  follows the outline at half its distortion, so its area varies little
+  from spot to spot.
   Umbral dots (Borrero & Ichimoto 2011): round, soft points on a jittered
   grid of 0.07 spot radii, one in about a third of the cells, each
   twinkling with a 20-minute period, computed only inside the umbra.
-- **A light bridge** across the umbra (Borrero & Ichimoto 2011) on seeds
-  above 0.5, between 0.30 and 0.80 of the region's life, at 0.8 of the
-  photosphere.
+- **A light bridge** across the umbra (Borrero & Ichimoto 2011), between
+  0.30 and 0.80 of the region's life, at 0.8 of the photosphere, on about
+  a third of the spots (a draw of their own) and only on large ones, from
+  0.008 to 0.012 star radii (6 to 8 Mm on the Sun). The umbra widens by
+  8 % round it, so that it keeps its area.
 - **Fragmentation** in the decline (Solanki 2003): from 0.45 of the life,
   a share of the spot growing to 0.35 at its death opens into gaps where a
   breakup noise (two lattices, the second turned by 37°, so that no gap is
   blocky) falls below the level of that share, and the spot spreads by
-  $1/\sqrt{1 - \text{share}}$, so its pieces keep its area. The timeline
+  $1/\sqrt{1 - 0.78\,\text{share}}$, so its pieces keep its area. The
+  umbra is not cut and keeps its size (the penumbra, about 0.78 of the
+  area, breaks up around it). The timeline
   already shrinks the area to 0 at the end of the life, so the decline is
   not counted twice. Gaps too small to be seen (under about 1.5 to 5 px)
   are not opened, and the spot does not spread for them.
@@ -541,13 +557,26 @@ half; its age is the region's age over its life. Every number below is a
   of a dot's twinkle, `exposureFade`), as a long exposure averages them
   out; the surface at a day stays a function of the activity, the day and
   the view.
-- **The area.** The drawn dark area of a region (darker than 0.9 of the
-  quiet photosphere, before the limb law) stays within 20 % of part 1's
-  round spots at the same day (**calibration**): the shape's scale (1.02,
-  trimmed by 3 % once grown) and the share the pores take from the spot
-  (5 %) were set so in a harness that renders a fixture region at ages
-  0.1 to 0.9, at three sizes on screen and for 16 seeds. The means lie
-  within 0.96–1.07 and every seed within 0.90–1.13.
+- **The area.** The drawn dark area of a region stays within 20 % of
+  part 1's round spots at the same day (**calibration**), on two
+  measures: the brightness under 0.9 of the quiet photosphere (before the
+  limb law), and what reads as dark on screen, the displayed luminance
+  (after the exposure curve and sRGB) under 0.9 of the local surface's.
+  The second counts the umbra and pores only, since a penumbra of 0.75
+  displays at about 0.94 of the photosphere. A first version of these
+  shapes had a penumbra of mean 0.68, whose dark filaments crossed that
+  threshold: it drew 1.3 to 1.9 times part 1's dark area on an M dwarf.
+  The shape's scale (1.02, trimmed by 3 % once grown), the share the pores
+  take from the spot (5 %), the penumbra's mean and floor and the umbra's
+  radius were set so in a harness that renders a fixture region at ages
+  0.1 to 0.9, at four sizes on screen and for 16 seeds, with an M4V's
+  colour, limb and granulation. On the first measure the means lie within
+  0.93–0.98 and every seed within 0.84–1.08; on the second the means lie
+  within 0.87–1.13 (every seed within 0.84–1.20 down to spots of 40 px;
+  under 0.8 for a few seeds at 11 px, where the umbra covers a few dozen
+  pixels). A threshold between the two, at 0.95 of the photosphere's
+  luminance, sits at part 1's penumbra itself and counts 0.7–0.85 of
+  part 1's area: no filamentary penumbra matches a flat one there.
 
 ### Where it departs from the science
 
@@ -613,9 +642,10 @@ half; its age is the region's age over its life. Every number below is a
   picture drawn after prototype D, not a model of a spot's magnetic
   structure; the Evershed flow has the measured speed only on a spot of
   10 Mm, and the pores do not move out with the moat flow. The penumbra's
-  mean, 0.68, and the umbra's 0.2 to 0.28 sit a little below Solanki's
-  0.75 and 0.3, so that the filaments and the umbra read through the soft
-  exposure.
+  filaments keep to 0.7–0.88, a narrower contrast than real ones, so that
+  the dark area on screen stays part 1's; the umbra's radius, 0.47 of the
+  spot's, is a little above Solanki's fifth of the area for the same
+  reason.
 - **Region size and look are calibrations.** The median peak area
   scaling, $152\,\text{MSH}\sqrt{\text{spot\_coverage}/0.003}$; the
   faculae's $0.25\,(1-\mu)$ contrast; the plage's disc of three spot
