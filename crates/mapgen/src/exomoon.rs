@@ -10,7 +10,7 @@
 //!
 //! **The giant.** Its mass is drawn log-uniformly from 0.3 to 10 Jupiter
 //! masses, its kind and look by the giant world pipeline (it is generated
-//! in `host/`, to be seen in the world's sky). The world orbits it between
+//! as a body of the system, to be seen in the world's sky). The world orbits it between
 //! 6 and 40 of its radii, within a third of its Hill radius, on a nearly
 //! circular orbit (kept slightly eccentric by resonances with other
 //! moons, as Io is by Europa and Ganymede), locked to it: its day is its
@@ -76,7 +76,7 @@ impl std::str::FromStr for HostMode {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct HostGiant {
-    /// The giant itself, as its own world (`host/` beside the world).
+    /// The giant itself, as a body of its own in the system.
     pub giant: GiantInfo,
     /// Seed of the giant's world.
     pub seed: u32,

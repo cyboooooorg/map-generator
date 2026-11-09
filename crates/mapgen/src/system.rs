@@ -2692,6 +2692,60 @@ mod tests {
     }
 
     #[test]
+    fn a_giants_moon_is_generated_with_its_giant_and_siblings_as_bodies() {
+        use crate::export::raw_data::{WorldMetadata, load_layers, read_metadata};
+        let request = SystemRequest::Around(WorldRequest {
+            planet: Some("terran".into()),
+            seed: Some(8),
+            host: Some(HostMode::Giant),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        });
+        let system = draw(&request, &mut StdRng::seed_from_u64(5)).unwrap();
+        let dir = std::env::temp_dir().join(format!("mapgen-host-gen-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        write_system(&dir, &system).unwrap();
+        let focus = system.focus.clone().expect("the world asked");
+        let done = generate_neighbourhood(&dir, &focus, |_| {}).unwrap();
+        let giant = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Planet && is_giant(&b.body_type))
+            .expect("the giant");
+        // The giant and every sibling come with the world, as bodies of
+        // the system: nothing is written beside it (no `host/`, `moons/`).
+        assert_eq!(done[0], focus);
+        assert!(done.contains(&giant.id));
+        assert!(done.len() >= 3);
+        let entries: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(entries.iter().all(|n| n == "system.json" || n == "bodies"));
+        for id in &done {
+            let body = system.bodies.iter().find(|b| &b.id == id).unwrap();
+            let size = crate::sizes::size_dir(
+                &dir.join("bodies").join(id),
+                body.params.width,
+                body.params.height,
+            );
+            let raw = size.join("raw_data");
+            let meta: WorldMetadata = read_metadata(&raw).unwrap();
+            // The world records its giant; the giant is a world of its own.
+            if *id == focus {
+                assert!(meta.host.is_some());
+            }
+            if *id == giant.id {
+                assert!(meta.giant.is_some());
+            }
+            // Read back as the server does.
+            load_layers(&size).unwrap();
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn opening_a_body_generates_it_and_its_family_once() {
         // A rocky planet with moons, small maps.
         let request = SystemRequest::Around(WorldRequest {

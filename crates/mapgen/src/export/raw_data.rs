@@ -108,7 +108,7 @@ pub struct WorldMetadata {
     /// rings); left out for a rocky world.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub giant: Option<crate::giant_world::GiantInfo>,
-    /// The giant the world orbits, as a moon of it (its world in `host/`);
+    /// The giant the world orbits, as a moon of it (its own body in the system);
     /// left out for a world orbiting its star.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<crate::exomoon::HostGiant>,

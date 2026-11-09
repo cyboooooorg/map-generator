@@ -77,17 +77,6 @@ async fn main() -> std::io::Result<()> {
             .and_then(|v| v.parse::<usize>().ok())
             .map_or(tiles::DEFAULT_BUDGET_BYTES, |mb| mb << 20),
     };
-    // Worlds made before systems are no longer read (no migration, see
-    // docs/system-spec.md): say so once, and leave removing them to the user.
-    let old_worlds = PathBuf::from(env_or("MAPGEN_WORLDS_DIR", "worlds"));
-    if std::fs::read_dir(&old_worlds).is_ok_and(|mut d| {
-        d.any(|e| e.is_ok_and(|e| !e.file_name().to_string_lossy().starts_with('.')))
-    }) {
-        tracing::warn!(
-            "{} holds worlds made before systems, which are no longer read: remove them with `mise run clean-worlds`",
-            old_worlds.display()
-        );
-    }
     std::fs::create_dir_all(&config.systems_dir)?;
     let address = format!("{}:{}", env_or("HOST", "0.0.0.0"), env_or("PORT", "3000"));
     tracing::info!(?config, "listening on http://{address}");

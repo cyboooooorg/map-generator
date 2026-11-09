@@ -1416,8 +1416,7 @@ fn displayed_size(
         .unwrap_or(original)
 }
 
-/// A detail tile of a body: a world (`id`) or one of its moons
-/// (`id/moons/n`, a world of its own in the world's directory).
+/// A detail tile of a body of a system.
 async fn body_tile(
     state: Shared,
     loc: BodyLoc,

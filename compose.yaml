@@ -39,7 +39,6 @@ services:
       # between generations (see crates/server/src/memory.rs).
       MAPGEN_MAX_PIXELS: "33554432"
     volumes:
-      - ./worlds:/data/worlds
       - ./systems:/data/systems
       # The index (SQLite): survives restarts and image rebuilds, back it up with systems/
       - ./db:/data/db

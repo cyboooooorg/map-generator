@@ -22,7 +22,7 @@ file anywhere, and you never change git state.
 
 2. Note the systems listed before the deploy:
    `curl -s http://planets.localhost/api/systems`.
-3. Start it ONLY from the user's checkout, whose `worlds/`, `systems/` and
+3. Start it ONLY from the user's checkout, whose `systems/` and
    `db/` hold the live data:
 
    ```bash

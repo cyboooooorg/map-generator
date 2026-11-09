@@ -548,9 +548,10 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     mounting `systems/`.
 - **Done since:** phase 6, a card for every body (`751535e`) and
   renaming any of them (`23f33c8`).
-- **Next (moved to #303):** phase 7, the clean-up of the world layout. The `/api/worlds`
-  routes are gone from the server; what remains is to check the moon and
-  host exports and the legacy `worlds/` directory.
+- **Done (#303):** phase 7, the clean-up of the world layout: the
+  `/api/worlds` routes, the `worlds/` mount, the startup warning and
+  `clean-worlds` are gone, and the moon and host exports are checked by
+  tests.
 
 ## 17. Asteroid belts and Lagrange points
 

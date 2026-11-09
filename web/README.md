@@ -15,7 +15,7 @@ mise run web:install
 
 ## Usage
 
-Development, with hot reload: run the server and the Vite dev server together, then open <http://localhost:5173>. Vite forwards `/api`, `/worlds` and `/healthz` to the server on port 3000.
+Development, with hot reload: run the server and the Vite dev server together, then open <http://localhost:5173>. Vite forwards `/api` and `/healthz` to the server on port 3000.
 
 ```bash
 mise run dev
