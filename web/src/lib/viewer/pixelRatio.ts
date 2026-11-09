@@ -33,16 +33,24 @@ export function pixelRatio(deviceRatio: number, msSinceMotion: number, caps: Pix
   return msSinceMotion < SETTLE_MS ? Math.min(full, caps.movingPixelRatio) : full;
 }
 
+/** Highest pixel ratio of an animated close-up (see `animatedPixelRatio`). */
+export const CLOSE_UP_PIXEL_RATIO = 1;
+
 /**
  * The pixel ratio of a view that is either animated or still, for a screen of
  * `deviceRatio`: the moving ratio while its clock runs (every frame changes),
- * the full ratio once it is paused (one sharp frame).
+ * the full ratio once it is paused (one sharp frame). With `close`, a view
+ * whose whole screen is costly surface (the star view under 1.1 radii) is
+ * drawn at `CLOSE_UP_PIXEL_RATIO` at most while it runs.
  */
 export function animatedPixelRatio(
   deviceRatio: number,
   animated: boolean,
   caps: PixelRatioCaps = DEFAULT_CAPS,
+  close = false,
 ): number {
   const full = fullPixelRatio(deviceRatio, caps);
-  return animated ? Math.min(full, caps.movingPixelRatio) : full;
+  if (!animated) return full;
+  const moving = Math.min(full, caps.movingPixelRatio);
+  return close ? Math.min(moving, CLOSE_UP_PIXEL_RATIO) : moving;
 }

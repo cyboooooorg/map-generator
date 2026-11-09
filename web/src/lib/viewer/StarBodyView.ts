@@ -49,6 +49,17 @@ import { starField } from './stars';
 
 /** Closest and farthest camera, star radii from the centre: close enough for granules, far enough for the corona. */
 const MIN_DISTANCE = 1.02;
+/**
+ * Below this distance (star radii from the centre) the surface fills the
+ * view, and an animated frame is drawn at `CLOSE_UP_PIXEL_RATIO` at most:
+ * the granulation is costly per pixel and its cells span a hundred pixels.
+ */
+const CLOSE_UP_DISTANCE = 1.1;
+
+/** Whether a camera `distance` star radii from the centre sees the close-up (see CLOSE_UP_DISTANCE). */
+export function isCloseUp(distance: number): boolean {
+  return distance < CLOSE_UP_DISTANCE;
+}
 const MAX_DISTANCE = 12;
 /** The camera's elevation above the star's equator when the view opens or is reset, radians. */
 const START_ELEVATION = (20 * Math.PI) / 180;
@@ -134,7 +145,11 @@ export class StarBodyView {
     this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
     this.controls.minDistance = MIN_DISTANCE * STAR_RADIUS;
     this.controls.maxDistance = MAX_DISTANCE * STAR_RADIUS;
-    this.controls.addEventListener('change', () => this.requestRender());
+    this.controls.addEventListener('change', () => {
+      // Crossing CLOSE_UP_DISTANCE while the clock runs changes the ratio; otherwise nothing is set.
+      if (this.loop !== null) this.applyPixelRatio(true);
+      this.requestRender();
+    });
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
     canvas.addEventListener('dblclick', (event) => {
       if (this.onOpenSystem && this.hitsStar(event.clientX, event.clientY)) this.onOpenSystem();
@@ -364,10 +379,21 @@ export class StarBodyView {
     });
   }
 
-  /** Switches the drawing buffer between the moving and the full ratio, and draws the new frame (not called per frame). */
+  /**
+   * Switches the drawing buffer between the moving ratio (1 at most in a
+   * close-up, see isCloseUp) and the full one, and draws the new frame;
+   * does nothing when the ratio stays the same, so the controls may call it
+   * on every change without resizing per frame.
+   */
   private applyPixelRatio(animated: boolean): void {
     if (this.disposed) return;
-    this.renderer.setPixelRatio(animatedPixelRatio(window.devicePixelRatio, animated, this.quality));
+    const close = isCloseUp(this.camera.position.length() / STAR_RADIUS);
+    const ratio = animatedPixelRatio(window.devicePixelRatio, animated, this.quality, close);
+    if (ratio === this.renderer.getPixelRatio()) {
+      this.requestRender();
+      return;
+    }
+    this.renderer.setPixelRatio(ratio);
     this.resize();
   }
 
