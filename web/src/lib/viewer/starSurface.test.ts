@@ -130,6 +130,17 @@ describe('star surface', () => {
     expect(area / now.area).toBeCloseTo(1, 4);
   });
 
+  it('offers loop regions only while the clock is slow enough for the spots', () => {
+    const state = new StarSurfaceState(starSurfaceUniforms(32), 32);
+    state.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    state.update(1000, BIG);
+    expect(state.loopRegions.length).toBeGreaterThan(0);
+    expect(state.loopFade).toBe(1);
+    // 2^12 days a second: 136 days a frame, far above 25 / 12 days.
+    state.update(1136, { ...BIG, daysPerSecond: 4096 });
+    expect(state.loopRegions).toEqual([]);
+  });
+
   it('draws nothing of the regions when they are faded out or absent', () => {
     const uniforms = starSurfaceUniforms(12);
     const state = new StarSurfaceState(uniforms, 12);

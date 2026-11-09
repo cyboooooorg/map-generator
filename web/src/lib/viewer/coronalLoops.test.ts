@@ -1,4 +1,4 @@
-import { ShaderMaterial } from 'three';
+import { ShaderMaterial, type BufferGeometry, type Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ActiveRegion, RegionNow } from '../starActivity';
 import { CoronalLoops, diffRegions, loopArcs } from './coronalLoops';
@@ -51,17 +51,20 @@ describe('CoronalLoops', () => {
   it('builds 3 loops per region in high and 1 in light, once, and turns them', () => {
     const high = new CoronalLoops(PROFILES.high, material);
     high.update([now(1, 0.002, 0.5)], 0);
-    const group = high.group.children[0]!;
-    expect(group.children).toHaveLength(3);
-    const mesh = group.children[0]!;
+    const mesh = high.group.children[0]! as unknown as Mesh<BufferGeometry, ShaderMaterial>;
+    const single = loopArcs(REGION, 1).length;
+    expect(single).toBe(1);
+    const triangles = mesh.geometry.index!.count / 3;
     high.update([now(1, 0.0005, 1.5)], 1);
-    expect(high.group.children[0]).toBe(group);
-    expect(group.children[0]).toBe(mesh);
-    expect(group.rotation.y).toBe(1.5);
+    expect(high.group.children).toHaveLength(1);
+    expect(high.group.children[0]).toBe(mesh);
+    expect(mesh.rotation.y).toBe(1.5);
+    expect(high.longitudeOf(1)).toBe(1.5);
     expect((mesh as unknown as { material: ShaderMaterial }).material.uniforms['uOpacity']!.value).toBeCloseTo(0.45, 9);
     const light = new CoronalLoops(PROFILES.light, material);
     light.update([now(1, 0.002, 0)], 0);
-    expect(light.group.children[0]!.children).toHaveLength(1);
+    // Three loops of 8 strands against one of 4 half-length strands.
+    expect(triangles).toBeGreaterThan(5 * ((light.group.children[0] as unknown as Mesh<BufferGeometry>).geometry.index!.count / 3));
     high.dispose();
     light.dispose();
   });
@@ -73,8 +76,26 @@ describe('CoronalLoops', () => {
     loops.update(many, 0);
     expect(loops.group.children).toHaveLength(PROFILES.light.loopRegions);
     expect(loops.largestArc()).not.toBeNull();
+    expect(loops.largestId()).toBe(1);
     loops.update([], 1);
     expect(loops.group.children).toHaveLength(0);
     expect(loops.largestArc()).toBeNull();
+  });
+
+  it('keeps a region that slips just below the cap, and fades by the factor given', () => {
+    const loops = new CoronalLoops(PROFILES.light, material);
+    const cap = PROFILES.light.loopRegions;
+    const ranked = Array.from({ length: cap + 1 }, (_, i) => now(i + 1, 0.01 - i * 0.001, 0));
+    loops.update(ranked.slice(0, cap), 0);
+    const [first, ...rest] = ranked.slice(0, cap);
+    // Region 1 slips to rank cap + 1: it stays; the one that rose does not make it blink.
+    loops.update([...rest, ranked[cap]!, first!], 1, 0.5);
+    expect(loops.longitudeOf(1)).not.toBeNull();
+    expect(loops.group.children).toHaveLength(cap + 1);
+    const mesh = loops.group.children[0] as unknown as Mesh<BufferGeometry, ShaderMaterial>;
+    expect(mesh.material.uniforms['uOpacity']!.value).toBeLessThanOrEqual(0.45);
+    // Beyond the kept ranks it goes.
+    loops.update([...rest, ranked[cap]!, now(90, 1e-4, 0), now(91, 1e-4, 0), now(92, 1e-4, 0), first!], 2);
+    expect(loops.longitudeOf(1)).toBeNull();
   });
 });

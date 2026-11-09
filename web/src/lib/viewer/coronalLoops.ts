@@ -6,6 +6,7 @@
 // its longitude, sets its opacity and advances the strands' shimmer.
 import { Group, Mesh, type BufferGeometry, type ShaderMaterial } from 'three';
 import { hash32, type ActiveRegion, type RegionNow } from '../starActivity';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { prominenceGeometry } from './prominenceGeometry';
 import type { QualityProfile } from './quality';
 import { STAR_RADIUS, type Prominence } from './starSystem';
@@ -13,6 +14,9 @@ import { STAR_RADIUS, type Prominence } from './starSystem';
 /** Loops standing over each region in the high and the light profiles. */
 const LOOPS_HIGH = 3;
 const LOOPS_LIGHT = 1;
+
+/** Strands in each loop: 8 of the full bundle's 12, so 24 loops stay near the cost of the 7 prominences they replace. */
+const STRANDS_PER_LOOP = 8;
 
 /** Opacity of a loop over a region at its peak. */
 const PEAK_OPACITY = 0.9;
@@ -85,17 +89,21 @@ export function diffRegions(shown: readonly number[], wanted: readonly number[])
   return { add: wanted.filter((id) => !have.has(id)), remove: shown.filter((id) => !want.has(id)) };
 }
 
-/** What is kept of a region shown: its group, its loops and their first arc. */
+/** What is kept of a region shown: its mesh (all its loops in one geometry), its first arc and its longitude now. */
 interface Shown {
-  group: Group;
-  meshes: Mesh<BufferGeometry, ShaderMaterial>[];
+  mesh: Mesh<BufferGeometry, ShaderMaterial>;
   arc: Prominence;
   peakArea: number;
+  longitude: number;
 }
+
+/** Regions kept past the `loopRegions` cap while they stay in the next ranks, so that a swap of ranks does not make a loop blink. */
+const KEEP_MARGIN = 2;
 
 /**
  * The loops of the largest active regions. Add `group` to the star's frame
- * (scaled like the star mesh) and call `update` as the clock moves.
+ * (scaled like the star mesh) and call `update` as the clock moves. A
+ * region's loops are one mesh with one material: one draw call a region.
  */
 export class CoronalLoops {
   readonly group = new Group();
@@ -104,12 +112,12 @@ export class CoronalLoops {
   private readonly maxRegions: number;
   private readonly strands: number;
   private index = 0;
-  private largest: { id: number; longitude: number } | null = null;
+  private largest: { id: number } | null = null;
 
   /**
-   * `material` makes the material of the loop of a given running index: a
-   * shader with a `uOpacity` and a `uTime` uniform (see prominenceFragment).
-   * Each loop owns its material, which `dispose` frees.
+   * `material` makes the material of the loops of a region, given a running
+   * index: a shader with a `uOpacity` and a `uTime` uniform (see
+   * prominenceFragment). Each region owns its material, which `dispose` frees.
    */
   constructor(
     quality: QualityProfile,
@@ -117,31 +125,52 @@ export class CoronalLoops {
   ) {
     this.perRegion = quality.quality === 'high' ? LOOPS_HIGH : LOOPS_LIGHT;
     this.maxRegions = quality.loopRegions;
-    this.strands = quality.prominenceStrands;
+    // Several loops share the budget: a bundle of at most 8 strands each.
+    this.strands = Math.min(quality.prominenceStrands, STRANDS_PER_LOOP);
   }
 
-  /** Keeps one sub-group per region among the `loopRegions` largest; turns each to its longitude now, opacity ∝ sqrt(area / peakArea). */
-  update(regions: readonly RegionNow[], days: number): void {
+  /**
+   * Keeps one mesh per region among the `loopRegions` largest (a region
+   * already shown stays while it is in the `loopRegions + 2` largest);
+   * turns each to its longitude now, opacity ∝ sqrt(area / peakArea) times
+   * `fade`. Allocates nothing when the set of regions is unchanged.
+   */
+  update(regions: readonly RegionNow[], days: number, fade = 1): void {
     void days; // Placement is a function of the regions alone; the day is already in their longitudes.
-    const wanted = regions.slice(0, this.maxRegions);
-    const { add, remove } = diffRegions([...this.shown.keys()], wanted.map((r) => r.region.id));
-    for (const id of remove) this.drop(id);
-    for (const now of wanted) if (add.includes(now.region.id)) this.build(now.region);
-    for (const now of wanted) {
-      const shown = this.shown.get(now.region.id)!;
-      shown.group.rotation.y = now.longitude;
-      const opacity = PEAK_OPACITY * Math.sqrt(Math.min(1, now.area / shown.peakArea));
-      for (const mesh of shown.meshes) mesh.material.uniforms['uOpacity']!.value = opacity;
+    const limit = Math.min(regions.length, this.maxRegions + KEEP_MARGIN);
+    let present = 0;
+    let missing = false;
+    for (let i = 0; i < limit; i += 1) {
+      if (this.shown.has(regions[i]!.region.id)) present += 1;
+      else if (i < this.maxRegions) missing = true;
     }
-    const first = wanted[0];
-    this.largest = first ? { id: first.region.id, longitude: first.longitude } : null;
+    if (missing || present !== this.shown.size) this.restructure(regions, limit);
+    for (let i = 0; i < limit; i += 1) {
+      const now = regions[i]!;
+      const shown = this.shown.get(now.region.id);
+      if (!shown) continue;
+      shown.longitude = now.longitude;
+      shown.mesh.rotation.y = now.longitude;
+      const opacity = PEAK_OPACITY * fade * Math.sqrt(Math.min(1, now.area / shown.peakArea));
+      shown.mesh.material.uniforms['uOpacity']!.value = opacity;
+    }
+    this.largest = regions.length > 0 && this.shown.has(regions[0]!.region.id) ? { id: regions[0]!.region.id } : null;
+  }
+
+  /** Drops the regions out of the kept ranks and builds those new in the top ones. */
+  private restructure(regions: readonly RegionNow[], limit: number): void {
+    const kept = new Set<number>();
+    for (let i = 0; i < limit; i += 1) kept.add(regions[i]!.region.id);
+    for (const id of [...this.shown.keys()]) if (!kept.has(id)) this.drop(id);
+    for (let i = 0; i < Math.min(limit, this.maxRegions); i += 1) {
+      const region = regions[i]!.region;
+      if (!this.shown.has(region.id)) this.build(region);
+    }
   }
 
   /** Advances the strands' shimmer to `time` seconds. */
   setTime(time: number): void {
-    for (const shown of this.shown.values()) {
-      for (const mesh of shown.meshes) mesh.material.uniforms['uTime']!.value = time;
-    }
+    for (const shown of this.shown.values()) shown.mesh.material.uniforms['uTime']!.value = time;
   }
 
   /** The arc of the largest region's first loop, in the region's frame, for the interim eruption; null when none. */
@@ -149,40 +178,38 @@ export class CoronalLoops {
     return this.largest ? (this.shown.get(this.largest.id)?.arc ?? null) : null;
   }
 
-  /** The longitude of the largest region now: where `largestArc` stands on the star. */
-  largestLongitude(): number {
-    return this.largest?.longitude ?? 0;
+  /** The id of the largest region (the one `largestArc` is of), or null. */
+  largestId(): number | null {
+    return this.largest ? this.largest.id : null;
   }
 
-  /** Frees every region's geometries and materials. */
+  /** The longitude now of region `id`, or null when it is not shown. */
+  longitudeOf(id: number): number | null {
+    return this.shown.get(id)?.longitude ?? null;
+  }
+
+  /** Frees every region's geometry and material. */
   dispose(): void {
     for (const id of [...this.shown.keys()]) this.drop(id);
   }
 
   private build(region: ActiveRegion): void {
-    const group = new Group();
     const arcs = loopArcs(region, this.perRegion);
-    const meshes = arcs.map((arc, k) => {
-      const mesh = new Mesh(
-        prominenceGeometry(arc, STAR_RADIUS, hash32(region.id, k, 2) % 1_000_003, this.strands),
-        this.material(this.index++),
-      );
-      mesh.renderOrder = 2;
-      group.add(mesh);
-      return mesh;
-    });
-    this.group.add(group);
-    this.shown.set(region.id, { group, meshes, arc: arcs[0]!, peakArea: region.peakArea });
+    const parts = arcs.map((arc, k) => prominenceGeometry(arc, STAR_RADIUS, hash32(region.id, k, 2) % 1_000_003, this.strands));
+    const geometry = parts.length === 1 ? parts[0]! : mergeGeometries(parts)!;
+    if (geometry !== parts[0]) for (const part of parts) part.dispose();
+    const mesh = new Mesh(geometry, this.material(this.index++));
+    mesh.renderOrder = 2;
+    this.group.add(mesh);
+    this.shown.set(region.id, { mesh, arc: arcs[0]!, peakArea: region.peakArea, longitude: 0 });
   }
 
   private drop(id: number): void {
     const shown = this.shown.get(id);
     if (!shown) return;
-    for (const mesh of shown.meshes) {
-      mesh.geometry.dispose();
-      mesh.material.dispose();
-    }
-    this.group.remove(shown.group);
+    shown.mesh.geometry.dispose();
+    shown.mesh.material.dispose();
+    this.group.remove(shown.mesh);
     this.shown.delete(id);
   }
 }

@@ -396,6 +396,25 @@ export class StarSurfaceState {
     return this.drawn;
   }
 
+  /** Share of the regions' fade due to the star's size on screen (0 below 6 px, 1 from 12). */
+  private sizeFade = 0;
+  /** The exposure fade of the regions: below 1, the clock is faster than the regions change. */
+  private exposure = 1;
+
+  /**
+   * The regions to stand loops on: `regions`, but none while the clock is so
+   * fast that the spots are averaged out (a long exposure), when the set
+   * changes almost entirely every frame and loops would only pop in and out.
+   */
+  get loopRegions(): readonly RegionNow[] {
+    return this.exposure < 1 ? [] : this.drawn;
+  }
+
+  /** The loops' opacity factor: the spots' ramp with the star's size on screen. */
+  get loopFade(): number {
+    return this.sizeFade;
+  }
+
   /** Shows another star (or the same with another activity). */
   setStar(look: StarLook, activity: StarActivity | null): void {
     this.look = look;
@@ -471,7 +490,9 @@ export class StarSurfaceState {
     (u['uGranule']!.value as Vector4).set(look.granuleSize, look.granuleContrast, phase, granuleFade);
 
     const rotationDays = TWO_PI / look.omegaEq;
-    const regionFade = detail.regions * exposureFade(daysPerFrame, rotationDays / 12);
+    this.exposure = exposureFade(daysPerFrame, rotationDays / 12);
+    this.sizeFade = detail.regions;
+    const regionFade = detail.regions * this.exposure;
     u['uRegionFade']!.value = regionFade;
 
     const activity = this.activity;

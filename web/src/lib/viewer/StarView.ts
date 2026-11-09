@@ -226,6 +226,8 @@ export class StarView {
   private readonly arcs = new Group();
   private loops!: CoronalLoops;
   private eruption: Mesh<BufferGeometry, ShaderMaterial> | null = null;
+  /** The region the eruption launched from: it follows that region's longitude. */
+  private eruptionRegion: number | null = null;
   private klass = 'G';
   private seed = 0;
   private orbitOn = true;
@@ -1376,7 +1378,7 @@ export class StarView {
   /** Shows or hides the coronal loops and eruptions. */
   setProminences(on: boolean): void {
     this.arcs.visible = on;
-    this.loops.update(on ? this.surface.regions : [], this.systemDay);
+    this.loops.update(on ? this.surface.loopRegions : [], this.systemDay, this.surface.loopFade);
     this.requestRender();
   }
 
@@ -1469,7 +1471,7 @@ export class StarView {
       ? ((this.starScale * STAR_RADIUS) / (distance * Math.tan(halfFov))) * (height / 2)
       : 0;
     this.surface.update(days, { radiusPx, daysPerSecond: this.speed * this.daysPerSecond });
-    this.loops.update(this.arcs.visible ? this.surface.regions : [], days);
+    this.loops.update(this.arcs.visible ? this.surface.loopRegions : [], days, this.surface.loopFade);
   }
 
   /** Mean anomaly of the planet now, radians. */
@@ -1727,10 +1729,14 @@ export class StarView {
         this.loopMaterial(cycle),
       );
       this.eruption.renderOrder = 2;
-      this.eruption.rotation.y = this.loops.largestLongitude();
+      this.eruptionRegion = this.loops.largestId();
+      this.eruption.rotation.y = this.loops.longitudeOf(this.eruptionRegion!) ?? 0;
       this.eruption.userData['cycle'] = cycle;
       this.arcs.add(this.eruption);
     }
+    // Turns with the region it left (the last longitude once that is gone).
+    const longitude = this.eruptionRegion === null ? null : this.loops.longitudeOf(this.eruptionRegion);
+    if (longitude !== null) this.eruption.rotation.y = longitude;
     // Rises over the first half of the cycle, gone by its end.
     const u = this.eruption.material.uniforms;
     const rise = Math.min(phase * 1.6, 1) ** 1.5;
