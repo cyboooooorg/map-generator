@@ -60,6 +60,14 @@ describe('star surface', () => {
     expect(surfaceDetail(20, 0.002).regions).toBe(1);
   });
 
+  it('keeps granules off until they span 2.5 pixels', () => {
+    // The star view's default distance puts G2V granules near 2.4 px.
+    expect(surfaceDetail(1200, 0.002).granulation).toBe(0);
+    expect(surfaceDetail(1250, 0.002).granulation).toBe(0);
+    expect(surfaceDetail(1875, 0.002).granulation).toBeCloseTo(0.5, 6);
+    expect(surfaceDetail(2500, 0.002).granulation).toBe(1);
+  });
+
   it('starLook falls back without activity', () => {
     const look = starLook(SUN_SYSTEM, null);
     expect(look.limb[0]).toBeCloseTo(0.6, 2);

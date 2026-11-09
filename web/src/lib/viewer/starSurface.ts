@@ -127,13 +127,14 @@ const ramp = (x: number, lo: number, hi: number): number => Math.min(1, Math.max
 
 /**
  * How much surface detail a star `radiusPx` pixels in radius shows:
- * granulation fades in from 1.5 to 4 pixels per granule (`granuleSize`
- * in star radii) and is off below; the active regions fade in from 6 to
+ * granulation fades in from 2.5 to 5 pixels per granule (`granuleSize`
+ * in star radii) and is off below, where its cells could not be told
+ * apart and would cost the most for nothing; the active regions fade in from 6 to
  * 12 pixels of star radius and are off below.
  */
 export function surfaceDetail(radiusPx: number, granuleSize: number): { granulation: number; regions: number } {
   return {
-    granulation: ramp(radiusPx * granuleSize, 1.5, 4),
+    granulation: ramp(radiusPx * granuleSize, 2.5, 5),
     regions: ramp(radiusPx, 6, 12),
   };
 }

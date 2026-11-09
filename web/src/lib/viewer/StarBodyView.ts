@@ -69,7 +69,7 @@ const MIN_ALTITUDE = 1e-3;
  * Pixels per star radius at the point of the surface nearest the camera,
  * `distance` star radii from the centre, in a view `heightPx` CSS px tall
  * with a vertical field of view of `fovDeg`: that point lies `distance − 1`
- * radii away. The star view's detail (granules from 1.5 px each, see
+ * radii away. The star view's detail (granules from 2.5 px each, see
  * surfaceDetail) follows it, so that up close, where the surface fills the
  * view, granules show at full contrast; the system view measures from the
  * centre instead, the same far away.
