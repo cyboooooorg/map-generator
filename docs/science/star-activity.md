@@ -170,7 +170,23 @@ Granules, the tops of convective cells, scale with the pressure scale
 height $H_p \propto T/g$ (Trampedach et al. 2013; Magic et al. 2013). On
 the Sun they are about 1.3 Mm across and live minutes: Title et al.
 (1989) find exponential lifetime distributions with time constants of 2.5
-to 6 minutes, depending on how granules are tracked.
+to 6 minutes, depending on how granules are tracked. Seen from above,
+granulation is a network of cells: each granule is a hot, bright
+upflow, ringed by narrow, cooler and darker intergranular lanes where
+the gas sinks back (Nordlund, Stein & Asplund 2009). Small magnetic
+bright points sit in the lanes; in the quiet Sun they last a few
+minutes and reach 0.8 to 1.8 times the mean photosphere (Sánchez
+Almeida et al. 2004).
+
+Granules are organised on a larger scale. The supergranules, cells about
+30 Mm across, about twenty-three granules, are horizontal flows that
+sweep the magnetic field to their edges (Leighton, Noyes & Simon 1962;
+Rieutord & Rincon 2010). They live about a day (Hart 1956; Rieutord &
+Rincon 2010). The field gathered along their edges forms the
+chromospheric network, whose small faculae make it bright in white
+light near the limb and nearly invisible at the disc centre, as plages
+are (Solanki 2003). Between the two scales, the mesogranulation is a
+weaker pattern of 5 to 10 Mm (November et al. 1981).
 
 A star's disc is darker at its edge, because there we see higher, cooler
 layers. The quadratic law $I(\mu) = 1 - u_1(1-\mu) - u_2(1-\mu)^2$, with
@@ -237,21 +253,24 @@ the frame rate):
   all drawn, as from a close-in planet;
 - never the granulation, compiled out of this shader: a granule is
   about a five-hundredth of a Sun-like star's radius, a pixel or less
-  on any disc a planet's sky shows.
+  on any disc a planet's sky shows;
+- the supergranule network not under 16 px either, and in practice
+  only on a disc hundreds of pixels across (from 3 px per network cell,
+  see below).
 
 While the orbits play, the clock's speed fades the regions out as in the
 star views (a long exposure).
 
 The disc takes the star view's exposure, not the plain disc's gain (the
-linear colour times 1.4), which clips the quiet photosphere to white over most of a large disc (up to 0.85 of its
-radius on G2V b), and the penumbrae (0.75 of the photosphere, 1.05 after
-the gain) and the faculae disappear: only the umbrae showed, as grey
-dots. The disc now draws `starSurfaceExposed`, at the same gain as the
-star view: the soft curve $1 - e^{-1.6\,b}$ on the brightness, with the
-limb law and the light linear. For the G2V star of the test system, its
-sRGB values at 0, 0.5, 0.9 and 0.98 of the radius are 231, 224, 192 and
-166, against 231, 223, 194 and 174 in the star view seen from 50 radii.
-The plain disc keeps its 1.4.
+linear colour times 1.4), which clips the quiet photosphere to white
+over most of a large disc (up to 0.85 of its radius on G2V b), and the penumbrae
+(0.75 of the photosphere, 1.05 after the gain) and the faculae disappear: only
+the umbrae showed, as grey dots. The disc now draws `starSurfaceExposed`, at the
+same gain as the star view: the soft curve $1 - e^{-1.6\,b}$ on the brightness,
+with the limb law and the light linear. For the G2V star of the test system, its
+sRGB values at 0, 0.5, 0.9 and 0.98 of the radius are 231, 224, 192 and 166,
+against 231, 223, 194 and 174 in the star view seen from 50 radii. The plain
+disc keeps its 1.4.
 
 The disc is drawn on a square that the vertex shader places round the
 star's direction, not on a point sprite. A point is clamped to the GPU's
@@ -336,17 +355,96 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    centre, which covers nine spot areas; it is filled at
    `facula_ratio` / 9, at most 1, so that a Sun-like ratio of about 10
    fills it and a spot-dominated star's plages are fainter
-   (**calibration**). The granulation is simplex noise at the granule
-   size, cross-faded between two fields over each granule lifetime: a
-   texture with the right scale, contrast and lifetime, not convection
-   cells. The shader (`web/src/lib/viewer/starSurface.ts`) fades the
-   regions and the granules out as the star shrinks on screen, and as a
-   frame of the clock outlasts a twelfth of a rotation or a granule
-   lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
-   exposure's averaging). Its soft exposure, $1 - e^{-1.6\,b}$, acts on
-   the brightness $b$ of granules, spots and faculae only; the limb law
-   and the star's colour multiply the result linearly, so the limb keeps
-   Claret & Bloemen's darkening and the disc its colour.
+   (**calibration**). The granulation is moving cellular noise at the
+   granule size, as prototype D drew it: one cell centre per unit cube,
+   in a space warped by one octave of value noise, strong enough to
+   curve the cells' edges. Each cell is a dome, bright at its centre and
+   falling towards its edge as $1.2 - 0.75\,s^2$, with $s$ the distance
+   to the centre over the sum of the distances to the centre and to the
+   edge, both measured along the surface. Its tone varies from cell to
+   cell (0.75 to 1.2), it is dimmer while its centre lies deep (a
+   granule being born or dying), and a quarter of the large cells have
+   a darker middle, as exploding granules do; it falls faster near its
+   edge ($-0.35\,\text{smoothstep}(0.75, 1, s)$), which rounds its
+   corners. The intergranular lanes are dark with soft edges, narrow
+   along long edges (0.05 cell) and widening into pools at the
+   junctions of three cells (0.26 cell). The distances are taken
+   along the surface, not as the 3D second-nearest distance: a sphere
+   cutting a 3D cell pattern runs nearly parallel to some faces between
+   centres stacked in depth, where the 3D $F_2 - F_1$ stays small over
+   wide flat grey patches with hard edges (Nordlund, Stein & Asplund
+   2009 for the cells and lanes; the shapes and weights are
+   **calibrations**). The magnetic bright points of the lanes (Sánchez
+   Almeida et al. 2004) are not drawn: prototype D's, cut by the lane
+   they sat in, read as specks on screen. Each centre wanders
+   about its cell's middle by 0.3 of a cell along each axis, at 97, 103
+   and 109 turns per 289 granule lifetimes (2.1 to 2.4 rad per
+   lifetime, **calibration**), so that cells deform, split and merge
+   over a few lifetimes; the warp drifts round a circle at 2 turns per
+   289 lifetimes. Every motion turns a whole number of times in the 289
+   lifetimes at which the phase wraps, and the day clock behind the
+   phase wraps at a whole number of those periods (near 10,000 days),
+   so the surface does not jump at either wrap. The result is brought
+   to zero mean and unit rms (measured over disc patches from the
+   centre to 0.6 radii), then multiplied by a gain of 1.6
+   (**calibration**): prototype D, the approved look, drew an rms
+   contrast of about 0.24 on the Sun, whose `granule_contrast` is 0.15. The
+   drawn rms contrast of the brightness is therefore 1.6 times
+   `granule_contrast`, before the soft exposure below compresses it on screen.
+   The shading follows a granule's size on screen (**calibration**): from 120
+   pixels across it is the one above; at 40 pixels or fewer the cells are a sum
+   of round blobs, one per centre, each of its cell's tone (0.45 to 1.45) times
+   $e^{-d^2/(2\sigma^2)}$ with $\sigma = 0.3$ cell and $d^2$ the squared
+   distance along the surface plus 0.4 of the squared depth (**calibrations**).
+   The field is continuous everywhere, no edge is drawn, and the dips between
+   centres are the lanes, wide where centres are far apart. Between the two it
+   blends, and every lane edge is at least about 2.5 pixels soft. At mid zoom,
+   about 1.1 radii, thin crisp lanes round flat cells read as cracked glass, and
+   any edge drawn among the blobs as a thin seam. Both ends are brought to zero
+   mean and the same rms. The supergranule network is a second cell pattern, at
+   `SUPERGRANULE_SIZE_MM` = 30 Mm on the Sun (Leighton, Noyes & Simon 1962): its
+   cell size is the granule size times 30/1.3, so that it scales with the
+   convection on other stars (**calibration**; no survey measures other stars'
+   networks). Its cells wander as the granules do, on their own phase, in
+   supergranule lifetimes of `SUPERGRANULE_LIFETIME_DAYS` = 1 day (Hart 1956;
+   Rieutord & Rincon 2010), wrapped at 289 lifetimes as the granule phase is,
+   and turn with the star: the network is sampled at the longitude minus the
+   equatorial rotation phase, without differential rotation over its day of
+   life. Its lanes, $F_2 - F_1$ with the lane distance measured along the
+   surface as for the granules, are drawn as soft, wide ribbons of faculae: $1 -
+   \text{smoothstep}(0, w, F_2 - F_1)$ with $w = 0.6$ cells (**calibration**),
+   widened up to 1.3 times at the junctions of three cells and of a tone varying
+   from lane to lane (**calibration**), blended to a common tone where lanes
+   meet. They are brightened by $c\,L(\mu)$, with $L = \max(0.35, \min(0.35 +
+   1.4\,(1-\mu),\ 1.33\,(1-\mu)))$: faint at the disc centre, about four times
+   brighter at the limb, as faculae are (Solanki 2003). The cap $1.33\,(1-\mu)$
+   keeps a ribbon's peak, $0.15 \times 1.33\,(1-\mu) = 0.2\,(1-\mu)$, at 0.8 of
+   a full plage's $0.25\,(1-\mu)$ (**calibration**), so that the active regions'
+   faculae stay the brightest features near the limb. Its contrast is $c =
+   \min(1, \text{granule\_contrast}/0.15) \times 0.15$, 0 on a radiative star.
+   The 0.15 (**calibration**) makes the network stronger than the real one in
+   white light, so that the whole disc, whose granules are under a pixel, does
+   not look smooth: the disc centre is about 2 % brighter on average with a 2.3
+   % rms, and near the limb ($\mu \approx 0.4$) about 5 % brighter with a 5 %
+   rms. From afar, a mesogranular mottle, one octave of value noise at 0.35 of
+   the cell size, adds $\pm c/4$ and varies the ribbons' width and tone along
+   their length (**calibration**); it fades out as the granules fade in, since
+   they cover its scale up close. The network is searched among 8 cells rather
+   than the granules' 20, to keep it cheap over the whole disc; it misses a
+   short stub of lane near a junction on about 0.1 % of the points, hidden by
+   the soft ribbons. It fades in from 3 to 8 pixels per network cell. The shader
+   (`web/src/lib/viewer/starSurface.ts`) fades the regions and the granules out
+   as the star shrinks on screen, and as a frame of the clock outlasts a twelfth
+   of a rotation, a granule lifetime or, for the network, which turns with the
+   star, a supergranule lifetime or a twelfth of a rotation (as
+   $\sqrt{\text{timescale}/\text{frame}}$, a long exposure's averaging). Its
+   soft exposure, $1 - e^{-1.6\,b}$, acts on the brightness $b$ of granules,
+   spots and faculae only; the limb law and the star's colour multiply the
+   result linearly, so the limb keeps Claret & Bloemen's darkening and the disc
+   its colour, but for the network's faculae: on average they brighten the limb
+   by a few percent more than the centre (about 5 % at $\mu \approx 0.4$ against
+   2 %), which flattens the drawn limb darkening a little (**calibration**, the
+   price of a visible network).
 
 ```rust
 // crates/mapgen/src/activity.rs (trimmed)
@@ -411,6 +509,18 @@ star, about half of them on the visible side.
   clamped to 0.5, which radiative stars all reach.
 - **Granule lifetime**: the 8 minutes is a calibration a little above
   the time constants Title et al. (1989) report.
+- **The drawn granulation is a picture of convection, not a model of
+  it.** Its cells, lanes, blobs, wander speeds and the gain of
+  1.6 on `granule_contrast` are calibrations matched to prototype D;
+  the gain makes the drawn contrast (0.24 rms on the Sun) higher than
+  the 0.15 the activity gives, so that the surface reads as agitated
+  up close.
+- **The supergranule network is slightly exaggerated** (**calibration**):
+  its contrast of 0.15 on the Sun, rising about four times towards the limb,
+  and its wide ribbons are above the real network's in white light, so
+  that the whole disc shows texture where granules are under a pixel.
+  Its size on other stars scales with the granules. It turns with the
+  star's equator, without the differential rotation the regions follow.
 
 - **Timeline and region shapes are calibrations.** One cycle maps onto
   $x \in [0, 2.6]$ of the Hathaway fit; a region grows over
@@ -441,6 +551,9 @@ checking:
 - the Sun's 0.3 % spotted area at maximum (Hathaway 2015);
 - the solar $\Delta\Omega = 0.055$ rad/day (Snodgrass & Ulrich 1990);
 - the 1.3 Mm solar granule size (Trampedach et al. 2013);
+- the 30 Mm supergranule size (Leighton, Noyes & Simon 1962), its
+  lifetime of about a day (Hart 1956; Rieutord & Rincon 2010), and the
+  5 to 10 Mm mesogranulation (November et al. 1981);
 - the rotations per cycle of Böhm-Vitense (2007), read from the summary
   of Distefano et al. (2017);
 - the typical $v \sin i$ of A stars (Royer et al. 2007), the M-dwarf
@@ -579,6 +692,25 @@ against the VizieR catalogue.
 41. Jha, B. K. et al. 2019, "Study of sunspot penumbra to umbra area ratio
     using Kodaikanal white-light digitized data", preprint
     [arXiv:1905.06888](https://arxiv.org/abs/1905.06888).
+42. Nordlund, Å., Stein, R. F. & Asplund, M. 2009, "Solar surface
+    convection", *Living Reviews in Solar Physics* 6, 2,
+    [doi:10.12942/lrsp-2009-2](https://doi.org/10.12942/lrsp-2009-2).
+43. Sánchez Almeida, J., Márquez, I., Bonet, J. A., Domínguez Cerdeña,
+    I. & Muller, R. 2004, "Bright points in the internetwork quiet Sun",
+    *The Astrophysical Journal* 609, L91, preprint
+    [arXiv:astro-ph/0405515](https://arxiv.org/abs/astro-ph/0405515).
+44. Leighton, R. B., Noyes, R. W. & Simon, G. W. 1962, "Velocity fields
+    in the solar atmosphere. I. Preliminary report", *The Astrophysical
+    Journal* 135, 474.
+45. Hart, A. B. 1956, "Motions in the Sun at the photospheric level. VI.
+    Large-scale motions in the equatorial region", *Monthly Notices of
+    the Royal Astronomical Society* 116, 38.
+46. Rieutord, M. & Rincon, F. 2010, "The Sun's supergranulation",
+    *Living Reviews in Solar Physics* 7, 2,
+    [doi:10.12942/lrsp-2010-2](https://doi.org/10.12942/lrsp-2010-2).
+47. November, L. J., Toomre, J., Gebbie, K. B. & Simon, G. W. 1981, "The
+    detection of mesogranulation on the Sun", *The Astrophysical Journal*
+    245, L123.
 
 ## See also
 

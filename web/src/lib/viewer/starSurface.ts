@@ -7,7 +7,10 @@
  * - `STAR_SURFACE_GLSL` is a GLSL chunk with its uniforms and
  *   `vec3 starSurfaceColour(vec3 n, float mu)`; a material includes it,
  *   defines `STAR_REGIONS` (the length of the region arrays) and, for a
- *   disc too small to show granules, `STAR_NO_GRANULATION`.
+ *   disc too small to show granules, `STAR_NO_GRANULATION`. The
+ *   granulation is moving cellular noise (`starCells`): bright cells,
+ *   dark lanes between them, whose
+ *   centres wander with the granule phase.
  * - `StarSurfaceState` keeps the uniforms in step with the clock: it asks
  *   the region timeline (lib/starActivity.ts) for the regions alive at a
  *   day and packs them into two small uniform arrays, again only when the
@@ -16,6 +19,9 @@
  *
  * Time: the shader sees only `uLocalDays`, days since the last repack
  * (under 21), and the granule phase reduced in JS: never an absolute day.
+ * The phase wraps at 289 lifetimes, and every motion on it turns a whole
+ * number of times per wrap (`granuleMotionHarmonics`), so the cells do
+ * not jump there.
  * The surface at a day depends only on the activity (which carries the
  * seed), the day, and the nominal speed of the clock (the fades), never
  * on frame history or wall time.
@@ -24,6 +30,13 @@
  * with the clock's speed (`exposureFade`); the shader skips the region
  * loop and the granulation behind uniform branches when they are faded
  * out, so a small or fast-turning star costs only its limb darkening.
+ * Where it is drawn, the granulation is the costliest term: two passes
+ * over 20 cells (the second reuses the first's `rs[]`) and the warp's
+ * 8 hashes, 28 hashes per pixel, one more in the lanes. The supergranule
+ * network, drawn over the whole disc from afar, is kept much cheaper:
+ * 8 cells and, from afar only, one octave of value noise (16 hashes);
+ * up close, where the granules are drawn, the noise is skipped and the
+ * 8 cells remain.
  *
  * The science (spot structure, facular contrast, limb law) is in
  * docs/science/star-activity.md.
@@ -38,6 +51,7 @@ import {
   regionNow,
   regionsBornIn,
   type RegionNow,
+  rotationPhase,
 } from '../starActivity';
 
 const TWO_PI = 2 * Math.PI;
@@ -116,27 +130,184 @@ export function exposureFade(daysPerFrame: number, timescaleDays: number): numbe
 const ramp = (x: number, lo: number, hi: number): number => Math.min(1, Math.max(0, (x - lo) / (hi - lo)));
 
 /**
- * How much surface detail a star `radiusPx` pixels in radius shows:
- * granulation fades in from 1.5 to 4 pixels per granule (`granuleSize`
- * in star radii) and is off below; the active regions fade in from 6 to
- * 12 pixels of star radius and are off below.
+ * The Sun's supergranules, the cells of the chromospheric network, are
+ * about 30 Mm across (Leighton, Noyes & Simon 1962, ApJ 135, 474;
+ * Rieutord & Rincon 2010, Living Rev. Sol. Phys. 7, 2).
  */
-export function surfaceDetail(radiusPx: number, granuleSize: number): { granulation: number; regions: number } {
+export const SUPERGRANULE_SIZE_MM = 30;
+/** The Sun's granules, 1.3 Mm (Trampedach et al. 2013), as `SUN_GRANULE_SIZE`. */
+const SUN_GRANULE_SIZE_MM = 1.3;
+/**
+ * A supergranule lives about a day (Hart 1956, MNRAS 116, 38; Rieutord &
+ * Rincon 2010, Living Rev. Sol. Phys. 7, 2): the network's own clock.
+ */
+export const SUPERGRANULE_LIFETIME_DAYS = 1;
+/**
+ * **Calibration**: the network's brightening at the Sun's
+ * `granule_contrast` of 0.15, a little stronger than the real network
+ * (prototype D's thin lanes drew 0.07; the soft ribbons need 0.15 to be
+ * seen at the disc centre from the star view's opening distance): the
+ * disc centre about 2 % brighter on average with a 2.3 % rms, the limb
+ * about 5 % brighter with a 5 % rms (the figures after the limb cap, as in
+ * the science doc). Times `min(1, granule_contrast / 0.15)`: 0 on a radiative
+ * star.
+ */
+const NETWORK_CONTRAST = 0.15;
+/**
+ * **Calibration**: the half-width of the network's ribbons in F2 − F1
+ * (cells), before the junctions widen them and the mottle varies them:
+ * soft and wide, a picture of the network's faculae seen from afar
+ * rather than thin cell outlines.
+ */
+const NETWORK_LANE_WIDTH = 0.6;
+/** The plages' brightening at the limb, 0.25 (1 − μ) at most (see STAR_SURFACE_GLSL). */
+const PLAGE_LIMB_CONTRAST = 0.25;
+/**
+ * **Calibration**: a network ribbon's peak is at most this share of a
+ * full plage's at the same μ (away from the disc centre), so that the
+ * active regions' faculae stay the brightest features at the limb.
+ */
+const NETWORK_PLAGE_SHARE = 0.8;
+/** The Sun's granule contrast, against which the network's is scaled. */
+const SUN_GRANULE_CONTRAST = 0.15;
+
+/**
+ * The network's cell size in star radii, for granules of `granuleSize`:
+ * supergranules scale with the granules, `SUPERGRANULE_SIZE_MM` over the
+ * Sun's 1.3 Mm granules (both are set by the convection's scale; a
+ * **calibration** for other stars, as no survey measures their network).
+ */
+export function networkSize(granuleSize: number): number {
+  return (granuleSize * SUPERGRANULE_SIZE_MM) / SUN_GRANULE_SIZE_MM;
+}
+
+/** The network's contrast for a granule contrast: `min(1, c / 0.15) · 0.15`, 0 when radiative. */
+export function networkContrast(granuleContrast: number): number {
+  if (!(granuleContrast > 0)) return 0;
+  return Math.min(1, granuleContrast / SUN_GRANULE_CONTRAST) * NETWORK_CONTRAST;
+}
+
+/**
+ * How much surface detail a star `radiusPx` pixels in radius shows:
+ * granulation fades in from 2.5 to 5 pixels per granule (`granuleSize`
+ * in star radii) and is off below, where its cells could not be told
+ * apart and would cost the most for nothing; the active regions fade in from 6 to
+ * 12 pixels of star radius and are off below; the supergranule network
+ * (cells `networkSize(granuleSize)` across) fades in from 3 to 8 pixels
+ * per cell, so that it shows on the whole disc of the star view (about
+ * 20 px per cell for the Sun 500 px in radius) and is off on a small star.
+ */
+export function surfaceDetail(
+  radiusPx: number,
+  granuleSize: number,
+): { granulation: number; regions: number; network: number } {
   return {
-    granulation: ramp(radiusPx * granuleSize, 1.5, 4),
+    granulation: ramp(radiusPx * granuleSize, 2.5, 5),
     regions: ramp(radiusPx, 6, 12),
+    network: ramp(radiusPx * networkSize(granuleSize), 3, 8),
   };
 }
 
 /**
- * Period of the granule pattern's phase: the shader offsets field k by
- * `mod(k · (17, 31, 7), 289)`, so the fields for k and k + 289 are the
- * same, and the phase can be reduced modulo 289 in JS without a jump
- * (the cross-fade from field 288 goes on to field 289, which is field 0).
+ * Period of the granule pattern's phase, in granule lifetimes: the
+ * phase is reduced modulo 289 in JS, so every motion the shader drives
+ * with it turns a whole number of times per period (see
+ * `granuleMotionHarmonics`) and the pattern does not jump at the wrap.
  */
 const GRANULE_PHASE_PERIOD = 289;
-/** Days at which the granule clock wraps before its phase is computed (keeps it exact in f64). */
+
+/**
+ * The cells' wander, as whole turns per `GRANULE_PHASE_PERIOD`: the
+ * centres move along x, y and z at 97, 103 and 109 turns (2.1 to 2.4
+ * rad per lifetime, as prototype D's 2.4; **calibration**), the domain
+ * warp drifts round a circle at 2 turns.
+ */
+const CELL_HARMONICS = [97, 103, 109] as const;
+const WARP_HARMONIC = 2;
+
+/**
+ * Every angular rate the shader puts on the granule phase is
+ * 2π·k/`GRANULE_PHASE_PERIOD` for one of these integers k (the chunk's
+ * rates are written from them), so the surface is periodic in the
+ * phase's wrap: the three axes of the cells' wander, then the warp's
+ * drift.
+ */
+export function granuleMotionHarmonics(): readonly number[] {
+  return [...CELL_HARMONICS, WARP_HARMONIC];
+}
+
+/** The angular rate of harmonic k on the granule phase, rad per lifetime, as a GLSL literal. */
+const glslRate = (k: number): string => ((TWO_PI * k) / GRANULE_PHASE_PERIOD).toFixed(8);
+
+/**
+ * Prototype D's warp drifted 0.08 noise units per lifetime; on a circle
+ * turning at the warp's rate, that is its radius.
+ */
+const WARP_RADIUS = 0.08 / ((TWO_PI * WARP_HARMONIC) / GRANULE_PHASE_PERIOD);
+
+/**
+ * Mean and rms of the raw granule brightness up close,
+ * measured on disc patches from the centre to 0.6 radii and at several
+ * phases (see `starGranules`): they bring it to zero mean and unit rms.
+ */
+const GRANULE_RAW_MEAN = 0.519;
+const GRANULE_RAW_RMS = 0.384;
+
+/**
+ * **Calibration**: granules this many pixels across or fewer are shaded
+ * as small (a continuous sum of round blobs of more varied tone, see
+ * starCellBlobs), and from the second as close up: in between, at
+ * 1.1 R, thin crisp lanes round flat cells read as cracked glass, and
+ * any drawn edge as a seam across the blobs.
+ */
+const GRANULE_SMALL_PX = [40, 120] as const;
+/** The raw brightness's mean and rms with the small shading, measured as GRANULE_RAW_MEAN. */
+const GRANULE_SMALL_RAW_MEAN = 1.323;
+const GRANULE_SMALL_RAW_RMS = 0.545;
+
+/**
+ * **Calibration**: the drawn granulation's rms over `granule_contrast`,
+ * on the brightness b before the soft exposure curve.
+ * Prototype D, the approved look, drew 0.62 × the raw rms (about 0.236)
+ * on the Sun, whose `granule_contrast` is 0.15: a gain of about 1.6.
+ */
+const GRANULE_GAIN = 1.6;
+
+/** About where the granule clock's days wrap before the phase is computed (keeps it exact in f64). */
 const GRANULE_DAYS_WRAP = 1e4;
+
+/**
+ * The days at which the granule clock wraps for granules living
+ * `lifetimeDays`: the whole number of phase periods (289 lifetimes)
+ * nearest `GRANULE_DAYS_WRAP`, at least one, so that the phase runs on
+ * across the wrap without a jump.
+ */
+export function granuleDaysWrap(lifetimeDays: number): number {
+  const period = GRANULE_PHASE_PERIOD * lifetimeDays;
+  return period * Math.max(1, Math.round(GRANULE_DAYS_WRAP / period));
+}
+
+/**
+ * The granule phase at `days`, in lifetimes, reduced modulo
+ * `GRANULE_PHASE_PERIOD`: continuous in `days` (the day clock wraps at
+ * `granuleDaysWrap`, a whole number of periods), and 0 without
+ * granule lifetime.
+ */
+export function granulePhase(days: number, lifetimeDays: number): number {
+  if (!(lifetimeDays > 0)) return 0;
+  return modulo(modulo(days, granuleDaysWrap(lifetimeDays)) / lifetimeDays, GRANULE_PHASE_PERIOD);
+}
+
+/**
+ * The network's phase at `days`, in supergranule lifetimes, reduced as
+ * the granule phase (`granulePhase`): modulo 289 lifetimes, its day clock
+ * wrapped at a whole number of them, so that the network's cells, which
+ * move on the same harmonics, do not jump at either wrap.
+ */
+export function networkPhase(days: number): number {
+  return granulePhase(days, SUPERGRANULE_LIFETIME_DAYS);
+}
+
 /** Days from the epoch after which the regions are packed again, to keep `uLocalDays` small. */
 const EPOCH_SPAN_DAYS = 20;
 /**
@@ -147,20 +318,65 @@ const EPOCH_SPAN_DAYS = 20;
 const WINDOW_DAYS = 21;
 
 /**
- * The surface's GLSL: its uniforms, `float starLimb(float mu)`, `float
- * starBrightness(vec3 n, float mu)`, `vec3 starSurfaceExposed(vec3 n,
- * float mu)` (for display, see there), `float starDither(vec2)` and
- * `vec3 starSurfaceColour(vec3 n, float mu)`, the linear colour of the photosphere at unit normal `n`
- * in the star's inertial frame (y the spin axis, longitude increasing
+ * The surface's GLSL: its uniforms; the noise helpers, compiled even
+ * when `STAR_NO_GRANULATION` is defined, so that a material without
+ * granules can still draw cells (`uint starHashU(vec3 c)`, `float
+ * starHash(vec3 p)`, `vec3 starHash3(vec3 c)`, `vec3
+ * starValueNoise3(vec3 x)`, `vec3 starFbm2x3(vec3 p)`, `float
+ * starFbm2(vec3 p)`, `vec3 starWave(vec3 x)`, `StarCell
+ * starCellDetail(vec3 p, float phase, float blobs)`, `float
+ * starCellBlobs(vec3 p, float phase)`, `vec2 starCells(vec3 p, float
+ * phase)` and `float starCellLanes(vec3 p, float phase)`); `float
+ * starLimb(float mu)`, `float starBrightness(vec3 n, float mu)`, `vec3
+ * starSurfaceExposed(vec3 n, float mu)` (for display, see there),
+ * `float starDither(vec2)` and `vec3 starSurfaceColour(vec3 n, float
+ * mu)`, the linear colour of the photosphere at unit normal `n` in the
+ * star's inertial frame (y the spin axis, longitude increasing
  * anticlockwise seen from +y, as the orbits go) and `mu` the cosine of
  * the angle to the line of sight.
  *
  * The photosphere's brightness is the quadratic limb law times the
- * granulation, the spots and the faculae, times `uStarColour`:
+ * granulation, the network, the spots and the faculae, times
+ * `uStarColour`:
  *
- * - Granulation: simplex noise at the granule size, cross-faded between
- *   two fields over each granule lifetime (it boils rather than slides).
- *   Compiled out under `STAR_NO_GRANULATION` (noise and all).
+ * - Granulation (`starGranules`, prototype D): cellular noise at the
+ *   granule size, warped by one octave of value noise that curves the
+ *   cells' edges. Each cell is a dome of its own tone, bright at its
+ *   centre and falling towards its edge (distances along the surface,
+ *   see `starCellDetail`), dimmer while it is born or dies, a few large
+ *   ones darker in the middle, its corners rounded; the intergranular
+ *   lanes are dark, narrow along long edges and wider at junctions.
+ *   Granules are the tops of convective cells: hot upflows, bright,
+ *   ringed by cooler, darker downflow lanes (Nordlund, Stein & Asplund
+ *   2009, Living Rev. Sol. Phys. 6, 2). The magnetic bright points of
+ *   the lanes (Sánchez Almeida et al. 2004, ApJ 609, L91) are not drawn:
+ *   cut by the lane they sat in, they read as specks. The cells' centres wander by 0.3 of a cell at 2.1 to 2.4 rad
+ *   per lifetime (**calibration**), so cells deform, split and merge over
+ *   a few lifetimes. It is brought to zero mean and unit rms, then times
+ *   `GRANULE_GAIN` (**calibration**, prototype D's look): the rms of the
+ *   brightness b is 1.6 × `granule_contrast`, measured before the soft
+ *   exposure curve (`starSurfaceExposed`), which compresses it on
+ *   screen. `starGranules` is compiled out under
+ *   `STAR_NO_GRANULATION`; the noise helpers are not.
+ * - The supergranule network (`uNetwork`): cells of `networkSize` (30 Mm
+ *   on the Sun, Leighton, Noyes & Simon 1962) on their own phase, in
+ *   supergranule lifetimes (a day, Hart 1956), whose lanes
+ *   (`starCellLanes`) are drawn as soft ribbons, `NETWORK_LANE_WIDTH` in
+ *   F2 − F1 and wider and brighter at junctions, of a tone varying from
+ *   lane to lane, brightened by c (0.35 + 1.4 (1 − μ)), faculae
+ *   brightest at the limb (Solanki 2003), capped so that a ribbon's
+ *   peak stays at 0.8 of a plage's at the same μ. From afar a mesogranular
+ *   mottle (one octave of value noise at 0.35 of the cell size) adds
+ *   ±c/4 and varies the ribbons' width and tone along their length; it
+ *   fades out as the granules fade in (1 − `uGranule.w`), behind a
+ *   uniform branch. c is `networkContrast`, 0.15 on the Sun
+ *   (**calibration**, slightly above the real network so that the whole
+ *   disc is not smooth) and 0 on a radiative star. The network is
+ *   sampled in the star's turning frame: n's longitude minus the
+ *   equatorial rotation phase (`uNetworkSpin`, `rotationPhase` reduced
+ *   in JS), with no shear over its day of life. Not compiled out by
+ *   `STAR_NO_GRANULATION`: the sky disc keeps it off with its fade
+ *   (`hostStarDetail`).
  * - Each region: a leader (0.6 of the area, **calibration**) and a
  *   follower spot, at ±separation/2 along the region's tilt axis (the
  *   leader east and equatorward, Joy's law), each an umbra at 0.3 of the
@@ -185,6 +401,12 @@ uniform vec3 uStarColour;
 uniform vec2 uLimb;
 /** Granules: size (star radii), contrast, phase (lifetimes, mod 289), fade. */
 uniform vec4 uGranule;
+/** A granule's size on screen, pixels (the star's radius in pixels times the granule size): its shading follows it. */
+uniform float uGranulePx;
+/** The supergranule network: cell size (star radii), contrast, phase (lifetimes, mod 289), fade. */
+uniform vec4 uNetwork;
+/** The star's equatorial rotation phase (rad, in [0, 2π)): the network turns with it. */
+uniform float uNetworkSpin;
 uniform float uRegionFade;
 uniform int uRegionCount;
 uniform vec4 uRegionA[STAR_REGIONS];
@@ -195,63 +417,352 @@ uniform float uOmegaEq;
 uniform float uShear;
 uniform float uFacula;
 
-#ifndef STAR_NO_GRANULATION
-// 3D simplex noise (Ashima Arts / Stefan Gustavson, MIT), in [-1, 1];
-// renamed so that it never clashes with a host shader's own noise.
-vec3 starMod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 starMod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 starPermute(vec4 x) { return starMod289(((x * 34.0) + 10.0) * x); }
-vec4 starTaylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-float starNoise(vec3 v) {
-  const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
-  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-  vec3 i = floor(v + dot(v, C.yyy));
-  vec3 x0 = v - i + dot(i, C.xxx);
-  vec3 g = step(x0.yzx, x0.xyz);
-  vec3 l = 1.0 - g;
-  vec3 i1 = min(g.xyz, l.zxy);
-  vec3 i2 = max(g.xyz, l.zxy);
-  vec3 x1 = x0 - i1 + C.xxx;
-  vec3 x2 = x0 - i2 + C.yyy;
-  vec3 x3 = x0 - D.yyy;
-  i = starMod289(i);
-  vec4 p = starPermute(starPermute(starPermute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-  float n_ = 0.142857142857;
-  vec3 ns = n_ * D.wyz - D.xzx;
-  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-  vec4 x_ = floor(j * ns.z);
-  vec4 y_ = floor(j - 7.0 * x_);
-  vec4 x = x_ * ns.x + ns.yyyy;
-  vec4 y = y_ * ns.x + ns.yyyy;
-  vec4 h = 1.0 - abs(x) - abs(y);
-  vec4 b0 = vec4(x.xy, y.xy);
-  vec4 b1 = vec4(x.zw, y.zw);
-  vec4 s0 = floor(b0) * 2.0 + 1.0;
-  vec4 s1 = floor(b1) * 2.0 + 1.0;
-  vec4 sh = -step(h, vec4(0.0));
-  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-  vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-  vec3 p0 = vec3(a0.xy, h.x);
-  vec3 p1 = vec3(a0.zw, h.y);
-  vec3 p2 = vec3(a1.xy, h.z);
-  vec3 p3 = vec3(a1.zw, h.w);
-  vec4 norm = starTaylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
-  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-  vec4 m = max(0.5 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
-  m = m * m;
-  return 105.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+/** Angular rates of the cells' wander along x, y, z on a phase, rad per lifetime: 2π·k/289. */
+const vec3 STAR_CELL_RATES = vec3(${CELL_HARMONICS.map(glslRate).join(', ')});
+/** The granule warp's drift round a circle: its rate (2π·k/289) and radius, in noise units. */
+const float STAR_WARP_RATE = ${glslRate(WARP_HARMONIC)};
+const float STAR_WARP_RADIUS = ${WARP_RADIUS.toFixed(6)};
+/** The network's ribbons: half-width in F2 − F1 (cells) and the junction's reach (**calibrations**, NETWORK_LANE_WIDTH). */
+const float STAR_NETWORK_WIDTH = ${NETWORK_LANE_WIDTH.toFixed(4)};
+const float STAR_NETWORK_JUNCTION = 0.6;
+/** The network's limb slope at most: its peak, c times this times (1 − μ), at most NETWORK_PLAGE_SHARE of a plage's 0.25 (1 − μ). */
+const float STAR_NETWORK_LIMB_CAP = ${((NETWORK_PLAGE_SHARE * PLAGE_LIMB_CONTRAST) / NETWORK_CONTRAST).toFixed(4)};
+/** The warp's frequency (per cell) and amplitude (cells, **calibration**): enough to curve the cells' edges. */
+const float STAR_WARP_SCALE = 0.3;
+const float STAR_WARP_AMPLITUDE = 1.0;
+
+/**
+ * A 32-bit hash of the integer point c (lowbias32, Wellons 2018, of the
+ * coordinates' weighted sum). The offset keeps the coordinates positive
+ * for |c| < 32768, i.e. cells larger than 3e-5 star radii.
+ */
+uint starHashU(vec3 c) {
+  uvec3 v = uvec3(ivec3(c) + 32768);
+  uint h = v.x * 0x8da6b343u + v.y * 0xd8163841u + v.z * 0xcb1ab31fu;
+  h ^= h >> 16u;
+  h *= 0x7feb352du;
+  h ^= h >> 15u;
+  h *= 0x846ca68bu;
+  h ^= h >> 16u;
+  return h;
 }
 
-/** Granulation at n, about zero-mean with unit contrast: two noise fields cross-faded over a lifetime. */
+/** A value in [0, 1) for the unit cell holding p. */
+float starHash(vec3 p) {
+  return float(starHashU(floor(p)) >> 8u) * (1.0 / 16777216.0);
+}
+
+/** Three values in [0, 1) for the integer point c, ten bits each. */
+vec3 starHash3(vec3 c) {
+  uint h = starHashU(c);
+  return vec3(uvec3(h, h >> 10u, h >> 20u) & 1023u) * (1.0 / 1024.0);
+}
+
+/** Three channels of value noise in [0, 1], one hash per lattice corner. */
+vec3 starValueNoise3(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = x - i;
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(starHash3(i), starHash3(i + vec3(1.0, 0.0, 0.0)), f.x),
+        mix(starHash3(i + vec3(0.0, 1.0, 0.0)), starHash3(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+    mix(mix(starHash3(i + vec3(0.0, 0.0, 1.0)), starHash3(i + vec3(1.0, 0.0, 1.0)), f.x),
+        mix(starHash3(i + vec3(0.0, 1.0, 1.0)), starHash3(i + vec3(1.0, 1.0, 1.0)), f.x), f.y),
+    f.z);
+}
+
+/** Two octaves of value noise, three channels in [0, 1] about 0.5 (prototype D's cheap fbm). */
+vec3 starFbm2x3(vec3 p) {
+  return (0.5 * starValueNoise3(p) + 0.25 * starValueNoise3(p * 2.03 + 1.7)) * (4.0 / 3.0);
+}
+
+/** One channel of starFbm2x3. */
+float starFbm2(vec3 p) {
+  return starFbm2x3(p).x;
+}
+
+/** sin(2π x) within 0.056, a parabola per half turn: smooth, and cheaper than sin. */
+vec3 starWave(vec3 x) {
+  vec3 f = 1.0 - 2.0 * fract(x);
+  return 4.0 * f * (1.0 - abs(f));
+}
+
+/**
+ * The 20 cells searched round p's cell, as steps towards p's side of
+ * its cell on each axis (1), none (0) or away (−1): the 27 neighbours
+ * but the 7 away on two or three axes.
+ */
+const vec3 STAR_CELL_STEPS[20] = vec3[20](
+  vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0),
+  vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), vec3(1.0, 1.0, 1.0),
+  vec3(-1.0, 0.0, 0.0), vec3(-1.0, 1.0, 0.0), vec3(-1.0, 0.0, 1.0), vec3(-1.0, 1.0, 1.0),
+  vec3(0.0, -1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(0.0, -1.0, 1.0), vec3(1.0, -1.0, 1.0),
+  vec3(0.0, 0.0, -1.0), vec3(1.0, 0.0, -1.0), vec3(0.0, 1.0, -1.0), vec3(1.0, 1.0, -1.0));
+
+
+/**
+ * The small granules' blobs: exp(−d² · this), a Gaussian of
+ * σ = 1 / sqrt(2 · 5.5) ≈ 0.30 cell, depth counting for 0.4 of its square
+ * (**calibrations**).
+ */
+const float STAR_BLOB_SHARPNESS = 5.5;
+
+/** What starCellDetail finds at a point, distances in cells. */
+struct StarCell {
+  /** Distance to the nearest centre (3D). */
+  float f1;
+  /** Distance along the surface to the cell's nearest edge, and to its second-nearest edge line. */
+  float edge;
+  float edge2;
+  /** Distance along the surface to the cell's centre, and the centre's depth below or above the surface. */
+  float centre;
+  float depth;
+  /** A value in [0, 1) for the cell. */
+  float id;
+  /** starCellBlobs's sum when asked for (blobs > 0), else 0. */
+  float blobs;
+};
+
+/**
+ * Cellular noise on the surface through p (the sphere of radius |p|,
+ * one cell centre per unit cube). Each centre wanders about its cube's
+ * middle by 0.3 · starWave(rate · phase / 2π + h) per axis, h the
+ * cube's hash and rate STAR_CELL_RATES, so the cells deform, split and
+ * merge as the phase runs, and come back the same after 289.
+ *
+ * The edges are measured along the surface, in the tangent plane: the
+ * distance to the bisector with centre k is (d_k − d_1) / (2 |t_k −
+ * t_1|), t the centres projected on the plane. The slice of a Voronoi
+ * diagram by a plane is a power diagram in it, and a cell is convex, so
+ * the nearest of these is the exact, continuous distance to the cell's
+ * edge. Plain 3D Worley F2 − F1 stays small wherever the sphere runs
+ * nearly parallel to a face between two centres stacked in depth, and
+ * drew flat grey patches with hard, axis-aligned edges.
+ *
+ * edge2, the distance to the second-nearest edge line, is small near
+ * a junction of three cells; it may differ on the two sides of an edge,
+ * where edge is 0.
+ *
+ * It takes two passes over the 20 cubes of STAR_CELL_STEPS: the nearest
+ * centre, then the nearest edges. With the wander bounded by 0.3 the
+ * result matched a 125-cube search on every one of 4.3 million test
+ * points. A 27-cube search, on an M1, cost two to four times as much.
+ */
+StarCell starCellDetail(vec3 p, float phase, float blobs) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 axis = normalize(p);
+  vec3 side = sign(f - 0.5);
+  side += 1.0 - abs(side);
+  vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
+  // The centres are kept from the first pass for the second.
+  vec3 rs[20];
+  float d1 = 1e4;
+  vec3 r1 = vec3(0.0);
+  float h1 = 0.0;
+  float sum = 0.0;
+  for (int k = 0; k < 20; k++) {
+    vec3 g = side * STAR_CELL_STEPS[k];
+    vec3 hv = starHash3(i + g);
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
+    rs[k] = r;
+    float d = dot(r, r);
+    // Callers pass blobs as a literal, so the compiler drops this when 0.
+    if (blobs > 0.0) {
+      float depth = dot(r, axis);
+      sum += (0.45 + fract(hv.x * 13.7)) * exp(-(d - 0.6 * depth * depth) * blobs);
+    }
+    bool nearer = d < d1;
+    d1 = nearer ? d : d1;
+    r1 = nearer ? r : r1;
+    h1 = nearer ? hv.x : h1;
+  }
+  float edge = 1e4;
+  float edge2 = 1e4;
+  for (int k = 0; k < 20; k++) {
+    vec3 r = rs[k];
+    vec3 dr = r - r1;
+    float along = dot(dr, axis);
+    float apart = dot(dr, dr) - along * along;
+    // The nearest centre itself (apart 0) is no edge.
+    float e = apart > 1e-8 ? 0.5 * (dot(r, r) - d1) * inversesqrt(apart) : 1e4;
+    bool nearer = e < edge;
+    edge2 = min(edge2, max(edge, e));
+    edge = nearer ? e : edge;
+  }
+  StarCell cell;
+  cell.f1 = sqrt(d1);
+  cell.edge = edge;
+  cell.edge2 = edge2;
+  float depth = dot(r1, axis);
+  cell.depth = abs(depth);
+  cell.centre = length(r1 - depth * axis);
+  cell.id = h1;
+  cell.blobs = sum;
+  return cell;
+}
+
+/**
+ * (F1, F2) of starCellDetail, F2 = F1 + 2 · edge: F2 − F1 is 0 on a
+ * cell's edge and grows into the cell, as the lane measure of a 2D cell
+ * pattern.
+ */
+vec2 starCells(vec3 p, float phase) {
+  StarCell cell = starCellDetail(p, phase, 0.0);
+  return vec2(cell.f1, cell.f1 + 2.0 * cell.edge);
+}
+
+/**
+ * The network's lanes, drawn over the whole disc: (F2 − F1, the same
+ * measure for the second-nearest edge line, a value in [0, 1) for the
+ * pair of cells across the nearest edge). F2 − F1 = 2 · edge as
+ * starCells measures it (the same cells, wandering the same way, the
+ * edges along the surface), but searched among the 8 cells of the
+ * 2×2×2 block on p's side only, in one pass whose centres are kept for
+ * the edges: about a third of starCells' cost. Against the 20-cell
+ * search it misses a short stub of lane near a junction on about 0.1 %
+ * of the points, which the network's soft, wide ribbons hide.
+ */
+vec3 starCellLanes(vec3 p, float phase) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 axis = normalize(p);
+  vec3 side = sign(f - 0.5);
+  side += 1.0 - abs(side);
+  vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
+  vec3 rs[8];
+  float hs[8];
+  float d1 = 1e4;
+  vec3 r1 = vec3(0.0);
+  float h1 = 0.0;
+  // STAR_CELL_STEPS starts with the block's 8 cells.
+  for (int k = 0; k < 8; k++) {
+    vec3 g = side * STAR_CELL_STEPS[k];
+    vec3 hv = starHash3(i + g);
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
+    rs[k] = r;
+    hs[k] = hv.x;
+    float d = dot(r, r);
+    bool nearer = d < d1;
+    d1 = nearer ? d : d1;
+    r1 = nearer ? r : r1;
+    h1 = nearer ? hv.x : h1;
+  }
+  float edge = 1e4;
+  float edge2 = 1e4;
+  float across = 0.0;
+  for (int k = 0; k < 8; k++) {
+    vec3 r = rs[k];
+    vec3 dr = r - r1;
+    float along = dot(dr, axis);
+    float apart = dot(dr, dr) - along * along;
+    float e = apart > 1e-8 ? 0.5 * (dot(r, r) - d1) * inversesqrt(apart) : 1e4;
+    bool nearer = e < edge;
+    edge2 = min(edge2, max(edge, e));
+    edge = nearer ? e : edge;
+    across = nearer ? hs[k] : across;
+  }
+  return vec3(2.0 * edge, 2.0 * edge2, fract(h1 + across));
+}
+
+/**
+ * The cells of starCellDetail as a sum of round blobs: over the same 20
+ * cells, each centre's tone (0.45 to 1.45, from its value) times
+ * exp(−d² · STAR_BLOB_SHARPNESS), d² the squared distance along the
+ * surface plus 0.4 of the squared depth (a centre deep below or above
+ * the surface is dimmer). It is continuous everywhere: no edge is drawn,
+ * and the dips between centres are the lanes, wide where centres are far
+ * apart. One pass, for granules too small on screen for their edges.
+ */
+float starCellBlobs(vec3 p, float phase) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 axis = normalize(p);
+  vec3 side = sign(f - 0.5);
+  side += 1.0 - abs(side);
+  vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
+  float sum = 0.0;
+  for (int k = 0; k < 20; k++) {
+    vec3 g = side * STAR_CELL_STEPS[k];
+    vec3 hv = starHash3(i + g);
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
+    float along = dot(r, axis);
+    sum += (0.45 + fract(hv.x * 13.7)) * exp(-(dot(r, r) - 0.6 * along * along) * STAR_BLOB_SHARPNESS);
+  }
+  return sum;
+}
+
+#ifndef STAR_NO_GRANULATION
+/**
+ * Granulation at n, zero-mean with rms ${GRANULE_GAIN} (the gain, see
+ * GRANULE_GAIN): cells of the granule size in a space warped by one
+ * octave of value noise (which curves their edges), shaded as
+ * prototype D's look and real granules:
+ *
+ * - each cell a dome, bright at its centre and falling towards its edge
+ *   with s = centre / (centre + edge), its tone varying from cell to
+ *   cell, dimmer while its centre lies deep (a granule being born or
+ *   dying), and a darker middle in a few large cells (exploding
+ *   granules);
+ * - its corners rounded by a faster fall where s nears 1;
+ * - dark intergranular lanes with soft edges, narrow along long edges
+ *   and widening into pools at junctions.
+ *
+ * That is the look from 120 px per granule (uGranulePx). At 40 px or
+ * fewer, the cells are a continuous sum of round blobs (starCellBlobs),
+ * with no edge drawn, so no seam crosses them; in between the two
+ * blend, every lane edge at least 2.5 px soft (GRANULE_SMALL_PX), the
+ * blobs summed in the same pass as the cells.
+ *
+ * The shapes and weights are **calibrations** matched by eye to
+ * prototype D.
+ */
 float starGranules(vec3 n) {
-  float k = floor(uGranule.z);
-  float w = smoothstep(0.0, 1.0, uGranule.z - k);
-  vec3 p = n / uGranule.x;
-  vec3 step3 = vec3(17.0, 31.0, 7.0);
-  float g = mix(starNoise(p + mod(step3 * k, 289.0)), starNoise(p + mod(step3 * (k + 1.0), 289.0)), w);
-  // Keep the contrast through the cross-fade (two independent fields).
-  g /= sqrt((1.0 - w) * (1.0 - w) + w * w);
-  return clamp(3.0 * g, -2.0, 2.0);
+  float phase = uGranule.z;
+  vec3 q = n / uGranule.x;
+  float drift = STAR_WARP_RATE * phase;
+  // One octave of warp, as D's second octave cost a sixth of the term.
+  q += STAR_WARP_AMPLITUDE * (starValueNoise3(STAR_WARP_SCALE * q + STAR_WARP_RADIUS * vec3(cos(drift), 0.0, sin(drift))) - 0.5);
+  // How small the granules are on screen: 1 up to ${GRANULE_SMALL_PX[0]} px, 0 from
+  // ${GRANULE_SMALL_PX[1]} px. Each look is computed only while it shows
+  // (uniform branches): the cells' edges up close, the blobs when small.
+  float small = 1.0 - smoothstep(${GRANULE_SMALL_PX[0].toFixed(1)}, ${GRANULE_SMALL_PX[1].toFixed(1)}, uGranulePx);
+  float lit = 0.0;
+  float blob = 0.0;
+  if (small >= 1.0) {
+    blob = starCellBlobs(q, phase);
+  } else {
+    StarCell cell;
+    // Between the two looks, the blobs are summed in the same pass.
+    if (small > 0.0) cell = starCellDetail(q, phase, STAR_BLOB_SHARPNESS);
+    else cell = starCellDetail(q, phase, 0.0);
+    blob = cell.blobs;
+    // About 2.5 px of softness, in cells; at most 0.1 cell.
+    float soft = min(2.5 / max(uGranulePx, 1.0), 0.1);
+    float s = cell.centre / (cell.centre + cell.edge + 1e-4);
+    float tone = 0.75 + 0.45 * fract(cell.id * 13.7);
+    tone *= 1.0 - 0.35 * smoothstep(0.15, 0.5, cell.depth);
+    // D's dome: bright at the centre, falling towards the edge, and
+    // faster near it, which rounds the cell's corners (where s nears 1
+    // first) into a curved outline.
+    float dome = 1.2 - 0.75 * s * s - 0.35 * smoothstep(0.75, 1.0, s);
+    // A dark middle in a few large cells.
+    float large = smoothstep(0.45, 0.7, cell.centre + cell.edge) * step(0.75, fract(cell.id * 7.31));
+    dome -= 0.35 * large * (1.0 - smoothstep(0.0, 0.35, s));
+    // Only the width varies (edge2 may differ across a lane, where edge
+    // is 0). Lanes widen into soft pools at the junctions, and every lane
+    // edge is at least about 2.5 px soft.
+    float junction = 1.0 - smoothstep(0.0, 0.55, cell.edge2);
+    float width = mix(0.05, 0.26, junction * junction) + soft;
+    float lane = 1.0 - smoothstep(0.0, width, cell.edge);
+    lit = tone * dome * (1.0 - lane);
+  }
+  // Small on screen, a sum of round blobs (starCellBlobs).
+  float raw = mix(lit, 1.6 * blob + 0.3, small);
+  // Brought to zero mean and unit rms at either end of the size range.
+  float mean = mix(${GRANULE_RAW_MEAN.toFixed(4)}, ${GRANULE_SMALL_RAW_MEAN.toFixed(4)}, small);
+  float rms = mix(${GRANULE_RAW_RMS.toFixed(4)}, ${GRANULE_SMALL_RAW_RMS.toFixed(4)}, small);
+  return ${GRANULE_GAIN.toFixed(4)} * (raw - mean) / rms;
 }
 #endif
 
@@ -276,6 +787,45 @@ float starBrightness(vec3 n, float mu) {
 #ifndef STAR_NO_GRANULATION
   if (uGranule.w > 0.0) brightness += uGranule.y * uGranule.w * starGranules(n);
 #endif
+  if (uNetwork.w > 0.0) {
+    // The supergranule network, sampled in the star's turning frame
+    // (longitude minus the equatorial rotation phase, no shear: a cell
+    // lives a day). Its lanes are soft, wide ribbons of faculae,
+    // stronger towards the limb, wider and brighter at the junctions,
+    // of a tone varying from one lane to the next; from afar a
+    // mesogranular mottle a third of the cell's size varies them along
+    // their length and mottles the cells. The mottle fades out as the
+    // granules, which cover its scale, fade in. All calibrations,
+    // slightly exaggerated so that the whole disc is not smooth.
+    float spinC = cos(uNetworkSpin);
+    float spinS = sin(uNetworkSpin);
+    vec3 q = vec3(n.x * spinC - n.z * spinS, n.y, n.x * spinS + n.z * spinC) / uNetwork.x;
+    vec3 lanes = starCellLanes(q, uNetwork.z);
+    float junction = 1.0 - smoothstep(0.0, STAR_NETWORK_JUNCTION, lanes.y);
+    float width = STAR_NETWORK_WIDTH * (0.7 + 0.6 * junction);
+    // Each lane's own tone, blended to a common one at the junctions,
+    // where lanes of different tones meet.
+    float tone = mix(0.6 + 0.4 * fract(lanes.z * 7.31), 0.8, junction) * (0.8 + 0.4 * junction);
+    float mottle = 0.0;
+#ifdef STAR_NO_GRANULATION
+    float mottleFade = 1.0;
+#else
+    float mottleFade = 1.0 - uGranule.w;
+#endif
+    if (mottleFade > 0.0) {
+      vec3 v = starValueNoise3(q * (1.0 / 0.35));
+      mottle = mottleFade * 0.5 * (v.x - 0.5);
+      width *= mix(1.0, 0.5 + v.y, mottleFade);
+      tone *= mix(1.0, 0.3 + 1.4 * v.z, mottleFade);
+    }
+    float ribbon = 1.0 - smoothstep(0.0, width, lanes.x);
+    float net = min(tone * ribbon, 1.0);
+    // Brighter towards the limb, but capped so that a ribbon's peak stays
+    // below a plage's at the same μ (STAR_NETWORK_LIMB_CAP), except near
+    // the disc centre, where plages vanish and the network keeps 0.35.
+    float limb = max(0.35, min(0.35 + 1.4 * edge, STAR_NETWORK_LIMB_CAP * edge));
+    brightness += uNetwork.w * uNetwork.y * (net * limb + mottle);
+  }
   if (uRegionFade > 0.0 && uRegionCount > 0) {
     float latitude = asin(clamp(n.y, -1.0, 1.0));
     // About a pixel on the sphere, to keep small spots from aliasing; a
@@ -318,7 +868,7 @@ float starBrightness(vec3 n, float mu) {
     }
     brightness *= mix(1.0, spot, uRegionFade);
     float fill = min(uFacula / 9.0, 1.0);
-    brightness += uRegionFade * 0.25 * edge * fill * facula * smoothstep(0.75, 1.0, spot);
+    brightness += uRegionFade * ${PLAGE_LIMB_CONTRAST.toFixed(2)} * edge * fill * facula * smoothstep(0.75, 1.0, spot);
   }
   return brightness;
 }
@@ -348,7 +898,8 @@ float starDither(vec2 fragCoord) {
 /**
  * The uniforms of `STAR_SURFACE_GLSL`, the region arrays `maxRegions`
  * long (the material's `STAR_REGIONS`): uStarColour, uLimb (vec2),
- * uGranule (vec4: size, contrast, phase, fade), uRegionFade,
+ * uGranule (vec4: size, contrast, phase, fade), uGranulePx, uNetwork (vec4: cell
+ * size, contrast, phase, fade), uNetworkSpin, uRegionFade,
  * uRegionCount, uRegionA and uRegionB (vec4 each), uLocalDays, uOmegaEq,
  * uShear, uFacula.
  */
@@ -357,6 +908,9 @@ export function starSurfaceUniforms(maxRegions: number): Record<string, IUniform
     uStarColour: { value: new Vector3(1, 1, 1) },
     uLimb: { value: new Vector2(0.6, 0.2) },
     uGranule: { value: new Vector4(SUN_GRANULE_SIZE, 0, 0, 0) },
+    uGranulePx: { value: 0 },
+    uNetwork: { value: new Vector4(networkSize(SUN_GRANULE_SIZE), 0, 0, 0) },
+    uNetworkSpin: { value: 0 },
     uRegionFade: { value: 0 },
     uRegionCount: { value: 0 },
     uRegionA: { value: new Float32Array(4 * maxRegions) },
@@ -481,8 +1035,13 @@ export class StarSurfaceState {
    * |days − epoch| > 20. Returns whether it repacked. `regionDetail`, when
    * given, replaces the regions' ramp with the star's size (see
    * `surfaceDetail`): the sky disc has its own (`hostStarDetail`).
+   * `networkDetail`, when given, caps the network's ramp the same way
+   * (the sky disc passes `hostStarDetail` too, 0 for its usual 14 px).
    */
-  update(days: number, view: { radiusPx: number; daysPerSecond: number; regionDetail?: number }): boolean {
+  update(
+    days: number,
+    view: { radiusPx: number; daysPerSecond: number; regionDetail?: number; networkDetail?: number },
+  ): boolean {
     const look = this.look;
     if (!look) return false;
     const u = this.uniforms;
@@ -491,14 +1050,23 @@ export class StarSurfaceState {
 
     const granuleFade =
       look.granuleContrast > 0 ? detail.granulation * exposureFade(daysPerFrame, look.granuleLifetimeDays) : 0;
-    const phase =
-      look.granuleLifetimeDays > 0
-        ? modulo(modulo(days, GRANULE_DAYS_WRAP) / look.granuleLifetimeDays, GRANULE_PHASE_PERIOD)
-        : 0;
+    const phase = granulePhase(days, look.granuleLifetimeDays);
     (u['uGranule']!.value as Vector4).set(look.granuleSize, look.granuleContrast, phase, granuleFade);
+    u['uGranulePx']!.value = view.radiusPx * look.granuleSize;
 
     const rotationDays = TWO_PI / look.omegaEq;
-    this.exposure = exposureFade(daysPerFrame, rotationDays / 12);
+    const rotationExposure = exposureFade(daysPerFrame, rotationDays / 12);
+    const contrast = networkContrast(look.granuleContrast);
+    // It boils on its own lifetime and turns with the star: either can smear it.
+    const networkFade =
+      contrast > 0
+        ? Math.min(detail.network, view.networkDetail ?? 1) *
+          Math.min(exposureFade(daysPerFrame, SUPERGRANULE_LIFETIME_DAYS), rotationExposure)
+        : 0;
+    (u['uNetwork']!.value as Vector4).set(networkSize(look.granuleSize), contrast, networkPhase(days), networkFade);
+    u['uNetworkSpin']!.value = this.activity ? rotationPhase(this.activity, days) : modulo(look.omegaEq * days, TWO_PI);
+
+    this.exposure = rotationExposure;
     this.sizeFade = view.regionDetail ?? detail.regions;
     const regionFade = this.sizeFade * this.exposure;
     u['uRegionFade']!.value = regionFade;

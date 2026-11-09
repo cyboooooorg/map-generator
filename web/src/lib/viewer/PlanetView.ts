@@ -492,7 +492,7 @@ export class PlanetView {
     toCamera: [0, 0, 0] as SkyVec3,
     cameraUp: [0, 0, 0] as SkyVec3,
     basis: new Array<number>(9).fill(0),
-    view: { radiusPx: 0, daysPerSecond: 0, regionDetail: 0 },
+    view: { radiusPx: 0, daysPerSecond: 0, regionDetail: 0, networkDetail: 0 },
   };
   /** The atmosphere's ground (veil) and sky passes. */
   private readonly atmosphere: Mesh<SphereGeometry, ShaderMaterial>[];
@@ -1793,7 +1793,8 @@ export class PlanetView {
    * The host star's living surface (docs/science/star-activity.md, "In
    * the app"): the same spots as the star view at the same day, the same
    * limb darkening; the active regions from a disc 16 px across (see
-   * hostStarDetail), granulation never. `days` is the system clock (days
+   * hostStarDetail), the supergranule network not below that either,
+   * granulation never. `days` is the system clock (days
    * from the system's epoch), `daysPerSecond` its nominal speed (0 while
    * paused), `axes` the star's axes in the frame of the body shown (see
    * systemSky). Null, for a world without a system, draws the plain disc.
@@ -3350,6 +3351,7 @@ export class PlanetView {
       s.view.radiusPx = cssDisk / 2;
       s.view.daysPerSecond = surface.daysPerSecond;
       s.view.regionDetail = hostStarDetail(cssDisk);
+      s.view.networkDetail = s.view.regionDetail;
       this.hostSurface.update(surface.days, s.view);
     }
   }

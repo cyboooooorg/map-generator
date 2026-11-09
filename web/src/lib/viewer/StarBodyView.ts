@@ -32,7 +32,7 @@ import type { StarInfo } from '../api/types/StarInfo';
 import { CoronalLoops } from './coronalLoops';
 import { Eruption, eruptive } from './eruption';
 import { FrameStats } from './frameStats';
-import { fullPixelRatio } from './pixelRatio';
+import { animatedPixelRatio, fullPixelRatio } from './pixelRatio';
 import { PROFILES, type QualityProfile } from './quality';
 import { starsFragment, starsVertex } from './shaders';
 import {
@@ -49,6 +49,17 @@ import { starField } from './stars';
 
 /** Closest and farthest camera, star radii from the centre: close enough for granules, far enough for the corona. */
 const MIN_DISTANCE = 1.02;
+/**
+ * Below this distance (star radii from the centre) the surface fills the
+ * view, and an animated frame is drawn at `CLOSE_UP_PIXEL_RATIO` at most:
+ * the granulation is costly per pixel and its cells span a hundred pixels.
+ */
+const CLOSE_UP_DISTANCE = 1.1;
+
+/** Whether a camera `distance` star radii from the centre sees the close-up (see CLOSE_UP_DISTANCE). */
+export function isCloseUp(distance: number): boolean {
+  return distance < CLOSE_UP_DISTANCE;
+}
 const MAX_DISTANCE = 12;
 /** The camera's elevation above the star's equator when the view opens or is reset, radians. */
 const START_ELEVATION = (20 * Math.PI) / 180;
@@ -69,7 +80,7 @@ const MIN_ALTITUDE = 1e-3;
  * Pixels per star radius at the point of the surface nearest the camera,
  * `distance` star radii from the centre, in a view `heightPx` CSS px tall
  * with a vertical field of view of `fovDeg`: that point lies `distance − 1`
- * radii away. The star view's detail (granules from 1.5 px each, see
+ * radii away. The star view's detail (granules from 2.5 px each, see
  * surfaceDetail) follows it, so that up close, where the surface fills the
  * view, granules show at full contrast; the system view measures from the
  * centre instead, the same far away.
@@ -134,7 +145,11 @@ export class StarBodyView {
     this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
     this.controls.minDistance = MIN_DISTANCE * STAR_RADIUS;
     this.controls.maxDistance = MAX_DISTANCE * STAR_RADIUS;
-    this.controls.addEventListener('change', () => this.requestRender());
+    this.controls.addEventListener('change', () => {
+      // Crossing CLOSE_UP_DISTANCE while the clock runs changes the ratio; otherwise nothing is set.
+      if (this.loop !== null) this.applyPixelRatio(true);
+      this.requestRender();
+    });
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
     canvas.addEventListener('dblclick', (event) => {
       if (this.onOpenSystem && this.hitsStar(event.clientX, event.clientY)) this.onOpenSystem();
@@ -247,9 +262,11 @@ export class StarBodyView {
     if (on && this.loop === null && !this.disposed) {
       this.lastTick = performance.now();
       this.loop = requestAnimationFrame(this.tick);
+      this.applyPixelRatio(true);
     } else if (!on && this.loop !== null) {
       cancelAnimationFrame(this.loop);
       this.loop = null;
+      this.applyPixelRatio(false);
       // The eruption is an animation: paused, none hangs half-risen.
       this.eruption.remove();
     }
@@ -362,6 +379,24 @@ export class StarBodyView {
     });
   }
 
+  /**
+   * Switches the drawing buffer between the moving ratio (0.75 at most in a
+   * close-up, see isCloseUp) and the full one, and draws the new frame;
+   * does nothing when the ratio stays the same, so the controls may call it
+   * on every change without resizing per frame.
+   */
+  private applyPixelRatio(animated: boolean): void {
+    if (this.disposed) return;
+    const close = isCloseUp(this.camera.position.length() / STAR_RADIUS);
+    const ratio = animatedPixelRatio(window.devicePixelRatio, animated, this.quality, close);
+    if (ratio === this.renderer.getPixelRatio()) {
+      this.requestRender();
+      return;
+    }
+    this.renderer.setPixelRatio(ratio);
+    this.resize();
+  }
+
   private resize(): void {
     const { clientWidth, clientHeight } = this.canvas;
     if (clientWidth === 0 || clientHeight === 0) return;
@@ -369,6 +404,9 @@ export class StarBodyView {
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     this.sky.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
+    // Resizing cleared the drawing buffer: the next frame is drawn without
+    // waiting for the profile's frame cap, so no blank frame shows.
+    this.lastDrawn = -Infinity;
     this.requestRender();
   }
 
