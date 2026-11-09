@@ -8,9 +8,9 @@
  *   `vec3 starSurfaceColour(vec3 n, float mu)`; a material includes it,
  *   defines `STAR_REGIONS` (the length of the region arrays) and, for a
  *   disc too small to show granules, `STAR_NO_GRANULATION`. The
- *   granulation is moving cellular noise (`starCells`): bright cells,
- *   dark lanes between them, whose
- *   centres wander with the granule phase.
+ *   granulation is moving cellular noise (`starCellDetail`, and
+ *   `starCellBlobs` when small): bright cells, dark lanes between them,
+ *   whose centres wander with the granule phase.
  * - `StarSurfaceState` keeps the uniforms in step with the clock: it asks
  *   the region timeline (lib/starActivity.ts) for the regions alive at a
  *   day and packs them into three small uniform arrays, again only when
@@ -381,16 +381,15 @@ const WINDOW_DAYS = 21;
 /**
  * The surface's GLSL: its uniforms; the noise helpers, compiled even
  * when `STAR_NO_GRANULATION` is defined, so that a material without
- * granules can still draw cells (`uint starHashU(vec3 c)`, `float
- * starHash(vec3 p)`, `vec3 starHash3(vec3 c)`, `vec3
- * starValueNoise3(vec3 x)`, `vec3 starFbm2x3(vec3 p)`, `float
- * starFbm2(vec3 p)`, `vec3 starWave(vec3 x)`, `vec3
+ * granules can still draw cells and spots (`uint starHashU(vec3 c)`,
+ * `vec3 starHash3(vec3 c)`, `vec3 starValueNoise3(vec3 x)`, `vec3
+ * starFbm2x3(vec3 p)`, `vec3 starWave(vec3 x)`, `vec3
  * starValueNoiseRing(vec2 x, float period, float salt)`, `StarCell
  * starCellDetail(vec3 p, float phase, float blobs)`, `float
- * starCellBlobs(vec3 p, float phase)`, `vec2 starCells(vec3 p, float
- * phase)` and `float starCellLanes(vec3 p, float phase)`); `float
- * starSpotShaped(vec2 local, float rs, float seed, float age, float
- * aa)`, the brightness of one spot; `float starLimb(float mu)`, `float starBrightness(vec3 n, float mu)`, `vec3
+ * starCellBlobs(vec3 p, float phase)` and `vec3 starCellLanes(vec3 p,
+ * float phase)`); `float starSpotShaped(vec2 local, float rs, float
+ * seed, float age, float aa)`, the brightness of one spot; `float
+ * starLimb(float mu)`, `float starBrightness(vec3 n, float mu)`, `vec3
  * starSurfaceExposed(vec3 n, float mu)` (for display, see there),
  * `float starDither(vec2)` and `vec3 starSurfaceColour(vec3 n, float
  * mu)`, the linear colour of the photosphere at unit normal `n` in the
@@ -525,11 +524,6 @@ uint starHashU(vec3 c) {
   return h;
 }
 
-/** A value in [0, 1) for the unit cell holding p. */
-float starHash(vec3 p) {
-  return float(starHashU(floor(p)) >> 8u) * (1.0 / 16777216.0);
-}
-
 /** Three values in [0, 1) for the integer point c, ten bits each. */
 vec3 starHash3(vec3 c) {
   uint h = starHashU(c);
@@ -552,11 +546,6 @@ vec3 starValueNoise3(vec3 x) {
 /** Two octaves of value noise, three channels in [0, 1] about 0.5 (prototype D's cheap fbm). */
 vec3 starFbm2x3(vec3 p) {
   return (0.5 * starValueNoise3(p) + 0.25 * starValueNoise3(p * 2.03 + 1.7)) * (4.0 / 3.0);
-}
-
-/** One channel of starFbm2x3. */
-float starFbm2(vec3 p) {
-  return starFbm2x3(p).x;
 }
 
 /**
@@ -697,23 +686,13 @@ StarCell starCellDetail(vec3 p, float phase, float blobs) {
 }
 
 /**
- * (F1, F2) of starCellDetail, F2 = F1 + 2 · edge: F2 − F1 is 0 on a
- * cell's edge and grows into the cell, as the lane measure of a 2D cell
- * pattern.
- */
-vec2 starCells(vec3 p, float phase) {
-  StarCell cell = starCellDetail(p, phase, 0.0);
-  return vec2(cell.f1, cell.f1 + 2.0 * cell.edge);
-}
-
-/**
  * The network's lanes, drawn over the whole disc: (F2 − F1, the same
  * measure for the second-nearest edge line, a value in [0, 1) for the
- * pair of cells across the nearest edge). F2 − F1 = 2 · edge as
- * starCells measures it (the same cells, wandering the same way, the
- * edges along the surface), but searched among the 8 cells of the
+ * pair of cells across the nearest edge). F2 − F1 = 2 · edge, the edge
+ * as starCellDetail measures it (the same cells, wandering the same way,
+ * the edges along the surface), but searched among the 8 cells of the
  * 2×2×2 block on p's side only, in one pass whose centres are kept for
- * the edges: about a third of starCells' cost. Against the 20-cell
+ * the edges: about a third of starCellDetail's cost. Against the 20-cell
  * search it misses a short stub of lane near a junction on about 0.1 %
  * of the points, which the network's soft, wide ribbons hide.
  */

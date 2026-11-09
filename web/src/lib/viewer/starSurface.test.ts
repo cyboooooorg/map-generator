@@ -377,7 +377,7 @@ describe('star surface', () => {
   });
 
   it('draws granules as cells', () => {
-    expect(STAR_SURFACE_GLSL).toMatch(/vec2 starCells\(vec3 p, float phase\)/);
+    expect(STAR_SURFACE_GLSL).toMatch(/StarCell starCellDetail\(vec3 p, float phase, float blobs\)/);
     expect(STAR_SURFACE_GLSL).not.toMatch(/starNoise\(p \+ mod\(step3/); // the simplex cross-fade is gone
     expect(STAR_SURFACE_GLSL).toMatch(/float starGranules\(vec3 n\)/);
   });
@@ -419,7 +419,7 @@ describe('star surface', () => {
   it('keeps the cell helpers out of STAR_NO_GRANULATION, for the sky disc', () => {
     const gate = STAR_SURFACE_GLSL.indexOf('#ifndef STAR_NO_GRANULATION');
     expect(gate).toBeGreaterThan(0);
-    for (const helper of ['vec2 starCells(', 'float starFbm2(', 'float starHash(']) {
+    for (const helper of ['StarCell starCellDetail(', 'vec3 starFbm2x3(', 'vec3 starHash3(', 'vec3 starValueNoiseRing(']) {
       const at = STAR_SURFACE_GLSL.indexOf(helper);
       expect(at, helper).toBeGreaterThan(0);
       expect(at, helper).toBeLessThan(gate);
