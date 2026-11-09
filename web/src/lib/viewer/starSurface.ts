@@ -9,7 +9,7 @@
  *   defines `STAR_REGIONS` (the length of the region arrays) and, for a
  *   disc too small to show granules, `STAR_NO_GRANULATION`. The
  *   granulation is moving cellular noise (`starCells`): bright cells,
- *   dark lanes between them and bright points in the lanes, whose
+ *   dark lanes between them, whose
  *   centres wander with the granule phase.
  * - `StarSurfaceState` keeps the uniforms in step with the clock: it asks
  *   the region timeline (lib/starActivity.ts) for the regions alive at a
@@ -245,23 +245,24 @@ const glslRate = (k: number): string => ((TWO_PI * k) / GRANULE_PHASE_PERIOD).to
 const WARP_RADIUS = 0.08 / ((TWO_PI * WARP_HARMONIC) / GRANULE_PHASE_PERIOD);
 
 /**
- * Mean and rms of the raw granule brightness (cell plus bright points),
+ * Mean and rms of the raw granule brightness up close,
  * measured on disc patches from the centre to 0.6 radii and at several
  * phases (see `starGranules`): they bring it to zero mean and unit rms.
  */
-const GRANULE_RAW_MEAN = 0.576;
-const GRANULE_RAW_RMS = 0.354;
+const GRANULE_RAW_MEAN = 0.519;
+const GRANULE_RAW_RMS = 0.384;
 
 /**
  * **Calibration**: granules this many pixels across or fewer are shaded
- * as small (wider, softer lanes and pools, round blobs of more varied
- * tone, no bright points), and from the second as close up: in between,
- * at 1.1 R, thin crisp lanes round flat cells read as cracked glass.
+ * as small (a continuous sum of round blobs of more varied tone, see
+ * starCellBlobs), and from the second as close up: in between, at
+ * 1.1 R, thin crisp lanes round flat cells read as cracked glass, and
+ * any drawn edge as a seam across the blobs.
  */
-const GRANULE_SMALL_PX = [30, 120] as const;
+const GRANULE_SMALL_PX = [40, 120] as const;
 /** The raw brightness's mean and rms with the small shading, measured as GRANULE_RAW_MEAN. */
-const GRANULE_SMALL_RAW_MEAN = 0.712;
-const GRANULE_SMALL_RAW_RMS = 0.49;
+const GRANULE_SMALL_RAW_MEAN = 1.323;
+const GRANULE_SMALL_RAW_RMS = 0.545;
 
 /**
  * **Calibration**: the drawn granulation's rms over `granule_contrast`,
@@ -322,7 +323,7 @@ const WINDOW_DAYS = 21;
  * starHash(vec3 p)`, `vec3 starHash3(vec3 c)`, `vec3
  * starValueNoise3(vec3 x)`, `vec3 starFbm2x3(vec3 p)`, `float
  * starFbm2(vec3 p)`, `vec3 starWave(vec3 x)`, `StarCell starCellDetail(vec3
- * p, float phase)`, `vec2 starCells(vec3 p, float phase)` and `float
+ * p, float phase)`, `float starCellBlobs(vec3 p, float phase)`, `vec2 starCells(vec3 p, float phase)` and `float
  * starCellLanes(vec3 p, float phase)`); `float
  * starLimb(float mu)`, `float
  * starBrightness(vec3 n, float mu)`, `vec3 starSurfaceExposed(vec3 n,
@@ -341,13 +342,13 @@ const WINDOW_DAYS = 21;
  *   cells' edges. Each cell is a dome of its own tone, bright at its
  *   centre and falling towards its edge (distances along the surface,
  *   see `starCellDetail`), dimmer while it is born or dies, a few large
- *   ones darker in the middle; the intergranular lanes are dark, narrow
- *   along long edges and wider at junctions, and about a fifth of them
- *   carry a soft bright point. Granules are the tops of convective cells: hot
- *   upflows, bright, ringed by cooler, darker downflow lanes (Nordlund,
- *   Stein & Asplund 2009, Living Rev. Sol. Phys. 6, 2), in which
- *   magnetic bright points sit (Sánchez Almeida et al. 2004, ApJ 609,
- *   L91). The cells' centres wander by 0.3 of a cell at 2.1 to 2.4 rad
+ *   ones darker in the middle, its corners rounded; the intergranular
+ *   lanes are dark, narrow along long edges and wider at junctions.
+ *   Granules are the tops of convective cells: hot upflows, bright,
+ *   ringed by cooler, darker downflow lanes (Nordlund, Stein & Asplund
+ *   2009, Living Rev. Sol. Phys. 6, 2). The magnetic bright points of
+ *   the lanes (Sánchez Almeida et al. 2004, ApJ 609, L91) are not drawn:
+ *   cut by the lane they sat in, they read as specks. The cells' centres wander by 0.3 of a cell at 2.1 to 2.4 rad
  *   per lifetime (**calibration**), so cells deform, split and merge over
  *   a few lifetimes. It is brought to zero mean and unit rms, then times
  *   `GRANULE_GAIN` (**calibration**, prototype D's look): the rms of the
@@ -496,10 +497,11 @@ const vec3 STAR_CELL_STEPS[20] = vec3[20](
   vec3(0.0, -1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(0.0, -1.0, 1.0), vec3(1.0, -1.0, 1.0),
   vec3(0.0, 0.0, -1.0), vec3(1.0, 0.0, -1.0), vec3(0.0, 1.0, -1.0), vec3(1.0, 1.0, -1.0));
 
-/** How far from a lane's middle its bright point reaches, in cells. */
-const float STAR_LANE_POINT_RADIUS = 0.10;
 
 /** What starCellDetail finds at a point, distances in cells. */
+/** The small granules' blobs: exp(−d² · this), a Gaussian of σ = 0.38 cell, depth counting for 0.4 of its square (**calibrations**). */
+const float STAR_BLOB_SHARPNESS = 5.5;
+
 struct StarCell {
   /** Distance to the nearest centre (3D). */
   float f1;
@@ -511,10 +513,8 @@ struct StarCell {
   float depth;
   /** A value in [0, 1) for the cell. */
   float id;
-  /** Distance to where the nearest edge crosses the segment between the two centres; 1e4 away from the lanes. */
-  float point;
-  /** A value in [0, 1) for the pair of cells across the nearest edge. */
-  float pair;
+  /** starCellBlobs's sum when asked for (blobs > 0), else 0. */
+  float blobs;
 };
 
 /**
@@ -542,7 +542,7 @@ struct StarCell {
  * result matched a 125-cube search on every one of 4.3 million test
  * points. A 27-cube search, on an M1, cost two to four times as much.
  */
-StarCell starCellDetail(vec3 p, float phase) {
+StarCell starCellDetail(vec3 p, float phase, float blobs) {
   vec3 i = floor(p);
   vec3 f = p - i;
   vec3 axis = normalize(p);
@@ -554,12 +554,18 @@ StarCell starCellDetail(vec3 p, float phase) {
   float d1 = 1e4;
   vec3 r1 = vec3(0.0);
   float h1 = 0.0;
+  float sum = 0.0;
   for (int k = 0; k < 20; k++) {
     vec3 g = side * STAR_CELL_STEPS[k];
     vec3 hv = starHash3(i + g);
     vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
     rs[k] = r;
     float d = dot(r, r);
+    // Callers pass blobs as a literal, so the compiler drops this when 0.
+    if (blobs > 0.0) {
+      float depth = dot(r, axis);
+      sum += (0.45 + fract(hv.x * 13.7)) * exp(-(d - 0.6 * depth * depth) * blobs);
+    }
     bool nearer = d < d1;
     d1 = nearer ? d : d1;
     r1 = nearer ? r : r1;
@@ -567,7 +573,6 @@ StarCell starCellDetail(vec3 p, float phase) {
   }
   float edge = 1e4;
   float edge2 = 1e4;
-  int across = 0;
   for (int k = 0; k < 20; k++) {
     vec3 r = rs[k];
     vec3 dr = r - r1;
@@ -578,7 +583,6 @@ StarCell starCellDetail(vec3 p, float phase) {
     bool nearer = e < edge;
     edge2 = min(edge2, max(edge, e));
     edge = nearer ? e : edge;
-    across = nearer ? k : across;
   }
   StarCell cell;
   cell.f1 = sqrt(d1);
@@ -588,18 +592,7 @@ StarCell starCellDetail(vec3 p, float phase) {
   cell.depth = abs(depth);
   cell.centre = length(r1 - depth * axis);
   cell.id = h1;
-  cell.point = 1e4;
-  cell.pair = 0.0;
-  if (edge < STAR_LANE_POINT_RADIUS) {
-    // The neighbour across the nearest edge again, rather than carry it through the loop.
-    vec3 g = side * STAR_CELL_STEPS[across];
-    vec3 hv = starHash3(i + g);
-    vec3 dr = g + 0.5 + 0.3 * starWave(turns + hv) - f - r1;
-    vec3 normal = normalize(dr - dot(dr, axis) * axis);
-    vec3 t1 = r1 - depth * axis;
-    cell.point = length(t1 + (edge - dot(normal, t1)) * normal);
-    cell.pair = fract(h1 + hv.x);
-  }
+  cell.blobs = sum;
   return cell;
 }
 
@@ -609,7 +602,7 @@ StarCell starCellDetail(vec3 p, float phase) {
  * pattern.
  */
 vec2 starCells(vec3 p, float phase) {
-  StarCell cell = starCellDetail(p, phase);
+  StarCell cell = starCellDetail(p, phase, 0.0);
   return vec2(cell.f1, cell.f1 + 2.0 * cell.edge);
 }
 
@@ -666,6 +659,33 @@ vec3 starCellLanes(vec3 p, float phase) {
   return vec3(2.0 * edge, 2.0 * edge2, fract(h1 + across));
 }
 
+/**
+ * The cells of starCellDetail as a sum of round blobs: over the same 20
+ * cells, each centre's tone (0.45 to 1.45, from its value) times
+ * exp(−d² · STAR_BLOB_SHARPNESS), d² the squared distance along the
+ * surface plus 0.4 of the squared depth (a centre deep below or above
+ * the surface is dimmer). It is continuous everywhere: no edge is drawn,
+ * and the dips between centres are the lanes, wide where centres are far
+ * apart. One pass, for granules too small on screen for their edges.
+ */
+float starCellBlobs(vec3 p, float phase) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 axis = normalize(p);
+  vec3 side = sign(f - 0.5);
+  side += 1.0 - abs(side);
+  vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
+  float sum = 0.0;
+  for (int k = 0; k < 20; k++) {
+    vec3 g = side * STAR_CELL_STEPS[k];
+    vec3 hv = starHash3(i + g);
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + hv) - f;
+    float along = dot(r, axis);
+    sum += (0.45 + fract(hv.x * 13.7)) * exp(-(dot(r, r) - 0.6 * along * along) * STAR_BLOB_SHARPNESS);
+  }
+  return sum;
+}
+
 #ifndef STAR_NO_GRANULATION
 /**
  * Granulation at n, zero-mean with rms ${GRANULE_GAIN} (the gain, see
@@ -678,14 +698,15 @@ vec3 starCellLanes(vec3 p, float phase) {
  *   cell, dimmer while its centre lies deep (a granule being born or
  *   dying), and a darker middle in a few large cells (exploding
  *   granules);
+ * - its corners rounded by a faster fall where s nears 1;
  * - dark intergranular lanes with soft edges, narrow along long edges
- *   and wider and darker at junctions;
- * - a soft bright point in the middle of a fifth of the lanes.
+ *   and widening into pools at junctions.
  *
- * That is the look from 120 px per granule (uGranulePx). At 30 px or
- * fewer, each cell is a round blob of more varied tone over a shared
- * floor, without drawn lanes or points, and in between the two blend,
- * every lane edge at least 2.5 px soft (GRANULE_SMALL_PX).
+ * That is the look from 120 px per granule (uGranulePx). At 40 px or
+ * fewer, the cells are a continuous sum of round blobs (starCellBlobs),
+ * with no edge drawn, so no seam crosses them; in between the two
+ * blend, every lane edge at least 2.5 px soft (GRANULE_SMALL_PX), the
+ * blobs summed in the same pass as the cells.
  *
  * The shapes and weights are **calibrations** matched by eye to
  * prototype D.
@@ -696,36 +717,42 @@ float starGranules(vec3 n) {
   float drift = STAR_WARP_RATE * phase;
   // One octave of warp, as D's second octave cost a sixth of the term.
   q += STAR_WARP_AMPLITUDE * (starValueNoise3(STAR_WARP_SCALE * q + STAR_WARP_RADIUS * vec3(cos(drift), 0.0, sin(drift))) - 0.5);
-  StarCell cell = starCellDetail(q, phase);
   // How small the granules are on screen: 1 up to ${GRANULE_SMALL_PX[0]} px, 0 from
-  // ${GRANULE_SMALL_PX[1]} px; and a pixel, in cells.
+  // ${GRANULE_SMALL_PX[1]} px. Each look is computed only while it shows
+  // (uniform branches): the cells' edges up close, the blobs when small.
   float small = 1.0 - smoothstep(${GRANULE_SMALL_PX[0].toFixed(1)}, ${GRANULE_SMALL_PX[1].toFixed(1)}, uGranulePx);
-  float pixel = 1.0 / max(uGranulePx, 1.0);
-  float s = cell.centre / (cell.centre + cell.edge + 1e-4);
-  float shade = fract(cell.id * 13.7);
-  float tone = mix(0.75 + 0.45 * shade, 0.45 + 1.0 * shade, small);
-  tone *= 1.0 - 0.35 * smoothstep(0.15, 0.5, cell.depth);
-  // Close up, D's dome: bright at the centre, falling towards the edge.
-  float dome = 1.2 - 0.75 * s * s;
-  // A dark middle in a few large cells.
-  float large = smoothstep(0.45, 0.7, cell.centre + cell.edge) * step(0.75, fract(cell.id * 7.31));
-  dome -= 0.35 * large * (1.0 - smoothstep(0.0, 0.35, s));
-  // Small on screen, a round blob: falling with the distance from the
-  // centre as much as towards the edge, so that the dark between cells
-  // is wide where centres are far apart and the cells read as irregular
-  // blobs, not polygons; its lanes are that soft dark alone.
-  // The floor between blobs is the same for every cell (over the tone), so
-  // that cells of different tones meet without a step.
-  float blob = 1.6 * (1.0 - smoothstep(0.05, 0.8, cell.centre)) * (1.0 - smoothstep(0.35, 1.0, s)) + 0.3 / tone;
-  dome = mix(dome, blob, small);
-  // Only the width varies (edge2 may differ across a lane, where edge is 0).
-  // Every lane edge is at least about 2.5 px soft.
-  float junction = 1.0 - smoothstep(0.0, 0.45, cell.edge2);
-  float width = mix(0.045, 0.22, junction * junction) + 2.5 * pixel;
-  float lane = (1.0 - smoothstep(0.0, width, cell.edge)) * (1.0 - small);
-  float points = (1.0 - small) * step(0.8, cell.pair) * (1.0 - smoothstep(0.0, STAR_LANE_POINT_RADIUS, cell.point));
-  // D's weights: the cells, then the points at 0.35 / 0.62 of them.
-  float raw = tone * dome * (1.0 - lane) + 0.5645 * points;
+  float lit = 0.0;
+  float blob = 0.0;
+  if (small >= 1.0) {
+    blob = starCellBlobs(q, phase);
+  } else {
+    StarCell cell;
+    // Between the two looks, the blobs are summed in the same pass.
+    if (small > 0.0) cell = starCellDetail(q, phase, STAR_BLOB_SHARPNESS);
+    else cell = starCellDetail(q, phase, 0.0);
+    blob = cell.blobs;
+    // About 2.5 px of softness, in cells; at most 0.1 cell.
+    float soft = min(2.5 / max(uGranulePx, 1.0), 0.1);
+    float s = cell.centre / (cell.centre + cell.edge + 1e-4);
+    float tone = 0.75 + 0.45 * fract(cell.id * 13.7);
+    tone *= 1.0 - 0.35 * smoothstep(0.15, 0.5, cell.depth);
+    // D's dome: bright at the centre, falling towards the edge, and
+    // faster near it, which rounds the cell's corners (where s nears 1
+    // first) into a curved outline.
+    float dome = 1.2 - 0.75 * s * s - 0.35 * smoothstep(0.75, 1.0, s);
+    // A dark middle in a few large cells.
+    float large = smoothstep(0.45, 0.7, cell.centre + cell.edge) * step(0.75, fract(cell.id * 7.31));
+    dome -= 0.35 * large * (1.0 - smoothstep(0.0, 0.35, s));
+    // Only the width varies (edge2 may differ across a lane, where edge
+    // is 0). Lanes widen into soft pools at the junctions, and every lane
+    // edge is at least about 2.5 px soft.
+    float junction = 1.0 - smoothstep(0.0, 0.55, cell.edge2);
+    float width = mix(0.05, 0.26, junction * junction) + soft;
+    float lane = 1.0 - smoothstep(0.0, width, cell.edge);
+    lit = tone * dome * (1.0 - lane);
+  }
+  // Small on screen, a sum of round blobs (starCellBlobs).
+  float raw = mix(lit, 1.6 * blob + 0.3, small);
   // Brought to zero mean and unit rms at either end of the size range.
   float mean = mix(${GRANULE_RAW_MEAN.toFixed(4)}, ${GRANULE_SMALL_RAW_MEAN.toFixed(4)}, small);
   float rms = mix(${GRANULE_RAW_RMS.toFixed(4)}, ${GRANULE_SMALL_RAW_RMS.toFixed(4)}, small);

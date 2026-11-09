@@ -166,7 +166,16 @@ describe('star surface', () => {
     s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
     s.update(100, { radiusPx: 20000, daysPerSecond: 0 });
     expect(u.uGranulePx!.value).toBeCloseTo(20000 * SUN_ACTIVITY.granule_size, 9);
-    expect(STAR_SURFACE_GLSL).toMatch(/float small = 1\.0 - smoothstep\(30\.0, 120\.0, uGranulePx\);/);
+    expect(STAR_SURFACE_GLSL).toMatch(/float small = 1\.0 - smoothstep\(40\.0, 120\.0, uGranulePx\);/);
+  });
+
+  it('draws small granules as a continuous sum of blobs, without specks', () => {
+    // Small on screen, the blobs alone; up close, the cells' edges; in between, both in one pass.
+    expect(STAR_SURFACE_GLSL).toContain('float starCellBlobs(vec3 p, float phase)');
+    expect(STAR_SURFACE_GLSL).toMatch(/if \(small >= 1\.0\) \{\n\s+blob = starCellBlobs\(q, phase\);/);
+    expect(STAR_SURFACE_GLSL).toContain('cell = starCellDetail(q, phase, STAR_BLOB_SHARPNESS)');
+    // The bright points, cut by the lanes they sat in, are gone.
+    expect(STAR_SURFACE_GLSL).not.toMatch(/cell\.point|cell\.pair/);
   });
 
   it('fades the mottle out as the granules fade in', () => {

@@ -364,18 +364,19 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    edge, both measured along the surface. Its tone varies from cell to
    cell (0.75 to 1.2), it is dimmer while its centre lies deep (a
    granule being born or dying), and a quarter of the large cells have
-   a darker middle, as exploding granules do. The intergranular lanes
-   are dark with soft edges, narrow along long edges and widening into
-   pools at the junctions of three cells. The distances are taken
+   a darker middle, as exploding granules do; it falls faster near its
+   edge ($-0.35\,\text{smoothstep}(0.75, 1, s)$), which rounds its
+   corners. The intergranular lanes are dark with soft edges, narrow
+   along long edges (0.05 cell) and widening into pools at the
+   junctions of three cells (0.26 cell). The distances are taken
    along the surface, not as the 3D second-nearest distance: a sphere
    cutting a 3D cell pattern runs nearly parallel to some faces between
    centres stacked in depth, where the 3D $F_2 - F_1$ stays small over
-   wide flat grey patches with hard edges. About a fifth of the lanes
-   carry a soft bright point where the lane crosses the line between
-   its two centres, weighted 0.35 against the cells' 0.62 (prototype D;
-   Nordlund, Stein & Asplund 2009 for the cells and lanes, Sánchez
-   Almeida et al. 2004 for the points; the shapes and weights are
-   **calibrations**). Each centre wanders
+   wide flat grey patches with hard edges (Nordlund, Stein & Asplund
+   2009 for the cells and lanes; the shapes and weights are
+   **calibrations**). The magnetic bright points of the lanes (Sánchez
+   Almeida et al. 2004) are not drawn: prototype D's, cut by the lane
+   they sat in, read as specks on screen. Each centre wanders
    about its cell's middle by 0.3 of a cell along each axis, at 97, 103
    and 109 turns per 289 granule lifetimes (2.1 to 2.4 rad per
    lifetime, **calibration**), so that cells deform, split and merge
@@ -391,14 +392,16 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    is therefore 1.6 times `granule_contrast`, before the soft exposure
    below compresses it on screen. The shading follows a granule's size
    on screen (**calibration**): from 120 pixels across it is the one
-   above; at 30 pixels or fewer each cell is drawn as a round blob,
-   falling with its distance from the cell's centre as much as towards
-   its edge, over a floor shared by every cell, with a wider spread of
-   tones (0.45 to 1.45) and no bright points or drawn lanes, so that the
-   dark between granules is wide where their centres are far apart.
-   Between the two it blends, and every lane edge is at least about 2.5
-   pixels soft. At mid zoom, about 1.1 radii, thin crisp lanes round
-   flat cells otherwise read as cracked glass. Both ends are brought to
+   above; at 40 pixels or fewer the cells are a sum of round blobs, one
+   per centre, each of its cell's tone (0.45 to 1.45) times
+   $e^{-d^2/(2\sigma^2)}$ with $\sigma = 0.3$ cell and $d^2$ the squared
+   distance along the surface plus 0.4 of the squared depth
+   (**calibrations**). The field is continuous everywhere, no edge is
+   drawn, and the dips between centres are the lanes, wide where
+   centres are far apart. Between the two it blends, and every lane
+   edge is at least about 2.5 pixels soft. At mid zoom, about 1.1 radii,
+   thin crisp lanes round flat cells read as cracked glass, and any
+   edge drawn among the blobs as a thin seam. Both ends are brought to
    zero mean and the same rms.
    The supergranule network is a second cell pattern, at
    `SUPERGRANULE_SIZE_MM` = 30 Mm on the Sun (Leighton, Noyes & Simon
@@ -515,7 +518,7 @@ star, about half of them on the visible side.
 - **Granule lifetime**: the 8 minutes is a calibration a little above
   the time constants Title et al. (1989) report.
 - **The drawn granulation is a picture of convection, not a model of
-  it.** Its cells, lanes, bright points, wander speeds and the gain of
+  it.** Its cells, lanes, blobs, wander speeds and the gain of
   1.6 on `granule_contrast` are calibrations matched to prototype D;
   the gain makes the drawn contrast (0.24 rms on the Sun) higher than
   the 0.15 the activity gives, so that the surface reads as agitated
