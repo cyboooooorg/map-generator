@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GeneratorNote } from './api/types/GeneratorNote';
 import type { System } from './api/types/System';
 import type { RegeneratedBody } from './api/types/RegeneratedBody';
-import { bodyTitle, evictedKey, forgetTold, toTell, toTellEvicted } from './evicted';
+import { bodyTitle, evictedKey, forgetTold, remadeToasts, toTell, toTellEvicted } from './evicted';
 
 const note: GeneratorNote = { version: '0.1.0+aaaa', format: 3, current_version: '0.1.0+bbbb', current_format: 3 };
 
@@ -44,5 +44,27 @@ describe('the notice of an evicted body made again', () => {
     forgetTold('mgs-1', new Set(), told);
     expect([...told]).toEqual(['mgs-2/c-1']);
     expect(toTellEvicted('mgs-1', 'c-1', told)).toBe(true);
+  });
+});
+
+describe('what the user is told when the body opened is made again', () => {
+  const from = (body: string): RegeneratedBody => ({ body, from: note });
+  it('says an evicted body is made again, even when the system was reloaded meanwhile', () => {
+    // `wasEvicted` is read before the request: the system listing may be
+    // fetched again (and no longer list the body) while it is in flight.
+    const told = new Set<string>();
+    expect(remadeToasts('mgs-1', 'c-1', true, [], new Set(), told)).toEqual([{ kind: 'evictedRemade', body: 'c-1' }]);
+    expect(remadeToasts('mgs-1', 'c-1', true, [], new Set(), told)).toEqual([]);
+  });
+  it('says it once, with the older generator, for the body opened', () => {
+    expect(remadeToasts('mgs-1', 'c-1', true, [from('c-1')], new Set(), new Set())).toEqual([
+      { kind: 'evictedRemadeOlder', body: 'c-1' },
+    ]);
+  });
+  it('names the others of the family as older worlds', () => {
+    expect(remadeToasts('mgs-1', 'c-1', false, [from('c'), from('c-1')], new Set(), new Set())).toEqual([
+      { kind: 'olderWorld', body: 'c' },
+      { kind: 'olderWorld', body: 'c-1' },
+    ]);
   });
 });

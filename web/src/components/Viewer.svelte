@@ -38,7 +38,7 @@
   import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
-  import { bodyTitle, toTell, toTellEvicted } from '../lib/evicted';
+  import { bodyTitle, forgetTold, remadeToasts } from '../lib/evicted';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
@@ -1255,23 +1255,20 @@
         const pending = world.id === id ? world.sizes?.pending.find((p) => sizeName(p.width, p.height) === wanted) : undefined;
         jobId = pending ? pending.job_id : (await api.generateSize(id, wanted)).job_id;
       } else {
+        // Read before the request: the system may be listed again while it
+        // is in flight (a job ending), and no longer name the body.
+        const wasEvicted = world.systemEvicted.includes(body);
         const started = await api.generateBody(systemId, body);
         jobId = started.job_id;
         // Bodies that lost their files, made by another generator (the one
         // asked for, and its family: a planet's job makes its moons): the
-        // user hears it once each.
-        // The body opened, if it lost its files, is told of once as it is
-        // made again; when it is also made by an older generator, one toast
-        // says both (the older-world one is not shown for it as well).
-        const remade = world.systemEvicted.includes(body) && toTellEvicted(systemId, body);
-        const older = toTell(systemId, started.regenerated);
-        for (const named of older) {
+        // user hears it once each. The body opened, if it lost its files,
+        // is told of once as it is made again; when it is also made by an
+        // older generator, one toast says both.
+        for (const { kind, body: named } of remadeToasts(systemId, body, wasEvicted, started.regenerated)) {
           const title = bodyTitle(sys, world.systemNames, named);
-          if (remade && named === body) toasts.show(t.app.evictedRemadeOlder({ body: title }), { ms: 12000 });
-          else toasts.show(t.app.olderWorld({ body: title }), { ms: 12000 });
-        }
-        if (remade && !older.includes(body)) {
-          toasts.show(t.app.evictedRemade({ body: bodyTitle(sys, world.systemNames, body) }), { ms: 5000 });
+          if (kind === 'evictedRemade') toasts.show(t.app.evictedRemade({ body: title }), { ms: 5000 });
+          else toasts.show(kind === 'evictedRemadeOlder' ? t.app.evictedRemadeOlder({ body: title }) : t.app.olderWorld({ body: title }), { ms: 12000 });
         }
       }
       if (jobId !== null) followedJobs.add(jobId);
@@ -1290,6 +1287,8 @@
       if (!mine()) return;
       if (final.status === 'done') {
         generation = null;
+        // Made again: a later eviction of these bodies tells again.
+        forgetTold(systemId);
         if (wanted !== null) await showSize(wanted);
         else world.loadSystem(systemId);
       } else {

@@ -45,6 +45,38 @@ export function toTell(system: string, regenerated: RegeneratedBody[], told: Set
   return fresh;
 }
 
+/** A toast about a body made again: which message, for which body. */
+export interface RemadeToast {
+  kind: 'olderWorld' | 'evictedRemade' | 'evictedRemadeOlder';
+  body: string;
+}
+
+/**
+ * The toasts for the answer to the generation of `body` (the one opened):
+ * `wasEvicted` says it lost its files, read before the request was sent
+ * (the system may be listed again while the request is in flight, and no
+ * longer name it); `regenerated` is what the server says the job makes
+ * again by another generator. A body evicted and made by an older
+ * generator gets one toast saying both.
+ */
+export function remadeToasts(
+  system: string,
+  body: string,
+  wasEvicted: boolean,
+  regenerated: RegeneratedBody[],
+  toldOlderSet: Set<string> = toldOlder,
+  toldEvictedSet: Set<string> = toldEvicted,
+): RemadeToast[] {
+  const remade = wasEvicted && toTellEvicted(system, body, toldEvictedSet);
+  const older = toTell(system, regenerated, toldOlderSet);
+  const out: RemadeToast[] = older.map((named) => ({
+    kind: remade && named === body ? 'evictedRemadeOlder' : 'olderWorld',
+    body: named,
+  }));
+  if (remade && !older.includes(body)) out.push({ kind: 'evictedRemade', body });
+  return out;
+}
+
 /** Forgets what the user was told of `system`'s bodies: a later eviction tells again. */
 export function forgetTold(system: string, ...sets: Set<string>[]): void {
   for (const told of sets.length > 0 ? sets : [toldOlder, toldEvicted]) {
