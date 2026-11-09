@@ -318,9 +318,10 @@ A body has its original resolution (the size in its parameters in
   when `sizes/<W>x<H>/raw_data/world.json` is
   (`mapgen::sizes::sizes_on_disk`). A size is generated into
   `sizes/.tmp-<W>x<H>/` and renamed into place
-  (`mapgen::system::generate_size`); a deleted one is first renamed to
+  (`mapgen::system::generate_size`; a size job that fails, crashes or
+  is cancelled removes it); a deleted one is first renamed to
   `sizes/.tmp-delete-<W>x<H>-<ms>/`, then removed. The start's sweep
-  clears both kinds of leftovers.
+  clears both kinds of leftovers a killed server leaves.
 - **The index** remembers the displayed size of each body
   (`bodies.displayed_width`, `displayed_height`, NULL for the original;
   layout 3), kept when the system is read again from the tree and reset

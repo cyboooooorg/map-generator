@@ -225,11 +225,16 @@ fn world_failure(error: TileError, what: &str) -> Response {
 }
 
 pub fn router(config: Config) -> Router {
+    routes(new_state(&config), &config)
+}
+
+/// The server's state: the tree swept, the index opened and reconciled.
+fn new_state(config: &Config) -> Shared {
     // Exports a killed server left unfinished.
     systems::sweep(&config.systems_dir);
     let catalog = Catalog::load(&config.presets_dir);
-    let (index, jobs, next_job) = open_index(&config);
-    let state = Arc::new(AppState {
+    let (index, jobs, next_job) = open_index(config);
+    Arc::new(AppState {
         catalog,
         index,
         jobs: Mutex::new(jobs),
@@ -245,7 +250,11 @@ pub fn router(config: Config) -> Router {
         thumbnails: Thumbnails::default(),
         originals: Arc::default(),
         config: config.clone(),
-    });
+    })
+}
+
+/// The routes over `state`.
+fn routes(state: Shared, config: &Config) -> Router {
     let spa = ServeDir::new(&config.static_dir)
         .fallback(ServeFile::new(config.static_dir.join("index.html")));
     // Vite names the bundles after their content hash: cache them for good
@@ -1056,44 +1065,38 @@ async fn generate_size(
     if size == original {
         return Ok(Json(GenerateStarted { job_id: None }));
     }
-    /// What the pending list said, under its lock.
-    enum Turn {
-        Present,
-        Queued(Option<String>),
-        Refused(Rejection),
-        New(String, NewJob),
-    }
     let (task_state, system, owned) = (state.clone(), id.clone(), body.clone());
-    let turn = tokio::task::spawn_blocking(move || {
-        let state = task_state;
-        let key = pending_size(&system, &owned, size);
-        // Under the lock, so that a size is never both deleted and queued.
-        let mut pending = state.pending.lock().expect("pending lock");
-        if pending.contains(&key) {
-            return Turn::Queued(unfinished_job(&state, &system, Some(&owned), Some(size)));
-        }
-        if systems::size_revision(&state.config.systems_dir, &system, &owned, size).is_some() {
-            return Turn::Present;
-        }
-        if let Err(refused) = check_offered(size, state.config.max_pixels) {
-            return Turn::Refused(refused);
-        }
-        pending.push(key.clone());
-        let job = register_job(&state, &system, &owned, Some(size));
-        Turn::New(key, job)
-    })
-    .await
-    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let job_id = match turn {
-        Turn::Present => None,
-        Turn::Queued(job) => job,
-        Turn::Refused(refused) => return Err(refused),
-        Turn::New(key, job) => {
-            note_opened(&state, &id, &body);
-            Some(start_job(&state, key, job).await)
-        }
-    };
+    let job_id =
+        tokio::task::spawn_blocking(move || claim_size(&task_state, &system, &owned, size))
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
+    note_opened(&state, &id, &body);
     Ok(Json(GenerateStarted { job_id }))
+}
+
+/// Under the pending list's lock (so that a size is never both deleted
+/// and queued): the job generating `size` of `body` when there is one,
+/// none when that size is on disk, else a new job, started at once (so
+/// that a request dropped meanwhile leaves no job without a task).
+/// Blocking; runs inside the runtime (it spawns the job's task).
+fn claim_size(
+    state: &Shared,
+    id: &str,
+    body: &str,
+    size: (u32, u32),
+) -> Result<Option<String>, Rejection> {
+    let key = pending_size(id, body, size);
+    let mut pending = state.pending.lock().expect("pending lock");
+    if pending.contains(&key) {
+        return Ok(unfinished_job(state, id, Some(body), Some(size)));
+    }
+    if systems::size_revision(&state.config.systems_dir, id, body, size).is_some() {
+        return Ok(None);
+    }
+    check_offered(size, state.config.max_pixels)?;
+    pending.push(key.clone());
+    let job = register_job(state, id, body, Some(size));
+    Ok(Some(start_job(state, key, job)))
 }
 
 /// Refuses a resolution that is not offered ([`request::SIZE_PRESETS`]) or
@@ -1772,9 +1775,10 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
             return Ok(None);
         }
         pending.push(key.clone());
-        register_job(state, id, body, None)
+        let job = register_job(state, id, body, None);
+        start_job(state, key, job)
     };
-    Ok(Some(start_job(state, key, job).await))
+    Ok(Some(job))
 }
 
 /// The id of the unfinished job of system `id` generating `size` of
@@ -1838,12 +1842,14 @@ fn register_job(state: &AppState, id: &str, body: &str, size: Option<(u32, u32)>
     }
 }
 
-/// Stores and starts a job listed by [`register_job`] whose `key` is in
-/// the pending list already: `body` and its neighbourhood, or its `size` resolution
+/// Starts the task of a job listed by [`register_job`] (it stores the
+/// job, then waits for its turn), whose `key` is in the pending list
+/// already. Call it right after [`register_job`], with no `.await` in
+/// between: `body` and its neighbourhood, or its `size` resolution
 /// alone. Every job waits for its turn on the one generation queue, so a
 /// resolution is never generated while its system's own job runs. Answers
 /// the job's id.
-async fn start_job(state: &Shared, key: String, job: NewJob) -> String {
+fn start_job(state: &Shared, key: String, job: NewJob) -> String {
     let NewJob {
         number: job_number,
         id,
@@ -1855,29 +1861,36 @@ async fn start_job(state: &Shared, key: String, job: NewJob) -> String {
     let (id, body) = (id.as_str(), body.as_str());
     let dir = systems::system_dir(&state.config.systems_dir, id);
     let job_id = job_number.to_string();
-    {
-        let (index, owned, owned_body) = (state.index.clone(), id.to_string(), body.to_string());
-        let queued = tokio::task::spawn_blocking(move || {
-            index.job_queued(
-                job_number,
-                &owned,
-                Some((&owned, &owned_body)),
-                &WorldRequest::default(),
-                size,
-                FINISHED_JOBS_KEPT,
-            )
-        })
-        .await;
-        if let Err(e) = queued
-            .map_err(|e| e.to_string())
-            .and_then(|r| r.map_err(|e| e.to_string()))
-        {
-            tracing::error!("job {job_number} not stored: {e}");
-        }
-    }
     let task_state = state.clone();
     let (task_system, task_body) = (id.to_string(), body.to_string());
+    // Spawned at once, with no wait between the listing of the job and
+    // here: a request dropped by its client must not leave a job listed
+    // and pending with no task to run it.
     tokio::spawn(async move {
+        {
+            let (index, owned, owned_body) = (
+                task_state.index.clone(),
+                task_system.clone(),
+                task_body.clone(),
+            );
+            let queued = tokio::task::spawn_blocking(move || {
+                index.job_queued(
+                    job_number,
+                    &owned,
+                    Some((&owned, &owned_body)),
+                    &WorldRequest::default(),
+                    size,
+                    FINISHED_JOBS_KEPT,
+                )
+            })
+            .await;
+            if let Err(e) = queued
+                .map_err(|e| e.to_string())
+                .and_then(|r| r.map_err(|e| e.to_string()))
+            {
+                tracing::error!("job {job_number} not stored: {e}");
+            }
+        }
         // Stored before it is announced, so that a restart right after
         // finds what a client saw. `None` is a job that starts running.
         let store = |status: Option<JobStatus>| {
@@ -1940,8 +1953,7 @@ async fn start_job(state: &Shared, key: String, job: NewJob) -> String {
             let report = |p: mapgen::system::BodyProgress| {
                 // A cancelled job stops when the next stage starts; the
                 // bodies done before it stay generated (a resolution
-                // stopped midway stays in its `.tmp-` directory, cleared
-                // by the next try or the next start).
+                // stopped midway is removed below).
                 if thread_cancel.is_requested() {
                     std::panic::resume_unwind(Box::new(Cancelled));
                 }
@@ -1974,6 +1986,24 @@ async fn start_job(state: &Shared, key: String, job: NewJob) -> String {
                 error: format!("generation crashed: {e}"),
             },
         };
+        // A resolution cancelled or failed midway: its staging directory
+        // can hold GBs (`generate_size` removes it on an error, not on the
+        // cancel's unwind). Still under the job's pending key, so no other
+        // job writes it.
+        if let (Some((width, height)), false) = (size, matches!(status, JobStatus::Done { .. })) {
+            let staging =
+                systems::body_dir(&task_state.config.systems_dir, &task_system, &task_body)
+                    .join(mapgen::sizes::SIZES_DIR)
+                    .join(format!(".tmp-{}", mapgen::sizes::size_name(width, height)));
+            let _ = tokio::task::spawn_blocking(move || {
+                if let Err(e) = std::fs::remove_dir_all(&staging)
+                    && e.kind() != std::io::ErrorKind::NotFound
+                {
+                    tracing::warn!("could not remove {}: {e}", staging.display());
+                }
+            })
+            .await;
+        }
         let _ = tokio::task::spawn_blocking(memory::release).await;
         drop(paused_tiles);
         store(Some(status.clone())).await;
@@ -2635,6 +2665,73 @@ mod tests {
         let (status, body) = call(&tight, "POST", &post, None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert_eq!(json(&body)["detail"]["code"], "too_many_pixels");
+    }
+
+    /// Waits until no generation is pending (a job frees its key just
+    /// after announcing its end).
+    async fn wait_released(state: &AppState) {
+        for _ in 0..500 {
+            if state.pending.lock().unwrap().is_empty() {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        panic!("pending: {:?}", state.pending.lock().unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_size_job_runs_without_its_request_and_leaves_nothing_when_cancelled() {
+        let config = temp_config("size-orphan");
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        let (id, planet) = generated_planet(&app, "barren", 11, "").await;
+        let body_dir = systems::body_dir(&config.systems_dir, &id, &planet);
+        let events = |job: &str| {
+            let (app, uri) = (app.clone(), format!("/api/jobs/{job}/events"));
+            async move {
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(120),
+                    call(&app, "GET", &uri, None),
+                )
+                .await
+                .expect("the job ends")
+                .1
+            }
+        };
+
+        // Claimed, then nothing awaited by any request (as when a client
+        // drops it): the job runs all the same and frees its key.
+        let job = claim_size(&state, &id, &planet, (1024, 512))
+            .ok()
+            .flatten()
+            .expect("a new job");
+        assert!(events(&job).await.contains("\"status\":\"done\""));
+        wait_released(&state).await;
+        assert!(
+            body_dir
+                .join("sizes/1024x512/raw_data/world.json")
+                .is_file()
+        );
+
+        // Cancelled midway: no staging directory is left.
+        let job = claim_size(&state, &id, &planet, (2048, 1024))
+            .ok()
+            .flatten()
+            .expect("a new job");
+        let staging = body_dir.join("sizes/.tmp-2048x1024");
+        loop {
+            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
+            if list.contains("\"status\":\"running\"") {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
+        assert_eq!(status, StatusCode::ACCEPTED);
+        assert!(events(&job).await.contains("\"status\":\"cancelled\""));
+        assert!(!staging.exists());
+        assert!(!body_dir.join("sizes/2048x1024").exists());
+        wait_released(&state).await;
     }
 
     #[tokio::test]
