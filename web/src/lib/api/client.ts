@@ -72,6 +72,9 @@ export const api = {
     call<WorldMetadata>(peeked(worldFile(id, size, 'raw_data/world.json')), fileInit(signal)),
   rivers: (id: string, size: string, file: string, signal?: AbortSignal) =>
     call<RiversFile>(worldFile(id, size, `raw_data/${file}`), fileInit(signal)),
+  /** The rivers of a body seen from another body's view: a peek, see `peekMetadata`. */
+  peekRivers: (id: string, size: string, file: string, signal?: AbortSignal) =>
+    call<RiversFile>(peeked(worldFile(id, size, `raw_data/${file}`)), fileInit(signal)),
   /** The resolutions of a generated body: on disk, displayed, being generated, offered. */
   sizes: (id: string, signal?: AbortSignal) =>
     call<BodySizes>(`${bodyApi(id)}/sizes`, signal ? { cache: 'no-cache', signal } : { cache: 'no-cache' }),

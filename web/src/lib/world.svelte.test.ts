@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
+import type { WorldStats } from './stats';
 import { LoadedWorld } from './world.svelte';
+
+// A moon's card reads its planet's biome statistics through a worker, which
+// the tests have not: only that call is replaced.
+const { peekStats } = vi.hoisted(() => ({ peekStats: vi.fn() }));
+vi.mock('./layers', async (original) => ({ ...(await original<typeof import('./layers')>()), loadPeekedStats: peekStats }));
 
 const body = (id: string, parent?: string) => ({ id, kind: parent ? 'moon' : 'planet', parent, generated: false });
 const files: Record<string, unknown> = {
@@ -363,5 +369,57 @@ describe("a moon's card", () => {
     await settled(() => world.worldError !== null);
     expect(world.worldMeta).toBeNull();
     expect(world.worldError).toContain('c');
+  });
+});
+
+describe("a moon's card biomes", () => {
+  const planetStats = { shares: [], land: 0.3, water: 0.7, surfaceKm2: 5e8 } as unknown as WorldStats;
+  const withBiomes = { ...planetMeta, rivers: 'rivers.json', layers: { biomes: { file: 'biomes.png' } } } as unknown as WorldMetadata;
+
+  function serveBiomes(requested: string[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        requested.push(url);
+        const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+        if (url.includes('/bodies/c-1/')) return new Promise<Response>(() => undefined);
+        if (url.endsWith('/sizes')) return json(sizes);
+        if (url.includes('world.json')) return json(withBiomes);
+        if (url.includes('rivers.json')) return json({ rivers: [] });
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+  }
+
+  it("has its planet's biome statistics when the moon is opened first, read as a peek", async () => {
+    const requested: string[] = [];
+    serveBiomes(requested);
+    peekStats.mockResolvedValueOnce(planetStats);
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldStats !== null);
+    expect(world.worldStats).toBe(planetStats);
+    expect(peekStats).toHaveBeenCalledOnce();
+    const url = peekStats.mock.calls[0]![0] as string;
+    expect(url).toContain(`/bodies/c/`);
+    expect(url).toContain('biomes.png');
+    expect(url).toContain('peek=1');
+    expect(requested.filter((u) => u.includes('rivers.json')).every((u) => u.includes('peek=1'))).toBe(true);
+    await settled(() => world.worldRivers !== null);
+    expect(world.worldRivers).not.toBeNull();
+  });
+
+  it('says so when the statistics cannot be read, instead of measuring for ever', async () => {
+    serveBiomes([]);
+    peekStats.mockRejectedValueOnce(new Error('boom'));
+    const world = new LoadedWorld();
+    world.system = system({});
+    world.systemId = SYSTEM;
+    world.showSystemBody('c-1');
+    await settled(() => world.worldError !== null);
+    expect(world.worldStats).toBeNull();
+    expect(world.worldError).toContain('boom');
   });
 });

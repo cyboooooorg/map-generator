@@ -299,6 +299,9 @@
             {allBiomes ? t.worldInfo.showFewer : t.worldInfo.showAll({ count: stats.shares.length })}
           </button>
         {/if}
+      {:else if world.worldError || (world.id === worldId && world.error)}
+        <!-- The statistics will not come: say why rather than measuring for ever. -->
+        <p class="muted">{world.worldError ?? world.error}</p>
       {:else}
         <p class="muted">{t.worldInfo.measuring}</p>
       {/if}

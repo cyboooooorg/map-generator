@@ -89,6 +89,12 @@ function decodeGrey(file: ArrayBuffer, width: number, height: number, depth: 8 |
   return png.data;
 }
 
+/** Decodes the biome PNG of a world: the biome id of each pixel. */
+export function decodeBiomes(meta: WorldMetadata, file: ArrayBuffer): Uint8Array {
+  const ids = decodeGrey(file, meta.width, meta.height, 8);
+  return ids instanceof Uint8Array ? ids : Uint8Array.from(ids);
+}
+
 function decode16(file: ArrayBuffer, width: number, height: number): Uint16Array {
   const pixels = decodeGrey(file, width, height, 16);
   return pixels instanceof Uint16Array ? pixels : Uint16Array.from(pixels);

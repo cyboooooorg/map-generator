@@ -5,6 +5,7 @@ import type { LoadProgress } from '../progress';
 import type { WorldStats } from '../stats';
 import { epochLayers, type Grey8, type WorldLayers } from './decode';
 import type { EpochRequest, EpochResponse } from './epochWorker';
+import type { StatsRequest, StatsResponse } from './statsWorker';
 import type { GreyRequest, GreyResponse } from './greyWorker';
 import type { WorkerRequest, WorkerResponse } from './worker';
 
@@ -80,6 +81,18 @@ export async function loadLayers(
   const request: WorkerRequest = { base: worldFile(id, size, 'raw_data/'), meta };
   const { layers, stats } = await runOnce<WorkerRequest, WorkerResponse>(worker, request, signal, onProgress);
   return { layers, stats };
+}
+
+/**
+ * The biome statistics of a world from its biome map alone (`biomes`, the
+ * URL of the map, a peek for a body that is not the one shown), computed
+ * in a Web Worker. Aborting `signal` terminates the worker.
+ */
+export async function loadPeekedStats(biomes: string, meta: WorldMetadata, signal?: AbortSignal): Promise<WorldStats> {
+  signal?.throwIfAborted();
+  const worker = new Worker(new URL('./statsWorker.ts', import.meta.url), { type: 'module' });
+  const { stats } = await runOnce<StatsRequest, StatsResponse>(worker, { biomes, meta }, signal);
+  return stats;
 }
 
 /**

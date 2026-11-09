@@ -2,14 +2,14 @@
 // statistics and rivers, loaded in that order (each step can take a while
 // on large maps, and the earlier ones are useful on their own).
 import { t } from './i18n/index.svelte';
-import { api, sizeName, systemBodyId } from './api/client';
+import { api, peeked, sizeName, systemBodyId, worldFile } from './api/client';
 import type { BodySizes } from './api/types/BodySizes';
 import type { PresentSize } from './api/types/PresentSize';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
 import { MIN_FORMAT_VERSION } from './formatVersion';
-import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
+import { loadEpochLayers, loadLayers, loadPeekedStats, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
 import type { WorldStats } from './stats';
@@ -239,9 +239,11 @@ export class LoadedWorld {
   }
 
   /**
-   * Reads the metadata of the planet `id` of a moon shown (its card is the
-   * planet's), at the resolution displayed. A peek: the planet is not the
-   * body looked at, so the server does not count it opened.
+   * Reads the metadata, biome statistics and rivers of the planet `id` of a
+   * moon shown (its card is the planet's), at the resolution displayed. All
+   * peeks: the planet is not the body looked at, so the server does not
+   * count it opened. The card shows the planet's statistics, whichever of
+   * the two was shown first (the moon's own are not on its card).
    */
   private loadPlanetMeta(id: string): void {
     const controller = new AbortController();
@@ -258,6 +260,14 @@ export class LoadedWorld {
         return;
       }
       this.worldMeta = meta;
+      const name = sizeName(shown.width, shown.height);
+      const [stats, rivers] = await Promise.all([
+        loadPeekedStats(peeked(worldFile(id, name, `raw_data/${meta.layers.biomes.file}`)), meta, signal),
+        meta.rivers ? api.peekRivers(id, name, meta.rivers, signal) : null,
+      ]);
+      if (signal.aborted || this.worldId !== id) return;
+      this.worldStats = stats;
+      if (rivers) this.worldRivers = new RiverIndex(rivers, meta.circumference_km);
     })().catch((e: unknown) => {
       if (signal.aborted || this.worldId !== id) return;
       this.worldError = t.world.loadFailed({ id, error: String(e) });
