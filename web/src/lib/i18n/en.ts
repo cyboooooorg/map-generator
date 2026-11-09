@@ -165,6 +165,7 @@ export const en = {
     unpin: (p: { name: string }) => `Unpin ${p.name}`,
     pinFailed: (p: { error: string }) => `Could not change the pin: ${p.error}`,
     rename: (p: { name: string }) => `Rename ${p.name}`,
+    exportSystem: (p: { name: string }) => `Export ${p.name}: seeds, requests and images (ZIP)`,
     renameLabel: 'System name',
     renameSave: 'Save',
     renameCancel: 'Cancel',

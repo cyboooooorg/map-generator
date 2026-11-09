@@ -9,6 +9,7 @@
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
 //! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
 //! | `DELETE /api/systems/{id}`      | delete a system (409 while it or a resolution of a body is being generated) |
+//! | `GET /api/systems/{id}/export`  | a `.zip` of the system: `system.json` (seeds, requests, names, generator versions; see `crate::export`) and the PNGs of its generated bodies |
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
 //! | `PUT /api/systems/{id}/name`   | name the system itself, keeping its bodies' names (`SystemName`; null clears) |
 //! | `PUT /api/systems/{id}/pin`     | pin it in the main menu (idempotent, answers its summary) |
@@ -294,6 +295,7 @@ fn routes(state: Shared, config: &Config) -> Router {
         .route("/api/form", get(form))
         .route("/api/systems", get(list_systems).post(create_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
+        .route("/api/systems/{id}/export", get(export_system))
         .route("/api/systems/{id}/names", put(rename_system))
         .route("/api/systems/{id}/name", put(name_system))
         .route("/api/systems/{id}/bodies/{body}/name", put(name_body))
@@ -783,6 +785,44 @@ async fn delete_system(
         let _ = tokio::task::spawn_blocking(memory::release).await;
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Exports a system (`GET /api/systems/{id}/export`): a `.zip` named after
+/// it, see [`crate::export`].
+async fn export_system(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> Result<Response, Failure> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
+    }
+    let (root, owned, index) = (
+        state.config.systems_dir.clone(),
+        id.clone(),
+        state.index.clone(),
+    );
+    let archive = tokio::task::spawn_blocking(move || {
+        crate::export::build_archive(&root, &owned, &index, crate::index::now_ms())
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| match e {
+        crate::export::ExportError::System(e) => {
+            unreadable_system(&state.config.systems_dir, &id, &e)
+        }
+        crate::export::ExportError::Other(e) => Failure(StatusCode::INTERNAL_SERVER_ERROR, e),
+    })?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/zip".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{id}.zip\""),
+            ),
+        ],
+        archive,
+    )
+        .into_response())
 }
 
 /// Pins a system in the main menu (`PUT /api/systems/{id}/pin`).
@@ -3338,6 +3378,256 @@ mod tests {
             .count();
         assert_eq!(planets, 1, "{system}");
         assert_eq!(system["request"]["around"]["alone"], true);
+    }
+
+    async fn get_bytes(app: &Router, uri: &str) -> (StatusCode, HeaderMap, Vec<u8>) {
+        let response = app
+            .clone()
+            .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let (status, headers) = (response.status(), response.headers().clone());
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (status, headers, bytes.to_vec())
+    }
+
+    /// The entries of an archive, by name.
+    fn zip_entries(bytes: Vec<u8>) -> std::collections::BTreeMap<String, Vec<u8>> {
+        use std::io::Read;
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("a zip");
+        (0..archive.len())
+            .map(|i| {
+                let mut file = archive.by_index(i).unwrap();
+                let mut data = Vec::new();
+                file.read_to_end(&mut data).unwrap();
+                (file.name().unwrap().into_owned(), data)
+            })
+            .collect()
+    }
+
+    const EXPORTED: &str = r#"{"system": {"star": "K1V", "planets": {"barren": 3}, "seed": 3, "width": 64, "height": 32}}"#;
+
+    /// Draws `EXPORTED` and generates its planet `b`: the system's id.
+    async fn exported_system(app: &Router) -> String {
+        let (status, body) = call(app, "POST", "/api/systems", Some(EXPORTED)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let created: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let id = created["system_id"].as_str().unwrap().to_string();
+        let (status, body) = call(
+            app,
+            "POST",
+            &format!("/api/systems/{id}/bodies/b/generate"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let events = wait_job(app, &body).await;
+        assert!(events.contains("\"status\":\"done\""), "{events}");
+        id
+    }
+
+    #[tokio::test]
+    async fn a_system_is_exported_as_a_zip_of_its_json_and_pngs() {
+        let app = router(temp_config("export"));
+        let id = exported_system(&app).await;
+        let names = r#"{"names": {"b": "Gaia", "star": "Helia"}}"#;
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &format!("/api/systems/{id}/names"),
+                Some(names)
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        let (status, headers, bytes) = get_bytes(&app, &format!("/api/systems/{id}/export")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers[header::CONTENT_TYPE], "application/zip");
+        assert_eq!(
+            headers[header::CONTENT_DISPOSITION],
+            format!("attachment; filename=\"{id}.zip\"").as_str()
+        );
+        let entries = zip_entries(bytes);
+        let png = |name: &str| {
+            entries
+                .get(&format!("{id}/{name}"))
+                .unwrap_or_else(|| panic!("{name} in {:?}", entries.keys()))
+        };
+        assert!(png("bodies/b/thumb.png").starts_with(b"\x89PNG"));
+        assert!(png("bodies/b/sizes/64x32/world.png").starts_with(b"\x89PNG"));
+        assert!(png("bodies/b/sizes/64x32/legend.png").starts_with(b"\x89PNG"));
+        // Nothing else: no tiles, raw data, SVG or noise maps.
+        for name in entries.keys() {
+            assert!(
+                name.ends_with(".png") || name == &format!("{id}/system.json"),
+                "unexpected {name}"
+            );
+        }
+        let document: serde_json::Value = serde_json::from_slice(png("system.json")).unwrap();
+        assert_eq!(document["schema"], 1);
+        assert_eq!(document["id"], id.as_str());
+        assert_eq!(document["seed"], 3);
+        assert!(document["exported_at"].as_str().unwrap().ends_with('Z'));
+        assert_eq!(document["star"]["name"], "Helia");
+        assert_eq!(document["request"]["system"]["star"], "K1V");
+        assert_eq!(document["create"]["system"]["seed"], 3);
+        let b = &document["bodies"][0];
+        assert_eq!(b["id"], "b");
+        assert_eq!(b["name"], "Gaia");
+        assert_eq!(b["generated"], true);
+        assert_eq!(
+            b["made_with"]["format_version"],
+            mapgen::export::raw_data::FORMAT_VERSION
+        );
+        assert!(b["made_with"]["version"].is_string(), "{b}");
+        assert!(b["request"]["seed"].is_u64());
+    }
+
+    #[tokio::test]
+    async fn bodies_never_generated_are_listed_with_their_seed_and_request() {
+        let config = temp_config("export-ungenerated");
+        let root = config.systems_dir.clone();
+        let app = router(config);
+        let id = exported_system(&app).await;
+        // Planet c was never generated; planet b loses its images.
+        std::fs::remove_dir_all(root.join(&id).join("bodies/b/sizes")).unwrap();
+        let (status, _, bytes) = get_bytes(&app, &format!("/api/systems/{id}/export")).await;
+        assert_eq!(status, StatusCode::OK);
+        let entries = zip_entries(bytes);
+        assert!(
+            entries.keys().all(|n| !n.contains("/sizes/")),
+            "{:?}",
+            entries.keys()
+        );
+        let document: serde_json::Value =
+            serde_json::from_slice(&entries[&format!("{id}/system.json")]).unwrap();
+        let (_, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
+        let stored = detail["system"]["bodies"].as_array().unwrap();
+        let listed = document["bodies"].as_array().unwrap();
+        assert_eq!(listed.len(), stored.len());
+        assert!(listed.len() >= 3);
+        for (listed, stored) in listed.iter().zip(stored) {
+            assert_eq!(listed["id"], stored["id"]);
+            assert_eq!(listed["generated"], false, "{listed}");
+            assert!(listed["made_with"].is_null());
+            assert_eq!(listed["files"].as_array().unwrap().len(), 0);
+            assert_eq!(listed["seed"], stored["params"]["seed"]);
+            assert_eq!(listed["request"], stored["params"]);
+        }
+    }
+
+    /// Draws `request` (its seed left to chance), exports the system,
+    /// deletes it and draws it again from the export's `create`: the
+    /// export document, the system before and the system after.
+    async fn drawn_again_from_its_export(
+        app: &Router,
+        request: &str,
+    ) -> (serde_json::Value, serde_json::Value, serde_json::Value) {
+        let json = |text: &str| serde_json::from_str::<serde_json::Value>(text).unwrap();
+        let (status, body) = call(app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let id = json(&body)["system_id"].as_str().unwrap().to_string();
+        if json(&body)["job_id"].is_string() {
+            wait_job(app, &body).await;
+        }
+        let (_, _, bytes) = get_bytes(app, &format!("/api/systems/{id}/export")).await;
+        let document = json(
+            &String::from_utf8(zip_entries(bytes)[&format!("{id}/system.json")].clone()).unwrap(),
+        );
+        let (_, before) = call(app, "GET", &format!("/api/systems/{id}"), None).await;
+        let before = json(&before);
+        let deleted = call(app, "DELETE", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(deleted.0, StatusCode::NO_CONTENT);
+        let create = document["create"].to_string();
+        let (status, body) = call(app, "POST", "/api/systems", Some(&create)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(json(&body)["system_id"], id.as_str());
+        if json(&body)["job_id"].is_string() {
+            wait_job(app, &body).await;
+        }
+        let (_, after) = call(app, "GET", &format!("/api/systems/{id}"), None).await;
+        (document, before, json(&after))
+    }
+
+    fn body_seeds(detail: &serde_json::Value) -> Vec<(String, u64)> {
+        detail["system"]["bodies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| {
+                (
+                    b["id"].as_str().unwrap().to_string(),
+                    b["params"]["seed"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn the_export_of_a_whole_system_draws_the_same_system_again() {
+        let app = router(temp_config("export-whole"));
+        // The seed is left to chance: only the export's `create` knows it.
+        let request =
+            r#"{"system": {"star": "K1V", "planets": {"barren": 3}, "width": 64, "height": 32}}"#;
+        let (document, before, after) = drawn_again_from_its_export(&app, request).await;
+        assert!(document["request"]["system"]["seed"].is_null());
+        assert_eq!(document["create"]["system"]["seed"], document["seed"]);
+        assert_eq!(after["system"]["seed"], before["system"]["seed"]);
+        assert_eq!(body_seeds(&after), body_seeds(&before));
+        // The seeds listed in the export are the ones drawn.
+        let listed: Vec<(String, u64)> = document["bodies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| {
+                (
+                    b["id"].as_str().unwrap().to_string(),
+                    b["seed"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(listed, body_seeds(&before));
+        // The whole draw is the same, not only its seeds.
+        let (mut after, mut before) = (after["system"].clone(), before["system"].clone());
+        for system in [&mut after, &mut before] {
+            system["request"]["system"]["seed"] = serde_json::Value::Null;
+        }
+        assert_eq!(after, before);
+    }
+
+    #[tokio::test]
+    async fn the_export_of_a_system_round_a_planet_keeps_its_seeds_and_id() {
+        let app = router(temp_config("export-around"));
+        // The star is pinned: its designation, hence the id, comes from the
+        // seed and the star's type. What a request leaves open besides the
+        // seed (the orbit, the other planets) comes from the random
+        // generator, not from the seed, so only the planet asked for and
+        // the system keep their seeds.
+        let request = r#"{"around": {"planet": "barren", "star": "K1V", "width": 64, "height": 32, "moons": {"count": 2}, "giants": "none"}}"#;
+        let (document, before, after) = drawn_again_from_its_export(&app, request).await;
+        assert_eq!(document["create"]["around"]["seed"], document["seed"]);
+        assert_eq!(after["system"]["seed"], before["system"]["seed"]);
+        let focus = |detail: &serde_json::Value| {
+            let focus = detail["system"]["focus"].as_str().unwrap().to_string();
+            body_seeds(detail)
+                .into_iter()
+                .find(|(id, _)| *id == focus)
+                .unwrap()
+                .1
+        };
+        assert_eq!(focus(&after), focus(&before));
+    }
+
+    #[tokio::test]
+    async fn exporting_an_unknown_or_invalid_system_fails() {
+        let app = router(temp_config("export-missing"));
+        let (status, _, _) = get_bytes(&app, "/api/systems/mgs-1-1/export").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _, _) = get_bytes(&app, "/api/systems/..%2Fetc-1/export").await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     /// Waits, for 60 s at most, until a job is listed as running.

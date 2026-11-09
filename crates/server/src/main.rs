@@ -31,6 +31,7 @@
 mod api;
 mod app;
 mod catalog;
+mod export;
 mod index;
 mod memory;
 mod previews;

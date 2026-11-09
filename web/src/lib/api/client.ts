@@ -126,6 +126,11 @@ export const api = {
     }),
 };
 
+/** The download of a system's export (`.zip`: seeds, requests, names and PNG images), see `crate::export` on the server. */
+export function systemExportUrl(id: string): string {
+  return `/api/systems/${encodeURIComponent(id)}/export`;
+}
+
 /**
  * A body id as a URL path: a world id, or a moon's `<world>/moons/<n>`
  * (see lib/moons.ts), each segment encoded.

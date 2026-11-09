@@ -35,3 +35,12 @@ describe('world URLs', () => {
     expect(sizeName(4096, 2048)).toBe('4096x2048');
   });
 });
+
+import { systemExportUrl } from './client';
+
+describe('system export', () => {
+  it('is one download named after the system', () => {
+    expect(systemExportUrl('mgs-48213-42')).toBe('/api/systems/mgs-48213-42/export');
+    expect(systemExportUrl('a b')).toBe('/api/systems/a%20b/export');
+  });
+});
