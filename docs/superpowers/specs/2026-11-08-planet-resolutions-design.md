@@ -1,6 +1,6 @@
 # Planet resolutions: design
 
-Date: 2026-11-08. Status: draft, awaiting the user's approval.
+Date: 2026-11-08. Status: approved by the user on 2026-11-08; part 1 implemented on feat/planet-resolutions.
 
 ## Intent
 
@@ -117,7 +117,9 @@ one, and a place to keep several sizes.
 ## Builder's calls (made by Claude, not by the user)
 
 - **End of a generation:** when the new resolution is ready, the view
-  switches to it, and it becomes the remembered one.
+  switches to it, and it becomes the remembered one. The server marks
+  it as displayed when the job is done, so that it is remembered even
+  when no tab follows the job.
 - **After a reduce:** a body regenerates at its remembered displayed
   resolution, not at its original.
 - **Offered sizes:** the generate form's `SIZES`
