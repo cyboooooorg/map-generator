@@ -5,6 +5,7 @@ import type { Moon } from '../api/types/Moon';
 import type { Giant } from '../api/types/Giant';
 import type { RingSystem } from '../api/types/RingSystem';
 import type { StarInfo } from '../api/types/StarInfo';
+import type { Axes, Vec3 } from '../skyBodies';
 
 /**
  * A planet of a planetary system as the star view draws it: a giant, with
@@ -23,7 +24,99 @@ export type SystemGiant = Giant & {
   inclination?: number;
   node?: number;
   moons?: readonly OrbitMoon[];
+  /**
+   * In a planetary system, its own axes after `days` on the system's clock,
+   * in the frame of systemSky's placeSystem (the planet view's): how its
+   * globe is turned (see globeTurn). A world's giants have none.
+   */
+  axes?: (days: number) => Axes;
+  /**
+   * In a planetary system, its day (hours) when it turns freely, its axes
+   * then turning with it alone; absent for a locked planet or one in a
+   * spin-orbit resonance, whose turn follows its orbit (see spinLag).
+   */
+  spinHours?: number;
 };
+
+/** Turns per frame up to which a freely spinning globe is shown turning at its true rate. */
+const SPIN_SHOWN_TURNS = 0.15;
+/** Turns per frame from which it is held still: faster, the eye sees it strobe or turn backwards. */
+const SPIN_HELD_TURNS = 0.25;
+/** Turns of its true spin over which a globe held back catches up with its true hour (an e-fold). */
+const SPIN_CATCH_UP_TURNS = 4;
+
+/**
+ * The share of a free spinner's turn shown at `turnsPerFrame` (its true
+ * turns between two frames): all of it while slow enough to follow, none
+ * from SPIN_HELD_TURNS on, easing between so the globe never jumps.
+ */
+export function spinShare(turnsPerFrame: number): number {
+  const t = Math.min(Math.max((Math.abs(turnsPerFrame) - SPIN_SHOWN_TURNS) / (SPIN_HELD_TURNS - SPIN_SHOWN_TURNS), 0), 1);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/**
+ * How far (days) a free spinner's globe is held behind the system's clock
+ * after a frame of `stepDays` (the clock's advance, 0 when paused or for a
+ * jump of the clock) from `lag`: the globe is drawn at the day `day - lag`.
+ * A spin too fast for the frames (a 10 h day at 32 days a second is about
+ * one turn a frame) is held still, where it was; once slow enough again,
+ * the globe catches up with its true hour over a few of its turns, never
+ * while the clock is stopped. The lag is kept within half a turn, which
+ * changes nothing drawn.
+ */
+export function spinLag(lag: number, stepDays: number, periodDays: number): number {
+  if (!(periodDays > 0)) return 0;
+  const turns = stepDays / periodDays;
+  const shown = spinShare(turns);
+  let next = lag + stepDays * (1 - shown);
+  next *= Math.exp((-Math.abs(turns) * shown) / SPIN_CATCH_UP_TURNS);
+  next -= periodDays * Math.round(next / periodDays);
+  return next;
+}
+
+/**
+ * The direction from the star of the point of giant `giant`'s orbit at a
+ * true anomaly, in the star view's frame: in the reference plane (the
+ * view's (x, -z) plane, its north the view's up), or tilted by its
+ * inclination about its line of nodes.
+ */
+export function orbitDirection(giant: Pick<SystemGiant, 'periapsis_angle' | 'inclination' | 'node'>, trueAnomaly: number): Vec3 {
+  const tilt = giant.inclination ?? 0;
+  const node = giant.node ?? 0;
+  // The angle from the ascending node in the orbit's plane.
+  const u = trueAnomaly + giant.periapsis_angle - node;
+  const x = Math.cos(node) * Math.cos(u) - Math.sin(node) * Math.sin(u) * Math.cos(tilt);
+  const y = Math.sin(node) * Math.cos(u) + Math.cos(node) * Math.sin(u) * Math.cos(tilt);
+  const z = Math.sin(u) * Math.sin(tilt);
+  return [x, z, -y];
+}
+
+/**
+ * How a planet's globe (a three.js SphereGeometry wrapped in its map) is
+ * turned in the star view: the view-frame images of the geometry's x, y
+ * and z axes (the columns of the turn), from the planet's own `axes` in
+ * placeSystem's frame, so that it shows its star the face the planet view
+ * shows (a locked planet its longitude 180°).
+ *
+ * Three frames meet here:
+ * - SphereGeometry puts u = 0 at -x, 0.25 at +z, 0.5 at +x and 0.75 at -z,
+ *   north +y; the map's frame (geo.ts) puts longitude u * 2pi at
+ *   (sin lon, ., cos lon): u = 0 at +z, 0.25 at +x, 0.5 at -z. Both turn
+ *   eastward right-handed about +y, so the geometry's (x, y, z) is the
+ *   map frame's (-z, y, x).
+ * - The body's axes carry its map frame into placeSystem's: x, y, z there.
+ * - placeSystem's frame (star's axis +y, longitudes counted from +z
+ *   towards +x) is the star view's turned a quarter about y: its z is the
+ *   view's x (the reference direction), its x the view's -z (see
+ *   orbitDirection). The view's distances are compressed along the line
+ *   from the star only, so directions from the star are kept.
+ */
+export function globeTurn(axes: Axes): Axes {
+  const [x, y, z] = axes;
+  const toView = (v: Vec3): Vec3 => [v[2], v[1], -v[0]];
+  return [toView([-z[0], -z[1], -z[2]]), toView(y), toView(x)];
+}
 
 /**
  * A moon as the star view draws it; `ring` for a moon of a giant's rings
