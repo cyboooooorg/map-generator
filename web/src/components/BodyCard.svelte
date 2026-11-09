@@ -253,7 +253,7 @@
       {/if}
     </dl>
     {#if !body.generated}
-      <p class="muted">{busy ? t.card.generating : t.card.notGenerated}</p>
+      <p class="muted">{busy ? t.card.generating : world.systemEvicted.includes(body.id) ? t.card.evicted : t.card.notGenerated}</p>
       {#if !busy}
         <button class="primary" onclick={() => world.systemId && onGenerate(world.systemId, body.id)}>{t.card.generate}</button>
       {/if}

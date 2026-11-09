@@ -77,6 +77,9 @@ export const en = {
     retrying: 'Retrying…',
     dismiss: 'Dismiss',
     ready: (p: { id: string }) => `${p.id} is ready.`,
+    /** A body deleted for lack of use is made again by a newer generator. */
+    olderWorld: (p: { body: string }) =>
+      `${p.body} was made by an older version of the generator and is made again with the current one: it may look different from before.`,
     open: 'Open',
     failed: (p: { id: string; error: string }) => `${p.id} failed: ${p.error}`,
     cancelled: (p: { id: string }) => `${p.id} cancelled.`,
@@ -145,6 +148,7 @@ export const en = {
       confining: () => 'orbits just beyond the rings; its 7:6 resonance sets their outer edge, as Janus does for the A ring',
     },
     notGenerated: 'Its maps are not made yet: what the draw fixed is above.',
+    evicted: 'Its maps were deleted after a while unopened: they are made again when it is opened.',
     generating: 'Its maps are being made: see the progress over the view.',
     generate: 'Generate its maps',
   },

@@ -710,6 +710,13 @@ addressed as `<system-id>/<body-id>` everywhere.
   view (lit, with its axis and its sky) and its card, with **Generate**.
   Pressing it, or picking a body whose neighbourhood is not complete,
   queues the job; the view switches to the maps when it ends.
+- **A body evicted.** Its card says its maps were deleted after a while
+  unopened. Opening its view (the planet view, not the system view or a
+  card in a list) queues its generation by itself, as pressing
+  **Generate** would. When the generator that made it differs from the
+  current one (`regenerated_from` in the answer of `POST …/generate`), a
+  toast tells the user once that the world was made by an older version
+  and may look different from before.
 - **Progress bar.** While a job runs, the viewer shows a bar over the
   canvas, in the style of the loading bar, with the message of
   [Generating on demand](#generating-on-demand) and **Cancel**. Its share

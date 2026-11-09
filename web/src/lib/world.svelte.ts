@@ -67,6 +67,8 @@ export class LoadedWorld {
   system = $state.raw<System | null>(null);
   systemId = $state<string | null>(null);
   systemNames = $state.raw<Record<string, string>>({});
+  /** The bodies of the system that lost their files after a while unopened (see evicted.ts). */
+  systemEvicted = $state.raw<string[]>([]);
   systemBody = $state<string | null>(null);
   /**
    * What the viewer shows: the body (`planet`), or the star and its system
@@ -127,6 +129,7 @@ export class LoadedWorld {
     this.systemId = null;
     this.systemBody = null;
     this.systemNames = {};
+    this.systemEvicted = [];
     this.subject = 'planet';
     this.starMode = 'system';
     this.pinnedPlanets = [];
@@ -161,6 +164,7 @@ export class LoadedWorld {
       // its own file arrives (moon ids requested under the wrong system).
       this.system = null;
       this.systemNames = {};
+      this.systemEvicted = [];
       this.systemBody = null;
       this.worldMeta = null;
       this.worldStats = null;
@@ -173,10 +177,11 @@ export class LoadedWorld {
     this.systemId = id;
     this.worldId = null;
     (async () => {
-      const { system, names } = await fetchSystem(id, controller.signal);
+      const { system, names, evicted } = await fetchSystem(id, controller.signal);
       if (controller.signal.aborted) return;
       this.system = system;
       this.systemNames = names;
+      this.systemEvicted = evicted;
       // `focus` shows the planet the system was drawn around, as a planet.
       if (focus) this.subject = 'planet';
       const wanted = body ?? (focus ? null : again ? this.systemBody : null);
@@ -465,13 +470,13 @@ function displayedSize(sizes: BodySizes): PresentSize | null {
 async function fetchSystem(
   id: string,
   signal: AbortSignal,
-): Promise<{ system: System; names: Record<string, string> }> {
+): Promise<{ system: System; names: Record<string, string>; evicted: string[] }> {
   const response = await fetch(`/api/systems/${encodeURIComponent(id)}`, { signal, cache: 'no-cache' });
   if (response.ok) {
-    const body = (await response.json()) as { system: System; names?: Record<string, string> };
-    return { system: body.system, names: body.names ?? {} };
+    const body = (await response.json()) as { system: System; names?: Record<string, string>; evicted?: string[] };
+    return { system: body.system, names: body.names ?? {}, evicted: body.evicted ?? [] };
   }
   const file = await fetch(`/systems/${encodeURIComponent(id)}/system.json`, { signal, cache: 'no-cache' });
   if (!file.ok) throw new Error(`${file.status} ${file.statusText}`);
-  return { system: (await file.json()) as System, names: {} };
+  return { system: (await file.json()) as System, names: {}, evicted: [] };
 }
