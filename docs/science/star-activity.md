@@ -279,7 +279,10 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    regions and the granules out as the star shrinks on screen, and as a
    frame of the clock outlasts a twelfth of a rotation or a granule
    lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
-   exposure's averaging).
+   exposure's averaging). Its soft exposure, $1 - e^{-1.6\,b}$, acts on
+   the brightness $b$ of granules, spots and faculae only; the limb law
+   and the star's colour multiply the result linearly, so the limb keeps
+   Claret & Bloemen's darkening and the disc its colour.
 
 ```rust
 // crates/mapgen/src/activity.rs (trimmed)

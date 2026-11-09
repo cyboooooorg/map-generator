@@ -13,16 +13,18 @@ export const starSurfaceVertex = /* glsl */ `
 
 // The photosphere (see starSurface.ts): limb darkening, granulation and
 // the active regions of the star's activity, turned by the system clock.
-// The output keeps a soft exposure, so the bright disk keeps its colour.
+// The soft exposure acts on the brightness only (starSurfaceExposed), so
+// the disk keeps its colour and its limb; a dither of half an 8-bit step
+// keeps the smooth gradient from banding.
 export const starSurfaceFragment = /* glsl */ `
   varying vec3 vObject;
   varying vec3 vViewNormal;
   ${STAR_SURFACE_GLSL}
   void main() {
     float mu = clamp(normalize(vViewNormal).z, 0.0, 1.0);
-    vec3 colour = starSurfaceColour(normalize(vObject), mu);
-    gl_FragColor = vec4(1.0 - exp(-1.6 * colour), 1.0);
+    gl_FragColor = vec4(starSurfaceExposed(normalize(vObject), mu), 1.0);
     #include <colorspace_fragment>
+    gl_FragColor.rgb += starDither(gl_FragCoord.xy) / 255.0;
   }
 `;
 

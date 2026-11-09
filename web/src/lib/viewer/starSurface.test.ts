@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StarActivity } from '../api/types/StarActivity';
+import { activeRegions } from '../starActivity';
 import { SUN_SYSTEM } from './starSystem';
 import {
   exposureFade,
@@ -151,5 +152,74 @@ describe('star surface', () => {
     expect(STAR_SURFACE_GLSL).toContain('vec3 starSurfaceColour(vec3 n, float mu)');
     expect(STAR_SURFACE_GLSL).toContain('STAR_NO_GRANULATION');
     expect((uniforms['uRegionA']!.value as Float32Array).length).toBe(32);
+  });
+
+  it('re-packs after 20 days even when the same regions are alive', () => {
+    // Long-lived, rare regions: look for a day whose set is unchanged 21 days on.
+    const rare: StarActivity = { ...SUN_ACTIVITY, region_rate: 0.03, decay_per_day: 1e-7, cycle_depth: 0 };
+    const ids = (d: number) => activeRegions(rare, d, 32).map((r) => r.region.id).sort().join(' ');
+    let day = Number.NaN;
+    for (let d = 200; d < 5000; d += 1) {
+      if (ids(d) !== '' && ids(d) === ids(d + 21) && ids(d) === ids(d + 10)) {
+        day = d;
+        break;
+      }
+    }
+    expect(Number.isNaN(day)).toBe(false);
+    const uniforms = starSurfaceUniforms(32);
+    const state = new StarSurfaceState(uniforms, 32);
+    state.setStar(starLook(SUN_SYSTEM, rare), rare);
+    expect(state.update(day, BIG)).toBe(true);
+    expect(state.update(day + 10, BIG)).toBe(false);
+    expect(uniforms['uLocalDays']!.value).toBeCloseTo(10, 9);
+    expect(state.update(day + 21, BIG)).toBe(true);
+    expect(uniforms['uLocalDays']!.value).toBe(0);
+  });
+
+  it('is a function of the day alone, whatever days came before', () => {
+    // What the shader rebuilds from the uniforms, region by region, sorted.
+    const decode = (u: ReturnType<typeof starSurfaceUniforms>) => {
+      const a = u['uRegionA']!.value as Float32Array;
+      const b = u['uRegionB']!.value as Float32Array;
+      const local = u['uLocalDays']!.value as number;
+      const omega = u['uOmegaEq']!.value as number;
+      const shear = u['uShear']!.value as number;
+      const out: number[][] = [];
+      for (let i = 0; i < (u['uRegionCount']!.value as number); i++) {
+        const lat = a[4 * i]!;
+        const t = local - b[4 * i]!;
+        const [growth, lifetime, peak] = [b[4 * i + 1]!, b[4 * i + 2]!, b[4 * i + 3]!];
+        const area = t <= 0 || t >= lifetime ? 0 : t < growth ? (peak * t) / growth : (peak * (lifetime - t)) / (lifetime - growth);
+        const lon = a[4 * i + 1]! + omega * (1 - shear * Math.sin(lat) ** 2) * local;
+        out.push([lat, Math.cos(lon), Math.sin(lon), a[4 * i + 2]!, a[4 * i + 3]!, area]);
+      }
+      return out.sort((x, y) => x[0]! - y[0]! || x[5]! - y[5]!);
+    };
+    const swept = starSurfaceUniforms(32);
+    const state = new StarSurfaceState(swept, 32);
+    state.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    // Forwards in small and large steps, then backwards.
+    const days = [
+      ...Array.from({ length: 60 }, (_, i) => 3000 + i * 0.37),
+      ...Array.from({ length: 20 }, (_, i) => 3030 + i * 7.3),
+      ...Array.from({ length: 30 }, (_, i) => 3200 - i * 2.9),
+    ];
+    for (const d of days) {
+      state.update(d, BIG);
+      const fresh = starSurfaceUniforms(32);
+      const once = new StarSurfaceState(fresh, 32);
+      once.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+      once.update(d, BIG);
+      expect(state.regions).toEqual(activeRegions(SUN_ACTIVITY, d, 32));
+      expect(state.regions).toEqual(once.regions);
+      for (const name of ['uRegionCount', 'uRegionFade']) expect(swept[name]!.value).toBe(fresh[name]!.value);
+      expect((swept['uGranule']!.value as { toArray(): number[] }).toArray()).toEqual(
+        (fresh['uGranule']!.value as { toArray(): number[] }).toArray(),
+      );
+      const x = decode(swept);
+      const y = decode(fresh);
+      expect(x.length).toBe(y.length);
+      x.forEach((row, i) => row.forEach((v, k) => expect(v).toBeCloseTo(y[i]![k]!, k === 5 ? 9 : 4)));
+    }
   });
 });

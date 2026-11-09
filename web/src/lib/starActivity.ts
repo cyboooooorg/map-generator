@@ -246,22 +246,29 @@ function areaAt(r: ActiveRegion, t: number): number {
   return (r.peakArea * (r.lifetime - t)) / (r.lifetime - r.growth);
 }
 
+/** Region `region` at `days`: its area and longitude then, or null when it is not alive. */
+export function regionNow(a: StarActivity, region: ActiveRegion, days: number): RegionNow | null {
+  const t = days - region.born;
+  const area = areaAt(region, t);
+  if (!(area > 0)) return null;
+  return { region, area, longitude: reduce(region.longitude + angularVelocity(a, region.latitude) * t) };
+}
+
+/** Sorts `regions` largest first (ties by id) in place and keeps at most `max`: the order `activeRegions` gives. */
+export function rankRegions(regions: RegionNow[], max: number): RegionNow[] {
+  regions.sort((x, y) => y.area - x.area || x.region.id - y.region.id);
+  return regions.length > max ? regions.slice(0, max) : regions;
+}
+
 /** Regions alive at `days`, with their area and longitude now, largest first, at most `max`. */
 export function activeRegions(a: StarActivity, days: number, max: number): RegionNow[] {
   if (!(a.region_rate > 0)) return [];
   const out: RegionNow[] = [];
   for (let n = Math.floor(days - MAX_LIFETIME_DAYS); n <= Math.floor(days); n++) {
     for (const region of regionsBornIn(a, n)) {
-      const t = days - region.born;
-      const area = areaAt(region, t);
-      if (!(area > 0)) continue;
-      out.push({
-        region,
-        area,
-        longitude: reduce(region.longitude + angularVelocity(a, region.latitude) * t),
-      });
+      const now = regionNow(a, region, days);
+      if (now) out.push(now);
     }
   }
-  out.sort((x, y) => y.area - x.area || x.region.id - y.region.id);
-  return out.length > max ? out.slice(0, max) : out;
+  return rankRegions(out, max);
 }

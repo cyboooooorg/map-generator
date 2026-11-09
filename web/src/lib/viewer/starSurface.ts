@@ -31,7 +31,14 @@
 import { type IUniform, Vector2, Vector3, Vector4 } from 'three';
 import type { StarActivity } from '../api/types/StarActivity';
 import type { StarInfo } from '../api/types/StarInfo';
-import { activeRegions, type RegionNow } from '../starActivity';
+import {
+  type ActiveRegion,
+  MAX_LIFETIME_DAYS,
+  rankRegions,
+  regionNow,
+  regionsBornIn,
+  type RegionNow,
+} from '../starActivity';
 
 const TWO_PI = 2 * Math.PI;
 
@@ -122,19 +129,28 @@ export function surfaceDetail(radiusPx: number, granuleSize: number): { granulat
 }
 
 /**
- * Period of the granule pattern's phase: the simplex noise below repeats
- * every 289 lattice units, so offsets `k · (17, 31, 7)` repeat every 289
- * steps of k, and the phase can be reduced modulo 289 without a jump.
+ * Period of the granule pattern's phase: the shader offsets field k by
+ * `mod(k · (17, 31, 7), 289)`, so the fields for k and k + 289 are the
+ * same, and the phase can be reduced modulo 289 in JS without a jump
+ * (the cross-fade from field 288 goes on to field 289, which is field 0).
  */
 const GRANULE_PHASE_PERIOD = 289;
 /** Days at which the granule clock wraps before its phase is computed (keeps it exact in f64). */
 const GRANULE_DAYS_WRAP = 1e4;
 /** Days from the epoch after which the regions are packed again, to keep `uLocalDays` small. */
 const EPOCH_SPAN_DAYS = 20;
+/**
+ * Half-width of the window of days the cached candidate regions cover:
+ * every region alive at some day within it. The timeline is drawn again
+ * only when the clock leaves the window.
+ */
+const WINDOW_DAYS = 21;
 
 /**
- * The surface's GLSL: its uniforms and `vec3 starSurfaceColour(vec3 n,
- * float mu)`, the linear colour of the photosphere at unit normal `n`
+ * The surface's GLSL: its uniforms, `float starLimb(float mu)`, `float
+ * starBrightness(vec3 n, float mu)`, `vec3 starSurfaceExposed(vec3 n,
+ * float mu)` (for display, see there), `float starDither(vec2)` and
+ * `vec3 starSurfaceColour(vec3 n, float mu)`, the linear colour of the photosphere at unit normal `n`
  * in the star's inertial frame (y the spin axis, longitude increasing
  * anticlockwise seen from +y, as the orbits go) and `mu` the cosine of
  * the angle to the line of sight.
@@ -247,9 +263,15 @@ float starSpot(float d, float rs, float aa) {
   return mix(mix(1.0, 0.75, penumbra), 0.3, umbra);
 }
 
-vec3 starSurfaceColour(vec3 n, float mu) {
+/** The quadratic limb law, I(μ) = 1 − u1 (1 − μ) − u2 (1 − μ)². */
+float starLimb(float mu) {
   float edge = 1.0 - mu;
-  float limb = 1.0 - uLimb.x * edge - uLimb.y * edge * edge;
+  return 1.0 - uLimb.x * edge - uLimb.y * edge * edge;
+}
+
+/** Brightness of the photosphere at n before the limb law: 1 quiet, less in spots, more in faculae and bright granules. */
+float starBrightness(vec3 n, float mu) {
+  float edge = 1.0 - mu;
   float brightness = 1.0;
 #ifndef STAR_NO_GRANULATION
   if (uGranule.w > 0.0) brightness += uGranule.y * uGranule.w * starGranules(n);
@@ -292,7 +314,28 @@ vec3 starSurfaceColour(vec3 n, float mu) {
     float fill = min(uFacula / 9.0, 1.0);
     brightness += uRegionFade * 0.25 * edge * fill * facula * smoothstep(0.75, 1.0, spot);
   }
-  return uStarColour * brightness * limb;
+  return brightness;
+}
+
+/** The photosphere's linear colour: its light times the brightness and the limb law. */
+vec3 starSurfaceColour(vec3 n, float mu) {
+  return uStarColour * starBrightness(n, mu) * starLimb(mu);
+}
+
+/**
+ * The photosphere for display: the soft exposure 1 − exp(−1.6 b) on the
+ * brightness only, then the limb law and the star's light. The curve
+ * keeps bright faculae and granules from clipping, while the limb law
+ * and the colour stay linear: applied to the whole colour, the curve
+ * flattens the limb and pulls every channel towards white.
+ */
+vec3 starSurfaceExposed(vec3 n, float mu) {
+  return uStarColour * (1.0 - exp(-1.6 * starBrightness(n, mu))) * starLimb(mu);
+}
+
+/** A screen-space dither in [−0.5, 0.5) (interleaved gradient noise, Jimenez 2014), against 8-bit bands on a smooth disc. */
+float starDither(vec2 fragCoord) {
+  return fract(52.9829189 * fract(dot(fragCoord, vec2(0.06711056, 0.00583715)))) - 0.5;
 }
 `;
 
@@ -332,12 +375,16 @@ const modulo = (x: number, m: number): number => {
 export class StarSurfaceState {
   private look: StarLook | null = null;
   private activity: StarActivity | null = null;
-  /** Ids of the regions packed, and the day they were packed at; null: none packed. */
+  /** Ids of the regions packed. */
   private packed = new Set<number>();
   private epoch: number | null = null;
-  /** The day the regions were last asked for, to ask once per day shown. */
+  /** The day the regions were last found for, to find them once per day shown. */
   private lastDays = Number.NaN;
   private drawn: readonly RegionNow[] = [];
+  /** Every region alive at some day of [windowFrom, windowTo] (see regionsAt). */
+  private candidates: ActiveRegion[] = [];
+  private windowFrom = Number.NaN;
+  private windowTo = Number.NaN;
 
   constructor(
     private readonly uniforms: Record<string, IUniform>,
@@ -359,7 +406,38 @@ export class StarSurfaceState {
     u['uOmegaEq']!.value = look.omegaEq;
     u['uShear']!.value = look.shear;
     u['uFacula']!.value = look.faculaRatio;
+    this.candidates = [];
+    this.windowFrom = this.windowTo = Number.NaN;
     this.clearRegions();
+  }
+
+  /**
+   * The regions alive at `days`, largest first, at most `maxRegions`:
+   * exactly `activeRegions(activity, days, maxRegions)`, found among the
+   * cached candidates, which are drawn from the timeline again only when
+   * `days` leaves their window (about 160 day-slots, against a filter of
+   * a few hundred regions per frame).
+   */
+  private regionsAt(activity: StarActivity, days: number): RegionNow[] {
+    if (!(days >= this.windowFrom && days <= this.windowTo)) {
+      const from = days - WINDOW_DAYS;
+      const to = days + WINDOW_DAYS;
+      const list: ActiveRegion[] = [];
+      for (let n = Math.floor(from - MAX_LIFETIME_DAYS); n <= Math.floor(to); n++) {
+        for (const region of regionsBornIn(activity, n)) {
+          if (region.born <= to && region.born + region.lifetime > from) list.push(region);
+        }
+      }
+      this.candidates = list;
+      this.windowFrom = from;
+      this.windowTo = to;
+    }
+    const alive: RegionNow[] = [];
+    for (const region of this.candidates) {
+      const now = regionNow(activity, region, days);
+      if (now) alive.push(now);
+    }
+    return rankRegions(alive, this.maxRegions);
   }
 
   private clearRegions(): void {
@@ -406,7 +484,7 @@ export class StarSurfaceState {
       return false;
     }
     this.lastDays = days;
-    const now = activeRegions(activity, days, this.maxRegions);
+    const now = this.regionsAt(activity, days);
     this.drawn = now;
     const same =
       this.epoch !== null &&
