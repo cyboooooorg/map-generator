@@ -178,6 +178,16 @@ bright points sit in the lanes; in the quiet Sun they last a few
 minutes and reach 0.8 to 1.8 times the mean photosphere (Sánchez
 Almeida et al. 2004).
 
+Granules are organised on a larger scale. The supergranules, cells about
+30 Mm across, about twenty-three granules, are horizontal flows that
+sweep the magnetic field to their edges (Leighton, Noyes & Simon 1962;
+Rieutord & Rincon 2010). They live about a day (Hart 1956; Rieutord &
+Rincon 2010). The field gathered along their edges forms the
+chromospheric network, whose small faculae make it bright in white
+light near the limb and nearly invisible at the disc centre, as plages
+are (Solanki 2003). Between the two scales, the mesogranulation is a
+weaker pattern of 5 to 10 Mm (November et al. 1981).
+
 A star's disc is darker at its edge, because there we see higher, cooler
 layers. The quadratic law $I(\mu) = 1 - u_1(1-\mu) - u_2(1-\mu)^2$, with
 $\mu$ the cosine of the angle from the disc centre, fits model
@@ -243,7 +253,10 @@ the frame rate):
   all drawn, as from a close-in planet;
 - never the granulation, compiled out of this shader: a granule is
   about a five-hundredth of a Sun-like star's radius, a pixel or less
-  on any disc a planet's sky shows.
+  on any disc a planet's sky shows;
+- the supergranule network not under 16 px either, and in practice
+  only on a disc hundreds of pixels across (from 3 px per network cell,
+  see below).
 
 While the orbits play, the clock's speed fades the regions out as in the
 star views (a long exposure).
@@ -377,10 +390,31 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    `granule_contrast` is 0.15. The drawn rms contrast of the brightness
    is therefore 1.6 times `granule_contrast`, before the soft exposure
    below compresses it on screen.
+   The supergranule network is a second cell pattern, at
+   `SUPERGRANULE_SIZE_MM` = 30 Mm on the Sun (Leighton, Noyes & Simon
+   1962): its cell size is the granule size times 30/1.3, so that it
+   scales with the convection on other stars (**calibration**; no
+   survey measures other stars' networks). Its cells wander as the
+   granules do, on their own phase, in supergranule lifetimes of
+   `SUPERGRANULE_LIFETIME_DAYS` = 1 day (Hart 1956; Rieutord & Rincon
+   2010), wrapped at 289 lifetimes as the granule phase is. Its lanes,
+   $1 - \text{smoothstep}(0, 0.1, F_2 - F_1)$ with the lane distance
+   measured along the surface as for the granules, are brightened by
+   $c\,(0.35 + 1.4\,(1-\mu))$: faint at the disc centre, about five
+   times brighter at the limb, as faculae are (Solanki 2003). Its
+   contrast is $c = \min(1, \text{granule\_contrast}/0.15) \times 0.07$,
+   0 on a radiative star. The 0.07 (**calibration**, prototype D) makes
+   the network a little stronger than the real one, so that the whole
+   disc, whose granules are under a pixel, does not look smooth. A
+   mesogranular mottle, one octave of value noise at 0.35 of the cell
+   size, adds $\pm c/4$ (**calibration**). The network is searched among
+   8 cells rather than the granules' 20, to keep it cheap over the whole
+   disc; it misses a short stub of lane near a junction on about 0.1 %
+   of the points. It fades in from 3 to 8 pixels per network cell.
    The shader (`web/src/lib/viewer/starSurface.ts`) fades the
    regions and the granules out as the star shrinks on screen, and as a
-   frame of the clock outlasts a twelfth of a rotation or a granule
-   lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
+   frame of the clock outlasts a twelfth of a rotation, a granule
+   lifetime or, for the network, a supergranule lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
    exposure's averaging). Its soft exposure, $1 - e^{-1.6\,b}$, acts on
    the brightness $b$ of granules, spots and faculae only; the limb law
    and the star's colour multiply the result linearly, so the limb keeps
@@ -455,6 +489,13 @@ star, about half of them on the visible side.
   the gain makes the drawn contrast (0.24 rms on the Sun) higher than
   the 0.15 the activity gives, so that the surface reads as agitated
   up close.
+- **The supergranule network is slightly exaggerated** (**calibration**):
+  its contrast of 0.07 on the Sun, rising five times towards the limb,
+  is a little above the real network's in white light, so that the
+  whole disc shows texture where granules are under a pixel. Its size
+  on other stars scales with the granules, and it does not turn with
+  the star (nor do the granules): over a supergranule's day of life a
+  Sun-like star turns by 14°.
 
 - **Timeline and region shapes are calibrations.** One cycle maps onto
   $x \in [0, 2.6]$ of the Hathaway fit; a region grows over
@@ -485,6 +526,9 @@ checking:
 - the Sun's 0.3 % spotted area at maximum (Hathaway 2015);
 - the solar $\Delta\Omega = 0.055$ rad/day (Snodgrass & Ulrich 1990);
 - the 1.3 Mm solar granule size (Trampedach et al. 2013);
+- the 30 Mm supergranule size (Leighton, Noyes & Simon 1962), its
+  lifetime of about a day (Hart 1956; Rieutord & Rincon 2010), and the
+  5 to 10 Mm mesogranulation (November et al. 1981);
 - the rotations per cycle of Böhm-Vitense (2007), read from the summary
   of Distefano et al. (2017);
 - the typical $v \sin i$ of A stars (Royer et al. 2007), the M-dwarf
@@ -630,6 +674,18 @@ against the VizieR catalogue.
     I. & Muller, R. 2004, "Bright points in the internetwork quiet Sun",
     *The Astrophysical Journal* 609, L91, preprint
     [arXiv:astro-ph/0405515](https://arxiv.org/abs/astro-ph/0405515).
+44. Leighton, R. B., Noyes, R. W. & Simon, G. W. 1962, "Velocity fields
+    in the solar atmosphere. I. Preliminary report", *The Astrophysical
+    Journal* 135, 474.
+45. Hart, A. B. 1956, "Motions in the Sun at the photospheric level. VI.
+    Large-scale motions in the equatorial region", *Monthly Notices of
+    the Royal Astronomical Society* 116, 38.
+46. Rieutord, M. & Rincon, F. 2010, "The Sun's supergranulation",
+    *Living Reviews in Solar Physics* 7, 2,
+    [doi:10.12942/lrsp-2010-2](https://doi.org/10.12942/lrsp-2010-2).
+47. November, L. J., Toomre, J., Gebbie, K. B. & Simon, G. W. 1981, "The
+    detection of mesogranulation on the Sun", *The Astrophysical Journal*
+    245, L123.
 
 ## See also
 

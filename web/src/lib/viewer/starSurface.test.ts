@@ -1,3 +1,4 @@
+import type { Vector4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { StarActivity } from '../api/types/StarActivity';
 import { activeRegions } from '../starActivity';
@@ -8,7 +9,9 @@ import {
   granuleMotionHarmonics,
   granuleDaysWrap,
   granulePhase,
+  networkPhase,
   STAR_SURFACE_GLSL,
+  SUPERGRANULE_LIFETIME_DAYS,
   StarSurfaceState,
   starLook,
   starSurfaceUniforms,
@@ -41,6 +44,10 @@ const SUN_ACTIVITY: StarActivity = {
   seed: 12345,
 };
 
+/** An A-type star's activity (starActivity.test.ts): radiative, no granules. */
+const HOT: StarActivity = {"envelope":"radiative","age_gyr":1.4346926,"rotation_days":0.71322525,"shear":0.5,"turnover_days":0.0,"rossby":0.0,"activity":0.0,"cycle_years":0.0,"cycle_phase":0.22184348,"cycle_depth":0.0,"band_deg":[0.0,0.0],"spot_coverage":0.0,"facula_ratio":0.0,"region_rate":0.0,"region_area":0.0,"region_sigma":0.0,"decay_per_day":0.00001,"granule_size":0.003158995,"granule_contrast":0.0,"granule_lifetime_days":0.020596515,"limb":[0.233016,0.32803598],"seed":3214283846};
+const HOT_INFO = { ...SUN_SYSTEM, teff_k: 9700 };
+
 /** A view where the star is large and the clock slow: every detail on. */
 const BIG = { radiusPx: 4000, daysPerSecond: 2 ** -11 };
 
@@ -54,7 +61,7 @@ describe('star surface', () => {
   });
 
   it('drops detail on a small star', () => {
-    expect(surfaceDetail(5, 0.002)).toEqual({ granulation: 0, regions: 0 });
+    expect(surfaceDetail(5, 0.002)).toEqual({ granulation: 0, regions: 0, network: 0 });
     expect(surfaceDetail(4000, 0.002).granulation).toBe(1);
     expect(surfaceDetail(9, 0.002).regions).toBeCloseTo(0.5, 6);
     expect(surfaceDetail(20, 0.002).regions).toBe(1);
@@ -66,6 +73,57 @@ describe('star surface', () => {
     expect(surfaceDetail(1250, 0.002).granulation).toBe(0);
     expect(surfaceDetail(1875, 0.002).granulation).toBeCloseTo(0.5, 6);
     expect(surfaceDetail(2500, 0.002).granulation).toBe(1);
+  });
+
+  it('shows the network from afar', () => {
+    expect(surfaceDetail(500, 0.0019).network).toBe(1); // whole disc in a 1080p view
+    expect(surfaceDetail(20, 0.0019).network).toBe(0); // a small star: off
+  });
+
+  it('keeps a radiative star plain', () => {
+    const u = starSurfaceUniforms(8);
+    const s = new StarSurfaceState(u, 8);
+    s.setStar(starLook(HOT_INFO, HOT), HOT);
+    s.update(100, { radiusPx: 500, daysPerSecond: 1 });
+    expect((u.uNetwork!.value as Vector4).y).toBe(0);
+  });
+
+  it('draws the network on a convective star, but not on the small sky disc', () => {
+    const u = starSurfaceUniforms(8);
+    const s = new StarSurfaceState(u, 8);
+    s.setStar(starLook(SUN_SYSTEM, SUN_ACTIVITY), SUN_ACTIVITY);
+    s.update(100.3, { radiusPx: 500, daysPerSecond: 1 });
+    const network = u.uNetwork!.value as Vector4;
+    expect(network.y).toBeCloseTo(0.07, 9);
+    expect(network.z).toBeCloseTo(networkPhase(100.3), 9);
+    expect(network.w).toBe(1);
+    // The sky disc passes its own detail (hostStarDetail): 0 for the usual disc.
+    s.update(100.3, { radiusPx: 500, daysPerSecond: 1, regionDetail: 0, networkDetail: 0 });
+    expect(network.w).toBe(0);
+    // A clock far faster than a supergranule lives averages it out.
+    s.update(100.3, { radiusPx: 500, daysPerSecond: 4096 });
+    expect(network.w).toBeLessThan(0.1);
+  });
+
+  it('keeps the network phase continuous where its day clock wraps', () => {
+    const wrap = granuleDaysWrap(SUPERGRANULE_LIFETIME_DAYS);
+    const eps = 1e-3;
+    const before = networkPhase(wrap - eps);
+    const after = networkPhase(wrap + eps);
+    const step = (((after - before) % 289) + 289) % 289;
+    expect(step).toBeCloseTo((2 * eps) / SUPERGRANULE_LIFETIME_DAYS, 6);
+    expect(networkPhase(-3.7)).toBeGreaterThanOrEqual(0);
+    expect(networkPhase(-3.7)).toBeLessThan(289);
+  });
+
+  it('draws the network outside STAR_NO_GRANULATION, behind its fade', () => {
+    const gate = STAR_SURFACE_GLSL.indexOf('#ifndef STAR_NO_GRANULATION\n  if (uGranule.w');
+    const network = STAR_SURFACE_GLSL.indexOf('if (uNetwork.w > 0.0)');
+    expect(network).toBeGreaterThan(0);
+    expect(gate).toBeGreaterThan(0);
+    // After the granules' gated block in starBrightness, so not inside it.
+    expect(network).toBeGreaterThan(STAR_SURFACE_GLSL.indexOf('#endif', gate));
+    expect(STAR_SURFACE_GLSL).toMatch(/0\.35 \+ 1\.4 \* \(1\.0 - mu\)/);
   });
 
   it('starLook falls back without activity', () => {
@@ -299,9 +357,11 @@ describe('star surface', () => {
       expect(state.regions).toEqual(activeRegions(SUN_ACTIVITY, d, 32));
       expect(state.regions).toEqual(once.regions);
       for (const name of ['uRegionCount', 'uRegionFade']) expect(swept[name]!.value).toBe(fresh[name]!.value);
-      expect((swept['uGranule']!.value as { toArray(): number[] }).toArray()).toEqual(
-        (fresh['uGranule']!.value as { toArray(): number[] }).toArray(),
-      );
+      for (const name of ['uGranule', 'uNetwork']) {
+        expect((swept[name]!.value as { toArray(): number[] }).toArray()).toEqual(
+          (fresh[name]!.value as { toArray(): number[] }).toArray(),
+        );
+      }
       const x = decode(swept);
       const y = decode(fresh);
       expect(x.length).toBe(y.length);

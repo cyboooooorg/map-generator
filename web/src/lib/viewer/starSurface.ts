@@ -33,7 +33,9 @@
  * Where it is drawn, the granulation is the costliest term: two passes
  * over 20 cells and one octave of value noise per pixel (48 hashes, one
  * more in the lanes), about four and a half times the two simplex
- * fields it replaced.
+ * fields it replaced. The supergranule network, drawn over the whole
+ * disc from afar, is kept to about a third of that: 8 cells and one
+ * octave of value noise (16 hashes).
  *
  * The science (spot structure, facular contrast, limb law) is in
  * docs/science/star-activity.md.
@@ -126,16 +128,63 @@ export function exposureFade(daysPerFrame: number, timescaleDays: number): numbe
 const ramp = (x: number, lo: number, hi: number): number => Math.min(1, Math.max(0, (x - lo) / (hi - lo)));
 
 /**
+ * The Sun's supergranules, the cells of the chromospheric network, are
+ * about 30 Mm across (Leighton, Noyes & Simon 1962, ApJ 135, 474;
+ * Rieutord & Rincon 2010, Living Rev. Sol. Phys. 7, 2).
+ */
+export const SUPERGRANULE_SIZE_MM = 30;
+/** The Sun's granules, 1.3 Mm (Trampedach et al. 2013), as `SUN_GRANULE_SIZE`. */
+const SUN_GRANULE_SIZE_MM = 1.3;
+/**
+ * A supergranule lives about a day (Hart 1956, MNRAS 116, 38; Rieutord &
+ * Rincon 2010, Living Rev. Sol. Phys. 7, 2): the network's own clock.
+ */
+export const SUPERGRANULE_LIFETIME_DAYS = 1;
+/**
+ * **Calibration**: the network's brightening per unit `granule_contrast`
+ * of the Sun's 0.15 (prototype D's 0.07), a little stronger than the
+ * real network so that it shows on the whole disc, where granules are
+ * under a pixel. Times `min(1, granule_contrast / 0.15)`: 0 on a
+ * radiative star.
+ */
+const NETWORK_CONTRAST = 0.07;
+/** The Sun's granule contrast, against which the network's is scaled. */
+const SUN_GRANULE_CONTRAST = 0.15;
+
+/**
+ * The network's cell size in star radii, for granules of `granuleSize`:
+ * supergranules scale with the granules, `SUPERGRANULE_SIZE_MM` over the
+ * Sun's 1.3 Mm granules (both are set by the convection's scale; a
+ * **calibration** for other stars, as no survey measures their network).
+ */
+export function networkSize(granuleSize: number): number {
+  return (granuleSize * SUPERGRANULE_SIZE_MM) / SUN_GRANULE_SIZE_MM;
+}
+
+/** The network's contrast for a granule contrast: `min(1, c / 0.15) · 0.07`, 0 when radiative. */
+export function networkContrast(granuleContrast: number): number {
+  if (!(granuleContrast > 0)) return 0;
+  return Math.min(1, granuleContrast / SUN_GRANULE_CONTRAST) * NETWORK_CONTRAST;
+}
+
+/**
  * How much surface detail a star `radiusPx` pixels in radius shows:
  * granulation fades in from 2.5 to 5 pixels per granule (`granuleSize`
  * in star radii) and is off below, where its cells could not be told
  * apart and would cost the most for nothing; the active regions fade in from 6 to
- * 12 pixels of star radius and are off below.
+ * 12 pixels of star radius and are off below; the supergranule network
+ * (cells `networkSize(granuleSize)` across) fades in from 3 to 8 pixels
+ * per cell, so that it shows on the whole disc of the star view (about
+ * 20 px per cell for the Sun 500 px in radius) and is off on a small star.
  */
-export function surfaceDetail(radiusPx: number, granuleSize: number): { granulation: number; regions: number } {
+export function surfaceDetail(
+  radiusPx: number,
+  granuleSize: number,
+): { granulation: number; regions: number; network: number } {
   return {
     granulation: ramp(radiusPx * granuleSize, 2.5, 5),
     regions: ramp(radiusPx, 6, 12),
+    network: ramp(radiusPx * networkSize(granuleSize), 3, 8),
   };
 }
 
@@ -216,6 +265,17 @@ export function granulePhase(days: number, lifetimeDays: number): number {
   if (!(lifetimeDays > 0)) return 0;
   return modulo(modulo(days, granuleDaysWrap(lifetimeDays)) / lifetimeDays, GRANULE_PHASE_PERIOD);
 }
+
+/**
+ * The network's phase at `days`, in supergranule lifetimes, reduced as
+ * the granule phase (`granulePhase`): modulo 289 lifetimes, its day clock
+ * wrapped at a whole number of them, so that the network's cells, which
+ * move on the same harmonics, do not jump at either wrap.
+ */
+export function networkPhase(days: number): number {
+  return granulePhase(days, SUPERGRANULE_LIFETIME_DAYS);
+}
+
 /** Days from the epoch after which the regions are packed again, to keep `uLocalDays` small. */
 const EPOCH_SPAN_DAYS = 20;
 /**
@@ -232,7 +292,8 @@ const WINDOW_DAYS = 21;
  * starHash(vec3 p)`, `vec3 starHash3(vec3 c)`, `vec3
  * starValueNoise3(vec3 x)`, `vec3 starFbm2x3(vec3 p)`, `float
  * starFbm2(vec3 p)`, `vec3 starWave(vec3 x)`, `StarCell starCellDetail(vec3
- * p, float phase)` and `vec2 starCells(vec3 p, float phase)`); `float
+ * p, float phase)`, `vec2 starCells(vec3 p, float phase)` and `float
+ * starCellLanes(vec3 p, float phase)`); `float
  * starLimb(float mu)`, `float
  * starBrightness(vec3 n, float mu)`, `vec3 starSurfaceExposed(vec3 n,
  * float mu)` (for display, see there), `float starDither(vec2)` and
@@ -242,7 +303,8 @@ const WINDOW_DAYS = 21;
  * the angle to the line of sight.
  *
  * The photosphere's brightness is the quadratic limb law times the
- * granulation, the spots and the faculae, times `uStarColour`:
+ * granulation, the network, the spots and the faculae, times
+ * `uStarColour`:
  *
  * - Granulation (`starGranules`, prototype D): cellular noise at the
  *   granule size, warped by one octave of value noise that curves the
@@ -263,6 +325,16 @@ const WINDOW_DAYS = 21;
  *   exposure curve (`starSurfaceExposed`), which compresses it on
  *   screen. `starGranules` is compiled out under
  *   `STAR_NO_GRANULATION`; the noise helpers are not.
+ * - The supergranule network (`uNetwork`): cells of `networkSize` (30 Mm
+ *   on the Sun, Leighton, Noyes & Simon 1962) on their own phase, in
+ *   supergranule lifetimes (a day, Hart 1956), whose lanes
+ *   (`starCellLanes`) are brightened by c (0.35 + 1.4 (1 − μ)), faculae
+ *   brightest at the limb (Solanki 2003), plus a mesogranular mottle of
+ *   ±c/4 at 0.35 of the cell size. c is `networkContrast`, 0.07 on the
+ *   Sun (**calibration**, slightly above the real network so that the
+ *   whole disc is not smooth) and 0 on a radiative star. Not compiled
+ *   out by `STAR_NO_GRANULATION`: the sky disc keeps it off with its
+ *   fade (`hostStarDetail`).
  * - Each region: a leader (0.6 of the area, **calibration**) and a
  *   follower spot, at ±separation/2 along the region's tilt axis (the
  *   leader east and equatorward, Joy's law), each an umbra at 0.3 of the
@@ -287,6 +359,8 @@ uniform vec3 uStarColour;
 uniform vec2 uLimb;
 /** Granules: size (star radii), contrast, phase (lifetimes, mod 289), fade. */
 uniform vec4 uGranule;
+/** The supergranule network: cell size (star radii), contrast, phase (lifetimes, mod 289), fade. */
+uniform vec4 uNetwork;
 uniform float uRegionFade;
 uniform int uRegionCount;
 uniform vec4 uRegionA[STAR_REGIONS];
@@ -489,6 +563,46 @@ vec2 starCells(vec3 p, float phase) {
   return vec2(cell.f1, cell.f1 + 2.0 * cell.edge);
 }
 
+/**
+ * A cheaper lane measure for the network, drawn over the whole disc:
+ * F2 − F1 = 2 · edge as starCells measures it (the same cells, wandering
+ * the same way, the edges along the surface), but searched among the 8
+ * cells of the 2×2×2 block on p's side only, in one pass whose centres
+ * are kept for the edges. It costs about a third of starCells. Against
+ * the 20-cell search it misses a short stub of lane near a junction on
+ * about 0.1 % of the points, invisible at the network's faint contrast.
+ */
+float starCellLanes(vec3 p, float phase) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 axis = normalize(p);
+  vec3 side = sign(f - 0.5);
+  side += 1.0 - abs(side);
+  vec3 turns = fract(STAR_CELL_RATES * (phase * 0.15915494));
+  vec3 rs[8];
+  float d1 = 1e4;
+  vec3 r1 = vec3(0.0);
+  // STAR_CELL_STEPS starts with the block's 8 cells.
+  for (int k = 0; k < 8; k++) {
+    vec3 g = side * STAR_CELL_STEPS[k];
+    vec3 r = g + 0.5 + 0.3 * starWave(turns + starHash3(i + g)) - f;
+    rs[k] = r;
+    float d = dot(r, r);
+    bool nearer = d < d1;
+    d1 = nearer ? d : d1;
+    r1 = nearer ? r : r1;
+  }
+  float edge = 1e4;
+  for (int k = 0; k < 8; k++) {
+    vec3 r = rs[k];
+    vec3 dr = r - r1;
+    float along = dot(dr, axis);
+    float apart = dot(dr, dr) - along * along;
+    edge = min(edge, apart > 1e-8 ? 0.5 * (dot(r, r) - d1) * inversesqrt(apart) : 1e4);
+  }
+  return 2.0 * edge;
+}
+
 #ifndef STAR_NO_GRANULATION
 /**
  * Granulation at n, zero-mean with rms ${GRANULE_GAIN} (the gain, see
@@ -553,6 +667,16 @@ float starBrightness(vec3 n, float mu) {
 #ifndef STAR_NO_GRANULATION
   if (uGranule.w > 0.0) brightness += uGranule.y * uGranule.w * starGranules(n);
 #endif
+  if (uNetwork.w > 0.0) {
+    // The supergranule network: bright faculae along the cells' lanes,
+    // stronger towards the limb, and a mesogranular mottle a third of its
+    // size; both slightly exaggerated (calibration), seen from afar. The
+    // mottle takes one octave of value noise: a second (starFbm2) cost
+    // two and a half times as much in this term and could not be seen.
+    float net = 1.0 - smoothstep(0.0, 0.10, starCellLanes(n / uNetwork.x, uNetwork.z));
+    float mottle = 0.5 * (starValueNoise3(n / (0.35 * uNetwork.x)).x - 0.5);
+    brightness += uNetwork.w * uNetwork.y * (net * (0.35 + 1.4 * (1.0 - mu)) + mottle);
+  }
   if (uRegionFade > 0.0 && uRegionCount > 0) {
     float latitude = asin(clamp(n.y, -1.0, 1.0));
     // About a pixel on the sphere, to keep small spots from aliasing; a
@@ -625,7 +749,8 @@ float starDither(vec2 fragCoord) {
 /**
  * The uniforms of `STAR_SURFACE_GLSL`, the region arrays `maxRegions`
  * long (the material's `STAR_REGIONS`): uStarColour, uLimb (vec2),
- * uGranule (vec4: size, contrast, phase, fade), uRegionFade,
+ * uGranule (vec4: size, contrast, phase, fade), uNetwork (vec4: cell
+ * size, contrast, phase, fade), uRegionFade,
  * uRegionCount, uRegionA and uRegionB (vec4 each), uLocalDays, uOmegaEq,
  * uShear, uFacula.
  */
@@ -634,6 +759,7 @@ export function starSurfaceUniforms(maxRegions: number): Record<string, IUniform
     uStarColour: { value: new Vector3(1, 1, 1) },
     uLimb: { value: new Vector2(0.6, 0.2) },
     uGranule: { value: new Vector4(SUN_GRANULE_SIZE, 0, 0, 0) },
+    uNetwork: { value: new Vector4(networkSize(SUN_GRANULE_SIZE), 0, 0, 0) },
     uRegionFade: { value: 0 },
     uRegionCount: { value: 0 },
     uRegionA: { value: new Float32Array(4 * maxRegions) },
@@ -758,8 +884,13 @@ export class StarSurfaceState {
    * |days − epoch| > 20. Returns whether it repacked. `regionDetail`, when
    * given, replaces the regions' ramp with the star's size (see
    * `surfaceDetail`): the sky disc has its own (`hostStarDetail`).
+   * `networkDetail`, when given, caps the network's ramp the same way
+   * (the sky disc passes `hostStarDetail` too, 0 for its usual 14 px).
    */
-  update(days: number, view: { radiusPx: number; daysPerSecond: number; regionDetail?: number }): boolean {
+  update(
+    days: number,
+    view: { radiusPx: number; daysPerSecond: number; regionDetail?: number; networkDetail?: number },
+  ): boolean {
     const look = this.look;
     if (!look) return false;
     const u = this.uniforms;
@@ -770,6 +901,13 @@ export class StarSurfaceState {
       look.granuleContrast > 0 ? detail.granulation * exposureFade(daysPerFrame, look.granuleLifetimeDays) : 0;
     const phase = granulePhase(days, look.granuleLifetimeDays);
     (u['uGranule']!.value as Vector4).set(look.granuleSize, look.granuleContrast, phase, granuleFade);
+
+    const contrast = networkContrast(look.granuleContrast);
+    const networkFade =
+      contrast > 0
+        ? Math.min(detail.network, view.networkDetail ?? 1) * exposureFade(daysPerFrame, SUPERGRANULE_LIFETIME_DAYS)
+        : 0;
+    (u['uNetwork']!.value as Vector4).set(networkSize(look.granuleSize), contrast, networkPhase(days), networkFade);
 
     const rotationDays = TWO_PI / look.omegaEq;
     this.exposure = exposureFade(daysPerFrame, rotationDays / 12);
