@@ -31,8 +31,8 @@
  * loop and the granulation behind uniform branches when they are faded
  * out, so a small or fast-turning star costs only its limb darkening.
  * Where it is drawn, the granulation is the costliest term: a 20-cell
- * search and two octaves of value noise per pixel (about 36 hashes),
- * three to four times the two simplex fields it replaced.
+ * search and one octave of value noise per pixel (28 hashes, one more
+ * in the lanes), about three times the two simplex fields it replaced.
  *
  * The science (spot structure, facular contrast, limb law) is in
  * docs/science/star-activity.md.
@@ -216,7 +216,8 @@ const WINDOW_DAYS = 21;
  * granulation, the spots and the faculae, times `uStarColour`:
  *
  * - Granulation (`starGranules`, prototype D): cellular noise at the
- *   granule size, warped by two octaves of value noise, bright in each
+ *   granule size, warped by one octave of value noise (D's second octave
+ *   cost a sixth of the term and did not show), bright in each
  *   cell's middle (`smoothstep(0.02, 0.30, F2 − F1) · (1.15 − 0.55 F1)`)
  *   and dark in the intergranular lanes, with bright points in about a
  *   fifth of the lanes. Granules are the tops of convective cells: hot
@@ -369,19 +370,22 @@ vec2 starCells(vec3 p, float phase) {
 #ifndef STAR_NO_GRANULATION
 /**
  * Granulation at n, zero-mean with rms ${GRANULE_GAIN} (the gain, see
- * GRANULE_GAIN): cells of the granule size, warped by two octaves of
- * noise, bright in the middle and dark in the lanes between, with bright
+ * GRANULE_GAIN): cells of the granule size, warped by one octave of
+ * value noise, bright in the middle and dark in the lanes between, with bright
  * points in some lanes (prototype D).
  */
 float starGranules(vec3 n) {
   float phase = uGranule.z;
   vec3 q = n / uGranule.x;
   float drift = STAR_WARP_RATE * phase;
-  q += 1.4 * (starFbm2x3(0.15 * q + STAR_WARP_RADIUS * vec3(cos(drift), 0.0, sin(drift))) - 0.5);
+  // One octave of warp: D's second octave cost a sixth of the term and did not show.
+  q += 1.4 * (starValueNoise3(0.15 * q + STAR_WARP_RADIUS * vec3(cos(drift), 0.0, sin(drift))) - 0.5);
   vec2 cells = starCells(q, phase);
   float lane = cells.y - cells.x;
   float cell = smoothstep(0.02, 0.30, lane) * (1.15 - 0.55 * cells.x);
-  float points = (1.0 - smoothstep(0.0, 0.035, lane)) * step(0.82, starHash(1.7 * q));
+  // Bright points only in the lanes: the hash is skipped everywhere else.
+  float points = 0.0;
+  if (lane < 0.035) points = (1.0 - smoothstep(0.0, 0.035, lane)) * step(0.82, starHash(1.7 * q));
   // D's weights: 0.62 for the cell, 0.35 for the points.
   float raw = cell + 0.5645 * points;
   return ${GRANULE_GAIN.toFixed(4)} * (raw - ${GRANULE_RAW_MEAN.toFixed(4)}) / ${GRANULE_RAW_RMS.toFixed(4)};

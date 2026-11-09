@@ -345,7 +345,7 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    (**calibration**). The granulation is moving cellular noise at the
    granule size, as prototype D drew it: the distances $F_1$, $F_2$ to
    the nearest and second-nearest cell centre, one centre per granule,
-   in a space warped by two octaves of value noise. A cell is bright
+   in a space warped by one octave of value noise. A cell is bright
    in its middle, $\mathrm{smoothstep}(0.02, 0.30, F_2 - F_1)\,(1.15 -
    0.55\,F_1)$, and dark in the lanes where $F_2 - F_1$ falls to 0;
    about a fifth of the lanes carry bright points, weighted 0.35
