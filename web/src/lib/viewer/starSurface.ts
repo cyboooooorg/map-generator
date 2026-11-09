@@ -323,8 +323,8 @@ const SPOT_GROWN_TRIM = 0.03;
 /** **Calibration**: the share of a spot's area its moat's pores darken (measured with the area, see SPOT_SCALE). */
 const SPOT_PORE_SHARE = 0.05;
 /**
- * The breakup noise, the mean of starFbm2 (sd 0.138) and one octave of
- * value noise (sd 0.185), is close to normal with mean 0.5 and sd 0.115:
+ * The breakup noise, the mean of a starFbm2x3 channel (sd 0.138) and one
+ * octave of value noise (sd 0.185), is close to normal with mean 0.5 and sd 0.115:
  * a share p of it lies below 0.5 + 0.115 · probit(p), within 0.003 of
  * the quantiles measured on 500 000 samples for p from 0.02 to 0.35.
  */

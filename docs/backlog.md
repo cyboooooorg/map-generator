@@ -944,5 +944,6 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   dropped, since `main` was already over it (p95 19 to 22 ms at
   2560 x 1440 on an Apple M1 Pro, median 15 to 17 ms). The user accepted
   the branch's p95 of 24 to 27 ms (median 19 to 21 ms), within about
-  5 ms of `main` and under the star view's 30 fps cap (33 ms). The system and planet views stay
-  within noise, so the system view keeps its full pixel ratio.
+  5 ms of `main` and under the star view's 30 fps cap (33 ms). The
+  system and planet views stay within noise, so the system view keeps
+  its full pixel ratio.
