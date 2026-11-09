@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { SphereGeometry } from 'three';
+import { Color, Line, SphereGeometry, Vector3 } from 'three';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
 import { libration, librationAmplitude, placeSystem } from './systemSky';
 import { systemStarView } from './systemStar';
 import type { Axes, Vec3 } from './skyBodies';
-import { globeTurn, keplerPosition, orbitDirection, type SystemGiant } from './viewer/starSystem';
+import { giantNorth, globeTurn, keplerPosition, moonOrbits, orbitDirection, type SystemGiant } from './viewer/starSystem';
+import { alignRingPlane, moonSet, placeMoonMarkers, ringMeshes } from './viewer/giantRings';
 
 // The star view's planet globes are three.js SphereGeometry meshes wrapped
 // in their maps, turned by globeTurn; the planet view turns the same
@@ -124,6 +125,51 @@ describe("the star view's planet globes", () => {
     const north = turned(globeTurn(giant.axes!(100)), [0, 1, 0]);
     const normal = unit(cross(fromStar(giant, 100), fromStar(giant, 101)));
     expect(angle(north, normal)).toBeCloseTo(c.spin.axial_tilt_deg * DEG, 3);
+  });
+});
+
+describe("the star view's giant rings", () => {
+  it('lie in the equatorial plane of the globe, its ring moons too, fixed while it turns', () => {
+    const system = lockedSystem();
+    const c = system.bodies.find((x) => x.id === 'c')!;
+    // A tilted giant whose orbit's node is far from the reference direction.
+    c.spin.axial_tilt_deg = 27;
+    expect(Math.abs(c.orbit.node_deg)).toBeGreaterThan(10);
+    const view = systemStarView(system, c);
+    const giant = view.giants.giants[view.ids.indexOf('c')]!;
+    const rings = ringMeshes(0.1, null, new Color('#ffffff'), 0.5);
+    const radius = c.physical.radius_km;
+    const moon = (a: number, ring: boolean) => ({ radius_km: 10, inclination_deg: 0, period_days: 1, barycentre_km: 0, semi_major_axis_km: a * radius, ring });
+    const orbits = moonOrbits([moon(2.05, true), moon(4, false)], radius, 365, 60, false);
+    const moons = moonSet(orbits, { colour: '#ffffff', opacity: 0.3, segments: 64, detail: [12, 6] });
+    const seen: Vec3[] = [];
+    for (const days of [100, 1234.5]) {
+      // The globe's north, as the marker's shader turns it (see globeTurn).
+      const north = turned(globeTurn(giant.axes!(days)), [0, 1, 0]);
+      alignRingPlane(rings, giantNorth(giant, days));
+      alignRingPlane(moons.ringPlane, giantNorth(giant, days));
+      placeMoonMarkers(orbits, moons.markers, days);
+      rings.updateMatrixWorld(true);
+      moons.group.updateMatrixWorld(true);
+      // Each band's normal (a RingGeometry lies in its xy plane).
+      expect(rings.children.length).toBeGreaterThan(0);
+      for (const band of rings.children) {
+        const normal = new Vector3(0, 0, 1).transformDirection(band.matrixWorld);
+        for (let i = 0; i < 3; i += 1) expect(Math.abs(normal.getComponent(i) - north[i]!), `day ${days}`).toBeLessThan(1e-6);
+      }
+      // The ring moon's orbit line: its normal from two points a quarter turn apart.
+      const line = moons.ringPlane.children.find((o): o is Line => o instanceof Line)!;
+      const points = line.geometry.getAttribute('position');
+      const at = (i: number) => new Vector3().fromBufferAttribute(points, i).applyMatrix4(line.matrixWorld);
+      const normal = new Vector3().crossVectors(at(0), at(16)).normalize();
+      for (let i = 0; i < 3; i += 1) expect(Math.abs(normal.getComponent(i) - north[i]!), `day ${days}`).toBeLessThan(1e-6);
+      // Its marker is in that plane.
+      const marker = new Vector3().setFromMatrixPosition(moons.markers[0]!.matrixWorld);
+      expect(Math.abs(marker.dot(new Vector3(...north)))).toBeLessThan(1e-6);
+      seen.push(north);
+    }
+    // The axis does not wobble with the day.
+    expect(angle(seen[0]!, seen[1]!)).toBeLessThan(1e-6);
   });
 });
 

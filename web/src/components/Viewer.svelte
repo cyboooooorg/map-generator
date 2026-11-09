@@ -2432,6 +2432,7 @@
       bind:prominences={starProminences}
       giantSystem={system.giants}
       worldGiant={meta?.giant ?? null}
+      worldTiltDeg={meta?.axial_tilt_deg ?? 0}
       host={null}
       bind:giants={starGiants}
       bind:links={starLinks}
