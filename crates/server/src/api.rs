@@ -398,12 +398,25 @@ pub struct SystemName {
 #[ts(export)]
 pub struct GenerateStarted {
     pub job_id: Option<String>,
-    /// Set when the body asked for was generated before by another
-    /// generator than the current one (it lost its files and is made
-    /// again): the world may look different from the one it replaces.
+    /// The bodies the job makes again that another generator than the
+    /// current one made before they lost their files: the worlds may look
+    /// different from the ones they replace. Every body of the family
+    /// (the planet and its moons) that is in this case is named, not only
+    /// the one asked for: a planet's job makes its evicted moons too.
     /// Said on every answer while the job is queued or running; the
-    /// viewer tells the user once.
-    pub regenerated_from: Option<GeneratorNote>,
+    /// viewer tells the user once per body.
+    pub regenerated: Vec<RegeneratedBody>,
+}
+
+/// A body made again by another generator than the one that made it, see
+/// [`GenerateStarted::regenerated`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct RegeneratedBody {
+    /// The body's id in its system.
+    pub body: String,
+    /// The generator that made it and the current one.
+    pub from: GeneratorNote,
 }
 
 /// The generator that made a world, and the current one: what the user is

@@ -571,8 +571,12 @@ addressed as `<system-id>/<body-id>` everywhere.
   one generated with all its neighbours answers 200 with no job, so a
   double click costs nothing. For a body evicted and made by another
   build of the generator than the current one, the answer carries
-  `regenerated_from` (the version, build id and format recorded, and the
-  current ones), only when the job answered generates that body. Once the
+  `regenerated` (one entry per body of the family, the planet and its
+  moons, that the job makes again and another build made: its id, the
+  version, build id and format recorded, and the current ones), only when
+  the job answered is the family's. Bringing evicted bodies back does not
+  move their system in the library (`system.json` keeps its date); a job
+  that makes a body never generated before dates it as ever. Once the
   job is done, the body asked for, if it was displayed at another size
   than its original, gets that size queued too; its neighbours made by
   the same job (moons, giant, siblings) stay at their original size.
@@ -725,9 +729,11 @@ addressed as `<system-id>/<body-id>` everywhere.
   unopened. Opening its view (the planet view, not the system view or a
   card in a list) queues its generation by itself, as pressing
   **Generate** would. When the generator that made it differs from the
-  current one (`regenerated_from` in the answer of `POST …/generate`), a
-  toast tells the user once that the world was made by an older version
-  and may look different from before.
+  current one (`regenerated` in the answer of `POST …/generate`, which also
+  names the evicted moons or planet a job makes with it), a toast tells
+  the user once per body that the world was made by an older version and
+  may look different from before. A moon's card shows its planet's (its
+  metadata is read when the moon is opened first).
 - **Progress bar.** While a job runs, the viewer shows a bar over the
   canvas, in the style of the loading bar, with the message of
   [Generating on demand](#generating-on-demand) and **Cancel**. Its share

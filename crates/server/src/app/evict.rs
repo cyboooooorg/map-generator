@@ -237,6 +237,50 @@ fn write_system_keeping_date(dir: &Path, system: &mapgen::system::System) -> Res
     Ok(())
 }
 
+/// The date of a system's `system.json`, put back when this is dropped:
+/// what a job that only makes evicted bodies again holds, so that the
+/// library, which dates a system by that file, does not see the system
+/// move when a body comes back (as [`write_system_keeping_date`] does for
+/// the eviction itself). Dropped also when the job is cancelled midway.
+pub struct KeptDate {
+    file: std::path::PathBuf,
+    modified: std::time::SystemTime,
+}
+
+impl KeptDate {
+    /// Holds the date of system `system`'s file when generating `body` and
+    /// its neighbourhood would only make bodies that were evicted again,
+    /// else `None`: a body generated for the first time dates the system
+    /// as before (the new world is a change to it). Blocking.
+    pub fn when_only_restoring(
+        index: &crate::index::Index,
+        dir: &Path,
+        system: &str,
+        body: &str,
+    ) -> Option<Self> {
+        let file = dir.join(systems::SYSTEM_FILE);
+        let wanted = mapgen::system::neighbourhood(&mapgen::system::read_system(dir).ok()?, body);
+        let evicted = index.evicted_bodies(system).ok()?;
+        if wanted.is_empty() || !wanted.iter().all(|id| evicted.contains(id)) {
+            return None;
+        }
+        let modified = std::fs::metadata(&file).and_then(|m| m.modified()).ok()?;
+        Some(Self { file, modified })
+    }
+}
+
+impl Drop for KeptDate {
+    fn drop(&mut self) {
+        let put_back = std::fs::File::options()
+            .write(true)
+            .open(&self.file)
+            .and_then(|f| f.set_modified(self.modified));
+        if let Err(e) = put_back {
+            tracing::warn!("{} keeps its new date: {e}", self.file.display());
+        }
+    }
+}
+
 /// Prefix of the directory a body's `sizes/` is renamed to while it is
 /// deleted: `bodies/.tmp-evict-<body>-<ms>`.
 const EVICT_PREFIX: &str = ".tmp-evict-";

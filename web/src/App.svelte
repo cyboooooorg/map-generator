@@ -21,7 +21,7 @@
   import type { PresetInfo } from './lib/api/types/PresetInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { driftRange, driftRequest, formatDrift } from './lib/drift';
-  import { bodyTitle, evictedKey, forgetTold, shouldTell } from './lib/evicted';
+  import { bodyTitle, forgetTold, toTell } from './lib/evicted';
   import { keepAlone, requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
@@ -477,10 +477,10 @@
       if (started.job_id) {
         jobs.track(started.job_id, system, {}, { status: 'queued' }, true);
       }
-      // An evicted world made by an older generator: the user hears it once.
-      if (shouldTell(started.regenerated_from, evictedKey(system, body))) {
-        const shown = primary.systemId === system;
-        toasts.show(t.app.olderWorld({ body: bodyTitle(shown ? primary.system : null, shown ? primary.systemNames : {}, body) }), {
+      // Evicted worlds made by an older generator: the user hears it once each.
+      const shown = primary.systemId === system;
+      for (const named of toTell(system, started.regenerated)) {
+        toasts.show(t.app.olderWorld({ body: bodyTitle(shown ? primary.system : null, shown ? primary.systemNames : {}, named) }), {
           ms: 12000,
         });
       }

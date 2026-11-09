@@ -414,13 +414,20 @@ Decisions 3 and 4, implemented (issue #328, step 3 of the plan). Code in
   theirs. Opening a moon regenerates its neighbourhood as on-demand
   generation does. The Viewer queues it once (`generateShown`); the card's
   button uses `generateBody` of `App.svelte`.
-- **Generator notice:** `POST …/generate` answers `regenerated_from` (the
-  recorded version and format and the current ones) when the body was
-  evicted and its generator differs, on every answer while the job
-  lives (and only when the job answered generates that body: a job of
-  another body of the system that leaves it alone carries no note); the
-  viewer toasts once per body and session, naming the body by its name or
-  designation.
+- **Generator notice:** `POST …/generate` answers `regenerated`: one
+  `{body, from}` per body of the family (the planet and its moons) that
+  is evicted and whose generator differs, with the recorded version and
+  format and the current ones, on every answer while the job lives (and
+  only when the job answered is the family's: a job of another family
+  carries no note). A planet's job makes its evicted moons too, so they
+  are named, not only the body asked. The viewer toasts once per body and
+  session, naming the body by its name or designation.
+- **Date of a restored system:** a job whose bodies were all evicted
+  (the index holds their generator) puts `system.json`'s modification
+  time back when it ends (`KeptDate` in `app/evict.rs`), so restoring a
+  body does not move its system to the top of the library. A job that
+  also makes a body never generated before keeps the usual behaviour: the
+  system is dated by that generation.
 - **Build id:** `GENERATOR_VERSION` is `<crate version>+<git commit>`
   (`0.1.0+1a2b3c4d5e6f`), recorded in `generator_version` (no schema
   change). `crates/server/build.rs` takes the commit from `GIT_SHA` of
