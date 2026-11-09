@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fullPixelRatio, MAX_PIXEL_RATIO, MOVING_PIXEL_RATIO, pixelRatio, SETTLE_MS } from './pixelRatio';
+import { animatedPixelRatio, fullPixelRatio, MAX_PIXEL_RATIO, MOVING_PIXEL_RATIO, pixelRatio, SETTLE_MS } from './pixelRatio';
 
 describe('pixelRatio', () => {
   it('caps the settled ratio', () => {
@@ -18,5 +18,11 @@ describe('pixelRatio', () => {
   it('never raises a low device ratio', () => {
     expect(pixelRatio(1, 0)).toBe(1);
     expect(pixelRatio(0.8, 0)).toBe(0.8);
+  });
+
+  it('draws an animated star at the moving ratio', () => {
+    expect(animatedPixelRatio(2, true, { maxPixelRatio: 2, movingPixelRatio: 1.25 })).toBe(1.25);
+    expect(animatedPixelRatio(2, false, { maxPixelRatio: 2, movingPixelRatio: 1.25 })).toBe(2);
+    expect(animatedPixelRatio(1, true, { maxPixelRatio: 2, movingPixelRatio: 1.25 })).toBe(1);
   });
 });

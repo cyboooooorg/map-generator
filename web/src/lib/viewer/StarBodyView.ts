@@ -32,7 +32,7 @@ import type { StarInfo } from '../api/types/StarInfo';
 import { CoronalLoops } from './coronalLoops';
 import { Eruption, eruptive } from './eruption';
 import { FrameStats } from './frameStats';
-import { fullPixelRatio } from './pixelRatio';
+import { animatedPixelRatio, fullPixelRatio } from './pixelRatio';
 import { PROFILES, type QualityProfile } from './quality';
 import { starsFragment, starsVertex } from './shaders';
 import {
@@ -247,9 +247,11 @@ export class StarBodyView {
     if (on && this.loop === null && !this.disposed) {
       this.lastTick = performance.now();
       this.loop = requestAnimationFrame(this.tick);
+      this.applyPixelRatio(true);
     } else if (!on && this.loop !== null) {
       cancelAnimationFrame(this.loop);
       this.loop = null;
+      this.applyPixelRatio(false);
       // The eruption is an animation: paused, none hangs half-risen.
       this.eruption.remove();
     }
@@ -360,6 +362,13 @@ export class StarBodyView {
       transparent: true,
       depthWrite: false,
     });
+  }
+
+  /** Switches the drawing buffer between the moving and the full ratio, and draws the new frame (not called per frame). */
+  private applyPixelRatio(animated: boolean): void {
+    if (this.disposed) return;
+    this.renderer.setPixelRatio(animatedPixelRatio(window.devicePixelRatio, animated, this.quality));
+    this.resize();
   }
 
   private resize(): void {

@@ -32,3 +32,17 @@ export function pixelRatio(deviceRatio: number, msSinceMotion: number, caps: Pix
   const full = fullPixelRatio(deviceRatio, caps);
   return msSinceMotion < SETTLE_MS ? Math.min(full, caps.movingPixelRatio) : full;
 }
+
+/**
+ * The pixel ratio of a view that is either animated or still, for a screen of
+ * `deviceRatio`: the moving ratio while its clock runs (every frame changes),
+ * the full ratio once it is paused (one sharp frame).
+ */
+export function animatedPixelRatio(
+  deviceRatio: number,
+  animated: boolean,
+  caps: PixelRatioCaps = DEFAULT_CAPS,
+): number {
+  const full = fullPixelRatio(deviceRatio, caps);
+  return animated ? Math.min(full, caps.movingPixelRatio) : full;
+}
