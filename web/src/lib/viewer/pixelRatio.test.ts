@@ -26,13 +26,15 @@ describe('pixelRatio', () => {
     expect(animatedPixelRatio(1, true, { maxPixelRatio: 2, movingPixelRatio: 1.25 })).toBe(1);
   });
 
-  it('draws an animated close-up at ratio 1 at most', () => {
+  it('draws an animated close-up at ratio 0.75 at most, on every screen', () => {
     const caps = { maxPixelRatio: 2, movingPixelRatio: 1.25 };
-    expect(animatedPixelRatio(2, true, caps, true)).toBe(1);
+    expect(animatedPixelRatio(2, true, caps, true)).toBe(0.75);
+    expect(animatedPixelRatio(1, true, caps, true)).toBe(0.75);
     expect(animatedPixelRatio(2, true, caps, false)).toBe(1.25);
     // Paused, the close-up is drawn sharp; a lower screen or cap is never raised.
     expect(animatedPixelRatio(2, false, caps, true)).toBe(2);
-    expect(animatedPixelRatio(0.8, true, caps, true)).toBe(0.8);
-    expect(animatedPixelRatio(2, true, { maxPixelRatio: 2, movingPixelRatio: 0.9 }, true)).toBe(0.9);
+    expect(animatedPixelRatio(1, false, caps, true)).toBe(1);
+    expect(animatedPixelRatio(0.6, true, caps, true)).toBe(0.6);
+    expect(animatedPixelRatio(2, true, { maxPixelRatio: 2, movingPixelRatio: 0.5 }, true)).toBe(0.5);
   });
 });

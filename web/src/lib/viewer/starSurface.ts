@@ -498,10 +498,14 @@ const vec3 STAR_CELL_STEPS[20] = vec3[20](
   vec3(0.0, 0.0, -1.0), vec3(1.0, 0.0, -1.0), vec3(0.0, 1.0, -1.0), vec3(1.0, 1.0, -1.0));
 
 
-/** What starCellDetail finds at a point, distances in cells. */
-/** The small granules' blobs: exp(−d² · this), a Gaussian of σ = 0.38 cell, depth counting for 0.4 of its square (**calibrations**). */
+/**
+ * The small granules' blobs: exp(−d² · this), a Gaussian of
+ * σ = 1 / sqrt(2 · 5.5) ≈ 0.30 cell, depth counting for 0.4 of its square
+ * (**calibrations**).
+ */
 const float STAR_BLOB_SHARPNESS = 5.5;
 
+/** What starCellDetail finds at a point, distances in cells. */
 struct StarCell {
   /** Distance to the nearest centre (3D). */
   float f1;

@@ -33,8 +33,13 @@ export function pixelRatio(deviceRatio: number, msSinceMotion: number, caps: Pix
   return msSinceMotion < SETTLE_MS ? Math.min(full, caps.movingPixelRatio) : full;
 }
 
-/** Highest pixel ratio of an animated close-up (see `animatedPixelRatio`). */
-export const CLOSE_UP_PIXEL_RATIO = 1;
+/**
+ * Highest pixel ratio of an animated close-up (see `animatedPixelRatio`), on
+ * every screen: below 1 the browser upscales the smaller drawing buffer to
+ * the canvas's unchanged CSS size, a softer frame for about 44 % fewer pixels
+ * than ratio 1.
+ */
+export const CLOSE_UP_PIXEL_RATIO = 0.75;
 
 /**
  * The pixel ratio of a view that is either animated or still, for a screen of

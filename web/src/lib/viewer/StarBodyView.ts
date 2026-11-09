@@ -380,7 +380,7 @@ export class StarBodyView {
   }
 
   /**
-   * Switches the drawing buffer between the moving ratio (1 at most in a
+   * Switches the drawing buffer between the moving ratio (0.75 at most in a
    * close-up, see isCloseUp) and the full one, and draws the new frame;
    * does nothing when the ratio stays the same, so the controls may call it
    * on every change without resizing per frame.
@@ -404,6 +404,9 @@ export class StarBodyView {
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     this.sky.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
+    // Resizing cleared the drawing buffer: the next frame is drawn without
+    // waiting for the profile's frame cap, so no blank frame shows.
+    this.lastDrawn = -Infinity;
     this.requestRender();
   }
 
