@@ -6,8 +6,8 @@
  */
 export type GeneratorNote = { 
 /**
- * Crate version of the generator that made the world; null when it
- * was not recorded.
+ * Version of the generator that made the world (`0.1.0+<git sha>`: crate
+ * version and build id); null when it was not recorded.
  */
 version: string | null, 
 /**

@@ -11,6 +11,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 # Built-in presets are embedded in the binaries at compile time
 COPY presets presets
+# The commit the image is built from, recorded with every body generated (the
+# build context has no .git, see .dockerignore): `mise run up` passes it
+ARG GIT_SHA=
+ENV GIT_SHA=${GIT_SHA}
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
 	--mount=type=cache,target=/src/target \
 	cargo build --release --locked -p mapgen-server -p map-generator \

@@ -26,7 +26,11 @@ services:
   # Reads and writes the worlds, systems and index (db/) of this checkout; reads its presets (built-in ones are embedded).
   # ---------------------------------------------------------------------------------------------------- #
   planets:
-    build: .
+    build:
+      context: .
+      args:
+        # The commit recorded as the generator's build id (`mise run up` exports it)
+        GIT_SHA: "${GIT_SHA:-}"
     image: map-generator:local
     container_name: map-generator
     restart: unless-stopped

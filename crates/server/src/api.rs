@@ -411,8 +411,8 @@ pub struct GenerateStarted {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct GeneratorNote {
-    /// Crate version of the generator that made the world; null when it
-    /// was not recorded.
+    /// Version of the generator that made the world (`0.1.0+<git sha>`: crate
+    /// version and build id); null when it was not recorded.
     pub version: Option<String>,
     /// Revision of the data it wrote (`format_version` of its
     /// `world.json`); 0 when not known.
