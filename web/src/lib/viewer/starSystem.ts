@@ -119,6 +119,17 @@ export function globeTurn(axes: Axes): Axes {
 }
 
 /**
+ * A giant's north in the star view's frame after `days`: its spin axis,
+ * the globe's north as globeTurn turns it (the turn's second column), in
+ * whose equator its rings lie. The axis does not turn with the globe's
+ * day. A giant without axes (a world's own, outside a planetary system)
+ * has the view's up, the normal of its orbit's plane.
+ */
+export function giantNorth(giant: Pick<SystemGiant, 'axes'>, days: number): Vec3 {
+  return giant.axes ? globeTurn(giant.axes(days))[1] : [0, 1, 0];
+}
+
+/**
  * A moon as the star view draws it; `ring` for a moon of a giant's rings
  * (in a gap, at their edge, shepherding them, or making a gap by
  * resonance), drawn where it is, among the rings.
@@ -502,7 +513,11 @@ export interface MoonOrbit {
   radius: number;
   /** Size of its marker, view units. */
   size: number;
-  /** Inclination of its orbit to the plane of the system, radians. */
+  /**
+   * Inclination of its orbit, radians: to its planet's equator in a
+   * planetary system (see giantRings' moonSet), else to the plane of the
+   * system.
+   */
   inclination: number;
   /** Radians per animated second; negative on a retrograde orbit. */
   speed: number;
@@ -510,17 +525,17 @@ export interface MoonOrbit {
   phase: number;
   /** Share of the orbit's radius the planet swings around the barycentre (a binary), else 0. */
   swing: number;
+  /**
+   * A moon of the planet's rings: its orbit lies in their plane, the
+   * planet's equator (see giantRings' moonSet), `inclination` to it.
+   */
+  ring?: boolean;
 }
 
 /** Radius of the planet's marker in the star view, view units. */
 export const PLANET_MARKER = 0.11;
 /** Shortest animated period of a moon, s: closer moons would only flicker. */
 const MOON_MIN_PERIOD_S = 2;
-/**
- * Tilt of a giant's rings round its marker, radians out of the view's
- * plane (seen a little open, as most giants' are): a ring moon's orbit too.
- */
-export const RING_TILT = 0.45;
 /** Radius of a ring moon's marker, in planet markers: small enough for its gap. */
 export const RING_MOON_SIZE = 0.06;
 /** The rings drawn round a giant's marker without their system's edges, in its radii. */
@@ -574,7 +589,8 @@ export function moonOrbits(
       return {
         radius: PLANET_MARKER * radii(moon),
         size: PLANET_MARKER * RING_MOON_SIZE,
-        inclination: RING_TILT,
+        inclination: 0,
+        ring: true,
         speed: (2 * Math.PI) / period,
         phase: k * 2.4,
         swing: 0,

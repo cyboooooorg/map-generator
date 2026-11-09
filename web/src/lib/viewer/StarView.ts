@@ -93,12 +93,11 @@ import {
   orbitGaps,
   FOOTPRINT_GAP_SHARE,
   velocityScale,
-  RING_MOON_SIZE,
-  RING_TILT,
-  ringBands,
+  giantNorth,
   SYMBOLIC_RINGS,
 } from './starSystem';
-import type { RingSystem } from '../api/types/RingSystem';
+import { alignRingPlane, disposeTree, moonSet, placeMoonMarkers, ringMeshes, type MoonSet } from './giantRings';
+import type { Vec3 } from '../skyBodies';
 
 /** Size of a preview's texture on a marker, pixels (a marker is a few pixels to a few dozen wide). */
 const PREVIEW_WIDTH = 64;
@@ -172,25 +171,6 @@ const SUN_RADIUS_AU = 0.004_65;
 /** Width of the glow quad, in star radii. */
 const GLOW_SIZE = 7;
 
-/**
- * A giant's rings round its marker (`size` its radius): to scale with
- * their gaps when the system drew them (`rings`), each gap wide enough
- * for a ring moon's marker (see moonOrbits); else a plain band. Tilted,
- * as most giants' rings (and spins) are.
- */
-function ringMeshes(size: number, rings: RingSystem | null, colour: Color, opacity: number): Group {
-  const group = new Group();
-  const bands = rings ? ringBands(rings, RING_MOON_SIZE * 1.6) : [SYMBOLIC_RINGS];
-  const material = () => new MeshBasicMaterial({ color: colour, transparent: true, opacity, side: DoubleSide, depthWrite: false });
-  for (const [inner, outer] of bands) {
-    const band = new Mesh(new RingGeometry(size * inner, size * outer, 64), material());
-    band.renderOrder = 3;
-    group.add(band);
-  }
-  group.rotation.x = -Math.PI / 2 + RING_TILT;
-  return group;
-}
-
 export class StarView {
   private readonly renderer: WebGLRenderer;
   /** Frame-time probe (`?frames=1`); a plain draw call otherwise. */
@@ -254,7 +234,14 @@ export class StarView {
   private readonly giantGroup = new Group();
   private giants: SystemGiant[] = [];
   /** A planetary system's moons, round every planet: by planet, its group, orbits and markers. */
-  private systemMoons: { group: Group; orbits: MoonOrbit[]; markers: Mesh<SphereGeometry, MeshBasicMaterial>[] }[] = [];
+  private systemMoons: (MoonSet & { orbits: MoonOrbit[] })[] = [];
+  /** Each giant's rings (null without), tilted with its axis (see giantNorth). */
+  private giantRings: (Group | null)[] = [];
+  /** Each giant's north in the view's frame, as last placed (see placeGiants). */
+  private giantNorths: Vec3[] = [];
+  /** The plane of the rings of the world itself drawn as a giant (see setWorldGiant), and of its ring moons' orbits. */
+  private moonRingPlane: Group | null = null;
+  private worldNorth: Vec3 = [0, 1, 0];
   private giantMarkers: Mesh<SphereGeometry, ShaderMaterial>[] = [];
   /** How far each free spinner's globe is held behind the clock, days, by giant (see spinLag). */
   private spinLags: number[] = [];
@@ -695,35 +682,18 @@ export class StarView {
     // A planetary system draws the moons of every planet (see buildSystemMoons).
     if (this.selected !== null) return;
     this.moonOrbits = orbits;
-    for (const orbit of orbits) {
-      const ring = new Line(
-        new BufferGeometry().setFromPoints(
-          Array.from({ length: 97 }, (_, i) => {
-            const a = (i / 96) * 2 * Math.PI;
-            return new Vector3(Math.cos(a) * orbit.radius, 0, -Math.sin(a) * orbit.radius);
-          }),
-        ),
-        new LineBasicMaterial({ color: this.overlay.orbit, transparent: true, opacity: 0.35 }),
-      );
-      ring.rotation.x = orbit.inclination;
-      // Transparent: drawn in a fixed order with the glow and prominences.
-      ring.renderOrder = 3;
-      this.moonGroup.add(ring);
-      const marker = new Mesh(new SphereGeometry(orbit.size, 16, 8), new MeshBasicMaterial({ color: '#d9d4c8' }));
-      this.moonMarkers.push(marker);
-      this.moonGroup.add(marker);
-    }
+    const set = moonSet(orbits, { colour: this.overlay.orbit, opacity: 0.35, segments: 96, detail: [16, 8] }, this.moonGroup);
+    // A giant world's ring moons go round in its rings' plane.
+    this.moonRingPlane = set.ringPlane;
+    alignRingPlane(set.ringPlane, this.worldNorth);
+    this.moonMarkers = set.markers;
     this.placePlanet();
     this.requestRender();
   }
 
   private disposeMoons(): void {
-    for (const child of [...this.moonGroup.children]) {
-      const object = child as Mesh<BufferGeometry, MeshBasicMaterial>;
-      object.geometry.dispose();
-      object.material.dispose();
-      this.moonGroup.remove(child);
-    }
+    disposeTree(this.moonGroup);
+    this.moonRingPlane = null;
     this.moonMarkers = [];
     this.moonOrbits = [];
   }
@@ -735,43 +705,26 @@ export class StarView {
    */
   private buildSystemMoons(): void {
     for (const moons of this.systemMoons) {
-      for (const child of [...moons.group.children]) {
-        const object = child as Mesh<BufferGeometry, MeshBasicMaterial>;
-        object.geometry.dispose();
-        object.material.dispose();
-      }
+      disposeTree(moons.group);
       this.giantGroup.remove(moons.group);
     }
     this.systemMoons = [];
     if (this.selected === null) return;
     for (const [k, giant] of this.giants.entries()) {
-      const group = new Group();
       // A day a second at ×1: a year lasts its days in seconds.
       const orbits = moonOrbits(giant.moons ?? [], giant.radius_earth * 6371, giant.year_days, giant.year_days, false);
-      const markers = orbits.map((orbit) => {
-        const ring = new Line(
-          new BufferGeometry().setFromPoints(
-            Array.from({ length: 65 }, (_, i) => {
-              const a = (i / 64) * 2 * Math.PI;
-              return new Vector3(Math.cos(a) * orbit.radius, 0, -Math.sin(a) * orbit.radius);
-            }),
-          ),
-          new LineBasicMaterial({ color: this.overlay.orbit, transparent: true, opacity: 0.3 }),
-        );
-        ring.rotation.x = orbit.inclination;
-        ring.renderOrder = 3;
-        group.add(ring);
-        const marker = new Mesh(new SphereGeometry(orbit.size, 12, 6), new MeshBasicMaterial({ color: '#d9d4c8' }));
-        group.add(marker);
-        return marker;
-      });
+      // Its moons round its equator, their inclinations measured from it
+      // (as placeSystem places them), tilted with its axis like its rings
+      // (see placeSystemMoons).
+      const set = moonSet(orbits, { colour: this.overlay.orbit, opacity: 0.3, segments: 64, detail: [12, 6], equatorial: true });
+      const group = set.group;
       // The moons' orbits, scaled to the planet's marker, shrink to stay
       // between this planet's orbit and its neighbours'.
       const reach = Math.max(0, ...orbits.map((o) => o.radius + o.size));
       const room = this.markerGaps[k] !== undefined && !this.realScale ? (FOOTPRINT_GAP_SHARE * this.markerGaps[k]!) / Math.max(reach, 1e-9) : Infinity;
       group.scale.setScalar(Math.min(this.markerSize(k) / PLANET_MARKER, room));
       this.giantGroup.add(group);
-      this.systemMoons.push({ group, orbits, markers });
+      this.systemMoons.push({ ...set, orbits });
     }
   }
 
@@ -781,12 +734,8 @@ export class StarView {
       const marker = this.giantMarkers[k];
       if (!marker) return;
       moons.group.position.copy(marker.position);
-      moons.orbits.forEach((orbit, m) => {
-        const angle = orbit.phase + this.orbitTime * orbit.speed;
-        const local = new Vector3(Math.cos(angle) * orbit.radius, 0, -Math.sin(angle) * orbit.radius);
-        local.applyAxisAngle(new Vector3(1, 0, 0), orbit.inclination);
-        moons.markers[m]?.position.copy(local);
-      });
+      alignRingPlane(moons.ringPlane, this.giantNorths[k] ?? [0, 1, 0]);
+      placeMoonMarkers(moons.orbits, moons.markers, this.orbitTime);
     });
   }
 
@@ -795,11 +744,9 @@ export class StarView {
     this.moonGroup.position.copy(this.planet.position);
     // In a planetary system, the moons run on the system's clock.
     const time = this.selected !== null ? this.orbitTime : this.time;
+    const places = placeMoonMarkers(this.moonOrbits, this.moonMarkers, time);
     this.moonOrbits.forEach((orbit, k) => {
-      const angle = orbit.phase + time * orbit.speed;
-      const local = new Vector3(Math.cos(angle) * orbit.radius, 0, -Math.sin(angle) * orbit.radius);
-      local.applyAxisAngle(new Vector3(1, 0, 0), orbit.inclination);
-      this.moonMarkers[k]?.position.copy(local);
+      const local = places[k]!;
       if (orbit.swing > 0) {
         this.planet.position.addScaledVector(local, -orbit.swing * this.moonGroup.scale.x);
       }
@@ -817,7 +764,13 @@ export class StarView {
    * Draws the world itself as the giant it is (its colour, size and
    * rings), or as the usual blue marker of a rocky world (null).
    */
-  setWorldGiant(info: GiantInfo | null): void {
+  setWorldGiant(info: GiantInfo | null, tiltDeg = 0): void {
+    // Its axis leans from its orbit's normal by its tilt, about the view's
+    // x axis (the world alone does not say towards where): its rings and
+    // its ring moons' orbits lie in its equator.
+    const tilt = (tiltDeg * Math.PI) / 180;
+    this.worldNorth = [0, Math.cos(tilt), Math.sin(tilt)];
+    if (this.moonRingPlane) alignRingPlane(this.moonRingPlane, this.worldNorth);
     for (const child of [...this.planet.children]) {
       child.traverse((object) => {
         if (object instanceof Mesh) {
@@ -837,9 +790,9 @@ export class StarView {
     this.planet.material.color.copy(colour);
     this.planet.scale.setScalar(giantMarkerSize(info.radius_earth) / PLANET_MARKER);
     if (info.rings) {
-      this.planet.add(
-        ringMeshes(PLANET_MARKER, null, new Color().setRGB(...info.rings.colour, SRGBColorSpace), info.rings.bright ? 0.6 : 0.22),
-      );
+      const rings = ringMeshes(PLANET_MARKER, null, new Color().setRGB(...info.rings.colour, SRGBColorSpace), info.rings.bright ? 0.6 : 0.22);
+      alignRingPlane(rings, this.worldNorth);
+      this.planet.add(rings);
     }
     this.requestRender();
   }
@@ -867,6 +820,8 @@ export class StarView {
       this.giantGroup.remove(child);
     }
     this.giantMarkers = [];
+    this.giantRings = [];
+    this.giantNorths = [];
     this.giantOrbits = [];
     this.fatMaterials = this.fatMaterials.filter((m) => !this.orbitHighlights.some((h) => h.material === m));
     this.orbitHighlights = [];
@@ -913,9 +868,13 @@ export class StarView {
       const marker = new Mesh(new SphereGeometry(size, 32, 16), planetMarkerMaterial(colour));
       const ringsReach = giant.rings !== 'none' ? Math.max(SYMBOLIC_RINGS[1], giant.ringSystem?.outer ?? 0) : 0;
       if (giant.rings !== 'none') {
-        marker.add(
-          ringMeshes(size, giant.ringSystem ?? null, colour.clone().lerp(new Color('#e8e0d0'), 0.5), giant.rings === 'bright' ? 0.6 : 0.22),
-        );
+        // In its equator, tilted with its axis (see placeGiants).
+        const rings = ringMeshes(size, giant.ringSystem ?? null, colour.clone().lerp(new Color('#e8e0d0'), 0.5), giant.rings === 'bright' ? 0.6 : 0.22);
+        alignRingPlane(rings, giantNorth(giant, this.systemDay));
+        marker.add(rings);
+        this.giantRings.push(rings);
+      } else {
+        this.giantRings.push(null);
       }
       // Its highlight: a ring a little wider than the marker (and its rings).
       const halo = new Mesh(
@@ -1351,8 +1310,13 @@ export class StarView {
       // Its globe turned on itself on the system's clock, as placeSystem
       // turns it: a locked planet keeps its longitude 180° towards the star;
       // a free spinner too fast for the frames is held back (see spinLag).
+      // Its rings, and its ring moons' orbits (see placeSystemMoons), lie
+      // in its equator: tilted with its axis, which does not turn with it.
+      const day = this.systemDay - (giant.spinHours ? (this.spinLags[k] ?? 0) : 0);
+      this.giantNorths[k] = giantNorth(giant, day);
+      const rings = this.giantRings[k];
+      if (rings) alignRingPlane(rings, this.giantNorths[k]);
       if (marker && giant.axes) {
-        const day = this.systemDay - (giant.spinHours ? (this.spinLags[k] ?? 0) : 0);
         (marker.material.uniforms['uTurn']!.value as Matrix3).fromArray(globeTurn(giant.axes(day)).flat());
       }
       this.placeVector(k, giant, position, giant.orbit_au * distance);

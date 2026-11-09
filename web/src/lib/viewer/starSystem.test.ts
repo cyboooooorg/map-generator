@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, realVectorBound, REAL_VECTOR_FLOOR, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
+import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, realVectorBound, REAL_VECTOR_FLOOR, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, ringBands } from './starSystem';
 
 describe('star view', () => {
   it('lays the system out outside the star, in proportion', () => {
@@ -155,7 +155,9 @@ describe('star view', () => {
     const rings = { inner: 1.25, outer: 2.3, gaps: [[2.05, 0.0005] as [number, number], [1.9, 0.06] as [number, number]] };
     const [moonlet, resonant, other] = moonOrbits([moon(2.05, true), moon(3.0, true), moon(4, false)], R, 365, 60, false);
     expect(moonlet!.radius).toBeCloseTo(PLANET_MARKER * 2.05, 9);
-    expect(moonlet!.inclination).toBe(RING_TILT);
+    // In the rings' plane (see giantRings' moonSet).
+    expect(moonlet!.ring).toBe(true);
+    expect(moonlet!.inclination).toBe(0);
     expect(resonant!.radius).toBeCloseTo(PLANET_MARKER * 3.0, 9);
     expect(other!.radius).toBeGreaterThan(resonant!.radius);
     // The moonlet's gap is cut wide enough for its marker.

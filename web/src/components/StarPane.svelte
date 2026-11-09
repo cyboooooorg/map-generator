@@ -71,6 +71,8 @@
     showLagrange?: boolean;
     /** The world itself when it is a giant planet, or the giant it orbits. */
     worldGiant?: GiantInfo | null;
+    /** The axial tilt of `worldGiant`, degrees: its rings and ring moons lie in its equator. */
+    worldTiltDeg?: number;
     /** The giant the world orbits, as its moon. */
     host?: HostGiant | null;
     /**
@@ -152,6 +154,7 @@
     showTrojans = $bindable(true),
     showLagrange = $bindable(false),
     worldGiant = null,
+    worldTiltDeg = 0,
     host = null,
     kinds = null,
     onPickPlanet = null,
@@ -333,7 +336,7 @@
   });
   // A planetary system's planets are the system itself: always drawn.
   $effect(() => view?.setGiantsVisible(giants || selected !== null));
-  $effect(() => view?.setWorldGiant(worldGiant));
+  $effect(() => view?.setWorldGiant(worldGiant, worldTiltDeg));
 
   /** Jupiter masses, from Earth masses. */
   const jupiters = (earth: number) => earth / 317.8;
