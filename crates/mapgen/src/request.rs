@@ -626,6 +626,13 @@ impl WorldRequest {
         // planet its star despun, moons light enough to outlast its tides.
         // A drawn star and orbit are drawn again until they leave it (the
         // generation stays coherent); set ones that do not are an error.
+        // Eccentric giants force an eccentricity on the world, before the
+        // moons and the effects below see its orbit (and after each orbit
+        // the moons draw again): a request pinning the final eccentricity
+        // then sees the same orbit at every step.
+        if eccentricity_drawn {
+            force_eccentricity(&mut params, giant);
+        }
         if let Some(n) = params.moons.count() {
             let room = |p: &WorldParams| {
                 crate::moons::MoonSystem::draw(p).is_some_and(|m| m.moons.len() >= usize::from(n))
@@ -647,6 +654,9 @@ impl WorldRequest {
                 params.star = star;
                 params.orbit_au = orbit_au;
                 params.eccentricity = eccentricity;
+                if eccentricity_drawn {
+                    force_eccentricity(&mut params, giant);
+                }
                 attempts += 1;
             }
         }
@@ -679,29 +689,6 @@ impl WorldRequest {
             params.axial_tilt_deg = crate::spin::upright(&params, params.axial_tilt_deg);
         }
         params.planet.rules.shore_width_km *= effects.shore_factor;
-        // Eccentric giants force an eccentricity on the world: a drawn one is
-        // at least that (the giants are placed around the final orbit, which
-        // the moons may have drawn again).
-        let at = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0);
-        let circular = if giant {
-            crate::spin::circularised(&at)
-        } else {
-            crate::spin::rocky_circularised(
-                &at,
-                params.mass_earth(),
-                params.circumference_km / crate::noise::EARTH_CIRCUMFERENCE_KM,
-            )
-        };
-        if eccentricity_drawn && !circular {
-            for _ in 0..3 {
-                let forced = crate::giants::GiantSystem::draw(&params)
-                    .map_or(0.0, |g| g.forced_eccentricity);
-                if forced <= params.eccentricity {
-                    break;
-                }
-                params.eccentricity = forced.min(ECCENTRICITY.max);
-            }
-        }
         // Tidal heat raises a drawn volcanism, from the giant as the final
         // orbit places it (the giants may have forced its eccentricity), so
         // that `host.tidal_flux` in `world.json` explains it.
@@ -797,6 +784,34 @@ impl WorldRequest {
             width: Some(params.width),
             height: Some(params.height),
         }
+    }
+}
+
+/// Eccentric giants force an eccentricity on a world whose eccentricity was
+/// drawn: it becomes at least that, unless its star's tides have
+/// circularised its orbit. The giants are placed around the world's orbit,
+/// whose eccentricity they then change: settled in three rounds at most.
+fn force_eccentricity(params: &mut WorldParams, giant: bool) {
+    let at = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0);
+    let circular = if giant {
+        crate::spin::circularised(&at)
+    } else {
+        crate::spin::rocky_circularised(
+            &at,
+            params.mass_earth(),
+            params.circumference_km / crate::noise::EARTH_CIRCUMFERENCE_KM,
+        )
+    };
+    if circular {
+        return;
+    }
+    for _ in 0..3 {
+        let forced =
+            crate::giants::GiantSystem::draw(params).map_or(0.0, |g| g.forced_eccentricity);
+        if forced <= params.eccentricity {
+            break;
+        }
+        params.eccentricity = forced.min(ECCENTRICITY.max);
     }
 }
 
@@ -1317,6 +1332,78 @@ mod tests {
                     "{pinned:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn a_world_its_giants_make_eccentric_replays_its_effects_from_its_pinned_request() {
+        use rand::SeedableRng;
+        // Moons left to the seed and moons asked for: both see the orbit.
+        let requests = [
+            WorldRequest {
+                planet: Some("terran".into()),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            },
+            WorldRequest {
+                planet: Some("terran".into()),
+                moons: Some(crate::moons::MoonsMode::Count(2)),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            },
+        ];
+        for request in requests {
+            let mut forced = 0;
+            for draw in 0..400u64 {
+                let resolve = |request: &WorldRequest, draw: u64| {
+                    request.resolve(&mut rand::rngs::StdRng::seed_from_u64(draw))
+                };
+                let Ok(resolved) = resolve(&request, draw) else {
+                    continue;
+                };
+                // The same draws without giants: the eccentricity before
+                // they force it.
+                let alone = WorldRequest {
+                    giants: Some(GiantsMode::None),
+                    ..request.clone()
+                };
+                let Ok(free) = resolve(&alone, draw) else {
+                    continue;
+                };
+                if (free.params.star, free.params.orbit_au)
+                    != (resolved.params.star, resolved.params.orbit_au)
+                    || free.params.eccentricity >= resolved.params.eccentricity
+                {
+                    continue;
+                }
+                forced += 1;
+                let p = &resolved.params;
+                let pinned = request.pinned(p, &resolved.planet_spec);
+                let again = resolve(&pinned, draw + 1000)
+                    .unwrap_or_else(|e| panic!("{pinned:?}: {e}"))
+                    .params;
+                let moons = |p: &WorldParams| {
+                    crate::moons::MoonSystem::draw(p).map_or(0, |m| m.moons.len())
+                };
+                assert_eq!(
+                    again.planet.rules.shore_width_km, p.planet.rules.shore_width_km,
+                    "{pinned:?}"
+                );
+                assert_eq!(moons(&again), moons(p), "{pinned:?}");
+                assert_eq!(
+                    crate::spin::star_info(&again),
+                    crate::spin::star_info(p),
+                    "{pinned:?}"
+                );
+                assert_eq!(
+                    serde_json::to_value(&again).unwrap(),
+                    serde_json::to_value(p).unwrap(),
+                    "{pinned:?}"
+                );
+            }
+            assert!(forced >= 3, "{request:?}: only {forced} forced draws");
         }
     }
 }

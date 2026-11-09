@@ -540,7 +540,7 @@ addressed as `<system-id>/<body-id>` everywhere.
   gone, is still listed. A system drawn again from `create` is
   identical, a whole system or one around a planet: what a request
   around a planet leaves open comes from the random generator, not the
-  seed, so `create` pins the values the planet asked for took.
+  seed, so `create` sets each of those fields to the focus body's value.
   Format and rationale: the README, *Export of a system*, and
   `docs/analysis/15-storage.md`, *Export done*. The main menu's
   **Export** button downloads it.

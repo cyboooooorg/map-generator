@@ -3604,10 +3604,11 @@ mod tests {
         // What a request around a planet leaves open (the star, the orbit,
         // the world's parameters) is resolved by the random generator, not
         // by the seed: the export's `create` pins the values they took.
-        // A planet with neighbours and moons, then the moon of a giant.
+        // A planet with neighbours and moons, its star left open; then the
+        // moon of a giant, round a Sun-like star.
         for request in [
             r#"{"around": {"planet": "barren", "width": 64, "height": 32, "moons": {"count": 2}}}"#,
-            r#"{"around": {"planet": "terran", "width": 64, "height": 32, "host": "giant"}}"#,
+            r#"{"around": {"planet": "terran", "star": "G2V", "width": 64, "height": 32, "host": "giant"}}"#,
         ] {
             let (document, before, after) = drawn_again_from_its_export(&app, request).await;
             assert!(document["request"]["around"]["seed"].is_null());
