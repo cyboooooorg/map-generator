@@ -144,8 +144,8 @@
 
   /**
    * The address says what is shown: no hash, or `#menu`, is the menu, and
-   * `#system=<id>&body=<id>&compare=<id>&pins=…` a system's viewer, so a
-   * reload, a shared link or the browser's Back and Forward show it. A
+   * `#system=<id>&body=<id>&compare=<id>&pins=…` a system's viewer
+   * (`body=star` its star view, no body its system view), so a reload, a shared link or the browser's Back and Forward show it. A
    * copied link also carries the view (see lib/link.ts), applied once to
    * the main pane; the address then names only the systems.
    */
@@ -191,7 +191,7 @@
   /** A link to the worlds shown and the main pane's view (Copy link). */
   function shareLink(): string {
     const hash = systemHash(
-      { system: selectedId, body: primary.subject === 'star' ? null : primary.systemBody, compare: compareId, pins: primary.pinnedPlanets },
+      { system: selectedId, body: primary.linkBody, compare: compareId, pins: primary.pinnedPlanets },
       primaryPane?.viewState() ?? null,
     );
     return `${location.origin}${location.pathname}#${hash}`;
@@ -260,7 +260,7 @@
     const hash =
       systemHash({
         system: selectedId,
-        body: primary.subject === 'star' ? null : primary.systemBody,
+        body: primary.linkBody,
         compare: compareId,
         pins: primary.pinnedPlanets,
       }) || 'menu';

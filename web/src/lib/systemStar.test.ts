@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
 import { ringsKind, systemStarView } from './systemStar';
+import { anomalies } from './systemSky';
 
 const system = fixture as unknown as System;
 
@@ -50,6 +51,26 @@ describe('system star view', () => {
     expect(list.map((m) => m.id)).toEqual(['c-1', 'c-2']);
     expect(list[0]!.name).toBe('Io');
     expect(list[0]!.semi_major_axis_km).toBeLessThan(list[1]!.semi_major_axis_km);
+  });
+});
+
+describe('system star view epoch', () => {
+  it('runs the system view on the planets epoch', () => {
+    const b = system.bodies.find((x) => x.id === 'b')!;
+    const view = systemStarView(system, b);
+    const planets = system.bodies.filter((x) => x.kind === 'planet');
+    const TWO_PI = 2 * Math.PI;
+    const wrap = (x: number) => ((x % TWO_PI) + TWO_PI) % TWO_PI;
+    for (const days of [0, 1234]) {
+      planets.forEach((planet, k) => {
+        const giant = view.giants.giants[k]!;
+        // StarView's mean anomaly at its systemDay (giantAnomaly).
+        const shown = giant.phase * TWO_PI + (TWO_PI * days) / giant.year_days;
+        const sky = anomalies(planet.orbit, days).mean;
+        const diff = wrap(shown - sky);
+        expect(Math.min(diff, TWO_PI - diff)).toBeLessThan(1e-9);
+      });
+    }
   });
 });
 

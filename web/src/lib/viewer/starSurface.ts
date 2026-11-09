@@ -64,7 +64,7 @@ export interface StarLook {
 /** The Sun's granule size, 1.3 Mm over its 695.7 Mm radius (Trampedach et al. 2013). */
 const SUN_GRANULE_SIZE = 1.3 / 695.7;
 /** The Sun's granule lifetime, 8 minutes (Title et al. 1989). */
-const SUN_GRANULE_LIFETIME_DAYS = 8 / 1440;
+export const SUN_GRANULE_LIFETIME_DAYS = 8 / 1440;
 
 /**
  * The look of `info`'s surface. Without an activity (a system file read

@@ -146,6 +146,19 @@ export function rotationPhase(a: StarActivity, days: number): number {
   return p >= TWO_PI ? 0 : p;
 }
 
+/**
+ * This model's activity for the Sun, as `sun_activity` in `activity.rs`
+ * derives it: `(Ro☉ / 0.13)^−2.70` (Wright et al. 2011, ApJ 743, 48), with
+ * Ro☉ = 25.4 d over the turnover time of 1 M☉, `10^(2.33 − 1.50 + 0.31)`
+ * days (Wright et al. 2018, MNRAS 479, 2351, eq. 6).
+ */
+const SUN_ACTIVITY = (25.4 / 10 ** (2.33 - 1.5 + 0.31) / 0.13) ** -2.7;
+
+/** `a.activity` relative to the Sun's in this model (1 for the Sun). */
+export function activityRelativeToSun(a: StarActivity): number {
+  return a.activity / SUN_ACTIVITY;
+}
+
 /** Integer hash used by the timeline (and by coronalLoops for per-loop jitter). Unsigned 32 bits. */
 export function hash32(...keys: number[]): number {
   let h = 0x9e3779b9;

@@ -40,6 +40,7 @@
   import { cssGradient } from '../lib/viewer/colormaps';
   import { starLitColour, vegetationShares } from '../lib/vegetation';
   import StarPane from './StarPane.svelte';
+  import StarSurfacePane from './StarSurfacePane.svelte';
   import SkyLabels, { type SkyLabel } from './SkyLabels.svelte';
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
@@ -243,6 +244,24 @@
   let starOrbit = $state(true);
   let starZone = $state(true);
   let starProminences = $state(true);
+  /**
+   * The day the system view and the star view show, Earth days from the
+   * system's t = 0: both panes bind it, so switching keeps the day. 0 with
+   * each new system; opening the star from a planet starts at the planet
+   * view's day (sysDays). The planet view's own clock is left as it is.
+   */
+  let starDays = $state(0);
+  let starDaysFor: { system: string | null; subject: 'planet' | 'star' } | null = null;
+  $effect(() => {
+    const system = world.systemId;
+    const subject = world.subject;
+    untrack(() => {
+      const before = starDaysFor;
+      starDaysFor = { system, subject };
+      if (!before || before.system !== system) starDays = 0;
+      else if (subject === 'star' && before.subject === 'planet') starDays = sysDays;
+    });
+  });
   let starGiants = $state(true);
   /** A planetary system's dotted star–planet lines and velocity vectors in the star view. */
   let starLinks = $state(true);
@@ -255,6 +274,7 @@
   let starLagrange = $state(false);
   let starRealScale = $state(false);
   let starPane = $state<ReturnType<typeof StarPane> | null>(null);
+  let starSurfacePane = $state<ReturnType<typeof StarSurfacePane> | null>(null);
   let starLight = $state(saved.starLight);
   let clouds = $state(saved.clouds);
   /** The planet seen in a moon's sky (or the giant in its moon world's), drawn by its own switches. */
@@ -438,7 +458,7 @@
       world.subject = 'planet';
       world.showSystemBody(key);
     };
-    if (world.subject === 'star' && starPane && index >= 0) starPane.flyToPlanet(index, open);
+    if (world.subject === 'star' && world.starMode === 'system' && starPane && index >= 0) starPane.flyToPlanet(index, open);
     else open();
   }
   // Only planets have a hex grid.
@@ -911,6 +931,7 @@
     starPick = sysPlanet?.id ?? null;
     const index = sysStar && sysPlanet ? sysStar.ids.indexOf(sysPlanet.id) : -1;
     flyBack = index >= 0 ? index : null;
+    world.starMode = 'system';
     world.subject = 'star';
   }
   /**
@@ -1785,7 +1806,8 @@
   /** Back to the whole planet, north up (or to the whole system, in the star view). */
   export function resetView(): void {
     if (world.subject === 'star') {
-      starPane?.resetView();
+      if (world.starMode === 'star') starSurfacePane?.resetView();
+      else starPane?.resetView();
     } else {
       view?.resetView();
     }
@@ -2277,6 +2299,20 @@
       bind:showBelts={starBelts}
       bind:showTrojans={starTrojans}
       bind:showLagrange={starLagrange}
+      hidden={world.starMode === 'star'}
+      bind:clockDays={starDays}
+      onOpenStar={sys ? () => (world.starMode = 'star') : null}
+    />
+  {/if}
+  {#if world.subject === 'star' && world.starMode === 'star' && sys}
+    <StarSurfacePane
+      bind:this={starSurfacePane}
+      star={sys.star.info}
+      activity={sys.star.activity ?? null}
+      bind:clockDays={starDays}
+      bind:animated={starAnimated}
+      bind:loops={starProminences}
+      onOpenSystem={() => (world.starMode = 'system')}
     />
   {/if}
 

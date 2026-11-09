@@ -63,7 +63,7 @@ function orbitPlane(orbit: Orbit, parent: Axes): Plane {
 }
 
 /** The mean, true and eccentric anomalies of an orbit after `days`, radians (Kepler's equation). */
-function anomalies(orbit: Orbit, days: number): { mean: number; true: number; eccentric: number } {
+export function anomalies(orbit: Orbit, days: number): { mean: number; true: number; eccentric: number } {
   const e = Math.min(Math.max(orbit.eccentricity, 0), 0.95);
   const mean = orbit.mean_anomaly_deg * DEG + (2 * Math.PI * days) / Math.max(orbit.period_days, 1e-6);
   let eccentric = e < 0.8 ? mean : Math.PI;

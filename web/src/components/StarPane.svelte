@@ -110,6 +110,21 @@
     onOpenPlanet?: ((index: number) => void) | null;
     /** The maps wrapped round each planet's marker, in the giants' order, null for its colour. */
     maps?: readonly (SurfaceMaps | null)[] | null;
+    /**
+     * The day shown, Earth days from the system's t = 0, shared with the
+     * star view (StarSurfacePane): the view writes it as its clock runs,
+     * and takes a day written from outside when it opens or shows again.
+     */
+    clockDays?: number;
+    /**
+     * Hidden behind the star view: the canvas and its chrome are not shown
+     * and the animation loop stops (no frame is drawn unless a setting
+     * changes), but the view is kept,
+     * with its camera, speed and switches, for when it shows again.
+     */
+    hidden?: boolean;
+    /** Opens the star view (the Star button, a double click on the star); null hides the button. */
+    onOpenStar?: (() => void) | null;
   }
 
   let {
@@ -153,6 +168,9 @@
     onOpenMoon = () => {},
     onOpenPlanet = null,
     maps = null,
+    clockDays = $bindable(0),
+    hidden = false,
+    onOpenStar = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
@@ -192,6 +210,8 @@
     created.onClock = (fraction, days) => {
       yearFraction = fraction;
       elapsedDays = days;
+      reported = days;
+      clockDays = days;
     };
     view = created;
     return () => {
@@ -202,6 +222,19 @@
   });
 
   $effect(() => view?.setStar(star, omega, giantList, selected, activity));
+  /** The last day this view reported (see clockDays): any other is a day set from outside. */
+  let reported = Number.NaN;
+  // A day set from outside (the star view's, or the planet view's on
+  // opening), applied after setStar and only while shown: the hidden view
+  // draws nothing.
+  $effect(() => {
+    const days = clockDays;
+    if (!view || hidden || days === reported) return;
+    untrack(() => view?.setSystemDay(days));
+  });
+  $effect(() => {
+    if (view) view.onOpenStar = onOpenStar;
+  });
   /** The world's axes on screen, for the gizmo. */
   let axes = $state<ScreenAxis[]>([]);
   // Back from a planet's view: out from it to the whole system, once.
@@ -322,7 +355,8 @@
       eccentricity: formatUpTo(g.eccentricity, 2),
       rings: t.starView.rings[g.rings] ?? '',
     });
-  $effect(() => view?.setAnimated(animated));
+  // Hidden, the view runs no animation loop at all.
+  $effect(() => view?.setAnimated(animated && !hidden));
   $effect(() => view?.setPlanetLinks(links));
   $effect(() => view?.setVelocities(velocities));
   $effect(() => view?.setPulls(pulls));
@@ -638,6 +672,7 @@
   }
 </script>
 
+<div class="star-pane" class:concealed={hidden}>
 <canvas bind:this={canvas} class="star-canvas"></canvas>
 {#if labels}
   <div class="labels" aria-hidden="true" bind:clientWidth={width}>
@@ -752,6 +787,7 @@
     {/if}
   </div>
 {/if}
+</div>
 {#snippet starPanel()}
   <p class="heading"><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></p>
   <dl>
@@ -890,8 +926,12 @@
     </dl>
   {/if}
 {/snippet}
+<div class="star-pane" class:concealed={hidden}>
 <div class="star-chrome">
   <div class="gizmo"><AxesGizmo {axes} /></div>
+  {#if onOpenStar}
+    <button type="button" class="view-switch" title={t.starView.openStarHelp} onclick={onOpenStar}>{t.starView.openStar}</button>
+  {/if}
   <div class="toggles">
     <ToggleBar label={t.starView.displaySection} groups={toggleGroups} />
   </div>
@@ -937,8 +977,33 @@
         : []}
   />
 </div>
+</div>
 
 <style>
+  /* The pane's parts are placed in the viewer: the wrapper only hides them. */
+  .star-pane {
+    display: contents;
+  }
+  .star-pane.concealed {
+    display: none;
+  }
+  .view-switch {
+    position: absolute;
+    left: 12px;
+    bottom: 72px;
+    pointer-events: auto;
+    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
+    background: var(--frame-deco), var(--panel);
+    clip-path: var(--frame-clip);
+    box-shadow: var(--glow);
+    padding: 4px 10px;
+  }
+  /* The playback bar wraps to two lines on narrow views. */
+  @media (max-width: 720px) {
+    .view-switch {
+      bottom: 128px;
+    }
+  }
   .star-canvas {
     position: absolute;
     inset: 0;

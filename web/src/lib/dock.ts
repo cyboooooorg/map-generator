@@ -4,7 +4,7 @@
 // of a comparison share it.
 import { loadSetting, saveSetting } from './settings';
 
-export type DockKind = 'star' | 'planet';
+export type DockKind = 'star' | 'starSurface' | 'planet';
 
 /** Where a floating panel's top-left corner is, CSS px in the view. */
 export interface FloatAt {

@@ -353,6 +353,8 @@ export class StarView {
   onHoverPlanet: ((index: number | null) => void) | null = null;
   /** Called with a giant's index when its marker is double-clicked; null ignores double clicks. */
   onOpenPlanet: ((index: number) => void) | null = null;
+  /** Called when the star is double-clicked (no planet there): opens the star view; null ignores it. */
+  onOpenStar: (() => void) | null = null;
   /**
    * A planetary system's selected planet, by its index in `giants`, or
    * null for a lone world's view. With one, every planet is drawn as a
@@ -408,9 +410,10 @@ export class StarView {
     });
     canvas.addEventListener('pointerleave', () => this.hover(null));
     canvas.addEventListener('dblclick', (event) => {
-      if (!this.onOpenPlanet) return;
-      const index = this.pickPlanet(event.clientX, event.clientY);
-      if (index !== null) this.onOpenPlanet(index);
+      const index = this.onOpenPlanet ? this.pickPlanet(event.clientX, event.clientY) : null;
+      if (index !== null) this.onOpenPlanet?.(index);
+      // No planet there: the star itself opens the star view.
+      else if (this.onOpenStar && this.hitsStar(event.clientX, event.clientY)) this.onOpenStar();
     });
     canvas.addEventListener('pointerup', (event) => {
       const at = this.pressAt;
@@ -1635,6 +1638,18 @@ export class StarView {
       if (hit) best = this.giantMarkers.indexOf(hit.object as (typeof this.giantMarkers)[number]);
     }
     return best;
+  }
+
+  /** Whether the ray through a point of the screen (client px) meets the star's sphere. */
+  private hitsStar(clientX: number, clientY: number): boolean {
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    const ray = new Raycaster();
+    ray.setFromCamera(
+      new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1),
+      this.camera,
+    );
+    return ray.intersectObject(this.star, false).length > 0;
   }
 
   dispose(): void {

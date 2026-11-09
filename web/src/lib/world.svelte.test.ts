@@ -54,4 +54,48 @@ describe('LoadedWorld.loadSystem', () => {
     expect(world.subject).toBe('planet');
     expect(world.shownSystemBody?.id).toBe('d');
   });
+
+  it('opens the star view from body=star', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: files.a }) }));
+    const world = new LoadedWorld();
+    world.loadSystem('x', 'star');
+    expect(world.subject).toBe('star');
+    expect(world.starMode).toBe('star');
+    await flush();
+    expect(world.subject).toBe('star');
+    expect(world.starMode).toBe('star');
+    // 'star' is never a body id: the system's planet is the body behind the view.
+    expect(world.systemBody).not.toBe('star');
+    expect(world.systemBody).toBe('d');
+    expect(world.linkBody).toBe('star');
+  });
+
+  it('opens the system view without body', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: files.a }) }));
+    const world = new LoadedWorld();
+    world.loadSystem('x');
+    await flush();
+    expect(world.subject).toBe('star');
+    expect(world.starMode).toBe('system');
+    expect(world.linkBody).toBeNull();
+  });
+
+  it('resets the star mode with another system', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: files.a }) }));
+    const world = new LoadedWorld();
+    world.loadSystem('x', 'star');
+    await flush();
+    expect(world.starMode).toBe('star');
+    world.loadSystem('y');
+    expect(world.starMode).toBe('system');
+    await flush();
+    expect(world.subject).toBe('star');
+    expect(world.starMode).toBe('system');
+    // A body asked for opens the planet view, in system mode once back at the star.
+    world.loadSystem('z', 'd-1');
+    expect(world.subject).toBe('planet');
+    expect(world.starMode).toBe('system');
+    await flush();
+    expect(world.linkBody).toBe('d-1');
+  });
 });
