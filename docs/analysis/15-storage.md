@@ -4,7 +4,8 @@ Study of how the app stores its systems and bodies today, and of the
 alternatives (a database, an object store such as MinIO, or others), to
 decide what to keep, what to change and in what order. Step 1 of the
 recommendation (the SQLite index) is implemented, see *Step 1 done*
-below; the rest is not.
+below, and so is the system export (decision 6, see *Export done*);
+the rest is not.
 
 ## Today
 
@@ -351,3 +352,42 @@ A body has its original resolution (the size in its parameters in
 - The project's own layout and behaviour: `docs/system-spec.md`
   (*Storage*), `crates/server/src/staging.rs`, `crates/server/src/systems.rs`,
   `compose.yaml`.
+
+## Export done: a system's seeds, requests and images
+
+Implemented in `crates/server/src/export.rs` (issue #329, decision 6).
+No backup is automatic, so the app offers the export instead:
+`GET /api/systems/{id}/export` answers `<system-id>.zip`, and the
+system's card in the main menu has an **Export** button (⤓) that
+downloads it. What it does, and where it departs from the plan above:
+
+- **Archive:** `<system-id>/system.json` and, for each generated body,
+  `bodies/<body>/thumb.png` and `bodies/<body>/sizes/<W>x<H>/world.png`
+  and `legend.png` for every resolution on disk. No tiles, raw data, SVG
+  or noise maps: they are rebuilt from the seed, and the SVG is on
+  request anyway (#327). PNGs are stored as they are, only the JSON is
+  deflated.
+- **Built in memory** and sent whole: for a personal library (decision
+  1) it keeps the code simple and leaves no temporary file to clean up.
+  The memory used is the size of the PNGs; streaming from a temporary
+  file is the way out if a system with many large resolutions needs it.
+- **`system.json`** is a serde type (`SystemExport`) with a `schema`
+  field (1). Its fields are listed in the README, *Export of a system*.
+  Bodies never generated, or whose files are gone, are listed with their
+  seed and request and `generated: false`.
+- **Generator version:** each generated body gives `made_with`, read
+  from the index (decision 4): the crate version, `null` for a body found
+  in the tree, and the `format_version` of its `world.json`.
+- **Reproducing a system:** the export's `create` field is the stored
+  request with its seed filled in. Posted to `POST /api/systems` it
+  draws a *whole system* (`{"system": …}`) again exactly: the same id,
+  the same bodies and seeds, the same `system.json`. A system *around a
+  planet* (`{"around": …}`) keeps its id and its seed (when the request
+  fixes the star), but whatever the request leaves open besides the seed
+  (orbit, the other planets, the parameters of the world) is drawn from
+  the random generator of the request, not from the seed, so a second
+  draw gives other values. Its exact parameters are in `bodies[].request`.
+  An import is not built: `create` is the whole of what a future one would
+  need for a whole system.
+- **Not exported:** the pin and the displayed sizes (view preferences, see
+  *Step 1 done*), and the job history.

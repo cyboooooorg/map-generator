@@ -523,6 +523,24 @@ addressed as `<system-id>/<body-id>` everywhere.
   unpin a system in the main menu (idempotent, 404 for an unknown
   system). Both answer its summary, whose `pinned` flag `GET /api/systems`
   also gives. The pin lives in the index only.
+- `GET /api/systems/{id}/export`: the system as `<id>.zip` (400 for an
+  invalid id, 404 for an unknown system, 410 for one an older generator
+  made). It holds `<id>/system.json`, a document with a `schema` field
+  (1), and the PNGs of the generated bodies: `bodies/<body>/thumb.png`
+  and, per resolution on disk, `bodies/<body>/sizes/<W>x<H>/world.png`
+  and `legend.png`; tiles, raw data, SVG and noise maps are not in it.
+  The document gives the system's `request`, `seed`, `create` (the
+  request with the seed filled in, the body of the `POST` that draws the
+  system again), the star's and the bodies' names, and per body its
+  `seed`, its `request` (the `WorldParams` of `system.json`), whether it
+  is `generated`, `made_with` (crate version and `format_version`, from
+  the index) and its `files`. A body never generated, or whose files are
+  gone, is still listed. A whole system drawn again from `create` is
+  identical; a system around a planet keeps its id and seed, but what
+  its request leaves open comes from the random generator, not the seed.
+  Format and rationale: the README, *Export of a system*, and
+  `docs/analysis/15-storage.md`, *Export done*. The main menu's
+  **Export** button downloads it.
 - `POST /api/systems/{id}/bodies/{body}/generate`: queue the body and its
   neighbourhood (see [Generating on demand](#generating-on-demand)) as
   one job. Asking for a body already queued answers that job; asking for
