@@ -63,14 +63,18 @@ export interface MoonLook {
   segments: number;
   /** Width and height segments of a moon's marker. */
   detail: [number, number];
+  /** Every moon's orbit in the planet's equatorial plane (`ringPlane`), not only the ring moons'. */
+  equatorial?: boolean;
 }
 
 /**
  * A planet's moons round its marker: their orbit lines and markers, on the
  * orbits `moonOrbits` gives. A ring moon's orbit is drawn in `ringPlane`,
- * in the rings' plane (aligned as they are, see alignRingPlane); the
- * others at their inclination to the view's plane. Markers are placed by
- * placeMoonMarkers.
+ * the planet's equatorial plane (aligned as the rings are, see
+ * alignRingPlane); with `equatorial`, every moon's is, at its inclination
+ * to that plane (as placeSystem places moons, from their planet's
+ * equator); otherwise the others are at their inclination to the view's
+ * plane. Markers are placed by placeMoonMarkers.
  */
 export interface MoonSet {
   group: Group;
@@ -83,7 +87,7 @@ export function moonSet(orbits: readonly MoonOrbit[], look: MoonLook, group = ne
   const ringPlane = new Group();
   group.add(ringPlane);
   const markers = orbits.map((orbit) => {
-    const parent = orbit.ring ? ringPlane : group;
+    const parent = orbit.ring || look.equatorial ? ringPlane : group;
     const line = new Line(
       new BufferGeometry().setFromPoints(
         Array.from({ length: look.segments + 1 }, (_, i) => {

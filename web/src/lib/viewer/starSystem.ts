@@ -513,7 +513,11 @@ export interface MoonOrbit {
   radius: number;
   /** Size of its marker, view units. */
   size: number;
-  /** Inclination of its orbit to the plane of the system, radians. */
+  /**
+   * Inclination of its orbit, radians: to its planet's equator in a
+   * planetary system (see giantRings' moonSet), else to the plane of the
+   * system.
+   */
   inclination: number;
   /** Radians per animated second; negative on a retrograde orbit. */
   speed: number;

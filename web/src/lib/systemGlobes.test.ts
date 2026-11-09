@@ -173,6 +173,34 @@ describe("the star view's giant rings", () => {
   });
 });
 
+describe("the star view's moons of a planet", () => {
+  it("orbit round its equator, tilted with its axis, at their inclination to it", () => {
+    const system = lockedSystem();
+    const c = system.bodies.find((x) => x.id === 'c')!;
+    // Lying on its side, as Uranus does.
+    c.spin.axial_tilt_deg = 98;
+    const view = systemStarView(system, c);
+    const giant = view.giants.giants[view.ids.indexOf('c')]!;
+    const radius = c.physical.radius_km;
+    const moon = (a: number, inclination: number) => ({ radius_km: 300, inclination_deg: inclination, period_days: 3, barycentre_km: 0, semi_major_axis_km: a * radius });
+    const orbits = moonOrbits([moon(5, 0), moon(8, 10)], radius, 365, 60, false);
+    const moons = moonSet(orbits, { colour: '#ffffff', opacity: 0.3, segments: 64, detail: [12, 6], equatorial: true });
+    const north = turned(globeTurn(giant.axes!(100)), [0, 1, 0]);
+    alignRingPlane(moons.ringPlane, giantNorth(giant, 100));
+    moons.group.updateMatrixWorld(true);
+    const lines = [moons.group, moons.ringPlane].flatMap((g) => g.children.filter((o): o is Line => o instanceof Line));
+    expect(lines).toHaveLength(2);
+    const normals = lines.map((line) => {
+      const points = line.geometry.getAttribute('position');
+      const at = (i: number) => new Vector3().fromBufferAttribute(points, i).applyMatrix4(line.matrixWorld);
+      const n = new Vector3().crossVectors(at(0), at(16)).normalize();
+      return [n.x, n.y, n.z] as Vec3;
+    });
+    expect(angle(normals[0]!, north)).toBeLessThan(1e-6);
+    expect(angle(normals[1]!, north)).toBeCloseTo(10 * DEG, 6);
+  });
+});
+
 function cross(a: Vec3, b: Vec3): Vec3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }

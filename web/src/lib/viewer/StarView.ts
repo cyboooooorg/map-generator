@@ -713,8 +713,10 @@ export class StarView {
     for (const [k, giant] of this.giants.entries()) {
       // A day a second at ×1: a year lasts its days in seconds.
       const orbits = moonOrbits(giant.moons ?? [], giant.radius_earth * 6371, giant.year_days, giant.year_days, false);
-      // Its ring moons in its rings' plane, tilted with its axis (see placeSystemMoons).
-      const set = moonSet(orbits, { colour: this.overlay.orbit, opacity: 0.3, segments: 64, detail: [12, 6] });
+      // Its moons round its equator, their inclinations measured from it
+      // (as placeSystem places them), tilted with its axis like its rings
+      // (see placeSystemMoons).
+      const set = moonSet(orbits, { colour: this.overlay.orbit, opacity: 0.3, segments: 64, detail: [12, 6], equatorial: true });
       const group = set.group;
       // The moons' orbits, scaled to the planet's marker, shrink to stay
       // between this planet's orbit and its neighbours'.
@@ -819,6 +821,7 @@ export class StarView {
     }
     this.giantMarkers = [];
     this.giantRings = [];
+    this.giantNorths = [];
     this.giantOrbits = [];
     this.fatMaterials = this.fatMaterials.filter((m) => !this.orbitHighlights.some((h) => h.material === m));
     this.orbitHighlights = [];
