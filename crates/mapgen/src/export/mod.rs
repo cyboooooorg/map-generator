@@ -90,26 +90,33 @@ pub fn drift_label(drift_ma: f32) -> Option<String> {
 /// Writes every output of a generated world into `dir` (created if needed),
 /// its thumbnail into `options.thumb_dir` (created if needed) when set.
 /// The exports are independent and dominated by PNG encoding, so they run in
-/// parallel.
+/// parallel. The raw layers no map reads are written before the render and
+/// freed (`raw_data::write_early_layers`), which lowers the memory peak.
 pub fn export_world(
     generated: Generated,
     dir: &Path,
     options: ExportOptions,
 ) -> Result<(), String> {
     let Generated {
-        world,
+        mut world,
         river_coverage,
     } = generated;
-    let world = &world;
     let path = |sub: &str| dir.join(sub).to_string_lossy().into_owned();
     let io = |e: std::io::Error| e.to_string();
     std::fs::create_dir_all(dir).map_err(io)?;
     if let Some(thumb_dir) = &options.thumb_dir {
         std::fs::create_dir_all(thumb_dir).map_err(io)?;
     }
-    if options.raw_data {
+    // The raw layers no map reads are written first, then freed before the
+    // render: they do not stay in memory beside it.
+    let early = if options.raw_data {
         std::fs::create_dir_all(dir.join("raw_data")).map_err(io)?;
-    }
+        Some(raw_data::write_early_layers(&world, &dir.join("raw_data"))?)
+    } else {
+        None
+    };
+    raw_data::free_early_layers(&mut world);
+    let world = &world;
 
     let layers = MapLayers::with_coverage(world, river_coverage);
     let layers = &layers;
@@ -155,13 +162,14 @@ pub fn export_world(
             export_svg(world, layers, &path("world.svg")).map_err(|e| e.to_string())
         }));
     }
-    if options.raw_data {
-        exports.push(Box::new(|| {
+    if let Some(early) = &early {
+        exports.push(Box::new(move || {
             let maps = raw_data::SurfaceMaps {
                 colour: &rendered.colour,
                 normal: &rendered.normal,
             };
-            export_raw_data(world, &dir.join("raw_data"), Some(&maps)).map_err(|e| e.to_string())
+            raw_data::write_raw_data(world, &dir.join("raw_data"), Some(&maps), early)
+                .map_err(|e| e.to_string())
         }));
     }
     exports.par_iter().try_for_each(|export| export())
@@ -760,6 +768,55 @@ mod tests {
         let generated = crate::generation::generate(params);
         super::export_world(generated, &dir, super::ExportOptions::default()).unwrap();
         dir
+    }
+
+    /// Writing the layers no map reads before the render, then freeing
+    /// them, leaves `raw_data/` byte for byte as written from the whole
+    /// world.
+    #[test]
+    fn the_early_layers_leave_the_raw_data_unchanged() {
+        for (seed, planet) in [(3, "terran"), (5, "barren")] {
+            let params = crate::generation::tests::params(seed, planet);
+            let dir = exported(&params, &format!("early-{planet}"));
+
+            let reference = std::env::temp_dir()
+                .join(format!("mapgen-early-ref-{planet}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&reference);
+            std::fs::create_dir_all(&reference).unwrap();
+            let generated = crate::generation::generate(&params);
+            let world = &generated.world;
+            assert!(world.elevation_base.is_some(), "{planet}");
+            let layers = super::MapLayers::with_coverage(world, generated.river_coverage.clone());
+            let rendered = super::render_both(world, &layers);
+            let maps = super::raw_data::SurfaceMaps {
+                colour: &rendered.colour,
+                normal: &rendered.normal,
+            };
+            super::export_raw_data(world, &reference, Some(&maps)).unwrap();
+
+            let mut files: Vec<_> = std::fs::read_dir(&reference)
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            files.sort();
+            for early in ["flow.png", "floodplain.png", "elevation_base.png"] {
+                assert!(files.iter().any(|f| f == early), "{planet}: {early}");
+            }
+            let written: Vec<_> = std::fs::read_dir(dir.join("raw_data"))
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            assert_eq!(written.len(), files.len(), "{planet}");
+            for file in &files {
+                assert!(
+                    std::fs::read(reference.join(file)).unwrap()
+                        == std::fs::read(dir.join("raw_data").join(file)).unwrap(),
+                    "{planet}: {file:?}"
+                );
+            }
+            std::fs::remove_dir_all(&dir).unwrap();
+            std::fs::remove_dir_all(&reference).unwrap();
+        }
     }
 
     #[test]

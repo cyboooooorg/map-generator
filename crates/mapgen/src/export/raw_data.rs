@@ -250,7 +250,7 @@ pub struct SurfaceMaps<'a> {
 
 /// A 16-bit layer: pixel `p` decodes to `min + p / 65535 × (max − min)`
 /// (`gray8` layers: `min + p / 255 × (max − min)`).
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ScalarLayerInfo {
     pub file: String,
@@ -307,7 +307,6 @@ const COAST_DISTANCE: (f32, f32) = (0.0, COAST_DISTANCE_CAP_KM);
 const HIGHLAND_OFFSET: (f32, f32) = (-1.0, 1.0);
 const FLOODPLAIN: (f32, f32) = (0.0, 1.0);
 
-/// Maps `v` from `[min, max]` to the full `u16` range.
 /// One file of `raw_data/` to write.
 type Job<'a> = Box<dyn FnOnce() -> Result<(), String> + Send + 'a>;
 
@@ -330,8 +329,113 @@ fn write_jobs(jobs: Vec<Job>) -> Result<(), String> {
     })
 }
 
+/// Maps `v` from `[min, max]` to the full `u16` range.
 fn quantise(v: f32, min: f32, max: f32) -> u16 {
     ((v.clamp(min, max) - min) / (max - min) * u16::MAX as f32).round() as u16
+}
+
+/// A [`ScalarLayer`] stored as `gray16`.
+fn gray16<'a>(name: &'static str, values: &'a [f32], range: (f32, f32)) -> ScalarLayer<'a> {
+    ScalarLayer {
+        name,
+        encoding: "gray16",
+        values,
+        log: false,
+        range,
+    }
+}
+
+/// Writes `pixels` as the 16-bit grey PNG `file` of `dir`.
+fn save16(dir: &Path, (w, h): (u32, u32), file: &str, pixels: Vec<u16>) -> Result<(), String> {
+    ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
+        .ok_or("layer size does not match the world size")?
+        .save(dir.join(file))
+        .map_err(|e| e.to_string())
+}
+
+/// Queues `layer` in `jobs` and returns its description for `world.json`.
+/// The layer is quantised inside its job, so only the layers being written
+/// hold a buffer, and with no full-size copy of the transformed values.
+fn push_scalar<'a>(
+    jobs: &mut Vec<Job<'a>>,
+    dir: &'a Path,
+    size: (u32, u32),
+    layer: ScalarLayer<'a>,
+) -> ScalarLayerInfo {
+    let (min, max) = layer.range;
+    let file = format!("{}.png", layer.name);
+    let info = ScalarLayerInfo {
+        file: file.clone(),
+        encoding: layer.encoding.to_string(),
+        min,
+        max,
+    };
+    jobs.push(Box::new(move || {
+        let pixels: Vec<u16> = layer
+            .values
+            .iter()
+            .map(|&v| quantise(if layer.log { (v + 1.0).log10() } else { v }, min, max))
+            .collect();
+        save16(dir, size, &file, pixels)
+    }));
+    info
+}
+
+/// The layers of `raw_data/` that no map reads (not the render, the
+/// contours, the legend nor the SVG), once written: see
+/// [`write_early_layers`].
+#[derive(Clone)]
+pub(crate) struct EarlyLayers {
+    flow: ScalarLayerInfo,
+    floodplain: ScalarLayerInfo,
+    elevation_base: Option<ScalarLayerInfo>,
+}
+
+/// Writes the layers that no map reads (`flow.png`, `floodplain.png` and
+/// `elevation_base.png`) into `dir`. [`super::export_world`] writes them
+/// before rendering and frees them with [`free_early_layers`]: about
+/// 400 MB less at the export's memory peak at 8192 × 4096. The files are
+/// the same bytes as when written with the others.
+pub(crate) fn write_early_layers(world: &World, dir: &Path) -> Result<EarlyLayers, String> {
+    let size = (world.width, world.height);
+    let mut jobs: Vec<Job> = Vec::new();
+    let flow = push_scalar(
+        &mut jobs,
+        dir,
+        size,
+        ScalarLayer {
+            encoding: "gray16-log10",
+            log: true,
+            ..gray16("flow", &world.flow_km2, FLOW_LOG10)
+        },
+    );
+    let floodplain = push_scalar(
+        &mut jobs,
+        dir,
+        size,
+        gray16("floodplain", &world.floodplain, FLOODPLAIN),
+    );
+    let elevation_base = world.elevation_base.as_deref().map(|values| {
+        push_scalar(
+            &mut jobs,
+            dir,
+            size,
+            gray16("elevation_base", values, ELEVATION),
+        )
+    });
+    write_jobs(jobs)?;
+    Ok(EarlyLayers {
+        flow,
+        floodplain,
+        elevation_base,
+    })
+}
+
+/// Frees the layers [`write_early_layers`] writes: no map reads them.
+pub(crate) fn free_early_layers(world: &mut World) {
+    world.flow_km2 = Vec::new();
+    world.floodplain = Vec::new();
+    world.elevation_base = None;
 }
 
 /// Writes `world.json` and one PNG per layer into `dir`. `maps`, the
@@ -343,41 +447,26 @@ pub fn export_raw_data(
     dir: &Path,
     maps: Option<&SurfaceMaps>,
 ) -> Result<(), Box<dyn Error>> {
+    let early = write_early_layers(world, dir)?;
+    write_raw_data(world, dir, maps, &early)
+}
+
+/// [`export_raw_data`] once the layers of `early` are written: the other
+/// layers, the maps and `world.json`. `world` needs none of the early
+/// layers (see [`free_early_layers`]).
+pub(crate) fn write_raw_data(
+    world: &World,
+    dir: &Path,
+    maps: Option<&SurfaceMaps>,
+    early: &EarlyLayers,
+) -> Result<(), Box<dyn Error>> {
     let (w, h) = (world.width, world.height);
-    let layer = |name, values, range| ScalarLayer {
-        name,
-        encoding: "gray16",
-        values,
-        log: false,
-        range,
-    };
-    let scalars = [
-        layer("elevation", &world.elevation, ELEVATION),
-        layer("moisture", &world.moisture, MOISTURE),
-        layer("temperature", &world.temperature, TEMPERATURE),
-        ScalarLayer {
-            encoding: "gray16-log10",
-            log: true,
-            ..layer("flow", &world.flow_km2, FLOW_LOG10)
-        },
-        layer("volcanic_zone", &world.volcanic_zone, VOLCANIC_ZONE),
-        layer("coast_distance", &world.coast_distance_km, COAST_DISTANCE),
-        layer("highland_offset", &world.highland_offset, HIGHLAND_OFFSET),
-        layer("floodplain", &world.floodplain, FLOODPLAIN),
-    ];
+    let size = (w, h);
 
     // Every PNG below is an independent single-threaded encode of the
     // whole map (about 0.1 s each at 8192 × 4096): they are queued as jobs
-    // and written by a few threads at once (see `write_jobs`). The layers
-    // are quantised inside their job, so only those being written hold a
-    // buffer.
+    // and written by a few threads at once (see `write_jobs`).
     let mut jobs: Vec<Job> = Vec::new();
-    let save16 = move |file: String, pixels: Vec<u16>| -> Result<(), String> {
-        ImageBuffer::<Luma<u16>, _>::from_raw(w, h, pixels)
-            .ok_or("layer size does not match the world size")?
-            .save(dir.join(file))
-            .map_err(|e| e.to_string())
-    };
     let save8 = move |file: &str, pixels: Vec<u8>| -> Result<(), String> {
         GrayImage::from_raw(w, h, pixels)
             .ok_or("layer size does not match the world size")?
@@ -385,50 +474,33 @@ pub fn export_raw_data(
             .map_err(|e| e.to_string())
     };
 
-    let mut infos = Vec::with_capacity(scalars.len());
-    for layer in scalars {
-        let (min, max) = layer.range;
-        let file = format!("{}.png", layer.name);
-        infos.push(ScalarLayerInfo {
-            file: file.clone(),
-            encoding: layer.encoding.to_string(),
-            min,
-            max,
-        });
-        jobs.push(Box::new(move || {
-            // Quantised on the fly: no full-size copy of the transformed values.
-            let pixels: Vec<u16> = layer
-                .values
-                .iter()
-                .map(|&v| quantise(if layer.log { (v + 1.0).log10() } else { v }, min, max))
-                .collect();
-            save16(file, pixels)
-        }));
-    }
-
-    let elevation_base = match &world.elevation_base {
-        Some(values) => {
-            let (min, max) = ELEVATION;
-            jobs.push(Box::new(move || {
-                let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
-                save16("elevation_base.png".into(), pixels)
-            }));
-            Some(ScalarLayerInfo {
-                file: "elevation_base.png".into(),
-                encoding: "gray16".into(),
-                min,
-                max,
-            })
-        }
-        None => None,
-    };
+    let mut scalar = |layer| push_scalar(&mut jobs, dir, size, layer);
+    let elevation = scalar(gray16("elevation", &world.elevation, ELEVATION));
+    let moisture = scalar(gray16("moisture", &world.moisture, MOISTURE));
+    let temperature = scalar(gray16("temperature", &world.temperature, TEMPERATURE));
+    let volcanic_zone = scalar(gray16("volcanic_zone", &world.volcanic_zone, VOLCANIC_ZONE));
+    let coast_distance = scalar(gray16(
+        "coast_distance",
+        &world.coast_distance_km,
+        COAST_DISTANCE,
+    ));
+    let highland_offset = scalar(gray16(
+        "highland_offset",
+        &world.highland_offset,
+        HIGHLAND_OFFSET,
+    ));
+    let EarlyLayers {
+        flow,
+        floodplain,
+        elevation_base,
+    } = early.clone();
 
     let shape = match crate::moons::shape_layer(&world.params) {
         Some(values) => {
             let (min, max) = SHAPE;
             jobs.push(Box::new(move || {
                 let pixels: Vec<u16> = values.iter().map(|&v| quantise(v, min, max)).collect();
-                save16("shape.png".into(), pixels)
+                save16(dir, size, "shape.png", pixels)
             }));
             Some(ScalarLayerInfo {
                 file: "shape.png".into(),
@@ -507,18 +579,6 @@ pub fn export_raw_data(
     };
     write_jobs(jobs)?;
 
-    let [
-        elevation,
-        moisture,
-        temperature,
-        flow,
-        volcanic_zone,
-        coast_distance,
-        highland_offset,
-        floodplain,
-    ]: [ScalarLayerInfo; 8] = infos
-        .try_into()
-        .map_err(|_| "unexpected number of scalar layers")?;
     let metadata = WorldMetadata {
         format_version: FORMAT_VERSION,
         width: w,
