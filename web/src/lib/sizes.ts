@@ -69,3 +69,33 @@ export function chipStates(sizes: BodySizes, shown: string, generating: string |
       };
     });
 }
+
+/**
+ * The map size a blank or reopened generation form starts with, as `WxH`.
+ * `initial` is the size of the world the form opens on (Vary, drift): a real
+ * size, kept as it is. `remembered` is the size of the last form submitted:
+ * reused only if it is still one of the server's 2:1 presets and fits its
+ * limits, so a size remembered from before the presets (1920x1080) is dropped.
+ */
+export function initialFormSize(
+  initial: [number, number] | null,
+  remembered: string | undefined,
+  spec: {
+    size_presets: [number, number][];
+    default_width: number;
+    default_height: number;
+    max_size: number;
+    max_pixels: number;
+  },
+): string {
+  if (initial) return sizeName(initial[0], initial[1]);
+  const parsed = remembered === undefined ? null : parseSize(remembered);
+  if (parsed) {
+    const [w, h] = parsed;
+    const preset = spec.size_presets.some(([pw, ph]) => pw === w && ph === h);
+    if (preset && w <= spec.max_size && h <= spec.max_size && w * h <= spec.max_pixels) {
+      return sizeName(w, h);
+    }
+  }
+  return sizeName(spec.default_width, spec.default_height);
+}

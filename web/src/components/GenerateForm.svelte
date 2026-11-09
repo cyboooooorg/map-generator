@@ -16,6 +16,7 @@
   import { formatInt, formatUpTo, MAX_SEED, randomSeed } from '../lib/format';
   import { formatDrift } from '../lib/drift';
   import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
+  import { initialFormSize } from '../lib/sizes';
   import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
   import { type Unit, unitTooltip } from '../lib/units';
@@ -206,12 +207,6 @@
     return name === undefined ? undefined : presets.find((p) => p.spec === name || p.name === name);
   }
 
-  /** Whether a map size is one this server accepts. */
-  function sizeFits(value: string): boolean {
-    const [w, h] = value.split('x').map(Number);
-    return !!w && !!h && w <= spec.max_size && h <= spec.max_size && w * h <= spec.max_pixels;
-  }
-
   // The form starts from the props as they are when it opens; later prop
   // changes must not reset what the user typed, hence untrack.
   const start = untrack(() => ({ initial, preset: findPreset(initial?.planet) ?? presets[0] }));
@@ -227,11 +222,11 @@
   let seed = $state(start.initial?.seed !== undefined ? String(start.initial.seed) : '');
   let size = $state(
     untrack(() =>
-      start.initial?.width && start.initial.height
-        ? `${start.initial.width}x${start.initial.height}`
-        : memory && sizeFits(memory.size)
-          ? memory.size
-          : `${spec.default_width}x${spec.default_height}`,
+      initialFormSize(
+        start.initial?.width && start.initial.height ? [start.initial.width, start.initial.height] : null,
+        memory?.size,
+        spec,
+      ),
     ),
   );
   let fields = $state<FieldState>(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodySizes } from './api/types/BodySizes';
-import { chipStates, parseSize, pendingToFollow, sizeName } from './sizes';
+import { chipStates, initialFormSize, parseSize, pendingToFollow, sizeName } from './sizes';
 
 const sizes = (over: Partial<BodySizes> = {}): BodySizes => ({
   original: [2048, 1024],
@@ -87,5 +87,35 @@ describe('pendingToFollow', () => {
   it('does not follow a job again once followed', () => {
     expect(pendingToFollow(pending, false, new Set(['j1']))).toBeNull();
     expect(pendingToFollow(sizes(), false, new Set())).toBeNull();
+  });
+});
+
+describe('initialFormSize', () => {
+  const formSpec = {
+    size_presets: [
+      [1024, 512],
+      [2048, 1024],
+      [4096, 2048],
+      [8192, 4096],
+    ] as [number, number][],
+    default_width: 2048,
+    default_height: 1024,
+    max_size: 16384,
+    max_pixels: 8_388_608,
+  };
+  it('ignores a remembered size that is not a preset', () => {
+    expect(initialFormSize(null, '1920x1080', formSpec)).toBe('2048x1024');
+  });
+  it('reuses a remembered preset', () => {
+    expect(initialFormSize(null, '4096x2048', formSpec)).toBe('4096x2048');
+  });
+  it('ignores a remembered preset the server would refuse', () => {
+    expect(initialFormSize(null, '8192x4096', { ...formSpec, max_pixels: 8_388_607 })).toBe('2048x1024');
+  });
+  it('keeps the size of the world the form opens on', () => {
+    expect(initialFormSize([1920, 1080], '4096x2048', formSpec)).toBe('1920x1080');
+  });
+  it('falls back to the default', () => {
+    expect(initialFormSize(null, undefined, formSpec)).toBe('2048x1024');
   });
 });
