@@ -38,6 +38,9 @@
   const stats = $derived(world.worldStats);
   const rivers = $derived(world.worldRivers);
   const worldId = $derived(world.worldId);
+  // The world's metadata is set only while the world itself is shown: its
+  // resolution is then the one shown.
+  const size = $derived(meta ? world.size : null);
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
   const title = $derived(forcedTitle ?? (meta ? presetName(meta.preset) : worldId));
@@ -55,12 +58,12 @@
     }
   }
   async function zip(): Promise<void> {
-    if (!worldId || !meta) {
+    if (!worldId || !meta || !size) {
       return;
     }
     zipping = true;
     try {
-      await downloadRawData(worldId, meta);
+      await downloadRawData(worldId, size, meta);
     } catch (e) {
       toasts.error(t.worldInfo.archiveFailed({ error: String(e) }));
     } finally {
@@ -304,9 +307,11 @@
 
       <div class="downloads">
         <span>{t.worldInfo.download}</span>
-        <a href={worldFile(worldId, 'world.png', revision)} download={`${worldId}.png`}>{t.worldInfo.mapPng}</a>
-        <a href={worldFile(worldId, 'world.svg', revision)} download={`${worldId}.svg`}>{t.worldInfo.svg}</a>
-        <a href={worldFile(worldId, 'legend.png', revision)} download={`${worldId}-legend.png`}>{t.worldInfo.legend}</a>
+        {#if size}
+          <a href={worldFile(worldId, size, 'world.png', world.revision)} download={`${worldId}.png`}>{t.worldInfo.mapPng}</a>
+          <a href={worldFile(worldId, size, 'world.svg', world.revision)} download={`${worldId}.svg`}>{t.worldInfo.svg}</a>
+          <a href={worldFile(worldId, size, 'legend.png', world.revision)} download={`${worldId}-legend.png`}>{t.worldInfo.legend}</a>
+        {/if}
         <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
       </div>
     {:else if world.error}

@@ -10,7 +10,7 @@
   import AxesGizmo from './AxesGizmo.svelte';
   import type { ScreenAxis } from '../lib/viewer/axes';
   import type { SurfaceMaps } from '../lib/skyBodies';
-  import { ApiFailure, api, followJob, systemBodyId, worldFile } from '../lib/api/client';
+  import { ApiFailure, api, followJob, sizeName, systemBodyId, worldFile } from '../lib/api/client';
   import type { BiomeInfo } from '../lib/api/types/BiomeInfo';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
@@ -66,7 +66,11 @@
 
   interface Props {
     world: LoadedWorld;
-    /** Its revision (modification time), which keys the cached detail tiles. */
+    /**
+     * The system's revision (modification time): null while the world is
+     * regenerated in place. The body's own files and tiles are keyed by the
+     * revision of the resolution shown (`world.revision`).
+     */
     revision: number | null;
     /** Measured path to draw. */
     path: readonly LonLat[];
@@ -435,6 +439,9 @@
   let epochPreview = $state<number | null>(null);
 
   const worldId = $derived(world.id);
+  /** The resolution shown (`WxH`) and its revision, which key its files and tiles. */
+  const size = $derived(world.size);
+  const sizeRevision = $derived(world.revision);
   const meta = $derived(world.meta);
   /** `U`: each body of the family of the planet shown in turn (the star aside, on `O`). */
   function stepBody(): void {
@@ -640,15 +647,24 @@
   $effect(() => {
     const current = view;
     const id = worldId;
-    const rev = revision;
+    const shownSize = size;
+    const rev = sizeRevision;
     // No revision: the world left the list, typically while it is being
     // regenerated in place. Keep its map until the new one is listed.
-    if (rev === null && id !== null && id === textureOf) {
+    if (revision === null && id !== null && id === textureOf) {
       loading = false;
       return;
     }
-    pinned = null;
-    hovered = null;
+    // The same body at another resolution, listed in a moment: keep its map
+    // (and the point picked, the hexes) meanwhile.
+    if (id !== null && id === textureOf && shownSize === null) {
+      return;
+    }
+    if (id !== textureOf) {
+      pinned = null;
+      hovered = null;
+      hexOn = false;
+    }
     if (!current || !id) {
       textureOf = null;
       loading = false;
@@ -658,7 +674,10 @@
     loading = true;
     mapProgress = null;
     error = null;
-    hexOn = false;
+    // A new body: its map loads once its resolution is listed.
+    if (shownSize === null) {
+      return;
+    }
     const controller = new AbortController();
     const progress = (p: LoadProgress) => {
       if (!controller.signal.aborted) mapProgress = p;
@@ -668,7 +687,7 @@
     // the same epoch as the one before).
     const epochMa = untrack(() => epoch);
     textureEpoch = { id, epochMa, scale: 1 };
-    const maps = epochMaps(id, epochMa, rev, 1);
+    const maps = epochMaps(id, shownSize, epochMa, rev, 1);
     current
       .setMaps(maps.colour, maps.normal, controller.signal, progress)
       .catch((e: unknown) => {
@@ -689,10 +708,9 @@
   // The layers (relief, contours, picking) follow the epoch once the slider is released.
   $effect(() => {
     const epochMa = epoch;
-    const rev = revision;
     // Untracked: the world's own epoch state must not re-run this (a failed
     // load would be retried at once, again and again).
-    untrack(() => world.setEpoch(epochMa, rev));
+    untrack(() => world.setEpoch(epochMa));
   });
   $effect(() => {
     if (world.epochError) toasts.error(world.epochError);
@@ -708,13 +726,13 @@
    * hillshade) and its relief normals, stored at the present, rendered by
    * the server at another epoch.
    */
-  function epochMaps(id: string, epochMa: number, rev: number | null, scale: 1 | 4): { colour: string; normal: string } {
+  function epochMaps(id: string, size: string, epochMa: number, rev: number | null, scale: 1 | 4): { colour: string; normal: string } {
     if (epochMa === 0) {
-      return { colour: worldFile(id, 'raw_data/colour.png', rev), normal: worldFile(id, 'raw_data/normal.png', rev) };
+      return { colour: worldFile(id, size, 'raw_data/colour.png', rev), normal: worldFile(id, size, 'raw_data/normal.png', rev) };
     }
     return {
-      colour: epochFile(id, epochMa, 'colour.png', rev, scale),
-      normal: epochFile(id, epochMa, 'normal.png', rev, scale),
+      colour: epochFile(id, size, epochMa, 'colour.png', rev, scale),
+      normal: epochFile(id, size, epochMa, 'normal.png', rev, scale),
     };
   }
 
@@ -723,10 +741,11 @@
   $effect(() => {
     const current = view;
     const id = worldId;
-    const rev = revision;
+    const shownSize = size;
+    const rev = sizeRevision;
     const epochMa = epochShown;
     const scale: 1 | 4 = epochPreview === null ? 1 : 4;
-    if (!current || !id || id !== textureOf || loading) {
+    if (!current || !id || !shownSize || id !== textureOf || loading) {
       return;
     }
     if (textureEpoch.id === id && textureEpoch.epochMa === epochMa && textureEpoch.scale === scale) {
@@ -735,7 +754,7 @@
     const controller = new AbortController();
     const show = () => {
       epochMapLoading = true;
-      const maps = epochMaps(id, epochMa, rev, scale);
+      const maps = epochMaps(id, shownSize, epochMa, rev, scale);
       current
         .setMaps(maps.colour, maps.normal, controller.signal)
         .then(() => {
@@ -772,7 +791,7 @@
       return;
     }
     const controller = new AbortController();
-    const url = id && file ? worldFile(id, `raw_data/${file}`, revision) : null;
+    const url = id && size && file ? worldFile(id, size, `raw_data/${file}`, sizeRevision) : null;
     current
       .setClouds(url, meta ? cloudTint(meta) : [1, 1, 1], controller.signal)
       .catch((e: unknown) => {
@@ -783,11 +802,15 @@
   // An irregular moon's shape, once per body.
   $effect(() => {
     const id = worldId;
+    const shownSize = size;
     const shape = meta?.layers.shape;
     if (!view) return;
     const controller = new AbortController();
     view
-      .setShape(id && shape ? { url: worldFile(id, `raw_data/${shape.file}`, revision), min: shape.min, max: shape.max } : null, controller.signal)
+      .setShape(
+        id && shownSize && shape ? { url: worldFile(id, shownSize, `raw_data/${shape.file}`, sizeRevision), min: shape.min, max: shape.max } : null,
+        controller.signal,
+      )
       .catch((e: unknown) => {
         if (!controller.signal.aborted) console.warn('Could not load the shape', e);
       });
@@ -808,8 +831,8 @@
     // No detail while the slider moves: the reduced preview shows through.
     // A giant has no ground to detail.
     view?.setDetail(
-      worldId && meta && !giant && revision !== null && epochPreview === null
-        ? { id: worldId, revision, baseWidth: meta.width, epochMa: epoch }
+      worldId && size && meta && !giant && sizeRevision !== null && epochPreview === null
+        ? { id: worldId, size, revision: sizeRevision, baseWidth: meta.width, epochMa: epoch }
         : null,
     );
   });
@@ -874,6 +897,15 @@
   // it; the Sun longitude slider sets the hour of the body shown.
   const sys = $derived(world.system);
   const sysBody = $derived(world.shownSystemBody);
+  /**
+   * The original resolution of a body of the system shown (`WxH`, its
+   * params' size): always on disk once it is generated, so the other
+   * bodies' maps (sky, star view) need no listing of their resolutions.
+   */
+  const originalSize = (body: string): string | null => {
+    const params = sys?.bodies.find((b) => b.id === body)?.params;
+    return params ? sizeName(params.width, params.height) : null;
+  };
   /** The planet of the body shown (itself, or the planet of a moon). */
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
   /** Whether the body shown is a moon, its host planet then in its sky: the switches then have a part for each. */
@@ -938,16 +970,18 @@
   }
   /**
    * The maps of each generated planet of the star view, for its marker: the
-   * small copies of its colour and its relief normals, at the system's revision.
+   * small copies of its colour and its relief normals, from its original
+   * resolution, at the system's revision.
    */
   const sysMaps = $derived(
     sysStar && world.systemId
       ? sysStar.planets.map((p): SurfaceMaps | null => {
-          if (!p.generated) return null;
+          const original = originalSize(p.id);
+          if (!p.generated || !original) return null;
           const id = systemBodyId(world.systemId!, p.id);
           return {
-            colour: worldFile(id, 'raw_data/colour_small.png', revision),
-            normal: worldFile(id, 'raw_data/normal_small.png', revision),
+            colour: worldFile(id, original, 'raw_data/colour_small.png', revision),
+            normal: worldFile(id, original, 'raw_data/normal_small.png', revision),
           };
         })
       : null,
@@ -980,11 +1014,12 @@
   const sysDays = $derived(sysPlanet ? clockDays(sysPlanet.orbit, season, orbitDays) : orbitDays);
   /** The day of the planet's year the clock shows: days since its northern spring equinox. */
   const yearDay = $derived(sysPlanet ? yearDayAt(sysPlanet.orbit, sysDays) : null);
-  /** The maps of a body of the system, for the sky. */
+  /** The maps of a body of the system, for the sky: its original resolution's. */
   const sysTextures = (id: string): SurfaceMaps | null => {
-    if (!world.systemId) return null;
+    const original = originalSize(id);
+    if (!world.systemId || !original) return null;
     const body = systemBodyId(world.systemId, id);
-    return { colour: worldFile(body, 'raw_data/colour.png'), normal: worldFile(body, 'raw_data/normal.png') };
+    return { colour: worldFile(body, original, 'raw_data/colour.png'), normal: worldFile(body, original, 'raw_data/normal.png') };
   };
   /**
    * The hour: the sun at the slider's longitude over the body shown at the
@@ -1360,11 +1395,12 @@
       return;
     }
     const id = systemBodyId(system, parent.id);
+    const original = sizeName(parent.params.width, parent.params.height);
     const controller = new AbortController();
     api
-      .metadata(id, controller.signal)
+      .metadata(id, original, controller.signal)
       .then((host) => {
-        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => worldFile(id, `raw_data/${file}`)) };
+        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => worldFile(id, original, `raw_data/${file}`)) };
       })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) console.warn("Could not load the host planet's world", e);
@@ -1776,9 +1812,10 @@
   $effect(() => {
     const current = view;
     const id = worldId;
+    const shownSize = size;
     const columns = hexColumns;
     const riverFlow = Math.round(10 ** hexRiverLog);
-    if (!current || !id || !hexOn) {
+    if (!current || !id || !shownSize || !hexOn) {
       current?.setHex(null);
       hexMap = null;
       hexBusy = false;
@@ -1790,7 +1827,7 @@
     const controller = new AbortController();
     const timer = setTimeout(() => {
       hexBusy = true;
-      retryWhileBusy((signal) => api.hex(id, { columns, river_flow_km2: riverFlow }, signal), {
+      retryWhileBusy((signal) => api.hex(id, shownSize, { columns, river_flow_km2: riverFlow }, signal), {
         signal: controller.signal,
         // The server answers 503 while it generates a world.
         isBusy: (e) => e instanceof ApiFailure && e.status === 503,

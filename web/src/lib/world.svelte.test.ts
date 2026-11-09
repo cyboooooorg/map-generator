@@ -99,3 +99,83 @@ describe('LoadedWorld.loadSystem', () => {
     expect(world.linkBody).toBe('d-1');
   });
 });
+
+describe('LoadedWorld sizes', () => {
+  const generated = { focus: 'd', bodies: [{ id: 'd', kind: 'planet', generated: true }] };
+  const sizes = (displayed: [number, number], present: [number, number, number][]) => ({
+    original: [2048, 1024],
+    displayed,
+    present: present.map(([width, height, revision]) => ({ width, height, revision })),
+    pending: [],
+    presets: [],
+    max_size: 8192,
+    max_pixels: 8192 * 4096,
+  });
+  const reply = (status: number, body?: unknown) => ({
+    ok: status < 300,
+    status,
+    statusText: String(status),
+    json: async () => body,
+    text: async () => (body === undefined ? '' : JSON.stringify(body)),
+  });
+  /** A server with system `a`, its generated planet `d`, and the sizes `listing()` gives. */
+  function serve(listing: () => ReturnType<typeof sizes>, requests: string[]) {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      requests.push(`${init?.method ?? 'GET'} ${url}${init?.body ? ` ${String(init.body)}` : ''}`);
+      if (url === '/api/systems/a') return reply(200, { system: generated });
+      if (url === '/api/systems/a/bodies/d/sizes') return reply(200, listing());
+      if (url === '/api/systems/a/bodies/d/displayed-size') return reply(204);
+      const file = /^\/systems\/a\/bodies\/d\/sizes\/(\d+)x(\d+)\/raw_data\/world\.json/.exec(url);
+      if (file) {
+        const [width, height] = [Number(file[1]), Number(file[2])];
+        const there = listing().present.some((p) => p.width === width && p.height === height);
+        return there ? reply(200, { format_version: 1e6, width, height }) : reply(404, { error: 'not found' });
+      }
+      return reply(404, { error: 'not found' });
+    });
+  }
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await flush();
+  };
+
+  it('loads a body at its displayed size', async () => {
+    const requests: string[] = [];
+    serve(() => sizes([4096, 2048], [[2048, 1024, 11], [4096, 2048, 22]]), requests);
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd');
+    await settle();
+    expect(world.size).toBe('4096x2048');
+    expect(world.revision).toBe(22);
+    expect(world.sizes?.displayed).toEqual([4096, 2048]);
+    expect(world.meta?.width).toBe(4096);
+    expect(requests.some((r) => r.startsWith('GET /systems/a/bodies/d/sizes/4096x2048/raw_data/world.json'))).toBe(true);
+  });
+
+  it('loads the displayed size again when the one shown was deleted elsewhere', async () => {
+    const requests: string[] = [];
+    let listed = 0;
+    // The first listing still names 4096x2048, deleted before its files are read.
+    serve(() => (listed++ === 0 ? sizes([4096, 2048], [[2048, 1024, 11], [4096, 2048, 22]]) : sizes([2048, 1024], [[2048, 1024, 11]])), requests);
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd');
+    await settle();
+    expect(world.size).toBe('2048x1024');
+    expect(world.revision).toBe(11);
+    expect(world.meta?.width).toBe(2048);
+  });
+
+  it('switches to another size and remembers it', async () => {
+    const requests: string[] = [];
+    serve(() => sizes([2048, 1024], [[2048, 1024, 11], [4096, 2048, 22]]), requests);
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd');
+    await settle();
+    expect(world.size).toBe('2048x1024');
+    await world.switchSize('4096x2048');
+    await settle();
+    expect(world.size).toBe('4096x2048');
+    expect(world.revision).toBe(22);
+    expect(world.meta?.width).toBe(4096);
+    expect(requests).toContain('PUT /api/systems/a/bodies/d/displayed-size {"width":4096,"height":2048}');
+  });
+});

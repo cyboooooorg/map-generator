@@ -18,7 +18,9 @@
   interface Props {
     /** Id of the body shown (`systems/<system>/bodies/<body>`). */
     id: string;
-    /** Its revision, which keys the cached previews. */
+    /** The resolution shown (`WxH`), which the previews are made from. */
+    size: string;
+    /** That resolution's revision, which keys the cached previews. */
     revision: number | null;
     /** The epoch of the world shown, Ma from the present (negative in the past). */
     current: number;
@@ -26,7 +28,7 @@
     onGenerate: (driftMa: number) => void;
   }
 
-  let { id, revision, current, onGenerate }: Props = $props();
+  let { id, size, revision, current, onGenerate }: Props = $props();
 
   /** The epoch chosen, and the one under the slider while it is dragged. */
   let choice = $state(untrack(() => snapDrift(current)));
@@ -58,7 +60,7 @@
 
   async function load(ma: number, width: number, signal: AbortSignal): Promise<void> {
     try {
-      const response = await fetch(driftPreviewUrl(id, ma, width, revision), { signal });
+      const response = await fetch(driftPreviewUrl(id, size, ma, width, revision), { signal });
       if (!response.ok) {
         const body: { error?: string; detail?: { code?: string } } | null = await response.json().catch(() => null);
         throw new ApiFailure(response.status, body?.error ?? response.statusText);

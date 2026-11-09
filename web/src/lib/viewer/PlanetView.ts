@@ -1745,10 +1745,11 @@ export class PlanetView {
   }
 
   /**
-   * Streams detail tiles of a world when zooming in (`revision` keys the
-   * browser cache), at an epoch in Ma when set, or stops with null.
+   * Streams detail tiles of a world at resolution `size` when zooming in
+   * (`revision`, that resolution's, keys the browser cache), at an epoch
+   * in Ma when set, or stops with null.
    */
-  setDetail(world: { id: string; revision: number; baseWidth: number; epochMa?: number } | null): void {
+  setDetail(world: { id: string; revision: number; baseWidth: number; epochMa?: number; size: string } | null): void {
     this.requestRender();
     this.tiles.setWorld(world);
   }

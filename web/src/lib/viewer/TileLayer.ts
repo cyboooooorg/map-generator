@@ -96,6 +96,23 @@ interface Failure {
   attempts: number;
 }
 
+/** The world a TileLayer details: a body at one resolution and epoch. */
+export interface TileWorld {
+  id: string;
+  /** Its resolution, `WxH` (see sizeName). */
+  size: string;
+  /** That resolution's revision, which keys the browser cache. */
+  revision: number;
+  /** Ma before present (0: the present; see lib/epochs.ts). */
+  epochMa: number;
+}
+
+/** URL of tile `key` (`z/x/y`) of a world (`GET …/tiles/{z}/{x}/{y}?size=`). */
+export function tileUrl(world: TileWorld, key: string): string {
+  const epoch = world.epochMa === 0 ? '' : `&epoch=${world.epochMa}`;
+  return `${bodyApi(world.id)}/tiles/${key}?size=${encodeURIComponent(world.size)}&rev=${world.revision}&render=${TILE_RENDER_VERSION}${epoch}`;
+}
+
 /**
  * Delay before retrying a tile after `attempts` failures, or Infinity when
  * retrying cannot help (a client error such as 404: the tile does not exist).
@@ -133,7 +150,7 @@ export class TileLayer {
   private readonly failed = new Map<number, Failure>();
   /** Timers that wake the view up when failed tiles can be retried. */
   private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>();
-  private world: { id: string; revision: number; epochMa: number; firstLevel: number } | null = null;
+  private world: (TileWorld & { firstLevel: number }) | null = null;
   private enabled = true;
   private maxTextures = MAX_TEXTURES;
   private frame = 0;
@@ -168,13 +185,15 @@ export class TileLayer {
   ) {}
 
   /**
-   * Shows the detail of a world (`revision` keys the browser cache) at an
-   * epoch in Ma (0, the default, for the present; see lib/epochs.ts), or none.
+   * Shows the detail of a world at resolution `size` (`WxH`; `revision`,
+   * that resolution's, keys the browser cache) at an epoch in Ma (0, the
+   * default, for the present; see lib/epochs.ts), or none.
    */
-  setWorld(world: { id: string; revision: number; baseWidth: number; epochMa?: number } | null): void {
+  setWorld(world: { id: string; revision: number; baseWidth: number; epochMa?: number; size: string } | null): void {
     this.clear();
     this.world = world && {
       id: world.id,
+      size: world.size,
       revision: world.revision,
       epochMa: world.epochMa ?? 0,
       firstLevel: firstDetailLevel(world.baseWidth),
@@ -357,9 +376,7 @@ export class TileLayer {
     this.loading.set(index, { controller, started: performance.now() });
     let status: number | null = null;
     try {
-      const epoch = world.epochMa === 0 ? '' : `&epoch=${world.epochMa}`;
-      const url = `${bodyApi(world.id)}/tiles/${key}?rev=${world.revision}&render=${TILE_RENDER_VERSION}${epoch}`;
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await fetch(tileUrl(world, key), { signal: controller.signal });
       if (!response.ok) {
         status = response.status;
         throw new Error(`${response.status}`);

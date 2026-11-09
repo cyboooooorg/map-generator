@@ -65,15 +65,19 @@ export function formatEpoch(ma: number): string {
   return ma > 0 ? t.epochs.ago({ time }) : t.epochs.ahead({ time });
 }
 
-/** URL of a layer of a world at an epoch (`GET /api/systems/{id}/bodies/{body}/epoch/{ma}/{file}`). */
+/**
+ * URL of a layer of a world at resolution `size` at an epoch
+ * (`GET /api/systems/{id}/bodies/{body}/epoch/{ma}/{file}?size=`).
+ */
 export function epochFile(
   id: string,
+  size: string,
   ma: number,
   file: 'colour.png' | 'normal.png' | 'elevation.png' | 'biomes.png',
   revision: number | null,
   scale: 1 | 2 | 4 = 1,
 ): string {
-  const query = [`render=${TILE_RENDER_VERSION}`];
+  const query = [`size=${encodeURIComponent(size)}`, `render=${TILE_RENDER_VERSION}`];
   if (revision !== null) query.unshift(`rev=${revision}`);
   if (scale !== 1) query.push(`scale=${scale}`);
   return `${bodyApi(id)}/epoch/${ma}/${file}?${query.join('&')}`;

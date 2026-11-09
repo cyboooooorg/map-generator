@@ -19,11 +19,11 @@ export function rawDataFiles(meta: WorldMetadata): string[] {
   return [...files];
 }
 
-/** Fetches every raw data file of a world and saves them as `<id>-raw_data.zip`. */
-export async function downloadRawData(id: string, meta: WorldMetadata): Promise<void> {
+/** Fetches every raw data file of a world at resolution `size` and saves them as `<id>-raw_data.zip`. */
+export async function downloadRawData(id: string, size: string, meta: WorldMetadata): Promise<void> {
   const entries = await Promise.all(
     rawDataFiles(meta).map(async (file): Promise<[string, Uint8Array]> => {
-      const response = await fetch(worldFile(id, `raw_data/${file}`), { cache: 'no-cache' });
+      const response = await fetch(worldFile(id, size, `raw_data/${file}`), { cache: 'no-cache' });
       if (!response.ok) {
         throw new Error(`raw_data/${file}: ${response.status} ${response.statusText}`);
       }
