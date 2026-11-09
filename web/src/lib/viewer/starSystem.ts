@@ -1,34 +1,10 @@
-// What the star view draws, from a world's star: the look of its surface
-// and the layout of its system.
+// What the star view draws, from a world's star: the layout of its system
+// (the look of its surface is in starSurface.ts).
 import type { Trojans } from '../api/types/Trojans';
 import type { Moon } from '../api/types/Moon';
 import type { Giant } from '../api/types/Giant';
 import type { RingSystem } from '../api/types/RingSystem';
 import type { StarInfo } from '../api/types/StarInfo';
-
-/** The surface of a star as the star view draws it (see starSurfaceFragment). */
-export interface StarSurface {
-  /** Linear limb darkening coefficient: stronger on cool stars. */
-  limb: number;
-  /** Contrast of the convective granules; none on hot stars (above about 7 500 K). */
-  granulation: number;
-  /** About the share of the surface under spots: large on red dwarfs, none on hot stars. */
-  spots: number;
-  /** 1 on red dwarfs, which flare. */
-  flares: number;
-}
-
-/** The surface of a star of effective temperature `teffK` and spectral class `klass`. */
-export function starSurface(teffK: number, klass: string): StarSurface {
-  const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
-  const spots: Record<string, number> = { M: 0.25, K: 0.12, G: 0.05, F: 0.02 };
-  return {
-    limb: clamp(0.6 + (5772 - teffK) / 5000, 0.3, 0.85),
-    granulation: teffK > 7500 ? 0 : 0.12,
-    spots: spots[klass] ?? 0,
-    flares: klass === 'M' ? 1 : 0,
-  };
-}
 
 /**
  * A planet of a planetary system as the star view draws it: a giant, with

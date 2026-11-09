@@ -29,8 +29,8 @@ describe('quality', () => {
 
   it('keeps the full drawing in the high profile and lightens the costly passes in the light one', () => {
     const { high, light } = PROFILES;
-    expect(high).toMatchObject({ surfaceSegments: 720, atmosphere: 'scattering', tileBudget: 1, cloudShadows: true, starSegments: 128, prominenceStrands: STRANDS, ringRocks: true });
-    expect(light).toMatchObject({ surfaceSegments: 240, atmosphere: 'halo', tileBudget: 0.25, cloudShadows: false, starSegments: 48, prominenceStrands: 4, ringRocks: false });
+    expect(high).toMatchObject({ surfaceSegments: 720, atmosphere: 'scattering', tileBudget: 1, cloudShadows: true, starSegments: 128, prominenceStrands: STRANDS, starRegions: 32, loopRegions: 8, ringRocks: true });
+    expect(light).toMatchObject({ surfaceSegments: 240, atmosphere: 'halo', tileBudget: 0.25, cloudShadows: false, starSegments: 48, prominenceStrands: 4, starRegions: 12, loopRegions: 3, ringRocks: false });
     // Meshes have half as many rows as columns.
     expect(light.surfaceSegments % 2).toBe(0);
     expect(light.starSegments % 2).toBe(0);

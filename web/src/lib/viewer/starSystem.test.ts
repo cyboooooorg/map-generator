@@ -1,18 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, starSurface, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
+import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, prominences, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, RING_TILT, ringBands } from './starSystem';
 
 describe('star view', () => {
-  it('gives cool stars spots, flares and darker limbs, hot stars a smooth surface', () => {
-    const red = starSurface(3100, 'M');
-    const sun = starSurface(5772, 'G');
-    const hot = starSurface(9700, 'A');
-    expect(red.spots).toBeGreaterThan(sun.spots);
-    expect(red.flares).toBe(1);
-    expect(red.limb).toBeGreaterThan(sun.limb);
-    expect(hot.granulation).toBe(0);
-    expect(hot.spots).toBe(0);
-  });
-
   it('lays the system out outside the star, in proportion', () => {
     const at = systemScale(SUN_SYSTEM);
     expect(at(0)).toBeGreaterThan(STAR_RADIUS);

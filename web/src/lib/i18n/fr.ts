@@ -1006,7 +1006,7 @@ export const fr: Messages = {
     outOfZone: 'hors de la zone habitable',
     periapsis: (p) => `périastre ${p.distance}`,
     apoapsis: (p) => `apoastre ${p.distance}`,
-    animateHelp: 'L’étoile tourne et bouillonne, les naines rouges ont des éruptions, la planète parcourt son orbite en une minute (trente images par seconde)',
+    animateHelp: 'L’étoile tourne et bouillonne, ses taches naissent et disparaissent, la planète parcourt son orbite en une minute (trente images par seconde)',
     clock: (p) => `Temps${S}: 1${S}s = ${p.scale} (×${p.factor}) · jour ${p.day} sur ${p.year} depuis le périastre`,
     clockHelp:
       `L’animation fait passer une année de la planète en une minute${S}: le temps y va plus vite du facteur affiché. Les vitesses affichées restent réelles, en km par seconde réelle${S}: en une seconde d’animation, la planète parcourt sa vitesse multipliée par ce facteur. Les jours se comptent depuis le périastre (depuis un point arbitraire sur une orbite circulaire).`,

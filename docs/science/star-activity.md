@@ -268,6 +268,18 @@ rotation period, a scatter of the cycle period, the cycle's phase at day
    0.75 of the photosphere, the penumbra four times the umbra's area
    (Solanki 2003), and faculae with a contrast of $0.25\,(1-\mu)$
    (**calibration**, brightest at the limb as Solanki 2003 describes).
+   The plage is a disc of three times the region's spot radius round its
+   centre, which covers nine spot areas; it is filled at
+   `facula_ratio` / 9, at most 1, so that a Sun-like ratio of about 10
+   fills it and a spot-dominated star's plages are fainter
+   (**calibration**). The granulation is simplex noise at the granule
+   size, cross-faded between two fields over each granule lifetime: a
+   texture with the right scale, contrast and lifetime, not convection
+   cells. The shader (`web/src/lib/viewer/starSurface.ts`) fades the
+   regions and the granules out as the star shrinks on screen, and as a
+   frame of the clock outlasts a twelfth of a rotation or a granule
+   lifetime (as $\sqrt{\text{timescale}/\text{frame}}$, a long
+   exposure's averaging).
 
 ```rust
 // crates/mapgen/src/activity.rs (trimmed)

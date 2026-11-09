@@ -8,6 +8,7 @@
   import type { Belt } from '../lib/api/types/Belt';
   import type { SystemPlanet } from '../lib/systemStar';
   import type { StarInfo } from '../lib/api/types/StarInfo';
+  import type { StarActivity } from '../lib/api/types/StarActivity';
   import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import type { Moon } from '../lib/api/types/Moon';
@@ -29,6 +30,8 @@
 
   interface Props {
     star: StarInfo;
+    /** The star's activity (its living surface, see lib/viewer/starSurface.ts); null shows its limb and granules only. */
+    activity?: StarActivity | null;
     /** Orientation of the orbit's periapsis, radians (see periapsisAngle). */
     omega: number;
     /** Whether the star turns and boils (thirty frames a second at most). */
@@ -111,6 +114,7 @@
 
   let {
     star,
+    activity = null,
     omega,
     animated = $bindable(),
     distances = $bindable(),
@@ -197,7 +201,7 @@
     };
   });
 
-  $effect(() => view?.setStar(star, omega, giantList, selected));
+  $effect(() => view?.setStar(star, omega, giantList, selected, activity));
   /** The world's axes on screen, for the gizmo. */
   let axes = $state<ScreenAxis[]>([]);
   // Back from a planet's view: out from it to the whole system, once.

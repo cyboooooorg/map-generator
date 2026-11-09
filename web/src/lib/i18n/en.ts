@@ -1058,7 +1058,7 @@ export const en = {
     outOfZone: 'outside the habitable zone',
     periapsis: (p: { distance: string }) => `periapsis ${p.distance}`,
     apoapsis: (p: { distance: string }) => `apoapsis ${p.distance}`,
-    animateHelp: 'The star turns and boils, red dwarfs flare, the planet goes round its orbit in a minute (thirty frames a second)',
+    animateHelp: 'The star turns and boils, its spots come and go, the planet goes round its orbit in a minute (thirty frames a second)',
     clock: (p: { scale: string; factor: string; day: string; year: string }) =>
       `Time: 1 s = ${p.scale} (×${p.factor}) · day ${p.day} of ${p.year} since periapsis`,
     clockHelp:

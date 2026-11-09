@@ -41,6 +41,14 @@ export interface QualityProfile {
   starSegments: number;
   /** Strands in each prominence of the star view (see prominenceGeometry). */
   prominenceStrands: number;
+  /**
+   * Active regions a star's surface draws at most, the largest first
+   * (`STAR_REGIONS` of the surface shader, see starSurface.ts): each one
+   * a few more instructions for every pixel near it.
+   */
+  starRegions: number;
+  /** Active regions whose coronal loops are drawn, the largest first. */
+  loopRegions: number;
   /** The rocks of a giant's rings round a ring moon, in the planet view (see lib/ringRocks.ts). */
   ringRocks: boolean;
   /**
@@ -65,6 +73,8 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     cloudShadows: true,
     starSegments: 128,
     prominenceStrands: 12,
+    starRegions: 32,
+    loopRegions: 8,
     ringRocks: true,
     // 0.5° apart: no corner shows on a line passing a twentieth of its
     // radius from the camera (under a tenth of a pixel off the curve).
@@ -85,6 +95,8 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     cloudShadows: false,
     starSegments: 48,
     prominenceStrands: 4,
+    starRegions: 12,
+    loopRegions: 3,
     ringRocks: false,
     // 2.25° apart (see ORBIT_SAMPLES in lib/systemSky.ts).
     orbitSamples: 160,
