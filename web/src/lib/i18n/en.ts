@@ -697,6 +697,7 @@ export const en = {
     deleteSize: ({ size }: { size: string }) => `Delete the ${size} px map`,
     deleteSizeConfirm: ({ size }: { size: string }) => `Delete the ${size} px map of this body? Its original map stays.`,
     sizeGenerating: ({ size }: { size: string }) => `Generating the ${size} px map`,
+    sizeFailed: ({ size, error }: { size: string; error: string }) => `Could not generate the ${size} px map: ${error}`,
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · not generated'}`,
     bodyTypes: {

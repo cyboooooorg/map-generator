@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodySizes } from './api/types/BodySizes';
-import { chipStates } from './sizes';
+import { chipStates, parseSize, pendingToFollow, sizeName } from './sizes';
 
 const sizes = (over: Partial<BodySizes> = {}): BodySizes => ({
   original: [2048, 1024],
@@ -61,5 +61,31 @@ describe('chipStates', () => {
     );
     expect(chips.map((c) => c.size)).toEqual(['1024x512', '2048x1024', '3000x1500', '4096x2048', '8192x4096']);
     expect(chips[2]).toMatchObject({ present: true, shown: true, deletable: true });
+  });
+});
+
+describe('parseSize', () => {
+  it('reads a size name back', () => {
+    expect(parseSize(sizeName(4096, 2048))).toEqual([4096, 2048]);
+    expect(parseSize('4096')).toBeNull();
+    expect(parseSize('4096x2048x1')).toBeNull();
+    expect(parseSize('ax2')).toBeNull();
+  });
+});
+
+describe('pendingToFollow', () => {
+  const pending = sizes({ pending: [{ width: 8192, height: 4096, job_id: 'j1' }] });
+
+  it('follows a job started elsewhere', () => {
+    expect(pendingToFollow(pending, false, new Set())).toEqual({ width: 8192, height: 4096, job_id: 'j1' });
+  });
+
+  it('leaves it while another generation is followed', () => {
+    expect(pendingToFollow(pending, true, new Set())).toBeNull();
+  });
+
+  it('does not follow a job again once followed', () => {
+    expect(pendingToFollow(pending, false, new Set(['j1']))).toBeNull();
+    expect(pendingToFollow(sizes(), false, new Set())).toBeNull();
   });
 });

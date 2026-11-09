@@ -48,10 +48,14 @@
       {:else if chip.generating}
         <button disabled aria-busy="true" title={t.viewer.sizeGenerating({ size: width })}>{width}</button>
       {:else}
+        <!-- Too large: focusable, its reason read out with its name (aria-disabled, not disabled). -->
         <button
-          disabled={chip.tooLarge}
-          onclick={() => onGenerate(chip.size)}
-          title={chip.tooLarge ? t.viewer.sizeTooLarge : t.viewer.generateSize({ size: width })}>{width} +</button
+          aria-disabled={chip.tooLarge ? 'true' : undefined}
+          onclick={() => {
+            if (!chip.tooLarge) onGenerate(chip.size);
+          }}
+          title={chip.tooLarge ? t.viewer.sizeTooLarge : t.viewer.generateSize({ size: width })}
+          >{width} +{#if chip.tooLarge}<span class="visually-hidden">{t.viewer.sizeTooLarge}</span>{/if}</button
         >
       {/if}
     </span>
@@ -99,9 +103,18 @@
   .size:not(.present) button {
     color: var(--muted);
   }
-  button:disabled {
+  button:disabled,
+  button[aria-disabled='true'] {
     cursor: default;
     opacity: 0.55;
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   button[aria-busy='true'] {
     opacity: 1;

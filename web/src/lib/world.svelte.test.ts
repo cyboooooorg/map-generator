@@ -274,14 +274,17 @@ describe('LoadedWorld sizes', () => {
     expect(listings()).toBe(before + 1);
     await settle();
     expect(world.size).toBe('2048x1024');
-    // Still there: a missing file of a size on disk is not listed again and again.
+    // Still there: one check at a time, and a later 404 checks again
+    // (a transient error does not use the check up).
     const after = listings();
     world.fileMissing();
     world.fileMissing();
-    await settle();
-    world.fileMissing();
+    expect(listings()).toBe(after + 1);
     await settle();
     expect(listings()).toBe(after + 1);
+    world.fileMissing();
+    await settle();
+    expect(listings()).toBe(after + 2);
     expect(world.size).toBe('2048x1024');
   });
 });

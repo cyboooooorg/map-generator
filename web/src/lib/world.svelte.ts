@@ -114,7 +114,7 @@ export class LoadedWorld {
   private displayedPut: Promise<void> = Promise.resolve();
   /** The size a switch asked for while its PUT has not landed: loads of the body keep it. */
   private switchingTo: { id: string; size: string } | null = null;
-  /** The size shown whose missing file was reported (fileMissing): `id size revision`. */
+  /** The size shown whose missing file is being checked (fileMissing): `id size revision`. */
   private missingChecked: string | null = null;
 
   /**
@@ -284,8 +284,10 @@ export class LoadedWorld {
   /**
    * A file of the resolution shown could not be read (a tile answered 404,
    * say): the resolution may have been deleted elsewhere. Lists the sizes
-   * again, which loads the displayed one when it is gone; once per
-   * resolution shown, so that files missing for another reason cause no loop.
+   * again, which loads the displayed one when it is gone. One check at a
+   * time per resolution shown, so that many failures at once (tiles) list
+   * them once; a check that finds the size still there is over, so a later
+   * failure checks again.
    */
   fileMissing(): void {
     const { id, size, revision } = this;
@@ -293,7 +295,11 @@ export class LoadedWorld {
     const key = `${id} ${size} ${revision}`;
     if (this.missingChecked === key) return;
     this.missingChecked = key;
-    this.refreshSizes().catch((e: unknown) => console.warn('Could not list the resolutions', e));
+    this.refreshSizes()
+      .catch((e: unknown) => console.warn('Could not list the resolutions', e))
+      .finally(() => {
+        if (this.missingChecked === key) this.missingChecked = null;
+      });
   }
 
   /**

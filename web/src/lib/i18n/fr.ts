@@ -662,6 +662,7 @@ export const fr: Messages = {
     deleteSizeConfirm: ({ size }: { size: string }) =>
       `Supprimer la carte de ${size} px de cet astre${S}? Sa carte d’origine reste.`,
     sizeGenerating: ({ size }: { size: string }) => `Génération de la carte de ${size} px`,
+    sizeFailed: ({ size, error }: { size: string; error: string }) => `Impossible de générer la carte de ${size} px${S}: ${error}`,
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · non générée'}`,
     bodyTypes: {
