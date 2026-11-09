@@ -623,7 +623,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   views, chosen in the cog's **Display** menu and remembered: cards (an
   orbit strip, the name, the star, a chip per planet type, the moons and
   the date), compact cards (a small orrery on the left) and a table.
-  Selecting several to compare or delete works in all three. Opening a
+  Each card or row has pin, rename, **Export** (the system's `.zip`, see
+  [API](#api)) and delete buttons. Selecting several to compare or delete
+  works in all three. Opening a
   card opens its viewer, whose **Menu** button goes back; the address is `#menu` (or empty) on the menu and `#system=…` in
   a viewer, and the browser's Back returns from a viewer to the menu. A
   global indicator counts the generations under way and opens their

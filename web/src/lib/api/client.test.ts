@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bodyApi, parseSystemBody, sizeName, systemBodyId, worldFile, worldThumbnail } from './client';
+import { bodyApi, parseSystemBody, sizeName, systemBodyId, systemExportUrl, worldFile, worldThumbnail } from './client';
 
 describe('world URLs', () => {
   it('name the revision of the world', () => {
@@ -26,5 +26,12 @@ describe('world URLs', () => {
     );
     expect(worldFile('systems/a/bodies/b', '1024x512', 'raw_data/')).toBe('/systems/a/bodies/b/sizes/1024x512/raw_data/');
     expect(sizeName(4096, 2048)).toBe('4096x2048');
+  });
+});
+
+describe('system export', () => {
+  it('is one download named after the system', () => {
+    expect(systemExportUrl('mgs-48213-42')).toBe('/api/systems/mgs-48213-42/export');
+    expect(systemExportUrl('a b')).toBe('/api/systems/a%20b/export');
   });
 });

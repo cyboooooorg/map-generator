@@ -151,6 +151,7 @@ export const fr: Messages = {
     unpin: (p) => `Désépingler ${p.name}`,
     pinFailed: (p) => `Impossible de modifier l’épingle${S}: ${p.error}`,
     rename: (p) => `Renommer ${p.name}`,
+    exportSystem: (p) => `Exporter ${p.name}${S}: graines, requêtes et images (ZIP)`,
     renameLabel: 'Nom du système',
     renameSave: 'Enregistrer',
     renameCancel: 'Annuler',

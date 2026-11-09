@@ -1,6 +1,7 @@
 <script lang="ts">
   // The buttons of a system in the main menu, inside its card or row: pin,
-  // rename and delete (or, in select mode, the checkbox in delete's place).
+  // rename, export and delete (or, in select mode, the checkbox in delete's place).
+  import { systemExportUrl } from '../lib/api/client';
   import { t } from '../lib/i18n/index.svelte';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
   import { systemName } from '../lib/systemList';
@@ -31,6 +32,14 @@
   <button class="rename-button" data-rename={system.id} onclick={onRename} aria-label={t.systemList.rename({ name })} title={t.systemList.rename({ name })}
     >✎</button
   >
+  <a
+    class="export"
+    data-export={system.id}
+    href={systemExportUrl(system.id)}
+    download
+    aria-label={t.systemList.exportSystem({ name })}
+    title={t.systemList.exportSystem({ name })}>⤓</a
+  >
   {#if selecting}
     <input class="choose" type="checkbox" checked={chosen} onchange={onToggle} aria-label={t.worldList.selectOne({ id: name })} />
   {:else}
@@ -57,6 +66,24 @@
     border-color: var(--accent);
     color: var(--text);
   }
+  .export {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 7px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .export:hover,
+  .export:focus-visible {
+    border-color: var(--accent);
+    color: var(--text);
+  }
   .actions :global(button.pin.on) {
     color: var(--accent);
   }
@@ -70,6 +97,10 @@
   }
   @media (hover: none), (pointer: coarse) {
     .actions :global(button) {
+      min-width: 40px;
+      height: 40px;
+    }
+    .export {
       min-width: 40px;
       height: 40px;
     }

@@ -159,6 +159,11 @@ export function bodyApi(id: string): string {
   return `/api/${bodyPath(id)}`;
 }
 
+/** The download of a system's export (`.zip`: seeds, requests, names and PNG images), see `crate::export` on the server. */
+export function systemExportUrl(id: string): string {
+  return `/api/systems/${encodeURIComponent(id)}/export`;
+}
+
 /** The name of a resolution, as URLs and `?size=` take it: `2048x1024`. */
 export function sizeName(width: number, height: number): string {
   return `${width}x${height}`;
