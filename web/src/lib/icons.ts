@@ -49,6 +49,8 @@ export const ICONS = {
   host: 'M9 9a5 5 0 1 0 0 10a5 5 0 1 0 0-10zM18 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4z',
   fold: 'M9 6l6 6l-6 6',
   unfold: 'M15 6l-6 6l6 6',
+  /** A map's pixels: the resolution chips. */
+  resolution: 'M3 6h18v12H3zM3 10h18M3 14h18M7.5 6v12M12 6v12M16.5 6v12',
 } as const;
 
 export type IconName = keyof typeof ICONS;

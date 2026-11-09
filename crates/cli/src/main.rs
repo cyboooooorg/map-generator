@@ -197,6 +197,26 @@ struct Args {
     /// of drawing one
     #[arg(long, requires = "body")]
     in_system: Option<String>,
+
+    /// Generates another resolution, `WxH` (`4096x2048`), of --body of
+    /// --in-system, generated already: the same world at that size, into
+    /// bodies/<body>/sizes/<WxH>/ beside its other resolutions
+    #[arg(long, requires_all = ["in_system", "body"], value_parser = parse_size)]
+    size: Option<(u32, u32)>,
+}
+
+/// A resolution of `--size`: `WxH`, each between the map size limits.
+fn parse_size(text: &str) -> Result<(u32, u32), String> {
+    use mapgen::request::MAP_SIZE;
+    let (width, height) = mapgen::sizes::parse_size_name(text)
+        .ok_or_else(|| format!("{text:?}: expected WxH, such as 4096x2048"))?;
+    if !(MAP_SIZE.0..=MAP_SIZE.1).contains(&width) || !(MAP_SIZE.0..=MAP_SIZE.1).contains(&height) {
+        return Err(format!(
+            "{text}: width and height must be between {} and {}",
+            MAP_SIZE.0, MAP_SIZE.1
+        ));
+    }
+    Ok((width, height))
 }
 
 /// The planets of `--system`: `type=count` pairs, or `auto`.
@@ -240,6 +260,31 @@ fn generate_body(
             dir.join("bodies").display()
         );
     }
+    Ok(())
+}
+
+/// Generates the `width` × `height` resolution of `body` in the system
+/// written in `dir` (see `--size`).
+fn generate_size(
+    dir: &std::path::Path,
+    body: &str,
+    (width, height): (u32, u32),
+    noise_maps: bool,
+) -> Result<(), Box<dyn Error>> {
+    let mut last = None;
+    mapgen::system::generate_size(dir, body, width, height, noise_maps, |p| {
+        if last != Some(p.step) {
+            eprintln!(
+                "{} {width}x{height} — {:?} ({}/{})",
+                p.body, p.stage, p.step, p.steps
+            );
+            last = Some(p.step);
+        }
+    })?;
+    println!(
+        "Generated: {body} at {width}x{height} → {}",
+        mapgen::sizes::size_dir(&dir.join("bodies").join(body), width, height).display()
+    );
     Ok(())
 }
 
@@ -334,6 +379,14 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    if let (Some(system), Some(body), Some(size)) = (&args.in_system, &args.body, args.size) {
+        return generate_size(
+            &args.systems_dir.join(system),
+            body,
+            size,
+            !args.no_noise_maps,
+        );
+    }
     if let Some(planets) = &args.system {
         let request = mapgen::system::SystemRequest::System(mapgen::system::WholeSystemRequest {
             star: args.star.clone(),

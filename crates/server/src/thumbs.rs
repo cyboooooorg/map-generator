@@ -4,7 +4,7 @@
 //! `thumb.png`: the world then gets one on its first request, its `world.png` is decoded row by row into the
 //! same downscaler the export uses, so a thumbnail costs a few MB of memory
 //! even for an 8192 × 4096 map (measured: 4 MB and 0.4 s; decoding the
-//! whole image would take 100 MB), then written into the world directory
+//! whole image would take 100 MB), then written beside the body's `sizes/`
 //! for the next requests.
 //!
 //! Decoding still takes a core while it runs: at most
@@ -44,10 +44,11 @@ impl Default for Thumbnails {
 }
 
 impl Thumbnails {
-    /// The PNG bytes of the thumbnail of the world in `dir`, made from its
-    /// `world.png` first when it has none.
-    pub async fn get(&self, dir: &Path) -> Result<Vec<u8>, ThumbError> {
-        let path = dir.join(THUMB_FILE);
+    /// The PNG bytes of the thumbnail in `thumb_dir`, made from
+    /// `world_png` first when there is none (a body keeps its thumbnail
+    /// beside its resolutions, made from the original one's `world.png`).
+    pub async fn get(&self, thumb_dir: &Path, world_png: &Path) -> Result<Vec<u8>, ThumbError> {
+        let path = thumb_dir.join(THUMB_FILE);
         match tokio::fs::read(&path).await {
             Ok(bytes) => return Ok(bytes),
             Err(e) if e.kind() == ErrorKind::NotFound => {}
@@ -61,13 +62,13 @@ impl Thumbnails {
             .acquire_owned()
             .await
             .map_err(|e| ThumbError::Failed(e.to_string()))?;
-        let dir = dir.to_path_buf();
+        let (dir, world_png) = (thumb_dir.to_path_buf(), world_png.to_path_buf());
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
             // Made by a request that held the turn before this one.
             match std::fs::read(&path) {
                 Ok(bytes) => Ok(bytes),
-                Err(_) => make(&dir),
+                Err(_) => make(&dir, &world_png),
             }
         })
         .await
@@ -75,12 +76,11 @@ impl Thumbnails {
     }
 }
 
-/// Makes the thumbnail of the world in `dir` from its `world.png`, writes
+/// Makes a thumbnail from the world map `source` (a `world.png`), writes
 /// it into `dir` (best effort: a read-only library still gets thumbnails)
 /// and returns its PNG bytes.
-fn make(dir: &Path) -> Result<Vec<u8>, ThumbError> {
-    let source = dir.join("world.png");
-    let file = std::fs::File::open(&source).map_err(|e| match e.kind() {
+fn make(dir: &Path, source: &Path) -> Result<Vec<u8>, ThumbError> {
+    let file = std::fs::File::open(source).map_err(|e| match e.kind() {
         ErrorKind::NotFound => ThumbError::NotFound,
         _ => ThumbError::Failed(format!("{}: {e}", source.display())),
     })?;
@@ -183,13 +183,17 @@ mod tests {
             ..Default::default()
         };
         let params = request.resolve(&mut rand::rng()).unwrap().params;
-        export_world(generate(&params), &dir, ExportOptions { raw_data: false }).unwrap();
+        let options = ExportOptions {
+            raw_data: false,
+            thumb_dir: Some(dir.clone()),
+        };
+        export_world(generate(&params), &dir, options).unwrap();
         let exported = std::fs::read(dir.join(THUMB_FILE)).unwrap();
         // A deleted thumbnail.
         std::fs::remove_file(dir.join(THUMB_FILE)).unwrap();
 
         let thumbnails = Thumbnails::default();
-        let made = thumbnails.get(&dir).await.unwrap();
+        let made = thumbnails.get(&dir, &dir.join("world.png")).await.unwrap();
         assert_eq!(made, exported, "the same thumbnail as the export's");
         assert_eq!(std::fs::read(dir.join(THUMB_FILE)).unwrap(), exported);
         assert!(!dir.join(TEMP_FILE).exists());
@@ -198,7 +202,10 @@ mod tests {
 
         // Served from the file from then on.
         std::fs::write(dir.join(THUMB_FILE), b"cached").unwrap();
-        assert_eq!(thumbnails.get(&dir).await.unwrap(), b"cached");
+        assert_eq!(
+            thumbnails.get(&dir, &dir.join("world.png")).await.unwrap(),
+            b"cached"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -208,12 +215,12 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let thumbnails = Thumbnails::default();
         assert!(matches!(
-            thumbnails.get(&dir).await,
+            thumbnails.get(&dir, &dir.join("world.png")).await,
             Err(ThumbError::NotFound)
         ));
         std::fs::write(dir.join("world.png"), b"not a png").unwrap();
         assert!(matches!(
-            thumbnails.get(&dir).await,
+            thumbnails.get(&dir, &dir.join("world.png")).await,
             Err(ThumbError::Failed(_))
         ));
         assert!(!dir.join(THUMB_FILE).exists());

@@ -8,9 +8,11 @@
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
   import AxesGizmo from './AxesGizmo.svelte';
+  import SizeChips from './SizeChips.svelte';
+  import { parseSize, pendingToFollow } from '../lib/sizes';
   import type { ScreenAxis } from '../lib/viewer/axes';
   import type { SurfaceMaps } from '../lib/skyBodies';
-  import { ApiFailure, api, followJob, systemBodyId, worldFile } from '../lib/api/client';
+  import { ApiFailure, api, followJob, sizeName, systemBodyId, worldFile } from '../lib/api/client';
   import type { BiomeInfo } from '../lib/api/types/BiomeInfo';
   import type { JobStatus } from '../lib/api/types/JobStatus';
   import type { Stage } from '../lib/api/types/Stage';
@@ -66,7 +68,11 @@
 
   interface Props {
     world: LoadedWorld;
-    /** Its revision (modification time), which keys the cached detail tiles. */
+    /**
+     * The system's revision (modification time): null while the world is
+     * regenerated in place. The body's own files and tiles are keyed by the
+     * revision of the resolution shown (`world.revision`).
+     */
     revision: number | null;
     /** Measured path to draw. */
     path: readonly LonLat[];
@@ -435,6 +441,9 @@
   let epochPreview = $state<number | null>(null);
 
   const worldId = $derived(world.id);
+  /** The resolution shown (`WxH`) and its revision, which key its files and tiles. */
+  const size = $derived(world.size);
+  const sizeRevision = $derived(world.revision);
   const meta = $derived(world.meta);
   /** `U`: each body of the family of the planet shown in turn (the star aside, on `O`). */
   function stepBody(): void {
@@ -621,6 +630,8 @@
       view.onCameraChange = (state) => onCameraChange?.(state);
       canvasVisible = view.visible;
       view.onVisibilityChange = (visible) => (canvasVisible = visible);
+      // A detail tile of the resolution shown answered 404: deleted elsewhere, maybe.
+      view.onDetailMissing = () => world.fileMissing();
     } catch (e) {
       error = t.viewer.noWebgl({ error: String(e) });
     }
@@ -640,15 +651,24 @@
   $effect(() => {
     const current = view;
     const id = worldId;
-    const rev = revision;
+    const shownSize = size;
+    const rev = sizeRevision;
     // No revision: the world left the list, typically while it is being
     // regenerated in place. Keep its map until the new one is listed.
-    if (rev === null && id !== null && id === textureOf) {
+    if (revision === null && id !== null && id === textureOf) {
       loading = false;
       return;
     }
-    pinned = null;
-    hovered = null;
+    // The same body at another resolution, listed in a moment: keep its map
+    // (and the point picked, the hexes) meanwhile.
+    if (id !== null && id === textureOf && shownSize === null) {
+      return;
+    }
+    if (id !== textureOf) {
+      pinned = null;
+      hovered = null;
+      hexOn = false;
+    }
     if (!current || !id) {
       textureOf = null;
       loading = false;
@@ -658,7 +678,10 @@
     loading = true;
     mapProgress = null;
     error = null;
-    hexOn = false;
+    // A new body: its map loads once its resolution is listed.
+    if (shownSize === null) {
+      return;
+    }
     const controller = new AbortController();
     const progress = (p: LoadProgress) => {
       if (!controller.signal.aborted) mapProgress = p;
@@ -668,11 +691,14 @@
     // the same epoch as the one before).
     const epochMa = untrack(() => epoch);
     textureEpoch = { id, epochMa, scale: 1 };
-    const maps = epochMaps(id, epochMa, rev, 1);
+    const maps = epochMaps(id, shownSize, epochMa, rev, 1);
     current
       .setMaps(maps.colour, maps.normal, controller.signal, progress)
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) error = t.viewer.mapFailed({ error: String(e) });
+        if (controller.signal.aborted) return;
+        error = t.viewer.mapFailed({ error: String(e) });
+        // Its resolution deleted elsewhere, maybe: the world lists them again.
+        world.fileMissing();
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -689,10 +715,9 @@
   // The layers (relief, contours, picking) follow the epoch once the slider is released.
   $effect(() => {
     const epochMa = epoch;
-    const rev = revision;
     // Untracked: the world's own epoch state must not re-run this (a failed
     // load would be retried at once, again and again).
-    untrack(() => world.setEpoch(epochMa, rev));
+    untrack(() => world.setEpoch(epochMa));
   });
   $effect(() => {
     if (world.epochError) toasts.error(world.epochError);
@@ -708,13 +733,13 @@
    * hillshade) and its relief normals, stored at the present, rendered by
    * the server at another epoch.
    */
-  function epochMaps(id: string, epochMa: number, rev: number | null, scale: 1 | 4): { colour: string; normal: string } {
+  function epochMaps(id: string, size: string, epochMa: number, rev: number | null, scale: 1 | 4): { colour: string; normal: string } {
     if (epochMa === 0) {
-      return { colour: worldFile(id, 'raw_data/colour.png', rev), normal: worldFile(id, 'raw_data/normal.png', rev) };
+      return { colour: worldFile(id, size, 'raw_data/colour.png', rev), normal: worldFile(id, size, 'raw_data/normal.png', rev) };
     }
     return {
-      colour: epochFile(id, epochMa, 'colour.png', rev, scale),
-      normal: epochFile(id, epochMa, 'normal.png', rev, scale),
+      colour: epochFile(id, size, epochMa, 'colour.png', rev, scale),
+      normal: epochFile(id, size, epochMa, 'normal.png', rev, scale),
     };
   }
 
@@ -723,10 +748,11 @@
   $effect(() => {
     const current = view;
     const id = worldId;
-    const rev = revision;
+    const shownSize = size;
+    const rev = sizeRevision;
     const epochMa = epochShown;
     const scale: 1 | 4 = epochPreview === null ? 1 : 4;
-    if (!current || !id || id !== textureOf || loading) {
+    if (!current || !id || !shownSize || id !== textureOf || loading) {
       return;
     }
     if (textureEpoch.id === id && textureEpoch.epochMa === epochMa && textureEpoch.scale === scale) {
@@ -735,14 +761,16 @@
     const controller = new AbortController();
     const show = () => {
       epochMapLoading = true;
-      const maps = epochMaps(id, epochMa, rev, scale);
+      const maps = epochMaps(id, shownSize, epochMa, rev, scale);
       current
         .setMaps(maps.colour, maps.normal, controller.signal)
         .then(() => {
           textureEpoch = { id, epochMa, scale };
         })
         .catch((e: unknown) => {
-          if (!controller.signal.aborted) toasts.error(t.epochs.failed({ error: String(e) }));
+          if (controller.signal.aborted) return;
+          toasts.error(t.epochs.failed({ error: String(e) }));
+          world.fileMissing();
         })
         .finally(() => {
           if (!controller.signal.aborted) epochMapLoading = false;
@@ -772,24 +800,32 @@
       return;
     }
     const controller = new AbortController();
-    const url = id && file ? worldFile(id, `raw_data/${file}`, revision) : null;
+    const url = id && size && file ? worldFile(id, size, `raw_data/${file}`, sizeRevision) : null;
     current
       .setClouds(url, meta ? cloudTint(meta) : [1, 1, 1], controller.signal)
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) console.warn('Could not load the clouds', e);
+        if (controller.signal.aborted) return;
+        console.warn('Could not load the clouds', e);
+        if (url) world.fileMissing();
       });
     return () => controller.abort();
   });
   // An irregular moon's shape, once per body.
   $effect(() => {
     const id = worldId;
+    const shownSize = size;
     const shape = meta?.layers.shape;
     if (!view) return;
     const controller = new AbortController();
     view
-      .setShape(id && shape ? { url: worldFile(id, `raw_data/${shape.file}`, revision), min: shape.min, max: shape.max } : null, controller.signal)
+      .setShape(
+        id && shownSize && shape ? { url: worldFile(id, shownSize, `raw_data/${shape.file}`, sizeRevision), min: shape.min, max: shape.max } : null,
+        controller.signal,
+      )
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) console.warn('Could not load the shape', e);
+        if (controller.signal.aborted) return;
+        console.warn('Could not load the shape', e);
+        if (id && shownSize && shape) world.fileMissing();
       });
     return () => controller.abort();
   });
@@ -808,8 +844,8 @@
     // No detail while the slider moves: the reduced preview shows through.
     // A giant has no ground to detail.
     view?.setDetail(
-      worldId && meta && !giant && revision !== null && epochPreview === null
-        ? { id: worldId, revision, baseWidth: meta.width, epochMa: epoch }
+      worldId && size && meta && !giant && sizeRevision !== null && epochPreview === null
+        ? { id: worldId, size, revision: sizeRevision, baseWidth: meta.width, epochMa: epoch }
         : null,
     );
   });
@@ -874,6 +910,15 @@
   // it; the Sun longitude slider sets the hour of the body shown.
   const sys = $derived(world.system);
   const sysBody = $derived(world.shownSystemBody);
+  /**
+   * The original resolution of a body of the system shown (`WxH`, its
+   * params' size): always on disk once it is generated, so the other
+   * bodies' maps (sky, star view) need no listing of their resolutions.
+   */
+  const originalSize = (body: string): string | null => {
+    const params = sys?.bodies.find((b) => b.id === body)?.params;
+    return params ? sizeName(params.width, params.height) : null;
+  };
   /** The planet of the body shown (itself, or the planet of a moon). */
   const sysPlanet = $derived(sys && sysBody ? (sys.bodies.find((b) => b.id === (sysBody.parent ?? sysBody.id)) ?? null) : null);
   /** Whether the body shown is a moon, its host planet then in its sky: the switches then have a part for each. */
@@ -938,16 +983,18 @@
   }
   /**
    * The maps of each generated planet of the star view, for its marker: the
-   * small copies of its colour and its relief normals, at the system's revision.
+   * small copies of its colour and its relief normals, from its original
+   * resolution, at the system's revision.
    */
   const sysMaps = $derived(
     sysStar && world.systemId
       ? sysStar.planets.map((p): SurfaceMaps | null => {
-          if (!p.generated) return null;
+          const original = originalSize(p.id);
+          if (!p.generated || !original) return null;
           const id = systemBodyId(world.systemId!, p.id);
           return {
-            colour: worldFile(id, 'raw_data/colour_small.png', revision),
-            normal: worldFile(id, 'raw_data/normal_small.png', revision),
+            colour: worldFile(id, original, 'raw_data/colour_small.png', revision),
+            normal: worldFile(id, original, 'raw_data/normal_small.png', revision),
           };
         })
       : null,
@@ -980,11 +1027,12 @@
   const sysDays = $derived(sysPlanet ? clockDays(sysPlanet.orbit, season, orbitDays) : orbitDays);
   /** The day of the planet's year the clock shows: days since its northern spring equinox. */
   const yearDay = $derived(sysPlanet ? yearDayAt(sysPlanet.orbit, sysDays) : null);
-  /** The maps of a body of the system, for the sky. */
+  /** The maps of a body of the system, for the sky: its original resolution's. */
   const sysTextures = (id: string): SurfaceMaps | null => {
-    if (!world.systemId) return null;
+    const original = originalSize(id);
+    if (!world.systemId || !original) return null;
     const body = systemBodyId(world.systemId, id);
-    return { colour: worldFile(body, 'raw_data/colour.png'), normal: worldFile(body, 'raw_data/normal.png') };
+    return { colour: worldFile(body, original, 'raw_data/colour.png'), normal: worldFile(body, original, 'raw_data/normal.png') };
   };
   /**
    * The hour: the sun at the slider's longitude over the body shown at the
@@ -1168,44 +1216,113 @@
    * The generation of the body shown and its neighbourhood, when it is not
    * generated yet (`POST /api/systems/{id}/bodies/{body}/generate`): queued
    * as soon as it is shown, followed until done, then the system reloaded.
+   * Or, with `size`, one more resolution of a generated body, asked for
+   * from its chips (`POST …/sizes/{W}x{H}`), shown once done.
    */
-  let generation = $state<{ body: string; status: JobStatus | null; error: string | null } | null>(null);
+  let generation = $state<{ body: string; size: string | null; status: JobStatus | null; error: string | null } | null>(null);
   /** A running status of a system job: the body being made and its place in the job. */
   type RunningBody = { body?: string | null; body_step?: number | null; bodies?: number | null; stage: Stage; step: number; steps: number };
   let stopFollowing: (() => void) | null = null;
-  async function generateShown(body: string): Promise<void> {
+  /** The jobs this tab has followed: a listing may name one for a moment after it ends. */
+  const followedJobs = new Set<string>();
+  /** The width of a size name, as the chips and messages name a size. */
+  const sizeWidth = (size: string) => String(parseSize(size)?.[0] ?? size);
+  async function generateShown(body: string, size?: string): Promise<void> {
     const systemId = world.systemId;
     if (!systemId) return;
     stopFollowing?.();
     stopFollowing = null;
-    generation = { body, status: null, error: null };
+    const wanted = size ?? null;
+    generation = { body, size: wanted, status: null, error: null };
+    // Still this generation: another one (another body, another size) replaces it.
+    const mine = () => generation?.body === body && generation.size === wanted;
+    const id = systemBodyId(systemId, body);
+    /** Shows the resolution made, when its body is still the one shown. */
+    const showSize = async (made: string) => {
+      if (world.id !== id) return;
+      await world.refreshSizes();
+      if (world.id === id) await world.switchSize(made);
+    };
     try {
-      const response = await fetch(
-        `/api/systems/${encodeURIComponent(systemId)}/bodies/${encodeURIComponent(body)}/generate`,
-        { method: 'POST' },
-      );
-      if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
-      const { job_id: jobId } = (await response.json()) as { job_id: string | null };
+      let jobId: string | null;
+      if (wanted !== null) {
+        // Being generated already (from another tab): follow its job.
+        const pending = world.id === id ? world.sizes?.pending.find((p) => sizeName(p.width, p.height) === wanted) : undefined;
+        jobId = pending ? pending.job_id : (await api.generateSize(id, wanted)).job_id;
+      } else {
+        const response = await fetch(
+          `/api/systems/${encodeURIComponent(systemId)}/bodies/${encodeURIComponent(body)}/generate`,
+          { method: 'POST' },
+        );
+        if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+        jobId = ((await response.json()) as { job_id: string | null }).job_id;
+      }
+      if (jobId !== null) followedJobs.add(jobId);
       if (jobId === null) {
-        world.loadSystem(systemId);
+        if (!mine()) return;
+        generation = null;
+        if (wanted !== null) await showSize(wanted);
+        else world.loadSystem(systemId);
         return;
       }
       const stream = followJob(jobId, (status) => {
-        if (generation?.body === body) generation = { body, status, error: null };
+        if (mine()) generation = { body, size: wanted, status, error: null };
       });
       stopFollowing = stream.cancel;
       const final = await stream.done;
-      if (generation?.body !== body) return;
+      if (!mine()) return;
       if (final.status === 'done') {
         generation = null;
-        world.loadSystem(systemId);
+        if (wanted !== null) await showSize(wanted);
+        else world.loadSystem(systemId);
       } else {
-        generation = { body, status: final, error: final.status === 'failed' ? final.error : null };
+        generation = { body, size: wanted, status: final, error: final.status === 'failed' ? final.error : null };
       }
     } catch (e) {
-      if (generation?.body === body) generation = { body, status: null, error: String(e) };
+      if (mine()) generation = { body, size: wanted, status: null, error: errorText(e) };
+      else if (wanted !== null) toasts.error(t.viewer.sizeFailed({ size: sizeWidth(wanted), error: errorText(e) }));
     }
   }
+  // A size of the body shown being generated by a job this tab does not
+  // follow (another tab's, or one started before a reload): follow it, with
+  // the same bar, and show the size once done.
+  $effect(() => {
+    const sizes = world.sizes;
+    const body = sysBody;
+    const systemId = world.systemId;
+    if (!sizes || !body?.generated || !systemId || world.subject !== 'planet' || worldId !== systemBodyId(systemId, body.id)) return;
+    untrack(() => {
+      const job = pendingToFollow(sizes, generation !== null && !generation.error, followedJobs);
+      if (job) void generateShown(body.id, sizeName(job.width, job.height));
+    });
+  });
+  /** Deletes resolution `size` of the body shown (its chip's ×), then lists the sizes again. */
+  async function deleteShownSize(size: string): Promise<void> {
+    const id = world.id;
+    if (!id) return;
+    try {
+      await api.deleteSize(id, size);
+    } catch (e) {
+      toasts.error(errorText(e));
+    }
+    // Deleted or not, the listing tells: the body loads at its displayed
+    // size when the one shown is gone.
+    await world.refreshSizes().catch((e: unknown) => console.warn('Could not list the resolutions', e));
+  }
+  /** Shows resolution `size` of the body shown (a chip on disk). */
+  function pickSize(size: string): void {
+    world.switchSize(size).catch((e: unknown) => toasts.error(errorText(e)));
+  }
+  /** The resolution chips under the planet, from the icon bar's Resolution switch. */
+  let sizesOpen = $state(false);
+  /** A generated body has resolutions to show: its listing is in. */
+  const sizesShown = $derived(world.subject === 'planet' && worldId !== null && world.sizes !== null);
+  /** The resolution this view is generating for the body shown, `WxH`. */
+  const sizeGenerating = $derived(
+    generation && generation.size !== null && !generation.error && worldId === systemBodyId(world.systemId ?? '', generation.body)
+      ? generation.size
+      : null,
+  );
   $effect(() => {
     // Only the body looked at is generated: the star view of a system
     // (its default) leaves its planets as spheres until one is opened.
@@ -1220,8 +1337,16 @@
   const generationText = $derived.by(() => {
     if (!generation || !sys) return null;
     const name = (id: string) => world.systemNames[id] ?? sys.bodies.find((b) => b.id === id)?.designation ?? id;
-    if (generation.error) return t.viewer.generationFailed({ body: name(generation.body), error: generation.error });
+    if (generation.error) {
+      return generation.size !== null
+        ? t.viewer.sizeFailed({ size: sizeWidth(generation.size), error: generation.error })
+        : t.viewer.generationFailed({ body: name(generation.body), error: generation.error });
+    }
     const job = generation.status;
+    if (generation.size !== null) {
+      const width = sizeWidth(generation.size);
+      return !job || job.status === 'queued' || job.status === 'running' ? t.viewer.sizeGenerating({ size: width }) : null;
+    }
     if (!job || job.status === 'queued') return t.viewer.generationQueued({ body: name(generation.body) });
     if (job.status !== 'running') return null;
     const status = job as unknown as RunningBody;
@@ -1360,11 +1485,12 @@
       return;
     }
     const id = systemBodyId(system, parent.id);
+    const original = sizeName(parent.params.width, parent.params.height);
     const controller = new AbortController();
     api
-      .metadata(id, controller.signal)
+      .metadata(id, original, controller.signal)
       .then((host) => {
-        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => worldFile(id, `raw_data/${file}`)) };
+        if (!controller.signal.aborted) hostLook = { system, id: parent.id, look: planetLook(host, (file) => worldFile(id, original, `raw_data/${file}`)) };
       })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) console.warn("Could not load the host planet's world", e);
@@ -1724,6 +1850,8 @@
         ? [perBody({ key: 'dial', label: t.viewer.compass, help: t.viewer.compassHelp, icon: 'dial' }, dialShown, hostCompassShown, (v) => (dialShown = v), (v) => (hostCompassShown = v))]
         : []),
     ],
+    // The resolutions of a generated body: chips under the planet.
+    ...(sizesShown ? [[{ key: 'sizes', label: t.viewer.sizes, help: t.viewer.sizesHelp, icon: 'resolution' as const, on: sizesOpen, set: (on: boolean) => (sizesOpen = on) }]] : []),
   ]);
   /** The panels of the planet's dock. */
   const dockPanels = $derived<DockPanel[]>([
@@ -1776,9 +1904,10 @@
   $effect(() => {
     const current = view;
     const id = worldId;
+    const shownSize = size;
     const columns = hexColumns;
     const riverFlow = Math.round(10 ** hexRiverLog);
-    if (!current || !id || !hexOn) {
+    if (!current || !id || !shownSize || !hexOn) {
       current?.setHex(null);
       hexMap = null;
       hexBusy = false;
@@ -1790,7 +1919,7 @@
     const controller = new AbortController();
     const timer = setTimeout(() => {
       hexBusy = true;
-      retryWhileBusy((signal) => api.hex(id, { columns, river_flow_km2: riverFlow }, signal), {
+      retryWhileBusy((signal) => api.hex(id, shownSize, { columns, river_flow_km2: riverFlow }, signal), {
         signal: controller.signal,
         // The server answers 503 while it generates a world.
         isBusy: (e) => e instanceof ApiFailure && e.status === 503,
@@ -2406,6 +2535,18 @@
       clock={locked ? t.viewer.lockedSun : ''}
       jumps={clockYear ? [{ key: 'start', label: t.playback.toStart, icon: 'start', run: () => setClockDay(0) }] : []}
     />
+    {#if sizesOpen && sizesShown && world.sizes}
+      <div class="sizes">
+        <SizeChips
+          sizes={world.sizes}
+          shown={size ?? ''}
+          generating={sizeGenerating}
+          onPick={pickSize}
+          onGenerate={(s) => sysBody && generateShown(sysBody.id, s)}
+          onDelete={(s) => void deleteShownSize(s)}
+        />
+      </div>
+    {/if}
   </div>
 
   {#if dataReady && shown !== 'biomes'}
@@ -2510,7 +2651,7 @@
         <span style:width={`${generationShare * 100}%`}></span>
       </div>
       {#if generation?.error}
-        <button onclick={() => generation && generateShown(generation.body)}>{t.viewer.generationRetry}</button>
+        <button onclick={() => generation && generateShown(generation.body, generation.size ?? undefined)}>{t.viewer.generationRetry}</button>
       {/if}
     </div>
   {/if}
@@ -2614,6 +2755,14 @@
     position: absolute;
     top: 4px;
     right: 12px;
+  }
+  /* The resolution chips: under the planet, clear of the playback bar. */
+  .sizes {
+    position: absolute;
+    left: 50%;
+    bottom: 64px;
+    transform: translateX(-50%);
+    max-width: calc(100% - 24px);
   }
   .panel-body {
     display: grid;

@@ -44,6 +44,12 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.unknownType({ type: detail.body_type });
     case 'system_exists':
       return t.errors.systemExists({ system: detail.system });
+    case 'size_not_offered':
+      return t.errors.sizeNotOffered({ width: detail.width, height: detail.height });
+    case 'original_size':
+      return t.errors.originalSize;
+    case 'size_not_generated':
+      return t.errors.sizeNotGenerated({ width: detail.width, height: detail.height });
   }
 }
 

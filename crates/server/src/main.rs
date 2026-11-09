@@ -8,7 +8,7 @@
 //! | `MAPGEN_DB`           | `db/mapgen.sqlite` | the index: systems, bodies, names, jobs |
 //! | `MAPGEN_PRESETS_DIR`  | `presets`    | extra planet presets (`*.toml`)          |
 //! | `MAPGEN_STATIC_DIR`   | `web/dist`   | built web front-end                      |
-//! | `MAPGEN_MAX_PIXELS`   | `8388608`    | largest map accepted (width × height)    |
+//! | `MAPGEN_MAX_PIXELS`   | `33554432`   | largest map accepted (width × height)    |
 //! | `MAPGEN_TILE_CACHE_MB`| `1024`       | memory for worlds loaded for tiles (MiB) |
 //! | `HOST`                | `0.0.0.0`    | listen address                           |
 //! | `PORT`                | `3000`       | listen port                              |

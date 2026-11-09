@@ -520,11 +520,12 @@
 {/snippet}
 
 {#snippet drift()}
-  {#if primary.meta && primary.id}
-    {#key primary.id}
+  {#if primary.meta && primary.id && primary.size}
+    {#key `${primary.id} ${primary.size}`}
       <DriftPanel
         id={primary.id}
-        revision={revision(selectedId)}
+        size={primary.size}
+        revision={primary.revision}
         current={primary.meta.drift_ma ?? 0}
         onGenerate={(ma) => {
           if (!primary.meta) return;

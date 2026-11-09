@@ -823,6 +823,8 @@ export class PlanetView {
   onCameraChange: (state: CameraState) => void = () => {};
   /** Called when the canvas gets a size or loses it (see `visible`). */
   onVisibilityChange: (visible: boolean) => void = () => {};
+  /** A detail tile of the world shown answered 404: its resolution may have been deleted elsewhere. */
+  onDetailMissing: (() => void) | null = null;
   /** Called after each frame with the world's axes as the camera sees them (the axes gizmo). */
   onAxes: (axes: ScreenAxis[]) => void = () => {};
   /**
@@ -1033,6 +1035,7 @@ export class PlanetView {
           side: FrontSide,
         }),
       () => this.requestRender(),
+      () => this.onDetailMissing?.(),
     );
 
     this.controls = new OrbitControls(this.camera, canvas);
@@ -1745,10 +1748,11 @@ export class PlanetView {
   }
 
   /**
-   * Streams detail tiles of a world when zooming in (`revision` keys the
-   * browser cache), at an epoch in Ma when set, or stops with null.
+   * Streams detail tiles of a world at resolution `size` when zooming in
+   * (`revision`, that resolution's, keys the browser cache), at an epoch
+   * in Ma when set, or stops with null.
    */
-  setDetail(world: { id: string; revision: number; baseWidth: number; epochMa?: number } | null): void {
+  setDetail(world: { id: string; revision: number; baseWidth: number; epochMa?: number; size: string } | null): void {
     this.requestRender();
     this.tiles.setWorld(world);
   }

@@ -303,7 +303,6 @@ export const en = {
     copyRefused: 'The browser refused to copy.',
     archiveFailed: (p: { error: string }) => `Could not build the archive: ${p.error}`,
     seed: 'Seed',
-    map: 'Map',
     seaLevel: 'Sea level',
     volcanism: 'Volcanism',
     erosion: 'Erosion',
@@ -691,6 +690,14 @@ export const en = {
       `Generating ${p.body} (body ${p.step} of ${p.bodies}): ${p.stage}, ${p.stageStep} of ${p.stageSteps}`,
     generationFailed: ({ body, error }: { body: string; error: string }) => `Could not generate ${body}: ${error}`,
     generationRetry: 'Try again',
+    sizes: 'Resolution',
+    sizesHelp: 'The resolutions of the planet shown, under the view: show one, generate a larger one, or delete one added',
+    sizeTooLarge: 'Too large for this server',
+    generateSize: ({ size }: { size: string }) => `Generate the ${size} px map`,
+    deleteSize: ({ size }: { size: string }) => `Delete the ${size} px map`,
+    deleteSizeConfirm: ({ size }: { size: string }) => `Delete the ${size} px map of this body? Its original map stays.`,
+    sizeGenerating: ({ size }: { size: string }) => `Generating the ${size} px map`,
+    sizeFailed: ({ size, error }: { size: string; error: string }) => `Could not generate the ${size} px map: ${error}`,
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · not generated'}`,
     bodyTypes: {
@@ -1235,6 +1242,11 @@ export const en = {
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,
     beingGenerated: (p: { world: string }) => `${p.world} is being generated already.`,
     busy: 'A generation is running: try again once it ends.',
+    sizeNotOffered: (p: { width: number; height: number }) =>
+      `${p.width} × ${p.height} is not one of the offered map sizes.`,
+    originalSize: 'The original size of a planet cannot be deleted.',
+    sizeNotGenerated: (p: { width: number; height: number }) =>
+      `This planet has no ${p.width} × ${p.height} map: generate it first.`,
     /** Names of the request fields, in the error messages. */
     fields: {
       sea_level: 'Sea level',

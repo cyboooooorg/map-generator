@@ -62,21 +62,22 @@ function runOnce<Request, Response extends { ok: true } | { ok: false; error: st
 }
 
 /**
- * Fetches and decodes the layers of a world, and computes its biome
- * statistics, in a Web Worker. `onProgress` follows the downloads (bytes
+ * Fetches and decodes the layers of a world at resolution `size`, and
+ * computes its biome statistics, in a Web Worker. `onProgress` follows the downloads (bytes
  * of all the files) and then the decoding steps. Aborting `signal`
  * terminates the worker (its downloads and decoding stop) and rejects with
  * the abort reason.
  */
 export async function loadLayers(
   id: string,
+  size: string,
   meta: WorldMetadata,
   signal?: AbortSignal,
   onProgress?: (progress: LoadProgress) => void,
 ): Promise<DecodedWorld> {
   signal?.throwIfAborted();
   const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-  const request: WorkerRequest = { base: worldFile(id, 'raw_data/'), meta };
+  const request: WorkerRequest = { base: worldFile(id, size, 'raw_data/'), meta };
   const { layers, stats } = await runOnce<WorkerRequest, WorkerResponse>(worker, request, signal, onProgress);
   return { layers, stats };
 }

@@ -50,8 +50,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
-/// Version of `system.json`.
-pub const SYSTEM_FORMAT_VERSION: u32 = 1;
+/// Version of `system.json`, and of the layout of the bodies beside it.
+/// Version 2 keeps each resolution of a body in its own directory (see
+/// [`crate::sizes`]). A system of another version is refused by
+/// [`read_system`], not migrated.
+pub const SYSTEM_FORMAT_VERSION: u32 = 2;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.
@@ -196,7 +199,9 @@ pub struct Body {
     pub preview: Preview,
     /// Everything its generation needs.
     pub params: WorldParams,
-    /// Whether its maps are in `bodies/<id>/`.
+    /// Whether its maps are in `bodies/<id>/`: its thumbnail, and its
+    /// original resolution (its params' size) in
+    /// `bodies/<id>/sizes/<W>x<H>/` (see [`crate::sizes`]).
     pub generated: bool,
     /// A planet's trojans at its L4 and L5 points, where they last (see
     /// `crate::belts`); none for a moon, and in the systems drawn before
@@ -345,9 +350,24 @@ pub fn write_system(dir: &std::path::Path, system: &System) -> Result<(), String
 }
 
 /// Reads `system.json` from `dir`, deriving the star's activity when the
-/// file predates it.
+/// file predates it. A system of another [`SYSTEM_FORMAT_VERSION`] is
+/// refused: its bodies are not laid out as this version reads them.
 pub fn read_system(dir: &std::path::Path) -> Result<System, String> {
     let bytes = std::fs::read(dir.join("system.json")).map_err(|e| e.to_string())?;
+    // The version first: an older system may not even parse as today's.
+    #[derive(Deserialize)]
+    struct Head {
+        format_version: u32,
+    }
+    let head: Head = serde_json::from_slice(&bytes).map_err(|e| format!("system.json: {e}"))?;
+    if head.format_version != SYSTEM_FORMAT_VERSION {
+        return Err(format!(
+            "system.json: format version {} is not the supported version \
+             {SYSTEM_FORMAT_VERSION}: the generator does not migrate older systems, delete it \
+             (`mise run clean-systems`) and draw it again",
+            head.format_version
+        ));
+    }
     let mut system: System = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
     // A system drawn before the star's activity existed gets it derived,
     // the same as a draw would store.
@@ -1840,9 +1860,77 @@ pub fn neighbourhood(system: &System, body_id: &str) -> Vec<String> {
 /// Stages a body's generation reports (the moons are bodies of their own).
 const BODY_STAGES: usize = 8;
 
+/// Generates `params` (a body's, at the size they say) into `dir`, which
+/// it creates: the maps, `raw_data/` naming its system and body (`names`),
+/// and the diagnostic noise maps (`noise_maps/`) when `noise_maps` is set;
+/// the thumbnail into `thumb_dir` when given. Reports each stage to `at`.
+fn generate_into(
+    params: &WorldParams,
+    dir: &std::path::Path,
+    thumb_dir: Option<std::path::PathBuf>,
+    noise_maps: bool,
+    names: (&str, &str),
+    at: impl Fn(crate::generation::Stage),
+) -> Result<(), String> {
+    use crate::generation::{GenerateOptions, Stage, generate_with_progress};
+    // The noise maps are written as the generation computes their
+    // layers, each one freed once encoded.
+    let writer = if noise_maps {
+        Some(
+            crate::export::NoiseMapWriter::new(
+                &dir.join("noise_maps"),
+                params.width,
+                params.height,
+            )
+            .map_err(|e| e.to_string())?,
+        )
+    } else {
+        None
+    };
+    let options = GenerateOptions {
+        debug: writer.as_ref().map(|w| w as _),
+    };
+    let generated = generate_with_progress(params, options, &at);
+    if let Some(writer) = writer {
+        writer.finish()?;
+    }
+    at(Stage::Export);
+    crate::export::export_world(
+        generated,
+        dir,
+        crate::export::ExportOptions {
+            raw_data: true,
+            thumb_dir,
+        },
+    )?;
+    name_world(dir, names.0, names.1)
+}
+
+/// The progress callback of body `id`, `k`-th (from 0) of a job of `bodies`.
+fn body_stage<'a>(
+    report: &'a std::cell::RefCell<&'a mut dyn FnMut(BodyProgress)>,
+    id: &'a str,
+    k: usize,
+    bodies: usize,
+) -> impl Fn(crate::generation::Stage) + 'a {
+    use crate::generation::Stage;
+    move |stage: Stage| {
+        let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
+        (report.borrow_mut())(BodyProgress {
+            body: id.to_string(),
+            body_step: k as u32 + 1,
+            bodies: bodies as u32,
+            stage,
+            step: step.min(BODY_STAGES as u32),
+            steps: BODY_STAGES as u32,
+        });
+    }
+}
+
 /// Generates the bodies opening `body_id` asks for (see [`neighbourhood`])
 /// in the system written in `system_dir`, one by one, each into
-/// `bodies/<id>/` with the layout of a world: written into
+/// `bodies/<id>/` at its original resolution, laid out as
+/// [`crate::sizes`] says (`thumb.png`, `sizes/<W>x<H>/`): written into
 /// `bodies/.tmp-<id>/`, renamed into place once complete, then marked
 /// generated in `system.json`, so a job stopped between two bodies (a
 /// cancelled generation unwinds from `progress`) keeps those done and
@@ -1857,15 +1945,14 @@ pub fn generate_neighbourhood(
 }
 
 /// [`generate_neighbourhood`], with the diagnostic noise maps of each body
-/// (`bodies/<id>/noise_maps/`, see [`crate::export::NoiseMapWriter`]) when
-/// `noise_maps` is set.
+/// (`bodies/<id>/sizes/<W>x<H>/noise_maps/`, see
+/// [`crate::export::NoiseMapWriter`]) when `noise_maps` is set.
 pub fn generate_neighbourhood_with(
     system_dir: &std::path::Path,
     body_id: &str,
     noise_maps: bool,
     mut progress: impl FnMut(BodyProgress),
 ) -> Result<Vec<String>, String> {
-    use crate::generation::{GenerateOptions, Stage, generate_with_progress};
     let system = read_system(system_dir)?;
     if !system.bodies.iter().any(|b| b.id == body_id) {
         return Err(format!("no body {body_id} in this system"));
@@ -1874,50 +1961,21 @@ pub fn generate_neighbourhood_with(
     let system_name = system_id(&system);
     let bodies_dir = system_dir.join("bodies");
     std::fs::create_dir_all(&bodies_dir).map_err(|e| e.to_string())?;
+    let report = std::cell::RefCell::new(&mut progress as &mut dyn FnMut(BodyProgress));
     for (k, id) in ids.iter().enumerate() {
         let body = system.bodies.iter().find(|b| &b.id == id).expect("listed");
-        let report = std::cell::RefCell::new(&mut progress);
-        let at = |stage: Stage| {
-            let step = Stage::ALL.iter().position(|s| *s == stage).unwrap_or(0) as u32 + 1;
-            (report.borrow_mut())(BodyProgress {
-                body: id.clone(),
-                body_step: k as u32 + 1,
-                bodies: ids.len() as u32,
-                stage,
-                step: step.min(BODY_STAGES as u32),
-                steps: BODY_STAGES as u32,
-            });
-        };
+        let params = world_params(body);
         let temp = bodies_dir.join(format!(".tmp-{id}"));
         let _ = std::fs::remove_dir_all(&temp);
-        // The noise maps are written as the generation computes their
-        // layers, each one freed once encoded.
-        let writer = if noise_maps {
-            Some(
-                crate::export::NoiseMapWriter::new(
-                    &temp.join("noise_maps"),
-                    body.params.width,
-                    body.params.height,
-                )
-                .map_err(|e| e.to_string())?,
-            )
-        } else {
-            None
-        };
-        let options = GenerateOptions {
-            debug: writer.as_ref().map(|w| w as _),
-        };
-        let generated = generate_with_progress(&world_params(body), options, at);
-        if let Some(writer) = writer {
-            writer.finish()?;
-        }
-        at(Stage::Export);
-        crate::export::export_world(
-            generated,
-            &temp,
-            crate::export::ExportOptions { raw_data: true },
+        let size = crate::sizes::size_dir(&temp, params.width, params.height);
+        generate_into(
+            &params,
+            &size,
+            Some(temp.clone()),
+            noise_maps,
+            (&system_name, id),
+            body_stage(&report, id, k, ids.len()),
         )?;
-        name_world(&temp, &system_name, id)?;
         let target = bodies_dir.join(id);
         let _ = std::fs::remove_dir_all(&target);
         std::fs::rename(&temp, &target).map_err(|e| e.to_string())?;
@@ -1929,6 +1987,71 @@ pub fn generate_neighbourhood_with(
         write_system(system_dir, &current)?;
     }
     Ok(ids)
+}
+
+/// Generates another resolution, `width` × `height`, of body `body_id` of
+/// the system written in `system_dir`: the same world at another size,
+/// into `bodies/<id>/sizes/<W>x<H>/` (see [`crate::sizes`]), written into
+/// `sizes/.tmp-<W>x<H>/` and renamed into place once complete. With the
+/// diagnostic noise maps when `noise_maps` is set. The body's thumbnail
+/// and `system.json` are left as they are.
+///
+/// Refused when the body is unknown, not generated yet (its original
+/// resolution comes from [`generate_neighbourhood`]), when that size is
+/// on disk already, or outside [`crate::request::MAP_SIZE`].
+pub fn generate_size(
+    system_dir: &std::path::Path,
+    body_id: &str,
+    width: u32,
+    height: u32,
+    noise_maps: bool,
+    mut progress: impl FnMut(BodyProgress),
+) -> Result<(), String> {
+    use crate::request::MAP_SIZE;
+    for (field, value) in [("width", width), ("height", height)] {
+        if !(MAP_SIZE.0..=MAP_SIZE.1).contains(&value) {
+            return Err(format!(
+                "{field} is {value}, it must be between {} and {}",
+                MAP_SIZE.0, MAP_SIZE.1
+            ));
+        }
+    }
+    let system = read_system(system_dir)?;
+    let body = system
+        .bodies
+        .iter()
+        .find(|b| b.id == body_id)
+        .ok_or_else(|| format!("no body {body_id} in this system"))?;
+    if !body.generated {
+        return Err(format!("body {body_id} is not generated"));
+    }
+    let body_dir = system_dir.join("bodies").join(body_id);
+    let name = crate::sizes::size_name(width, height);
+    let target = crate::sizes::size_dir(&body_dir, width, height);
+    if target.exists() {
+        return Err(format!("body {body_id} has its {name} size already"));
+    }
+    let mut params = world_params(body);
+    params.width = width;
+    params.height = height;
+    let temp = body_dir
+        .join(crate::sizes::SIZES_DIR)
+        .join(format!(".tmp-{name}"));
+    let _ = std::fs::remove_dir_all(&temp);
+    let report = std::cell::RefCell::new(&mut progress as &mut dyn FnMut(BodyProgress));
+    let generated = generate_into(
+        &params,
+        &temp,
+        None,
+        noise_maps,
+        (&system_id(&system), body_id),
+        body_stage(&report, body_id, 0, 1),
+    );
+    if let Err(e) = generated {
+        let _ = std::fs::remove_dir_all(&temp);
+        return Err(e);
+    }
+    std::fs::rename(&temp, &target).map_err(|e| e.to_string())
 }
 
 /// Adds the system and the body to a generated body's `world.json`.
@@ -2608,9 +2731,9 @@ mod tests {
         let done = generate_neighbourhood(&dir, &moon.id, |p| seen.push(p)).unwrap();
         assert_eq!(done, family);
         for id in &done {
-            let world = dir
-                .join("bodies")
-                .join(id)
+            let params = &system.bodies.iter().find(|b| &b.id == id).unwrap().params;
+            let body = dir.join("bodies").join(id);
+            let world = crate::sizes::size_dir(&body, params.width, params.height)
                 .join("raw_data")
                 .join("world.json");
             let json: serde_json::Value =
@@ -2641,6 +2764,94 @@ mod tests {
                 .is_empty()
         );
         assert!(generate_neighbourhood(&dir, "zz", |_| {}).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A lone barren planet with no moons, drawn at 256 × 128 into a
+    /// directory of its own; returns the directory and the planet's id.
+    fn lone_planet(name: &str) -> (std::path::PathBuf, String) {
+        let request = SystemRequest::Around(WorldRequest {
+            planet: Some("barren".into()),
+            seed: Some(7),
+            moons: Some(MoonsMode::None),
+            alone: Some(true),
+            width: Some(256),
+            height: Some(128),
+            ..WorldRequest::default()
+        });
+        let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+        let dir = std::env::temp_dir().join(format!("mapgen-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        write_system(&dir, &system).unwrap();
+        let focus = system.focus.clone().expect("the planet asked");
+        (dir, focus)
+    }
+
+    #[test]
+    fn each_resolution_of_a_body_has_its_own_directory() {
+        use crate::sizes::size_dir;
+        let (dir, id) = lone_planet("system-sizes");
+        assert_eq!(
+            generate_neighbourhood(&dir, &id, |_| {}).unwrap(),
+            [id.as_str()]
+        );
+        let body = dir.join("bodies").join(&id);
+        assert!(body.join("thumb.png").is_file());
+        assert!(!body.join("world.png").exists());
+        assert!(!body.join("raw_data").exists());
+        let original = size_dir(&body, 256, 128);
+        assert!(original.join("raw_data").join("world.json").is_file());
+        assert!(original.join("world.png").is_file());
+        assert!(!original.join("thumb.png").exists());
+        assert_eq!(crate::sizes::sizes_on_disk(&body), [(256, 128)]);
+
+        // Another resolution: a directory beside it, system.json untouched.
+        let system_json = std::fs::read(dir.join("system.json")).unwrap();
+        let thumb = std::fs::read(body.join("thumb.png")).unwrap();
+        generate_size(&dir, &id, 512, 256, false, |_| {}).unwrap();
+        let added = size_dir(&body, 512, 256);
+        let world: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(added.join("raw_data").join("world.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            (world["width"].as_u64(), world["height"].as_u64()),
+            (Some(512), Some(256))
+        );
+        assert_eq!(world["body"], serde_json::Value::from(id.as_str()));
+        assert!(world["system"].is_string());
+        assert!(!added.join("thumb.png").exists());
+        assert_eq!(std::fs::read(body.join("thumb.png")).unwrap(), thumb);
+        assert_eq!(std::fs::read(dir.join("system.json")).unwrap(), system_json);
+        assert_eq!(crate::sizes::sizes_on_disk(&body), [(256, 128), (512, 256)]);
+        assert!(!body.join("sizes").join(".tmp-512x256").exists());
+
+        // A size on disk already (the original too), an unknown body.
+        assert!(generate_size(&dir, &id, 512, 256, false, |_| {}).is_err());
+        assert!(generate_size(&dir, &id, 256, 128, false, |_| {}).is_err());
+        assert!(generate_size(&dir, "zz", 512, 256, false, |_| {}).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_size_of_a_body_not_generated_is_refused() {
+        let (dir, id) = lone_planet("system-size-ungenerated");
+        let error = generate_size(&dir, &id, 512, 256, false, |_| {}).unwrap_err();
+        assert!(error.contains("not generated"), "{error}");
+        assert!(!dir.join("bodies").join(&id).exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_system_of_another_format_is_refused() {
+        let (dir, _) = lone_planet("system-old-format");
+        let path = dir.join("system.json");
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        json["format_version"] = serde_json::Value::from(1);
+        std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
+        let error = read_system(&dir).unwrap_err();
+        assert!(error.contains("format version 1"), "{error}");
         let _ = std::fs::remove_dir_all(dir);
     }
 

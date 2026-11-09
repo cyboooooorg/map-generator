@@ -24,6 +24,10 @@ run = "target/release/hexgrid"
 description = "Run the test suite"
 run = "cargo test --workspace --all-features"
 
+[tasks."test:invariance"]
+description = "Check that a planet keeps its large-scale geography at 1024 and 2048 pixels wide (slow, release build)"
+run = "cargo test --release -p mapgen --all-features --test resolution_invariance -- --ignored"
+
 [tasks.lint]
 description = "Check formatting and run clippy with warnings denied"
 run = [

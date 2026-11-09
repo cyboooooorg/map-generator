@@ -435,7 +435,7 @@ mod tests {
                 ..Default::default()
             };
             let params = request.resolve(&mut rand::rng()).unwrap().params;
-            let options = ExportOptions { raw_data: true };
+            let options = ExportOptions::default();
             export_world(
                 generate(&params),
                 &root.join(format!("{planet}-{seed}")),

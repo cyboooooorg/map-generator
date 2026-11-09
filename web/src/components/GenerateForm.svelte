@@ -16,6 +16,7 @@
   import { formatInt, formatUpTo, MAX_SEED, randomSeed } from '../lib/format';
   import { formatDrift } from '../lib/drift';
   import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
+  import { initialFormSize } from '../lib/sizes';
   import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
   import { type Unit, unitTooltip } from '../lib/units';
@@ -149,14 +150,6 @@
   /** The sea is set either by its level or by the share of land it leaves. */
   type SeaBy = 'level' | 'land';
 
-  const SIZES: [number, number][] = [
-    [960, 540],
-    [1920, 1080],
-    [2048, 1024],
-    [4096, 2048],
-    [8192, 4096],
-  ];
-
   /** Each parameter: random (left to the preset or the server) or a fixed value. */
   type FieldState = Record<Field, { random: boolean; value: number }>;
 
@@ -214,12 +207,6 @@
     return name === undefined ? undefined : presets.find((p) => p.spec === name || p.name === name);
   }
 
-  /** Whether a map size is one this server accepts. */
-  function sizeFits(value: string): boolean {
-    const [w, h] = value.split('x').map(Number);
-    return !!w && !!h && w <= spec.max_size && h <= spec.max_size && w * h <= spec.max_pixels;
-  }
-
   // The form starts from the props as they are when it opens; later prop
   // changes must not reset what the user typed, hence untrack.
   const start = untrack(() => ({ initial, preset: findPreset(initial?.planet) ?? presets[0] }));
@@ -235,11 +222,11 @@
   let seed = $state(start.initial?.seed !== undefined ? String(start.initial.seed) : '');
   let size = $state(
     untrack(() =>
-      start.initial?.width && start.initial.height
-        ? `${start.initial.width}x${start.initial.height}`
-        : memory && sizeFits(memory.size)
-          ? memory.size
-          : `${spec.default_width}x${spec.default_height}`,
+      initialFormSize(
+        start.initial?.width && start.initial.height ? [start.initial.width, start.initial.height] : null,
+        memory?.size,
+        spec,
+      ),
     ),
   );
   let fields = $state<FieldState>(
@@ -276,7 +263,7 @@
   /** The fields a world of the chosen kind has. */
   const shownFields = $derived(giantWorld ? OTHER_FIELDS.filter((f) => f === 'axial_tilt_deg') : OTHER_FIELDS);
   const sizes = $derived.by(() => {
-    const list = [...SIZES];
+    const list = spec.size_presets.map(([w, h]): [number, number] => [w, h]);
     for (const extra of [size, `${spec.default_width}x${spec.default_height}`]) {
       const [w, h] = extra.split('x').map(Number);
       if (w && h && !list.some(([lw, lh]) => lw === w && lh === h)) {

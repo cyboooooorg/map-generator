@@ -45,13 +45,22 @@ describe('drift', () => {
   });
 
   it('names the preview in the body routes', () => {
-    expect(driftPreviewUrl('systems/mgs-1-42/bodies/c', -120, 256, 9)).toBe('/api/systems/mgs-1-42/bodies/c/drift/-120/surface.png?rev=9&width=256');
-    expect(driftPreviewUrl('systems/mgs-1-42/bodies/c', 0, 512, null)).toBe('/api/systems/mgs-1-42/bodies/c/drift/0/surface.png?width=512');
+    expect(driftPreviewUrl('systems/mgs-1-42/bodies/c', '2048x1024', -120, 256, 9)).toBe(
+      '/api/systems/mgs-1-42/bodies/c/drift/-120/surface.png?rev=9&size=2048x1024&width=256',
+    );
+    expect(driftPreviewUrl('systems/mgs-1-42/bodies/c', '1024x512', 0, 512, null)).toBe(
+      '/api/systems/mgs-1-42/bodies/c/drift/0/surface.png?size=1024x512&width=512',
+    );
   });
 
   it('asks for the same world at another epoch', () => {
     expect(driftRequest(meta(), -150)).toMatchObject({ planet: 'terran', seed: 7, drift_ma: -150 });
     // The present leaves the epoch out, even from a drifted world.
     expect(driftRequest(meta({ drift_ma: -80 }), 0)).not.toHaveProperty('drift_ma');
+  });
+
+  it('generates at the resolution displayed', () => {
+    // world.json is the displayed size's: the form opens at that size.
+    expect(driftRequest(meta({ width: 4096, height: 2048 }), 100)).toMatchObject({ width: 4096, height: 2048 });
   });
 });

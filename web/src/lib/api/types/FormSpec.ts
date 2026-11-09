@@ -37,6 +37,10 @@ metallicity: Limits,
  */
 giant_mass: Limits, default_width: number, default_height: number, 
 /**
+ * The map sizes the form offers, `[width, height]`, all 2:1.
+ */
+size_presets: Array<[number, number]>, 
+/**
  * Largest width or height the server accepts.
  */
 max_size: number, 

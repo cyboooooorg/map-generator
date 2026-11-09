@@ -34,9 +34,9 @@ export function formatDrift(ma: number): string {
   return formatEpoch(-ma);
 }
 
-/** URL of the preview of a body at a drift (`…/drift/{ma}/surface.png`). */
-export function driftPreviewUrl(id: string, ma: number, width: number, revision: number | null): string {
-  const query = [`width=${width}`];
+/** URL of the preview of a body at a drift (`…/drift/{ma}/surface.png`), made from its resolution `size`. */
+export function driftPreviewUrl(id: string, size: string, ma: number, width: number, revision: number | null): string {
+  const query = [`size=${encodeURIComponent(size)}`, `width=${width}`];
   if (revision !== null) query.unshift(`rev=${revision}`);
   return `${bodyApi(id)}/drift/${ma}/surface.png?${query.join('&')}`;
 }

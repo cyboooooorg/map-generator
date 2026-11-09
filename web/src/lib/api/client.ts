@@ -3,6 +3,8 @@
 // front-end does not follow fails `npm run check`.
 import type { ErrorDetail } from './types/ErrorDetail';
 import type { ApiError } from './types/ApiError';
+import type { BodySizes } from './types/BodySizes';
+import type { DisplayedSize } from './types/DisplayedSize';
 import type { FormSpec } from './types/FormSpec';
 import type { GenerateStarted } from './types/GenerateStarted';
 import type { SystemCreated } from './types/SystemCreated';
@@ -59,10 +61,27 @@ export const api = {
   form: () => call<FormSpec>('/api/form'),
   // World files keep their URL when a world is regenerated under the same
   // id: revalidate them ('no-cache', a 304 when unchanged).
-  metadata: (id: string, signal?: AbortSignal) =>
-    call<WorldMetadata>(worldFile(id, 'raw_data/world.json'), fileInit(signal)),
-  rivers: (id: string, file: string, signal?: AbortSignal) =>
-    call<RiversFile>(worldFile(id, `raw_data/${file}`), fileInit(signal)),
+  /** The metadata of a body at resolution `size` (`WxH`, see sizeName). */
+  metadata: (id: string, size: string, signal?: AbortSignal) =>
+    call<WorldMetadata>(worldFile(id, size, 'raw_data/world.json'), fileInit(signal)),
+  rivers: (id: string, size: string, file: string, signal?: AbortSignal) =>
+    call<RiversFile>(worldFile(id, size, `raw_data/${file}`), fileInit(signal)),
+  /** The resolutions of a generated body: on disk, displayed, being generated, offered. */
+  sizes: (id: string, signal?: AbortSignal) =>
+    call<BodySizes>(`${bodyApi(id)}/sizes`, signal ? { cache: 'no-cache', signal } : { cache: 'no-cache' }),
+  /** Queues resolution `size` of a body; `job_id` null when it is on disk already. */
+  generateSize: (id: string, size: string) =>
+    call<GenerateStarted>(`${bodyApi(id)}/sizes/${encodeURIComponent(size)}`, { method: 'POST' }),
+  /** Deletes an added resolution of a body (never its original). */
+  deleteSize: (id: string, size: string) =>
+    call<void>(`${bodyApi(id)}/sizes/${encodeURIComponent(size)}`, { method: 'DELETE' }),
+  /** Remembers the resolution a body is shown at, in every browser. */
+  setDisplayedSize: (id: string, width: number, height: number) =>
+    call<void>(`${bodyApi(id)}/displayed-size`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ width, height } satisfies DisplayedSize),
+    }),
   jobs: () => call<JobInfo[]>('/api/jobs'),
   cancelJob: (id: string) => call<void>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** The drawn systems, most recent first. */
@@ -97,8 +116,9 @@ export const api = {
     call<GenerateStarted>(`/api/systems/${encodeURIComponent(id)}/bodies/${encodeURIComponent(body)}/generate`, {
       method: 'POST',
     }),
-  hex: (id: string, request: HexRequest, signal?: AbortSignal) =>
-    call<HexMap>(`${bodyApi(id)}/hex`, {
+  /** The hex map of a body at resolution `size`. */
+  hex: (id: string, size: string, request: HexRequest, signal?: AbortSignal) =>
+    call<HexMap>(`${bodyApi(id)}/hex?size=${encodeURIComponent(size)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -139,13 +159,20 @@ export function bodyApi(id: string): string {
   return `/api/${bodyPath(id)}`;
 }
 
+/** The name of a resolution, as URLs and `?size=` take it: `2048x1024`. */
+export function sizeName(width: number, height: number): string {
+  return `${width}x${height}`;
+}
+
 /**
- * URL of a file of a generated world. `revision` (the world's modification
- * time) makes the URL change when the world is regenerated under the same id,
- * so the browser never shows a cached file of the replaced world.
+ * URL of a file of a generated world at resolution `size` (`WxH`, see
+ * sizeName): `/systems/<system>/bodies/<body>/sizes/<size>/<path>`.
+ * `revision` (that resolution's modification time, `PresentSize.revision`)
+ * makes the URL change when it is regenerated under the same id, so the
+ * browser never shows a cached file of the replaced world.
  */
-export function worldFile(id: string, path: string, revision?: number | null): string {
-  const url = `${bodyFiles(id)}/${path}`;
+export function worldFile(id: string, size: string, path: string, revision?: number | null): string {
+  const url = `${bodyFiles(id)}/sizes/${encodeURIComponent(size)}/${path}`;
   return revision === undefined || revision === null ? url : `${url}?rev=${revision}`;
 }
 

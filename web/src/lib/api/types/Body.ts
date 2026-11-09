@@ -35,7 +35,9 @@ parent: string | null, orbit: Orbit, physical: Physical, spin: Spin, surrounding
  */
 params: WorldParams, 
 /**
- * Whether its maps are in `bodies/<id>/`.
+ * Whether its maps are in `bodies/<id>/`: its thumbnail, and its
+ * original resolution (its params' size) in
+ * `bodies/<id>/sizes/<W>x<H>/` (see [`crate::sizes`]).
  */
 generated: boolean, 
 /**
