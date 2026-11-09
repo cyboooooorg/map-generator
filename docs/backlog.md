@@ -941,8 +941,8 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   lower pixel ratio while the clock runs. The calibrations and the
   departures are listed in `docs/science/star-activity.md`.
 - **Cost decision:** the plan bound of p95 under 16.7 ms up close was
-  dropped, since `main` was already over it (15 to 17 ms median at
-  2560 x 1440 on an Apple M1 Pro). The user accepted the branch's 19 to
-  21 ms median (p95 24 to 27 ms), within about 5 ms of `main` and under
-  the star view's 30 fps cap (33 ms). The system and planet views stay
+  dropped, since `main` was already over it (p95 19 to 22 ms at
+  2560 x 1440 on an Apple M1 Pro, median 15 to 17 ms). The user accepted
+  the branch's p95 of 24 to 27 ms (median 19 to 21 ms), within about
+  5 ms of `main` and under the star view's 30 fps cap (33 ms). The system and planet views stay
   within noise, so the system view keeps its full pixel ratio.

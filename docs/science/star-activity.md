@@ -631,6 +631,21 @@ half; its age is the region's age over its life. Every number below is a
   that the whole disc shows texture where granules are under a pixel.
   Its size on other stars scales with the granules. It turns with the
   star's equator, without the differential rotation the regions follow.
+- **The network flattens the drawn limb darkening** (**calibration**):
+  its faculae brighten the limb by a few percent more than the centre
+  (about 5 % at $\mu \approx 0.4$ against 2 %), so the limb is drawn a
+  little brighter than Claret & Bloemen's law; the price of a visible
+  network.
+- **A network ribbon is capped at 0.8 of a plage** at the same $\mu$
+  (**calibration**), so that the active regions' faculae stay the
+  brightest features near the limb.
+- **The mesogranular mottle is a calibration**: from afar, one octave of
+  value noise at 0.35 of the network's cell size adds $\pm c/4$ and
+  varies the ribbons' width and tone along their length.
+- **The granules' look switches with their size on screen**
+  (**calibration**): a continuous sum of round blobs up to 40 px per
+  granule, the cells with their lanes from 120 px, blended in between,
+  every lane edge at least 2.5 px soft.
 
 - **The granules' bright points are dropped.** Prototype D drew the
   magnetic bright points of the lanes; cut by the lane they sat in, they
@@ -649,6 +664,10 @@ half; its age is the region's age over its life. Every number below is a
   $\min(0.1\,T,\ 3\ \text{d})$ times a factor within $\pm 20\ \%$; its
   polarities are $4\sqrt{2A}$ radians apart; the leader spot carries 0.6
   of the area.
+- **The spot-area margin is a calibration.** A region's drawn dark area
+  stays within $\pm 20\ \%$ of part 1's round spots at the same day, on
+  the two measures of *The spots' shapes*; the margin itself is a choice,
+  not a measure.
 - **The spots' shapes are calibrations.** Their filaments, torn
   outlines, umbral dots, light bridges, fragmentation and pores are a
   picture drawn after prototype D, not a model of a spot's magnetic
@@ -692,7 +711,14 @@ checking:
   Wilson & Reichmann (1994);
 - the umbral and penumbral brightness (0.3, 0.75) and the penumbra's four
   umbral areas in Solanki (2003), and the 10° separation of a 1,000 MSH
-  region in Wang & Sheeley (1989).
+  region in Wang & Sheeley (1989);
+- the spots' structure: the Evershed flow of about 1–2 km/s (Evershed
+  1909; the reference was checked, not the value), the umbral dots'
+  lifetimes of minutes to about an hour and the light bridges' timing in
+  a spot's development and decay (Borrero & Ichimoto 2011), the
+  penumbral filaments and the decay by fragmentation (Solanki 2003), and
+  the pores and moat round a spot (Sheeley 1969; Solanki 2003): their
+  references exist as cited, their values were not read in them.
 
 Joy's 32.1° was checked against Stenflo (2013), the limb-darkening rows
 against the VizieR catalogue.

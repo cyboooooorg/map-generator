@@ -412,9 +412,10 @@ const WINDOW_DAYS = 21;
  *   ringed by cooler, darker downflow lanes (Nordlund, Stein & Asplund
  *   2009, Living Rev. Sol. Phys. 6, 2). The magnetic bright points of
  *   the lanes (Sánchez Almeida et al. 2004, ApJ 609, L91) are not drawn:
- *   cut by the lane they sat in, they read as specks. The cells' centres wander by 0.3 of a cell at 2.1 to 2.4 rad
- *   per lifetime (**calibration**), so cells deform, split and merge over
- *   a few lifetimes. It is brought to zero mean and unit rms, then times
+ *   cut by the lane they sat in, they read as specks. The cells' centres
+ *   wander by 0.3 of a cell at 2.1 to 2.4 rad per lifetime
+ *   (**calibration**), so cells deform, split and merge over a few
+ *   lifetimes. It is brought to zero mean and unit rms, then times
  *   `GRANULE_GAIN` (**calibration**, prototype D's look): the rms of the
  *   brightness b is 1.6 × `granule_contrast`, measured before the soft
  *   exposure curve (`starSurfaceExposed`), which compresses it on
@@ -448,11 +449,10 @@ const WINDOW_DAYS = 21;
  *   bridge on some, a torn outline that changes with the region's age,
  *   fragments in its decline and pores in its moat, its dark area within
  *   20 % of a round spot's. No granules are drawn (nor computed) inside
- *   it. Around them a facular
- *   plage of 3× the region's spot radius, brightened by 0.25 (1 − μ)
- *   (**calibration**, brightest at the limb, Solanki 2003), with a fill
- *   of facula_ratio / 9 (the plage covers 9 spot areas; the Sun's ratio
- *   about 10 fills it), at most 1.
+ *   it. Around them a facular plage of 3× the region's spot radius,
+ *   brightened by 0.25 (1 − μ) (**calibration**, brightest at the limb,
+ *   Solanki 2003), with a fill of facula_ratio / 9 (the plage covers 9
+ *   spot areas; the Sun's ratio about 10 fills it), at most 1.
  *
  * Region arrays: `uRegionA[i] = (latitude, longitude at the epoch, tilt,
  * separation)`, `uRegionB[i] = (born − epoch, growth, lifetime,
@@ -858,8 +858,9 @@ float starSpotDays = 0.0;
 /**
  * The inverse of the standard normal distribution at p in (0, 0.5]: the
  * rational approximation of Abramowitz & Stegun 26.2.23 (error under
- * 4.5e-4). ${SPOT_BREAKUP_MEDIAN} + ${SPOT_BREAKUP_SD} · this is close to the level
- * below which a share p of one octave of value noise lies.
+ * 4.5e-4). ${SPOT_BREAKUP_MEDIAN} + ${SPOT_BREAKUP_SD} · this is close to the
+ * level below which a share p of the breakup noise lies (the mean of
+ * starFbm2x3 and one octave of value noise, see SPOT_BREAKUP_SD).
  */
 float starProbit(float p) {
   float t = sqrt(-2.0 * log(clamp(p, 1e-6, 0.5)));
@@ -925,8 +926,8 @@ float starSpotShaped(vec2 local, float rs, float seed, float age, float aa) {
   float grown = smoothstep(0.02, 0.25, age);
   // The share of the spot opened into gaps in the decline, and the spread
   // that keeps the pieces' area.
-  // Only gaps wide enough to be seen (the breakup's features, a quarter
-  // of a spot radius, over 1.5 to 5 px) are opened: a blurred gap would
+  // Only gaps wide enough to be seen (the breakup's features, a fifth of
+  // a spot radius, over 1.5 to 5 px) are opened: a blurred gap would
   // not lighten the spot, and its spread would add area.
   float gapPx = 0.2 * radius * STAR_SPOT_SCALE / aa;
   float lost = ${SPOT_FRAGMENT_LOST.toFixed(2)} * smoothstep(0.45, 1.0, age) * smoothstep(1.5, 5.0, gapPx);
