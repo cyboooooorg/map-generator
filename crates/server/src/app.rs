@@ -17,7 +17,7 @@
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
 //! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body; `?size=<W>x<H>` picks a resolution (tiles, epoch, hex; default the displayed one, 404 when not generated, 400 for a bad name); the thumb is the original's |
 //! | `GET /api/systems/{id}/bodies/{body}/sizes` | its resolutions: original, displayed, present, pending, offered (`BodySizes`; 404 when not generated) |
-//! | `POST /api/systems/{id}/bodies/{body}/sizes/{W}x{H}` | queue that resolution (`GenerateStarted`: no job when present, the pending job when queued; 400 `size_not_offered` or `too_many_pixels`) |
+//! | `POST /api/systems/{id}/bodies/{body}/sizes/{W}x{H}` | queue that resolution (`GenerateStarted`: no job when present, the pending job when queued; the server marks it displayed when the job is done; 400 `size_not_offered` or `too_many_pixels`) |
 //! | `DELETE /api/systems/{id}/bodies/{body}/sizes/{W}x{H}` | delete an added resolution, its cached world and previews (204; 409 `original_size` or `being_generated`; 404 `size_not_generated`) |
 //! | `PUT /api/systems/{id}/bodies/{body}/displayed-size` | remember the resolution shown (`DisplayedSize`, 204; 404 `size_not_generated`) |
 //! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates (`?size=` as above, for its `rev`) |
@@ -1899,6 +1899,7 @@ fn start_job(state: &Shared, key: String, job: NewJob) -> String {
                 task_state.config.systems_dir.clone(),
                 task_system.clone(),
             );
+            let body = task_body.clone();
             async move {
                 let stored = tokio::task::spawn_blocking(move || match status {
                     None => index.job_running(job_number),
@@ -1906,6 +1907,11 @@ fn start_job(state: &Shared, key: String, job: NewJob) -> String {
                         // What the job generated is in the tree: read it.
                         if status.is_finished() {
                             index.refresh_system(&root, &system, Cause::Generated)?;
+                        }
+                        // A resolution that is ready becomes the one
+                        // displayed, whether or not a tab follows the job.
+                        if let (JobStatus::Done { .. }, Some(size)) = (&status, size) {
+                            index.set_displayed_size(&system, &body, Some(size))?;
                         }
                         index.job_status(job_number, &status)
                     }
@@ -2587,7 +2593,8 @@ mod tests {
             .collect();
         assert_eq!(present, [[256, 128], [1024, 512]]);
         assert_eq!(listed["pending"], serde_json::json!([]));
-        assert_eq!(listed["displayed"], serde_json::json!([256, 128]));
+        // The finished size is the displayed one, with no PUT and no tab.
+        assert_eq!(listed["displayed"], serde_json::json!([1024, 512]));
         // Present: no job.
         let (status, again) = call(&app, "POST", &post, None).await;
         assert_eq!(status, StatusCode::OK);
@@ -2719,13 +2726,7 @@ mod tests {
             .flatten()
             .expect("a new job");
         let staging = body_dir.join("sizes/.tmp-2048x1024");
-        loop {
-            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
-            if list.contains("\"status\":\"running\"") {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
+        wait_running(&app).await;
         let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{job}"), None).await;
         assert_eq!(status, StatusCode::ACCEPTED);
         assert!(events(&job).await.contains("\"status\":\"cancelled\""));
@@ -3194,6 +3195,22 @@ mod tests {
         assert_eq!(system["request"]["around"]["alone"], true);
     }
 
+    /// Waits, for 60 s at most, until a job is listed as running.
+    async fn wait_running(app: &Router) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let (_, list) = call(app, "GET", "/api/jobs", None).await;
+            if list.contains("\"status\":\"running\"") {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "no job was running after 60 s: {list}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
     async fn wait_job(app: &Router, created: &str) -> String {
         let created: serde_json::Value = serde_json::from_str(created).unwrap();
         let uri = format!("/api/jobs/{}/events", created["job_id"].as_str().unwrap());
@@ -3249,13 +3266,7 @@ mod tests {
 
         // A running job stops when its next stage starts.
         let first_id = first["job_id"].as_str().unwrap();
-        loop {
-            let (_, list) = call(&app, "GET", "/api/jobs", None).await;
-            if list.contains("\"status\":\"running\"") {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
+        wait_running(&app).await;
         let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{first_id}"), None).await;
         assert_eq!(status, StatusCode::ACCEPTED);
         let (_, events) = call(&app, "GET", &format!("/api/jobs/{first_id}/events"), None).await;

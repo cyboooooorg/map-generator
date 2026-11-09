@@ -326,7 +326,9 @@ A body has its original resolution (the size in its parameters in
   (`bodies.displayed_width`, `displayed_height`, NULL for the original;
   layout 3), kept when the system is read again from the tree and reset
   when it is drawn again. It is used only while that size is on disk:
-  otherwise the original is displayed. A lost index shows every body at
+  otherwise the original is displayed. A size job that is done sets it
+  to the size it added (the server does it, so no tab is needed), and
+  `PUT …/displayed-size` sets it to any size on disk. A lost index shows every body at
   its original size. Jobs record the size they add (`jobs.size`,
   `<W>x<H>`, NULL for a body and its neighbourhood).
 - **Caches** key a world by its size: `systems/<id>/<body>/<W>x<H>` in
