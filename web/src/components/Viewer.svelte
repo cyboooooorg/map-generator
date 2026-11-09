@@ -445,10 +445,12 @@
     world.subject = 'planet';
     world.showSystemBody(family[(at + 1) % family.length]!.id);
   }
-  /** The body picker's choice: the star, or a body of the system. */
+  /** The body picker's choice: the system view, the star view, or a body of the system. */
   function pickBody(key: string): void {
-    if (key === 'star') {
-      if (sys) toStar();
+    if (key === 'system' || key === 'star') {
+      if (!sys) return;
+      toStar();
+      if (key === 'star') world.starMode = 'star';
       return;
     }
     // From the star view, the camera flies to the planet (a moon's planet) first.
@@ -2335,11 +2337,14 @@
       class="body-pick"
       aria-label={t.viewer.body}
       title={t.viewer.bodyHelp}
-      value={world.subject === 'star' ? 'star' : (world.systemBody ?? '')}
+      value={world.subject === 'star' ? (world.starMode === 'star' ? 'star' : 'system') : (world.systemBody ?? '')}
       onchange={(e) => pickBody(e.currentTarget.value)}
       disabled={!sys}
     >
       {#if sys}
+        <option value="system"
+          >{t.viewer.bodyOption({ name: world.systemNames['star'] ?? sys.star.designation, role: t.viewer.roleSystem })}</option
+        >
         <option value="star"
           >{t.viewer.bodyOption({ name: world.systemNames['star'] ?? sys.star.designation, role: t.viewer.roleStar })}</option
         >
