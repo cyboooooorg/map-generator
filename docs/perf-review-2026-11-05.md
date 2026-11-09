@@ -105,6 +105,20 @@ at 1920 × 1080 the moisture and the anomaly (steps 4 and 10); at 4096 ×
 2048 the highland jitter too; from about 7 300 pixels of width the two
 variability fields as well (step 2 at 8192).
 
+P1 was done on 2026-11-09 (#335). `export_world` writes `flow.png`,
+`floodplain.png` and `elevation_base.png` first, then frees those three
+layers of the world before the render: no map reads them. Measured with
+a counting allocator around `export_world` (terran, seed 42, 8192 ×
+4096, three runs each), the heap peak of the export falls from 2 683–2 792
+MB to 2 215–2 312 MB (about −470 MB). It is now below the generation's
+own peak (2 476 MB), so the process peak falls by about 300 MB, to the
+generation's. The export takes the same time within the noise (6.0–7.4 s
+before, 6.3–7.4 s after, on a busy machine). The 20 output files are
+byte-identical, and a test compares `raw_data/` with what
+`export_raw_data` writes from the whole world. `/usr/bin/time` cannot
+show it: the peak RSS of a same binary ranges from 2.6 to 3.3 GB from
+one run to the next on macOS.
+
 ## Findings
 
 ### Noise, coast, moisture, clouds
@@ -218,7 +232,7 @@ variability fields as well (step 2 at 8192).
    third), and −0.1 GB.
 2. **Output changes, worth it:** C1, N2 and X3, M1, then S1 for systems.
    About −3 s more on a planet, and much less work per neighbourhood.
-3. **Later:** E2, X2 (b), P1.
+3. **Later:** E2, X2 (b), P1 (done, see Results).
 
 Each step ships with its benchmark (stage times before and after on the
 setup above) and, for the ID items, a test that the output bytes are
