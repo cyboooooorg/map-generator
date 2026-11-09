@@ -627,7 +627,11 @@ addressed as `<system-id>/<body-id>` everywhere.
   Every planet has a dotted line to the star with its distance now
   written along it, a velocity arrow along its orbit labelled with its
   speed now, and an arrow of the star's pull towards the star (**Lines to
-  the star**, **Velocities** and **Star's pull** hide them); its name
+  the star**, **Velocities** and **Star's pull** hide them); the
+  arrows share one scale (km/s, m/s²) across the planets, so a faster
+  planet has a longer arrow, and drawn to scale the longest is bounded
+  to half the narrowest gap between the drawn orbits; the Hill spheres
+  are drawn to scale there, solid; its name
   sits on the side away from its velocity. The panel's planet list selects a
   planet in place, and pins its card; every planet shows its moons, and
   every orbit its inclination. The view can show the frost line and

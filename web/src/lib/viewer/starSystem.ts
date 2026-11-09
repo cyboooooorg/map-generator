@@ -218,6 +218,26 @@ export function velocityScale(
   return fastest > 0 ? maxLength / fastest : 0;
 }
 
+/** Shortest a true-scale vector is bounded to, view units: shorter would hide it when two orbits are drawn almost on each other. */
+export const REAL_VECTOR_FLOOR = 0.02;
+
+/**
+ * The length the longest velocity (or pull) vector of a system drawn to
+ * scale may have, view units: half the narrowest gap between the star and
+ * the orbits' drawn radii (`orbitRadii`, semi-major axes on the view's
+ * scale), so a vector reaches at most the middle of the way to the
+ * neighbouring orbit. At most the schematic's VELOCITY_MAX_LENGTH, at
+ * least REAL_VECTOR_FLOOR. Use it as `maxLength` of velocityScale and
+ * gravityScale: one scale for all the planets, the fastest (strongest) at
+ * this length.
+ */
+export function realVectorBound(orbitRadii: readonly number[]): number {
+  const sorted = [0, ...orbitRadii].sort((a, b) => a - b);
+  let gap = Infinity;
+  for (let i = 1; i < sorted.length; i++) gap = Math.min(gap, sorted[i]! - sorted[i - 1]!);
+  return Math.min(VELOCITY_MAX_LENGTH, Math.max(REAL_VECTOR_FLOOR, gap / 2));
+}
+
 /**
  * Seconds of animation a planetary system's innermost planet takes to go
  * round at the default speed (see defaultSystemSpeed).
@@ -263,9 +283,17 @@ export function hillRadiusAu(orbitAu: number, eccentricity: number, massEarth: n
  * view, and whether that is to scale: `trueRadius` (its Hill radius on the
  * view's scale), unless that is smaller than the planet's marker
  * (`markerSize`) or than its outermost moon's ring (`moonReach`, 0 for
- * none), both drawn larger than to scale: then just outside those.
+ * none), both drawn larger than to scale: then just outside those. In the
+ * true-scale view (`realScale`) the planets are drawn at their true size
+ * and the moons are hidden: no floor, the true radius always.
  */
-export function hillShownRadius(trueRadius: number, markerSize: number, moonReach: number): { radius: number; toScale: boolean } {
+export function hillShownRadius(
+  trueRadius: number,
+  markerSize: number,
+  moonReach: number,
+  realScale = false,
+): { radius: number; toScale: boolean } {
+  if (realScale) return { radius: trueRadius, toScale: true };
   const floor = Math.max(markerSize * 1.6, moonReach * 1.15);
   return trueRadius >= floor ? { radius: trueRadius, toScale: true } : { radius: floor, toScale: false };
 }

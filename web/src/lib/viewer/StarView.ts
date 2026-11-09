@@ -75,6 +75,7 @@ import {
   frostLineAu,
   hillRadiusAu,
   hillShownRadius,
+  realVectorBound,
   sphereGrid,
   type SystemGiant,
   moonOrbits,
@@ -85,7 +86,6 @@ import {
   systemScale,
   systemLogScale,
   markerSizes,
-  meanOrbitalSpeed,
   orbitGaps,
   FOOTPRINT_GAP_SHARE,
   velocityScale,
@@ -159,8 +159,6 @@ export const YEAR_S = 60;
 const START_ANOMALY = 0.6;
 /** How far out the farthest point of a system drawn to scale lies, view units. */
 const REAL_SPAN = 9;
-/** To scale, the length of a velocity vector at a planet's mean speed, as a share of its orbit's drawn radius. */
-const REAL_VECTOR_SHARE = 0.25;
 /** Kilometres in an AU. */
 const AU_KM = 149_597_870.7;
 /** Height of the pins up from the bodies drawn to scale, view units. */
@@ -1038,8 +1036,15 @@ export class StarView {
     this.pullMids = [];
     this.fatMaterials = this.fatMaterials.filter((m) => m === this.selectedOrbit.material || this.orbitHighlights.some((h) => h.material === m));
     if (this.selected === null || !this.info) return;
-    this.arrowScale = velocityScale(this.info.mass, this.giants);
-    this.pullScale = gravityScale(this.info.mass, this.giants);
+    // One scale for all the planets, so lengths compare across them. To
+    // scale the planets are close together in view units, so the longest
+    // is bounded by the drawn orbit spacing (see realVectorBound); the
+    // schematic's own length would cross the whole system.
+    const longest = this.realScale
+      ? realVectorBound(this.giants.map((g) => this.at(g.orbit_au)))
+      : undefined;
+    this.arrowScale = velocityScale(this.info.mass, this.giants, longest);
+    this.pullScale = gravityScale(this.info.mass, this.giants, longest);
     for (const giant of this.giants) {
       const colour = new Color().setRGB(...giant.colour, SRGBColorSpace).lerp(new Color(this.overlay.line), 0.6);
       const link = new Line(
@@ -1218,9 +1223,11 @@ export class StarView {
 
   /**
    * A grid sphere round each planet of a planetary system, as wide as its
-   * Hill sphere on the view's scale, or dashed just outside its marker and
-   * its moons' rings where those are drawn larger than that (see
-   * hillShownRadius).
+   * Hill sphere on the view's scale. In the schematic view, one smaller than
+   * its marker and its moons' rings (drawn larger than to scale) is dashed
+   * just outside them instead (see hillShownRadius); drawn to scale it is
+   * always the true radius, solid. Rebuilt by setStar, hence whenever the
+   * scale mode toggles (setRealScale).
    */
   private buildHills(): void {
     for (const hill of this.hills) {
@@ -1230,6 +1237,9 @@ export class StarView {
     }
     this.hills = [];
     if (this.selected === null || !this.info) return;
+    // To scale the planets are drawn at their true size and the moons are
+    // hidden: the Hill sphere is its true radius, solid, with no floor.
+    const real = this.realScale;
     this.giants.forEach((giant, k) => {
       const a = giant.orbit_au * (1 - giant.eccentricity);
       const hill = hillRadiusAu(giant.orbit_au, giant.eccentricity, giant.mass_earth, this.info!.mass);
@@ -1239,8 +1249,8 @@ export class StarView {
       // Its moons' rings, round the marker and scaled to it (hidden to scale).
       const moons = this.systemMoons[k];
       const reach =
-        moons && !this.realScale ? Math.max(0, ...moons.orbits.map((o) => o.radius)) * moons.group.scale.x : 0;
-      const { radius, toScale } = hillShownRadius(true_, this.markerSize(k), reach);
+        moons && !real ? Math.max(0, ...moons.orbits.map((o) => o.radius)) * moons.group.scale.x : 0;
+      const { radius, toScale } = hillShownRadius(true_, this.markerSize(k), reach, real);
       const sphere = new LineSegments(
         new BufferGeometry().setFromPoints(sphereGrid(radius).map(([x, y, z]) => new Vector3(x, y, z))),
         toScale
@@ -1296,14 +1306,9 @@ export class StarView {
     };
     const mean = this.giantAnomaly(k);
     const direction = at(mean + 1e-3).sub(at(mean - 1e-3)).normalize();
-    // To scale the planets are close to the star in view units: the arrow
-    // is a share of the orbit's drawn radius, longer the faster the planet
-    // goes against its mean speed (the schematic's one scale would cross
-    // the whole system).
+    // One km/s scale for every planet, in both modes (set in buildVectors).
     const toScale = this.realScale && this.selected !== null;
-    const length = toScale
-      ? (REAL_VECTOR_SHARE * this.at(giant.orbit_au) * speed) / Math.max(meanOrbitalSpeed(this.info.mass, giant.orbit_au), 1e-9)
-      : speed * this.arrowScale;
+    const length = speed * this.arrowScale;
     arrow.geometry.setPositions(StarView.arrowPoints(position, direction, length).flatMap((p) => [p.x, p.y, p.z]));
     this.arrowMids[k] = position.clone().addScaledVector(direction, length / 2);
     // The star's pull, towards the star; never longer than the way to it,
@@ -1315,10 +1320,9 @@ export class StarView {
     const inward = position.clone().negate();
     const room = Math.max(inward.length() - STAR_RADIUS * this.starScale * 1.2, 0.02);
     inward.normalize();
-    // To scale, the pull is a share of the orbit's drawn radius too.
-    const pullLength = toScale
-      ? Math.min(REAL_VECTOR_SHARE * 0.6 * this.at(giant.orbit_au) * (giant.orbit_au / distanceAu) ** 2, room)
-      : Math.min(Math.max(gravity * this.pullScale, 0.04), room);
+    // One m/s² scale for every planet; the schematic keeps a minimum so
+    // that a far planet's pull is seen, to scale it keeps the ordering.
+    const pullLength = Math.min(toScale ? gravity * this.pullScale : Math.max(gravity * this.pullScale, 0.04), room);
     pull.geometry.setPositions(StarView.arrowPoints(position, inward, pullLength).flatMap((p) => [p.x, p.y, p.z]));
     this.pullMids[k] = position.clone().addScaledVector(inward, pullLength / 2);
   }
