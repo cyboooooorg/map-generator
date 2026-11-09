@@ -17,4 +17,10 @@ system_id: string | null, body: string | null,
 /**
  * The request, as sent by the client, so a reloaded page can show it.
  */
-request: WorldRequest, status: JobStatus, };
+request: WorldRequest, status: JobStatus, 
+/**
+ * A job generating one resolution of a body
+ * (`POST /api/systems/{id}/bodies/{body}/sizes/{W}x{H}`): its
+ * `[width, height]`; `null` for a body and its neighbourhood.
+ */
+size: [number, number] | null, };

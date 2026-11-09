@@ -8,14 +8,18 @@
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
 //! | `GET /api/systems/{id}`         | a system (`system.json`) and the names given       |
-//! | `DELETE /api/systems/{id}`      | delete a system (409 while it is being generated)  |
+//! | `DELETE /api/systems/{id}`      | delete a system (409 while it or a resolution of a body is being generated) |
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
 //! | `PUT /api/systems/{id}/name`   | name the system itself, keeping its bodies' names (`SystemName`; null clears) |
 //! | `PUT /api/systems/{id}/pin`     | pin it in the main menu (idempotent, answers its summary) |
 //! | `DELETE /api/systems/{id}/pin`  | unpin it (idempotent, answers its summary)         |
 //! | `PUT /api/systems/{id}/bodies/{body}/name` | name one body, the other names kept (`SystemName`; null clears) |
 //! | `POST /api/systems/{id}/bodies/{body}/generate` | queue a body and its neighbourhood (`GenerateStarted`) |
-//! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body; `?size=<W>x<H>` picks a resolution (tiles, epoch, hex; default the original, 404 when not generated, 400 for a bad name); the thumb is the original's |
+//! | `GET /api/systems/{id}/bodies/{body}/tiles/…`, `…/epoch/…`, `…/thumb`; `POST …/hex` | as for a world, per generated body; `?size=<W>x<H>` picks a resolution (tiles, epoch, hex; default the displayed one, 404 when not generated, 400 for a bad name); the thumb is the original's |
+//! | `GET /api/systems/{id}/bodies/{body}/sizes` | its resolutions: original, displayed, present, pending, offered (`BodySizes`; 404 when not generated) |
+//! | `POST /api/systems/{id}/bodies/{body}/sizes/{W}x{H}` | queue that resolution (`GenerateStarted`: no job when present, the pending job when queued; 400 `size_not_offered` or `too_many_pixels`) |
+//! | `DELETE /api/systems/{id}/bodies/{body}/sizes/{W}x{H}` | delete an added resolution, its cached world and previews (204; 409 `original_size` or `being_generated`; 404 `size_not_generated`) |
+//! | `PUT /api/systems/{id}/bodies/{body}/displayed-size` | remember the resolution shown (`DisplayedSize`, 204; 404 `size_not_generated`) |
 //! | `GET /api/systems/{id}/bodies/{body}/drift/{ma}/surface.png` | low-resolution preview of a world with plates at another epoch of its plates (`?size=` as above, for its `rev`) |
 //! | `GET /systems/{id}/...`         | system files (`system.json`, `bodies/<body>/sizes/<W>x<H>/…`) |
 //! | `GET /api/jobs`                 | recent generation jobs, most recent first         |
@@ -31,8 +35,9 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, ErrorDetail, FormSpec, GenerateStarted, HexRequest, JobInfo, JobStatus, ParamSpec,
-    PresetInfo, SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
+    ApiError, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted, HexRequest,
+    JobInfo, JobStatus, ParamSpec, PendingSize, PresentSize, PresetInfo, SystemCreated,
+    SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, Index};
@@ -81,6 +86,9 @@ struct Job {
     world_id: String,
     /// A system's job: the system and the body asked for.
     system: Option<(String, String)>,
+    /// A job generating one resolution of that body: its size. `None`
+    /// for the body and its neighbourhood.
+    size: Option<(u32, u32)>,
     request: WorldRequest,
     status: watch::Receiver<JobStatus>,
     cancel: Arc<Cancel>,
@@ -136,7 +144,9 @@ pub struct AppState {
     next_job: AtomicU64,
     /// One generation at a time: each one already uses every core.
     queue: Semaphore,
-    /// Worlds being generated, to refuse a second job writing the same directory.
+    /// Generations queued or running, to refuse a second job writing the
+    /// same directory: a system's own job ([`pending_system`]) and the
+    /// resolutions being added to its bodies ([`pending_size`]).
     pending: Mutex<Vec<String>>,
     tiles: TileCache,
     /// Tiles rendered at once (each one uses every core). A request waits
@@ -299,6 +309,15 @@ pub fn router(config: Config) -> Router {
             get(system_thumbnail),
         )
         .route("/api/systems/{id}/bodies/{body}/hex", post(system_hex))
+        .route("/api/systems/{id}/bodies/{body}/sizes", get(body_sizes))
+        .route(
+            "/api/systems/{id}/bodies/{body}/sizes/{size}",
+            post(generate_size).delete(delete_size),
+        )
+        .route(
+            "/api/systems/{id}/bodies/{body}/displayed-size",
+            put(set_displayed_size),
+        )
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{id}", delete(cancel_job))
         .route("/api/jobs/{id}/events", get(job_events))
@@ -348,6 +367,7 @@ fn open_index(config: &Config) -> (Arc<Index>, HashMap<String, Job>, u64) {
                 Job {
                     world_id: job.world_id,
                     system: job.system,
+                    size: job.size,
                     request: job.request,
                     status,
                     cancel: Arc::new(Cancel::default()),
@@ -457,6 +477,22 @@ fn pending_system(id: &str) -> String {
     format!("systems/{id}")
 }
 
+/// The key a resolution being added to a body takes in the list of
+/// pending generations: `<id>/<body>/<W>x<H>`.
+fn pending_size(id: &str, body: &str, size: (u32, u32)) -> String {
+    format!("{id}/{body}/{}", mapgen::sizes::size_name(size.0, size.1))
+}
+
+/// Whether system `id` has a generation queued or running: its own job, or
+/// a resolution of one of its bodies.
+fn system_is_pending(pending: &[String], id: &str) -> bool {
+    let system = pending_system(id);
+    let sizes = format!("{id}/");
+    pending
+        .iter()
+        .any(|key| *key == system || key.starts_with(&sizes))
+}
+
 async fn list_systems(State(state): State<Shared>) -> Json<Vec<SystemSummary>> {
     let index = state.index.clone();
     Json(
@@ -551,12 +587,7 @@ async fn create_system(
         .into());
     }
     let replace = query.replace.unwrap_or(false);
-    if state
-        .pending
-        .lock()
-        .expect("pending lock")
-        .contains(&pending_system(&id))
-    {
+    if system_is_pending(&state.pending.lock().expect("pending lock"), &id) {
         return Err(Rejection(
             Failure(
                 StatusCode::CONFLICT,
@@ -611,6 +642,7 @@ async fn create_system(
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     state.tiles.forget(&format!("systems/{id}"));
+    state.originals.forget(&id);
     let job_id = match &request {
         mapgen::system::SystemRequest::Around(_) => first_body_job(&state, &id).await?,
         mapgen::system::SystemRequest::System(_) => None,
@@ -713,12 +745,7 @@ async fn delete_system(
     if !systems::is_valid_system_id(&id) {
         return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()));
     }
-    if state
-        .pending
-        .lock()
-        .expect("pending lock")
-        .contains(&pending_system(&id))
-    {
+    if system_is_pending(&state.pending.lock().expect("pending lock"), &id) {
         return Err(Failure(
             StatusCode::CONFLICT,
             format!("system {id} is being generated: cancel its job first"),
@@ -931,6 +958,298 @@ async fn generate_body(
     Ok(Json(GenerateStarted { job_id }))
 }
 
+/// The resolution a path segment names (`2048x1024`): 400 otherwise.
+fn path_size(name: &str) -> Result<(u32, u32), Failure> {
+    query_size(Some(name)).map(|size| size.expect("a name was given"))
+}
+
+/// The original resolution of a generated body: 404 when it is not
+/// generated (see [`original_size`] for the other failures).
+async fn generated_original(state: &AppState, id: &str, body: &str) -> Result<(u32, u32), Failure> {
+    let original = original_size(state, id, body).await?;
+    let root = state.config.systems_dir.clone();
+    let (system, owned) = (id.to_string(), body.to_string());
+    let generated = tokio::task::spawn_blocking(move || {
+        systems::size_revision(&root, &system, &owned, original).is_some()
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if !generated {
+        return Err(Failure(
+            StatusCode::NOT_FOUND,
+            format!("body {body} of {id} is not generated"),
+        ));
+    }
+    Ok(original)
+}
+
+/// The resolutions of a generated body
+/// (`GET /api/systems/{id}/bodies/{body}/sizes`).
+async fn body_sizes(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+) -> Result<Json<BodySizes>, Failure> {
+    let original = generated_original(&state, &id, &body).await?;
+    let (root, index) = (state.config.systems_dir.clone(), state.index.clone());
+    let (system, owned) = (id.clone(), body.clone());
+    let (present, displayed) = tokio::task::spawn_blocking(move || {
+        let body_dir = systems::body_dir(&root, &system, &owned);
+        let present: Vec<PresentSize> = mapgen::sizes::sizes_on_disk(&body_dir)
+            .into_iter()
+            .filter_map(|(width, height)| {
+                let revision = systems::size_revision(&root, &system, &owned, (width, height))?;
+                Some(PresentSize {
+                    width,
+                    height,
+                    revision,
+                })
+            })
+            .collect();
+        let displayed = displayed_size(&index, &root, &system, &owned, original);
+        (present, displayed)
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut pending: Vec<(u64, PendingSize)> = {
+        let jobs = state.jobs.lock().expect("jobs lock");
+        jobs.iter()
+            .filter(|(_, job)| {
+                job.system
+                    .as_ref()
+                    .is_some_and(|(s, b)| *s == id && *b == body)
+                    && !job.status.borrow().is_finished()
+            })
+            .filter_map(|(job_id, job)| {
+                let (width, height) = job.size?;
+                Some((
+                    job_id.parse().unwrap_or(0),
+                    PendingSize {
+                        width,
+                        height,
+                        job_id: job_id.clone(),
+                    },
+                ))
+            })
+            .collect()
+    };
+    pending.sort_unstable_by_key(|(job, _)| *job);
+    Ok(Json(BodySizes {
+        original: [original.0, original.1],
+        displayed: [displayed.0, displayed.1],
+        present,
+        pending: pending.into_iter().map(|(_, size)| size).collect(),
+        presets: request::SIZE_PRESETS.iter().map(|&(w, h)| [w, h]).collect(),
+        max_size: MAX_SIZE,
+        max_pixels: state.config.max_pixels,
+    }))
+}
+
+/// Generates one more resolution of a generated body
+/// (`POST /api/systems/{id}/bodies/{body}/sizes/{W}x{H}`): no job when it
+/// is on disk already, the job already queued when it is being generated.
+async fn generate_size(
+    State(state): State<Shared>,
+    UrlPath((id, body, size)): UrlPath<(String, String, String)>,
+) -> Result<Json<GenerateStarted>, Rejection> {
+    let size = path_size(&size)?;
+    let original = generated_original(&state, &id, &body).await?;
+    if size == original {
+        return Ok(Json(GenerateStarted { job_id: None }));
+    }
+    /// What the pending list said, under its lock.
+    enum Turn {
+        Present,
+        Queued(Option<String>),
+        Refused(Rejection),
+        New(String, NewJob),
+    }
+    let (task_state, system, owned) = (state.clone(), id.clone(), body.clone());
+    let turn = tokio::task::spawn_blocking(move || {
+        let state = task_state;
+        let key = pending_size(&system, &owned, size);
+        // Under the lock, so that a size is never both deleted and queued.
+        let mut pending = state.pending.lock().expect("pending lock");
+        if pending.contains(&key) {
+            return Turn::Queued(unfinished_job(&state, &system, Some(&owned), Some(size)));
+        }
+        if systems::size_revision(&state.config.systems_dir, &system, &owned, size).is_some() {
+            return Turn::Present;
+        }
+        if let Err(refused) = check_offered(size, state.config.max_pixels) {
+            return Turn::Refused(refused);
+        }
+        pending.push(key.clone());
+        let job = register_job(&state, &system, &owned, Some(size));
+        Turn::New(key, job)
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let job_id = match turn {
+        Turn::Present => None,
+        Turn::Queued(job) => job,
+        Turn::Refused(refused) => return Err(refused),
+        Turn::New(key, job) => {
+            note_opened(&state, &id, &body);
+            Some(start_job(&state, key, job).await)
+        }
+    };
+    Ok(Json(GenerateStarted { job_id }))
+}
+
+/// Refuses a resolution that is not offered ([`request::SIZE_PRESETS`]) or
+/// larger than this server accepts.
+fn check_offered((width, height): (u32, u32), max_pixels: u64) -> Result<(), Rejection> {
+    if !request::SIZE_PRESETS.contains(&(width, height)) {
+        let offered: Vec<String> = request::SIZE_PRESETS
+            .iter()
+            .map(|&(w, h)| mapgen::sizes::size_name(w, h))
+            .collect();
+        return Err(Rejection(
+            bad(format!(
+                "{width}x{height} is not an offered size: {}",
+                offered.join(", ")
+            )),
+            Some(ErrorDetail::SizeNotOffered { width, height }),
+        ));
+    }
+    let pixels = u64::from(width) * u64::from(height);
+    if pixels > max_pixels {
+        return Err(Rejection(
+            bad(format!(
+                "{width} × {height} needs about {:.1} GB of memory; this server accepts up to \
+                 {max_pixels} pixels (MAPGEN_MAX_PIXELS)",
+                (pixels * BYTES_PER_PIXEL) as f64 / 1e9,
+            )),
+            Some(ErrorDetail::TooManyPixels {
+                width,
+                height,
+                max_pixels,
+            }),
+        ));
+    }
+    Ok(())
+}
+
+/// Deletes an added resolution of a body
+/// (`DELETE /api/systems/{id}/bodies/{body}/sizes/{W}x{H}`): its files, its
+/// cached world and previews; the body is displayed at its original size
+/// again if it was displayed at this one.
+async fn delete_size(
+    State(state): State<Shared>,
+    UrlPath((id, body, size)): UrlPath<(String, String, String)>,
+) -> Result<StatusCode, Rejection> {
+    let size = path_size(&size)?;
+    let (width, height) = size;
+    let original = original_size(&state, &id, &body).await?;
+    if size == original {
+        return Err(Rejection(
+            Failure(
+                StatusCode::CONFLICT,
+                format!("{width}x{height} is the original size of {body}: it cannot be deleted"),
+            ),
+            Some(ErrorDetail::OriginalSize),
+        ));
+    }
+    let (task_state, system, owned) = (state.clone(), id.clone(), body.clone());
+    tokio::task::spawn_blocking(move || {
+        let state = task_state;
+        let key = pending_size(&system, &owned, size);
+        let body_dir = systems::body_dir(&state.config.systems_dir, &system, &owned);
+        let dir = mapgen::sizes::size_dir(&body_dir, width, height);
+        // Moved away under the lock, so that a size is never both deleted
+        // and queued; removed after, out of sight of every route (the
+        // start's sweep clears what a stop leaves of it).
+        let doomed = body_dir.join(mapgen::sizes::SIZES_DIR).join(format!(
+            ".tmp-delete-{width}x{height}-{}",
+            crate::index::now_ms()
+        ));
+        {
+            let pending = state.pending.lock().expect("pending lock");
+            if pending.contains(&key) {
+                return Err(Rejection(
+                    Failure(
+                        StatusCode::CONFLICT,
+                        format!(
+                            "{width}x{height} of {owned} is being generated: cancel its job first"
+                        ),
+                    ),
+                    Some(ErrorDetail::BeingGenerated { world: key }),
+                ));
+            }
+            if !dir.is_dir() {
+                return Err(Rejection(
+                    Failure(
+                        StatusCode::NOT_FOUND,
+                        format!(
+                            "size {width}x{height} of body {owned} of {system} is not generated"
+                        ),
+                    ),
+                    Some(ErrorDetail::SizeNotGenerated { width, height }),
+                ));
+            }
+            std::fs::rename(&dir, &doomed)
+                .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        }
+        if let Err(e) = std::fs::remove_dir_all(&doomed) {
+            tracing::warn!("could not remove {}: {e}", doomed.display());
+        }
+        if state.index.displayed_size(&system, &owned).ok().flatten() == Some(size) {
+            state
+                .index
+                .set_displayed_size(&system, &owned, None)
+                .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
+    let key = size_key(&id, &body, size);
+    let forgotten = state.tiles.forget(&key);
+    state.drift_cache.forget(&key);
+    if forgotten {
+        let _ = tokio::task::spawn_blocking(memory::release).await;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Remembers the resolution a body is displayed at
+/// (`PUT /api/systems/{id}/bodies/{body}/displayed-size`): the default of
+/// its tiles, layers and hex grids, in every browser.
+async fn set_displayed_size(
+    State(state): State<Shared>,
+    UrlPath((id, body)): UrlPath<(String, String)>,
+    Json(request): Json<DisplayedSize>,
+) -> Result<StatusCode, Rejection> {
+    let size = (request.width, request.height);
+    let original = original_size(&state, &id, &body).await?;
+    let (root, index) = (state.config.systems_dir.clone(), state.index.clone());
+    let (system, owned) = (id.clone(), body.clone());
+    let present = tokio::task::spawn_blocking(move || {
+        if systems::size_revision(&root, &system, &owned, size).is_none() {
+            return Ok(false);
+        }
+        // The original is the default: nothing to remember.
+        let remembered = (size != original).then_some(size);
+        index
+            .set_displayed_size(&system, &owned, remembered)
+            .map(|()| true)
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if !present {
+        let (width, height) = size;
+        return Err(Rejection(
+            Failure(
+                StatusCode::NOT_FOUND,
+                format!("size {width}x{height} of body {body} of {id} is not generated"),
+            ),
+            Some(ErrorDetail::SizeNotGenerated { width, height }),
+        ));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Query of a tile request: the world revision and the renderer version
 /// the client knows, the epoch shown (Ma before present, negative in the
 /// future; the world as generated without it) and the resolution (see
@@ -1007,9 +1326,6 @@ struct BodyLoc {
     /// in the tile cache, and forgetting `systems/<id>` forgets them all.
     key: String,
     revision: u64,
-    /// The resolution, width and height in pixels.
-    #[allow(dead_code)]
-    size: (u32, u32),
 }
 
 /// The original resolution of body `body` of system `id` (see
@@ -1036,7 +1352,8 @@ async fn original_size(state: &AppState, id: &str, body: &str) -> Result<(u32, u
 /// The `size` resolution of a generated body of a system, in
 /// `systems/<id>/bodies/<body>/sizes/<W>x<H>/`, with its own revision, so
 /// that generating another body or another size keeps its tiles. Without
-/// a size, the original one. 404 when that size is not generated.
+/// a size, the displayed one (see [`displayed_size`]). 404 when that size
+/// is not generated.
 async fn system_body_loc(
     state: &AppState,
     id: &str,
@@ -1044,13 +1361,14 @@ async fn system_body_loc(
     size: Option<(u32, u32)>,
 ) -> Result<BodyLoc, Failure> {
     let original = original_size(state, id, body).await?;
-    let size = size.unwrap_or(original);
-    let root = state.config.systems_dir.clone();
+    let (root, index) = (state.config.systems_dir.clone(), state.index.clone());
     let (system, owned) = (id.to_string(), body.to_string());
-    let revision =
-        tokio::task::spawn_blocking(move || systems::size_revision(&root, &system, &owned, size))
-            .await
-            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let (size, revision) = tokio::task::spawn_blocking(move || {
+        let size = size.unwrap_or_else(|| displayed_size(&index, &root, &system, &owned, original));
+        (size, systems::size_revision(&root, &system, &owned, size))
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let name = mapgen::sizes::size_name(size.0, size.1);
     let revision = revision.ok_or_else(|| {
         let message = if size == original {
@@ -1063,10 +1381,36 @@ async fn system_body_loc(
     let body_dir = systems::body_dir(&state.config.systems_dir, id, body);
     Ok(BodyLoc {
         dir: mapgen::sizes::size_dir(&body_dir, size.0, size.1),
-        key: format!("systems/{id}/{body}/{name}"),
+        key: size_key(id, body, size),
         revision,
-        size,
     })
+}
+
+/// The key of a body's resolution in the tile and preview caches:
+/// `systems/<id>/<body>/<W>x<H>`.
+fn size_key(id: &str, body: &str, size: (u32, u32)) -> String {
+    format!(
+        "systems/{id}/{body}/{}",
+        mapgen::sizes::size_name(size.0, size.1)
+    )
+}
+
+/// The resolution body `body` of system `id` is displayed at: the one the
+/// index remembers while it is on disk, else `original`. Blocking.
+fn displayed_size(
+    index: &Index,
+    root: &Path,
+    id: &str,
+    body: &str,
+    original: (u32, u32),
+) -> (u32, u32) {
+    let remembered = index.displayed_size(id, body).unwrap_or_else(|e| {
+        tracing::warn!("displayed size of {id}/{body} not read: {e}");
+        None
+    });
+    remembered
+        .filter(|&size| systems::size_revision(root, id, body, size).is_some())
+        .unwrap_or(original)
 }
 
 /// A detail tile of a body: a world (`id`) or one of its moons
@@ -1419,26 +1763,98 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
     }
     note_opened(state, id, body);
     let key = pending_system(id);
-    {
+    let job = {
         let mut pending = state.pending.lock().expect("pending lock");
         if pending.contains(&key) {
-            let jobs = state.jobs.lock().expect("jobs lock");
-            let queued = jobs.iter().find(|(_, job)| {
-                job.system.as_ref().is_some_and(|(s, _)| s == id)
-                    && !job.status.borrow().is_finished()
-            });
-            return Ok(queued.map(|(job_id, _)| job_id.clone()));
+            return Ok(unfinished_job(state, id, None, None));
         }
         if mapgen::system::neighbourhood(&system, body).is_empty() {
             return Ok(None);
         }
         pending.push(key.clone());
-    }
+        register_job(state, id, body, None)
+    };
+    Ok(Some(start_job(state, key, job).await))
+}
 
-    let job_number = state.next_job.fetch_add(1, Ordering::Relaxed);
-    let job_id = job_number.to_string();
+/// The id of the unfinished job of system `id` generating `size` of
+/// `body` (any body when `None`), or its own job when `size` is `None`.
+fn unfinished_job(
+    state: &AppState,
+    id: &str,
+    body: Option<&str>,
+    size: Option<(u32, u32)>,
+) -> Option<String> {
+    let jobs = state.jobs.lock().expect("jobs lock");
+    jobs.iter()
+        .find(|(_, job)| {
+            job.system
+                .as_ref()
+                .is_some_and(|(s, b)| s == id && body.is_none_or(|body| b == body))
+                && job.size == size
+                && !job.status.borrow().is_finished()
+        })
+        .map(|(job_id, _)| job_id.clone())
+}
+
+/// A job listed (see [`register_job`]), not started yet.
+struct NewJob {
+    number: u64,
+    id: String,
+    body: String,
+    size: Option<(u32, u32)>,
+    tx: watch::Sender<JobStatus>,
+    cancel: Arc<Cancel>,
+}
+
+/// Lists a new queued job of system `id`: `body` and its neighbourhood, or
+/// its `size` resolution alone. Called under the pending list's lock, with
+/// the job's key pushed, so that a second request for the same generation
+/// always finds the job ([`unfinished_job`]).
+fn register_job(state: &AppState, id: &str, body: &str, size: Option<(u32, u32)>) -> NewJob {
+    let number = state.next_job.fetch_add(1, Ordering::Relaxed);
     let (tx, rx) = watch::channel(JobStatus::Queued);
     let cancel = Arc::new(Cancel::default());
+    let mut jobs = state.jobs.lock().expect("jobs lock");
+    forget_old_jobs(&mut jobs);
+    jobs.insert(
+        number.to_string(),
+        Job {
+            world_id: id.to_string(),
+            system: Some((id.to_string(), body.to_string())),
+            size,
+            request: WorldRequest::default(),
+            status: rx,
+            cancel: cancel.clone(),
+        },
+    );
+    NewJob {
+        number,
+        id: id.to_string(),
+        body: body.to_string(),
+        size,
+        tx,
+        cancel,
+    }
+}
+
+/// Stores and starts a job listed by [`register_job`] whose `key` is in
+/// the pending list already: `body` and its neighbourhood, or its `size` resolution
+/// alone. Every job waits for its turn on the one generation queue, so a
+/// resolution is never generated while its system's own job runs. Answers
+/// the job's id.
+async fn start_job(state: &Shared, key: String, job: NewJob) -> String {
+    let NewJob {
+        number: job_number,
+        id,
+        body,
+        size,
+        tx,
+        cancel,
+    } = job;
+    let (id, body) = (id.as_str(), body.as_str());
+    let dir = systems::system_dir(&state.config.systems_dir, id);
+    let job_id = job_number.to_string();
     {
         let (index, owned, owned_body) = (state.index.clone(), id.to_string(), body.to_string());
         let queued = tokio::task::spawn_blocking(move || {
@@ -1447,6 +1863,7 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
                 &owned,
                 Some((&owned, &owned_body)),
                 &WorldRequest::default(),
+                size,
                 FINISHED_JOBS_KEPT,
             )
         })
@@ -1458,21 +1875,6 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
             tracing::error!("job {job_number} not stored: {e}");
         }
     }
-    {
-        let mut jobs = state.jobs.lock().expect("jobs lock");
-        forget_old_jobs(&mut jobs);
-        jobs.insert(
-            job_id.clone(),
-            Job {
-                world_id: id.to_string(),
-                system: Some((id.to_string(), body.to_string())),
-                request: WorldRequest::default(),
-                status: rx,
-                cancel: cancel.clone(),
-            },
-        );
-    }
-
     let task_state = state.clone();
     let (task_system, task_body) = (id.to_string(), body.to_string());
     tokio::spawn(async move {
@@ -1506,7 +1908,8 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         };
         let finish = |status: JobStatus| {
             if let JobStatus::Failed { error } = &status {
-                tracing::error!("generation of {task_system}/{task_body} failed: {error}");
+                let what = size.map_or(String::new(), |(w, h)| format!(" at {w}x{h}"));
+                tracing::error!("generation of {task_system}/{task_body}{what} failed: {error}");
             }
             tx.send_replace(status);
             task_state
@@ -1534,9 +1937,11 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         let thread_cancel = cancel.clone();
         let body = task_body.clone();
         let result = tokio::task::spawn_blocking(move || {
-            mapgen::system::generate_neighbourhood(&dir, &body, |p| {
+            let report = |p: mapgen::system::BodyProgress| {
                 // A cancelled job stops when the next stage starts; the
-                // bodies done before it stay generated.
+                // bodies done before it stay generated (a resolution
+                // stopped midway stays in its `.tmp-` directory, cleared
+                // by the next try or the next start).
                 if thread_cancel.is_requested() {
                     std::panic::resume_unwind(Box::new(Cancelled));
                 }
@@ -1548,7 +1953,14 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
                     body_step: Some(p.body_step),
                     bodies: Some(p.bodies),
                 });
-            })
+            };
+            match size {
+                Some((width, height)) => {
+                    mapgen::system::generate_size(&dir, &body, width, height, false, report)
+                        .map(|()| vec![body.clone()])
+                }
+                None => mapgen::system::generate_neighbourhood(&dir, &body, report),
+            }
         })
         .await;
         let status = match result {
@@ -1567,7 +1979,7 @@ async fn queue_body(state: &Shared, id: &str, body: &str) -> Result<Option<Strin
         store(Some(status.clone())).await;
         finish(status);
     });
-    Ok(Some(job_id))
+    job_id
 }
 
 /// Drops the oldest finished jobs beyond [`FINISHED_JOBS_KEPT`].
@@ -1600,6 +2012,7 @@ async fn list_jobs(State(state): State<Shared>) -> Json<Vec<JobInfo>> {
                     body: job.system.as_ref().map(|(_, b)| b.clone()),
                     request: job.request.clone(),
                     status: job.status.borrow().clone(),
+                    size: job.size.map(|(w, h)| [w, h]),
                 },
             )
         })
@@ -2073,6 +2486,155 @@ mod tests {
         let (status, _) = get(format!("{base}/thumb")).await;
         assert_eq!(status, StatusCode::OK);
         assert!(thumb.is_file());
+    }
+
+    #[tokio::test]
+    async fn sizes_are_generated_listed_remembered_and_deleted() {
+        let app = router(temp_config("size-jobs"));
+        // One pixel short of the smallest offered size.
+        let tight = Config {
+            max_pixels: 1024 * 512 - 1,
+            ..temp_config("size-jobs-tight")
+        };
+        let (id, planet) = generated_planet(&app, "barren", 9, "").await;
+        let base = format!("/api/systems/{id}/bodies/{planet}");
+        let json = |body: &str| serde_json::from_str::<serde_json::Value>(body).unwrap();
+        let sizes = || {
+            let (app, uri) = (app.clone(), format!("{base}/sizes"));
+            async move {
+                let (status, body) = call(&app, "GET", &uri, None).await;
+                assert_eq!(status, StatusCode::OK, "{body}");
+                json(&body)
+            }
+        };
+        let listed = sizes().await;
+        assert_eq!(listed["original"], serde_json::json!([256, 128]));
+        assert_eq!(listed["displayed"], serde_json::json!([256, 128]));
+        assert_eq!(listed["present"].as_array().unwrap().len(), 1);
+        assert_eq!(listed["present"][0]["width"], 256);
+        assert!(listed["present"][0]["revision"].as_u64().unwrap() > 0);
+        assert_eq!(listed["pending"], serde_json::json!([]));
+        assert_eq!(
+            listed["presets"],
+            serde_json::json!([[1024, 512], [2048, 1024], [4096, 2048], [8192, 4096]])
+        );
+        assert_eq!(listed["max_size"], MAX_SIZE);
+        assert_eq!(listed["max_pixels"], DEFAULT_MAX_PIXELS);
+
+        // Asked twice at once, then once more: one job.
+        let post = format!("{base}/sizes/1024x512");
+        let ((status, first), (other, second)) = tokio::join!(
+            call(&app, "POST", &post, None),
+            call(&app, "POST", &post, None)
+        );
+        assert_eq!(status, StatusCode::OK, "{first}");
+        assert_eq!(other, StatusCode::OK, "{second}");
+        let job = json(&first)["job_id"].as_str().unwrap().to_string();
+        assert_eq!(json(&second)["job_id"], job.as_str());
+        let (_, third) = call(&app, "POST", &post, None).await;
+        assert_eq!(json(&third)["job_id"], job.as_str());
+        // Listed as pending meanwhile, the job naming its size.
+        let pending = sizes().await["pending"].clone();
+        if pending.as_array().unwrap().is_empty() {
+            // Finished already: nothing to check.
+        } else {
+            assert_eq!(pending[0]["job_id"], job.as_str());
+            assert_eq!(pending[0]["width"], 1024);
+        }
+        let (_, jobs) = call(&app, "GET", "/api/jobs", None).await;
+        assert_eq!(json(&jobs)[0]["size"], serde_json::json!([1024, 512]));
+        // Neither the system nor its size can go while it is generated.
+        let (status, _) = call(&app, "DELETE", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let events = wait_job(&app, &first).await;
+        assert!(events.contains("\"status\":\"done\""), "{events}");
+        let listed = sizes().await;
+        let present: Vec<[u64; 2]> = listed["present"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| [p["width"].as_u64().unwrap(), p["height"].as_u64().unwrap()])
+            .collect();
+        assert_eq!(present, [[256, 128], [1024, 512]]);
+        assert_eq!(listed["pending"], serde_json::json!([]));
+        assert_eq!(listed["displayed"], serde_json::json!([256, 128]));
+        // Present: no job.
+        let (status, again) = call(&app, "POST", &post, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(json(&again)["job_id"].is_null(), "{again}");
+
+        // Refused: a size not offered, and one beyond the server's limit.
+        let (status, body) = call(&app, "POST", &format!("{base}/sizes/1000x500"), None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json(&body)["detail"]["code"], "size_not_offered");
+        let (status, _) = call(&app, "POST", &format!("{base}/sizes/1024X512"), None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let (status, _) = call(
+            &app,
+            "GET",
+            &format!("/api/systems/{id}/bodies/zz/sizes"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        // The displayed size is remembered, and the default of every route.
+        let put = format!("{base}/displayed-size");
+        let (status, body) =
+            call(&app, "PUT", &put, Some(r#"{"width": 1024, "height": 512}"#)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+        assert_eq!(sizes().await["displayed"], serde_json::json!([1024, 512]));
+        let (status, layer) = {
+            let request = Request::get(format!("{base}/epoch/0/elevation.png"))
+                .body(Body::empty())
+                .unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            let status = response.status();
+            (
+                status,
+                response.into_body().collect().await.unwrap().to_bytes(),
+            )
+        };
+        assert_eq!(status, StatusCode::OK);
+        let layer = image::load_from_memory(&layer).unwrap();
+        assert_eq!((layer.width(), layer.height()), (1024, 512));
+        let (status, body) = call(
+            &app,
+            "PUT",
+            &put,
+            Some(r#"{"width": 2048, "height": 1024}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json(&body)["detail"]["code"], "size_not_generated");
+
+        // Deleted: gone from the list and the routes, the original shown.
+        let tile = format!("{base}/tiles/0/0/0?size=1024x512");
+        assert_eq!(call(&app, "GET", &tile, None).await.0, StatusCode::OK);
+        let (status, body) = call(&app, "DELETE", &post, None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+        let listed = sizes().await;
+        assert_eq!(listed["displayed"], serde_json::json!([256, 128]));
+        assert_eq!(listed["present"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            call(&app, "GET", &tile, None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        let (status, body) = call(&app, "DELETE", &post, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json(&body)["detail"]["code"], "size_not_generated");
+        // The original stays.
+        let (status, body) = call(&app, "DELETE", &format!("{base}/sizes/256x128"), None).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(json(&body)["detail"]["code"], "original_size");
+
+        // A server whose limit is below the size asked for.
+        let tight = router(tight);
+        let (id, planet) = generated_planet(&tight, "barren", 9, "").await;
+        let post = format!("/api/systems/{id}/bodies/{planet}/sizes/1024x512");
+        let (status, body) = call(&tight, "POST", &post, None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(json(&body)["detail"]["code"], "too_many_pixels");
     }
 
     #[tokio::test]

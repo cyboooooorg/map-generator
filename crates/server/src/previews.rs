@@ -12,8 +12,8 @@ const BUDGET_BYTES: usize = 32 << 20;
 /// What identifies a preview.
 #[derive(Clone, PartialEq, Eq)]
 pub struct PreviewKey {
-    /// The body (`systems/<id>/<body>`) and its revision: regenerating it
-    /// changes its preview.
+    /// The body's resolution (`systems/<id>/<body>/<W>x<H>`) and its
+    /// revision: regenerating it changes its preview.
     pub body: String,
     pub revision: u64,
     pub drift_ma: i32,
@@ -46,6 +46,14 @@ impl PreviewCache {
         while total > BUDGET_BYTES && entries.len() > 1 {
             total -= entries.remove(0).1.len();
         }
+    }
+
+    /// Forgets the previews of `body` (a resolution deleted).
+    pub fn forget(&self, body: &str) {
+        self.entries
+            .lock()
+            .expect("preview cache lock")
+            .retain(|(k, _)| k.body != body);
     }
 }
 
@@ -85,5 +93,15 @@ mod tests {
         assert!(cache.get(&key("a", 1, 10)).is_none());
         assert!(cache.get(&key("a", 2, 10)).is_some());
         assert!(cache.get(&key("b", 1, 10)).is_some());
+    }
+
+    #[test]
+    fn a_body_forgotten_drops_its_previews_only() {
+        let cache = PreviewCache::default();
+        cache.insert(key("a/1x1", 1, 10), Arc::new(vec![1]));
+        cache.insert(key("a/2x1", 1, 10), Arc::new(vec![2]));
+        cache.forget("a/1x1");
+        assert!(cache.get(&key("a/1x1", 1, 10)).is_none());
+        assert!(cache.get(&key("a/2x1", 1, 10)).is_some());
     }
 }

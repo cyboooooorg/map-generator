@@ -543,11 +543,19 @@ addressed as `<system-id>/<body-id>` everywhere.
 
   The tiles, epoch layers, drift previews and hex grids take
   `?size=<W>x<H>` (`2048x1024`), the resolution to read
-  (`bodies/<body>/sizes/<W>x<H>/`); without it, the original one. A size
-  not generated answers 404, a name that is not a size 400. Each
-  resolution is a world of its own in the tile cache, with its own
-  revision (`rev=`). The thumbnail is the body's, made from its original
-  resolution.
+  (`bodies/<body>/sizes/<W>x<H>/`); without it, the displayed one (the
+  original unless `PUT .../displayed-size` chose another one still on
+  disk). A size not generated answers 404, a name that is not a size
+  400. Each resolution is a world of its own in the tile cache, with its
+  own revision (`rev=`). The thumbnail is the body's, made from its
+  original resolution.
+
+  - `GET /api/systems/{id}/bodies/{body}/sizes`: its resolutions
+    (`BodySizes`);
+  - `POST` / `DELETE /api/systems/{id}/bodies/{body}/sizes/{W}x{H}`:
+    queue an offered size (a job, deduplicated) or delete an added one;
+  - `PUT /api/systems/{id}/bodies/{body}/displayed-size`: remember the
+    size shown, in the index (see the README, *Resolutions*).
 - `GET /systems/{id}/...`: the files, `system.json` and
   `bodies/<body>/...`.
 - `GET /api/jobs`, `DELETE /api/jobs/{id}` and

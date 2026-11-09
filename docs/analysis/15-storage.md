@@ -240,20 +240,24 @@ What was built, and where it departs from the plan above:
   its pin.
 - **Pins:** the user pins systems to the top of the main menu
   (`PUT`/`DELETE /api/systems/{id}/pin`). Stored in the index only, in
-  `systems.pinned_ms` (layout version 2; a version 1 file gets the column
-  by `ALTER TABLE` when it is opened). Not mirrored to a file, by choice:
+  `systems.pinned_ms` (since layout version 2). Not mirrored to a file, by choice:
   a pin is a view preference, cheap to redo, and a mirror would add a
   second source of truth to reconcile. A lost database loses the pins,
   not the names. This is the first user data that only the database holds.
   Pins are lost too when a start finds a system's directory absent
   (`systems/` not mounted: the reconcile drops the system) and when a
   corrupt file is set aside (the `.corrupt-<ms>` file still holds them).
-- **Layout versions:** an older file is migrated when opened, inside a
-  `BEGIN IMMEDIATE` transaction that reads `user_version` again, so two
-  processes opening a version 1 file migrate it once. A newer file is
-  refused. Downgrading: an older server stops with `database layout 2,
-  this server knows 1`; move the file (and `-wal`, `-shm`) aside, the
-  index is rebuilt, names come back from `names.json`, pins are lost.
+- **Layout versions:** version 3 since the resolutions (see
+  *Resolutions* below). No migration code: a file of any other layout,
+  older or newer, is renamed `<file>.layout-<version>-<ms>` with its
+  `-wal` and `-shm`, a warning is logged and a new index is built from
+  the tree. What only the index held (pins, displayed sizes, last
+  opened dates, job history) stays in the file set aside. A process sets
+  the file aside only if it is still the file it read (same device and
+  inode), so two processes opening it at once set it aside once; an
+  empty file gets its layout inside a `BEGIN IMMEDIATE` transaction that
+  reads `user_version` again. (Layout 2 added `systems.pinned_ms` by
+  migration; that migration went with layout 3.)
 - **Single names:** `PUT /api/systems/{id}/name` (the star) and
   `PUT /api/systems/{id}/bodies/{body}/name` merge one name into the names
   under the connection lock (`names.json` first, then the index), so a
@@ -303,6 +307,36 @@ What was built, and where it departs from the plan above:
   files.
 - **Corrupt file:** a file that is not a database is kept aside as
   `mapgen.sqlite.corrupt-<ms>` and rebuilt from the tree.
+
+## Resolutions
+
+A body has its original resolution (the size in its parameters in
+`system.json`) and any number of added ones, all laid out alike in
+`bodies/<body>/sizes/<W>x<H>/` (see *Today*). What each part keeps:
+
+- **The tree** is the truth for which sizes exist: a size is present
+  when `sizes/<W>x<H>/raw_data/world.json` is
+  (`mapgen::sizes::sizes_on_disk`). A size is generated into
+  `sizes/.tmp-<W>x<H>/` and renamed into place
+  (`mapgen::system::generate_size`); a deleted one is first renamed to
+  `sizes/.tmp-delete-<W>x<H>-<ms>/`, then removed. The start's sweep
+  clears both kinds of leftovers.
+- **The index** remembers the displayed size of each body
+  (`bodies.displayed_width`, `displayed_height`, NULL for the original;
+  layout 3), kept when the system is read again from the tree and reset
+  when it is drawn again. It is used only while that size is on disk:
+  otherwise the original is displayed. A lost index shows every body at
+  its original size. Jobs record the size they add (`jobs.size`,
+  `<W>x<H>`, NULL for a body and its neighbourhood).
+- **Caches** key a world by its size: `systems/<id>/<body>/<W>x<H>` in
+  the tile cache and the drift previews. Deleting a size forgets that
+  key in both.
+- **Jobs:** a size job takes the key `<id>/<body>/<W>x<H>` in the list of
+  pending generations, so two requests for the same size queue one job,
+  and a size cannot be deleted while it is queued or running. It waits
+  on the one generation queue with every other job, so it never runs
+  beside its system's own job. A system cannot be deleted or replaced
+  while one of its sizes is pending.
 
 ## Sources
 

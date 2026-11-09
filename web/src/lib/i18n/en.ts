@@ -1235,6 +1235,11 @@ export const en = {
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,
     beingGenerated: (p: { world: string }) => `${p.world} is being generated already.`,
     busy: 'A generation is running: try again once it ends.',
+    sizeNotOffered: (p: { width: number; height: number }) =>
+      `${p.width} × ${p.height} is not one of the offered map sizes.`,
+    originalSize: 'The original size of a planet cannot be deleted.',
+    sizeNotGenerated: (p: { width: number; height: number }) =>
+      `This planet has no ${p.width} × ${p.height} map: generate it first.`,
     /** Names of the request fields, in the error messages. */
     fields: {
       sea_level: 'Sea level',

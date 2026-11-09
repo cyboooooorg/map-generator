@@ -1171,6 +1171,9 @@ export const fr: Messages = {
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,
     beingGenerated: (p) => `${p.world} est déjà en cours de génération.`,
     busy: `Une génération est en cours${S}: réessayez quand elle sera finie.`,
+    sizeNotOffered: (p) => `${p.width} × ${p.height} ne fait pas partie des tailles de carte proposées.`,
+    originalSize: 'La taille d’origine d’une planète ne peut pas être supprimée.',
+    sizeNotGenerated: (p) => `Cette planète n’a pas de carte en ${p.width} × ${p.height}${S}: générez-la d’abord.`,
     fields: {
       sea_level: 'Niveau de la mer',
       land_fraction: 'Part des terres',

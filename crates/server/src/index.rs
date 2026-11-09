@@ -15,10 +15,11 @@
 //! from the tree when the database is missing or empty, and reconciled
 //! with it on every start ([`Index::reconcile`]), so the files need no
 //! migration step. The database itself has a layout version
-//! (`PRAGMA user_version`): an older file is migrated when opened (in one
-//! immediate transaction), a newer one is refused. What only the index
-//! holds (pins, last opened dates, job history) is not rebuilt from the
-//! tree. Names are written to `names.json` too, so that the
+//! (`PRAGMA user_version`): a file of another layout, older or newer, is
+//! renamed `<file>.layout-<version>-<ms>` (with its `-wal` and `-shm`) and
+//! a new database is made, with a warning. What only the index holds
+//! (pins, last opened dates, displayed sizes, job history) is not rebuilt
+//! from the tree. Names are written to `names.json` too, so that the
 //! tree stays self-sufficient for now.
 //!
 //! One connection behind a mutex: the server's writes are few and short,
@@ -50,10 +51,14 @@ pub const GENERATOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// had.
 pub const GENERATOR_FORMAT: u32 = mapgen::export::raw_data::FORMAT_VERSION;
 
-/// Version of the database layout (`PRAGMA user_version`).
-const SCHEMA_VERSION: i64 = 2;
-/// Layout 1 -> 2: systems can be pinned in the main menu.
-const MIGRATE_1_TO_2: &str = "ALTER TABLE systems ADD COLUMN pinned_ms INTEGER;";
+/// Version of the database layout (`PRAGMA user_version`). A file of
+/// another layout is set aside and a new one made (no migration): what
+/// only the index held (pins, last opened dates, displayed sizes, the job
+/// history) starts over, the rest is read again from the tree.
+///
+/// - 2: systems can be pinned in the main menu;
+/// - 3: the displayed size of each body, the size a job generates.
+const SCHEMA_VERSION: i64 = 3;
 /// Least time between two writes of a body's last opened date: a viewer
 /// asks for dozens of tiles a second.
 const TOUCH_EVERY: Duration = Duration::from_secs(60);
@@ -125,6 +130,10 @@ CREATE TABLE bodies (
     -- when its data was last served or opened (ms), NULL if never since
     -- the index exists
     last_opened_ms    INTEGER,
+    -- the resolution the viewer shows (pixels), NULL for the original;
+    -- only the index holds it
+    displayed_width   INTEGER,
+    displayed_height  INTEGER,
     PRIMARY KEY (system_id, id)
 );
 CREATE TABLE names (
@@ -144,6 +153,8 @@ CREATE TABLE jobs (
     error      TEXT,
     -- the bodies a finished job generated (JSON array)
     bodies     TEXT,
+    -- a job generating one resolution of a body: its size (`<W>x<H>`)
+    size       TEXT,
     created_ms INTEGER NOT NULL,
     updated_ms INTEGER NOT NULL
 );
@@ -182,6 +193,8 @@ pub struct StoredJob {
     pub system: Option<(String, String)>,
     pub request: WorldRequest,
     pub status: JobStatus,
+    /// A job generating one resolution of a body: its size.
+    pub size: Option<(u32, u32)>,
 }
 
 /// A body's generator, as recorded.
@@ -232,33 +245,68 @@ impl Index {
     /// missing. A file that is not a database is moved aside
     /// (`<file>.corrupt-<ms>`) and replaced by an empty one, which
     /// [`Index::reconcile`] then fills from the tree.
+    ///
+    /// A database of another layout (see [`SCHEMA_VERSION`]) is moved
+    /// aside too (`<file>.layout-<version>-<ms>`), with a warning.
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(dir)
                 .map_err(|e| IndexError(format!("{}: {e}", dir.display())))?;
         }
-        match Self::open_file(path) {
-            Err(e) if is_not_a_database(&e) => {
-                let suffix = format!(".corrupt-{}", now_ms());
-                tracing::warn!("{} is not a database: kept aside{suffix}", path.display());
-                set_aside(path, &suffix)?;
-                Self::open_file(path).map_err(IndexError::from)
+        // A few turns: another process may be setting the same file aside.
+        let mut last = None;
+        for _ in 0..4 {
+            let before = file_identity(path);
+            let suffix = match Self::open_file(path) {
+                Ok(index) => return Ok(index),
+                Err(Opening::Sqlite(e)) if is_not_a_database(&e) => {
+                    let suffix = format!(".corrupt-{}", now_ms());
+                    tracing::warn!("{} is not a database: kept aside{suffix}", path.display());
+                    suffix
+                }
+                // Another process holds the file past the busy timeout
+                // (switching it to WAL, creating its layout): try again.
+                Err(Opening::Sqlite(e))
+                    if e.sqlite_error_code() == Some(rusqlite::ErrorCode::DatabaseBusy) =>
+                {
+                    last = Some(e.into());
+                    std::thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
+                Err(Opening::Sqlite(e)) => return Err(e.into()),
+                Err(Opening::OtherLayout(version)) => {
+                    let suffix = format!(".layout-{version}-{}", now_ms());
+                    tracing::warn!(
+                        "{} has the database layout {version}, this server knows \
+                         {SCHEMA_VERSION}: kept aside{suffix}, a new index is made from the tree",
+                        path.display()
+                    );
+                    suffix
+                }
+            };
+            // Only the file this process read: when another one set it
+            // aside meanwhile, the file now there is its new database.
+            if before.is_some()
+                && file_identity(path) == before
+                && let Err(e) = set_aside(path, &suffix)
+            {
+                last = Some(e);
             }
-            other => other.map_err(IndexError::from),
         }
+        Err(last.unwrap_or_else(|| IndexError(format!("{}: cannot be opened", path.display()))))
     }
 
-    fn open_file(path: &Path) -> rusqlite::Result<Self> {
+    fn open_file(path: &Path) -> std::result::Result<Self, Opening> {
         Self::init(Connection::open(path)?)
     }
 
-    fn init(conn: Connection) -> rusqlite::Result<Self> {
+    fn init(conn: Connection) -> std::result::Result<Self, Opening> {
         conn.busy_timeout(Duration::from_secs(5))?;
         let journal = choose_journal(&conn)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version != SCHEMA_VERSION {
-            migrate(&conn)?;
+            create(&conn)?;
         }
         Ok(Self {
             journal,
@@ -705,10 +753,48 @@ impl Index {
     }
 
     // ------------------------------------------------------------------
+    // Displayed size
+    // ------------------------------------------------------------------
+
+    /// The resolution a body was last displayed at
+    /// (`PUT .../displayed-size`), `None` for its original one (or an
+    /// unknown body). The index alone keeps it: a rebuilt index shows the
+    /// originals.
+    pub fn displayed_size(&self, system: &str, body: &str) -> Result<Option<(u32, u32)>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT displayed_width, displayed_height FROM bodies
+                 WHERE system_id = ?1 AND id = ?2",
+                params![system, body],
+                |r| Ok((r.get::<_, Option<u32>>(0)?, r.get::<_, Option<u32>>(1)?)),
+            )
+            .optional()?
+            .and_then(|(width, height)| Some((width?, height?))))
+    }
+
+    /// Remembers the resolution a body is displayed at; `None` brings
+    /// back the original. An unknown body is no error.
+    pub fn set_displayed_size(
+        &self,
+        system: &str,
+        body: &str,
+        size: Option<(u32, u32)>,
+    ) -> Result<()> {
+        self.conn().execute(
+            "UPDATE bodies SET displayed_width = ?3, displayed_height = ?4
+             WHERE system_id = ?1 AND id = ?2",
+            params![system, body, size.map(|s| s.0), size.map(|s| s.1)],
+        )?;
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
     // Jobs
     // ------------------------------------------------------------------
 
-    /// Records a job as queued, and forgets the finished ones beyond the
+    /// Records a job as queued (`size`: the resolution a job generating
+    /// one size of a body makes), and forgets the finished ones beyond the
     /// `keep` newest.
     pub fn job_queued(
         &self,
@@ -716,6 +802,7 @@ impl Index {
         world_id: &str,
         system: Option<(&str, &str)>,
         request: &WorldRequest,
+        size: Option<(u32, u32)>,
         keep: usize,
     ) -> Result<()> {
         let request = serde_json::to_string(request).map_err(|e| IndexError(e.to_string()))?;
@@ -723,15 +810,16 @@ impl Index {
         let conn = self.conn();
         conn.execute(
             "INSERT OR REPLACE INTO jobs
-                (id, system_id, body, world_id, request, state, created_ms, updated_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?6)",
+                (id, system_id, body, world_id, request, state, created_ms, updated_ms, size)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?6, ?7)",
             params![
                 id as i64,
                 system.map(|s| s.0),
                 system.map(|s| s.1),
                 world_id,
                 request,
-                now
+                now,
+                size.map(|(w, h)| mapgen::sizes::size_name(w, h))
             ],
         )?;
         conn.execute(
@@ -788,7 +876,7 @@ impl Index {
     pub fn jobs(&self) -> Result<Vec<StoredJob>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, system_id, body, world_id, request, state, error, bodies
+            "SELECT id, system_id, body, world_id, request, state, error, bodies, size
              FROM jobs ORDER BY id DESC",
         )?;
         let rows = stmt.query_map([], |r| {
@@ -820,6 +908,9 @@ impl Index {
                 system: system.zip(body),
                 request: serde_json::from_str(&request).unwrap_or_default(),
                 status,
+                size: r
+                    .get::<_, Option<String>>(8)?
+                    .and_then(|name| mapgen::sizes::parse_size_name(&name)),
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -834,35 +925,60 @@ impl Index {
     }
 }
 
-/// Creates the layout or brings an older one up to date. The version is
-/// read again inside an immediate transaction, so that two processes
-/// opening the same old file at once migrate it once, not twice.
-fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+/// Why a database file could not be opened as the index.
+#[derive(Debug)]
+enum Opening {
+    Sqlite(rusqlite::Error),
+    /// The file has another layout (its `user_version`).
+    OtherLayout(i64),
+}
+
+impl From<rusqlite::Error> for Opening {
+    fn from(e: rusqlite::Error) -> Self {
+        Self::Sqlite(e)
+    }
+}
+
+/// Creates the layout in an empty database, or tells the layout of
+/// another one. The version is read again inside an immediate
+/// transaction, so that two processes opening the same new file at once
+/// create it once, not twice.
+fn create(conn: &Connection) -> std::result::Result<(), Opening> {
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
-        let mut version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version == 0 {
-            conn.execute_batch(SCHEMA)?;
-            version = SCHEMA_VERSION;
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        match version {
+            0 => {
+                conn.execute_batch(SCHEMA)?;
+                conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
+                Ok(())
+            }
+            SCHEMA_VERSION => Ok(()),
+            other => Err(Opening::OtherLayout(other)),
         }
-        if version == 1 {
-            conn.execute_batch(MIGRATE_1_TO_2)?;
-            version = 2;
-        }
-        if version != SCHEMA_VERSION {
-            return Err(rusqlite::Error::InvalidParameterName(format!(
-                "database layout {version}, this server knows {SCHEMA_VERSION}"
-            )));
-        }
-        conn.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))
     })();
     match result {
-        Ok(()) => conn.execute_batch("COMMIT"),
+        Ok(()) => Ok(conn.execute_batch("COMMIT")?),
         Err(e) => {
             let _ = conn.execute_batch("ROLLBACK");
             Err(e)
         }
     }
+}
+
+/// What tells one file from another at `path` (device and inode), `None`
+/// when there is none.
+#[cfg(unix)]
+fn file_identity(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+}
+
+/// What tells one file from another at `path`: its creation time where
+/// there are no inodes.
+#[cfg(not(unix))]
+fn file_identity(path: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(path).ok().and_then(|m| m.created().ok())
 }
 
 /// Turns WAL on and checks it works here, or falls back to the default
@@ -993,7 +1109,8 @@ fn world_format(dir: &Path) -> Option<u32> {
 }
 
 /// Writes a system read from the tree, keeping what only the index knows
-/// (generator versions, last opened dates) of the bodies it already had.
+/// (generator versions, last opened dates, displayed sizes) of the bodies
+/// it already had.
 fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()> {
     let s = &loaded.summary;
     let mut pinned_ms: Option<i64> = None;
@@ -1011,14 +1128,32 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
             .flatten();
         tx.execute("DELETE FROM systems WHERE id = ?1", [&s.id])?;
     }
-    type Before = (bool, Option<String>, Option<i64>, Option<i64>);
+    type Before = (
+        bool,
+        Option<String>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+    );
     let before: HashMap<String, Before> = {
         let mut stmt = tx.prepare(
-            "SELECT id, generated, generator_version, generator_format, last_opened_ms
+            "SELECT id, generated, generator_version, generator_format, last_opened_ms,
+                    displayed_width, displayed_height
              FROM bodies WHERE system_id = ?1",
         )?;
         stmt.query_map([&s.id], |r| {
-            Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+            Ok((
+                r.get(0)?,
+                (
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                ),
+            ))
         })?
         .collect::<rusqlite::Result<_>>()?
     };
@@ -1053,7 +1188,7 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
         let old = before.get(&body.id);
         let (version, format) = if !body.generated {
             (None, None)
-        } else if let Some((true, version, format, _)) = old {
+        } else if let Some((true, version, format, ..)) = old {
             (version.clone(), *format)
         } else if cause == Cause::Generated {
             (
@@ -1067,8 +1202,10 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
             "INSERT INTO bodies (system_id, id, position, designation, kind, body_type,
                                  colour_r, colour_g, colour_b, generated, orbit_au,
                                  eccentricity, periapsis_deg, seed, params,
-                                 generator_version, generator_format, last_opened_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                                 generator_version, generator_format, last_opened_ms,
+                                 displayed_width, displayed_height)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                     ?18, ?19, ?20)",
             params![
                 s.id,
                 body.id,
@@ -1088,6 +1225,8 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
                 version,
                 format,
                 old.and_then(|o| o.3),
+                old.and_then(|o| o.4),
+                old.and_then(|o| o.5),
             ],
         )?;
     }
@@ -1360,33 +1499,99 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    /// The files of `dir` whose name holds `part`.
+    fn files_with(dir: &Path, part: &str) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains(part))
+            .collect();
+        names.sort();
+        names
+    }
+
     #[test]
-    fn a_database_of_layout_1_gains_the_pin_column() {
-        let root = temp_root("migrate");
+    fn a_database_of_another_layout_is_set_aside_for_a_new_one() {
+        let root = temp_root("layout");
         let systems = root.join("systems");
         tree(&systems, &["mgs-1-1"]);
         let db = root.join("mapgen.sqlite");
-        {
+        for old in [2, 4] {
+            {
+                let index = Index::open(&db).unwrap();
+                index.reconcile(&systems).unwrap();
+                index.set_pinned("mgs-1-1", true).unwrap();
+            }
+            // Turn it into a database of another layout.
+            Connection::open(&db)
+                .unwrap()
+                .execute_batch(&format!("PRAGMA user_version = {old};"))
+                .unwrap();
             let index = Index::open(&db).unwrap();
+            // A new, empty database, of this layout.
+            assert!(index.list_systems().unwrap().is_empty());
             index.reconcile(&systems).unwrap();
+            assert!(!index.summary("mgs-1-1").unwrap().unwrap().pinned);
+            drop(index);
+            let version: i64 = Connection::open(&db)
+                .unwrap()
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(version, SCHEMA_VERSION);
+            // The old one kept aside, by its layout.
+            let aside = files_with(&root, &format!(".layout-{old}-"));
+            assert!(
+                aside.iter().any(|n| n.starts_with("mapgen.sqlite.layout-")),
+                "{aside:?}"
+            );
+            assert!(
+                aside
+                    .iter()
+                    .all(|n| !n.ends_with("-wal") && !n.ends_with("-shm"))
+            );
         }
-        // Turn it back into a layout 1 database.
-        {
-            let conn = Connection::open(&db).unwrap();
-            conn.execute_batch(
-                "ALTER TABLE systems DROP COLUMN pinned_ms; PRAGMA user_version = 1;",
-            )
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_body_keeps_its_displayed_size_until_its_system_is_drawn_again() {
+        let root = temp_root("displayed");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        index.reconcile(&systems).unwrap();
+        assert_eq!(index.displayed_size("mgs-1-1", "c").unwrap(), None);
+        index
+            .set_displayed_size("mgs-1-1", "c", Some((2048, 1024)))
             .unwrap();
+        assert_eq!(
+            index.displayed_size("mgs-1-1", "c").unwrap(),
+            Some((2048, 1024))
+        );
+        // Read again from the tree, it stays.
+        for cause in [Cause::Scan, Cause::Generated] {
+            index.refresh_system(&systems, "mgs-1-1", cause).unwrap();
+            assert_eq!(
+                index.displayed_size("mgs-1-1", "c").unwrap(),
+                Some((2048, 1024)),
+                "{cause:?}"
+            );
         }
-        let index = Index::open(&db).unwrap();
-        assert_eq!(index.list_systems().unwrap().len(), 1);
-        assert!(index.set_pinned("mgs-1-1", true).unwrap().unwrap().pinned);
-        drop(index);
-        let conn = Connection::open(&db).unwrap();
-        let version: i64 = conn
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
+        index.set_displayed_size("mgs-1-1", "c", None).unwrap();
+        assert_eq!(index.displayed_size("mgs-1-1", "c").unwrap(), None);
+        // Drawn again, the system starts over; unknown bodies have none.
+        index
+            .set_displayed_size("mgs-1-1", "c", Some((1024, 512)))
             .unwrap();
-        assert_eq!(version, SCHEMA_VERSION);
+        index
+            .refresh_system(&systems, "mgs-1-1", Cause::Drawn)
+            .unwrap();
+        assert_eq!(index.displayed_size("mgs-1-1", "c").unwrap(), None);
+        assert_eq!(index.displayed_size("mgs-9-9", "c").unwrap(), None);
+        index
+            .set_displayed_size("mgs-9-9", "c", Some((1024, 512)))
+            .unwrap();
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1477,16 +1682,15 @@ mod tests {
     }
 
     #[test]
-    fn two_processes_opening_an_old_file_migrate_it_once() {
-        let root = temp_root("migrate-race");
+    fn two_processes_opening_an_old_file_set_it_aside_once() {
+        let root = temp_root("layout-race");
         let db = root.join("mapgen.sqlite");
         {
             Index::open(&db).unwrap();
-            let conn = Connection::open(&db).unwrap();
-            conn.execute_batch(
-                "ALTER TABLE systems DROP COLUMN pinned_ms; PRAGMA user_version = 1;",
-            )
-            .unwrap();
+            Connection::open(&db)
+                .unwrap()
+                .execute_batch("PRAGMA user_version = 2")
+                .unwrap();
         }
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
         let opened: Vec<_> = (0..4)
@@ -1502,13 +1706,16 @@ mod tests {
         for handle in opened {
             handle.join().unwrap().unwrap();
         }
-        // A layout from the future is refused, and nothing is changed.
-        {
-            let conn = Connection::open(&db).unwrap();
-            conn.execute_batch("PRAGMA user_version = 3").unwrap();
-        }
-        let refused = Index::open(&db).err().expect("refused");
-        assert!(refused.0.contains("database layout 3"), "{refused}");
+        let aside: Vec<String> = files_with(&root, ".layout-2-")
+            .into_iter()
+            .filter(|n| !n.contains("-wal") && !n.contains("-shm"))
+            .collect();
+        assert_eq!(aside.len(), 1, "{aside:?}");
+        let version: i64 = Connection::open(&db)
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1594,7 +1801,7 @@ mod tests {
         let request = WorldRequest::default();
         for id in 1..=4 {
             index
-                .job_queued(id, "mgs-1-1", Some(("mgs-1-1", "c")), &request, 20)
+                .job_queued(id, "mgs-1-1", Some(("mgs-1-1", "c")), &request, None, 20)
                 .unwrap();
         }
         index
@@ -1658,10 +1865,28 @@ mod tests {
         );
         assert_eq!(jobs[0].system, Some(("mgs-1-1".into(), "c".into())));
 
+        assert_eq!(jobs[0].size, None);
+
+        // A job generating one size of a body keeps it.
+        index
+            .job_queued(
+                5,
+                "mgs-1-1",
+                Some(("mgs-1-1", "c")),
+                &request,
+                Some((1024, 512)),
+                20,
+            )
+            .unwrap();
+        assert_eq!(index.jobs().unwrap()[0].size, Some((1024, 512)));
+
         // Only the newest finished jobs are kept.
-        index.job_queued(5, "mgs-1-1", None, &request, 2).unwrap();
+        index.job_status(5, &JobStatus::Cancelled).unwrap();
+        index
+            .job_queued(6, "mgs-1-1", None, &request, None, 2)
+            .unwrap();
         let kept: Vec<u64> = index.jobs().unwrap().iter().map(|j| j.id).collect();
-        assert_eq!(kept, [5, 4, 3]);
+        assert_eq!(kept, [6, 5, 4]);
         std::fs::remove_dir_all(root).unwrap();
     }
 

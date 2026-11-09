@@ -14,6 +14,11 @@ describe('error messages', () => {
       'mystery must be between 0.25 and 2.',
     );
     expect(detailText({ code: 'busy' })).toMatch(/generation is running/);
+    expect(detailText({ code: 'size_not_offered', width: 1000, height: 500 })).toBe(
+      '1000 × 500 is not one of the offered map sizes.',
+    );
+    expect(detailText({ code: 'original_size' })).toMatch(/original size/);
+    expect(detailText({ code: 'size_not_generated', width: 4096, height: 2048 })).toMatch(/no 4096 × 2048 map/);
   });
 
   it('falls back to the server text, then to the error itself', () => {

@@ -133,6 +133,10 @@ pub struct JobInfo {
     /// The request, as sent by the client, so a reloaded page can show it.
     pub request: WorldRequest,
     pub status: JobStatus,
+    /// A job generating one resolution of a body
+    /// (`POST /api/systems/{id}/bodies/{body}/sizes/{W}x{H}`): its
+    /// `[width, height]`; `null` for a body and its neighbourhood.
+    pub size: Option<[u32; 2]>,
 }
 
 /// Error body of every failed API call.
@@ -205,6 +209,13 @@ pub enum ErrorDetail {
     UnknownType { body_type: String },
     /// The system exists and the request does not replace it.
     SystemExists { system: String },
+    /// A resolution that is not one of the offered sizes
+    /// (`FormSpec.size_presets`).
+    SizeNotOffered { width: u32, height: u32 },
+    /// The original resolution of a body cannot be deleted.
+    OriginalSize,
+    /// The body has no such resolution on disk.
+    SizeNotGenerated { width: u32, height: u32 },
 }
 
 impl ErrorDetail {
@@ -382,4 +393,61 @@ pub struct SystemName {
 #[ts(export)]
 pub struct GenerateStarted {
     pub job_id: Option<String>,
+}
+
+/// The resolutions of a generated body
+/// (`GET /api/systems/{id}/bodies/{body}/sizes`). Sizes are
+/// `[width, height]` in pixels.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct BodySizes {
+    /// The size the body was generated at (its parameters in
+    /// `system.json`); never deleted.
+    pub original: [u32; 2],
+    /// The size the viewer shows: the one remembered
+    /// (`PUT .../displayed-size`) while it is on disk, else the original.
+    pub displayed: [u32; 2],
+    /// The sizes on disk, the original included, smallest first.
+    pub present: Vec<PresentSize>,
+    /// The sizes being generated, with their job.
+    pub pending: Vec<PendingSize>,
+    /// The sizes that can be generated (`POST .../sizes/{W}x{H}`), all 2:1.
+    pub presets: Vec<[u32; 2]>,
+    /// Largest width or height the server accepts.
+    pub max_size: u32,
+    /// Largest map the server accepts, in pixels: larger presets are
+    /// refused.
+    #[ts(type = "number")]
+    pub max_pixels: u64,
+}
+
+/// A resolution of a body on disk.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct PresentSize {
+    pub width: u32,
+    pub height: u32,
+    /// Its revision, as tile and layer URLs take it (`rev=`).
+    #[ts(type = "number")]
+    pub revision: u64,
+}
+
+/// A resolution of a body being generated.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct PendingSize {
+    pub width: u32,
+    pub height: u32,
+    /// Its job (`GET /api/jobs/{id}/events`).
+    pub job_id: String,
+}
+
+/// Body of `PUT /api/systems/{id}/bodies/{body}/displayed-size`: the
+/// resolution to show the body at, from now on and in every browser.
+#[derive(Clone, Debug, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct DisplayedSize {
+    pub width: u32,
+    pub height: u32,
 }
