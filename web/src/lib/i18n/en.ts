@@ -309,6 +309,7 @@ export const en = {
   } satisfies Record<Regime, string>,
   /** The world card. */
   worldInfo: {
+    planetHeading: (p: { name: string }) => `Planet: ${p.name}`,
     copied: (p: { what: string }) => `${p.what} copied.`,
     copyRefused: 'The browser refused to copy.',
     archiveFailed: (p: { error: string }) => `Could not build the archive: ${p.error}`,

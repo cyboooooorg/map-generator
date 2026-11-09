@@ -22,6 +22,7 @@
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { driftRange, driftRequest, formatDrift } from './lib/drift';
   import { bodyTitle, forgetTold, toTell } from './lib/evicted';
+  import { worldCardOwner } from './lib/moons';
   import { keepAlone, requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setPresetLocales } from './lib/i18n/names.svelte';
@@ -512,6 +513,7 @@
 </script>
 
 {#snippet info()}
+  {@const cardOwner = primary.system ? worldCardOwner(primary.system.bodies, primary.systemNames, primary.systemBody) : null}
   {#if primary.system}
     <BodyCard
       world={primary}
@@ -522,7 +524,8 @@
   {#if !primary.system || primary.shownSystemBody?.generated}
     <WorldInfo
       world={primary}
-      title={primary.shownSystemBody ? (primary.systemNames[primary.shownSystemBody.id] ?? primary.shownSystemBody.designation) : null}
+      title={cardOwner?.planet ?? null}
+      ofMoon={cardOwner?.ofMoon ?? false}
       revision={revision(selectedId)}
       onVary={() => primary.meta && openForm('around', keepAlone(requestFromWorld(primary.meta), primary.system), primary.id)}
       onReroll={reroll}

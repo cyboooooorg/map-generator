@@ -284,6 +284,7 @@ export const fr: Messages = {
     heat_pipe: 'caloduc',
   },
   worldInfo: {
+    planetHeading: (p) => `Planète${S}: ${p.name}`,
     copied: (p) => `Copié dans le presse-papiers${S}: ${p.what.toLowerCase()}.`,
     copyRefused: 'Le navigateur a refusé la copie.',
     archiveFailed: (p) => `Impossible de créer l’archive${S}: ${p.error}`,

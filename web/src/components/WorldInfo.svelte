@@ -21,11 +21,13 @@
     /** The link Copy link copies: the worlds shown and the view. */
     link: () => string;
     onDelete: () => void;
-    /** The title instead of the world's own: a system body's name. */
+    /** The title instead of the world's own: a system body's name (the planet's, for a moon). */
     title?: string | null;
+    /** The card is the planet's while one of its moons is shown: the heading says so. */
+    ofMoon?: boolean;
   }
 
-  let { world, revision = null, onVary, onReroll, link, onDelete, title: forcedTitle = null }: Props = $props();
+  let { world, revision = null, onVary, onReroll, link, onDelete, title: forcedTitle = null, ofMoon = false }: Props = $props();
 
   let open = $state(loadSetting('worldInfoOpen', true));
   let allBiomes = $state(false);
@@ -90,7 +92,7 @@
   <details class="card" bind:open>
     <summary>
       <span class="title">
-        <strong>{title}</strong>
+        <strong>{ofMoon ? t.worldInfo.planetHeading({ name: title ?? '' }) : title}</strong>
         <small
           >{[meta ? presetName(meta.preset) : null, forcedTitle ? null : worldId]
             .filter(Boolean)

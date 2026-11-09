@@ -37,3 +37,20 @@ export function parseMoonChoice(raw: unknown, max: number): MoonChoice {
   if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= max) return raw;
   return 'auto';
 }
+
+/**
+ * Whose data the world card holds while `body` of a system is shown: the
+ * planet's, also for one of its moons (a moon is shown under its planet's
+ * maps, biome statistics and rivers), so the card is named after the planet
+ * and says when the body shown is one of its moons. Null with no body.
+ */
+export function worldCardOwner(
+  bodies: readonly { id: string; designation: string; parent?: string | null }[],
+  names: Record<string, string>,
+  body: string | null,
+): { planet: string; ofMoon: boolean } | null {
+  const shown = bodies.find((b) => b.id === body);
+  if (!shown) return null;
+  const planet = (shown.parent ? bodies.find((b) => b.id === shown.parent) : null) ?? shown;
+  return { planet: names[planet.id] ?? planet.designation, ofMoon: planet.id !== shown.id };
+}
