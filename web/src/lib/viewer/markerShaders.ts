@@ -2,11 +2,14 @@
 // stands at the scene's origin, with a day side and a night side, their
 // relief from their normal map and their lava glowing (see lavaGlsl in
 // shaders.ts, whose levels they share).
-import { Color, ShaderMaterial, type Texture, Vector3 } from 'three';
+import { Color, Matrix3, ShaderMaterial, type Texture, Vector3 } from 'three';
 import { emptyTexture } from './textures';
 import { lavaGlsl } from './shaders';
 
 const vertex = /* glsl */ `
+  // How the globe is turned on itself (its spin, see globeTurn), inside
+  // the mesh: its rings and halo, children of the mesh, keep their place.
+  uniform mat3 uTurn;
   varying vec2 vUv;
   varying vec3 vNormalW;
   varying vec3 vEastW;
@@ -16,12 +19,12 @@ const vertex = /* glsl */ `
     vec3 n = normalize(position);
     // three's SphereGeometry: u grows eastward round +y, north is +y.
     vec3 east = normalize(vec3(n.z, 0.0, -n.x) + vec3(1e-6, 0.0, 0.0));
-    mat3 turn = mat3(modelMatrix);
+    mat3 turn = mat3(modelMatrix) * uTurn;
     vNormalW = normalize(turn * n);
     vEastW = normalize(turn * east);
     vec3 centre = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
     vToStar = -centre;
-    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(uTurn * position, 1.0);
   }
 `;
 
@@ -64,7 +67,10 @@ const fragment = /* glsl */ `
   }
 `;
 
-/** The material of a planet's marker, in `colour` until it has maps. */
+/**
+ * The material of a planet's marker, in `colour` until it has maps; its
+ * `uTurn` (a Matrix3, identity at first) turns the globe on itself.
+ */
 export function planetMarkerMaterial(colour: Color): ShaderMaterial {
   return new ShaderMaterial({
     vertexShader: vertex,
@@ -75,6 +81,7 @@ export function planetMarkerMaterial(colour: Color): ShaderMaterial {
       uMap: { value: emptyTexture() },
       uHasNormal: { value: 0 },
       uNormalMap: { value: emptyTexture() },
+      uTurn: { value: new Matrix3() },
     },
   });
 }

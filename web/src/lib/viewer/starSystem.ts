@@ -5,6 +5,7 @@ import type { Moon } from '../api/types/Moon';
 import type { Giant } from '../api/types/Giant';
 import type { RingSystem } from '../api/types/RingSystem';
 import type { StarInfo } from '../api/types/StarInfo';
+import type { Axes, Vec3 } from '../skyBodies';
 
 /**
  * A planet of a planetary system as the star view draws it: a giant, with
@@ -23,7 +24,56 @@ export type SystemGiant = Giant & {
   inclination?: number;
   node?: number;
   moons?: readonly OrbitMoon[];
+  /**
+   * In a planetary system, its own axes after `days` on the system's clock,
+   * in the frame of systemSky's placeSystem (the planet view's): how its
+   * globe is turned (see globeTurn). A world's giants have none.
+   */
+  axes?: (days: number) => Axes;
 };
+
+/**
+ * The direction from the star of the point of giant `giant`'s orbit at a
+ * true anomaly, in the star view's frame: in the reference plane (the
+ * view's (x, -z) plane, its north the view's up), or tilted by its
+ * inclination about its line of nodes.
+ */
+export function orbitDirection(giant: Pick<SystemGiant, 'periapsis_angle' | 'inclination' | 'node'>, trueAnomaly: number): Vec3 {
+  const tilt = giant.inclination ?? 0;
+  const node = giant.node ?? 0;
+  // The angle from the ascending node in the orbit's plane.
+  const u = trueAnomaly + giant.periapsis_angle - node;
+  const x = Math.cos(node) * Math.cos(u) - Math.sin(node) * Math.sin(u) * Math.cos(tilt);
+  const y = Math.sin(node) * Math.cos(u) + Math.cos(node) * Math.sin(u) * Math.cos(tilt);
+  const z = Math.sin(u) * Math.sin(tilt);
+  return [x, z, -y];
+}
+
+/**
+ * How a planet's globe (a three.js SphereGeometry wrapped in its map) is
+ * turned in the star view: the view-frame images of the geometry's x, y
+ * and z axes (the columns of the turn), from the planet's own `axes` in
+ * placeSystem's frame, so that it shows its star the face the planet view
+ * shows (a locked planet its longitude 180°).
+ *
+ * Three frames meet here:
+ * - SphereGeometry puts u = 0 at -x, 0.25 at +z, 0.5 at +x and 0.75 at -z,
+ *   north +y; the map's frame (geo.ts) puts longitude u * 2pi at
+ *   (sin lon, ., cos lon): u = 0 at +z, 0.25 at +x, 0.5 at -z. Both turn
+ *   eastward right-handed about +y, so the geometry's (x, y, z) is the
+ *   map frame's (-z, y, x).
+ * - The body's axes carry its map frame into placeSystem's: x, y, z there.
+ * - placeSystem's frame (star's axis +y, longitudes counted from +z
+ *   towards +x) is the star view's turned a quarter about y: its z is the
+ *   view's x (the reference direction), its x the view's -z (see
+ *   orbitDirection). The view's distances are compressed along the line
+ *   from the star only, so directions from the star are kept.
+ */
+export function globeTurn(axes: Axes): Axes {
+  const [x, y, z] = axes;
+  const toView = (v: Vec3): Vec3 => [v[2], v[1], -v[0]];
+  return [toView([-z[0], -z[1], -z[2]]), toView(y), toView(x)];
+}
 
 /**
  * A moon as the star view draws it; `ring` for a moon of a giant's rings

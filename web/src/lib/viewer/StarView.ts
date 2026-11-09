@@ -29,6 +29,7 @@ import {
   SphereGeometry,
   type Texture,
   DataTexture,
+  Matrix3,
   TextureLoader,
   Vector3,
   WebGLRenderer,
@@ -78,6 +79,8 @@ import {
   realVectorBound,
   sphereGrid,
   type SystemGiant,
+  globeTurn,
+  orbitDirection,
   moonOrbits,
   gravityScale,
   orbitalSpeed,
@@ -1337,7 +1340,13 @@ export class StarView {
       const { trueAnomaly, distance } = keplerPosition(giant.eccentricity, this.giantAnomaly(k));
       this.giantDistances[k] = giant.orbit_au * distance;
       const position = this.orbitPoint(giant, trueAnomaly, giant.orbit_au * distance);
-      this.giantMarkers[k]?.position.copy(position);
+      const marker = this.giantMarkers[k];
+      marker?.position.copy(position);
+      // Its globe turned on itself as the planet view turns it: a locked
+      // planet keeps its longitude 180° towards the star.
+      if (marker && giant.axes) {
+        (marker.material.uniforms['uTurn']!.value as Matrix3).fromArray(globeTurn(giant.axes(this.systemDay)).flat());
+      }
       this.placeVector(k, giant, position, giant.orbit_au * distance);
       const pin = this.pins[k];
       if (pin) {
@@ -1736,17 +1745,7 @@ export class StarView {
    * SystemGiant), the distance compressed as the view's.
    */
   private orbitPoint(giant: SystemGiant, trueAnomaly: number, au: number): Vector3 {
-    const tilt = giant.inclination ?? 0;
-    if (tilt === 0) return this.inPlaneAt(trueAnomaly + giant.periapsis_angle, au);
-    const node = giant.node ?? 0;
-    // The angle from the ascending node in the orbit's plane.
-    const u = trueAnomaly + giant.periapsis_angle - node;
-    const x = Math.cos(node) * Math.cos(u) - Math.sin(node) * Math.sin(u) * Math.cos(tilt);
-    const y = Math.sin(node) * Math.cos(u) + Math.cos(node) * Math.sin(u) * Math.cos(tilt);
-    const z = Math.sin(u) * Math.sin(tilt);
-    const r = this.at(au);
-    // The reference plane is the view's (x, -z) plane, its north the view's up.
-    return new Vector3(x * r, z * r, -y * r);
+    return new Vector3(...orbitDirection(giant, trueAnomaly)).multiplyScalar(this.at(au));
   }
 
   /** A point of the orbital plane at an angle from the reference direction and a distance (AU), in view units. */

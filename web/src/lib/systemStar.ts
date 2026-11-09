@@ -12,6 +12,7 @@ import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
 import type { Belt } from './api/types/Belt';
 import type { Trojans } from './api/types/Trojans';
+import { placeSystem, type Placement } from './systemSky';
 import { type SystemGiant, withOrbitDefaults } from './viewer/starSystem';
 
 const DEG = Math.PI / 180;
@@ -118,6 +119,12 @@ export function systemStarView(
         // A moon of the rings: drawn among them (see moonOrbits).
         ring: Boolean(b.ring_role),
       }));
+  // Every body placed once per day asked, for all the planets' globes.
+  let placed: { days: number; at: Map<string, Placement> } | null = null;
+  const placeAt = (days: number) => {
+    if (placed?.days !== days) placed = { days, at: placeSystem(system, days) };
+    return placed.at;
+  };
   const giants: SystemGiant[] = all.map((body) => {
     const colour = (body.preview.colours[0] ?? [0.4, 0.4, 0.4]).map(toSrgb) as [number, number, number];
     return {
@@ -143,6 +150,7 @@ export function systemStarView(
       inclination: body.orbit.inclination_deg * DEG,
       node: body.orbit.node_deg * DEG,
       moons: moonsOf(body.id).map((m) => ({ ...m, barycentre_km: 0 })),
+      axes: (days: number) => placeAt(days).get(body.id)!.axes,
     };
   });
   return {
