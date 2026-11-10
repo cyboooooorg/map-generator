@@ -1098,6 +1098,9 @@ export const en = {
     openStarHelp: 'Opens the star view: the star alone, close up, its granules boiling and its spots turning (or double-click the star)',
   },
   starSurface: {
+    filter: 'Photo filter',
+    filterHelp:
+      'Draws the star through a filter of its type\'s hue, as close-up photos of stars show them (taken through narrow-band filters or recoloured): gold for a star like the Sun, orange for a K dwarf, red for a red dwarf, blue for a hot star. Off, the star has its true colour: the Sun is nearly white',
     openSystem: 'System',
     openSystemHelp: 'Back to the system view: the star and its planets (or double-click the star)',
     starSection: 'The star',
