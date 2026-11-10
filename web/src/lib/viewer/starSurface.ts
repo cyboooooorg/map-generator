@@ -76,6 +76,29 @@ export interface StarLook {
   faculaRatio: number;
 }
 
+/**
+ * The display filter's tint, per linear channel: the warm gold of
+ * narrow-band and recoloured photos of the Sun (DKIST/Inouye sunspot
+ * images), over the near-white of a G2V star. The throwaway close-up
+ * prototype mixed its light from `(1, 0.985, 0.955)` to `(1, 0.80, 0.42)`;
+ * this is the second over the first. **Display only**: no science value
+ * reads it.
+ */
+export const FILTER_TINT: readonly [number, number, number] = [1, 0.8 / 0.985, 0.42 / 0.955];
+
+/**
+ * The light a star is drawn with: its true colour `light` (linear RGB), or,
+ * with `filter`, that colour through the warm display filter
+ * (`FILTER_TINT`), as photos of the Sun show it. Set once per star on the
+ * CPU, so the filter costs no frame time.
+ */
+export function displayedLight(light: readonly number[], filter: boolean): [number, number, number] {
+  const r = light[0] ?? 1;
+  const g = light[1] ?? 1;
+  const b = light[2] ?? 1;
+  return filter ? [r * FILTER_TINT[0], g * FILTER_TINT[1], b * FILTER_TINT[2]] : [r, g, b];
+}
+
 /** The Sun's granule size, 1.3 Mm over its 695.7 Mm radius (Trampedach et al. 2013). */
 const SUN_GRANULE_SIZE = 1.3 / 695.7;
 /** The Sun's granule lifetime, 8 minutes (Title et al. 1989). */

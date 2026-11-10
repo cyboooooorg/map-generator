@@ -29,6 +29,8 @@
     animated: boolean;
     /** Whether the coronal loops (and eruptions) are drawn. */
     loops: boolean;
+    /** Whether the star is drawn through the warm display filter rather than in its true colour. */
+    filter: boolean;
     /** Back to the system view (the System button, a double click on the star). */
     onOpenSystem: () => void;
   }
@@ -39,6 +41,7 @@
     clockDays = $bindable(0),
     animated = $bindable(),
     loops = $bindable(),
+    filter = $bindable(),
     onOpenSystem,
   }: Props = $props();
 
@@ -87,6 +90,7 @@
   $effect(() => view?.setSpeed(2 ** speed));
   $effect(() => view?.setAnimated(animated));
   $effect(() => view?.setLoops(loops));
+  $effect(() => view?.setFilter(filter));
 
   /** Back to the starting view of the star. */
   export function resetView(): void {
@@ -122,11 +126,14 @@
   });
   const phase = $derived(activity ? cyclePhase(activity, statsDay) : null);
 
-  const toggleGroups = $derived<Toggle[][]>(
-    activity !== null && activity.envelope !== 'radiative'
-      ? [[{ key: 'loops', label: t.starView.prominences, help: t.starView.prominencesHelp, icon: 'prominence', on: loops, set: (v) => (loops = v) }]]
-      : [],
-  );
+  const toggleGroups = $derived<Toggle[][]>([
+    [
+      ...(activity !== null && activity.envelope !== 'radiative'
+        ? [{ key: 'loops', label: t.starView.prominences, help: t.starView.prominencesHelp, icon: 'prominence' as const, on: loops, set: (v: boolean) => (loops = v) }]
+        : []),
+      { key: 'filter', label: t.starSurface.filter, help: t.starSurface.filterHelp, icon: 'filter', on: filter, set: (v: boolean) => (filter = v) },
+    ],
+  ]);
   const dockPanels = $derived<DockPanel[]>([
     { id: 'star', title: t.starSurface.starSection, icon: 'star', content: starPanel },
     ...(activity ? [{ id: 'activity', title: t.starSurface.activitySection, icon: 'sun' as const, content: activityPanel }] : []),
@@ -205,11 +212,9 @@
 {/snippet}
 <div class="star-chrome">
   <button type="button" class="view-switch" title={t.starSurface.openSystemHelp} onclick={onOpenSystem}>{t.starSurface.openSystem}</button>
-  {#if toggleGroups.length > 0}
-    <div class="toggles">
-      <ToggleBar label={t.starView.displaySection} groups={toggleGroups} />
-    </div>
-  {/if}
+  <div class="toggles">
+    <ToggleBar label={t.starView.displaySection} groups={toggleGroups} />
+  </div>
   <Dock kind="starSurface" panels={dockPanels} defaultActive="star" />
   <PlaybackBar
     bind:playing={animated}

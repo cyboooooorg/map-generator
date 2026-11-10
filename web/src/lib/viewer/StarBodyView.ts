@@ -44,7 +44,7 @@ import {
   starSurfaceFragment,
   starSurfaceVertex,
 } from './starShaders';
-import { StarSurfaceState, starLook, starSurfaceUniforms } from './starSurface';
+import { StarSurfaceState, displayedLight, starLook, starSurfaceUniforms } from './starSurface';
 import { STAR_RADIUS } from './starSystem';
 import { starField } from './stars';
 
@@ -123,6 +123,10 @@ export class StarBodyView {
   /** Seconds of animation, for the loops' shimmer and the eruptions (not the surface). */
   private time = 0;
   private hasActivity = false;
+  /** The star's true light, linear RGB (`info.light`). */
+  private light: readonly number[] = [1, 1, 1];
+  /** Whether the star is drawn through the warm display filter (setFilter). */
+  private filter = false;
   /** Called with the day on each animated frame and after setDay. */
   onClock: (days: number) => void = () => {};
   /** Called on a double click on the star; null ignores it. */
@@ -228,9 +232,10 @@ export class StarBodyView {
    * cycle); without one it shows its limb and granules only.
    */
   setStar(info: StarInfo, activity: StarActivity | null): void {
-    (this.glow.material.uniforms['uColor']!.value as Vector3).set(...info.light);
     this.glow.material.uniforms['uStrength']!.value = Math.min(1.4, 0.6 + 0.12 * Math.log10(info.luminosity + 1e-4) + 0.5);
     this.surface.setStar(starLook(info, activity), activity);
+    this.light = info.light;
+    this.applyLight();
     this.hasActivity = activity !== null && activity.envelope !== 'radiative';
     this.klass = info.type[0] ?? 'G';
     this.seed = Math.round(info.teff_k * 7 + info.orbit_au * 1000);
@@ -275,6 +280,24 @@ export class StarBodyView {
       // The eruption is an animation: paused, none hangs half-risen.
       this.eruption.remove();
     }
+  }
+
+  /**
+   * Draws the star in its true colour, or through a warm display filter,
+   * as photos of the Sun show it (see displayedLight). Display only.
+   */
+  setFilter(on: boolean): void {
+    if (on === this.filter) return;
+    this.filter = on;
+    this.applyLight();
+    this.requestRender();
+  }
+
+  /** Sets the surface's and the corona's light from the star's and the filter. */
+  private applyLight(): void {
+    const light = displayedLight(this.light, this.filter);
+    (this.star.material.uniforms['uStarColour']!.value as Vector3).set(...light);
+    (this.glow.material.uniforms['uColor']!.value as Vector3).set(...light);
   }
 
   /** Shows or hides the coronal loops (and the eruptions). */

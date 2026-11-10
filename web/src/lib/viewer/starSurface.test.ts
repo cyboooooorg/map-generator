@@ -5,6 +5,7 @@ import { activeRegions, hash32, rotationPhase } from '../starActivity';
 import { starSurfaceFragment, starSurfaceVertex } from './starShaders';
 import { SUN_SYSTEM } from './starSystem';
 import {
+  displayedLight,
   exposureFade,
   granuleMotionHarmonics,
   granuleDaysWrap,
@@ -505,5 +506,25 @@ describe('star surface', () => {
     expect(starSurfaceFragment).toMatch(/dot\(normalize\(vWorldNormal\), normalize\(cameraPosition - vWorld\)\)/);
     expect(starSurfaceFragment).not.toContain('vViewNormal');
     expect(starSurfaceVertex).toContain('vWorld = world.xyz');
+  });
+});
+
+describe('display filter', () => {
+  it('keeps the true colour by default', () => {
+    expect(displayedLight([1, 0.98, 0.95], false)).toEqual([1, 0.98, 0.95]);
+  });
+
+  it('tints a near-white star toward the gold of solar photos', () => {
+    const [r, g, b] = displayedLight([1, 0.985, 0.955], true);
+    expect(r).toBeCloseTo(1, 6);
+    expect(g).toBeCloseTo(0.8, 6);
+    expect(b).toBeCloseTo(0.42, 6);
+  });
+
+  it('only darkens green and blue, so a red star stays red', () => {
+    const [r, g, b] = displayedLight([1, 0.6, 0.3], true);
+    expect(r).toBe(1);
+    expect(g).toBeLessThan(0.6);
+    expect(b).toBeLessThan(0.3);
   });
 });

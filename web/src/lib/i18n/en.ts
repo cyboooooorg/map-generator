@@ -1098,6 +1098,9 @@ export const en = {
     openStarHelp: 'Opens the star view: the star alone, close up, its granules boiling and its spots turning (or double-click the star)',
   },
   starSurface: {
+    filter: 'Photo filter',
+    filterHelp:
+      'Draws the star through a warm filter, gold to orange, as close-up photos of the Sun show it (they are taken through narrow-band filters or recoloured). Off, the star has its true colour: the Sun is nearly white',
     openSystem: 'System',
     openSystemHelp: 'Back to the system view: the star and its planets (or double-click the star)',
     starSection: 'The star',

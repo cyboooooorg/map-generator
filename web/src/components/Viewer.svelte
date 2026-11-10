@@ -251,6 +251,8 @@
   let starOrbit = $state(true);
   let starZone = $state(true);
   let starProminences = $state(true);
+  /** Whether the star view draws the star through its warm display filter (true colour by default). */
+  let starFilter = $state(false);
   /**
    * The day the system view and the star view show, Earth days from the
    * system's t = 0: both panes bind it, so switching keeps the day. 0 with
@@ -2475,6 +2477,7 @@
       bind:clockDays={starDays}
       bind:animated={starAnimated}
       bind:loops={starProminences}
+      bind:filter={starFilter}
       onOpenSystem={() => (world.starMode = 'system')}
     />
   {/if}

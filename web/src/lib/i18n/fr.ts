@@ -1043,6 +1043,9 @@ export const fr: Messages = {
     openStarHelp: `Ouvre la vue de l’étoile${S}: l’étoile seule, de près, ses granules qui bouillonnent et ses taches qui tournent (ou double-cliquer sur l’étoile)`,
   },
   starSurface: {
+    filter: 'Filtre photo',
+    filterHelp:
+      `Dessine l’étoile à travers un filtre chaud, doré à orangé, comme la montrent les photos rapprochées du Soleil (prises avec des filtres à bande étroite ou recolorées). Désactivé, l’étoile a sa vraie couleur${S}: le Soleil est presque blanc`,
     openSystem: 'Système',
     openSystemHelp: `Revient à la vue du système${S}: l’étoile et ses planètes (ou double-cliquer sur l’étoile)`,
     starSection: 'L’étoile',
