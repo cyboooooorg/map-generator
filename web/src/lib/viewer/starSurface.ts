@@ -84,15 +84,18 @@ export interface StarLook {
  * `(1, 0.80, 0.42)` (DKIST/Inouye sunspot images); the red dwarfs go to
  * red, the K dwarfs to orange, the F stars to pale yellow, the A stars to
  * white-blue and the O and B stars to blue. **Display only**: no science
- * value reads it.
+ * value reads it. The values are linear: the screen's sRGB curve lifts
+ * them, so the red dwarfs' `(1, 0.08, 0.02)` shows as about
+ * `rgb(255, 80, 40)` and the K dwarfs' `(1, 0.3, 0.05)` as about
+ * `rgb(255, 150, 60)`.
  */
 export const FILTER_COLOURS: readonly (readonly [number, readonly [number, number, number]])[] = [
-  [2400, [1, 0.2, 0.08]],
-  [3200, [1, 0.3, 0.12]],
-  [3900, [1, 0.45, 0.18]],
-  [5000, [1, 0.62, 0.26]],
+  [2400, [1, 0.045, 0.012]],
+  [3200, [1, 0.08, 0.021]],
+  [3900, [1, 0.155, 0.032]],
+  [5000, [1, 0.305, 0.045]],
   [5772, [1, 0.8, 0.42]],
-  [6600, [1, 0.92, 0.66]],
+  [6600, [1, 0.87, 0.51]],
   [8500, [0.9, 0.94, 1]],
   [15000, [0.62, 0.74, 1]],
   [30000, [0.48, 0.62, 1]],

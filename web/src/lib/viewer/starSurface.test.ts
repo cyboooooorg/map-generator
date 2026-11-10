@@ -528,8 +528,8 @@ describe('display filter', () => {
     expect(mg).toBeLessThan(0.3);
     expect(mb).toBeLessThan(0.15);
     const [, kg] = filterColour(4500);
-    expect(kg).toBeGreaterThan(0.45);
-    expect(kg).toBeLessThan(0.62);
+    expect(kg).toBeGreaterThan(0.155);
+    expect(kg).toBeLessThan(0.4);
     const [br, , bb] = filterColour(20000);
     expect(bb).toBe(1);
     expect(br).toBeLessThan(0.62);
