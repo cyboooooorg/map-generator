@@ -767,12 +767,20 @@ export const lineFragment = /* glsl */ `
 
 // Stars: points at infinity. Only the camera's rotation moves them, so
 // they stay put while the camera orbits the planet; drawn at the far plane
-// (z = w), behind everything, without writing depth.
+// (z = w), behind everything, without writing depth. With HIDE_HOST_STAR
+// (the planet view), the stars behind the host star's disc are dropped:
+// the disc is drawn additively, so it would not hide them. uHostDir is the
+// star's direction (world space), uHostCos the cosine of the disc's
+// angular radius as drawn (above 1 hides none).
 export const starsVertex = /* glsl */ `
   attribute vec3 colour;
   attribute float size;
   uniform float uPixelRatio;
   uniform float uOpacity;
+  #ifdef HIDE_HOST_STAR
+  uniform vec3 uHostDir;
+  uniform float uHostCos;
+  #endif
   varying vec3 vColour;
   void main() {
     // With the field's own rotation (the sky turning against the body
@@ -781,6 +789,13 @@ export const starsVertex = /* glsl */ `
     gl_Position = clip.xyww;
     gl_PointSize = size * uPixelRatio;
     vColour = colour * uOpacity;
+    #ifdef HIDE_HOST_STAR
+    if (dot(normalize(mat3(modelMatrix) * position), uHostDir) > uHostCos) {
+      // Outside the clip volume: the point is not drawn.
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      gl_PointSize = 0.0;
+    }
+    #endif
   }
 `;
 
@@ -1304,6 +1319,29 @@ export const SKY_OCCLUDERS = 4;
 export const SKY_LINE_PASS = { farUnder: 0, farOver: 1, near: 2 } as const;
 
 /**
+ * GLSL: `hostStarHides(ray, pointDistance)` says whether the host star's
+ * disc (uHostOccluder: its centre, xyz, and radius, w, in the scene's
+ * frame; w 0 for none) stands between the camera and a point
+ * `pointDistance` away along the unit `ray`. The star is drawn
+ * additively, without depth, so the lines and guides behind it test it
+ * themselves, as they do the sky bodies; the ones in front of it stay
+ * drawn, over its disc and its glow.
+ */
+const hostStarHidesGlsl = /* glsl */ `
+  uniform vec4 uHostOccluder;
+  bool hostStarHides(vec3 ray, float pointDistance) {
+    if (uHostOccluder.w <= 0.0) return false;
+    vec3 oc = cameraPosition - uHostOccluder.xyz;
+    float b = dot(oc, ray);
+    vec3 across = oc - b * ray;
+    float h = uHostOccluder.w * uHostOccluder.w - dot(across, across);
+    if (h <= 0.0) return false;
+    float hit = -b - sqrt(h);
+    return hit > 0.0 && hit < pointDistance - 1e-4 * uHostOccluder.w;
+  }
+`;
+
+/**
  * GLSL for a surface drawn far away (a Hill sphere): `skyHidden(point)`
  * says whether a sky body of uOccluders stands between the camera and the
  * point, the hit measured as in skyOrbitFragment. A sphere centred on a
@@ -1313,10 +1351,12 @@ export const SKY_LINE_PASS = { farUnder: 0, farOver: 1, near: 2 } as const;
 export const skyHiddenChunk = /* glsl */ `
   uniform vec4 uOccluders[${SKY_OCCLUDERS}];
   uniform int uOccluderCount;
+  ${hostStarHidesGlsl}
   bool skyHidden(vec3 point) {
     vec3 toPoint = point - cameraPosition;
     float pointDistance = length(toPoint);
     vec3 ray = toPoint / max(pointDistance, 1e-9);
+    if (hostStarHides(ray, pointDistance)) return true;
     for (int i = 0; i < ${SKY_OCCLUDERS}; i++) {
       if (i >= uOccluderCount) break;
       vec4 body = uOccluders[i];
@@ -1365,6 +1405,7 @@ export const skyOrbitFragment = /* glsl */ `
   uniform int uPass;
   uniform vec4 uOccluders[${SKY_OCCLUDERS}];
   uniform int uOccluderCount;
+  ${hostStarHidesGlsl}
   // Dash period along a dashed orbit, in radii of the body shown.
   uniform float uDash;
   // The screen's height, in drawn pixels.
@@ -1382,6 +1423,8 @@ export const skyOrbitFragment = /* glsl */ `
     vec3 toPoint = vPoint - cameraPosition;
     float pointDistance = length(toPoint);
     vec3 ray = toPoint / max(pointDistance, 1e-9);
+    // Behind the host star's disc: dropped in every pass.
+    if (hostStarHides(ray, pointDistance)) discard;
     bool hidden = false;
     bool over = false;
     for (int i = 0; i < ${SKY_OCCLUDERS}; i++) {

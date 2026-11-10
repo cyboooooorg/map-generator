@@ -648,6 +648,8 @@ export class PlanetView {
   private readonly skyOccluders = {
     uOccluders: { value: Array.from({ length: SKY_OCCLUDERS }, () => new Vector4()) },
     uOccluderCount: { value: 0 },
+    /** The host star (centre, radius), which hides what is behind its disc; radius 0 for none (see drawHostStar). */
+    uHostOccluder: { value: new Vector4() },
   };
   /**
    * The globe's spin axis (see setSpinAxes): out of its poles, the north
@@ -862,7 +864,14 @@ export class PlanetView {
       new ShaderMaterial({
         vertexShader: starsVertex,
         fragmentShader: starsFragment,
-        uniforms: { uPixelRatio: { value: 1 }, uOpacity: { value: 1 } },
+        // The host star's disc hides the stars behind it (see starsVertex).
+        defines: { HIDE_HOST_STAR: 1 },
+        uniforms: {
+          uPixelRatio: { value: 1 },
+          uOpacity: { value: 1 },
+          uHostDir: { value: new Vector3(0, 0, 1) },
+          uHostCos: { value: 2 },
+        },
         blending: AdditiveBlending,
         transparent: true,
         depthWrite: false,
@@ -872,7 +881,10 @@ export class PlanetView {
     this.stars.frustumCulled = false;
     // The sky, farthest first: the star field, the host star, then the
     // bodies of the system, which hide both (all at infinity, drawn in
-    // this order after the surface, which hides them by depth).
+    // this order after the surface, which hides them by depth). The star
+    // is drawn additively, without depth: the star field drops the points
+    // behind its disc (starsVertex), the orbit lines the segments behind
+    // it (skyOrbitFragment, uHostOccluder).
     this.stars.renderOrder = -3;
     this.scene.add(this.stars);
 
@@ -3304,6 +3316,10 @@ export class PlanetView {
   private drawHostStar(): void {
     const visible = this.u.uLightMode.value === 1 && this.morph > 0.01;
     this.hostStar.visible = visible;
+    const hostOccluder = this.skyOccluders.uHostOccluder.value;
+    const starsUniforms = this.stars.material.uniforms;
+    hostOccluder.set(0, 0, 0, 0);
+    starsUniforms['uHostCos']!.value = 2;
     if (!visible) {
       return;
     }
@@ -3328,6 +3344,11 @@ export class PlanetView {
     const glow = Math.min(1.2, 0.55 * this.host.insolation ** 0.25);
     u['uDisk']!.value = disk;
     u['uSize']!.value = hostStarSpriteSize(disk, ratio);
+    // What the disc hides: the stars within its radius as drawn (at least
+    // a few pixels), the lines behind the star itself.
+    (starsUniforms['uHostDir']!.value as Vector3).copy(dir);
+    starsUniforms['uHostCos']!.value = Math.cos(((disk / 2 / pixelsPerDegree) * Math.PI) / 180);
+    if (this.starPlace) hostOccluder.set(this.starPlace.position.x, this.starPlace.position.y, this.starPlace.position.z, this.starPlace.radius);
     u['uGlow']!.value = glow;
     u['uOpacity']!.value = this.morph ** 3;
     const surface = this.hostSurfaceOf;
@@ -3823,7 +3844,7 @@ function screenDial(anchors: ReturnType<RotationDial['anchors']>, project: (poin
 function farGuide(
   material: Material,
   uniforms: { uHostCentre: IUniform<Vector3>; uHostRadius: IUniform<number> },
-  occluders?: { uOccluders: IUniform<Vector4[]>; uOccluderCount: IUniform<number> },
+  occluders?: { uOccluders: IUniform<Vector4[]>; uOccluderCount: IUniform<number>; uHostOccluder: IUniform<Vector4> },
 ): void {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms, occluders);
