@@ -1100,7 +1100,7 @@ export const en = {
   starSurface: {
     filter: 'Photo filter',
     filterHelp:
-      'Draws the star through a warm filter, gold to orange, as close-up photos of the Sun show it (they are taken through narrow-band filters or recoloured). Off, the star has its true colour: the Sun is nearly white',
+      'Draws the star through a filter of its type\'s hue, as close-up photos of stars show them (taken through narrow-band filters or recoloured): gold for a star like the Sun, orange for a K dwarf, red for a red dwarf, blue for a hot star. Off, the star has its true colour: the Sun is nearly white',
     openSystem: 'System',
     openSystemHelp: 'Back to the system view: the star and its planets (or double-click the star)',
     starSection: 'The star',

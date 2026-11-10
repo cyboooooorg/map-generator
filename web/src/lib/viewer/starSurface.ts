@@ -77,26 +77,56 @@ export interface StarLook {
 }
 
 /**
- * The display filter's tint, per linear channel: the warm gold of
- * narrow-band and recoloured photos of the Sun (DKIST/Inouye sunspot
- * images), over the near-white of a G2V star. The throwaway close-up
- * prototype mixed its light from `(1, 0.985, 0.955)` to `(1, 0.80, 0.42)`;
- * this is the second over the first. **Display only**: no science value
- * reads it.
+ * The display filter's colours (linear RGB, red or blue at 1) against
+ * effective temperature, K, interpolated linearly between them: the
+ * saturated hue of each spectral class, as narrow-band or recoloured
+ * photos show stars. The Sun's gold is the close-up prototype's
+ * `(1, 0.80, 0.42)` (DKIST/Inouye sunspot images); the red dwarfs go to
+ * red, the K dwarfs to orange, the F stars to pale yellow, the A stars to
+ * white-blue and the O and B stars to blue. **Display only**: no science
+ * value reads it.
  */
-export const FILTER_TINT: readonly [number, number, number] = [1, 0.8 / 0.985, 0.42 / 0.955];
+export const FILTER_COLOURS: readonly (readonly [number, readonly [number, number, number]])[] = [
+  [2400, [1, 0.2, 0.08]],
+  [3200, [1, 0.3, 0.12]],
+  [3900, [1, 0.45, 0.18]],
+  [5000, [1, 0.62, 0.26]],
+  [5772, [1, 0.8, 0.42]],
+  [6600, [1, 0.92, 0.66]],
+  [8500, [0.9, 0.94, 1]],
+  [15000, [0.62, 0.74, 1]],
+  [30000, [0.48, 0.62, 1]],
+];
+
+/** The display filter's colour for a star of effective temperature `teffK` (see FILTER_COLOURS), clamped at both ends. */
+export function filterColour(teffK: number): [number, number, number] {
+  const first = FILTER_COLOURS[0]!;
+  const last = FILTER_COLOURS[FILTER_COLOURS.length - 1]!;
+  if (!(teffK > first[0])) return [...first[1]];
+  if (teffK >= last[0]) return [...last[1]];
+  let k = 1;
+  while (FILTER_COLOURS[k]![0] < teffK) k++;
+  const [t0, c0] = FILTER_COLOURS[k - 1]!;
+  const [t1, c1] = FILTER_COLOURS[k]!;
+  const f = (teffK - t0) / (t1 - t0);
+  return [c0[0] + f * (c1[0] - c0[0]), c0[1] + f * (c1[1] - c0[1]), c0[2] + f * (c1[2] - c0[2])];
+}
 
 /**
- * The light a star is drawn with: its true colour `light` (linear RGB), or,
- * with `filter`, that colour through the warm display filter
- * (`FILTER_TINT`), as photos of the Sun show it. Set once per star on the
- * CPU, so the filter costs no frame time.
+ * The light a star is drawn with: its true colour `light` (linear RGB,
+ * the Sun white), or, with `filter`, the display filter's colour for its
+ * temperature `teffK` (see FILTER_COLOURS) at the same brightness (its
+ * brightest channel). Set once per star on the CPU, so the filter costs
+ * no frame time.
  */
-export function displayedLight(light: readonly number[], filter: boolean): [number, number, number] {
+export function displayedLight(light: readonly number[], teffK: number, filter: boolean): [number, number, number] {
   const r = light[0] ?? 1;
   const g = light[1] ?? 1;
   const b = light[2] ?? 1;
-  return filter ? [r * FILTER_TINT[0], g * FILTER_TINT[1], b * FILTER_TINT[2]] : [r, g, b];
+  if (!filter) return [r, g, b];
+  const peak = Math.max(r, g, b);
+  const [fr, fg, fb] = filterColour(teffK);
+  return [fr * peak, fg * peak, fb * peak];
 }
 
 /** The Sun's granule size, 1.3 Mm over its 695.7 Mm radius (Trampedach et al. 2013). */

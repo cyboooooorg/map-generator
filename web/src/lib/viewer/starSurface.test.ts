@@ -6,6 +6,7 @@ import { starSurfaceFragment, starSurfaceVertex } from './starShaders';
 import { SUN_SYSTEM } from './starSystem';
 import {
   displayedLight,
+  filterColour,
   exposureFade,
   granuleMotionHarmonics,
   granuleDaysWrap,
@@ -511,20 +512,44 @@ describe('star surface', () => {
 
 describe('display filter', () => {
   it('keeps the true colour by default', () => {
-    expect(displayedLight([1, 0.98, 0.95], false)).toEqual([1, 0.98, 0.95]);
+    expect(displayedLight([1, 0.98, 0.95], 5772, false)).toEqual([1, 0.98, 0.95]);
   });
 
-  it('tints a near-white star toward the gold of solar photos', () => {
-    const [r, g, b] = displayedLight([1, 0.985, 0.955], true);
-    expect(r).toBeCloseTo(1, 6);
+  it('shows the Sun gold, as in solar photos', () => {
+    const [r, g, b] = displayedLight([1, 1, 1], 5772, true);
+    expect(r).toBe(1);
     expect(g).toBeCloseTo(0.8, 6);
     expect(b).toBeCloseTo(0.42, 6);
   });
 
-  it('only darkens green and blue, so a red star stays red', () => {
-    const [r, g, b] = displayedLight([1, 0.6, 0.3], true);
-    expect(r).toBe(1);
-    expect(g).toBeLessThan(0.6);
-    expect(b).toBeLessThan(0.3);
+  it('shows a red dwarf red, a K dwarf orange and a hot star blue', () => {
+    const [mr, mg, mb] = filterColour(3000);
+    expect(mr).toBe(1);
+    expect(mg).toBeLessThan(0.3);
+    expect(mb).toBeLessThan(0.15);
+    const [, kg] = filterColour(4500);
+    expect(kg).toBeGreaterThan(0.45);
+    expect(kg).toBeLessThan(0.62);
+    const [br, , bb] = filterColour(20000);
+    expect(bb).toBe(1);
+    expect(br).toBeLessThan(0.62);
+  });
+
+  it('gets warmer as the star gets cooler, and clamps at both ends', () => {
+    let previous = 0;
+    for (let t = 2000; t <= 40000; t += 250) {
+      const [r, g, b] = filterColour(t);
+      // Blue over red rises with the temperature.
+      expect(b / r).toBeGreaterThanOrEqual(previous);
+      previous = b / r;
+      for (const c of [r, g, b]) expect(c).toBeGreaterThan(0);
+    }
+    expect(filterColour(1000)).toEqual(filterColour(2400));
+    expect(filterColour(50000)).toEqual(filterColour(30000));
+  });
+
+  it("keeps the star's brightness", () => {
+    const [r, g, b] = displayedLight([0.5, 0.4, 0.3], 4000, true);
+    expect(Math.max(r, g, b)).toBeCloseTo(0.5, 9);
   });
 });

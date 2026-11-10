@@ -1045,7 +1045,7 @@ export const fr: Messages = {
   starSurface: {
     filter: 'Filtre photo',
     filterHelp:
-      `Dessine l’étoile à travers un filtre chaud, doré à orangé, comme la montrent les photos rapprochées du Soleil (prises avec des filtres à bande étroite ou recolorées). Désactivé, l’étoile a sa vraie couleur${S}: le Soleil est presque blanc`,
+      `Dessine l’étoile à travers un filtre de la teinte de son type, comme la montrent les photos rapprochées d’étoiles (prises avec des filtres à bande étroite ou recolorées)${S}: doré pour une étoile comme le Soleil, orange pour une naine K, rouge pour une naine rouge, bleu pour une étoile chaude. Désactivé, l’étoile a sa vraie couleur${S}: le Soleil est presque blanc`,
     openSystem: 'Système',
     openSystemHelp: `Revient à la vue du système${S}: l’étoile et ses planètes (ou double-cliquer sur l’étoile)`,
     starSection: 'L’étoile',
