@@ -948,7 +948,7 @@ export class PlanetView {
     this.surface.material.stencilRef = DETAIL_STENCIL;
     this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
-    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin, this.dial.group, this.hostDial.group);
+    this.scene.add(this.guides.spin, this.guides.host, this.guides.vectors, this.hostSpin.spin, this.dial.group, this.hostDial.group);
 
     this.grid = new LineSegments(
       graticule(30),

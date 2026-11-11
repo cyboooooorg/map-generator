@@ -1715,7 +1715,8 @@
             },
       });
     }
-    const pullText = (pull: number) => withUnit(formatUpTo(pull, pull < 0.01 ? 4 : 3), 'm/s²');
+    // Three significant digits at least: a planet far out feels 1e-5 m/s² of its star.
+    const pullText = (pull: number) => withUnit(formatUpTo(pull, pull >= 0.01 ? 3 : Math.min(Math.ceil(-Math.log10(Math.max(pull, 1e-12))) + 2, 12)), 'm/s²');
     const speedText = (speed: number) => withUnit(formatUpTo(speed, 2), 'km/s');
     // The pull of what the body orbits (its planet, or the star) and its speed round it.
     if (sysBody && ownMotion) {
