@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import fixture from './systemSky.fixture.json';
-import { hillRadiusKm, hillReach, hillSphere, libration, placeSystem, smallBodiesSky, systemReach, systemSky } from './systemSky';
+import { hillRadiusKm, hillReach, hillSphere, libration, placeSystem, skyMotions, smallBodiesSky, systemReach, systemSky } from './systemSky';
 import { ringSeed, type Vec3 } from './skyBodies';
 
 // A G2V system drawn by the generator: b (terran, generated), c (a gas
@@ -380,5 +380,67 @@ describe('Hill sphere reach', () => {
 
   it('is nothing for nothing', () => {
     expect(hillReach([0, 0, 0], 0)).toBe(0);
+  });
+});
+
+describe('motions in the sky', () => {
+  const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+  it('pulls a planet towards the star, the way the sunlight comes from', () => {
+    const motion = skyMotions(system, 'b', 100).get('b')!;
+    const sky = systemSky(system, 'b', 100, textures);
+    expect(dot(motion.pull, sky.sun)).toBeCloseTo(1, 6);
+  });
+
+  it('pulls a moon towards its planet, where its planet is in its sky', () => {
+    const motion = skyMotions(system, 'c-1', 3).get('c-1')!;
+    const sky = systemSky(system, 'c-1', 3, textures);
+    const planet = sky.bodies[sky.ids.indexOf('c')]!;
+    expect(dot(motion.pull, planet.direction)).toBeCloseTo(1, 6);
+  });
+
+  it('has no share of the pull along the velocity on a round orbit', () => {
+    // b, c-1 and c-2: e under 0.03 (c, at 0.26, is the eccentric one).
+    const motions = skyMotions(system, 'c-1', 3);
+    for (const id of ['b', 'c-1', 'c-2']) expect(Math.abs(motions.get(id)!.alongShare)).toBeLessThan(0.03);
+  });
+
+  it('moves each body across its pull, near enough on a round orbit', () => {
+    for (const [id, motion] of skyMotions(system, 'c-1', 3)) {
+      const e = system.bodies.find((b) => b.id === id)!.orbit.eccentricity;
+      expect(length(motion.pull)).toBeCloseTo(1, 9);
+      expect(length(motion.velocity!)).toBeCloseTo(1, 9);
+      expect(Math.abs(dot(motion.pull, motion.velocity!))).toBeLessThan(e + 0.01);
+    }
+  });
+
+  it('gives the pull and the speed of the primary at the present distance', () => {
+    const motion = skyMotions(system, 'b', 0).get('b')!;
+    // 1 Sun at about 1.48 AU: about 0.0027 m/s² and 24.5 km/s.
+    const sunPull = 1.32712e20 / (motion.distanceKm * 1000) ** 2;
+    expect(motion.pullMs2 / sunPull).toBeCloseTo(1, 2);
+    expect(motion.speedKms).toBeGreaterThan(23.5);
+    expect(motion.speedKms).toBeLessThan(25.5);
+  });
+
+  it('sizes the pull and the speed against their means: larger at periapsis, smaller at apoapsis', () => {
+    // c: e = 0.256, its year 11,333 days; its periapsis and apoapsis half a year apart.
+    const e = system.bodies.find((b) => b.id === 'c')!.orbit.eccentricity;
+    const scales = Array.from({ length: 64 }, (_, k) => skyMotions(system, 'c', (k * 11332.8) / 64).get('c')!);
+    const most = Math.max(...scales.map((m) => m.pullScale));
+    const least = Math.min(...scales.map((m) => m.pullScale));
+    expect(most).toBeGreaterThan(1);
+    expect(least).toBeLessThan(1);
+    expect(most / least).toBeCloseTo(((1 + e) / (1 - e)) ** 2, 0);
+    // Speeding up on the way in, slowing down on the way out: the share along the velocity changes sign.
+    expect(Math.max(...scales.map((m) => m.alongShare))).toBeGreaterThan(0.05);
+    expect(Math.min(...scales.map((m) => m.alongShare))).toBeLessThan(-0.05);
+    // Faster where the pull is stronger.
+    const fastest = scales.reduce((x, y) => (y.speedScale > x.speedScale ? y : x));
+    expect(fastest.pullScale).toBeCloseTo(most, 1);
+  });
+
+  it('is empty for an unknown body', () => {
+    expect(skyMotions(system, 'zz', 0).size).toBe(0);
   });
 });

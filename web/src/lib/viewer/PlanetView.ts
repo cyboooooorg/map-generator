@@ -63,7 +63,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { cameraPlanes } from './cameraPlanes';
 import { FrameStats } from './frameStats';
-import { BodyGuides, type GuidePoints, type HostGuide } from './bodyGuides';
+import { BodyGuides, type GuidePoints, type HostGuide, type MotionGuide } from './bodyGuides';
 import { DIAL_RADIUS, RotationDial } from './rotationDial';
 import { sphereGrid } from './starSystem';
 import { hiddenByShape, hiddenBySkyDisc } from './occlusion';
@@ -669,11 +669,19 @@ export class PlanetView {
   /** Which body of the sky is the host planet, and whether it is locked to its star; null for none. */
   private hostSpinOf: { index: number; locked: boolean } | null = null;
   private hostGuideOn = false;
+  /**
+   * The arrows of the pull and the velocity of each body of the sky (see
+   * setSkyMotions), in the order of setSkyBodies, built as they are first
+   * needed: far away as the host's spin is, each hidden behind its own body.
+   */
+  private readonly skyVectors: { guides: BodyGuides; uniforms: { uHostCentre: { value: Vector3 }; uHostRadius: { value: number } } }[] = [];
   /** How far the clouds of the sky bodies have drifted, turns (shared: only the host has any). */
   private readonly skyCloudShift = { value: 0 };
   /** Whether the body shown's spin arrow (or locked ring) is drawn (see setSpinDirection), and the link to the host (see setHostLink). */
   private spinArrowOn = false;
   private hostLinkOn = false;
+  /** Whether the body shown's pull and velocity arrows are drawn (see setVectors). */
+  private vectorsOn = false;
   /**
    * The Hill sphere drawn round a body of the sky (see setHillSphere): a
    * grid and a faint limb shell on a unit sphere, placed and scaled to it,
@@ -940,7 +948,7 @@ export class PlanetView {
     this.surface.material.stencilRef = DETAIL_STENCIL;
     this.surface.material.stencilFunc = NotEqualStencilFunc;
     this.scene.add(this.surface);
-    this.scene.add(this.guides.spin, this.guides.host, this.hostSpin.spin, this.dial.group, this.hostDial.group);
+    this.scene.add(this.guides.spin, this.guides.host, this.guides.vectors, this.hostSpin.spin, this.dial.group, this.hostDial.group);
 
     this.grid = new LineSegments(
       graticule(30),
@@ -2269,6 +2277,7 @@ export class PlanetView {
     this.spinAxis?.geometry.dispose();
     this.guides.dispose();
     this.hostSpin.dispose();
+    for (const { guides } of this.skyVectors) guides.dispose();
     this.dial.dispose();
     this.hostDial.dispose();
     this.previewGlobe?.geometry.dispose();
@@ -2763,12 +2772,40 @@ export class PlanetView {
     this.requestRender();
   }
 
-  /**
-   * Draws the link to the host planet (see setHostGuide): the dotted line,
-   * the pull and the velocity arrows.
-   */
+  /** Draws the link to the host planet (see setHostGuide): the dotted line. */
   setHostLink(on: boolean): void {
     this.hostLinkOn = on;
+    this.requestRender();
+  }
+
+  /** Draws the body shown's pull and velocity arrows (see setMotion). */
+  setVectors(on: boolean): void {
+    this.vectorsOn = on;
+    this.requestRender();
+  }
+
+  /**
+   * The body shown's motion round what it orbits (its planet, or the
+   * star), for the arrows of its pull and its velocity; null for none.
+   */
+  setMotion(motion: MotionGuide | null): void {
+    this.guides.setMotion(motion);
+    this.requestRender();
+  }
+
+  /**
+   * The motion of each body of the sky (in the order of setSkyBodies; null
+   * for none), drawn round it as the body shown's while its `show.vectors`
+   * is on.
+   */
+  setSkyMotions(motions: readonly (MotionGuide | null)[]): void {
+    while (this.skyVectors.length < motions.length) {
+      const uniforms = { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 1 } };
+      const guides = new BodyGuides(new Color(...SPIN_AXIS_NORTH), (material) => farGuide(material, uniforms));
+      this.scene.add(guides.vectors);
+      this.skyVectors.push({ guides, uniforms });
+    }
+    this.skyVectors.forEach((entry, i) => entry.guides.setMotion(motions[i] ?? null));
     this.requestRender();
   }
 
@@ -2783,8 +2820,7 @@ export class PlanetView {
 
   /**
    * The host planet of the body shown (a moon's planet), for a dotted line
-   * to it and the arrows of its pull and of the body's velocity; null for
-   * none. Shown with the link to the host (see setHostLink).
+   * to it; null for none. Shown with the link to the host (see setHostLink).
    */
   setHostGuide(guide: HostGuide | null): void {
     this.guides.setHost(guide);
@@ -2912,7 +2948,7 @@ export class PlanetView {
     bodies: ({ x: number; y: number } | null)[];
     star: { x: number; y: number } | null;
     /** Where the body's guides end (see lib/viewer/bodyGuides), null when not drawn or hidden by the globe. */
-    guides: Record<keyof GuidePoints | 'hostSpin', { x: number; y: number } | null>;
+    guides: Record<keyof GuidePoints | 'hostSpin' | 'hostPull' | 'hostVelocity' | 'hostAcross' | 'hostAlong', { x: number; y: number } | null>;
     /** Where each mark of setSkyMarks is: its candidate in view nearest the screen's centre, null when none is. */
     marks: ({ x: number; y: number } | null)[];
     /**
@@ -2992,7 +3028,10 @@ export class PlanetView {
         host: hostAt,
         pull: pullAt,
         velocity: velocityAt,
+        across: near(points.across),
+        along: near(points.along),
         hostSpin: this.hostSpinTip(near),
+        ...this.hostVectorTips(near),
       },
       marks: this.skyMarks.map(({ candidates, prefer = [0.5, 0.5] }) => {
         let best: { x: number; y: number } | null = null;
@@ -3064,6 +3103,21 @@ export class PlanetView {
     return near(tip);
   }
 
+  /** Where the host planet's pull and velocity arrows end on the screen, through `near`, null when not drawn or hidden by the planet. */
+  private hostVectorTips(near: (point: Vector3 | null, margin?: number) => { x: number; y: number } | null): {
+    hostPull: { x: number; y: number } | null;
+    hostVelocity: { x: number; y: number } | null;
+    hostAcross: { x: number; y: number } | null;
+    hostAlong: { x: number; y: number } | null;
+  } {
+    const host = this.hostSpinOf ? this.skyVectors[this.hostSpinOf.index] : undefined;
+    if (!host) return { hostPull: null, hostVelocity: null, hostAcross: null, hostAlong: null };
+    host.guides.vectors.updateMatrixWorld(true);
+    const points = host.guides.points();
+    const tip = (point: Vector3 | null) => (point && !this.behindPlanet(point, host.uniforms) ? near(point) : null);
+    return { hostPull: tip(points.pull), hostVelocity: tip(points.velocity), hostAcross: tip(points.across), hostAlong: tip(points.along) };
+  }
+
   /** Whether the planet (`uniforms`: its centre and radius) stands between the camera and `point`. */
   private behindPlanet(point: Vector3, uniforms: { uHostCentre: { value: Vector3 }; uHostRadius: { value: number } }): boolean {
     const to = point.clone().sub(this.camera.position);
@@ -3120,7 +3174,7 @@ export class PlanetView {
       this.hostSpinUniforms.uHostCentre.value.copy(centre);
       this.hostSpinUniforms.uHostRadius.value = body.radius;
     }
-    this.hostSpin.update(on, false, this.morph);
+    this.hostSpin.update(on, false, false, this.morph);
   }
 
   private drawSkyBodies(): void {
@@ -3185,6 +3239,29 @@ export class PlanetView {
     this.skyOccluders.uOccluderCount.value = occluders.length;
     this.drawHostSpin(visible);
     this.drawHostDial(visible);
+    this.drawSkyVectors(visible, smallest);
+  }
+
+  /**
+   * Places each body of the sky's pull and velocity arrows round it (see
+   * setSkyMotions), scaled to its disc as drawn: its own size, or the few
+   * pixels a small one is given.
+   */
+  private drawSkyVectors(visible: boolean, smallest: number): void {
+    this.skyVectors.forEach(({ guides, uniforms }, i) => {
+      const entry = this.skyBodies[i];
+      const body = entry?.body;
+      const on = visible && !!body?.show?.vectors && !!body.position && body.radius !== undefined && entry!.mesh.visible;
+      if (on && body?.position && body.radius !== undefined) {
+        const centre = new Vector3(...body.position);
+        const drawn = Math.max(body.radius, centre.clone().sub(this.camera.position).length() * Math.tan(smallest));
+        guides.vectors.position.copy(centre);
+        guides.vectors.scale.setScalar(drawn);
+        uniforms.uHostCentre.value.copy(centre);
+        uniforms.uHostRadius.value = body.radius;
+      }
+      guides.update(false, false, on, this.morph);
+    });
   }
 
   /**
@@ -3410,7 +3487,7 @@ export class PlanetView {
       this.spinAxis.material.opacity = this.morph ** 3;
       this.spinAxis.scale.setScalar(poles);
     }
-    this.guides.update(this.spinArrowOn, this.hostLinkOn && this.hostGuideOn, this.morph);
+    this.guides.update(this.spinArrowOn, this.hostLinkOn && this.hostGuideOn, this.vectorsOn, this.morph);
     // The dial's ring stands clear of the farthest of the shape, with its
     // relief as displayed (as the guides), else the surface hides it.
     if (this.dialState) {

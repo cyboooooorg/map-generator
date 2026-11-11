@@ -20,8 +20,9 @@ describe('BodyGuides', () => {
   it('starts the spin arrow and the host arrows from the surface where they point', () => {
     const guides = new BodyGuides(new Color('#ffffff'));
     guides.setSpin(true);
-    guides.setHost({ position: [0, 0, -100], velocity: [1, 0, 0] });
-    guides.update(true, true, 1);
+    guides.setHost({ position: [0, 0, -100] });
+    guides.setMotion({ pull: [0, 0, -1], velocity: [1, 0, 0] });
+    guides.update(true, true, true, 1);
     const sphere = guides.points();
     // A moonlet: 1.4 radii out at its poles, 1.6 towards its host
     // (its long axis), 1.1 in the direction it moves.
@@ -29,16 +30,105 @@ describe('BodyGuides', () => {
     guides.setSurface(1.4, at);
     guides.spin.updateMatrixWorld(true);
     guides.host.updateMatrixWorld(true);
+    guides.vectors.updateMatrixWorld(true);
     const moonlet = guides.points();
     expect(moonlet.spin!.y).toBeCloseTo(1.4 * sphere.spin!.y, 6);
     expect(moonlet.pull!.length() - sphere.pull!.length()).toBeCloseTo(0.6, 6);
     expect(moonlet.velocity!.length() - sphere.velocity!.length()).toBeCloseTo(0.1, 6);
     // The host label stands one diameter beyond the surface towards the host.
     expect(moonlet.host!.z).toBeCloseTo(-(1.6 + HOST_LABEL_BEYOND), 6);
-    // A host set afterwards starts from the surface too.
-    guides.setHost({ position: [0, 0, -100], velocity: null });
-    guides.host.updateMatrixWorld(true);
+    // A motion set afterwards starts from the surface too.
+    guides.setMotion({ pull: [0, 0, -1], velocity: null });
+    guides.vectors.updateMatrixWorld(true);
     expect(guides.points().pull!.length() - sphere.pull!.length()).toBeCloseTo(0.6, 6);
+    guides.dispose();
+  });
+});
+
+describe('BodyGuides line and vectors', () => {
+  it('shows the line to the host and the arrows apart', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    guides.setHost({ position: [0, 0, -100] });
+    guides.setMotion({ pull: [0, 0, -1], velocity: [1, 0, 0] });
+    guides.update(false, false, true, 1);
+    expect(guides.points().host).toBeNull();
+    expect(guides.points().pull).not.toBeNull();
+    expect(guides.points().velocity).not.toBeNull();
+    guides.update(false, true, false, 1);
+    expect(guides.points().host).not.toBeNull();
+    expect(guides.points().pull).toBeNull();
+    guides.dispose();
+  });
+
+  it('puts the host label beyond the pull arrow only while the arrow shows', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    guides.setHost({ position: [0, 0, -100] });
+    guides.setSurface(1, () => 1);
+    guides.setMotion({ pull: [0, 0, -1], velocity: null });
+    guides.update(false, true, false, 1);
+    expect(guides.points().host!.z).toBeCloseTo(-(1 + HOST_LABEL_BEYOND), 9);
+    guides.update(false, true, true, 1);
+    expect(guides.points().host!.z).toBeCloseTo(-Math.max(1 + HOST_LABEL_BEYOND, 2.4), 9);
+    guides.dispose();
+  });
+
+  it('turns the arrows in place as the motion changes', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    guides.setMotion({ pull: [0, 0, -1], velocity: [1, 0, 0] });
+    guides.update(false, false, true, 1);
+    const arrows = [...guides.vectors.children];
+    guides.setMotion({ pull: [0, 0, 1], velocity: [0, 1, 0] });
+    expect(guides.vectors.children).toEqual(arrows);
+    guides.vectors.updateMatrixWorld(true);
+    const points = guides.points();
+    expect(points.pull!.z).toBeCloseTo(2.4, 6);
+    expect(points.velocity!.y).toBeCloseTo(2.4, 6);
+    // The velocity gone: no tip for it.
+    guides.setMotion({ pull: [0, 0, 1], velocity: null });
+    expect(guides.points().velocity).toBeNull();
+    guides.dispose();
+  });
+
+  it('sizes each arrow by its scale, within bounds', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    guides.setMotion({ pull: [0, 0, -1], velocity: [1, 0, 0], pullScale: 2, speedScale: 0.5 });
+    guides.update(false, false, true, 1);
+    guides.vectors.updateMatrixWorld(true);
+    expect(guides.points().pull!.z).toBeCloseTo(-(1 + 2 * 1.4), 6);
+    expect(guides.points().velocity!.x).toBeCloseTo(1 + 0.5 * 1.4, 6);
+    guides.setMotion({ pull: [0, 0, -1], velocity: [1, 0, 0], pullScale: 1e4 });
+    guides.vectors.updateMatrixWorld(true);
+    expect(guides.points().pull!.z).toBeCloseTo(-(1 + 4 * 1.4), 6);
+    guides.dispose();
+  });
+
+  it('splits the pull into a right triangle: square to the velocity, then along it', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    // The pull 30° off square to the velocity, backwards: the body slows down.
+    const s = Math.sin(Math.PI / 6);
+    const c = Math.cos(Math.PI / 6);
+    guides.setMotion({ pull: [-s, 0, -c], velocity: [1, 0, 0] });
+    guides.update(false, false, true, 1);
+    guides.vectors.updateMatrixWorld(true);
+    const [, , across, along] = guides.vectors.children;
+    // The bending part from the pull's foot, square to the velocity, cos 30° of the pull long.
+    const foot = new Vector3(-s, 0, -c);
+    expect(across!.position.distanceTo(foot)).toBeCloseTo(0, 9);
+    const acrossTip = foot.clone().add(new Vector3(0, 0, -1).multiplyScalar(1.4 * c));
+    // The part along the velocity from that tip, backwards, ending at the pull's tip.
+    expect(along!.position.distanceTo(acrossTip)).toBeCloseTo(0, 9);
+    const alongTip = acrossTip.clone().add(new Vector3(-1, 0, 0).multiplyScalar(1.4 * s));
+    expect(alongTip.distanceTo(guides.points().pull!)).toBeCloseTo(0, 9);
+    // Their labels hang at their middles.
+    expect(guides.points().across!.distanceTo(foot.clone().lerp(acrossTip, 0.5))).toBeCloseTo(0, 9);
+    expect(guides.points().along!.distanceTo(acrossTip.clone().lerp(alongTip, 0.5))).toBeCloseTo(0, 9);
+    guides.dispose();
+  });
+
+  it('draws no arrows without a motion', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    guides.update(false, false, true, 1);
+    expect(guides.vectors.visible).toBe(false);
     guides.dispose();
   });
 });
@@ -60,8 +150,8 @@ describe('hostLabelRadius', () => {
 
   it('holds still on the axis as the surface and the pull are set', () => {
     const guides = new BodyGuides(new Color('#ffffff'));
-    guides.setHost({ position: [0, 0, -100], velocity: null });
-    guides.update(false, true, 1);
+    guides.setHost({ position: [0, 0, -100] });
+    guides.update(false, true, false, 1);
     guides.host.updateMatrixWorld(true);
     const label = guides.points().host!;
     expect(label.x).toBeCloseTo(0, 9);
@@ -71,7 +161,7 @@ describe('hostLabelRadius', () => {
     guides.host.updateMatrixWorld(true);
     expect(guides.points().host!.z).toBeCloseTo(-(1.6 + HOST_LABEL_BEYOND), 9);
     // Hidden with the host guides.
-    guides.update(false, false, 1);
+    guides.update(false, false, false, 1);
     expect(guides.points().host).toBeNull();
     guides.dispose();
   });
