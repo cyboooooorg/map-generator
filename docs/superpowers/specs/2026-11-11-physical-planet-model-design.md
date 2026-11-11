@@ -1,6 +1,6 @@
 # Physical planet model: design
 
-Date: 2026-11-11. Status: draft, under review by the user. Tracked in
+Date: 2026-11-11. Status: approved by the user. Tracked in
 #423, first track of the roadmap (#427).
 
 ## Intent
