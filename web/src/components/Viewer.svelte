@@ -1696,7 +1696,13 @@
     view?.setHostSpin(hostBody && index >= 0 ? { index, locked: hostBody.spin.locked } : null);
   });
   /** The guides that carry a label. */
-  type GuideKey = 'spin' | 'host' | 'pull' | 'velocity' | 'hostSpin' | 'hostPull' | 'hostVelocity';
+  type GuideKey = 'spin' | 'host' | 'pull' | 'velocity' | 'across' | 'along' | 'hostSpin' | 'hostPull' | 'hostVelocity' | 'hostAcross' | 'hostAlong';
+  /**
+   * Below this share of the pull along the velocity, the pull's two parts
+   * go unlabelled: the part along it is a stub, and the bending part all
+   * but the pull, whose label says as much.
+   */
+  const PART_LABEL_SHARE = 0.05;
   /** The guides' labels: the spin, the host's distance, the pull on the body and its speed, the host's own spin, pull and speed. */
   const guideLabels = $derived.by((): { key: GuideKey; label: SkyLabel }[] => {
     const labels: { key: GuideKey; label: SkyLabel }[] = [];
@@ -1718,10 +1724,18 @@
     // Three significant digits at least: a planet far out feels 1e-5 m/s² of its star.
     const pullText = (pull: number) => withUnit(formatUpTo(pull, pull >= 0.01 ? 3 : Math.min(Math.ceil(-Math.log10(Math.max(pull, 1e-12))) + 2, 12)), 'm/s²');
     const speedText = (speed: number) => withUnit(formatUpTo(speed, 2), 'km/s');
+    /** The labels of the pull's two parts (see lib/viewer/bodyGuides): the one that bends the path, the one along the velocity. */
+    const parts = (motion: SkyMotion, across: GuideKey, along: GuideKey) => {
+      if (Math.abs(motion.alongShare) < PART_LABEL_SHARE) return;
+      const share = motion.alongShare;
+      labels.push({ key: across, label: { name: t.viewer.pullBending, detail: pullText(motion.pullMs2 * Math.sqrt(Math.max(1 - share * share, 0))) } });
+      labels.push({ key: along, label: { name: share > 0 ? t.viewer.pullSpeeding : t.viewer.pullSlowing, detail: pullText(motion.pullMs2 * Math.abs(share)) } });
+    };
     // The pull of what the body orbits (its planet, or the star) and its speed round it.
     if (sysBody && ownMotion) {
       labels.push({ key: 'pull', label: { name: sysBody.parent ? t.viewer.hostPull : t.viewer.starPull, detail: pullText(ownMotion.pullMs2) } });
       labels.push({ key: 'velocity', label: { name: t.viewer.hostOrbitSpeed, detail: speedText(ownMotion.speedKms) } });
+      parts(ownMotion, 'across', 'along');
     }
     const host = sys && sysBody?.parent ? sys.bodies.find((b) => b.id === sysBody.parent) : null;
     if (sysBody && host) {
@@ -1740,6 +1754,7 @@
       if (hostMotion) {
         labels.push({ key: 'hostPull', label: { name: t.viewer.hostStarPull({ name }), detail: pullText(hostMotion.pullMs2) } });
         labels.push({ key: 'hostVelocity', label: { name: t.viewer.hostOrbitSpeedOf({ name }), detail: speedText(hostMotion.speedKms) } });
+        parts(hostMotion, 'hostAcross', 'hostAlong');
       }
       // Its own spin, drawn round it.
       const hostHours = host.spin.period_hours;
@@ -2483,7 +2498,7 @@
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
   {#if world.subject === 'planet' && skyPositions}
-    {@const guideOn = { spin: spinDirection, hostSpin: hostSpinDirection, host: hostLink, pull: bodyVectors, velocity: bodyVectors, hostPull: hostVectors, hostVelocity: hostVectors }}
+    {@const guideOn = { spin: spinDirection, hostSpin: hostSpinDirection, host: hostLink, pull: bodyVectors, velocity: bodyVectors, across: bodyVectors, along: bodyVectors, hostPull: hostVectors, hostVelocity: hostVectors, hostAcross: hostVectors, hostAlong: hostVectors }}
     {@const guides = guideLabels.filter((g) => guideOn[g.key] && (g.key !== 'pull' || !skyPositions!.guides.host))}
     {@const marks = smallSky ? skyPositions.marks : []}
     <!-- A dashed ring round each trojan swarm, too faint to see. -->

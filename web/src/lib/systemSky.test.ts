@@ -399,6 +399,12 @@ describe('motions in the sky', () => {
     expect(dot(motion.pull, planet.direction)).toBeCloseTo(1, 6);
   });
 
+  it('has no share of the pull along the velocity on a round orbit', () => {
+    // b, c-1 and c-2: e under 0.03 (c, at 0.26, is the eccentric one).
+    const motions = skyMotions(system, 'c-1', 3);
+    for (const id of ['b', 'c-1', 'c-2']) expect(Math.abs(motions.get(id)!.alongShare)).toBeLessThan(0.03);
+  });
+
   it('moves each body across its pull, near enough on a round orbit', () => {
     for (const [id, motion] of skyMotions(system, 'c-1', 3)) {
       const e = system.bodies.find((b) => b.id === id)!.orbit.eccentricity;
@@ -426,6 +432,9 @@ describe('motions in the sky', () => {
     expect(most).toBeGreaterThan(1);
     expect(least).toBeLessThan(1);
     expect(most / least).toBeCloseTo(((1 + e) / (1 - e)) ** 2, 0);
+    // Speeding up on the way in, slowing down on the way out: the share along the velocity changes sign.
+    expect(Math.max(...scales.map((m) => m.alongShare))).toBeGreaterThan(0.05);
+    expect(Math.min(...scales.map((m) => m.alongShare))).toBeLessThan(-0.05);
     // Faster where the pull is stronger.
     const fastest = scales.reduce((x, y) => (y.speedScale > x.speedScale ? y : x));
     expect(fastest.pullScale).toBeCloseTo(most, 1);

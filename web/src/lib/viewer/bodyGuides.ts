@@ -82,6 +82,9 @@ export interface GuidePoints {
   host: Vector3 | null;
   pull: Vector3 | null;
   velocity: Vector3 | null;
+  /** The middles of the pull's two parts: the one that bends the path, the one along the velocity. */
+  across: Vector3 | null;
+  along: Vector3 | null;
 }
 
 /**
@@ -126,6 +129,8 @@ export class BodyGuides {
   private hostAxis: { direction: Vector3; distance: number } | null = null;
   private pullTip: Vector3 | null = null;
   private velocityTip: Vector3 | null = null;
+  private acrossMid: Vector3 | null = null;
+  private alongMid: Vector3 | null = null;
   private locked: boolean | null = null;
 
   /**
@@ -251,7 +256,7 @@ export class BodyGuides {
    * round orbit).
    */
   private layout(): void {
-    this.pullTip = this.velocityTip = null;
+    this.pullTip = this.velocityTip = this.acrossMid = this.alongMid = null;
     const arrows = this.arrows;
     const motion = this.motion;
     if (!arrows) return;
@@ -274,12 +279,16 @@ export class BodyGuides {
     const along = p.dot(v);
     const across = p.clone().addScaledVector(v, -along);
     const acrossLength = pullLength * across.length();
-    if (acrossLength > 1e-9) placeArrow(arrows.across, pullFoot, across.normalize(), acrossLength);
+    if (acrossLength > 1e-9) {
+      placeArrow(arrows.across, pullFoot, across.normalize(), acrossLength);
+      this.acrossMid = pullFoot.clone().addScaledVector(across, acrossLength / 2);
+    }
     const alongLength = pullLength * Math.abs(along);
     if (alongLength > 1e-9) {
       arrows.along.material.color.copy(along > 0 ? SPEEDING_COLOUR : SLOWING_COLOUR);
       const from = pullFoot.clone().addScaledVector(across, acrossLength);
       placeArrow(arrows.along, from, v.clone().multiplyScalar(Math.sign(along)), alongLength);
+      this.alongMid = from.clone().addScaledVector(v, (Math.sign(along) * alongLength) / 2);
     }
   }
 
@@ -314,6 +323,8 @@ export class BodyGuides {
       host: scene(this.hostLabel(), this.host),
       pull: scene(this.pullTip, this.vectors),
       velocity: scene(this.velocityTip, this.vectors),
+      across: scene(this.acrossMid, this.vectors),
+      along: scene(this.alongMid, this.vectors),
     };
   }
 

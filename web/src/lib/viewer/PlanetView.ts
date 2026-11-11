@@ -2948,7 +2948,7 @@ export class PlanetView {
     bodies: ({ x: number; y: number } | null)[];
     star: { x: number; y: number } | null;
     /** Where the body's guides end (see lib/viewer/bodyGuides), null when not drawn or hidden by the globe. */
-    guides: Record<keyof GuidePoints | 'hostSpin' | 'hostPull' | 'hostVelocity', { x: number; y: number } | null>;
+    guides: Record<keyof GuidePoints | 'hostSpin' | 'hostPull' | 'hostVelocity' | 'hostAcross' | 'hostAlong', { x: number; y: number } | null>;
     /** Where each mark of setSkyMarks is: its candidate in view nearest the screen's centre, null when none is. */
     marks: ({ x: number; y: number } | null)[];
     /**
@@ -3028,6 +3028,8 @@ export class PlanetView {
         host: hostAt,
         pull: pullAt,
         velocity: velocityAt,
+        across: near(points.across),
+        along: near(points.along),
         hostSpin: this.hostSpinTip(near),
         ...this.hostVectorTips(near),
       },
@@ -3105,13 +3107,15 @@ export class PlanetView {
   private hostVectorTips(near: (point: Vector3 | null, margin?: number) => { x: number; y: number } | null): {
     hostPull: { x: number; y: number } | null;
     hostVelocity: { x: number; y: number } | null;
+    hostAcross: { x: number; y: number } | null;
+    hostAlong: { x: number; y: number } | null;
   } {
     const host = this.hostSpinOf ? this.skyVectors[this.hostSpinOf.index] : undefined;
-    if (!host) return { hostPull: null, hostVelocity: null };
+    if (!host) return { hostPull: null, hostVelocity: null, hostAcross: null, hostAlong: null };
     host.guides.vectors.updateMatrixWorld(true);
     const points = host.guides.points();
     const tip = (point: Vector3 | null) => (point && !this.behindPlanet(point, host.uniforms) ? near(point) : null);
-    return { hostPull: tip(points.pull), hostVelocity: tip(points.velocity) };
+    return { hostPull: tip(points.pull), hostVelocity: tip(points.velocity), hostAcross: tip(points.across), hostAlong: tip(points.along) };
   }
 
   /** Whether the planet (`uniforms`: its centre and radius) stands between the camera and `point`. */

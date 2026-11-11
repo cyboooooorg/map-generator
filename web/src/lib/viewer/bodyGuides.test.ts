@@ -119,6 +119,9 @@ describe('BodyGuides line and vectors', () => {
     expect(along!.position.distanceTo(acrossTip)).toBeCloseTo(0, 9);
     const alongTip = acrossTip.clone().add(new Vector3(-1, 0, 0).multiplyScalar(1.4 * s));
     expect(alongTip.distanceTo(guides.points().pull!)).toBeCloseTo(0, 9);
+    // Their labels hang at their middles.
+    expect(guides.points().across!.distanceTo(foot.clone().lerp(acrossTip, 0.5))).toBeCloseTo(0, 9);
+    expect(guides.points().along!.distanceTo(acrossTip.clone().lerp(alongTip, 0.5))).toBeCloseTo(0, 9);
     guides.dispose();
   });
 

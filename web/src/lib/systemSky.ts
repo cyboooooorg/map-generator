@@ -411,6 +411,8 @@ export interface SkyMotion {
   /** The pull and the speed against their means round the orbit (the pull at the semi-major axis, the circular speed there): 1 on a round orbit. */
   pullScale: number;
   speedScale: number;
+  /** The share of the pull along the velocity (the cosine between them): above 0 it speeds the body up, below 0 it slows it down. */
+  alongShare: number;
 }
 
 /**
@@ -448,6 +450,7 @@ export function skyMotions(system: System, shown: string, days: number, spinOffs
       distanceKm,
       pullScale: (a / r) ** 2,
       speedScale: speed / Math.sqrt(mu / a),
+      alongShare: Math.hypot(...step) > 0 ? dot(unit(scale(out, -1)), unit(step)) : 0,
     });
   }
   return motions;
