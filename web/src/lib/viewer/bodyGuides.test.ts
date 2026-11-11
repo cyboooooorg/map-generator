@@ -83,9 +83,42 @@ describe('BodyGuides line and vectors', () => {
     const points = guides.points();
     expect(points.pull!.z).toBeCloseTo(2.4, 6);
     expect(points.velocity!.y).toBeCloseTo(2.4, 6);
-    // The velocity gone: rebuilt without it.
+    // The velocity gone: no tip for it.
     guides.setMotion({ pull: [0, 0, 1], velocity: null });
-    expect(guides.vectors.children).toHaveLength(1);
+    expect(guides.points().velocity).toBeNull();
+    guides.dispose();
+  });
+
+  it('sizes each arrow by its scale, within bounds', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    guides.setMotion({ pull: [0, 0, -1], velocity: [1, 0, 0], pullScale: 2, speedScale: 0.5 });
+    guides.update(false, false, true, 1);
+    guides.vectors.updateMatrixWorld(true);
+    expect(guides.points().pull!.z).toBeCloseTo(-(1 + 2 * 1.4), 6);
+    expect(guides.points().velocity!.x).toBeCloseTo(1 + 0.5 * 1.4, 6);
+    guides.setMotion({ pull: [0, 0, -1], velocity: [1, 0, 0], pullScale: 1e4 });
+    guides.vectors.updateMatrixWorld(true);
+    expect(guides.points().pull!.z).toBeCloseTo(-(1 + 4 * 1.4), 6);
+    guides.dispose();
+  });
+
+  it('splits the pull into a right triangle: square to the velocity, then along it', () => {
+    const guides = new BodyGuides(new Color('#ffffff'));
+    // The pull 30° off square to the velocity, backwards: the body slows down.
+    const s = Math.sin(Math.PI / 6);
+    const c = Math.cos(Math.PI / 6);
+    guides.setMotion({ pull: [-s, 0, -c], velocity: [1, 0, 0] });
+    guides.update(false, false, true, 1);
+    guides.vectors.updateMatrixWorld(true);
+    const [, , across, along] = guides.vectors.children;
+    // The bending part from the pull's foot, square to the velocity, cos 30° of the pull long.
+    const foot = new Vector3(-s, 0, -c);
+    expect(across!.position.distanceTo(foot)).toBeCloseTo(0, 9);
+    const acrossTip = foot.clone().add(new Vector3(0, 0, -1).multiplyScalar(1.4 * c));
+    // The part along the velocity from that tip, backwards, ending at the pull's tip.
+    expect(along!.position.distanceTo(acrossTip)).toBeCloseTo(0, 9);
+    const alongTip = acrossTip.clone().add(new Vector3(-1, 0, 0).multiplyScalar(1.4 * s));
+    expect(alongTip.distanceTo(guides.points().pull!)).toBeCloseTo(0, 9);
     guides.dispose();
   });
 

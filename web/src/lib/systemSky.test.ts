@@ -417,6 +417,20 @@ describe('motions in the sky', () => {
     expect(motion.speedKms).toBeLessThan(25.5);
   });
 
+  it('sizes the pull and the speed against their means: larger at periapsis, smaller at apoapsis', () => {
+    // c: e = 0.256, its year 11,333 days; its periapsis and apoapsis half a year apart.
+    const e = system.bodies.find((b) => b.id === 'c')!.orbit.eccentricity;
+    const scales = Array.from({ length: 64 }, (_, k) => skyMotions(system, 'c', (k * 11332.8) / 64).get('c')!);
+    const most = Math.max(...scales.map((m) => m.pullScale));
+    const least = Math.min(...scales.map((m) => m.pullScale));
+    expect(most).toBeGreaterThan(1);
+    expect(least).toBeLessThan(1);
+    expect(most / least).toBeCloseTo(((1 + e) / (1 - e)) ** 2, 0);
+    // Faster where the pull is stronger.
+    const fastest = scales.reduce((x, y) => (y.speedScale > x.speedScale ? y : x));
+    expect(fastest.pullScale).toBeCloseTo(most, 1);
+  });
+
   it('is empty for an unknown body', () => {
     expect(skyMotions(system, 'zz', 0).size).toBe(0);
   });

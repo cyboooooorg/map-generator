@@ -707,7 +707,7 @@ export const fr: Messages = {
       'Depuis une lune : un trait pointillé vers sa planète hôte, avec leur distance (et l’attraction de la planète quand Vecteurs l’affiche)',
     vectors: 'Vecteurs',
     vectorsHelp:
-      'Trace l’attraction de ce que chaque astre orbite (orange, vers sa planète, ou l’étoile pour une planète) et sa vitesse orbitale (cyan), en flèches depuis sa surface, avec leurs valeurs sur l’astre affiché et sa planète hôte. Ses carrés : l’astre affiché, sa planète hôte (depuis une lune), les autres astres du ciel',
+      'Trace l’attraction de ce que chaque astre orbite (orange, vers sa planète, ou l’étoile pour une planète) et sa vitesse orbitale (cyan), en flèches depuis sa surface, chacune aussi longue que sa valeur rapportée à sa moyenne (plus longue près du périastre), avec leurs valeurs sur l’astre affiché et sa planète hôte. L’attraction est décomposée en deux flèches plus fines : la part qui courbe la trajectoire, et la part le long de la vitesse, verte quand elle accélère l’astre, rouge quand elle le freine. Ses carrés : l’astre affiché, sa planète hôte (depuis une lune), les autres astres du ciel',
     resetDrift: 'Réinitialiser la dérive',
     hostRings: 'Anneaux de l’hôte',
     hostRingsHelp: 'Les anneaux de la planète hôte dans le ciel de la lune',

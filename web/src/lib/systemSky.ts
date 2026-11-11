@@ -408,6 +408,9 @@ export interface SkyMotion {
   speedKms: number;
   /** Its present distance from its primary, km. */
   distanceKm: number;
+  /** The pull and the speed against their means round the orbit (the pull at the semi-major axis, the circular speed there): 1 on a round orbit. */
+  pullScale: number;
+  speedScale: number;
 }
 
 /**
@@ -436,12 +439,15 @@ export function skyMotions(system: System, shown: string, days: number, spinOffs
     const r = distanceKm * 1000;
     const a = Math.max(body.orbit.semi_major_axis_km, 1e-6) * 1000;
     const mu = G * (primaryKg + body.physical.mass_earth * EARTH_KG);
+    const speed = Math.sqrt(Math.max(mu * (2 / r - 1 / a), 0));
     motions.set(body.id, {
       pull: unit(local(scale(out, -1))),
       velocity: Math.hypot(...step) > 0 ? unit(local(step)) : null,
       pullMs2: (G * primaryKg) / (r * r),
-      speedKms: Math.sqrt(Math.max(mu * (2 / r - 1 / a), 0)) / 1000,
+      speedKms: speed / 1000,
       distanceKm,
+      pullScale: (a / r) ** 2,
+      speedScale: speed / Math.sqrt(mu / a),
     });
   }
   return motions;

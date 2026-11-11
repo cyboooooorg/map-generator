@@ -745,7 +745,7 @@ export const en = {
       "From a moon: a dotted line to its host planet, labelled with their distance (and the planet's pull while Vectors shows it)",
     vectors: 'Vectors',
     vectorsHelp:
-      'Draws the pull of what each body orbits (orange, towards its planet, or the star for a planet) and its orbital velocity (cyan), as arrows from its surface, with their figures on the body shown and its host planet. Its squares: the body shown, its host planet (from a moon), the other bodies of the sky',
+      'Draws the pull of what each body orbits (orange, towards its planet, or the star for a planet) and its orbital velocity (cyan), as arrows from its surface, each as long as its value against its mean (longer near the periapsis), with their figures on the body shown and its host planet. The pull is split in two thinner arrows: the part that bends the path, and the part along the velocity, green when it speeds the body up, red when it slows it down. Its squares: the body shown, its host planet (from a moon), the other bodies of the sky',
     resetDrift: 'Reset the drift',
     hostRings: 'Host rings',
     hostRingsHelp: "The rings of the host planet in the moon's sky",

@@ -48,7 +48,7 @@
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { hillReach, hillSphere, skyMotions, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
+  import { hillReach, hillSphere, skyMotions, smallBodiesSky, systemReach, systemSky, type SkyMotion } from '../lib/systemSky';
   import { dialFigureText, formatDialAngle, hostCompass as hostCompassOf, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -1682,13 +1682,12 @@
   /** How each body of the system moves round what it orbits, seen from the body shown: the Vectors switch's arrows. */
   const motions = $derived(sys && sysBody && (bodyVectors || hostVectors || otherVectors) ? skyMotions(sys, sysBody.id, sysDays, skySpin) : null);
   const ownMotion = $derived(sysBody ? (motions?.get(sysBody.id) ?? null) : null);
-  $effect(() => view?.setMotion(ownMotion ? { pull: ownMotion.pull, velocity: ownMotion.velocity } : null));
+  /** A motion as the arrows draw it: directions, and sizes against their means (eccentric orbits). */
+  const motionGuide = (m: SkyMotion | undefined | null) => (m ? { pull: m.pull, velocity: m.velocity, pullScale: m.pullScale, speedScale: m.speedScale } : null);
+  $effect(() => view?.setMotion(motionGuide(ownMotion)));
   $effect(() => {
     const all = motions;
-    view?.setSkyMotions((sysSky?.ids ?? []).map((id) => {
-      const motion = all?.get(id);
-      return motion ? { pull: motion.pull, velocity: motion.velocity } : null;
-    }));
+    view?.setSkyMotions((sysSky?.ids ?? []).map((id) => motionGuide(all?.get(id))));
   });
   /** The host planet in a moon's sky, whose spin is drawn in 3D round it (Spin axes). */
   const hostBody = $derived(sys && sysBody?.parent ? (sys.bodies.find((b) => b.id === sysBody.parent) ?? null) : null);
