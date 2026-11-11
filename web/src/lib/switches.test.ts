@@ -154,6 +154,11 @@ describe('migrateDisplay', () => {
     });
   });
 
+  it('gives the vectors of the body shown the link to the host they came with', () => {
+    expect(migrateDisplay({ hostLink: true }, current)).toMatchObject({ vectors: true });
+    expect(migrateDisplay({ spinAxes: true }, current)).toMatchObject({ vectors: true });
+  });
+
   it('carries a value through both splits', () => {
     const out = migrateDisplay({ skyLabels: false, smallBodies: true, spinAxes: true }, current);
     expect(out).toMatchObject({ skyLabelsMoons: false, skyLabelsHost: false, trojansOwn: true, trojansOther: true, otherSpinDirection: true });

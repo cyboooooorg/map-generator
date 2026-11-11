@@ -48,7 +48,7 @@
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { hillReach, hillSphere, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
+  import { hillReach, hillSphere, skyMotions, smallBodiesSky, systemReach, systemSky } from '../lib/systemSky';
   import { dialFigureText, formatDialAngle, hostCompass as hostCompassOf, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -209,6 +209,11 @@
     // The same on the other bodies of the sky (the host planet has its own).
     otherSpinAxes: false,
     otherSpinDirection: false,
+    // The arrows of the pull of what a body orbits and of its velocity: the
+    // body shown's, its host planet's and the other bodies of the sky's.
+    vectors: false,
+    hostVectors: false,
+    otherVectors: false,
     // The ring round the body shown, graduated in degrees, reading its turn.
     rotationDial: false,
     // The same round the host planet in a moon's sky, following the moon.
@@ -318,6 +323,10 @@
   /** The spin axes and arrows of the other bodies of the sky (the host planet aside). */
   let otherAxes = $state(saved.otherSpinAxes);
   let otherSpinDirection = $state(saved.otherSpinDirection);
+  /** The arrows of the pull and the velocity: of the body shown, of its host planet, of the other bodies of the sky. */
+  let bodyVectors = $state(saved.vectors);
+  let hostVectors = $state(saved.hostVectors);
+  let otherVectors = $state(saved.otherVectors);
   let dialShown = $state(saved.rotationDial);
   let hostCompassShown = $state(saved.hostCompass);
   let cameraOnBody = $state(saved.cameraOnBody);
@@ -325,6 +334,7 @@
   $effect(() => view?.setSpinAxes(axesShown));
   $effect(() => view?.setSpinDirection(spinDirection));
   $effect(() => view?.setHostLink(hostLink));
+  $effect(() => view?.setVectors(bodyVectors));
   /** Labels on the bodies of the sky, and where those are on the screen. */
   let skyLabels = $state(saved.skyLabels);
   let skyLabelsMoons = $state(saved.skyLabelsMoons);
@@ -588,6 +598,9 @@
       hostLink,
       otherSpinAxes: otherAxes,
       otherSpinDirection,
+      vectors: bodyVectors,
+      hostVectors,
+      otherVectors,
       rotationDial: dialShown,
       hostCompass: hostCompassShown,
       cameraOnBody,
@@ -1550,6 +1563,7 @@
       rings: hostRingsShown,
       axis: hostAxes,
       spin: hostSpinDirection,
+      vectors: hostVectors,
     };
     const otherShow: SkyBodyShow = {
       atmosphere: true,
@@ -1560,6 +1574,7 @@
       rings: true,
       axis: otherAxes,
       spin: otherSpinDirection,
+      vectors: otherVectors,
     };
     const bodies = (sysSky?.bodies ?? []).map((body, k) =>
       sysSky?.ids[k] === parent
@@ -1597,7 +1612,7 @@
     const current = view;
     if (!current) return;
     // The guides' labels (spin, host) follow with the spin axes, the dial's with the dial.
-    const follow = skyLabels || skyLabelsMoons || skyLabelsHost || spinDirection || hostLink || hostSpinDirection || smallOn || dial !== null || hostCompass !== null;
+    const follow = skyLabels || skyLabelsMoons || skyLabelsHost || spinDirection || hostLink || bodyVectors || hostVectors || hostSpinDirection || smallOn || dial !== null || hostCompass !== null;
     current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
     if (!follow) skyPositions = null;
     return () => {
@@ -1657,27 +1672,24 @@
     if (spinLocked) cameraOnLockedBody = on;
     else cameraOnBody = on;
   }
-  /** A moon's host planet: where it is, and the moon's direction of motion round it (its own orbit's tangent). */
+  /** A moon's host planet: where it is, for the line to it. */
   const hostGuide = $derived.by(() => {
     if (!sys || !sysBody?.parent || !sysSky) return null;
-    const index = sysSky.ids.indexOf(sysBody.parent);
-    const host = sysSky.bodies[index];
-    if (!host?.position) return null;
-    const loop = sysSky.orbits[sysSky.ownOrbit] ?? null;
-    let velocity: [number, number, number] | null = null;
-    if (loop && loop.length > 2) {
-      // The point of the loop at the body (the origin), and its neighbours.
-      let k = 0;
-      loop.forEach((p, i) => {
-        if (Math.hypot(...p) < Math.hypot(...loop[k]!)) k = i;
-      });
-      const next = loop[(k + 1) % loop.length]!;
-      const prev = loop[(k - 1 + loop.length) % loop.length]!;
-      velocity = [next[0] - prev[0], next[1] - prev[1], next[2] - prev[2]];
-    }
-    return { position: host.position, velocity };
+    const host = sysSky.bodies[sysSky.ids.indexOf(sysBody.parent)];
+    return host?.position ? { position: host.position } : null;
   });
   $effect(() => view?.setHostGuide(hostGuide));
+  /** How each body of the system moves round what it orbits, seen from the body shown: the Vectors switch's arrows. */
+  const motions = $derived(sys && sysBody && (bodyVectors || hostVectors || otherVectors) ? skyMotions(sys, sysBody.id, sysDays, skySpin) : null);
+  const ownMotion = $derived(sysBody ? (motions?.get(sysBody.id) ?? null) : null);
+  $effect(() => view?.setMotion(ownMotion ? { pull: ownMotion.pull, velocity: ownMotion.velocity } : null));
+  $effect(() => {
+    const all = motions;
+    view?.setSkyMotions((sysSky?.ids ?? []).map((id) => {
+      const motion = all?.get(id);
+      return motion ? { pull: motion.pull, velocity: motion.velocity } : null;
+    }));
+  });
   /** The host planet in a moon's sky, whose spin is drawn in 3D round it (Spin axes). */
   const hostBody = $derived(sys && sysBody?.parent ? (sys.bodies.find((b) => b.id === sysBody.parent) ?? null) : null);
   $effect(() => {
@@ -1685,8 +1697,8 @@
     view?.setHostSpin(hostBody && index >= 0 ? { index, locked: hostBody.spin.locked } : null);
   });
   /** The guides that carry a label. */
-  type GuideKey = 'spin' | 'host' | 'pull' | 'velocity' | 'hostSpin';
-  /** The guides' labels: the spin, the host's distance, its pull, the body's speed and the host's own spin. */
+  type GuideKey = 'spin' | 'host' | 'pull' | 'velocity' | 'hostSpin' | 'hostPull' | 'hostVelocity';
+  /** The guides' labels: the spin, the host's distance, the pull on the body and its speed, the host's own spin, pull and speed. */
   const guideLabels = $derived.by((): { key: GuideKey; label: SkyLabel }[] => {
     const labels: { key: GuideKey; label: SkyLabel }[] = [];
     if (sysBody) {
@@ -1704,26 +1716,31 @@
             },
       });
     }
+    const pullText = (pull: number) => withUnit(formatUpTo(pull, pull < 0.01 ? 4 : 3), 'm/s²');
+    const speedText = (speed: number) => withUnit(formatUpTo(speed, 2), 'km/s');
+    // The pull of what the body orbits (its planet, or the star) and its speed round it.
+    if (sysBody && ownMotion) {
+      labels.push({ key: 'pull', label: { name: sysBody.parent ? t.viewer.hostPull : t.viewer.starPull, detail: pullText(ownMotion.pullMs2) } });
+      labels.push({ key: 'velocity', label: { name: t.viewer.hostOrbitSpeed, detail: speedText(ownMotion.speedKms) } });
+    }
     const host = sys && sysBody?.parent ? sys.bodies.find((b) => b.id === sysBody.parent) : null;
     if (sysBody && host) {
-      const G = 6.674e-11;
-      const EARTH_KG = 5.972e24;
-      const r = sysBody.orbit.semi_major_axis_km;
-      const hostKm = hostGuide ? Math.hypot(...hostGuide.position) * sysBody.physical.radius_km : r;
-      const mu = G * (host.physical.mass_earth + sysBody.physical.mass_earth) * EARTH_KG;
-      const pull = (G * host.physical.mass_earth * EARTH_KG) / (hostKm * 1000) ** 2;
-      const speed = Math.sqrt(Math.max(mu * (2 / (hostKm * 1000) - 1 / (r * 1000)), 0)) / 1000;
+      const hostKm = hostGuide ? Math.hypot(...hostGuide.position) * sysBody.physical.radius_km : sysBody.orbit.semi_major_axis_km;
       const name = world.systemNames[host.id] ?? host.designation;
       // The line to the host and the pull of the host point the same way:
-      // one label for both on the line (see the template), the pull's own
-      // only when the line is hidden.
-      const pullText = withUnit(formatUpTo(pull, pull < 0.01 ? 4 : 3), 'm/s²');
+      // one label for both on the line while the arrows show (see the
+      // template), the pull's own only when the line is hidden.
+      const distance = withUnit(formatInt(hostKm), 'km');
       labels.push({
         key: 'host',
-        label: { name, detail: t.viewer.hostLineFacts({ distance: withUnit(formatInt(hostKm), 'km'), pull: pullText }) },
+        label: { name, detail: bodyVectors && ownMotion ? t.viewer.hostLineFacts({ distance, pull: pullText(ownMotion.pullMs2) }) : distance },
       });
-      labels.push({ key: 'pull', label: { name: t.viewer.hostPull, detail: pullText } });
-      labels.push({ key: 'velocity', label: { name: t.viewer.hostOrbitSpeed, detail: withUnit(formatUpTo(speed, 2), 'km/s') } });
+      // The host's own motion round the star.
+      const hostMotion = motions?.get(host.id);
+      if (hostMotion) {
+        labels.push({ key: 'hostPull', label: { name: t.viewer.hostStarPull({ name }), detail: pullText(hostMotion.pullMs2) } });
+        labels.push({ key: 'hostVelocity', label: { name: t.viewer.hostOrbitSpeedOf({ name }), detail: speedText(hostMotion.speedKms) } });
+      }
       // Its own spin, drawn round it.
       const hostHours = host.spin.period_hours;
       labels.push({
@@ -1838,8 +1855,8 @@
   /** Whether the body's own planet has trojans, and whether the other planets do. */
   const ownTrojans = $derived(Boolean(sysPlanet?.trojans && sysPlanet.trojans.l4 + sysPlanet.trojans.l5 > 0));
   const otherTrojans = $derived(Boolean(sys?.bodies.some((b) => b.parent === null && b.id !== sysPlanet?.id && b.trojans && b.trojans.l4 + b.trojans.l5 > 0)));
-  /** A spin switch's three squares: the body shown, its host planet (from a moon), the other bodies of the sky. */
-  function spinParts(what: string, body: boolean, host: boolean, others: boolean, setBody: (on: boolean) => void, setHost: (on: boolean) => void, setOthers: (on: boolean) => void): PartSquare[] {
+  /** A sky switch's three squares (spin axes, spin direction, vectors): the body shown, its host planet (from a moon), the other bodies of the sky. */
+  function skyParts(what: string, body: boolean, host: boolean, others: boolean, setBody: (on: boolean) => void, setHost: (on: boolean) => void, setOthers: (on: boolean) => void): PartSquare[] {
     return [
       hasHost
         ? { key: 'moon', label: t.viewer.squareMoon({ what }), icon: 'moon', on: body, set: setBody, shown: true }
@@ -1928,14 +1945,23 @@
         : []),
       parted(
         { key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis' },
-        spinParts(t.viewer.spinAxes, axesShown, hostAxes, otherAxes, (v) => (axesShown = v), (v) => (hostAxes = v), (v) => (otherAxes = v)),
+        skyParts(t.viewer.spinAxes, axesShown, hostAxes, otherAxes, (v) => (axesShown = v), (v) => (hostAxes = v), (v) => (otherAxes = v)),
         true,
       ),
       parted(
         { key: 'spin', label: t.viewer.spinDirection, help: t.viewer.spinDirectionHelp, icon: 'spin' },
-        spinParts(t.viewer.spinDirection, spinDirection, hostSpinDirection, otherSpinDirection, (v) => (spinDirection = v), (v) => (hostSpinDirection = v), (v) => (otherSpinDirection = v)),
+        skyParts(t.viewer.spinDirection, spinDirection, hostSpinDirection, otherSpinDirection, (v) => (spinDirection = v), (v) => (hostSpinDirection = v), (v) => (otherSpinDirection = v)),
         true,
       ),
+      ...(sys && sysBody
+        ? [
+            parted(
+              { key: 'vectors', label: t.viewer.vectors, help: t.viewer.vectorsHelp, icon: 'velocity' },
+              skyParts(t.viewer.vectors, bodyVectors, hostVectors, otherVectors, (v) => (bodyVectors = v), (v) => (hostVectors = v), (v) => (otherVectors = v)),
+              true,
+            ),
+          ]
+        : []),
       ...(hasHost
         ? [{ key: 'hostLink', label: t.viewer.hostLink, help: t.viewer.hostLinkHelp, icon: 'links' as const, on: hostLink, set: (v: boolean) => (hostLink = v) }]
         : []),
@@ -2457,7 +2483,8 @@
   <!-- Hidden (no size) in the star view: the planet view pauses meanwhile. -->
   <canvas bind:this={canvas} class:measuring class:hidden={world.subject === 'star'}></canvas>
   {#if world.subject === 'planet' && skyPositions}
-    {@const guides = guideLabels.filter((g) => (g.key === 'spin' ? spinDirection : g.key === 'hostSpin' ? hostSpinDirection : hostLink) && (g.key !== 'pull' || !skyPositions!.guides.host))}
+    {@const guideOn = { spin: spinDirection, hostSpin: hostSpinDirection, host: hostLink, pull: bodyVectors, velocity: bodyVectors, hostPull: hostVectors, hostVelocity: hostVectors }}
+    {@const guides = guideLabels.filter((g) => guideOn[g.key] && (g.key !== 'pull' || !skyPositions!.guides.host))}
     {@const marks = smallSky ? skyPositions.marks : []}
     <!-- A dashed ring round each trojan swarm, too faint to see. -->
     {#each marks.slice(0, smallSky?.swarms.length ?? 0) as mark, k (k)}

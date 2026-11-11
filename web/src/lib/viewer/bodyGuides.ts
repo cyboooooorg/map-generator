@@ -1,10 +1,10 @@
 // What the planet view draws about the body shown's own motion, on the
 // globe (see PlanetView): its spin, as a solid curved arrow round its axis
 // (or, for a body locked to what it orbits, a closed ring: no spin of its
-// own against it), and in a planetary system, its host planet: a dotted
-// line to it, the host's pull on the body and the body's orbital velocity
-// as arrows, drawn as the spin arrow is (a tube and a cone). Positions are
-// in radii of the body shown, in its frame.
+// own against it), and in a planetary system, its host planet (a dotted
+// line to it) and its motion: the pull of what it orbits and its orbital
+// velocity as arrows, drawn as the spin arrow is (a tube and a cone).
+// Positions are in radii of the body, in the frame of the body shown.
 import {
   BufferGeometry,
   Color,
@@ -28,7 +28,7 @@ const SPIN_HEIGHT = 1.3;
 const SPIN_RADIUS = 0.3;
 const SPIN_ARC = 1.5 * Math.PI;
 const SPIN_TUBE = 0.022;
-/** The arrows of the host's pull and the body's velocity: their length beyond the surface, in radii. */
+/** The arrows of the pull and the velocity: their length beyond the surface, in radii. */
 const GUIDE_LENGTH = 1.4;
 /** Points of the host line, spaced geometrically from the surface to the host (see hostLineRadii). */
 const HOST_LINE_POINTS = 96;
@@ -37,9 +37,18 @@ export const VELOCITY_COLOUR = new Color('#4fd1ff');
 export const PULL_COLOUR = new Color('#ff9a3d');
 const HOST_LINE_COLOUR = new Color('#c8d2e6');
 
-/** The host planet as the guides draw it: its centre, and the body's direction of motion round it (or null). */
+/** The host planet as the guides draw it: its centre. */
 export interface HostGuide {
   position: Vec3;
+}
+
+/**
+ * The body's motion as the guides draw it: the direction of the pull of
+ * what it orbits (its planet, or the star), and its direction of motion
+ * round it (or null).
+ */
+export interface MotionGuide {
+  pull: Vec3;
   velocity: Vec3 | null;
 }
 
@@ -85,8 +94,8 @@ export class BodyGuides {
   readonly spin = new Group();
   /** In the body's frame, as the sky bodies are. */
   readonly host = new Group();
-  /** The host's pull and the body's velocity, each starting from the surface where it points (see setSurface). */
-  private readonly arrows = new Group();
+  /** The pull and the velocity, each starting from the surface where it points (see setSurface); in the body's frame. */
+  readonly vectors = new Group();
   private pull: { arrow: Group; direction: Vector3 } | null = null;
   private velocity: { arrow: Group; direction: Vector3 } | null = null;
   /** How far the surface reaches in a direction of the body's frame, in its radii (1: a sphere). */
@@ -110,7 +119,7 @@ export class BodyGuides {
     this.spin.visible = false;
     this.spin.renderOrder = 2;
     this.host.visible = false;
-    this.host.add(this.arrows);
+    this.vectors.visible = false;
   }
 
   /**
@@ -118,8 +127,7 @@ export class BodyGuides {
    * `at` in any direction of its frame, in its radii (an irregular moon's
    * shape with its relief, a few tenths over 1 on a moonlet a few km
    * across). The spin arrow, scaled by `poles`, and the arrows of the
-   * host's pull and of the body's velocity start from there rather than
-   * inside the body.
+   * pull and of the velocity start from there rather than inside the body.
    */
   setSurface(poles: number, at: (direction: Vector3) => number): void {
     this.surfaceAt = at;
@@ -169,13 +177,10 @@ export class BodyGuides {
     this.spinTip.copy(tip);
   }
 
-  /** The host planet's guides, or none (null). */
+  /** The line to the host planet, or none (null). */
   setHost(guide: HostGuide | null): void {
-    clear(this.arrows);
-    for (const child of [...this.host.children]) if (child !== this.arrows) clearOne(this.host, child);
+    clear(this.host);
     this.hostAxis = null;
-    this.pullTip = this.velocityTip = null;
-    this.pull = this.velocity = null;
     if (!guide) return;
     const to = new Vector3(...guide.position);
     const distance = to.length();
@@ -199,25 +204,59 @@ export class BodyGuides {
     line.computeLineDistances();
     line.frustumCulled = false;
     this.host.add(line);
-    // The host's pull, from the surface towards it.
-    const pull = arrow(toward.clone().multiplyScalar(this.surfaceAt(toward)), toward, GUIDE_LENGTH, PULL_COLOUR);
-    this.arrows.add(pull);
+  }
+
+  /**
+   * The arrows of the pull and of the velocity, or none (null). Arrows
+   * already there are turned in place (the motion changes every frame
+   * while the clock plays); they are rebuilt only when one comes or goes.
+   */
+  setMotion(motion: MotionGuide | null): void {
+    if (motion && this.pull && (motion.velocity === null) === (this.velocity === null)) {
+      const turn = (guide: { arrow: Group; direction: Vector3 }, to: Vec3) => {
+        const d = new Vector3(...to);
+        if (d.lengthSq() < 1e-12) return;
+        guide.direction.copy(d.normalize());
+        guide.arrow.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), guide.direction);
+        guide.arrow.position.copy(guide.direction).multiplyScalar(this.surfaceAt(guide.direction));
+      };
+      turn(this.pull, motion.pull);
+      this.pullTip = this.tipOf(this.pull.direction);
+      if (this.velocity && motion.velocity) {
+        turn(this.velocity, motion.velocity);
+        this.velocityTip = this.tipOf(this.velocity.direction);
+      }
+      return;
+    }
+    clear(this.vectors);
+    this.pullTip = this.velocityTip = null;
+    this.pull = this.velocity = null;
+    if (!motion) return;
+    const toward = new Vector3(...motion.pull);
+    if (toward.lengthSq() < 1e-12) return;
+    toward.normalize();
+    // The pull, from the surface towards what the body orbits.
+    const pull = arrow(toward.clone().multiplyScalar(this.surfaceAt(toward)), toward, GUIDE_LENGTH, PULL_COLOUR, this.prepare);
+    this.vectors.add(pull);
     this.pull = { arrow: pull, direction: toward };
     this.pullTip = this.tipOf(toward);
-    if (guide.velocity) {
-      const v = new Vector3(...guide.velocity).normalize();
-      const velocity = arrow(v.clone().multiplyScalar(this.surfaceAt(v)), v, GUIDE_LENGTH, VELOCITY_COLOUR);
-      this.arrows.add(velocity);
+    if (motion.velocity) {
+      const v = new Vector3(...motion.velocity).normalize();
+      const velocity = arrow(v.clone().multiplyScalar(this.surfaceAt(v)), v, GUIDE_LENGTH, VELOCITY_COLOUR, this.prepare);
+      this.vectors.add(velocity);
       this.velocity = { arrow: velocity, direction: v };
       this.velocityTip = this.tipOf(v);
     }
+    // Far away in the sky, beyond the far plane its depth is held short of: never culled.
+    this.vectors.traverse((object) => (object.frustumCulled = false));
   }
 
   /** Shows them, faded with the globe (`fade`, 0 on the flat map). */
-  update(spinOn: boolean, hostOn: boolean, fade: number): void {
+  update(spinOn: boolean, hostOn: boolean, vectorsOn: boolean, fade: number): void {
     this.spin.visible = spinOn && this.locked !== null && fade > 0.01;
     this.host.visible = hostOn && fade > 0.01;
-    for (const group of [this.spin, this.host]) {
+    this.vectors.visible = vectorsOn && this.pull !== null && fade > 0.01;
+    for (const group of [this.spin, this.host, this.vectors]) {
       group.traverse((object) => {
         const material = (object as Mesh).material as MeshBasicMaterial | undefined;
         if (material) material.opacity = fade ** 3 * (object instanceof Line ? 0.75 : 1);
@@ -230,7 +269,8 @@ export class BodyGuides {
     const axis = this.hostAxis;
     if (!axis) return null;
     const surface = this.surfaceAt(axis.direction);
-    const pull = this.pullTip?.length() ?? 0;
+    // Beyond the pull arrow's tip while it is drawn along the line.
+    const pull = this.vectors.visible ? (this.pullTip?.length() ?? 0) : 0;
     return axis.direction.clone().multiplyScalar(hostLabelRadius(surface, pull, axis.distance));
   }
 
@@ -240,14 +280,14 @@ export class BodyGuides {
     return {
       spin: scene(this.spinTip, this.spin),
       host: scene(this.hostLabel(), this.host),
-      pull: scene(this.pullTip, this.arrows),
-      velocity: scene(this.velocityTip, this.arrows),
+      pull: scene(this.pullTip, this.vectors),
+      velocity: scene(this.velocityTip, this.vectors),
     };
   }
 
   dispose(): void {
     clear(this.spin);
-    clear(this.arrows);
+    clear(this.vectors);
     clear(this.host);
   }
 }
@@ -256,8 +296,9 @@ export class BodyGuides {
  * An arrow from the surface point `from` along `direction`,
  * `length` long in all: a tube and a cone, as the spin arrow.
  */
-function arrow(from: Vector3, direction: Vector3, length: number, colour: Color): Group {
+function arrow(from: Vector3, direction: Vector3, length: number, colour: Color, prepare: (material: MeshBasicMaterial) => void): Group {
   const material = new MeshBasicMaterial({ color: colour, transparent: true });
+  prepare(material);
   const headLength = SPIN_TUBE * 7;
   const shaft = length - headLength;
   // Both parts are built along +y from the arrow's foot, then turned.

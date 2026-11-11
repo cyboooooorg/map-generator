@@ -122,6 +122,8 @@ export interface SkyBodyShow {
   axis: boolean;
   /** Its spin arrow, or its ring when it is locked to what it orbits. */
   spin: boolean;
+  /** The arrows of the pull of what it orbits and of its velocity (see PlanetView.setSkyMotions). */
+  vectors?: boolean;
 }
 
 /** An atmosphere seen from afar. */

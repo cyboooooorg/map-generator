@@ -742,7 +742,10 @@ export const en = {
       'Draws the way each body turns (on the globe): an arrow bent round its axis, or a closed ring for a body locked to what it orbits, which does not turn against it. Its squares: the body shown, its host planet (from a moon), the other bodies of the sky',
     hostLink: 'Link to the host',
     hostLinkHelp:
-      "From a moon: a dotted line to its host planet, with the host's pull on the moon and the moon's velocity as arrows, and their figures",
+      "From a moon: a dotted line to its host planet, labelled with their distance (and the planet's pull while Vectors shows it)",
+    vectors: 'Vectors',
+    vectorsHelp:
+      'Draws the pull of what each body orbits (orange, towards its planet, or the star for a planet) and its orbital velocity (cyan), as arrows from its surface, with their figures on the body shown and its host planet. Its squares: the body shown, its host planet (from a moon), the other bodies of the sky',
     resetDrift: 'Reset the drift',
     hostRings: 'Host rings',
     hostRingsHelp: "The rings of the host planet in the moon's sky",
@@ -839,6 +842,9 @@ export const en = {
     hostSpinName: (p: { name: string }) => `Spin of ${p.name}`,
     hostSpinLockedFacts: (p: { period: string }) => `the same face to its star: a turn per orbit, ${p.period}`,
     hostPull: 'Pull of its planet',
+    starPull: 'Pull of the star',
+    hostStarPull: (p: { name: string }) => `Pull of the star on ${p.name}`,
+    hostOrbitSpeedOf: (p: { name: string }) => `Orbital speed of ${p.name}`,
     hostLineFacts: (p: { distance: string; pull: string }) => `${p.distance} · pull ${p.pull}`,
     hostOrbitSpeed: 'Orbital speed',
     skyStarFacts: (p: { distance: string }) => `${p.distance} away`,

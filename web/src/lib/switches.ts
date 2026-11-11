@@ -136,6 +136,8 @@ export function migrateDisplay<T extends object>(stored: unknown, current: T): T
     ['skyBelts', 'smallBodies'],
     ['otherSpinAxes', 'spinAxes'],
     ['otherSpinDirection', 'spinDirection'],
+    // The pull and velocity arrows came with the link to the host.
+    ['vectors', 'hostLink'],
   ];
   // In order, each copy seeing the ones before: a key from the first split
   // passes its value on to those split from it since.

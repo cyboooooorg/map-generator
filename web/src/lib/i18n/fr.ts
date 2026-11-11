@@ -704,7 +704,10 @@ export const fr: Messages = {
       'Trace le sens dans lequel tourne chaque astre (sur le globe) : une flèche courbée autour de son axe, ou un anneau fermé pour un astre en rotation synchrone avec ce qu’il orbite, qui ne tourne pas par rapport à lui. Ses carrés : l’astre affiché, sa planète hôte (depuis une lune), les autres astres du ciel',
     hostLink: 'Lien avec l’hôte',
     hostLinkHelp:
-      'Depuis une lune : un trait pointillé vers sa planète hôte, avec l’attraction de l’hôte sur la lune et la vitesse de la lune en flèches, et leurs valeurs',
+      'Depuis une lune : un trait pointillé vers sa planète hôte, avec leur distance (et l’attraction de la planète quand Vecteurs l’affiche)',
+    vectors: 'Vecteurs',
+    vectorsHelp:
+      'Trace l’attraction de ce que chaque astre orbite (orange, vers sa planète, ou l’étoile pour une planète) et sa vitesse orbitale (cyan), en flèches depuis sa surface, avec leurs valeurs sur l’astre affiché et sa planète hôte. Ses carrés : l’astre affiché, sa planète hôte (depuis une lune), les autres astres du ciel',
     resetDrift: 'Réinitialiser la dérive',
     hostRings: 'Anneaux de l’hôte',
     hostRingsHelp: 'Les anneaux de la planète hôte dans le ciel de la lune',
@@ -802,6 +805,9 @@ export const fr: Messages = {
     hostSpinName: (p) => `Rotation de ${p.name}`,
     hostSpinLockedFacts: (p) => `la même face vers son étoile${'\u202f'}: un tour par orbite, ${p.period}`,
     hostPull: 'Attraction de sa planète',
+    starPull: 'Attraction de l’étoile',
+    hostStarPull: (p) => `Attraction de l’étoile sur ${p.name}`,
+    hostOrbitSpeedOf: (p) => `Vitesse orbitale de ${p.name}`,
     hostLineFacts: (p) => `${p.distance} · attraction ${p.pull}`,
     hostOrbitSpeed: 'Vitesse orbitale',
     skyStarFacts: (p) => `à ${p.distance}`,

@@ -392,6 +392,61 @@ export function hillSphere(
   return { id: host.id, radiusKm, radiusInHostRadii: radiusKm / Math.max(host.physical.radius_km, 1e-6) };
 }
 
+/** The gravitational constant, m³ / (kg s²), and an Earth mass, kg. */
+const G = 6.674e-11;
+const EARTH_KG = 5.972e24;
+
+/** A body's motion round what it orbits (its planet for a moon, the star for a planet), as the Vectors switch draws it. */
+export interface SkyMotion {
+  /** Towards its primary (unit), in the frame of the body shown. */
+  pull: Vec3;
+  /** Its direction of motion round its primary (unit), in that frame; null for a body that does not move. */
+  velocity: Vec3 | null;
+  /** The primary's pull on it, m/s², at its present distance. */
+  pullMs2: number;
+  /** Its speed round its primary, km/s, at its present distance (vis-viva). */
+  speedKms: number;
+  /** Its present distance from its primary, km. */
+  distanceKm: number;
+}
+
+/**
+ * The motion of every body of the system round its primary after `days`,
+ * the body shown included, its directions in the frame of body `shown`
+ * (see systemSky; `spinOffset` as there). Empty when `shown` is unknown.
+ */
+export function skyMotions(system: System, shown: string, days: number, spinOffset = 0): Map<string, SkyMotion> {
+  const placements = placeSystem(system, days, { id: shown, spinOffset });
+  const here = placements.get(shown);
+  const motions = new Map<string, SkyMotion>();
+  if (!here) return motions;
+  const [ax, ay, az] = here.axes;
+  const local = (v: Vec3): Vec3 => [dot(v, ax), dot(v, ay), dot(v, az)];
+  const starKg = system.star.info.mass * EARTH_PER_SUN * EARTH_KG;
+  for (const body of system.bodies) {
+    const there = placements.get(body.id)!;
+    const primary = body.parent ? system.bodies.find((b) => b.id === body.parent) : undefined;
+    const primaryCentre = body.parent ? (placements.get(body.parent)?.centre ?? [0, 0, 0]) : [0, 0, 0];
+    const primaryKg = primary ? primary.physical.mass_earth * EARTH_KG : starKg;
+    const out = sub(there.centre, primaryCentre as Vec3);
+    const distanceKm = Math.max(Math.hypot(...out), 1e-6);
+    // Along the orbit, from its places a moment before and after.
+    const dt = Math.max(body.orbit.period_days, 1e-6) * 1e-4;
+    const step = sub(orbitPosition(body.orbit, there.plane, days + dt), orbitPosition(body.orbit, there.plane, days - dt));
+    const r = distanceKm * 1000;
+    const a = Math.max(body.orbit.semi_major_axis_km, 1e-6) * 1000;
+    const mu = G * (primaryKg + body.physical.mass_earth * EARTH_KG);
+    motions.set(body.id, {
+      pull: unit(local(scale(out, -1))),
+      velocity: Math.hypot(...step) > 0 ? unit(local(step)) : null,
+      pullMs2: (G * primaryKg) / (r * r),
+      speedKms: Math.sqrt(Math.max(mu * (2 / r - 1 / a), 0)) / 1000,
+      distanceKm,
+    });
+  }
+  return motions;
+}
+
 /** The shown body's distance from the star, AU (for the light it gets). */
 export function starDistanceAu(system: System, shown: string, days: number): number {
   const here = placeSystem(system, days).get(shown);
