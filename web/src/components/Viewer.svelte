@@ -6,7 +6,7 @@
   import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
-  import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
+  import ToggleBar, { type SubToggle, type Toggle } from './dock/ToggleBar.svelte';
   import AxesGizmo from './AxesGizmo.svelte';
   import SizeChips from './SizeChips.svelte';
   import { parseSize, pendingToFollow } from '../lib/sizes';
@@ -37,7 +37,7 @@
   import { cloudTint, namedSeason, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
   import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
-  import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn, type ScopePair } from '../lib/switches';
+  import { localGroup, migrateDisplay, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups, type ScopePair } from '../lib/switches';
   import { bodyTitle, forgetTold, remadeToasts } from '../lib/evicted';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
@@ -193,9 +193,11 @@
     orbitLines: false,
     orbitLinesLocal: false,
     hillSphere: false,
-    // The trojan swarms and belts ringed in the sky.
-    smallBodies: false,
-    smallBodiesLocal: false,
+    // The small bodies marked in the sky: the trojans of the body's planet,
+    // the other planets' trojans, and the belts (one switch, a square each).
+    trojansOwn: false,
+    trojansOther: false,
+    skyBelts: false,
     // The rocks of the rings round a ring moon: 0 none, else their drawn
     // size over their true size (1 true; more is not to scale).
     ringRocks: 100 as number,
@@ -204,6 +206,9 @@
     spinAxes: false,
     spinDirection: false,
     hostLink: false,
+    // The same on the other bodies of the sky (the host planet has its own).
+    otherSpinAxes: false,
+    otherSpinDirection: false,
     // The ring round the body shown, graduated in degrees, reading its turn.
     rotationDial: false,
     // The same round the host planet in a moon's sky, following the moon.
@@ -217,9 +222,11 @@
     // planet, filling its sky, would otherwise sweep round it once per
     // orbit, as if the camera went round the body.
     cameraOnLockedBody: true,
-    // Names tied to the bodies of the sky.
+    // Names tied to the bodies of the sky: `skyLabels` the star's and the
+    // rest of the star system's, then the moons' and the host planet's.
     skyLabels: true,
-    skyLabelsLocal: true,
+    skyLabelsMoons: true,
+    skyLabelsHost: true,
     starLight: false,
     clouds: true,
     cloudDrift: false,
@@ -300,13 +307,17 @@
   let orbitLinesLocal = $state(saved.orbitLinesLocal);
   /** The Hill sphere of the body shown (its host planet's from a moon) drawn in the sky. */
   let hillOn = $state(saved.hillSphere);
-  let smallBodies = $state(saved.smallBodies);
-  let smallBodiesLocal = $state(saved.smallBodiesLocal);
+  let trojansOwn = $state(saved.trojansOwn);
+  let trojansOther = $state(saved.trojansOther);
+  let skyBelts = $state(saved.skyBelts);
   let ringRockScale = $state(RING_ROCK_SCALES.includes(saved.ringRocks) ? saved.ringRocks : 100);
-  /** The body shown's spin axis (and the sky bodies' when it has no host), its spin arrow, and the link to its host planet. */
+  /** The body shown's spin axis, its spin arrow, and the link to its host planet. */
   let axesShown = $state(saved.spinAxes);
   let spinDirection = $state(saved.spinDirection);
   let hostLink = $state(saved.hostLink);
+  /** The spin axes and arrows of the other bodies of the sky (the host planet aside). */
+  let otherAxes = $state(saved.otherSpinAxes);
+  let otherSpinDirection = $state(saved.otherSpinDirection);
   let dialShown = $state(saved.rotationDial);
   let hostCompassShown = $state(saved.hostCompass);
   let cameraOnBody = $state(saved.cameraOnBody);
@@ -316,7 +327,8 @@
   $effect(() => view?.setHostLink(hostLink));
   /** Labels on the bodies of the sky, and where those are on the screen. */
   let skyLabels = $state(saved.skyLabels);
-  let skyLabelsLocal = $state(saved.skyLabelsLocal);
+  let skyLabelsMoons = $state(saved.skyLabelsMoons);
+  let skyLabelsHost = $state(saved.skyLabelsHost);
   let skyPositions = $state<ReturnType<PlanetView['skyScreenPositions']> | null>(null);
   let cloudDrift = $state(saved.cloudDrift);
   let sun = $state(saved.sun);
@@ -567,18 +579,22 @@
       orbitLines,
       orbitLinesLocal,
       hillSphere: hillOn,
-      smallBodies,
-      smallBodiesLocal,
+      trojansOwn,
+      trojansOther,
+      skyBelts,
       ringRocks: ringRockScale,
       spinAxes: axesShown,
       spinDirection,
       hostLink,
+      otherSpinAxes: otherAxes,
+      otherSpinDirection,
       rotationDial: dialShown,
       hostCompass: hostCompassShown,
       cameraOnBody,
       cameraOnLockedBody,
       skyLabels,
-      skyLabelsLocal,
+      skyLabelsMoons,
+      skyLabelsHost,
       sun,
       season,
       sunLongitude,
@@ -930,9 +946,13 @@
   const localIds = $derived(sys && sysBody ? localGroup(sys.bodies, sysBody.id) : new Set<string>());
   /** The system-wide switches' parts: the squares show only when there is a local group to tell from the rest. */
   const hasLocalGroup = $derived(localIds.size > 0);
-  const labelScope = $derived<ScopePair>({ local: skyLabelsLocal, stellar: skyLabels });
   const orbitScope = $derived<ScopePair>({ local: orbitLinesLocal, stellar: orbitLines });
-  const smallScope = $derived<ScopePair>({ local: smallBodiesLocal, stellar: smallBodies });
+  /** The sky of the body shown as its sky switches split it: its host planet, the moons of its planet, the rest. */
+  const skyIds = $derived(sys && sysBody ? skyGroups(sys.bodies, sysBody.id) : { host: null, moons: new Set<string>() });
+  /** Whether the label of sky body `id` shows, by the square for its part of the sky. */
+  const labelShown = (id: string): boolean => (id === skyIds.host ? skyLabelsHost : skyIds.moons.has(id) ? skyLabelsMoons : skyLabels);
+  /** Whether any small body is marked in the sky. */
+  const smallOn = $derived(trojansOwn || trojansOther || skyBelts);
   /** The star view of a planetary system (lib/systemStar.ts). */
   /**
    * The planet picked in the star view (a click on it, or its row), by id:
@@ -1057,14 +1077,13 @@
     if (!sys || !sysBody || !sysPlanet) return null;
     return systemSky(sys, sysBody.id, sysDays, sysTextures, skySpin, orbitSamples);
   });
-  /** The trojan swarms and belts in that sky, while Small bodies is on. */
+  /** The trojan swarms and belts in that sky, while Small bodies is on: each kind by its own square. */
   const smallSky = $derived.by(() => {
-    if (!scopeOn(smallScope) || !sys || !sysBody || !sysPlanet) return null;
+    if (!smallOn || !sys || !sysBody || !sysPlanet) return null;
     const all = smallBodiesSky(sys, sysBody.id, sysDays, skySpin);
-    // The planet's own trojans are local; the belts and the other planets' trojans are the star system's.
     return {
-      swarms: all.swarms.filter((swarm) => (swarm.planet === sysPlanet.id ? smallScope.local : smallScope.stellar)),
-      belts: smallScope.stellar ? all.belts : [],
+      swarms: all.swarms.filter((swarm) => (swarm.planet === sysPlanet.id ? trojansOwn : trojansOther)),
+      belts: skyBelts ? all.belts : [],
     };
   });
   $effect(() => view?.setSkyBelts(smallSky ? smallSky.belts.flatMap((b) => b.edges) : []));
@@ -1521,7 +1540,7 @@
     const parent = sysBody?.parent ?? null;
     const planetTilt = sysPlanet?.spin.axial_tilt_deg ?? 0;
     // The host by its own part of each switch; the other bodies of the sky
-    // (a planet's moons, a moon's siblings) by the host's, else the body's.
+    // (a planet's moons, a moon's siblings, the other planets) by theirs.
     const hostShow: SkyBodyShow = {
       atmosphere: hostAtmosphere,
       clouds: hostClouds,
@@ -1539,8 +1558,8 @@
       grid: false,
       tropics: false,
       rings: true,
-      axis: parent ? hostAxes : axesShown,
-      spin: parent ? hostSpinDirection : spinDirection,
+      axis: otherAxes,
+      spin: otherSpinDirection,
     };
     const bodies = (sysSky?.bodies ?? []).map((body, k) =>
       sysSky?.ids[k] === parent
@@ -1578,7 +1597,7 @@
     const current = view;
     if (!current) return;
     // The guides' labels (spin, host) follow with the spin axes, the dial's with the dial.
-    const follow = scopeOn(labelScope) || spinDirection || hostLink || hostSpinDirection || scopeOn(smallScope) || dial !== null || hostCompass !== null;
+    const follow = skyLabels || skyLabelsMoons || skyLabelsHost || spinDirection || hostLink || hostSpinDirection || smallOn || dial !== null || hostCompass !== null;
     current.onSkyPositions = follow ? (positions) => (skyPositions = positions) : null;
     if (!follow) skyPositions = null;
     return () => {
@@ -1791,6 +1810,44 @@
       ],
     };
   }
+  /** One square of a switch with parts (see `parted`), with whether it has anything to draw from the body shown. */
+  type PartSquare = SubToggle & { shown: boolean };
+  /**
+   * A switch with a square for each part that has something to draw from
+   * the body shown; its main button sets every such part (see
+   * lib/switches.ts, `lead` as there). With a single part, a plain switch.
+   */
+  function parted(base: Omit<Toggle, 'on' | 'set' | 'subs'>, parts: readonly PartSquare[], lead: boolean): Toggle {
+    const shown = parts.filter((p) => p.shown);
+    if (shown.length <= 1) {
+      const only = shown[0] ?? parts[0]!;
+      return { ...base, on: only.on, set: only.set };
+    }
+    return {
+      ...base,
+      on: partsOn(shown, lead),
+      set: () => {
+        const next = pressParts(shown, lead);
+        for (const p of shown) p.set(next);
+      },
+      subs: shown.map(({ shown: _, ...p }) => ({ ...p, key: `${base.key}-${p.key}` })),
+    };
+  }
+  /** Whether the sky has bodies other than the host planet: the spin switches' third square. */
+  const hasOtherSkyBodies = $derived((sysSky?.ids ?? []).some((id) => id !== skyIds.host));
+  /** Whether the body's own planet has trojans, and whether the other planets do. */
+  const ownTrojans = $derived(Boolean(sysPlanet?.trojans && sysPlanet.trojans.l4 + sysPlanet.trojans.l5 > 0));
+  const otherTrojans = $derived(Boolean(sys?.bodies.some((b) => b.parent === null && b.id !== sysPlanet?.id && b.trojans && b.trojans.l4 + b.trojans.l5 > 0)));
+  /** A spin switch's three squares: the body shown, its host planet (from a moon), the other bodies of the sky. */
+  function spinParts(what: string, body: boolean, host: boolean, others: boolean, setBody: (on: boolean) => void, setHost: (on: boolean) => void, setOthers: (on: boolean) => void): PartSquare[] {
+    return [
+      hasHost
+        ? { key: 'moon', label: t.viewer.squareMoon({ what }), icon: 'moon', on: body, set: setBody, shown: true }
+        : { key: 'planet', label: t.viewer.squarePlanet({ what }), icon: 'planet', on: body, set: setBody, shown: true },
+      { key: 'host', label: t.viewer.squareHost({ what }), icon: 'planet', on: host, set: setHost, shown: hasHost },
+      { key: 'others', label: t.viewer.squareOthers({ what }), icon: 'host', on: others, set: setOthers, shown: hasOtherSkyBodies },
+    ];
+  }
   /** The drift row's reset button: the bands, storms and clouds back to where they were generated. */
   const driftReset = $derived({ label: t.viewer.resetDrift, icon: 'start' as const, run: () => view?.resetDrift() });
   /** Whether the host planet has an atmosphere halo, and clouds, to draw in a moon's sky. */
@@ -1823,10 +1880,15 @@
       { key: 'land', label: t.viewer.elevationContours, help: t.viewer.elevationContoursHelp, icon: 'contours', on: landContours, set: (v) => dataReady && (landContours = v) },
     ],
     [
-      scoped({ key: 'labels', label: t.viewer.skyLabels, help: t.viewer.skyLabelsHelp, icon: 'tag' }, labelScope, (s) => {
-        skyLabelsLocal = s.local;
-        skyLabels = s.stellar;
-      }),
+      parted(
+        { key: 'labels', label: t.viewer.skyLabels, help: t.viewer.skyLabelsHelp, icon: 'tag' },
+        [
+          { key: 'moons', label: t.viewer.squareMoons({ what: t.viewer.skyLabels }), icon: 'moon', on: skyLabelsMoons, set: (v) => (skyLabelsMoons = v), shown: skyIds.moons.size > 0 },
+          { key: 'host', label: t.viewer.squareHost({ what: t.viewer.skyLabels }), icon: 'planet', on: skyLabelsHost, set: (v) => (skyLabelsHost = v), shown: hasHost },
+          { key: 'stellar', label: t.viewer.squareRest({ what: t.viewer.skyLabels }), icon: 'star', on: skyLabels, set: (v) => (skyLabels = v), shown: true },
+        ],
+        false,
+      ),
       ...(sys && sys.bodies.length > 1
         ? [
             scoped({ key: 'orbits', label: t.viewer.orbitLines, help: t.viewer.orbitLinesHelp, icon: 'orbit' }, orbitScope, (s) => {
@@ -1853,14 +1915,27 @@
         : []),
       ...(sys && ((sys.belts?.length ?? 0) > 0 || sys.bodies.some((b) => b.trojans))
         ? [
-            scoped({ key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' }, smallScope, (s) => {
-              smallBodiesLocal = s.local;
-              smallBodies = s.stellar;
-            }),
+            parted(
+              { key: 'small', label: t.viewer.smallBodies, help: t.viewer.smallBodiesHelp, icon: 'trojans' },
+              [
+                { key: 'own', label: t.viewer.squareOwnTrojans, icon: 'planet', on: trojansOwn, set: (v) => (trojansOwn = v), shown: ownTrojans },
+                { key: 'other', label: t.viewer.squareOtherTrojans, icon: 'trojans', on: trojansOther, set: (v) => (trojansOther = v), shown: otherTrojans },
+                { key: 'belts', label: t.viewer.squareBelts, icon: 'belt', on: skyBelts, set: (v) => (skyBelts = v), shown: (sys.belts?.length ?? 0) > 0 },
+              ],
+              false,
+            ),
           ]
         : []),
-      perBody({ key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis' }, axesShown, hostAxes, (v) => (axesShown = v), (v) => (hostAxes = v)),
-      perBody({ key: 'spin', label: t.viewer.spinDirection, help: t.viewer.spinDirectionHelp, icon: 'spin' }, spinDirection, hostSpinDirection, (v) => (spinDirection = v), (v) => (hostSpinDirection = v)),
+      parted(
+        { key: 'axes', label: t.viewer.spinAxes, help: t.viewer.spinAxesHelp, icon: 'axis' },
+        spinParts(t.viewer.spinAxes, axesShown, hostAxes, otherAxes, (v) => (axesShown = v), (v) => (hostAxes = v), (v) => (otherAxes = v)),
+        true,
+      ),
+      parted(
+        { key: 'spin', label: t.viewer.spinDirection, help: t.viewer.spinDirectionHelp, icon: 'spin' },
+        spinParts(t.viewer.spinDirection, spinDirection, hostSpinDirection, otherSpinDirection, (v) => (spinDirection = v), (v) => (hostSpinDirection = v), (v) => (otherSpinDirection = v)),
+        true,
+      ),
       ...(hasHost
         ? [{ key: 'hostLink', label: t.viewer.hostLink, help: t.viewer.hostLinkHelp, icon: 'links' as const, on: hostLink, set: (v: boolean) => (hostLink = v) }]
         : []),
@@ -2392,7 +2467,7 @@
     {/each}
     <SkyLabels
       positions={[
-        ...skyPositions.bodies.map((at, k) => (inScope(labelScope, localIds, sysSky?.ids[k] ?? '') ? at : null)),
+        ...skyPositions.bodies.map((at, k) => (labelShown(sysSky?.ids[k] ?? '') ? at : null)),
         ...guides.map((g) => skyPositions!.guides[g.key]),
         ...marks,
         ...dialLabels.map((d) => d.at),
@@ -2405,7 +2480,7 @@
         ...dialLabels.map((d) => d.label),
         ...hostCompassLabels.map((d) => d.label),
       ]}
-      star={labelScope.stellar ? skyPositions.star : null}
+      star={skyLabels ? skyPositions.star : null}
       {starLabel}
     />
     {#if dial && skyPositions.dial}

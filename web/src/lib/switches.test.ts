@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inScope, localGroup, migrateDisplay, pressBody, pressScope, scopeOn } from './switches';
+import { inScope, localGroup, migrateDisplay, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups } from './switches';
 
 describe('pressBody', () => {
   it('sets both bodies to the opposite of the body shown', () => {
@@ -55,6 +55,46 @@ describe('localGroup', () => {
   });
 });
 
+describe('skyGroups', () => {
+  it('splits a moon\'s sky into its host and the other moons', () => {
+    const groups = skyGroups(bodies, 'a-1');
+    expect(groups.host).toBe('a');
+    expect([...groups.moons]).toEqual(['a-2']);
+  });
+
+  it('gives a planet no host and all its moons', () => {
+    const groups = skyGroups(bodies, 'a');
+    expect(groups.host).toBeNull();
+    expect([...groups.moons].sort()).toEqual(['a-1', 'a-2']);
+  });
+
+  it('is empty for a planet without moons, and for an unknown body', () => {
+    expect(skyGroups(bodies, 'c')).toEqual({ host: null, moons: new Set() });
+    expect(skyGroups(bodies, 'zz')).toEqual({ host: null, moons: new Set() });
+  });
+});
+
+describe('partsOn and pressParts', () => {
+  const on = (v: boolean, shown = true) => ({ on: v, shown });
+
+  it('reads a lead switch by its first part, and presses all to its opposite', () => {
+    expect(partsOn([on(false), on(true), on(true)], true)).toBe(false);
+    expect(pressParts([on(false), on(true), on(true)], true)).toBe(true);
+    expect(pressParts([on(true), on(false), on(false)], true)).toBe(false);
+  });
+
+  it('reads a scoped switch as on when any part shown is', () => {
+    expect(partsOn([on(false), on(true), on(false)], false)).toBe(true);
+    expect(pressParts([on(false), on(true), on(false)], false)).toBe(false);
+    expect(pressParts([on(false), on(false), on(false)], false)).toBe(true);
+  });
+
+  it('ignores a part with nothing to draw', () => {
+    expect(partsOn([on(false), on(true, false)], false)).toBe(false);
+    expect(pressParts([on(false), on(true, false)], false)).toBe(true);
+  });
+});
+
 describe('inScope', () => {
   const group = localGroup(bodies, 'a-1');
 
@@ -96,6 +136,27 @@ describe('migrateDisplay', () => {
   it('leaves a value saved under the new keys alone', () => {
     const out = migrateDisplay({ spinAxes: true, spinDirection: false }, { ...current, spinDirection: false });
     expect(out.spinDirection).toBe(false);
+  });
+
+  it('splits the local labels, the small bodies and the spin switches again (#430)', () => {
+    const out = migrateDisplay(
+      { skyLabels: false, skyLabelsLocal: true, smallBodies: true, smallBodiesLocal: false, spinAxes: true, spinDirection: false },
+      current,
+    );
+    expect(out).toMatchObject({
+      skyLabelsMoons: true,
+      skyLabelsHost: true,
+      trojansOwn: false,
+      trojansOther: true,
+      skyBelts: true,
+      otherSpinAxes: true,
+      otherSpinDirection: false,
+    });
+  });
+
+  it('carries a value through both splits', () => {
+    const out = migrateDisplay({ skyLabels: false, smallBodies: true, spinAxes: true }, current);
+    expect(out).toMatchObject({ skyLabelsMoons: false, skyLabelsHost: false, trojansOwn: true, trojansOther: true, otherSpinDirection: true });
   });
 
   it('keeps the defaults when nothing was saved', () => {

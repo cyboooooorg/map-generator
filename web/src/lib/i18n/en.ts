@@ -688,7 +688,7 @@ export const en = {
     orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
     smallBodies: 'Small bodies',
     smallBodiesHelp:
-      'Rings the trojan swarms and traces the belts of the system in the sky (on the globe, in sunlight), their bodies too small to see from here, with their names',
+      "Rings the trojan swarms and traces the belts of the system in the sky (on the globe, in sunlight), their bodies too small to see from here, with their names. Its squares: this planet's trojans, the other planets' trojans, the belts",
     ringRocks: 'Ring rocks',
     ringRocksHelp:
       'The boulders of the ring round this moon, in sunlight: each goes round the giant at its own pace, those inside the moon\'s orbit passing it, those outside falling behind. Real boulders, 10 m or so, are under a pixel beyond a few km: enlarged, they show the ring as a belt, not to scale',
@@ -736,10 +736,10 @@ export const en = {
     },
     spinAxes: 'Spin axes',
     spinAxesHelp:
-      'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit',
+      'Draws the axis each body turns on (on the globe): through its poles, the north end light, the south end blue; its tilt shows against its orbit. Its squares: the body shown, its host planet (from a moon), the other bodies of the sky',
     spinDirection: 'Spin direction',
     spinDirectionHelp:
-      'Draws the way each body turns (on the globe): an arrow bent round its axis, or a closed ring for a body locked to what it orbits, which does not turn against it',
+      'Draws the way each body turns (on the globe): an arrow bent round its axis, or a closed ring for a body locked to what it orbits, which does not turn against it. Its squares: the body shown, its host planet (from a moon), the other bodies of the sky',
     hostLink: 'Link to the host',
     hostLinkHelp:
       "From a moon: a dotted line to its host planet, with the host's pull on the moon and the moon's velocity as arrows, and their figures",
@@ -753,6 +753,13 @@ export const en = {
     squareHost: (p: { what: string }) => `${p.what} on the host`,
     squareLocal: (p: { what: string }) => `${p.what} of the local system`,
     squareStellar: (p: { what: string }) => `${p.what} of the star system`,
+    squarePlanet: (p: { what: string }) => `${p.what} on the planet`,
+    squareMoons: (p: { what: string }) => `${p.what} of the moons`,
+    squareOthers: (p: { what: string }) => `${p.what} on the other bodies of the sky`,
+    squareRest: (p: { what: string }) => `${p.what} of the star and the rest of the star system`,
+    squareOwnTrojans: "This planet's trojans",
+    squareOtherTrojans: "The other planets' trojans",
+    squareBelts: 'The belts',
     hostCompassMoon: 'Moon',
     rotationDial: 'Rotation dial',
     rotationDialHelp:
@@ -824,7 +831,7 @@ export const en = {
     clouds: 'Clouds',
     drift: 'Drift',
     skyLabels: 'Labels',
-    skyLabelsHelp: 'Names and basic facts of the bodies in the sky (moons, the planet seen from a moon, the star), tied to each by a line, to find even the smallest; with Sunlight',
+    skyLabelsHelp: 'Names and basic facts of the bodies in the sky (moons, the planet seen from a moon, the star), tied to each by a line, to find even the smallest; with Sunlight. Its squares: the moons, the host planet (from a moon), the star and the rest of the star system',
     spinName: 'Spin',
     spinFacts: (p: { speed: string; period: string }) => `${p.speed} at the equator · a turn in ${p.period}`,
     spinLockedName: 'Locked',

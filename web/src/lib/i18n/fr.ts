@@ -649,7 +649,7 @@ export const fr: Messages = {
     orbitLinesHelp: 'Trace les orbites des lunes dans le ciel (sur le globe), vues depuis le corps affiché',
     smallBodies: 'Petits corps',
     smallBodiesHelp:
-      'Entoure les essaims troyens et trace les ceintures du système dans le ciel (sur le globe, à la lumière du soleil), leurs corps trop petits pour être vus d’ici, avec leur nom',
+      'Entoure les essaims troyens et trace les ceintures du système dans le ciel (sur le globe, à la lumière du soleil), leurs corps trop petits pour être vus d’ici, avec leur nom. Ses carrés : les troyens de cette planète, ceux des autres planètes, les ceintures',
     ringRocks: 'Blocs des anneaux',
     ringRocksHelp:
       'Les blocs de l’anneau autour de cette lune, au soleil : chacun tourne autour de la géante à son propre rythme, ceux à l’intérieur de l’orbite de la lune la dépassent, ceux à l’extérieur restent en arrière. Les vrais blocs, d’une dizaine de mètres, font moins d’un pixel au-delà de quelques km : agrandis, ils montrent l’anneau comme une ceinture, sans respecter l’échelle',
@@ -698,10 +698,10 @@ export const fr: Messages = {
     },
     spinAxes: 'Axes de rotation',
     spinAxesHelp:
-      `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite`,
+      `Trace l’axe autour duquel tourne chaque astre (sur le globe)${S}: par ses pôles, le bout nord clair, le bout sud bleu${S}; son inclinaison se lit par rapport à son orbite. Ses carrés${S}: l’astre affiché, sa planète hôte (depuis une lune), les autres astres du ciel`,
     spinDirection: 'Sens de rotation',
     spinDirectionHelp:
-      'Trace le sens dans lequel tourne chaque astre (sur le globe) : une flèche courbée autour de son axe, ou un anneau fermé pour un astre en rotation synchrone avec ce qu’il orbite, qui ne tourne pas par rapport à lui',
+      'Trace le sens dans lequel tourne chaque astre (sur le globe) : une flèche courbée autour de son axe, ou un anneau fermé pour un astre en rotation synchrone avec ce qu’il orbite, qui ne tourne pas par rapport à lui. Ses carrés : l’astre affiché, sa planète hôte (depuis une lune), les autres astres du ciel',
     hostLink: 'Lien avec l’hôte',
     hostLinkHelp:
       'Depuis une lune : un trait pointillé vers sa planète hôte, avec l’attraction de l’hôte sur la lune et la vitesse de la lune en flèches, et leurs valeurs',
@@ -715,6 +715,13 @@ export const fr: Messages = {
     squareHost: (p) => `${p.what} sur l’hôte`,
     squareLocal: (p) => `${p.what} du système local`,
     squareStellar: (p) => `${p.what} du système stellaire`,
+    squarePlanet: (p) => `${p.what} sur la planète`,
+    squareMoons: (p) => `${p.what} des lunes`,
+    squareOthers: (p) => `${p.what} sur les autres astres du ciel`,
+    squareRest: (p) => `${p.what} de l’étoile et du reste du système stellaire`,
+    squareOwnTrojans: 'Troyens de cette planète',
+    squareOtherTrojans: 'Troyens des autres planètes',
+    squareBelts: 'Ceintures',
     hostCompassMoon: 'Lune',
     rotationDial: 'Boussole de rotation',
     rotationDialHelp:
@@ -787,7 +794,7 @@ export const fr: Messages = {
     clouds: 'Nuages',
     drift: 'Dérive',
     skyLabels: 'Étiquettes',
-    skyLabelsHelp: `Noms et données de base des astres du ciel (lunes, planète vue depuis une lune, étoile), reliés chacun par un trait, pour trouver même les plus petits${S}; avec la lumière du soleil`,
+    skyLabelsHelp: `Noms et données de base des astres du ciel (lunes, planète vue depuis une lune, étoile), reliés chacun par un trait, pour trouver même les plus petits${S}; avec la lumière du soleil. Ses carrés${S}: les lunes, la planète hôte (depuis une lune), l’étoile et le reste du système stellaire`,
     spinName: 'Rotation',
     spinFacts: (p) => `${p.speed} à l’équateur · un tour en ${p.period}`,
     spinLockedName: 'Synchrone',
