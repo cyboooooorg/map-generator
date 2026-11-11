@@ -1725,11 +1725,14 @@
     const pullText = (pull: number) => withUnit(formatUpTo(pull, pull >= 0.01 ? 3 : Math.min(Math.ceil(-Math.log10(Math.max(pull, 1e-12))) + 2, 12)), 'm/s²');
     const speedText = (speed: number) => withUnit(formatUpTo(speed, 2), 'km/s');
     /** The labels of the pull's two parts (see lib/viewer/bodyGuides): the one that bends the path, the one along the velocity. */
-    const parts = (motion: SkyMotion, across: GuideKey, along: GuideKey) => {
+    // `of`: the host planet's name, for its parts seen from a moon; none for the body shown's.
+    const parts = (motion: SkyMotion, across: GuideKey, along: GuideKey, of: string | null = null) => {
       if (Math.abs(motion.alongShare) < PART_LABEL_SHARE) return;
       const share = motion.alongShare;
-      labels.push({ key: across, label: { name: t.viewer.pullBending, detail: pullText(motion.pullMs2 * Math.sqrt(Math.max(1 - share * share, 0))) } });
-      labels.push({ key: along, label: { name: share > 0 ? t.viewer.pullSpeeding : t.viewer.pullSlowing, detail: pullText(motion.pullMs2 * Math.abs(share)) } });
+      const bending = of ? t.viewer.pullBendingOf({ name: of }) : t.viewer.pullBending;
+      const alongName = share > 0 ? (of ? t.viewer.pullSpeedingOf({ name: of }) : t.viewer.pullSpeeding) : of ? t.viewer.pullSlowingOf({ name: of }) : t.viewer.pullSlowing;
+      labels.push({ key: across, label: { name: bending, detail: pullText(motion.pullMs2 * Math.sqrt(Math.max(1 - share * share, 0))) } });
+      labels.push({ key: along, label: { name: alongName, detail: pullText(motion.pullMs2 * Math.abs(share)) } });
     };
     // The pull of what the body orbits (its planet, or the star) and its speed round it.
     if (sysBody && ownMotion) {
@@ -1754,7 +1757,7 @@
       if (hostMotion) {
         labels.push({ key: 'hostPull', label: { name: t.viewer.hostStarPull({ name }), detail: pullText(hostMotion.pullMs2) } });
         labels.push({ key: 'hostVelocity', label: { name: t.viewer.hostOrbitSpeedOf({ name }), detail: speedText(hostMotion.speedKms) } });
-        parts(hostMotion, 'hostAcross', 'hostAlong');
+        parts(hostMotion, 'hostAcross', 'hostAlong', name);
       }
       // Its own spin, drawn round it.
       const hostHours = host.spin.period_hours;
