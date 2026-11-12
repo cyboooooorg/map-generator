@@ -990,6 +990,7 @@ export const en = {
     luminosity: 'Luminosity',
     luminosityHelp: 'Power the star radiates, relative to the Sun',
     sizeHelp: "Radius and mass of the star, relative to the Sun's (696 000 km, 2 × 10³⁰ kg)",
+    ageHelp: 'Age of the star and of its system (the Sun: 4.6 billion years)',
     lifetimeHelp: 'Time the star stays on the main sequence, burning the hydrogen of its core steadily (the Sun: about 10 billion years)',
     zoneHelp: 'Distances where water can stay liquid on an Earth-like planet (Kopparapu et al. 2014)',
     orbitHelp: 'Semi-major axis of the orbit (its mean distance) and the place of the planet relative to the habitable zone (0 inner edge, 1 outer edge)',
@@ -1083,6 +1084,7 @@ export const en = {
     compressed: (p: { distance: string }) =>
       `Beyond the dashed circle (${p.distance}), distances are compressed to fit the giants in.`,
     lifetime: 'Lifetime',
+    age: 'Age',
     gyr: 'billion years',
     zone: 'Habitable zone',
     range: (p: { inner: string; outer: string }) => `${p.inner} to ${p.outer}`,
