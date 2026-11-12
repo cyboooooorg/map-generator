@@ -62,7 +62,7 @@ pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use life::{Life, life, oxygenate};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
-pub use regime::{HEAT_PIPE_FLUX_W_M2, OCEAN_KG, Water, regime, water};
+pub use regime::{HEAT_PIPE_FLUX_W_M2, OCEAN_KG, Water, regime, steam, water};
 pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
 
 /// Kilograms of each volatile per kilogram of planet.
@@ -198,7 +198,10 @@ const AU_M: f64 = 1.495_978_707e11;
 /// goes on to its [`water`] and [`regime`], its [`core`], its air
 /// ([`outgassed`], [`atmosphere`], [`cold_trap`], [`photochemistry`], in
 /// that order: the photochemistry reads the cold trap's air), its
-/// [`climate`] and its [`life`] with the oxygen it makes.
+/// [`climate`] and its [`life`] with the oxygen it makes. A body whose
+/// climate carries its water past the critical point
+/// ([`climate::boils`]) has run away: it goes through those steps again
+/// from its [`steam`].
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
 }
@@ -234,28 +237,38 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
         None
     } else {
+        let bare = |w: Water| {
+            let r = regime(&inputs, &heat, &interior, &w);
+            let k = core(&inputs, &interior, r, context.age_gyr);
+            let out = outgassed(&inputs, &w, r, &interior);
+            let atm = atmosphere(out, &interior, inputs.mass_earth, &k, fluence);
+            let gases =
+                photochemistry(cold_trap(atm, context.equilibrium_k), context.equilibrium_k);
+            let flux = heat.flux_w_m2(interior.radius_earth);
+            let (after, climate) = self::climate(context, gases, &w, r, flux);
+            let life = life(&inputs, &climate, context.age_gyr);
+            let surface = Surface {
+                water: w,
+                regime: r,
+                core: k,
+                gases: oxygenate(after, &life),
+                climate,
+                life,
+            };
+            let before = Air {
+                water: w,
+                regime: r,
+                gases,
+            };
+            (surface, before)
+        };
         let w = water(context, &inputs, &interior, fluence);
-        let r = regime(&inputs, &heat, &interior, &w);
-        let k = core(&inputs, &interior, r, context.age_gyr);
-        let out = outgassed(&inputs, &w, r, &interior);
-        let atm = atmosphere(out, &interior, inputs.mass_earth, &k, fluence);
-        let gases = photochemistry(cold_trap(atm, context.equilibrium_k), context.equilibrium_k);
-        air = Some(Air {
-            water: w,
-            regime: r,
-            gases,
-        });
-        let flux = heat.flux_w_m2(interior.radius_earth);
-        let (gases, climate) = self::climate(context, gases, &w, r, flux);
-        let life = life(&inputs, &climate, context.age_gyr);
-        Some(Surface {
-            water: w,
-            regime: r,
-            core: k,
-            gases: oxygenate(gases, &life),
-            climate,
-            life,
-        })
+        let (mut surface, mut before) = bare(w);
+        if climate::boils(&w, &surface.climate) {
+            (surface, before) = bare(steam(&inputs, &interior, fluence));
+        }
+        air = Some(before);
+        Some(surface)
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
     let model = PlanetModel {

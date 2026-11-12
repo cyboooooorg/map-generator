@@ -245,13 +245,38 @@ mod tests {
     #[test]
     fn a_migrated_water_world_in_the_habitable_zone_is_an_ocean_world() {
         // 1 Earth mass, 30 % water (some 1300 oceans), at 1 AU, with the
-        // volatiles of its rock: the thermostat holds it temperate.
+        // volatiles `draw_inputs` gives its rock and its ice, without
+        // their scatter: the ocean keeps most of them out of the air.
         let inputs = PlanetInputs {
             water_fraction: 0.3,
-            volatiles: crate::planet::inputs::volatile_rule(0.7, 0.0),
+            volatiles: crate::planet::inputs::volatile_rule(0.7, 0.3),
             ..reference::inputs(1.0, 0.325, 0.0)
         };
-        assert_eq!(class_of(inputs, 1.0), OceanWorld);
+        let model = planet_model(&sun_at(1.0), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert_eq!(model.class, OceanWorld, "{surface:?}");
+        assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
+    }
+
+    #[test]
+    fn a_water_topped_body_past_the_critical_point_is_a_steam_runaway() {
+        // 1 Earth mass, 1 % water (some 40 oceans) at 1 AU, below the
+        // runaway limit of the insolation: the 20 bar of nitrogen its ice
+        // brings carries the vapour feedback past 647 K.
+        let inputs = PlanetInputs {
+            water_fraction: 0.01,
+            volatiles: crate::planet::inputs::volatile_rule(0.99, 0.01),
+            ..reference::inputs(1.0, 0.325, 0.0)
+        };
+        let model = planet_model(&sun_at(1.0), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(surface.water.kept_kg > 0.0, "{surface:?}");
+        assert!(surface.water.runaway, "{surface:?}");
+        assert!(surface.climate.temperature_k >= 647.0, "{surface:?}");
+        assert_ne!(surface.climate.liquid, SurfaceLiquid::Lava, "{surface:?}");
+        assert_ne!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
+        assert_ne!(surface.regime, crate::geology::Regime::Plates);
+        assert_eq!(model.class, RunawayGreenhouse);
     }
 
     #[test]

@@ -192,16 +192,21 @@ fn ethane_boils_k(pressure_bar: f64) -> f64 {
 pub const LAVA_K: f64 = 1400.0;
 
 /// The liquid at a surface at `temperature_k` under `gases`, from the
-/// phase diagrams: lava above [`LAVA_K`]; water between the melting of
-/// ice and its boiling point at the surface pressure, above its triple
-/// point pressure, when water is kept; hydrocarbons between methane's
-/// triple point and ethane's boiling point, with methane in the air;
-/// none otherwise.
+/// phase diagrams: lava above [`LAVA_K`], on a body that has kept no
+/// water (with water on top, its steam or supercritical fluid covers the
+/// rock: no lava, no liquid, Hamano, Abe & Genda 2013,
+/// doi:10.1038/nature12163, for the steam over a magma ocean; not
+/// checked); water between the melting of ice and its boiling point at
+/// the surface pressure, above its triple point pressure, when water is
+/// kept out of a runaway; hydrocarbons between methane's triple point and
+/// ethane's boiling point, with methane in the air; none otherwise.
 fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
     let pressure = gases.total();
-    if temperature_k >= LAVA_K {
+    let water_on_top = water.kept_kg > 0.0;
+    if temperature_k >= LAVA_K && !water_on_top {
         SurfaceLiquid::Lava
-    } else if water.kept_kg > 0.0
+    } else if water_on_top
+        && !water.runaway
         && pressure >= WATER_TRIPLE_BAR
         && temperature_k >= ICE_MELTS_K
         && temperature_k < water_boils_k(pressure)
@@ -215,6 +220,17 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
     } else {
         SurfaceLiquid::None
     }
+}
+
+/// Whether the climate of a body that keeps its water out of a runaway
+/// has carried its surface past water's critical point: its vapour
+/// feedback has run away where the insolation limit of
+/// [`super::regime::water`] did not see it (the moist runaway of a wet
+/// planet under a thick air; Kasting 1988, doi:10.1016/0019-1035(88)90116-9,
+/// not checked). Its ocean is then steam: the chain derives the body
+/// again with [`super::regime::steam`].
+pub fn boils(water: &Water, climate: &Climate) -> bool {
+    !water.runaway && water.kept_kg > 0.0 && climate.temperature_k >= WATER_CRITICAL_K
 }
 
 /// `gases` with the water vapour an ocean or ice keeps at
@@ -446,6 +462,58 @@ mod tests {
     fn a_close_rock_is_a_lava_world() {
         let (_, _, c) = climate_at(&model_inputs(reference("Earth")), 0.01);
         assert_eq!(c.liquid, SurfaceLiquid::Lava, "{c:?}");
+    }
+
+    #[test]
+    fn water_on_top_is_never_lava() {
+        let air = Gases {
+            n2: 10.0,
+            h2o: 200.0,
+            ..Gases::default()
+        };
+        for runaway in [false, true] {
+            let wet = Water {
+                runaway,
+                kept_kg: 1.4e21,
+                oceans: 1.0,
+            };
+            for t in [700.0, 2000.0, 5000.0] {
+                assert_eq!(liquid(t, &air, &wet), SurfaceLiquid::None, "{t} {wet:?}");
+            }
+        }
+        let dry = Water {
+            runaway: true,
+            kept_kg: 0.0,
+            oceans: 0.0,
+        };
+        assert_eq!(liquid(2000.0, &air, &dry), SurfaceLiquid::Lava);
+        // A wet surface past the critical point boils; a runaway's does not
+        // boil again.
+        let hot = Climate {
+            temperature_k: 700.0,
+            liquid: SurfaceLiquid::None,
+            regulated: false,
+        };
+        let ocean = Water {
+            runaway: false,
+            kept_kg: 1.4e21,
+            oceans: 1.0,
+        };
+        assert!(boils(&ocean, &hot));
+        assert!(!boils(
+            &Water {
+                runaway: true,
+                ..ocean
+            },
+            &hot
+        ));
+        assert!(!boils(
+            &ocean,
+            &Climate {
+                temperature_k: 600.0,
+                ..hot
+            }
+        ));
     }
 
     #[test]

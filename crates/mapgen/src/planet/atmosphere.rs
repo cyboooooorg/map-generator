@@ -35,6 +35,42 @@ fn outgassed_share(regime: Regime) -> f64 {
     }
 }
 
+/// Pressure, bar, at the floor of a water layer at which half of the
+/// volatiles its body outgasses reach the air (see
+/// [`released_under_ocean`]): 3 GPa. Calibration, no source: Titan
+/// (about 1.0 GPa under its 45 % of ice in the model), Ganymede and
+/// Callisto keep nearly all of their air, while a 1 M⊕ planet of 30 %
+/// water (about 17 GPa) lets about 1e-3 of it out, which leaves it the
+/// few bar of CO₂ before the thermostat that Kite & Ford 2018 find on
+/// waterworlds (see [`released_under_ocean`]).
+const SEAFLOOR_HALF_BAR: f64 = 3.0e4;
+
+/// Steepness of the release across [`SEAFLOOR_HALF_BAR`]: the share is
+/// `1 / (1 + (P / P_half)^k)`. Calibration, no source, with
+/// [`SEAFLOOR_HALF_BAR`] on the same bodies.
+const SEAFLOOR_STEEPNESS: f64 = 4.0;
+
+/// Share of the volatiles a body outgasses that reaches the air under a
+/// water layer whose floor is at `seafloor_bar`:
+/// `1 / (1 + (P / P_half)^k)` ([`SEAFLOOR_HALF_BAR`],
+/// [`SEAFLOOR_STEEPNESS`]).
+///
+/// Under a deep water layer the weight of the water on the seafloor
+/// curtails the exchange of volatiles between the mantle and the ocean
+/// (Kite & Ford 2018, ApJ 864, 75, doi:10.3847/1538-4357/aad6e0, for
+/// waterworlds of 10 to 1000 times Earth's water: their pCO₂ often lands
+/// between 0.2 and 20 bar), and high-pressure ice at its base seals the
+/// rock below (Noack et al. 2016, Icarus 277, 215,
+/// doi:10.1016/j.icarus.2016.05.009; the pressure at which they find
+/// outgassing stops is not checked against the paper). The ice's own
+/// volatiles stay dissolved in the ocean or locked in clathrates. One
+/// share for both, a labelled calibration on the pressure at the floor:
+/// a runaway's steam weighs on the rock as its ocean did, so the share
+/// holds in a runaway too.
+fn released_under_ocean(seafloor_bar: f64) -> f64 {
+    1.0 / (1.0 + (seafloor_bar.max(0.0) / SEAFLOOR_HALF_BAR).powf(SEAFLOOR_STEEPNESS))
+}
+
 /// Share of the carbon, sulphur and water plates outgas that subduction
 /// carries back into the mantle. Calibration, no source, set equal to
 /// the nitrogen's before that was raised (no target constrains it once
@@ -121,11 +157,14 @@ pub fn escape_velocity_km_s(interior: &Interior, mass_earth: f64) -> f64 {
 /// the share its `regime` outgasses ([`outgassed_share`], less what
 /// subduction returns under plates: [`NITROGEN_RECYCLED_UNDER_PLATES`] of
 /// the N₂ and NH₃, [`RECYCLED_UNDER_PLATES`] of the rest), gives a mass of gas `m` that weighs
-/// `P = m g / (4π R²)` on the surface, with `g = G M / R²`. Sulphur comes
+/// `P = m g / (4π R²)` on the surface, with `g = G M / R²`, times the
+/// share [`released_under_ocean`] lets through the body's water (its
+/// weight, `water.kept_kg`, on the seafloor). Sulphur comes
 /// up as SO₂, of which [`SULPHUR_IN_AIR`] stays in the air. The water is
 /// in the air as vapour only in a runaway greenhouse, and only what the
-/// runaway has left (`water.kept_kg`); otherwise it is in the oceans and
-/// the climate sets its vapour. No oxygen: life makes it.
+/// runaway has left (`water.kept_kg`, outgassed as the rest but not held
+/// back by the seafloor: it is the ocean itself); otherwise it is in the
+/// oceans and the climate sets its vapour. No oxygen: life makes it.
 pub fn outgassed(
     inputs: &PlanetInputs,
     water: &Water,
@@ -136,7 +175,9 @@ pub fn outgassed(
     let radius = interior.radius_earth * EARTH_M;
     let gravity = G * mass / (radius * radius);
     let bar_per_kg = gravity / (4.0 * PI * radius * radius) / PA_PER_BAR;
+    let seafloor_bar = water.kept_kg * bar_per_kg;
     let share = outgassed_share(regime) * bar_per_kg;
+    let released = share * released_under_ocean(seafloor_bar);
     let (kept, nitrogen_kept) = if regime == Regime::Plates {
         (
             1.0 - RECYCLED_UNDER_PLATES,
@@ -147,12 +188,12 @@ pub fn outgassed(
     };
     let v = &inputs.volatiles;
     let steam = if water.runaway { water.kept_kg } else { 0.0 };
-    let nitrogen = share * nitrogen_kept;
-    let rest = share * kept;
+    let nitrogen = released * nitrogen_kept;
+    let rest = released * kept;
     Gases {
         n2: v.n2 * mass * nitrogen,
         co2: v.co2 * mass * rest,
-        h2o: steam * rest,
+        h2o: steam * share * kept,
         ch4: v.ch4 * mass * rest,
         nh3: v.nh3 * mass * nitrogen,
         so2: v.s * mass * SO2_PER_S * SULPHUR_IN_AIR * rest,

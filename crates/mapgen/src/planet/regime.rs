@@ -41,28 +41,40 @@ pub struct Water {
 /// A runaway greenhouse starts when the insolation exceeds the runaway
 /// limit of [`habitable_fluxes`] (Kopparapu et al. 2014,
 /// doi:10.1088/2041-8205/787/2/L29, the fit for 1 M-earth; their mass
-/// correction is not applied, not checked). In a runaway the water is in
-/// the air, where the XUV splits it and the hydrogen escapes at the
-/// energy-limited rate (Owen & Wu 2017, [`energy_limited_loss_kg`]) with
-/// 9 kg of water for each kg of hydrogen: `kept = max(0, water - 9 H)`.
-/// Without a runaway the cold trap keeps the water.
+/// correction is not applied, not checked); then the water is
+/// [`steam`]'s. Without a runaway the cold trap keeps the water. The
+/// climate can still find a runaway the limit missed (a wet surface
+/// carried past water's critical point, see
+/// [`super::climate::boils`]); the chain then takes [`steam`].
 pub fn water(
     context: &Context,
     inputs: &PlanetInputs,
     interior: &Interior,
     fluence_rel: f64,
 ) -> Water {
-    let initial = inputs.water_fraction * inputs.mass_earth * EARTH_KG;
     let (runaway_limit, _) = habitable_fluxes(context.teff_k as f32);
-    let runaway = context.insolation > f64::from(runaway_limit);
-    let kept_kg = if runaway {
-        let hydrogen = energy_limited_loss_kg(interior, inputs.mass_earth, fluence_rel);
-        (initial - WATER_PER_HYDROGEN * hydrogen).max(0.0)
+    if context.insolation > f64::from(runaway_limit) {
+        steam(inputs, interior, fluence_rel)
     } else {
-        initial
-    };
+        let kept_kg = inputs.water_fraction * inputs.mass_earth * EARTH_KG;
+        Water {
+            runaway: false,
+            kept_kg,
+            oceans: kept_kg / OCEAN_KG,
+        }
+    }
+}
+
+/// The water a planet keeps in a runaway greenhouse. The water is in the
+/// air, where the XUV splits it and the hydrogen escapes at the
+/// energy-limited rate (Owen & Wu 2017, [`energy_limited_loss_kg`]) with
+/// 9 kg of water for each kg of hydrogen: `kept = max(0, water - 9 H)`.
+pub fn steam(inputs: &PlanetInputs, interior: &Interior, fluence_rel: f64) -> Water {
+    let initial = inputs.water_fraction * inputs.mass_earth * EARTH_KG;
+    let hydrogen = energy_limited_loss_kg(interior, inputs.mass_earth, fluence_rel);
+    let kept_kg = (initial - WATER_PER_HYDROGEN * hydrogen).max(0.0);
     Water {
-        runaway,
+        runaway: true,
         kept_kg,
         oceans: kept_kg / OCEAN_KG,
     }
@@ -72,9 +84,10 @@ pub fn water(
 /// disagrees on the mass dependence (see [`crate::geology::regime_of`]).
 ///
 /// - heat pipe above [`HEAT_PIPE_FLUX_W_M2`] of internal heat (Io);
-/// - plates from [`PLATES_MIN_MASS_EARTH`] when water is kept (Earth);
-/// - episodic when the mass allows plates but the water is gone (Venus,
-///   Weller et al. 2023, doi:10.1038/s41550-023-02102-w);
+/// - plates from [`PLATES_MIN_MASS_EARTH`] when liquid water is kept
+///   (Earth): a runaway's steam does not weaken the lithosphere;
+/// - episodic when the mass allows plates but the water is gone or
+///   steam (Venus, Weller et al. 2023, doi:10.1038/s41550-023-02102-w);
 /// - stagnant otherwise (Mars, Mercury, the Moon).
 ///
 /// Calibration, no source, for the mass threshold and the water rule:
@@ -89,7 +102,7 @@ pub fn regime(
         Regime::HeatPipe
     } else if inputs.mass_earth < f64::from(PLATES_MIN_MASS_EARTH) {
         Regime::Stagnant
-    } else if water.kept_kg > 0.0 {
+    } else if water.kept_kg > 0.0 && !water.runaway {
         Regime::Plates
     } else {
         Regime::Episodic

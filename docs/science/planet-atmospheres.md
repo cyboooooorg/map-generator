@@ -72,8 +72,12 @@ water: the oceans sit in the air as vapour. The mass correction of that
 paper is not applied (not checked). There the XUV splits the water and
 the hydrogen escapes at the energy-limited rate of the previous section
 (Owen & Wu 2017), 9 kg of water for each kg of hydrogen:
-`kept = max(0, water - 9 H lost)`. Without a runaway the planet keeps its
-water. `oceans` counts it in units of 1.4e21 kg.
+`kept = max(0, water - 9 H lost)` (`regime::steam`). Without a runaway
+the planet keeps its water. `oceans` counts it in units of 1.4e21 kg.
+The climate can find a runaway this limit misses: when the vapour
+feedback carries a wet surface past water's critical point (647 K,
+`climate::boils`), the ocean is steam and the chain derives the body
+again from `regime::steam` (see [the chain](#the-chain-and-the-surface-classes)).
 
 **Regime.** A labelled calibration, since the literature disagrees on the
 mass dependence (see [plate tectonics](plate-tectonics.md)):
@@ -82,8 +86,10 @@ mass dependence (see [plate tectonics](plate-tectonics.md)):
   doi:10.1038/nature12424, value not checked against the paper; Earth's
   mean is 0.087 W/m²);
 - plates from 0.3 M⊕ (`geology::PLATES_MIN_MASS_EARTH`, shared with the
-  generator) when water is kept;
-- episodic when the mass allows plates but the water is gone (Venus);
+  generator) when liquid water is kept, never in a runaway (its steam
+  does not weaken the lithosphere);
+- episodic when the mass allows plates but the water is gone or is steam
+  (Venus);
 - stagnant otherwise (Mars, Mercury, the Moon).
 
 Calibration targets: Earth keeps 0.9 to 1.1 oceans and has plates; Venus
@@ -183,6 +189,24 @@ lids outgas less than plates):
 | Episodic lid | 0.95 | Venus's 90 bar of CO₂ |
 | Heat pipe | 0.95 | none (Io) |
 | Stagnant lid | 0.2 | Mars, Titan |
+
+**Under a deep ocean** (`released_under_ocean`), only a share of that
+reaches the air: `1 / (1 + (P_floor / 3 GPa)^4)`, with `P_floor` the
+weight of the water kept on the seafloor, `m_water g / (4π R²)`. The
+weight of a deep ocean curtails the exchange of volatiles between mantle
+and ocean (Kite & Ford 2018, ApJ 864, 75, doi:10.3847/1538-4357/aad6e0,
+for waterworlds of 10 to 1000 times Earth's water, whose pCO₂ often lands
+between 0.2 and 20 bar), high-pressure ice at its base seals the rock
+(Noack et al. 2016, Icarus 277, 215, doi:10.1016/j.icarus.2016.05.009;
+the pressure at which they find outgassing stops is not checked against
+the paper), and the ices' own volatiles stay dissolved in the ocean or
+locked in clathrates. The 3 GPa and the power 4 are calibrations with no
+source: Earth's ocean (0.03 GPa) changes nothing, Titan (1.0 GPa in the
+model), Ganymede and Callisto keep 98 % or more of their air, and a 1 M⊕
+planet of 30 % water (17 GPa) lets out about 1e-3 of it, a few bar of
+CO₂ before the thermostat. A runaway's steam weighs on the rock as its
+ocean did, so the share holds in a runaway too; the steam itself is not
+held back.
 
 Sulphur comes up as SO₂, of which 1e-4 stays in the air (the rest ends in
 the crust; Venus's SO₂ is buffered by its surface, Fegley & Prinn 1989,
@@ -318,10 +342,15 @@ and pressure, in this order:
 
 - `lava` from 1400 K (`LAVA_K`), the basalt solidus taken as the
   threshold of a magma surface (Kite, Fegley, Schaefer & Gaidos 2016,
-  doi:10.3847/0004-637X/828/2/80; value not checked against the paper);
+  doi:10.3847/0004-637X/828/2/80; value not checked against the paper),
+  on a body that has kept no water: under water, steam or supercritical
+  fluid covers the rock (Hamano, Abe & Genda 2013, doi:10.1038/nature12163,
+  on the steam over a magma ocean; not checked), so a body with water on
+  top is never a lava world;
 - `water` between 273.15 K and water's boiling point at the surface
   pressure (the same Clausius–Clapeyron, 373 K at 1 atm, capped at the
-  critical point), above the triple-point pressure, with water kept;
+  critical point), above the triple-point pressure, with water kept out
+  of a runaway;
 - `hydrocarbons` between methane's triple point (90.7 K) and ethane's
   boiling point at the surface pressure (Clausius–Clapeyron from 184.6 K
   at 1 atm with 14.7 kJ/mol, capped at its critical 305 K; NIST values
@@ -386,7 +415,11 @@ heat, then, if the envelope left is under `MIN_ENVELOPE` (0.1 % of the
 mass), the water kept and the runaway check, the tectonic regime, the
 core and dynamo, the air (`outgassed`, `atmosphere`, `cold_trap`, then
 `photochemistry`, which reads the cold trap's air), the climate and
-surface liquid, and life with the oxygen it makes. A body that keeps an
+surface liquid, and life with the oxygen it makes. If that climate
+carries a wet surface past water's critical point (`climate::boils`),
+the body has run away after all: the steps from the regime on run once
+more from its steam (`regime::steam`, the water left after escape, in
+the air), so that a body never keeps a liquid ocean above 647 K. A body that keeps an
 envelope has no surface: `PlanetModel.surface` is `None`. Otherwise the
 `Surface` holds the water, regime, core, final gases, climate and life,
 and `classify` reads the class off it. Nothing derives from the class.
@@ -397,8 +430,8 @@ The first rule that holds wins:
 |---|---|---|
 | 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 |
 | 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
-| 3 | `lava-world` | surface liquid is lava (at least 1400 K) |
-| 4 | `runaway-greenhouse` | the insolation is over the runaway limit and the air is over 1 bar |
+| 3 | `lava-world` | surface liquid is lava (at least 1400 K, no water kept) |
+| 4 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over 1 bar |
 | 6 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
 | 7 | `ice-world` | at least 5 % water and ices |
@@ -420,7 +453,11 @@ hide for good.
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa
 `ice-world`, the giants as in part 1. A 1 M⊕ planet of 30 % water at
-1 AU, with the volatiles of its rock, is an `ocean-world`. The model is
+1 AU, with the volatiles `draw_inputs` gives its rock and ice (no
+scatter), is an `ocean-world` at 288 K under 0.4 bar. With 1 % water
+(about 40 oceans) at 1 AU, the 20 bar of nitrogen its ice brings carry
+the vapour feedback past 647 K: it is a `runaway-greenhouse`, never a
+lava world. The model is
 finite and non-negative on mass 0.01 and 20 M⊕, insolation 1e-3 and 1e4,
 age 0.5 and 13 Gyr, M5V and A0V stars.
 
