@@ -4,8 +4,9 @@
 //!
 //! [`outgassed`] turns the volatile inventory into partial pressures by
 //! regime, [`atmosphere`] keeps the share the cosmic shoreline of Zahnle &
-//! Catling 2017 allows, and [`cold_trap`] freezes out what the
-//! equilibrium temperature cannot hold as gas. The carbonate thermostat
+//! Catling 2017 allows, [`cold_trap`] freezes out what the
+//! equilibrium temperature cannot hold as gas, and [`photochemistry`]
+//! turns ammonia into nitrogen and oxidises warm methane. The carbonate thermostat
 //! (climate) and oxygen (life) come after.
 use std::f64::consts::PI;
 
@@ -34,13 +35,20 @@ fn outgassed_share(regime: Regime) -> f64 {
     }
 }
 
-/// Share of what plates outgas that subduction carries back into the
-/// mantle. Calibration, no source: Earth's air holds about a third of
-/// the 2 ppm of nitrogen the volatile rule gives it, the mantle the rest
-/// (Marty 2012, Earth Planet. Sci. Lett. 313, 56, finds as much nitrogen
-/// in the mantle as in the air or more; not checked in detail). Venus,
-/// without subduction, keeps all it outgasses.
+/// Share of the carbon, sulphur and water plates outgas that subduction
+/// carries back into the mantle. Calibration, no source, set equal to
+/// the nitrogen's before that was raised (no target constrains it once
+/// the thermostat takes Earth's CO₂). Venus, without subduction, keeps
+/// all it outgasses.
 const RECYCLED_UNDER_PLATES: f64 = 0.63;
+
+/// Share of the nitrogen (N₂ and NH₃) plates outgas that subduction
+/// carries back into the mantle: ammonium bound in clays and sediments
+/// rides the slabs down (Goldblatt et al. 2009,
+/// doi:10.1038/ngeo692, argue the mantle holds several times the air's
+/// nitrogen; not checked). Calibration, no source: Earth's air keeps
+/// about 0.9 bar of N₂ once its NH₃ is photolysed into it.
+const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8;
 
 /// Share of the outgassed sulphur that stays in the air as SO₂: the rest
 /// ends in sulphides and sulphates at the surface (on Venus SO₂ is
@@ -111,7 +119,8 @@ pub fn escape_velocity_km_s(interior: &Interior, mass_earth: f64) -> f64 {
 ///
 /// Each volatile of `inputs` (kg per kg of planet) times the mass, times
 /// the share its `regime` outgasses ([`outgassed_share`], less what
-/// subduction returns under plates), gives a mass of gas `m` that weighs
+/// subduction returns under plates: [`NITROGEN_RECYCLED_UNDER_PLATES`] of
+/// the N₂ and NH₃, [`RECYCLED_UNDER_PLATES`] of the rest), gives a mass of gas `m` that weighs
 /// `P = m g / (4π R²)` on the surface, with `g = G M / R²`. Sulphur comes
 /// up as SO₂, of which [`SULPHUR_IN_AIR`] stays in the air. The water is
 /// in the air as vapour only in a runaway greenhouse, and only what the
@@ -127,22 +136,28 @@ pub fn outgassed(
     let radius = interior.radius_earth * EARTH_M;
     let gravity = G * mass / (radius * radius);
     let bar_per_kg = gravity / (4.0 * PI * radius * radius) / PA_PER_BAR;
-    let mut share = outgassed_share(regime);
-    if regime == Regime::Plates {
-        share *= 1.0 - RECYCLED_UNDER_PLATES;
-    }
+    let share = outgassed_share(regime) * bar_per_kg;
+    let (kept, nitrogen_kept) = if regime == Regime::Plates {
+        (
+            1.0 - RECYCLED_UNDER_PLATES,
+            1.0 - NITROGEN_RECYCLED_UNDER_PLATES,
+        )
+    } else {
+        (1.0, 1.0)
+    };
     let v = &inputs.volatiles;
     let steam = if water.runaway { water.kept_kg } else { 0.0 };
+    let nitrogen = share * nitrogen_kept;
+    let rest = share * kept;
     Gases {
-        n2: v.n2 * mass,
-        co2: v.co2 * mass,
-        h2o: steam,
-        ch4: v.ch4 * mass,
-        nh3: v.nh3 * mass,
-        so2: v.s * mass * SO2_PER_S * SULPHUR_IN_AIR,
+        n2: v.n2 * mass * nitrogen,
+        co2: v.co2 * mass * rest,
+        h2o: steam * rest,
+        ch4: v.ch4 * mass * rest,
+        nh3: v.nh3 * mass * nitrogen,
+        so2: v.s * mass * SO2_PER_S * SULPHUR_IN_AIR * rest,
         o2: 0.0,
     }
-    .scaled(share * bar_per_kg)
 }
 
 /// The share of its air a body keeps against escape to space: the cosmic
@@ -244,6 +259,44 @@ pub fn cold_trap(gases: Gases, equilibrium_k: f64) -> Gases {
     }
 }
 
+/// Mass of N₂ per mass of NH₃ photolysed: `2 NH₃ → N₂ + 3 H₂`, 28 for
+/// 34. Stoichiometry.
+const N2_PER_NH3: f64 = 28.0 / 34.0;
+
+/// Equilibrium temperature, K, under which methane survives in the air.
+/// Above it, water vapour reaches the upper air, where its photolysis
+/// makes the OH that oxidises methane within a geologically short time;
+/// below it, water is frozen out so deep that none does (at 150 K the
+/// sublimation pressure of ice is about 1e-11 bar). Calibration, no
+/// source: between Titan (about 82 K at the model's albedo, keeps its
+/// methane) and an abiotic Earth (255 K) or Mars (207 K), which do not.
+const METHANE_SURVIVES_K: f64 = 150.0;
+
+/// The gases once the star's ultraviolet has worked on them, over times
+/// short against a planet's age. Apply it after [`cold_trap`]: only what
+/// is still gas is photolysed.
+///
+/// - NH₃ is photolysed to N₂ and hydrogen, which escapes: the nitrogen is
+///   conserved, `2 NH₃ → N₂ + 3 H₂` (Atreya, Donahue & Kuhn 1978,
+///   *Science* 201, 611, doi:10.1126/science.201.4356.611, for Titan's N₂
+///   from NH₃; reference from memory, not checked).
+/// - CH₄ is kept only below [`METHANE_SURVIVES_K`]; above it OH oxidises
+///   it and it is set to zero (the CO₂ it makes is not added: a trace
+///   against what is outgassed). A labelled calibration on Titan against
+///   an abiotic Earth; life's methane is Task 7's.
+pub fn photochemistry(gases: Gases, equilibrium_k: f64) -> Gases {
+    Gases {
+        n2: gases.n2 + gases.nh3 * N2_PER_NH3,
+        nh3: 0.0,
+        ch4: if equilibrium_k < METHANE_SURVIVES_K {
+            gases.ch4
+        } else {
+            0.0
+        },
+        ..gases
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,7 +327,8 @@ mod tests {
     }
 
     /// The air of `inputs` at `orbit_au` round the Sun, through the chain
-    /// of part 2: water, regime, core, outgassing, escape, cold trap.
+    /// of part 2: water, regime, core, outgassing, escape, cold trap,
+    /// photochemistry.
     fn air(inputs: &PlanetInputs, orbit_au: f64) -> Gases {
         let c = sun(orbit_au);
         let int = interior(inputs, &c.exposure());
@@ -288,10 +342,8 @@ mod tests {
         let r = regime(inputs, &heat, &int, &w);
         let k = core(inputs, &int, r, NOW);
         let out = outgassed(inputs, &w, r, &int);
-        cold_trap(
-            atmosphere(out, &int, inputs.mass_earth, &k, fluence),
-            c.equilibrium_k,
-        )
+        let air = atmosphere(out, &int, inputs.mass_earth, &k, fluence);
+        photochemistry(cold_trap(air, c.equilibrium_k), c.equilibrium_k)
     }
 
     /// The air of the reference body `name`.
@@ -327,6 +379,30 @@ mod tests {
             let g = air_of(name);
             assert!(g.total() < f64::from(AIRLESS_BAR), "{name} {g:?}");
         }
+    }
+
+    #[test]
+    fn earth_has_no_abiotic_methane_or_ammonia() {
+        let g = air_of("Earth");
+        assert!(g.ch4 < 1e-3 && g.nh3 < 1e-3, "{g:?}");
+    }
+
+    #[test]
+    fn titan_keeps_its_methane() {
+        let g = air_of("Titan");
+        assert!(g.ch4 > 0.01, "{g:?}");
+    }
+
+    #[test]
+    fn photolysis_conserves_nitrogen() {
+        let g = Gases {
+            n2: 1.0,
+            nh3: 34.0,
+            ..Gases::default()
+        };
+        let p = photochemistry(g, 300.0);
+        assert_eq!(p.nh3, 0.0);
+        assert!((p.n2 - 29.0).abs() < 1e-9, "{p:?}");
     }
 
     #[test]

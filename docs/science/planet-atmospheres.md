@@ -165,7 +165,8 @@ model freezes it, which only matters for its state, not its dynamo.
 
 `planet::atmosphere` (not yet chained into `planet_model`) gives the
 partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
-and O₂ (`Gases`, with `total()`), in three steps. The carbonate
+and O₂ (`Gases`, with `total()`), in four steps, called in this order:
+`outgassed`, `atmosphere`, `cold_trap`, `photochemistry`. The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -178,7 +179,7 @@ lids outgas less than plates):
 
 | Regime | Share outgassed | Calibrated on |
 |---|---|---|
-| Plates | 0.95, of which subduction returns 63 % | Earth's air holds about a third of its nitrogen (Marty 2012, not checked in detail) |
+| Plates | 0.95, of which subduction returns 80 % of the nitrogen (N₂ and NH₃) and 63 % of the rest | Earth's N₂ once its NH₃ is photolysed (Goldblatt et al. 2009, doi:10.1038/ngeo692, on the mantle's large nitrogen store, not checked) |
 | Episodic lid | 0.95 | Venus's 90 bar of CO₂ |
 | Heat pipe | 0.95 | none (Io) |
 | Stagnant lid | 0.2 | Mars, Titan |
@@ -217,20 +218,30 @@ the triple point the gas stays; whether it rains out depends on the
 surface temperature, which the climate sets. Water is left to the
 climate.
 
+**Photochemistry** (`photochemistry`, after the cold trap, on what is
+still gas). The star's ultraviolet photolyses NH₃ into N₂ and hydrogen,
+which escapes: `2 NH₃ → N₂ + 3 H₂`, the nitrogen conserved (Atreya,
+Donahue & Kuhn 1978, doi:10.1126/science.201.4356.611, on Titan's N₂ from
+NH₃; reference from memory, not checked). CH₄ survives only where the
+equilibrium temperature is under 150 K: there water is frozen out so deep
+that none reaches the upper air; above it, OH from water's photolysis
+oxidises the methane, which is set to zero (the CO₂ it would make is
+not added). The 150 K is a calibration with no source, between Titan
+(82 K, keeps its methane) and an abiotic Earth (255 K) or Mars (207 K).
+Life's methane is added later.
+
 Calibration targets, through the whole chain from the reference bodies'
 inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ |
-| Earth | 0.89 bar N₂ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar | 0.78 bar N₂ |
+| Earth | 0.89 bar N₂, no CH₄ or NH₃ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar; CH₄ and NH₃ under 1e-3 bar | 0.78 bar N₂ |
 | Mars | 0.014 bar | 0.002 to 0.05 bar | 0.006 bar |
-| Titan | 2.1 bar, 98 % N₂ | 0.5 to 5 bar | 1.5 bar |
+| Titan | 2.1 bar, 98 % N₂, 0.035 bar CH₄ | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
 
-Two shortcomings, outside the targets: Earth's ocean carries the ice
-volatiles of the rule, which outgas about 0.9 bar each of CH₄ and NH₃
-(no photochemical sink is modelled); and at Jupiter's distance, above
-methane's triple point, Ganymede keeps about 0.2 bar of CH₄ and Callisto,
+A shortcoming, outside the targets: at Jupiter's distance (equilibrium
+temperature 112 K, above methane's triple point and under 150 K), Ganymede keeps about 0.2 bar of CH₄ and Callisto,
 to which the core model gives a weak deep dynamo, about 0.5 bar (both
 are airless). Moons are not modelled yet (`body_model` skips them).
