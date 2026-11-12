@@ -162,6 +162,62 @@ pub(crate) fn exposure_at(orbit_au: f64) -> super::Exposure {
     }
 }
 
+/// What part 2's chain derives for a body before its climate.
+#[cfg(test)]
+pub(crate) struct Derived {
+    pub context: super::Context,
+    pub gases: super::Gases,
+    pub water: super::Water,
+    pub regime: crate::geology::Regime,
+    /// Internal heat flux through the surface, W/m² (radiogenic only).
+    pub heat_flux_w_m2: f64,
+}
+
+/// The Sun's context at `orbit_au`, 4.6 Gyr, with the insolation of
+/// exactly `1/a²` and its equilibrium temperature.
+#[cfg(test)]
+pub(crate) fn sun_at(orbit_au: f64) -> super::Context {
+    use crate::star::{StarInfo, parse_type};
+    let star = StarInfo::new(parse_type("G2V").unwrap(), orbit_au as f32, 0.0, 4.6);
+    let mut c = super::Context::of(&star, 0.0, 2.7);
+    let exposure = exposure_at(orbit_au);
+    c.insolation = exposure.insolation;
+    c.equilibrium_k = exposure.equilibrium_k;
+    c.star_mass = 1.0;
+    c
+}
+
+/// Runs part 2's chain on `inputs` at `orbit_au` round the Sun: water,
+/// regime, core, outgassing, escape, cold trap, photochemistry; no tides.
+#[cfg(test)]
+pub(crate) fn derive_at(inputs: &super::PlanetInputs, orbit_au: f64) -> Derived {
+    use super::{
+        InternalHeat, atmosphere, cold_trap, core, interior, outgassed, photochemistry,
+        radiogenic_w, regime, water, xuv_fluence,
+    };
+    let context = sun_at(orbit_au);
+    let int = interior(inputs, &context.exposure());
+    let fluence = xuv_fluence(&context);
+    let w = water(&context, inputs, &int, fluence);
+    let silicate = inputs.mass_earth * (1.0 - inputs.water_fraction) * crate::exomoon::EARTH_KG;
+    let heat = InternalHeat {
+        radiogenic_w: radiogenic_w(silicate, inputs.radiogenic, context.age_gyr),
+        tidal_w: 0.0,
+    };
+    let r = regime(inputs, &heat, &int, &w);
+    let k = core(inputs, &int, r, context.age_gyr);
+    let out = outgassed(inputs, &w, r, &int);
+    let air = atmosphere(out, &int, inputs.mass_earth, &k, fluence);
+    let gases = photochemistry(cold_trap(air, context.equilibrium_k), context.equilibrium_k);
+    Derived {
+        heat_flux_w_m2: heat.flux_w_m2(int.radius_earth),
+        context,
+        gases,
+        water: w,
+        regime: r,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

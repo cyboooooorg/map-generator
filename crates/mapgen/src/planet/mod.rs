@@ -17,6 +17,9 @@
 //! [`atmosphere::outgassed`], [`atmosphere::atmosphere`] and
 //! [`atmosphere::cold_trap`] and [`atmosphere::photochemistry`] derive its air, as [`Gases`], from what it
 //! outgasses, what escape leaves and what its cold freezes out.
+//! [`climate::climate`] sets its surface temperature through a grey
+//! greenhouse and the carbonate thermostat, and the [`SurfaceLiquid`] on
+//! its surface.
 //! [`classify::classify`] reads its [`PlanetClass`] off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`body_model`] for a planet of a stored system.
@@ -33,6 +36,7 @@ use crate::system::{Body, BodyKind, System, body_seed};
 
 pub mod atmosphere;
 pub mod classify;
+pub mod climate;
 pub mod core;
 pub mod escape;
 pub mod heat;
@@ -46,6 +50,7 @@ pub use atmosphere::{
     Gases, atmosphere, cold_trap, escape_velocity_km_s, outgassed, photochemistry,
 };
 pub use classify::{PlanetClass, classify};
+pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};

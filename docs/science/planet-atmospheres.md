@@ -245,3 +245,102 @@ A shortcoming, outside the targets: at Jupiter's distance (equilibrium
 temperature 112 K, above methane's triple point and under 150 K), Ganymede keeps about 0.2 bar of CH₄ and Callisto,
 to which the core model gives a weak deep dynamo, about 0.5 bar (both
 are airless). Moons are not modelled yet (`body_model` skips them).
+
+## Climate and surface liquid
+
+`planet::climate` (not yet chained into `planet_model`) gives the mean
+surface temperature, the liquid on the surface (`SurfaceLiquid`: `none`,
+`water`, `hydrocarbons` or `lava`) and whether the carbonate thermostat
+holds the temperature (`Climate::regulated`). It takes the gases after
+`photochemistry` and returns them with the CO₂ the thermostat leaves and
+the water vapour the climate sets.
+
+**Grey greenhouse** (`surface_temperature_k`). A grey atmosphere in
+radiative equilibrium, in the Eddington approximation (Pierrehumbert
+2010, *Principles of Planetary Climate*, §4.6), warmed from below by the
+internal heat flux `q`:
+
+```text
+T⁴ = T_eq⁴ (1 + ¾ τ) + q / σ
+τ  = (P / 1 bar)^½ · Σ k_i (p_i / 1 bar)^a_i
+```
+
+`T_eq` is the context's equilibrium temperature (Bond albedo 0.3), `P`
+the surface pressure and `p_i` the partial pressures of CO₂, H₂O and
+CH₄. The square roots are the strong-line limit of a pressure-broadened
+band, which absorbs as `sqrt(S u α)` with the path `u ∝ p_i` and the
+width `α ∝ P` (Pierrehumbert 2010, §4.4; Goody & Yung 1989). CO₂'s
+power is smaller, 0.25: its 15 µm band is saturated at the centre, so its
+forcing grows with the logarithm of its amount (Myhre et al. 1998,
+doi:10.1029/98GL01908), and the small power stands in for it across the
+six decades between Earth and Venus. The opacities are calibrations with
+no source:
+
+| Gas | `k_i` | `a_i` | Calibrated on |
+|---|---|---|---|
+| CO₂ | 1.66 | 0.25 | Venus's 737 K under 85 bar |
+| H₂O | 5.9 | 0.5 | Earth: the thermostat leaves about 280 ppm of CO₂ |
+| CH₄ | 3.4 | 0.5 | Titan's 94 K |
+
+Titan's real greenhouse is mostly collision-induced absorption by N₂,
+CH₄ and H₂, partly undone by its haze (McKay, Pollack & Courtin 1991,
+doi:10.1126/science.11538492, not checked); the methane opacity carries
+all of it here.
+
+**Water vapour.** Where water is kept and there is no runaway, the air
+above the ocean or the ice holds 77 % of the saturation pressure (the
+fixed relative humidity of Manabe & Wetherald 1967,
+doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2, not checked). The
+saturation is Clausius–Clapeyron from water's triple point (273.16 K,
+611.657 Pa) with a mean latent heat of 2.4e6 J/kg, capped at the
+critical point (647 K). The temperature and the vapour are solved
+together by iterating from the dry temperature, which climbs to the
+coldest balance. A runaway's steam is already in the gases and is kept
+as it is.
+
+**Carbonate thermostat.** On a planet with plates and water, weathering
+draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
+Hays & Kasting 1981, doi:10.1029/JC086iC10p09776). The model sets the CO₂
+by bisection between none and all that is outgassed (never more) so that
+the surface is at `THERMOSTAT_K`, 288 K (a calibration on Earth), the
+vapour taken at that temperature. If all the CO₂ is not enough, it all
+stays in the air and the planet is colder: below 273 K its water freezes
+(weathering stops, so the CO₂ accumulates). If no CO₂ at all is still too
+warm, the planet is hotter. Only a temperature reached is `regulated`.
+The CO₂ the thermostat can use is what the cold trap left: past about
+1.6 AU from the Sun, CO₂ frosts out at the equilibrium temperature and
+an Earth falls short, close to the maximum-greenhouse limit of the
+habitable zone (Kopparapu et al. 2013, about 1.67 AU). The grid's
+`carbon_cycle` is unchanged; part 3 aligns them.
+
+**Surface liquid**, from the phase diagrams at the surface temperature
+and pressure, in this order:
+
+- `lava` from 1400 K (`LAVA_K`), the basalt solidus taken as the
+  threshold of a magma surface (Kite, Fegley, Schaefer & Gaidos 2016,
+  doi:10.3847/0004-637X/828/2/80; value not checked against the paper);
+- `water` between 273.15 K and water's boiling point at the surface
+  pressure (the same Clausius–Clapeyron, 373 K at 1 atm, capped at the
+  critical point), above the triple-point pressure, with water kept;
+- `hydrocarbons` between methane's triple point (90.7 K) and ethane's
+  boiling point at the surface pressure (Clausius–Clapeyron from 184.6 K
+  at 1 atm with 14.7 kJ/mol, capped at its critical 305 K; NIST values
+  from memory, not checked), with methane in the air;
+- `none` otherwise.
+
+Calibration targets, through the whole chain from the reference bodies'
+inputs round the Sun at 4.6 Gyr:
+
+| Body | Result | Target | Observed |
+|---|---|---|---|
+| Earth | 288 K, water, regulated, 270 ppm CO₂ | 288 ± 6 K, water, regulated | 288 K, 280 ppm before industry |
+| Venus | 736 K, none | 737 ± 50 K, none | 737 K |
+| Mars | 209 K, none | 210 ± 12 K, none | about 210 K |
+| Titan | 94 K, hydrocarbons | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
+| Mercury | 410 K, its equilibrium temperature | within 1 K of it | airless |
+
+An Earth moved round the Sun keeps 288 K out to 1.4 AU (0.17 bar of CO₂
+at 1.2 AU, 0.8 bar at 1.4 AU), is just short at 1.6 AU (288 K less 0.2,
+all its 1.8 bar of CO₂ in the air, its water still liquid) and freezes
+beyond (234 K at 1.8 AU). At 0.9 AU it has run away (705 K, no water);
+at 0.01 AU it is a lava world.
