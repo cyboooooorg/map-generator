@@ -376,3 +376,173 @@ oxygen oxidises.
 
 `life_draw` is appended as the last draw of `draw_inputs`, so every
 earlier input of a body keeps its value.
+
+## The chain and the surface classes
+
+`planet_model` is the single place that chains the derivation, in this
+order: the interior from the drawn inputs, the XUV fluence, the envelope
+escape (the interior is derived again from what is left), the internal
+heat, then, if the envelope left is under `MIN_ENVELOPE` (0.1 % of the
+mass), the water kept and the runaway check, the tectonic regime, the
+core and dynamo, the air (`outgassed`, `atmosphere`, `cold_trap`, then
+`photochemistry`, which reads the cold trap's air), the climate and
+surface liquid, and life with the oxygen it makes. A body that keeps an
+envelope has no surface: `PlanetModel.surface` is `None`. Otherwise the
+`Surface` holds the water, regime, core, final gases, climate and life,
+and `classify` reads the class off it. Nothing derives from the class.
+
+The first rule that holds wins:
+
+| Order | Class | Rule |
+|---|---|---|
+| 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 |
+| 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
+| 3 | `lava-world` | surface liquid is lava (at least 1400 K) |
+| 4 | `runaway-greenhouse` | the insolation is over the runaway limit and the air is over 1 bar |
+| 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over 1 bar |
+| 6 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
+| 7 | `ice-world` | at least 5 % water and ices |
+| 8 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
+
+Two constants are calibrations. `OCEAN_WORLD_OCEANS` is 10 Earth oceans:
+Cowan & Abbot 2014 (doi:10.1088/0004-637X/781/1/27) study how much water
+drowns all land; ten is a round figure above the few oceans their basins
+hold, not a value from the paper. `DENSE_AIR_BAR` is 1 bar, for the
+runaway greenhouse (Venus has 90 bar; a runaway that lost its air is a bare rock) and for
+the hydrocarbon world. The pressure condition on hydrocarbons is a
+departure from the plain rule "liquid hydrocarbons": without it the model
+makes Ganymede and Callisto hydrocarbon worlds, because it outgasses 0.2
+and 0.5 bar of methane from their ices and holds it, which the real
+moons do not have. Titan has 2.1 bar in the model. That excess methane is
+a weakness of the atmosphere step, not something the classifier should
+hide for good.
+
+The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
+and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa
+`ice-world`, the giants as in part 1. A 1 M⊕ planet of 30 % water at
+1 AU, with the volatiles of its rock, is an `ocean-world`. The model is
+finite and non-negative on mass 0.01 and 20 M⊕, insolation 1e-3 and 1e4,
+age 0.5 and 13 Gyr, M5V and A0V stars.
+
+## Census
+
+Measured, not tuned: `cargo run --release -p mapgen --example planet_census
+-- 500` draws systems of seeds 1 to 500 and derives every planet through
+`body_model`.
+
+```text
+500 systems, 1677 planets
+
+body_type against derived class (planets)
+body_type              gas-giant         hot-jupiter   hydrocarbon-world           ice-giant           ice-world          lava-world        mini-neptune         ocean-world               rocky  runaway-greenhouse         super-earth   total
+barren                         0                   0                   0                   0                  37                  16                   0                   2                 339                  15                   1     410
+caustic                        0                   0                   0                   0                   7                   6                   1                   0                  57                  24                   0      95
+frozen                         0                   0                 128                   0                 547                  10                  56                  31                   2                   0                   0     774
+gas-giant                     41                   0                   0                   0                   0                   0                   0                   0                   0                   0                   0      41
+hot-jupiter                    0                   1                   0                   0                   0                   0                   0                   0                   0                   0                   0       1
+ice-giant                     28                   0                   0                  56                   0                   0                   0                   0                   0                   0                   0      84
+terran                         0                   0                   0                   0                  11                  10                   4                   7                 131                   3                   8     174
+volcanic                       0                   0                   0                   0                   6                   4                   0                   0                  80                   8                   0      98
+
+planets per radius bin (Fulton et al. 2017 bins, R_earth)
+    <1    55.9 %  (938)
+ 1-1.5    31.0 %  (520)
+ 1.5-2     3.5 %  (58)
+   2-3     2.1 %  (36)
+   3-4     1.9 %  (32)
+   4-6     2.4 %  (41)
+  6-10     1.9 %  (32)
+ 10-22     1.2 %  (20)
+   >22     0.0 %  (0)
+
+medians per class
+class               planets   age Gyr    CMF    water  envelope
+gas-giant                69      4.90  0.332   0.0283    0.9000
+hot-jupiter               1      6.33  0.382   0.0000    0.9445
+hydrocarbon-world       128      5.75  0.317   0.3514    0.0000
+ice-giant                56      5.35  0.313   0.2924    0.1614
+ice-world               608      5.51  0.308   0.3441    0.0000
+lava-world               46      4.42  0.303   0.3193    0.0000
+mini-neptune             61      6.09  0.312   0.3434    0.0089
+ocean-world              40      3.65  0.296   0.3007    0.0000
+rocky                   609      5.34  0.311   0.0005    0.0000
+runaway-greenhouse       50      4.13  0.310   0.0007    0.0000
+super-earth               9      3.53  0.279   0.0007    0.0014
+
+class mix (1677 planets)
+rocky                 36.3 %  (609)
+ice-world             36.3 %  (608)
+hydrocarbon-world      7.6 %  (128)
+gas-giant              4.1 %  (69)
+mini-neptune           3.6 %  (61)
+ice-giant              3.3 %  (56)
+runaway-greenhouse     3.0 %  (50)
+lava-world             2.7 %  (46)
+ocean-world            2.4 %  (40)
+super-earth            0.5 %  (9)
+hot-jupiter            0.1 %  (1)
+
+planets with a surface: 1479
+
+surface liquid (1479 planets with a surface)
+Hydrocarbons          11.8 %  (175)
+Lava                   3.1 %  (46)
+None                  77.6 %  (1148)
+Water                  7.4 %  (110)
+
+tectonic regime (1479 planets with a surface)
+Episodic              19.5 %  (289)
+HeatPipe               2.6 %  (39)
+Plates                42.3 %  (625)
+Stagnant              35.6 %  (526)
+
+life: 2.4 % of planets with a surface (36), 2.1 % oxygenated (31)
+
+radius histogram, period under 100 days (867 planets)
+ 0.00-0.25      0.0 %  (0)
+ 0.25-0.50     10.4 %  (90)
+ 0.50-0.75     20.2 %  (175)
+ 0.75-1.00     36.9 %  (320)
+ 1.00-1.25     23.2 %  (201)
+ 1.25-1.50      5.8 %  (50)
+ 1.50-1.75      0.9 %  (8)
+ 1.75-2.00      0.6 %  (5)
+ 2.00-2.25      0.5 %  (4)
+ 2.25-2.50      0.3 %  (3)
+ 2.50-2.75      0.2 %  (2)
+ 2.75-3.00      0.0 %  (0)
+ 3.00-3.25      0.1 %  (1)
+ 3.25-3.50      0.0 %  (0)
+ 3.50-3.75      0.1 %  (1)
+ 3.75-4.00      0.0 %  (0)
+ 4.00-4.25      0.0 %  (0)
+ 4.25-4.50      0.0 %  (0)
+ 4.50-4.75      0.0 %  (0)
+ 4.75-5.00 +    0.8 %  (7)
+```
+
+What it shows, plainly:
+
+- **Radius valley.** No dip appears between 1.5 and 2 R⊕ (Fulton et al.
+  2017, doi:10.3847/1538-3881/aa80eb). Among the 867 planets with a
+  period under 100 days the histogram falls steadily from 1.0 R⊕ upward:
+  23.2 % in 1.00-1.25, 5.8 % in 1.25-1.50, 0.9 % and 0.6 % in the two
+  bins of the valley, then a thin tail. There is no peak at 1.25-1.5 and
+  no second peak at 2-3 R⊕ for a valley to separate. The generator draws
+  few planets above 1.5 R⊕ at all (13 % of all planets), most of
+  them beyond 100 days, so photoevaporation has no population of
+  sub-Neptunes to carve a gap in. The model was not tuned to produce one.
+- **Mini-Neptunes** are 3.6 % of the planets (61), against the
+  over-representation of part 1 (see [planet-interiors.md](planet-interiors.md)).
+  The `frozen` type holds 56 of them; escape strips the ones close in.
+- **Surface liquid** over the 1479 planets with a surface: no liquid for
+  77.6 %, hydrocarbons 11.8 %, water 7.4 %, lava 3.1 %.
+- **Life** arises on 2.4 % of the planets with a surface, 2.1 % with
+  oxygen.
+- **Hydrocarbon worlds** are 7.6 % of the planets, nearly all of them
+  `frozen`: the volatile rule gives ices methane and nitrogen, and the
+  model keeps over a bar of it on the wet ones.
+  This is likely too many; it is the same excess methane that the
+  Ganymede and Callisto remark above points to.
+- Ocean worlds are 2.4 %, runaway greenhouses 3.0 %, lava worlds 2.7 %.
+
