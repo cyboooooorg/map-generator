@@ -86,10 +86,10 @@ describe('format', () => {
   it("describes the geology", () => {
     const preset = { geology: { regime: 'stagnant', wet_until: 3.5 } };
     expect(formatGeology({ ...meta, surface_age_ga: 3.8, preset } as unknown as WorldMetadata)).toBe(
-      'stagnant lid, surface 3.8 billion years',
+      'stagnant lid, surface 3.8 billion years (3.8 Ga)',
     );
     expect(formatGeology({ ...meta, surface_age_ga: 0.02, preset } as unknown as WorldMetadata)).toBe(
-      'stagnant lid, surface 20 million years',
+      'stagnant lid, surface 20 million years (20 Ma)',
     );
   });
 
@@ -146,26 +146,26 @@ describe('keepAlone', () => {
 
 describe('ages on the cards', () => {
   it('spells the system age out in billions or millions of years', () => {
-    expect(formatAge(8.123456)).toBe('8.12 billion years');
-    expect(formatAge(1.5)).toBe('1.5 billion years');
-    expect(formatAge(0.6)).toBe('600 million years');
-    expect(formatAge(0.001)).toBe('1 million years');
+    expect(formatAge(8.123456)).toBe('8.12 billion years (8.12 Ga)');
+    expect(formatAge(1.5)).toBe('1.5 billion years (1.5 Ga)');
+    expect(formatAge(0.6)).toBe('600 million years (600 Ma)');
+    expect(formatAge(0.001)).toBe('1 million years (1 Ma)');
     expect(formatAge(meta.star!.age_gyr)).toContain('8.12');
   });
 
   it('spells a surface age out the same way', () => {
-    expect(formatSurfaceAge(3.84)).toBe('3.84 billion years');
-    expect(formatSurfaceAge(0.4234)).toBe('423 million years');
-    expect(formatSurfaceAge(0.02)).toBe('20 million years');
+    expect(formatSurfaceAge(3.84)).toBe('3.84 billion years (3.84 Ga)');
+    expect(formatSurfaceAge(0.4234)).toBe('423 million years (423 Ma)');
+    expect(formatSurfaceAge(0.02)).toBe('20 million years (20 Ma)');
   });
 
   it('spells ages out in French', () => {
     setLocale('fr');
     try {
-      expect(formatAge(8.123456)).toBe(`8,12${S}milliards d’années`);
-      expect(formatAge(1.5)).toBe(`1,5${S}milliard d’années`);
-      expect(formatAge(0.6)).toBe(`600${S}millions d’années`);
-      expect(formatAge(0.001)).toBe(`1${S}million d’années`);
+      expect(formatAge(8.123456)).toBe(`8,12${S}milliards d’années (8,12${S}Ga)`);
+      expect(formatAge(1.5)).toBe(`1,5${S}milliard d’années (1,5${S}Ga)`);
+      expect(formatAge(0.6)).toBe(`600${S}millions d’années (600${S}Ma)`);
+      expect(formatAge(0.001)).toBe(`1${S}million d’années (1${S}Ma)`);
     } finally {
       setLocale('en');
     }

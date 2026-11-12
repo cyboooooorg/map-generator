@@ -255,8 +255,8 @@ export function formatGeology(meta: WorldMetadata): string {
 }
 
 /**
- * A duration in Ga spelled out: "8.12 billion years", "1.5 billion year(s)"
- * by the language's rule, "600 million years" under 1 Ga. Billions keep two
+ * A duration in Ga spelled out: "8.12 billion years (8.12 Ga)", singular or plural by the
+ * language's rule, "600 million years (600 Ma)" under 1 Ga. Billions keep two
  * decimals at most, millions three significant digits.
  */
 function spellAge(ga: number): string {
@@ -264,15 +264,18 @@ function spellAge(ga: number): string {
   const billions = Number(ga.toFixed(2));
   if (billions >= 1) {
     const unit = billions < 2 ? words.billionOne : words.billionMany;
-    return withUnit(formatUpTo(billions, 2), unit);
+    const n = formatUpTo(billions, 2);
+    return `${withUnit(n, unit)} (${withUnit(n, 'Ga')})`;
   }
   const millions = Number((ga * 1000).toPrecision(3));
   if (millions >= 1000) {
-    return withUnit(formatUpTo(1, 2), words.billionOne);
+    const n = formatUpTo(1, 2);
+    return `${withUnit(n, words.billionOne)} (${withUnit(n, 'Ga')})`;
   }
   const shown = millions >= 1 ? Math.round(millions) : millions;
   const unit = shown >= 2 ? words.millionMany : words.millionOne;
-  return withUnit(formatUpTo(shown, 2), unit);
+  const n = formatUpTo(shown, 2);
+  return `${withUnit(n, unit)} (${withUnit(n, 'Ma')})`;
 }
 
 /** A surface age, spelled out in billions or millions of years. */

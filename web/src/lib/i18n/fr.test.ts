@@ -29,9 +29,9 @@ describe('French', () => {
   it('describes the geology in French', () => {
     setLocale('fr');
     const meta = { surface_age_ga: 3.8, preset: { geology: { regime: 'stagnant', wet_until: 3.5 } } };
-    expect(formatGeology(meta as unknown as WorldMetadata)).toBe(`couvercle stagnant, surface de 3,8${S}milliards d’années`);
+    expect(formatGeology(meta as unknown as WorldMetadata)).toBe(`couvercle stagnant, surface de 3,8${S}milliards d’années (3,8${S}Ga)`);
     expect(formatGeology({ ...meta, surface_age_ga: 0.02 } as unknown as WorldMetadata)).toBe(
-      `couvercle stagnant, surface de 20${S}millions d’années`,
+      `couvercle stagnant, surface de 20${S}millions d’années (20${S}Ma)`,
     );
   });
 
