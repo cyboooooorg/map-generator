@@ -52,6 +52,12 @@ export const fr: Messages = {
   format: {
     unitSpace: S,
     millionKm2: `M${S}km²`,
+    ageWords: {
+      billionOne: 'milliard d’années',
+      billionMany: 'milliards d’années',
+      millionOne: 'million d’années',
+      millionMany: 'millions d’années',
+    },
     au: 'UA',
     justNow: 'à l’instant',
   },

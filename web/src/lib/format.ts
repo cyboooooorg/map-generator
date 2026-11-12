@@ -247,21 +247,42 @@ export function formatAtmosphere(meta: WorldMetadata): string {
 
 /**
  * The tectonic regime and surface age of a world, e.g. "stagnant lid,
- * surface 3.8 Ga", in the active locale.
+ * surface 3.8 billion years", in the active locale.
  */
 export function formatGeology(meta: WorldMetadata): string {
   const regime = t.regimes[meta.preset.geology.regime];
   return t.worldInfo.geologySurface({ regime, age: formatSurfaceAge(meta.surface_age_ga) });
 }
 
-/** A surface age in Ga, or in Ma under 1 Ga. */
-export function formatSurfaceAge(ga: number): string {
-  return ga >= 1 ? withUnit(formatNumber(ga, 1), 'Ga') : withUnit(formatNumber(ga * 1000), 'Ma');
+/**
+ * A duration in Ga spelled out: "8.12 billion years", "1.5 billion year(s)"
+ * by the language's rule, "600 million years" under 1 Ga. Billions keep two
+ * decimals at most, millions three significant digits.
+ */
+function spellAge(ga: number): string {
+  const words = t.format.ageWords;
+  const billions = Number(ga.toFixed(2));
+  if (billions >= 1) {
+    const unit = billions < 2 ? words.billionOne : words.billionMany;
+    return withUnit(formatUpTo(billions, 2), unit);
+  }
+  const millions = Number((ga * 1000).toPrecision(3));
+  if (millions >= 1000) {
+    return withUnit(formatUpTo(1, 2), words.billionOne);
+  }
+  const shown = millions >= 1 ? Math.round(millions) : millions;
+  const unit = shown >= 2 ? words.millionMany : words.millionOne;
+  return withUnit(formatUpTo(shown, 2), unit);
 }
 
-/** The age of a star or of the bodies of its system, in Ga, with two decimals at most. */
+/** A surface age, spelled out in billions or millions of years. */
+export function formatSurfaceAge(ga: number): string {
+  return spellAge(ga);
+}
+
+/** The age of a star or of the bodies of its system, spelled out in billions or millions of years. */
 export function formatAge(gyr: number): string {
-  return withUnit(formatUpTo(gyr, 2), 'Ga');
+  return spellAge(gyr);
 }
 
 /** The star line of the world card: type, temperature and luminosity. */

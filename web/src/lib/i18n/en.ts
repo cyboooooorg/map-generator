@@ -60,6 +60,12 @@ export const en = {
     /** Between a number and its unit. */
     unitSpace: ' ',
     millionKm2: 'M km²',
+    ageWords: {
+      billionOne: 'billion years',
+      billionMany: 'billion years',
+      millionOne: 'million years',
+      millionMany: 'million years',
+    },
     /** Astronomical unit. */
     au: 'AU',
     justNow: 'just now',
