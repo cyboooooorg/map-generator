@@ -11,15 +11,27 @@
 //! the radius, the bulk density and the surface gravity.
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
 //! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`]).
+//! [`classify::classify`] reads its [`PlanetClass`] off the result, and
+//! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
+//! context and inputs, [`body_model`] for a planet of a stored system.
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
 //! are checked against.
 use serde::{Deserialize, Serialize};
 
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
+use crate::exomoon::{EARTH_KG, EARTH_M};
+use crate::star::StarInfo;
+use crate::system::{Body, BodyKind, System, body_seed};
+
+pub mod classify;
 pub mod heat;
 pub mod inputs;
 pub mod interior;
 pub mod reference;
 
+pub use classify::{PlanetClass, classify};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, radiogenic_w, tidal_power_w};
 pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
@@ -93,4 +105,136 @@ pub struct Interior {
     pub density: f64,
     /// Surface gravity, Earth's = 1.
     pub gravity: f64,
+}
+
+/// A planet as the model derives it: what it is made of, its layers, the
+/// heat it makes and its class.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlanetModel {
+    pub inputs: PlanetInputs,
+    pub interior: Interior,
+    pub heat: InternalHeat,
+    pub class: PlanetClass,
+}
+
+/// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
+/// (Resolution B3, 1.327 124 4e20 m³/s²) over the G of `crate::exomoon`
+/// (6.674e-11).
+const SUN_KG: f64 = 1.988_5e30;
+
+/// The astronomical unit, m (IAU 2012, Resolution B2).
+const AU_M: f64 = 1.495_978_707e11;
+
+/// Tidal response `k₂/Q` of a planet raised by its star: the rocky moons'
+/// of `crate::exomoon` (Io's, Lainey et al. 2009,
+/// doi:10.1038/nature08108).
+const K2_OVER_Q: f64 = 0.015;
+
+/// The model of a planet of `inputs` in its formation `context`: its
+/// [`interior`] under the star's exposure; its radiogenic heat from its
+/// silicate mass, `M (1 − water − envelope) (1 − CMF)`, its abundance and
+/// the system's age; its tidal heat from the star at its orbit, with
+/// `k₂/Q` 0.015; then its [`classify`] class, which feeds back into none
+/// of them.
+pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
+    let interior = interior(&inputs, &context.exposure());
+    let silicate_kg = inputs.mass_earth
+        * (1.0 - inputs.water_fraction - inputs.envelope_fraction)
+        * (1.0 - inputs.core_mass_fraction)
+        * EARTH_KG;
+    let heat = InternalHeat {
+        radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
+        tidal_w: tidal_power_w(
+            context.star_mass * SUN_KG,
+            interior.radius_earth * EARTH_M,
+            context.orbit_au * AU_M,
+            context.eccentricity,
+            K2_OVER_Q,
+        ),
+    };
+    let class = classify(&inputs, &interior, context.period_days());
+    PlanetModel {
+        inputs,
+        interior,
+        heat,
+        class,
+    }
+}
+
+/// The model of a planet of a stored system; `None` for a moon (part 4).
+///
+/// Its context is its own star seen from its orbit (its params' star,
+/// orbit, eccentricity and age), its system's metallicity and ice line;
+/// its mass the stored one. Its inputs are drawn from their own stream,
+/// seeded by the system's seed and `<id>/model`, so they depend on no
+/// other body and shift no other draw.
+pub fn body_model(system: &System, body: &Body) -> Option<PlanetModel> {
+    if body.kind != BodyKind::Planet {
+        return None;
+    }
+    let p = &body.params;
+    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
+    let context = Context::of(&star, p.metallicity, system.star.ice_line_au);
+    let seed = body_seed(system.seed, &format!("{}/model", body.id));
+    let mut rng = StdRng::seed_from_u64(u64::from(seed));
+    let inputs = draw_inputs(&context, body.physical.mass_earth, &mut rng);
+    Some(planet_model(&context, inputs))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::system::{SystemRequest, WholeSystemRequest, draw};
+
+    /// The whole system seed 2 draws round a Sun-like star.
+    fn drawn() -> System {
+        let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
+            star: Some("G2V".into()),
+            metallicity: Some(0.0),
+            planets: None,
+            seed: Some(2),
+            width: Some(64),
+            height: Some(32),
+        });
+        draw(&request, &mut StdRng::seed_from_u64(2)).unwrap()
+    }
+
+    #[test]
+    fn body_model_is_deterministic_and_independent() {
+        let system = drawn();
+        let planets: Vec<&Body> = system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == BodyKind::Planet)
+            .collect();
+        assert!(planets.len() >= 2, "{} planets", planets.len());
+        for body in &planets {
+            let model = body_model(&system, body).expect("a planet has a model");
+            assert_eq!(
+                body_model(&system, body),
+                Some(model.clone()),
+                "{}",
+                body.id
+            );
+            assert_eq!(model.inputs.mass_earth, body.physical.mass_earth);
+        }
+        // Removing another planet leaves the model of b as it was.
+        let b = planets[0];
+        let mut fewer = system.clone();
+        let other = planets[1].id.clone();
+        fewer.bodies.retain(|x| x.id != other);
+        assert_eq!(body_model(&fewer, b), body_model(&system, b));
+    }
+
+    #[test]
+    fn moons_have_no_model_yet() {
+        let system = drawn();
+        let mut moon = system.bodies[0].clone();
+        moon.kind = BodyKind::Moon;
+        assert_eq!(body_model(&system, &moon), None);
+        for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
+            assert_eq!(body_model(&system, body), None, "{}", body.id);
+        }
+    }
 }

@@ -1001,7 +1001,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
 }
 
 /// The body seed of `id` in the system of `seed`.
-fn body_seed(seed: u32, id: &str) -> u32 {
+pub(crate) fn body_seed(seed: u32, id: &str) -> u32 {
     // FNV-1a of the id, stable across versions.
     let mut hash: u32 = 0x811c_9dc5;
     for byte in id.as_bytes() {
