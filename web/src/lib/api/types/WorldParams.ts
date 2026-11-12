@@ -151,4 +151,12 @@ ridge?: number,
  * host of an exomoon, whose seasonal swing then ignores the distance to
  * the star.
  */
-perihelion_longitude_deg?: number, };
+perihelion_longitude_deg?: number, 
+/**
+ * Age of the star, Gyr, at most its main-sequence life: drawn per
+ * system or per lone world ([`crate::star::draw_age_gyr`]); it sets
+ * how far the star's tides have worked on the planet (lock, resonance,
+ * circular orbit) and how far a giant has cooled. Files without one
+ * read as [`crate::star::DEFAULT_AGE_GYR`].
+ */
+age_gyr: number, };

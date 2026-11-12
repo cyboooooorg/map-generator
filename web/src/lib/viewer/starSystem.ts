@@ -501,6 +501,7 @@ export const SUN_SYSTEM: StarInfo = {
   year_days: 365.25,
   angular_diameter_deg: 0.533,
   lifetime_gyr: 9.8,
+  age_gyr: 4.6,
   locking_gyr: 166,
   tidally_locked: false,
   light: [1, 1, 1],

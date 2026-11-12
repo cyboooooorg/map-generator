@@ -1142,6 +1142,7 @@ mod tests {
 
     fn params(seed: u32) -> WorldParams {
         WorldParams {
+            age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 512,
             height: 256,
             seed,

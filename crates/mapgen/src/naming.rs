@@ -162,7 +162,7 @@ pub fn names(layout: &Layout) -> Names {
 
 /// The names of the system of world `p`, as `world.json` will describe it.
 pub fn of_params(p: &crate::world::WorldParams) -> Names {
-    let star = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    let star = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
     names(&Layout {
         seed: p.seed,
         star: &star.kind,

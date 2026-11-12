@@ -142,7 +142,7 @@ impl HostGiant {
         }
         let mass_earth = (0.3f64.ln() + rng.random::<f64>() * (10.0f64 / 0.3).ln()).exp() as f32
             * JUPITER_EARTH_MASSES;
-        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
         let radius_earth = giant_radius(mass_earth, star.equilibrium_k);
         let radius_m = f64::from(radius_earth) * EARTH_M;
         let mass_kg = f64::from(mass_earth) * EARTH_KG;
@@ -285,7 +285,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
             GiantKind::Gas
         };
     }
-    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
     let width = 512;
     WorldParams {
         width,
@@ -302,6 +302,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         star: p.star,
         orbit_au: p.orbit_au,
         eccentricity: p.eccentricity,
+        age_gyr: p.age_gyr,
         drift_ma: 0.0,
         moons: crate::moons::MoonsMode::None,
         shape: None,
@@ -326,6 +327,7 @@ mod tests {
 
     fn params(seed: u32, host: HostMode, orbit_au: f32) -> WorldParams {
         WorldParams {
+            age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 64,
             height: 32,
             seed,

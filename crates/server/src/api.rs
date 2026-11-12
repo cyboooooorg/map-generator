@@ -241,7 +241,8 @@ impl ErrorDetail {
             RequestError::NoRoomForMoons { count } => Some(Self::NoRoomForMoons { count: *count }),
             RequestError::MoonsOfAMoon => Some(Self::MoonsOfAMoon),
             RequestError::HotGiantMoons { count } => Some(Self::HotGiantMoons { count: *count }),
-            RequestError::Preset(_) => None,
+            // The text names the age and the star's life; no structured detail.
+            RequestError::Preset(_) | RequestError::BadAge { .. } => None,
             RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
                 asked: *asked,
                 max: *max,

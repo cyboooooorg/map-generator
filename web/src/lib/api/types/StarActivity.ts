@@ -7,7 +7,7 @@ import type { Envelope } from "./Envelope";
  */
 export type StarActivity = { envelope: Envelope, 
 /**
- * Age of the star, Gyr ([`system_age_gyr`]).
+ * Age of the star, Gyr ([`StarInfo::age_gyr`]).
  */
 age_gyr: number, 
 /**

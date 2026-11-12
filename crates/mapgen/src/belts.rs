@@ -392,7 +392,12 @@ mod tests {
     use super::*;
 
     fn sun() -> StarInfo {
-        StarInfo::new(crate::star::parse_type("G2V").unwrap(), 1.0, 0.0)
+        StarInfo::new(
+            crate::star::parse_type("G2V").unwrap(),
+            1.0,
+            0.0,
+            crate::star::DEFAULT_AGE_GYR,
+        )
     }
 
     fn solar() -> Vec<Track<'static>> {

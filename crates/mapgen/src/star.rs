@@ -402,9 +402,64 @@ pub fn light_colour(teff_k: f32) -> [f32; 3] {
     rgb.map(|c| (c / max) as f32)
 }
 
-/// Age assumed for a star when deciding whether its planet is locked: the
-/// Sun's, or the star's whole main-sequence life if shorter.
-pub const AGE_GYR: f32 = 4.6;
+/// Age of the Sun, Gyr: the age of a stored star that has none (a file
+/// written before systems drew their age), the one Jupiter's cooling is
+/// normalised at, and the age tests use. A system or world draws its own
+/// ([`draw_age_gyr`]).
+pub const DEFAULT_AGE_GYR: f32 = 4.6;
+
+/// The star age stored when a file has none ([`DEFAULT_AGE_GYR`]).
+pub(crate) fn default_age_gyr() -> f32 {
+    DEFAULT_AGE_GYR
+}
+
+/// Upper end of the ages drawn, Gyr: the thin disc of the Galaxy is about
+/// 10 Gyr old (Binney, Dehnen & Bertelli 2000, doi:10.1046/j.1365-8711.2000.03529.x,
+/// 11 Gyr; del Peloso et al. 2005, 8.8 Gyr).
+const DISC_AGE_GYR: f32 = 10.0;
+
+/// Youngest age drawn for a star that lives long enough, Gyr: the end of
+/// the heavy bombardment. Calibration, no source.
+const YOUNGEST_AGE_GYR: f32 = 0.5;
+
+/// Age of a system, Gyr, drawn uniformly from 0.5 Gyr (or half the star's
+/// life when shorter) to 10 Gyr (or the star's whole main-sequence
+/// `lifetime_gyr` when shorter). The thin disc has formed stars at a
+/// roughly constant rate over about 10 Gyr, so the ages of field stars are
+/// close to uniform (Binney, Dehnen & Bertelli 2000, doi:10.1046/j.1365-8711.2000.03529.x).
+/// The 0.5 Gyr floor is a calibration, no source: no system younger than
+/// the end of heavy bombardment by default.
+pub fn draw_age_gyr(lifetime_gyr: f32, rng: &mut impl RngExt) -> f32 {
+    let high = lifetime_gyr.min(DISC_AGE_GYR);
+    let low = (YOUNGEST_AGE_GYR).min(0.5 * lifetime_gyr);
+    // `random()` is in [0, 1): flip it so the age stays above `low`.
+    high - rng.random::<f32>() * (high - low)
+}
+
+/// The age of the star of type `code` for the world or system of `seed`:
+/// `asked` when set, which must lie in `(0, lifetime]` ([`lifetime_gyr`] of
+/// the star), otherwise drawn ([`draw_age_gyr`]) from the seed's
+/// [`AGE`](crate::noise::stream::AGE) stream, so that no other draw shifts.
+pub fn resolve_age_gyr(
+    asked: Option<f32>,
+    code: f32,
+    seed: u32,
+) -> Result<f32, crate::request::RequestError> {
+    let lifetime = lifetime_gyr(values(code).mass);
+    match asked {
+        Some(age) if !(age > 0.0 && age <= lifetime) => Err(crate::request::RequestError::BadAge {
+            age_gyr: age,
+            lifetime_gyr: lifetime,
+        }),
+        Some(age) => Ok(age),
+        None => {
+            use rand::SeedableRng;
+            let stream = crate::noise::stream_seed(seed, crate::noise::stream::AGE);
+            let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(stream));
+            Ok(draw_age_gyr(lifetime, &mut rng))
+        }
+    }
+}
 
 /// A preset's `[star]` table:
 ///
@@ -535,11 +590,15 @@ pub struct StarInfo {
     pub angular_diameter_deg: f32,
     /// Main-sequence lifetime of the star, Gyr.
     pub lifetime_gyr: f32,
+    /// Age of the star, Gyr: drawn per system ([`draw_age_gyr`]), at most
+    /// its lifetime. Files without one read as [`DEFAULT_AGE_GYR`].
+    #[serde(default = "default_age_gyr")]
+    pub age_gyr: f32,
     /// Time for the star's tides to lock the planet's spin, Gyr.
     pub locking_gyr: f32,
     /// Whether the planet is tidally locked, one face to its star: its
-    /// locking time is shorter than the star's age ([`AGE_GYR`] or the
-    /// star's lifetime) and its eccentricity under 0.06 (see
+    /// locking time is shorter than the star's age (the star's
+    /// `age_gyr`) and its eccentricity under 0.06 (see
     /// `crate::spin`).
     pub tidally_locked: bool,
     /// Whether the star's tides hold the planet in the 3:2 spin–orbit
@@ -575,10 +634,11 @@ impl StarInfo {
     /// The star of type `code` with an Earth-like planet (Earth's mass and
     /// radius) on an orbit of semi-major axis `orbit_au` and
     /// `eccentricity`; the draw of its spin-orbit resonance is keyed by
-    /// the orbit (see [`Self::for_planet`]).
-    pub fn new(code: f32, orbit_au: f32, eccentricity: f32) -> Self {
+    /// the orbit (see [`Self::for_planet`]). `age_gyr` is the age of the
+    /// star.
+    pub fn new(code: f32, orbit_au: f32, eccentricity: f32, age_gyr: f32) -> Self {
         let key = orbit_au.to_bits() ^ eccentricity.to_bits().rotate_left(16) ^ code.to_bits();
-        Self::for_planet(code, orbit_au, eccentricity, 1.0, 1.0, key)
+        Self::for_planet(code, orbit_au, eccentricity, 1.0, 1.0, age_gyr, key)
     }
 
     /// The star of type `code` with a rocky planet of `mass_earth` and
@@ -587,13 +647,15 @@ impl StarInfo {
     /// time that scales with the planet's mass and radius
     /// ([`crate::spin::rocky_locking_gyr`]), and the resonance it is
     /// captured in, if despun on an eccentric orbit, is drawn from `seed`
-    /// ([`crate::spin::capture`]).
+    /// ([`crate::spin::capture`]). `age_gyr` is the age of the star, at most
+    /// its lifetime.
     pub fn for_planet(
         code: f32,
         orbit_au: f32,
         eccentricity: f32,
         mass_earth: f32,
         radius_earth: f32,
+        age_gyr: f32,
         seed: u32,
     ) -> Self {
         let v = values(code);
@@ -606,7 +668,7 @@ impl StarInfo {
         let (inner, outer) = habitable_fluxes(v.teff_k);
         let lifetime = lifetime_gyr(v.mass);
         let locking = crate::spin::rocky_locking_gyr(orbit_au, v.mass, mass_earth, radius_earth);
-        let age = AGE_GYR.min(lifetime);
+        let age = age_gyr.min(lifetime);
         let turns = if locking < age {
             crate::spin::capture(eccentricity, seed)
         } else {
@@ -632,6 +694,7 @@ impl StarInfo {
             year_days: year_days(orbit_au, v.mass),
             angular_diameter_deg: angular_diameter_deg(v.radius, orbit_au),
             lifetime_gyr: lifetime,
+            age_gyr: age,
             locking_gyr: locking,
             tidally_locked: locking < age && turns == 0.0,
             spin_orbit_3_2: turns == crate::spin::RESONANCE_TURNS_PER_ORBIT,
@@ -829,6 +892,7 @@ pub fn orbit_at(code: f32, position: f32) -> f32 {
 mod tests {
     use super::*;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     #[test]
     fn the_sun_has_the_suns_values() {
@@ -867,6 +931,26 @@ mod tests {
     }
 
     #[test]
+    fn drawn_age_stays_inside_the_star_life() {
+        let mut rng = StdRng::seed_from_u64(7);
+        for lifetime in [0.02_f32, 0.3, 1.0, 10.0, 50.0] {
+            for _ in 0..1000 {
+                let age = draw_age_gyr(lifetime, &mut rng);
+                assert!(age > 0.0 && age <= lifetime.min(10.0), "{lifetime}: {age}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_sun_like_star_draws_ages_across_the_disc() {
+        let mut rng = StdRng::seed_from_u64(1);
+        let ages: Vec<f32> = (0..4000).map(|_| draw_age_gyr(10.0, &mut rng)).collect();
+        let mean = ages.iter().sum::<f32>() / ages.len() as f32;
+        assert!((mean - 5.25).abs() < 0.2, "{mean}");
+        assert!(ages.iter().all(|&a| (0.5..=10.0).contains(&a)));
+    }
+
+    #[test]
     fn the_habitable_zone_matches_kopparapu() {
         // The Sun: 0.95 to 1.68 AU.
         let (inner, outer) = habitable_fluxes(5780.0);
@@ -901,12 +985,25 @@ mod tests {
 
     #[test]
     fn earth_reads_as_earth() {
-        let earth = StarInfo::new(SUN, 1.0, 0.0);
+        let earth = StarInfo::new(SUN, 1.0, 0.0, DEFAULT_AGE_GYR);
         assert_eq!(earth.kind, "G2V");
         assert!((earth.insolation - 1.0).abs() < 0.03);
         assert!(!earth.tidally_locked);
-        assert!(StarInfo::new(parse_type("M5V").unwrap(), orbit_at(65.0, 0.5), 0.0).tidally_locked);
-        let back = StarInfo::new(earth.code(), earth.orbit_au, earth.eccentricity);
+        assert!(
+            StarInfo::new(
+                parse_type("M5V").unwrap(),
+                orbit_at(65.0, 0.5),
+                0.0,
+                DEFAULT_AGE_GYR
+            )
+            .tidally_locked
+        );
+        let back = StarInfo::new(
+            earth.code(),
+            earth.orbit_au,
+            earth.eccentricity,
+            DEFAULT_AGE_GYR,
+        );
         assert_eq!(back, earth);
     }
 
@@ -990,14 +1087,17 @@ mod tests {
 
     #[test]
     fn eccentric_orbits_get_more_light_and_draw_like_known_planets() {
-        let mercury = StarInfo::new(SUN, 0.387, 0.2056);
+        let mercury = StarInfo::new(SUN, 0.387, 0.2056, DEFAULT_AGE_GYR);
         assert!((mercury.periapsis_au - 0.307).abs() < 1e-3);
         assert!((mercury.apoapsis_au - 0.467).abs() < 1e-3);
         assert!(mercury.insolation_periapsis > 2.0 * mercury.insolation_apoapsis);
         assert!((mean_flux_factor(0.6) - 1.25).abs() < 1e-4);
         // The mean temperature falls instead (Méndez & Rivera-Valentín 2017).
         assert!((mean_temperature_factor(0.6) - 0.9756).abs() < 1e-3);
-        let (circle, eccentric) = (StarInfo::new(SUN, 1.0, 0.0), StarInfo::new(SUN, 1.0, 0.6));
+        let (circle, eccentric) = (
+            StarInfo::new(SUN, 1.0, 0.0, DEFAULT_AGE_GYR),
+            StarInfo::new(SUN, 1.0, 0.6, DEFAULT_AGE_GYR),
+        );
         assert!(eccentric.insolation > circle.insolation);
         assert!(eccentric.equilibrium_k < circle.equilibrium_k);
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);

@@ -300,7 +300,7 @@ quarter and half of the square's side, always starts outside the disc.
 
 [`activity.rs`](../../crates/mapgen/src/activity.rs) derives a
 `StarActivity` from the star's temperature, mass, radius and age
-(`giants::system_age_gyr`) and the system's seed. The seed draws, from
+(`StarInfo::age_gyr`, drawn per system) and the system's seed. The seed draws, from
 its own stream (`STAR_ACTIVITY`) and in a fixed order: a scatter of the
 rotation period, a scatter of the cycle period, the cycle's phase at day
 0, and the seed of the region timeline the browser draws.

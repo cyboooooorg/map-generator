@@ -445,7 +445,12 @@ systems/<system-id>/
   - `format_version` (2), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
     body's files directly in `bodies/<id>/`;
-  - `star`: today's `StarInfo` and its designation;
+  - `star`: today's `StarInfo` and its designation. `info.age_gyr` is the
+    age of the star in Gyr, drawn from the `AGE` stream between 0.5 and
+    10 Gyr (uniform; the star's lifetime if shorter) or set by `age_gyr`
+    of the request, which must lie in `(0, lifetime]`. Every body shares
+    it: `bodies[].params.age_gyr` repeats it. Files without one read as
+    4.6 Gyr (`DEFAULT_AGE_GYR`);
   - `bodies`: one entry per planet and moon, with the fields of
     [Model](#model): id, designation, kind, type, parent, orbit, physical
     facts, spin, surroundings, preview, `WorldParams`, and `generated`.

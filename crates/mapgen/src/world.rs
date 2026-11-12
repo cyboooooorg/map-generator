@@ -121,6 +121,13 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub perihelion_longitude_deg: Option<f32>,
+    /// Age of the star, Gyr, at most its main-sequence life: drawn per
+    /// system or per lone world ([`crate::star::draw_age_gyr`]); it sets
+    /// how far the star's tides have worked on the planet (lock, resonance,
+    /// circular orbit) and how far a giant has cooled. Files without one
+    /// read as [`crate::star::DEFAULT_AGE_GYR`].
+    #[serde(default = "crate::star::default_age_gyr")]
+    pub age_gyr: f32,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

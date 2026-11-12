@@ -4,7 +4,7 @@
 //! **Despun.** The star's tides brake a planet's spin; [`locking_gyr`]
 //! gives the time they take for an Earth-like planet, [`giant_locking_gyr`]
 //! for a giant. A planet whose time is shorter than the star's age
-//! ([`AGE_GYR`], or the star's whole life when shorter) is despun.
+//! ([`StarInfo::age_gyr`], drawn per system) is despun.
 //!
 //! **Locked or resonant.** A despun rocky planet on a circular orbit ends
 //! locked with one face to its star, one turn per orbit. On an eccentric
@@ -21,10 +21,9 @@
 //! pseudo-synchronous rate ([`pseudo_synchronous_turns`]).
 //!
 //! [`locking_gyr`]: crate::star::locking_gyr
-//! [`AGE_GYR`]: crate::star::AGE_GYR
 
 use crate::noise::EARTH_CIRCUMFERENCE_KM;
-use crate::star::{AGE_GYR, StarInfo};
+use crate::star::StarInfo;
 
 /// A spin-orbit resonance a despun planet may be captured in, and the
 /// eccentricities between which its capture goes from impossible to
@@ -178,9 +177,9 @@ pub fn rocky_body(circumference_km: f32) -> (f32, f32) {
 }
 
 /// The age the tides have had to work on a planet of `star`, Gyr: the
-/// Sun's, or the star's whole main-sequence life if shorter.
+/// star's age (at most its main-sequence life).
 pub fn tidal_age_gyr(star: &StarInfo) -> f32 {
-    AGE_GYR.min(star.lifetime_gyr)
+    star.age_gyr
 }
 
 /// Whether the star's tides have despun a rocky planet of `star` (locked or
@@ -225,7 +224,15 @@ pub fn upright(p: &crate::world::WorldParams, drawn: f32) -> f32 {
 fn rocky_star(p: &crate::world::WorldParams) -> StarInfo {
     let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
     let mass = p.mass_earth();
-    StarInfo::for_planet(p.star, p.orbit_au, p.eccentricity, mass, radius, p.seed)
+    StarInfo::for_planet(
+        p.star,
+        p.orbit_au,
+        p.eccentricity,
+        mass,
+        radius,
+        p.age_gyr,
+        p.seed,
+    )
 }
 
 /// The star of world `p` with what its tides do to it: [`StarInfo::new`],
@@ -408,25 +415,43 @@ mod tests {
     fn a_despun_planet_on_a_round_orbit_is_locked_and_an_eccentric_one_may_not_be() {
         // Mercury: 0.387 AU from the Sun, e = 0.2056. Despun (0.56 Gyr),
         // never circularised.
-        let mercury = StarInfo::new(SUN, 0.387, 0.2056);
+        let mercury = StarInfo::new(SUN, 0.387, 0.2056, crate::star::DEFAULT_AGE_GYR);
         assert!(despun(&mercury) && !circularised(&mercury));
         assert!(!mercury.tidally_locked && mercury.spin_turns >= 1.5);
         assert_eq!(mercury.spin_orbit_3_2, mercury.spin_turns == 1.5);
         // On a circle, or on an orbit as round as Proxima b's, it is locked.
         for e in [0.0, 0.0478, 0.059] {
-            let round = StarInfo::new(SUN, 0.387, e);
+            let round = StarInfo::new(SUN, 0.387, e, crate::star::DEFAULT_AGE_GYR);
             assert!(round.tidally_locked && round.spin_turns == 0.0, "{e}");
         }
         // Seeds give both states at one eccentricity.
         let red = parse_type("M5V").unwrap();
         let a = orbit_at(red, 0.5);
         let states: Vec<f32> = (0..200)
-            .map(|seed| StarInfo::for_planet(red, a, 0.13, 1.0, 1.0, seed).spin_turns)
+            .map(|seed| {
+                StarInfo::for_planet(red, a, 0.13, 1.0, 1.0, crate::star::DEFAULT_AGE_GYR, seed)
+                    .spin_turns
+            })
             .collect();
         assert!(states.contains(&0.0) && states.contains(&1.5));
         // Earth is neither.
-        let earth = StarInfo::new(SUN, 1.0, 0.0167);
+        let earth = StarInfo::new(SUN, 1.0, 0.0167, crate::star::DEFAULT_AGE_GYR);
         assert!(!earth.tidally_locked && earth.spin_turns == 0.0);
+    }
+
+    #[test]
+    fn an_older_system_locks_more_planets() {
+        // A red dwarf's planet whose locking time lies between 1 and 9 Gyr
+        // (the time goes as the sixth power of the distance).
+        let red = parse_type("M5V").unwrap();
+        let base = StarInfo::new(red, 0.1, 0.0, 5.0).locking_gyr;
+        let a = 0.1 * (4.0 / base).powf(1.0 / 6.0);
+        let locking = StarInfo::new(red, a, 0.0, 5.0).locking_gyr;
+        assert!((1.0..9.0).contains(&locking), "{locking}");
+        let young = StarInfo::for_planet(red, a, 0.0, 1.0, 1.0, 1.0, 7);
+        let old = StarInfo::for_planet(red, a, 0.0, 1.0, 1.0, 9.0, 7);
+        assert!(!young.tidally_locked && old.tidally_locked);
+        assert!(!despun(&young) && despun(&old));
     }
 
     #[test]
@@ -443,7 +468,7 @@ mod tests {
         assert!(rocky_circularisation_gyr(0.05, 1.0, 0.107, 0.53) > earth);
         // An orbit at the edge: the super-Earth's is circular where the
         // Earth's is not.
-        let star = StarInfo::new(SUN, 0.08, 0.0);
+        let star = StarInfo::new(SUN, 0.08, 0.0, crate::star::DEFAULT_AGE_GYR);
         assert!(!circularised(&star) && rocky_circularised(&star, 5.5, 1.76));
     }
 
@@ -624,9 +649,14 @@ mod tests {
         assert!((1e5..1e7).contains(&ratio), "{ratio}");
         // A red dwarf's habitable zone is despun but not circularised.
         let red = parse_type("M5V").unwrap();
-        let hz = StarInfo::new(red, orbit_at(red, 0.5), 0.0);
+        let hz = StarInfo::new(red, orbit_at(red, 0.5), 0.0, crate::star::DEFAULT_AGE_GYR);
         assert!(despun(&hz) && !circularised(&hz));
-        assert!(circularised(&StarInfo::new(red, 0.02, 0.0)));
+        assert!(circularised(&StarInfo::new(
+            red,
+            0.02,
+            0.0,
+            crate::star::DEFAULT_AGE_GYR
+        )));
     }
 
     #[test]
@@ -653,7 +683,12 @@ mod tests {
         .resolve(&mut rand::rng())
         .unwrap()
         .params;
-        let info = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let info = crate::star::StarInfo::new(
+            p.star,
+            p.orbit_au,
+            p.eccentricity,
+            crate::star::DEFAULT_AGE_GYR,
+        );
         let mass = p.giant_mass_earth.unwrap();
         let look = crate::giant_world::Look::draw(&p, mass).info;
         assert!(giant_locked(&info, mass, look.radius_earth));
