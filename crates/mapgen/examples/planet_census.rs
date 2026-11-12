@@ -10,8 +10,9 @@
 //! 1. the current `body_type` against the class the model derives;
 //! 2. the share of planets in each radius bin of Fulton et al. (2017,
 //!    doi:10.3847/1538-3881/aa80eb);
-//! 3. the median age, core mass fraction, water fraction and envelope
-//!    fraction of each class;
+//! 3. the median age, mass, orbit, core mass fraction, water fraction,
+//!    envelope fraction, surface temperature and surface pressure of each
+//!    class (the last two over the planets that have a surface);
 //! 4. the class mix, the surface liquid mix, the share with life and the
 //!    tectonic regime mix, over the planets that have a surface;
 //! 5. the radius histogram, in bins of 0.25 R_earth, of the planets with a
@@ -40,6 +41,10 @@ const BINS: [(f64, &str); 9] = [
 #[derive(Default)]
 struct ClassStats {
     age: Vec<f64>,
+    mass: Vec<f64>,
+    orbit: Vec<f64>,
+    temperature: Vec<f64>,
+    pressure: Vec<f64>,
     cmf: Vec<f64>,
     water: Vec<f64>,
     envelope: Vec<f64>,
@@ -110,6 +115,12 @@ fn main() {
             }
             let s = stats.entry(class).or_default();
             s.age.push(f64::from(body.params.age_gyr));
+            s.mass.push(model.inputs.mass_earth);
+            s.orbit.push(f64::from(body.params.orbit_au));
+            if let Some(surface) = &model.surface {
+                s.temperature.push(surface.climate.temperature_k);
+                s.pressure.push(surface.gases.total());
+            }
             s.cmf.push(model.inputs.core_mass_fraction);
             s.water.push(model.inputs.water_fraction);
             s.envelope.push(model.inputs.envelope_fraction);
@@ -152,17 +163,30 @@ fn main() {
 
     println!("\nmedians per class");
     println!(
-        "{:<20}{:>7}{:>10}{:>7}{:>9}{:>10}",
-        "class", "planets", "age Gyr", "CMF", "water", "envelope"
+        "{:<20}{:>7}{:>9}{:>9}{:>8}{:>7}{:>9}{:>10}{:>8}{:>11}",
+        "class",
+        "planets",
+        "age Gyr",
+        "mass M⊕",
+        "a AU",
+        "CMF",
+        "water",
+        "envelope",
+        "T K",
+        "P bar"
     );
     for (class, s) in &mut stats {
         println!(
-            "{class:<20}{:>7}{:>10.2}{:>7.3}{:>9.4}{:>10.4}",
+            "{class:<20}{:>7}{:>9.2}{:>9.3}{:>8.3}{:>7.3}{:>9.4}{:>10.4}{:>8.0}{:>11.3}",
             s.age.len(),
             median(&mut s.age),
+            median(&mut s.mass),
+            median(&mut s.orbit),
             median(&mut s.cmf),
             median(&mut s.water),
             median(&mut s.envelope),
+            median(&mut s.temperature),
+            median(&mut s.pressure),
         );
     }
 

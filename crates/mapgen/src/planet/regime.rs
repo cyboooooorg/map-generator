@@ -9,9 +9,10 @@ use crate::exomoon::EARTH_KG;
 use crate::geology::{PLATES_MIN_MASS_EARTH, Regime};
 use crate::star::habitable_fluxes;
 
-/// Mass of one Earth ocean, kg: 1.4e21 (Earth's oceans hold
-/// 1.335e21 kg, Charette & Smith 2010, *Oceanography* 23(2); rounded up
-/// with the ice caps and groundwater).
+/// Mass of one Earth ocean, kg: 1.4e21. Earth's oceans hold 1.335e9 km³
+/// (Charette & Smith 2010, *Oceanography* 23(2)), about 1.37e21 kg at a
+/// mean density of 1027 kg/m³; rounded up with the ice caps and
+/// groundwater.
 pub const OCEAN_KG: f64 = 1.4e21;
 
 /// Mass of water per unit mass of hydrogen lost: `H₂O` is 18 for 2 of

@@ -47,6 +47,12 @@ pub fn life(inputs: &PlanetInputs, climate: &Climate, age_gyr: f64) -> Life {
 
 /// The air of an oxygenated world: O₂ at [`O2_PER_N2`] of the N₂, and the
 /// methane gone (oxidised). Other gases are unchanged.
+///
+/// It runs after the climate: `Surface.gases` is the air after life, but
+/// `Surface.climate` was solved with the air before it, methane
+/// included. Removing a greenhouse gas would cool the surface a little;
+/// the temperature is not solved again (a known simplification: on
+/// Earth the model's abiotic air has no methane anyway).
 pub fn oxygenate(gases: Gases, life: &Life) -> Gases {
     if !life.oxygenated {
         return gases;
@@ -126,15 +132,22 @@ mod tests {
         let c: Context = crate::planet::reference::sun_at(1.0);
         let mut rng = StdRng::seed_from_u64(7);
         let i = crate::planet::draw_inputs(&c, 1.0, &mut rng);
-        assert_eq!(i.core_mass_fraction, 0.2785878209101608);
-        assert_eq!(i.water_fraction, 0.00022607183544463648);
+        // Fields that go through ln, cos or powf (the normal draws, the
+        // log-uniform water, the log-normal scatter) may differ in their
+        // last bits between platforms: 1e-12 relative.
+        let close = |got: f64, want: f64| {
+            assert!((got - want).abs() <= 1e-12 * want.abs(), "{got} {want}");
+        };
+        close(i.core_mass_fraction, 0.2785878209101608);
+        close(i.water_fraction, 0.00022607183544463648);
         assert_eq!(i.envelope_fraction, 0.0);
-        assert_eq!(i.volatiles.co2, 0.0005830938999623686);
-        assert_eq!(i.volatiles.n2, 1.1407820714593542e-6);
-        assert_eq!(i.volatiles.ch4, 1.0841261800592375e-6);
-        assert_eq!(i.volatiles.nh3, 1.2976472772934134e-6);
-        assert_eq!(i.volatiles.s, 0.00013041927131499377);
-        assert_eq!(i.radiogenic, 0.6204511799069944);
+        close(i.volatiles.co2, 0.0005830938999623686);
+        close(i.volatiles.n2, 1.1407820714593542e-6);
+        close(i.volatiles.ch4, 1.0841261800592375e-6);
+        close(i.volatiles.nh3, 1.2976472772934134e-6);
+        close(i.volatiles.s, 0.00013041927131499377);
+        close(i.radiogenic, 0.6204511799069944);
+        // The life draw is a plain uniform: exact.
         assert_eq!(i.life_draw, 0.7870037668293781);
         assert!((0.0..1.0).contains(&i.life_draw));
     }
