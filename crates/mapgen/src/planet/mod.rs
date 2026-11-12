@@ -20,6 +20,8 @@
 //! [`climate::climate`] sets its surface temperature through a grey
 //! greenhouse and the carbonate thermostat, and the [`SurfaceLiquid`] on
 //! its surface.
+//! [`life::life`] decides whether life arose where water lasted, and
+//! [`life::oxygenate`] gives the air its oxygen.
 //! [`classify::classify`] reads its [`PlanetClass`] off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`body_model`] for a planet of a stored system.
@@ -42,6 +44,7 @@ pub mod escape;
 pub mod heat;
 pub mod inputs;
 pub mod interior;
+pub mod life;
 pub mod reference;
 pub mod regime;
 pub mod xuv;
@@ -56,6 +59,7 @@ pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
 pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
+pub use life::{Life, life, oxygenate};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
 pub use regime::{HEAT_PIPE_FLUX_W_M2, OCEAN_KG, Water, regime, water};
 pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
@@ -84,6 +88,9 @@ pub struct PlanetInputs {
     pub volatiles: Volatiles,
     /// Radiogenic abundance at formation, relative to Earth's (1.0).
     pub radiogenic: f64,
+    /// Uniform in `[0, 1)`, drawn last: life arises where it is below
+    /// [`life::LIFE_CHANCE`] (and the world allows it).
+    pub life_draw: f64,
 }
 
 /// What a layer of a planet is made of.

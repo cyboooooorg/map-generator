@@ -106,6 +106,7 @@ pub(crate) fn inputs_of(body: &ReferenceBody) -> super::PlanetInputs {
         envelope_fraction: body.envelope_fraction,
         volatiles: super::Volatiles::default(),
         radiogenic: 1.0,
+        life_draw: 0.0,
     }
 }
 
@@ -137,6 +138,7 @@ pub(crate) fn inputs(
         envelope_fraction: 0.0,
         volatiles: super::Volatiles::default(),
         radiogenic: 1.0,
+        life_draw: 0.0,
     }
 }
 

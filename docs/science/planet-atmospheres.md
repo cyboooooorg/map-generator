@@ -344,3 +344,35 @@ at 1.2 AU, 0.8 bar at 1.4 AU), is just short at 1.6 AU (288 K less 0.2,
 all its 1.8 bar of CO₂ in the air, its water still liquid) and freezes
 beyond (234 K at 1.8 AU). At 0.9 AU it has run away (705 K, no water);
 at 0.01 AU it is a lava world.
+
+## Life
+
+`life` decides from the climate whether life arose, and `oxygenate` gives
+the air of a world with oxygenic life its oxygen. Life is possible when
+the surface liquid is water now and the system is at least `LIFE_MIN_GYR`
+(1.0 Gyr, calibration, no source: the spec's "order of a billion years")
+old. It then arises when the last draw of the inputs, `life_draw`, is
+below `LIFE_CHANCE` = 1/3.
+
+`LIFE_CHANCE` is a game choice, set with the user on 2026-11-12. No
+measured rate exists: the only world known to have life is Earth, and one
+case gives no probability. Nothing in the model is calibrated on it, and
+it can be changed without touching any physics.
+
+Life has oxygenated the air once the system is `OXYGEN_AFTER_GYR` old,
+2.2 Gyr, Earth's Great Oxidation Event about 2.4 Ga (Lyons, Reinhard &
+Planavsky 2014, doi:10.1038/nature13068; the date is from memory, not
+checked against the paper). The oxygenated air holds O₂ at `0.27` of its
+N₂ (calibration on Earth: 0.21 over 0.78) and no methane, which the
+oxygen oxidises.
+
+| Case | Result |
+|---|---|
+| Earth, `life_draw` 0, 4.6 Gyr | life, O₂ between 0.15 and 0.3 bar, no CH₄ |
+| Earth at 0.5 Gyr | no life |
+| Earth at 1.5 Gyr | life, no oxygen yet |
+| Earth, `life_draw` 0.99 | habitable, lifeless |
+| Venus, Mars | no life, whatever the draw (no liquid water) |
+
+`life_draw` is appended as the last draw of `draw_inputs`, so every
+earlier input of a body keeps its value.

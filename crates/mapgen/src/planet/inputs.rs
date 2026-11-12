@@ -203,7 +203,8 @@ const RADIOGENIC_SPREAD_DEX: f64 = 0.15;
 ///   beyond it;
 /// - envelope by [`envelope_fraction`];
 /// - volatiles by [`volatiles`];
-/// - radiogenic abundance `10^N(0, 0.15)` of Earth's.
+/// - radiogenic abundance `10^N(0, 0.15)` of Earth's;
+/// - the life draw `U(0, 1)`, read by [`life`](super::life::life).
 ///
 /// The ice share is of the mass that is not hydrogen and helium, so the
 /// water share of the whole is that times `1 − envelope`: a wet giant
@@ -212,7 +213,8 @@ const RADIOGENIC_SPREAD_DEX: f64 = 0.15;
 /// The draws come in a fixed order and count, whatever the branch taken:
 /// core share (one normal), stripping (two uniforms), water (two
 /// uniforms), migration (one uniform), envelope (three draws), volatiles
-/// (five normals), radiogenic abundance (one normal). A later draw (the
+/// (five normals), radiogenic abundance (one normal), life (one uniform,
+/// always last). A later draw (the
 /// mass, in part 3) goes in front of them.
 pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) -> PlanetInputs {
     let x = context.orbit_au / context.ice_line_au;
@@ -237,6 +239,7 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
     let refractory = 1.0 - water_fraction - envelope_fraction;
     let volatiles = volatiles(refractory, water_fraction, rng);
     let radiogenic = 10f64.powf(RADIOGENIC_SPREAD_DEX * normal(rng));
+    let life_draw = rng.random::<f64>();
 
     PlanetInputs {
         mass_earth,
@@ -245,6 +248,7 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
         envelope_fraction,
         volatiles,
         radiogenic,
+        life_draw,
     }
 }
 
