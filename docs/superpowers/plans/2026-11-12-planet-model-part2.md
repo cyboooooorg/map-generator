@@ -395,8 +395,9 @@ Gaidos 2016, doi:10.3847/0004-637X/828/2/80); otherwise none.
 
 Life is possible when surface water is liquid now and the system is at
 least `LIFE_MIN_GYR` old (1.0, calibration, no source: the spec's "order
-of a billion years"); it arises when `life_draw < LIFE_CHANCE` (0.5, a
-game choice, documented as such: no measured rate exists). It
+of a billion years"); it arises when `life_draw < LIFE_CHANCE` (1/3, a
+game choice set with the user on 2026-11-12, documented as such: no
+measured rate exists). It
 oxygenates the air after `OXYGEN_AFTER_GYR` (about 2.2 Gyr after
 formation, Earth's Great Oxidation Event, Lyons, Reinhard & Planavsky
 2014, doi:10.1038/nature13068), with O₂ at Earth's ratio to N₂ (0.27,
