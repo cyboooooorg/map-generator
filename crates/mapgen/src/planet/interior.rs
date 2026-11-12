@@ -124,14 +124,16 @@ pub const GIANT_MIN_ENVELOPE: f64 = 0.05;
 /// `R_env = 2.06 R⊕ M^−0.21 (f/5 %)^0.59 S^0.044 (age/5 Gyr)^−0.11`, with
 /// the age exponent of their solar-metallicity models (eq. 3 itself,
 /// fitted to enhanced-opacity models, has −0.18). The fit is within about
-/// 0.1 dex of their full models. The inputs are clamped to the grid it was
-/// fitted on (1–20 M⊕, 0.1–1000 S⊕, 0.1–10 Gyr; envelopes of 0.1–20 % of
-/// the mass, where the grid goes down to 0.01 %), so that it never
-/// extrapolates. The thin radiative atmosphere above it
-/// (their `R_atm`, about 0.1 R⊕) is left out.
+/// 0.1 dex of their full models. The mass, insolation and age are clamped
+/// to the grid it was fitted on (1–20 M⊕, 0.1–1000 S⊕, 0.1–10 Gyr), and
+/// the envelope share to at most 20 % of the mass. Below the grid's
+/// smallest envelope (0.01 % of the mass) the `f^0.59` term is
+/// extrapolated, unclamped, so that the envelope thins to nothing as its
+/// share goes to zero instead of jumping at `f = 0`. The thin radiative
+/// atmosphere above it (their `R_atm`, about 0.1 R⊕) is left out.
 fn envelope_thickness(mass_earth: f64, envelope: f64, insolation: f64, age_gyr: f64) -> f64 {
     let m = mass_earth.clamp(1.0, 20.0);
-    let f = envelope.clamp(0.001, 0.2);
+    let f = envelope.clamp(0.0, 0.2);
     let s = insolation.clamp(0.1, 1000.0);
     let age = age_gyr.clamp(0.1, 10.0);
     2.06 * m.powf(-0.21) * (f / 0.05).powf(0.59) * s.powf(0.044) * (age / 5.0).powf(-0.11)
@@ -315,6 +317,24 @@ mod tests {
         };
         let r = interior(&with_envelope(5.0, 0.02), &exposure).radius_earth;
         assert!((2.1..2.8).contains(&r), "{r}");
+    }
+
+    #[test]
+    fn envelope_radius_vanishes_with_the_envelope() {
+        let exposure = Exposure {
+            insolation: 10.0,
+            equilibrium_k: 500.0,
+            age_gyr: 5.0,
+        };
+        let radius = |f: f64| interior(&with_envelope(5.0, f), &exposure).radius_earth;
+        let solid = solid_interior(&with_envelope(5.0, 1e-6)).radius_earth;
+        assert!((radius(1e-6) - solid).abs() < 0.01, "{}", radius(1e-6));
+        let mut last = 0.0;
+        for f in [0.0, 1e-6, 1e-4, 1e-3, 1e-2, 0.1] {
+            let r = radius(f);
+            assert!(r >= last, "{f}: {r} < {last}");
+            last = r;
+        }
     }
 
     #[test]
