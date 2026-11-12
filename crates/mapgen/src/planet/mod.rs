@@ -7,13 +7,17 @@
 //! derives the iron, rock and water layers, and [`interior::interior`] adds
 //! the hydrogen and helium envelope under the star's [`Exposure`], giving
 //! the radius, the bulk density and the surface gravity.
+//! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
+//! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`]).
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
 //! are checked against.
 use serde::{Deserialize, Serialize};
 
+pub mod heat;
 pub mod interior;
 pub mod reference;
 
+pub use heat::{EARTH_SILICATE_KG, InternalHeat, radiogenic_w, tidal_power_w};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
 

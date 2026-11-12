@@ -17,16 +17,18 @@
 //! orbit, the giant fixed over one hemisphere.
 //!
 //! **Tidal heating.** `Ė = (21/2)(k₂/Q) G M² R⁵ n e² / a⁶` (Peale et al.
-//! 1979), with Io's `k₂/Q` of 0.015: Io gets about 2 W/m². Spread over the
-//! world it is an internal heat, added to the climate as radiated power
-//! (`T⁴` adds up) and raising the volcanism; close in, it drives a runaway
-//! greenhouse: Heller & Barnes (2013)'s habitable edge, about 10 giant
-//! radii for typical cases. A world of liquid water is kept beyond it (its
-//! orbit moved out until starlight and tides stay under the limit); a dry or
+//! 1979, [`crate::planet::heat::tidal_power_w`]), with Io's `k₂/Q` of
+//! 0.015: Io gets about 2 W/m². Spread over the world it is an internal
+//! heat, added to the climate as radiated power (`T⁴` adds up) and
+//! raising the volcanism; close in, it drives a runaway greenhouse:
+//! Heller & Barnes (2013)'s habitable edge, about 10 giant radii for
+//! typical cases. A world of liquid water is kept beyond it (its orbit
+//! moved out until starlight and tides stay under the limit); a dry or
 //! volcanic one may be kneaded like Io.
 use crate::giant_world::GiantInfo;
 use crate::giants::{GiantKind, JUPITER_EARTH_MASSES, giant_radius};
 use crate::noise::{stream, stream_seed};
+use crate::planet::heat::tidal_power_w;
 use crate::star::StarInfo;
 use crate::world::WorldParams;
 use rand::rngs::StdRng;
@@ -169,18 +171,13 @@ impl HostGiant {
         let world_radius = f64::from(p.circumference_km) * 1000.0 / (2.0 * PI);
         // Tidal heating at `radii` giant radii, W/m².
         let flux_at = |radii: f64| {
-            let a = radii * radius_m;
-            let n = (G * mass_kg / a.powi(3)).sqrt();
-            10.5 * K2_OVER_Q
-                * G
-                * mass_kg
-                * mass_kg
-                * world_radius.powi(5)
-                * n
-                * eccentricity
-                * eccentricity
-                / a.powi(6)
-                / (4.0 * PI * world_radius * world_radius)
+            tidal_power_w(
+                mass_kg,
+                world_radius,
+                radii * radius_m,
+                eccentricity,
+                K2_OVER_Q,
+            ) / (4.0 * PI * world_radius * world_radius)
         };
         // Absorbed starlight (Earth's albedo), to weigh against the runaway
         // limit.
@@ -396,8 +393,7 @@ mod tests {
         // Io's numbers: Jupiter's mass, 5.9 radii, e = 0.0041, Io's size.
         let io_flux = {
             let (m, r, a, e) = (1.898e27f64, 1.8216e6f64, 4.217e8f64, 0.0041f64);
-            let n = (G * m / a.powi(3)).sqrt();
-            10.5 * K2_OVER_Q * G * m * m * r.powi(5) * n * e * e / a.powi(6) / (4.0 * PI * r * r)
+            tidal_power_w(m, r, a, e, K2_OVER_Q) / (4.0 * PI * r * r)
         };
         assert!((1.0..4.0).contains(&io_flux), "{io_flux}");
     }
