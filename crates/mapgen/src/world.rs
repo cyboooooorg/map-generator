@@ -145,7 +145,7 @@ const ROCKY_MASS_RADIUS_EXPONENT: f32 = 3.7;
 /// doi:10.1086/521346: "for Ms ≪ 1, the EOS reduces to ρs = 1"). The
 /// compressed density of [`ROCKY_MASS_RADIUS_EXPONENT`] falls to it at
 /// 0.48 Earth radii.
-const UNCOMPRESSED_ROCK_DENSITY: f32 = 3.344 / 5.513;
+pub(crate) const UNCOMPRESSED_ROCK_DENSITY: f32 = 3.344 / 5.513;
 
 /// Largest surface gravity of a rocky world, Earth's = 1: the bound the
 /// app kept before the mass–radius relation, reached at 2.6 Earth radii

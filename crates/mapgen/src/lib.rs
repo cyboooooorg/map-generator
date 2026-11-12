@@ -33,6 +33,7 @@ pub mod hydrology;
 pub mod moons;
 pub mod naming;
 pub mod noise;
+pub mod planet;
 pub mod plates;
 pub mod preset;
 pub mod request;
