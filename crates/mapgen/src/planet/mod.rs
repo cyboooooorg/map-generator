@@ -10,7 +10,8 @@
 //! the hydrogen and helium envelope under the star's [`Exposure`], giving
 //! the radius, the bulk density and the surface gravity.
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
-//! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`]).
+//! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`], with the
+//! response [`heat::k2_over_q`] of a rocky, icy or enveloped body).
 //! [`classify::classify`] reads its [`PlanetClass`] off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`body_model`] for a planet of a stored system.
@@ -35,7 +36,7 @@ pub mod xuv;
 
 pub use classify::{PlanetClass, classify};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
-pub use heat::{EARTH_SILICATE_KG, InternalHeat, radiogenic_w, tidal_power_w};
+pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
 pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
@@ -133,21 +134,15 @@ const SUN_KG: f64 = 1.988_5e30;
 /// The astronomical unit, m (IAU 2012, Resolution B2).
 const AU_M: f64 = 1.495_978_707e11;
 
-/// Tidal response `k₂/Q` of a planet raised by its star: the rocky moons'
-/// of `crate::exomoon` (Io's, Lainey et al. 2009,
-/// doi:10.1038/nature08108). Applied to a giant it overestimates the tidal
-/// heat (a hot Jupiter gets more than the starlight it absorbs): a giant's
-/// own k₂ and Q are issue #433.
-const K2_OVER_Q: f64 = 0.015;
-
 /// The model of a planet of `inputs` in its formation `context`: its
 /// [`interior`] under the star's exposure; the XUV fluence of its star
 /// ([`xuv_fluence`]) and the envelope that [`envelope_after_escape`] leaves
 /// it, from which the interior is derived again; its radiogenic heat from its
 /// silicate mass, `M (1 − water − envelope) (1 − CMF)`, its abundance and
-/// the system's age; its tidal heat from the star at its orbit, with
-/// `k₂/Q` 0.015; then its [`classify`] class, which feeds back into none
-/// of them.
+/// the system's age; its tidal heat from the star at its orbit, with the
+/// [`heat::k2_over_q`] of its envelope and water shares (a giant's is
+/// over a thousand times smaller than a rock's); then its [`classify`]
+/// class, which feeds back into none of them.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     let exposure = context.exposure();
     let fluence = xuv_fluence(context);
@@ -171,7 +166,7 @@ pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
             interior.radius_earth * EARTH_M,
             context.orbit_au * AU_M,
             context.eccentricity,
-            K2_OVER_Q,
+            k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
         ),
     };
     let class = classify(&inputs, &interior, context.period_days());
@@ -252,6 +247,50 @@ mod tests {
         let other = planets[1].id.clone();
         fewer.bodies.retain(|x| x.id != other);
         assert_eq!(body_model(&fewer, b), body_model(&system, b));
+    }
+
+    /// The context of a body round the Sun at `orbit_au` on an orbit of
+    /// `eccentricity`, at 4.6 Gyr.
+    fn sun_at(orbit_au: f32, eccentricity: f32) -> Context {
+        let sun = crate::star::parse_type("G2V").unwrap();
+        let star = StarInfo::new(sun, orbit_au, eccentricity, crate::star::DEFAULT_AGE_GYR);
+        Context::of(&star, 0.0, 2.7)
+    }
+
+    /// Starlight a body of `radius_earth` takes in, W, black (albedo 0):
+    /// its cross-section times the mean flux, 1361 W/m² per unit of
+    /// insolation.
+    fn absorbed_w(context: &Context, radius_earth: f64) -> f64 {
+        let r = radius_earth * EARTH_M;
+        std::f64::consts::PI * r * r * 1361.0 * context.insolation
+    }
+
+    #[test]
+    fn a_close_eccentric_hot_jupiter_makes_far_less_tidal_heat_than_starlight() {
+        // A Jupiter (318 M⊕, 95 % hydrogen and helium) at 0.04 AU from
+        // the Sun on an orbit of eccentricity 0.1. With Jupiter's k₂/Q
+        // its tides make about 4 % of the starlight it would absorb black;
+        // with Io's, which every body took before issue #433, they made
+        // 60 times that starlight.
+        let context = sun_at(0.04, 0.1);
+        let model = planet_model(&context, reference::with_envelope(318.0, 0.95));
+        assert_eq!(model.class, PlanetClass::HotJupiter);
+        let ratio = model.heat.tidal_w / absorbed_w(&context, model.interior.radius_earth);
+        assert!(ratio < 0.1, "tidal / absorbed starlight {ratio}");
+    }
+
+    #[test]
+    fn a_rocky_planet_keeps_io_tidal_response() {
+        let context = sun_at(0.05, 0.2);
+        let model = planet_model(&context, reference::inputs(1.0, 0.325, 0.0));
+        let io = tidal_power_w(
+            context.star_mass * SUN_KG,
+            model.interior.radius_earth * EARTH_M,
+            context.orbit_au * AU_M,
+            context.eccentricity,
+            0.015,
+        );
+        assert_eq!(model.heat.tidal_w, io);
     }
 
     #[test]
