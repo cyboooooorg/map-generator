@@ -159,8 +159,10 @@ mod tests {
 
     #[test]
     fn an_enveloped_planet_above_the_valley_is_a_mini_neptune() {
-        assert_eq!(class_of(with_envelope(5.0, 0.02), 0.1), MiniNeptune);
-        assert_eq!(class_of(with_envelope(5.0, 0.0), 0.1), SuperEarth);
+        // At 0.1 AU such an envelope is photoevaporated (see `escape`).
+        assert_eq!(class_of(with_envelope(5.0, 0.02), 0.5), MiniNeptune);
+        assert_eq!(class_of(with_envelope(5.0, 0.0), 0.5), SuperEarth);
+        assert_eq!(class_of(with_envelope(5.0, 0.02), 0.1), SuperEarth);
     }
 
     #[test]

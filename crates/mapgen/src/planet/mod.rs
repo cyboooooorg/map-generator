@@ -26,6 +26,7 @@ use crate::star::StarInfo;
 use crate::system::{Body, BodyKind, System, body_seed};
 
 pub mod classify;
+pub mod escape;
 pub mod heat;
 pub mod inputs;
 pub mod interior;
@@ -33,6 +34,7 @@ pub mod reference;
 pub mod xuv;
 
 pub use classify::{PlanetClass, classify};
+pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, radiogenic_w, tidal_power_w};
 pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
@@ -116,6 +118,10 @@ pub struct PlanetModel {
     pub inputs: PlanetInputs,
     pub interior: Interior,
     pub heat: InternalHeat,
+    /// XUV energy received over the system's age, Earth's = 1.
+    pub xuv_fluence: f64,
+    /// Share of the initial envelope that photoevaporation took, 0 to 1.
+    pub envelope_lost: f64,
     pub class: PlanetClass,
 }
 
@@ -135,13 +141,25 @@ const AU_M: f64 = 1.495_978_707e11;
 const K2_OVER_Q: f64 = 0.015;
 
 /// The model of a planet of `inputs` in its formation `context`: its
-/// [`interior`] under the star's exposure; its radiogenic heat from its
+/// [`interior`] under the star's exposure; the XUV fluence of its star
+/// ([`xuv_fluence`]) and the envelope that [`envelope_after_escape`] leaves
+/// it, from which the interior is derived again; its radiogenic heat from its
 /// silicate mass, `M (1 − water − envelope) (1 − CMF)`, its abundance and
 /// the system's age; its tidal heat from the star at its orbit, with
 /// `k₂/Q` 0.015; then its [`classify`] class, which feeds back into none
 /// of them.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
-    let interior = interior(&inputs, &context.exposure());
+    let exposure = context.exposure();
+    let fluence = xuv_fluence(context);
+    let initial_envelope = inputs.mass_earth * inputs.envelope_fraction;
+    let drawn = interior(&inputs, &exposure);
+    let inputs = envelope_after_escape(&inputs, &drawn, fluence);
+    let envelope_lost = if initial_envelope > 0.0 {
+        1.0 - inputs.mass_earth * inputs.envelope_fraction / initial_envelope
+    } else {
+        0.0
+    };
+    let interior = interior(&inputs, &exposure);
     let silicate_kg = inputs.mass_earth
         * (1.0 - inputs.water_fraction - inputs.envelope_fraction)
         * (1.0 - inputs.core_mass_fraction)
@@ -161,6 +179,8 @@ pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
         inputs,
         interior,
         heat,
+        xuv_fluence: fluence,
+        envelope_lost,
         class,
     }
 }
@@ -221,7 +241,10 @@ mod tests {
                 "{}",
                 body.id
             );
-            assert_eq!(model.inputs.mass_earth, body.physical.mass_earth);
+            // Photoevaporation can only lower the mass, by the envelope lost.
+            let lost = body.physical.mass_earth - model.inputs.mass_earth;
+            assert!(lost >= 0.0, "{}", body.id);
+            assert!(lost <= 1.0e-3 + model.envelope_lost * body.physical.mass_earth);
         }
         // Removing another planet leaves the model of b as it was.
         let b = planets[0];

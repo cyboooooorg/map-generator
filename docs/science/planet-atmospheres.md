@@ -25,3 +25,37 @@ Calibration targets: Earth is 1.0 (absolute value
 `EARTH_XUV_FLUENCE_J_M2` = 1.5e16 J/m²); 5 to 10 Gyr adds under 30 %;
 a 0.2 M☉ star at Earth's insolation delivers more than 10 times Earth's
 fluence.
+
+## Envelope escape
+
+`planet::escape` removes the hydrogen and helium a planet loses to the
+star's XUV light. It is the energy-limited escape of Owen & Wu 2017
+(doi:10.3847/1538-4357/aa890a, eq. 19, after Lecavelier des Etangs 2007
+and Erkaev et al. 2007), integrated over the age:
+
+```text
+ΔM = η π R³ F / (G M)
+```
+
+with `F` the XUV fluence in J/m² (the relative `xuv_fluence` times
+`EARTH_XUV_FLUENCE_J_M2`), `R` the planet's radius with its envelope, `M`
+its mass and `η = 0.1`, the constant efficiency Owen & Wu adopt ("of
+order 0.1 for low-mass planets", checked against the paper). The
+efficiency really falls for deep potential wells (their eq. 31); the
+model ignores that, since a giant loses next to nothing at `η = 0.1`
+already. `energy_limited_loss_kg` gives `ΔM`; the water loss of the next
+section reuses it.
+
+`envelope_after_escape` caps the loss at the envelope, lowers the mass by
+what is lost, and sets the envelope to zero once it falls under 0.1 % of
+the mass (`MIN_ENVELOPE`): what is left is a thin atmosphere, not a
+hydrogen shell. The radius is the one before the loss, an upper bound.
+`planet_model` then derives the interior again from what is left, and
+records `xuv_fluence` and `envelope_lost`, the share of the initial
+envelope lost. Nothing is tuned to the radius valley's position; the
+census of the valley is measured at the end of part 2.
+
+Calibration targets: a 5 M⊕ planet with a 1 % envelope at 0.05 AU round
+the Sun is stripped and its radius falls under 1.8 R⊕; Jupiter at
+0.05 AU keeps over 99 % of its envelope; 5 M⊕ with 1 % at 0.5 AU keeps at
+least half; Earth, Uranus and Neptune are unchanged.
