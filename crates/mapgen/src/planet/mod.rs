@@ -12,6 +12,8 @@
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
 //! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`], with the
 //! response [`heat::k2_over_q`] of a rocky, icy or enveloped body).
+//! [`core::core`] derives whether its iron core is liquid and drives a
+//! dynamo, and the field at its surface.
 //! [`classify::classify`] reads its [`PlanetClass`] off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`body_model`] for a planet of a stored system.
@@ -27,6 +29,7 @@ use crate::star::StarInfo;
 use crate::system::{Body, BodyKind, System, body_seed};
 
 pub mod classify;
+pub mod core;
 pub mod escape;
 pub mod heat;
 pub mod inputs;
@@ -36,6 +39,7 @@ pub mod regime;
 pub mod xuv;
 
 pub use classify::{PlanetClass, classify};
+pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
 pub use inputs::{Context, draw_inputs};
