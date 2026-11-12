@@ -160,3 +160,77 @@ Calibration targets, with the regimes of the previous section:
 
 The Moon's core is in fact still partly molten (Weber et al. 2011); the
 model freezes it, which only matters for its state, not its dynamo.
+
+## Atmosphere
+
+`planet::atmosphere` (not yet chained into `planet_model`) gives the
+partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
+and O₂ (`Gases`, with `total()`), in three steps. The carbonate
+thermostat of the climate takes Earth's CO₂ away afterwards, and life
+adds the oxygen.
+
+**Outgassing** (`outgassed`). Each volatile the planet holds (the
+`Volatiles` of its inputs, kg per kg of planet) times its mass, times the
+share its regime brings to the surface over its life, weighs
+`P = m g / (4π R²)` on the surface. The shares are a calibration within
+the picture of Kite, Manga & Gaidos 2009 (doi:10.1088/0004-637X/700/2/1732,
+lids outgas less than plates):
+
+| Regime | Share outgassed | Calibrated on |
+|---|---|---|
+| Plates | 0.95, of which subduction returns 63 % | Earth's air holds about a third of its nitrogen (Marty 2012, not checked in detail) |
+| Episodic lid | 0.95 | Venus's 90 bar of CO₂ |
+| Heat pipe | 0.95 | none (Io) |
+| Stagnant lid | 0.2 | Mars, Titan |
+
+Sulphur comes up as SO₂, of which 1e-4 stays in the air (the rest ends in
+the crust; Venus's SO₂ is buffered by its surface, Fegley & Prinn 1989,
+not checked; calibrated on Venus's 150 ppm). Water is vapour only in a
+runaway greenhouse, and only what the runaway left (`Water::kept_kg`);
+otherwise it is an ocean or ice, and the climate sets its vapour.
+
+**Escape** (`atmosphere`). The cosmic shoreline of Zahnle & Catling 2017
+(doi:10.3847/2041-8213/aa7846) splits the bodies with and without air by
+`I_XUV ∝ v_esc⁴`. Here the line is `I_line = (v_esc / 6.5 km/s)⁴`, in
+units of Earth's XUV fluence (`xuv_fluence`), and the share of air kept
+falls smoothly across it:
+
+```text
+kept = 1 / (1 + (s I / I_line)^6)
+```
+
+with `s = 2` for a body without a dynamo, whose upper air the stellar
+wind strips (`UNMAGNETISED_ESCAPE`, a calibration with no source, tied to
+issue #344). The normalisation 6.5 km/s, the steepness 6 and `s` are
+calibrations: the line passes close to Mars, as in the paper, and `s` is
+small enough that Venus, which has no dynamo, keeps its air. Every gas is
+kept in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`.
+
+**Cold trap** (`cold_trap`). A gas whose triple point lies above the
+body's equilibrium temperature frosts onto the ground until its partial
+pressure falls to its sublimation pressure, by Clausius–Clapeyron from
+the triple point (CO₂ 216.6 K, 5.185 bar, 26.1 kJ/mol; NH₃ 195.4 K,
+0.0606 bar, 29 kJ/mol; CH₄ 90.7 K, 0.117 bar, 9.1 kJ/mol; N₂ 63.15 K,
+0.125 bar, 6.3 kJ/mol; values from the NIST WebBook from memory, not
+checked). This freezes Titan's CO₂ and NH₃ and most of its CH₄. Above
+the triple point the gas stays; whether it rains out depends on the
+surface temperature, which the climate sets. Water is left to the
+climate.
+
+Calibration targets, through the whole chain from the reference bodies'
+inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
+
+| Body | Result | Target | Observed |
+|---|---|---|---|
+| Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ |
+| Earth | 0.89 bar N₂ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar | 0.78 bar N₂ |
+| Mars | 0.014 bar | 0.002 to 0.05 bar | 0.006 bar |
+| Titan | 2.1 bar, 98 % N₂ | 0.5 to 5 bar | 1.5 bar |
+| Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
+
+Two shortcomings, outside the targets: Earth's ocean carries the ice
+volatiles of the rule, which outgas about 0.9 bar each of CH₄ and NH₃
+(no photochemical sink is modelled); and at Jupiter's distance, above
+methane's triple point, Ganymede keeps about 0.2 bar of CH₄ and Callisto,
+to which the core model gives a weak deep dynamo, about 0.5 bar (both
+are airless). Moons are not modelled yet (`body_model` skips them).

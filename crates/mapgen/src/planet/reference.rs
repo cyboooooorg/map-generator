@@ -109,6 +109,19 @@ pub(crate) fn inputs_of(body: &ReferenceBody) -> super::PlanetInputs {
     }
 }
 
+/// The inputs of a reference body as the model draws them, without the
+/// scatter: its composition, the volatiles of the rule of
+/// [`super::inputs::draw_inputs`] for its rock and ice, Earth's radiogenic
+/// abundance. Every Solar System test from the atmosphere on uses it.
+#[cfg(test)]
+pub(crate) fn model_inputs(body: &ReferenceBody) -> super::PlanetInputs {
+    let refractory = 1.0 - body.water_fraction - body.envelope_fraction;
+    super::PlanetInputs {
+        volatiles: super::inputs::volatile_rule(refractory, body.water_fraction),
+        ..inputs_of(body)
+    }
+}
+
 /// Inputs without envelope, volatiles at zero, Earth's radiogenic
 /// abundance.
 #[cfg(test)]

@@ -14,6 +14,9 @@
 //! response [`heat::k2_over_q`] of a rocky, icy or enveloped body).
 //! [`core::core`] derives whether its iron core is liquid and drives a
 //! dynamo, and the field at its surface.
+//! [`atmosphere::outgassed`], [`atmosphere::atmosphere`] and
+//! [`atmosphere::cold_trap`] derive its air, as [`Gases`], from what it
+//! outgasses, what escape leaves and what its cold freezes out.
 //! [`classify::classify`] reads its [`PlanetClass`] off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`body_model`] for a planet of a stored system.
@@ -28,6 +31,7 @@ use crate::exomoon::{EARTH_KG, EARTH_M};
 use crate::star::StarInfo;
 use crate::system::{Body, BodyKind, System, body_seed};
 
+pub mod atmosphere;
 pub mod classify;
 pub mod core;
 pub mod escape;
@@ -38,6 +42,7 @@ pub mod reference;
 pub mod regime;
 pub mod xuv;
 
+pub use atmosphere::{Gases, atmosphere, cold_trap, escape_velocity_km_s, outgassed};
 pub use classify::{PlanetClass, classify};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
