@@ -2622,7 +2622,7 @@ mod tests {
             &app,
             "examples/mercury-like.toml",
             3,
-            r#", "surface_age_ga": 4.0"#,
+            r#", "surface_age_ga": 4.0, "age_gyr": 6.0"#,
         )
         .await;
         let (wet, sea) = generated_planet(&app, "terran", 4, "").await;

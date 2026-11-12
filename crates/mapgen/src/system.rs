@@ -43,7 +43,7 @@ use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
 use crate::request::{RequestError, WorldRequest};
-use crate::star::{StarInfo, draw_eccentricity, draw_type, parse_type};
+use crate::star::{StarInfo, draw_eccentricity, parse_type};
 use crate::world::WorldParams;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -711,7 +711,7 @@ fn draw_whole(
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
     let star_code = match &whole.star {
         Some(text) => parse_type(text).map_err(RequestError::BadStar)?,
-        None => draw_type(&mut rng),
+        None => crate::star::draw_type_living(whole.age_gyr, &mut rng),
     };
     let metallicity = whole
         .metallicity
@@ -3122,6 +3122,47 @@ mod tests {
         let system = draw(&request, &mut StdRng::seed_from_u64(5)).unwrap();
         assert_eq!(system.star.info.age_gyr, 2.0);
         assert!(system.bodies.iter().all(|b| b.params.age_gyr == 2.0));
+    }
+
+    #[test]
+    fn no_surface_is_older_than_a_young_system() {
+        for seed in 1..=4 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                age_gyr: Some(0.6),
+                star: Some("G2V".into()),
+                planets: Some([("terran".to_string(), 2), ("frozen".to_string(), 1)].into()),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap();
+            assert!(!system.bodies.is_empty());
+            for body in &system.bodies {
+                assert!(
+                    body.params.surface_age_ga <= 0.6,
+                    "seed {seed}, {}: {} Ga",
+                    body.id,
+                    body.params.surface_age_ga
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_age_does_not_refuse_a_star_that_was_drawn() {
+        for seed in 1..=60 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                age_gyr: Some(5.0),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1))
+                .unwrap_or_else(|e| panic!("seed {seed}: {e}"));
+            assert_eq!(system.star.info.age_gyr, 5.0);
+        }
     }
 
     #[test]

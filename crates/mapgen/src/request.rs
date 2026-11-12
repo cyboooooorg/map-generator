@@ -476,7 +476,7 @@ impl WorldRequest {
         let mut draw_orbit = || -> Result<(f32, f32, f32, f32), RequestError> {
             let star = match self.star.as_deref().or(s.kind.as_deref()) {
                 Some(kind) => crate::star::parse_type(kind).map_err(RequestError::BadStar)?,
-                None => crate::star::draw_type(rng),
+                None => crate::star::draw_type_living(self.age_gyr, rng),
             };
             // The age, from its own stream: no other draw shifts.
             let age_gyr = crate::star::resolve_age_gyr(self.age_gyr, star, seed)?;
@@ -586,7 +586,8 @@ impl WorldRequest {
             axial_tilt_deg,
             erosion: if giant { 0.0 } else { erosion },
             pressure_bar,
-            surface_age_ga,
+            // A surface is never older than its system.
+            surface_age_ga: surface_age_ga.min(age_gyr),
             star,
             orbit_au,
             eccentricity,
@@ -676,6 +677,7 @@ impl WorldRequest {
                 let (star, orbit_au, eccentricity, age_gyr) = draw_orbit()?;
                 params.star = star;
                 params.age_gyr = age_gyr;
+                params.surface_age_ga = surface_age_ga.min(age_gyr);
                 params.orbit_au = orbit_au;
                 params.eccentricity = eccentricity;
                 if eccentricity_drawn {

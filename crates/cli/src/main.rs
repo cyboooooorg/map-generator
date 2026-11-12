@@ -60,7 +60,8 @@ struct Args {
     pressure: Option<f32>,
 
     /// Age of the oldest surviving surface in Ga, in [0, 4.6]: how long
-    /// impacts have cratered it (Earth: about 0.4, the Moon: 4.4)
+    /// impacts have cratered it (Earth: about 0.4, the Moon: 4.4); at most
+    /// the star's age, a larger value is lowered to it
     /// [default: from the preset, else random in 0.2..0.6]
     #[arg(long, value_parser = parse_in(request::SURFACE_AGE_GA))]
     surface_age: Option<f32>,
@@ -101,7 +102,8 @@ struct Args {
     /// (about 10 Gyr for the Sun): the older it is, the more planets its
     /// tides have locked and the more its giants have cooled. With --system
     /// the whole system shares it [default: drawn from the seed, between
-    /// 0.5 and 10 Gyr, or the star's life if shorter]
+    /// 0.5 and 10 Gyr, or the star's life if shorter; a star drawn at
+    /// random is redrawn until it lives that long]
     #[arg(long)]
     age: Option<f32>,
 

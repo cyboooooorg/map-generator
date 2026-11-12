@@ -1243,6 +1243,8 @@ pub fn small_body_params(
         crate::preset::ParamDefault::Fixed(v) => v,
         crate::preset::ParamDefault::Range([lo, _]) => lo,
     });
+    // A surface is never older than its system.
+    let surface_age_ga = surface_age_ga.min(planet.age_gyr);
     WorldParams {
         width,
         height: width / 2,

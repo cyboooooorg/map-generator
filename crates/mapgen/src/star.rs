@@ -261,6 +261,26 @@ pub fn draw_type(rng: &mut impl RngExt) -> f32 {
     class as f32 * 10.0 + half
 }
 
+/// A drawn type ([`draw_type`]) whose star lives at least `age_gyr` when an
+/// age is asked for: a type that does not is drawn again, so that `--age`
+/// never refuses a star the user did not choose. Without an age it is
+/// [`draw_type`] itself, so the draws do not change. At most 64 tries (a
+/// fraction of a percent of the stars live under 0.1 Gyr; an age beyond
+/// every lifetime ends on the last draw and is refused by
+/// [`resolve_age_gyr`]).
+pub fn draw_type_living(age_gyr: Option<f32>, rng: &mut impl RngExt) -> f32 {
+    let mut code = draw_type(rng);
+    if let Some(age) = age_gyr {
+        for _ in 0..64 {
+            if age <= lifetime_gyr(values(code).mass) {
+                break;
+            }
+            code = draw_type(rng);
+        }
+    }
+    code
+}
+
 /// Flux at the edges of the habitable zone, relative to Earth's (S⊕),
 /// for an effective temperature: Kopparapu et al. 2014, runaway greenhouse
 /// (inner) and maximum greenhouse (outer), for a 1 M⊕ planet. The fit
