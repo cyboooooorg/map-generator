@@ -3,7 +3,9 @@
 //! rather than from a type name (see
 //! `docs/superpowers/specs/2026-11-11-physical-planet-model-design.md`).
 //!
-//! [`PlanetInputs`] holds the drawn quantities; [`interior::solid_interior`]
+//! [`PlanetInputs`] holds the drawn quantities, which
+//! [`inputs::draw_inputs`] draws from the formation [`inputs::Context`]
+//! and the mass; [`interior::solid_interior`]
 //! derives the iron, rock and water layers, and [`interior::interior`] adds
 //! the hydrogen and helium envelope under the star's [`Exposure`], giving
 //! the radius, the bulk density and the surface gravity.
@@ -14,10 +16,12 @@
 use serde::{Deserialize, Serialize};
 
 pub mod heat;
+pub mod inputs;
 pub mod interior;
 pub mod reference;
 
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, radiogenic_w, tidal_power_w};
+pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
 
