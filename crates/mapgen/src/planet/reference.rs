@@ -24,7 +24,8 @@
 //! - Titan: about 45 % ice (Iess et al. 2010, doi:10.1126/science.1182583).
 //! - Giants: envelope and ice shares of Guillot 2005
 //!   (doi:10.1146/annurev.earth.33.092203.122639) and Helled et al. 2011
-//!   (doi:10.1088/0004-637X/726/1/15), rounded; Task 3 checks them.
+//!   (doi:10.1088/0004-637X/726/1/15), rounded. Their radii come from
+//!   `giants::giant_radius` (see `interior::interior`).
 
 /// A Solar System body with its composition and its observed radius.
 #[derive(Clone, Debug, PartialEq)]
@@ -123,6 +124,28 @@ pub(crate) fn inputs(
         envelope_fraction: 0.0,
         volatiles: super::Volatiles::default(),
         radiogenic: 1.0,
+    }
+}
+
+/// Inputs of `mass_earth` with an `envelope` share of hydrogen and helium,
+/// Earth-like rock (CMF 0.325), no water, no volatiles.
+#[cfg(test)]
+pub(crate) fn with_envelope(mass_earth: f64, envelope: f64) -> super::PlanetInputs {
+    super::PlanetInputs {
+        envelope_fraction: envelope,
+        ..inputs(mass_earth, 0.325, 0.0)
+    }
+}
+
+/// What the Sun gives a body at `orbit_au`, at 4.6 Gyr: insolation `1/a²`
+/// and the equilibrium temperature of [`crate::star::equilibrium_k`].
+#[cfg(test)]
+pub(crate) fn exposure_at(orbit_au: f64) -> super::Exposure {
+    let insolation = 1.0 / (orbit_au * orbit_au);
+    super::Exposure {
+        insolation,
+        equilibrium_k: f64::from(crate::star::equilibrium_k(insolation as f32)),
+        age_gyr: 4.6,
     }
 }
 

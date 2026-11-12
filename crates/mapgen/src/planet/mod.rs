@@ -4,15 +4,17 @@
 //! `docs/superpowers/specs/2026-11-11-physical-planet-model-design.md`).
 //!
 //! [`PlanetInputs`] holds the drawn quantities; [`interior::solid_interior`]
-//! derives the iron, rock and water layers, the radius, the bulk density
-//! and the surface gravity. [`reference::SOLAR_BODIES`] lists the Solar
-//! System bodies the relations are checked against.
+//! derives the iron, rock and water layers, and [`interior::interior`] adds
+//! the hydrogen and helium envelope under the star's [`Exposure`], giving
+//! the radius, the bulk density and the surface gravity.
+//! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
+//! are checked against.
 use serde::{Deserialize, Serialize};
 
 pub mod interior;
 pub mod reference;
 
-pub use interior::solid_interior;
+pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
 
 /// Kilograms of each volatile per kilogram of planet.
@@ -58,6 +60,18 @@ pub struct Layer {
     pub mass_earth: f64,
     /// Outer radius of the layer, Earth radii.
     pub outer_radius_earth: f64,
+}
+
+/// What a planet's star gives it, which sets the size of a hydrogen and
+/// helium envelope.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Exposure {
+    /// Light received, Earth's = 1.
+    pub insolation: f64,
+    /// Equilibrium temperature, K.
+    pub equilibrium_k: f64,
+    /// Age of the system, Gyr.
+    pub age_gyr: f64,
 }
 
 /// The layered structure of a planet and its bulk quantities.
