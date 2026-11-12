@@ -31,6 +31,10 @@ pub struct Context {
     pub equilibrium_k: f64,
     /// Age of the system, Gyr.
     pub age_gyr: f64,
+    /// Effective temperature of the star, K.
+    pub teff_k: f64,
+    /// Luminosity of the star, solar units.
+    pub luminosity: f64,
 }
 
 impl Context {
@@ -47,6 +51,8 @@ impl Context {
             insolation: f64::from(star.insolation),
             equilibrium_k: f64::from(star.equilibrium_k),
             age_gyr: f64::from(star.age_gyr),
+            teff_k: f64::from(star.teff_k),
+            luminosity: f64::from(star.luminosity),
         }
     }
 
@@ -328,6 +334,8 @@ mod tests {
             insolation,
             equilibrium_k: 255.0 * insolation.powf(0.25),
             age_gyr: 4.6,
+            teff_k: 5772.0,
+            luminosity: 1.0,
         }
     }
 

@@ -300,3 +300,6 @@ reports of the paper) were not checked in the papers themselves.
   locking has gone.
 - [docs/superpowers/specs/2026-11-11-physical-planet-model-design.md](../superpowers/specs/2026-11-11-physical-planet-model-design.md):
   the design of the model.
+
+For the atmosphere, climate and XUV history of a planet see
+[planet-atmospheres.md](planet-atmospheres.md).

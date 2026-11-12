@@ -30,12 +30,14 @@ pub mod heat;
 pub mod inputs;
 pub mod interior;
 pub mod reference;
+pub mod xuv;
 
 pub use classify::{PlanetClass, classify};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, radiogenic_w, tidal_power_w};
 pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
+pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
 
 /// Kilograms of each volatile per kilogram of planet.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
