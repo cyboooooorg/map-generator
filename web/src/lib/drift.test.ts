@@ -15,7 +15,7 @@ const meta = (overrides: Record<string, unknown> = {}) =>
     axial_tilt_deg: 23,
     pressure_bar: 1,
     surface_age_ga: 4,
-    star: { type: 'G2V', orbit_au: 1, eccentricity: 0, metallicity: 0 },
+    star: { type: 'G2V', orbit_au: 1, eccentricity: 0, metallicity: 0, age_gyr: 8.5 },
     width: 1024,
     height: 512,
     preset: { geology: { regime: 'plates', wet_until: 0 } },
@@ -55,6 +55,8 @@ describe('drift', () => {
 
   it('asks for the same world at another epoch', () => {
     expect(driftRequest(meta(), -150)).toMatchObject({ planet: 'terran', seed: 7, drift_ma: -150 });
+    // The epoch of a planet of a system is another epoch of the same star age.
+    expect(driftRequest(meta(), -150).age_gyr).toBe(8.5);
     // The present leaves the epoch out, even from a drifted world.
     expect(driftRequest(meta({ drift_ma: -80 }), 0)).not.toHaveProperty('drift_ma');
   });

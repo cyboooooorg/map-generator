@@ -156,6 +156,10 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     star: meta.star.type,
     orbit_au: round(meta.star.orbit_au, 5),
     eccentricity: round(meta.star.eccentricity, 4),
+    // The star's age, as stored (not rounded: one rounded up past a short-lived
+    // star's life is refused). A planet of a system keeps its system's age, which
+    // its own seed would not draw again.
+    age_gyr: meta.star.age_gyr,
     // A world away from the present of its plates (0 is left out).
     ...(meta.drift_ma ? { drift_ma: meta.drift_ma } : {}),
     // A world whose moons were turned off.
@@ -193,6 +197,7 @@ export function cliCommand(meta: WorldMetadata): string {
     `--star ${r.star}`,
     `--orbit-au ${r.orbit_au}`,
     `--eccentricity ${r.eccentricity}`,
+    ...(r.age_gyr === undefined ? [] : [`--age ${r.age_gyr}`]),
     ...(r.drift_ma === undefined ? [] : [`--drift=${r.drift_ma}`]),
     ...(r.moons === undefined ? [] : [`--moons ${typeof r.moons === 'object' ? r.moons.count : r.moons}`]),
     ...(r.metallicity === undefined ? [] : [`--metallicity=${r.metallicity}`]),

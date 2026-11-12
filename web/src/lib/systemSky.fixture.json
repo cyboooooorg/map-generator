@@ -46,7 +46,8 @@
     0.9997768,
     0.9994095
    ],
-   "metallicity": 0.0
+   "metallicity": 0.0,
+   "age_gyr": 4.6
   },
   "metallicity": -0.12842736,
   "ice_line_au": 2.7312648

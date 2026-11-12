@@ -14,7 +14,7 @@ const meta = {
   erosion: 1,
   pressure_bar: 0.41237,
   surface_age_ga: 1.23456,
-  star: { type: 'M4.5V', orbit_au: 0.0812345, eccentricity: 0.123456, metallicity: 0.1 },
+  star: { type: 'M4.5V', orbit_au: 0.0812345, eccentricity: 0.123456, metallicity: 0.1, age_gyr: 8.123456 },
   moons: { planet_day_hours: 24 },
   giants: { count: 0 },
   width: 1920,
@@ -36,6 +36,7 @@ describe('format', () => {
       star: 'M4.5V',
       orbit_au: 0.08123,
       eccentricity: 0.1235,
+      age_gyr: 8.123456,
       metallicity: 0.1,
       width: 1920,
       height: 1080,
@@ -43,7 +44,7 @@ describe('format', () => {
     expect(cliCommand(meta)).toBe(
       'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
         '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 ' +
-        '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --metallicity=0.1 --width 1920 --height 1080',
+        '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --age 8.123456 --metallicity=0.1 --width 1920 --height 1080',
     );
     // An epoch of the plates, and moons turned off, are reproduced too.
     const drifted = { ...meta, drift_ma: -120, moons: null } as unknown as WorldMetadata;
@@ -64,6 +65,8 @@ describe('format', () => {
 
   it('rerolls a world with a new seed and every other parameter kept', () => {
     expect(rerollRequest(meta, 7)).toEqual({ ...requestFromWorld(meta), seed: 7 });
+    // A planet of a system keeps the age of its star under a new seed.
+    expect(rerollRequest(meta, 7).age_gyr).toBe(8.123456);
     const seed = rerollRequest(meta).seed ?? -1;
     expect(Number.isInteger(seed) && seed >= 0 && seed <= MAX_SEED).toBe(true);
     expect(Number.isInteger(randomSeed())).toBe(true);
