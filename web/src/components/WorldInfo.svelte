@@ -3,7 +3,7 @@
   import { biomeName, presetDescription, presetName } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
   import { downloadRawData, downloadSvg } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAge, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
@@ -187,6 +187,8 @@
         {#if meta.star}
           {@const star = meta.star}
           <dd class="unit-help" title={unitTooltip('L☉')}>{formatStar(star)}</dd>
+          <dt>{t.worldInfo.age}</dt>
+          <dd>{formatAge(star.age_gyr)}</dd>
           <dt>{t.worldInfo.orbit}</dt>
           <dd
             class="unit-help"

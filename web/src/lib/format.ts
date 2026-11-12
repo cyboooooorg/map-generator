@@ -251,9 +251,17 @@ export function formatAtmosphere(meta: WorldMetadata): string {
  */
 export function formatGeology(meta: WorldMetadata): string {
   const regime = t.regimes[meta.preset.geology.regime];
-  const age = meta.surface_age_ga;
-  const shown = age >= 1 ? withUnit(formatNumber(age, 1), 'Ga') : withUnit(formatNumber(age * 1000), 'Ma');
-  return t.worldInfo.geologySurface({ regime, age: shown });
+  return t.worldInfo.geologySurface({ regime, age: formatSurfaceAge(meta.surface_age_ga) });
+}
+
+/** A surface age in Ga, or in Ma under 1 Ga. */
+export function formatSurfaceAge(ga: number): string {
+  return ga >= 1 ? withUnit(formatNumber(ga, 1), 'Ga') : withUnit(formatNumber(ga * 1000), 'Ma');
+}
+
+/** The age of a star or of the bodies of its system, in Ga, with two decimals at most. */
+export function formatAge(gyr: number): string {
+  return withUnit(formatUpTo(gyr, 2), 'Ga');
 }
 
 /** The star line of the world card: type, temperature and luminosity. */

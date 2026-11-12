@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { driftRequest } from './drift';
-import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatAge, formatSurfaceAge, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
 
 const meta = {
   planet_type: 'frozen',
@@ -138,5 +138,18 @@ describe('keepAlone', () => {
     expect(keepAlone(request, stored({ around: { alone: false } }))).toBe(request);
     expect(keepAlone(request, stored({ system: {} }))).toBe(request);
     expect(keepAlone(request, null)).toBe(request);
+  });
+});
+
+describe('ages on the cards', () => {
+  it('writes the system age in Ga with two decimals at most', () => {
+    expect(formatAge(8.123456)).toBe('8.12\u00a0Ga'.replace('\u00a0', ' '));
+    expect(formatAge(0.5)).toContain('0.5');
+    expect(formatAge(meta.star!.age_gyr)).toContain('8.12');
+  });
+
+  it('writes a surface age in Ga, or Ma under 1 Ga', () => {
+    expect(formatSurfaceAge(3.84)).toContain('3.8');
+    expect(formatSurfaceAge(0.42)).toContain('420');
   });
 });

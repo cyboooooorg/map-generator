@@ -699,7 +699,7 @@ addressed as `<system-id>/<body-id>` everywhere.
   generated yet in its preview's belts, land and caps). Hovering
   a planet rings it and opens its card beside it, linked by a line: name
   and type, radius and mass, semi-major axis and eccentricity, current
-  speed, year, day, light, surface gravity, equilibrium temperature,
+  speed, year, age (the system's), day, light, surface gravity, equilibrium temperature,
   place relative to the habitable zone, moons (links to them), and
   whether it is generated, with a button that opens it. A click or a tap
   pins the card, and several pinned cards can be compared side by side,
@@ -760,7 +760,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   A sphere's card gives what the draw fixed (orbit, size, mass, type,
   temperature, spin) and says that its maps are not made yet. The card
   follows the body picker, under a short system summary (star, planet
-  strip). **Rename** moves into the card and names any body.
+  strip). **Rename** moves into the card and names any body. The age of
+  the system, drawn per system, shows in the star's summary, and on each
+  body's card with its surface age (capped at the system's).
 
 ## Removing the old worlds
 

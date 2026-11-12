@@ -4,7 +4,7 @@
   // kept open by its pin (see StarPane.svelte and lib/planetCard.ts).
   import { scale } from 'svelte/transition';
   import type { StarInfo } from '../lib/api/types/StarInfo';
-  import { formatAu, formatInt, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { formatAge, formatAu, formatInt, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { t } from '../lib/i18n/index.svelte';
   import { type CardBox, type CardMetric, type Extreme, linkEnd, zonePlace } from '../lib/planetCard';
   import type { SystemPlanet } from '../lib/systemStar';
@@ -139,6 +139,8 @@
     <dd>{@render value('speed', t.planetCard.speedNow({ speed }))}</dd>
     <dt>{t.planetCard.year}</dt>
     <dd>{@render value('year', formatYear(planet.year_days))}</dd>
+    <dt>{t.planetCard.age}</dt>
+    <dd>{formatAge(star.age_gyr)}</dd>
     <dt>{t.planetCard.day}</dt>
     <dd>{@render value('day', day)}</dd>
     <dt>{t.planetCard.light}</dt>
