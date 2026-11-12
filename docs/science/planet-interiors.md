@@ -78,7 +78,7 @@ between their 1.911 (300 K) and 1.981 (700 K), and within 6 % of them from
 1 to 20 Earth masses.
 
 **The envelope.** A hydrogen and helium envelope adds to the radius a
-thickness that Lopez & Fortney (2014, eq. 3) fit:
+thickness that Lopez & Fortney (2014) fit:
 
 ```math
 R_\mathrm{env} = 2.06\,R_\oplus\, M^{-0.21} \left(\frac{f}{5\,\%}\right)^{0.59} S^{0.044} \left(\frac{t}{5\,\mathrm{Gyr}}\right)^{-0.11}
@@ -86,7 +86,9 @@ R_\mathrm{env} = 2.06\,R_\oplus\, M^{-0.21} \left(\frac{f}{5\,\%}\right)^{0.59} 
 
 with $M$ the mass in Earth masses, $f$ the envelope's share of the mass,
 $S$ the light received (Earth's = 1) and $t$ the age. The age exponent is
-that of their solar-metallicity models rather than the −0.18 of eq. 3.
+that of their solar-metallicity models (the text of the paper gives −0.11
+for them and −0.18 for the enhanced-opacity models the printed fit was
+made on).
 
 **In words.** A heavier planet squeezes its envelope; a thicker envelope
 swells it; more light and a younger age swell it a little. The relation
@@ -144,7 +146,7 @@ The class is read off the result, in this order; the first rule that holds
 wins.
 
 | Class | Rule | Source of the threshold |
-|---|---|---|
+| --- | --- | --- |
 | Giant: gas giant | at least 10 Earth masses and 5 % gas; at least 50 % of the mass in gas | calibration (parts Jupiter and Saturn from Uranus and Neptune) |
 | Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012 |
 | Giant: ice giant | a giant with less than 50 % gas | same calibration |
@@ -204,7 +206,7 @@ and envelope per class
 - **Uranus is 11.6 % too small.** The envelope of a giant uses the
   generator's existing giant radius, which gives Uranus 3.52 $R_\oplus$
   against 3.98 observed. A test for it is ignored until the radius is
-  fixed.
+  fixed (issue #432).
 - **Too many mini-Neptunes.** The model has no atmospheric escape yet:
   close-in planets keep gas that photoevaporation would strip, which
   carves the radius valley Fulton et al. (2017) found at 1.5 to 2 $R_\oplus$.
@@ -228,7 +230,8 @@ and envelope per class
 3. Borucki, W. J. et al. 2011, *The Astrophysical Journal* 736, 19,
    [doi:10.1088/0004-637X/736/1/19](https://doi.org/10.1088/0004-637X/736/1/19).
 4. Chen, J. & Kipping, D. 2017, "Probabilistic forecasting of the masses and
-   radii of other worlds", *The Astrophysical Journal* 834, 17.
+   radii of other worlds", *The Astrophysical Journal* 834, 17,
+   [doi:10.3847/1538-4357/834/1/17](https://doi.org/10.3847/1538-4357/834/1/17).
 5. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
    the radius distribution of small planets", *The Astronomical Journal*
    154, 109,
@@ -251,7 +254,8 @@ and envelope per class
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
 11. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
-    Letters* 313–314, 56–66.
+    Letters* 313–314, 56–66,
+    [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
 12. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
@@ -265,7 +269,8 @@ and envelope per class
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
 16. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
-    radius anomalies", *The Astronomical Journal* 155, 214.
+    radius anomalies", *The Astronomical Journal* 155, 214,
+    [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
 17. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
 18. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
@@ -279,9 +284,12 @@ and envelope per class
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
 
-The Chen & Kipping, Marty and Thorngren & Fortney references are given
-from memory of the journal, without a DOI; check them before relying on
-them.
+The three DOIs above were checked against the publishers' pages. Of the
+figures quoted from papers, Marty's 1000 to 3000 ppm of water and up to
+500 ppm of carbon match the abstract; his 2 ppm of nitrogen (the abstract
+only says nitrogen is depleted by about an order of magnitude) and the
+"5 of 22 rocky planets" of Adibekyan et al. 2021 (22 comes from press
+reports of the paper) were not checked in the papers themselves.
 
 ## See also
 

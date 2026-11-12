@@ -316,7 +316,7 @@ day side turns ochre and the halo loses its blue.
 ### Step 5: tidal locking
 
 A planet is locked when its locking time is shorter than its star's age
-(4.6 Gyr or its lifetime): at the middle of their habitable zones, M
+(its `age_gyr`: drawn from 0.5 Gyr to its lifetime, or asked for): at the middle of their habitable zones, M
 dwarfs' planets lock (M0V: 1.4 Gyr), K5V's do not (12 Gyr). Its
 temperature follows the angle θ from the substellar point, at the map's
 centre: `4 cos θ` times the mean light on the day side (none at night),

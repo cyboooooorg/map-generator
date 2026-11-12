@@ -127,7 +127,9 @@ const AU_M: f64 = 1.495_978_707e11;
 
 /// Tidal response `k₂/Q` of a planet raised by its star: the rocky moons'
 /// of `crate::exomoon` (Io's, Lainey et al. 2009,
-/// doi:10.1038/nature08108).
+/// doi:10.1038/nature08108). Applied to a giant it overestimates the tidal
+/// heat (a hot Jupiter gets more than the starlight it absorbs): a giant's
+/// own k₂ and Q are issue #433.
 const K2_OVER_Q: f64 = 0.015;
 
 /// The model of a planet of `inputs` in its formation `context`: its

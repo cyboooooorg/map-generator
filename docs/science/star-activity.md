@@ -300,10 +300,11 @@ quarter and half of the square's side, always starts outside the disc.
 
 [`activity.rs`](../../crates/mapgen/src/activity.rs) derives a
 `StarActivity` from the star's temperature, mass, radius and age
-(`StarInfo::age_gyr`, drawn per system) and the system's seed. The seed draws, from
-its own stream (`STAR_ACTIVITY`) and in a fixed order: a scatter of the
-rotation period, a scatter of the cycle period, the cycle's phase at day
-0, and the seed of the region timeline the browser draws.
+(`StarInfo::age_gyr`, drawn per system) and the system's seed. The seed
+draws, from its own stream (`STAR_ACTIVITY`) and in a fixed order: a
+scatter of the rotation period, a scatter of the cycle period, the
+cycle's phase at day 0, and the seed of the region timeline the browser
+draws.
 
 1. **Envelope**: radiative at or above 7,200 K (the granulation boundary
    of Gray & Nagel 1989, near F0V), fully convective below 0.35 M☉
@@ -613,7 +614,8 @@ half; its age is the region's age over its life. Every number below is a
   scatters of the rotation and cycle periods (0.15 in the log).
 - **The Kraft-break ramp and the 150 km/s of A stars are fixed values**
   where real stars spread widely, and young stars, which turn faster,
-  are not modelled: every star has the age `system_age_gyr` gives it.
+  are modelled only through the star's age (drawn from 0.5 Gyr, or
+  asked for): the rotation period and the activity follow it.
 - **$\Delta\Omega \propto T^{8.92}$ was measured on young G to M rapid
   rotators.** Applied to hotter stars it overshoots: the shear is
   clamped to 0.5, which radiative stars all reach.

@@ -937,8 +937,8 @@ times denser and each crater is kept with the share
 `(1 + k cos γ) / (1 + k)`, γ its angle to the apex (longitude 90°, on the
 equator), `k = (1.3 − 1) / (1.3 + 1)`: an apex-to-antapex ratio of 1.3,
 about 1.14 from one hemisphere to the other (tested), the mean density
-kept. Craters older than the locking (`min(4.6 Gyr, the star's
-lifetime) − locking time` ago) are kept with the mean share, wherever
+kept. Craters older than the locking (`the star's age −
+locking time` ago) are kept with the mean share, wherever
 they are. The share is a draw of its own after the crater's others, made
 only on locked worlds: unlocked worlds keep the same craters. Larger
 craters on the leading side (faster impacts) are not modelled.

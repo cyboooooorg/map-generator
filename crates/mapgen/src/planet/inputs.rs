@@ -91,8 +91,9 @@ const CMF_RANGE: (f64, f64) = (0.15, 0.55);
 /// Closest orbits, as a share of the ice-line distance, where giant
 /// impacts strip mantles, and how often they do. Calibration, no source:
 /// Mercury, and the super-Mercuries Adibekyan et al. (2021) find a
-/// distinct population (5 of their 22 rocky planets, a sample biased
-/// towards them; a few percent of small planets overall).
+/// distinct population (5 of their 22 rocky planets, from press reports
+/// of the paper, not checked there; a sample biased towards them; a few
+/// percent of small planets overall).
 const STRIP_MAX_X: f64 = 0.3;
 const STRIP_CHANCE: f64 = 0.05;
 
@@ -151,16 +152,18 @@ const ICE_GIANT_ENVELOPE: (f64, f64) = (0.05, 0.3);
 const GAS_GIANT_MASS: f64 = 30.0;
 
 /// Heavy-element mass of a gas giant, Earth masses, at most a tenth of
-/// the planet. Calibration, no source: Saturn's 300 M⊕ keep about 15 to
-/// 20 in heavy elements; Jupiter, more than the 30 this allows it.
+/// the planet. Calibration, no source: Saturn's 95 M⊕ keep about 15 to
+/// 20 in heavy elements, at the top of this range; Jupiter's 318 M⊕ keep
+/// more than the 20 M⊕ this allows it.
 const GIANT_CORE: (f64, f64) = (5.0, 20.0);
 const GIANT_CORE_MAX_SHARE: f64 = 0.1;
 
 /// Carbon and nitrogen per kilogram of rock and iron: Earth and Venus
 /// hold about 1e-4 of carbon (Marty 2012, Earth Planet. Sci. Lett. 313,
 /// 56, gives up to 500 ppm in the silicate Earth) and Earth about 2e-6 of
-/// nitrogen (Marty 2012: about 2 ppm). Sulphur at 1e-4: calibration, no
-/// source.
+/// nitrogen (about 2 ppm: not checked in Marty 2012, whose abstract says
+/// nitrogen is depleted by about an order of magnitude against water).
+/// Sulphur at 1e-4: calibration, no source.
 const ROCK_CO2: f64 = 1e-4;
 const ROCK_N2: f64 = 2e-6;
 const ROCK_S: f64 = 1e-4;

@@ -293,8 +293,8 @@ pub fn locking_gyr(orbit_au: f32, mass: f32) -> f32 {
 
 // In StarInfo::new:
 let locking = locking_gyr(orbit_au, v.mass);
-tidally_locked: crate::spin::locked(locking, AGE_GYR.min(lifetime), eccentricity),
-spin_orbit_3_2: crate::spin::resonant(locking, AGE_GYR.min(lifetime), eccentricity),
+tidally_locked: crate::spin::locked(locking, age_gyr, eccentricity),
+spin_orbit_3_2: crate::spin::resonant(locking, age_gyr, eccentricity),
 
 // spin.rs
 pub const RESONANCE_CAPTURE_ECCENTRICITY: f32 = 0.06;

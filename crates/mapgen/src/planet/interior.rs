@@ -120,10 +120,10 @@ pub const GIANT_MIN_ENVELOPE: f64 = 0.05;
 /// planet's mass (Earth masses), the envelope's share of it, the
 /// insolation (Earth's = 1) and the age (Gyr).
 ///
-/// Lopez & Fortney (2014, doi:10.1088/0004-637X/792/1/1), eq. 3:
+/// Lopez & Fortney (2014, doi:10.1088/0004-637X/792/1/1), their fit:
 /// `R_env = 2.06 R⊕ M^−0.21 (f/5 %)^0.59 S^0.044 (age/5 Gyr)^−0.11`, with
-/// the age exponent of their solar-metallicity models (eq. 3 itself,
-/// fitted to enhanced-opacity models, has −0.18). The fit is within about
+/// the age exponent of their solar-metallicity models (the printed fit,
+/// made on enhanced-opacity models, has −0.18). The fit is within about
 /// 0.1 dex of their full models. The mass, insolation and age are clamped
 /// to the grid it was fitted on (1–20 M⊕, 0.1–1000 S⊕, 0.1–10 Gyr), and
 /// the envelope share to at most 20 % of the mass. Below the grid's
@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     #[ignore = "giants::giant_radius gives Uranus 3.52 R⊕ (3.98 observed, −11.6 %): \
-                its M^0.59 law below Neptune's mass; left to the main session (#423)"]
+                its M^0.59 law below Neptune's mass; issue #432"]
     fn uranus_comes_out_its_size() {
         assert_giant_size("Uranus", 0.08);
     }
