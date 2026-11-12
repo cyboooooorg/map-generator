@@ -11,7 +11,12 @@
 //! 2. the share of planets in each radius bin of Fulton et al. (2017,
 //!    doi:10.3847/1538-3881/aa80eb);
 //! 3. the median age, core mass fraction, water fraction and envelope
-//!    fraction of each class.
+//!    fraction of each class;
+//! 4. the class mix, the surface liquid mix, the share with life and the
+//!    tectonic regime mix, over the planets that have a surface;
+//! 5. the radius histogram, in bins of 0.25 R_earth, of the planets with a
+//!    period under 100 days (the radius valley of Fulton et al. 2017
+//!    shows as a dip between 1.5 and 2 R_earth).
 use std::collections::BTreeMap;
 
 use mapgen::planet::body_model;
@@ -63,6 +68,13 @@ fn main() {
     let mut bins = [0u32; BINS.len()];
     let mut stats: BTreeMap<&'static str, ClassStats> = BTreeMap::new();
     let mut planets = 0u32;
+    let mut with_surface = 0u32;
+    let mut liquids: BTreeMap<String, u32> = BTreeMap::new();
+    let mut regimes: BTreeMap<String, u32> = BTreeMap::new();
+    let mut life = 0u32;
+    let mut oxygenated = 0u32;
+    let mut close_in = [0u32; 20];
+    let mut close_in_total = 0u32;
 
     for seed in 1..=count {
         let request = SystemRequest::System(WholeSystemRequest {
@@ -82,6 +94,20 @@ fn main() {
                 .rposition(|&(low, _)| radius >= low)
                 .unwrap_or(0);
             bins[bin] += 1;
+            if let Some(surface) = &model.surface {
+                with_surface += 1;
+                *liquids
+                    .entry(format!("{:?}", surface.climate.liquid))
+                    .or_default() += 1;
+                *regimes.entry(format!("{:?}", surface.regime)).or_default() += 1;
+                life += u32::from(surface.life.arose);
+                oxygenated += u32::from(surface.life.oxygenated);
+            }
+            if body.orbit.period_days < 100.0 {
+                close_in_total += 1;
+                let i = ((radius / 0.25) as usize).min(close_in.len() - 1);
+                close_in[i] += 1;
+            }
             let s = stats.entry(class).or_default();
             s.age.push(f64::from(body.params.age_gyr));
             s.cmf.push(model.inputs.core_mass_fraction);
@@ -96,7 +122,7 @@ fn main() {
     let classes: Vec<&'static str> = stats.keys().copied().collect();
     print!("{:<12}", "body_type");
     for c in &classes {
-        print!("{c:>13}");
+        print!("{c:>20}");
     }
     println!("{:>8}", "total");
     let types: Vec<String> = {
@@ -110,7 +136,7 @@ fn main() {
         for c in &classes {
             let n = cross.get(&(t.clone(), *c)).copied().unwrap_or(0);
             total += n;
-            print!("{n:>13}");
+            print!("{n:>20}");
         }
         println!("{total:>8}");
     }
@@ -126,17 +152,52 @@ fn main() {
 
     println!("\nmedians per class");
     println!(
-        "{:<13}{:>7}{:>10}{:>7}{:>9}{:>10}",
+        "{:<20}{:>7}{:>10}{:>7}{:>9}{:>10}",
         "class", "planets", "age Gyr", "CMF", "water", "envelope"
     );
     for (class, s) in &mut stats {
         println!(
-            "{class:<13}{:>7}{:>10.2}{:>7.3}{:>9.4}{:>10.4}",
+            "{class:<20}{:>7}{:>10.2}{:>7.3}{:>9.4}{:>10.4}",
             s.age.len(),
             median(&mut s.age),
             median(&mut s.cmf),
             median(&mut s.water),
             median(&mut s.envelope),
+        );
+    }
+
+    let share = |n: u32, of: u32| 100.0 * f64::from(n) / f64::from(of.max(1));
+
+    println!("\nclass mix ({planets} planets)");
+    let mut mix: Vec<(&&str, u32)> = stats.iter().map(|(c, s)| (c, s.age.len() as u32)).collect();
+    mix.sort_by_key(|&(_, n)| std::cmp::Reverse(n));
+    for (class, n) in mix {
+        println!("{class:<20}{:>6.1} %  ({n})", share(n, planets));
+    }
+
+    println!("\nplanets with a surface: {with_surface}");
+    println!("\nsurface liquid ({with_surface} planets with a surface)");
+    for (liquid, n) in &liquids {
+        println!("{liquid:<20}{:>6.1} %  ({n})", share(*n, with_surface));
+    }
+    println!("\ntectonic regime ({with_surface} planets with a surface)");
+    for (regime, n) in &regimes {
+        println!("{regime:<20}{:>6.1} %  ({n})", share(*n, with_surface));
+    }
+    println!(
+        "\nlife: {:.1} % of planets with a surface ({life}), {:.1} % oxygenated ({oxygenated})",
+        share(life, with_surface),
+        share(oxygenated, with_surface)
+    );
+
+    println!("\nradius histogram, period under 100 days ({close_in_total} planets)");
+    for (i, n) in close_in.iter().enumerate() {
+        let low = 0.25 * i as f64;
+        let last = if i + 1 == close_in.len() { "+" } else { "" };
+        println!(
+            "{low:>5.2}-{:<5.2}{last:<2}{:>6.1} %  ({n})",
+            low + 0.25,
+            share(*n, close_in_total)
         );
     }
 }

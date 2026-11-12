@@ -171,7 +171,7 @@ pub(crate) struct Derived {
     pub gases: super::Gases,
     pub water: super::Water,
     pub regime: crate::geology::Regime,
-    /// Internal heat flux through the surface, W/m² (radiogenic only).
+    /// Internal heat flux through the surface, W/m².
     pub heat_flux_w_m2: f64,
 }
 
@@ -189,34 +189,20 @@ pub(crate) fn sun_at(orbit_au: f64) -> super::Context {
     c
 }
 
-/// Runs part 2's chain on `inputs` at `orbit_au` round the Sun: water,
-/// regime, core, outgassing, escape, cold trap, photochemistry; no tides.
+/// Runs [`super::planet_model`]'s chain on `inputs` at `orbit_au` round
+/// the Sun and returns what it had before the climate; no tides
+/// (circular orbit). `inputs` must leave no envelope.
 #[cfg(test)]
 pub(crate) fn derive_at(inputs: &super::PlanetInputs, orbit_au: f64) -> Derived {
-    use super::{
-        InternalHeat, atmosphere, cold_trap, core, interior, outgassed, photochemistry,
-        radiogenic_w, regime, water, xuv_fluence,
-    };
     let context = sun_at(orbit_au);
-    let int = interior(inputs, &context.exposure());
-    let fluence = xuv_fluence(&context);
-    let w = water(&context, inputs, &int, fluence);
-    let silicate = inputs.mass_earth * (1.0 - inputs.water_fraction) * crate::exomoon::EARTH_KG;
-    let heat = InternalHeat {
-        radiogenic_w: radiogenic_w(silicate, inputs.radiogenic, context.age_gyr),
-        tidal_w: 0.0,
-    };
-    let r = regime(inputs, &heat, &int, &w);
-    let k = core(inputs, &int, r, context.age_gyr);
-    let out = outgassed(inputs, &w, r, &int);
-    let air = atmosphere(out, &int, inputs.mass_earth, &k, fluence);
-    let gases = photochemistry(cold_trap(air, context.equilibrium_k), context.equilibrium_k);
+    let (model, air) = super::chain(&context, inputs.clone());
+    let air = air.expect("a body with an envelope has no surface");
     Derived {
-        heat_flux_w_m2: heat.flux_w_m2(int.radius_earth),
+        heat_flux_w_m2: model.heat.flux_w_m2(model.interior.radius_earth),
         context,
-        gases,
-        water: w,
-        regime: r,
+        gases: air.gases,
+        water: air.water,
+        regime: air.regime,
     }
 }
 

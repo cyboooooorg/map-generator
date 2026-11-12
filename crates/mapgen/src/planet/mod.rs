@@ -22,7 +22,8 @@
 //! its surface.
 //! [`life::life`] decides whether life arose where water lasted, and
 //! [`life::oxygenate`] gives the air its oxygen.
-//! [`classify::classify`] reads its [`PlanetClass`] off the result, and
+//! [`classify::classify`] reads its [`PlanetClass`], including the surface
+//! classes, off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`body_model`] for a planet of a stored system.
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
@@ -148,7 +149,32 @@ pub struct PlanetModel {
     pub xuv_fluence: f64,
     /// Share of the initial envelope that photoevaporation took, 0 to 1.
     pub envelope_lost: f64,
+    /// What the body's surface is like; `None` when an envelope is left
+    /// (at least [`escape::MIN_ENVELOPE`] of the mass), which hides it.
+    pub surface: Option<Surface>,
     pub class: PlanetClass,
+}
+
+/// A bare body's surface: the water it kept, how it loses its heat, its
+/// core, its air and climate, and its life.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Surface {
+    pub water: Water,
+    pub regime: crate::geology::Regime,
+    pub core: Core,
+    /// The air as the climate and the life leave it (oxygenated if so).
+    pub gases: Gases,
+    pub climate: Climate,
+    pub life: Life,
+}
+
+/// What the chain derives before the climate, for the tests that vary the
+/// climate afterwards.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) struct Air {
+    pub water: Water,
+    pub regime: crate::geology::Regime,
+    pub gases: Gases,
 }
 
 /// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
@@ -167,8 +193,18 @@ const AU_M: f64 = 1.495_978_707e11;
 /// the system's age; its tidal heat from the star at its orbit, with the
 /// [`heat::k2_over_q`] of its envelope and water shares (a giant's is
 /// over a thousand times smaller than a rock's); then its [`classify`]
-/// class, which feeds back into none of them.
+/// class, which feeds back into none of them. A body that keeps an
+/// envelope of [`escape::MIN_ENVELOPE`] or more has no surface; any other
+/// goes on to its [`water`] and [`regime`], its [`core`], its air
+/// ([`outgassed`], [`atmosphere`], [`cold_trap`], [`photochemistry`], in
+/// that order: the photochemistry reads the cold trap's air), its
+/// [`climate`] and its [`life`] with the oxygen it makes.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
+    chain(context, inputs).0
+}
+
+/// [`planet_model`] and the air it had before the climate (see [`Air`]).
+pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Option<Air>) {
     let exposure = context.exposure();
     let fluence = xuv_fluence(context);
     let initial_envelope = inputs.mass_earth * inputs.envelope_fraction;
@@ -194,15 +230,44 @@ pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
             k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
         ),
     };
-    let class = classify(&inputs, &interior, context.period_days());
-    PlanetModel {
+    let mut air = None;
+    let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
+        None
+    } else {
+        let w = water(context, &inputs, &interior, fluence);
+        let r = regime(&inputs, &heat, &interior, &w);
+        let k = core(&inputs, &interior, r, context.age_gyr);
+        let out = outgassed(&inputs, &w, r, &interior);
+        let atm = atmosphere(out, &interior, inputs.mass_earth, &k, fluence);
+        let gases = photochemistry(cold_trap(atm, context.equilibrium_k), context.equilibrium_k);
+        air = Some(Air {
+            water: w,
+            regime: r,
+            gases,
+        });
+        let flux = heat.flux_w_m2(interior.radius_earth);
+        let (gases, climate) = self::climate(context, gases, &w, r, flux);
+        let life = life(&inputs, &climate, context.age_gyr);
+        Some(Surface {
+            water: w,
+            regime: r,
+            core: k,
+            gases: oxygenate(gases, &life),
+            climate,
+            life,
+        })
+    };
+    let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
+    let model = PlanetModel {
         inputs,
         interior,
         heat,
         xuv_fluence: fluence,
         envelope_lost,
+        surface,
         class,
-    }
+    };
+    (model, air)
 }
 
 /// The model of a planet of a stored system; `None` for a moon (part 4).

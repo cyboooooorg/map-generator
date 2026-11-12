@@ -3,7 +3,8 @@
 //! fed back into them ([`classify`]).
 use serde::{Deserialize, Serialize};
 
-use super::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, Interior, PlanetInputs};
+use super::climate::SurfaceLiquid;
+use super::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, Interior, PlanetInputs, Surface};
 
 /// The kind of a planet, from its derived quantities.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -16,11 +17,17 @@ pub enum PlanetClass {
     IceGiant,
     GasGiant,
     HotJupiter,
+    LavaWorld,
+    RunawayGreenhouse,
+    HydrocarbonWorld,
+    OceanWorld,
 }
 
 impl PlanetClass {
     /// The class as stored: `rocky`, `super-earth`, `ice-world`,
-    /// `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`.
+    /// `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
+    /// `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    /// `ocean-world`.
     pub fn key(self) -> &'static str {
         match self {
             Self::Rocky => "rocky",
@@ -30,6 +37,10 @@ impl PlanetClass {
             Self::IceGiant => "ice-giant",
             Self::GasGiant => "gas-giant",
             Self::HotJupiter => "hot-jupiter",
+            Self::LavaWorld => "lava-world",
+            Self::RunawayGreenhouse => "runaway-greenhouse",
+            Self::HydrocarbonWorld => "hydrocarbon-world",
+            Self::OceanWorld => "ocean-world",
         }
     }
 }
@@ -67,6 +78,20 @@ const ICE_WORLD_MIN_WATER: f64 = 0.05;
 /// 1.25 R⊕, super-Earth-size 1.25 to 2).
 const SUPER_EARTH_MIN_RADIUS: f64 = 1.25;
 
+/// Surface pressure above which a runaway greenhouse or a sea of
+/// hydrocarbons gives a class of its own, bar. Calibration, no source: a
+/// runaway with less than 1 bar has lost its air and is a bare rock
+/// (Mercury, Mars); Titan's 1.5 bar holds its seas, while the model
+/// outgasses 0.2 to 0.5 bar of methane on Ganymede and Callisto, far more
+/// than they hold, and they stay ice worlds.
+const DENSE_AIR_BAR: f64 = 1.0;
+
+/// Earth oceans of water kept from which an ocean world drowns all land.
+/// Calibration: Cowan & Abbot 2014, doi:10.1088/0004-637X/781/1/27, find
+/// that the water a planet's basins hold is a few oceans at most, so ten
+/// covers the continents.
+pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
+
 /// Classifies a planet from its `inputs`, its `interior` and its orbital
 /// period, days. The first rule that holds wins:
 ///
@@ -76,11 +101,21 @@ const SUPER_EARTH_MIN_RADIUS: f64 = 1.25;
 ///    star is a hot Jupiter;
 /// 2. an envelope of at least 0.1 % of the mass and a radius of at least
 ///    1.6 R⊕: a mini-Neptune;
-/// 3. at least 5 % water and ices: an ice world;
-/// 4. a super-Earth from 1.25 R⊕, rocky below.
+/// 3. with a `surface` (an enveloped body has none): a lava world (liquid
+///    lava), a runaway greenhouse (runaway and over
+///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
+///    more than [`DENSE_AIR_BAR`]), an
+///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]);
+/// 4. at least 5 % water and ices: an ice world;
+/// 5. a super-Earth from 1.25 R⊕, rocky below.
 ///
 /// The class is read off the model; nothing derives from it.
-pub fn classify(inputs: &PlanetInputs, interior: &Interior, period_days: f64) -> PlanetClass {
+pub fn classify(
+    inputs: &PlanetInputs,
+    interior: &Interior,
+    period_days: f64,
+    surface: Option<&Surface>,
+) -> PlanetClass {
     let envelope = inputs.envelope_fraction;
     let radius = interior.radius_earth;
     if inputs.mass_earth >= GIANT_MIN_MASS_EARTH && envelope >= GIANT_MIN_ENVELOPE {
@@ -93,6 +128,8 @@ pub fn classify(inputs: &PlanetInputs, interior: &Interior, period_days: f64) ->
         }
     } else if envelope >= MINI_NEPTUNE_MIN_ENVELOPE && radius >= MINI_NEPTUNE_MIN_RADIUS {
         PlanetClass::MiniNeptune
+    } else if let Some(class) = surface.and_then(surface_class) {
+        class
     } else if inputs.water_fraction >= ICE_WORLD_MIN_WATER {
         PlanetClass::IceWorld
     } else if radius >= SUPER_EARTH_MIN_RADIUS {
@@ -102,11 +139,27 @@ pub fn classify(inputs: &PlanetInputs, interior: &Interior, period_days: f64) ->
     }
 }
 
+/// The class a surface gives, if it gives one (see [`classify`]).
+fn surface_class(surface: &Surface) -> Option<PlanetClass> {
+    let liquid = surface.climate.liquid;
+    if liquid == SurfaceLiquid::Lava {
+        Some(PlanetClass::LavaWorld)
+    } else if surface.water.runaway && surface.gases.total() > DENSE_AIR_BAR {
+        Some(PlanetClass::RunawayGreenhouse)
+    } else if liquid == SurfaceLiquid::Hydrocarbons && surface.gases.total() > DENSE_AIR_BAR {
+        Some(PlanetClass::HydrocarbonWorld)
+    } else if liquid == SurfaceLiquid::Water && surface.water.oceans >= OCEAN_WORLD_OCEANS {
+        Some(PlanetClass::OceanWorld)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::PlanetClass::*;
     use super::*;
-    use crate::planet::reference::{inputs_of, with_envelope};
+    use crate::planet::reference::{inputs_of, model_inputs, with_envelope};
     use crate::planet::{Context, SOLAR_BODIES, planet_model, reference};
     use crate::star::{DEFAULT_AGE_GYR, StarInfo, parse_type};
 
@@ -126,11 +179,11 @@ mod tests {
     fn the_solar_system_classifies_as_itself() {
         let expect = [
             ("Mercury", Rocky),
-            ("Venus", Rocky),
+            ("Venus", RunawayGreenhouse),
             ("Earth", Rocky),
             ("Mars", Rocky),
             ("Ganymede", IceWorld),
-            ("Titan", IceWorld),
+            ("Titan", HydrocarbonWorld),
             ("Europa", IceWorld),
             ("Jupiter", GasGiant),
             ("Saturn", GasGiant),
@@ -140,11 +193,11 @@ mod tests {
         for (name, class) in expect {
             // A moon sits at its planet's orbit (its reference orbit).
             let body = reference(name);
-            assert_eq!(class_of(inputs_of(body), body.orbit_au), class, "{name}");
+            assert_eq!(class_of(model_inputs(body), body.orbit_au), class, "{name}");
         }
         // Every reference body gets a class.
         for body in SOLAR_BODIES {
-            class_of(inputs_of(body), body.orbit_au);
+            class_of(model_inputs(body), body.orbit_au);
         }
     }
 
@@ -175,11 +228,86 @@ mod tests {
             IceGiant,
             GasGiant,
             HotJupiter,
+            LavaWorld,
+            RunawayGreenhouse,
+            HydrocarbonWorld,
+            OceanWorld,
         ] {
             let json = serde_json::to_string(&class).unwrap();
             assert_eq!(json, format!("\"{}\"", class.key()));
         }
         assert_eq!(SuperEarth.key(), "super-earth");
         assert_eq!(HotJupiter.key(), "hot-jupiter");
+        assert_eq!(RunawayGreenhouse.key(), "runaway-greenhouse");
+        assert_eq!(HydrocarbonWorld.key(), "hydrocarbon-world");
+    }
+
+    #[test]
+    fn a_migrated_water_world_in_the_habitable_zone_is_an_ocean_world() {
+        // 1 Earth mass, 30 % water (some 1300 oceans), at 1 AU, with the
+        // volatiles of its rock: the thermostat holds it temperate.
+        let inputs = PlanetInputs {
+            water_fraction: 0.3,
+            volatiles: crate::planet::inputs::volatile_rule(0.7, 0.0),
+            ..reference::inputs(1.0, 0.325, 0.0)
+        };
+        assert_eq!(class_of(inputs, 1.0), OceanWorld);
+    }
+
+    #[test]
+    fn enveloped_bodies_have_no_surface() {
+        let context = sun_at(30.1);
+        let neptune = planet_model(&context, inputs_of(reference("Neptune")));
+        assert_eq!(neptune.surface, None);
+        let earth = planet_model(&sun_at(1.0), inputs_of(reference("Earth")));
+        assert!(earth.surface.is_some());
+    }
+
+    #[test]
+    fn every_derived_value_is_finite_on_extreme_inputs() {
+        for star in ["M5V", "A0V"] {
+            for mass in [0.01, 20.0] {
+                for insolation in [1e-3, 1e4] {
+                    for age in [0.5, 13.0] {
+                        for envelope in [0.0, 0.02] {
+                            let star_info =
+                                StarInfo::new(parse_type(star).unwrap(), 1.0, 0.0, age as f32);
+                            let mut context = Context::of(&star_info, 0.0, 2.7);
+                            context.insolation = insolation;
+                            context.equilibrium_k =
+                                f64::from(crate::star::equilibrium_k(insolation as f32));
+                            let inputs = PlanetInputs {
+                                water_fraction: 0.1,
+                                envelope_fraction: envelope,
+                                volatiles: crate::planet::inputs::volatile_rule(
+                                    0.88 - envelope,
+                                    0.1,
+                                ),
+                                ..reference::inputs(mass, 0.325, 0.1)
+                            };
+                            let model = planet_model(&context, inputs);
+                            let json = serde_json::to_value(&model).unwrap();
+                            assert_all_finite(
+                                &json,
+                                &format!("{star} {mass} {insolation} {age} {envelope}"),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Every number in `value` is finite and not negative.
+    fn assert_all_finite(value: &serde_json::Value, what: &str) {
+        match value {
+            serde_json::Value::Number(n) => {
+                let x = n.as_f64().unwrap();
+                assert!(x.is_finite() && x >= 0.0, "{what}: {x}");
+            }
+            serde_json::Value::Array(a) => a.iter().for_each(|v| assert_all_finite(v, what)),
+            serde_json::Value::Object(o) => o.values().for_each(|v| assert_all_finite(v, what)),
+            _ => {}
+        }
     }
 }
