@@ -182,7 +182,8 @@ million times more slowly than they despin the planet.
 **Orders of magnitude.** For an Earth with $Q = 100$ and $k_2 = 0.3$
 ($Q' = 500$), this article's evaluation is about $10^8$ Gyr at 1 AU from
 the Sun. Only planets within about 0.05 AU of a red dwarf, or 0.07 AU of
-the Sun, are circularised in 4.6 Gyr. The habitable zone of a red dwarf is
+the Sun, are circularised in 4.6 Gyr (the Sun's age; the generator uses the age
+of each system). The habitable zone of a red dwarf is
 despun but keeps its eccentricity, which is why Mercury-like and
 red-dwarf planets can be in 3:2. The formula is the planetary term of
 Jackson et al.'s equation 4, read in their preprint; it is rewritten here
@@ -273,7 +274,10 @@ flowchart LR
 **Whether a planet is despun, locked or in 3:2.** The generator keeps the
 scaling of the first equation for an Earth-like planet (`locking_gyr` in
 [star.rs](../../crates/mapgen/src/star.rs)) and compares it with the star's
-age, 4.6 Gyr or the star's whole main-sequence life if shorter. A despun
+age (`age_gyr` of the star: drawn per system between 0.5 and 10 Gyr, or
+the star's whole main-sequence life if shorter; 4.6 Gyr, the Sun's, for
+stored files that have none). An older system therefore locks more of its
+planets. A despun
 planet is then locked below an eccentricity of 0.06 and in the 3:2
 resonance from it (`locked` and `resonant` in
 [spin.rs](../../crates/mapgen/src/spin.rs), the rule of Ribas et al. 2016):
@@ -289,8 +293,8 @@ pub fn locking_gyr(orbit_au: f32, mass: f32) -> f32 {
 
 // In StarInfo::new:
 let locking = locking_gyr(orbit_au, v.mass);
-tidally_locked: crate::spin::locked(locking, AGE_GYR.min(lifetime), eccentricity),
-spin_orbit_3_2: crate::spin::resonant(locking, AGE_GYR.min(lifetime), eccentricity),
+tidally_locked: crate::spin::locked(locking, age_gyr, eccentricity),
+spin_orbit_3_2: crate::spin::resonant(locking, age_gyr, eccentricity),
 
 // spin.rs
 pub const RESONANCE_CAPTURE_ECCENTRICITY: f32 = 0.06;

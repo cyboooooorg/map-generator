@@ -121,6 +121,13 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub perihelion_longitude_deg: Option<f32>,
+    /// Age of the star, Gyr, at most its main-sequence life: drawn per
+    /// system or per lone world ([`crate::star::draw_age_gyr`]); it sets
+    /// how far the star's tides have worked on the planet (lock, resonance,
+    /// circular orbit) and how far a giant has cooled. Files without one
+    /// read as [`crate::star::DEFAULT_AGE_GYR`].
+    #[serde(default = "crate::star::default_age_gyr")]
+    pub age_gyr: f32,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &
@@ -138,7 +145,7 @@ const ROCKY_MASS_RADIUS_EXPONENT: f32 = 3.7;
 /// doi:10.1086/521346: "for Ms ≪ 1, the EOS reduces to ρs = 1"). The
 /// compressed density of [`ROCKY_MASS_RADIUS_EXPONENT`] falls to it at
 /// 0.48 Earth radii.
-const UNCOMPRESSED_ROCK_DENSITY: f32 = 3.344 / 5.513;
+pub(crate) const UNCOMPRESSED_ROCK_DENSITY: f32 = 3.344 / 5.513;
 
 /// Largest surface gravity of a rocky world, Earth's = 1: the bound the
 /// app kept before the mass–radius relation, reached at 2.6 Earth radii

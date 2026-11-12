@@ -60,7 +60,8 @@ struct Args {
     pressure: Option<f32>,
 
     /// Age of the oldest surviving surface in Ga, in [0, 4.6]: how long
-    /// impacts have cratered it (Earth: about 0.4, the Moon: 4.4)
+    /// impacts have cratered it (Earth: about 0.4, the Moon: 4.4); at most
+    /// the star's age, a larger value is lowered to it
     /// [default: from the preset, else random in 0.2..0.6]
     #[arg(long, value_parser = parse_in(request::SURFACE_AGE_GA))]
     surface_age: Option<f32>,
@@ -96,6 +97,15 @@ struct Args {
     /// the seasons uneven [default: drawn from the seed]
     #[arg(long, value_parser = parse_in(request::PERIHELION_LONGITUDE_DEG))]
     perihelion: Option<f32>,
+
+    /// Age of the star, in Gyr, above 0 and at most its main-sequence life
+    /// (about 10 Gyr for the Sun): the older it is, the more planets its
+    /// tides have locked and the more its giants have cooled. With --system
+    /// the whole system shares it [default: drawn from the seed, between
+    /// 0.5 and 10 Gyr, or the star's life if shorter; a star drawn at
+    /// random is redrawn until it lives that long]
+    #[arg(long)]
+    age: Option<f32>,
 
     /// Epoch of the plates in Ma from the present, in [-300, 300], negative
     /// in the past: on worlds with plate tectonics, the continents as the
@@ -333,9 +343,10 @@ fn print_bodies(system: &mapgen::system::System) {
     use mapgen::system::BodyKind;
     let id = mapgen::system::system_id(system);
     println!(
-        "System {id}: {} ({}), {} planets, {} moons",
+        "System {id}: {} ({}, {:.1} Gyr), {} planets, {} moons",
         system.star.designation,
         system.star.spectral,
+        system.star.info.age_gyr,
         system
             .bodies
             .iter()
@@ -407,6 +418,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         let request = mapgen::system::SystemRequest::System(mapgen::system::WholeSystemRequest {
             star: args.star.clone(),
             metallicity: args.metallicity,
+            age_gyr: args.age,
             planets: parse_planets(planets)?,
             seed: args.seed,
             width: Some(args.width),
@@ -439,6 +451,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         hz_position: args.hz_position,
         eccentricity: args.eccentricity,
         perihelion_longitude_deg: args.perihelion,
+        age_gyr: args.age,
         drift_ma: args.drift,
         moons: args.moons,
         metallicity: args.metallicity,
@@ -465,11 +478,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         );
     }
     let p = &resolved.params;
-    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
     println!(
         "Parameters → planet={} seed={} sea_level={:.2} volcanic={:.2} \
          circumference={:.0} km tilt={:.1}° gravity≈{:.2}g pressure={:.3} bar \
-         surface_age={:.2} Ga ({}){} star={} orbit={:.3} AU e={:.3} ({:.2} in the habitable zone, \
+         surface_age={:.2} Ga ({}){} star={} age={:.2} Gyr orbit={:.3} AU e={:.3} ({:.2} in the habitable zone, \
          {:.2}× Earth's light)",
         p.planet.name,
         p.seed,
@@ -487,6 +500,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
             format!(" drift={} Ma", p.drift_ma)
         },
         star.kind,
+        star.age_gyr,
         star.orbit_au,
         star.eccentricity,
         star.hz_position,
@@ -591,6 +605,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         format!("--orbit-au {}", set(pinned.orbit_au)),
         format!("--eccentricity {}", set(pinned.eccentricity)),
         format!("--metallicity {}", set(pinned.metallicity)),
+        format!("--age {}", set(pinned.age_gyr)),
     ]);
     if let Some(longitude) = pinned
         .perihelion_longitude_deg

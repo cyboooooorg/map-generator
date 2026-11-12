@@ -159,6 +159,12 @@ pub struct WorldRequest {
     /// closest to its star. Drawn from the seed when left out; it matters
     /// on eccentric orbits only.
     pub perihelion_longitude_deg: Option<f32>,
+    /// Age of the star, Gyr, in `(0, lifetime]` of its spectral type
+    /// (about 10 Gyr for the Sun): drawn from the seed between 0.5 and 10
+    /// Gyr (or the star's life when shorter) when left out. An older star
+    /// has had longer to lock its planets and to cool its giants.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub age_gyr: Option<f32>,
     /// Epoch of the plates, Ma from the present (negative in the past), in
     /// `[-300, 300]`; the present when left out (never drawn).
     pub drift_ma: Option<f32>,
@@ -221,6 +227,11 @@ pub enum RequestError {
         count: u8,
     },
     Preset(PresetError),
+    /// The age asked is not between 0 and the star's main-sequence life.
+    BadAge {
+        age_gyr: f32,
+        lifetime_gyr: f32,
+    },
     /// More planets than a system holds.
     TooManyPlanets {
         asked: u32,
@@ -279,6 +290,14 @@ impl fmt::Display for RequestError {
                 "not that many moons for a giant this close to its star (asked for {count}): \
                  its Hill sphere is too small, or its star's tides have locked it and its \
                  moons spiral in (pick a farther orbit or fewer moons)"
+            ),
+            RequestError::BadAge {
+                age_gyr,
+                lifetime_gyr,
+            } => write!(
+                f,
+                "age_gyr is {age_gyr}, it must be above 0 and at most {lifetime_gyr:.2}, the \
+                 main-sequence life of this star"
             ),
             RequestError::Preset(e) => e.fmt(f),
             RequestError::TooManyPlanets { asked, max } => {
@@ -454,11 +473,13 @@ impl WorldRequest {
         let star_set = self.star.is_some() || s.kind.is_some();
         let orbit_set =
             self.orbit_au.is_some() || self.hz_position.is_some() || s.orbit_au.is_some();
-        let mut draw_orbit = || -> Result<(f32, f32, f32), RequestError> {
+        let mut draw_orbit = || -> Result<(f32, f32, f32, f32), RequestError> {
             let star = match self.star.as_deref().or(s.kind.as_deref()) {
                 Some(kind) => crate::star::parse_type(kind).map_err(RequestError::BadStar)?,
-                None => crate::star::draw_type(rng),
+                None => crate::star::draw_type_living(self.age_gyr, rng),
             };
+            // The age, from its own stream: no other draw shifts.
+            let age_gyr = crate::star::resolve_age_gyr(self.age_gyr, star, seed)?;
             let orbit_au = match (self.orbit_au, self.hz_position, s.orbit_au) {
                 (Some(au), _, _) => au,
                 (None, Some(position), _) => crate::star::orbit_at(star, position),
@@ -489,7 +510,7 @@ impl WorldRequest {
                     } else {
                         crate::star::draw_small_eccentricity(false, rng)
                     };
-                    let at = crate::star::StarInfo::new(star, orbit_au, 0.0);
+                    let at = crate::star::StarInfo::new(star, orbit_au, 0.0, age_gyr);
                     let circular = match giant_mass_earth {
                         Some(mass) => crate::spin::giant_circularised(
                             &at,
@@ -504,9 +525,9 @@ impl WorldRequest {
                     if circular { 0.0 } else { drawn }
                 }
             };
-            Ok((star, orbit_au, eccentricity))
+            Ok((star, orbit_au, eccentricity, age_gyr))
         };
-        let (star, orbit_au, eccentricity) = draw_orbit()?;
+        let (star, orbit_au, eccentricity, age_gyr) = draw_orbit()?;
         // Not drawn from the main stream: the values above keep their draws.
         let metallicity = self
             .metallicity
@@ -544,7 +565,8 @@ impl WorldRequest {
         };
         let circumference_km = match giant_mass_earth {
             Some(mass) => {
-                let at = crate::star::StarInfo::new(star, orbit_au, eccentricity).equilibrium_k;
+                let at =
+                    crate::star::StarInfo::new(star, orbit_au, eccentricity, age_gyr).equilibrium_k;
                 crate::giants::giant_radius(mass, at) * 40_075.0
             }
             None => circumference_km,
@@ -564,7 +586,8 @@ impl WorldRequest {
             axial_tilt_deg,
             erosion: if giant { 0.0 } else { erosion },
             pressure_bar,
-            surface_age_ga,
+            // A surface is never older than its system.
+            surface_age_ga: surface_age_ga.min(age_gyr),
             star,
             orbit_au,
             eccentricity,
@@ -591,6 +614,7 @@ impl WorldRequest {
             resonance_to_star: pinned.map(|turns| if turns == 1.0 { 0.0 } else { turns }),
             ridge: None,
             gravity: None,
+            age_gyr,
             // Drawn from its own stream: the other draws keep their values.
             perihelion_longitude_deg: Some(self.perihelion_longitude_deg.map_or_else(
                 || {
@@ -650,8 +674,10 @@ impl WorldRequest {
                 if (star_set && orbit_set) || attempts >= MOON_ORBIT_ATTEMPTS {
                     return Err(RequestError::NoRoomForMoons { count: n });
                 }
-                let (star, orbit_au, eccentricity) = draw_orbit()?;
+                let (star, orbit_au, eccentricity, age_gyr) = draw_orbit()?;
                 params.star = star;
+                params.age_gyr = age_gyr;
+                params.surface_age_ga = surface_age_ga.min(age_gyr);
                 params.orbit_au = orbit_au;
                 params.eccentricity = eccentricity;
                 if eccentricity_drawn {
@@ -762,6 +788,7 @@ impl WorldRequest {
             perihelion_longitude_deg: self
                 .perihelion_longitude_deg
                 .or(params.perihelion_longitude_deg),
+            age_gyr: self.age_gyr.or(Some(params.age_gyr)),
             drift_ma: self.drift_ma.or(Some(params.drift_ma)),
             moons: self.moons.or(Some(params.moons)),
             metallicity: self.metallicity.or(Some(params.metallicity)),
@@ -792,7 +819,7 @@ impl WorldRequest {
 /// circularised its orbit. The giants are placed around the world's orbit,
 /// whose eccentricity they then change: settled in three rounds at most.
 fn force_eccentricity(params: &mut WorldParams, giant: bool) {
-    let at = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0);
+    let at = crate::star::StarInfo::new(params.star, params.orbit_au, 0.0, params.age_gyr);
     let circular = if giant {
         crate::spin::circularised(&at)
     } else {
@@ -845,7 +872,12 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(red.star, parse_type("M4V").unwrap());
-        let info = StarInfo::new(red.star, red.orbit_au, red.eccentricity);
+        let info = StarInfo::new(
+            red.star,
+            red.orbit_au,
+            red.eccentricity,
+            crate::star::DEFAULT_AGE_GYR,
+        );
         assert!(
             (info.hz_position - 0.5).abs() < 1e-3,
             "{}",
@@ -857,7 +889,8 @@ mod tests {
                 planet: Some("terran".into()),
                 ..Default::default()
             });
-            let position = StarInfo::new(p.star, p.orbit_au, 0.0).hz_position;
+            let position =
+                StarInfo::new(p.star, p.orbit_au, 0.0, crate::star::DEFAULT_AGE_GYR).hz_position;
             assert!((0.04..0.76).contains(&position), "{position}");
         }
         // Bad stars and both orbits at once are refused.

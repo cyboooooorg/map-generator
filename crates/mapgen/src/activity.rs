@@ -21,7 +21,7 @@
 //! **The regions themselves** (their emergence, growth and decay over
 //! time) are drawn in the browser, from [`StarActivity::seed`] and these
 //! parameters (`web/src/lib/starActivity.ts`).
-use crate::giants::{normal, system_age_gyr};
+use crate::giants::normal;
 use crate::noise::{stream, stream_seed};
 use crate::star::{SUN_TEFF_K, StarInfo};
 use rand::rngs::StdRng;
@@ -49,7 +49,7 @@ pub enum Envelope {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct StarActivity {
     pub envelope: Envelope,
-    /// Age of the star, Gyr ([`system_age_gyr`]).
+    /// Age of the star, Gyr ([`StarInfo::age_gyr`]).
     pub age_gyr: f32,
     /// Equatorial sidereal rotation period, days.
     pub rotation_days: f32,
@@ -287,7 +287,7 @@ pub fn star_activity(info: &StarInfo, system_seed: u32) -> StarActivity {
     let seed = rng.random::<u32>();
 
     let (teff, mass, radius) = (info.teff_k, info.mass, info.radius);
-    let age_gyr = system_age_gyr(mass);
+    let age_gyr = info.age_gyr;
     let envelope = envelope(teff, mass);
     let rotation_days = rotation_days(envelope, teff, radius, age_gyr) * rotation_scatter;
     let rotation_days = match envelope {
@@ -533,7 +533,12 @@ mod tests {
     use crate::star::{StarInfo, parse_type};
 
     fn star(kind: &str) -> StarInfo {
-        StarInfo::new(parse_type(kind).unwrap(), 1.0, 0.0)
+        StarInfo::new(
+            parse_type(kind).unwrap(),
+            1.0,
+            0.0,
+            crate::star::DEFAULT_AGE_GYR,
+        )
     }
 
     /// The median of `f` over the activities of seeds 0 to 200.

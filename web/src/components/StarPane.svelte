@@ -9,7 +9,7 @@
   import type { SystemPlanet } from '../lib/systemStar';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import type { StarActivity } from '../lib/api/types/StarActivity';
-  import { formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { formatAge, formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import type { Moon } from '../lib/api/types/Moon';
   import type { Giant } from '../lib/api/types/Giant';
@@ -814,6 +814,8 @@
     </dd>
     <dt title={t.starView.lifetimeHelp}>{t.starView.lifetime}</dt>
     <dd>{withUnit(formatUpTo(star.lifetime_gyr, star.lifetime_gyr < 10 ? 1 : 0), t.starView.gyr)}</dd>
+    <dt title={t.starView.ageHelp}>{t.starView.age}</dt>
+    <dd>{formatAge(star.age_gyr)}</dd>
     <dt title={t.starView.zoneHelp}><span class="swatch zone"></span>{t.starView.zone}</dt>
     <dd>
       {t.starView.range({

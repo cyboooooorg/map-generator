@@ -31,8 +31,8 @@
 use crate::giant_clouds::Clouds;
 use crate::noise::{stream, stream_seed};
 use crate::star::{
-    AGE_GYR, StarValues, draw_eccentricity, equilibrium_k, lifetime_gyr, mean_temperature_factor,
-    values, year_days,
+    DEFAULT_AGE_GYR, StarValues, draw_eccentricity, equilibrium_k, mean_temperature_factor, values,
+    year_days,
 };
 use crate::world::WorldParams;
 use rand::rngs::StdRng;
@@ -300,13 +300,6 @@ const COOLING_AGE_EXPONENT: f32 = -0.29;
 /// internal heat compared with the gas giants').
 const ICE_INTERNAL_K: f32 = 40.0;
 
-/// Age of the system, Gyr: the Sun's, or the whole main-sequence life of a
-/// shorter-lived star (the age the world's spin locking assumes too, see
-/// [`AGE_GYR`]).
-pub fn system_age_gyr(star_mass: f32) -> f32 {
-    AGE_GYR.min(lifetime_gyr(star_mass))
-}
-
 /// Temperature of the heat a giant of `mass_earth` radiates from its
 /// interior at `age_gyr`, K.
 ///
@@ -331,7 +324,7 @@ pub fn internal_temperature(kind: GiantKind, mass_earth: f32, age_gyr: f32) -> f
     let mass = mass_earth / JUPITER_EARTH_MASSES;
     jupiter
         * mass.powf(COOLING_MASS_EXPONENT)
-        * (age_gyr.max(YOUNGEST_GYR) / AGE_GYR).powf(COOLING_AGE_EXPONENT)
+        * (age_gyr.max(YOUNGEST_GYR) / DEFAULT_AGE_GYR).powf(COOLING_AGE_EXPONENT)
 }
 
 /// Surface gravity of a giant of `mass_earth` and `radius_earth`, m/s².
@@ -521,7 +514,7 @@ impl GiantSystem {
             .map(|(i, &(track, kind, _, seed))| {
                 // Lettered among the planets, the world's orbit included.
                 let rank = i + usize::from(track.orbit > world.orbit);
-                describe(&star, track, kind, seed, rank)
+                describe(&star, p.age_gyr, track, kind, seed, rank)
             })
             .collect();
         let forced = giants
@@ -556,7 +549,14 @@ impl GiantSystem {
 
 /// The stored description of a placed giant, the `rank`-th planet from the
 /// star (see [`crate::naming`]).
-fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: usize) -> Giant {
+fn describe(
+    star: &StarValues,
+    age_gyr: f32,
+    track: Track,
+    kind: GiantKind,
+    seed: u32,
+    rank: usize,
+) -> Giant {
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
     let mass_earth = (track.mass * SUN_EARTH_MASSES) as f32;
     let orbit_au = track.orbit as f32;
@@ -564,7 +564,7 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
     let flux = star.luminosity / (orbit_au * orbit_au);
     let equilibrium = equilibrium_k(flux) * mean_temperature_factor(eccentricity);
     // Heat left from formation, cooled over the age of the system.
-    let internal = internal_temperature(kind, mass_earth, system_age_gyr(star.mass));
+    let internal = internal_temperature(kind, mass_earth, age_gyr);
     let effective = (equilibrium.powi(4) + internal.powi(4)).powf(0.25);
     let radius_earth = giant_radius(mass_earth, equilibrium);
     let class = cloud_class(effective, surface_gravity(mass_earth, radius_earth));
@@ -606,6 +606,7 @@ fn describe(star: &StarValues, track: Track, kind: GiantKind, seed: u32, rank: u
 mod tests {
     use super::*;
     use crate::preset::Preset;
+    use crate::star::lifetime_gyr;
 
     #[test]
     fn heavier_pairs_need_fewer_hill_radii() {
@@ -625,6 +626,7 @@ mod tests {
 
     fn params(seed: u32, star: f32, orbit_au: f32, metallicity: f32) -> WorldParams {
         WorldParams {
+            age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 64,
             height: 32,
             seed,
@@ -702,10 +704,10 @@ mod tests {
     #[test]
     fn a_giant_cools_with_age_and_grows_hotter_with_mass() {
         // Jupiter's own: 7.485 W/m² of internal heat is 107 K.
-        let jupiter = internal_temperature(GiantKind::Gas, JUPITER_EARTH_MASSES, AGE_GYR);
+        let jupiter = internal_temperature(GiantKind::Gas, JUPITER_EARTH_MASSES, DEFAULT_AGE_GYR);
         assert!((jupiter - 107.2).abs() < 0.3, "{jupiter}");
         // Saturn: the cooling law alone gives 59 K (it really has more).
-        let saturn = internal_temperature(GiantKind::Gas, 95.16, AGE_GYR);
+        let saturn = internal_temperature(GiantKind::Gas, 95.16, DEFAULT_AGE_GYR);
         assert!((54.0..64.0).contains(&saturn), "{saturn}");
         // Baraffe et al. (2003) for ten Jupiter masses: 491 K at 1 Gyr,
         // 322 K at 5 Gyr, 953 K at 0.1 Gyr; within 10 %.
@@ -720,9 +722,6 @@ mod tests {
         // And one Jupiter mass at 1 Gyr: 160 K.
         let one = internal_temperature(GiantKind::Gas, JUPITER_EARTH_MASSES, 1.0);
         assert!((one / 160.0 - 1.0).abs() < 0.2, "{one}");
-        // The Sun's age, or a short-lived star's whole life.
-        assert_eq!(system_age_gyr(1.0), AGE_GYR);
-        assert!(system_age_gyr(3.0) < 1.0);
     }
 
     #[test]
@@ -730,7 +729,11 @@ mod tests {
         // Ten Jupiter masses at 40 AU: it radiates its own 340 K, with no
         // sunlight to speak of, and sits near the edge of the water clouds.
         let star = values(42.0);
-        let internal = internal_temperature(GiantKind::Gas, 3178.0, system_age_gyr(star.mass));
+        let internal = internal_temperature(
+            GiantKind::Gas,
+            3178.0,
+            DEFAULT_AGE_GYR.min(lifetime_gyr(star.mass)),
+        );
         let teq = equilibrium_k(star.luminosity / 1600.0);
         let teff = (teq.powi(4) + internal.powi(4)).powf(0.25);
         assert!((320.0..380.0).contains(&teff), "{teff}");

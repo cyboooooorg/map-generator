@@ -408,6 +408,8 @@
 
   /** The epoch of the plates a varied world was shown at (the drift slider), kept as it is: the form has no field for it. */
   const driftMa = start.initial?.drift_ma ?? 0;
+  /** The age of the star of a varied world. */
+  const startAge = start.initial?.age_gyr;
 
   function buildRequest(): WorldRequest {
     const [width, height] = size.split('x').map(Number);
@@ -431,6 +433,11 @@
       }
     }
     applyStarChoice(request, star);
+    // A varied world keeps the age of its star (the form has no field for it),
+    // unless the star was changed: the old age might outlive the new one.
+    if (startAge !== undefined && request.star === start.initial?.star) {
+      request.age_gyr = startAge;
+    }
     const asked = moonsRequest(moons);
     // A giant's moon keeps no moons of its own (its Hill sphere is too small).
     if (asked !== undefined && !giantWorld && giantChoice.host !== 'giant') {

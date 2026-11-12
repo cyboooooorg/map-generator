@@ -14,6 +14,12 @@ star: string | null,
  */
 metallicity: number | null, 
 /**
+ * Age of the star, Gyr, in `(0, lifetime]` of its spectral type;
+ * drawn from the seed ([`crate::star::draw_age_gyr`]) when left out.
+ * Every planet and moon of the system shares it.
+ */
+age_gyr?: number, 
+/**
  * The planets asked for, by type ([`PLANET_TYPES`]); the whole system
  * drawn when left out. At most [`MAX_PLANETS`] in all.
  */

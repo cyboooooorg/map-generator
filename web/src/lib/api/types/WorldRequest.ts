@@ -50,6 +50,13 @@ eccentricity?: number,
  */
 perihelion_longitude_deg?: number, 
 /**
+ * Age of the star, Gyr, in `(0, lifetime]` of its spectral type
+ * (about 10 Gyr for the Sun): drawn from the seed between 0.5 and 10
+ * Gyr (or the star's life when shorter) when left out. An older star
+ * has had longer to lock its planets and to cool its giants.
+ */
+age_gyr?: number, 
+/**
  * Epoch of the plates, Ma from the present (negative in the past), in
  * `[-300, 300]`; the present when left out (never drawn).
  */

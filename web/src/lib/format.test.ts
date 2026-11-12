@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { driftRequest } from './drift';
-import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+import { setLocale } from './i18n/index.svelte';
+import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatAge, formatSurfaceAge, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+
+const S = '\u202f';
 
 const meta = {
   planet_type: 'frozen',
@@ -14,7 +17,7 @@ const meta = {
   erosion: 1,
   pressure_bar: 0.41237,
   surface_age_ga: 1.23456,
-  star: { type: 'M4.5V', orbit_au: 0.0812345, eccentricity: 0.123456, metallicity: 0.1 },
+  star: { type: 'M4.5V', orbit_au: 0.0812345, eccentricity: 0.123456, metallicity: 0.1, age_gyr: 8.123456 },
   moons: { planet_day_hours: 24 },
   giants: { count: 0 },
   width: 1920,
@@ -36,6 +39,7 @@ describe('format', () => {
       star: 'M4.5V',
       orbit_au: 0.08123,
       eccentricity: 0.1235,
+      age_gyr: 8.123456,
       metallicity: 0.1,
       width: 1920,
       height: 1080,
@@ -43,7 +47,7 @@ describe('format', () => {
     expect(cliCommand(meta)).toBe(
       'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
         '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 ' +
-        '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --metallicity=0.1 --width 1920 --height 1080',
+        '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --age 8.123456 --metallicity=0.1 --width 1920 --height 1080',
     );
     // An epoch of the plates, and moons turned off, are reproduced too.
     const drifted = { ...meta, drift_ma: -120, moons: null } as unknown as WorldMetadata;
@@ -64,6 +68,8 @@ describe('format', () => {
 
   it('rerolls a world with a new seed and every other parameter kept', () => {
     expect(rerollRequest(meta, 7)).toEqual({ ...requestFromWorld(meta), seed: 7 });
+    // A planet of a system keeps the age of its star under a new seed.
+    expect(rerollRequest(meta, 7).age_gyr).toBe(8.123456);
     const seed = rerollRequest(meta).seed ?? -1;
     expect(Number.isInteger(seed) && seed >= 0 && seed <= MAX_SEED).toBe(true);
     expect(Number.isInteger(randomSeed())).toBe(true);
@@ -80,10 +86,10 @@ describe('format', () => {
   it("describes the geology", () => {
     const preset = { geology: { regime: 'stagnant', wet_until: 3.5 } };
     expect(formatGeology({ ...meta, surface_age_ga: 3.8, preset } as unknown as WorldMetadata)).toBe(
-      'stagnant lid, surface 3.8 Ga',
+      'stagnant lid, surface 3.8 billion years (3.8 Ga)',
     );
     expect(formatGeology({ ...meta, surface_age_ga: 0.02, preset } as unknown as WorldMetadata)).toBe(
-      'stagnant lid, surface 20 Ma',
+      'stagnant lid, surface 20 million years (20 Ma)',
     );
   });
 
@@ -135,5 +141,33 @@ describe('keepAlone', () => {
     expect(keepAlone(request, stored({ around: { alone: false } }))).toBe(request);
     expect(keepAlone(request, stored({ system: {} }))).toBe(request);
     expect(keepAlone(request, null)).toBe(request);
+  });
+});
+
+describe('ages on the cards', () => {
+  it('spells the system age out in billions or millions of years', () => {
+    expect(formatAge(8.123456)).toBe('8.12 billion years (8.12 Ga)');
+    expect(formatAge(1.5)).toBe('1.5 billion years (1.5 Ga)');
+    expect(formatAge(0.6)).toBe('600 million years (600 Ma)');
+    expect(formatAge(0.001)).toBe('1 million years (1 Ma)');
+    expect(formatAge(meta.star!.age_gyr)).toContain('8.12');
+  });
+
+  it('spells a surface age out the same way', () => {
+    expect(formatSurfaceAge(3.84)).toBe('3.84 billion years (3.84 Ga)');
+    expect(formatSurfaceAge(0.4234)).toBe('423 million years (423 Ma)');
+    expect(formatSurfaceAge(0.02)).toBe('20 million years (20 Ma)');
+  });
+
+  it('spells ages out in French', () => {
+    setLocale('fr');
+    try {
+      expect(formatAge(8.123456)).toBe(`8,12${S}milliards d’années (8,12${S}Ga)`);
+      expect(formatAge(1.5)).toBe(`1,5${S}milliard d’années (1,5${S}Ga)`);
+      expect(formatAge(0.6)).toBe(`600${S}millions d’années (600${S}Ma)`);
+      expect(formatAge(0.001)).toBe(`1${S}million d’années (1${S}Ma)`);
+    } finally {
+      setLocale('en');
+    }
   });
 });

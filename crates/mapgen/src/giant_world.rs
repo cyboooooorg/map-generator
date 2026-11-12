@@ -47,9 +47,7 @@
 use crate::biome::Biome;
 use crate::generation::{Generated, Stage};
 use crate::giant_clouds::Clouds;
-use crate::giants::{
-    GiantKind, giant_radius, internal_temperature, surface_gravity, system_age_gyr,
-};
+use crate::giants::{GiantKind, giant_radius, internal_temperature, surface_gravity};
 use crate::noise::{fbm, smoothstep, stream, stream_seed};
 use crate::star::StarInfo;
 use crate::world::{World, WorldParams};
@@ -495,7 +493,7 @@ fn great_spot_site(bands: &[Band], pick: f32) -> (f32, f32) {
 
 /// Radius of a giant world, Earth radii, from its parameters.
 pub fn radius_earth(p: &WorldParams, mass_earth: f32) -> f32 {
-    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
     giant_radius(mass_earth, star.equilibrium_k)
 }
 
@@ -590,11 +588,11 @@ impl Look {
         let kind = p.planet.giant.as_ref().map_or(GiantKind::Gas, |g| g.kind);
         let rings_odds = p.planet.giant.as_ref().map_or([0.0, 0.0], |g| g.rings);
         let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(p.seed, stream::GIANT_LOOK)));
-        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
         let equilibrium = star.equilibrium_k;
         let hot = equilibrium > HOT_GIANT_K;
         let radius_earth = giant_radius(mass_earth, equilibrium);
-        let internal = internal_temperature(kind, mass_earth, system_age_gyr(star.mass));
+        let internal = internal_temperature(kind, mass_earth, star.age_gyr);
         let effective = (equilibrium.powi(4) + internal.powi(4)).powf(0.25);
         let clouds = Clouds::of(effective, surface_gravity(mass_earth, radius_earth));
         let class = clouds.class;
@@ -1314,6 +1312,7 @@ mod tests {
 
     fn params(preset: &str, seed: u32, mass: f32, orbit_au: f32) -> WorldParams {
         WorldParams {
+            age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 128,
             height: 64,
             seed,

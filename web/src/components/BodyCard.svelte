@@ -10,7 +10,7 @@
   import type { Body } from '../lib/api/types/Body';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
   import { errorText } from '../lib/i18n/errors';
-  import { formatAu, formatInt, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { formatAge, formatAu, formatInt, formatSurfaceAge, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
   import { MAX_NAME_CHARS } from '../lib/names';
@@ -143,6 +143,7 @@
         moons: system.bodies.length - planets.length,
         ice: formatAu(star.ice_line_au),
         metallicity: `${star.metallicity >= 0 ? '+' : ''}${formatUpTo(star.metallicity, 2)}`,
+        age: formatAge(star.info.age_gyr),
       })}</small
     >
   </section>
@@ -200,6 +201,8 @@
           temperature: withUnit(formatInt(Math.round(body.surroundings.equilibrium_k - 273.15)), '°C'),
         })}
       </dd>
+      <dt>{t.card.age}</dt>
+      <dd>{t.card.ageValue({ age: formatAge(body.params.age_gyr), surface: formatSurfaceAge(body.params.surface_age_ga) })}</dd>
       {#if rings}
         <dt>{t.card.rings}</dt>
         <dd>

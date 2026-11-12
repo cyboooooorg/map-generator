@@ -156,6 +156,10 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     star: meta.star.type,
     orbit_au: round(meta.star.orbit_au, 5),
     eccentricity: round(meta.star.eccentricity, 4),
+    // The star's age, as stored (not rounded: one rounded up past a short-lived
+    // star's life is refused). A planet of a system keeps its system's age, which
+    // its own seed would not draw again.
+    age_gyr: meta.star.age_gyr,
     // A world away from the present of its plates (0 is left out).
     ...(meta.drift_ma ? { drift_ma: meta.drift_ma } : {}),
     // A world whose moons were turned off.
@@ -193,6 +197,7 @@ export function cliCommand(meta: WorldMetadata): string {
     `--star ${r.star}`,
     `--orbit-au ${r.orbit_au}`,
     `--eccentricity ${r.eccentricity}`,
+    ...(r.age_gyr === undefined ? [] : [`--age ${r.age_gyr}`]),
     ...(r.drift_ma === undefined ? [] : [`--drift=${r.drift_ma}`]),
     ...(r.moons === undefined ? [] : [`--moons ${typeof r.moons === 'object' ? r.moons.count : r.moons}`]),
     ...(r.metallicity === undefined ? [] : [`--metallicity=${r.metallicity}`]),
@@ -242,13 +247,45 @@ export function formatAtmosphere(meta: WorldMetadata): string {
 
 /**
  * The tectonic regime and surface age of a world, e.g. "stagnant lid,
- * surface 3.8 Ga", in the active locale.
+ * surface 3.8 billion years", in the active locale.
  */
 export function formatGeology(meta: WorldMetadata): string {
   const regime = t.regimes[meta.preset.geology.regime];
-  const age = meta.surface_age_ga;
-  const shown = age >= 1 ? withUnit(formatNumber(age, 1), 'Ga') : withUnit(formatNumber(age * 1000), 'Ma');
-  return t.worldInfo.geologySurface({ regime, age: shown });
+  return t.worldInfo.geologySurface({ regime, age: formatSurfaceAge(meta.surface_age_ga) });
+}
+
+/**
+ * A duration in Ga spelled out: "8.12 billion years (8.12 Ga)", singular or plural by the
+ * language's rule, "600 million years (600 Ma)" under 1 Ga. Billions keep two
+ * decimals at most, millions three significant digits.
+ */
+function spellAge(ga: number): string {
+  const words = t.format.ageWords;
+  const billions = Number(ga.toFixed(2));
+  if (billions >= 1) {
+    const unit = billions < 2 ? words.billionOne : words.billionMany;
+    const n = formatUpTo(billions, 2);
+    return `${withUnit(n, unit)} (${withUnit(n, 'Ga')})`;
+  }
+  const millions = Number((ga * 1000).toPrecision(3));
+  if (millions >= 1000) {
+    const n = formatUpTo(1, 2);
+    return `${withUnit(n, words.billionOne)} (${withUnit(n, 'Ga')})`;
+  }
+  const shown = millions >= 1 ? Math.round(millions) : millions;
+  const unit = shown >= 2 ? words.millionMany : words.millionOne;
+  const n = formatUpTo(shown, 2);
+  return `${withUnit(n, unit)} (${withUnit(n, 'Ma')})`;
+}
+
+/** A surface age, spelled out in billions or millions of years. */
+export function formatSurfaceAge(ga: number): string {
+  return spellAge(ga);
+}
+
+/** The age of a star or of the bodies of its system, spelled out in billions or millions of years. */
+export function formatAge(gyr: number): string {
+  return spellAge(gyr);
 }
 
 /** The star line of the world card: type, temperature and luminosity. */

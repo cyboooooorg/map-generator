@@ -355,6 +355,7 @@ mod tests {
 
     fn world() -> crate::world::World {
         let request = WorldRequest {
+            age_gyr: None,
             planet: Some("terran".into()),
             seed: Some(3),
             sea_level: Some(0.2),

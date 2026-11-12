@@ -249,8 +249,9 @@ of a giant (`Look::draw`), then samples it on every pixel:
    $T_\text{eff} = (T_\text{eq}^4 + T_\text{int}^4)^{1/4}$.
    `internal_temperature` in
    [`giants.rs`](../../crates/mapgen/src/giants.rs) cools a gas giant with
-   its mass and the age of the system (4.6 Gyr, or the lifetime of a
-   shorter-lived star):
+   its mass and the age of the system (`age_gyr` of the star, drawn
+   between 0.5 and 10 Gyr, or up to the lifetime of a shorter-lived star;
+   4.6 Gyr, Jupiter's age, is the normalisation):
 
    ```math
    T_\text{int} = 107.2\,\text{K}

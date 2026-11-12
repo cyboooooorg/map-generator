@@ -1019,6 +1019,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         star: meta.star.code(),
         orbit_au: meta.star.orbit_au,
         eccentricity: meta.star.eccentricity,
+        age_gyr: meta.star.age_gyr,
         drift_ma: meta.drift_ma,
         moons: match &meta.moons {
             Some(system) => system.count_asked.map_or(
@@ -1236,6 +1237,7 @@ mod tests {
     #[test]
     fn layers_round_trip() {
         let world = generate(&WorldParams {
+            age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 32,
             height: 16,
             seed: 9,

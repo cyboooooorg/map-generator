@@ -43,7 +43,7 @@ use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
 use crate::request::{RequestError, WorldRequest};
-use crate::star::{StarInfo, draw_eccentricity, draw_type, parse_type};
+use crate::star::{StarInfo, draw_eccentricity, parse_type};
 use crate::world::WorldParams;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -110,6 +110,12 @@ pub struct WholeSystemRequest {
     pub star: Option<String>,
     /// `[Fe/H]` of the star, dex; drawn when left out.
     pub metallicity: Option<f32>,
+    /// Age of the star, Gyr, in `(0, lifetime]` of its spectral type;
+    /// drawn from the seed ([`crate::star::draw_age_gyr`]) when left out.
+    /// Every planet and moon of the system shares it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub age_gyr: Option<f32>,
     /// The planets asked for, by type ([`PLANET_TYPES`]); the whole system
     /// drawn when left out. At most [`MAX_PLANETS`] in all.
     pub planets: Option<BTreeMap<String, u32>>,
@@ -705,7 +711,7 @@ fn draw_whole(
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
     let star_code = match &whole.star {
         Some(text) => parse_type(text).map_err(RequestError::BadStar)?,
-        None => draw_type(&mut rng),
+        None => crate::star::draw_type_living(whole.age_gyr, &mut rng),
     };
     let metallicity = whole
         .metallicity
@@ -714,7 +720,9 @@ fn draw_whole(
         whole.width.unwrap_or(DEFAULT_SIZE.0),
         whole.height.unwrap_or(DEFAULT_SIZE.1),
     );
-    let star = StarInfo::new(star_code, 1.0, 0.0);
+    // From its own stream, after the star is known: no other draw shifts.
+    let age_gyr = crate::star::resolve_age_gyr(whole.age_gyr, star_code, seed)?;
+    let star = StarInfo::new(star_code, 1.0, 0.0, age_gyr);
     let hz = (f64::from(star.hz_inner_au), f64::from(star.hz_outer_au));
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
@@ -807,6 +815,7 @@ fn draw_whole(
                     request,
                     seed,
                     star_code,
+                    age_gyr,
                     metallicity,
                     width,
                     height,
@@ -848,6 +857,7 @@ fn draw_whole(
                     request,
                     seed,
                     star_code,
+                    age_gyr,
                     metallicity,
                     width,
                     height,
@@ -860,6 +870,7 @@ fn draw_whole(
             request,
             seed,
             star_code,
+            age_gyr,
             metallicity,
             width,
             height,
@@ -899,7 +910,7 @@ struct Focus {
 fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
     let seed = params.seed;
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
-    let star = StarInfo::new(params.star, 1.0, 0.0);
+    let star = StarInfo::new(params.star, 1.0, 0.0, params.age_gyr);
     let hz = (f64::from(star.hz_inner_au), f64::from(star.hz_outer_au));
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
@@ -980,6 +991,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
         request,
         seed,
         params.star,
+        params.age_gyr,
         params.metallicity,
         width,
         height,
@@ -989,7 +1001,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
 }
 
 /// The body seed of `id` in the system of `seed`.
-fn body_seed(seed: u32, id: &str) -> u32 {
+pub(crate) fn body_seed(seed: u32, id: &str) -> u32 {
     // FNV-1a of the id, stable across versions.
     let mut hash: u32 = 0x811c_9dc5;
     for byte in id.as_bytes() {
@@ -1006,13 +1018,14 @@ fn assemble(
     request: &SystemRequest,
     seed: u32,
     star_code: f32,
+    age_gyr: f32,
     metallicity: f32,
     width: u32,
     height: u32,
     slots: Vec<Slot>,
     focus: Option<Focus>,
 ) -> System {
-    let info = StarInfo::new(star_code, 1.0, 0.0);
+    let info = StarInfo::new(star_code, 1.0, 0.0, age_gyr);
     let designation = star_name(seed, &info.kind);
     let ice = 2.7 * info.luminosity.sqrt();
     // The star's tides have circularised the closest orbits: a planet
@@ -1027,7 +1040,7 @@ fn assemble(
                     .as_ref()
                     .is_some_and(|f| (f64::from(f.params.orbit_au) - slot.orbit_au).abs() < 1e-9);
             if !asked {
-                slot.eccentricity = tidal_eccentricity(&slot, star_code);
+                slot.eccentricity = tidal_eccentricity(&slot, star_code, age_gyr);
             }
             slot
         })
@@ -1048,7 +1061,15 @@ fn assemble(
                 let host = f.host.as_ref().expect("host");
                 crate::exomoon::host_params(&f.params, host.giant.mass_earth, host.seed)
             }
-            _ => planet_params(slot, star_code, metallicity, width, height, planet_seed),
+            _ => planet_params(
+                slot,
+                star_code,
+                age_gyr,
+                metallicity,
+                width,
+                height,
+                planet_seed,
+            ),
         };
         let mut params = if is_giant(&slot.body_type) {
             with_system_rings(params)
@@ -1234,8 +1255,8 @@ fn assemble(
 /// The eccentricity the star's tides leave a planet drawn for `slot` round
 /// a star of type `star`: none when they have circularised its orbit, a
 /// giant's with its own tides (see `crate::spin`).
-fn tidal_eccentricity(slot: &Slot, star: f32) -> f64 {
-    let at = StarInfo::new(star, slot.orbit_au as f32, 0.0);
+fn tidal_eccentricity(slot: &Slot, star: f32, age_gyr: f32) -> f64 {
+    let at = StarInfo::new(star, slot.orbit_au as f32, 0.0, age_gyr);
     let circular = if is_giant(&slot.body_type) {
         let mass = slot.mass_earth as f32;
         crate::spin::giant_circularised(
@@ -1256,6 +1277,7 @@ fn tidal_eccentricity(slot: &Slot, star: f32) -> f64 {
 fn planet_params(
     slot: &Slot,
     star: f32,
+    age_gyr: f32,
     metallicity: f32,
     width: u32,
     height: u32,
@@ -1266,7 +1288,8 @@ fn planet_params(
     let request = WorldRequest {
         planet: Some(slot.body_type.clone()),
         seed: Some(seed),
-        star: Some(StarInfo::new(star, 1.0, 0.0).kind),
+        star: Some(StarInfo::new(star, 1.0, 0.0, age_gyr).kind),
+        age_gyr: Some(age_gyr),
         orbit_au: Some(slot.orbit_au as f32),
         eccentricity: Some(slot.eccentricity as f32),
         metallicity: Some(metallicity),
@@ -1300,6 +1323,7 @@ fn planet_params(
                 .expect("built-in presets resolve")
                 .params;
             params.star = star;
+            params.age_gyr = age_gyr;
             params.orbit_au = slot.orbit_au as f32;
             params.eccentricity = slot.eccentricity as f32;
             params
@@ -1309,7 +1333,12 @@ fn planet_params(
 
 /// What a body gets from its star at `orbit_au`.
 fn surroundings_at(star: &StarInfo, orbit_au: f64, eccentricity: f64) -> Surroundings {
-    let at = StarInfo::new(star.code(), orbit_au as f32, eccentricity as f32);
+    let at = StarInfo::new(
+        star.code(),
+        orbit_au as f32,
+        eccentricity as f32,
+        star.age_gyr,
+    );
     Surroundings {
         flux_earth: f64::from(at.insolation),
         equilibrium_k: f64::from(at.equilibrium_k),
@@ -1323,7 +1352,12 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
     // A rocky planet's tides scale with its own mass and radius, its
     // resonance is drawn from its seed (see `crate::spin::star_info`).
     let info = if giant {
-        StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32)
+        StarInfo::new(
+            star,
+            slot.orbit_au as f32,
+            slot.eccentricity as f32,
+            params.age_gyr,
+        )
     } else {
         crate::spin::star_info(params)
     };
@@ -1537,7 +1571,12 @@ fn shape_rings(
     let Some(rings) = params.given_rings.as_mut().and_then(|g| g.rings.take()) else {
         return Vec::new();
     };
-    let info = StarInfo::new(star, slot.orbit_au as f32, slot.eccentricity as f32);
+    let info = StarInfo::new(
+        star,
+        slot.orbit_au as f32,
+        slot.eccentricity as f32,
+        params.age_gyr,
+    );
     let mass_kg = slot.mass_earth * EARTH_KG;
     let radius_m = f64::from(params.circumference_km) * 1000.0 / (2.0 * PI);
     let density = mass_kg / (4.0 / 3.0 * PI * radius_m.powi(3)) / 1000.0;
@@ -2146,6 +2185,7 @@ mod tests {
 
     fn whole(planets: &[(&str, u32)], seed: u32) -> SystemRequest {
         SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
             star: Some("G2V".into()),
             metallicity: Some(0.0),
             planets: Some(
@@ -3054,6 +3094,124 @@ mod tests {
     }
 
     #[test]
+    fn every_body_of_a_system_shares_its_age() {
+        let mut other_than_default = false;
+        for seed in 1..=8 {
+            let system = draw(&whole_drawn(seed), &mut StdRng::seed_from_u64(3)).unwrap();
+            let age = system.star.info.age_gyr;
+            other_than_default |= age != crate::star::DEFAULT_AGE_GYR;
+            assert!(age > 0.0 && age <= system.star.info.lifetime_gyr);
+            for body in &system.bodies {
+                assert_eq!(body.params.age_gyr, age, "seed {seed}, {}", body.id);
+            }
+        }
+        assert!(other_than_default);
+    }
+
+    #[test]
+    fn a_requested_age_is_kept() {
+        let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: Some(2.0),
+            star: Some("G2V".into()),
+            planets: Some([("terran".to_string(), 1)].into()),
+            seed: Some(5),
+            width: Some(64),
+            height: Some(32),
+            ..Default::default()
+        });
+        let system = draw(&request, &mut StdRng::seed_from_u64(5)).unwrap();
+        assert_eq!(system.star.info.age_gyr, 2.0);
+        assert!(system.bodies.iter().all(|b| b.params.age_gyr == 2.0));
+    }
+
+    #[test]
+    fn no_surface_is_older_than_a_young_system() {
+        for seed in 1..=4 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                age_gyr: Some(0.6),
+                star: Some("G2V".into()),
+                planets: Some([("terran".to_string(), 2), ("frozen".to_string(), 1)].into()),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap();
+            assert!(!system.bodies.is_empty());
+            for body in &system.bodies {
+                assert!(
+                    body.params.surface_age_ga <= 0.6,
+                    "seed {seed}, {}: {} Ga",
+                    body.id,
+                    body.params.surface_age_ga
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_age_does_not_refuse_a_star_that_was_drawn() {
+        for seed in 1..=60 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                age_gyr: Some(5.0),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1))
+                .unwrap_or_else(|e| panic!("seed {seed}: {e}"));
+            assert_eq!(system.star.info.age_gyr, 5.0);
+        }
+    }
+
+    #[test]
+    fn an_age_beyond_the_star_life_is_refused() {
+        let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: Some(5.0),
+            star: Some("B5V".into()),
+            seed: Some(5),
+            ..Default::default()
+        });
+        let Err(error) = draw(&request, &mut StdRng::seed_from_u64(5)) else {
+            panic!("a B5 star does not live 5 Gyr");
+        };
+        let text = error.to_string();
+        assert!(
+            text.contains("age_gyr is 5") && text.contains("main-sequence"),
+            "{text}"
+        );
+        assert!(matches!(error, RequestError::BadAge { lifetime_gyr, .. } if lifetime_gyr < 5.0));
+    }
+
+    #[test]
+    fn a_system_without_age_reads_with_the_default() {
+        let system = draw(&whole(&[("terran", 1)], 6), &mut StdRng::seed_from_u64(6)).unwrap();
+        let mut json = serde_json::to_value(&system).unwrap();
+        json["star"]["info"]
+            .as_object_mut()
+            .unwrap()
+            .remove("age_gyr")
+            .unwrap();
+        for body in json["bodies"].as_array_mut().unwrap() {
+            body["params"]
+                .as_object_mut()
+                .unwrap()
+                .remove("age_gyr")
+                .unwrap();
+        }
+        let dir = std::env::temp_dir().join(format!("mapgen-no-age-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("system.json"), serde_json::to_vec(&json).unwrap()).unwrap();
+        let back = read_system(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let default = crate::star::DEFAULT_AGE_GYR;
+        assert_eq!(back.star.info.age_gyr, default);
+        assert!(!back.bodies.is_empty());
+        assert!(back.bodies.iter().all(|b| b.params.age_gyr == default));
+    }
+
+    #[test]
     fn rocky_planets_keep_out_of_the_first_cold_giants_belt_zone() {
         let mut zones = 0;
         for seed in 0..200 {
@@ -3152,6 +3310,7 @@ mod tests {
 
     fn whole_drawn(seed: u32) -> SystemRequest {
         SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
             star: Some("G2V".into()),
             metallicity: Some(0.2),
             planets: None,
@@ -3291,6 +3450,7 @@ mod spin_tests {
 
     fn red_dwarf_system(seed: u32) -> System {
         let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
             star: Some("M4V".into()),
             metallicity: Some(0.0),
             planets: None,
@@ -3436,6 +3596,7 @@ mod spin_tests {
     fn a_moons_spin_and_world_share_one_tilt_and_giants_one_recipe() {
         for seed in 0..20 {
             let request = SystemRequest::System(WholeSystemRequest {
+                age_gyr: None,
                 star: Some("G2V".into()),
                 metallicity: Some(0.0),
                 planets: Some(

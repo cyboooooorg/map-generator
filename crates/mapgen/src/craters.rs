@@ -540,9 +540,9 @@ impl CraterField {
         let radius_km = p.circumference_km as f64 / (2.0 * PI);
         // Locked to its star (not a moon, which is locked to its planet).
         let star = crate::spin::star_info(p);
-        let locked_since_ga = star.tidally_locked.then(|| {
-            f64::from((crate::star::AGE_GYR.min(star.lifetime_gyr) - star.locking_gyr).max(0.0))
-        });
+        let locked_since_ga = star
+            .tidally_locked
+            .then(|| f64::from((star.age_gyr - star.locking_gyr).max(0.0)));
         // A locked planet draws more craters, and keeps a share of them by
         // their angle to its apex (see `leading_share`): the same mean.
         let locked_raise = if locked_since_ga.is_some() {
@@ -1708,6 +1708,7 @@ mod tests {
         let mut planet = Preset::load("barren").unwrap();
         planet.geology.maria = None;
         WorldParams {
+            age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 512,
             height: 256,
             seed: 11,

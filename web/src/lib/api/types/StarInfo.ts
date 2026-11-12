@@ -64,13 +64,18 @@ angular_diameter_deg: number,
  */
 lifetime_gyr: number, 
 /**
+ * Age of the star, Gyr: drawn per system ([`draw_age_gyr`]), at most
+ * its lifetime. Files without one read as [`DEFAULT_AGE_GYR`].
+ */
+age_gyr: number, 
+/**
  * Time for the star's tides to lock the planet's spin, Gyr.
  */
 locking_gyr: number, 
 /**
  * Whether the planet is tidally locked, one face to its star: its
- * locking time is shorter than the star's age ([`AGE_GYR`] or the
- * star's lifetime) and its eccentricity under 0.06 (see
+ * locking time is shorter than the star's age (the star's
+ * `age_gyr`) and its eccentricity under 0.06 (see
  * `crate::spin`).
  */
 tidally_locked: boolean, 

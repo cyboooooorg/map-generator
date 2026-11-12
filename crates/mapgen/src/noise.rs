@@ -164,6 +164,9 @@ pub mod stream {
     /// A system star's activity: its rotation and cycle scatter, cycle
     /// phase and region seed (see `crate::activity`).
     pub const STAR_ACTIVITY: u32 = 40;
+    /// The age of a system, or of a lone world's star (see
+    /// `crate::star::draw_age_gyr`).
+    pub const AGE: u32 = 41;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;

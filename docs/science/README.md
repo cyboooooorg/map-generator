@@ -33,6 +33,8 @@ wants to understand it, and link back to those studies.
 - [How many moons can a planet keep, and how large?](how-many-moons.md)
 - [Why are small moons shaped like potatoes?](moon-shapes.md)
 - [Why do gas giants have bands?](gas-giant-bands.md)
+- [What are planets made of, and how big does that make
+  them?](planet-interiors.md)
 
 ### Planet view: the surface
 

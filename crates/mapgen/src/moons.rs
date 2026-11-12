@@ -863,7 +863,7 @@ impl MoonSystem {
     /// to outlast the system's age (Barnes & O'Brien 2002).
     fn of_giant(p: &WorldParams, mass_earth: f32) -> Self {
         let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
-        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
         let look = crate::giant_world::Look::draw(p, mass_earth).info;
         let r_g = f64::from(p.circumference_km) / (2.0 * PI);
         let m_g = f64::from(mass_earth) * EARTH_MASS_KG;
@@ -1088,7 +1088,7 @@ impl PlanetEffects {
         let star = if p.giant_mass_earth.is_none() {
             crate::spin::star_info(p)
         } else {
-            StarInfo::new(p.star, p.orbit_au, p.eccentricity)
+            StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr)
         };
         let r_p = f64::from(p.circumference_km) / (2.0 * PI);
         let size = r_p / EARTH_RADIUS_KM;
@@ -1243,6 +1243,8 @@ pub fn small_body_params(
         crate::preset::ParamDefault::Fixed(v) => v,
         crate::preset::ParamDefault::Range([lo, _]) => lo,
     });
+    // A surface is never older than its system.
+    let surface_age_ga = surface_age_ga.min(planet.age_gyr);
     WorldParams {
         width,
         height: width / 2,
@@ -1258,6 +1260,7 @@ pub fn small_body_params(
         star: planet.star,
         orbit_au: planet.orbit_au,
         eccentricity: planet.eccentricity,
+        age_gyr: planet.age_gyr,
         drift_ma: 0.0,
         moons: MoonsMode::None,
         shape,
@@ -1362,6 +1365,7 @@ fn regular_moon(
         p.star,
         p.orbit_au,
         p.eccentricity,
+        p.age_gyr,
     )));
     let radius = (3.0 * mass / (4.0 * PI * density * 1e12)).cbrt();
     let period = 2.0 * PI * (a.powi(3) / (G * (m_g + mass))).sqrt() / 86_400.0;
@@ -1415,6 +1419,7 @@ mod tests {
 
     fn params(seed: u32, circumference_km: f32) -> WorldParams {
         WorldParams {
+            age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 64,
             height: 32,
             seed,
@@ -1824,8 +1829,9 @@ mod tests {
             p.star = crate::star::parse_type("M5V").unwrap();
             p.orbit_au = crate::star::orbit_at(p.star, 0.5);
             let system = MoonSystem::draw(&p).unwrap();
-            let year_h =
-                crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity).year_days * 24.0;
+            let year_h = crate::star::StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr)
+                .year_days
+                * 24.0;
             assert!((system.planet_day_hours - year_h).abs() < 1e-3 * year_h);
             assert!(!system.binary);
             for m in &system.moons {
@@ -1973,7 +1979,7 @@ mod tests {
             p.orbit_au = 0.12;
             p.circumference_km = crate::giant_world::radius_earth(&p, 318.0) * 40_075.0;
             let system = MoonSystem::draw(&p).unwrap();
-            let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity);
+            let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
             let look = crate::giant_world::Look::draw(&p, 318.0).info;
             assert!(crate::spin::giant_locked(&star, 318.0, look.radius_earth));
             let m_g = 318.0 * EARTH_MASS_KG;

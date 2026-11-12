@@ -60,6 +60,12 @@ export const en = {
     /** Between a number and its unit. */
     unitSpace: ' ',
     millionKm2: 'M km²',
+    ageWords: {
+      billionOne: 'billion years',
+      billionMany: 'billion years',
+      millionOne: 'million years',
+      millionMany: 'million years',
+    },
     /** Astronomical unit. */
     au: 'AU',
     justNow: 'just now',
@@ -109,8 +115,8 @@ export const en = {
     body: 'The body shown',
     planets: 'Its planets, from the star outwards: pick one',
     starFacts: (p: { temperature: string; luminosity: string }) => `${p.temperature} · ${p.luminosity}`,
-    systemFacts: (p: { planets: number; moons: number; ice: string; metallicity: string }) =>
-      `${p.planets} planet${p.planets === 1 ? '' : 's'}, ${p.moons} moon${p.moons === 1 ? '' : 's'} · ice line ${p.ice} · [Fe/H] ${p.metallicity}`,
+    systemFacts: (p: { planets: number; moons: number; ice: string; metallicity: string; age: string }) =>
+      `${p.planets} planet${p.planets === 1 ? '' : 's'}, ${p.moons} moon${p.moons === 1 ? '' : 's'} · ice line ${p.ice} · [Fe/H] ${p.metallicity} · age ${p.age}`,
     moonOf: (p: { planet: string }) => `moon of ${p.planet}`,
     planetOf: (p: { star: string }) => `planet of ${p.star}`,
     orbit: 'Orbit',
@@ -123,6 +129,8 @@ export const en = {
     axes: (p: { a: string; b: string; c: string }) => `${p.a} × ${p.b} × ${p.c} across`,
     axesHelp: 'Its three diameters, the longest towards its planet when it is locked to it: an irregular moon, or a round one stretched by its planet’s tides',
     tilt: (p: { tilt: string }) => `tilt ${p.tilt}`,
+    age: 'Age',
+    ageValue: (p: { age: string; surface: string }) => `${p.age} · surface ${p.surface}`,
     light: 'Light',
     lightValue: (p: { flux: string; temperature: string }) => `${p.flux}× Earth's · equilibrium ${p.temperature}`,
     moons: 'Moons',
@@ -325,6 +333,7 @@ export const en = {
     pressureClouds: (p: { pressure: string; clouds: string }) => `${p.pressure}, ${p.clouds} clouds`,
     pressureNoClouds: (p: { pressure: string }) => `${p.pressure}, no clouds`,
     geology: 'Geology',
+    age: 'Age',
     star: 'Star',
     starValue: (p: { type: string; teff: string; luminosity: string }) => `${p.type} · ${p.teff} · ${p.luminosity}`,
     orbit: 'Orbit',
@@ -987,6 +996,7 @@ export const en = {
     luminosity: 'Luminosity',
     luminosityHelp: 'Power the star radiates, relative to the Sun',
     sizeHelp: "Radius and mass of the star, relative to the Sun's (696 000 km, 2 × 10³⁰ kg)",
+    ageHelp: 'Age of the star and of its system (the Sun: 4.6 billion years)',
     lifetimeHelp: 'Time the star stays on the main sequence, burning the hydrogen of its core steadily (the Sun: about 10 billion years)',
     zoneHelp: 'Distances where water can stay liquid on an Earth-like planet (Kopparapu et al. 2014)',
     orbitHelp: 'Semi-major axis of the orbit (its mean distance) and the place of the planet relative to the habitable zone (0 inner edge, 1 outer edge)',
@@ -1080,6 +1090,7 @@ export const en = {
     compressed: (p: { distance: string }) =>
       `Beyond the dashed circle (${p.distance}), distances are compressed to fit the giants in.`,
     lifetime: 'Lifetime',
+    age: 'Age',
     gyr: 'billion years',
     zone: 'Habitable zone',
     range: (p: { inner: string; outer: string }) => `${p.inner} to ${p.outer}`,
@@ -1187,6 +1198,7 @@ export const en = {
     zoneOuter: (p: { gap: string }) => `${p.gap} beyond it`,
     speedNow: (p: { speed: string }) => `${p.speed} now`,
     year: 'Year',
+    age: 'Age',
     day: 'Day',
     dayLocked: 'locked to its star',
     light: 'Light',
