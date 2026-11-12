@@ -137,8 +137,33 @@ with $M_h$ the host's mass, $R$ the planet's radius, $a$ and $e$ its orbit's
 semi-major axis and eccentricity, $n$ its mean motion, and $k_2/Q$ the
 tidal response.
 
+The tidal response $k_2/Q$ depends on what the planet is made of, read
+from its composition, never from a class or a type name:
+
+| Body | Rule | $k_2/Q$ | Source |
+| --- | --- | --- | --- |
+| Enveloped | at least 0.1 % of the mass in gas | $1.1 \times 10^{-5}$ | Jupiter's, measured (Lainey et al. 2009) |
+| Icy | otherwise, at least 5 % water and ices | $2.5 \times 10^{-3}$ | calibration (Europa, Enceladus) |
+| Rocky | the rest | 0.015 | Io's, measured (Lainey et al. 2009) |
+
+The thresholds are the mini-Neptune and ice world lines of the classes
+below. A gas envelope sets the radius, whose fifth power the heat follows,
+but dissipates little: Jupiter's $k_2/Q$ is about 1400 times smaller than
+Io's. Saturn's, measured at $1.6$ to $2.3 \times 10^{-4}$ (Lainey et al.
+2012; Lainey 2016), is 15 to 20 times Jupiter's; the eccentricities of
+close-in giants point to a weaker one, a $Q' = 3Q/2k_2$ of $10^{6.5}$, about
+$5 \times 10^{-7}$ (Jackson, Greenberg & Barnes 2008). No icy moon has a
+measured $k_2/Q$: the icy value is a $k_2$ of about 0.25 for an ice shell
+over an ocean (Wahr et al. 2006) over a $Q$ of 100, a calibration.
+
 **Orders of magnitude.** Io, with $k_2/Q$ = 0.015, gets about $10^{14}$ W
-from Jupiter (Lainey et al. 2009).
+from Jupiter (Lainey et al. 2009). Europa, with the icy value, gets about
+$1.1 \times 10^{12}$ W, 35 mW/m², within the 10 to 50 mW/m² of tidal
+heating that thermal models of its ice shell consider (Kimura 2024), and
+Enceladus about 3.7 GW, a quarter of the 15.8 GW it radiates (Howett et
+al. 2011). A Jupiter at 0.04 AU from the Sun on an orbit of eccentricity
+0.1 gets about 4 % of the starlight it absorbs; with Io's response, which
+every body took before, it got 60 times that starlight.
 
 ### Classes
 
@@ -216,7 +241,10 @@ and envelope per class
   planet with a 30 % envelope (the model allows up to 30 %) is sized as if
   it had 20 %.
 - **Moons have no model** yet.
-- **Tides** use one $k_2/Q$ for every planet (Io's) and neglect the
+- **Tides** use one $k_2/Q$ per kind of body, not one per planet: a cold
+  rocky planet takes Io's, which is partly molten (Mars's is about
+  $1.7 \times 10^{-3}$, Lainey 2016), and every enveloped planet takes
+  Jupiter's, from a mini-Neptune to a hot Jupiter. They neglect the
   planet's own mass.
 
 ## Sources
@@ -242,49 +270,79 @@ and envelope per class
    [doi:10.1146/annurev.earth.33.092203.122639](https://doi.org/10.1146/annurev.earth.33.092203.122639).
 7. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
    [doi:10.1088/0004-637X/726/1/15](https://doi.org/10.1088/0004-637X/726/1/15).
-8. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
-   tidal dissipation in Io and Jupiter from astrometric observations",
-   *Nature* 459, 957–959,
-   [doi:10.1038/nature08108](https://doi.org/10.1038/nature08108).
-9. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
-   [doi:10.3847/0004-637X/817/2/90](https://doi.org/10.3847/0004-637X/817/2/90).
-10. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
+8. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
+   heat flow from Enceladus' south polar region measured using 10–600
+   cm⁻¹ Cassini/CIRS data", *Journal of Geophysical Research* 116, E03003,
+   [doi:10.1029/2010JE003718](https://doi.org/10.1029/2010JE003718).
+9. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
+   close-in extrasolar planets", *The Astrophysical Journal* 678,
+   1396–1406, [doi:10.1086/529187](https://doi.org/10.1086/529187).
+10. Kimura, J. 2024, "Europa's structural conditions for the existence of
+    subsurface ocean and the absence of metallic core-driven magnetic
+    field", arXiv:2403.01336,
+    [arxiv.org/abs/2403.01336](https://arxiv.org/abs/2403.01336).
+11. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
+    tidal dissipation in Io and Jupiter from astrometric observations",
+    *Nature* 459, 957–959,
+    [doi:10.1038/nature08108](https://doi.org/10.1038/nature08108).
+12. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
+    data", *Celestial Mechanics and Dynamical Astronomy* 126, 145–156
+    (table 1),
+    [doi:10.1007/s10569-016-9695-y](https://doi.org/10.1007/s10569-016-9695-y).
+13. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
+    constraints on Enceladus' thermal state from astrometry", *The
+    Astrophysical Journal* 752, 14,
+    [doi:10.1088/0004-637X/752/1/14](https://doi.org/10.1088/0004-637X/752/1/14).
+14. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
+    [doi:10.3847/0004-637X/817/2/90](https://doi.org/10.3847/0004-637X/817/2/90).
+15. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
     relation for sub-Neptunes: radius as a proxy for composition", *The
     Astrophysical Journal* 792, 1,
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
-11. Marty, B. 2012, "The origins and concentrations of water, carbon,
+16. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
     Letters* 313–314, 56–66,
     [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
-12. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
+17. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-13. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+18. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-14. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+19. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-15. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+20. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-16. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+21. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-17. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+22. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-18. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+23. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+    Europa, and the thickness of Europa's icy shell", *Journal of
+    Geophysical Research* 111, E12005,
+    [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
+24. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-19. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+25. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).
-20. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+26. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
 
-The three DOIs above were checked against the publishers' pages. Of the
+The three DOIs above were checked against the publishers' pages; the
+DOIs of the tidal sources (Howett, Jackson, Kimura, Lainey, Wahr) against
+their Crossref records. Of the tidal figures, Jupiter's and Io's $k_2/Q$,
+Saturn's $1.59 \times 10^{-4}$ and Mars's $k_2$ and $Q$ match table 1 of
+Lainey 2016; Saturn's $2.3 \times 10^{-4}$, the planetary $Q$ of
+$10^{6.5}$ of Jackson et al. and Kimura's 10 to 50 mW/m² match their
+abstracts; Howett's 15.8 GW and Wahr's $k_2$ of 0.25 were not checked in
+the papers themselves. Of the
 figures quoted from papers, Marty's 1000 to 3000 ppm of water and up to
 500 ppm of carbon match the abstract; his 2 ppm of nitrogen (the abstract
 only says nitrogen is depleted by about an order of magnitude) and the

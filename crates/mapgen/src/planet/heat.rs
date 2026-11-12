@@ -1,7 +1,8 @@
 //! The heat a planet makes inside (spec "Derived, in order", item 2): the
 //! decay of its radioactive isotopes, from its silicate mass, its
 //! abundance at formation and its age ([`radiogenic_w`]), and the tides a
-//! host raises in it on an eccentric orbit ([`tidal_power_w`]).
+//! host raises in it on an eccentric orbit ([`tidal_power_w`]), with the
+//! response of a rocky, icy or enveloped body ([`k2_over_q`]).
 //! [`InternalHeat`] holds both and the mean flux they push through the
 //! surface.
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,70 @@ pub fn tidal_power_w(
         / a_m.powi(6)
 }
 
+/// Tidal response `k₂/Q` of a rocky body: Io's, `0.015 ± 0.003`, measured
+/// from the drift of the Galilean moons' orbits (Lainey et al. 2009,
+/// doi:10.1038/nature08108; table 1 of Lainey 2016,
+/// doi:10.1007/s10569-016-9695-y), the value `crate::exomoon` gives its
+/// moons. Io is partly molten: a cold rocky body dissipates less (Mars,
+/// `k₂` 0.173 over `Q` 99.5, about 1.7e-3, same table).
+pub const ROCKY_K2_OVER_Q: f64 = 0.015;
+
+/// Tidal response `k₂/Q` of an icy body, an ice shell over an ocean.
+/// Calibration, no source: no icy moon has a measured `k₂/Q`. A `k₂` of
+/// about 0.25 for a shell over an ocean (Wahr et al. 2006,
+/// doi:10.1029/2006JE002729) over a `Q` of 100 gives Europa about
+/// 1.1e12 W, 35 mW/m², within the 10 to 50 mW/m² of tidal heating that
+/// thermal models of its shell consider (Kimura 2024, arXiv:2403.01336),
+/// and Enceladus about 3.7 GW, a quarter of the 15.8 ± 3.1 GW it radiates
+/// (Howett et al. 2011, doi:10.1029/2010JE003718) and that the
+/// equilibrium of its orbit can supply given Saturn's strong measured
+/// dissipation (Lainey et al. 2012, doi:10.1088/0004-637X/752/1/14).
+pub const ICY_K2_OVER_Q: f64 = 2.5e-3;
+
+/// Tidal response `k₂/Q` of a body wrapped in hydrogen and helium:
+/// Jupiter's, `(1.102 ± 0.203) × 10⁻⁵`, measured with Io's (Lainey et al.
+/// 2009, doi:10.1038/nature08108). Saturn's, measured at `(2.3 ± 0.7) ×
+/// 10⁻⁴` (Lainey et al. 2012, doi:10.1088/0004-637X/752/1/14) and `(1.59
+/// ± 0.74) × 10⁻⁴` (Lainey 2016, doi:10.1007/s10569-016-9695-y), is about
+/// 15 to 20 times larger; the eccentricities of close-in giants point to a
+/// smaller one, `Q′ = 3Q / 2k₂` of 10^6.5, about 5e-7 (Jackson, Greenberg
+/// & Barnes 2008, doi:10.1086/529187). Io's response on a giant's radius,
+/// whose fifth power the heat follows, gave a close eccentric hot Jupiter
+/// 60 times the starlight it absorbs (issue #433); Jupiter's gives it a
+/// few per cent.
+pub const ENVELOPED_K2_OVER_Q: f64 = 1.1e-5;
+
+/// Least hydrogen and helium share of the mass that makes a body respond
+/// to tides as an enveloped one. Calibration, no source: from 0.1 % of
+/// the mass, the envelope lifts a 5 M⊕ core by about 0.15 R⊕ (Lopez &
+/// Fortney 2014, doi:10.1088/0004-637X/792/1/1), so it sets the radius
+/// the tides act on; the mini-Neptune line of [`super::classify`] is the
+/// same share.
+pub const ENVELOPED_MIN_ENVELOPE: f64 = 1e-3;
+
+/// Least share of water and ices of the mass that makes a body without
+/// an envelope respond to tides as an icy one. Calibration, no source:
+/// Europa (about 8 % water, see [`super::reference`]) is icy, Io and
+/// Earth (0.02 %) are rocky; the ice world line of [`super::classify`] is
+/// the same share.
+pub const ICY_MIN_WATER: f64 = 0.05;
+
+/// Tidal response `k₂/Q` of a body from what it is made of: its hydrogen
+/// and helium share `envelope_fraction` and its water and ice share
+/// `water_fraction`, both of the total mass. Enveloped
+/// ([`ENVELOPED_K2_OVER_Q`]) from [`ENVELOPED_MIN_ENVELOPE`], whatever
+/// its water (Uranus and Neptune); otherwise icy ([`ICY_K2_OVER_Q`]) from
+/// [`ICY_MIN_WATER`]; otherwise rocky ([`ROCKY_K2_OVER_Q`]).
+pub fn k2_over_q(envelope_fraction: f64, water_fraction: f64) -> f64 {
+    if envelope_fraction >= ENVELOPED_MIN_ENVELOPE {
+        ENVELOPED_K2_OVER_Q
+    } else if water_fraction >= ICY_MIN_WATER {
+        ICY_K2_OVER_Q
+    } else {
+        ROCKY_K2_OVER_Q
+    }
+}
+
 /// The heat a planet makes inside, W.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InternalHeat {
@@ -125,6 +190,69 @@ mod tests {
         // k₂/Q 0.015 (exomoon's): observed output about 1e14 W (Lainey et al. 2009).
         let w = tidal_power_w(1.898e27, 1.8216e6, 4.217e8, 0.0041, 0.015);
         assert!((3e13..3e14).contains(&w), "{w}");
+    }
+
+    #[test]
+    fn the_tidal_response_follows_the_composition() {
+        // (envelope, water) → k₂/Q.
+        let cases = [
+            ((0.0, 0.0), ROCKY_K2_OVER_Q),
+            ((0.0, 0.049), ROCKY_K2_OVER_Q),
+            ((9e-4, 0.0), ROCKY_K2_OVER_Q),
+            ((0.0, 0.05), ICY_K2_OVER_Q),
+            ((9e-4, 0.4), ICY_K2_OVER_Q),
+            ((1e-3, 0.0), ENVELOPED_K2_OVER_Q),
+            ((1e-3, 0.4), ENVELOPED_K2_OVER_Q),
+            ((0.95, 0.0), ENVELOPED_K2_OVER_Q),
+        ];
+        for ((envelope, water), expected) in cases {
+            assert_eq!(k2_over_q(envelope, water), expected, "{envelope} {water}");
+        }
+    }
+
+    #[test]
+    fn the_solar_system_responds_to_tides_by_its_composition() {
+        use crate::planet::reference;
+        let expect = [
+            ("Mercury", ROCKY_K2_OVER_Q),
+            ("Earth", ROCKY_K2_OVER_Q),
+            ("Moon", ROCKY_K2_OVER_Q),
+            ("Io", ROCKY_K2_OVER_Q),
+            ("Europa", ICY_K2_OVER_Q),
+            ("Ganymede", ICY_K2_OVER_Q),
+            ("Titan", ICY_K2_OVER_Q),
+            ("Jupiter", ENVELOPED_K2_OVER_Q),
+            ("Saturn", ENVELOPED_K2_OVER_Q),
+            ("Uranus", ENVELOPED_K2_OVER_Q),
+            ("Neptune", ENVELOPED_K2_OVER_Q),
+        ];
+        for (name, k2q) in expect {
+            let body = reference(name);
+            assert_eq!(
+                k2_over_q(body.envelope_fraction, body.water_fraction),
+                k2q,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_icy_response_heats_europa_and_enceladus_as_observed() {
+        // Europa: Jupiter 1.898e27 kg, R 1.5608e6 m, a 6.709e8 m, e 0.009.
+        let r = 1.5608e6;
+        let europa = tidal_power_w(1.898e27, r, 6.709e8, 0.009, ICY_K2_OVER_Q);
+        let flux = europa / (4.0 * PI * r * r);
+        assert!(
+            (0.01..0.05).contains(&flux),
+            "Europa {europa} W, {flux} W/m²"
+        );
+        // Enceladus: Saturn 5.683e26 kg, R 2.521e5 m, a 2.3802e8 m,
+        // e 0.0047: a few GW, under the 15.8 GW observed.
+        let enceladus = tidal_power_w(5.683e26, 2.521e5, 2.3802e8, 0.0047, ICY_K2_OVER_Q);
+        assert!(
+            (2e9..15.8e9).contains(&enceladus),
+            "Enceladus {enceladus} W"
+        );
     }
 
     #[test]
