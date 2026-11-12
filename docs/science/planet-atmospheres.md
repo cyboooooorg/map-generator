@@ -12,18 +12,24 @@ interiors are in [planet-interiors.md](planet-interiors.md).
 has received over its system's age, relative to Earth's (the Sun at
 1 AU at 4.567 Gyr is 1.0). It is the budget that drives photoevaporation.
 
-The star emits `L_XUV / L_bol = 10^-3` while saturated (Wright et al.
-2011, doi:10.1088/0004-637X/743/1/48), for a time `t_sat = 0.1 Gyr ·
-M^-2` (M in solar masses; 0.1 Gyr for the Sun from Jackson, Davis &
+The star emits `L_XUV / L_bol = 3.71e-4` (1 to 1180 Å) while
+saturated: the Sun's own, from the fit `F = 29.7 τ^-1.23` erg s⁻¹ cm⁻²
+at 1 AU of Ribas et al. 2005 (doi:10.1086/427977; τ in Gyr, saturated
+before 0.1 Gyr), 504 erg s⁻¹ cm⁻² at 0.1 Gyr over the 1361 W/m² solar
+constant (fit and band as cited in the model's review, not re-read). It
+is below the X-ray saturation of the fastest rotators, `L_X / L_bol ≈
+10^-3` (Wright et al. 2011, doi:10.1088/0004-637X/743/1/48). It lasts
+`t_sat = 0.1 Gyr · M^-2` (M in solar masses; 0.1 Gyr for the Sun from Jackson, Davis &
 Wheatley 2012, doi:10.1111/j.1365-2966.2012.21384.x, the mass exponent is
 a calibration giving 1.1 Gyr at 0.3 M☉ and 2.5 Gyr at 0.2 M☉), then
 decays as `t^-1.23` (Ribas et al. 2005, doi:10.1086/427977). The
 integral over the age is analytic and is multiplied by the insolation.
 The luminosity is taken constant over the age.
 
-Calibration targets: Earth is 1.0 (absolute value
-`EARTH_XUV_FLUENCE_J_M2` = 1.5e16 J/m²); 5 to 10 Gyr adds under 30 %;
-a 0.2 M☉ star at Earth's insolation delivers more than 10 times Earth's
+Calibration targets: Earth is 1.0; its absolute value
+`EARTH_XUV_FLUENCE_J_M2` = 5.64e15 J/m² is Ribas et al.'s fit integrated
+over 4.567 Gyr, and today's flux 4.6 mW/m² is theirs, both within 1 %;
+5 to 10 Gyr adds under 30 %; a 0.2 M☉ star at Earth's insolation delivers more than 10 times Earth's
 fluence.
 
 ## Envelope escape
@@ -56,7 +62,10 @@ envelope lost. Nothing is tuned to the radius valley's position; the
 census of the valley is measured at the end of part 2.
 
 Calibration targets: a 5 M⊕ planet with a 1 % envelope at 0.05 AU round
-the Sun is stripped and its radius falls under 1.8 R⊕; Jupiter at
+the Sun is stripped and its radius falls under 1.8 R⊕ (with a 2 %
+envelope it is stripped at 0.05 AU and keeps about a third of it at
+0.1 AU, where the fluence of before Ribas et al.'s normalisation, 2.7
+times higher, stripped it); Jupiter at
 0.05 AU keeps over 99 % of its envelope; 5 M⊕ with 1 % at 0.5 AU keeps at
 least half; Earth, Uranus and Neptune are unchanged.
 

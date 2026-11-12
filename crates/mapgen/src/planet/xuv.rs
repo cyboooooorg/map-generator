@@ -9,11 +9,17 @@
 //! current activity; this one is for the history.
 use super::Context;
 
-/// Share of the bolometric luminosity emitted as XUV while the star is
-/// saturated. Wright et al. 2011, ApJ 743, 48, doi:10.1088/0004-637X/743/1/48
-/// (`L_X/L_bol ≈ 10^-3` for fast rotators); the XUV band is a few times
-/// the X-ray band alone (Ribas et al. 2005, doi:10.1086/427977).
-const SATURATED_RATIO: f64 = 1.0e-3;
+/// Share of the bolometric luminosity emitted as XUV (1 to 1180 Å) while
+/// the star is saturated: the Sun's own, from Ribas et al. 2005
+/// (doi:10.1086/427977), whose fit `F = 29.7 τ^-1.23` erg s⁻¹ cm⁻² at
+/// 1 AU (τ in Gyr, from 0.1 Gyr) gives 504 erg s⁻¹ cm⁻² at the end of
+/// saturation, 0.1 Gyr, or 3.71e-4 of the 1361 W/m² solar constant. The
+/// fit and its band are taken from the paper as cited by the review of
+/// this model, not re-read in it. The X-ray saturation of the fastest
+/// rotators, `L_X/L_bol ≈ 10^-3` (Wright et al. 2011,
+/// doi:10.1088/0004-637X/743/1/48), is higher: the young Sun of Ribas
+/// et al. sat below it.
+const SATURATED_RATIO: f64 = 3.71e-4;
 
 /// Exponent of the decay of the XUV luminosity with age after saturation:
 /// `L_XUV ∝ t^-1.23` for the Sun (Ribas et al. 2005,
@@ -36,9 +42,12 @@ const SATURATION_MASS_EXPONENT: f64 = 2.0;
 /// Earth's age, Gyr: the reference of the relative fluence.
 const EARTH_AGE_GYR: f64 = 4.567;
 
-/// XUV energy Earth has received over 4.567 Gyr, J/m²: the model below
-/// integrated for the Sun, `1.0e-3 · 1361 W/m² · 0.354 Gyr`.
-pub const EARTH_XUV_FLUENCE_J_M2: f64 = 1.52e16;
+/// XUV energy Earth has received over 4.567 Gyr, J/m²: the fit of Ribas
+/// et al. 2005 integrated, 0.504 W/m² for 0.1 Gyr then
+/// `29.7 τ^-1.23` mW/m² to 4.567 Gyr, which is the model below for the
+/// Sun, `3.71e-4 · 1361 W/m² · 0.354 Gyr` (5.64e15). Today's flux is
+/// 4.6 mW/m².
+pub const EARTH_XUV_FLUENCE_J_M2: f64 = 5.64e15;
 
 /// Time-integral of the XUV-to-bolometric ratio from 0 to `age_gyr` for a
 /// star of `star_mass`, in Gyr (constant in the saturated phase, then
@@ -99,6 +108,23 @@ mod tests {
     fn earth_absolute_value_matches_the_model() {
         let j = SOLAR_CONSTANT_W_M2 * integrated_ratio_gyr(1.0, EARTH_AGE_GYR) * GYR_S;
         assert!((j / EARTH_XUV_FLUENCE_J_M2 - 1.0).abs() < 0.02, "{j:e}");
+    }
+
+    #[test]
+    fn earth_matches_ribas_2005() {
+        // Ribas et al. 2005: F = 29.7 τ^-1.23 erg/s/cm² = mW/m² at 1 AU,
+        // saturated before 0.1 Gyr.
+        let ribas = |t: f64| 29.7e-3 * t.max(0.1).powf(-DECAY_EXPONENT);
+        let saturated = ribas(0.1) * 0.1;
+        let decayed =
+            29.7e-3 * (0.1f64.powf(-0.23) - EARTH_AGE_GYR.powf(-0.23)) / (DECAY_EXPONENT - 1.0);
+        let j = (saturated + decayed) * GYR_S;
+        assert!((j / EARTH_XUV_FLUENCE_J_M2 - 1.0).abs() < 0.01, "{j:e}");
+        // Today's flux: the model's ratio at 4.567 Gyr times the constant.
+        let now = SOLAR_CONSTANT_W_M2
+            * SATURATED_RATIO
+            * (EARTH_AGE_GYR / SATURATION_SUN_GYR).powf(-DECAY_EXPONENT);
+        assert!((now / ribas(EARTH_AGE_GYR) - 1.0).abs() < 0.01, "{now}");
     }
 
     #[test]

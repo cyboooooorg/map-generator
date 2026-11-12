@@ -212,10 +212,13 @@ mod tests {
 
     #[test]
     fn an_enveloped_planet_above_the_valley_is_a_mini_neptune() {
-        // At 0.1 AU such an envelope is photoevaporated (see `escape`).
+        // At 0.05 AU such an envelope is photoevaporated (see `escape`); at
+        // 0.1 AU, since the XUV fluence follows Ribas et al. 2005, it keeps
+        // about a third of it.
         assert_eq!(class_of(with_envelope(5.0, 0.02), 0.5), MiniNeptune);
         assert_eq!(class_of(with_envelope(5.0, 0.0), 0.5), SuperEarth);
-        assert_eq!(class_of(with_envelope(5.0, 0.02), 0.1), SuperEarth);
+        assert_eq!(class_of(with_envelope(5.0, 0.02), 0.05), SuperEarth);
+        assert_eq!(class_of(with_envelope(5.0, 0.02), 0.1), MiniNeptune);
     }
 
     #[test]
