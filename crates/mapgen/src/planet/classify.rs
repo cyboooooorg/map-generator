@@ -314,11 +314,8 @@ mod tests {
                                 ..reference::inputs(mass, 0.325, 0.1)
                             };
                             let model = planet_model(&context, inputs);
-                            let json = serde_json::to_value(&model).unwrap();
-                            assert_all_finite(
-                                &json,
-                                &format!("{star} {mass} {insolation} {age} {envelope}"),
-                            );
+                            let what = format!("{star} {mass} {insolation} {age} {envelope}");
+                            assert_eq!(not_finite(&model), None, "{what}");
                         }
                     }
                 }
@@ -326,16 +323,47 @@ mod tests {
         }
     }
 
-    /// Every number in `value` is finite and not negative.
-    fn assert_all_finite(value: &serde_json::Value, what: &str) {
+    #[test]
+    fn the_finiteness_check_sees_nan_and_infinity() {
+        let model = planet_model(&sun_at(1.0), model_inputs(reference("Earth")));
+        assert_eq!(not_finite(&model), None);
+        let mut nan = model.clone();
+        nan.heat.radiogenic_w = f64::NAN;
+        assert!(not_finite(&nan).is_some());
+        let mut deep = model.clone();
+        let mut surface = deep.surface.expect("Earth has a surface");
+        surface.climate.temperature_k = f64::INFINITY;
+        deep.surface = Some(surface);
+        assert!(not_finite(&deep).is_some());
+        let mut negative = model;
+        negative.xuv_fluence = -1.0;
+        assert!(not_finite(&negative).is_some());
+    }
+
+    /// The path of the first number of `model` that is not finite or is
+    /// negative, if any. serde_json writes a non-finite `f64` as `null`,
+    /// so a `null` counts as one, except where an `Option` is expected
+    /// (`surface`, `None` for an enveloped body).
+    fn not_finite(model: &crate::planet::PlanetModel) -> Option<String> {
+        let json = serde_json::to_value(model).unwrap();
+        first_bad(&json, "")
+    }
+
+    fn first_bad(value: &serde_json::Value, path: &str) -> Option<String> {
         match value {
             serde_json::Value::Number(n) => {
                 let x = n.as_f64().unwrap();
-                assert!(x.is_finite() && x >= 0.0, "{what}: {x}");
+                (!(x.is_finite() && x >= 0.0)).then(|| format!("{path}: {x}"))
             }
-            serde_json::Value::Array(a) => a.iter().for_each(|v| assert_all_finite(v, what)),
-            serde_json::Value::Object(o) => o.values().for_each(|v| assert_all_finite(v, what)),
-            _ => {}
+            serde_json::Value::Null if path != "/surface" => Some(format!("{path}: null")),
+            serde_json::Value::Array(a) => a
+                .iter()
+                .enumerate()
+                .find_map(|(i, v)| first_bad(v, &format!("{path}/{i}"))),
+            serde_json::Value::Object(o) => o
+                .iter()
+                .find_map(|(k, v)| first_bad(v, &format!("{path}/{k}"))),
+            _ => None,
         }
     }
 }
