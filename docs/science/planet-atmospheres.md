@@ -59,3 +59,34 @@ Calibration targets: a 5 M⊕ planet with a 1 % envelope at 0.05 AU round
 the Sun is stripped and its radius falls under 1.8 R⊕; Jupiter at
 0.05 AU keeps over 99 % of its envelope; 5 M⊕ with 1 % at 0.5 AU keeps at
 least half; Earth, Uranus and Neptune are unchanged.
+
+## Runaway greenhouse, water kept and tectonic regime
+
+`planet::regime::water` and `planet::regime::regime` (not yet chained into
+`planet_model`).
+
+**Runaway.** A planet whose insolation exceeds the runaway limit of
+`star::habitable_fluxes` (Kopparapu et al. 2014,
+doi:10.1088/2041-8205/787/2/L29, for a 1 M⊕ planet) cannot keep liquid
+water: the oceans sit in the air as vapour. The mass correction of that
+paper is not applied (not checked). There the XUV splits the water and
+the hydrogen escapes at the energy-limited rate of the previous section
+(Owen & Wu 2017), 9 kg of water for each kg of hydrogen:
+`kept = max(0, water - 9 H lost)`. Without a runaway the planet keeps its
+water. `oceans` counts it in units of 1.4e21 kg.
+
+**Regime.** A labelled calibration, since the literature disagrees on the
+mass dependence (see [plate tectonics](plate-tectonics.md)):
+
+- heat pipe above 2 W/m² of internal heat (Io; Moore & Webb 2013,
+  doi:10.1038/nature12424, value not checked against the paper; Earth's
+  mean is 0.087 W/m²);
+- plates from 0.3 M⊕ (`geology::PLATES_MIN_MASS_EARTH`, shared with the
+  generator) when water is kept;
+- episodic when the mass allows plates but the water is gone (Venus);
+- stagnant otherwise (Mars, Mercury, the Moon).
+
+Calibration targets: Earth keeps 0.9 to 1.1 oceans and has plates; Venus
+is in runaway, loses even an Earth ocean and is episodic; Mars and
+Mercury are stagnant; Io with 1e14 W of tidal heat is a heat pipe; a dry
+5 M⊕ planet outside the runaway has no plates.
