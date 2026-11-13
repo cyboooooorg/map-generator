@@ -127,15 +127,11 @@
     return name === undefined ? undefined : archetypes.find((a) => a.spec === name || a.name === name);
   }
 
-  /**
-   * Whether an archetype's world takes the giant path: its mass is no less
-   * than the smallest giant's (`GIANT_MASS` in crates/mapgen/src/request.rs,
-   * Earth masses).
-   */
-  const GIANT_MASS_MIN = 5;
+  /** Lower end of the giant mass slider, Earth masses: a mini-Neptune's (`mini-neptune` starts at 5). */
+  const GIANT_SLIDER_MIN = 5;
+  /** Whether an archetype's world takes the giant path, as the server's model derives it. */
   function isGiantArchetype(archetype: ArchetypeInfo | undefined): boolean {
-    const mass = archetype?.inputs.mass_earth;
-    return mass !== undefined && (typeof mass === 'number' ? mass : mass[0]) >= GIANT_MASS_MIN;
+    return archetype?.giant === true;
   }
 
   // The form starts from the props as they are when it opens; later prop
@@ -719,14 +715,14 @@
               <!-- Logarithmic: from a small ice giant to 13 Jupiter masses. -->
               <input
                 type="range"
-                min={Math.log10(Math.max(GIANT_MASS_MIN, spec.inputs.mass_earth.min))}
+                min={Math.log10(Math.max(GIANT_SLIDER_MIN, spec.inputs.mass_earth.min))}
                 max={Math.log10(spec.inputs.mass_earth.max)}
                 step={0.01}
                 value={Math.log10(giantChoice.mass)}
                 oninput={(e) => (giantChoice.mass = Math.round(10 ** Number(e.currentTarget.value)))}
                 aria-label={t.form.giantMass}
               />
-              <input type="number" min={Math.max(GIANT_MASS_MIN, spec.inputs.mass_earth.min)} max={spec.inputs.mass_earth.max} step="any" bind:value={giantChoice.mass} />
+              <input type="number" min={Math.max(GIANT_SLIDER_MIN, spec.inputs.mass_earth.min)} max={spec.inputs.mass_earth.max} step="any" bind:value={giantChoice.mass} />
             </div>
           {/if}
           <p class="help">{t.form.giantMassHelp}</p>

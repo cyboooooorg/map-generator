@@ -6,6 +6,11 @@
 //! parsed once, at startup: a changed or added file is picked up on restart.
 use crate::api::ArchetypeInfo;
 use mapgen::archetype::{Archetype, built_in_names};
+use mapgen::giants::GiantsMode;
+use mapgen::moons::MoonsMode;
+use mapgen::request::WorldRequest;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use std::path::{Path, PathBuf};
 
 pub struct Catalog {
@@ -40,6 +45,11 @@ impl Catalog {
                 continue;
             }
             match Archetype::load(&path.to_string_lossy()) {
+                // A name names one archetype: the form's labels and a
+                // world's `archetype` go by it.
+                Ok(a) if entries.iter().any(|(info, _)| info.name == a.name) => {
+                    tracing::warn!("skipping archetype {spec}: its name {} is taken", a.name);
+                }
                 Ok(a) => entries.push((info(&a, &spec, false), a)),
                 Err(e) => tracing::warn!("skipping archetype {spec}: {e}"),
             }
@@ -68,8 +78,27 @@ fn info(a: &Archetype, spec: &str, built_in: bool) -> ArchetypeInfo {
         built_in,
         inputs: a.inputs.clone(),
         orbit: a.orbit.clone(),
+        giant: renders_as_giant(a),
         locales: a.locales.clone(),
     }
+}
+
+/// Whether the planet of `a`, asked alone at seed 0 (its ranges drawn
+/// once, its star and orbit by a generator seeded 0), renders as a giant:
+/// what the model derives, not a mass threshold. An archetype whose
+/// ranges straddle the giants is read at that one draw.
+fn renders_as_giant(a: &Archetype) -> bool {
+    let request = WorldRequest {
+        seed: Some(0),
+        moons: Some(MoonsMode::None),
+        giants: Some(GiantsMode::None),
+        width: Some(64),
+        height: Some(32),
+        ..WorldRequest::default()
+    };
+    request
+        .resolve_with_archetype(Some(a.clone()), &mut StdRng::seed_from_u64(0))
+        .is_ok_and(|r| r.params.giant_mass_earth.is_some())
 }
 
 fn collect_toml(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -83,5 +112,64 @@ fn collect_toml(dir: &Path, out: &mut Vec<PathBuf>) {
         } else if path.extension().is_some_and(|e| e == "toml") {
             out.push(path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A directory under the system's temporary one, emptied.
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("mapgen-catalog-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn the_giants_are_the_ones_the_model_makes() {
+        let catalog = Catalog::load(&temp_dir("giants"));
+        let giants: Vec<String> = catalog
+            .list()
+            .into_iter()
+            .filter(|a| a.giant)
+            .map(|a| a.name)
+            .collect();
+        assert_eq!(
+            giants,
+            [
+                "jupiter-like",
+                "saturn-like",
+                "uranus-like",
+                "neptune-like",
+                "mini-neptune",
+                "hot-jupiter"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_file_with_a_name_taken_is_skipped() {
+        let dir = temp_dir("taken");
+        std::fs::write(
+            dir.join("mine.toml"),
+            "name = \"earth-like\"\n[inputs]\nmass_earth = 1.0\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("heavy-rock.toml"),
+            "name = \"heavy-rock\"\n[inputs]\nmass_earth = [6.0, 8.0]\nenvelope_fraction = 0.0\n",
+        )
+        .unwrap();
+        let catalog = Catalog::load(&dir);
+        let list = catalog.list();
+        assert_eq!(list.iter().filter(|a| a.name == "earth-like").count(), 1);
+        assert!(catalog.get("mine.toml").is_none());
+        // Heavy, but bare: a rocky super-Earth, not a giant.
+        let rock = list.iter().find(|a| a.name == "heavy-rock").unwrap();
+        assert!(!rock.giant);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

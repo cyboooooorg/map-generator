@@ -25,6 +25,13 @@ inputs: ArchetypeInputs,
  */
 orbit: ArchetypeOrbit, 
 /**
+ * Whether its planet renders as a giant (no ground: no drift, moons
+ * of its own to ask for or giant neighbours), as the model derives it
+ * for the archetype asked alone at seed 0: the form hides those
+ * fields and offers a giant's mass instead.
+ */
+giant: boolean, 
+/**
  * Translated name and description, by language code (`fr`).
  */
 locales: { [key in string]: Locale }, };

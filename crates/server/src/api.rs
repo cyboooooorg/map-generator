@@ -22,6 +22,11 @@ pub struct ArchetypeInfo {
     pub inputs: ArchetypeInputs,
     /// Where the archetype sits and how it spins.
     pub orbit: ArchetypeOrbit,
+    /// Whether its planet renders as a giant (no ground: no drift, moons
+    /// of its own to ask for or giant neighbours), as the model derives it
+    /// for the archetype asked alone at seed 0: the form hides those
+    /// fields and offers a giant's mass instead.
+    pub giant: bool,
     /// Translated name and description, by language code (`fr`).
     pub locales: BTreeMap<String, Locale>,
 }
