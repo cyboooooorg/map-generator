@@ -19,3 +19,13 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149", features = ["preserve_order", "float_roundtrip"] }
 toml = "1.1.8"
 mapgen = { path = "crates/mapgen" }
+
+# Most test time goes into generating worlds, over ten times slower
+# unoptimized: build the dependencies optimized (once) and the workspace
+# crates at opt-level 1, which keeps incremental rebuilds short. Debug
+# assertions and overflow checks stay on. See README, Development tasks.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.test]
+opt-level = 1
