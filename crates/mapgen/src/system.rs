@@ -593,10 +593,9 @@ fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<
     }
     // Drawn last, so that the other planets' draws stay as they were.
     out.extend(drawn_hot_jupiter(star, metallicity, rng).map(|a| (Origin::HotJupiter, a)));
-    // A giant's log-normal orbit can fall outside the system.
-    for (_, orbit) in &mut out {
-        *orbit = orbit.clamp(INNER_EDGE_AU, OUTER_EDGE_AU);
-    }
+    // A slot whose orbit falls outside the system is dropped, after every
+    // draw, as `place` dropped it.
+    out.retain(|(_, a)| (INNER_EDGE_AU..=OUTER_EDGE_AU).contains(a));
     out
 }
 
