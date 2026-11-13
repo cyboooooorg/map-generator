@@ -1469,8 +1469,12 @@ fn tidal_eccentricity(slot: &Slot, star: f32, age_gyr: f32) -> f64 {
 /// `seed`: a planet with a surface as the model derives it
 /// ([`params_for`]); a giant class with today's giant path, its giant
 /// preset ([`base_of`]) at the model's mass (a mini-Neptune under the
-/// smallest giant's mass at that mass); a body without a surface that is
-/// no giant with its base preset at the size of its mass.
+/// smallest giant's mass at that mass); a body that is no giant whose
+/// envelope hides its surface with its class's preset ([`base_of`]:
+/// `frozen` for an ice world, `barren` otherwise) at the model's radius
+/// and gravity, with no ocean and no temperature shift (its generation
+/// aims it at its bare temperature, see [`generation_params`]). Part 3b
+/// of #423 derives the surface under such an envelope.
 fn planet_params(model: &PlanetModel, request: WorldRequest, seed: u32) -> WorldParams {
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
     let base = base_of(model);
@@ -1485,6 +1489,10 @@ fn planet_params(model: &PlanetModel, request: WorldRequest, seed: u32) -> World
         return params_for(model, request, &mut rng);
     }
     let mass_earth = model.inputs.mass_earth;
+    let gravity = (!giant).then_some(model.interior.gravity as f32);
+    let circumference_km =
+        (2.0 * std::f64::consts::PI * model.interior.radius_earth * crate::exomoon::EARTH_M
+            / 1000.0) as f32;
     let request = WorldRequest {
         planet: Some(base.to_string()),
         giants: if giant { None } else { Some(GiantsMode::None) },
@@ -1499,14 +1507,17 @@ fn planet_params(model: &PlanetModel, request: WorldRequest, seed: u32) -> World
                 crate::request::GIANT_MASS.max,
             )
         }),
-        // A rocky planet takes the size of its model's mass, by the
-        // mass-radius relation of rocky planets (the mass a world's size
-        // gives, see planet_body), rather than its preset's own draw, so
-        // that the spacing holds.
-        circumference_km: (!giant).then(|| crate::world::rocky_circumference_km(mass_earth)),
+        // An enveloped body takes its model's radius and, below, its
+        // gravity, and keeps no ocean.
+        circumference_km: (!giant).then_some(circumference_km),
+        sea_level: (!giant).then_some(crate::request::SEA_LEVEL.min),
         ..request
     };
-    match request.resolve(&mut rng) {
+    let preset = crate::preset::Preset::load(base).expect("built-in presets load");
+    let resolve = |request: &WorldRequest, rng: &mut StdRng| {
+        request.resolve_with_preset_at_gravity(preset.clone(), base.to_string(), gravity, rng)
+    };
+    let mut params = match resolve(&request, &mut rng) {
         Ok(resolved) => resolved.params,
         // A preset that refuses this orbit (its own limits): its defaults
         // at the orbit kept as is.
@@ -1516,10 +1527,11 @@ fn planet_params(model: &PlanetModel, request: WorldRequest, seed: u32) -> World
                 seed: request.seed,
                 width: request.width,
                 height: request.height,
+                circumference_km: request.circumference_km,
+                sea_level: request.sea_level,
                 ..WorldRequest::default()
             };
-            let mut params = bare
-                .resolve(&mut rng)
+            let mut params = resolve(&bare, &mut rng)
                 .expect("built-in presets resolve")
                 .params;
             if let Some(star) = &request.star {
@@ -1531,7 +1543,13 @@ fn planet_params(model: &PlanetModel, request: WorldRequest, seed: u32) -> World
             params.eccentricity = request.eccentricity.unwrap_or(params.eccentricity);
             params
         }
+    };
+    if !giant {
+        // Its generation sets the whole shift (see `generation_params`).
+        params.planet.climate.temperature = 0.0;
+        params.planet.atmosphere.greenhouse = 0.0;
     }
+    params
 }
 
 /// What a body gets from its star at `orbit_au`.
@@ -1769,17 +1787,22 @@ pub fn world_params(body: &Body) -> WorldParams {
 /// The parameters a body's world is generated with: [`world_params`],
 /// and for a planet whose model gives it a surface (no giant) the sea
 /// level its water fills and the warming toward its model's temperature
-/// ([`crate::planet::interim::calibrate`]). Those pass over its relief,
+/// ([`crate::planet::interim::calibrate`]); for one that is no giant
+/// whose envelope hides its surface, the warming toward its bare
+/// temperature ([`crate::planet::interim::calibrate_enveloped`]). Those pass over its relief,
 /// so the system's draw leaves them to here; listing and indexing a
 /// system read [`world_params`], which stays cheap.
 pub fn generation_params(body: &Body) -> WorldParams {
     let mut params = world_params(body);
     if let Some(model) = &body.model
-        && model.surface.is_some()
         && !model.class.is_giant()
         && params.giant_mass_earth.is_none()
     {
-        crate::planet::interim::calibrate(&mut params, model);
+        if model.surface.is_some() {
+            crate::planet::interim::calibrate(&mut params, model);
+        } else {
+            crate::planet::interim::calibrate_enveloped(&mut params, model);
+        }
     }
     params
 }
@@ -4271,6 +4294,77 @@ mod lone_tests {
         let params = planet_params(&model, request, 5);
         let look = base_of(&model);
         planet_body("b", "Test b", &slot, look, Some(model), &params, star)
+    }
+
+    #[test]
+    fn an_enveloped_rock_renders_its_class_at_the_models_size() {
+        // An Earth-mass body at 1 AU round a G2V keeping 0.2 % of its mass
+        // in hydrogen and helium (no giant, its surface hidden), as rocky
+        // and as an ice world.
+        let at = StarInfo::new(parse_type("G2V").unwrap(), 1.0, 0.0, 4.6);
+        let context = Context::of(&at, 0.0, 2.7);
+        let model = crate::planet::planet_model(
+            &context,
+            crate::planet::reference::with_envelope(1.0, 0.002),
+        );
+        assert!(
+            model.surface.is_none() && !model.class.is_giant(),
+            "{:?}",
+            model.class
+        );
+        let mut icy = model.clone();
+        icy.class = PlanetClass::IceWorld;
+        let request = WorldRequest {
+            seed: Some(5),
+            star: Some("G2V".into()),
+            age_gyr: Some(4.6),
+            orbit_au: Some(1.0),
+            eccentricity: Some(0.0),
+            metallicity: Some(0.0),
+            moons: Some(MoonsMode::Auto),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        for (model, base) in [(model, "barren"), (icy, "frozen")] {
+            assert_eq!(base_of(&model), base);
+            let params = planet_params(&model, request.clone(), 5);
+            let radius_km = model.interior.radius_earth * EARTH_M / 1000.0;
+            let circumference = (2.0 * PI * radius_km) as f32;
+            assert!(
+                (params.circumference_km - circumference).abs() < 1.0,
+                "{base}"
+            );
+            assert_eq!(
+                params.gravity,
+                Some(model.interior.gravity as f32),
+                "{base}"
+            );
+            assert_eq!(params.sea_level, crate::request::SEA_LEVEL.min, "{base}");
+            assert_eq!(params.planet.climate.temperature, 0.0, "{base}");
+            assert_eq!(params.planet.atmosphere.greenhouse, 0.0, "{base}");
+            // Its generation aims it at a bare surface's temperature: the
+            // equilibrium, plus a little internal heat.
+            let slot = Slot {
+                placement: Placement::Drawn(crate::planet::Origin::Small),
+                mass_earth: 1.0,
+                orbit_au: 1.0,
+                drawn_au: 1.0,
+                eccentricity: 0.0,
+                fixed: false,
+            };
+            let star = at.code();
+            let body = planet_body("b", "Test b", &slot, base, Some(model), &params, star);
+            let generated = generation_params(&body);
+            let mean = crate::generation::mean_surface_temperature_c(&generated)
+                + generated.planet.climate.temperature
+                + 273.15;
+            let eq = f64::from(at.equilibrium_k);
+            assert!(
+                (f64::from(mean) - eq) > -1.0 && (f64::from(mean) - eq) < 5.0,
+                "{base}: {mean} K against {eq} K"
+            );
+        }
     }
 
     #[test]

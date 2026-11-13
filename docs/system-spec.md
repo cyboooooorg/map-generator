@@ -473,8 +473,9 @@ systems/<system-id>/
     `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     `ocean-world`), its `physical.mass_earth` the model's mass after
     photoevaporation; its world renders, until #424, with the preset
-    closest to the model (`planet::interim::base_of`), and the model
-    drives the world (`planet::interim::params_for`): its size, gravity,
+    closest to the model (`planet::interim::base_of`), and the model of
+    a planet with a surface drives the world
+    (`planet::interim::params_for`): its size, gravity,
     surface pressure, regime, sky, erosion, volcanism, surface age, the
     sea level its oceans fill, a world without life stripped of its
     forests and grasslands, and a mean temperature aimed at the model's.
@@ -483,6 +484,14 @@ systems/<system-id>/
     when the system is drawn: `bodies[].params` stores the drawn sea
     level and no temperature shift, and the body's `world.json` the
     calibrated ones.
+    A planet that is no giant whose envelope hides its surface (at least
+    0.1 % of its mass, under 1.6 R⊕: the model derives no surface under
+    it) renders with its class's preset, `frozen` for an ice world and
+    `barren` otherwise, at the model's radius and gravity, with no ocean
+    and a mean temperature aimed at a bare surface's (its equilibrium
+    plus its internal heat, no greenhouse); part 3b of #423 derives the
+    surface under the envelope. About 0.3 % of drawn planets (5 of 1 577
+    over 500 systems).
     A giant class keeps the giant world of its preset at the model's
     mass (a mini-Neptune under 5 M⊕ at 5 M⊕). A request still
     asks for planets by preset name: the name places the planet (its

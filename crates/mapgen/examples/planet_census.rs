@@ -20,7 +20,10 @@
 //!    many runaways came from the insolation limit or from boiling their
 //!    ocean (`Water::boiled`), all of them and the runaway-greenhouse
 //!    class alone, and how many wet planets stay past 647 K (a boil whose
-//!    steam would have cooled, so the first pass stands);
+//!    steam would have cooled, so the first pass stands), and how many
+//!    planets that are no giant (nor mini-Neptune) keep an envelope that
+//!    hides their surface, by class (they render with their class's
+//!    preset, see `planet::interim::base_of`);
 //! 5. the radius histogram, in bins of 0.25 R_earth, of the planets with a
 //!    period under 100 days (the radius valley of Fulton et al. 2017
 //!    shows as a dip between 1.5 and 2 R_earth), and the class mix of the
@@ -82,6 +85,8 @@ fn main() {
     let mut stats: BTreeMap<&'static str, ClassStats> = BTreeMap::new();
     let mut planets = 0u32;
     let mut with_surface = 0u32;
+    // Planets no giant whose envelope hides the surface, by class.
+    let mut enveloped: BTreeMap<&'static str, u32> = BTreeMap::new();
     let mut liquids: BTreeMap<String, u32> = BTreeMap::new();
     let mut regimes: BTreeMap<String, u32> = BTreeMap::new();
     let mut life = 0u32;
@@ -112,6 +117,9 @@ fn main() {
                 .rposition(|&(low, _)| radius >= low)
                 .unwrap_or(0);
             bins[bin] += 1;
+            if model.surface.is_none() && !model.class.is_giant() {
+                *enveloped.entry(class).or_default() += 1;
+            }
             if let Some(surface) = &model.surface {
                 with_surface += 1;
                 *liquids
@@ -211,6 +219,14 @@ fn main() {
     }
 
     println!("\nplanets with a surface: {with_surface}");
+    let hidden: u32 = enveloped.values().sum();
+    println!(
+        "no giant, surface hidden by an envelope: {hidden} ({:.1} %)",
+        share(hidden, planets)
+    );
+    for (class, n) in &enveloped {
+        println!("  {class:<18}{n:>6}");
+    }
     println!("\nsurface liquid ({with_surface} planets with a surface)");
     for (liquid, n) in &liquids {
         println!("{liquid:<20}{:>6.1} %  ({n})", share(*n, with_surface));

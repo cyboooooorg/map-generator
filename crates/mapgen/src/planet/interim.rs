@@ -47,8 +47,13 @@ const FROZEN_MIN_OCEANS: f64 = 0.01;
 ///    or at least 0.01 Earth oceans kept at the surface (its sea level is
 ///    calibrated on that water, which the barren look would draw as
 ///    rock): `frozen`;
-/// 7. otherwise `barren` (a body with no surface under a thin envelope
-///    too: the model gives it no temperature at the surface).
+/// 7. otherwise `barren`.
+///
+/// A body that is no giant whose envelope hides its surface (the model
+/// derives none under at least [`super::escape::MIN_ENVELOPE`] of its
+/// mass) renders with its class's preset: `frozen` for an ice world,
+/// `barren` for the others (rocky, super-Earth). Part 3b of #423 derives
+/// the surface under the envelope.
 pub fn base_of(model: &PlanetModel) -> &'static str {
     match model.class {
         PlanetClass::GasGiant => return "gas-giant",
@@ -68,7 +73,11 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
         return "caustic";
     }
     let Some(surface) = surface else {
-        return "barren";
+        return if model.class == PlanetClass::IceWorld {
+            "frozen"
+        } else {
+            "barren"
+        };
     };
     match liquid {
         SurfaceLiquid::Hydrocarbons => "frozen",
@@ -416,6 +425,27 @@ pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
         sea_level_for_water(params, ocean_depth_m(oceans, model.interior.radius_earth))
     };
     params.planet.climate.temperature = warming_for(params, surface.climate.temperature_k);
+}
+
+/// Temperature of a bare surface under the starlight `equilibrium_k`
+/// (K) and the internal heat flux `heat_flux_w_m2` (W/m²), K:
+/// [`super::surface_temperature_k`] with no air, `(T_eq⁴ + F/σ)^¼`.
+fn bare_temperature_k(equilibrium_k: f64, heat_flux_w_m2: f64) -> f64 {
+    (equilibrium_k.max(0.0).powi(4) + heat_flux_w_m2.max(0.0) / SIGMA).powf(0.25)
+}
+
+/// Sets the temperature shift of the world of a body that is no giant
+/// whose envelope hides its surface ([`base_of`]): the model derives no
+/// surface temperature under the envelope, so the world aims at the
+/// temperature a bare surface keeps at its orbit (the equilibrium of
+/// `params`'s star and orbit, plus its internal heat: no greenhouse), with
+/// [`warming_for`]. No sea: its world keeps none. Part 3b of #423 derives
+/// the surface under the envelope.
+pub fn calibrate_enveloped(params: &mut WorldParams, model: &PlanetModel) {
+    let equilibrium_k = f64::from(crate::spin::star_info(params).equilibrium_k);
+    let flux = model.heat.flux_w_m2(model.interior.radius_earth);
+    params.planet.climate.temperature =
+        warming_for(params, bare_temperature_k(equilibrium_k, flux));
 }
 
 #[cfg(test)]

@@ -232,7 +232,9 @@ archetypes):
   render the model, the first rule that holds: a giant class renders as
   `gas-giant`, `hot-jupiter` or `ice-giant` (a mini-Neptune as an ice
   giant); a lava world or a heat-pipe regime as `volcanic`; a runaway
-  greenhouse as `caustic`; liquid hydrocarbons as `frozen`; liquid water
+  greenhouse as `caustic`; a body whose envelope hides its surface as
+  `frozen` for an ice world, `barren` otherwise; liquid hydrocarbons as
+  `frozen`; liquid water
   as `terran`; no liquid, under 273 K and at least 5 % water, or at
   least 0.01 Earth oceans kept at the surface, as `frozen`; otherwise
   `barren`. The thresholds are the ones of the classes, so the look
@@ -243,6 +245,12 @@ archetypes):
   `frozen`, a frozen sea in its basins (the 0.01 oceans: a little over
   twice Mars's 0.004, its polar deposits and ground ice of about 34 m of
   global layer, Carr & Head 2015, doi:10.1002/2014GL062464).
+- A body that is no giant whose envelope hides its surface (the model
+  derives none under it; about 0.3 % of drawn planets) keeps its
+  class's preset at the model's radius and gravity, with no ocean, and
+  its world aims at a bare surface's temperature, its equilibrium plus
+  its internal heat (`calibrate_enveloped`). Part 3b of #423 derives the
+  surface under the envelope.
 - The gravity and the tectonic regime are the model's, and the radius is
   the interior's. The world is resolved at that gravity, so the star's
   tides, the moons it draws, the tilt they leave it and its tidal flats
