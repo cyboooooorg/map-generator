@@ -81,9 +81,10 @@ const SUPER_EARTH_MIN_RADIUS: f64 = 1.25;
 /// Surface pressure above which a runaway greenhouse or a sea of
 /// hydrocarbons gives a class of its own, bar. Calibration, no source: a
 /// runaway with less than 1 bar has lost its air and is a bare rock
-/// (Mercury, Mars); Titan's 1.5 bar holds its seas, while the model
-/// outgasses 0.2 to 0.5 bar of methane on Ganymede and Callisto, far more
-/// than they hold, and they stay ice worlds.
+/// (Mercury, Mars); Titan's 1.5 bar holds its seas. A cold body whose
+/// outgassing barely outruns its star's ultraviolet keeps a trace of
+/// methane over its ice under a thin air
+/// ([`super::atmosphere::methane_photolysis`]), and stays an ice world.
 const DENSE_AIR_BAR: f64 = 1.0;
 
 /// Earth oceans of water kept from which an ocean world drowns all land.
@@ -184,6 +185,7 @@ mod tests {
             ("Earth", Rocky),
             ("Mars", Rocky),
             ("Ganymede", IceWorld),
+            ("Callisto", IceWorld),
             ("Titan", HydrocarbonWorld),
             ("Europa", IceWorld),
             ("Jupiter", GasGiant),
@@ -200,6 +202,18 @@ mod tests {
             // A moon sits at its planet's orbit (its reference orbit).
             let body = reference(name);
             assert_eq!(class_of(model_inputs(body), body.orbit_au), class, "{name}");
+        }
+        // Photolysis leaves Jupiter's moons no methane, so no seas of it.
+        for name in ["Ganymede", "Callisto"] {
+            let body = reference(name);
+            let model = planet_model(&sun_at(body.orbit_au), model_inputs(body));
+            let surface = model.surface.expect("an icy moon has a surface");
+            assert_eq!(surface.gases.ch4, 0.0, "{name}");
+            assert_eq!(
+                surface.climate.liquid,
+                crate::planet::SurfaceLiquid::None,
+                "{name}"
+            );
         }
         // Every reference body gets a class.
         for body in SOLAR_BODIES {

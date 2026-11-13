@@ -1016,10 +1016,14 @@ mod tests {
 
     #[test]
     fn surface_age_comes_from_the_request_then_the_preset() {
-        let age = |planet: &str, surface_age_ga| {
+        // The Sun and the system's age are pinned: a drawn system younger
+        // than the surface would clamp it (see below).
+        let age = |planet: &str, surface_age_ga, age_gyr| {
             WorldRequest {
                 planet: Some(planet.into()),
                 surface_age_ga,
+                star: Some("G2V".into()),
+                age_gyr: Some(age_gyr),
                 width: Some(16),
                 height: Some(8),
                 ..Default::default()
@@ -1029,8 +1033,15 @@ mod tests {
             .params
             .surface_age_ga
         };
-        assert_eq!(age("barren", Some(1.5)), 1.5);
-        assert!((3.0..4.2).contains(&age("barren", None)));
+        assert_eq!(age("barren", Some(1.5), 4.6), 1.5);
+        for _ in 0..20 {
+            let drawn = age("barren", None, 4.6);
+            assert!((3.0..4.2).contains(&drawn), "{drawn}");
+        }
+        // A surface is never older than its system: a young one clamps
+        // both the asked and the preset's age.
+        assert_eq!(age("barren", Some(1.5), 1.0), 1.0);
+        assert_eq!(age("barren", None, 1.0), 1.0);
     }
 
     #[test]

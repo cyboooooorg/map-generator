@@ -4,10 +4,12 @@
 //!
 //! [`outgassed`] turns the volatile inventory into partial pressures by
 //! regime, [`atmosphere`] keeps the share the cosmic shoreline of Zahnle &
-//! Catling 2017 allows, [`cold_trap`] freezes out what the
-//! equilibrium temperature cannot hold as gas, and [`photochemistry`]
-//! turns ammonia into nitrogen and oxidises warm methane. The carbonate thermostat
-//! (climate) and oxygen (life) come after.
+//! Catling 2017 allows, [`methane_photolysis`] keeps the methane the
+//! outgassing adds faster than the star's ultraviolet destroys it,
+//! [`cold_trap`] freezes out what the equilibrium temperature cannot hold
+//! as gas, and [`photochemistry`] turns ammonia into nitrogen and
+//! oxidises warm methane. The carbonate thermostat (climate) and oxygen
+//! (life) come after.
 use std::f64::consts::PI;
 
 use serde::{Deserialize, Serialize};
@@ -249,6 +251,37 @@ pub fn atmosphere(
     outgassed.scaled(kept)
 }
 
+/// Solar constant, W/m² (Kopp & Lean 2011, doi:10.1029/2010GL045777):
+/// the insolation of 1.
+const SOLAR_CONSTANT_W_M2: f64 = 1361.0;
+
+/// Energy of a Lyman α photon, J: `h c / λ` at 121.567 nm.
+const LYMAN_ALPHA_PHOTON_J: f64 = 1.634e-18;
+
+/// Mass of a methane molecule, kg: 16.04 u.
+const CH4_MOLECULE_KG: f64 = 16.04 * 1.660_54e-27;
+
+/// Seconds in a gigayear (Julian years).
+const GYR_S: f64 = 3.155_76e16;
+
+/// Methane molecules destroyed for each Lyman α photon the star sends a
+/// body, averaged over its sphere. Calibration on Titan: Yung, Allen &
+/// Pinto 1984 (ApJS 55, 465, doi:10.1086/190963; their abstract,
+/// checked) find that Titan "might have lost 5.6 × 10⁴ g cm⁻²" of
+/// methane, "the equivalent of 8 bars", over geologic time; read as
+/// 4.5 Gyr at today's rate (an assumption: the full text was not read),
+/// that is 1.48e10 molecules cm⁻² s⁻¹. Titan gets 1.07e9 Lyman α photons
+/// cm⁻² s⁻¹ on average today (3.9e11 at 1 AU from
+/// [`super::xuv::LYMAN_ALPHA`], over 9.58² and over 4 for the sphere),
+/// so 13.9 molecules per photon. More than one, because Lyman α stands
+/// here for all the ultraviolet that destroys methane: the photolysis
+/// proper below 145 nm and the dissociation photosensitised by acetylene
+/// at longer wavelengths (Yung et al.'s process (a)). The rate it gives
+/// destroys Titan's air's methane in a few tens of millions of years, as
+/// Tobie, Lunine & Sotin 2006 (Nature 440, 61, doi:10.1038/nature04497;
+/// abstract checked) state.
+const CH4_PER_LYMAN_ALPHA_PHOTON: f64 = 13.9;
+
 /// Universal gas constant, J/(mol·K).
 const R_GAS: f64 = 8.314;
 
@@ -299,6 +332,69 @@ impl Frost {
     }
 }
 
+/// Methane the star's ultraviolet destroys on a body, bar per Gyr, per
+/// unit of the Lyman α share of the star's light
+/// ([`super::xuv::LYMAN_ALPHA`]): `Y · S₀ I / 4 / E_γ` photons per m² and
+/// second ([`CH4_PER_LYMAN_ALPHA_PHOTON`], the insolation `I` over the
+/// sphere), times the mass of a molecule, times `g / 1e5` bar per kg/m².
+/// The rate does not depend on how much methane there is: any column
+/// worth counting absorbs all the Lyman α (photon-limited).
+fn methane_destroyed_bar_per_gyr(insolation: f64, gravity_m_s2: f64) -> f64 {
+    let photons = SOLAR_CONSTANT_W_M2 * insolation.max(0.0) / 4.0 / LYMAN_ALPHA_PHOTON_J;
+    CH4_PER_LYMAN_ALPHA_PHOTON * photons * CH4_MOLECULE_KG * gravity_m_s2 / PA_PER_BAR * GYR_S
+}
+
+/// The methane left, bar, once the star's ultraviolet has worked on what
+/// a body outgassed over its life.
+///
+/// The body outgasses its methane (`gases.ch4`, what escape left of it)
+/// at a steady rate over its `context.age_gyr`; the star destroys it at
+/// the rate of [`methane_destroyed_bar_per_gyr`], which follows its
+/// Lyman α history ([`super::xuv::LYMAN_ALPHA`]: saturated, then falling
+/// as `t^-0.72`). While destruction outruns the supply nothing builds up;
+/// once the supply overtakes it, at `t*`, methane gathers in the air and
+/// on the ground, `∫_{t*}^{age} (S − D(t)) dt`, analytic. Destroyed
+/// methane is gone: its hydrogen escapes and its carbon ends in heavier
+/// hydrocarbons on the ground, which the model does not carry.
+///
+/// This is Titan's resupply: Tobie, Lunine & Sotin 2006
+/// (doi:10.1038/nature04497) explain its methane by outgassing from
+/// its interior, without which photolysis would have removed it. The
+/// model spreads the outgassing evenly over the age, where they find it
+/// in episodes. Ganymede and Callisto, which get 3.4 times Titan's light
+/// per unit area and outgas a tenth of its methane or less, keep none.
+///
+/// Apply it to the air escape leaves, before [`cold_trap`]: what the cold
+/// freezes onto the ground feeds the air back as it is photolysed.
+pub fn methane_photolysis(
+    gases: Gases,
+    context: &super::Context,
+    mass_earth: f64,
+    interior: &Interior,
+) -> Gases {
+    use super::xuv::{LYMAN_ALPHA, age_below_ratio, integrated_ratio_gyr};
+    let age = context.age_gyr;
+    if gases.ch4 <= 0.0 || age <= 0.0 {
+        return gases;
+    }
+    let radius = interior.radius_earth * EARTH_M;
+    let gravity = G * mass_earth * EARTH_KG / (radius * radius);
+    let per_ratio = methane_destroyed_bar_per_gyr(context.insolation, gravity);
+    let supply = gases.ch4 / age;
+    // The supply overtakes the destruction once the Lyman α share has
+    // fallen to `supply / per_ratio`.
+    let onset = age_below_ratio(LYMAN_ALPHA, context.star_mass, supply / per_ratio);
+    let ch4 = if onset >= age {
+        0.0
+    } else {
+        let destroyed = per_ratio
+            * (integrated_ratio_gyr(LYMAN_ALPHA, context.star_mass, age)
+                - integrated_ratio_gyr(LYMAN_ALPHA, context.star_mass, onset));
+        (supply * (age - onset) - destroyed).max(0.0)
+    };
+    Gases { ch4, ..gases }
+}
+
 /// The gases left once what the cold freezes out has gone to the ground.
 ///
 /// A gas whose triple point lies above the body's `equilibrium_k` cannot
@@ -343,7 +439,9 @@ const METHANE_SURVIVES_K: f64 = 150.0;
 /// - CH₄ is kept only below [`METHANE_SURVIVES_K`]; above it OH oxidises
 ///   it and it is set to zero (the CO₂ it makes is not added: a trace
 ///   against what is outgassed). A labelled calibration on Titan against
-///   an abiotic Earth; life's methane is Task 7's.
+///   an abiotic Earth; life's methane is Task 7's. Its photolysis, which
+///   acts on the whole stock and not only on the gas, comes before the
+///   cold trap ([`methane_photolysis`]).
 pub fn photochemistry(gases: Gases, equilibrium_k: f64) -> Gases {
     Gases {
         n2: gases.n2 + gases.nh3 * N2_PER_NH3,
@@ -387,8 +485,8 @@ mod tests {
     }
 
     /// The air of `inputs` at `orbit_au` round the Sun, through the chain
-    /// of part 2: water, regime, core, outgassing, escape, cold trap,
-    /// photochemistry.
+    /// of part 2: water, regime, core, outgassing, escape, methane
+    /// photolysis, cold trap, photochemistry.
     fn air(inputs: &PlanetInputs, orbit_au: f64) -> Gases {
         let c = sun(orbit_au);
         let int = interior(inputs, &c.exposure());
@@ -403,6 +501,7 @@ mod tests {
         let k = core(inputs, &int, r, NOW);
         let out = outgassed(inputs, &w, r, &int);
         let air = atmosphere(out, &int, inputs.mass_earth, &k, fluence);
+        let air = methane_photolysis(air, &c, inputs.mass_earth, &int);
         photochemistry(cold_trap(air, c.equilibrium_k), c.equilibrium_k)
     }
 
@@ -451,6 +550,107 @@ mod tests {
     fn titan_keeps_its_methane() {
         let g = air_of("Titan");
         assert!(g.ch4 > 0.01, "{g:?}");
+    }
+
+    #[test]
+    fn ganymede_and_callisto_lose_their_methane_to_photolysis() {
+        // Their outgassing cannot keep up with the Sun's ultraviolet at
+        // 5.2 AU, which destroys methane over three times faster than at
+        // Titan.
+        for name in ["Ganymede", "Callisto"] {
+            let g = air_of(name);
+            assert!(g.ch4 < 1e-3, "{name} {g:?}");
+        }
+    }
+
+    #[test]
+    fn titan_loses_methane_at_the_rate_of_yung_1984() {
+        // 5.6e4 g/cm² over 4.5 Gyr: 1.48e10 molecules cm⁻² s⁻¹ today.
+        let c = sun(9.58);
+        let lyman_alpha = crate::planet::xuv::ratio(crate::planet::xuv::LYMAN_ALPHA, 1.0, NOW);
+        // At 1 m/s², a bar is 1e5 kg/m².
+        let kg_m2_s =
+            methane_destroyed_bar_per_gyr(c.insolation, 1.0) * lyman_alpha * PA_PER_BAR / GYR_S;
+        let rate = kg_m2_s / CH4_MOLECULE_KG * 1e-4;
+        assert!((rate / 1.48e10 - 1.0).abs() < 0.01, "{rate:e}");
+    }
+
+    /// Methane outgassed, after escape, and what photolysis leaves of it,
+    /// bar, for the reference body `name`.
+    fn methane_budget(name: &str) -> (f64, f64) {
+        let b = reference(name);
+        let inputs = model_inputs(b);
+        let c = sun(b.orbit_au);
+        let int = interior(&inputs, &c.exposure());
+        let fluence = xuv_fluence(&c);
+        let w = water(&c, &inputs, &int, fluence);
+        let silicate = inputs.mass_earth * (1.0 - inputs.water_fraction) * EARTH_KG;
+        let heat = InternalHeat {
+            radiogenic_w: radiogenic_w(silicate, inputs.radiogenic, NOW),
+            tidal_w: 0.0,
+        };
+        let r = regime(&inputs, &heat, &int, &w);
+        let k = core(&inputs, &int, r, NOW);
+        let air = atmosphere(
+            outgassed(&inputs, &w, r, &int),
+            &int,
+            inputs.mass_earth,
+            &k,
+            fluence,
+        );
+        let left = methane_photolysis(air, &c, inputs.mass_earth, &int);
+        (air.ch4, left.ch4)
+    }
+
+    #[test]
+    fn titans_outgassing_outruns_its_photolysis() {
+        // Titan keeps a stock of methane on its ground, from which the
+        // cold trap leaves its air a few hundredths of a bar.
+        let (outgassed, left) = methane_budget("Titan");
+        assert!(left > 1.0 && left < outgassed, "{outgassed} {left}");
+        assert!(air_of("Titan").ch4 < left);
+    }
+
+    #[test]
+    fn photolysis_matches_a_stepwise_budget() {
+        // The analytic stock against a step-by-step budget: a steady
+        // supply, a destruction that follows the Lyman α history, and a
+        // stock that never goes below zero.
+        use crate::planet::xuv::{LYMAN_ALPHA, ratio};
+        let b = reference("Titan");
+        let inputs = model_inputs(b);
+        for (orbit_au, star_mass, age, ch4) in [
+            (9.58, 1.0, 4.6, 19.0),
+            (9.58, 1.0, 4.6, 3.0),
+            (5.2, 1.0, 4.6, 0.5),
+            (1.0, 0.3, 8.0, 300.0),
+            (9.58, 1.0, 0.05, 19.0),
+        ] {
+            let mut c = sun(orbit_au);
+            c.star_mass = star_mass;
+            c.age_gyr = age;
+            let int = interior(&inputs, &c.exposure());
+            let gases = Gases {
+                ch4,
+                ..Gases::default()
+            };
+            let exact = methane_photolysis(gases, &c, inputs.mass_earth, &int).ch4;
+            let radius = int.radius_earth * EARTH_M;
+            let gravity = G * inputs.mass_earth * EARTH_KG / (radius * radius);
+            let per_ratio = methane_destroyed_bar_per_gyr(c.insolation, gravity);
+            let steps = 200_000;
+            let dt = age / f64::from(steps);
+            let mut stock = 0.0_f64;
+            for i in 0..steps {
+                let t = (f64::from(i) + 0.5) * dt;
+                stock = (stock + (ch4 / age - per_ratio * ratio(LYMAN_ALPHA, star_mass, t)) * dt)
+                    .max(0.0);
+            }
+            assert!(
+                (exact - stock).abs() <= 1e-3 * ch4,
+                "{orbit_au} AU, {star_mass} M☉, {age} Gyr, {ch4} bar: {exact} {stock}"
+            );
+        }
     }
 
     #[test]

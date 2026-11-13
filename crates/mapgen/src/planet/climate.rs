@@ -61,27 +61,164 @@ const H2O_OPACITY: f64 = 5.9;
 /// greenhouse is mostly collision-induced (N₂–N₂, N₂–CH₄, N₂–H₂; McKay,
 /// Pollack & Courtin 1991, doi:10.1126/science.11538492, not checked),
 /// and its haze cools it by about 9 K; this opacity carries all of it.
+/// That is why it keeps the square root of the whole air's pressure (see
+/// [`optical_depth`]): collision-induced absorption grows with the
+/// nitrogen faster than line broadening does, not slower.
 const CH4_OPACITY: f64 = 3.4;
 
-/// Power of a partial pressure, and of the total pressure, in a gas's
-/// opacity: the strong-line (square-root) limit, where a pressure-
+/// Power of a partial pressure, and of the broadening pressure, in a
+/// gas's opacity: the strong-line (square-root) limit, where a pressure-
 /// broadened line absorbs as `sqrt(S u α)`, its absorber path `u ∝ p_i`
-/// and its width `α ∝ P` (Pierrehumbert 2010, *Principles of Planetary
-/// Climate*, §4.4; Goody & Yung 1989, *Atmospheric Radiation*, ch. 4).
+/// and its width `α` growing with the pressure of the gases round it
+/// (Pierrehumbert 2010, *Principles of Planetary Climate*, §4.4; Goody &
+/// Yung 1989, *Atmospheric Radiation*, ch. 4).
 const LINE_EXPONENT: f64 = 0.5;
 
+/// Pressure of the other gases, bar, up to which they broaden the lines
+/// of CO₂ and water vapour in proportion (see [`broadening_bar`]): the
+/// gases other than CO₂ and water themselves (N₂, O₂, CH₄...).
+/// Calibration: Earth's air, so that Earth, Mars and Venus keep the plain
+/// square root of their pressure they were calibrated with.
+const BROADENING_KNEE_BAR: f64 = 1.0;
+
+/// Power of the other gases' pressure in the broadening pressure past
+/// [`BROADENING_KNEE_BAR`]: their share of a grey opacity then grows as
+/// its square root, `P^0.1`, not `P^0.5`.
+///
+/// Calibration on the warming of doubled nitrogen. Goldblatt et al. 2009
+/// (*Nature Geosci.* 2, 891, doi:10.1038/ngeo692; abstract checked) find
+/// that doubling the present nitrogen warms the late Archean Earth by
+/// 4.4 °C in a 1-D radiative–convective model; Charnay et al. 2013 (*JGR
+/// Atmos.* 118, 10414, doi:10.1002/jgrd.50808; §5.2 checked in arXiv
+/// 1310.4286) find +7 °C in a GCM for the air going from 1 to 2 bar at
+/// 2.5 Ga with 10 mbar of CO₂ and 2 mbar of CH₄, and Wolf & Toon 2014
+/// (*Astrobiology* 14, 241, doi:10.1089/ast.2013.1112; abstract checked)
+/// 3 to 7 K for plausible nitrogen. In Charnay's setting (no CH₄) the
+/// model warms by about 5 K with 0.2, by about 3 K with 0.1 and 8.5 K
+/// with 0.3; with the plain square root (1) it ran away, and so did an
+/// Earth at 1 AU with 2 bar of N₂ (issue #440). The real rise is milder
+/// than the strong-line law because lines overlap and saturate (Vladilo
+/// et al. 2013, ApJ 767, 65, doi:10.1088/0004-637X/767/1/65, App. A.3,
+/// checked), and the moist runaway limit is set by the water vapour
+/// alone (Nakajima, Hayashi & Abe 1992, *J. Atmos. Sci.* 49, 2256,
+/// doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2; abstract
+/// checked), which a grey opacity growing as `sqrt(P)` lowers with every
+/// bar of nitrogen. The 0.2 power still lowers it, less: the model's
+/// peak outgoing radiation at Earth's composition is 253 W/m², 239 W/m²
+/// with twice its N₂ (211 with the square root), so past about 11 bar of
+/// N₂ an Earth at 1 AU still runs away once its thermostat has no CO₂
+/// left to remove.
+const THICK_AIR_EXPONENT: f64 = 0.2;
+
+/// Pressure, bar, that broadens the lines of CO₂ and of water vapour in
+/// `gases`: the two of them in full, plus the other gases (N₂, O₂, CH₄,
+/// the rest), in proportion up to [`BROADENING_KNEE_BAR`] and as the
+/// [`THICK_AIR_EXPONENT`] power past it. It is the whole pressure in any
+/// air with less than 1 bar of other gases.
+///
+/// A gas broadens its own lines in full (pure CO₂ on Venus and Mars, a
+/// steam atmosphere), and CO₂ and water broaden each other's lines at
+/// least as well as N₂ does, so neither is tempered as a foreign gas of
+/// the other: water vapour broadens CO₂'s lines much more than N₂ and O₂
+/// do (Tan, Kochanov, Rothman & Gordon 2019, *JGR Atmos.* 124, 11580,
+/// doi:10.1029/2019JD030929; abstract checked), and CO₂ broadens water's
+/// 1.33 to 1.45 times as much as air (Yang et al. 2022, *Acta Phys. Sin.*
+/// 71, 203301, doi:10.7498/aps.71.20220700; abstract checked; Brown,
+/// Humphrey & Gamache 2007, *J. Mol. Spectrosc.* 246, 1,
+/// doi:10.1016/j.jms.2007.07.010, in the far infrared, not checked).
+/// They count here at par with N₂ under the knee, not above it, so that
+/// the opacities keep their calibration. Tempering the CO₂ as water's
+/// broadener (issue #440's first rule) cooled an Earth at 1.6 AU, all
+/// its 1.8 bar of CO₂ in the air, from 287.8 K to 281 K: it moved in the
+/// cold edge of the habitable zone, which Kopparapu et al. 2013 (*ApJ*
+/// 765, 131, doi:10.1088/0004-637X/765/2/131) put at about 1.67 AU with
+/// CO₂–H₂O atmospheres, by a broadening no calibration constrains (the
+/// doubled-nitrogen one holds 10 mbar of CO₂).
+///
+/// Steam counts up to [`STEAM_MAX_BAR`], the column at which it reaches
+/// the cap of the Simpson–Nakajima limit: the outgoing radiation of a
+/// thicker steam atmosphere comes from levels above it, so the deeper
+/// steam no more broadens CO₂'s lines there than it adds to water's own
+/// opacity. Without it, the 1.6e5 bar of a steam runaway gave its few
+/// bar of CO₂ an optical depth of a thousand and warmed it by 170 to
+/// 200 K.
+fn broadening_bar(gases: &Gases) -> f64 {
+    let co2 = gases.co2.max(0.0);
+    let h2o = gases.h2o.max(0.0);
+    let others = (gases.total() - co2 - h2o).max(0.0);
+    let strong = co2 + h2o.min(STEAM_MAX_BAR);
+    let foreign = if others <= BROADENING_KNEE_BAR {
+        others
+    } else {
+        BROADENING_KNEE_BAR * (others / BROADENING_KNEE_BAR).powf(THICK_AIR_EXPONENT)
+    };
+    strong + foreign
+}
+
+/// The Simpson–Nakajima limit, W/m²: the outgoing longwave radiation of
+/// a thick steam atmosphere, whose emission comes from a level pinned to
+/// water's saturation curve and so no longer depends on the surface
+/// temperature. Goldblatt, Robinson, Zahnle & Crisp 2013 (*Nature
+/// Geosci.* 6, 661, doi:10.1038/ngeo1892; abstract checked) find 282 W/m²
+/// line by line; Boukrouche, Lichtenberg & Pierrehumbert 2021 (*ApJ* 919,
+/// 130, doi:10.3847/1538-4357/ac1345; §III.1 read in arXiv 2107.14150)
+/// 283 W/m², and Hamano et al. 2015 (*ApJ* 806, 216,
+/// doi:10.1088/0004-637X/806/2/216; read in arXiv 1505.03552) 280 W/m².
+const SIMPSON_NAKAJIMA_W_M2: f64 = 282.0;
+
+/// Surface temperature, K, at which the radiation limit of a thick steam
+/// atmosphere ends. Boukrouche et al. 2021 (§III.1) find the outgoing
+/// radiation flat between 300 and 1800 K under 260 bar of steam (1050 K
+/// under 10 bar), the end of the plateau reaching a constant of about
+/// 1800 K as the steam thickens to 295 bar; past it the dry adiabat
+/// reaches the emitting levels and the radiation rises again. Goldblatt
+/// 2015 (*Astrobiology* 15, 362, doi:10.1089/ast.2014.1268; read in arXiv
+/// 1503.04835) puts the rise past 1500 K, through the 4 µm window.
+const STEAM_BREAKDOWN_K: f64 = 1800.0;
+
+/// Largest grey optical depth of water vapour: the one at which a steam
+/// atmosphere alone sends out [`SIMPSON_NAKAJIMA_W_M2`] from a surface at
+/// [`STEAM_BREAKDOWN_K`], `(4/3) (σ T_b⁴ / F_SN − 1)`, about 2800. Pure
+/// steam thick enough to reach it then sends out `F_SN (T / T_b)⁴` from a
+/// surface at `T`, whatever its column: no more than the limit up to the
+/// breakdown, rising past it as from a fixed emitting column (slower than
+/// the near-exponential rise Boukrouche et al. find, so an upper
+/// estimate), and a steam runaway absorbing more than the limit settles a
+/// little past 1800 K. The grey law alone (`k p` for pure steam) passes this depth
+/// past about 480 bar of steam, and put the 1.6e5 bar of a 30 %-water
+/// Earth at 0.7 AU at 8800 K (issue #438). Under that, the grey steam is
+/// left as it was: thinner than this cap, it emits more than the limit
+/// at the breakdown, and its hot state is cooler than Boukrouche et al.
+/// find (with 10 bar of steam the grey surface sends out the limit at
+/// about 680 K, not 1050 K).
+const STEAM_MAX_TAU: f64 = 4.0 / 3.0
+    * (SIGMA * STEAM_BREAKDOWN_K * STEAM_BREAKDOWN_K * STEAM_BREAKDOWN_K * STEAM_BREAKDOWN_K
+        / SIMPSON_NAKAJIMA_W_M2
+        - 1.0);
+
+/// Steam pressure, bar, at which pure steam reaches [`STEAM_MAX_TAU`]
+/// (`k p`, about 480 bar): the steam column the outgoing radiation of a
+/// steam atmosphere sees (see [`broadening_bar`]).
+const STEAM_MAX_BAR: f64 = STEAM_MAX_TAU / H2O_OPACITY;
+
 /// Grey infrared optical depth of the air: each absorber's
-/// `k_i (p_i / 1 bar)^a_i (P / 1 bar)^½`, the last factor the pressure
-/// broadening of its lines by the whole air (see [`LINE_EXPONENT`]).
+/// `k_i (p_i / 1 bar)^a_i (P_b / 1 bar)^½`, the last factor the pressure
+/// broadening of its lines (see [`LINE_EXPONENT`]). For CO₂ and water
+/// vapour `P_b` is [`broadening_bar`]; for methane it is the whole
+/// pressure, since its opacity stands for Titan's collision-induced
+/// greenhouse (see [`CH4_OPACITY`]). The water's share is capped at
+/// [`STEAM_MAX_TAU`], the Simpson–Nakajima limit of a steam atmosphere.
 /// Pressures in bar.
 fn optical_depth(gases: &Gases) -> f64 {
-    let broadening = gases.total().max(0.0).powf(LINE_EXPONENT);
-    let line =
-        |opacity: f64, partial: f64, exponent: f64| opacity * partial.max(0.0).powf(exponent);
-    broadening
-        * (line(CO2_OPACITY, gases.co2, CO2_EXPONENT)
-            + line(H2O_OPACITY, gases.h2o, LINE_EXPONENT)
-            + line(CH4_OPACITY, gases.ch4, LINE_EXPONENT))
+    let total = gases.total().max(0.0);
+    let line = |opacity: f64, partial: f64, exponent: f64, broadening: f64| {
+        opacity * partial.max(0.0).powf(exponent) * broadening.powf(LINE_EXPONENT)
+    };
+    let broadening = broadening_bar(gases);
+    let water = line(H2O_OPACITY, gases.h2o, LINE_EXPONENT, broadening);
+    line(CO2_OPACITY, gases.co2, CO2_EXPONENT, broadening)
+        + water.min(STEAM_MAX_TAU)
+        + line(CH4_OPACITY, gases.ch4, LINE_EXPONENT, total)
 }
 
 /// Mean surface temperature, K, of a body with `gases` (bar) under its
@@ -92,8 +229,10 @@ fn optical_depth(gases: &Gases) -> f64 {
 /// §4.6): `T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`, with `T_eq` the context's
 /// equilibrium temperature (Bond albedo 0.3) and `τ` the infrared optical
 /// depth of `optical_depth`, whose opacities are calibrated on Venus,
-/// Earth and Titan. Without air, the surface sits at `T_eq` warmed by its
-/// internal heat alone.
+/// Earth and Titan and whose steam is capped at the Simpson–Nakajima
+/// limit ([`STEAM_MAX_TAU`]): a thick steam runaway settles a little past
+/// 1800 K. Without air, the surface sits at `T_eq` warmed by its internal
+/// heat alone.
 pub fn surface_temperature_k(context: &Context, gases: &Gases, heat_flux_w_m2: f64) -> f64 {
     let tau = optical_depth(gases);
     let t_eq4 = context.equilibrium_k.max(0.0).powi(4);
@@ -585,6 +724,221 @@ mod tests {
         let bare = surface_temperature_k(&c, &Gases::default(), 0.0);
         assert!((bare - c.equilibrium_k).abs() < 1e-9);
         assert!(surface_temperature_k(&c, &Gases::default(), 100.0) > bare);
+    }
+
+    /// The model Earth at 1 AU with `n2_bar` of nitrogen in its air and
+    /// `water_fraction` of its mass in water, through the whole climate
+    /// (the carbonate thermostat included).
+    fn earth_with_nitrogen(n2_bar: f64, water_fraction: f64) -> (Gases, Climate) {
+        let earth = PlanetInputs {
+            water_fraction,
+            ..model_inputs(reference("Earth"))
+        };
+        let d = derive_at(&earth, 1.0);
+        let gases = Gases {
+            n2: n2_bar,
+            ..d.gases
+        };
+        climate(
+            &d.context,
+            gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+        )
+    }
+
+    #[test]
+    fn an_earth_with_two_or_three_bar_of_nitrogen_stays_temperate() {
+        // Archean Earth may have held 2 to 3 bar of N₂ (Goldblatt et al.
+        // 2009; Charnay et al. 2013): the thermostat still holds it, with
+        // Earth's water and with 1 % of its mass in water.
+        for water_fraction in [0.000_23, 0.01] {
+            for n2 in [2.0, 3.0] {
+                let (g, c) = earth_with_nitrogen(n2, water_fraction);
+                assert!(c.regulated, "{n2} bar, {water_fraction}: {c:?} {g:?}");
+                assert!(
+                    (282.0..=294.0).contains(&c.temperature_k),
+                    "{n2} bar, {water_fraction}: {c:?} {g:?}"
+                );
+                assert_eq!(c.liquid, SurfaceLiquid::Water, "{c:?}");
+                assert!(g.co2 > 0.0, "{g:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
+        // Charnay et al. 2013 (§5.2): the Sun at 2.5 Ga (Gough 1981,
+        // doi:10.1007/BF00151270, 0.82 of today's light), 10 mbar of CO₂, the air from 1 to 2 bar
+        // of N₂: +7 K in their GCM, +4 to 5 K in the 1-D model of
+        // Goldblatt et al. 2009. Their CO₂ held fixed, no thermostat.
+        let d = derive_at(&model_inputs(reference("Earth")), 1.0);
+        let faint = Context {
+            equilibrium_k: d.context.equilibrium_k * 0.82_f64.powf(0.25),
+            ..d.context
+        };
+        let air = |n2: f64| Gases {
+            n2,
+            co2: 0.010,
+            h2o: 0.0,
+            ch4: 0.0,
+            nh3: 0.0,
+            so2: 0.0,
+            o2: 0.0,
+        };
+        let temperature = |gases: Gases| {
+            let (g, c) = climate(
+                &faint,
+                gases,
+                &d.water,
+                Regime::Stagnant,
+                d.heat_flux_w_m2,
+                d.water_bar,
+            );
+            (g, c.temperature_k)
+        };
+        let (g1, t1) = temperature(air(0.99));
+        let (g2, t2) = temperature(air(1.99));
+        assert!((270.0..=290.0).contains(&t1), "{t1} {g1:?}");
+        let warming = t2 - t1;
+        assert!((3.0..=8.0).contains(&warming), "{t1} -> {t2}: {g2:?}");
+    }
+
+    #[test]
+    fn a_pure_gas_broadens_its_own_lines_in_full() {
+        // Venus's CO₂ and a steam atmosphere: the gas is its own air, so
+        // the strong-line law holds whole.
+        let venus = Gases {
+            co2: 85.0,
+            ..Gases::default()
+        };
+        let expected = CO2_OPACITY * 85.0_f64.powf(CO2_EXPONENT) * 85.0_f64.sqrt();
+        assert!((optical_depth(&venus) / expected - 1.0).abs() < 1e-12);
+        let steam = Gases {
+            h2o: 260.0,
+            ..Gases::default()
+        };
+        let expected = H2O_OPACITY * 260.0;
+        assert!((optical_depth(&steam) / expected - 1.0).abs() < 1e-12);
+        // Below 1 bar of other gases, nothing changes from the plain
+        // square root of the whole pressure.
+        let earth = Gases {
+            n2: 0.9,
+            co2: 3e-4,
+            h2o: 0.0126,
+            ..Gases::default()
+        };
+        let p = earth.total();
+        let expected = p.sqrt()
+            * (CO2_OPACITY * 3e-4_f64.powf(CO2_EXPONENT) + H2O_OPACITY * 0.0126_f64.sqrt());
+        assert!((optical_depth(&earth) / expected - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn co2_and_water_broaden_each_other_in_full() {
+        // CO₂ broadens water vapour's lines at least as well as N₂ does,
+        // and water CO₂'s (Yang et al. 2022; Tan et al. 2019): only the
+        // other gases are tempered past the knee. An Earth at 1.6 AU, all
+        // its 1.8 bar of CO₂ in the air over 0.89 bar of N₂, keeps the
+        // plain square root of its whole pressure.
+        let (_, g, c) = climate_at(&model_inputs(reference("Earth")), 1.6);
+        assert!(g.co2 > 1.0 && g.n2 < BROADENING_KNEE_BAR, "{g:?}");
+        assert!((285.0..=290.0).contains(&c.temperature_k), "{c:?} {g:?}");
+        assert_eq!(c.liquid, SurfaceLiquid::Water, "{c:?}");
+        let thick = Gases {
+            n2: 0.89,
+            co2: 1.8,
+            h2o: 0.01,
+            ..Gases::default()
+        };
+        let p = thick.total();
+        let expected =
+            p.sqrt() * (CO2_OPACITY * 1.8_f64.powf(CO2_EXPONENT) + H2O_OPACITY * 0.01_f64.sqrt());
+        assert!((optical_depth(&thick) / expected - 1.0).abs() < 1e-12);
+        // Past the knee only the nitrogen is tempered: 3 bar of N₂ count
+        // as 3^0.2 bar, the CO₂ and the vapour in full for both.
+        let nitrogen = Gases { n2: 3.0, ..thick };
+        let pb = 1.8 + 0.01 + 3.0_f64.powf(THICK_AIR_EXPONENT);
+        let expected =
+            pb.sqrt() * (CO2_OPACITY * 1.8_f64.powf(CO2_EXPONENT) + H2O_OPACITY * 0.01_f64.sqrt());
+        assert!((optical_depth(&nitrogen) / expected - 1.0).abs() < 1e-12);
+        // Steam deeper than the column the Simpson-Nakajima cap sees no
+        // longer broadens the CO₂ either: a steam runaway's few bar of CO₂
+        // keep the same opacity under 1.6e5 bar of steam as under 1e3.
+        let runaway = Gases {
+            h2o: 1.6e5,
+            co2: 6.0,
+            ..Gases::default()
+        };
+        let thinner = Gases {
+            h2o: 1.0e3,
+            ..runaway
+        };
+        const { assert!(STEAM_MAX_BAR < 1.0e3) };
+        assert_eq!(optical_depth(&runaway), optical_depth(&thinner));
+    }
+
+    /// A 1 M⊕ planet with `water_fraction` of its mass in water and the
+    /// volatiles `draw_inputs` gives its rock and ice (no scatter), round
+    /// the Sun at `orbit_au`, through the whole chain.
+    fn water_world_at(water_fraction: f64, orbit_au: f64) -> crate::planet::Surface {
+        let inputs = PlanetInputs {
+            water_fraction,
+            volatiles: crate::planet::inputs::volatile_rule(1.0 - water_fraction, water_fraction),
+            ..crate::planet::reference::inputs(1.0, 0.325, 0.0)
+        };
+        let model =
+            crate::planet::planet_model(&crate::planet::reference::sun_at(orbit_au), inputs);
+        model.surface.expect("a bare body has a surface")
+    }
+
+    #[test]
+    fn a_steam_runaway_settles_past_the_end_of_the_radiation_limit() {
+        // Issue #438: 30 % water (some 1300 oceans) at 0.7 AU, over the
+        // runaway limit, puts about 1.6e5 bar of steam in the air. A thick
+        // steam atmosphere radiates the Simpson-Nakajima limit until its
+        // surface reaches about 1800 K, and more beyond (Boukrouche et al.
+        // 2021): absorbing 1.7 times the limit (489 against 282 W/m²), it
+        // settles a little past 1800 K, not at thousands of kelvin.
+        let surface = water_world_at(0.3, 0.7);
+        assert!(surface.water.runaway, "{surface:?}");
+        assert!(surface.gases.h2o > 1.0e5, "{:?}", surface.gases);
+        let t = surface.climate.temperature_k;
+        assert!((1800.0..=2500.0).contains(&t), "{t} K: {surface:?}");
+        assert_eq!(surface.climate.liquid, SurfaceLiquid::None, "{surface:?}");
+        // Past the breakdown the steam column no longer matters: with a
+        // third of the water (and more CO₂ left in the air), nearly the
+        // same hot state.
+        let less = water_world_at(0.1, 0.7);
+        assert!(less.water.runaway && less.gases.h2o > 1.0e4, "{less:?}");
+        let dt = (less.climate.temperature_k - t).abs();
+        assert!(dt < 20.0, "{t} K and {} K", less.climate.temperature_k);
+    }
+
+    #[test]
+    fn thick_steam_sends_out_the_simpson_nakajima_limit_at_the_breakdown() {
+        let olr = |t: f64, gases: &Gases| SIGMA * t.powi(4) / (1.0 + 0.75 * optical_depth(gases));
+        for h2o in [1.0e3, 1.0e4, 1.6e5] {
+            let steam = Gases {
+                h2o,
+                ..Gases::default()
+            };
+            let at_breakdown = olr(STEAM_BREAKDOWN_K, &steam);
+            assert!(
+                (at_breakdown - SIMPSON_NAKAJIMA_W_M2).abs() < 1e-6,
+                "{h2o} bar: {at_breakdown} W/m²"
+            );
+            assert!(olr(1500.0, &steam) < SIMPSON_NAKAJIMA_W_M2, "{h2o} bar");
+            assert!(olr(2000.0, &steam) > SIMPSON_NAKAJIMA_W_M2, "{h2o} bar");
+        }
+        // Under about 480 bar the grey law is under the cap and holds.
+        let steam = Gases {
+            h2o: 400.0,
+            ..Gases::default()
+        };
+        assert!((optical_depth(&steam) / (H2O_OPACITY * 400.0) - 1.0).abs() < 1e-12);
     }
 
     #[test]

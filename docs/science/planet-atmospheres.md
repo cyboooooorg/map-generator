@@ -86,7 +86,7 @@ least half; Earth, Uranus and Neptune are unchanged.
 
 ## Runaway greenhouse, water kept and tectonic regime
 
-`planet::regime::water` and `planet::regime::regime` (not yet chained into
+`planet::regime::water` and `planet::regime::regime` (called by
 `planet_model`).
 
 **Runaway.** A planet whose insolation exceeds the runaway limit of
@@ -132,7 +132,7 @@ still is with 7.5e13 W (1.79 W/m², the low end of Lainey et al.); a dry
 
 ## Core and dynamo
 
-`planet::core::core` (not yet chained into `planet_model`) gives the
+`planet::core::core` (called by `planet_model`) gives the
 state of the iron core (`none`, `liquid` or `frozen`), whether a dynamo
 runs and the surface equatorial dipole field in µT. It is a parametrised
 thermal history in the style of Stevenson, Spohn & Schubert 1983
@@ -204,10 +204,11 @@ model freezes it, which only matters for its state, not its dynamo.
 
 ## Atmosphere
 
-`planet::atmosphere` (not yet chained into `planet_model`) gives the
+`planet::atmosphere` (called by `planet_model`) gives the
 partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
-and O₂ (`Gases`, with `total()`), in four steps, called in this order:
-`outgassed`, `atmosphere`, `cold_trap`, `photochemistry`. The carbonate
+and O₂ (`Gases`, with `total()`), in five steps, called in this order:
+`outgassed`, `atmosphere`, `methane_photolysis`, `cold_trap`,
+`photochemistry`. The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -281,6 +282,59 @@ as in the paper, Titan keeps a bar, and `s` is small enough that Venus,
 which has no dynamo, keeps its air. Every gas is
 kept in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`.
 
+**Methane photolysis** (`methane_photolysis`, before the cold trap, on
+the whole stock). The star's ultraviolet destroys methane at a rate set
+by its light, not by the amount of methane: any column worth counting
+absorbs all the Lyman α (photon-limited). The rate, in molecules per m²
+and second over the sphere, is
+
+```text
+D = Y · S₀ I r(t) / 4 / E_γ
+```
+
+with `S₀ = 1361 W/m²`, `I` the insolation, `E_γ` the energy of a Lyman α
+photon (121.6 nm, 1.634e-18 J) and `r(t)` the Lyman α share of the
+star's light: Ribas et al. 2005 (doi:10.1086/427977, their eq. 2,
+checked) fit `F = 19.2 τ^-0.72` erg s⁻¹ cm⁻² at 1 AU, 7.40e-5 of the
+solar constant at the end of saturation (0.1 Gyr) and 3.9e11 photons
+cm⁻² s⁻¹ today. The line saturates with the XUV (`saturation_gyr`, the
+same anchors) and decays as `t^-0.72` after. `Y = 13.9` methane
+molecules per Lyman α photon is a calibration on Titan: Yung, Allen &
+Pinto 1984 (ApJS 55, 465, doi:10.1086/190963; abstract checked) find
+that Titan "might have lost 5.6 × 10⁴ g cm⁻²" of methane, "the
+equivalent of 8 bars", over geologic time. Read as 4.5 Gyr at today's
+rate (an assumption, the full text was not read), that is 1.48e10
+molecules cm⁻² s⁻¹ against the 1.07e9 Lyman α photons cm⁻² s⁻¹ Titan
+gets on average. `Y` is over one because Lyman α stands for all the
+ultraviolet that destroys methane, the photolysis proper below 145 nm
+and the dissociation photosensitised by acetylene at longer
+wavelengths. At that rate Titan's air would lose its methane in a few
+tens of millions of years, as Tobie, Lunine & Sotin 2006 (Nature 440,
+61, doi:10.1038/nature04497; abstract checked) state.
+
+The supply is the methane outgassed (after escape), spread evenly over
+the system's age: `S = CH₄ / age`. While the destruction outruns it,
+nothing builds up; from the age `t*` at which the falling destruction
+meets the supply, methane gathers in the air and on the ground:
+
+```text
+CH₄ left = ∫ from t* to age of (S − D(t)) dt
+```
+
+analytic, through the band integral of `xuv.rs`. This is Titan's
+resupply: Tobie et al. explain its methane by outgassing from its
+interior, in episodes where the model spreads it evenly. Titan outgasses
+20.6 bar of methane in the model and keeps 6.3 bar of it on its ground
+(the supply overtakes the destruction at about 1.2 Gyr), from which the
+cold trap leaves 0.035 bar in its air. Ganymede and Callisto get 3.4
+times Titan's light per unit area and outgas 0.15 and 0.47 bar: the
+destruction outruns them at every age and they keep none. Destroyed
+methane is gone: its hydrogen escapes and its carbon ends in heavier
+hydrocarbons on the ground, which the model does not carry. Two
+departures: the outgassing is spread evenly over the age, and the
+larger Lyman α share of an M dwarf's light is not modelled (both
+understate the destruction round red dwarfs, if anything).
+
 **Cold trap** (`cold_trap`). A gas whose triple point lies above the
 body's equilibrium temperature frosts onto the ground until its partial
 pressure falls to its sublimation pressure, by Clausius–Clapeyron from
@@ -302,7 +356,8 @@ that none reaches the upper air; above it, OH from water's photolysis
 oxidises the methane, which is set to zero (the CO₂ it would make is
 not added). The 150 K is a calibration with no source, between Titan
 (82 K, keeps its methane) and an abiotic Earth (255 K) or Mars (207 K).
-Life's methane is added later.
+Life's methane is added later. Methane's photolysis by the ultraviolet
+comes before the cold trap (above).
 
 Calibration targets, through the whole chain from the reference bodies'
 inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
@@ -313,17 +368,17 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 | Earth | 0.89 bar N₂, no CH₄ or NH₃ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar; CH₄ and NH₃ under 1e-3 bar | 0.78 bar N₂ |
 | Mars | 0.014 bar | 0.002 to 0.05 bar | 0.006 bar |
 | Titan | 2.1 bar, 98 % N₂, 0.035 bar CH₄ | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
+| Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
 
-A shortcoming, outside the targets: at Jupiter's distance (equilibrium
-temperature 112 K, above methane's triple point and under 150 K),
-Ganymede keeps about 0.2 bar of CH₄ and Callisto, to which the core
-model gives a weak deep dynamo, about 0.5 bar (both are airless). Moons
-are not modelled yet (`body_model` skips them).
+A shortcoming, outside the targets: Ganymede keeps 0.016 bar of N₂ and
+Callisto, to which the core model gives a weak deep dynamo, 0.047 bar;
+both are airless. Before methane photolysis they also kept 0.15 and
+0.47 bar of CH₄. Moons are not modelled yet (`body_model` skips them).
 
 ## Climate and surface liquid
 
-`planet::climate` (not yet chained into `planet_model`) gives the mean
+`planet::climate` (called by `planet_model`) gives the mean
 surface temperature, the liquid on the surface (`SurfaceLiquid`: `none`,
 `water`, `hydrocarbons` or `lava`) and whether the carbonate thermostat
 holds the temperature (`Climate::regulated`). It takes the gases after
@@ -337,14 +392,15 @@ internal heat flux `q`:
 
 ```text
 T⁴ = T_eq⁴ (1 + ¾ τ) + q / σ
-τ  = (P / 1 bar)^½ · Σ k_i (p_i / 1 bar)^a_i
+τ  = Σ k_i (p_i / 1 bar)^a_i (P_b,i / 1 bar)^½
 ```
 
-`T_eq` is the context's equilibrium temperature (Bond albedo 0.3), `P`
-the surface pressure and `p_i` the partial pressures of CO₂, H₂O and
-CH₄. The square roots are the strong-line limit of a pressure-broadened
-band, which absorbs as `sqrt(S u α)` with the path `u ∝ p_i` and the
-width `α ∝ P` (Pierrehumbert 2010, §4.4; Goody & Yung 1989). CO₂'s
+`T_eq` is the context's equilibrium temperature (Bond albedo 0.3), `p_i`
+the partial pressures of CO₂, H₂O and CH₄ and `P_b,i` the pressure that
+broadens each gas's lines (below). The square roots are the strong-line
+limit of a pressure-broadened band, which absorbs as `sqrt(S u α)` with
+the path `u ∝ p_i` and the width `α` growing with the pressure round
+the lines (Pierrehumbert 2010, §4.4; Goody & Yung 1989). CO₂'s
 power is smaller, 0.25: its 15 µm band is saturated at the centre, so its
 forcing grows with the logarithm of its amount (Myhre et al. 1998,
 doi:10.1029/98GL01908), and the small power stands in for it across the
@@ -361,6 +417,125 @@ Titan's real greenhouse is mostly collision-induced absorption by N₂,
 CH₄ and H₂, partly undone by its haze (McKay, Pollack & Courtin 1991,
 doi:10.1126/science.11538492, not checked); the methane opacity carries
 all of it here.
+
+**Broadening by the rest of the air** (`broadening_bar`, issue #440).
+For CO₂ and water vapour, `P_b` is the pressure of CO₂ and water vapour
+in full plus the pressure `P_o` of the other gases (N₂, O₂, CH₄, the
+rest), in proportion up to 1 bar (`BROADENING_KNEE_BAR`) and as its 0.2
+power past it (`THICK_AIR_EXPONENT`):
+
+```text
+P_b = p_CO2 + p_H2O + P_o                    for P_o ≤ 1 bar
+P_b = p_CO2 + p_H2O + 1 bar · (P_o / 1 bar)^0.2   past it
+```
+
+Below 1 bar of other gases this is the whole pressure, so Earth (0.90
+bar of other gases in the climate step), Mars and the pure CO₂ of Venus
+keep the calibration of the table, as does a steam atmosphere, whose
+water broadens its own lines. Past 1 bar, the other gases' share of an
+opacity grows as `P_o^0.1` instead of `P_o^0.5`.
+
+CO₂ and water vapour count in full for each other, not only for
+themselves. Water broadens CO₂'s lines much more than N₂ and O₂ do (Tan,
+Kochanov, Rothman & Gordon 2019, doi:10.1029/2019JD030929, abstract
+checked), and CO₂ broadens water's 1.33 to 1.45 times as much as air
+(Yang et al. 2022, doi:10.7498/aps.71.20220700, abstract checked; Brown,
+Humphrey & Gamache 2007, doi:10.1016/j.jms.2007.07.010, in the far
+infrared, not checked). They count at par with N₂ under the knee, not
+above it, so that the opacities keep their calibration. The
+doubled-nitrogen calibration below holds 10 mbar of CO₂ and cannot constrain the
+case where CO₂ is water's main broadener; tempering the CO₂ there too,
+as the first version of this rule did, cut an Earth at 1.6 AU (1.8 bar
+of CO₂ over 0.89 bar of N₂) from 287.8 K to 281 K and moved in the cold
+edge of the habitable zone that Kopparapu et al. 2013
+(doi:10.1088/0004-637X/765/2/131) put at about 1.67 AU with CO₂–H₂O
+atmospheres. With the plain square
+root, nitrogen alone ran an Earth away: at 1 AU, with 2 bar of N₂, the
+thermostat ran out of CO₂ to remove and the vapour feedback carried the
+surface to 1490 K (issue #440). The 0.2 is calibrated on the warming
+of doubled nitrogen. Goldblatt et al. 2009 (doi:10.1038/ngeo692,
+abstract checked) find 4.4 °C for twice the present nitrogen on the late
+Archean Earth (1-D radiative–convective model), Charnay et al. 2013
+(doi:10.1002/jgrd.50808, §5.2 read in arXiv 1310.4286) +7 °C in a GCM
+for the air going from 1 to 2 bar at 2.5 Ga with 10 mbar of CO₂ and
+2 mbar of CH₄, and Wolf & Toon 2014 (doi:10.1089/ast.2013.1112,
+abstract checked) 3 to 7 K for plausible nitrogen inventories. In
+Charnay's setting without methane (the Sun at 0.82 of its light, 10
+mbar of CO₂, no thermostat) the model goes from 280.6 K to 285.6 K
+(+5.0 K) at 2 bar and to 289.4 K at 3 bar; the powers 0.1 and 0.3 give
+about +3 K and +8.5 K. The real rise is milder than the strong-line law
+because lines overlap and saturate (Vladilo et al. 2013,
+doi:10.1088/0004-637X/767/1/65, appendix A.3, checked).
+
+Methane keeps the whole pressure, `P_b = P`: its opacity stands for
+Titan's collision-induced greenhouse, which grows with the nitrogen
+faster than line broadening, not slower. Titan's calibration is
+therefore unchanged, and so is Earth's (`H2O_OPACITY`), whose other
+gases stay under 1 bar.
+
+Earth at 1 AU now keeps 288 K under its thermostat with 2, 3, 5 and
+10 bar of N₂ (the CO₂ it leaves falls from 270 ppm of a bar to 23, 7,
+0.7 and a trace); past about 11 bar its vapour still runs away once the
+thermostat has no CO₂ left to remove. That remainder is the grey
+model's own moist limit: at Earth's composition the outgoing radiation
+peaks at 253 W/m² (Goldblatt et al. 2013, doi:10.1038/ngeo1892, find
+282 W/m² line by line), barely above the 240 W/m² Earth absorbs, and
+the peak still falls with nitrogen (239 W/m² at twice Earth's N₂, 211
+with the plain square root), whereas the limit of a real moist
+atmosphere is set by the water vapour alone (Nakajima, Hayashi & Abe
+1992, doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2, abstract
+checked). Issue #438 bounded the steam side of that limit (below); this
+moist side stays as it is.
+
+**Steam: the Simpson–Nakajima limit** (`STEAM_MAX_TAU`, issue #438). A
+thick steam atmosphere sends out a fixed flux whatever its surface
+temperature: its emission comes from a level pinned to water's
+saturation curve. Goldblatt, Robinson, Zahnle & Crisp 2013
+(doi:10.1038/ngeo1892, abstract checked) find this limit at 282 W/m²
+(`SIMPSON_NAKAJIMA_W_M2`) line by line; Boukrouche, Lichtenberg &
+Pierrehumbert 2021 (doi:10.3847/1538-4357/ac1345, §III.1 read in arXiv
+2107.14150) find 283 W/m² and Hamano et al. 2015
+(doi:10.1088/0004-637X/806/2/216, read in arXiv 1505.03552) 280 W/m².
+The plateau ends when the dry adiabat reaches the emitting levels:
+Boukrouche et al. find it flat from 300 to 1800 K under 260 bar of steam
+(to 1050 K under 10 bar), its end reaching a constant of about 1800 K
+(`STEAM_BREAKDOWN_K`) as the steam thickens to 295 bar, and the radiation
+rising almost exponentially past it; Goldblatt 2015
+(doi:10.1089/ast.2014.1268, read in arXiv 1503.04835) puts the rise past
+1500 K, through the 4 µm window.
+
+The grey law has no such plateau: the opacity of pure steam grows as its
+pressure, `5.9 p`, so the outgoing radiation at a given surface
+temperature falls without bound as the column thickens, and a 1 M⊕
+planet of 30 % water at 0.7 AU came out at 8805 K under 1.6e5 bar of
+steam. The model now caps the water's optical depth at the one with which
+steam alone sends out the limit from a surface at 1800 K:
+
+```text
+τ_H2O ≤ (4/3) (σ T_b⁴ / F_SN − 1) ≈ 2813      T_b = 1800 K, F_SN = 282 W/m²
+```
+
+Pure steam thick enough to reach the cap then sends out `F_SN (T / T_b)⁴`
+from a surface at `T`, whatever its column: no more than the limit up to
+the breakdown, rising past it as from a fixed emitting column (the `T⁴`
+rise is slower than the near-exponential one Boukrouche et al. find, so
+the hot state is an upper estimate); thinner steam sends out more. A pure steam runaway absorbing `A`
+settles at `T_b (A / F_SN)^¼` plus its other gases' greenhouse: the
+30 %-water planet at 0.7 AU (489 W/m² absorbed) now sits at 2076 K,
+2085 K with a third of the water and 57 bar of CO₂. The cap binds past
+about 480 bar of steam (2813 / 5.9, `STEAM_MAX_BAR`), and the steam
+counts in the broadening of the CO₂ lines up to that column only: the
+outgoing radiation comes from levels above it, so the deeper steam no
+more broadens CO₂'s lines there than it adds to water's own opacity.
+Counted whole, the 1.6e5 bar of the 30 %-water planet gave its 6 bar of
+CO₂ an optical depth of about a thousand and put it at 2235 K (2274 K
+with a third of the water). Thinner steam keeps the grey law,
+which emits more than the limit at the breakdown, so its hot state stays
+cooler than Boukrouche et al. find (10 bar of grey steam sends out the
+limit from about 680 K, not 1050 K). The wet climate never reaches the
+cap: its vapour, 77 % of saturation capped at the critical point, is at
+most about 283 bar. The Solar System is unchanged: none of its bodies
+holds that much steam.
 
 **Water vapour.** Where water is kept and there is no runaway, the air
 above the ocean or the ice holds 77 % of the saturation pressure (the
@@ -416,16 +591,20 @@ inputs round the Sun at 4.6 Gyr:
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Earth | 288 K, water, regulated, 270 ppm CO₂ | 288 ± 6 K, water, regulated | 288 K, 280 ppm before industry |
-| Venus | 736 K, none | 737 ± 50 K, none | 737 K |
+| Venus | 735 K, none | 737 ± 50 K, none | 737 K |
 | Mars | 209 K, none | 210 ± 12 K, none | about 210 K |
 | Titan | 94 K, hydrocarbons | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | 410 K, its equilibrium temperature | within 1 K of it | airless |
 
-An Earth moved round the Sun keeps 288 K out to 1.4 AU (0.17 bar of CO₂
-at 1.2 AU, 0.8 bar at 1.4 AU), is just short at 1.6 AU (288 K less 0.2,
-all its 1.8 bar of CO₂ in the air, its water still liquid) and freezes
-beyond (234 K at 1.8 AU). At 0.9 AU it has run away (705 K, no water);
-at 0.01 AU it is a lava world.
+An Earth moved round the Sun keeps 288 K out to 1.5 AU (0.17 bar of CO₂
+at 1.2 AU, 0.8 bar at 1.4 AU, 1.2 bar at 1.5 AU), is just short at
+1.6 AU (287.8 K, all its 1.8 bar of CO₂ in the air, its water liquid)
+and freezes beyond (258 K at 1.7 AU, 234 K at 1.8 AU), close to the
+maximum-greenhouse limit of Kopparapu et al. 2013 (about 1.67 AU). Its
+N₂ stays under 1 bar, so the tempering of thick air leaves this track as
+it was before issue #440; counting CO₂ as an ordinary foreign gas of
+water had put it at 281 K at 1.6 AU. At 0.9 AU it has run away (702 K, no water); at
+0.01 AU it is a lava world.
 
 ## Life
 
@@ -472,8 +651,9 @@ order: the interior from the drawn inputs, the XUV fluence, the envelope
 escape (the interior is derived again from what is left), the internal
 heat, then, if the envelope left is under `MIN_ENVELOPE` (0.1 % of the
 mass), the water kept and the runaway check, the tectonic regime, the
-core and dynamo, the air (`outgassed`, `atmosphere`, `cold_trap`, then
-`photochemistry`, which reads the cold trap's air), the climate and
+core and dynamo, the air (`outgassed`, `atmosphere`,
+`methane_photolysis`, `cold_trap`, then `photochemistry`, which reads
+the cold trap's air), the climate and
 surface liquid, and life with the oxygen it makes. If that climate
 carries a wet surface past water's critical point (`climate::boils`),
 the body has run away after all: the steps from the regime on run once
@@ -508,21 +688,21 @@ drowns all land; ten is a round figure above the few oceans their basins
 hold, not a value from the paper. `DENSE_AIR_BAR` is 1 bar, for the
 runaway greenhouse (Venus has 90 bar; a runaway that lost its air is a
 bare rock) and for the hydrocarbon world. The pressure condition on
-hydrocarbons is a departure from the plain rule "liquid hydrocarbons":
-without it the model makes Ganymede and Callisto hydrocarbon worlds,
-because it outgasses 0.2 and 0.5 bar of methane from their ices and
-holds it, which the real moons do not have. Titan has 2.1 bar in the
-model. That excess methane is a weakness of the atmosphere step, not
-something the classifier should hide for good.
+hydrocarbons is a departure from the plain rule "liquid hydrocarbons".
+It was added when the model kept 0.2 and 0.5 bar of methane on
+Ganymede and Callisto, which methane photolysis now removes; it still
+keeps a cold body with a trace of methane over its ice under a thin air
+an ice world. Titan has 2.1 bar in the model.
 
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa
-`ice-world`, the giants as in part 1. A 1 M⊕ planet of 30 % water at
+`ice-world`, Callisto `ice-world` with no methane, the giants as in
+part 1. A 1 M⊕ planet of 30 % water at
 1 AU, with the volatiles `draw_inputs` gives its rock and ice (no
 scatter), is an `ocean-world` at 288 K under 0.4 bar. With 1 % water
 (about 40 oceans) at 1 AU, the 20 bar of nitrogen its ice brings carry
-the vapour feedback past 647 K: it is a `runaway-greenhouse`, never a
-lava world. The model is
+the vapour feedback past 647 K (past about 11 bar of N₂, see the
+broadening above): it is a `runaway-greenhouse`, never a lava world. The model is
 finite and non-negative on mass 0.01 and 20 M⊕, insolation 1e-3 and 1e4,
 age 0.5 and 13 Gyr, M5V and A0V stars.
 
@@ -536,9 +716,13 @@ the fixes of the steam review and the source check: the vapour capped at
 the water a body has, a boil kept only if its steam stays past 647 K, a
 runaway's water all in its air, the XUV saturation time anchored on
 Jackson et al. and Johnstone et al., the heat-pipe threshold at 1 W/m²
-and the seafloor power 4.1. The census also counts the runaways by their
-source (`Water::boiled`) and the wet planets left past 647 K because
-their boil was not kept.
+and the seafloor power 4.1, then again after methane photolysis (issue
+#439), after the broadening by thick air was tempered (issue #440) and
+after the steam was capped at the Simpson–Nakajima limit (issue #438,
+the output unchanged), and after CO₂ and water vapour were counted in
+full in each other's broadening. The census also counts the runaways by their source
+(`Water::boiled`) and the wet planets left past 647 K because their boil
+was not kept.
 
 ```text
 500 systems, 1677 planets
@@ -546,12 +730,12 @@ their boil was not kept.
 body_type against derived class (planets)
 body_type              gas-giant         hot-jupiter   hydrocarbon-world           ice-giant           ice-world          lava-world        mini-neptune         ocean-world               rocky  runaway-greenhouse         super-earth   total
 barren                         0                   0                   0                   0                  38                  14                   0                   0                 335                  22                   1     410
-caustic                        0                   0                   0                   0                   8                   0                   1                   0                  55                  31                   0      95
-frozen                         0                   0                  85                   0                 591                   0                  57                  26                   2                  13                   0     774
+caustic                        0                   0                   0                   0                   8                   0                   1                   0                  56                  30                   0      95
+frozen                         0                   0                  16                   0                 699                   0                  57                   0                   2                   0                   0     774
 gas-giant                     41                   0                   0                   0                   0                   0                   0                   0                   0                   0                   0      41
 hot-jupiter                    0                   1                   0                   0                   0                   0                   0                   0                   0                   0                   0       1
 ice-giant                     28                   0                   0                  56                   0                   0                   0                   0                   0                   0                   0      84
-terran                         0                   0                   0                   0                  14                   0                   9                   7                 125                   6                  13     174
+terran                         0                   0                   0                   0                  14                   0                   9                   9                 124                   5                  13     174
 volcanic                       0                   0                   0                   0                   6                   3                   0                   0                  79                  10                   0      98
 
 planets per radius bin (Fulton et al. 2017 bins, R_earth)
@@ -569,47 +753,47 @@ medians per class
 class               planets  age Gyr  mass M⊕    a AU    CMF    water  envelope     T K      P bar
 gas-giant                69     4.90   47.361   2.172  0.332   0.0283    0.9000     NaN        NaN
 hot-jupiter               1     6.33  191.055   0.024  0.382   0.0000    0.9447     NaN        NaN
-hydrocarbon-world        85     4.09    0.346   0.640  0.319   0.3445    0.0000     162      2.713
+hydrocarbon-world        16     4.49    0.107   3.125  0.317   0.3555    0.0000     107      4.240
 ice-giant                56     5.35   17.247   2.028  0.313   0.2924    0.1614     NaN        NaN
-ice-world               657     5.74    0.461   0.380  0.308   0.3469    0.0000      87      0.084
+ice-world               765     5.57    0.418   0.405  0.309   0.3448    0.0000      90      0.046
 lava-world               17     3.18    0.428   0.026  0.303   0.0006    0.0000    1593      0.000
 mini-neptune             67     5.82    2.129   0.352  0.312   0.3407    0.0082     NaN        NaN
-ocean-world              33     3.89    0.241   0.622  0.295   0.3261    0.0000     312     10.282
-rocky                   596     5.31    0.474   0.047  0.313   0.0005    0.0000     337      0.000
-runaway-greenhouse       82     4.16    0.919   0.183  0.309   0.0012    0.0000     810     89.104
-super-earth              14     5.07    1.679   0.151  0.269   0.0008    0.0018     245      2.072
+ocean-world               9     4.45    1.310   0.137  0.324   0.3040    0.0000     288      1.906
+rocky                   596     5.31    0.474   0.047  0.312   0.0005    0.0000     336      0.000
+runaway-greenhouse       67     4.39    1.053   0.141  0.310   0.0008    0.0000     719     55.258
+super-earth              14     5.07    1.679   0.151  0.269   0.0008    0.0018     233      2.082
 
 class mix (1677 planets)
-ice-world             39.2 %  (657)
+ice-world             45.6 %  (765)
 rocky                 35.5 %  (596)
-hydrocarbon-world      5.1 %  (85)
-runaway-greenhouse     4.9 %  (82)
 gas-giant              4.1 %  (69)
 mini-neptune           4.0 %  (67)
+runaway-greenhouse     4.0 %  (67)
 ice-giant              3.3 %  (56)
-ocean-world            2.0 %  (33)
 lava-world             1.0 %  (17)
+hydrocarbon-world      1.0 %  (16)
 super-earth            0.8 %  (14)
+ocean-world            0.5 %  (9)
 hot-jupiter            0.1 %  (1)
 
 planets with a surface: 1467
 
 surface liquid (1467 planets with a surface)
-Hydrocarbons          14.6 %  (214)
+Hydrocarbons           1.1 %  (16)
 Lava                   1.2 %  (17)
-None                  77.5 %  (1137)
-Water                  6.7 %  (99)
+None                  92.6 %  (1359)
+Water                  5.1 %  (75)
 
 tectonic regime (1467 planets with a surface)
-Episodic              20.9 %  (306)
+Episodic              20.5 %  (301)
 HeatPipe               3.5 %  (51)
-Plates                40.1 %  (588)
+Plates                40.4 %  (593)
 Stagnant              35.6 %  (522)
 
-runaways: 531 by the insolation limit, 15 boiled; of the runaway-greenhouse class: 67 by the limit, 15 boiled
-wet, not in runaway and past 647 K (a boil not kept): 2
+runaways: 531 by the insolation limit, 0 boiled; of the runaway-greenhouse class: 67 by the limit, 0 boiled
+wet, not in runaway and past 647 K (a boil not kept): 1
 
-life: 2.4 % of planets with a surface (35), 2.0 % oxygenated (29)
+life: 1.8 % of planets with a surface (26), 1.5 % oxygenated (22)
 
 radius histogram, period under 100 days (867 planets)
  0.00-0.25      0.0 %  (0)
@@ -656,28 +840,70 @@ What it shows, plainly:
   lava worlds had a median water share of 0.32: migrated water worlds
   whose outgassed ices had run their climate past 1400 K under a water
   layer. A body with water on top is never a lava world now.
-- **Hydrocarbon worlds** are 5.1 % (85), all `frozen`: small icy bodies
-  (median 0.35 M⊕, water 0.34) round dim stars (median 0.64 AU) at a
-  median 162 K under 2.7 bar of nitrogen and methane, warmer and denser
-  Titans. Their seafloor is shallow enough (small mass, low gravity) that
-  the ocean share lets their ices' methane out. Before the fixes there
-  were 128; this is probably still too many: it is the same excess
-  methane that the Ganymede and Callisto remark above points to.
-- **Ocean worlds** are 2.0 % (33): migrated or icy water worlds (median
-  water 0.33) at a median 312 K under 10 bar.
-- **Runaway greenhouses** are 4.9 % (82), mostly dry rocks over the
-  runaway limit (median water 1.2e-3, 89 bar, 810 K): 67 ran away by the
-  insolation limit and 15 by boiling their ocean, all 15 of those in the
-  class. Of the 546 runaways among the planets with a surface, 531 come
-  from the limit; most of them have kept under 1 bar of air and are
-  rocks. The median temperature rose from 720 K because a runaway's
-  steam is now all in its air (the regime's share no longer holds it
-  back); the steam temperature is not bounded yet (issue #438). Two wet
-  planets stay past 647 K out of a runaway: their boil was not kept,
-  because their steam escaped until the dry re-run was cool.
+- **Hydrocarbon worlds** are 1.0 % (16), all `frozen`: small icy bodies
+  (median 0.11 M⊕, water 0.36) far from their stars (median 3.1 AU) under
+  a median 4.2 bar. Before methane photolysis there were 85 (5.1 %), at
+  a median 0.64 AU round dim stars: the ultraviolet of a red dwarf, close
+  in and saturated for gigayears, now destroys their methane faster than
+  they outgas it, and they are ice worlds. Ten of the sixteen are
+  Titans (82 to 88 K at equilibrium, a few hundredths of a bar of
+  methane, 94 to 113 K). The other six keep 0.5 to 18 bar of
+  methane in their air (their equilibrium
+  temperature, 91 to 107 K, is above methane's triple point, so the cold
+  trap holds none back), which warms four of them to 225 to 255 K
+  (within 1 K of their temperatures before issue #440: methane keeps the
+  broadening by the whole air, and their CO₂ and vapour are traces).
+- **Ocean worlds** are 0.5 % (9), down from 33: 26 of those were small
+  icy bodies (median 0.2 M⊕) at 90 to 150 K at equilibrium, warmed to
+  280 to 440 K by their methane (up to 70 bar of it). Photolysis leaves 20 of them
+  ice worlds and 6 hydrocarbon worlds. Tempering the broadening by thick
+  air (issue #440) made two ocean worlds, a former boiled runaway with
+  17 bar of N₂ and a rock frozen at 228 K under 20 bar of N₂, both now
+  held at 288 K by their thermostat, and froze one (275 K to 273 K under
+  1.65 bar of CO₂), which counting its CO₂ in full in the broadening of
+  water's lines thawed again (275 K, with life).
+- **Runaway greenhouses** are 4.0 % (67), all dry rocks over the
+  runaway limit of the insolation (median water 8e-4, 55 bar, 719 K).
+  Of the 531 runaways among the planets with a surface, all come from
+  the limit; most of them have kept under 1 bar of air and are rocks.
+  Before methane photolysis 15 had boiled their ocean, 13 of them icy
+  bodies whose methane greenhouse carried them there; they are ice
+  worlds now. The last two boiled with 2.9 and 17 bar of nitrogen in
+  their first pass, whose broadening carried their vapour away; with it
+  tempered (issue #440) their thermostats hold them at 288 K, a `rocky`
+  planet and an `ocean-world`. The dense CO₂ runaways with several bar
+  of N₂ cooled by up to 37 K. Capping the steam at the Simpson–Nakajima
+  limit (issue #438) moved five steam runaways round red dwarfs, under
+  550 to 2.7e5 bar of steam, and no class: they fell from 8554, 7328,
+  6302, 2617 and 2209 K to 1760, 1835, 1714, 1711 and 2134 K (counting
+  their steam in the broadening of their CO₂ up to the cap's column
+  added 1 to 9 K). The runaway class now spans 322 to 2134 K (median
+  719 K, unchanged). One
+  wet planet stays past 647 K out of a runaway (two before #440): its
+  boil was not kept, because its steam escaped until the dry re-run was
+  cool (458 c: 93 bar of CO₂ and 282 bar of vapour at 1549 K in its
+  first pass, 1488 K while its CO₂ and vapour were tempered as each
+  other's broadeners, all its water lost and 618 K in the steam pass). The cap does not
+  touch it: 282 bar of vapour is under it. The other, under 8.5 bar of
+  N₂, is now a wet `rocky` planet at 301 K, with life.
 - **Tectonic regimes**: heat pipes rose from 2.7 % (39) to 3.5 % (51)
-  with the threshold lowered from 2 to 1 W/m².
+  with the threshold lowered from 2 to 1 W/m². The two planets that
+  stopped boiling (#440) moved from episodic to plates.
 - **Surface liquid** over the 1467 planets with a surface: no liquid for
-  77.5 %, hydrocarbons 14.6 %, water 6.7 %, lava 1.2 %.
-- **Life** arises on 2.4 % of the planets with a surface, 2.0 % with
-  oxygen.
+  92.6 %, hydrocarbons 1.1 % (14.6 % before methane photolysis), water
+  5.1 % (6.7 %), lava 1.2 %. Issue #440 moved eight planets across the
+  water line, four each way, and left the count at 73: four gained an
+  ocean (the two former boils, the boil not kept and the frozen rock
+  under 20 bar of N₂), four cold ones under 1.8 to 3.1 bar of CO₂ and
+  N₂ froze (from 273 to 277 K down to 263 to 273 K). Counting CO₂ and
+  water in full in each other's broadening thawed two of them again
+  (201 b at 275 K and 446 b at 277 K, under 0.19 and 0.79 bar of N₂),
+  bringing the count to 75; the other two, under 1.45 and 1.93 bar of
+  N₂, stay frozen at 268 and 265 K (273 and 276 K before #440), their
+  nitrogen past 1 bar still tempered.
+- **Life** arises on 1.8 % of the planets with a surface (26), 1.5 %
+  with oxygen (22); 1.8 % and 1.6 % before issue #440, which froze two
+  inhabited planets and brought one back from 1073 K, and 1.7 % and
+  1.4 % before CO₂ and water were counted in full in each other's
+  broadening, which thawed one of the two (201 b); 2.4 % and 2.0 % before methane
+  photolysis (nine of the icy ocean worlds warmed by methane had life).
