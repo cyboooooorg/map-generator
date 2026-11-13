@@ -173,6 +173,8 @@ pub(crate) struct Derived {
     pub regime: crate::geology::Regime,
     /// Internal heat flux through the surface, W/m².
     pub heat_flux_w_m2: f64,
+    /// What all the water kept would weigh as vapour, bar.
+    pub water_bar: f64,
 }
 
 /// The Sun's context at `orbit_au`, 4.6 Gyr, with the insolation of
@@ -197,8 +199,10 @@ pub(crate) fn derive_at(inputs: &super::PlanetInputs, orbit_au: f64) -> Derived 
     let context = sun_at(orbit_au);
     let (model, air) = super::chain(&context, inputs.clone());
     let air = air.expect("a body with an envelope has no surface");
+    let bar_per_kg = super::atmosphere::bar_per_kg(model.inputs.mass_earth, &model.interior);
     Derived {
         heat_flux_w_m2: model.heat.flux_w_m2(model.interior.radius_earth),
+        water_bar: air.water.kept_kg * bar_per_kg,
         context,
         gases: air.gases,
         water: air.water,

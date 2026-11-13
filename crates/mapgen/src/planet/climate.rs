@@ -228,16 +228,28 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
 /// [`super::regime::water`] did not see it (the moist runaway of a wet
 /// planet under a thick air; Kasting 1988, doi:10.1016/0019-1035(88)90116-9,
 /// not checked). Its ocean is then steam: the chain derives the body
-/// again with [`super::regime::steam`].
+/// again with [`super::regime::steam`], and keeps that runaway only if
+/// the steam is still [`past_critical`]. The vapour that carries it there
+/// is bounded by the water the body has (see [`climate`]), so a trace of
+/// water cannot boil.
 pub fn boils(water: &Water, climate: &Climate) -> bool {
-    !water.runaway && water.kept_kg > 0.0 && climate.temperature_k >= WATER_CRITICAL_K
+    !water.runaway && water.kept_kg > 0.0 && past_critical(climate)
+}
+
+/// Whether `climate` holds its surface at or past water's critical point
+/// (647.096 K), where no liquid water exists: the test the chain puts to
+/// a boiled body's steam (see [`boils`]).
+pub fn past_critical(climate: &Climate) -> bool {
+    climate.temperature_k >= WATER_CRITICAL_K
 }
 
 /// `gases` with the water vapour an ocean or ice keeps at
-/// `temperature_k`: [`RELATIVE_HUMIDITY`] of saturation.
-fn with_vapour(gases: Gases, temperature_k: f64) -> Gases {
+/// `temperature_k`: [`RELATIVE_HUMIDITY`] of saturation, but never more
+/// than the `water_bar` the body's whole water would weigh as vapour (a
+/// trace of water cannot fill the air with a hundred bar of steam).
+fn with_vapour(gases: Gases, temperature_k: f64, water_bar: f64) -> Gases {
     Gases {
-        h2o: RELATIVE_HUMIDITY * water_saturation_bar(temperature_k),
+        h2o: (RELATIVE_HUMIDITY * water_saturation_bar(temperature_k)).min(water_bar.max(0.0)),
         ..gases
     }
 }
@@ -250,19 +262,26 @@ const ITERATIONS: usize = 60;
 /// temperature. `T ← T(gases with the vapour at T)` from the dry
 /// temperature: the map rises with `T`, so the iteration climbs to the
 /// coldest balance (the one a cooling planet reaches); the vapour is
-/// capped at water's critical point, so it stays bounded.
-fn wet_climate(context: &Context, gases: Gases, heat_flux_w_m2: f64) -> (Gases, f64) {
+/// capped at water's critical point and at the body's `water_bar` (see
+/// [`with_vapour`]), so it stays bounded.
+fn wet_climate(
+    context: &Context,
+    gases: Gases,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+) -> (Gases, f64) {
     let dry = Gases { h2o: 0.0, ..gases };
     let mut t = surface_temperature_k(context, &dry, heat_flux_w_m2);
     for _ in 0..ITERATIONS * 4 {
-        let next = surface_temperature_k(context, &with_vapour(gases, t), heat_flux_w_m2);
+        let next =
+            surface_temperature_k(context, &with_vapour(gases, t, water_bar), heat_flux_w_m2);
         let done = (next - t).abs() < 1e-3;
         t = next;
         if done {
             break;
         }
     }
-    (with_vapour(gases, t), t)
+    (with_vapour(gases, t, water_bar), t)
 }
 
 /// The climate of a body and its gases once the climate has set its CO₂
@@ -271,8 +290,9 @@ fn wet_climate(context: &Context, gases: Gases, heat_flux_w_m2: f64) -> (Gases, 
 /// - In a runaway greenhouse, or without water, the gases are as given
 ///   (a runaway's steam is already in them) and the temperature is
 ///   [`surface_temperature_k`]'s.
-/// - With water kept, its vapour follows the temperature (77 % of saturation),
-///   solved together with it.
+/// - With water kept, its vapour follows the temperature (77 % of
+///   saturation, never more than the `water_bar` all of the body's water
+///   would weigh as vapour), solved together with it.
 /// - With plates as well, the carbonate thermostat (Walker, Hays & Kasting
 ///   1981, doi:10.1029/JC086iC10p09776) sets the CO₂ by bisection between
 ///   none and all that is outgassed (`gases.co2`, never more) so that the
@@ -290,15 +310,16 @@ pub fn climate(
     water: &Water,
     regime: Regime,
     heat_flux_w_m2: f64,
+    water_bar: f64,
 ) -> (Gases, Climate) {
     let wet = !water.runaway && water.kept_kg > 0.0;
     let (gases, temperature_k, regulated) = if !wet {
         let t = surface_temperature_k(context, &gases, heat_flux_w_m2);
         (gases, t, false)
     } else if regime == Regime::Plates {
-        thermostat(context, gases, heat_flux_w_m2)
+        thermostat(context, gases, heat_flux_w_m2, water_bar)
     } else {
-        let (g, t) = wet_climate(context, gases, heat_flux_w_m2);
+        let (g, t) = wet_climate(context, gases, heat_flux_w_m2, water_bar);
         (g, t, false)
     };
     let liquid = liquid(temperature_k, &gases, water);
@@ -315,9 +336,14 @@ pub fn climate(
 /// The carbonate thermostat: the CO₂ in `[0, gases.co2]` that puts the
 /// surface at [`THERMOSTAT_K`], by bisection (see [`climate`]). Returns
 /// the gases, the temperature and whether it was reached.
-fn thermostat(context: &Context, gases: Gases, heat_flux_w_m2: f64) -> (Gases, f64, bool) {
+fn thermostat(
+    context: &Context,
+    gases: Gases,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+) -> (Gases, f64, bool) {
     let outgassed = gases.co2.max(0.0);
-    let at_target = with_vapour(gases, THERMOSTAT_K);
+    let at_target = with_vapour(gases, THERMOSTAT_K, water_bar);
     let temperature =
         |co2: f64| surface_temperature_k(context, &Gases { co2, ..at_target }, heat_flux_w_m2);
     if temperature(outgassed) < THERMOSTAT_K {
@@ -328,11 +354,17 @@ fn thermostat(context: &Context, gases: Gases, heat_flux_w_m2: f64) -> (Gases, f
                 ..gases
             },
             heat_flux_w_m2,
+            water_bar,
         );
         return (g, t, false);
     }
     if temperature(0.0) > THERMOSTAT_K {
-        let (g, t) = wet_climate(context, Gases { co2: 0.0, ..gases }, heat_flux_w_m2);
+        let (g, t) = wet_climate(
+            context,
+            Gases { co2: 0.0, ..gases },
+            heat_flux_w_m2,
+            water_bar,
+        );
         return (g, t, false);
     }
     let (mut low, mut high) = (0.0, outgassed);
@@ -360,7 +392,14 @@ mod tests {
     /// The climate of `inputs` at `orbit_au`, with the chain's gases.
     fn climate_at(inputs: &PlanetInputs, orbit_au: f64) -> (Derived, Gases, Climate) {
         let d = derive_at(inputs, orbit_au);
-        let (g, c) = climate(&d.context, d.gases, &d.water, d.regime, d.heat_flux_w_m2);
+        let (g, c) = climate(
+            &d.context,
+            d.gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+        );
         (d, g, c)
     }
 
@@ -441,7 +480,14 @@ mod tests {
             co2: d.gases.co2 * 1e-4,
             ..d.gases
         };
-        let (g, c) = climate(&d.context, scarce, &d.water, d.regime, d.heat_flux_w_m2);
+        let (g, c) = climate(
+            &d.context,
+            scarce,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+        );
         assert!(g.co2 <= scarce.co2, "{g:?}");
         assert!(!c.regulated, "{c:?}");
         assert_eq!(c.liquid, SurfaceLiquid::None, "{c:?}");
@@ -474,6 +520,7 @@ mod tests {
         for runaway in [false, true] {
             let wet = Water {
                 runaway,
+                boiled: false,
                 kept_kg: 1.4e21,
                 oceans: 1.0,
             };
@@ -483,6 +530,7 @@ mod tests {
         }
         let dry = Water {
             runaway: true,
+            boiled: false,
             kept_kg: 0.0,
             oceans: 0.0,
         };
@@ -496,6 +544,7 @@ mod tests {
         };
         let ocean = Water {
             runaway: false,
+            boiled: false,
             kept_kg: 1.4e21,
             oceans: 1.0,
         };
@@ -503,6 +552,7 @@ mod tests {
         assert!(!boils(
             &Water {
                 runaway: true,
+                boiled: false,
                 ..ocean
             },
             &hot

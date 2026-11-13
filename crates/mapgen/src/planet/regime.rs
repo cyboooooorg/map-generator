@@ -29,12 +29,30 @@ pub const HEAT_PIPE_FLUX_W_M2: f64 = 2.0;
 /// The water a planet keeps.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Water {
-    /// The insolation exceeds the runaway greenhouse limit.
+    /// The water ran away: the insolation exceeds the runaway greenhouse
+    /// limit, or the climate boiled the ocean (`boiled`).
     pub runaway: bool,
-    /// Water kept, kg.
+    /// The runaway came from the climate carrying a wet surface past
+    /// water's critical point ([`super::climate::boils`]), not from the
+    /// insolation limit. Always `false` without a runaway.
+    pub boiled: bool,
+    /// Water kept, kg. In a runaway, all of it is steam in the air.
     pub kept_kg: f64,
     /// Water kept, Earth oceans ([`OCEAN_KG`] each).
     pub oceans: f64,
+}
+
+impl Water {
+    /// The same water with `kept_kg` left: what escape to space leaves of
+    /// a runaway's steam.
+    pub(crate) fn keeping(self, kept_kg: f64) -> Self {
+        let kept_kg = kept_kg.max(0.0);
+        Self {
+            kept_kg,
+            oceans: kept_kg / OCEAN_KG,
+            ..self
+        }
+    }
 }
 
 /// The water a planet keeps after its star's light.
@@ -60,6 +78,7 @@ pub fn water(
         let kept_kg = inputs.water_fraction * inputs.mass_earth * EARTH_KG;
         Water {
             runaway: false,
+            boiled: false,
             kept_kg,
             oceans: kept_kg / OCEAN_KG,
         }
@@ -76,6 +95,7 @@ pub fn steam(inputs: &PlanetInputs, interior: &Interior, fluence_rel: f64) -> Wa
     let kept_kg = (initial - WATER_PER_HYDROGEN * hydrogen).max(0.0);
     Water {
         runaway: true,
+        boiled: false,
         kept_kg,
         oceans: kept_kg / OCEAN_KG,
     }

@@ -159,6 +159,7 @@ fn surface_class(surface: &Surface) -> Option<PlanetClass> {
 mod tests {
     use super::PlanetClass::*;
     use super::*;
+    use crate::planet::inputs::volatile_rule;
     use crate::planet::reference::{inputs_of, model_inputs, with_envelope};
     use crate::planet::{Context, SOLAR_BODIES, planet_model, reference};
     use crate::star::{DEFAULT_AGE_GYR, StarInfo, parse_type};
@@ -190,6 +191,11 @@ mod tests {
             ("Uranus", IceGiant),
             ("Neptune", IceGiant),
         ];
+        // Venus ran away by the insolation limit, not by boiling.
+        let venus = reference("Venus");
+        let model = planet_model(&sun_at(venus.orbit_au), model_inputs(venus));
+        let water = model.surface.expect("Venus has a surface").water;
+        assert!(water.runaway && !water.boiled, "{water:?}");
         for (name, class) in expect {
             // A moon sits at its planet's orbit (its reference orbit).
             let body = reference(name);
@@ -275,11 +281,82 @@ mod tests {
         let surface = model.surface.expect("a bare body has a surface");
         assert!(surface.water.kept_kg > 0.0, "{surface:?}");
         assert!(surface.water.runaway, "{surface:?}");
+        assert!(surface.water.boiled, "{surface:?}");
         assert!(surface.climate.temperature_k >= 647.0, "{surface:?}");
         assert_ne!(surface.climate.liquid, SurfaceLiquid::Lava, "{surface:?}");
         assert_ne!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
         assert_ne!(surface.regime, crate::geology::Regime::Plates);
         assert_eq!(model.class, RunawayGreenhouse);
+    }
+
+    #[test]
+    fn a_trace_of_water_does_not_boil_a_temperate_planet() {
+        // 0.2 M⊕ at 1.2 AU with 1e-9 of water (2.6e-4 bar if all of it
+        // were vapour) and the volatiles of 1 % of ice. Its vapour is
+        // bounded by the water it has, so it cannot carry the surface past
+        // 647 K. Before the vapour was capped, the first pass put hundreds
+        // of bar of steam in its air, boiled, and the planet came out a
+        // runaway greenhouse at 296 K.
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - 1.0e-9, 0.01),
+            ..reference::inputs(0.2, 0.325, 1.0e-9)
+        };
+        let model = planet_model(&sun_at(1.2), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+        assert!(surface.climate.temperature_k < 400.0, "{surface:?}");
+    }
+
+    #[test]
+    fn a_boil_whose_steam_cools_is_not_kept() {
+        // 0.2 M⊕ at 1.5 AU with 0.1 % of water (0.85 Earth oceans). Its
+        // vapour feedback carries the first pass past 647 K, but its steam
+        // escapes to nothing and the dry re-run sits at 293 K: the boil is
+        // not self-consistent, so the first pass stands, not a runaway
+        // greenhouse at room temperature.
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(0.999, 1.0e-3),
+            ..reference::inputs(0.2, 0.325, 1.0e-3)
+        };
+        let all = inputs.water_fraction * inputs.mass_earth * crate::exomoon::EARTH_KG;
+        let model = planet_model(&sun_at(1.5), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert!(!surface.water.boiled, "{surface:?}");
+        assert_eq!(surface.water.kept_kg, all, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    #[test]
+    fn a_runaway_keeps_in_its_air_the_water_it_keeps() {
+        // 0.2 M⊕ with 5 % and 1 % of water at 1.0 and 1.2 AU: every kg of
+        // water a runaway keeps is steam in its air, none of it neither
+        // vapour nor liquid.
+        let mut runaways = 0;
+        for (water, orbit_au) in [(0.05, 1.0), (0.01, 1.2)] {
+            let inputs = PlanetInputs {
+                volatiles: volatile_rule(1.0 - water, water),
+                ..reference::inputs(0.2, 0.325, water)
+            };
+            let model = planet_model(&sun_at(orbit_au), inputs);
+            let surface = model.surface.expect("a bare body has a surface");
+            if !surface.water.runaway {
+                continue;
+            }
+            runaways += 1;
+            let radius = model.interior.radius_earth * crate::exomoon::EARTH_M;
+            let mass = model.inputs.mass_earth * crate::exomoon::EARTH_KG;
+            let gravity = crate::exomoon::G * mass / (radius * radius);
+            let bar_per_kg = gravity / (4.0 * std::f64::consts::PI * radius * radius) / 1.0e5;
+            let kept_bar = surface.water.kept_kg * bar_per_kg;
+            assert!(
+                (surface.gases.h2o - kept_bar).abs() <= 1e-9 * kept_bar.max(1e-12),
+                "{water} {orbit_au}: {} bar in the air, {kept_bar} bar kept",
+                surface.gases.h2o
+            );
+        }
+        assert!(runaways > 0);
     }
 
     #[test]

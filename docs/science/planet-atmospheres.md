@@ -88,6 +88,10 @@ The climate can find a runaway this limit misses: when the vapour
 feedback carries a wet surface past water's critical point (647 K,
 `climate::boils`), the ocean is steam and the chain derives the body
 again from `regime::steam` (see [the chain](#the-chain-and-the-surface-classes)).
+`Water::boiled` records that a runaway came from such a boil rather than
+from the insolation limit. In a runaway all the water kept is steam in
+the air: `Water::kept_kg` is what escape to space leaves of it, and the
+air's H₂O is that water's weight.
 
 **Regime.** A labelled calibration, since the literature disagrees on the
 mass dependence (see [plate tectonics](plate-tectonics.md)):
@@ -216,13 +220,18 @@ model), Ganymede and Callisto keep 98 % or more of their air, and a 1 M⊕
 planet of 30 % water (17 GPa) lets out about 1e-3 of it, a few bar of
 CO₂ before the thermostat. A runaway's steam weighs on the rock as its
 ocean did, so the share holds in a runaway too; the steam itself is not
-held back.
+held back, by this share or by the regime's: it is the ocean, not a
+volatile of the mantle.
 
 Sulphur comes up as SO₂, of which 1e-4 stays in the air (the rest ends in
 the crust; Venus's SO₂ is buffered by its surface, Fegley & Prinn 1989,
 not checked; calibrated on Venus's 150 ppm). Water is vapour only in a
-runaway greenhouse, and only what the runaway left (`Water::kept_kg`);
-otherwise it is an ocean or ice, and the climate sets its vapour.
+runaway greenhouse, and then all that the runaway left
+(`Water::kept_kg`); otherwise it is an ocean or ice, and the climate sets
+its vapour. The escape of the cosmic shoreline (below) takes the same
+share of the steam as of every gas, and the chain lowers
+`Water::kept_kg` to what is left, so the water kept and the H₂O in the
+air always agree.
 
 **Escape** (`atmosphere`). The cosmic shoreline of Zahnle & Catling 2017
 (doi:10.3847/2041-8213/aa7846) splits the bodies with and without air by
@@ -328,10 +337,12 @@ fixed relative humidity of Manabe & Wetherald 1967,
 doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2, not checked). The
 saturation is Clausius–Clapeyron from water's triple point (273.16 K,
 611.657 Pa) with a mean latent heat of 2.4e6 J/kg, capped at the
-critical point (647 K). The temperature and the vapour are solved
-together by iterating from the dry temperature, which climbs to the
-coldest balance. A runaway's steam is already in the gases and is kept
-as it is.
+critical point (647 K), and never more than the body's whole water
+would weigh as vapour (`m_water g / (4π R²)`): a trace of water cannot
+put a hundred bar of steam in the air. The temperature and the vapour
+are solved together by iterating from the dry temperature, which climbs
+to the coldest balance. A runaway's steam is already in the gases and is
+kept as it is.
 
 **Carbonate thermostat.** On a planet with plates and water, weathering
 draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
@@ -436,7 +447,12 @@ surface liquid, and life with the oxygen it makes. If that climate
 carries a wet surface past water's critical point (`climate::boils`),
 the body has run away after all: the steps from the regime on run once
 more from its steam (`regime::steam`, the water left after escape, in
-the air), so that a body never keeps a liquid ocean above 647 K. A body
+the air), flagged `boiled`, so that a body never keeps a liquid ocean
+above 647 K. That second pass is kept only if its steam holds the
+surface at or past 647 K too (`climate::past_critical`): a boil whose
+steam escapes until the dry re-run is cool has no self-consistent
+runaway, and the first pass stands, its vapour bounded by its own
+water. A body
 that keeps an envelope has no surface: `PlanetModel.surface` is `None`.
 Otherwise the `Surface` holds the water, regime, core, final gases,
 climate and life, and `classify` reads the class off it. Nothing derives

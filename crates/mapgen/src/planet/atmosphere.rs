@@ -151,6 +151,15 @@ pub fn escape_velocity_km_s(interior: &Interior, mass_earth: f64) -> f64 {
     (2.0 * G * mass_earth * EARTH_KG / radius).sqrt() / 1.0e3
 }
 
+/// Bar per kilogram of gas spread over a body's surface:
+/// `P = m g / (4π R²)` with `g = G M / R²`, in bar for `m` = 1 kg.
+pub(crate) fn bar_per_kg(mass_earth: f64, interior: &Interior) -> f64 {
+    let mass = mass_earth * EARTH_KG;
+    let radius = interior.radius_earth * EARTH_M;
+    let gravity = G * mass / (radius * radius);
+    gravity / (4.0 * PI * radius * radius) / PA_PER_BAR
+}
+
 /// The gases a body's interior has brought to its surface, bar.
 ///
 /// Each volatile of `inputs` (kg per kg of planet) times the mass, times
@@ -161,10 +170,11 @@ pub fn escape_velocity_km_s(interior: &Interior, mass_earth: f64) -> f64 {
 /// share [`released_under_ocean`] lets through the body's water (its
 /// weight, `water.kept_kg`, on the seafloor). Sulphur comes
 /// up as SO₂, of which [`SULPHUR_IN_AIR`] stays in the air. The water is
-/// in the air as vapour only in a runaway greenhouse, and only what the
-/// runaway has left (`water.kept_kg`, outgassed as the rest but not held
-/// back by the seafloor: it is the ocean itself); otherwise it is in the
-/// oceans and the climate sets its vapour. No oxygen: life makes it.
+/// in the air as vapour only in a runaway greenhouse, and then all that
+/// the runaway has left (`water.kept_kg`): it is the ocean itself, not a
+/// volatile of the mantle, so neither the regime's share nor the seafloor
+/// holds it back; otherwise it is in the oceans and the climate sets its
+/// vapour. No oxygen: life makes it.
 pub fn outgassed(
     inputs: &PlanetInputs,
     water: &Water,
@@ -172,9 +182,7 @@ pub fn outgassed(
     interior: &Interior,
 ) -> Gases {
     let mass = inputs.mass_earth * EARTH_KG;
-    let radius = interior.radius_earth * EARTH_M;
-    let gravity = G * mass / (radius * radius);
-    let bar_per_kg = gravity / (4.0 * PI * radius * radius) / PA_PER_BAR;
+    let bar_per_kg = bar_per_kg(inputs.mass_earth, interior);
     let seafloor_bar = water.kept_kg * bar_per_kg;
     let share = outgassed_share(regime) * bar_per_kg;
     let released = share * released_under_ocean(seafloor_bar);
@@ -193,7 +201,7 @@ pub fn outgassed(
     Gases {
         n2: v.n2 * mass * nitrogen,
         co2: v.co2 * mass * rest,
-        h2o: steam * share * kept,
+        h2o: steam * bar_per_kg,
         ch4: v.ch4 * mass * rest,
         nh3: v.nh3 * mass * nitrogen,
         so2: v.s * mass * SO2_PER_S * SULPHUR_IN_AIR * rest,
@@ -470,6 +478,7 @@ mod tests {
             &i,
             &Water {
                 runaway: false,
+                boiled: false,
                 kept_kg: 0.0,
                 oceans: 0.0,
             },
@@ -502,6 +511,7 @@ mod tests {
         let steam = |runaway: bool, kept_kg: f64| {
             let w = Water {
                 runaway,
+                boiled: false,
                 kept_kg,
                 oceans: kept_kg / crate::planet::OCEAN_KG,
             };

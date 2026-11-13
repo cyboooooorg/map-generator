@@ -201,7 +201,11 @@ const AU_M: f64 = 1.495_978_707e11;
 /// [`climate`] and its [`life`] with the oxygen it makes. A body whose
 /// climate carries its water past the critical point
 /// ([`climate::boils`]) has run away: it goes through those steps again
-/// from its [`steam`].
+/// from its [`steam`], flagged `boiled`, and keeps that second pass only
+/// if its steam holds the surface past the critical point too
+/// ([`climate::past_critical`]). In a runaway the water kept is what the
+/// escape of [`atmosphere`] leaves of the steam in the air, so the
+/// [`Water`] and the air's H₂O agree.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
 }
@@ -237,15 +241,23 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
         None
     } else {
+        let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, &interior);
         let bare = |w: Water| {
             let r = regime(&inputs, &heat, &interior, &w);
             let k = core(&inputs, &interior, r, context.age_gyr);
             let out = outgassed(&inputs, &w, r, &interior);
             let atm = atmosphere(out, &interior, inputs.mass_earth, &k, fluence);
+            // A runaway's water is the steam escape has left in its air.
+            let w = if w.runaway {
+                w.keeping(atm.h2o / bar_per_kg)
+            } else {
+                w
+            };
             let gases =
                 photochemistry(cold_trap(atm, context.equilibrium_k), context.equilibrium_k);
             let flux = heat.flux_w_m2(interior.radius_earth);
-            let (after, climate) = self::climate(context, gases, &w, r, flux);
+            let water_bar = w.kept_kg * bar_per_kg;
+            let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar);
             let life = life(&inputs, &climate, context.age_gyr);
             let surface = Surface {
                 water: w,
@@ -265,7 +277,18 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         let w = water(context, &inputs, &interior, fluence);
         let (mut surface, mut before) = bare(w);
         if climate::boils(&w, &surface.climate) {
-            (surface, before) = bare(steam(&inputs, &interior, fluence));
+            let boiled = Water {
+                boiled: true,
+                ..steam(&inputs, &interior, fluence)
+            };
+            let (hot, air) = bare(boiled);
+            // Kept only if the steam holds the surface past the critical
+            // point itself: a boil whose steam escape leaves too little
+            // to stay hot has no consistent runaway, and the first pass,
+            // wet and bounded by its own water, stands.
+            if climate::past_critical(&hot.climate) {
+                (surface, before) = (hot, air);
+            }
         }
         air = Some(before);
         Some(surface)

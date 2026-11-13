@@ -81,7 +81,14 @@ mod tests {
         };
         let mut d = derive_at(&inputs, b.orbit_au);
         d.context.age_gyr = age_gyr;
-        let (gases, c) = climate(&d.context, d.gases, &d.water, d.regime, d.heat_flux_w_m2);
+        let (gases, c) = climate(
+            &d.context,
+            d.gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+        );
         let l = life(&inputs, &c, age_gyr);
         (l, oxygenate(gases, &l))
     }
