@@ -17,6 +17,7 @@ use crate::noise::{
     EARTH_CIRCUMFERENCE_KM, cell_value, fbm, lattice_points, ridged, smoothstep, stream,
     stream_seed,
 };
+use crate::planet::regime::OCEAN_KG;
 use crate::rivers;
 use crate::star::{StarClimate, star_temperatures};
 use crate::world::*;
@@ -1137,6 +1138,90 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     level
 }
 
+/// Mean density of sea water, kg/m³ (Earth's oceans, 1025: Gill 1982,
+/// *Atmosphere-Ocean Dynamics*, appendix 3).
+const SEA_WATER_KG_M3: f64 = 1025.0;
+
+/// Depth of a global layer of `oceans` Earth oceans ([`OCEAN_KG`]) spread
+/// over a body of `radius_earth` Earth radii, m.
+///
+/// Earth's 1.4e21 kg at 1025 kg/m³ is 1.37e18 m³, over the 5.1e14 m² of a
+/// sphere of 6.371e6 m: 2.68 km (the 1.335e9 km³ of Charette & Smith 2010
+/// over Earth's surface gives 2.62 km). The layer thins as the surface
+/// grows, `1 / radius²`. Pure geometry; [`sea_level_for_water`] turns it
+/// into a waterline.
+pub fn ocean_depth_m(oceans: f64, radius_earth: f64) -> f64 {
+    let radius = radius_earth * crate::exomoon::EARTH_M;
+    oceans * OCEAN_KG / SEA_WATER_KG_M3 / (4.0 * PI * radius * radius)
+}
+
+/// The sea level at which a global layer of water `depth_m` deep, in
+/// metres, fills the relief below it: the mean depth of the water over
+/// the sphere (by area) is `depth_m`, found by bisection within
+/// [`crate::request::SEA_LEVEL`].
+///
+/// Elevation is in units of [`crate::craters::ELEVATION_KM`] km; the
+/// depth below the waterline is converted to metres with it. The relief
+/// is sampled as in [`sea_level_for_land_fraction`] (same coarse grid,
+/// same plate frame, the crust following the waterline). No water leaves
+/// the lowest sea level; more than the relief holds, the highest.
+///
+/// Earth's ocean ([`ocean_depth_m`]) over the terran preset leaves 0.23 of
+/// the surface dry on the test grid, against 0.29 on Earth (ETOPO1,
+/// Amante & Eakins 2009): within the tolerance, so no calibration.
+pub fn sea_level_for_water(params: &WorldParams, depth_m: f64) -> f32 {
+    let limits = crate::request::SEA_LEVEL;
+    let target = depth_m;
+    if target <= 0.0 {
+        return limits.min;
+    }
+    let mut coarse = params.clone();
+    (coarse.width, coarse.height) = LAND_GRID;
+    let grid = coarse.grid();
+    let weights: Vec<f64> = (0..grid.height).map(|y| grid.latitude(y).cos()).collect();
+    let total: f64 = weights.iter().sum::<f64>() * grid.width as f64;
+    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+        .then(|| crate::plates::PlateFrame::new(&coarse));
+    let metres = f64::from(crate::craters::ELEVATION_KM) * 1000.0;
+    // The mean depth of the water at a sea level, minus the target, m.
+    let excess = |level: f32| {
+        let p = WorldParams {
+            sea_level: level,
+            ..coarse.clone()
+        };
+        let waterline = level + p.planet.rules.waterline;
+        let sampler = Sampler::with_frame(&p, frame.as_ref());
+        let water: f64 = (0..grid.height)
+            .into_par_iter()
+            .map(|y| {
+                let w = weights[y as usize];
+                (0..grid.width)
+                    .map(|x| f64::from((waterline - sampler.sample(x, y).elevation).max(0.0)))
+                    .sum::<f64>()
+                    * w
+            })
+            .sum();
+        water / total * metres - target
+    };
+    let (mut lo, mut hi) = (limits.min, limits.max);
+    if excess(hi) <= 0.0 {
+        return hi;
+    }
+    for _ in 0..WATER_PASSES {
+        let mid = 0.5 * (lo + hi);
+        if excess(mid) > 0.0 {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Bisection passes of [`sea_level_for_water`]: the range of 2 narrows to
+/// 2/2^12, under 0.001 (25 m of relief).
+const WATER_PASSES: usize = 12;
+
 /// The host star's action on the climate of world `params`: its light,
 /// regulated by a carbon cycle on wet worlds (fully with plate tectonics,
 /// partly under a stagnant lid), and the planet's own heat.
@@ -1735,6 +1820,71 @@ pub(crate) mod tests {
         let below = volcanoes(0.6, 0.599, 1.0).1;
         let above = volcanoes(0.6, 0.601, 1.0).1;
         assert!((above - below).abs() < 0.01, "{below} -> {above}");
+    }
+
+    fn earth_params() -> WorldParams {
+        let mut p = params(7, "terran");
+        (p.width, p.height) = LAND_GRID;
+        p
+    }
+
+    /// Share of the surface above the waterline at `level`, by area, on
+    /// the grid of [`sea_level_for_land_fraction`].
+    fn land_share(params: &WorldParams, level: f32) -> f64 {
+        let p = WorldParams {
+            sea_level: level,
+            ..params.clone()
+        };
+        let grid = p.grid();
+        let waterline = level + p.planet.rules.waterline;
+        let sampler = Sampler::new(&p);
+        let (mut land, mut total) = (0.0, 0.0);
+        for y in 0..grid.height {
+            let w = grid.latitude(y).cos();
+            for x in 0..grid.width {
+                total += w;
+                if sampler.sample(x, y).elevation > waterline {
+                    land += w;
+                }
+            }
+        }
+        land / total
+    }
+
+    #[test]
+    fn earths_ocean_depth_is_two_and_a_half_kilometres_or_so() {
+        let d = ocean_depth_m(1.0, 1.0);
+        assert!((d - 2680.0).abs() < 30.0, "{d}");
+        assert!((ocean_depth_m(2.0, 2.0) - d / 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn earths_ocean_leaves_earths_land() {
+        let params = earth_params();
+        let level = sea_level_for_water(&params, ocean_depth_m(1.0, 1.0));
+        let land = land_share(&params, level);
+        assert!((land - 0.29).abs() < 0.08, "{land}");
+    }
+
+    #[test]
+    fn no_water_leaves_no_sea() {
+        let params = earth_params();
+        assert_eq!(
+            sea_level_for_water(&params, 0.0),
+            crate::request::SEA_LEVEL.min
+        );
+    }
+
+    #[test]
+    fn a_deep_ocean_drowns_every_summit() {
+        let params = earth_params();
+        let level = sea_level_for_water(&params, ocean_depth_m(10.0, 1.0));
+        // The highest sea level of the range ([`crate::request::SEA_LEVEL`])
+        // holds about 26 km of water on average, short of 10 oceans on a
+        // few summits: the sea stops at the range, with under 1 % dry.
+        assert_eq!(level, crate::request::SEA_LEVEL.max);
+        let land = land_share(&params, level);
+        assert!(land < 0.01, "{land}");
     }
 
     pub fn params(seed: u32, planet: &str) -> WorldParams {
