@@ -1052,6 +1052,84 @@ impl ClimateGrids {
     }
 }
 
+/// Rows of sea-level temperature on `grid`, evened out by dense air, then
+/// moved by the host star, without the planet's warming. A tidally locked
+/// planet's climate follows the angle from the point under its star
+/// instead of the latitude.
+fn sea_level_rows(params: &WorldParams, grid: &Grid) -> (Vec<f32>, Option<LockedClimate>) {
+    let star_climate = star_climate(params);
+    let locked = crate::spin::star_info(params).tidally_locked.then(|| {
+        let mut locked = LockedClimate::new();
+        locked.transport_heat(params.pressure_bar);
+        star_temperatures(locked.profile_mut(), star_climate);
+        locked
+    });
+    let rows = match &locked {
+        Some(locked) => locked.rows(grid),
+        None => {
+            let mut rows = row_temperatures(grid, params.axial_tilt_deg);
+            transport_heat(&mut rows, grid, params.pressure_bar);
+            star_temperatures(&mut rows, star_climate);
+            rows
+        }
+    };
+    (rows, locked)
+}
+
+/// Elevation relative to the shifted sea level: what biome selection sees.
+fn relief_above(elevation: f32, sea_level: f32) -> f32 {
+    (elevation - sea_level).clamp(-1.0, 1.0)
+}
+
+/// The area-weighted mean of the planet's surface temperature, in degrees
+/// Celsius, with its warming (shift and greenhouse) left out, sampled on a
+/// coarse grid: the sea-level rows of temperature minus the cooling of the
+/// land by altitude (the lapse rate over the relief of a coarse elevation
+/// pass at `params.sea_level`), highlands included. Regional variability
+/// and the climate's anomalies average out and are not included.
+pub fn mean_surface_temperature_c(params: &WorldParams) -> f32 {
+    let mut coarse = params.clone();
+    (coarse.width, coarse.height) = LAND_GRID;
+    let grid = coarse.grid();
+    let (rows, _) = sea_level_rows(&coarse, &grid);
+    let lapse = crate::climate::lapse_rate(&coarse);
+    let flatten = relief_share(&coarse);
+    let rules_waterline = coarse.planet.rules.waterline;
+    let waterline = coarse.sea_level + rules_waterline;
+    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+        .then(|| crate::plates::PlateFrame::new(&coarse));
+    let sampler = Sampler::with_frame(&coarse, frame.as_ref());
+    let (sum, total) = (0..grid.height)
+        .into_par_iter()
+        .map(|y| {
+            let w = grid.latitude(y).cos();
+            let row = rows[y as usize];
+            let mean: f64 = (0..grid.width)
+                .map(|x| {
+                    let mut e = sampler.sample(x, y).elevation;
+                    if flatten < 1.0 {
+                        e = waterline + (e - waterline) * flatten;
+                    }
+                    let above_water = relief_above(e, coarse.sea_level) - rules_waterline;
+                    f64::from(temperature(row, above_water, lapse))
+                })
+                .sum::<f64>()
+                / f64::from(grid.width);
+            (w * mean, w)
+        })
+        .reduce(|| (0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
+    (sum / total) as f32
+}
+
+/// The `climate.temperature` shift that brings the grid's mean surface
+/// temperature to `target_k` (kelvin), clamped to [`TEMPERATURE_RANGE`]:
+/// the target minus [`mean_surface_temperature_c`], which includes the
+/// cooling of the land by altitude.
+pub fn warming_for(params: &WorldParams, target_k: f64) -> f32 {
+    let target_c = (target_k - 273.15) as f32;
+    target_c.clamp(TEMPERATURE_RANGE.0, TEMPERATURE_RANGE.1) - mean_surface_temperature_c(params)
+}
+
 /// Size of the grid [`sea_level_for_land_fraction`] samples the relief on.
 const LAND_GRID: (u32, u32) = (256, 128);
 /// Most passes [`sea_level_for_land_fraction`] makes, and the land share
@@ -1413,24 +1491,7 @@ pub fn generate_with_progress(
     }
     // Rows of sea-level temperature, evened out by dense air, then moved by
     // the host star.
-    let star_climate = star_climate(params);
-    // A tidally locked planet's climate follows the angle from the point
-    // under its star instead of the latitude.
-    let locked = crate::spin::star_info(params).tidally_locked.then(|| {
-        let mut locked = LockedClimate::new();
-        locked.transport_heat(params.pressure_bar);
-        star_temperatures(locked.profile_mut(), star_climate);
-        locked
-    });
-    let row_temperature = match &locked {
-        Some(locked) => locked.rows(&grid),
-        None => {
-            let mut rows = row_temperatures(&grid, params.axial_tilt_deg);
-            transport_heat(&mut rows, &grid, params.pressure_bar);
-            star_temperatures(&mut rows, star_climate);
-            rows
-        }
-    };
+    let (row_temperature, locked) = sea_level_rows(params, &grid);
     let seasons = seasons(params);
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
@@ -1508,7 +1569,7 @@ pub fn generate_with_progress(
     }
     // Elevation relative to the shifted sea level: what biome selection sees.
     // Computed where needed rather than kept as a layer.
-    let relief = |e: f32| (e - params.sea_level).clamp(-1.0, 1.0);
+    let relief = |e: f32| relief_above(e, params.sea_level);
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
@@ -1885,6 +1946,36 @@ pub(crate) mod tests {
         assert_eq!(level, crate::request::SEA_LEVEL.max);
         let land = land_share(&params, level);
         assert!(land < 0.01, "{land}");
+    }
+
+    #[test]
+    fn the_world_lands_on_the_models_temperature() {
+        // A terran preset world (seed 7, 128x64) at 1 AU round a G2V, with
+        // greenhouse 0 and climate.temperature = warming_for(&params, t).
+        for target_k in [250.0, 288.0, 330.0] {
+            let mut params = params(7, "terran");
+            (params.width, params.height) = (128, 64);
+            params.planet.atmosphere.greenhouse = 0.0;
+            params.planet.climate.temperature = warming_for(&params, target_k);
+            let world = generate(&params).world;
+            let grid = params.grid();
+            let (mut sum, mut total) = (0.0_f64, 0.0_f64);
+            for (i, &t) in world.temperature.iter().enumerate() {
+                let w = grid.latitude((i / world.width as usize) as u32).cos();
+                sum += w * f64::from(t);
+                total += w;
+            }
+            let mean = sum / total + 273.15;
+            eprintln!("target {target_k} K: mean {mean:.2} K");
+            assert!((mean - target_k).abs() < 5.0, "{mean} vs {target_k}");
+        }
+    }
+
+    #[test]
+    fn a_lava_world_aims_at_the_grid_ceiling() {
+        let params = earth_params();
+        let w = warming_for(&params, 1800.0);
+        assert_eq!(w + mean_surface_temperature_c(&params), TEMPERATURE_RANGE.1);
     }
 
     pub fn params(seed: u32, planet: &str) -> WorldParams {
