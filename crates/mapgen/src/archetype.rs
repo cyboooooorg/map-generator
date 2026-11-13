@@ -1,0 +1,562 @@
+//! Archetypes: named sets of inputs of the physical planet model.
+//!
+//! An archetype is not a type of planet. It names a mass, a composition and
+//! an orbit, each a fixed value or a `[min, max]` range; what the planet
+//! becomes (its class, its air, its oceans) is derived from them by
+//! [`crate::planet`]. An input an archetype leaves out is drawn from the
+//! formation context, like that of a planet nobody asked for. The built-in
+//! archetypes are embedded from `archetypes/*.toml`; any TOML file with the
+//! same format can be given to `--planet`.
+//!
+//! ```toml
+//! name = "mars-like"                  # lowercase letters and dashes
+//! description = "Mars-like: a small cold desert"
+//!
+//! [locales.fr]                        # optional: name and description per language
+//! name = "Martienne"
+//! description = "Un petit désert froid"
+//!
+//! [inputs]                            # a fixed value or a [min, max] range
+//! mass_earth = [0.096, 0.118]         # required, Earth masses
+//! core_mass_fraction = 0.24           # iron share of the refractory mass
+//! water_oceans = [0.01, 0.05]         # Earth oceans (1.4e21 kg each)
+//! envelope_fraction = 0.0             # hydrogen and helium share of the mass
+//! co2 = 1.0                           # factor on the formation rule, 1 typical
+//! n2 = 1.0                            # idem
+//! radiogenic = 1.0                    # Earth's abundance = 1
+//! life = true                         # true: arises where it can; false: never
+//!
+//! [orbit]
+//! star = "G2V"                        # spectral type, used when asked alone
+//! insolation = [0.39, 0.47]           # Earth's = 1, or period_days, not both
+//! eccentricity = 0.093
+//! axial_tilt = 25.19                  # degrees
+//! ```
+//!
+//! The Solar System archetypes take the masses, core shares and orbits of
+//! [`crate::planet::reference::SOLAR_BODIES`] (sources in its module
+//! docs) with ranges of about ±10 % on mass and insolation, the
+//! eccentricities and tilts of NASA's planetary fact sheets
+//! (nssdc.gsfc.nasa.gov/planetary/factsheet; tilts read as seasons).
+//! The exoplanet kinds (`super-earth`, `mini-neptune`, `ocean-world`,
+//! `lava-world`, `hot-jupiter`) name a range typical of the kind:
+//! Calibration, no source.
+use crate::planet::InputOverrides;
+use crate::request::Limits;
+use rand::RngExt;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::fmt;
+use std::path::Path;
+
+/// The built-in archetypes, in the order they are listed.
+const BUILT_IN: [(&str, &str); 13] = [
+    (
+        "mercury-like",
+        include_str!("../../../archetypes/mercury-like.toml"),
+    ),
+    (
+        "venus-like",
+        include_str!("../../../archetypes/venus-like.toml"),
+    ),
+    (
+        "earth-like",
+        include_str!("../../../archetypes/earth-like.toml"),
+    ),
+    (
+        "mars-like",
+        include_str!("../../../archetypes/mars-like.toml"),
+    ),
+    (
+        "jupiter-like",
+        include_str!("../../../archetypes/jupiter-like.toml"),
+    ),
+    (
+        "saturn-like",
+        include_str!("../../../archetypes/saturn-like.toml"),
+    ),
+    (
+        "uranus-like",
+        include_str!("../../../archetypes/uranus-like.toml"),
+    ),
+    (
+        "neptune-like",
+        include_str!("../../../archetypes/neptune-like.toml"),
+    ),
+    (
+        "super-earth",
+        include_str!("../../../archetypes/super-earth.toml"),
+    ),
+    (
+        "mini-neptune",
+        include_str!("../../../archetypes/mini-neptune.toml"),
+    ),
+    (
+        "ocean-world",
+        include_str!("../../../archetypes/ocean-world.toml"),
+    ),
+    (
+        "lava-world",
+        include_str!("../../../archetypes/lava-world.toml"),
+    ),
+    (
+        "hot-jupiter",
+        include_str!("../../../archetypes/hot-jupiter.toml"),
+    ),
+];
+
+/// Mass of a planet, Earth masses: from the Moon's tenth to 13 Jupiter
+/// masses, the deuterium-burning limit above which a body is a brown dwarf
+/// (Spiegel, Burrows & Milsom 2011, doi:10.1088/0004-637X/727/1/57).
+pub const MASS_EARTH: Limits = Limits {
+    min: 0.01,
+    max: 4131.0,
+};
+/// Iron share of the refractory mass. Calibration, no source: from no core
+/// to Mercury's 0.70 and beyond.
+pub const CORE_MASS_FRACTION: Limits = Limits { min: 0.0, max: 0.9 };
+/// Water and ices, Earth oceans. Calibration, no source: none to a
+/// planet's worth of water.
+pub const WATER_OCEANS: Limits = Limits {
+    min: 0.0,
+    max: 1.0e6,
+};
+/// Hydrogen and helium share of the mass. Calibration, no source: a
+/// Jupiter holds 0.93 to 0.96.
+pub const ENVELOPE_FRACTION: Limits = Limits {
+    min: 0.0,
+    max: 0.99,
+};
+/// Factor on the CO₂ or N₂ formation rule. Calibration, no source: two
+/// orders of magnitude either way is more than the draw scatters.
+pub const VOLATILE_FACTOR: Limits = Limits {
+    min: 0.0,
+    max: 100.0,
+};
+/// Radiogenic abundance, Earth's = 1. Calibration, no source: a decade
+/// either way.
+pub const RADIOGENIC: Limits = Limits {
+    min: 0.1,
+    max: 10.0,
+};
+/// Light received over the year, Earth's = 1. Calibration, no source:
+/// from far beyond Neptune (0.001) to a lava world's inferno.
+pub const INSOLATION: Limits = Limits {
+    min: 1e-5,
+    max: 1e5,
+};
+/// Orbital period, days. Calibration, no source: from an ultra-short
+/// period planet to a few hundred years.
+pub const PERIOD_DAYS: Limits = Limits { min: 0.1, max: 1e5 };
+/// Eccentricity of the orbit. Calibration, no source: a bound orbit that
+/// keeps its planet out of the star.
+pub const ECCENTRICITY: Limits = Limits { min: 0.0, max: 0.9 };
+/// Axial tilt, degrees. Calibration, no source: beyond 90° the spin runs
+/// backwards, which this tilt does not express.
+pub const AXIAL_TILT_DEG: Limits = Limits {
+    min: 0.0,
+    max: 90.0,
+};
+
+/// A parameter given by a preset or an archetype: a fixed value or a
+/// range to draw from.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(untagged)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum ParamDefault {
+    Fixed(f32),
+    Range([f32; 2]),
+}
+
+impl ParamDefault {
+    /// The fixed value, or a random draw in the range.
+    pub fn pick(self, rng: &mut impl RngExt) -> f32 {
+        match self {
+            ParamDefault::Fixed(v) => v,
+            ParamDefault::Range([lo, hi]) if lo < hi => rng.random_range(lo..hi),
+            ParamDefault::Range([lo, _]) => lo,
+        }
+    }
+
+    pub(crate) fn check(self, field: &str, min: f32, max: f32) -> Result<(), String> {
+        let (lo, hi) = match self {
+            ParamDefault::Fixed(v) => (v, v),
+            ParamDefault::Range([lo, hi]) => (lo, hi),
+        };
+        if lo > hi {
+            return Err(format!("defaults.{field}: range [{lo}, {hi}] is reversed"));
+        }
+        if lo < min || hi > max {
+            return Err(format!("defaults.{field}: must stay within [{min}, {max}]"));
+        }
+        Ok(())
+    }
+}
+
+/// The name and description of a preset or an archetype in one language.
+/// Either may be left out: the English one is shown instead.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields))]
+pub struct Locale {
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+/// The inputs of the planet model an archetype sets (the `[inputs]`
+/// table). Those left out are drawn from the formation context.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ArchetypeInputs {
+    /// Mass, Earth masses.
+    pub mass_earth: ParamDefault,
+    /// Iron share of the refractory mass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub core_mass_fraction: Option<ParamDefault>,
+    /// Water and ices, Earth oceans.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub water_oceans: Option<ParamDefault>,
+    /// Hydrogen and helium share of the mass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub envelope_fraction: Option<ParamDefault>,
+    /// Factor on the CO₂ formation rule (1 typical).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub co2: Option<ParamDefault>,
+    /// Factor on the N₂ formation rule (1 typical).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n2: Option<ParamDefault>,
+    /// Radiogenic abundance, Earth's = 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radiogenic: Option<ParamDefault>,
+    /// `true`: life arises wherever the world allows it; `false`: never.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub life: Option<bool>,
+}
+
+/// Where an archetype sits (the `[orbit]` table): by its light or by its
+/// period, not both.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ArchetypeOrbit {
+    /// Spectral type of the star, used when the archetype is asked alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub star: Option<String>,
+    /// Light received, Earth's = 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub insolation: Option<ParamDefault>,
+    /// Orbital period in days, instead of the insolation (a hot Jupiter).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub period_days: Option<ParamDefault>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eccentricity: Option<ParamDefault>,
+    /// Degrees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axial_tilt: Option<ParamDefault>,
+}
+
+/// A named set of model inputs. See the module documentation for the file
+/// format.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Archetype {
+    /// Short identifier: lowercase letters and dashes.
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub inputs: ArchetypeInputs,
+    #[serde(default)]
+    pub orbit: ArchetypeOrbit,
+    /// Translated name and description, by language code (`fr`).
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub locales: BTreeMap<String, Locale>,
+}
+
+/// Why an archetype could not be loaded.
+#[derive(Debug)]
+pub struct ArchetypeError(String);
+
+impl fmt::Display for ArchetypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ArchetypeError {}
+
+impl Archetype {
+    /// Parses and validates an archetype. `origin` names the source in
+    /// errors.
+    pub fn from_toml(text: &str, origin: &str) -> Result<Self, ArchetypeError> {
+        let archetype: Self =
+            toml::from_str(text).map_err(|e| ArchetypeError(format!("{origin}: {e}")))?;
+        archetype
+            .validate()
+            .map_err(|e| ArchetypeError(format!("{origin}: {e}")))?;
+        Ok(archetype)
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        let valid_name = !self.name.is_empty()
+            && self
+                .name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c == '-');
+        if !valid_name {
+            return Err(format!(
+                "name {:?} must use lowercase letters and dashes only",
+                self.name
+            ));
+        }
+        let i = &self.inputs;
+        let o = &self.orbit;
+        if o.insolation.is_some() && o.period_days.is_some() {
+            return Err("orbit: set insolation or period_days, not both".to_string());
+        }
+        if let Some(star) = &o.star {
+            crate::star::parse_type(star).map_err(|e| format!("orbit.star: {e}"))?;
+        }
+        let checks = [
+            ("inputs", "mass_earth", Some(i.mass_earth), MASS_EARTH),
+            (
+                "inputs",
+                "core_mass_fraction",
+                i.core_mass_fraction,
+                CORE_MASS_FRACTION,
+            ),
+            ("inputs", "water_oceans", i.water_oceans, WATER_OCEANS),
+            (
+                "inputs",
+                "envelope_fraction",
+                i.envelope_fraction,
+                ENVELOPE_FRACTION,
+            ),
+            ("inputs", "co2", i.co2, VOLATILE_FACTOR),
+            ("inputs", "n2", i.n2, VOLATILE_FACTOR),
+            ("inputs", "radiogenic", i.radiogenic, RADIOGENIC),
+            ("orbit", "insolation", o.insolation, INSOLATION),
+            ("orbit", "period_days", o.period_days, PERIOD_DAYS),
+            ("orbit", "eccentricity", o.eccentricity, ECCENTRICITY),
+            ("orbit", "axial_tilt", o.axial_tilt, AXIAL_TILT_DEG),
+        ];
+        for (table, field, value, limits) in checks {
+            if let Some(v) = value {
+                v.check(field, limits.min, limits.max)
+                    .map_err(|e| e.replacen("defaults.", &format!("{table}."), 1))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Loads a built-in archetype by name, or an archetype file when `spec`
+    /// ends with `.toml`.
+    pub fn load(spec: &str) -> Result<Self, ArchetypeError> {
+        if spec.ends_with(".toml") {
+            let text = std::fs::read_to_string(Path::new(spec))
+                .map_err(|e| ArchetypeError(format!("{spec}: {e}")))?;
+            return Archetype::from_toml(&text, spec);
+        }
+        BUILT_IN
+            .iter()
+            .find(|(name, _)| *name == spec)
+            .map(|(name, text)| Archetype::from_toml(text, &format!("built-in archetype {name}")))
+            .unwrap_or_else(|| {
+                Err(ArchetypeError(format!(
+                    "unknown planet {spec:?}: use one of {} or a .toml archetype file",
+                    built_in_names().join(", ")
+                )))
+            })
+    }
+
+    /// Every built-in archetype.
+    pub fn built_in() -> Vec<Archetype> {
+        BUILT_IN
+            .iter()
+            .map(|(name, _)| Archetype::load(name).expect("built-in archetypes are valid"))
+            .collect()
+    }
+
+    /// The overrides this archetype sets, its ranges drawn from `rng`
+    /// (one draw per range, in the order of the fields of `[inputs]`
+    /// after the mass).
+    pub fn overrides(&self, rng: &mut impl RngExt) -> InputOverrides {
+        let i = &self.inputs;
+        let mut pick = |p: Option<ParamDefault>| p.map(|p| f64::from(p.pick(rng)));
+        InputOverrides {
+            core_mass_fraction: pick(i.core_mass_fraction),
+            water_oceans: pick(i.water_oceans),
+            envelope_fraction: pick(i.envelope_fraction),
+            co2: pick(i.co2),
+            n2: pick(i.n2),
+            radiogenic: pick(i.radiogenic),
+            life: i.life,
+        }
+    }
+
+    /// The mass drawn in the archetype's range, Earth masses.
+    pub fn mass(&self, rng: &mut impl RngExt) -> f64 {
+        f64::from(self.inputs.mass_earth.pick(rng))
+    }
+}
+
+/// Names of the built-in archetypes.
+pub fn built_in_names() -> Vec<&'static str> {
+    BUILT_IN.iter().map(|(name, _)| *name).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planet::{Context, PlanetModel, derive_model_with};
+    use crate::star::{SUN, StarInfo};
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    const AGE_GYR: f32 = 4.6;
+
+    /// The model of `a` at its own insolation (or period) round a G2V of
+    /// 4.6 Gyr and metallicity 0, drawn from `seed`. What the archetype
+    /// leaves out is drawn by the formation context.
+    fn model_of(a: &Archetype, seed: u32) -> PlanetModel {
+        let mut rng = StdRng::seed_from_u64(u64::from(seed));
+        let v = crate::star::values(SUN);
+        let mass_earth = a.mass(&mut rng);
+        let orbit_au = match (a.orbit.insolation, a.orbit.period_days) {
+            (Some(s), _) => (v.luminosity / s.pick(&mut rng)).sqrt(),
+            (None, Some(p)) => {
+                let years = p.pick(&mut rng) / 365.25;
+                (v.mass * years * years).cbrt()
+            }
+            (None, None) => panic!("{} has no orbit", a.name),
+        };
+        let eccentricity = a.orbit.eccentricity.map_or(0.0, |e| e.pick(&mut rng));
+        let star = StarInfo::new(SUN, orbit_au, eccentricity, AGE_GYR);
+        let ice_line_au = 2.7 * star.luminosity.sqrt();
+        let context = Context::of(&star, 0.0, ice_line_au);
+        let overrides = a.overrides(&mut rng);
+        derive_model_with(seed, "planet", &context, mass_earth, &overrides)
+    }
+
+    /// The class key each archetype must come out as.
+    fn expected(name: &str) -> &'static str {
+        match name {
+            "mercury-like" | "earth-like" | "mars-like" => "rocky",
+            "venus-like" => "runaway-greenhouse",
+            "jupiter-like" | "saturn-like" => "gas-giant",
+            "uranus-like" | "neptune-like" => "ice-giant",
+            "super-earth" => "super-earth",
+            "mini-neptune" => "mini-neptune",
+            "ocean-world" => "ocean-world",
+            "lava-world" => "lava-world",
+            "hot-jupiter" => "hot-jupiter",
+            other => panic!("no expected class for {other}"),
+        }
+    }
+
+    #[test]
+    fn every_archetype_comes_out_as_its_class() {
+        for a in Archetype::built_in() {
+            for seed in 0..20 {
+                let model = model_of(&a, seed);
+                assert_eq!(
+                    model.class.key(),
+                    expected(&a.name),
+                    "{} seed {seed}: {model:?}",
+                    a.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn built_in_names_load() {
+        for n in built_in_names() {
+            Archetype::load(n).unwrap();
+        }
+        assert_eq!(built_in_names().len(), 13);
+    }
+
+    #[test]
+    fn a_file_with_both_insolation_and_period_is_refused() {
+        let text = r#"
+name = "both"
+[inputs]
+mass_earth = 1.0
+[orbit]
+insolation = 1.0
+period_days = 10.0
+"#;
+        let err = Archetype::from_toml(text, "test").unwrap_err().to_string();
+        assert!(err.contains("not both"), "{err}");
+    }
+
+    #[test]
+    fn a_range_outside_the_limits_is_refused() {
+        let text = r#"
+name = "heavy"
+[inputs]
+mass_earth = 5000.0
+"#;
+        let err = Archetype::from_toml(text, "test").unwrap_err().to_string();
+        assert!(err.contains("inputs.mass_earth"), "{err}");
+    }
+
+    #[test]
+    fn a_bad_name_or_unknown_field_is_refused() {
+        let bad_name = "name = \"Bad Name\"\n[inputs]\nmass_earth = 1.0\n";
+        assert!(Archetype::from_toml(bad_name, "test").is_err());
+        let unknown = "name = \"x\"\n[inputs]\nmass_earth = 1.0\nsea_level = 0.3\n";
+        assert!(Archetype::from_toml(unknown, "test").is_err());
+    }
+
+    #[test]
+    fn overrides_draw_ranges_and_keep_fixed_values() {
+        let a = Archetype::load("earth-like").unwrap();
+        let o = a.overrides(&mut StdRng::seed_from_u64(1));
+        assert_eq!(o.core_mass_fraction, Some(0.325_f32 as f64));
+        assert!((0.8..1.2).contains(&o.water_oceans.unwrap()));
+        assert_eq!(o.life, Some(true));
+        assert_eq!(o.co2, Some(1.0));
+        assert_eq!(o.radiogenic, None);
+    }
+
+    /// Known departure: Earth's air is not an input of the model. The
+    /// pressure comes from the N2 rule (set here, `n2 = 1`) plus the
+    /// nitrogen that ammonia photolysis leaves, and the ammonia scatter
+    /// (`10^N(0, 0.3)` of the formation rule) cannot be set by an
+    /// archetype: single seeds come out between 0.5 and 3.6 bar. The test
+    /// checks the ocean and the life per seed, and the pressure on the
+    /// median of the seeds.
+    #[test]
+    fn earth_like_keeps_its_ocean_and_its_life() {
+        let a = Archetype::load("earth-like").unwrap();
+        let mut bars = Vec::new();
+        for seed in 0..20 {
+            let m = model_of(&a, seed);
+            let s = m.surface.expect("a bare world has a surface");
+            let oceans = s.water.oceans;
+            assert!((0.5..2.0).contains(&oceans), "seed {seed}: {oceans} oceans");
+            assert!(s.life.arose, "seed {seed}: {:?}", s.life);
+            bars.push(s.gases.total());
+        }
+        bars.sort_by(f64::total_cmp);
+        let median = (bars[9] + bars[10]) / 2.0;
+        assert!((0.7..1.3).contains(&median), "median {median} bar");
+    }
+
+    #[test]
+    fn venus_like_has_venus_air() {
+        let a = Archetype::load("venus-like").unwrap();
+        for seed in 0..20 {
+            let m = model_of(&a, seed);
+            let gases = m.surface.expect("a bare world has a surface").gases;
+            let bar = gases.total();
+            assert!((60.0..120.0).contains(&bar), "seed {seed}: {bar} bar");
+            let share = gases.co2 / bar;
+            assert!(share > 0.9, "seed {seed}: CO2 {share}");
+        }
+    }
+}

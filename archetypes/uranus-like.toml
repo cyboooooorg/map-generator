@@ -1,0 +1,16 @@
+name = "uranus-like"
+description = "Uranus-like: an ice giant on its side"
+
+[locales.fr]
+name = "Uranienne"
+description = "Une géante de glaces couchée sur le côté"
+
+[inputs]
+mass_earth = [13.0, 16.0]
+envelope_fraction = [0.12, 0.18]
+
+[orbit]
+star = "G2V"
+insolation = [0.0024, 0.0030]
+eccentricity = 0.046
+axial_tilt = 82.2

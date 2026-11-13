@@ -40,12 +40,12 @@
 //! [remap]                            # target = [biomes replaced by it]
 //! DustPlain = ["Plain", "Desert"]
 //! ```
+pub use crate::archetype::{Locale as PresetLocale, ParamDefault};
 use crate::atmosphere::Atmosphere;
 use crate::biome::{Biome, BiomeRules};
 use crate::geology::Geology;
 use crate::request;
 use crate::star::StarSpec;
-use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -84,40 +84,6 @@ const MOON_PRESETS: [(&str, &str); 2] = [
         include_str!("../../../presets/moons/icy-moon.toml"),
     ),
 ];
-
-/// A generation parameter given by a preset: a fixed value or a range to draw from.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(untagged)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-pub enum ParamDefault {
-    Fixed(f32),
-    Range([f32; 2]),
-}
-
-impl ParamDefault {
-    /// The fixed value, or a random draw in the range.
-    pub fn pick(self, rng: &mut impl RngExt) -> f32 {
-        match self {
-            ParamDefault::Fixed(v) => v,
-            ParamDefault::Range([lo, hi]) if lo < hi => rng.random_range(lo..hi),
-            ParamDefault::Range([lo, _]) => lo,
-        }
-    }
-
-    pub(crate) fn check(self, field: &str, min: f32, max: f32) -> Result<(), String> {
-        let (lo, hi) = match self {
-            ParamDefault::Fixed(v) => (v, v),
-            ParamDefault::Range([lo, hi]) => (lo, hi),
-        };
-        if lo > hi {
-            return Err(format!("defaults.{field}: range [{lo}, {hi}] is reversed"));
-        }
-        if lo < min || hi > max {
-            return Err(format!("defaults.{field}: must stay within [{min}, {max}]"));
-        }
-        Ok(())
-    }
-}
 
 /// Default values of the generation parameters. Command-line options win;
 /// parameters missing here fall back to the generator's own defaults.
@@ -210,16 +176,6 @@ pub struct Preset {
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
     pub derived: bool,
-}
-
-/// The name and description of a preset in one language. Either may be
-/// left out: the English one is shown instead.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields))]
-pub struct PresetLocale {
-    pub name: Option<String>,
-    pub description: Option<String>,
 }
 
 /// A preset as written, before validation.

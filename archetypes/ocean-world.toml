@@ -1,0 +1,15 @@
+name = "ocean-world"
+description = "Ocean world: deep water covers the whole surface"
+
+[locales.fr]
+name = "Monde océan"
+description = "Une eau profonde recouvre toute la surface"
+
+[inputs]
+mass_earth = [1.0, 3.0]
+water_oceans = [300.0, 2000.0]
+envelope_fraction = 0.0
+co2 = 1.0
+
+[orbit]
+insolation = [0.9, 1.1]

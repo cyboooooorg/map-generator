@@ -2,7 +2,7 @@
 import type { BiomeInfo } from '../api/types/BiomeInfo';
 import type { Preset } from '../api/types/Preset';
 import type { PresetInfo } from '../api/types/PresetInfo';
-import type { PresetLocale } from '../api/types/PresetLocale';
+import type { Locale } from '../api/types/Locale';
 import { getLocale, t } from './index.svelte';
 
 /**
@@ -18,14 +18,14 @@ export function biomeName(biome: Pick<BiomeInfo, 'key' | 'name'>): string {
  * presets of `world.json` carry none (a world does not change when a
  * translation does): a world's card finds them here by the preset's name.
  */
-const known = $state<{ locales: Record<string, Record<string, PresetLocale>> }>({ locales: {} });
+const known = $state<{ locales: Record<string, Record<string, Locale>> }>({ locales: {} });
 
 /** Records the translations of the presets the server offers. */
 export function setPresetLocales(presets: readonly PresetInfo[]): void {
   known.locales = Object.fromEntries(presets.map((p) => [p.name, p.locales]));
 }
 
-function translation(name: string): PresetLocale | undefined {
+function translation(name: string): Locale | undefined {
   return known.locales[name]?.[getLocale()];
 }
 

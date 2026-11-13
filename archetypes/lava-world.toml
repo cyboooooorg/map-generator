@@ -1,0 +1,14 @@
+name = "lava-world"
+description = "Lava world: a rock so close to its star that its surface melts"
+
+[locales.fr]
+name = "Monde de lave"
+description = "Un monde si proche de son étoile que sa surface fond"
+
+[inputs]
+mass_earth = [1.0, 5.0]
+water_oceans = 0.0
+envelope_fraction = 0.0
+
+[orbit]
+insolation = [1000.0, 3000.0]

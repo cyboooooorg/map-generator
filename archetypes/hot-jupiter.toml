@@ -1,0 +1,12 @@
+name = "hot-jupiter"
+description = "Hot Jupiter: a giant days from its star"
+
+[locales.fr]
+name = "Jupiter chaud"
+description = "Une géante à quelques jours de son étoile"
+
+[inputs]
+mass_earth = [100.0, 1000.0]
+
+[orbit]
+period_days = [1.0, 5.0]

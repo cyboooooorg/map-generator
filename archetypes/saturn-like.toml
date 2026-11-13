@@ -1,0 +1,16 @@
+name = "saturn-like"
+description = "Saturn-like: a lighter gas giant, far out"
+
+[locales.fr]
+name = "Saturnienne"
+description = "Une géante gazeuse plus légère, loin de son étoile"
+
+[inputs]
+mass_earth = [86.0, 105.0]
+envelope_fraction = [0.83, 0.87]
+
+[orbit]
+star = "G2V"
+insolation = [0.010, 0.012]
+eccentricity = 0.057
+axial_tilt = 26.7

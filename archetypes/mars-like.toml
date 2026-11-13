@@ -1,0 +1,18 @@
+name = "mars-like"
+description = "Mars-like: a small cold desert that kept a little ice"
+
+[locales.fr]
+name = "Martienne"
+description = "Un petit désert froid qui a gardé un peu de glace"
+
+[inputs]
+mass_earth = [0.096, 0.118]
+core_mass_fraction = 0.24
+water_oceans = [0.01, 0.05]
+envelope_fraction = 0.0
+
+[orbit]
+star = "G2V"
+insolation = [0.39, 0.47]
+eccentricity = 0.093
+axial_tilt = 25.19

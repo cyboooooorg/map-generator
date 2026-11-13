@@ -1,0 +1,16 @@
+name = "jupiter-like"
+description = "Jupiter-like: a gas giant beyond the ice line"
+
+[locales.fr]
+name = "Jovienne"
+description = "Une géante gazeuse au-delà de la ligne des glaces"
+
+[inputs]
+mass_earth = [286.0, 350.0]
+envelope_fraction = [0.93, 0.96]
+
+[orbit]
+star = "G2V"
+insolation = [0.033, 0.041]
+eccentricity = 0.049
+axial_tilt = 3.1
