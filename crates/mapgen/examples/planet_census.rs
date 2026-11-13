@@ -7,7 +7,8 @@
 //! Draws `COUNT` whole systems (seeds 1 to `COUNT`, nothing written) and
 //! prints, for the planets of them all:
 //!
-//! 1. the current `body_type` against the class the model derives;
+//! 1. the preset each planet's world renders with (`params.planet.name`,
+//!    `planet::interim::base_of` of its model) against its class;
 //! 2. the share of planets in each radius bin of Fulton et al. (2017,
 //!    doi:10.3847/1538-3881/aa80eb);
 //! 3. the median age, mass, orbit, core mass fraction, water fraction,
@@ -72,7 +73,7 @@ fn main() {
         .nth(1)
         .map_or(500, |a| a.parse().expect("COUNT must be a number"));
 
-    // (body_type, class) -> planets
+    // (preset rendered, class) -> planets
     let mut cross: BTreeMap<(String, &'static str), u32> = BTreeMap::new();
     let mut bins = [0u32; BINS.len()];
     let mut stats: BTreeMap<&'static str, ClassStats> = BTreeMap::new();
@@ -100,7 +101,9 @@ fn main() {
             let model = body_model(&system, body).expect("a planet has a model");
             let class = model.class.key();
             planets += 1;
-            *cross.entry((body.body_type.clone(), class)).or_default() += 1;
+            *cross
+                .entry((body.params.planet.name.clone(), class))
+                .or_default() += 1;
             let radius = model.interior.radius_earth;
             let bin = BINS
                 .iter()
@@ -149,9 +152,9 @@ fn main() {
 
     println!("{count} systems, {planets} planets\n");
 
-    println!("body_type against derived class (planets)");
+    println!("preset rendered against derived class (planets)");
     let classes: Vec<&'static str> = stats.keys().copied().collect();
-    print!("{:<12}", "body_type");
+    print!("{:<12}", "preset");
     for c in &classes {
         print!("{c:>20}");
     }

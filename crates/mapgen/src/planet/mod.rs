@@ -27,7 +27,9 @@
 //! [`classify::classify`] reads its [`PlanetClass`], including the surface
 //! classes, off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
-//! context and inputs, [`body_model`] for a planet of a stored system.
+//! context and inputs, [`derive_model`] for a planet of a system as it is
+//! drawn, which stores it on the body ([`body_model`] reads it back).
+//! [`interim::base_of`] maps a model onto today's presets until #424.
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
 //! are checked against.
 use serde::{Deserialize, Serialize};
@@ -36,8 +38,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 use crate::exomoon::{EARTH_KG, EARTH_M};
-use crate::star::StarInfo;
-use crate::system::{Body, BodyKind, System, body_seed};
+use crate::system::{Body, System, body_seed};
 
 pub mod atmosphere;
 pub mod classify;
@@ -46,6 +47,7 @@ pub mod core;
 pub mod escape;
 pub mod heat;
 pub mod inputs;
+pub mod interim;
 pub mod interior;
 pub mod life;
 pub mod mass;
@@ -57,7 +59,7 @@ pub use atmosphere::{
     Gases, atmosphere, cold_trap, escape_velocity_km_s, methane_photolysis, outgassed,
     photochemistry,
 };
-pub use classify::{PlanetClass, classify};
+pub use classify::{PLANET_CLASSES, PlanetClass, classify};
 pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
@@ -72,6 +74,7 @@ pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
 
 /// Kilograms of each volatile per kilogram of planet.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Volatiles {
     pub co2: f64,
     pub n2: f64,
@@ -82,6 +85,7 @@ pub struct Volatiles {
 
 /// What a planet is made of: its mass and the shares of its components.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlanetInputs {
     /// Mass, Earth masses.
     pub mass_earth: f64,
@@ -101,6 +105,7 @@ pub struct PlanetInputs {
 
 /// What a layer of a planet is made of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Material {
     Iron,
     Rock,
@@ -110,6 +115,7 @@ pub enum Material {
 
 /// One shell of a planet, from the outer radius of the layer below.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Layer {
     pub material: Material,
     /// Mass of the layer, Earth masses.
@@ -132,6 +138,7 @@ pub struct Exposure {
 
 /// The layered structure of a planet and its bulk quantities.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Interior {
     /// Innermost first; the last layer's outer radius is the radius.
     pub layers: Vec<Layer>,
@@ -146,7 +153,13 @@ pub struct Interior {
 /// A planet as the model derives it: what it is made of, its layers, the
 /// heat it makes and its class.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlanetModel {
+    /// Mass drawn for the planet, Earth masses, before photoevaporation
+    /// (`inputs.mass_earth` is what escape leaves): with the planet's
+    /// context and id, what [`derive_model`] derives the model from again.
+    pub drawn_mass_earth: f64,
+    /// What it is made of, after photoevaporation.
     pub inputs: PlanetInputs,
     pub interior: Interior,
     pub heat: InternalHeat,
@@ -163,6 +176,7 @@ pub struct PlanetModel {
 /// A bare body's surface: the water it kept, how it loses its heat, its
 /// core, its air and climate, and its life.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Surface {
     pub water: Water,
     pub regime: crate::geology::Regime,
@@ -220,6 +234,7 @@ pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
 pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Option<Air>) {
     let exposure = context.exposure();
     let fluence = xuv_fluence(context);
+    let drawn_mass_earth = inputs.mass_earth;
     let initial_envelope = inputs.mass_earth * inputs.envelope_fraction;
     let drawn = interior(&inputs, &exposure);
     let inputs = envelope_after_escape(&inputs, &drawn, fluence);
@@ -302,6 +317,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
     let model = PlanetModel {
+        drawn_mass_earth,
         inputs,
         interior,
         heat,
@@ -313,30 +329,31 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     (model, air)
 }
 
-/// The model of a planet of a stored system; `None` for a moon (part 4).
+/// The model of the planet `id` of the system of `system_seed`, in its
+/// formation `context`, drawn `mass_earth` Earth masses (before escape).
 ///
-/// Its context is its own star seen from its orbit (its params' star,
-/// orbit, eccentricity and age), its system's metallicity and ice line;
-/// its mass the stored one. Its inputs are drawn from their own stream,
-/// seeded by the system's seed and `<id>/model`, so they depend on no
-/// other body and shift no other draw.
-pub fn body_model(system: &System, body: &Body) -> Option<PlanetModel> {
-    if body.kind != BodyKind::Planet {
-        return None;
-    }
-    let p = &body.params;
-    let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
-    let context = Context::of(&star, p.metallicity, system.star.ice_line_au);
-    let seed = body_seed(system.seed, &format!("{}/model", body.id));
+/// Its context is its own star seen from its orbit (its star, orbit,
+/// eccentricity and age), its system's metallicity and ice line. Its
+/// inputs are drawn from their own stream, seeded by the system's seed and
+/// `<id>/model`, so they depend on no other body and shift no other draw.
+pub fn derive_model(system_seed: u32, id: &str, context: &Context, mass_earth: f64) -> PlanetModel {
+    let seed = body_seed(system_seed, &format!("{id}/model"));
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
-    let inputs = draw_inputs(&context, body.physical.mass_earth, &mut rng);
-    Some(planet_model(&context, inputs))
+    let inputs = draw_inputs(context, mass_earth, &mut rng);
+    planet_model(context, inputs)
+}
+
+/// The model a stored system holds for `body`: the one [`derive_model`]
+/// gave its planet when the system was drawn; `None` for a moon (part 4).
+pub fn body_model(_system: &System, body: &Body) -> Option<PlanetModel> {
+    body.model.clone()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::system::{SystemRequest, WholeSystemRequest, draw};
+    use crate::star::StarInfo;
+    use crate::system::{BodyKind, SystemRequest, WholeSystemRequest, draw};
 
     /// The whole system seed 2 draws round a Sun-like star.
     fn drawn() -> System {
@@ -353,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn body_model_is_deterministic_and_independent() {
+    fn derive_model_is_deterministic_and_independent() {
         let system = drawn();
         let planets: Vec<&Body> = system
             .bodies
@@ -363,23 +380,30 @@ mod tests {
         assert!(planets.len() >= 2, "{} planets", planets.len());
         for body in &planets {
             let model = body_model(&system, body).expect("a planet has a model");
+            let p = &body.params;
+            let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
+            let context = Context::of(&star, p.metallicity, system.star.ice_line_au);
+            // From values alone: the same model again, whatever the other
+            // bodies of the system.
             assert_eq!(
-                body_model(&system, body),
-                Some(model.clone()),
+                derive_model(system.seed, &body.id, &context, model.drawn_mass_earth),
+                model,
                 "{}",
                 body.id
             );
             // Photoevaporation can only lower the mass, by the envelope lost.
-            let lost = body.physical.mass_earth - model.inputs.mass_earth;
+            let lost = model.drawn_mass_earth - model.inputs.mass_earth;
             assert!(lost >= 0.0, "{}", body.id);
-            assert!(lost <= 1.0e-3 + model.envelope_lost * body.physical.mass_earth);
+            assert!(lost <= 1.0e-3 + model.envelope_lost * model.drawn_mass_earth);
         }
-        // Removing another planet leaves the model of b as it was.
+        // Another id draws other inputs.
         let b = planets[0];
-        let mut fewer = system.clone();
-        let other = planets[1].id.clone();
-        fewer.bodies.retain(|x| x.id != other);
-        assert_eq!(body_model(&fewer, b), body_model(&system, b));
+        let model = b.model.clone().unwrap();
+        let p = &b.params;
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
+        let context = Context::of(&star, p.metallicity, system.star.ice_line_au);
+        let other = derive_model(system.seed, "z", &context, model.drawn_mass_earth);
+        assert_ne!(other.inputs, model.inputs);
     }
 
     /// The context of a body round the Sun at `orbit_au` on an orbit of
@@ -429,9 +453,6 @@ mod tests {
     #[test]
     fn moons_have_no_model_yet() {
         let system = drawn();
-        let mut moon = system.bodies[0].clone();
-        moon.kind = BodyKind::Moon;
-        assert_eq!(body_model(&system, &moon), None);
         for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
             assert_eq!(body_model(&system, body), None, "{}", body.id);
         }

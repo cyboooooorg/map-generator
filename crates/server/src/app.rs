@@ -4176,7 +4176,16 @@ mod tests {
         let (_, list) = call(&app, "GET", "/api/systems", None).await;
         let list: serde_json::Value = serde_json::from_str(&list).unwrap();
         assert_eq!(list[0]["id"], id.as_str());
-        assert_eq!(list[0]["planets"]["barren"], 2);
+        // Two barren planets asked, each counted under its class.
+        let planets = list[0]["planets"].as_object().unwrap();
+        assert!(
+            planets
+                .keys()
+                .all(|t| mapgen::planet::PLANET_CLASSES.contains(&t.as_str())),
+            "{planets:?}"
+        );
+        let total: u64 = planets.values().map(|n| n.as_u64().unwrap()).sum();
+        assert_eq!(total, 2);
         let (status, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
         assert_eq!(status, StatusCode::OK);
         let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();

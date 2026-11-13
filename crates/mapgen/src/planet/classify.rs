@@ -9,6 +9,7 @@ use super::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, Interior, PlanetInputs, Su
 /// The kind of a planet, from its derived quantities.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum PlanetClass {
     Rocky,
     SuperEarth,
@@ -43,7 +44,34 @@ impl PlanetClass {
             Self::OceanWorld => "ocean-world",
         }
     }
+
+    /// Whether the class is a giant: a gas giant, an ice giant, a hot
+    /// Jupiter or a mini-Neptune, whose envelope hides any surface and
+    /// whose world is generated as a giant's.
+    pub fn is_giant(self) -> bool {
+        matches!(
+            self,
+            Self::GasGiant | Self::IceGiant | Self::HotJupiter | Self::MiniNeptune
+        )
+    }
 }
+
+/// The keys of every [`PlanetClass`] ([`PlanetClass::key`]), in declaration
+/// order: the types a planet of a system is stored as. The server and the
+/// web read the same list.
+pub const PLANET_CLASSES: [&str; 11] = [
+    "rocky",
+    "super-earth",
+    "ice-world",
+    "mini-neptune",
+    "ice-giant",
+    "gas-giant",
+    "hot-jupiter",
+    "lava-world",
+    "runaway-greenhouse",
+    "hydrocarbon-world",
+    "ocean-world",
+];
 
 /// Least hydrogen and helium share of a gas giant; a giant with less is an
 /// ice giant. Calibration, no source: it parts Jupiter and Saturn (about
@@ -243,7 +271,7 @@ mod tests {
 
     #[test]
     fn keys_are_kebab_case_as_serialized() {
-        for class in [
+        for (i, class) in [
             Rocky,
             SuperEarth,
             IceWorld,
@@ -255,9 +283,15 @@ mod tests {
             RunawayGreenhouse,
             HydrocarbonWorld,
             OceanWorld,
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let json = serde_json::to_string(&class).unwrap();
             assert_eq!(json, format!("\"{}\"", class.key()));
+            assert_eq!(PLANET_CLASSES[i], class.key());
+            let giant = matches!(class, GasGiant | IceGiant | HotJupiter | MiniNeptune);
+            assert_eq!(class.is_giant(), giant, "{class:?}");
         }
         assert_eq!(SuperEarth.key(), "super-earth");
         assert_eq!(HotJupiter.key(), "hot-jupiter");

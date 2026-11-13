@@ -147,6 +147,7 @@ pub fn k2_over_q(envelope_fraction: f64, water_fraction: f64) -> f64 {
 
 /// The heat a planet makes inside, W.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct InternalHeat {
     /// From the decay of U, Th and K ([`radiogenic_w`]).
     pub radiogenic_w: f64,

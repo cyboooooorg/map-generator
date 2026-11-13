@@ -92,6 +92,7 @@ const DEEP_DIPOLE_SHARE: f64 = 3.0e-4;
 /// The state of a planet's iron core.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum CoreState {
     /// No iron core.
     None,
@@ -103,6 +104,7 @@ pub enum CoreState {
 
 /// A planet's core and its dynamo.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Core {
     pub state: CoreState,
     /// A dynamo runs in the core.

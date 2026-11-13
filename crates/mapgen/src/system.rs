@@ -42,7 +42,9 @@ use crate::giants::{
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
+use crate::planet::interim::base_of;
 use crate::planet::mass::{Origin, draw_mass};
+use crate::planet::{Context, PlanetClass, PlanetModel, derive_model};
 use crate::request::{RequestError, WorldRequest};
 use crate::star::{StarInfo, draw_eccentricity, parse_type};
 use crate::world::WorldParams;
@@ -54,9 +56,10 @@ use std::f64::consts::PI;
 
 /// Version of `system.json`, and of the layout of the bodies beside it.
 /// Version 2 keeps each resolution of a body in its own directory (see
-/// [`crate::sizes`]). A system of another version is refused by
-/// [`read_system`], not migrated.
-pub const SYSTEM_FORMAT_VERSION: u32 = 2;
+/// [`crate::sizes`]); version 3 stores each planet's physical model
+/// ([`Body::model`]) and types it by its class. A system of another
+/// version is refused by [`read_system`], not migrated.
+pub const SYSTEM_FORMAT_VERSION: u32 = 3;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.
@@ -195,7 +198,9 @@ pub struct Body {
     /// `MGS 48213 c`, `MGS 48213 c II`.
     pub designation: String,
     pub kind: BodyKind,
-    /// Its preset: a planet type, `rocky-moon` or `icy-moon`.
+    /// A planet's class ([`PlanetClass::key`], one of
+    /// [`crate::planet::PLANET_CLASSES`]); a moon's preset, `rocky-moon` or
+    /// `icy-moon`.
     #[serde(rename = "type")]
     pub body_type: String,
     /// The planet a moon orbits; none for a planet.
@@ -222,6 +227,11 @@ pub struct Body {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub ring_role: Option<crate::rings::RingRole>,
+    /// A planet's physical model, as [`derive_model`] gave it when the
+    /// system was drawn; none for a moon (part 4 of #423).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub model: Option<PlanetModel>,
 }
 
 /// An orbit, round the star (a planet) or round its planet (a moon).
@@ -450,27 +460,35 @@ impl Placement {
         }
     }
 
-    /// The type string the rest of the draw still reads, for a slot at
-    /// `orbit_au` round a star of habitable zone `hz` and ice line `ice`.
-    // Interim until Task 2 of part 3a: the derived class replaces it.
-    fn type_name(&self, orbit_au: f64, hz: (f64, f64), ice: f64) -> String {
+    /// The farthest a slot may be pushed out, AU, round a star of
+    /// habitable zone `hz` and ice line `ice`: a requested type's band
+    /// ([`band`]); a drawn hot Jupiter's (0.1 AU); any other drawn slot,
+    /// which has no type, the system's outer edge.
+    fn max_au(&self, hz: (f64, f64), ice: f64) -> f64 {
+        let name = match self {
+            Placement::Requested(name) => name.as_str(),
+            Placement::Drawn(Origin::HotJupiter) => "hot-jupiter",
+            Placement::Drawn(_) => return OUTER_EDGE_AU,
+        };
+        let ((_, max), _) = band(name, hz, ice).expect("known type");
+        max
+    }
+
+    /// The giant class the slot is spaced as, before its model exists:
+    /// what [`crate::belts::cold_giant`] reads while the planets are
+    /// placed. `None` for a small planet.
+    fn giant_class(&self) -> Option<PlanetClass> {
         match self {
-            Placement::Requested(name) => name.clone(),
-            Placement::Drawn(Origin::GasGiant) => "gas-giant".to_string(),
-            Placement::Drawn(Origin::IceGiant) => "ice-giant".to_string(),
-            Placement::Drawn(Origin::HotJupiter) => "hot-jupiter".to_string(),
-            Placement::Drawn(Origin::Small) => if orbit_au < 0.5 * hz.0 {
-                "volcanic"
-            } else if orbit_au < hz.0 {
-                "caustic"
-            } else if orbit_au <= hz.1 {
-                "terran"
-            } else if orbit_au < ice {
-                "barren"
-            } else {
-                "frozen"
-            }
-            .to_string(),
+            Placement::Drawn(Origin::GasGiant) => Some(PlanetClass::GasGiant),
+            Placement::Drawn(Origin::IceGiant) => Some(PlanetClass::IceGiant),
+            Placement::Drawn(Origin::HotJupiter) => Some(PlanetClass::HotJupiter),
+            Placement::Drawn(Origin::Small) => None,
+            Placement::Requested(name) => match name.as_str() {
+                "gas-giant" => Some(PlanetClass::GasGiant),
+                "ice-giant" => Some(PlanetClass::IceGiant),
+                "hot-jupiter" => Some(PlanetClass::HotJupiter),
+                _ => None,
+            },
         }
     }
 }
@@ -480,8 +498,6 @@ impl Placement {
 #[derive(Clone, Debug)]
 struct Slot {
     placement: Placement,
-    /// Interim until Task 2 of part 3a: see [`Placement::type_name`].
-    body_type: String,
     mass_earth: f64,
     orbit_au: f64,
     eccentricity: f64,
@@ -623,13 +639,18 @@ fn normal(rng: &mut impl RngExt) -> f64 {
 /// stay, the others around them), and the rocky ones past the inner belt's
 /// zone of the first cold giant (`belts::belt_zone`), where that giant
 /// stops a planet forming. The zone follows the giant as it settles, a few
-/// rounds at most. `None` names the first type pushed out of its band.
-fn space(slots: &mut Vec<Slot>, star_mass: f64, hz: (f64, f64), ice: f64) -> Result<(), String> {
+/// rounds at most. The error is the placement of the first slot pushed out
+/// of its band.
+fn space(slots: &mut Vec<Slot>, star_mass: f64, hz: (f64, f64), ice: f64) -> Result<(), Placement> {
     slots.sort_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
     let zone_of = |slots: &[Slot]| {
         slots
             .iter()
-            .filter(|s| crate::belts::cold_giant(&s.body_type, s.orbit_au, ice))
+            .filter(|s| {
+                s.placement
+                    .giant_class()
+                    .is_some_and(|class| crate::belts::cold_giant(class, s.orbit_au, ice))
+            })
             .map(|s| s.orbit_au)
             .reduce(f64::min)
             .map(crate::belts::belt_zone)
@@ -646,7 +667,7 @@ fn space(slots: &mut Vec<Slot>, star_mass: f64, hz: (f64, f64), ice: f64) -> Res
         zone = settled;
     }
     match placed.iter().find(|s| in_zone(s, zone_of(&placed))) {
-        Some(s) => Err(s.body_type.clone()),
+        Some(s) => Err(s.placement.clone()),
         None => {
             *slots = placed;
             Ok(())
@@ -671,12 +692,12 @@ fn place(
     hz: (f64, f64),
     ice: f64,
     zone: Option<(f64, f64)>,
-) -> Result<Vec<Slot>, String> {
+) -> Result<Vec<Slot>, Placement> {
     let mut placed: Vec<Slot> = slots.iter().filter(|s| s.fixed).cloned().collect();
     let mut free: Vec<Slot> = slots.iter().filter(|s| !s.fixed).cloned().collect();
     free.sort_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
     for mut slot in free {
-        let ((_, max), _) = band(&slot.body_type, hz, ice).expect("known type");
+        let max = slot.placement.max_au(hz, ice);
         // Out in small steps until clear of every planet placed, jumping
         // a belt's zone.
         loop {
@@ -689,7 +710,7 @@ fn place(
                 slot.orbit_au *= 1.02;
             }
             if slot.orbit_au > max.min(OUTER_EDGE_AU) {
-                return Err(slot.body_type);
+                return Err(slot.placement);
             }
         }
         placed.push(slot);
@@ -708,7 +729,6 @@ fn fits(body_type: &str, star_mass: f64, hz: (f64, f64), ice: f64) -> u32 {
     let mass = requested_mass(body_type, &mut rng);
     let mut last = Slot {
         placement: Placement::Requested(body_type.to_string()),
-        body_type: body_type.to_string(),
         mass_earth: mass,
         orbit_au: min.max(INNER_EDGE_AU),
         eccentricity: 0.0,
@@ -734,6 +754,34 @@ fn draw_whole(
     whole: &WholeSystemRequest,
     rng: &mut impl RngExt,
 ) -> Result<System, RequestError> {
+    let p = place_whole(whole, rng)?;
+    Ok(assemble(
+        request,
+        p.seed,
+        p.star_code,
+        p.age_gyr,
+        p.metallicity,
+        p.width,
+        p.height,
+        p.slots,
+        None,
+    ))
+}
+
+/// A whole system's star, size and planets as placed, before
+/// [`assemble`] makes them bodies.
+struct Placed {
+    seed: u32,
+    star_code: f32,
+    age_gyr: f32,
+    metallicity: f32,
+    width: u32,
+    height: u32,
+    slots: Vec<Slot>,
+}
+
+/// The planets of a whole system, placed.
+fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Placed, RequestError> {
     let seed = whole.seed.unwrap_or_else(|| rng.random());
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
     let star_code = match &whole.star {
@@ -824,7 +872,6 @@ fn draw_whole(
         let mut slots: Vec<Slot> = asked
             .iter()
             .map(|(placement, a)| Slot {
-                body_type: placement.type_name(*a, hz, ice),
                 mass_earth: slot_mass(placement, &mut rng),
                 orbit_au: *a * (1.0 + 0.2 * (rng.random::<f64>() - 0.5)),
                 eccentricity: if placement.is_hot_jupiter() {
@@ -845,8 +892,7 @@ fn draw_whole(
             Ok(()) => {
                 // A drawn system keeps the planets that fit: those pushed
                 // out are dropped rather than failing.
-                return Ok(assemble(
-                    request,
+                return Ok(Placed {
                     seed,
                     star_code,
                     age_gyr,
@@ -854,23 +900,21 @@ fn draw_whole(
                     width,
                     height,
                     slots,
-                    None,
-                ));
+                });
             }
-            Err(body_type) => last_error = Some(body_type),
+            Err(placement) => last_error = Some(placement),
         }
         if whole.planets.is_none() {
             break;
         }
     }
-    let body_type = last_error.unwrap_or_default();
     if whole.planets.is_none() {
         // A drawn system that does not fit is drawn again without the
-        // planet that failed, until it fits.
+        // planet that failed (the last of its origin), until it fits.
         let mut kept = asked;
-        while let Some(i) = kept
-            .iter()
-            .rposition(|(p, a)| p.type_name(*a, hz, ice) == body_type)
+        while let Some(i) = last_error
+            .as_ref()
+            .and_then(|failed| kept.iter().rposition(|(p, _)| p == failed))
         {
             kept.remove(i);
             let mut slots: Vec<Slot> = kept
@@ -881,7 +925,6 @@ fn draw_whole(
                     // a hot Jupiter's orbit is circular.
                     let e = f64::from(draw_eccentricity(&mut rng)) * 0.4;
                     Slot {
-                        body_type: p.type_name(*a, hz, ice),
                         placement: p.clone(),
                         mass_earth,
                         orbit_au: *a,
@@ -890,32 +933,36 @@ fn draw_whole(
                     }
                 })
                 .collect();
-            if space(&mut slots, star_mass, hz, ice).is_ok() {
-                return Ok(assemble(
-                    request,
-                    seed,
-                    star_code,
-                    age_gyr,
-                    metallicity,
-                    width,
-                    height,
-                    slots,
-                    None,
-                ));
+            match space(&mut slots, star_mass, hz, ice) {
+                Ok(()) => {
+                    return Ok(Placed {
+                        seed,
+                        star_code,
+                        age_gyr,
+                        metallicity,
+                        width,
+                        height,
+                        slots,
+                    });
+                }
+                // The next to go is the last of the origin that failed now.
+                Err(placement) => last_error = Some(placement),
             }
         }
-        return Ok(assemble(
-            request,
+        return Ok(Placed {
             seed,
             star_code,
             age_gyr,
             metallicity,
             width,
             height,
-            Vec::new(),
-            None,
-        ));
+            slots: Vec::new(),
+        });
     }
+    let body_type = match last_error {
+        Some(Placement::Requested(name)) => name,
+        _ => String::new(),
+    };
     let asked_of = whole
         .planets
         .as_ref()
@@ -971,8 +1018,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
         None => params.planet.name.clone(),
     };
     let focus_slot = Slot {
-        placement: Placement::Requested(focus_type.clone()),
-        body_type: focus_type,
+        placement: Placement::Requested(focus_type),
         mass_earth: match (&host, params.giant_mass_earth) {
             (Some(h), _) => f64::from(h.giant.mass_earth),
             // A giant asked for: its own mass, not a rocky planet's of its size.
@@ -999,8 +1045,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
                 "gas-giant".to_string()
             };
             slots.push(Slot {
-                placement: Placement::Requested(giant_type.clone()),
-                body_type: giant_type,
+                placement: Placement::Requested(giant_type),
                 mass_earth: f64::from(g.mass_earth),
                 orbit_au: f64::from(g.orbit_au),
                 eccentricity: f64::from(g.eccentricity),
@@ -1019,7 +1064,6 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
         let placement = Placement::Drawn(origin);
         let mut slot = Slot {
             mass_earth: draw_mass(origin, &mut rng),
-            body_type: placement.type_name(a, hz, ice),
             placement,
             orbit_au: a,
             eccentricity: f64::from(draw_eccentricity(&mut rng)) * 0.4,
@@ -1100,6 +1144,7 @@ fn assemble(
         .collect();
     let mut bodies = Vec::new();
     let mut focus_id = None;
+    let mut models = Vec::with_capacity(slots.len());
     for (rank, slot) in slots.iter().enumerate() {
         let id = planet_letter(rank);
         let planet_designation = format!("{designation} {id}");
@@ -1108,6 +1153,27 @@ fn assemble(
                 .as_ref()
                 .is_some_and(|f| (f64::from(f.params.orbit_au) - slot.orbit_au).abs() < 1e-9);
         let planet_seed = body_seed(seed, &id);
+        // Its physical model, once its id is fixed: its own star seen from
+        // its orbit, the system's age, metallicity and ice line, and the
+        // mass it was spaced with.
+        let at = StarInfo::new(
+            star_code,
+            slot.orbit_au as f32,
+            slot.eccentricity as f32,
+            age_gyr,
+        );
+        let model = derive_model(
+            seed,
+            &id,
+            &Context::of(&at, metallicity, ice),
+            slot.mass_earth,
+        );
+        // The preset its world renders with: the one asked for the planet
+        // of a request around one, the closest to its model otherwise.
+        let look = match (&slot.placement, at_focus) {
+            (Placement::Requested(name), true) => name.clone(),
+            _ => base_of(&model).to_string(),
+        };
         let params = match (&focus, at_focus) {
             (Some(f), true) if f.host.is_none() => f.params.clone(),
             (Some(f), true) => {
@@ -1116,6 +1182,7 @@ fn assemble(
             }
             _ => planet_params(
                 slot,
+                &model,
                 star_code,
                 age_gyr,
                 metallicity,
@@ -1124,13 +1191,16 @@ fn assemble(
                 planet_seed,
             ),
         };
-        let mut params = if is_giant(&slot.body_type) {
+        // A giant is a planet whose world is a giant's: a giant class, or
+        // the giant a request around one asked for.
+        let giant = params.giant_mass_earth.is_some();
+        let mut params = if giant {
             with_system_rings(params)
         } else {
             params
         };
         // Its moons.
-        let moons = if is_giant(&slot.body_type) {
+        let moons = if giant {
             match (&focus, at_focus) {
                 // The giant a world of the request orbits: the world among
                 // its moons.
@@ -1152,19 +1222,27 @@ fn assemble(
         };
         // The moons its rings shape, inside the others (the giant asked
         // for, and the giant a world of the request orbits, among them).
-        let ring_moons = if is_giant(&slot.body_type) {
+        let ring_moons = if giant {
             shape_rings(&mut params, slot, star_code, &moons)
         } else {
             Vec::new()
         };
-        let planet = planet_body(&id, &planet_designation, slot, &params, star_code);
+        let planet = planet_body(
+            &id,
+            &planet_designation,
+            slot,
+            &look,
+            model.clone(),
+            &params,
+            star_code,
+        );
         let planet_index = bodies.len();
         if at_focus && focus.as_ref().is_some_and(|f| f.host.is_none()) {
             focus_id = Some(id.clone());
         }
         bodies.push(planet);
         // Nearest first, the ring moons among the others.
-        let giant_kg = slot.mass_earth * EARTH_KG;
+        let giant_kg = model.inputs.mass_earth * EARTH_KG;
         let giant_radius_km = bodies[planet_index].physical.radius_km;
         let mut moons: Vec<(MoonParts, Option<&crate::rings::RingMoon>)> = moons
             .into_iter()
@@ -1217,6 +1295,7 @@ fn assemble(
                 generated: false,
                 trojans: None,
                 ring_role: ring.map(|r| r.role),
+                model: None,
             });
         }
         if let Some(rings) = bodies[planet_index]
@@ -1243,6 +1322,7 @@ fn assemble(
         if let Some(given) = bodies[planet_index].params.given_rings.as_mut() {
             given.dust = crate::rings::dust_rings(given.rings.as_ref(), &sources, seed);
         }
+        models.push(model);
     }
     // Its small bodies, from the planets as placed: belts and trojans, and
     // the crater rate they set on every body.
@@ -1250,10 +1330,11 @@ fn assemble(
     let tracks: Vec<crate::belts::Track> = slots
         .iter()
         .zip(&ids)
-        .map(|(slot, id)| crate::belts::Track {
+        .zip(&models)
+        .map(|((slot, id), model)| crate::belts::Track {
             id,
-            body_type: &slot.body_type,
-            mass_earth: slot.mass_earth,
+            class: model.class,
+            mass_earth: model.inputs.mass_earth,
             orbit_au: slot.orbit_au,
             eccentricity: slot.eccentricity,
         })
@@ -1310,7 +1391,8 @@ fn assemble(
 /// giant's with its own tides (see `crate::spin`).
 fn tidal_eccentricity(slot: &Slot, star: f32, age_gyr: f32) -> f64 {
     let at = StarInfo::new(star, slot.orbit_au as f32, 0.0, age_gyr);
-    let circular = if is_giant(&slot.body_type) {
+    // Before its model exists: a giant as it was placed.
+    let circular = if slot.placement.is_giant() {
         let mass = slot.mass_earth as f32;
         crate::spin::giant_circularised(
             &at,
@@ -1325,10 +1407,14 @@ fn tidal_eccentricity(slot: &Slot, star: f32, age_gyr: f32) -> f64 {
     if circular { 0.0 } else { slot.eccentricity }
 }
 
-/// The world parameters of a placed planet, its preset resolved with its
-/// own seed at its orbit.
+/// The world parameters of a placed planet, the preset closest to its
+/// `model` ([`base_of`]) resolved with its own seed at its orbit: a giant
+/// of the model's mass, a rocky planet of the size of its mass.
+// Task 5 of part 3a replaces it with `planet::interim::params_for`.
+#[allow(clippy::too_many_arguments)]
 fn planet_params(
     slot: &Slot,
+    model: &PlanetModel,
     star: f32,
     age_gyr: f32,
     metallicity: f32,
@@ -1337,9 +1423,11 @@ fn planet_params(
     seed: u32,
 ) -> WorldParams {
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
-    let giant = is_giant(&slot.body_type);
+    let base = base_of(model);
+    let giant = is_giant(base);
+    let mass_earth = model.inputs.mass_earth;
     let request = WorldRequest {
-        planet: Some(slot.body_type.clone()),
+        planet: Some(base.to_string()),
         seed: Some(seed),
         star: Some(StarInfo::new(star, 1.0, 0.0, age_gyr).kind),
         age_gyr: Some(age_gyr),
@@ -1349,12 +1437,20 @@ fn planet_params(
         moons: Some(MoonsMode::Auto),
         giants: if giant { None } else { Some(GiantsMode::None) },
         host: if giant { None } else { Some(HostMode::None) },
-        mass_earth: giant.then_some(slot.mass_earth as f32),
-        // A rocky planet takes the size of the mass it was spaced with, by
-        // the mass-radius relation of rocky planets (the mass a world's size
+        // A giant world takes no less than the smallest giant's mass: a
+        // mini-Neptune under it renders as an ice giant of that mass (until
+        // Task 5 of part 3a generates its own world).
+        mass_earth: giant.then(|| {
+            (mass_earth as f32).clamp(
+                crate::request::GIANT_MASS.min,
+                crate::request::GIANT_MASS.max,
+            )
+        }),
+        // A rocky planet takes the size of its model's mass, by the
+        // mass-radius relation of rocky planets (the mass a world's size
         // gives, see planet_body), rather than its preset's own draw, so
         // that the spacing holds.
-        circumference_km: (!giant).then(|| crate::world::rocky_circumference_km(slot.mass_earth)),
+        circumference_km: (!giant).then(|| crate::world::rocky_circumference_km(mass_earth)),
         width: Some(width),
         height: Some(height),
         ..WorldRequest::default()
@@ -1365,7 +1461,7 @@ fn planet_params(
         // at the orbit kept as is.
         Err(_) => {
             let request = WorldRequest {
-                planet: Some(slot.body_type.clone()),
+                planet: Some(base.to_string()),
                 seed: Some(seed),
                 width: Some(width),
                 height: Some(height),
@@ -1377,6 +1473,7 @@ fn planet_params(
                 .params;
             params.star = star;
             params.age_gyr = age_gyr;
+            params.metallicity = metallicity;
             params.orbit_au = slot.orbit_au as f32;
             params.eccentricity = slot.eccentricity as f32;
             params
@@ -1399,9 +1496,20 @@ fn surroundings_at(star: &StarInfo, orbit_au: f64, eccentricity: f64) -> Surroun
     }
 }
 
-/// The body of a placed planet.
-fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, star: f32) -> Body {
-    let giant = is_giant(&slot.body_type);
+/// The body of a placed planet, typed by its `model`'s class and of its
+/// mass, its preview in the colours of the preset `look` its world renders
+/// with.
+fn planet_body(
+    id: &str,
+    designation: &str,
+    slot: &Slot,
+    look: &str,
+    model: PlanetModel,
+    params: &WorldParams,
+    star: f32,
+) -> Body {
+    let giant = params.giant_mass_earth.is_some();
+    let model_mass = model.inputs.mass_earth;
     // A rocky planet's tides scale with its own mass and radius, its
     // resonance is drawn from its seed (see `crate::spin::star_info`).
     let info = if giant {
@@ -1419,13 +1527,13 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
     // may be locked or held in the 3:2 resonance (see `crate::spin`), its
     // sidereal day then two thirds of its year.
     let (radius_km, mass_earth, period_hours, locked, resonant) = if giant {
-        let look = crate::giant_world::Look::draw(params, slot.mass_earth as f32).info;
+        let look = crate::giant_world::Look::draw(params, model_mass as f32).info;
         let locked = (look.hot
             || crate::spin::giant_locked(&info, look.mass_earth, look.radius_earth))
             && crate::spin::giant_stays_locked(slot.eccentricity as f32);
         (
             f64::from(look.radius_earth) * EARTH_M / 1000.0,
-            f64::from(look.mass_earth),
+            model_mass,
             f64::from(look.rotation_hours),
             locked,
             0.0,
@@ -1439,14 +1547,7 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
         } else {
             day
         };
-        // The mass of the gravity its world is generated with.
-        (
-            radius,
-            f64::from(params.mass_earth()),
-            day,
-            info.tidally_locked,
-            resonant,
-        )
+        (radius, model_mass, day, info.tidally_locked, resonant)
     };
     let volume = 4.0 / 3.0 * PI * (radius_km * 1000.0).powi(3);
     let density = mass_earth * EARTH_KG / volume / 1000.0;
@@ -1459,7 +1560,7 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
         id: id.to_string(),
         designation: designation.to_string(),
         kind: BodyKind::Planet,
-        body_type: slot.body_type.clone(),
+        body_type: model.class.key().to_string(),
         parent: None,
         orbit: Orbit {
             semi_major_axis_km: slot.orbit_au * 1.495_978_707e8,
@@ -1491,11 +1592,12 @@ fn planet_body(id: &str, designation: &str, slot: &Slot, params: &WorldParams, s
             resonance_turns: resonant,
         },
         surroundings: surroundings_at(&info, slot.orbit_au, slot.eccentricity),
-        preview: preview_of(&slot.body_type, params, star),
+        preview: preview_of(look, params, star),
         params: params.clone(),
         generated: false,
         trojans: None,
         ring_role: None,
+        model: Some(model),
     };
     // The sky the viewer draws puts the planet on its node line (the spring
     // equinox of its northern hemisphere) at an angle `periapsis_deg` before
@@ -2203,7 +2305,23 @@ fn name_world(dir: &std::path::Path, system: &str, body: &str) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::planet::PLANET_CLASSES;
     use crate::rings::RingRole;
+
+    /// Whether `b` is a planet whose world is a giant's.
+    pub(super) fn giant(b: &Body) -> bool {
+        b.kind == BodyKind::Planet && b.params.giant_mass_earth.is_some()
+    }
+
+    /// The giant the world a request around one asked for orbits.
+    pub(super) fn host_of(system: &System) -> &Body {
+        let focus = system.focus.as_deref().expect("the world asked");
+        let moon = system.bodies.iter().find(|b| b.id == focus).unwrap();
+        let parent = moon.parent.as_deref().expect("a giant's moon");
+        let host = system.bodies.iter().find(|b| b.id == parent).unwrap();
+        assert!(giant(host), "{}", host.id);
+        host
+    }
 
     #[test]
     fn drawn_slots_name_no_type() {
@@ -2226,7 +2344,6 @@ mod tests {
         // (type, Earth masses, AU, eccentricity), NASA fact sheets.
         let slot = |body_type: &str, mass_earth: f64, orbit_au: f64, eccentricity: f64| Slot {
             placement: Placement::Requested(body_type.into()),
-            body_type: body_type.into(),
             mass_earth,
             orbit_au,
             eccentricity,
@@ -2289,11 +2406,18 @@ mod tests {
             ],
             7,
         );
-        let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
-        let p = planets(&system);
-        assert_eq!(p.len(), 5);
-        assert_eq!(system.focus, None);
-        let count = |t: &str| p.iter().filter(|b| b.body_type == t).count();
+        // Placed as asked, each in its type's band.
+        let SystemRequest::System(asked) = &request else {
+            unreachable!()
+        };
+        let placed = place_whole(asked, &mut StdRng::seed_from_u64(1)).unwrap();
+        let count = |t: &str| {
+            placed
+                .slots
+                .iter()
+                .filter(|s| s.placement == Placement::Requested(t.into()))
+                .count()
+        };
         assert_eq!(
             (
                 count("terran"),
@@ -2303,23 +2427,36 @@ mod tests {
             ),
             (2, 1, 1, 1)
         );
-        // From the star out, lettered in order, each clear of the last.
-        for (k, pair) in p.windows(2).enumerate() {
-            assert!(pair[0].orbit.semi_major_axis_au < pair[1].orbit.semi_major_axis_au);
-            assert_eq!(pair[0].id, planet_letter(k));
-        }
-        let star = &system.star.info;
-        for b in &p {
-            if b.body_type == "terran" {
-                let a = b.orbit.semi_major_axis_au;
+        let star = StarInfo::new(placed.star_code, 1.0, 0.0, placed.age_gyr);
+        let ice = 2.7 * f64::from(star.luminosity).sqrt();
+        for slot in &placed.slots {
+            let a = slot.orbit_au;
+            if slot.placement == Placement::Requested("terran".into()) {
                 assert!(
                     a >= f64::from(star.hz_inner_au) * 0.95
                         && a <= f64::from(star.hz_outer_au) * 1.05
                 );
             }
-            if b.body_type == "gas-giant" {
-                assert!(b.orbit.semi_major_axis_au >= 0.5 * f64::from(system.star.ice_line_au));
+            if slot.placement == Placement::Requested("gas-giant".into()) {
+                assert!(a >= 0.5 * ice);
             }
+        }
+        let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+        let p = planets(&system);
+        assert_eq!(p.len(), 5);
+        assert_eq!(system.focus, None);
+        // Each typed by its class.
+        for b in &p {
+            assert!(
+                PLANET_CLASSES.contains(&b.body_type.as_str()),
+                "{}",
+                b.body_type
+            );
+        }
+        // From the star out, lettered in order, each clear of the last.
+        for (k, pair) in p.windows(2).enumerate() {
+            assert!(pair[0].orbit.semi_major_axis_au < pair[1].orbit.semi_major_axis_au);
+            assert_eq!(pair[0].id, planet_letter(k));
         }
         // Moons follow their planet, nearest first, with their ids.
         for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
@@ -2394,8 +2531,8 @@ mod tests {
             });
             for pair in planets.windows(2) {
                 let slot = |b: &Body| Slot {
+                    // A class key: "hot-jupiter" spaces as one.
                     placement: Placement::Requested(b.body_type.clone()),
-                    body_type: b.body_type.clone(),
                     mass_earth: b.physical.mass_earth,
                     orbit_au: b.orbit.semi_major_axis_au,
                     eccentricity: b.orbit.eccentricity,
@@ -2571,7 +2708,9 @@ mod tests {
             .expect("the planet asked");
         assert_eq!(focus.params.seed, asked.seed);
         assert_eq!(focus.params.circumference_km, asked.circumference_km);
-        assert_eq!(focus.body_type, "terran");
+        // Its world is the one asked; its type is its model's class.
+        assert_eq!(focus.params.planet.name, "terran");
+        assert_eq!(focus.body_type, focus.model.as_ref().unwrap().class.key());
         assert_eq!(system.seed, 1234);
         assert_eq!(system.focus.as_deref(), Some(focus.id.as_str()));
         // Another epoch of the same planet is another system.
@@ -2602,7 +2741,7 @@ mod tests {
             )
             .unwrap();
             for body in &system.bodies {
-                if body.kind != BodyKind::Planet || !is_giant(&body.body_type) {
+                if !giant(body) {
                     continue;
                 }
                 let mass = body.params.giant_mass_earth.unwrap();
@@ -2645,7 +2784,7 @@ mod tests {
             )
             .unwrap();
             for body in &system.bodies {
-                if body.kind == BodyKind::Planet && is_giant(&body.body_type) {
+                if giant(body) {
                     giants += 1;
                     let given = body
                         .params
@@ -2657,7 +2796,7 @@ mod tests {
                         Some(_) => faint += 1,
                         None => {}
                     }
-                    if body.body_type == "ice-giant" {
+                    if body.params.planet.name == "ice-giant" {
                         assert!(given.rings.as_ref().is_none_or(|r| !r.bright));
                     }
                     // The giant world takes them, and nothing else of its look moves.
@@ -2823,11 +2962,7 @@ mod tests {
             ..WorldRequest::default()
         };
         let system = draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(5)).unwrap();
-        let giant = system
-            .bodies
-            .iter()
-            .find(|b| b.kind == BodyKind::Planet && is_giant(&b.body_type))
-            .expect("the giant");
+        let giant = host_of(&system);
         let moons: Vec<_> = system
             .bodies
             .iter()
@@ -2860,11 +2995,7 @@ mod tests {
         write_system(&dir, &system).unwrap();
         let focus = system.focus.clone().expect("the world asked");
         let done = generate_neighbourhood(&dir, &focus, |_| {}).unwrap();
-        let giant = system
-            .bodies
-            .iter()
-            .find(|b| b.kind == BodyKind::Planet && is_giant(&b.body_type))
-            .expect("the giant");
+        let giant = host_of(&system);
         // The giant and every sibling come with the world, as bodies of
         // the system: nothing is written beside it (no `host/`, `moons/`).
         assert_eq!(done[0], focus);
@@ -2917,7 +3048,7 @@ mod tests {
             .iter()
             .find(|b| {
                 b.kind == BodyKind::Planet
-                    && b.body_type == "barren"
+                    && b.params.planet.name == "barren"
                     && system
                         .bodies
                         .iter()
@@ -3116,6 +3247,112 @@ mod tests {
     }
 
     #[test]
+    fn a_system_of_version_2_is_refused() {
+        let (dir, _) = lone_planet("system-format-2");
+        let path = dir.join("system.json");
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        json["format_version"] = serde_json::Value::from(2);
+        std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
+        let error = read_system(&dir).unwrap_err();
+        assert!(error.contains("format version 2"), "{error}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The whole system `seed` draws round a G2V at metallicity 0, its
+    /// planets drawn (as `drawn()` in `planet::tests`).
+    fn drawn_g2v(seed: u32) -> System {
+        let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
+            star: Some("G2V".into()),
+            metallicity: Some(0.0),
+            planets: None,
+            seed: Some(seed),
+            width: Some(64),
+            height: Some(32),
+        });
+        draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap()
+    }
+
+    /// The system `seed` draws round a G2V at metallicity 0 with the
+    /// planets `counts` asks for, by type.
+    fn requested(seed: u32, counts: &[(&str, u32)]) -> System {
+        let request = SystemRequest::System(WholeSystemRequest {
+            metallicity: Some(0.0),
+            ..match whole(counts, seed) {
+                SystemRequest::System(w) => w,
+                SystemRequest::Around(_) => unreachable!(),
+            }
+        });
+        draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap()
+    }
+
+    #[test]
+    fn every_planet_stores_its_model_and_its_class() {
+        for seed in 1..=20 {
+            let system = drawn_g2v(seed);
+            for body in &system.bodies {
+                match body.kind {
+                    BodyKind::Planet => {
+                        let model = body.model.as_ref().expect("a planet has a model");
+                        assert_eq!(body.body_type, model.class.key(), "{}", body.id);
+                        assert_eq!(body.physical.mass_earth, model.inputs.mass_earth);
+                    }
+                    BodyKind::Moon => assert!(body.model.is_none(), "{}", body.id),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_stored_model_is_the_derived_one() {
+        let system = drawn_g2v(3);
+        let mut checked = 0;
+        for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+            let p = &body.params;
+            let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
+            let context = Context::of(&star, p.metallicity, system.star.ice_line_au);
+            let model = body.model.clone().unwrap();
+            assert_eq!(
+                derive_model(system.seed, &body.id, &context, model.drawn_mass_earth),
+                model,
+                "{}",
+                body.id
+            );
+            checked += 1;
+        }
+        assert!(checked > 0);
+        // And it survives `system.json`.
+        let json = serde_json::to_string(&system).unwrap();
+        let back: System = serde_json::from_str(&json).unwrap();
+        for (a, b) in system.bodies.iter().zip(&back.bodies) {
+            assert_eq!(a.model, b.model, "{}", a.id);
+        }
+    }
+
+    #[test]
+    fn requested_slots_store_the_derived_class() {
+        // terran=1, gas-giant=1 round a G2V, seeds 1..=10: one planet in
+        // each band; each stores a class key, whatever it is.
+        for seed in 1..=10 {
+            let system = requested(seed, &[("terran", 1), ("gas-giant", 1)]);
+            let planets: Vec<_> = system
+                .bodies
+                .iter()
+                .filter(|b| b.kind == BodyKind::Planet)
+                .collect();
+            assert_eq!(planets.len(), 2);
+            for b in planets {
+                assert!(
+                    PLANET_CLASSES.contains(&b.body_type.as_str()),
+                    "{}",
+                    b.body_type
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_system_round_trips_through_its_file() {
         let system = draw(
             &whole(&[("terran", 1), ("ice-giant", 1)], 3),
@@ -3293,17 +3530,21 @@ mod tests {
             .unwrap();
             let ice = f64::from(system.star.ice_line_au);
             let planets: Vec<&Body> = planets(&system);
-            let Some(giant) = planets
+            let Some(giant_au) = planets
                 .iter()
-                .filter(|b| crate::belts::cold_giant(&b.body_type, b.orbit.semi_major_axis_au, ice))
+                .filter(|b| {
+                    b.model.as_ref().is_some_and(|m| {
+                        crate::belts::cold_giant(m.class, b.orbit.semi_major_axis_au, ice)
+                    })
+                })
                 .map(|b| b.orbit.semi_major_axis_au)
                 .reduce(f64::min)
             else {
                 continue;
             };
             zones += 1;
-            let (lo, hi) = crate::belts::belt_zone(giant);
-            for p in planets.iter().filter(|b| !is_giant(&b.body_type)) {
+            let (lo, hi) = crate::belts::belt_zone(giant_au);
+            for p in planets.iter().filter(|b| !giant(b)) {
                 let (a, e) = (p.orbit.semi_major_axis_au, p.orbit.eccentricity);
                 assert!(
                     a * (1.0 + e) <= lo || a * (1.0 - e) >= hi,
@@ -3396,6 +3637,7 @@ mod tests {
 /// shaped as every other giant's.
 #[cfg(test)]
 mod focus_ring_tests {
+    use super::tests::host_of;
     use super::*;
     use crate::rings::RingRole;
 
@@ -3482,11 +3724,7 @@ mod focus_ring_tests {
     fn the_rings_of_a_worlds_giant_stay_inside_its_chain() {
         for seed in 0..30 {
             let system = around("terran", seed, Some(HostMode::Giant));
-            let giant = system
-                .bodies
-                .iter()
-                .find(|b| b.kind == BodyKind::Planet && is_giant(&b.body_type))
-                .expect("the giant");
+            let giant = host_of(&system);
             let moons: Vec<&Body> = system
                 .bodies
                 .iter()
@@ -3517,6 +3755,7 @@ mod focus_ring_tests {
 /// `crate::spin`).
 #[cfg(test)]
 mod spin_tests {
+    use super::tests::giant;
     use super::*;
 
     fn red_dwarf_system(seed: u32) -> System {
@@ -3541,7 +3780,7 @@ mod spin_tests {
         for seed in 0..300 {
             let system = red_dwarf_system(seed);
             for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
-                if is_giant(&body.body_type) || body.params.giant_mass_earth.is_some() {
+                if giant(body) {
                     continue;
                 }
                 let year_h = body.orbit.period_days * 24.0;
@@ -3586,7 +3825,7 @@ mod spin_tests {
         for seed in 0..60 {
             let system = red_dwarf_system(seed);
             for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
-                if is_giant(&body.body_type) {
+                if giant(body) {
                     continue;
                 }
                 let info = crate::spin::star_info(&body.params);
@@ -3691,14 +3930,14 @@ mod spin_tests {
                 }
             }
             // A giant's regular moons are those the giant world draws.
-            for giant in system.bodies.iter().filter(|b| b.body_type == "gas-giant") {
-                let drawn = MoonSystem::draw(&giant.params).map_or(0, |m| m.moons.len());
+            for planet in system.bodies.iter().filter(|b| giant(b)) {
+                let drawn = MoonSystem::draw(&planet.params).map_or(0, |m| m.moons.len());
                 let regular = system
                     .bodies
                     .iter()
-                    .filter(|b| b.parent.as_deref() == Some(&giant.id) && b.ring_role.is_none())
+                    .filter(|b| b.parent.as_deref() == Some(&planet.id) && b.ring_role.is_none())
                     .count();
-                assert_eq!(regular, drawn, "{}", giant.id);
+                assert_eq!(regular, drawn, "{}", planet.id);
             }
         }
     }
@@ -3813,7 +4052,7 @@ mod lone_tests {
             let lone = around("terran", seed, Some(HostMode::Giant), Some(true));
             let only = planets(&lone);
             assert_eq!(only.len(), 1, "seed {seed}");
-            assert!(is_giant(&only[0].body_type));
+            assert!(only[0].params.giant_mass_earth.is_some());
             let focus = lone.focus.as_deref().unwrap();
             let moon = lone.bodies.iter().find(|b| b.id == focus).unwrap();
             assert_eq!(moon.parent.as_deref(), Some(only[0].id.as_str()));
@@ -3865,12 +4104,15 @@ mod lone_tests {
         )
     }
 
-    /// Drawn by origin/main before the lone planet existed (seeds 1 to 4).
+    /// Drawn by the generator since part 3a of #423 stored each planet's
+    /// model (seeds 1 to 4): planets typed by class, drawn slots placed
+    /// without a type. Regenerated on purpose then; any other change is a
+    /// regression of a normal system.
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-57979-1 belts=1 b:barren:0.0200:0.0920:true c:barren:0.1775:0.0920:true d:terran:0.3626:0.0920:true e:barren:0.6827:0.0920:true",
-        "mgs-59108-2 belts=0 b:barren:0.0212:0.0350:true c:terran:0.1137:0.0350:true d:frozen:0.3133:0.0350:true",
-        "mgs-83289-3 belts=0 b:caustic:0.0200:0.0350:true c:barren:0.0259:0.0350:true d:terran:0.0393:0.0350:true d-1:rocky-moon:0.0003:0.0350:false d-2:rocky-moon:0.0006:0.0350:false e:barren:0.0750:0.0350:true f:frozen:0.1536:0.0350:true g:frozen:0.4348:0.0350:true g-1:rocky-moon:0.0004:0.0350:false",
-        "mgs-33182-4 belts=0 b:barren:0.0339:0.0350:true c:barren:0.0931:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:terran:0.3711:0.0350:true e:barren:0.5515:0.0350:true e-1:rocky-moon:0.0004:0.0350:false e-2:rocky-moon:0.0004:0.0350:false e-3:rocky-moon:0.0007:0.0350:false f:frozen:2.5098:0.0350:true",
+        "mgs-57979-1 belts=0 b:rocky:0.0200:0.0498:true c:mini-neptune:0.3626:0.0426:true d:rocky:0.7838:0.0426:false d-1:rocky-moon:0.0004:0.0426:false d-2:rocky-moon:0.0005:0.0426:false e:mini-neptune:1.4137:0.0350:true e-1:rocky-moon:0.0004:0.0350:false e-2:rocky-moon:0.0006:0.0350:false e-3:icy-moon:0.0011:0.0350:false e-4:icy-moon:0.0017:0.0350:false f:hydrocarbon-world:3.0647:0.0350:true g:ice-world:5.0697:0.0350:true g-1:icy-moon:0.0047:0.0350:false g-2:icy-moon:0.0071:0.0350:false g-3:icy-moon:0.0095:0.0350:false",
+        "mgs-59108-2 belts=0 b:ice-world:0.0212:0.0547:true c:ice-giant:0.1137:0.0418:true d:mini-neptune:0.3133:0.0415:true d-1:icy-moon:0.0002:0.0415:false d-2:rocky-moon:0.0005:0.0415:false d-3:rocky-moon:0.0007:0.0415:false d-4:icy-moon:0.0012:0.0415:false d-5:icy-moon:0.0019:0.0415:false e:mini-neptune:0.5513:0.0350:false e-1:rocky-moon:0.0003:0.0350:false e-2:rocky-moon:0.0004:0.0350:false e-3:icy-moon:0.0010:0.0350:false f:ice-world:1.3695:0.0350:true",
+        "mgs-83289-3 belts=0 b:ice-world:0.0200:0.0567:false c:rocky:0.0254:0.0567:false d:ice-giant:0.0393:0.0400:true d-1:rocky-moon:0.0003:0.0400:false d-2:rocky-moon:0.0006:0.0400:false e:mini-neptune:0.0707:0.0632:false e-1:icy-moon:0.0001:0.0632:false e-2:icy-moon:0.0001:0.0632:false e-3:icy-moon:0.0001:0.0632:false e-4:icy-moon:0.0001:0.0632:false e-5:rocky-moon:0.0003:0.0632:false e-6:rocky-moon:0.0005:0.0632:false f:ice-giant:0.1290:0.0350:true f-1:icy-moon:0.0004:0.0350:false f-2:rocky-moon:0.0013:0.0350:false f-3:icy-moon:0.0021:0.0350:false g:ice-world:0.2422:0.0350:false",
+        "mgs-33182-4 belts=0 b:rocky:0.0339:0.0438:true c:rocky:0.0931:0.0438:true c-1:rocky-moon:0.0001:0.0438:false d:rocky:0.3711:0.0438:false e:mini-neptune:0.6675:0.0350:true e-1:rocky-moon:0.0003:0.0350:false e-2:rocky-moon:0.0004:0.0350:false e-3:icy-moon:0.0013:0.0350:false f:ice-world:2.9560:0.0350:true",
     ];
 
     #[test]

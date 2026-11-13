@@ -442,9 +442,10 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (2), the request, the seed and the map size. A
+  - `format_version` (3), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
-    body's files directly in `bodies/<id>/`;
+    body's files directly in `bodies/<id>/`, version 2 typed its planets
+    by preset and stored no physical model;
   - `star`: today's `StarInfo` and its designation. `info.age_gyr` is the
     age of the star in Gyr, drawn from the `AGE` stream between 0.5 and
     10 Gyr (uniform; the star's lifetime if shorter) or set by `age_gyr`
@@ -454,6 +455,20 @@ systems/<system-id>/
   - `bodies`: one entry per planet and moon, with the fields of
     [Model](#model): id, designation, kind, type, parent, orbit, physical
     facts, spin, surroundings, preview, `WorldParams`, and `generated`.
+    A planet also stores `model`, its physical model (issue #423: what
+    it is made of, its interior, heat, surface, air, climate, life and
+    class), derived once when the system is drawn from its orbit, the
+    system's age, metallicity and ice line, and the mass drawn for it
+    (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
+    `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
+    `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
+    `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    `ocean-world`), its `physical.mass_earth` the model's mass after
+    photoevaporation; its world renders, until #424, with the preset
+    closest to the model (`planet::interim::base_of`). A request still
+    asks for planets by preset name: the name places the planet (its
+    band, below), the model types it. A moon has no model yet and keeps
+    `rocky-moon` or `icy-moon`;
 
   The server rewrites it (temporary file, then rename) only to set a
   body's `generated` once its directory is complete.

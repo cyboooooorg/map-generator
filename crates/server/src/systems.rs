@@ -523,7 +523,7 @@ mod tests {
     }
 
     const SYSTEM: &str = r#"{
-        "format_version": 2, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 3, "seed": 42, "width": 1024, "height": 512,
         "star": {"type": "K1V", "designation": "MGS 48213",
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
@@ -652,7 +652,7 @@ mod tests {
 
     #[test]
     fn each_body_has_its_original_size() {
-        let json = r#"{"format_version": 2, "width": 1024, "height": 512, "bodies": [
+        let json = r#"{"format_version": 3, "width": 1024, "height": 512, "bodies": [
             {"id": "c", "params": {"width": 1024, "height": 512}},
             {"id": "c-1", "params": {"width": 512, "height": 256}},
             {"id": "d"}
@@ -674,7 +674,7 @@ mod tests {
         assert!(originals.original_size(&root, "mgs-2-2", "c").is_err());
         // The file rewritten (a system drawn again under its id) is read
         // again, here one of the layout before sizes, which is refused.
-        let old = json.replace(r#""format_version": 2"#, r#""format_version": 1"#);
+        let old = json.replace(r#""format_version": 3"#, r#""format_version": 1"#);
         let error = original_sizes(old.as_bytes()).unwrap_err();
         assert!(error.contains("format version 1"), "{error}");
         // (A length of its own: some file systems stamp in coarse ticks.)

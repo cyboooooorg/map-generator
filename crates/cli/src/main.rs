@@ -370,7 +370,7 @@ fn print_bodies(system: &mapgen::system::System) {
             format!("{:.0} km", body.orbit.semi_major_axis_km)
         };
         println!(
-            "{indent}{:5} {:24} {:12} {distance:>11}  r={:.0} km  {:.1} K",
+            "{indent}{:5} {:24} {:18} {distance:>11}  r={:.0} km  {:.1} K",
             body.id,
             body.designation,
             body.body_type,

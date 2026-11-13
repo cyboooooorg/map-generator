@@ -25,6 +25,7 @@ pub const O2_PER_N2: f64 = 0.27;
 
 /// What life did to a world.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Life {
     /// Life arose.
     pub arose: bool,
