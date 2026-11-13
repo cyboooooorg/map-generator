@@ -80,10 +80,12 @@ const RECYCLED_UNDER_PLATES: f64 = 0.63;
 
 /// Share of the nitrogen (N₂ and NH₃) plates outgas that subduction
 /// carries back into the mantle: ammonium bound in clays and sediments
-/// rides the slabs down (Goldblatt et al. 2009,
-/// doi:10.1038/ngeo692, argue the mantle holds several times the air's
-/// nitrogen; not checked). Calibration, no source: Earth's air keeps
-/// about 0.9 bar of N₂ once its NH₃ is photolysed into it.
+/// rides the slabs down (Goldblatt et al. 2009, doi:10.1038/ngeo692,
+/// estimate that the crust holds about 0.5 and the mantle more than 1.4
+/// times the air's nitrogen; checked in their abstract, the full text not
+/// read: the stores below hold at least twice the air's, the order of
+/// the four to one this share returns). Calibration, no source: Earth's
+/// air keeps about 0.9 bar of N₂ once its NH₃ is photolysed into it.
 const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8;
 
 /// Share of the outgassed sulphur that stays in the air as SO₂: the rest
@@ -94,15 +96,17 @@ const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8;
 const SULPHUR_IN_AIR: f64 = 1.0e-4;
 
 /// Escape velocity, km/s, at which the cosmic shoreline crosses Earth's
-/// XUV fluence. Zahnle & Catling 2017 (doi:10.3847/2041-8213/aa7846)
-/// find the bodies with and without air split by `I_XUV ∝ v_esc⁴`, with
-/// Mars close to the line; the line's normalisation is not checked
-/// against the paper. Calibration, no source, for 6.5 km/s: Mars keeps a
-/// trace, Titan a bar.
+/// XUV fluence. Zahnle & Catling 2017 (ApJ 843, 122,
+/// doi:10.3847/1538-4357/aa7846) find the bodies with and without air
+/// split by `I_XUV ∝ v_esc⁴`, with Mars close to the line (checked). Their
+/// line is drawn by eye on their Fig. 1 and 2, with no normalisation in
+/// the text. Calibration, no source, on the Solar System bodies, for
+/// 6.5 km/s: Mars keeps a trace, Titan a bar, Venus and Earth their air.
 const SHORELINE_V_KM_S: f64 = 6.5;
 
 /// Steepness of the retention across the shoreline: the share kept is
-/// `1 / (1 + (I/I_line)^k)`. Calibration, no source: Titan (about 0.1 dex
+/// `1 / (1 + (I/I_line)^k)`. Calibration, no source, on the Solar System
+/// bodies (Zahnle & Catling's line has no width): Titan (about 0.1 dex
 /// on the side of the air) keeps most, Mars (about 0.4 dex on the other)
 /// keeps under 1 %.
 const SHORELINE_STEEPNESS: f64 = 6.0;
@@ -210,7 +214,7 @@ pub fn outgassed(
 }
 
 /// The share of its air a body keeps against escape to space: the cosmic
-/// shoreline of Zahnle & Catling 2017 (doi:10.3847/2041-8213/aa7846).
+/// shoreline of Zahnle & Catling 2017 (doi:10.3847/1538-4357/aa7846).
 ///
 /// The shoreline is `I_line = (v_esc / 6.5 km/s)⁴` in Earth's XUV
 /// fluence ([`SHORELINE_V_KM_S`]); a body without a dynamo meets

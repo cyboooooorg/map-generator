@@ -69,11 +69,12 @@ fn nusselt(regime: Regime) -> f64 {
 /// Magnetic constant µ₀, T·m/A.
 const MU_0: f64 = 4.0e-7 * PI;
 
-/// Prefactor `c` of the energy-flux scaling, Christensen, Holzwarth &
-/// Reiners 2009 (doi:10.1038/nature07626) and Christensen 2010
-/// (doi:10.1007/s11214-009-9553-2), about 0.63; the efficiency `F` and
-/// the ohmic share `f_ohm` are taken as 1. Values from memory, not
-/// checked against the papers.
+/// Prefactor `c` of the energy-flux scaling for a dipolar dynamo, 0.63:
+/// Christensen, Holzwarth & Reiners 2009 (*Nature* 457, 167,
+/// doi:10.1038/nature07626, p. 168; checked). Christensen 2010
+/// (doi:10.1007/s11214-009-9553-2) gives 0.23 for a multipolar one,
+/// not used here. The efficiency `F` and the ohmic share `f_ohm` are
+/// taken as 1.
 const FLUX_SCALING_C: f64 = 0.63;
 
 /// Share of the core's rms field in the dipole at the core's surface for

@@ -20,11 +20,16 @@ pub const OCEAN_KG: f64 = 1.4e21;
 const WATER_PER_HYDROGEN: f64 = 9.0;
 
 /// Internal heat flux above which a body loses its heat through volcanic
-/// heat pipes rather than by plates or conduction, W/m². Moore & Webb 2013
-/// (*Nature* 501, 501, doi:10.1038/nature12424) model Io's heat pipe,
-/// about 2 W/m² (Earth's mean is 0.087). Value from memory, not checked
-/// against the paper.
-pub const HEAT_PIPE_FLUX_W_M2: f64 = 2.0;
+/// heat pipes rather than by plates or conduction, W/m². Calibration, no
+/// source: no paper sets such a threshold. Moore & Webb 2013 ("Heat-pipe
+/// Earth", *Nature* 501, 501, doi:10.1038/nature12473) take Io as the
+/// heat-pipe body of today, carrying about 2.5 W/m², some 40 times
+/// Earth's mean (from Veeder et al. 2004, their ref. 13; checked in the
+/// paper); Lainey et al. 2009 (doi:10.1038/nature08108) measure
+/// 2.24 ± 0.45 W/m² from Io's orbit (not checked). 1 W/m², under half of
+/// Io's flux and over ten times Earth's, keeps Io a heat pipe even at the
+/// low end of that range.
+pub const HEAT_PIPE_FLUX_W_M2: f64 = 1.0;
 
 /// The water a planet keeps.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -197,6 +202,9 @@ mod tests {
         assert_eq!(regime_of_body("Mars", 0.0), Regime::Stagnant);
         assert_eq!(regime_of_body("Mercury", 0.0), Regime::Stagnant);
         assert_eq!(regime_of_body("Io", 1.0e14), Regime::HeatPipe);
+        // Still at the low end of Lainey et al. 2009, 1.79 W/m² over Io's
+        // 4.17e13 m².
+        assert_eq!(regime_of_body("Io", 7.5e13), Regime::HeatPipe);
     }
 
     #[test]

@@ -110,9 +110,13 @@ air's H₂O is that water's weight.
 **Regime.** A labelled calibration, since the literature disagrees on the
 mass dependence (see [plate tectonics](plate-tectonics.md)):
 
-- heat pipe above 2 W/m² of internal heat (Io; Moore & Webb 2013,
-  doi:10.1038/nature12424, value not checked against the paper; Earth's
-  mean is 0.087 W/m²);
+- heat pipe above 1 W/m² of internal heat, a calibration: no paper sets
+  a threshold. Io is the heat-pipe body of today, carrying about
+  2.5 W/m², some 40 times Earth's mean (Moore & Webb 2013, "Heat-pipe
+  Earth", doi:10.1038/nature12473, from Veeder et al. 2004; checked);
+  Lainey et al. 2009 (doi:10.1038/nature08108, not checked) measure
+  2.24 ± 0.45 W/m². 1 W/m² keeps Io a heat pipe even at the low end of
+  that range;
 - plates from 0.3 M⊕ (`geology::PLATES_MIN_MASS_EARTH`, shared with the
   generator) when liquid water is kept, never in a runaway (its steam
   does not weaken the lithosphere);
@@ -122,7 +126,8 @@ mass dependence (see [plate tectonics](plate-tectonics.md)):
 
 Calibration targets: Earth keeps 0.9 to 1.1 oceans and has plates; Venus
 is in runaway, loses even an Earth ocean and is episodic; Mars and
-Mercury are stagnant; Io with 1e14 W of tidal heat is a heat pipe; a dry
+Mercury are stagnant; Io with 1e14 W of tidal heat is a heat pipe, and
+still is with 7.5e13 W (1.79 W/m², the low end of Lainey et al.); a dry
 5 M⊕ planet outside the runaway has no plates.
 
 ## Core and dynamo
@@ -175,7 +180,9 @@ Earth's core loses about 10 TW today (Lay, Hernlund & Buffett 2008,
 doi:10.1038/ngeo.2007.44). The energy-flux scaling of Christensen 2010
 (doi:10.1007/s11214-009-9553-2) gives the rms field in the core,
 `B² / 2µ₀ = 0.63 ρ^(1/3) q^(2/3)` (efficiency and ohmic share taken as
-1). A share of it is the dipole at the core's surface: 0.067 for a
+1), with the prefactor 0.63 of a dipolar dynamo (Christensen, Holzwarth
+& Reiners 2009, doi:10.1038/nature07626, p. 168; checked; a multipolar
+one has 0.23). A share of it is the dipole at the core's surface: 0.067 for a
 dynamo driven from the top of the core, 3e-4 for a deep dynamo under a
 stably stratified top, whose field is multipolar and screened
 (Christensen 2006, doi:10.1038/nature05342). The factor `(r_core / R)³`
@@ -213,7 +220,7 @@ lids outgas less than plates):
 
 | Regime | Share outgassed | Calibrated on |
 |---|---|---|
-| Plates | 0.95, of which subduction returns 80 % of the nitrogen (N₂ and NH₃) and 63 % of the rest | Earth's N₂ once its NH₃ is photolysed (Goldblatt et al. 2009, doi:10.1038/ngeo692, on the mantle's large nitrogen store, not checked) |
+| Plates | 0.95, of which subduction returns 80 % of the nitrogen (N₂ and NH₃) and 63 % of the rest | Earth's N₂ once its NH₃ is photolysed (Goldblatt et al. 2009, doi:10.1038/ngeo692: about 0.5 times the air's nitrogen in the crust and more than 1.4 times in the mantle; checked in their abstract) |
 | Episodic lid | 0.95 | Venus's 90 bar of CO₂ |
 | Heat pipe | 0.95 | none (Io) |
 | Stagnant lid | 0.2 | Mars, Titan |
@@ -248,8 +255,9 @@ share of the steam as of every gas, and the chain lowers
 air always agree.
 
 **Escape** (`atmosphere`). The cosmic shoreline of Zahnle & Catling 2017
-(doi:10.3847/2041-8213/aa7846) splits the bodies with and without air by
-`I_XUV ∝ v_esc⁴`. Here the line is `I_line = (v_esc / 6.5 km/s)⁴`, in
+(ApJ 843, 122, doi:10.3847/1538-4357/aa7846) splits the bodies with and
+without air by `I_XUV ∝ v_esc⁴` (checked); their line is drawn by eye on
+their Fig. 1 and 2, with no normalisation in the text. Here the line is `I_line = (v_esc / 6.5 km/s)⁴`, in
 units of Earth's XUV fluence (`xuv_fluence`), and the share of air kept
 falls smoothly across it:
 
@@ -260,8 +268,9 @@ kept = 1 / (1 + (s I / I_line)^6)
 with `s = 2` for a body without a dynamo, whose upper air the stellar
 wind strips (`UNMAGNETISED_ESCAPE`, a calibration with no source, tied to
 issue #344). The normalisation 6.5 km/s, the steepness 6 and `s` are
-calibrations: the line passes close to Mars, as in the paper, and `s` is
-small enough that Venus, which has no dynamo, keeps its air. Every gas is
+calibrations on the Solar System bodies: the line passes close to Mars,
+as in the paper, Titan keeps a bar, and `s` is small enough that Venus,
+which has no dynamo, keeps its air. Every gas is
 kept in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`.
 
 **Cold trap** (`cold_trap`). A gas whose triple point lies above the
@@ -426,8 +435,8 @@ it can be changed without touching any physics.
 
 Life has oxygenated the air once the system is `OXYGEN_AFTER_GYR` old,
 2.2 Gyr, Earth's Great Oxidation Event about 2.4 Ga (Lyons, Reinhard &
-Planavsky 2014, doi:10.1038/nature13068; the date is from memory, not
-checked against the paper). The oxygenated air holds O₂ at `0.27` of its
+Planavsky 2014, doi:10.1038/nature13068: 2.3 to 2.4 Ga, checked in the
+authors' EGU 2014 abstract, the Nature text not read). The oxygenated air holds O₂ at `0.27` of its
 N₂ (calibration on Earth: 0.21 over 0.78) and no methane, which the
 oxygen oxidises.
 

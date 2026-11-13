@@ -15,9 +15,9 @@ pub const LIFE_CHANCE: f64 = 1.0 / 3.0;
 
 /// Age, Gyr after formation, from which oxygenic life has oxygenated the
 /// air: Earth's Great Oxidation Event, about 2.4 Ga, 2.2 Gyr after the
-/// Earth formed (Lyons, Reinhard & Planavsky 2014,
-/// doi:10.1038/nature13068; dates from memory, not checked against the
-/// paper).
+/// Earth formed 4.567 Ga (Lyons, Reinhard & Planavsky 2014,
+/// doi:10.1038/nature13068: 2.3 to 2.4 Ga, checked in the authors' EGU
+/// 2014 abstract, the Nature text not read).
 pub const OXYGEN_AFTER_GYR: f64 = 2.2;
 
 /// O₂ over N₂ in an oxygenated air. Calibration on Earth: 0.21 over 0.78.
