@@ -10,4 +10,6 @@ mass_earth = [5.0, 12.0]
 envelope_fraction = [0.01, 0.05]
 
 [orbit]
+star = "K2V"
 insolation = [5.0, 50.0]
+eccentricity = [0.0, 0.05]

@@ -12,3 +12,4 @@ envelope_fraction = 0.0
 
 [orbit]
 insolation = [0.4, 1.0]
+eccentricity = [0.0, 0.05]

@@ -13,3 +13,4 @@ co2 = 1.0
 
 [orbit]
 insolation = [0.9, 1.1]
+eccentricity = [0.0, 0.05]

@@ -19,7 +19,7 @@
 //! [inputs]                            # a fixed value or a [min, max] range
 //! mass_earth = [0.096, 0.118]         # required, Earth masses
 //! core_mass_fraction = 0.24           # iron share of the refractory mass
-//! water_oceans = [0.01, 0.05]         # Earth oceans (1.4e21 kg each)
+//! water_oceans = [0.002, 0.008]       # Earth oceans (1.4e21 kg each)
 //! envelope_fraction = 0.0             # hydrogen and helium share of the mass
 //! co2 = 1.0                           # factor on the formation rule, 1 typical
 //! n2 = 1.0                            # idem
@@ -38,9 +38,25 @@
 //! docs) with ranges of about ±10 % on mass and insolation, the
 //! eccentricities and tilts of NASA's planetary fact sheets
 //! (nssdc.gsfc.nasa.gov/planetary/factsheet; tilts read as seasons).
+//! `mars-like` departs from Mars's reference values on two inputs, so
+//! that it renders as Mars does: its water, 0.002 to 0.008 oceans, about
+//! the 0.004 of its polar deposits and ground ice (Carr & Head 2015, see
+//! `planet::classify::ICE_WORLD_MIN_OCEANS`), stays under the 0.01 that
+//! shows as ice; its CO₂ and N₂ factors, 0.4 (Calibration, no source:
+//! Mars lost most of its early air, which the formation rule does not
+//! model), bring its air to the fact sheet's 6 mbar on the median of the
+//! seeds.
 //! The exoplanet kinds (`super-earth`, `mini-neptune`, `ocean-world`,
 //! `lava-world`, `hot-jupiter`) name a range typical of the kind:
-//! Calibration, no source.
+//! Calibration, no source. The four small ones keep near-circular orbits
+//! (`eccentricity = [0, 0.05]`), as the tides keep close-in small planets
+//! (Van Eylen et al. 2019, doi:10.3847/1538-3881/aaf22f, fit a mean of
+//! 0.05 to the small planets of multi-transiting systems), rather than the formation draw, which can carry
+//! an ocean world to a runaway at periastron. `lava-world` and
+//! `mini-neptune` asked alone sit round a K dwarf (`K0V`, `K2V`), as the
+//! known lava worlds do (55 Cnc e, CoRoT-7 b and K2-141 b orbit K stars),
+//! so that a drawn M dwarf does not pull their orbit inside the closest
+//! one a request allows; in a system they take the system's star.
 use crate::planet::InputOverrides;
 use crate::request::Limits;
 use rand::RngExt;
@@ -587,6 +603,28 @@ mass_earth = 5000.0
         bars.sort_by(f64::total_cmp);
         let median = (bars[9] + bars[10]) / 2.0;
         assert!((0.7..1.3).contains(&median), "median {median} bar");
+    }
+
+    /// Mars keeps about 0.004 oceans of ice (Carr & Head 2015, see
+    /// `planet::classify::ICE_WORLD_MIN_OCEANS`), too little to show: the
+    /// barren look, not the frozen one; and 6 mbar of air, which the
+    /// archetype's lowered CO₂ and N₂ factors give on the median of the
+    /// seeds (single seeds spread with the mass, which sets the escape).
+    #[test]
+    fn mars_like_is_a_barren_desert_under_a_thin_air() {
+        let a = Archetype::load("mars-like").unwrap();
+        let mut bars = Vec::new();
+        for seed in 0..20 {
+            let m = model_of(&a, seed);
+            assert_eq!(crate::planet::interim::base_of(&m), "barren", "seed {seed}");
+            let s = m.surface.expect("a bare world has a surface");
+            assert!(s.water.oceans < 0.01, "seed {seed}: {} oceans", s.water.oceans);
+            bars.push(s.gases.total());
+        }
+        bars.sort_by(f64::total_cmp);
+        let median = (bars[9] + bars[10]) / 2.0;
+        assert!((0.004..0.012).contains(&median), "median {median} bar: {bars:?}");
+        assert!(bars[0] > 0.001 && bars[19] < 0.03, "{bars:?}");
     }
 
     #[test]

@@ -319,21 +319,23 @@ An archetype file has an `[inputs]` table and an optional `[orbit]` table. Every
 |            | `eccentricity`       | of the orbit                                                                             |
 |            | `axial_tilt`         | degrees                                                                                  |
 
-`name` (lowercase letters and dashes), `description` and `[locales.<language>]` (`name` and `description` in another language, two or three lowercase letters; the web app shows them when its interface is in that language) complete the file. Unknown fields are errors. The Solar System archetypes take the masses, core shares and orbits of `crates/mapgen/src/planet/reference.rs`, with ranges of about ±10 % on mass and insolation; the exoplanet kinds name a range typical of the kind. A copy-pasteable example, `archetypes/mars-like.toml`:
+`name` (lowercase letters and dashes), `description` and `[locales.<language>]` (`name` and `description` in another language, two or three lowercase letters; the web app shows them when its interface is in that language) complete the file. Unknown fields are errors. The Solar System archetypes take the masses, core shares and orbits of `crates/mapgen/src/planet/reference.rs`, with ranges of about ±10 % on mass and insolation. `mars-like` departs from them on two inputs so that it renders as Mars does: 0.002 to 0.008 oceans of water (Mars's polar deposits and ground ice, about 0.004, stay under the 0.01 that shows as ice, so its look is `barren`) and CO₂ and N₂ factors of 0.4 (Mars lost most of its early air, which the formation rule does not model), which give its 6 mbar on the median of the seeds. The exoplanet kinds name a range typical of the kind; the four small ones (`super-earth`, `mini-neptune`, `ocean-world`, `lava-world`) keep a near-circular orbit (`eccentricity = [0, 0.05]`), and `lava-world` and `mini-neptune` asked alone orbit a K dwarf (`K0V`, `K2V`), as 55 Cnc e, CoRoT-7 b and K2-141 b do, rather than a drawn M dwarf that would pull them inside the closest orbit allowed. A copy-pasteable example, `archetypes/mars-like.toml`:
 
 ```toml
 name = "mars-like"
-description = "Mars-like: a small cold desert that kept a little ice"
+description = "Mars-like: a small cold desert under a thin air"
 
 [locales.fr]
 name = "Martienne"
-description = "Un petit désert froid qui a gardé un peu de glace"
+description = "Un petit désert froid sous un air ténu"
 
 [inputs]
 mass_earth = [0.096, 0.118]
 core_mass_fraction = 0.24
-water_oceans = [0.01, 0.05]
+water_oceans = [0.002, 0.008]
 envelope_fraction = 0.0
+co2 = 0.4
+n2 = 0.4
 
 [orbit]
 star = "G2V"

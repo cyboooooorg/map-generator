@@ -1,15 +1,17 @@
 name = "mars-like"
-description = "Mars-like: a small cold desert that kept a little ice"
+description = "Mars-like: a small cold desert under a thin air"
 
 [locales.fr]
 name = "Martienne"
-description = "Un petit désert froid qui a gardé un peu de glace"
+description = "Un petit désert froid sous un air ténu"
 
 [inputs]
 mass_earth = [0.096, 0.118]
 core_mass_fraction = 0.24
-water_oceans = [0.01, 0.05]
+water_oceans = [0.002, 0.008]
 envelope_fraction = 0.0
+co2 = 0.4
+n2 = 0.4
 
 [orbit]
 star = "G2V"

@@ -11,4 +11,6 @@ water_oceans = 0.0
 envelope_fraction = 0.0
 
 [orbit]
+star = "K0V"
 insolation = [1000.0, 3000.0]
+eccentricity = [0.0, 0.05]
