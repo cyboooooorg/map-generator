@@ -60,8 +60,9 @@ The user split the spec's step 3 into three plans (2026-11-13):
 - Formats: `SYSTEM_FORMAT_VERSION` 2 → 3 (`system.rs:58`);
   `FORMAT_VERSION` and `MIN_FORMAT_VERSION` 16 → 17
   (`export/raw_data.rs:52,60`), with `web/src/lib/formatVersion.ts:6` in
-  the same commit. No open PR bumps either (checked 2026-11-13); confirm
-  with the peer sessions before merging (CLAUDE.md).
+  the same commit. No open PR bumps either (checked 2026-11-13); the
+  peer sessions stay idle until part 3 is finished (the user,
+  2026-11-13).
 - No legacy path: older systems are refused as today, listed as
   outdated, never migrated, never deleted by the server
   (spec "Storage and formats").
@@ -773,6 +774,4 @@ git commit -m "feat(web): read planet classes and document the model-driven worl
 - `world-coherence-checker` on 20 drawn systems, old binary against new:
   worlds change on purpose; report the class mix, land share and mean
   temperature per class for the main session to judge.
-- Warn the peer sessions: `SYSTEM_FORMAT_VERSION` 3 and `FORMAT_VERSION`
-  17 land with this PR, and every stored system becomes outdated.
 - The PR description lists `Refs #423`, `Refs #427`.
