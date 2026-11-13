@@ -221,7 +221,7 @@ it off. Over 4 000 seeds:
 **Outcome (step 2, 2026-11-04).** Moons are written as planned, with
 three changes found on the way:
 
-- **Presets in `presets/moons/`:** `rocky-moon` is bare rock everywhere
+- **Looks in `looks/moons/` (presets in `presets/moons/` then):** `rocky-moon` is bare rock everywhere
   (every biome remapped to `RockyWaste`), so the shading draws the
   craters and the albedo the maria; `icy-moon` is ice plains, older ice
   in basins and bare ice ridges. The server's preset catalog skips the

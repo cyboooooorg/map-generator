@@ -237,9 +237,12 @@ choices behind the sky and the clouds are in
 
 ### How it computes them
 
-The surface pressure is drawn like the sea level: from the request, else
-from the planet type's preset, else from 0.7 to 1.5 bar. Each type has its
-range or value ([`presets/`](../../presets/)):
+Until part 3b of #423 the surface pressure was drawn like the sea level:
+from the request, else from the planet type's preset, else from 0.7 to
+1.5 bar. It now comes from the planet model's air (`planet::atmosphere`);
+the table keeps the former presets' values, which
+`planet::interim::draws_of` still gives the looks (in
+[`looks/`](../../looks/)) of a world whose model leaves them open:
 
 | Preset | Pressure | Greenhouse | Clouds |
 | --- | --- | --- | --- |

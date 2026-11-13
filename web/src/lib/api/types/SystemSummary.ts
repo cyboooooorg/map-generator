@@ -32,7 +32,7 @@ star_light: [number, number, number],
  */
 hz_inner_au: number, hz_outer_au: number, 
 /**
- * How many planets of each archetype.
+ * How many planets of each class (their `type`: `rocky`, `gas-giant`…).
  */
 planets: { [key in string]: number }, moons: number, 
 /**

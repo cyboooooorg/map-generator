@@ -45,8 +45,8 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 /// A body that is no giant whose envelope hides its surface (the model
 /// derives none under at least [`super::escape::MIN_ENVELOPE`] of its
 /// mass) renders with its class's look: `frozen` for an ice world,
-/// `barren` for the others (rocky, super-Earth). Part 3b of #423 derives
-/// the surface under the envelope.
+/// `barren` for the others (rocky, super-Earth). The surface under the
+/// envelope is not derived yet (a later part of #423).
 pub fn base_of(model: &PlanetModel) -> &'static str {
     match model.class {
         PlanetClass::GasGiant => return "gas-giant",
@@ -365,8 +365,8 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///   look ([`base_of`]: `frozen` for an ice world, `barren` otherwise) at
 ///   the model's radius and gravity, with no ocean and no temperature
 ///   shift (its generation aims it at its bare temperature,
-///   [`calibrate_enveloped`]). Part 3b of #423 derives the surface under
-///   such an envelope.
+///   [`calibrate_enveloped`]). The surface under such an envelope is not
+///   derived yet (a later part of #423).
 ///
 /// What the model leaves open comes from the look's own draws, else the
 /// generator's [`fallback`], drawn from `rng` in a fixed order (sea level,
@@ -612,8 +612,8 @@ fn bare_temperature_k(equilibrium_k: f64, heat_flux_w_m2: f64) -> f64 {
 /// surface temperature under the envelope, so the world aims at the
 /// temperature a bare surface keeps at its orbit (the equilibrium of
 /// `params`'s star and orbit, plus its internal heat: no greenhouse), with
-/// [`warming_for`]. No sea: its world keeps none. Part 3b of #423 derives
-/// the surface under the envelope.
+/// [`warming_for`]. No sea: its world keeps none. The surface under the
+/// envelope is not derived yet (a later part of #423).
 pub fn calibrate_enveloped(params: &mut WorldParams, model: &PlanetModel) {
     let equilibrium_k = f64::from(crate::spin::star_info(params).equilibrium_k);
     let flux = model.heat.flux_w_m2(model.interior.radius_earth);

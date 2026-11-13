@@ -311,7 +311,7 @@ pub struct SystemSummary {
     /// file does not give them).
     pub hz_inner_au: f32,
     pub hz_outer_au: f32,
-    /// How many planets of each archetype.
+    /// How many planets of each class (their `type`: `rocky`, `gas-giant`…).
     pub planets: BTreeMap<String, u32>,
     pub moons: u32,
     /// Every body, planets and moons, in the system's order.
