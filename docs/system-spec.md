@@ -46,9 +46,13 @@ round planets. Every body has:
   [Storage](#storage));
 - its **designation** (`MGS 48213 c`, `MGS 48213 c II`) and an optional
   given name;
-- its **kind** (`planet` or `moon`) and **type**: a preset (`terran`,
-  `barren`, `caustic`, `frozen`, `volcanic`, `gas-giant`, `ice-giant`,
-  `hot-jupiter`; `rocky-moon`, `icy-moon` for small moons);
+- its **kind** (`planet` or `moon`) and **type**: a drawn planet's
+  class, from its physical model (`rocky`, `super-earth`, `ice-world`,
+  `ocean-world`, `mini-neptune`, `gas-giant`, …; see
+  [Storage](#storage)); the planet a request around one asked for keeps
+  its preset (`terran`, `barren`, `caustic`, `frozen`, `volcanic`,
+  `gas-giant`, `ice-giant`, `hot-jupiter`); `rocky-moon`, `icy-moon` for
+  small moons;
 - its **parent** (the star, or a planet) and its **orbit**: semi-major
   axis, eccentricity, inclination, longitude of the node, argument of
   periapsis, mean anomaly at the system's epoch, period (a moon's orbit
