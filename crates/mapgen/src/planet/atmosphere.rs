@@ -38,17 +38,24 @@ fn outgassed_share(regime: Regime) -> f64 {
 /// Pressure, bar, at the floor of a water layer at which half of the
 /// volatiles its body outgasses reach the air (see
 /// [`released_under_ocean`]): 3 GPa. Calibration, no source: Titan
-/// (about 1.0 GPa under its 45 % of ice in the model), Ganymede and
-/// Callisto keep nearly all of their air, while a 1 M⊕ planet of 30 %
-/// water (about 17 GPa) lets about 1e-3 of it out, which leaves it the
-/// few bar of CO₂ before the thermostat that Kite & Ford 2018 find on
-/// waterworlds (see [`released_under_ocean`]).
+/// (about 1.0 GPa under its 45 % of ice in the model), Ganymede (1.1 GPa)
+/// and Callisto keep 98 % or more of their air, while a 1 M⊕ planet of
+/// 30 % water (about 17 GPa) lets about 1e-3 of it out, which leaves it
+/// the few bar of CO₂ before the thermostat that Kite & Ford 2018 find on
+/// waterworlds (see [`released_under_ocean`]). A known departure: Kite &
+/// Ford (Fig. 5; checked) find that a stagnant-lid planet under a 3 GPa
+/// ocean does not melt at all, so 3 GPa is their full shutoff, not a half
+/// point. A shutoff there leaves the 30 %-water planet no air at all
+/// (frozen at 257 K at 1 AU instead of an ocean world): its air would
+/// have to come from the volatiles dissolved in its ocean, which the
+/// model does not carry.
 const SEAFLOOR_HALF_BAR: f64 = 3.0e4;
 
 /// Steepness of the release across [`SEAFLOOR_HALF_BAR`]: the share is
 /// `1 / (1 + (P / P_half)^k)`. Calibration, no source, with
-/// [`SEAFLOOR_HALF_BAR`] on the same bodies.
-const SEAFLOOR_STEEPNESS: f64 = 4.0;
+/// [`SEAFLOOR_HALF_BAR`] on the same bodies: 4.1 is the least that
+/// keeps Ganymede at 98 % (4 left it 97.9 %).
+const SEAFLOOR_STEEPNESS: f64 = 4.1;
 
 /// Share of the volatiles a body outgasses that reaches the air under a
 /// water layer whose floor is at `seafloor_bar`:
@@ -56,17 +63,17 @@ const SEAFLOOR_STEEPNESS: f64 = 4.0;
 /// [`SEAFLOOR_STEEPNESS`]).
 ///
 /// Under a deep water layer the weight of the water on the seafloor
-/// curtails the exchange of volatiles between the mantle and the ocean
-/// (Kite & Ford 2018, ApJ 864, 75, doi:10.3847/1538-4357/aad6e0, for
-/// waterworlds of 10 to 1000 times Earth's water: their pCO₂ often lands
-/// between 0.2 and 20 bar), and high-pressure ice at its base seals the
+/// curtails the decompression melting that outgasses the mantle (Kite &
+/// Ford 2018, ApJ 864, 75, doi:10.3847/1538-4357/aad6e0, for waterworlds
+/// of 10 to 1000 times Earth's water: their pCO₂ often lands between 0.2
+/// and 20 bar; checked), and high-pressure ice at its base seals the
 /// rock below (Noack et al. 2016, Icarus 277, 215,
-/// doi:10.1016/j.icarus.2016.05.009; the pressure at which they find
-/// outgassing stops is not checked against the paper). The ice's own
-/// volatiles stay dissolved in the ocean or locked in clathrates. One
-/// share for both, a labelled calibration on the pressure at the floor:
-/// a runaway's steam weighs on the rock as its ocean did, so the share
-/// holds in a runaway too.
+/// doi:10.1016/j.icarus.2016.05.009; the paper was not read, its
+/// companion abstract gives no single pressure). The ice's own volatiles
+/// stay dissolved in the ocean or locked in clathrates. One share for
+/// both, a labelled calibration on the pressure at the floor: a runaway's
+/// steam weighs on the rock as its ocean did, so the share holds in a
+/// runaway too.
 fn released_under_ocean(seafloor_bar: f64) -> f64 {
     1.0 / (1.0 + (seafloor_bar.max(0.0) / SEAFLOOR_HALF_BAR).powf(SEAFLOOR_STEEPNESS))
 }
@@ -505,6 +512,39 @@ mod tests {
         assert!(out.total() > 0.0);
         assert!(b > a && a > 0.0, "{a} {b}");
         assert!(b <= out.total());
+    }
+
+    /// Pressure, bar, at the floor of the water of `inputs` at
+    /// `orbit_au`, all its water kept.
+    fn seafloor_bar(inputs: &PlanetInputs, orbit_au: f64) -> f64 {
+        let int = interior(inputs, &exposure_at(orbit_au));
+        inputs.water_fraction * inputs.mass_earth * EARTH_KG * bar_per_kg(inputs.mass_earth, &int)
+    }
+
+    #[test]
+    fn a_deep_ocean_holds_back_what_the_mantle_outgasses() {
+        // The icy moons keep nearly all their air under their ice.
+        for name in ["Titan", "Ganymede", "Callisto"] {
+            let b = reference(name);
+            let p = seafloor_bar(&model_inputs(b), b.orbit_au);
+            let share = released_under_ocean(p);
+            assert!(share >= 0.98, "{name}: {p} bar, {share}");
+        }
+        // Earth's ocean changes nothing.
+        let earth = model_inputs(reference("Earth"));
+        let p = seafloor_bar(&earth, 1.0);
+        assert!(released_under_ocean(p) > 0.999_99, "{p} bar");
+        // An Earth of 30 % water lets about a thousandth through.
+        let deep = PlanetInputs {
+            water_fraction: 0.3,
+            ..earth
+        };
+        let p = seafloor_bar(&deep, 1.0);
+        let share = released_under_ocean(p);
+        assert!((5e-4..=2e-3).contains(&share), "{p} bar, {share}");
+        // No water, no hold; less as the floor deepens.
+        assert_eq!(released_under_ocean(0.0), 1.0);
+        assert!(released_under_ocean(2.0e4) < released_under_ocean(1.0e4));
     }
 
     #[test]

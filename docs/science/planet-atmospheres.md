@@ -226,23 +226,31 @@ lids outgas less than plates):
 | Stagnant lid | 0.2 | Mars, Titan |
 
 **Under a deep ocean** (`released_under_ocean`), only a share of that
-reaches the air: `1 / (1 + (P_floor / 3 GPa)^4)`, with `P_floor` the
+reaches the air: `1 / (1 + (P_floor / 3 GPa)^4.1)`, with `P_floor` the
 weight of the water kept on the seafloor, `m_water g / (4π R²)`. The
-weight of a deep ocean curtails the exchange of volatiles between mantle
-and ocean (Kite & Ford 2018, ApJ 864, 75, doi:10.3847/1538-4357/aad6e0,
+weight of a deep ocean curtails the decompression melting that outgasses
+the mantle (Kite & Ford 2018, ApJ 864, 75, doi:10.3847/1538-4357/aad6e0,
 for waterworlds of 10 to 1000 times Earth's water, whose pCO₂ often lands
-between 0.2 and 20 bar), high-pressure ice at its base seals the rock
-(Noack et al. 2016, Icarus 277, 215, doi:10.1016/j.icarus.2016.05.009;
-the pressure at which they find outgassing stops is not checked against
-the paper), and the ices' own volatiles stay dissolved in the ocean or
-locked in clathrates. The 3 GPa and the power 4 are calibrations with no
-source: Earth's ocean (0.03 GPa) changes nothing, Titan (1.0 GPa in the
-model), Ganymede and Callisto keep 98 % or more of their air, and a 1 M⊕
-planet of 30 % water (17 GPa) lets out about 1e-3 of it, a few bar of
-CO₂ before the thermostat. A runaway's steam weighs on the rock as its
-ocean did, so the share holds in a runaway too; the steam itself is not
-held back, by this share or by the regime's: it is the ocean, not a
-volatile of the mantle.
+between 0.2 and 20 bar; checked), high-pressure ice at its base seals the
+rock (Noack et al. 2016, Icarus 277, 215, doi:10.1016/j.icarus.2016.05.009;
+the paper was not read, its companion abstract gives no single pressure),
+and the ices' own volatiles stay dissolved in the ocean or locked in
+clathrates. The 3 GPa and the power 4.1 are calibrations with no source:
+Earth's ocean (0.03 GPa) changes nothing, Titan (1.0 GPa in the model),
+Ganymede (1.1 GPa) and Callisto keep 98 % or more of their air (the power
+4 left Ganymede 97.9 %), and a 1 M⊕ planet of 30 % water (17 GPa) lets
+out about 1e-3 of it, a few bar of CO₂ before the thermostat. A
+runaway's steam weighs on the rock as its ocean did, so the share holds
+in a runaway too; the steam itself is not held back, by this share or by
+the regime's: it is the ocean, not a volatile of the mantle.
+
+A known departure: Kite & Ford (Fig. 5) find that a stagnant-lid planet
+under a 3 GPa ocean does not melt at all, so 3 GPa is their full
+shutoff, not a half point. A shutoff there (tried with
+`1 - (P / 3 GPa)^5`) keeps the icy moons and Earth but leaves the
+30 %-water planet no air at all, frozen at 257 K at 1 AU instead of an
+ocean world: its air would have to come from the volatiles dissolved in
+its ocean, which the model does not carry.
 
 Sulphur comes up as SO₂, of which 1e-4 stays in the air (the rest ends in
 the crust; Venus's SO₂ is buffered by its surface, Fegley & Prinn 1989,
