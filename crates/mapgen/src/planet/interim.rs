@@ -132,11 +132,6 @@ const STAGNANT_SURFACE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.7, 0.95]
 /// doi:10.1038/nature05438, mapped them). The model does not size them.
 const HYDROCARBON_LAND_FRACTION: f32 = 0.99;
 
-/// Column of air (pressure over gravity, Earth's = 1) within which the sky
-/// keeps Earth's colours and density. Calibration, no source: a quarter
-/// either way, so that Earth's air renders as Earth's.
-const EARTH_COLUMN: (f64, f64) = (0.8, 1.25);
-
 /// Surface pressure past which the sky yellows toward caustic's, bar, and
 /// the one at which it is wholly caustic's. Calibration, no source: Venus's
 /// sky (92 bar) is yellow, Earth's (1 bar) blue; from 10 to 100 bar on a
@@ -146,9 +141,13 @@ const YELLOW_BAR: (f64, f64) = (10.0, 100.0);
 /// Rayleigh colour of caustic's sky, the Venus look (`looks/caustic.toml`).
 const CAUSTIC_RAYLEIGH: [f32; 3] = [0.4, 0.55, 0.25];
 
-/// Largest Rayleigh channel the atmosphere accepts
-/// ([`Atmosphere::validate`]).
-const MAX_RAYLEIGH: f32 = 10.0;
+/// Haze density and colour of caustic's sky (`looks/caustic.toml`).
+const CAUSTIC_HAZE: f32 = 0.3;
+const CAUSTIC_HAZE_COLOUR: [f32; 3] = [0.85, 0.95, 0.45];
+
+/// Pressure (bar) within which the sky is Earth's, a tenth either way:
+/// Earth's air renders as Earth's. Calibration, no source.
+const EARTH_BAR: (f64, f64) = (0.8, 1.25);
 
 /// Methane haze: CH₄ share of the air and surface pressure (bar) over
 /// which it forms, its density and Titan's orange. Calibration, no source:
@@ -267,18 +266,19 @@ fn draws_of(base: &str) -> LookDraws {
     }
 }
 
-/// The sky of a planet's air: Earth's ([`Atmosphere::default`]) for an air
-/// of Earth's column ([`EARTH_COLUMN`]); otherwise Earth's Rayleigh colour
-/// scaled by the column (`P / g`, Earth's = 1, as much gas over each
-/// square metre) and yellowed toward caustic's past 10 bar
-/// ([`YELLOW_BAR`]), its brightest channel held to the atmosphere's
-/// limit. A methane haze of Titan's orange where CH₄ is over 1 % of an air
-/// thicker than 0.5 bar. Clouds, the first that holds: none under
-/// [`AIRLESS_BAR`]; water where water or hydrocarbons are liquid or water
-/// vapour reaches [`WATER_CLOUD_MIN_BAR`] (methane clouds render as water
-/// ones, no other kind exists); sulfuric where SO₂ reaches
-/// [`SULFURIC_MIN_BAR`]; dust on a dry air under [`DUST_MAX_BAR`];
-/// otherwise none.
+/// The sky of a planet's air: its colour and aerosols, not its thickness
+/// (the viewer scales the Rayleigh depth with the surface pressure, so
+/// counting the column here too would make dense airs opaque). Earth's
+/// ([`Atmosphere::default`]) for an air of Earth's pressure
+/// ([`EARTH_BAR`]); otherwise Earth's Rayleigh colour, haze and haze
+/// colour yellowed toward caustic's past 10 bar ([`YELLOW_BAR`]), so that
+/// a Venus reads pale yellow. No haze under [`AIRLESS_BAR`]. A methane
+/// haze of Titan's orange where CH₄ is over 1 % of an air thicker than
+/// 0.5 bar. Clouds, the first that holds: none under [`AIRLESS_BAR`];
+/// water where water or hydrocarbons are liquid or water vapour reaches
+/// [`WATER_CLOUD_MIN_BAR`] (methane clouds render as water ones, no other
+/// kind exists); sulfuric where SO₂ reaches [`SULFURIC_MIN_BAR`]; dust on
+/// a dry air under [`DUST_MAX_BAR`]; otherwise none.
 ///
 /// # Panics
 ///
@@ -287,18 +287,16 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
     let surface = model.surface.as_ref().expect("a planet with a surface");
     let gases = &surface.gases;
     let pressure = gases.total();
-    let column = pressure / model.interior.gravity.max(1e-6);
     let earth = Atmosphere::default();
     let mut sky = earth.clone();
-    if !(EARTH_COLUMN.0..=EARTH_COLUMN.1).contains(&column) {
+    if !(EARTH_BAR.0..=EARTH_BAR.1).contains(&pressure) {
         let t = ((pressure / YELLOW_BAR.0).log10() / (YELLOW_BAR.1 / YELLOW_BAR.0).log10())
             .clamp(0.0, 1.0) as f32;
-        let colour: [f32; 3] = std::array::from_fn(|i| {
-            earth.rayleigh[i] + (CAUSTIC_RAYLEIGH[i] - earth.rayleigh[i]) * t
-        });
-        let brightest = colour.iter().copied().fold(0.0_f32, f32::max);
-        let scale = (column as f32).min(MAX_RAYLEIGH / brightest);
-        sky.rayleigh = colour.map(|c| c * scale);
+        let mix = |from: f32, to: f32| from + (to - from) * t;
+        sky.rayleigh = std::array::from_fn(|i| mix(earth.rayleigh[i], CAUSTIC_RAYLEIGH[i]));
+        sky.haze = mix(earth.haze, CAUSTIC_HAZE);
+        sky.haze_colour =
+            std::array::from_fn(|i| mix(earth.haze_colour[i], CAUSTIC_HAZE_COLOUR[i]));
         if pressure < AIRLESS_BAR as f64 {
             sky.haze = 0.0;
         }
@@ -766,6 +764,14 @@ mod tests {
     #[test]
     fn earths_sky_is_earths() {
         assert_eq!(sky_of(&model_of("Earth")), Atmosphere::default());
+    }
+
+    #[test]
+    fn a_dense_air_keeps_a_colour_not_a_column() {
+        let sky = sky_of(&model_of("Venus"));
+        let brightest = sky.rayleigh.iter().copied().fold(0.0_f32, f32::max);
+        assert!(brightest <= 1.0, "{:?}", sky.rayleigh);
+        assert!(sky.haze >= 0.25, "{}", sky.haze);
     }
 
     #[test]

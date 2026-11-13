@@ -711,10 +711,13 @@ age 0.5 and 13 Gyr, M5V and A0V stars.
 `planet::interim` turns the model's air into the sky and the climate of
 the world the planet renders (part 3a; issue #424 replaces it):
 
-- The sky (`sky_of`) is Earth's for an air of Earth's column (0.8 to
-  1.25 times its `P / g`); otherwise Earth's Rayleigh colour scaled by the
-  column, yellowed toward Venus's past 10 bar and held to the
-  atmosphere's brightest-channel limit. A methane haze of Titan's orange
+- The sky (`sky_of`) gives the air's colour and aerosols, not its
+  thickness: the viewer already scales the Rayleigh depth with the
+  surface pressure, so counting the column here too made dense airs opaque
+  grey. It is Earth's for an air of 0.8 to 1.25 bar; otherwise Earth's
+  Rayleigh colour, haze and haze colour yellowed toward Venus's
+  (`looks/caustic.toml`) from 10 bar (wholly at 100 bar), with no haze
+  under the airless limit. A methane haze of Titan's orange
   appears where CH4 is over 1 % of an air thicker than 0.5 bar. Clouds
   follow the air: none under the airless limit; water where water or
   hydrocarbons are liquid or the vapour reaches 1 mbar; sulfuric where
