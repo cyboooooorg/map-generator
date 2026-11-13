@@ -30,7 +30,6 @@ use crate::atmosphere::Atmosphere;
 use crate::biome::{Biome, BiomeRules};
 use crate::geology::Geology;
 use crate::moons::Composition;
-use crate::request;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -138,13 +137,6 @@ struct LookSpec {
 pub struct GiantSpec {
     /// Gas (Jupiter, Saturn) or ice (Uranus, Neptune).
     pub kind: crate::giants::GiantKind,
-    /// Mass in Earth masses, a value or a `[min, max]` range (drawn
-    /// log-uniformly would favour none: drawn uniformly in it).
-    pub mass: ParamDefault,
-    /// Orbital period in days, a value or a range: places a hot giant
-    /// close to its star instead of the `[star]` position.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub period_days: Option<ParamDefault>,
     /// Odds of bright rings (Saturn's) and of faint ones; the rest have
     /// none.
     #[serde(default)]
@@ -153,15 +145,6 @@ pub struct GiantSpec {
 
 impl GiantSpec {
     fn validate(&self) -> Result<(), String> {
-        let (lo, hi) = (request::GIANT_MASS.min, request::GIANT_MASS.max);
-        self.mass
-            .check("mass", lo, hi)
-            .map_err(|e| e.replacen("defaults.", "giant.", 1))?;
-        if let Some(period) = self.period_days {
-            period
-                .check("period_days", 0.2, 1000.0)
-                .map_err(|e| e.replacen("defaults.", "giant.", 1))?;
-        }
         if self.rings.iter().any(|r| !(0.0..=1.0).contains(r))
             || self.rings[0] + self.rings[1] > 1.0
         {

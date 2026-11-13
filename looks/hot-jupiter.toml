@@ -4,8 +4,6 @@
 
 [giant]                                # see `mapgen::giant_world`
 kind = "gas"
-mass = [60.0, 3000.0]                  # Earth masses: 51 Peg b about 150
-period_days = [1.0, 8.0]               # days: placed by its period, not in the habitable zone
 rings = [0.0, 0.05]                    # ice rings would boil away
 
 [atmosphere]

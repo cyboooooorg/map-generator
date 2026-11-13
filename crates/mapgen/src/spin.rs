@@ -73,17 +73,6 @@ const RESONANCES: [Resonance; 2] = [
     },
 ];
 
-/// Turns per orbit of the spin-orbit state named `name` in a preset's
-/// `[star] resonance`: `1:1` (locked, 1), `3:2` (1.5) or `2:1` (2).
-pub fn parse_resonance(name: &str) -> Option<f32> {
-    match name {
-        "1:1" => Some(1.0),
-        "3:2" => Some(RESONANCE_TURNS_PER_ORBIT),
-        "2:1" => Some(2.0),
-        _ => None,
-    }
-}
-
 /// A number in `[0, 1)` from `seed` and the `salt` of one draw
 /// (SplitMix64, Steele, Lea & Flood 2014, doi:10.1145/2714064.2660195).
 fn unit_draw(seed: u32, salt: u64) -> f32 {
@@ -470,20 +459,6 @@ mod tests {
         // Earth's is not.
         let star = StarInfo::new(SUN, 0.08, 0.0, crate::star::DEFAULT_AGE_GYR);
         assert!(!circularised(&star) && rocky_circularised(&star, 5.5, 1.76));
-    }
-
-    #[test]
-    fn a_preset_resonance_is_checked() {
-        let spec = |r: &str| crate::star::StarSpec {
-            resonance: Some(r.into()),
-            ..Default::default()
-        };
-        for ok in ["1:1", "3:2", "2:1"] {
-            assert!(spec(ok).validate().is_ok(), "{ok}");
-        }
-        let err = spec("5:2").validate().unwrap_err();
-        assert!(err.contains("star.resonance"), "{err}");
-        assert!(spec("").validate().is_err());
     }
 
     #[test]

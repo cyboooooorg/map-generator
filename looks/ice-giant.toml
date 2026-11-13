@@ -3,7 +3,6 @@
 
 [giant]                                # see `mapgen::giant_world`
 kind = "ice"
-mass = [10.0, 50.0]                    # Earth masses: Uranus 14.5, Neptune 17.1
 rings = [0.0, 0.7]                     # narrow, dark rings
 
 [atmosphere]

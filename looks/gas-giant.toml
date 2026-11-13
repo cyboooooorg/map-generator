@@ -3,7 +3,6 @@
 
 [giant]                                # see `mapgen::giant_world`
 kind = "gas"
-mass = [30.0, 1500.0]                  # Earth masses: Saturn 95, Jupiter 318
 rings = [0.25, 0.5]                    # odds of bright rings, of faint ones
 
 # A deep, hazy atmosphere.
