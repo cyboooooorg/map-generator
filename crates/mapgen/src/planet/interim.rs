@@ -25,6 +25,14 @@ const FREEZING_K: f64 = 273.0;
 /// is one; Earth, 0.02 %, is not).
 const FROZEN_MIN_WATER: f64 = 0.05;
 
+/// Least water kept at the surface of a cold, dry body that renders
+/// frozen, Earth oceans: its ice shows (a frozen sea in its basins) though
+/// its bulk is dry by mass. A little over twice Mars's water: its polar
+/// deposits and ground ice, about 34 m of global layer (Carr & Head 2015,
+/// doi:10.1002/2014GL062464), are about 0.004 oceans, and Mars renders
+/// barren. Calibration of the look, no other source.
+const FROZEN_MIN_OCEANS: f64 = 0.01;
+
 /// The built-in preset whose rules and remap render `model`, the first
 /// rule that holds:
 ///
@@ -35,8 +43,10 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 ///    barren or volcanic, caustic is closer to Venus and exists);
 /// 4. liquid hydrocarbons: `frozen`;
 /// 5. liquid water: `terran`;
-/// 6. no liquid, a mean temperature under 273 K and at least 5 % water:
-///    `frozen`;
+/// 6. no liquid, a mean temperature under 273 K and at least 5 % water,
+///    or at least 0.01 Earth oceans kept at the surface (its sea level is
+///    calibrated on that water, which the barren look would draw as
+///    rock): `frozen`;
 /// 7. otherwise `barren` (a body with no surface under a thin envelope
 ///    too: the model gives it no temperature at the surface).
 pub fn base_of(model: &PlanetModel) -> &'static str {
@@ -64,7 +74,8 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
         SurfaceLiquid::Hydrocarbons => "frozen",
         SurfaceLiquid::Water => "terran",
         _ if surface.climate.temperature_k < FREEZING_K
-            && model.inputs.water_fraction >= FROZEN_MIN_WATER =>
+            && (model.inputs.water_fraction >= FROZEN_MIN_WATER
+                || (!surface.water.runaway && surface.water.oceans >= FROZEN_MIN_OCEANS)) =>
         {
             "frozen"
         }
@@ -461,6 +472,19 @@ mod tests {
         for (name, base) in expect {
             assert_eq!(base_of(&model_of(name)), base, "{name}");
         }
+    }
+
+    #[test]
+    fn a_cold_rock_with_ice_renders_frozen() {
+        // Mars's model with 0.4 Earth oceans of water kept at its surface
+        // (a cold M-dwarf planet of the coherence check, mgs-65436-108 b),
+        // its bulk still dry by mass: its ice shows. A trace, as much as
+        // Mars keeps, leaves it barren.
+        let mut icy = model_of("Mars");
+        icy.surface.as_mut().unwrap().water.oceans = 0.4;
+        assert_eq!(base_of(&icy), "frozen");
+        icy.surface.as_mut().unwrap().water.oceans = 0.004;
+        assert_eq!(base_of(&icy), "barren");
     }
 
     #[test]

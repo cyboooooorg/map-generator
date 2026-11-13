@@ -233,10 +233,16 @@ archetypes):
   `gas-giant`, `hot-jupiter` or `ice-giant` (a mini-Neptune as an ice
   giant); a lava world or a heat-pipe regime as `volcanic`; a runaway
   greenhouse as `caustic`; liquid hydrocarbons as `frozen`; liquid water
-  as `terran`; no liquid, under 273 K and at least 5 % water as `frozen`;
-  otherwise `barren`. The thresholds are the ones of the classes, so the
-  look follows the class (Earth is `terran`, Venus `caustic`, Mars and
-  Mercury `barren`, Titan `frozen`).
+  as `terran`; no liquid, under 273 K and at least 5 % water, or at
+  least 0.01 Earth oceans kept at the surface, as `frozen`; otherwise
+  `barren`. The thresholds are the ones of the classes, so the look
+  follows the class (Earth is `terran`, Venus `caustic`, Mars and
+  Mercury `barren`, Titan `frozen`), except for a cold rock whose bulk is
+  dry but whose surface keeps water: its sea level is calibrated on that
+  water, which the barren look would draw as rock, so it renders
+  `frozen`, a frozen sea in its basins (the 0.01 oceans: a little over
+  twice Mars's 0.004, its polar deposits and ground ice of about 34 m of
+  global layer, Carr & Head 2015, doi:10.1002/2014GL062464).
 - The gravity and the tectonic regime are the model's, and the radius is
   the interior's. The relief parameters follow: volcanism from the heat
   flux (Earth's 0.087 W/m2 gives the preset's value), halved when
@@ -252,8 +258,9 @@ archetypes):
   parameters stored with the body keep the drawn values, and the
   calibrated ones are in the world's `world.json`.
 - Calibrations, no source: the share of water that makes a body frozen
-  (5 %), the hydrocarbon world's land share (Titan's 99 %), the erosion of
-  methane (half of water's).
+  (5 %) and the water at its surface that does (0.01 oceans), the
+  hydrocarbon world's land share (Titan's 99 %), the erosion of methane
+  (half of water's).
 
 ### Where it departs from the science
 
