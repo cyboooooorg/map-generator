@@ -42,6 +42,7 @@ use crate::giants::{
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
+use crate::planet::mass::{Origin, draw_mass};
 use crate::request::{RequestError, WorldRequest};
 use crate::star::{StarInfo, draw_eccentricity, parse_type};
 use crate::world::WorldParams;
@@ -424,10 +425,62 @@ pub fn band(body_type: &str, hz: (f64, f64), ice: f64) -> Option<((f64, f64), (f
     })
 }
 
-/// A planet being placed: its type, mass (Earth masses), orbit and
-/// eccentricity, and what it stays as.
+/// How a slot came to be: drawn from where it formed, with no type, or
+/// requested by type name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Placement {
+    Drawn(Origin),
+    Requested(String),
+}
+
+impl Placement {
+    /// Whether the slot holds a giant.
+    fn is_giant(&self) -> bool {
+        match self {
+            Placement::Drawn(origin) => origin.is_giant(),
+            Placement::Requested(name) => is_giant(name),
+        }
+    }
+
+    /// Whether the slot holds a hot Jupiter.
+    fn is_hot_jupiter(&self) -> bool {
+        match self {
+            Placement::Drawn(origin) => *origin == Origin::HotJupiter,
+            Placement::Requested(name) => name == "hot-jupiter",
+        }
+    }
+
+    /// The type string the rest of the draw still reads, for a slot at
+    /// `orbit_au` round a star of habitable zone `hz` and ice line `ice`.
+    // Interim until Task 2 of part 3a: the derived class replaces it.
+    fn type_name(&self, orbit_au: f64, hz: (f64, f64), ice: f64) -> String {
+        match self {
+            Placement::Requested(name) => name.clone(),
+            Placement::Drawn(Origin::GasGiant) => "gas-giant".to_string(),
+            Placement::Drawn(Origin::IceGiant) => "ice-giant".to_string(),
+            Placement::Drawn(Origin::HotJupiter) => "hot-jupiter".to_string(),
+            Placement::Drawn(Origin::Small) => if orbit_au < 0.5 * hz.0 {
+                "volcanic"
+            } else if orbit_au < hz.0 {
+                "caustic"
+            } else if orbit_au <= hz.1 {
+                "terran"
+            } else if orbit_au < ice {
+                "barren"
+            } else {
+                "frozen"
+            }
+            .to_string(),
+        }
+    }
+}
+
+/// A planet being placed: where it came from, mass (Earth masses), orbit
+/// and eccentricity, and what it stays as.
 #[derive(Clone, Debug)]
 struct Slot {
+    placement: Placement,
+    /// Interim until Task 2 of part 3a: see [`Placement::type_name`].
     body_type: String,
     mass_earth: f64,
     orbit_au: f64,
@@ -451,14 +504,14 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
         * (inner.orbit_au + outer.orbit_au);
     let gap =
         outer.orbit_au * (1.0 - outer.eccentricity) - inner.orbit_au * (1.0 + inner.eccentricity);
-    let hot = inner.body_type == "hot-jupiter" || outer.body_type == "hot-jupiter";
+    let hot = inner.placement.is_hot_jupiter() || outer.placement.is_hot_jupiter();
     let share = 0.5 * (inner.mass_earth + outer.mass_earth) / (star_mass * sun);
     gap >= hill_spacing(share) * hill
         && (!hot || outer.orbit_au / inner.orbit_au >= 4f64.powf(2.0 / 3.0))
 }
 
-/// A typical mass for a planet type, Earth masses, drawn.
-fn draw_mass(body_type: &str, rng: &mut impl RngExt) -> f64 {
+/// A typical mass for a requested planet type, Earth masses, drawn.
+fn requested_mass(body_type: &str, rng: &mut impl RngExt) -> f64 {
     let log_uniform = |lo: f64, hi: f64, rng: &mut dyn rand::Rng| {
         (lo.ln() + rand::RngExt::random::<f64>(rng) * (hi / lo).ln()).exp()
     };
@@ -486,13 +539,9 @@ fn is_giant(body_type: &str) -> bool {
 /// A hot Jupiter for a drawn system, or none: as often as round a world
 /// ([`HOT_JUPITERS`], about 1 % of Sun-like stars, Wright et al. 2012;
 /// times `10^(2 [Fe/H])` and the star's mass, like the other gas giants),
-/// on an orbit of 1 to 10 days, log-uniform, within the type's 0.1 AU.
-/// The spacing then keeps other planets beyond four times its period.
-fn drawn_hot_jupiter(
-    star: &StarInfo,
-    metallicity: f64,
-    rng: &mut impl RngExt,
-) -> Option<(String, f64)> {
+/// on an orbit of 1 to 10 days, log-uniform, within 0.1 AU. The spacing
+/// then keeps other planets beyond four times its period.
+fn drawn_hot_jupiter(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Option<f64> {
     let mass = f64::from(star.mass);
     let odds =
         (HOT_JUPITERS * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5)).min(0.2);
@@ -500,19 +549,19 @@ fn drawn_hot_jupiter(
     hot.then(|| {
         let (lo, hi) = HOT_PERIOD_DAYS;
         let days = (lo.ln() + u * (hi / lo).ln()).exp();
-        let a = (mass * (days / 365.25).powi(2))
+        (mass * (days / 365.25).powi(2))
             .cbrt()
-            .clamp(INNER_EDGE_AU, 0.1);
-        ("hot-jupiter".to_string(), a)
+            .clamp(INNER_EDGE_AU, 0.1)
     })
 }
 
-/// The planets drawn when a request leaves them to the draw: small planets
-/// from the Kepler counts (about 1.5 within 1 AU of a Sun-like star, 2.5 of
-/// an M dwarf; Mulders et al. 2018), a few colder ones beyond, the giants
-/// as [`GiantSystem`] draws them; their types from where they fall. Hot
-/// Jupiters come from [`drawn_hot_jupiter`].
-fn drawn_types(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<(String, f64)> {
+/// The slots drawn when a request leaves the planets to the draw, each an
+/// [`Origin`] and an orbit in AU, none a type: small planets from the
+/// Kepler counts (about 1.5 within 1 AU of a Sun-like star, 2.5 of an M
+/// dwarf; Mulders et al. 2018) on periods log-uniform from 1 to 400 days,
+/// a few colder ones beyond, the giants as [`GiantSystem`] draws them, and
+/// last a hot Jupiter ([`drawn_hot_jupiter`]).
+fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<(Origin, f64)> {
     let mass = f64::from(star.mass);
     let inner_mean = if mass < 0.6 {
         2.5
@@ -524,51 +573,29 @@ fn drawn_types(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<
     let outer_mean = 1.0;
     let gas_mean = 0.25 * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5);
     let ice_mean = 0.3 * 10f64.powf(0.5 * metallicity) * mass.clamp(0.1, 2.5).sqrt();
-    let hz = (f64::from(star.hz_inner_au), f64::from(star.hz_outer_au));
+    let hz_outer = f64::from(star.hz_outer_au);
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let mut out = Vec::new();
-    // Inner small planets: periods log-uniform from 1 to 400 days.
     for _ in 0..poisson(inner_mean, rng) {
         let days = (1f64.ln() + rng.random::<f64>() * 400f64.ln()).exp();
         let a = (mass * (days / 365.25).powi(2)).cbrt().max(INNER_EDGE_AU);
-        let body_type = if a < 0.5 * hz.0 {
-            if rng.random::<f64>() < 0.3 {
-                "volcanic"
-            } else {
-                "barren"
-            }
-        } else if a < hz.0 {
-            if rng.random::<f64>() < 0.5 {
-                "caustic"
-            } else {
-                "barren"
-            }
-        } else if a <= hz.1 {
-            "terran"
-        } else if a < ice {
-            "barren"
-        } else {
-            "frozen"
-        };
-        out.push((body_type.to_string(), a));
+        out.push((Origin::Small, a));
     }
-    // Colder rocky planets, between the habitable zone and the outer giants.
+    // Colder small planets, between the habitable zone and the outer giants.
     for _ in 0..poisson(outer_mean, rng) {
-        let a = hz.1 * (1.0 + rng.random::<f64>() * 8.0);
-        let body_type = if a < ice { "barren" } else { "frozen" };
-        out.push((body_type.to_string(), a));
+        out.push((Origin::Small, hz_outer * (1.0 + rng.random::<f64>() * 8.0)));
     }
     for _ in 0..poisson(gas_mean, rng) {
-        out.push((
-            "gas-giant".to_string(),
-            ice * 10f64.powf(0.3 + 0.4 * normal(rng)),
-        ));
+        out.push((Origin::GasGiant, ice * 10f64.powf(0.3 + 0.4 * normal(rng))));
     }
     for _ in 0..poisson(ice_mean, rng) {
-        out.push((
-            "ice-giant".to_string(),
-            ice * 10f64.powf(0.7 + 0.3 * normal(rng)),
-        ));
+        out.push((Origin::IceGiant, ice * 10f64.powf(0.7 + 0.3 * normal(rng))));
+    }
+    // Drawn last, so that the other planets' draws stay as they were.
+    out.extend(drawn_hot_jupiter(star, metallicity, rng).map(|a| (Origin::HotJupiter, a)));
+    // A giant's log-normal orbit can fall outside the system.
+    for (_, orbit) in &mut out {
+        *orbit = orbit.clamp(INNER_EDGE_AU, OUTER_EDGE_AU);
     }
     out
 }
@@ -632,7 +659,7 @@ fn space(slots: &mut Vec<Slot>, star_mass: f64, hz: (f64, f64), ice: f64) -> Res
 fn in_zone(slot: &Slot, zone: Option<(f64, f64)>) -> bool {
     zone.is_some_and(|(lo, hi)| {
         !slot.fixed
-            && !is_giant(&slot.body_type)
+            && !slot.placement.is_giant()
             && slot.orbit_au * (1.0 + slot.eccentricity) > lo
             && slot.orbit_au * (1.0 - slot.eccentricity) < hi
     })
@@ -679,8 +706,9 @@ fn fits(body_type: &str, star_mass: f64, hz: (f64, f64), ice: f64) -> u32 {
         return 0;
     };
     let mut rng = StdRng::seed_from_u64(0);
-    let mass = draw_mass(body_type, &mut rng);
+    let mass = requested_mass(body_type, &mut rng);
     let mut last = Slot {
+        placement: Placement::Requested(body_type.to_string()),
         body_type: body_type.to_string(),
         mass_earth: mass,
         orbit_au: min.max(INNER_EDGE_AU),
@@ -730,7 +758,7 @@ fn draw_whole(
     // The preferred band of each planet asked, to draw its distance again
     // when a try fails.
     let mut preferred: Vec<(String, f64, f64)> = Vec::new();
-    let asked: Vec<(String, f64)> = match &whole.planets {
+    let asked: Vec<(Placement, f64)> = match &whole.planets {
         Some(planets) => {
             let total: u32 = planets.values().sum();
             if total as usize > MAX_PLANETS {
@@ -762,18 +790,19 @@ fn draw_whole(
                 }
                 let (lo, hi) = (lo.max(min).max(INNER_EDGE_AU), hi.min(max));
                 for _ in 0..count {
-                    list.push((body_type.clone(), log_between(lo, hi, &mut rng)));
+                    list.push((
+                        Placement::Requested(body_type.clone()),
+                        log_between(lo, hi, &mut rng),
+                    ));
                     preferred.push((body_type.clone(), lo, hi));
                 }
             }
             list
         }
-        None => {
-            let mut list = drawn_types(&star, f64::from(metallicity), &mut rng);
-            // Drawn last, so that the other planets' draws stay as they were.
-            list.extend(drawn_hot_jupiter(&star, f64::from(metallicity), &mut rng));
-            list
-        }
+        None => drawn_slots(&star, f64::from(metallicity), &mut rng)
+            .into_iter()
+            .map(|(origin, a)| (Placement::Drawn(origin), a))
+            .collect(),
     };
     let packed = asked.len() >= 4;
     let mut last_error = None;
@@ -785,18 +814,23 @@ fn draw_whole(
         if attempt > 0 && !preferred.is_empty() {
             asked = preferred
                 .iter()
-                .map(|(t, lo, hi)| (t.clone(), log_between(*lo, *hi, &mut rng)))
+                .map(|(t, lo, hi)| {
+                    (
+                        Placement::Requested(t.clone()),
+                        log_between(*lo, *hi, &mut rng),
+                    )
+                })
                 .collect();
         }
         let mut slots: Vec<Slot> = asked
             .iter()
-            .map(|(body_type, a)| Slot {
-                body_type: body_type.clone(),
-                mass_earth: draw_mass(body_type, &mut rng),
+            .map(|(placement, a)| Slot {
+                body_type: placement.type_name(*a, hz, ice),
+                mass_earth: slot_mass(placement, &mut rng),
                 orbit_au: *a * (1.0 + 0.2 * (rng.random::<f64>() - 0.5)),
-                eccentricity: if body_type == "hot-jupiter" {
+                eccentricity: if placement.is_hot_jupiter() {
                     0.0
-                } else if is_giant(body_type) {
+                } else if placement.is_giant() {
                     // Packed systems are calmer (He et al. 2020).
                     f64::from(draw_eccentricity(&mut rng)) * if packed { 0.4 } else { 1.0 }
                 } else {
@@ -805,6 +839,7 @@ fn draw_whole(
                     f64::from(crate::star::draw_small_eccentricity(true, &mut rng))
                 },
                 fixed: false,
+                placement: placement.clone(),
             })
             .collect();
         match space(&mut slots, star_mass, hz, ice) {
@@ -834,20 +869,24 @@ fn draw_whole(
         // A drawn system that does not fit is drawn again without the
         // planet that failed, until it fits.
         let mut kept = asked;
-        while let Some(i) = kept.iter().rposition(|(t, _)| *t == body_type) {
+        while let Some(i) = kept
+            .iter()
+            .rposition(|(p, a)| p.type_name(*a, hz, ice) == body_type)
+        {
             kept.remove(i);
             let mut slots: Vec<Slot> = kept
                 .iter()
-                .map(|(t, a)| {
-                    let mass_earth = draw_mass(t, &mut rng);
+                .map(|(p, a)| {
+                    let mass_earth = slot_mass(p, &mut rng);
                     // Drawn for every planet, so the others' draws stay put;
                     // a hot Jupiter's orbit is circular.
                     let e = f64::from(draw_eccentricity(&mut rng)) * 0.4;
                     Slot {
-                        body_type: t.clone(),
+                        body_type: p.type_name(*a, hz, ice),
+                        placement: p.clone(),
                         mass_earth,
                         orbit_au: *a,
-                        eccentricity: if t == "hot-jupiter" { 0.0 } else { e },
+                        eccentricity: if p.is_hot_jupiter() { 0.0 } else { e },
                         fixed: false,
                     }
                 })
@@ -891,6 +930,15 @@ fn draw_whole(
     })
 }
 
+/// The mass of a slot, Earth masses: from its origin when drawn, from its
+/// type when requested.
+fn slot_mass(placement: &Placement, rng: &mut impl RngExt) -> f64 {
+    match placement {
+        Placement::Drawn(origin) => draw_mass(*origin, rng),
+        Placement::Requested(name) => requested_mass(name, rng),
+    }
+}
+
 /// A log-uniform draw between `lo` and `hi`.
 fn log_between(lo: f64, hi: f64, rng: &mut impl RngExt) -> f64 {
     if hi <= lo {
@@ -918,12 +966,14 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
     // A lone planet: no giant and no rocky neighbour.
     let alone = request.is_alone();
     // The planet asked, or the giant it orbits, on its orbit.
+    let focus_type = match &host {
+        Some(h) if h.giant.kind == GiantKind::Ice => "ice-giant".to_string(),
+        Some(_) => "gas-giant".to_string(),
+        None => params.planet.name.clone(),
+    };
     let focus_slot = Slot {
-        body_type: match &host {
-            Some(h) if h.giant.kind == GiantKind::Ice => "ice-giant".to_string(),
-            Some(_) => "gas-giant".to_string(),
-            None => params.planet.name.clone(),
-        },
+        placement: Placement::Requested(focus_type.clone()),
+        body_type: focus_type,
         mass_earth: match (&host, params.giant_mass_earth) {
             (Some(h), _) => f64::from(h.giant.mass_earth),
             // A giant asked for: its own mass, not a rocky planet's of its size.
@@ -942,14 +992,16 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
         && let Some(giants) = GiantSystem::draw(&params)
     {
         for g in giants.giants {
+            let giant_type = if g.hot {
+                "hot-jupiter".to_string()
+            } else if g.kind == GiantKind::Ice {
+                "ice-giant".to_string()
+            } else {
+                "gas-giant".to_string()
+            };
             slots.push(Slot {
-                body_type: if g.hot {
-                    "hot-jupiter".to_string()
-                } else if g.kind == GiantKind::Ice {
-                    "ice-giant".to_string()
-                } else {
-                    "gas-giant".to_string()
-                },
+                placement: Placement::Requested(giant_type.clone()),
+                body_type: giant_type,
                 mass_earth: f64::from(g.mass_earth),
                 orbit_au: f64::from(g.orbit_au),
                 eccentricity: f64::from(g.eccentricity),
@@ -961,13 +1013,15 @@ fn draw_around(request: &SystemRequest, params: WorldParams) -> System {
     let mut rocky = if alone {
         Vec::new()
     } else {
-        drawn_types(&star, f64::from(params.metallicity), &mut rng)
+        drawn_slots(&star, f64::from(params.metallicity), &mut rng)
     };
-    rocky.retain(|(t, _)| !is_giant(t));
-    for (body_type, a) in rocky {
+    rocky.retain(|(origin, _)| *origin == Origin::Small);
+    for (origin, a) in rocky {
+        let placement = Placement::Drawn(origin);
         let mut slot = Slot {
-            mass_earth: draw_mass(&body_type, &mut rng),
-            body_type,
+            mass_earth: draw_mass(origin, &mut rng),
+            body_type: placement.type_name(a, hz, ice),
+            placement,
             orbit_au: a,
             eccentricity: f64::from(draw_eccentricity(&mut rng)) * 0.4,
             fixed: false,
@@ -2153,9 +2207,26 @@ mod tests {
     use crate::rings::RingRole;
 
     #[test]
+    fn drawn_slots_name_no_type() {
+        // Seeds 1..=200 round a G2V: every slot is an origin and an orbit
+        // inside the system's edges; hot Jupiters only within 0.1 AU.
+        for seed in 1..=200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let star = StarInfo::new(parse_type("G2V").unwrap(), 1.0, 0.0, 4.6);
+            for (origin, a) in drawn_slots(&star, 0.0, &mut rng) {
+                assert!((INNER_EDGE_AU..=OUTER_EDGE_AU).contains(&a), "{a}");
+                if origin == Origin::HotJupiter {
+                    assert!(a <= 0.1, "{a}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn the_solar_system_planets_are_spaced_far_enough() {
         // (type, Earth masses, AU, eccentricity), NASA fact sheets.
         let slot = |body_type: &str, mass_earth: f64, orbit_au: f64, eccentricity: f64| Slot {
+            placement: Placement::Requested(body_type.into()),
             body_type: body_type.into(),
             mass_earth,
             orbit_au,
@@ -2324,6 +2395,7 @@ mod tests {
             });
             for pair in planets.windows(2) {
                 let slot = |b: &Body| Slot {
+                    placement: Placement::Requested(b.body_type.clone()),
                     body_type: b.body_type.clone(),
                     mass_earth: b.physical.mass_earth,
                     orbit_au: b.orbit.semi_major_axis_au,

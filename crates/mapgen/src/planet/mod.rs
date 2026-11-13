@@ -48,6 +48,7 @@ pub mod heat;
 pub mod inputs;
 pub mod interior;
 pub mod life;
+pub mod mass;
 pub mod reference;
 pub mod regime;
 pub mod xuv;
@@ -64,6 +65,7 @@ pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_p
 pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use life::{Life, life, oxygenate};
+pub use mass::{Origin, SMALL_MASS, draw_mass};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
 pub use regime::{HEAT_PIPE_FLUX_W_M2, OCEAN_KG, Water, regime, steam, water};
 pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
