@@ -351,37 +351,14 @@ fn carve_line(
 mod tests {
     use super::*;
     use crate::generation::{GenerateOptions, generate_with_progress};
-    use crate::request::WorldRequest;
 
     fn world() -> crate::world::World {
-        let request = WorldRequest {
-            age_gyr: None,
-            planet: Some("terran".into()),
-            seed: Some(3),
-            sea_level: Some(0.2),
-            land_fraction: None,
-            pressure_bar: Some(1.0),
-            surface_age_ga: Some(0.4),
-            volcanic: Some(0.3),
-            circumference_km: Some(40_000.0),
-            axial_tilt_deg: Some(23.44),
-            erosion: Some(1.0),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            hz_position: None,
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            drift_ma: None,
-            moons: None,
-            metallicity: None,
-            giants: None,
-            mass_earth: None,
-            host: None,
-            alone: None,
-            width: Some(480),
-            height: Some(240),
+        let params = crate::world::WorldParams {
+            sea_level: 0.2,
+            volcanic_intensity: 0.3,
+            circumference_km: 40_000.0,
+            ..crate::generation::tests::preset_params("terran", 3, 480, 240)
         };
-        let params = request.resolve(&mut rand::rng()).unwrap().params;
         generate_with_progress(&params, GenerateOptions::default(), |_| {}).world
     }
 

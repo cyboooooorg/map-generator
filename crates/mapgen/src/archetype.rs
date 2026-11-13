@@ -256,6 +256,24 @@ pub struct ArchetypeOrbit {
     pub axial_tilt: Option<ParamDefault>,
 }
 
+impl ArchetypeOrbit {
+    /// Semi-major axis of the orbit, AU, round a star of `luminosity` (L☉)
+    /// and `star_mass` (M☉): `a = sqrt(L / S)` for the insolation `S`
+    /// (Earth's = 1), or Kepler's third law `a = (M P²)^⅓` (`P` in years)
+    /// for the period; each range drawn from `rng`. `None` when the
+    /// archetype sets neither.
+    pub fn orbit_au(&self, luminosity: f64, star_mass: f64, rng: &mut impl RngExt) -> Option<f64> {
+        match (self.insolation, self.period_days) {
+            (Some(s), _) => Some((luminosity / f64::from(s.pick(rng))).sqrt()),
+            (None, Some(p)) => {
+                let years = f64::from(p.pick(rng)) / 365.25;
+                Some((star_mass * years * years).cbrt())
+            }
+            (None, None) => None,
+        }
+    }
+}
+
 /// A named set of model inputs. See the module documentation for the file
 /// format.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -424,14 +442,10 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(u64::from(seed));
         let v = crate::star::values(SUN);
         let mass_earth = a.mass(&mut rng);
-        let orbit_au = match (a.orbit.insolation, a.orbit.period_days) {
-            (Some(s), _) => (v.luminosity / s.pick(&mut rng)).sqrt(),
-            (None, Some(p)) => {
-                let years = p.pick(&mut rng) / 365.25;
-                (v.mass * years * years).cbrt()
-            }
-            (None, None) => panic!("{} has no orbit", a.name),
-        };
+        let orbit_au = a
+            .orbit
+            .orbit_au(f64::from(v.luminosity), f64::from(v.mass), &mut rng)
+            .unwrap_or_else(|| panic!("{} has no orbit", a.name)) as f32;
         let eccentricity = a.orbit.eccentricity.map_or(0.0, |e| e.pick(&mut rng));
         let star = StarInfo::new(SUN, orbit_au, eccentricity, AGE_GYR);
         let ice_line_au = 2.7 * star.luminosity.sqrt();

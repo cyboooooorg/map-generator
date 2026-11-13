@@ -222,10 +222,13 @@ mod tests {
         assert_eq!(world("terran", earth, 1.0, 0.72), Regime::Plates);
         // A stagnant preset never gains plates.
         assert_eq!(world("barren", earth, 1.0, 1.0), Regime::Stagnant);
-        // Requests apply it to the preset of the world.
+        // A world of the planet model carries its model's regime: Mars's
+        // is a stagnant lid.
         let small = crate::request::WorldRequest {
-            planet: Some("terran".into()),
-            circumference_km: Some(21_000.0),
+            planet: Some("mars-like".into()),
+            seed: Some(1),
+            width: Some(64),
+            height: Some(32),
             ..Default::default()
         };
         let params = small.resolve(&mut rand::rng()).unwrap().params;

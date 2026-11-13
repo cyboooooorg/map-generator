@@ -1997,23 +1997,25 @@ pub(crate) mod tests {
         for name in ["Earth", "Mars", "Venus"] {
             let body = reference(name);
             let model = crate::planet::planet_model(&sun_at(body.orbit_au), model_inputs(body));
-            let request = crate::request::WorldRequest {
-                seed: Some(1),
-                star: Some("G2V".into()),
-                age_gyr: Some(4.6),
-                orbit_au: Some(body.orbit_au as f32),
-                eccentricity: Some(0.0),
-                metallicity: Some(0.0),
-                moons: Some(crate::moons::MoonsMode::Auto),
-                giants: Some(crate::giants::GiantsMode::None),
-                host: Some(crate::exomoon::HostMode::None),
-                width: Some(128),
-                height: Some(64),
-                ..crate::request::WorldRequest::default()
+            let placed = crate::request::Placed {
+                seed: 1,
+                star: crate::star::SUN,
+                age_gyr: 4.6,
+                orbit_au: body.orbit_au as f32,
+                eccentricity: 0.0,
+                metallicity: 0.0,
+                axial_tilt_deg: None,
+                perihelion_longitude_deg: None,
+                drift_ma: 0.0,
+                width: 128,
+                height: 64,
+                moons: crate::moons::MoonsMode::Auto,
+                giants: crate::giants::GiantsMode::None,
+                host: crate::exomoon::HostMode::None,
             };
             let mut params = crate::planet::interim::params_for(
                 &model,
-                request,
+                &placed,
                 &mut rand::rngs::StdRng::seed_from_u64(1),
             );
             crate::planet::interim::calibrate(&mut params, &model);
@@ -2082,28 +2084,81 @@ pub(crate) mod tests {
         }
     }
 
+    /// The parameters a preset (a built-in name or a preset file) gives a
+    /// world without the planet model, as tests pin them: [`params`] at
+    /// `width` × `height`, with the preset's star and orbit (`[star]`,
+    /// its resonance included) and defaults (each range drawn from
+    /// `seed`), its land share turned into a sea level, no erosion without
+    /// air unless the preset sets one, and its regime decided from them.
+    /// What resolving a request gave before the planet model (part 3b of
+    /// #423), without the moons' effects on the tilt and the shores.
+    pub fn preset_params(planet: &str, seed: u32, width: u32, height: u32) -> WorldParams {
+        use rand::SeedableRng;
+        let mut p = params(seed, planet);
+        (p.width, p.height) = (width, height);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(seed));
+        let d = p.planet.defaults.clone();
+        let mut pick =
+            |v: Option<crate::preset::ParamDefault>, fb: f32| v.map_or(fb, |v| v.pick(&mut rng));
+        p.sea_level = pick(d.sea_level, p.sea_level);
+        p.volcanic_intensity = pick(d.volcanic, p.volcanic_intensity);
+        p.circumference_km = pick(d.circumference, p.circumference_km);
+        p.axial_tilt_deg = pick(d.axial_tilt, p.axial_tilt_deg);
+        p.erosion = pick(d.erosion, p.erosion);
+        p.pressure_bar = pick(d.pressure, p.pressure_bar);
+        p.surface_age_ga = pick(d.surface_age, p.surface_age_ga);
+        let land = d.land_fraction.map(|f| pick(Some(f), 0.0));
+        let star = p.planet.star.clone();
+        if let Some(kind) = &star.kind {
+            p.star = crate::star::parse_type(kind).unwrap();
+        }
+        if let Some(au) = star.orbit_au {
+            p.orbit_au = au;
+        }
+        if let Some(e) = star.eccentricity {
+            p.eccentricity = pick(Some(e), 0.0);
+        }
+        if let Some(m) = star.metallicity {
+            p.metallicity = m;
+        }
+        if let Some(turns) = star
+            .resonance
+            .as_deref()
+            .and_then(crate::spin::parse_resonance)
+        {
+            p.locked_to_star = Some(turns == 1.0);
+            p.resonance_to_star = Some(if turns == 1.0 { 0.0 } else { turns });
+        }
+        if d.erosion.is_none() && p.pressure_bar < crate::atmosphere::LIQUID_WATER_BAR {
+            p.erosion = 0.0;
+        }
+        if let Some(fraction) = land {
+            p.sea_level = sea_level_for_land_fraction(&p, fraction);
+        }
+        p.planet.geology.regime = crate::geology::regime_of(&p);
+        p
+    }
+
     /// An example world resolved at a small size.
     fn example_world(planet: &str, star: Option<&str>, orbit_au: Option<f32>) -> WorldParams {
-        let request = crate::request::WorldRequest {
-            planet: Some(format!(
-                "{}/../../presets/examples/{planet}.toml",
-                env!("CARGO_MANIFEST_DIR")
-            )),
-            seed: Some(1),
-            star: star.map(str::to_string),
-            orbit_au,
-            eccentricity: orbit_au.map(|_| 0.1),
-            width: Some(192),
-            height: Some(96),
-            moons: Some(crate::moons::MoonsMode::None),
-            giants: Some(crate::giants::GiantsMode::None),
-            host: Some(crate::exomoon::HostMode::None),
-            ..Default::default()
-        };
-        // A seeded generator, so that the draws the seed leaves open are
-        // the same on every run.
-        let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1);
-        request.resolve(&mut rng).unwrap().params
+        let path = format!(
+            "{}/../../presets/examples/{planet}.toml",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let mut p = preset_params(&path, 1, 192, 96);
+        if let Some(star) = star {
+            p.star = crate::star::parse_type(star).unwrap();
+        }
+        if let Some(au) = orbit_au {
+            p.orbit_au = au;
+            p.eccentricity = 0.1;
+            // Its preset's spin holds at its own orbit only.
+            p.locked_to_star = None;
+            p.resonance_to_star = None;
+        }
+        p.moons = crate::moons::MoonsMode::None;
+        p.planet.geology.regime = crate::geology::regime_of(&p);
+        p
     }
 
     #[test]
@@ -2290,15 +2345,7 @@ pub(crate) mod tests {
             "/../../presets/examples/earth-like.toml"
         );
         for seed in [1u32, 2, 3] {
-            let request = crate::request::WorldRequest {
-                planet: Some(earth.into()),
-                seed: Some(seed),
-                width: Some(256),
-                height: Some(128),
-                ..Default::default()
-            };
-            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
-            let p = request.resolve(&mut rng).unwrap().params;
+            let p = preset_params(earth, seed, 256, 128);
             let (land, sea) = hypsometry(&generate(&p).world);
             // The land the preset asks for (0.29).
             let area = |v: &[(f32, f32)]| v.iter().map(|x| x.1).sum::<f32>();
@@ -2329,15 +2376,7 @@ pub(crate) mod tests {
         // Mean rain of the 0-10° belt and of the 20-35° belts, mm.
         let mut belt = [(0.0f64, 0.0f64); 2];
         for seed in [1u32, 2, 3, 4] {
-            let request = crate::request::WorldRequest {
-                planet: Some(earth.into()),
-                seed: Some(seed),
-                width: Some(512),
-                height: Some(256),
-                ..Default::default()
-            };
-            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed));
-            let p = request.resolve(&mut rng).unwrap().params;
+            let p = preset_params(earth, seed, 512, 256);
             let w = generate(&p).world;
             let grid = p.grid();
             for i in 0..w.biomes.len() {

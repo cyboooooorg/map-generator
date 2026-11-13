@@ -800,27 +800,15 @@ impl Stamp {
 mod tests {
     use super::*;
     use crate::generation::generate;
-    use crate::request::WorldRequest;
 
     fn detail_world() -> DetailWorld {
-        let request = WorldRequest {
-            planet: Some("terran".into()),
-            seed: Some(3),
-            sea_level: Some(0.2),
-            volcanic: Some(0.3),
-            circumference_km: Some(40_000.0),
-            axial_tilt_deg: Some(23.44),
-            pressure_bar: Some(1.0),
-            surface_age_ga: Some(0.4),
-            width: Some(512),
-            height: Some(256),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
+        let params = crate::world::WorldParams {
+            sea_level: 0.2,
+            volcanic_intensity: 0.3,
+            circumference_km: 40_000.0,
+            ..crate::generation::tests::preset_params("terran", 3, 512, 256)
         };
-        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        let world = generate(&params).world;
         DetailWorld::new(LoadedWorld::from_world(&world))
     }
 
@@ -830,20 +818,17 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/../../presets/examples/mercury-like.toml"
         );
-        let request = WorldRequest {
-            planet: Some(planet.into()),
-            seed: Some(5),
-            sea_level: Some(0.15),
-            surface_age_ga: Some(4.0),
-            width: Some(512),
-            height: Some(256),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
+        let params = crate::world::WorldParams {
+            sea_level: 0.15,
+            surface_age_ga: 4.0,
+            orbit_au: 1.0,
+            eccentricity: 0.0,
+            // Its preset's spin holds at its own orbit only.
+            locked_to_star: None,
+            resonance_to_star: None,
+            ..crate::generation::tests::preset_params(planet, 5, 512, 256)
         };
-        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        let world = generate(&params).world;
         DetailWorld::new(LoadedWorld::from_world(&world))
     }
 

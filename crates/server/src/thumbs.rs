@@ -176,7 +176,7 @@ mod tests {
     async fn makes_the_thumbnail_of_an_old_world_like_the_export() {
         let dir = temp_dir("old");
         let request = WorldRequest {
-            planet: Some("terran".into()),
+            planet: Some("earth-like".into()),
             seed: Some(3),
             width: Some(1200),
             height: Some(600),

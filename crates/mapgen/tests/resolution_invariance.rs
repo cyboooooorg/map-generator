@@ -3,7 +3,6 @@
 
 use mapgen::biome::Biome;
 use mapgen::generation::generate;
-use mapgen::preset::Preset;
 use mapgen::request::WorldRequest;
 use mapgen::world::{World, WorldParams};
 use rand::SeedableRng;
@@ -15,17 +14,14 @@ const MAX_BIOME_SHARE_DELTA: f64 = 0.02;
 
 fn params(seed: u32) -> WorldParams {
     let request = WorldRequest {
+        planet: Some("earth-like".into()),
         seed: Some(seed),
         width: Some(1024),
         height: Some(512),
         ..Default::default()
     };
     request
-        .resolve_with_preset(
-            Preset::load("terran").unwrap(),
-            "terran".to_string(),
-            &mut StdRng::seed_from_u64(u64::from(seed)),
-        )
+        .resolve(&mut StdRng::seed_from_u64(u64::from(seed)))
         .unwrap()
         .params
 }

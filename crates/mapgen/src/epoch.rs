@@ -111,21 +111,16 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
 mod tests {
     use super::*;
     use crate::generation::generate;
-    use crate::request::WorldRequest;
     use crate::world::World;
 
     fn world(planet: &str) -> World {
         let planet = format!("{}/../../presets/{planet}", env!("CARGO_MANIFEST_DIR"));
-        let request = WorldRequest {
-            planet: Some(planet),
-            seed: Some(4),
-            sea_level: Some(0.15),
-            surface_age_ga: Some(4.0),
-            width: Some(512),
-            height: Some(256),
-            ..Default::default()
+        let params = crate::world::WorldParams {
+            sea_level: 0.15,
+            surface_age_ga: 4.0,
+            ..crate::generation::tests::preset_params(&planet, 4, 512, 256)
         };
-        generate(&request.resolve(&mut rand::rng()).unwrap().params).world
+        generate(&params).world
     }
 
     #[test]

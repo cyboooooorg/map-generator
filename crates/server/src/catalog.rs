@@ -55,14 +55,6 @@ impl Catalog {
     pub fn list(&self) -> Vec<PresetInfo> {
         self.entries.iter().map(|(info, _)| info.clone()).collect()
     }
-
-    /// The preset of a catalog spec.
-    pub fn resolve(&self, spec: &str) -> Option<Preset> {
-        self.entries
-            .iter()
-            .find(|(info, _)| info.spec == spec)
-            .map(|(_, preset)| preset.clone())
-    }
 }
 
 fn info(p: &Preset, spec: &str, built_in: bool) -> PresetInfo {

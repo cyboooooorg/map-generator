@@ -343,19 +343,7 @@ mod tests {
     fn resamples_a_generated_world() {
         use crate::export::{ExportOptions, export_world};
         use crate::generation::generate;
-        use crate::request::WorldRequest;
-        let request = WorldRequest {
-            planet: Some("terran".into()),
-            seed: Some(5),
-            width: Some(256),
-            height: Some(128),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
-        };
-        let params = request.resolve(&mut rand::rng()).unwrap().params;
+        let params = crate::generation::tests::preset_params("terran", 5, 256, 128);
         let dir = std::env::temp_dir().join(format!("mapgen-hex-{}", std::process::id()));
         export_world(generate(&params), &dir, ExportOptions::default()).unwrap();
 
@@ -373,21 +361,12 @@ mod tests {
     #[test]
     fn remapped_rivers_never_win_a_hex() {
         use crate::generation::generate;
-        use crate::request::WorldRequest;
         // Caustic worlds store their rivers as AcidRiver.
-        let request = WorldRequest {
-            planet: Some("caustic".into()),
-            seed: Some(4),
-            sea_level: Some(0.1),
-            width: Some(512),
-            height: Some(256),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
+        let params = crate::world::WorldParams {
+            sea_level: 0.1,
+            ..crate::generation::tests::preset_params("caustic", 4, 512, 256)
         };
-        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        let world = generate(&params).world;
         assert!(world.biomes.contains(&Biome::AcidRiver), "no river to test");
         let world = LoadedWorld::from_world(&world);
         let coverage = rivers::coverage(

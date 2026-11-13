@@ -166,8 +166,6 @@ pub enum ErrorDetail {
         min: u32,
         max: u32,
     },
-    /// Both `sea_level` and `land_fraction` are set.
-    SeaLevelAndLandFraction,
     /// No preset of that name or file.
     UnknownPreset { preset: String },
     /// The map has more pixels than this server accepts.
@@ -235,14 +233,19 @@ impl ErrorDetail {
                 min: MAP_SIZE.0,
                 max: MAP_SIZE.1,
             }),
-            RequestError::SeaLevelAndLandFraction => Some(Self::SeaLevelAndLandFraction),
             RequestError::BadStar(e) => Some(Self::UnknownStar { star: e.clone() }),
             RequestError::OrbitAndPosition => Some(Self::OrbitAndPosition),
             RequestError::NoRoomForMoons { count } => Some(Self::NoRoomForMoons { count: *count }),
             RequestError::MoonsOfAMoon => Some(Self::MoonsOfAMoon),
             RequestError::HotGiantMoons { count } => Some(Self::HotGiantMoons { count: *count }),
-            // The text names the age and the star's life; no structured detail.
-            RequestError::Preset(_) | RequestError::BadAge { .. } => None,
+            RequestError::UnknownArchetype(name) => Some(Self::UnknownPreset {
+                preset: name.clone(),
+            }),
+            // The text names the file, the age and the star's life, or the
+            // water and the mass; no structured detail.
+            RequestError::BadArchetype(_)
+            | RequestError::BadAge { .. }
+            | RequestError::WaterHeavierThanPlanet { .. } => None,
             RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
                 asked: *asked,
                 max: *max,

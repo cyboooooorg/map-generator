@@ -884,29 +884,35 @@ mod tests {
     #[test]
     fn moons_are_generated_as_bodies_of_their_own() {
         use crate::export::raw_data::{WorldMetadata, read_metadata};
-        // A Pluto-sized world far from its star: two small icy moons.
-        let request = crate::request::WorldRequest {
-            planet: Some("barren".into()),
-            seed: Some(3),
-            circumference_km: Some(7_460.0),
-            star: Some("G2V".into()),
-            orbit_au: Some(30.0),
-            eccentricity: Some(0.0),
-            width: Some(128),
-            height: Some(64),
-            ..Default::default()
-        };
-        let params = request.resolve(&mut rand::rng()).unwrap().params;
-        let system = crate::moons::MoonSystem::draw(&params).unwrap();
-        assert_eq!(system.moons.len(), 2);
+        // A small world far from its star, of the first seed that draws it
+        // moons.
+        let (request, resolved, system) = (0..64)
+            .find_map(|seed| {
+                let request = crate::request::WorldRequest {
+                    seed: Some(seed),
+                    mass_earth: Some(0.02),
+                    star: Some("G2V".into()),
+                    orbit_au: Some(30.0),
+                    eccentricity: Some(0.0),
+                    host: Some(crate::exomoon::HostMode::None),
+                    width: Some(128),
+                    height: Some(64),
+                    ..Default::default()
+                };
+                let resolved = request.resolve(&mut rand::rng()).unwrap();
+                let system = crate::moons::MoonSystem::draw(&resolved.params)
+                    .filter(|s| !s.moons.is_empty())?;
+                Some((request, resolved, system))
+            })
+            .expect("a seed with moons");
         let dir = std::env::temp_dir().join(format!("mapgen-moons-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         // Generated as bodies of the planet's system, with it.
-        let drawn = crate::system::draw_around_params(&request, params.clone());
+        let drawn = crate::system::draw_around_params(&request, resolved.params, resolved.model);
         crate::system::write_system(&dir, &drawn).unwrap();
         let planet = drawn.focus.clone().unwrap();
         let done = crate::system::generate_neighbourhood(&dir, &planet, |_| {}).unwrap();
-        assert_eq!(done.len(), 3);
+        assert_eq!(done.len(), 1 + system.moons.len());
         for (k, moon) in system.moons.iter().enumerate() {
             let id = format!("{planet}-{}", k + 1);
             let body = drawn.bodies.iter().find(|b| b.id == id).unwrap();
@@ -914,15 +920,22 @@ mod tests {
             let raw = crate::sizes::size_dir(&dir.join("bodies").join(&id), width, height)
                 .join("raw_data");
             let meta: WorldMetadata = read_metadata(&raw).unwrap();
-            assert_eq!(meta.planet_type, "icy-moon");
+            assert!(
+                ["icy-moon", "rocky-moon"].contains(&meta.planet_type.as_str()),
+                "{}",
+                meta.planet_type
+            );
             assert_eq!(meta.seed, moon.seed);
             assert!(
                 (meta.circumference_km / (2.0 * std::f32::consts::PI) - moon.radius_km).abs()
                     < 0.01
             );
-            // Irregular: a shape layer, and no moons of its own.
-            assert!(meta.shape.is_some() && meta.layers.shape.is_some() && meta.moons.is_none());
-            assert!(raw.join("shape.png").exists());
+            // No moons of its own; an irregular one has a shape layer.
+            assert!(meta.moons.is_none());
+            if !moon.round {
+                assert!(meta.shape.is_some() && meta.layers.shape.is_some());
+                assert!(raw.join("shape.png").exists());
+            }
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }

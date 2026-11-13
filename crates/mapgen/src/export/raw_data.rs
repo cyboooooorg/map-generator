@@ -1210,20 +1210,15 @@ mod tests {
     #[test]
     fn a_world_with_a_long_solar_day_reads_the_swing_of_its_day() {
         // Mercury in its 3:2 resonance: a solar day of two years.
-        let request = crate::request::WorldRequest {
-            planet: Some(
-                concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/../../presets/examples/mercury-like.toml"
-                )
-                .into(),
+        let params = crate::generation::tests::preset_params(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../presets/examples/mercury-like.toml"
             ),
-            seed: Some(3),
-            width: Some(32),
-            height: Some(16),
-            ..Default::default()
-        };
-        let params = request.resolve(&mut rand::rng()).unwrap().params;
+            3,
+            32,
+            16,
+        );
         let world = generate(&params).world;
         let world_dir =
             std::env::temp_dir().join(format!("map-generator-day-test-{}", std::process::id()));

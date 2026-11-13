@@ -363,7 +363,9 @@ pub fn derive_model_with(
 }
 
 /// The model a stored system holds for `body`: the one [`derive_model`]
-/// gave its planet when the system was drawn; `None` for a moon (part 4).
+/// gave its planet when the system was drawn, or the one the resolution of
+/// its request gave the world a system was drawn around (a giant's moon
+/// among them); `None` for any other moon (part 4).
 pub fn body_model(_system: &System, body: &Body) -> Option<PlanetModel> {
     body.model.clone()
 }
