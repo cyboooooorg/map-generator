@@ -420,6 +420,23 @@ impl WorldRequest {
         planet_spec: String,
         rng: &mut impl RngExt,
     ) -> Result<Resolved, RequestError> {
+        self.resolve_with_preset_at_gravity(planet, planet_spec, None, rng)
+    }
+
+    /// Like [`resolve_with_preset`](Self::resolve_with_preset) for a rocky
+    /// world whose surface gravity is known (Earth's = 1, a planet's
+    /// model): `gravity` sets [`WorldParams::gravity`] and so its mass,
+    /// which the star's tides, its moons, the tilt they leave it and its
+    /// tidal flats read during the resolution, instead of the mass the
+    /// rocky relation gives its size. `None` is
+    /// [`resolve_with_preset`](Self::resolve_with_preset).
+    pub fn resolve_with_preset_at_gravity(
+        &self,
+        planet: Preset,
+        planet_spec: String,
+        gravity: Option<f32>,
+        rng: &mut impl RngExt,
+    ) -> Result<Resolved, RequestError> {
         self.validate()?;
         let d = planet.defaults.clone();
         // Draw order matters for reproducibility with a seeded RNG: keep it stable.
@@ -518,7 +535,14 @@ impl WorldRequest {
                             crate::giants::giant_radius(mass, at.equilibrium_k),
                         ),
                         None => {
-                            let (mass, radius) = crate::spin::rocky_body(circumference_km);
+                            let (mass, radius) = match gravity {
+                                Some(g) => {
+                                    let radius =
+                                        circumference_km / crate::noise::EARTH_CIRCUMFERENCE_KM;
+                                    (g * radius * radius, radius)
+                                }
+                                None => crate::spin::rocky_body(circumference_km),
+                            };
                             crate::spin::rocky_circularised(&at, mass, radius)
                         }
                     };
@@ -613,7 +637,8 @@ impl WorldRequest {
             locked_to_star: pinned.map(|turns| turns == 1.0),
             resonance_to_star: pinned.map(|turns| if turns == 1.0 { 0.0 } else { turns }),
             ridge: None,
-            gravity: None,
+            // A giant's gravity follows from its own mass.
+            gravity: if giant { None } else { gravity },
             age_gyr,
             // Drawn from its own stream: the other draws keep their values.
             perihelion_longitude_deg: Some(self.perihelion_longitude_deg.map_or_else(

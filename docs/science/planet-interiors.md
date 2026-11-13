@@ -244,7 +244,9 @@ archetypes):
   twice Mars's 0.004, its polar deposits and ground ice of about 34 m of
   global layer, Carr & Head 2015, doi:10.1002/2014GL062464).
 - The gravity and the tectonic regime are the model's, and the radius is
-  the interior's. The relief parameters follow: volcanism from the heat
+  the interior's. The world is resolved at that gravity, so the star's
+  tides, the moons it draws, the tilt they leave it and its tidal flats
+  read the model's mass, not the one the rocky relation gives its size. The relief parameters follow: volcanism from the heat
   flux (Earth's 0.087 W/m2 gives the preset's value), halved when
   stagnant, full under a heat pipe; the age of the surface from the
   regime.

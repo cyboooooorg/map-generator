@@ -183,8 +183,8 @@ const LIFELESS: [(Biome, &[Biome]); 4] = [
 
 /// The preset a planet with a surface renders with: its [`base_of`]
 /// preset's rules, palette and remap, named after its class, with what the
-/// model derived: no temperature shift nor greenhouse ([`params_for`]'s
-/// finish aims the world at the model's temperature), the internal heat
+/// model derived: no temperature shift nor greenhouse ([`calibrate`]
+/// aims the world at the model's temperature), the internal heat
 /// `(F / σ)^¼` of its heat flux `F` (the temperature it alone would keep
 /// the surface at), its regime, its sky ([`sky_of`]), and the lifeless
 /// remap after the base one when life did not arise ([`LIFELESS`]). Its
@@ -293,8 +293,14 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
 ///   ([`HEAT_PIPE_SURFACE_AGE_GA`]), a stagnant lid most of the system's
 ///   age ([`STAGNANT_SURFACE_AGE_SHARE`]);
 ///
-/// then [`finish`]es them: its gravity and regime. The sea level and the
-/// temperature shift are [`calibrate`]'s, when the world is generated.
+/// - its gravity, the model's, which the resolution reads (the star's
+///   tides, the moons, the tilt they leave it and its tidal flats see
+///   the model's mass);
+/// - its regime, the model's (its preset's, see [`preset_for`]), not
+///   [`crate::geology::regime_of`]'s.
+///
+/// The sea level and the temperature shift are [`calibrate`]'s, when the
+/// world is generated.
 ///
 /// # Panics
 ///
@@ -347,7 +353,11 @@ pub fn params_for(
         surface_age_ga: Some(surface_age_ga.clamp(ages.min, ages.max)),
         ..request
     };
-    let mut params = match request.resolve_with_preset(preset.clone(), preset.name.clone(), rng) {
+    // Resolved at the model's gravity: the star's tides, the moons, the
+    // tilt they leave and the tidal flats read its mass.
+    let gravity = Some(model.interior.gravity as f32);
+    match request.resolve_with_preset_at_gravity(preset.clone(), preset.name.clone(), gravity, rng)
+    {
         Ok(resolved) => resolved.params,
         // An orbit or star the request refuses (its own limits): resolved
         // without them, then put back as they are.
@@ -361,7 +371,7 @@ pub fn params_for(
                 ..request.clone()
             };
             let mut params = bare
-                .resolve_with_preset(preset.clone(), preset.name.clone(), rng)
+                .resolve_with_preset_at_gravity(preset.clone(), preset.name.clone(), gravity, rng)
                 .expect("a derived preset resolves without an orbit")
                 .params;
             if let Some(star) = &request.star {
@@ -373,25 +383,7 @@ pub fn params_for(
             params.eccentricity = request.eccentricity.unwrap_or(params.eccentricity);
             params
         }
-    };
-    finish(&mut params, model);
-    params
-}
-
-/// Completes the parameters of a planet with a surface with what needs no
-/// pass over its relief, in this order (each step reads the ones
-/// before): its gravity, the model's (and the tilt of a planet the
-/// star's tides despin at that mass, none); its regime, the model's (not
-/// [`crate::geology::regime_of`]'s). Its sea level and temperature wait
-/// for [`calibrate`], when its world is generated.
-fn finish(params: &mut WorldParams, model: &PlanetModel) {
-    let surface = model.surface.as_ref().expect("a planet with a surface");
-    params.gravity = Some(model.interior.gravity as f32);
-    // The star's tides read the mass, which the gravity has just changed:
-    // a planet they now despin stands upright (`crate::spin::upright`). One
-    // they no longer despin keeps the tilt the resolution left it.
-    params.axial_tilt_deg = crate::spin::upright(params, params.axial_tilt_deg);
-    params.planet.geology.regime = surface.regime;
+    }
 }
 
 /// Sets the sea level and the temperature shift of the world of a planet
@@ -485,6 +477,36 @@ mod tests {
         assert_eq!(base_of(&icy), "frozen");
         icy.surface.as_mut().unwrap().water.oceans = 0.004;
         assert_eq!(base_of(&icy), "barren");
+    }
+
+    #[test]
+    fn the_tides_read_the_models_mass() {
+        // Titan's model (gravity 0.14, under the rocky relation's at its
+        // size) and Mercury's (0.38, over it), seeds 1 to 12 at 1 AU: the
+        // tidal flats widen with the tides of the moons drawn at the
+        // model's mass, as the world draws them when generated.
+        let mut checked = 0;
+        for name in ["Titan", "Mercury"] {
+            let model = model_of(name);
+            for seed in 1..=12 {
+                let request = WorldRequest {
+                    seed: Some(seed),
+                    ..earth_request()
+                };
+                let params = params_for(&model, request, &mut StdRng::seed_from_u64(seed.into()));
+                assert_eq!(params.gravity, Some(model.interior.gravity as f32));
+                let moons = crate::moons::MoonSystem::draw(&params);
+                let effects = crate::moons::PlanetEffects::of(&params, moons.as_ref());
+                let base = preset_for(&model).rules.shore_width_km;
+                assert_eq!(
+                    params.planet.rules.shore_width_km,
+                    base * effects.shore_factor,
+                    "{name} {seed}"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 24);
     }
 
     #[test]
