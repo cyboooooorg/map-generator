@@ -167,7 +167,11 @@ them today (metallicity and star mass), a hot Jupiter included: about
   radius with `μ^⅓`), 6.4 for a Jupiter and a Saturn, which are 6.5
   apart; never under `2√3` (Gladman 1993). A pair closer than that is
   spread outwards, a planet pushed out of its allowed band is redrawn a
-  few times, then the request fails (below).
+  few times, then the request fails (below). A planet the draw adds has
+  no type and no band: a small one stays within 1.5 times the orbit it
+  was drawn at (calibration: it keeps the planet near where its
+  formation context put it), a giant within the system; one that finds
+  no room there is dropped.
 - Neighbouring periods fall mostly between 1.3 and 3 times each other
   (the peas-in-a-pod systems of Weiss et al. 2018): planets of a system
   are of similar size and evenly spaced in `log a`.
@@ -467,8 +471,10 @@ systems/<system-id>/
     photoevaporation; its world renders, until #424, with the preset
     closest to the model (`planet::interim::base_of`). A request still
     asks for planets by preset name: the name places the planet (its
-    band, below), the model types it. A moon has no model yet and keeps
-    `rocky-moon` or `icy-moon`;
+    band, below), the model types it. The world a request around one
+    asks for keeps its named preset as `type` and has no model until part
+    3b of #423 (its neighbours have theirs). A moon has no model yet and
+    keeps `rocky-moon` or `icy-moon`;
 
   The server rewrites it (temporary file, then rename) only to set a
   body's `generated` once its directory is complete.

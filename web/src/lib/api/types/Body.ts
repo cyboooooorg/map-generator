@@ -25,7 +25,8 @@ id: string,
 designation: string, kind: BodyKind, 
 /**
  * A planet's class ([`PlanetClass::key`], one of
- * [`crate::planet::PLANET_CLASSES`]); a moon's preset, `rocky-moon` or
+ * [`crate::planet::PLANET_CLASSES`]); the preset the world a request
+ * around one asked for was named by; a moon's preset, `rocky-moon` or
  * `icy-moon`.
  */
 type: string, 
@@ -56,6 +57,7 @@ trojans?: Trojans,
 ring_role?: RingRole, 
 /**
  * A planet's physical model, as [`derive_model`] gave it when the
- * system was drawn; none for a moon (part 4 of #423).
+ * system was drawn; none for a moon (part 4 of #423), nor, until part
+ * 3b, for the world a request around one asked for.
  */
 model?: PlanetModel, };
