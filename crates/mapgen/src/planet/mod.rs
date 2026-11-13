@@ -14,9 +14,11 @@
 //! response [`heat::k2_over_q`] of a rocky, icy or enveloped body).
 //! [`core::core`] derives whether its iron core is liquid and drives a
 //! dynamo, and the field at its surface.
-//! [`atmosphere::outgassed`], [`atmosphere::atmosphere`] and
-//! [`atmosphere::cold_trap`] and [`atmosphere::photochemistry`] derive its air, as [`Gases`], from what it
-//! outgasses, what escape leaves and what its cold freezes out.
+//! [`atmosphere::outgassed`], [`atmosphere::atmosphere`],
+//! [`atmosphere::methane_photolysis`], [`atmosphere::cold_trap`] and
+//! [`atmosphere::photochemistry`] derive its air, as [`Gases`], from what
+//! it outgasses, what escape leaves, what its star's ultraviolet destroys
+//! and what its cold freezes out.
 //! [`climate::climate`] sets its surface temperature through a grey
 //! greenhouse and the carbonate thermostat, and the [`SurfaceLiquid`] on
 //! its surface.
@@ -51,7 +53,8 @@ pub mod regime;
 pub mod xuv;
 
 pub use atmosphere::{
-    Gases, atmosphere, cold_trap, escape_velocity_km_s, outgassed, photochemistry,
+    Gases, atmosphere, cold_trap, escape_velocity_km_s, methane_photolysis, outgassed,
+    photochemistry,
 };
 pub use classify::{PlanetClass, classify};
 pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
@@ -196,8 +199,9 @@ const AU_M: f64 = 1.495_978_707e11;
 /// class, which feeds back into none of them. A body that keeps an
 /// envelope of [`escape::MIN_ENVELOPE`] or more has no surface; any other
 /// goes on to its [`water`] and [`regime`], its [`core`], its air
-/// ([`outgassed`], [`atmosphere`], [`cold_trap`], [`photochemistry`], in
-/// that order: the photochemistry reads the cold trap's air), its
+/// ([`outgassed`], [`atmosphere`], [`methane_photolysis`], [`cold_trap`],
+/// [`photochemistry`], in that order: the photochemistry reads the cold
+/// trap's air), its
 /// [`climate`] and its [`life`] with the oxygen it makes. A body whose
 /// climate carries its water past the critical point
 /// ([`climate::boils`]) has run away: it goes through those steps again
@@ -253,6 +257,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
             } else {
                 w
             };
+            let atm = methane_photolysis(atm, context, inputs.mass_earth, &interior);
             let gases =
                 photochemistry(cold_trap(atm, context.equilibrium_k), context.equilibrium_k);
             let flux = heat.flux_w_m2(interior.radius_earth);

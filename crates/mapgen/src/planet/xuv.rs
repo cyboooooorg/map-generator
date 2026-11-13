@@ -7,7 +7,22 @@
 //! fluence is that emission integrated analytically from 0 to the age,
 //! times the insolation. `activity.rs` keeps its own model for the star's
 //! current activity; this one is for the history.
+//!
+//! The star's Lyman α line, which photolyses methane (see
+//! [`super::atmosphere::methane_photolysis`]), follows the same history
+//! with its own share and slope ([`LYMAN_ALPHA`]).
 use super::Context;
+
+/// One band of a star's high-energy light: its share of the bolometric
+/// luminosity while the star is saturated, and the power of age by which
+/// it decays after.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Band {
+    /// Share of the bolometric luminosity while saturated.
+    pub saturated_ratio: f64,
+    /// `L ∝ t^-decay_exponent` after saturation.
+    pub decay_exponent: f64,
+}
 
 /// Share of the bolometric luminosity emitted as XUV (1 to 1180 Å) while
 /// the star is saturated: the Sun's own, from Ribas et al. 2005
@@ -26,6 +41,26 @@ const SATURATED_RATIO: f64 = 3.71e-4;
 /// doi:10.1086/427977, Table 5; their stars span 0.1 to 6.7 Gyr).
 /// Checked.
 const DECAY_EXPONENT: f64 = 1.23;
+
+/// The XUV band, 1 to 1180 Å ([`SATURATED_RATIO`], [`DECAY_EXPONENT`]).
+const XUV: Band = Band {
+    saturated_ratio: SATURATED_RATIO,
+    decay_exponent: DECAY_EXPONENT,
+};
+
+/// The H I Lyman α line (1216 Å). Ribas et al. 2005
+/// (doi:10.1086/427977, their eq. 2, from two solar analogues, "preliminary")
+/// fit `F = 19.2 τ^-0.72` erg s⁻¹ cm⁻² at 1 AU, τ in Gyr: 100.8 erg s⁻¹
+/// cm⁻² at 0.1 Gyr, 7.40e-5 of the 1361 W/m² solar constant, and
+/// 6.4 erg s⁻¹ cm⁻² (3.9e11 photons cm⁻² s⁻¹) at 4.6 Gyr. Checked; the
+/// slope agrees with the τ^-0.65 ± 0.12 they derive from Wood et al.
+/// 2004. Its saturation time is taken as the XUV's ([`saturation_gyr`]):
+/// a simplification, and the line's larger share of an M dwarf's light is
+/// not modelled.
+pub(crate) const LYMAN_ALPHA: Band = Band {
+    saturated_ratio: 7.40e-5,
+    decay_exponent: 0.72,
+};
 
 /// Saturation time against the star's mass: `(M / M☉, t_sat / Gyr)`,
 /// interpolated in log-log between the points and extrapolated along the
@@ -73,17 +108,38 @@ const EARTH_AGE_GYR: f64 = 4.567;
 /// 4.6 mW/m².
 pub const EARTH_XUV_FLUENCE_J_M2: f64 = 5.64e15;
 
-/// Time-integral of the XUV-to-bolometric ratio from 0 to `age_gyr` for a
-/// star of `star_mass`, in Gyr (constant in the saturated phase, then
-/// the integral of the power-law decay, Ribas et al. 2005).
-fn integrated_ratio_gyr(star_mass: f64, age_gyr: f64) -> f64 {
+/// Time-integral of the band-to-bolometric ratio from 0 to `age_gyr` for
+/// a star of `star_mass`, in Gyr (constant in the saturated phase, then
+/// the integral of the power-law decay, Ribas et al. 2005). The decay
+/// exponent must not be 1.
+pub(crate) fn integrated_ratio_gyr(band: Band, star_mass: f64, age_gyr: f64) -> f64 {
     let t_sat = saturation_gyr(star_mass);
     if age_gyr <= t_sat {
-        return SATURATED_RATIO * age_gyr.max(0.0);
+        return band.saturated_ratio * age_gyr.max(0.0);
     }
-    let n = DECAY_EXPONENT - 1.0;
+    let n = band.decay_exponent - 1.0;
     let decayed = t_sat * (1.0 - (age_gyr / t_sat).powf(-n)) / n;
-    SATURATED_RATIO * (t_sat + decayed)
+    band.saturated_ratio * (t_sat + decayed)
+}
+
+/// Band-to-bolometric ratio of a star of `star_mass` at `age_gyr`.
+#[cfg(test)]
+pub(crate) fn ratio(band: Band, star_mass: f64, age_gyr: f64) -> f64 {
+    let t_sat = saturation_gyr(star_mass);
+    band.saturated_ratio * (age_gyr.max(t_sat) / t_sat).powf(-band.decay_exponent)
+}
+
+/// Age, Gyr, from which the band-to-bolometric ratio of a star of
+/// `star_mass` is at most `ratio`: 0 if it never exceeds it (at or above
+/// the saturated ratio), infinite if it never falls to it.
+pub(crate) fn age_below_ratio(band: Band, star_mass: f64, ratio: f64) -> f64 {
+    if ratio >= band.saturated_ratio {
+        0.0
+    } else if ratio <= 0.0 {
+        f64::INFINITY
+    } else {
+        saturation_gyr(star_mass) * (ratio / band.saturated_ratio).powf(-1.0 / band.decay_exponent)
+    }
 }
 
 /// XUV energy per unit area received over the system's age, relative to
@@ -92,8 +148,8 @@ fn integrated_ratio_gyr(star_mass: f64, age_gyr: f64) -> f64 {
 /// eccentricity; the star's luminosity is taken constant over its age
 /// (the pre-main-sequence excess, short, is ignored).
 pub fn xuv_fluence(context: &Context) -> f64 {
-    let earth = integrated_ratio_gyr(1.0, EARTH_AGE_GYR);
-    context.insolation * integrated_ratio_gyr(context.star_mass, context.age_gyr) / earth
+    let earth = integrated_ratio_gyr(XUV, 1.0, EARTH_AGE_GYR);
+    context.insolation * integrated_ratio_gyr(XUV, context.star_mass, context.age_gyr) / earth
 }
 
 #[cfg(test)]
@@ -130,7 +186,7 @@ mod tests {
 
     #[test]
     fn earth_absolute_value_matches_the_model() {
-        let j = SOLAR_CONSTANT_W_M2 * integrated_ratio_gyr(1.0, EARTH_AGE_GYR) * GYR_S;
+        let j = SOLAR_CONSTANT_W_M2 * integrated_ratio_gyr(XUV, 1.0, EARTH_AGE_GYR) * GYR_S;
         assert!((j / EARTH_XUV_FLUENCE_J_M2 - 1.0).abs() < 0.02, "{j:e}");
     }
 
@@ -149,6 +205,47 @@ mod tests {
             * SATURATED_RATIO
             * (EARTH_AGE_GYR / saturation_gyr(1.0)).powf(-DECAY_EXPONENT);
         assert!((now / ribas(EARTH_AGE_GYR) - 1.0).abs() < 0.01, "{now}");
+    }
+
+    #[test]
+    fn lyman_alpha_matches_ribas_2005() {
+        // Ribas et al. 2005, eq. 2: F = 19.2 τ^-0.72 erg/s/cm² = mW/m² at
+        // 1 AU, from 0.1 Gyr.
+        for age in [0.1, 1.0, 4.6, 8.0] {
+            let model = SOLAR_CONSTANT_W_M2 * ratio(LYMAN_ALPHA, 1.0, age);
+            let ribas = 19.2e-3 * f64::powf(age, -0.72);
+            assert!((model / ribas - 1.0).abs() < 0.01, "{age}: {model} {ribas}");
+        }
+        // About 3.9e11 photons cm⁻² s⁻¹ today.
+        let photons = SOLAR_CONSTANT_W_M2 * ratio(LYMAN_ALPHA, 1.0, 4.6) / 1.634e-18 * 1e-4;
+        assert!((3.7e11..4.1e11).contains(&photons), "{photons:e}");
+    }
+
+    #[test]
+    fn the_band_history_integrates_and_inverts() {
+        for mass in [1.0, 0.5, 0.2] {
+            for band in [XUV, LYMAN_ALPHA] {
+                // The analytic integral against a midpoint sum.
+                let age = 6.0;
+                let steps = 200_000;
+                let dt = age / f64::from(steps);
+                let sum: f64 = (0..steps)
+                    .map(|i| ratio(band, mass, (f64::from(i) + 0.5) * dt) * dt)
+                    .sum();
+                let exact = integrated_ratio_gyr(band, mass, age);
+                assert!((sum / exact - 1.0).abs() < 1e-3, "{mass}: {sum} {exact}");
+                // The age at which the ratio falls to its value at 3 Gyr is
+                // 3 Gyr, or 0 for a star still saturated then.
+                let t = age_below_ratio(band, mass, ratio(band, mass, 3.0));
+                if saturation_gyr(mass) < 3.0 {
+                    assert!((t / 3.0 - 1.0).abs() < 1e-9, "{mass}: {t}");
+                } else {
+                    assert_eq!(t, 0.0, "{mass}");
+                }
+            }
+        }
+        assert_eq!(age_below_ratio(LYMAN_ALPHA, 1.0, 1.0), 0.0);
+        assert!(age_below_ratio(LYMAN_ALPHA, 1.0, 0.0).is_infinite());
     }
 
     #[test]

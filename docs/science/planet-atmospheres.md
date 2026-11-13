@@ -206,8 +206,9 @@ model freezes it, which only matters for its state, not its dynamo.
 
 `planet::atmosphere` (not yet chained into `planet_model`) gives the
 partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
-and O₂ (`Gases`, with `total()`), in four steps, called in this order:
-`outgassed`, `atmosphere`, `cold_trap`, `photochemistry`. The carbonate
+and O₂ (`Gases`, with `total()`), in five steps, called in this order:
+`outgassed`, `atmosphere`, `methane_photolysis`, `cold_trap`,
+`photochemistry`. The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -281,6 +282,59 @@ as in the paper, Titan keeps a bar, and `s` is small enough that Venus,
 which has no dynamo, keeps its air. Every gas is
 kept in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`.
 
+**Methane photolysis** (`methane_photolysis`, before the cold trap, on
+the whole stock). The star's ultraviolet destroys methane at a rate set
+by its light, not by the amount of methane: any column worth counting
+absorbs all the Lyman α (photon-limited). The rate, in molecules per m²
+and second over the sphere, is
+
+```text
+D = Y · S₀ I r(t) / 4 / E_γ
+```
+
+with `S₀ = 1361 W/m²`, `I` the insolation, `E_γ` the energy of a Lyman α
+photon (121.6 nm, 1.634e-18 J) and `r(t)` the Lyman α share of the
+star's light: Ribas et al. 2005 (doi:10.1086/427977, their eq. 2,
+checked) fit `F = 19.2 τ^-0.72` erg s⁻¹ cm⁻² at 1 AU, 7.40e-5 of the
+solar constant at the end of saturation (0.1 Gyr) and 3.9e11 photons
+cm⁻² s⁻¹ today. The line saturates with the XUV (`saturation_gyr`, the
+same anchors) and decays as `t^-0.72` after. `Y = 13.9` methane
+molecules per Lyman α photon is a calibration on Titan: Yung, Allen &
+Pinto 1984 (ApJS 55, 465, doi:10.1086/190963; abstract checked) find
+that Titan "might have lost 5.6 × 10⁴ g cm⁻²" of methane, "the
+equivalent of 8 bars", over geologic time. Read as 4.5 Gyr at today's
+rate (an assumption, the full text was not read), that is 1.48e10
+molecules cm⁻² s⁻¹ against the 1.07e9 Lyman α photons cm⁻² s⁻¹ Titan
+gets on average. `Y` is over one because Lyman α stands for all the
+ultraviolet that destroys methane, the photolysis proper below 145 nm
+and the dissociation photosensitised by acetylene at longer
+wavelengths. At that rate Titan's air would lose its methane in a few
+tens of millions of years, as Tobie, Lunine & Sotin 2006 (Nature 440,
+61, doi:10.1038/nature04497; abstract checked) state.
+
+The supply is the methane outgassed (after escape), spread evenly over
+the system's age: `S = CH₄ / age`. While the destruction outruns it,
+nothing builds up; from the age `t*` at which the falling destruction
+meets the supply, methane gathers in the air and on the ground:
+
+```text
+CH₄ left = ∫ from t* to age of (S − D(t)) dt
+```
+
+analytic, through the band integral of `xuv.rs`. This is Titan's
+resupply: Tobie et al. explain its methane by outgassing from its
+interior, in episodes where the model spreads it evenly. Titan outgasses
+20.6 bar of methane in the model and keeps 6.3 bar of it on its ground
+(the supply overtakes the destruction at about 1.2 Gyr), from which the
+cold trap leaves 0.035 bar in its air. Ganymede and Callisto get 3.4
+times Titan's light per unit area and outgas 0.15 and 0.47 bar: the
+destruction outruns them at every age and they keep none. Destroyed
+methane is gone: its hydrogen escapes and its carbon ends in heavier
+hydrocarbons on the ground, which the model does not carry. Two
+departures: the outgassing is spread evenly over the age, and the
+larger Lyman α share of an M dwarf's light is not modelled (both
+understate the destruction round red dwarfs, if anything).
+
 **Cold trap** (`cold_trap`). A gas whose triple point lies above the
 body's equilibrium temperature frosts onto the ground until its partial
 pressure falls to its sublimation pressure, by Clausius–Clapeyron from
@@ -302,7 +356,8 @@ that none reaches the upper air; above it, OH from water's photolysis
 oxidises the methane, which is set to zero (the CO₂ it would make is
 not added). The 150 K is a calibration with no source, between Titan
 (82 K, keeps its methane) and an abiotic Earth (255 K) or Mars (207 K).
-Life's methane is added later.
+Life's methane is added later. Methane's photolysis by the ultraviolet
+comes before the cold trap (above).
 
 Calibration targets, through the whole chain from the reference bodies'
 inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
@@ -313,13 +368,13 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 | Earth | 0.89 bar N₂, no CH₄ or NH₃ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar; CH₄ and NH₃ under 1e-3 bar | 0.78 bar N₂ |
 | Mars | 0.014 bar | 0.002 to 0.05 bar | 0.006 bar |
 | Titan | 2.1 bar, 98 % N₂, 0.035 bar CH₄ | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
+| Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
 
-A shortcoming, outside the targets: at Jupiter's distance (equilibrium
-temperature 112 K, above methane's triple point and under 150 K),
-Ganymede keeps about 0.2 bar of CH₄ and Callisto, to which the core
-model gives a weak deep dynamo, about 0.5 bar (both are airless). Moons
-are not modelled yet (`body_model` skips them).
+A shortcoming, outside the targets: Ganymede keeps 0.016 bar of N₂ and
+Callisto, to which the core model gives a weak deep dynamo, 0.047 bar;
+both are airless. Before methane photolysis they also kept 0.15 and
+0.47 bar of CH₄. Moons are not modelled yet (`body_model` skips them).
 
 ## Climate and surface liquid
 
@@ -472,8 +527,9 @@ order: the interior from the drawn inputs, the XUV fluence, the envelope
 escape (the interior is derived again from what is left), the internal
 heat, then, if the envelope left is under `MIN_ENVELOPE` (0.1 % of the
 mass), the water kept and the runaway check, the tectonic regime, the
-core and dynamo, the air (`outgassed`, `atmosphere`, `cold_trap`, then
-`photochemistry`, which reads the cold trap's air), the climate and
+core and dynamo, the air (`outgassed`, `atmosphere`,
+`methane_photolysis`, `cold_trap`, then `photochemistry`, which reads
+the cold trap's air), the climate and
 surface liquid, and life with the oxygen it makes. If that climate
 carries a wet surface past water's critical point (`climate::boils`),
 the body has run away after all: the steps from the regime on run once
@@ -508,16 +564,16 @@ drowns all land; ten is a round figure above the few oceans their basins
 hold, not a value from the paper. `DENSE_AIR_BAR` is 1 bar, for the
 runaway greenhouse (Venus has 90 bar; a runaway that lost its air is a
 bare rock) and for the hydrocarbon world. The pressure condition on
-hydrocarbons is a departure from the plain rule "liquid hydrocarbons":
-without it the model makes Ganymede and Callisto hydrocarbon worlds,
-because it outgasses 0.2 and 0.5 bar of methane from their ices and
-holds it, which the real moons do not have. Titan has 2.1 bar in the
-model. That excess methane is a weakness of the atmosphere step, not
-something the classifier should hide for good.
+hydrocarbons is a departure from the plain rule "liquid hydrocarbons".
+It was added when the model kept 0.2 and 0.5 bar of methane on
+Ganymede and Callisto, which methane photolysis now removes; it still
+keeps a cold body with a trace of methane over its ice under a thin air
+an ice world. Titan has 2.1 bar in the model.
 
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa
-`ice-world`, the giants as in part 1. A 1 M⊕ planet of 30 % water at
+`ice-world`, Callisto `ice-world` with no methane, the giants as in
+part 1. A 1 M⊕ planet of 30 % water at
 1 AU, with the volatiles `draw_inputs` gives its rock and ice (no
 scatter), is an `ocean-world` at 288 K under 0.4 bar. With 1 % water
 (about 40 oceans) at 1 AU, the 20 bar of nitrogen its ice brings carry
@@ -536,9 +592,10 @@ the fixes of the steam review and the source check: the vapour capped at
 the water a body has, a boil kept only if its steam stays past 647 K, a
 runaway's water all in its air, the XUV saturation time anchored on
 Jackson et al. and Johnstone et al., the heat-pipe threshold at 1 W/m²
-and the seafloor power 4.1. The census also counts the runaways by their
-source (`Water::boiled`) and the wet planets left past 647 K because
-their boil was not kept.
+and the seafloor power 4.1, then again after methane photolysis (issue
+#439). The census also counts the runaways by their source
+(`Water::boiled`) and the wet planets left past 647 K because their boil
+was not kept.
 
 ```text
 500 systems, 1677 planets
@@ -547,7 +604,7 @@ body_type against derived class (planets)
 body_type              gas-giant         hot-jupiter   hydrocarbon-world           ice-giant           ice-world          lava-world        mini-neptune         ocean-world               rocky  runaway-greenhouse         super-earth   total
 barren                         0                   0                   0                   0                  38                  14                   0                   0                 335                  22                   1     410
 caustic                        0                   0                   0                   0                   8                   0                   1                   0                  55                  31                   0      95
-frozen                         0                   0                  85                   0                 591                   0                  57                  26                   2                  13                   0     774
+frozen                         0                   0                  16                   0                 699                   0                  57                   0                   2                   0                   0     774
 gas-giant                     41                   0                   0                   0                   0                   0                   0                   0                   0                   0                   0      41
 hot-jupiter                    0                   1                   0                   0                   0                   0                   0                   0                   0                   0                   0       1
 ice-giant                     28                   0                   0                  56                   0                   0                   0                   0                   0                   0                   0      84
@@ -569,47 +626,47 @@ medians per class
 class               planets  age Gyr  mass M⊕    a AU    CMF    water  envelope     T K      P bar
 gas-giant                69     4.90   47.361   2.172  0.332   0.0283    0.9000     NaN        NaN
 hot-jupiter               1     6.33  191.055   0.024  0.382   0.0000    0.9447     NaN        NaN
-hydrocarbon-world        85     4.09    0.346   0.640  0.319   0.3445    0.0000     162      2.713
+hydrocarbon-world        16     4.49    0.107   3.125  0.317   0.3555    0.0000     107      4.240
 ice-giant                56     5.35   17.247   2.028  0.313   0.2924    0.1614     NaN        NaN
-ice-world               657     5.74    0.461   0.380  0.308   0.3469    0.0000      87      0.084
+ice-world               765     5.57    0.418   0.405  0.309   0.3448    0.0000      90      0.046
 lava-world               17     3.18    0.428   0.026  0.303   0.0006    0.0000    1593      0.000
 mini-neptune             67     5.82    2.129   0.352  0.312   0.3407    0.0082     NaN        NaN
-ocean-world              33     3.89    0.241   0.622  0.295   0.3261    0.0000     312     10.282
+ocean-world               7     3.48    1.215   0.242  0.324   0.3322    0.0000     288      1.200
 rocky                   596     5.31    0.474   0.047  0.313   0.0005    0.0000     337      0.000
-runaway-greenhouse       82     4.16    0.919   0.183  0.309   0.0012    0.0000     810     89.104
+runaway-greenhouse       69     4.39    1.053   0.141  0.310   0.0008    0.0000     720     58.798
 super-earth              14     5.07    1.679   0.151  0.269   0.0008    0.0018     245      2.072
 
 class mix (1677 planets)
-ice-world             39.2 %  (657)
+ice-world             45.6 %  (765)
 rocky                 35.5 %  (596)
-hydrocarbon-world      5.1 %  (85)
-runaway-greenhouse     4.9 %  (82)
 gas-giant              4.1 %  (69)
+runaway-greenhouse     4.1 %  (69)
 mini-neptune           4.0 %  (67)
 ice-giant              3.3 %  (56)
-ocean-world            2.0 %  (33)
 lava-world             1.0 %  (17)
+hydrocarbon-world      1.0 %  (16)
 super-earth            0.8 %  (14)
+ocean-world            0.4 %  (7)
 hot-jupiter            0.1 %  (1)
 
 planets with a surface: 1467
 
 surface liquid (1467 planets with a surface)
-Hydrocarbons          14.6 %  (214)
+Hydrocarbons           1.1 %  (16)
 Lava                   1.2 %  (17)
-None                  77.5 %  (1137)
-Water                  6.7 %  (99)
+None                  92.8 %  (1361)
+Water                  5.0 %  (73)
 
 tectonic regime (1467 planets with a surface)
-Episodic              20.9 %  (306)
+Episodic              20.7 %  (303)
 HeatPipe               3.5 %  (51)
-Plates                40.1 %  (588)
+Plates                40.3 %  (591)
 Stagnant              35.6 %  (522)
 
-runaways: 531 by the insolation limit, 15 boiled; of the runaway-greenhouse class: 67 by the limit, 15 boiled
+runaways: 531 by the insolation limit, 2 boiled; of the runaway-greenhouse class: 67 by the limit, 2 boiled
 wet, not in runaway and past 647 K (a boil not kept): 2
 
-life: 2.4 % of planets with a surface (35), 2.0 % oxygenated (29)
+life: 1.8 % of planets with a surface (26), 1.6 % oxygenated (23)
 
 radius histogram, period under 100 days (867 planets)
  0.00-0.25      0.0 %  (0)
@@ -656,28 +713,36 @@ What it shows, plainly:
   lava worlds had a median water share of 0.32: migrated water worlds
   whose outgassed ices had run their climate past 1400 K under a water
   layer. A body with water on top is never a lava world now.
-- **Hydrocarbon worlds** are 5.1 % (85), all `frozen`: small icy bodies
-  (median 0.35 M⊕, water 0.34) round dim stars (median 0.64 AU) at a
-  median 162 K under 2.7 bar of nitrogen and methane, warmer and denser
-  Titans. Their seafloor is shallow enough (small mass, low gravity) that
-  the ocean share lets their ices' methane out. Before the fixes there
-  were 128; this is probably still too many: it is the same excess
-  methane that the Ganymede and Callisto remark above points to.
-- **Ocean worlds** are 2.0 % (33): migrated or icy water worlds (median
-  water 0.33) at a median 312 K under 10 bar.
-- **Runaway greenhouses** are 4.9 % (82), mostly dry rocks over the
-  runaway limit (median water 1.2e-3, 89 bar, 810 K): 67 ran away by the
-  insolation limit and 15 by boiling their ocean, all 15 of those in the
-  class. Of the 546 runaways among the planets with a surface, 531 come
-  from the limit; most of them have kept under 1 bar of air and are
-  rocks. The median temperature rose from 720 K because a runaway's
-  steam is now all in its air (the regime's share no longer holds it
-  back); the steam temperature is not bounded yet (issue #438). Two wet
-  planets stay past 647 K out of a runaway: their boil was not kept,
-  because their steam escaped until the dry re-run was cool.
+- **Hydrocarbon worlds** are 1.0 % (16), all `frozen`: small icy bodies
+  (median 0.11 M⊕, water 0.36) far from their stars (median 3.1 AU) under
+  a median 4.2 bar. Before methane photolysis there were 85 (5.1 %), at
+  a median 0.64 AU round dim stars: the ultraviolet of a red dwarf, close
+  in and saturated for gigayears, now destroys their methane faster than
+  they outgas it, and they are ice worlds. Ten of the sixteen are
+  Titans (82 to 88 K at equilibrium, a few hundredths of a bar of
+  methane, 94 to 113 K). The other six keep 0.5 to 18 bar of
+  methane in their air (their equilibrium
+  temperature, 91 to 107 K, is above methane's triple point, so the cold
+  trap holds none back), which warms four of them to 225 to 255 K.
+- **Ocean worlds** are 0.4 % (7), down from 33: 26 of those were small
+  icy bodies (median 0.2 M⊕) at 90 to 150 K at equilibrium, warmed to
+  280 to 440 K by their methane (up to 70 bar of it). Photolysis leaves 20 of them
+  ice worlds and 6 hydrocarbon worlds.
+- **Runaway greenhouses** are 4.1 % (69), mostly dry rocks over the
+  runaway limit (median water 8e-4, 59 bar, 720 K): 67 ran away by the
+  insolation limit and 2 by boiling their ocean. Of the 533 runaways
+  among the planets with a surface, 531 come from the limit; most of
+  them have kept under 1 bar of air and are rocks. Before methane
+  photolysis 15 had boiled their ocean, 13 of them icy bodies whose
+  methane greenhouse carried them there; they are ice worlds now. The
+  steam temperature is not bounded yet (issue #438). Two wet planets
+  stay past 647 K out of a runaway: their boil was not kept, because
+  their steam escaped until the dry re-run was cool.
 - **Tectonic regimes**: heat pipes rose from 2.7 % (39) to 3.5 % (51)
   with the threshold lowered from 2 to 1 W/m².
 - **Surface liquid** over the 1467 planets with a surface: no liquid for
-  77.5 %, hydrocarbons 14.6 %, water 6.7 %, lava 1.2 %.
-- **Life** arises on 2.4 % of the planets with a surface, 2.0 % with
-  oxygen.
+  92.8 %, hydrocarbons 1.1 % (14.6 % before methane photolysis), water
+  5.0 % (6.7 %), lava 1.2 %.
+- **Life** arises on 1.8 % of the planets with a surface, 1.6 % with
+  oxygen (2.4 % and 2.0 % before methane photolysis: nine of the icy
+  ocean worlds warmed by methane had life).
