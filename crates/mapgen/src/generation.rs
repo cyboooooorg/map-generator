@@ -161,14 +161,20 @@ const CONTINENTAL_SHELF: f32 = 0.05;
 ///   relief impacts give it, [`IMPACT_RELIEF_KM`]: there neither plates
 ///   nor volcanism build ranges near the `1/g` ceiling. Ice holds
 ///   [`ICE_RELIEF`] of rock's.
+/// - on an airless body whose lid overturns now and then (episodic, like
+///   Venus's), the same: between overturns its lid is a stagnant one, and
+///   without air nothing else shapes it. A heat-pipe body (Io) is left
+///   out: its lid sinks under the lava piled on it and breaks into blocks
+///   up to 17 km high (Schenk et al. 2001, doi:10.1029/2000JE001408), and
+///   lava, not impacts, resurfaces it.
 ///
 /// 1 for planets, whose relief comes from their plates, mountains and
 /// volcanoes.
 pub(crate) fn relief_share(p: &WorldParams) -> f32 {
     let radius_km = p.circumference_km / (2.0 * std::f32::consts::PI);
     let mut cap = SMALL_BODY_RELIEF * radius_km;
-    let stagnant = p.look.geology.regime == Regime::Stagnant;
-    if stagnant && p.pressure_bar <= AIRLESS_BAR {
+    let impact_shaped = matches!(p.look.geology.regime, Regime::Stagnant | Regime::Episodic);
+    if impact_shaped && p.pressure_bar <= AIRLESS_BAR {
         let ice = if icy(p) { ICE_RELIEF } else { 1.0 };
         cap = cap.min(IMPACT_RELIEF_KM * ice);
     }
@@ -177,11 +183,14 @@ pub(crate) fn relief_share(p: &WorldParams) -> f32 {
 
 /// Span of the noise relief of the world `p`, km: from the old floor
 /// ([`ABYSS_KM`]) to the top of the platform and of the mountains at its
-/// gravity.
+/// gravity and their weight in its regime ([`noise_mountains`]).
 fn noise_span_km(p: &WorldParams) -> f32 {
     ABYSS_KM
         + PLATFORM_KM
-        + MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()) * crate::craters::ELEVATION_KM
+        + noise_mountains(p.look.geology.regime)
+            * MOUNTAIN_BLEND
+            * relief_scale(p.gravity_modifier())
+            * crate::craters::ELEVATION_KM
 }
 
 /// Whether the world `p` is mostly ice: a bulk density, from its gravity
@@ -333,6 +342,38 @@ const NEW_CRUST_ROUGHNESS: f32 = 0.5;
 /// Share of the noise's mountain weight kept on worlds with plate
 /// tectonics: the rest of their ranges follow the plate boundaries.
 const NOISE_MOUNTAINS_WITH_PLATES: f32 = 0.5;
+/// Share of the noise's mountain weight kept on worlds without plates
+/// (stagnant, episodic or heat-pipe lids). With no plates to stack crust
+/// into ranges, such a world is plains with what the generator places on
+/// them (craters, basins, volcanoes, old sea floors), not a mountain fabric
+/// over the whole globe: Venus's hypsometry is unimodal, more than 80 % of
+/// its surface within 1 km of the mean radius and about 5 % more than 2 km
+/// above it (Pettengill et al. 1980, doi:10.1029/JA085iA13p08261, from
+/// Pioneer Venus; Ford & Pettengill 1992, doi:10.1029/92JE01085,
+/// from Magellan).
+///
+/// Calibration on the venus-like archetype (seed 12345, 2048×1024): 0.55
+/// puts about 80 % of its area within ±1 km of its median elevation (at
+/// the full weight, 1, only a third). The noise's ridges have a floor, so
+/// the relief falls faster than the weight: 0.45 already leaves nearly all
+/// of it within ±1 km. Checked, not fitted, on Mars and Mercury: the
+/// mars-like archetype keeps its dichotomy (old sea floors) and a span of
+/// about 24 km (Mars's dynamic range is about 30 km, Smith et al. 1999,
+/// doi:10.1126/science.284.5419.1495, Olympus Mons included); airless
+/// bodies keep the span [`IMPACT_RELIEF_KM`] gives them, since that span
+/// counts the mountains at this weight (see [`noise_span_km`]): the
+/// mercury-like archetype spans 8.4 km (Mercury's highest and lowest points are 4.48 km
+/// above and 5.38 km below its mean radius, Becker et al. 2016, LPSC
+/// abstract 2959).
+const NOISE_MOUNTAINS_WITHOUT_PLATES: f32 = 0.55;
+
+/// Share of the noise's mountain weight kept in the tectonic `regime`.
+fn noise_mountains(regime: Regime) -> f32 {
+    match regime {
+        Regime::Plates => NOISE_MOUNTAINS_WITH_PLATES,
+        Regime::Stagnant | Regime::Episodic | Regime::HeatPipe => NOISE_MOUNTAINS_WITHOUT_PLATES,
+    }
+}
 /// Weight of volcanic arcs in the volcanic zone, on a world without
 /// volcanism and on a fully volcanic one.
 const ARC_VOLCANISM: (f32, f32) = (0.8, 1.0);
@@ -419,8 +460,8 @@ pub struct Sampler {
     grid: Grid,
     /// The plates and their boundaries, on worlds with plate tectonics.
     tectonics: Option<crate::plates::PlateMap>,
-    /// Share of the noise's mountain weight kept on such worlds: their
-    /// ranges follow the plate boundaries.
+    /// Share of the noise's mountain weight kept in the world's regime
+    /// (see [`noise_mountains`]).
     noise_mountains: f32,
     /// Weight of volcanic arcs in the volcanic zone.
     arc_volcanism: f32,
@@ -471,7 +512,7 @@ impl Sampler {
         let grid = p.grid();
         let mut sampler = Self {
             tectonics: None,
-            noise_mountains: 1.0,
+            noise_mountains: noise_mountains(p.look.geology.regime),
             arc_volcanism: ARC_VOLCANISM.0
                 + (ARC_VOLCANISM.1 - ARC_VOLCANISM.0) * p.volcanic_intensity.clamp(0.0, 1.0),
             coast_octaves: coast_octaves(noise_scale, &grid),
@@ -512,7 +553,6 @@ impl Sampler {
                 _ => crate::plates::PlateMap::at_epoch(p, f64::from(p.drift_ma), continental),
             };
             sampler.tectonics = Some(map);
-            sampler.noise_mountains = NOISE_MOUNTAINS_WITH_PLATES;
         }
         sampler
     }
@@ -2501,6 +2541,78 @@ pub(crate) mod tests {
         let (a, b) = (within_range(1.1), within_range(1.4));
         assert!(a < b && b < 1.0, "{a} {b}");
         assert!(within_range(-3.0) >= -1.0);
+    }
+
+    /// A dry Venus-sized world without plates is plains, not a mountain
+    /// fabric: most of it within 1 km of its median, as on Venus (more than
+    /// 80 % within 1 km of the mean radius, Ford & Pettengill 1992).
+    #[test]
+    fn a_world_without_plates_is_mostly_plains() {
+        let mut p = WorldParams {
+            width: 256,
+            height: 128,
+            sea_level: -1.0,
+            pressure_bar: 90.0,
+            volcanic_intensity: 0.2,
+            gravity: Some(0.9),
+            ..params(12345, "terran")
+        };
+        let share_within_1km = |p: &WorldParams| {
+            let s = Sampler::new(p);
+            let mut cells: Vec<(f32, f32)> = (0..p.height)
+                .flat_map(|y| (0..p.width).map(move |x| (x, y)))
+                .map(|(x, y)| {
+                    let lat = (0.5 - (y as f32 + 0.5) / p.height as f32) * PI as f32;
+                    let km = s.sample(x, y).elevation * crate::craters::ELEVATION_KM;
+                    (km, lat.cos())
+                })
+                .collect();
+            cells.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let total: f32 = cells.iter().map(|c| c.1).sum();
+            let mut acc = 0.0;
+            let median = cells
+                .iter()
+                .find(|c| {
+                    acc += c.1;
+                    acc >= total / 2.0
+                })
+                .unwrap()
+                .0;
+            let near: f32 = cells
+                .iter()
+                .filter(|c| (c.0 - median).abs() <= 1.0)
+                .map(|c| c.1)
+                .sum();
+            near / total
+        };
+        for regime in [Regime::Stagnant, Regime::Episodic, Regime::HeatPipe] {
+            p.look.geology.regime = regime;
+            let share = share_within_1km(&p);
+            assert!(share > 0.7, "{regime:?} {share}");
+        }
+    }
+
+    /// An airless world without plates keeps the relief impacts give it,
+    /// whether its lid is stagnant or overturns now and then; a heat-pipe
+    /// world (Io) is not held to it.
+    #[test]
+    fn airless_worlds_without_plates_keep_impact_relief() {
+        let mut p = WorldParams {
+            pressure_bar: 0.0,
+            gravity: Some(1.0),
+            ..params(0, "terran")
+        };
+        for regime in [Regime::Stagnant, Regime::Episodic] {
+            p.look.geology.regime = regime;
+            let span = relief_share(&p) * noise_span_km(&p);
+            assert!((span - IMPACT_RELIEF_KM).abs() < 1e-3, "{regime:?} {span}");
+        }
+        p.look.geology.regime = Regime::HeatPipe;
+        assert_eq!(relief_share(&p), 1.0);
+        // With air, an episodic world keeps its whole relief.
+        p.look.geology.regime = Regime::Episodic;
+        p.pressure_bar = 90.0;
+        assert_eq!(relief_share(&p), 1.0);
     }
 
     #[test]
