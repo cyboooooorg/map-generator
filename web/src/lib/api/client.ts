@@ -16,7 +16,7 @@ import type { HexMap } from './types/HexMap';
 import type { HexRequest } from './types/HexRequest';
 import type { JobInfo } from './types/JobInfo';
 import type { JobStatus } from './types/JobStatus';
-import type { PresetInfo } from './types/PresetInfo';
+import type { ArchetypeInfo } from './types/ArchetypeInfo';
 import type { RiversFile } from './types/RiversFile';
 import type { WorldMetadata } from './types/WorldMetadata';
 
@@ -57,7 +57,7 @@ function fileInit(signal?: AbortSignal): RequestInit {
 }
 
 export const api = {
-  presets: () => call<PresetInfo[]>('/api/presets'),
+  archetypes: () => call<ArchetypeInfo[]>('/api/archetypes'),
   form: () => call<FormSpec>('/api/form'),
   // World files keep their URL when a world is regenerated under the same
   // id: revalidate them ('no-cache', a 304 when unchanged).

@@ -1,8 +1,8 @@
 // The star and orbit of the generation form: what the user picked, where
-// it starts from (the world being varied, the preset, the server's
+// it starts from (the world being varied, the archetype, the server's
 // fallback) and how it goes into a request.
 import type { ParamDefault } from './api/types/ParamDefault';
-import type { PresetInfo } from './api/types/PresetInfo';
+import type { ArchetypeInfo } from './api/types/ArchetypeInfo';
 import type { WorldRequest } from './api/types/WorldRequest';
 
 /** Spectral classes, hottest first (main-sequence dwarfs, O3V to M9.5V). */
@@ -13,18 +13,18 @@ export type OrbitBy = 'position' | 'au';
 
 /** The star and orbit as the form holds them. */
 export interface StarChoice {
-  /** Spectral class, or '' to let the preset or the server draw the star. */
+  /** Spectral class, or '' to let the archetype or the server draw the star. */
   klass: string;
   /** Subtype, 0 to 9.5. */
   subtype: number;
   orbitBy: OrbitBy;
-  /** Whether the orbit is left to the preset or the server. */
+  /** Whether the orbit is left to the archetype or the server. */
   orbitRandom: boolean;
   /** Position in the habitable zone (0 inner edge, 1 outer edge). */
   position: number;
   /** Distance, AU. */
   au: number;
-  /** Whether the eccentricity is left to the preset or the server. */
+  /** Whether the eccentricity is left to the archetype or the server. */
   eccentricityRandom: boolean;
   /** Eccentricity of the orbit, 0 to 0.9. */
   eccentricity: number;
@@ -54,23 +54,46 @@ function middle(d: ParamDefault): number {
 }
 
 /**
+ * Luminosity of a G2V star, L☉ (log L = 0.01 in the generator's star table,
+ * `star.rs`): the only star an archetype names today, so the only one whose
+ * insolation the form converts to a distance itself.
+ */
+const G2V_LUMINOSITY = 10 ** 0.01;
+
+/**
+ * The distance, AU, at which the archetype receives its insolation (the
+ * middle of its range) round its named star, as the server places it:
+ * `a = sqrt(L / S)`. Null when the archetype names no star, sets no
+ * insolation (a hot Jupiter sits at its period) or names a star whose
+ * luminosity the form does not know.
+ */
+function archetypeOrbitAu(archetype: ArchetypeInfo | undefined): number | null {
+  const insolation = archetype?.orbit.insolation;
+  const type = parseStarType(archetype?.orbit.star ?? '');
+  if (insolation == null || type === null || starType(type.klass, type.subtype) !== 'G2V') {
+    return null;
+  }
+  return Math.sqrt(G2V_LUMINOSITY / middle(insolation));
+}
+
+/**
  * Where the form starts: the varied world's star and orbit, else the
- * preset's, else a drawn star in the server's fallback range.
+ * archetype's, else a drawn star in the server's fallback range.
  */
 export function initialStarChoice(
-  preset: PresetInfo | undefined,
+  archetype: ArchetypeInfo | undefined,
   from: WorldRequest | null,
   fallbackPosition: ParamDefault,
 ): StarChoice {
-  const type = parseStarType(from?.star ?? preset?.star.type ?? '');
+  const type = parseStarType(from?.star ?? archetype?.orbit.star ?? '');
   const choice: StarChoice = {
     klass: type?.klass ?? '',
     subtype: type?.subtype ?? 2,
     orbitBy: 'position',
     orbitRandom: true,
-    position: middle(preset?.star.position ?? fallbackPosition),
+    position: middle(fallbackPosition),
     au: 1,
-    ...initialEccentricity(preset, from),
+    ...initialEccentricity(archetype, from),
   };
   if (from?.orbit_au != null) {
     return { ...choice, orbitBy: 'au', orbitRandom: false, au: from.orbit_au };
@@ -78,27 +101,22 @@ export function initialStarChoice(
   if (from?.hz_position != null) {
     return { ...choice, orbitRandom: false, position: from.hz_position };
   }
-  // Absent fields may come as null from older servers or stored worlds.
-  const presetAu = preset?.star.orbit_au;
-  if (presetAu != null) {
-    return { ...choice, orbitBy: 'au', orbitRandom: false, au: presetAu };
-  }
-  const presetPosition = preset?.star.position;
-  if (typeof presetPosition === 'number') {
-    return { ...choice, orbitRandom: false, position: presetPosition };
+  const archetypeAu = from?.star === undefined || from.star === archetype?.orbit.star ? archetypeOrbitAu(archetype) : null;
+  if (archetypeAu !== null) {
+    return { ...choice, orbitBy: 'au', orbitRandom: false, au: Number(archetypeAu.toFixed(4)) };
   }
   return choice;
 }
 
-/** The eccentricity the form starts from: the varied world's, else the preset's (fixed or the middle of its range). */
+/** The eccentricity the form starts from: the varied world's, else the archetype's (fixed or the middle of its range). */
 function initialEccentricity(
-  preset: PresetInfo | undefined,
+  archetype: ArchetypeInfo | undefined,
   from: WorldRequest | null,
 ): Pick<StarChoice, 'eccentricityRandom' | 'eccentricity'> {
   if (from?.eccentricity != null) {
     return { eccentricityRandom: false, eccentricity: from.eccentricity };
   }
-  const d = preset?.star.eccentricity;
+  const d = archetype?.orbit.eccentricity;
   if (typeof d === 'number') {
     return { eccentricityRandom: false, eccentricity: d };
   }

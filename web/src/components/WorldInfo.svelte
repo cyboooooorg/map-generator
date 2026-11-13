@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getLocale, t } from '../lib/i18n/index.svelte';
-  import { biomeName, presetDescription, presetName } from '../lib/i18n/names.svelte';
+  import { archetypeDescription, archetypeName, biomeName, className } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
   import { downloadRawData, downloadSvg } from '../lib/download';
   import { cliCommand, copyText, formatAgo, formatArea, formatAge, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
@@ -47,8 +47,8 @@
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
   // The archetype asked for, else the class of the planet.
-  const kind = $derived(meta ? { name: meta.archetype ?? meta.class } : null);
-  const title = $derived(forcedTitle ?? (kind ? presetName(kind) : worldId));
+  const kind = $derived(meta ? (meta.archetype ? archetypeName({ name: meta.archetype }) : className(meta.class)) : null);
+  const title = $derived(forcedTitle ?? kind ?? worldId);
 
   async function copy(text: string, what: string): Promise<void> {
     const ok = await copyText(text);
@@ -96,7 +96,7 @@
       <span class="title">
         <strong>{ofMoon ? t.worldInfo.planetHeading({ name: title ?? '' }) : title}</strong>
         <small
-          >{[kind ? presetName(kind) : null, forcedTitle ? null : worldId]
+          >{[kind, forcedTitle ? null : worldId]
             .filter(Boolean)
             .join(' · ')}</small
         >
@@ -104,7 +104,7 @@
     </summary>
 
     {#if meta}
-      <p class="description">{presetDescription({ name: meta.archetype ?? meta.class })}</p>
+      <p class="description">{meta.archetype ? archetypeDescription({ name: meta.archetype }) : ''}</p>
       <dl>
         <dt>{t.worldInfo.seed}</dt>
         <dd>{meta.seed}</dd>

@@ -1,37 +1,33 @@
 <script lang="ts">
   import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
-  import { presetDescription, presetName } from '../lib/i18n/names.svelte';
+  import { archetypeDescription, archetypeName } from '../lib/i18n/names.svelte';
   import { untrack } from 'svelte';
   import { api } from '../lib/api/client';
-  import type { Defaults } from '../lib/api/types/Defaults';
   import type { FormSpec } from '../lib/api/types/FormSpec';
   import type { SystemCreated } from '../lib/api/types/SystemCreated';
   import type { SystemRequest } from '../lib/api/types/SystemRequest';
   import type { WholeSystemRequest } from '../lib/api/types/WholeSystemRequest';
   import { ApiFailure } from '../lib/api/client';
-  import type { ParamDefault } from '../lib/api/types/ParamDefault';
-  import type { PresetInfo } from '../lib/api/types/PresetInfo';
+  import type { ArchetypeInfo } from '../lib/api/types/ArchetypeInfo';
   import type { WorldRequest } from '../lib/api/types/WorldRequest';
   import { formatInt, formatUpTo, MAX_SEED, randomSeed } from '../lib/format';
   import { formatDrift } from '../lib/drift';
   import { formatBytes, formatEstimate, serverPeakBytes, viewerBytes } from '../lib/estimate';
   import { initialFormSize } from '../lib/sizes';
-  import { clearFormMemory, loadFormMemory, saveFormMemory } from '../lib/formMemory';
+  import { clearFormMemory, FALLBACK_ARCHETYPE, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
-  import { type Unit, unitTooltip } from '../lib/units';
-  import { PRESSURE_STEPS, pressureToSlider, sliderToPressure } from '../lib/pressure';
   import { applyStarChoice, initialStarChoice, STAR_CLASSES, starType, type StarChoice } from '../lib/starForm';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
   import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
 
   interface Props {
-    presets: PresetInfo[];
+    archetypes: ArchetypeInfo[];
     spec: FormSpec;
     /**
      * Parameters to start from (varying an existing world), or null for the
-     * last form submitted in this browser (the preset defaults without one).
+     * last form submitted in this browser (the archetype's values without one).
      */
     initial?: WorldRequest | null;
     /** Id of the world being varied, for the title. */
@@ -45,11 +41,11 @@
     atSummary?: boolean;
   }
 
-  let { presets, spec, initial = null, variedFrom = null, onSubmitted, onCancel, entry = null, atSummary = false }: Props = $props();
+  let { archetypes, spec, initial = null, variedFrom = null, onSubmitted, onCancel, entry = null, atSummary = false }: Props = $props();
 
   /**
    * What the form asks for (docs/system-spec.md): a system around the
-   * planet it describes, or a whole system, its planets by type. A varied
+   * planet it describes, or a whole system, its planets by archetype. A varied
    * world is always a planet.
    */
   type Mode = 'around' | 'system';
@@ -72,152 +68,88 @@
     step = to;
   }
   $effect(() => saveSetting('formMode', mode));
-  /** A whole system: its star (a class and subtype, or drawn) and its planets by type (or all drawn). */
+  /** A whole system: its star (a class and subtype, or drawn) and its planets by archetype (or all drawn). */
   let systemStarRandom = $state(true);
   let systemClass = $state<string>('G');
   let systemSubtype = $state(2);
   let planetsDrawn = $state(true);
-  let planetCounts = $state<Record<string, number>>(untrack(() => Object.fromEntries(spec.planet_types.map((type) => [type, type === 'terran' ? 1 : 0]))));
+  let planetCounts = $state<Record<string, number>>(untrack(() => Object.fromEntries(spec.archetypes.map((name) => [name, name === FALLBACK_ARCHETYPE ? 1 : 0]))));
   const planetTotal = $derived(Object.values(planetCounts).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0));
   const planetsValid = $derived(planetsDrawn || (planetTotal >= 1 && planetTotal <= spec.max_planets));
   /** The system the server said exists already, which the next submission may replace. */
   let existsId = $state<string | null>(null);
 
-  type Field =
-    | 'sea_level'
-    | 'volcanic'
-    | 'circumference_km'
-    | 'axial_tilt_deg'
-    | 'erosion'
-    | 'pressure_bar'
-    | 'surface_age_ga';
+  /** The inputs the form sets itself; the planet's model inputs wait for their own fields. */
+  type Field = 'axial_tilt_deg';
 
   interface FieldInfo {
-    /** Key of the preset `[defaults]` table. */
-    defaultsKey: keyof Defaults;
     /** Slider range; the number input accepts the full server limits. */
     slider: [number, number];
     step: number;
-    /** Less common units of the field, explained in a tooltip. */
-    units?: Unit[];
   }
 
   const FIELDS: Record<Field, FieldInfo> = {
-    sea_level: {
-      defaultsKey: 'sea_level',
-      slider: [-1, 1],
-      step: 0.01,
-    },
-    volcanic: {
-      defaultsKey: 'volcanic',
-      slider: [0, 1],
-      step: 0.01,
-    },
-    circumference_km: {
-      defaultsKey: 'circumference',
-      slider: [5_000, 120_000],
-      step: 100,
-    },
     axial_tilt_deg: {
-      defaultsKey: 'axial_tilt',
       slider: [0, 90],
       step: 0.1,
     },
-    erosion: {
-      defaultsKey: 'erosion',
-      slider: [0, 5],
-      step: 0.1,
-    },
-    pressure_bar: {
-      units: ['bar'],
-      defaultsKey: 'pressure',
-      slider: [0, 100],
-      step: 0.001,
-    },
-    surface_age_ga: {
-      units: ['Ga'],
-      defaultsKey: 'surface_age',
-      slider: [0, 4.6],
-      step: 0.01,
-    },
   };
   const FIELD_NAMES = Object.keys(FIELDS) as Field[];
-  /** Label and help of a field other than the sea level, in the active locale. */
-  const fieldText = (field: Exclude<Field, 'sea_level'>) => t.form.fields[field];
-  /** Every field but the sea level, which has its own fieldset. */
-  const OTHER_FIELDS = FIELD_NAMES.filter((field) => field !== 'sea_level');
+  /** Label and help of a field, in the active locale. */
+  const fieldText = (field: Field) => t.form.fields[field];
 
-  /** The sea is set either by its level or by the share of land it leaves. */
-  type SeaBy = 'level' | 'land';
-
-  /** Each parameter: random (left to the preset or the server) or a fixed value. */
+  /** Each parameter: random (left to the archetype or the server) or a fixed value. */
   type FieldState = Record<Field, { random: boolean; value: number }>;
 
-  function initialState(preset: PresetInfo | undefined, from: WorldRequest | null): FieldState {
+  /** Earth's axial tilt (23.44 degrees), what a drawn field shows once the user fixes it. */
+  const EARTH_TILT = 23.44;
+
+  function initialState(archetype: ArchetypeInfo | undefined, from: WorldRequest | null): FieldState {
     const state = {} as FieldState;
-    const land = landDefault(preset, from);
     for (const field of FIELD_NAMES) {
-      if (field === 'sea_level' && land !== null) {
-        // Set by the land share: only its random flag matters here.
-        state[field] = { random: land.random, value: 0 };
-        continue;
-      }
       const given = from?.[field];
       if (given !== undefined) {
         state[field] = { random: false, value: given };
         continue;
       }
-      const fromPreset: ParamDefault | null = preset?.defaults[FIELDS[field].defaultsKey] ?? null;
-      const d = fromPreset ?? spec[field].fallback;
-      state[field] = typeof d === 'number' ? { random: false, value: d } : { random: true, value: (d[0] + d[1]) / 2 };
+      const d = archetype?.orbit.axial_tilt ?? null;
+      state[field] =
+        typeof d === 'number'
+          ? { random: false, value: d }
+          : { random: true, value: d ? (d[0] + d[1]) / 2 : EARTH_TILT };
     }
     return state;
   }
 
+  /** The archetype a request names: by spec (built-in name or file) or by name. */
+  function findArchetype(name: string | undefined): ArchetypeInfo | undefined {
+    return name === undefined ? undefined : archetypes.find((a) => a.spec === name || a.name === name);
+  }
+
   /**
-   * The land share a request or preset sets instead of the sea level, in
-   * percent, or null when it sets the sea level (or neither).
+   * Whether an archetype's world takes the giant path: its mass is no less
+   * than the smallest giant's (`GIANT_MASS` in crates/mapgen/src/request.rs,
+   * Earth masses).
    */
-  function landDefault(
-    preset: PresetInfo | undefined,
-    from: WorldRequest | null,
-  ): { random: boolean; percent: number } | null {
-    if (from?.land_fraction !== undefined) {
-      return { random: false, percent: toPercent(from.land_fraction) };
-    }
-    if (from?.sea_level !== undefined) {
-      return null;
-    }
-    const d = preset?.defaults.land_fraction ?? null;
-    if (d === null) {
-      return null;
-    }
-    return typeof d === 'number'
-      ? { random: false, percent: toPercent(d) }
-      : { random: true, percent: toPercent((d[0] + d[1]) / 2) };
-  }
-
-  /** A fraction in percent, rounded to 0.01 so 0.29 shows as 29, not 28.999999999999996. */
-  function toPercent(fraction: number): number {
-    return Math.round(fraction * 10_000) / 100;
-  }
-
-  /** The preset a request names: by spec (built-in name or file) or by preset name. */
-  function findPreset(name: string | undefined): PresetInfo | undefined {
-    return name === undefined ? undefined : presets.find((p) => p.spec === name || p.name === name);
+  const GIANT_MASS_MIN = 5;
+  function isGiantArchetype(archetype: ArchetypeInfo | undefined): boolean {
+    const mass = archetype?.inputs.mass_earth;
+    return mass !== undefined && (typeof mass === 'number' ? mass : mass[0]) >= GIANT_MASS_MIN;
   }
 
   // The form starts from the props as they are when it opens; later prop
   // changes must not reset what the user typed, hence untrack.
-  const start = untrack(() => ({ initial, preset: findPreset(initial?.planet) ?? presets[0] }));
-  const missingPreset = start.initial?.planet !== undefined && !findPreset(start.initial.planet);
-  /** A blank form starts from the last one submitted, if its preset is still offered. */
+  const start = untrack(() => ({ initial, archetype: findArchetype(initial?.planet) ?? findArchetype(FALLBACK_ARCHETYPE) ?? archetypes[0] }));
+  const missingArchetype = start.initial?.planet !== undefined && !findArchetype(start.initial.planet);
+  /** A blank form starts from the last one submitted (an archetype no longer offered becomes earth-like). */
   const memory = untrack(() => {
-    const stored = initial === null ? loadFormMemory(FIELD_NAMES) : null;
-    return stored && presets.some((p) => p.spec === stored.planet) ? stored : null;
+    return initial === null ? loadFormMemory(
+      FIELD_NAMES,
+      archetypes.map((a) => a.spec),
+    ) : null;
   });
-  const memoryPreset = untrack(() => (memory ? presets.find((p) => p.spec === memory.planet) : undefined));
-  let planet = $state(memoryPreset?.spec ?? start.preset?.spec ?? '');
+  const memoryArchetype = untrack(() => (memory ? archetypes.find((a) => a.spec === memory.planet) : undefined));
+  let planet = $state(memoryArchetype?.spec ?? start.archetype?.spec ?? '');
   let randomPlanet = $state(memory?.randomPlanet ?? false);
   let seed = $state(start.initial?.seed !== undefined ? String(start.initial.seed) : '');
   let size = $state(
@@ -232,21 +164,17 @@
   let fields = $state<FieldState>(
     untrack(() =>
       memory
-        ? { ...initialState(memoryPreset, null), ...(memory.fields as Partial<FieldState>) }
-        : initialState(start.preset, start.initial),
+        ? { ...initialState(memoryArchetype, null), ...(memory.fields as Partial<FieldState>) }
+        : initialState(start.archetype, start.initial),
     ),
   );
-  const startLand = untrack(() => (memory ? null : landDefault(start.preset, start.initial)));
-  let seaBy = $state<SeaBy>(memory?.seaBy ?? (startLand ? 'land' : 'level'));
-  /** Land share in percent, used when `seaBy` is 'land'. */
-  let landPercent = $state(memory?.landPercent ?? startLand?.percent ?? 29);
   /** The moons asked for: drawn by the seed, none, or a number. */
   let moons = $state<MoonChoice>(untrack(() => memory?.moons ?? moonChoiceOf(start.initial?.moons)));
   /** Metallicity, giant neighbours, a giant's moon, a giant's mass (see giantForm.ts). */
   let giantChoice = $state<GiantChoice>(untrack(() => memory?.giant ?? initialGiantChoice(start.initial)));
   /** The star and the orbit (see starForm.ts). */
   let star = $state<StarChoice>(
-    untrack(() => memory?.star ?? initialStarChoice(start.preset, start.initial, spec.hz_position.fallback)),
+    untrack(() => memory?.star ?? initialStarChoice(start.archetype, start.initial, spec.hz_position.fallback)),
   );
   /** Subtypes of a class, by half steps: O starts at O3, the sequence ends at M9.5. */
   function subtypes(klass: string): number[] {
@@ -257,11 +185,11 @@
   let error = $state<string | null>(null);
   let replace = $state(false);
 
-  const selectedPreset = $derived(presets.find((p) => p.spec === planet));
-  /** A giant planet: no ground, so no sea, volcanoes, erosion, air pressure, craters or moons to set. */
-  const giantWorld = $derived(!randomPlanet && selectedPreset?.giant !== undefined);
+  const selectedArchetype = $derived(archetypes.find((a) => a.spec === planet));
+  /** A giant planet: no ground, so no drift, moons or giant neighbours to set. */
+  const giantWorld = $derived(!randomPlanet && isGiantArchetype(selectedArchetype));
   /** The fields a world of the chosen kind has. */
-  const shownFields = $derived(giantWorld ? OTHER_FIELDS.filter((f) => f === 'axial_tilt_deg') : OTHER_FIELDS);
+  const shownFields = FIELD_NAMES;
   const sizes = $derived.by(() => {
     const list = spec.size_presets.map(([w, h]): [number, number] => [w, h]);
     for (const extra of [size, `${spec.default_width}x${spec.default_height}`]) {
@@ -273,32 +201,26 @@
     return list;
   });
 
-  function choosePreset(presetSpec: string): void {
-    planet = presetSpec;
-    const preset = presets.find((p) => p.spec === presetSpec);
-    fields = initialState(preset, null);
-    star = initialStarChoice(preset, null, spec.hz_position.fallback);
-    const land = landDefault(preset, null);
-    seaBy = land ? 'land' : 'level';
-    landPercent = land?.percent ?? 29;
+  function chooseArchetype(archetypeSpec: string): void {
+    planet = archetypeSpec;
+    const archetype = archetypes.find((a) => a.spec === archetypeSpec);
+    fields = initialState(archetype, null);
+    star = initialStarChoice(archetype, null, spec.hz_position.fallback);
   }
 
   /**
-   * Back to the defaults: the first preset's (or the varied world's)
+   * Back to the defaults: the first archetype's (or the varied world's)
    * parameters, the server's map size and a random seed, and the
    * remembered form forgotten.
    */
   function resetForm(): void {
     clearFormMemory();
-    const preset = start.preset;
+    const archetype = start.archetype;
     randomPlanet = false;
-    choosePreset(preset?.spec ?? '');
+    chooseArchetype(archetype?.spec ?? '');
     if (start.initial) {
-      fields = initialState(preset, start.initial);
-      star = initialStarChoice(preset, start.initial, spec.hz_position.fallback);
-      const land = landDefault(preset, start.initial);
-      seaBy = land ? 'land' : 'level';
-      landPercent = land?.percent ?? 29;
+      fields = initialState(archetype, start.initial);
+      star = initialStarChoice(archetype, start.initial, spec.hz_position.fallback);
     }
     moons = moonChoiceOf(start.initial?.moons);
     giantChoice = initialGiantChoice(start.initial);
@@ -359,21 +281,14 @@
           ? t.form.systemPlanetsDrawn
           : Object.entries(planetCounts)
               .filter(([, n]) => Number.isFinite(n) && n > 0)
-              .map(([type, n]) => `${n} ${presetName({ name: type })}`)
+              .map(([type, n]) => `${n} ${archetypeName({ name: type })}`)
               .join(' · '),
       });
     } else {
-      lines.push({ label: t.form.planet, value: randomPlanet ? random : selectedPreset ? presetName(selectedPreset) : planet });
+      lines.push({ label: t.form.planet, value: randomPlanet ? random : selectedArchetype ? archetypeName(selectedArchetype) : planet });
       lines.push({ label: t.form.star, value: star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype) });
       // Each parameter fixed, with its value; the others are drawn.
       const fixed: { label: string; value: string }[] = [];
-      if (!giantWorld && !fields.sea_level.random) {
-        fixed.push(
-          seaBy === 'level'
-            ? { label: t.form.seaLevel, value: formatUpTo(fields.sea_level.value, 2) }
-            : { label: t.form.landShare, value: formatUpTo(landPercent, 1) },
-        );
-      }
       for (const f of shownFields) {
         if (!fields[f].random) fixed.push({ label: fieldText(f).label, value: formatUpTo(fields[f].value, 3) });
       }
@@ -444,13 +359,6 @@
       request.moons = asked;
     }
     applyGiantChoice(request, giantChoice, giantWorld);
-    if (!fields.sea_level.random && !giantWorld) {
-      if (seaBy === 'level') {
-        request.sea_level = fields.sea_level.value;
-      } else {
-        request.land_fraction = landPercent / 100;
-      }
-    }
     return request;
   }
 
@@ -491,8 +399,6 @@
         planet,
         randomPlanet,
         size,
-        seaBy,
-        landPercent,
         fields,
         star,
         moons: giantChoice.host === 'giant' ? 'auto' : moons,
@@ -527,12 +433,8 @@
   {:else if memory}
     <p class="help">{t.form.memoryHelpBefore}<strong>{t.form.memoryHelpDefaults}</strong>{t.form.memoryHelpAfter}</p>
   {/if}
-  {#if missingPreset}
-    <p class="error">{t.form.missingPreset({ preset: start.initial?.planet ?? '' })}</p>
-  {/if}
-
-  {#if missingPreset}
-    <p class="error">{t.form.missingPreset({ preset: start.initial?.planet ?? '' })}</p>
+  {#if missingArchetype}
+    <p class="error">{t.form.missingArchetype({ archetype: start.initial?.planet ?? '' })}</p>
   {/if}
 
   {#if step === 'kind'}
@@ -684,9 +586,9 @@
         </legend>
         {#if !planetsDrawn}
           <div class="counts">
-            {#each spec.planet_types as type (type)}
+            {#each spec.archetypes as type (type)}
               <label>
-                <span>{presetName({ name: type })}</span>
+                <span>{archetypeName({ name: type })}</span>
                 <input type="number" min="0" max={spec.max_planets} step="1" bind:value={planetCounts[type]} />
               </label>
             {/each}
@@ -698,9 +600,9 @@
     {:else}
   <label class="row">
     <span>{t.form.planet}</span>
-    <select value={planet} onchange={(e) => choosePreset(e.currentTarget.value)} disabled={randomPlanet}>
-      {#each presets as preset (preset.spec)}
-        <option value={preset.spec}>{presetName(preset)}{preset.built_in ? '' : ` (${preset.spec})`}</option>
+    <select value={planet} onchange={(e) => chooseArchetype(e.currentTarget.value)} disabled={randomPlanet}>
+      {#each archetypes as archetype (archetype.spec)}
+        <option value={archetype.spec}>{archetypeName(archetype)}{archetype.built_in ? '' : ` (${archetype.spec})`}</option>
       {/each}
     </select>
   </label>
@@ -708,61 +610,16 @@
     <input type="checkbox" bind:checked={randomPlanet} />
     {t.form.randomPlanet}
   </label>
-  {#if selectedPreset && !randomPlanet}
-    <p class="help">{presetDescription(selectedPreset)}</p>
-  {/if}
-
-  {#if !giantWorld}
-  <fieldset>
-    <legend>
-      <select class="mode" bind:value={seaBy} aria-label={t.form.seaBy}>
-        <option value="level">{t.form.seaLevel}</option>
-        <option value="land">{t.form.landShare}</option>
-      </select>
-      <label class="check inline">
-        <input type="checkbox" bind:checked={fields.sea_level.random} />
-        {t.form.random}
-      </label>
-    </legend>
-    {#if !fields.sea_level.random}
-      <div class="slider">
-        {#if seaBy === 'level'}
-          <input type="range" min={-1} max={1} step={0.01} bind:value={fields.sea_level.value} />
-          <input
-            type="number"
-            min={spec.sea_level.limits.min}
-            max={spec.sea_level.limits.max}
-            step="any"
-            bind:value={fields.sea_level.value}
-          />
-        {:else}
-          <input type="range" min={0} max={100} step={1} bind:value={landPercent} />
-          <input
-            type="number"
-            min={spec.land_fraction.min * 100}
-            max={spec.land_fraction.max * 100}
-            step="any"
-            bind:value={landPercent}
-          />
-        {/if}
-      </div>
-    {/if}
-    <p class="help">
-      {seaBy === 'level' ? t.form.seaLevelHelp : t.form.landShareHelp}
-    </p>
-  </fieldset>
+  {#if selectedArchetype && !randomPlanet}
+    <p class="help">{archetypeDescription(selectedArchetype)}</p>
   {/if}
 
   {#each shownFields as field (field)}
     {@const info = FIELDS[field]}
-    {@const limits = spec[field].limits}
+    {@const limits = spec.inputs[field]}
     <fieldset>
       <legend>
-        {#if info.units}
-          <span class="unit-help" title={unitTooltip(...info.units)}>{fieldText(field).label}</span>
-        {:else}
-          {fieldText(field).label}
-        {/if}
+        {fieldText(field).label}
         <label class="check inline">
           <input type="checkbox" bind:checked={fields[field].random} />
           {t.form.random}
@@ -770,29 +627,13 @@
       </legend>
       {#if !fields[field].random}
         <div class="slider">
-          {#if field === 'pressure_bar'}
-            <!-- Logarithmic: position 0 is airless, then 0.001 to 1000 bar. -->
-            <input
-              type="range"
-              min={0}
-              max={PRESSURE_STEPS}
-              step={1}
-              value={pressureToSlider(fields[field].value)}
-              oninput={(e) => (fields.pressure_bar.value = sliderToPressure(Number(e.currentTarget.value)))}
-              aria-label={t.form.pressureSlider}
-            />
-          {:else}
-            <input
-              type="range"
-              min={info.slider[0]}
-              max={info.slider[1]}
-              step={info.step}
-              bind:value={fields[field].value}
-            />
-          {/if}
-          <!-- step="any": the slider step counts from the server minimum (1 km for
-               the circumference), so a stepped input would reject round values
-               such as 50000. -->
+          <input
+            type="range"
+            min={info.slider[0]}
+            max={info.slider[1]}
+            step={info.step}
+            bind:value={fields[field].value}
+          />
           <input type="number" min={limits.min} max={limits.max} step="any" bind:value={fields[field].value} />
         </div>
       {/if}
@@ -867,14 +708,14 @@
               <!-- Logarithmic: from a small ice giant to 13 Jupiter masses. -->
               <input
                 type="range"
-                min={Math.log10(spec.giant_mass.min)}
-                max={Math.log10(spec.giant_mass.max)}
+                min={Math.log10(Math.max(GIANT_MASS_MIN, spec.inputs.mass_earth.min))}
+                max={Math.log10(spec.inputs.mass_earth.max)}
                 step={0.01}
                 value={Math.log10(giantChoice.mass)}
                 oninput={(e) => (giantChoice.mass = Math.round(10 ** Number(e.currentTarget.value)))}
                 aria-label={t.form.giantMass}
               />
-              <input type="number" min={spec.giant_mass.min} max={spec.giant_mass.max} step="any" bind:value={giantChoice.mass} />
+              <input type="number" min={Math.max(GIANT_MASS_MIN, spec.inputs.mass_earth.min)} max={spec.inputs.mass_earth.max} step="any" bind:value={giantChoice.mass} />
             </div>
           {/if}
           <p class="help">{t.form.giantMassHelp}</p>

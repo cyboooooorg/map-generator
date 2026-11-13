@@ -1,6 +1,6 @@
 // Names of things that come from the generator, in the active locale.
 import type { BiomeInfo } from '../api/types/BiomeInfo';
-import type { PresetInfo } from '../api/types/PresetInfo';
+import type { ArchetypeInfo } from '../api/types/ArchetypeInfo';
 import type { Locale } from '../api/types/Locale';
 import { getLocale, t } from './index.svelte';
 
@@ -24,9 +24,9 @@ const known = $state<{
 }>({ locales: {}, descriptions: {} });
 
 /** Records the translations of the archetypes the server offers. */
-export function setPresetLocales(presets: readonly PresetInfo[]): void {
-  known.locales = Object.fromEntries(presets.map((p) => [p.name, p.locales]));
-  known.descriptions = Object.fromEntries(presets.map((p) => [p.name, p.description]));
+export function setArchetypeLocales(archetypes: readonly ArchetypeInfo[]): void {
+  known.locales = Object.fromEntries(archetypes.map((a) => [a.name, a.locales]));
+  known.descriptions = Object.fromEntries(archetypes.map((a) => [a.name, a.description]));
 }
 
 function translation(name: string): Locale | undefined {
@@ -34,14 +34,19 @@ function translation(name: string): Locale | undefined {
 }
 
 /**
- * The display name of an archetype, translated when its file says how, else
- * worded as a body type: a planet's class key (`rocky`, `ice-giant`…).
+ * The display name of an archetype: translated when its file says how, else
+ * its own name.
  */
-export function presetName(preset: { name: string }): string {
-  return translation(preset.name)?.name ?? (t.viewer.bodyTypes as Record<string, string>)[preset.name] ?? preset.name;
+export function archetypeName(archetype: { name: string }): string {
+  return translation(archetype.name)?.name ?? archetype.name;
 }
 
 /** The description of an archetype, translated when its file says how, else the server's. */
-export function presetDescription(preset: { name: string; description?: string }): string {
-  return translation(preset.name)?.description ?? preset.description ?? known.descriptions[preset.name] ?? '';
+export function archetypeDescription(archetype: { name: string; description?: string }): string {
+  return translation(archetype.name)?.description ?? archetype.description ?? known.descriptions[archetype.name] ?? '';
+}
+
+/** The label of a planet's class key (`rocky`, `ice-giant`, `icy-moon`…), the key itself when unknown. */
+export function className(key: string): string {
+  return (t.viewer.bodyTypes as Record<string, string>)[key] ?? key;
 }

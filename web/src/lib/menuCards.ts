@@ -92,8 +92,8 @@ export function presentClasses(systems: Pick<SystemSummary, 'star'>[]): StarClas
 /**
  * Whether a body is a habitable world: a planet with liquid water on its
  * surface, as the server reads it from the planet's model (or, for the
- * planet a request around one asked for, which has no model, its `terran`
- * or `earth-like` preset; see `BodySummary.habitable`). A moon never is,
+ * planet a request around one asked for, which has no model, its `earth-like`
+ * archetype; see `BodySummary.habitable`). A moon never is,
  * whatever its planet's orbit.
  */
 export const isHabitableWorld = (body: BodySummary): boolean => body.kind === 'planet' && body.habitable;

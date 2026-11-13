@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { PresetInfo } from './api/types/PresetInfo';
+import type { ArchetypeInfo } from './api/types/ArchetypeInfo';
 import type { WorldRequest } from './api/types/WorldRequest';
 import { applyStarChoice, initialStarChoice, parseStarChoice, parseStarType, starType } from './starForm';
 
-const preset = (star: PresetInfo['star']) => ({ star }) as PresetInfo;
+const archetype = (orbit: Partial<ArchetypeInfo['orbit']>) => ({ orbit }) as ArchetypeInfo;
 
 describe('star form', () => {
   it('reads and writes spectral types', () => {
@@ -15,13 +15,23 @@ describe('star form', () => {
     expect(starType('M', 4.5)).toBe('M4.5V');
   });
 
-  it('starts from the varied world, then the preset, then the fallback', () => {
-    const fromWorld = initialStarChoice(preset({ type: 'G2V', orbit_au: 1.524 }), { star: 'K3V', orbit_au: 0.7 }, [0.1, 0.9]);
+  it('starts from the varied world, then the archetype, then the fallback', () => {
+    const mars = archetype({ star: 'G2V', insolation: [0.39, 0.47] });
+    const fromWorld = initialStarChoice(mars, { star: 'K3V', orbit_au: 0.7 }, [0.1, 0.9]);
     expect(fromWorld).toMatchObject({ klass: 'K', subtype: 3, orbitBy: 'au', orbitRandom: false, au: 0.7 });
-    const mars = initialStarChoice(preset({ type: 'G2V', orbit_au: 1.524 }), null, [0.1, 0.9]);
-    expect(mars).toMatchObject({ klass: 'G', subtype: 2, orbitBy: 'au', au: 1.524 });
-    const terran = initialStarChoice(preset({ position: [0.1, 0.9] }), null, [0.1, 0.9]);
-    expect(terran).toMatchObject({ klass: '', orbitBy: 'position', orbitRandom: true, position: 0.5 });
+    // sqrt(1.023 / 0.43) = 1.542 AU, as the server places it.
+    const fromMars = initialStarChoice(mars, null, [0.1, 0.9]);
+    expect(fromMars).toMatchObject({ klass: 'G', subtype: 2, orbitBy: 'au', orbitRandom: false });
+    expect(fromMars.au).toBeCloseTo(1.542, 2);
+    const ocean = initialStarChoice(archetype({ insolation: [0.9, 1.1] }), null, [0.1, 0.9]);
+    expect(ocean).toMatchObject({ klass: '', orbitBy: 'position', orbitRandom: true, position: 0.5 });
+  });
+
+  it('the_archetype_chooses_the_star', () => {
+    const venus = initialStarChoice(archetype({ star: 'G2V', insolation: [1.7, 2.1] }), null, [0.1, 0.9]);
+    expect(starType(venus.klass, venus.subtype)).toBe('G2V');
+    expect(venus.orbitRandom).toBe(false);
+    expect(venus.au).toBeCloseTo(0.733, 2);
   });
 
   it('puts only what is fixed into the request', () => {

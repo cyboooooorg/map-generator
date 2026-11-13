@@ -135,24 +135,39 @@ function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
-/** The generation request that reproduces a world exactly. */
+/** Earth's mass, kg (`exomoon::EARTH_KG` in crates/mapgen). */
+const EARTH_KG = 5.972e24;
+/** One Earth ocean, kg (`planet::OCEAN_KG` in crates/mapgen). */
+const OCEAN_KG = 1.4e21;
+
+/** A model input rounded to 6 significant digits: short in the CLI, far finer than the generator's draws. */
+function significant(value: number): number {
+  return Number(value.toPrecision(6));
+}
+
+/**
+ * The generation request that reproduces a world: the archetype it was
+ * asked as, the inputs of its planet model pinned as overrides (so a new
+ * seed, a drift or a variation keeps the planet), and its orbit and star.
+ * The CO₂ and N₂ factors cannot be recovered from a model and are left to
+ * the archetype; a moon has no model and pins nothing of it.
+ */
 export function requestFromWorld(meta: WorldMetadata): WorldRequest {
+  const inputs = meta.model?.inputs;
   return {
     ...(meta.archetype ? { planet: meta.archetype } : {}),
     seed: meta.seed,
-    sea_level: round(meta.sea_level, 4),
-    // A giant has no ground: its volcanism, circumference and erosion are
-    // not asked for (the server ignores them).
-    ...(meta.giant
-      ? {}
-      : {
-          volcanic: round(meta.volcanic_intensity, 4),
-          circumference_km: round(meta.circumference_km, 1),
-          erosion: round(meta.erosion, 2),
-        }),
+    ...(inputs
+      ? {
+          mass_earth: significant(inputs.mass_earth),
+          core_mass_fraction: significant(inputs.core_mass_fraction),
+          water_oceans: significant((inputs.water_fraction * inputs.mass_earth * EARTH_KG) / OCEAN_KG),
+          envelope_fraction: significant(inputs.envelope_fraction),
+          radiogenic: significant(inputs.radiogenic),
+          ...(meta.model?.surface?.life.arose ? { life: true } : {}),
+        }
+      : {}),
     axial_tilt_deg: round(meta.axial_tilt_deg, 2),
-    pressure_bar: round(meta.pressure_bar, 4),
-    surface_age_ga: round(meta.surface_age_ga, 3),
     star: meta.star.type,
     orbit_au: round(meta.star.orbit_au, 5),
     eccentricity: round(meta.star.eccentricity, 4),
@@ -169,31 +184,30 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     // The star's metallicity, and giants turned off.
     metallicity: round(meta.star.metallicity, 4),
     ...(meta.giants == null && !meta.giant ? { giants: 'none' as const } : {}),
-    // A giant's moon stays one; a giant keeps its mass.
+    // A giant's moon stays one.
     ...(meta.host ? { host: 'giant' as const } : {}),
-    ...(meta.giant ? { mass_earth: round(meta.giant.mass_earth, 2) } : {}),
     width: meta.width,
     height: meta.height,
   };
 }
 
 /**
- * The command line that regenerates a world with the CLI. A preset read from
- * a file is named by its preset name: pass its path instead if it is not in
+ * The command line that regenerates a world with the CLI. An archetype read
+ * from a file is named by its name: pass its path instead if it is not in
  * the built-in list.
  */
 export function cliCommand(meta: WorldMetadata): string {
   const r = requestFromWorld(meta);
   const args = [
-    `--planet ${r.planet}`,
+    ...(r.planet === undefined ? [] : [`--planet ${r.planet}`]),
     `--seed ${r.seed}`,
-    `--sea-level ${r.sea_level}`,
-    ...(r.volcanic === undefined ? [] : [`--volcanic ${r.volcanic}`]),
-    ...(r.circumference_km === undefined ? [] : [`--circumference ${r.circumference_km}`]),
+    ...(r.mass_earth === undefined ? [] : [`--mass ${r.mass_earth}`]),
+    ...(r.core_mass_fraction === undefined ? [] : [`--core-fraction ${r.core_mass_fraction}`]),
+    ...(r.water_oceans === undefined ? [] : [`--water ${r.water_oceans}`]),
+    ...(r.envelope_fraction === undefined ? [] : [`--envelope ${r.envelope_fraction}`]),
+    ...(r.radiogenic === undefined ? [] : [`--radiogenic ${r.radiogenic}`]),
+    ...(r.life === undefined ? [] : [`--life ${r.life ? 'yes' : 'no'}`]),
     `--axial-tilt ${r.axial_tilt_deg}`,
-    ...(r.erosion === undefined ? [] : [`--erosion ${r.erosion}`]),
-    `--pressure ${r.pressure_bar}`,
-    ...(r.surface_age_ga === undefined ? [] : [`--surface-age ${r.surface_age_ga}`]),
     `--star ${r.star}`,
     `--orbit-au ${r.orbit_au}`,
     `--eccentricity ${r.eccentricity}`,
@@ -203,7 +217,6 @@ export function cliCommand(meta: WorldMetadata): string {
     ...(r.metallicity === undefined ? [] : [`--metallicity=${r.metallicity}`]),
     ...(r.giants === undefined ? [] : [`--giants ${r.giants}`]),
     ...(r.host === undefined ? [] : [`--host ${r.host}`]),
-    ...(r.mass_earth === undefined ? [] : [`--mass ${r.mass_earth}`]),
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];

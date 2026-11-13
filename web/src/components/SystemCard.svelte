@@ -7,7 +7,7 @@
   import { getLocale, t } from '../lib/i18n/index.svelte';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
   import { formatAgo } from '../lib/format';
-  import { presetName } from '../lib/i18n/names.svelte';
+  import { archetypeName } from '../lib/i18n/names.svelte';
   import { hasHabitableWorld, starLetter } from '../lib/menuCards';
   import { cssColour } from '../lib/orrery';
   import { systemName as nameOf } from '../lib/systemList';
@@ -58,11 +58,11 @@
   const starColour = $derived(cssColour(system.star_light));
   const starKind = $derived(t.systemList.starKinds[starLetter(system.star) ?? 'unknown']);
   const habitable = $derived(hasHabitableWorld(system));
-  /** One chip per planet type: its count and name, in the colour of the first planet of that type. */
+  /** One chip per archetype: its count and name, in the colour of the first planet of that class. */
   const chips = $derived(
     Object.entries(system.planets).map(([type, count]) => ({
       type,
-      text: `${count} ${presetName({ name: type })}`,
+      text: `${count} ${archetypeName({ name: type })}`,
       colour: cssColour(system.bodies.find((b) => b.kind === 'planet' && b.body_type === type)?.colour ?? [0.5, 0.5, 0.5]),
     })),
   );
