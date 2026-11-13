@@ -181,7 +181,7 @@ pub struct WorldRequest {
     pub core_mass_fraction: Option<f64>,
     /// Water and ices, Earth oceans (1.4e21 kg each), in `[0, 1e6]`.
     pub water_oceans: Option<f64>,
-    /// Hydrogen and helium share of the mass at formation, in `[0, 0.99]`.
+    /// Hydrogen and helium share of the mass at formation, in `[0, 0.999]`.
     pub envelope_fraction: Option<f64>,
     /// Factor on the CO₂ formation rule, in `[0, 100]`: 1 typical (the
     /// rule's scatter draws about 0.5 to 2).
@@ -717,23 +717,22 @@ impl WorldRequest {
      * same world whatever the random generator (the CLI's "Reproduce
      * with" line, the `create` of an export around a planet).
      *
-     * The archetype stays as asked (its draws come from the seed's own
-     * stream); the model's mass, core share and radiogenic abundance are
-     * pinned, and its life when it was set. The other inputs stay as the
-     * request set them: the seed draws them again exactly, which a value
-     * read back from the model (the water after escape, a CO₂ factor
-     * divided out of its rule) would not. A position in the habitable
-     * zone asked for stays, the orbit it gave stays open. A giant gets no
-     * giant neighbours or host pinned: [`resolve`](Self::resolve) would
-     * ignore them.
+     * The archetype stays as asked; the model's formation inputs
+     * ([`PlanetModel::formation`]: the drawn mass, core share, water,
+     * envelope at formation, CO₂ and N₂ factors, radiogenic abundance and
+     * whether life arose) are pinned where the request left them open, so
+     * that the planet stays the same under another seed or epoch too. A
+     * position in the habitable zone asked for stays, the orbit it gave
+     * stays open. A giant gets no giant neighbours or host pinned:
+     * [`resolve`](Self::resolve) would ignore them.
      */
     pub fn pinned(&self, params: &WorldParams, model: Option<&PlanetModel>) -> WorldRequest {
         let giant = params.giant_mass_earth.is_some();
-        let life = model.and_then(|m| match m.inputs.life_draw {
-            0.0 => Some(true),
-            1.0 => Some(false),
-            _ => None,
-        });
+        let (mass, set) = model
+            .map(PlanetModel::formation)
+            .map_or((None, InputOverrides::default()), |f| {
+                (Some(f.mass_earth), f.overrides)
+            });
         WorldRequest {
             planet: self.planet.clone(),
             seed: Some(params.seed),
@@ -760,20 +759,14 @@ impl WorldRequest {
             } else {
                 self.giants.or(Some(params.giants))
             },
-            mass_earth: self
-                .mass_earth
-                .or_else(|| model.map(|m| m.drawn_mass_earth)),
-            core_mass_fraction: self
-                .core_mass_fraction
-                .or_else(|| model.map(|m| m.inputs.core_mass_fraction)),
-            water_oceans: self.water_oceans,
-            envelope_fraction: self.envelope_fraction,
-            co2: self.co2,
-            n2: self.n2,
-            radiogenic: self
-                .radiogenic
-                .or_else(|| model.map(|m| m.inputs.radiogenic)),
-            life: self.life.or(life),
+            mass_earth: self.mass_earth.or(mass),
+            core_mass_fraction: self.core_mass_fraction.or(set.core_mass_fraction),
+            water_oceans: self.water_oceans.or(set.water_oceans),
+            envelope_fraction: self.envelope_fraction.or(set.envelope_fraction),
+            co2: self.co2.or(set.co2),
+            n2: self.n2.or(set.n2),
+            radiogenic: self.radiogenic.or(set.radiogenic),
+            life: self.life.or(set.life),
             host: if giant {
                 self.host
             } else {
@@ -892,6 +885,48 @@ mod tests {
 
     fn resolve(request: &WorldRequest) -> Result<Resolved, RequestError> {
         request.resolve(&mut StdRng::seed_from_u64(7))
+    }
+
+    /// Relative tolerance of [`assert_same`]: a value read back from the
+    /// model (water in oceans, a volatile factor, the envelope before
+    /// escape) and multiplied again may land an ulp or two away.
+    const SAME: f64 = 1e-9;
+
+    /// Asserts that `a` and `b` serialize alike, numbers within [`SAME`]
+    /// of each other, the life draw left out (a pinned `life` sets it to 0
+    /// or 1, which arises or not as the drawn value did).
+    fn assert_same(a: &impl Serialize, b: &impl Serialize, what: &str) {
+        fn walk(a: &serde_json::Value, b: &serde_json::Value, path: &str, what: &str) {
+            use serde_json::Value;
+            match (a, b) {
+                (Value::Number(x), Value::Number(y)) => {
+                    let (x, y) = (x.as_f64().unwrap(), y.as_f64().unwrap());
+                    let scale = x.abs().max(y.abs()).max(f64::MIN_POSITIVE);
+                    assert!((x - y).abs() / scale <= SAME, "{path}: {x} vs {y} ({what})");
+                }
+                (Value::Object(x), Value::Object(y)) => {
+                    let keys: std::collections::BTreeSet<_> = x.keys().chain(y.keys()).collect();
+                    for k in keys.into_iter().filter(|k| *k != "life_draw") {
+                        let (Some(xv), Some(yv)) = (x.get(k), y.get(k)) else {
+                            panic!("{path}.{k} on one side only ({what})");
+                        };
+                        walk(xv, yv, &format!("{path}.{k}"), what);
+                    }
+                }
+                (Value::Array(x), Value::Array(y)) => {
+                    assert_eq!(x.len(), y.len(), "{path} ({what})");
+                    for (i, (xv, yv)) in x.iter().zip(y).enumerate() {
+                        walk(xv, yv, &format!("{path}[{i}]"), what);
+                    }
+                }
+                _ => assert_eq!(a, b, "{path} ({what})"),
+            }
+        }
+        let (a, b) = (
+            serde_json::to_value(a).unwrap(),
+            serde_json::to_value(b).unwrap(),
+        );
+        walk(&a, &b, "", what);
     }
 
     #[test]
@@ -1028,6 +1063,12 @@ mod tests {
                 seed: None,
                 ..named(Some("super-earth"), 0)
             },
+            // A giant heavy enough that its envelope at formation passes
+            // 99 % of its mass: pinned, it is not out of range.
+            WorldRequest {
+                mass_earth: Some(4000.0),
+                ..named(Some("hot-jupiter"), 8)
+            },
         ];
         for request in requests {
             for draw in 0..3u64 {
@@ -1038,14 +1079,132 @@ mod tests {
                     .resolve(&mut StdRng::seed_from_u64(draw + 1000))
                     .unwrap();
                 assert!(again.ignored.is_empty(), "{pinned:?}: {:?}", again.ignored);
-                assert_eq!(again.model(), resolved.model(), "{pinned:?}");
-                assert_eq!(
-                    serde_json::to_value(&again.params).unwrap(),
-                    serde_json::to_value(&resolved.params).unwrap(),
-                    "{pinned:?}"
-                );
+                let what = format!("{pinned:?}");
+                assert_same(again.model(), resolved.model(), &what);
+                assert_same(&again.params, &resolved.params, &what);
             }
         }
+    }
+
+    /// Asserts that `again` formed as `model` did: the same mass, core
+    /// share, water, envelope, CO₂, N₂ and radiogenic abundance (within
+    /// [`SAME`]), and the same class.
+    fn assert_same_formation(again: &PlanetModel, model: &PlanetModel, what: &str) {
+        let (a, b) = (&again.inputs, &model.inputs);
+        for (field, x, y) in [
+            ("drawn mass", again.drawn_mass_earth, model.drawn_mass_earth),
+            ("mass", a.mass_earth, b.mass_earth),
+            ("core share", a.core_mass_fraction, b.core_mass_fraction),
+            ("water", a.water_fraction, b.water_fraction),
+            ("envelope", a.envelope_fraction, b.envelope_fraction),
+            ("co2", a.volatiles.co2, b.volatiles.co2),
+            ("n2", a.volatiles.n2, b.volatiles.n2),
+            ("radiogenic", a.radiogenic, b.radiogenic),
+        ] {
+            let scale = x.abs().max(y.abs()).max(f64::MIN_POSITIVE);
+            assert!((x - y).abs() / scale <= SAME, "{what} {field}: {x} vs {y}");
+        }
+        assert_eq!(again.class, model.class, "{what}");
+        let arose = |m: &PlanetModel| m.surface.is_some_and(|s| s.life.arose);
+        assert_eq!(arose(again), arose(model), "{what}");
+    }
+
+    /// The request a world's page sends to vary it or move it to another
+    /// epoch: its formation inputs, star and orbit pinned (as the web's
+    /// `requestFromWorld` does from world.json), under `seed`.
+    fn from_world(params: &WorldParams, model: &PlanetModel, seed: u32) -> WorldRequest {
+        WorldRequest {
+            planet: params.archetype.clone(),
+            seed: Some(seed),
+            ..WorldRequest::default()
+        }
+        .pinned(params, Some(model))
+    }
+
+    #[test]
+    fn a_pinned_request_keeps_the_planet_under_a_new_seed() {
+        let system = crate::system::draw(
+            &crate::system::SystemRequest::System(crate::system::WholeSystemRequest {
+                age_gyr: None,
+                star: Some("G2V".into()),
+                metallicity: Some(0.0),
+                planets: None,
+                seed: Some(2),
+                width: Some(64),
+                height: Some(32),
+            }),
+            &mut StdRng::seed_from_u64(2),
+        )
+        .unwrap();
+        let drawn = system
+            .bodies
+            .iter()
+            .find(|b| b.model.as_ref().is_some_and(|m| m.surface.is_some()))
+            .expect("a drawn rocky planet");
+        let mut worlds = vec![(
+            format!("system planet {}", drawn.id),
+            drawn.params.clone(),
+            drawn.model.clone().unwrap(),
+        )];
+        for name in ["mini-neptune", "earth-like"] {
+            let resolved = resolve(&named(Some(name), 4)).unwrap();
+            let model = resolved.model().clone();
+            worlds.push((name.to_string(), resolved.params, model));
+        }
+        // The mini-Neptune lost part of its envelope: the request asks for
+        // what it formed with, not what escape left.
+        assert!(worlds[1].2.envelope_lost > 0.0, "{:?}", worlds[1].2);
+        for (what, params, model) in &worlds {
+            for seed in [params.seed, 77, 1234] {
+                let request = from_world(params, model, seed);
+                let again = request.resolve(&mut StdRng::seed_from_u64(9)).unwrap();
+                assert_same_formation(again.model(), model, &format!("{what} seed {seed}"));
+            }
+        }
+    }
+
+    /// A planet of a system drifted to another epoch is asked for as a
+    /// world of its own, whose inputs come from its own seed's stream, not
+    /// its system's: pinned, its formation inputs keep its class and its
+    /// CO₂ to the bit. Known departure: the NH₃ and sulphur scatter
+    /// (`10^N(0, 0.3)` of their rules), which no request sets, follow the
+    /// world's stream, so the nitrogen that ammonia photolysis leaves and
+    /// the SO₂ move (by about 20 % of the N₂ on planet c here), and the
+    /// pressure with them.
+    #[test]
+    fn a_drifted_system_planet_keeps_its_air() {
+        let system = crate::system::draw(
+            &crate::system::SystemRequest::System(crate::system::WholeSystemRequest {
+                age_gyr: None,
+                star: Some("G2V".into()),
+                metallicity: Some(0.0),
+                planets: None,
+                seed: Some(2),
+                width: Some(64),
+                height: Some(32),
+            }),
+            &mut StdRng::seed_from_u64(2),
+        )
+        .unwrap();
+        let mut checked = 0;
+        for body in &system.bodies {
+            let Some(model) = &body.model else { continue };
+            let Some(surface) = model.surface else { continue };
+            let request = WorldRequest {
+                drift_ma: Some(-100.0),
+                ..from_world(&body.params, model, body.params.seed)
+            };
+            let again = request.resolve(&mut StdRng::seed_from_u64(3)).unwrap();
+            let what = format!("{} drifted", body.id);
+            assert_same_formation(again.model(), model, &what);
+            let air = again.model().surface.expect("a surface").gases;
+            let co2 = (air.co2 - surface.gases.co2).abs() / surface.gases.co2.max(f64::MIN_POSITIVE);
+            assert!(co2 <= SAME, "{what}: {air:?} vs {:?}", surface.gases);
+            let ratio = air.total() / surface.gases.total();
+            assert!((0.5..2.0).contains(&ratio), "{what}: {air:?} vs {:?}", surface.gases);
+            checked += 1;
+        }
+        assert!(checked > 0);
     }
 
     #[test]
@@ -1410,17 +1569,13 @@ mod tests {
                 let again = pinned
                     .resolve(&mut StdRng::seed_from_u64(u64::from(draw) + 1000))
                     .unwrap_or_else(|e| panic!("{pinned:?}: {e}"));
-                assert_eq!(again.model(), resolved.model(), "{pinned:?}");
+                assert_same(again.model(), resolved.model(), &format!("{pinned:?}"));
                 assert_eq!(
                     crate::spin::star_info(&again.params),
                     crate::spin::star_info(p),
                     "{pinned:?}"
                 );
-                assert_eq!(
-                    serde_json::to_value(&again.params).unwrap(),
-                    serde_json::to_value(p).unwrap(),
-                    "{pinned:?}"
-                );
+                assert_same(&again.params, p, &format!("{pinned:?}"));
             }
             assert!(forced >= 3, "{request:?}: only {forced} forced draws");
         }

@@ -4786,6 +4786,18 @@ mod tests {
         assert_eq!(after, before);
     }
 
+    /// Removes every `life_draw` of a model from `value`.
+    fn drop_life_draws(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                map.remove("life_draw");
+                map.values_mut().for_each(drop_life_draws);
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(drop_life_draws),
+            _ => {}
+        }
+    }
+
     #[tokio::test]
     async fn the_export_of_a_system_round_a_planet_draws_the_same_system_again() {
         let app = router(temp_config("export-around"));
@@ -4805,10 +4817,13 @@ mod tests {
             assert_eq!(after["system"]["focus"], before["system"]["focus"]);
             assert_eq!(body_seeds(&after), body_seeds(&before), "{request}");
             // The whole draw is the same, not only its seeds (the request
-            // stored is the export's `create`, open fields pinned).
+            // stored is the export's `create`, open fields pinned). The
+            // life draw aside: `create` pins whether life arose, which sets
+            // the draw to 0 or 1 (`PlanetModel::formation`).
             let (mut after, mut before) = (after["system"].clone(), before["system"].clone());
             for system in [&mut after, &mut before] {
                 system["request"] = serde_json::Value::Null;
+                drop_life_draws(system);
             }
             assert_eq!(after, before, "{request}");
         }

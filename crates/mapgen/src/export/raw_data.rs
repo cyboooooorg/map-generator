@@ -26,7 +26,7 @@ use crate::biome::{biome_color, surface_color};
 use crate::climate::TEMPERATURE_RANGE;
 use crate::generation::COAST_DISTANCE_CAP_KM;
 use crate::look::Look;
-use crate::planet::PlanetModel;
+use crate::planet::{Formation, PlanetModel};
 use crate::rivers::{RiverLine, RiversFile};
 use crate::star::StarInfo;
 use crate::world::WorldParams;
@@ -88,6 +88,11 @@ pub struct WorldMetadata {
     /// The planet's model; left out for a moon (part 4).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<PlanetModel>,
+    /// The inputs the planet formed with, as a request sets them
+    /// ([`PlanetModel::formation`]): what a request pins to make the same
+    /// planet under another seed or epoch. Left out with the model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formation: Option<Formation>,
     /// The full look the world renders with, so it can be regenerated even
     /// if the look files change (internal until #424).
     pub look: Look,
@@ -603,6 +608,7 @@ pub(crate) fn write_raw_data(
         class: world.params.class.clone(),
         archetype: world.params.archetype.clone(),
         model: world.params.model.clone(),
+        formation: world.params.model.as_ref().map(PlanetModel::formation),
         look: world.params.look.clone(),
         sea_level: world.params.sea_level,
         volcanic_intensity: world.params.volcanic_intensity,

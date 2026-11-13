@@ -52,7 +52,7 @@ struct Args {
     #[arg(long, value_parser = parse_in64(request::WATER_OCEANS))]
     water: Option<f64>,
 
-    /// Hydrogen and helium share of the mass at formation, in [0, 0.99]
+    /// Hydrogen and helium share of the mass at formation, in [0, 0.999]
     /// (Jupiter: about 0.95) [default: the archetype's, else drawn from the
     /// mass]
     #[arg(long, value_parser = parse_in64(request::ENVELOPE_FRACTION))]
@@ -649,7 +649,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         format!("--core-fraction {}", set64(pinned.core_mass_fraction)),
         format!("--radiogenic {}", set64(pinned.radiogenic)),
     ]);
-    // The inputs the request set; the seed draws the others again.
+    // The formation inputs (`PlanetModel::formation`), so that the planet
+    // stays the same under another seed too.
     for (flag, value) in [
         ("--water", pinned.water_oceans),
         ("--envelope", pinned.envelope_fraction),

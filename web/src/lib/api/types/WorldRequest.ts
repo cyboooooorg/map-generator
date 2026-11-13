@@ -78,7 +78,7 @@ core_mass_fraction?: number,
  */
 water_oceans?: number, 
 /**
- * Hydrogen and helium share of the mass at formation, in `[0, 0.99]`.
+ * Hydrogen and helium share of the mass at formation, in `[0, 0.999]`.
  */
 envelope_fraction?: number, 
 /**

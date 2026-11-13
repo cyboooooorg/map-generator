@@ -122,10 +122,12 @@ pub const WATER_OCEANS: Limits = Limits {
     max: 1.0e6,
 };
 /// Hydrogen and helium share of the mass. Calibration, no source: a
-/// Jupiter holds 0.93 to 0.96.
+/// Jupiter holds 0.93 to 0.96; the formation draw reaches `1 − 5 / 4131`
+/// (0.9988) for the heaviest giant with the lightest core, which a pinned
+/// request must be able to ask for again.
 pub const ENVELOPE_FRACTION: Limits = Limits {
     min: 0.0,
-    max: 0.99,
+    max: 0.999,
 };
 /// Factor on the CO₂ or N₂ formation rule. Calibration, no source: two
 /// orders of magnitude either way is more than the draw scatters.
