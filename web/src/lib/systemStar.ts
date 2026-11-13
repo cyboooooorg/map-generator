@@ -12,6 +12,7 @@ import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
 import type { Belt } from './api/types/Belt';
 import type { Trojans } from './api/types/Trojans';
+import { hasFrozenSurface } from './planetClass';
 import { resonanceTurns } from './spinResonance';
 import { placeSystem, type Placement } from './systemSky';
 import { type SystemGiant, withOrbitDefaults } from './viewer/starSystem';
@@ -68,13 +69,15 @@ export interface SystemPlanet {
  * periapsis angle, and every planet (`planet` included, at `selected`) as
  * its giants, with their ids and their facts (`planets`) in the same
  * order, each under the name given to it in `names` (by body id), else its
- * designation, its type worded by `typeLabels` (by type), else as is.
+ * designation, its type worded by `typeLabels` (by type), else as is, and
+ * followed by `frozenLabel` for a rocky world with a frozen surface.
  */
 export function systemStarView(
   system: System,
   planet: Body,
   names: Readonly<Record<string, string>> = {},
   typeLabels: Readonly<Record<string, string>> = {},
+  frozenLabel = '',
 ): {
   star: StarInfo;
   omega: number;
@@ -164,7 +167,7 @@ export function systemStarView(
       id: body.id,
       name: names[body.id] ?? body.designation,
       type: body.type,
-      typeLabel: typeLabels[body.type] ?? body.type,
+      typeLabel: `${typeLabels[body.type] ?? body.type}${frozenLabel && hasFrozenSurface(body.type, body.model) ? ` · ${frozenLabel}` : ''}`,
       radius_km: body.physical.radius_km,
       mass_earth: body.physical.mass_earth,
       orbit_au: body.orbit.semi_major_axis_au,

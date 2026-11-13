@@ -5,7 +5,7 @@
   // them, its given name (renamed here), and whether its maps exist. The
   // world card follows it for a generated body, with its maps' details.
   import { t } from '../lib/i18n/index.svelte';
-  import { className } from '../lib/i18n/names.svelte';
+  import { classLabel } from '../lib/i18n/names.svelte';
   import { api } from '../lib/api/client';
   import { isGiantType } from '../lib/planetClass';
   import type { Body } from '../lib/api/types/Body';
@@ -131,7 +131,7 @@
           style:background={css(p.preview.colours[0] ?? [0.5, 0.5, 0.5])}
           style:width={`${giant(p) ? 16 : 11}px`}
           style:height={`${giant(p) ? 16 : 11}px`}
-          title={`${nameOf(p.id, p.designation)} · ${className(p.type)} · ${formatAu(p.orbit.semi_major_axis_au)}`}
+          title={`${nameOf(p.id, p.designation)} · ${classLabel(p.type, p.model)} · ${formatAu(p.orbit.semi_major_axis_au)}`}
           aria-label={nameOf(p.id, p.designation)}
           onclick={() => world.showSystemBody(p.id)}
         ></button>
@@ -160,7 +160,7 @@
         <button class="link" onclick={() => startRenaming(body.id)} title={t.worldInfo.renameHelp}>{t.worldInfo.rename}</button>
       {/if}
       <small
-        >{title === body.designation ? '' : `${body.designation} · `}{className(body.type)} · {body.kind === 'moon'
+        >{title === body.designation ? '' : `${body.designation} · `}{classLabel(body.type, body.model)} · {body.kind === 'moon'
           ? t.card.moonOf({ planet: planet ? nameOf(planet.id, planet.designation) : '' })
           : t.card.planetOf({ star: starName })}</small
       >

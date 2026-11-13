@@ -671,6 +671,7 @@ export const fr: Messages = {
     sizeFailed: ({ size, error }: { size: string; error: string }) => `Impossible de générer la carte de ${size} px${S}: ${error}`,
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · non générée'}`,
+    frozenSurface: 'surface gelée',
     bodyTypes: {
       'gas-giant': 'Géante gazeuse',
       'ice-giant': 'Géante de glace',

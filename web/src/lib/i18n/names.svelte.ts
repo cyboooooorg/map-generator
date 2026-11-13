@@ -3,6 +3,7 @@ import type { BiomeInfo } from '../api/types/BiomeInfo';
 import type { ArchetypeInfo } from '../api/types/ArchetypeInfo';
 import type { Locale } from '../api/types/Locale';
 import { getLocale, t } from './index.svelte';
+import { hasFrozenSurface, type SurfaceModel } from '../planetClass';
 
 /**
  * The name of a biome: translated from its key, or the generator's own
@@ -49,4 +50,13 @@ export function archetypeDescription(archetype: { name: string; description?: st
 /** The label of a planet's class key (`rocky`, `ice-giant`, `icy-moon`…), the key itself when unknown. */
 export function className(key: string): string {
   return (t.viewer.bodyTypes as Record<string, string>)[key] ?? key;
+}
+
+/**
+ * The label of a world's class with its surface state: `className` and,
+ * for a rocky world whose water is frozen at the surface, `frozen
+ * surface` after it (`hasFrozenSurface`). The class alone without a model.
+ */
+export function classLabel(key: string, model?: SurfaceModel): string {
+  return hasFrozenSurface(key, model) ? `${className(key)} · ${t.viewer.frozenSurface}` : className(key);
 }

@@ -980,7 +980,7 @@
   /** The planet the star view's orbit facts describe: the one picked, else any (nothing is then selected). */
   const starBase = $derived(pickedPlanet ?? sysPlanet ?? sys?.bodies.find((b) => b.kind === 'planet') ?? null);
   const sysStar = $derived(
-    sys && starBase ? systemStarView(sys, starBase, world.systemNames, t.viewer.bodyTypes as Record<string, string>) : null,
+    sys && starBase ? systemStarView(sys, starBase, world.systemNames, t.viewer.bodyTypes as Record<string, string>, t.viewer.frozenSurface) : null,
   );
   /** Picks planet `index` of the star view, or lets it go if it is the one picked: its card pinned or unpinned with it. */
   function togglePick(index: number): void {

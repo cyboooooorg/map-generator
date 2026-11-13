@@ -709,6 +709,7 @@ export const en = {
     sizeFailed: ({ size, error }: { size: string; error: string }) => `Could not generate the ${size} px map: ${error}`,
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · not generated'}`,
+    frozenSurface: 'frozen surface',
     bodyTypes: {
       'gas-giant': 'Gas giant',
       'ice-giant': 'Ice giant',

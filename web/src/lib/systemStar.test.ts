@@ -40,6 +40,18 @@ describe('system star view', () => {
     expect(pc!.orbit_au).toBe(system.bodies.find((x) => x.id === 'c')!.orbit.semi_major_axis_au);
   });
 
+  it('adds the frozen surface to the type of a rocky world that has one', () => {
+    const rocky = {
+      ...system.bodies.find((x) => x.id === 'b')!,
+      type: 'rocky',
+      model: { surface: { water: { oceans: 0.25 }, climate: { temperature_k: 215, liquid: 'none' } } },
+    };
+    const frozen = { ...system, bodies: system.bodies.map((x) => (x.id === 'b' ? rocky : x)) } as unknown as System;
+    const planets = (labels: string) => systemStarView(frozen, rocky as never, {}, { rocky: 'Rocky' }, labels).planets;
+    expect(planets('frozen surface')[0]!.typeLabel).toBe('Rocky · frozen surface');
+    expect(planets('')[0]!.typeLabel).toBe('Rocky');
+  });
+
   it('gives each planet its tilt and its moons, nearest first', () => {
     const c = system.bodies.find((x) => x.id === 'c')!;
     const view = systemStarView(system, c, { 'c-1': 'Io' });

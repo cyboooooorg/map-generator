@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getLocale, t } from '../lib/i18n/index.svelte';
-  import { archetypeDescription, archetypeName, biomeName, className } from '../lib/i18n/names.svelte';
+  import { archetypeDescription, archetypeName, biomeName, classLabel } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
   import { downloadRawData, downloadSvg } from '../lib/download';
   import { cliCommand, copyText, formatAgo, formatArea, formatAge, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
@@ -47,7 +47,7 @@
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
   // The archetype asked for, else the class of the planet.
-  const kind = $derived(meta ? (meta.archetype ? archetypeName({ name: meta.archetype }) : className(meta.class)) : null);
+  const kind = $derived(meta ? (meta.archetype ? archetypeName({ name: meta.archetype }) : classLabel(meta.class, meta.model)) : null);
   const title = $derived(forcedTitle ?? kind ?? worldId);
 
   async function copy(text: string, what: string): Promise<void> {
