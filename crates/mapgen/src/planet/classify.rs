@@ -110,6 +110,16 @@ const MINI_NEPTUNE_MIN_RADIUS: f64 = 1.6;
 /// Europa (about 8 %) is one, Earth (0.02 %) is not.
 const ICE_WORLD_MIN_WATER: f64 = 0.05;
 
+/// Earth oceans an ice world keeps at its surface, at least, and a cold dry
+/// body keeps to render frozen. A little over twice Mars's water: its polar
+/// deposits and ground ice, about 34 m of global layer (Carr & Head 2015,
+/// doi:10.1002/2014GL062464), are about 0.004 oceans, and Mars is no ice
+/// world. Calibration, no other source: a planet whose bulk is icy but whose surface holds under
+/// 1 % of an ocean has lost its ice to its star (#452) and is a dry rock.
+/// [`super::interim::base_of`] uses the same threshold for the frozen
+/// look.
+pub const ICE_WORLD_MIN_OCEANS: f64 = 0.01;
+
 /// Radius, Earth radii, from which a rocky planet is a super-Earth
 /// (Borucki et al. 2011, doi:10.1088/0004-637X/736/1/19: Earth-size below
 /// 1.25 R⊕, super-Earth-size 1.25 to 2).
@@ -144,7 +154,9 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
 ///    more than [`DENSE_AIR_BAR`]), an
 ///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]);
-/// 4. at least 5 % water and ices: an ice world;
+/// 4. at least 5 % water and ices, and with a `surface`, at least
+///    [`ICE_WORLD_MIN_OCEANS`] of them kept there: an ice world (a body
+///    that lost its ice falls through);
 /// 5. a super-Earth from 1.25 R⊕, rocky below.
 ///
 /// The class is read off the model; nothing derives from it.
@@ -168,7 +180,9 @@ pub fn classify(
         PlanetClass::MiniNeptune
     } else if let Some(class) = surface.and_then(surface_class) {
         class
-    } else if inputs.water_fraction >= ICE_WORLD_MIN_WATER {
+    } else if inputs.water_fraction >= ICE_WORLD_MIN_WATER
+        && surface.is_none_or(|s| s.water.oceans >= ICE_WORLD_MIN_OCEANS)
+    {
         PlanetClass::IceWorld
     } else if radius >= SUPER_EARTH_MIN_RADIUS {
         PlanetClass::SuperEarth
@@ -256,6 +270,35 @@ mod tests {
         for body in SOLAR_BODIES {
             class_of(model_inputs(body), body.orbit_au);
         }
+    }
+
+    /// A bare planet of `mass` M_earth with `water` as its water share, the
+    /// volatiles of the rule without scatter, Earth's core share, at
+    /// `orbit_au` round the Sun.
+    fn model_at(mass: f64, water: f64, orbit_au: f64) -> crate::planet::PlanetModel {
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - water, water),
+            ..reference::inputs(mass, 0.325, water)
+        };
+        planet_model(&sun_at(orbit_au), inputs)
+    }
+
+    #[test]
+    fn a_planet_that_lost_its_water_is_not_an_ice_world() {
+        // The case of #452 (mgs-65793-1225983567 b: 0.22 M_earth, 37 %
+        // water, hot): at 0.6 AU these inputs keep 6e-4 oceans in a thin
+        // air that gives no runaway class, so only the bulk made it an ice
+        // world. (At 0.75 AU the same inputs are a runaway greenhouse.)
+        let model = model_at(0.22, 0.37, 0.6);
+        let s = model.surface.as_ref().unwrap();
+        assert!(s.water.oceans < 0.01, "{s:?}");
+        assert_ne!(model.class, IceWorld);
+    }
+
+    #[test]
+    fn a_cold_icy_planet_stays_an_ice_world() {
+        let model = model_at(0.5, 0.3, 4.0);
+        assert_eq!(model.class, IceWorld);
     }
 
     #[test]

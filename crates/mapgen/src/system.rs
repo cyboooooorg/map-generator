@@ -4249,12 +4249,13 @@ mod lone_tests {
     /// model (seeds 1 to 4): planets typed by class (the world asked keeps
     /// its preset), drawn small slots kept near their drawn orbit, and a
     /// mini-Neptune no giant to the small bodies (it shapes no belt,
-    /// empties no trojan point, stirs no impactor). Regenerated on purpose
+    /// empties no trojan point, stirs no impactor); seeds 2 b and 3 b are rocky since
+    /// #452 (they lost their ice at 0.02 AU). Regenerated on purpose
     /// then; any other change is a regression of a normal system.
     const MAIN_SIGNATURES: [&str; 4] = [
         "mgs-57979-1 belts=1 b:rocky:0.0200:0.0920:true c:terran:0.3626:0.0920:true d:mini-neptune:0.7069:0.0920:true d-1:icy-moon:0.0002:0.0920:false d-2:icy-moon:0.0002:0.0920:false d-3:icy-moon:0.0003:0.0920:false d-4:rocky-moon:0.0006:0.0920:false d-5:icy-moon:0.0010:0.0920:false e:hydrocarbon-world:3.0647:0.0920:true f:ice-world:5.0697:0.0920:true",
-        "mgs-59108-2 belts=0 b:ice-world:0.0212:0.0350:true c:terran:0.1137:0.0350:true d:mini-neptune:0.3133:0.0350:true d-1:icy-moon:0.0002:0.0350:false d-2:rocky-moon:0.0005:0.0350:false d-3:rocky-moon:0.0007:0.0350:false d-4:icy-moon:0.0012:0.0350:false d-5:icy-moon:0.0019:0.0350:false e:ice-world:0.6848:0.0350:true e-1:icy-moon:0.0001:0.0350:false",
-        "mgs-83289-3 belts=0 b:ice-world:0.0200:0.0632:true c:rocky:0.0254:0.0632:true d:terran:0.0393:0.0632:false d-1:rocky-moon:0.0003:0.0632:false d-2:rocky-moon:0.0006:0.0632:false e:ice-giant:0.0756:0.0350:true e-1:icy-moon:0.0003:0.0350:false e-2:icy-moon:0.0003:0.0350:false e-3:icy-moon:0.0004:0.0350:false e-4:icy-moon:0.0004:0.0350:false e-5:rocky-moon:0.0006:0.0350:false e-6:rocky-moon:0.0010:0.0350:false",
+        "mgs-59108-2 belts=0 b:rocky:0.0212:0.0350:true c:terran:0.1137:0.0350:true d:mini-neptune:0.3133:0.0350:true d-1:icy-moon:0.0002:0.0350:false d-2:rocky-moon:0.0005:0.0350:false d-3:rocky-moon:0.0007:0.0350:false d-4:icy-moon:0.0012:0.0350:false d-5:icy-moon:0.0019:0.0350:false e:ice-world:0.6848:0.0350:true e-1:icy-moon:0.0001:0.0350:false",
+        "mgs-83289-3 belts=0 b:rocky:0.0200:0.0632:true c:rocky:0.0254:0.0632:true d:terran:0.0393:0.0632:false d-1:rocky-moon:0.0003:0.0632:false d-2:rocky-moon:0.0006:0.0632:false e:ice-giant:0.0756:0.0350:true e-1:icy-moon:0.0003:0.0350:false e-2:icy-moon:0.0003:0.0350:false e-3:icy-moon:0.0004:0.0350:false e-4:icy-moon:0.0004:0.0350:false e-5:rocky-moon:0.0006:0.0350:false e-6:rocky-moon:0.0010:0.0350:false",
         "mgs-33182-4 belts=0 b:rocky:0.0339:0.0350:true c:rocky:0.0931:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:terran:0.3711:0.0350:true e:mini-neptune:0.6675:0.0350:true e-1:rocky-moon:0.0003:0.0350:false e-2:rocky-moon:0.0004:0.0350:false e-3:icy-moon:0.0013:0.0350:false f:ice-world:2.9560:0.0350:true",
     ];
 

@@ -4,6 +4,7 @@
 //! replace the presets.
 use rand::RngExt;
 
+use super::classify::ICE_WORLD_MIN_OCEANS;
 use super::{PlanetClass, PlanetModel, SurfaceLiquid};
 use crate::atmosphere::{AIRLESS_BAR, Atmosphere, CloudKind};
 use crate::biome::Biome;
@@ -24,14 +25,6 @@ const FREEZING_K: f64 = 273.0;
 /// the ice world's threshold of [`super::classify`] (Europa, about 8 %,
 /// is one; Earth, 0.02 %, is not).
 const FROZEN_MIN_WATER: f64 = 0.05;
-
-/// Least water kept at the surface of a cold, dry body that renders
-/// frozen, Earth oceans: its ice shows (a frozen sea in its basins) though
-/// its bulk is dry by mass. A little over twice Mars's water: its polar
-/// deposits and ground ice, about 34 m of global layer (Carr & Head 2015,
-/// doi:10.1002/2014GL062464), are about 0.004 oceans, and Mars renders
-/// barren. Calibration of the look, no other source.
-const FROZEN_MIN_OCEANS: f64 = 0.01;
 
 /// The built-in preset whose rules and remap render `model`, the first
 /// rule that holds:
@@ -84,7 +77,7 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
         SurfaceLiquid::Water => "terran",
         _ if surface.climate.temperature_k < FREEZING_K
             && (model.inputs.water_fraction >= FROZEN_MIN_WATER
-                || (!surface.water.runaway && surface.water.oceans >= FROZEN_MIN_OCEANS)) =>
+                || (!surface.water.runaway && surface.water.oceans >= ICE_WORLD_MIN_OCEANS)) =>
         {
             "frozen"
         }
