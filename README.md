@@ -295,6 +295,12 @@ For development with hot reload, see [web/README.md](web/README.md) (`mise run d
 
 The CI workflow (`.github/workflows/ci.yml`) runs `mise run lint`, `mise run test` (and checks the generated TypeScript types are committed) and `mise run web:check` / `web:build` on every push to `main` and on pull requests.
 
+Tests are compiled with some optimization (`[profile.test]` and `[profile.dev.package."*"]` in `Cargo.toml`): most of their time goes into generating worlds, which runs over ten times slower unoptimized. The dependencies are built at `opt-level = 3`, once; the workspace crates at `opt-level = 1`, which keeps an incremental rebuild of `mapgen` near 20 s, against about 2 min at `opt-level = 2` for a few seconds saved per run. Debug assertions and overflow checks stay on. The suite takes about a minute instead of over ten. To debug a test step by step, build it unoptimized for one run:
+
+```bash
+CARGO_PROFILE_TEST_OPT_LEVEL=0 cargo test -p mapgen <test name>
+```
+
 ### Planet presets
 
 A planet type is a TOML preset. The eight built-in ones live in `presets/` and are embedded in the binary; a request without a planet draws one of the five rocky ones (a giant is asked for by name):
