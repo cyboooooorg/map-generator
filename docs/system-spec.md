@@ -830,7 +830,7 @@ No migration, as decided: the worlds made before systems are deleted.
 The same rule holds for a system written by an older generator: the
 generator keeps no code to re-derive it.
 
-- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (14 at
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (17 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
   with a message asking to delete it (`mise run clean-systems`) and draw it
   again, and the viewer shows that message instead of requesting them.
@@ -838,7 +838,12 @@ generator keeps no code to re-derive it.
   format 11 carry `shrubland_moisture`, now an unknown field):
   `GET /api/systems/{id}` and the generation of its bodies answer 410 Gone
   with the same message, not 404. Only a missing `system.json` is 404.
-- The server still starts and lists these systems.
+- The server still starts and lists these systems. One whose
+  `system.json` is not of the current `SYSTEM_FORMAT_VERSION` carries
+  `outdated: true` in `GET /api/systems` (its id, seed, star and date when
+  they parse, no bodies). The main menu labels it "Outdated: made by an
+  older generator" and offers only the delete button; the server never
+  deletes it itself.
 
 ## Delivery
 

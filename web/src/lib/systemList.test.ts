@@ -28,6 +28,7 @@ const system = (id: string, seed: number, modified_ms: number, pinned = false, p
   names: {},
   modified_ms,
   pinned,
+  outdated: false,
 });
 
 describe('sortSystems', () => {

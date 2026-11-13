@@ -49,6 +49,7 @@ const system = (extra: Partial<SystemSummary> = {}): SystemSummary => ({
   names: {},
   modified_ms: 0,
   pinned: false,
+  outdated: false,
   ...extra,
 });
 

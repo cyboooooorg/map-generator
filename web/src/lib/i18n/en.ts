@@ -201,6 +201,7 @@ export const en = {
     habitableFilter: 'With a habitable world',
     habitableLine: 'Rocky world in the habitable zone',
     habitableShort: 'Habitable zone',
+    outdated: 'Outdated: made by an older generator',
     planetsCount: (p: { count: number }) => `${p.count} ${p.count === 1 ? 'planet' : 'planets'}`,
     moonsCount: (p: { count: number }) => (p.count === 0 ? 'no moons' : `${p.count} ${p.count === 1 ? 'moon' : 'moons'}`),
     columns: { pin: 'Pin', name: 'Name', star: 'Star', planets: 'Planets', moons: 'Moons', created: 'Created', actions: 'Actions' },

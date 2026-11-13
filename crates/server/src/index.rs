@@ -69,8 +69,9 @@ pub const UNKNOWN_FORMAT: i64 = 0;
 /// history) starts over, the rest is read again from the tree.
 ///
 /// - 2: systems can be pinned in the main menu;
-/// - 3: the displayed size of each body, the size a job generates.
-const SCHEMA_VERSION: i64 = 3;
+/// - 3: the displayed size of each body, the size a job generates;
+/// - 4: systems made by an older generator are flagged `outdated`.
+const SCHEMA_VERSION: i64 = 4;
 /// Least time between two writes of a body's last opened date: a viewer
 /// asks for dozens of tiles a second.
 const TOUCH_EVERY: Duration = Duration::from_secs(60);
@@ -116,7 +117,9 @@ CREATE TABLE systems (
     request           TEXT,
     -- when the system was pinned in the main menu (ms), NULL if it is not;
     -- only the index holds it (no file mirrors it)
-    pinned_ms         INTEGER
+    pinned_ms         INTEGER,
+    -- made by an older generator (system.json of another format)
+    outdated          INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE bodies (
     system_id         TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
@@ -471,7 +474,7 @@ impl Index {
         };
         let mut stmt = conn.prepare(&format!(
             "SELECT id, seed, width, height, star, designation, light_r, light_g, light_b,
-                    hz_inner_au, hz_outer_au, modified_ms, pinned_ms
+                    hz_inner_au, hz_outer_au, modified_ms, pinned_ms, outdated
              FROM systems {filter} ORDER BY modified_ms DESC, id"
         ))?;
         let mut systems: Vec<SystemSummary> = stmt
@@ -492,6 +495,7 @@ impl Index {
                     names: BTreeMap::new(),
                     modified_ms: r.get::<_, i64>(11)? as u64,
                     pinned: r.get::<_, Option<i64>>(12)?.is_some(),
+                    outdated: r.get(13)?,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -1280,12 +1284,12 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
     };
     tx.execute(
         "INSERT INTO systems (id, seed, width, height, star, designation, light_r, light_g,
-                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms, outdated)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT(id) DO UPDATE SET
             seed = ?2, width = ?3, height = ?4, star = ?5, designation = ?6, light_r = ?7,
             light_g = ?8, light_b = ?9, hz_inner_au = ?10, hz_outer_au = ?11,
-            modified_ms = ?12, request = ?13",
+            modified_ms = ?12, request = ?13, outdated = ?15",
         params![
             s.id,
             s.seed,
@@ -1300,7 +1304,8 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
             s.hz_outer_au,
             s.modified_ms as i64,
             loaded.request,
-            pinned_ms
+            pinned_ms,
+            s.outdated
         ],
     )?;
     tx.execute("DELETE FROM bodies WHERE system_id = ?1", [&s.id])?;
@@ -1736,7 +1741,7 @@ mod tests {
         let systems = root.join("systems");
         tree(&systems, &["mgs-1-1"]);
         let db = root.join("mapgen.sqlite");
-        for old in [2, 4] {
+        for old in [2, 5] {
             {
                 let index = Index::open(&db).unwrap();
                 index.reconcile(&systems).unwrap();

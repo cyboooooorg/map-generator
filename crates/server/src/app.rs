@@ -2612,6 +2612,61 @@ mod tests {
         assert!(body.contains("clean-systems"), "{body}");
     }
 
+    /// Writes a `system.json` of format 2 (an older generator's) under
+    /// `root` as system `id`.
+    fn write_outdated_system(root: &Path, id: &str) {
+        let dir = root.join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("system.json"),
+            r#"{"format_version": 2, "seed": 7, "width": 64, "height": 32,
+                "star": {"type": "G2V", "designation": "MGS 7"}, "bodies": []}"#,
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_outdated_system_is_listed_not_deleted() {
+        let config = temp_config("outdated-listed");
+        let root = config.systems_dir.clone();
+        write_outdated_system(&root, "mgs-7-7");
+        let app = router(config);
+        let (status, body) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let list: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let system = &list.as_array().unwrap()[0];
+        assert_eq!(system["id"], "mgs-7-7");
+        assert_eq!(system["outdated"], true);
+        assert_eq!(system["seed"], 7);
+        assert_eq!(system["star"], "G2V");
+        assert!(system["planets"].as_object().unwrap().is_empty());
+        assert!(root.join("mgs-7-7").is_dir());
+    }
+
+    #[tokio::test]
+    async fn an_outdated_system_can_be_deleted_by_request() {
+        let config = temp_config("outdated-deleted");
+        let root = config.systems_dir.clone();
+        write_outdated_system(&root, "mgs-7-7");
+        let app = router(config);
+        let (status, body) = call(&app, "DELETE", "/api/systems/mgs-7-7", None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+        assert!(!root.join("mgs-7-7").exists());
+        let (_, body) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(body.trim(), "[]");
+    }
+
+    #[tokio::test]
+    async fn opening_an_outdated_system_names_clean_systems() {
+        let config = temp_config("outdated-opened");
+        let root = config.systems_dir.clone();
+        write_outdated_system(&root, "mgs-7-7");
+        let app = router(config);
+        let (status, body) = call(&app, "GET", "/api/systems/mgs-7-7", None).await;
+        assert_eq!(status, StatusCode::GONE, "{body}");
+        assert!(body.contains("clean-systems"), "{body}");
+    }
+
     #[tokio::test]
     async fn serves_bodies_at_other_epochs() {
         let config = temp_config("epochs");

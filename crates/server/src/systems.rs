@@ -83,11 +83,37 @@ pub fn body_dir(root: &Path, id: &str, body: &str) -> PathBuf {
 /// The fields of `system.json` a summary needs.
 #[derive(Deserialize)]
 struct Meta {
+    #[serde(default)]
+    format_version: u32,
     seed: u32,
     width: u32,
     height: u32,
     star: MetaStar,
     bodies: Vec<MetaBody>,
+}
+
+/// What an outdated `system.json` may still tell, field by field: its
+/// system is listed with whatever parses.
+#[derive(Deserialize, Default)]
+struct OutdatedMeta {
+    #[serde(default)]
+    format_version: u32,
+    #[serde(default)]
+    seed: u32,
+    #[serde(default)]
+    width: u32,
+    #[serde(default)]
+    height: u32,
+    #[serde(default)]
+    star: Option<MetaStarLoose>,
+}
+
+#[derive(Deserialize, Default)]
+struct MetaStarLoose {
+    #[serde(rename = "type", default)]
+    kind: String,
+    #[serde(default)]
+    designation: String,
 }
 
 #[derive(Deserialize)]
@@ -309,7 +335,26 @@ pub fn body_params(root: &Path, id: &str, body: &str) -> Option<mapgen::world::W
 /// A system's summary from the bytes of its `system.json` (modified at
 /// `modified_ms`); the names are the index's to fill in.
 pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummary> {
-    let meta: Meta = serde_json::from_slice(json).ok()?;
+    let meta: Meta = match serde_json::from_slice(json) {
+        Ok(meta) => meta,
+        Err(_) => return outdated_summary(id, json, modified_ms),
+    };
+    if meta.format_version != mapgen::system::SYSTEM_FORMAT_VERSION {
+        return Some(outdated_stub(
+            id,
+            modified_ms,
+            &OutdatedMeta {
+                format_version: meta.format_version,
+                seed: meta.seed,
+                width: meta.width,
+                height: meta.height,
+                star: Some(MetaStarLoose {
+                    kind: meta.star.kind,
+                    designation: meta.star.designation,
+                }),
+            },
+        ));
+    }
     let mut planets: BTreeMap<String, u32> = BTreeMap::new();
     for body in meta.bodies.iter().filter(|b| b.kind == "planet") {
         *planets.entry(body.preset.clone()).or_default() += 1;
@@ -349,7 +394,40 @@ pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummar
         names: GivenNames::new(),
         modified_ms,
         pinned: false,
+        outdated: false,
     })
+}
+
+/// The summary of a `system.json` that does not parse as today's: listed
+/// as outdated when it is a JSON object of another format version, so
+/// that the user can delete it; `None` when it is not even that.
+fn outdated_summary(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummary> {
+    let meta: OutdatedMeta = serde_json::from_slice(json).ok()?;
+    (meta.format_version != mapgen::system::SYSTEM_FORMAT_VERSION)
+        .then(|| outdated_stub(id, modified_ms, &meta))
+}
+
+/// A summary with no bodies, for a system of another format.
+fn outdated_stub(id: &str, modified_ms: u64, meta: &OutdatedMeta) -> SystemSummary {
+    let star = meta.star.as_ref();
+    SystemSummary {
+        id: id.to_string(),
+        seed: meta.seed,
+        width: meta.width,
+        height: meta.height,
+        star: star.map_or_else(String::new, |s| s.kind.clone()),
+        designation: star.map_or_else(String::new, |s| s.designation.clone()),
+        star_light: [1.0, 1.0, 1.0],
+        hz_inner_au: 0.0,
+        hz_outer_au: 0.0,
+        planets: BTreeMap::new(),
+        moons: 0,
+        bodies: Vec::new(),
+        names: GivenNames::new(),
+        modified_ms,
+        pinned: false,
+        outdated: true,
+    }
 }
 
 /// The ids of the systems under `root`: directories with a valid name.

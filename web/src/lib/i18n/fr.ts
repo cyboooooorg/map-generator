@@ -184,6 +184,7 @@ export const fr: Messages = {
     habitableFilter: 'Avec un monde habitable',
     habitableLine: 'Monde rocheux en zone habitable',
     habitableShort: 'Zone habitable',
+    outdated: `Obsolète${S}: créé par un générateur plus ancien`,
     planetsCount: (p) => `${p.count} ${p.count > 1 ? 'planètes' : 'planète'}`,
     moonsCount: (p) => (p.count === 0 ? 'aucune lune' : `${p.count} ${p.count > 1 ? 'lunes' : 'lune'}`),
     columns: { pin: 'Épingle', name: 'Nom', star: 'Étoile', planets: 'Planètes', moons: 'Lunes', created: 'Créé', actions: 'Actions' },

@@ -72,7 +72,7 @@
 </script>
 
 <article class="card" class:compact class:editing={renaming} title={t.systemList.seedTitle({ seed: system.seed })}>
-  {#if renaming}
+  {#if renaming && !system.outdated}
     {#if compact}
       <SystemOrrery {system} width={ORRERY} height={ORRERY} radius={10} scale="log" />
     {:else}
@@ -80,6 +80,17 @@
     {/if}
     <div class="body"><RenameForm {system} {onChanged} onClose={onRenameClose} bind:dirty /></div>
   {:else}
+    {#if system.outdated}
+      <div class="open outdated">
+        <span class="body">
+          <span class="head">
+            <strong class="name">{name}</strong>
+            {#if renamed}<small>{system.designation}</small>{/if}
+          </span>
+          <span class="badge">{t.systemList.outdated}</span>
+        </span>
+      </div>
+    {:else}
     <button class="open" aria-pressed={selecting ? chosen : undefined} onclick={() => (selecting ? onToggle() : onOpen())}>
       {#if compact}
         <SystemOrrery {system} width={ORRERY} height={ORRERY} radius={10} scale="log" />
@@ -107,6 +118,7 @@
         {/if}
       </span>
     </button>
+    {/if}
     <span class="foot">
       <small class="meta" title={when}>{meta}</small>
       <SystemActions {system} {selecting} {chosen} {onChanged} {onPinned} {onRename} {onDelete} {onToggle} />
@@ -219,6 +231,15 @@
   /* A meaning, not a theme colour: green in every theme. */
   .habitable {
     color: #4fc27c;
+    font-size: 0.9em;
+  }
+  /* A meaning, not a theme colour: amber in every theme. */
+  .badge {
+    align-self: flex-start;
+    padding: 2px 9px;
+    border: 1px solid #d9a441;
+    border-radius: 999px;
+    color: #d9a441;
     font-size: 0.9em;
   }
   .foot {

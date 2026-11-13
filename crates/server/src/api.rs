@@ -311,6 +311,10 @@ pub struct SystemSummary {
     /// Pinned in the main menu (`PUT`/`DELETE /api/systems/{id}/pin`): the
     /// library lists pinned systems first. Kept in the index only.
     pub pinned: bool,
+    /// Made by an older generator: its `system.json` is not of the
+    /// current format, so it cannot be opened, only listed and deleted
+    /// (the other fields are empty when its file does not give them).
+    pub outdated: bool,
 }
 
 /// A body of a system, as its summary lists it.
