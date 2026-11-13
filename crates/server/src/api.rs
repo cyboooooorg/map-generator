@@ -1,23 +1,27 @@
 //! Types exchanged with the web front-end. `cargo test` regenerates their
 //! TypeScript definitions in `web/src/lib/api/types/` (see `.cargo/config.toml`).
-use mapgen::archetype::{Locale, ParamDefault};
+use mapgen::archetype::{ArchetypeInputs, ArchetypeOrbit, Locale, ParamDefault};
 use mapgen::generation::Stage;
 use mapgen::request::{Limits, WorldRequest};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::TS;
 
-/// An archetype the generation form can offer (Task 7 of part 3b of #423
-/// gives this type its final shape).
+/// An archetype the generation form can offer.
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]
-pub struct PresetInfo {
-    /// Value to send as `WorldRequest.planet`.
+pub struct ArchetypeInfo {
+    /// Value to send as `WorldRequest.planet`: the built-in name, or the
+    /// path of the archetype file under the archetypes directory.
     pub spec: String,
     pub name: String,
     pub description: String,
-    /// Whether the preset is embedded in the generator or read from a file.
+    /// Whether the archetype is embedded in the generator or read from a file.
     pub built_in: bool,
+    /// What the archetype sets of the planet model (the rest is drawn).
+    pub inputs: ArchetypeInputs,
+    /// Where the archetype sits and how it spins.
+    pub orbit: ArchetypeOrbit,
     /// Translated name and description, by language code (`fr`).
     pub locales: BTreeMap<String, Locale>,
 }
@@ -27,24 +31,37 @@ pub struct PresetInfo {
 #[ts(export)]
 pub struct ParamSpec {
     pub limits: Limits,
-    /// Used when neither the request nor the preset sets the value.
+    /// Used when neither the request nor the archetype sets the value.
     pub fallback: ParamDefault,
+}
+
+/// Limits of the inputs of the planet model a request can set, beside its
+/// archetype (the web form offers them from step 5 of #423).
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct InputLimits {
+    /// Earth masses.
+    pub mass_earth: Limits,
+    /// Iron share of the refractory mass.
+    pub core_mass_fraction: Limits,
+    /// Earth oceans.
+    pub water_oceans: Limits,
+    /// Hydrogen and helium share of the mass.
+    pub envelope_fraction: Limits,
+    /// Factor on the CO₂ formation rule (1 typical).
+    pub co2: Limits,
+    /// Factor on the N₂ formation rule (1 typical).
+    pub n2: Limits,
+    /// Earth's = 1.
+    pub radiogenic: Limits,
+    /// Degrees.
+    pub axial_tilt_deg: Limits,
 }
 
 /// Everything the generation form needs to validate its inputs.
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]
 pub struct FormSpec {
-    pub sea_level: ParamSpec,
-    /// Limits of `land_fraction`, the alternative to `sea_level`; without
-    /// it, the sea level falls back as usual.
-    pub land_fraction: Limits,
-    pub volcanic: ParamSpec,
-    pub circumference_km: ParamSpec,
-    pub axial_tilt_deg: ParamSpec,
-    pub erosion: ParamSpec,
-    pub pressure_bar: ParamSpec,
-    pub surface_age_ga: ParamSpec,
     /// Position of the orbit in the star's habitable zone.
     pub hz_position: ParamSpec,
     /// Limits of `orbit_au`, the alternative to `hz_position`.
@@ -56,8 +73,8 @@ pub struct FormSpec {
     pub moon_count: Limits,
     /// Limits of the star's metallicity (dex).
     pub metallicity: Limits,
-    /// Limits of a giant planet's mass (Earth masses).
-    pub giant_mass: Limits,
+    /// Limits of the inputs of the planet model a request can set.
+    pub inputs: InputLimits,
     pub default_width: u32,
     pub default_height: u32,
     /// The map sizes the form offers, `[width, height]`, all 2:1.
@@ -67,8 +84,8 @@ pub struct FormSpec {
     /// Largest map the server accepts, in pixels (width × height).
     #[ts(type = "number")]
     pub max_pixels: u64,
-    /// The planet types a whole system can be asked for (preset names).
-    pub planet_types: Vec<String>,
+    /// The archetypes a whole system can be asked for (built-in names).
+    pub archetypes: Vec<String>,
     /// Most planets a system holds (moons not counted).
     pub max_planets: u32,
 }
@@ -159,8 +176,8 @@ pub enum ErrorDetail {
         min: u32,
         max: u32,
     },
-    /// No preset of that name or file.
-    UnknownPreset { preset: String },
+    /// No archetype of that name or file.
+    UnknownArchetype { archetype: String },
     /// The map has more pixels than this server accepts.
     TooManyPixels {
         width: u32,
@@ -196,8 +213,6 @@ pub enum ErrorDetail {
     },
     /// A planet type the star leaves no room for.
     TypeImpossible { body_type: String },
-    /// A planet type that is not a preset the draw knows.
-    UnknownType { body_type: String },
     /// The system exists and the request does not replace it.
     SystemExists { system: String },
     /// A resolution that is not one of the offered sizes
@@ -210,8 +225,8 @@ pub enum ErrorDetail {
 }
 
 impl ErrorDetail {
-    /// The detail of a request validation error, when it has one (preset
-    /// errors keep their text only).
+    /// The detail of a request validation error, when it has one (archetype
+    /// file errors keep their text only).
     pub fn of_request(error: &mapgen::request::RequestError) -> Option<Self> {
         use mapgen::request::{MAP_SIZE, RequestError};
         match error {
@@ -231,8 +246,8 @@ impl ErrorDetail {
             RequestError::NoRoomForMoons { count } => Some(Self::NoRoomForMoons { count: *count }),
             RequestError::MoonsOfAMoon => Some(Self::MoonsOfAMoon),
             RequestError::HotGiantMoons { count } => Some(Self::HotGiantMoons { count: *count }),
-            RequestError::UnknownArchetype(name) => Some(Self::UnknownPreset {
-                preset: name.clone(),
+            RequestError::UnknownArchetype(name) => Some(Self::UnknownArchetype {
+                archetype: name.clone(),
             }),
             // The text names the file, the age and the star's life, or the
             // water and the mass; no structured detail.
@@ -254,9 +269,6 @@ impl ErrorDetail {
             }),
             RequestError::TypeImpossible { body_type } => Some(Self::TypeImpossible {
                 body_type: body_type.clone(),
-            }),
-            RequestError::UnknownType(t) => Some(Self::UnknownType {
-                body_type: t.clone(),
             }),
         }
     }
@@ -294,7 +306,7 @@ pub struct SystemSummary {
     /// file does not give them).
     pub hz_inner_au: f32,
     pub hz_outer_au: f32,
-    /// How many planets of each type (preset name).
+    /// How many planets of each archetype.
     pub planets: BTreeMap<String, u32>,
     pub moons: u32,
     /// Every body, planets and moons, in the system's order.

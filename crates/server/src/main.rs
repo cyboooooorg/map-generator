@@ -6,7 +6,7 @@
 //! |-----------------------|--------------|------------------------------------------|
 //! | `MAPGEN_SYSTEMS_DIR`  | `systems`    | drawn systems and their bodies           |
 //! | `MAPGEN_DB`           | `db/mapgen.sqlite` | the index: systems, bodies, names, jobs |
-//! | `MAPGEN_PRESETS_DIR`  | `presets`    | extra planet presets (`*.toml`)          |
+//! | `MAPGEN_ARCHETYPES_DIR` | `archetypes` | extra planet archetypes (`*.toml`); missing: built-ins only |
 //! | `MAPGEN_STATIC_DIR`   | `web/dist`   | built web front-end                      |
 //! | `MAPGEN_MAX_PIXELS`   | `33554432`   | largest map accepted (width × height)    |
 //! | `MAPGEN_TILE_CACHE_MB`| `1024`       | memory for worlds loaded for tiles (MiB) |
@@ -99,7 +99,7 @@ async fn main() -> std::io::Result<()> {
     let config = app::Config {
         systems_dir: PathBuf::from(env_or("MAPGEN_SYSTEMS_DIR", "systems")),
         db_path: PathBuf::from(env_or("MAPGEN_DB", "db/mapgen.sqlite")),
-        presets_dir: PathBuf::from(env_or("MAPGEN_PRESETS_DIR", "presets")),
+        archetypes_dir: PathBuf::from(env_or("MAPGEN_ARCHETYPES_DIR", "archetypes")),
         static_dir: PathBuf::from(env_or("MAPGEN_STATIC_DIR", "web/dist")),
         max_pixels: std::env::var("MAPGEN_MAX_PIXELS")
             .ok()

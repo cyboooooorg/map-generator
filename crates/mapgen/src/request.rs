@@ -248,9 +248,6 @@ pub enum RequestError {
     },
     /// A type the star leaves no room for.
     TypeImpossible { body_type: String },
-    /// A planet type that is not one of the old preset names (no longer
-    /// produced: a system names archetypes, see `UnknownArchetype`).
-    UnknownType(String),
 }
 
 impl fmt::Display for RequestError {
@@ -327,7 +324,6 @@ impl fmt::Display for RequestError {
             RequestError::TypeImpossible { body_type } => {
                 write!(f, "this star leaves no room for a {body_type} planet")
             }
-            RequestError::UnknownType(t) => write!(f, "unknown planet type {t:?}"),
         }
     }
 }

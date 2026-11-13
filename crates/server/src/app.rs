@@ -3,7 +3,7 @@
 //! | Route                           | Purpose                                           |
 //! |---------------------------------|---------------------------------------------------|
 //! | `GET /healthz`                  | liveness probe                                    |
-//! | `GET /api/presets`              | planet presets the form can offer                 |
+//! | `GET /api/archetypes`           | planet archetypes the form can offer              |
 //! | `GET /api/form`                 | parameter limits, defaults and map sizes          |
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
@@ -36,10 +36,10 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted, GeneratorNote,
-    HexRequest, JobInfo, JobStatus, ParamSpec, PendingSize, PresentSize, PresetInfo,
-    RegeneratedBody, SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery,
-    SystemSummary,
+    ApiError, ArchetypeInfo, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted,
+    GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec, PendingSize,
+    PresentSize, RegeneratedBody, SystemCreated, SystemDetail, SystemName, SystemNames,
+    SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
@@ -131,7 +131,9 @@ pub struct Config {
     /// The SQLite file of the index (see [`crate::index`]); created, with
     /// its directory, when missing.
     pub db_path: PathBuf,
-    pub presets_dir: PathBuf,
+    /// Extra archetype files (`*.toml`); a missing directory means the
+    /// built-in archetypes only.
+    pub archetypes_dir: PathBuf,
     /// Built front-end (`web/dist`); missing in development, where Vite serves it.
     pub static_dir: PathBuf,
     /// Largest map accepted, in pixels (see [`DEFAULT_MAX_PIXELS`]).
@@ -247,7 +249,7 @@ pub fn router(config: Config) -> Router {
 fn new_state(config: &Config) -> Shared {
     // Exports a killed server left unfinished.
     systems::sweep(&config.systems_dir);
-    let catalog = Catalog::load(&config.presets_dir);
+    let catalog = Catalog::load(&config.archetypes_dir);
     let (index, jobs, next_job) = open_index(config);
     Arc::new(AppState {
         catalog,
@@ -301,7 +303,7 @@ fn routes(state: Shared, config: &Config) -> Router {
         .compress_when(SizeAbove::new(COMPRESS_ABOVE).and(compressible));
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        .route("/api/presets", get(presets))
+        .route("/api/archetypes", get(archetypes))
         .route("/api/form", get(form))
         .route("/api/systems", get(list_systems).post(create_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
@@ -467,33 +469,34 @@ fn compressible(_: StatusCode, _: Version, headers: &HeaderMap, _: &Extensions) 
     )
 }
 
-async fn presets(State(state): State<Shared>) -> Json<Vec<PresetInfo>> {
+async fn archetypes(State(state): State<Shared>) -> Json<Vec<ArchetypeInfo>> {
     Json(state.catalog.list())
 }
 
 async fn form(State(state): State<Shared>) -> Json<FormSpec> {
     let spec = |limits, fallback| ParamSpec { limits, fallback };
     Json(FormSpec {
-        sea_level: spec(request::SEA_LEVEL, fallback::SEA_LEVEL),
-        land_fraction: request::LAND_FRACTION,
-        volcanic: spec(request::VOLCANIC, fallback::VOLCANIC),
-        circumference_km: spec(request::CIRCUMFERENCE_KM, fallback::CIRCUMFERENCE_KM),
-        axial_tilt_deg: spec(request::AXIAL_TILT_DEG, fallback::AXIAL_TILT_DEG),
-        erosion: spec(request::EROSION, fallback::EROSION),
-        pressure_bar: spec(request::PRESSURE_BAR, fallback::PRESSURE_BAR),
-        surface_age_ga: spec(request::SURFACE_AGE_GA, fallback::SURFACE_AGE_GA),
         hz_position: spec(request::HZ_POSITION, fallback::HZ_POSITION),
         orbit_au: request::ORBIT_AU,
         eccentricity: request::ECCENTRICITY,
         moon_count: request::MOON_COUNT,
         metallicity: request::METALLICITY,
-        giant_mass: request::GIANT_MASS,
+        inputs: InputLimits {
+            mass_earth: request::MASS_EARTH,
+            core_mass_fraction: request::CORE_MASS_FRACTION,
+            water_oceans: request::WATER_OCEANS,
+            envelope_fraction: request::ENVELOPE_FRACTION,
+            co2: request::VOLATILE_FACTOR,
+            n2: request::VOLATILE_FACTOR,
+            radiogenic: request::RADIOGENIC,
+            axial_tilt_deg: request::AXIAL_TILT_DEG,
+        },
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,
         size_presets: request::SIZE_PRESETS.iter().map(|&(w, h)| [w, h]).collect(),
         max_size: MAX_SIZE,
         max_pixels: state.config.max_pixels,
-        planet_types: mapgen::system::archetype_names(),
+        archetypes: mapgen::system::archetype_names(),
         max_planets: mapgen::system::MAX_PLANETS as u32,
     })
 }
@@ -581,26 +584,25 @@ async fn create_system(
     Json(request): Json<mapgen::system::SystemRequest>,
 ) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
     check_system_request(&request)?;
-    // Around a planet: a built-in archetype only (never a path chosen by
-    // the client), its parameters resolved here, the system drawn around
-    // them.
-    if let mapgen::system::SystemRequest::Around(world) = &request
-        && let Some(spec) = &world.planet
-        && !mapgen::archetype::built_in_names().contains(&spec.as_str())
-    {
-        return Err(Rejection(
-            bad(format!("unknown planet archetype {spec:?}")),
-            Some(ErrorDetail::UnknownPreset {
-                preset: spec.clone(),
-            }),
-        ));
-    }
+    // Around a planet: an archetype of the catalog (never a path chosen by
+    // the client), loaded once at startup; a whole system names built-in
+    // archetypes only (`system::draw` refuses the others).
+    let archetype = match &request {
+        mapgen::system::SystemRequest::Around(world) => match &world.planet {
+            Some(spec) => Some(state.catalog.get(spec).cloned().ok_or_else(|| {
+                let e = mapgen::request::RequestError::UnknownArchetype(spec.clone());
+                Rejection(bad(e.to_string()), ErrorDetail::of_request(&e))
+            })?),
+            None => None,
+        },
+        mapgen::system::SystemRequest::System(_) => None,
+    };
     let drawn = request.clone();
     let (system, ignored) = tokio::task::spawn_blocking(move || {
         let rng = &mut rand::rng();
         match &drawn {
             mapgen::system::SystemRequest::Around(world) => {
-                let resolved = world.resolve(rng)?;
+                let resolved = world.resolve_with_archetype(archetype, rng)?;
                 let ignored = resolved.ignored.iter().map(|f| (*f).to_owned()).collect();
                 Ok((
                     mapgen::system::draw_around_params(
@@ -2504,7 +2506,7 @@ mod tests {
         Config {
             systems_dir: root.join("systems"),
             db_path: root.join("db").join("mapgen.sqlite"),
-            presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../archetypes")),
+            archetypes_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../archetypes")),
             static_dir: root.join("static"),
             max_pixels: DEFAULT_MAX_PIXELS,
             tile_cache_bytes: tiles::DEFAULT_BUDGET_BYTES,
@@ -4050,12 +4052,62 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lists_the_built_in_archetypes() {
-        let app = router(temp_config("presets"));
-        let (status, body) = call(&app, "GET", "/api/presets", None).await;
+    async fn archetypes_are_listed() {
+        let app = router(temp_config("archetypes"));
+        let (status, body) = call(&app, "GET", "/api/archetypes", None).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.contains("\"spec\":\"earth-like\""));
-        assert!(body.contains("\"spec\":\"jupiter-like\""));
+        let list: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let list = list.as_array().unwrap();
+        let built_in: Vec<_> = list.iter().filter(|a| a["built_in"] == true).collect();
+        assert_eq!(built_in.len(), 13);
+        let earth = list.iter().find(|a| a["spec"] == "earth-like").unwrap();
+        assert!(earth["locales"]["fr"]["name"].is_string());
+        assert!(!earth["inputs"]["mass_earth"].is_null());
+        assert!(earth["orbit"].is_object());
+        assert!(list.iter().any(|a| a["spec"] == "jupiter-like"));
+        let (status, _) = call(&app, "GET", "/api/presets", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn a_missing_archetypes_dir_is_fine() {
+        let mut config = temp_config("no-archetypes");
+        config.archetypes_dir = config.systems_dir.join("nowhere");
+        let app = router(config);
+        let (status, body) = call(&app, "GET", "/api/archetypes", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let list: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap();
+        assert_eq!(list.len(), 13);
+        assert!(list.iter().all(|a| a["built_in"] == true));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_archetype_is_named() {
+        let app = router(temp_config("unknown-archetype"));
+        for body in [
+            r#"{"around": {"planet": "terran"}}"#,
+            r#"{"system": {"planets": {"terran": 1}, "seed": 1, "width": 64, "height": 32}}"#,
+        ] {
+            let (status, text) = call(&app, "POST", "/api/systems", Some(body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            let detail = &serde_json::from_str::<serde_json::Value>(&text).unwrap()["detail"];
+            assert_eq!(detail["code"], "unknown_archetype", "{body}");
+            assert_eq!(detail["archetype"], "terran", "{body}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_form_offers_archetypes() {
+        let app = router(temp_config("form-archetypes"));
+        let (_, body) = call(&app, "GET", "/api/form", None).await;
+        let form: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let names = form["archetypes"].as_array().unwrap();
+        assert!(names.iter().any(|n| n == "earth-like"));
+        assert!(form.get("planet_types").is_none());
+        assert!(form.get("sea_level").is_none());
+        assert!(form.get("land_fraction").is_none());
+        assert!(form["inputs"]["water_oceans"]["max"].is_number());
+        assert!(form["inputs"]["mass_earth"]["min"].is_number());
     }
 
     #[tokio::test]
@@ -4108,7 +4160,7 @@ mod tests {
         let (_, body) = post(r#"{"around": {"width": 100000}}"#).await;
         assert_eq!(detail(&body)["code"], "size_out_of_range");
         let (_, body) = post(r#"{"around": {"planet": "nowhere"}}"#).await;
-        assert_eq!(detail(&body)["code"], "unknown_preset");
+        assert_eq!(detail(&body)["code"], "unknown_archetype");
         let (_, body) = post(
             r#"{"system": {"star": null, "metallicity": null, "planets": {"earth-like": 16}, "seed": 1, "width": 64, "height": 32}}"#,
         )

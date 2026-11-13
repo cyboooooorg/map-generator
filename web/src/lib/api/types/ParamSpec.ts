@@ -7,6 +7,6 @@ import type { ParamDefault } from "./ParamDefault";
  */
 export type ParamSpec = { limits: Limits, 
 /**
- * Used when neither the request nor the preset sets the value.
+ * Used when neither the request nor the archetype sets the value.
  */
 fallback: ParamDefault, };

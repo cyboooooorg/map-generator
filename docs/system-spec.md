@@ -377,7 +377,7 @@ axis, orbit and labels:
 - moons grey (rock) or pale (ice), irregular ones with their shape.
 
 The system file stores each body's preview (its colours, or its band
-palette and layout), so the viewer draws it without knowing the presets.
+palette and layout), so the viewer draws it without knowing the archetypes or looks.
 A preview's colours are linear RGB (a giant's sRGB palette is converted
 when the preview is made); a giant's `edges` are the latitudes of the
 bands it will be generated with, so the preview sphere shows the same

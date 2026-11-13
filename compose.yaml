@@ -23,7 +23,7 @@ networks:
 services:
   # ---------------------------------------------------------------------------------------------------- #
   # Planet viewer
-  # Reads and writes the worlds, systems and index (db/) of this checkout; reads its presets (built-in ones are embedded).
+  # Reads and writes the worlds, systems and index (db/) of this checkout; reads its archetypes (built-in ones are embedded).
   # ---------------------------------------------------------------------------------------------------- #
   planets:
     build:
@@ -49,7 +49,7 @@ services:
       - ./systems:/data/systems
       # The index (SQLite): survives restarts and image rebuilds, back it up with systems/
       - ./db:/data/db
-      - ./presets:/data/presets:ro
+      - ./archetypes:/data/archetypes:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/healthz"]
       interval: 30s

@@ -4,19 +4,19 @@
 //! Requests name an archetype by its catalog `spec`, never by a raw path, so
 //! a client cannot make the server read arbitrary files. Archetypes are
 //! parsed once, at startup: a changed or added file is picked up on restart.
-use crate::api::PresetInfo;
+use crate::api::ArchetypeInfo;
 use mapgen::archetype::{Archetype, built_in_names};
 use std::path::{Path, PathBuf};
 
 pub struct Catalog {
-    entries: Vec<(PresetInfo, Archetype)>,
+    entries: Vec<(ArchetypeInfo, Archetype)>,
 }
 
 impl Catalog {
     /// Loads the built-in archetypes and the archetype files under `dir`.
     /// Invalid files are skipped with a warning.
     pub fn load(dir: &Path) -> Self {
-        let mut entries: Vec<(PresetInfo, Archetype)> = Archetype::built_in()
+        let mut entries: Vec<(ArchetypeInfo, Archetype)> = Archetype::built_in()
             .into_iter()
             .map(|a| {
                 let spec = a.name.clone();
@@ -47,17 +47,27 @@ impl Catalog {
         Self { entries }
     }
 
-    pub fn list(&self) -> Vec<PresetInfo> {
+    /// The archetype a request's `planet` names (its catalog `spec`).
+    pub fn get(&self, spec: &str) -> Option<&Archetype> {
+        self.entries
+            .iter()
+            .find(|(info, _)| info.spec == spec)
+            .map(|(_, a)| a)
+    }
+
+    pub fn list(&self) -> Vec<ArchetypeInfo> {
         self.entries.iter().map(|(info, _)| info.clone()).collect()
     }
 }
 
-fn info(a: &Archetype, spec: &str, built_in: bool) -> PresetInfo {
-    PresetInfo {
+fn info(a: &Archetype, spec: &str, built_in: bool) -> ArchetypeInfo {
+    ArchetypeInfo {
         spec: spec.to_string(),
         name: a.name.clone(),
         description: a.description.clone(),
         built_in,
+        inputs: a.inputs.clone(),
+        orbit: a.orbit.clone(),
         locales: a.locales.clone(),
     }
 }
