@@ -540,6 +540,8 @@ export const en = {
     missingArchetype: (p: { archetype: string }) => `The archetype ${p.archetype} is not offered by this server: pick another one.`,
     planet: 'Planet',
     randomPlanet: 'Drawn from the star',
+    modelInputs: 'Composition',
+    modelInputsKept: (p: { id: string }) => `as ${p.id} (mass, water, air, life)`,
     random: 'random',
     fields: {
       axial_tilt_deg: { label: 'Axial tilt (°)', help: 'Earth: 23.4°' },

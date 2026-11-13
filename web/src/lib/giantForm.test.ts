@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyGiantChoice, initialGiantChoice, parseGiantChoice } from './giantForm';
+import { applyGiantChoice, initialGiantChoice, parseGiantChoice, rememberedGiantChoice } from './giantForm';
 import type { WorldRequest } from './api/types/WorldRequest';
 
 describe('giant form fields', () => {
@@ -19,8 +19,21 @@ describe('giant form fields', () => {
   });
 
   it('starts from a varied world', () => {
-    const choice = initialGiantChoice({ metallicity: -0.2, host: 'giant', mass_earth: 17 });
-    expect(choice).toMatchObject({ metallicityRandom: false, metallicity: -0.2, host: 'giant', massRandom: false, mass: 17 });
+    const giant = initialGiantChoice({ metallicity: -0.2, host: 'giant', mass_earth: 17 }, true);
+    expect(giant).toMatchObject({ metallicityRandom: false, metallicity: -0.2, host: 'giant', massRandom: false, mass: 17 });
+  });
+
+  it('a_rocky_worlds_mass_never_reaches_a_giant', () => {
+    // Varying an Earth: its mass is not a giant's mass to offer.
+    const earth = initialGiantChoice({ mass_earth: 1 }, false);
+    expect(earth).toMatchObject({ massRandom: true, mass: 318 });
+    const jupiter: WorldRequest = { planet: 'jupiter-like' };
+    applyGiantChoice(jupiter, earth, true);
+    expect(jupiter).not.toHaveProperty('mass_earth');
+    // Nor through the form memory: a giant's mass set by hand is not kept.
+    const asked = { ...initialGiantChoice(null), massRandom: false, mass: 95, metallicityRandom: false, metallicity: 0.2 };
+    expect(rememberedGiantChoice(asked)).toMatchObject({ massRandom: true, mass: 318, metallicityRandom: false, metallicity: 0.2 });
+    expect(parseGiantChoice({ massRandom: false, mass: 1 })).toMatchObject({ massRandom: true, mass: 318 });
   });
 
   it('draws a field left empty', () => {
@@ -38,8 +51,8 @@ describe('giant form fields', () => {
       giants: 'none',
       alone: false,
       host: 'giant',
-      massRandom: false,
-      mass: 17,
+      massRandom: true,
+      mass: 318,
     });
     expect(parseGiantChoice({ metallicity: 'high', giants: 'many', host: 'moon', mass: -3 })).toEqual(initialGiantChoice(null));
     expect(parseGiantChoice(undefined)).toEqual(initialGiantChoice(null));

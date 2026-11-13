@@ -4,7 +4,7 @@
 import { loadSetting, removeSetting, saveSetting } from './settings';
 import { type MoonChoice, parseMoonChoice } from './moons';
 import { parseStarChoice, type StarChoice } from './starForm';
-import { type GiantChoice, parseGiantChoice } from './giantForm';
+import { type GiantChoice, parseGiantChoice, rememberedGiantChoice } from './giantForm';
 
 /** Most moons a remembered form may ask for (mapgen's MAX_MOON_COUNT). */
 const MAX_MOONS = 6;
@@ -30,7 +30,10 @@ export interface FormMemory {
   star: StarChoice | null;
   /** The moons asked for (`auto`: drawn by the seed). */
   moons: MoonChoice;
-  /** Metallicity, giant neighbours, a giant's moon, a giant's mass; drawn when absent. */
+  /**
+   * Metallicity, giant neighbours, a giant's moon; drawn when absent. Never a
+   * model input: the giant's mass is not kept (see `rememberedGiantChoice`).
+   */
   giant: GiantChoice;
 }
 
@@ -88,8 +91,9 @@ export function loadFormMemory(fieldNames: readonly string[], archetypes: readon
   return parseFormMemory(loadSetting<unknown>(KEY, null), fieldNames, archetypes);
 }
 
+/** Remembers the form, without its model inputs (a giant's mass). */
 export function saveFormMemory(memory: FormMemory): void {
-  saveSetting(KEY, memory);
+  saveSetting(KEY, { ...memory, giant: rememberedGiantChoice(memory.giant) });
 }
 
 /** Forgets the form: the next one starts from the archetype's values. */

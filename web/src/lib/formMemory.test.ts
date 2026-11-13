@@ -22,9 +22,13 @@ describe('parseFormMemory', () => {
         eccentricity: 0.05,
       },
       moons: 3,
-      giant: { metallicityRandom: false, metallicity: 0.3, giants: 'none', alone: false, host: 'giant', massRandom: false, mass: 95 },
+      giant: { metallicityRandom: false, metallicity: 0.3, giants: 'none', alone: false, host: 'giant', massRandom: true, mass: 318 },
     };
     expect(parseFormMemory(stored, FIELDS, ARCHETYPES)).toEqual(stored);
+    // A model input is never read back from the memory: a giant's mass
+    // stored by an older form is drawn again.
+    const withMass = { ...stored, giant: { ...stored.giant, massRandom: false, mass: 95 } };
+    expect(parseFormMemory(withMass, FIELDS, ARCHETYPES)?.giant).toMatchObject({ massRandom: true, mass: 318 });
     expect(parseFormMemory({ ...stored, moons: 'none' }, FIELDS, ARCHETYPES)?.moons).toBe('none');
     // An unknown or out-of-range number of moons falls back to the seed's.
     expect(parseFormMemory({ ...stored, moons: 9 }, FIELDS, ARCHETYPES)?.moons).toBe('auto');

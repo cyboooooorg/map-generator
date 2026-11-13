@@ -18,17 +18,34 @@ export interface GiantChoice {
   mass: number;
 }
 
-/** The choice a form starts from: drawn, or a varied world's values. */
-export function initialGiantChoice(initial: WorldRequest | null | undefined): GiantChoice {
+/** Jupiter's mass, Earth masses: what the giant mass field shows until set. */
+const JUPITER_MASS = 318;
+
+/**
+ * The choice a form starts from: drawn, or a varied world's values. Its
+ * mass fills the giant mass field only when the varied world is a giant
+ * (`giant`): a rocky world's mass would turn a giant archetype picked
+ * afterwards into a small world.
+ */
+export function initialGiantChoice(initial: WorldRequest | null | undefined, giant = false): GiantChoice {
+  const mass = giant ? initial?.mass_earth : undefined;
   return {
     metallicityRandom: initial?.metallicity === undefined,
     metallicity: initial?.metallicity ?? 0,
     giants: initial?.giants ?? 'auto',
     alone: initial?.alone === true,
     host: initial?.host ?? 'auto',
-    massRandom: initial?.mass_earth === undefined,
-    mass: initial?.mass_earth ?? 318,
+    massRandom: mass === undefined,
+    mass: mass ?? JUPITER_MASS,
   };
+}
+
+/**
+ * The choice as the form memory keeps it: without the giant's mass, a model
+ * input, which the next form must not carry to another planet.
+ */
+export function rememberedGiantChoice(choice: GiantChoice): GiantChoice {
+  return { ...choice, massRandom: true, mass: JUPITER_MASS };
 }
 
 /**
@@ -50,7 +67,9 @@ export function applyGiantChoice(request: WorldRequest, choice: GiantChoice, gia
 
 /**
  * Reads a remembered choice, keeping only well-formed values: each one
- * missing or malformed takes the drawn default of `initialGiantChoice`.
+ * missing or malformed takes the drawn default of `initialGiantChoice`. A
+ * mass remembered by an older form is dropped (see
+ * {@link rememberedGiantChoice}).
  */
 export function parseGiantChoice(raw: unknown): GiantChoice {
   const choice = initialGiantChoice(null);
@@ -62,7 +81,5 @@ export function parseGiantChoice(raw: unknown): GiantChoice {
   if (r.giants === 'auto' || r.giants === 'none') choice.giants = r.giants;
   if (typeof r.alone === 'boolean') choice.alone = r.alone;
   if (r.host === 'auto' || r.host === 'none' || r.host === 'giant') choice.host = r.host;
-  if (typeof r.massRandom === 'boolean') choice.massRandom = r.massRandom;
-  if (finite(r.mass) && r.mass > 0) choice.mass = r.mass;
   return choice;
 }

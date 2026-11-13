@@ -510,6 +510,8 @@ export const fr: Messages = {
     missingArchetype: (p) => `Ce serveur ne propose pas l’archétype ${p.archetype}${S}: choisissez-en un autre.`,
     planet: 'Planète',
     randomPlanet: 'Tirée selon l’étoile',
+    modelInputs: 'Composition',
+    modelInputsKept: (p) => `celle de ${p.id} (masse, eau, air, vie)`,
     random: 'au hasard',
     fields: {
       axial_tilt_deg: { label: 'Inclinaison de l’axe (°)', help: `Terre${S}: 23,4°` },

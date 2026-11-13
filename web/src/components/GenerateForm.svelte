@@ -21,6 +21,7 @@
   import { loadSetting, saveSetting } from '../lib/settings';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
   import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
+  import { keepModelInputs, keepsModelInputs, startsDrawn } from '../lib/variedWorld';
 
   interface Props {
     archetypes: ArchetypeInfo[];
@@ -141,6 +142,8 @@
   // changes must not reset what the user typed, hence untrack.
   const start = untrack(() => ({ initial, archetype: findArchetype(initial?.planet) ?? findArchetype(FALLBACK_ARCHETYPE) ?? archetypes[0] }));
   const missingArchetype = start.initial?.planet !== undefined && !findArchetype(start.initial.planet);
+  /** The catalog spec of the varied world's archetype (a request sends the spec, world.json the name). */
+  const initialSpec = findArchetype(start.initial?.planet)?.spec;
   /** A blank form starts from the last one submitted (an archetype no longer offered becomes earth-like). */
   const memory = untrack(() => {
     return initial === null ? loadFormMemory(
@@ -150,7 +153,8 @@
   });
   const memoryArchetype = untrack(() => (memory ? archetypes.find((a) => a.spec === memory.planet) : undefined));
   let planet = $state(memoryArchetype?.spec ?? start.archetype?.spec ?? '');
-  let randomPlanet = $state(memory?.randomPlanet ?? false);
+  /** A varied world asked as no archetype starts on "drawn from the star", its inputs kept (see variedWorld.ts). */
+  let randomPlanet = $state(startsDrawn(start.initial, memory?.randomPlanet));
   let seed = $state(start.initial?.seed !== undefined ? String(start.initial.seed) : '');
   let size = $state(
     untrack(() =>
@@ -171,7 +175,9 @@
   /** The moons asked for: drawn by the seed, none, or a number. */
   let moons = $state<MoonChoice>(untrack(() => memory?.moons ?? moonChoiceOf(start.initial?.moons)));
   /** Metallicity, giant neighbours, a giant's moon, a giant's mass (see giantForm.ts). */
-  let giantChoice = $state<GiantChoice>(untrack(() => memory?.giant ?? initialGiantChoice(start.initial)));
+  let giantChoice = $state<GiantChoice>(
+    untrack(() => memory?.giant ?? initialGiantChoice(start.initial, !randomPlanet && isGiantArchetype(start.archetype))),
+  );
   /** The star and the orbit (see starForm.ts). */
   let star = $state<StarChoice>(
     untrack(() => memory?.star ?? initialStarChoice(start.archetype, start.initial, spec.hz_position.fallback)),
@@ -216,14 +222,14 @@
   function resetForm(): void {
     clearFormMemory();
     const archetype = start.archetype;
-    randomPlanet = false;
     chooseArchetype(archetype?.spec ?? '');
     if (start.initial) {
       fields = initialState(archetype, start.initial);
       star = initialStarChoice(archetype, start.initial, spec.hz_position.fallback);
     }
     moons = moonChoiceOf(start.initial?.moons);
-    giantChoice = initialGiantChoice(start.initial);
+    randomPlanet = startsDrawn(start.initial, false);
+    giantChoice = initialGiantChoice(start.initial, !randomPlanet && isGiantArchetype(archetype));
     seed = start.initial?.seed !== undefined ? String(start.initial.seed) : '';
     size =
       start.initial?.width && start.initial.height
@@ -286,6 +292,9 @@
       });
     } else {
       lines.push({ label: t.form.planet, value: randomPlanet ? random : selectedArchetype ? archetypeName(selectedArchetype) : planet });
+      if (variedFrom && keepsModelInputs(randomPlanet ? undefined : planet, start.initial, initialSpec)) {
+        lines.push({ label: t.form.modelInputs, value: t.form.modelInputsKept({ id: variedFrom }) });
+      }
       lines.push({ label: t.form.star, value: star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype) });
       // Each parameter fixed, with its value; the others are drawn.
       const fixed: { label: string; value: string }[] = [];
@@ -359,6 +368,8 @@
       request.moons = asked;
     }
     applyGiantChoice(request, giantChoice, giantWorld);
+    // The varied world's inputs, while its planet is still the one asked for.
+    keepModelInputs(request, start.initial, initialSpec);
     return request;
   }
 
