@@ -13,6 +13,7 @@ const body = (id: string, orbit_au: number, extra: Partial<BodySummary> = {}): B
   orbit_au,
   eccentricity: 0,
   periapsis_deg: 0,
+  habitable: false,
   ...extra,
 });
 
@@ -32,6 +33,7 @@ const system = (bodies: BodySummary[], hz: [number, number] = [0.9, 1.5]): Syste
   names: {},
   modified_ms: 0,
   pinned: false,
+  outdated: false,
 });
 
 describe('orbitRadius', () => {
@@ -109,5 +111,11 @@ describe('cssColour', () => {
       expect(p.rx).toBeGreaterThan(log.starR);
     }
     expect(log.starR).toBeLessThan(sqrt.starR);
+  });
+
+  it('draws a mini-Neptune with the giant radius rule', () => {
+    const radius = (body_type: string) => orrery(system([body('b', 1, { body_type })]), 72, 40).planets[0]!.r;
+    expect(radius('mini-neptune')).toBe(radius('gas-giant'));
+    expect(radius('mini-neptune')).toBeGreaterThan(radius('super-earth'));
   });
 });

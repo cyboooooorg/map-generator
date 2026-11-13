@@ -69,8 +69,9 @@ pub const UNKNOWN_FORMAT: i64 = 0;
 /// history) starts over, the rest is read again from the tree.
 ///
 /// - 2: systems can be pinned in the main menu;
-/// - 3: the displayed size of each body, the size a job generates.
-const SCHEMA_VERSION: i64 = 3;
+/// - 3: the displayed size of each body, the size a job generates;
+/// - 4: systems made by an older generator are flagged `outdated`.
+const SCHEMA_VERSION: i64 = 4;
 /// Least time between two writes of a body's last opened date: a viewer
 /// asks for dozens of tiles a second.
 const TOUCH_EVERY: Duration = Duration::from_secs(60);
@@ -116,7 +117,9 @@ CREATE TABLE systems (
     request           TEXT,
     -- when the system was pinned in the main menu (ms), NULL if it is not;
     -- only the index holds it (no file mirrors it)
-    pinned_ms         INTEGER
+    pinned_ms         INTEGER,
+    -- made by an older generator (system.json of another format)
+    outdated          INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE bodies (
     system_id         TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
@@ -132,6 +135,8 @@ CREATE TABLE bodies (
     orbit_au          REAL NOT NULL,
     eccentricity      REAL NOT NULL,
     periapsis_deg     REAL NOT NULL,
+    -- a planet with liquid water on its surface (BodySummary::habitable)
+    habitable         INTEGER NOT NULL,
     -- what generates the body again: its seed and parameters (JSON)
     seed              INTEGER,
     params            TEXT,
@@ -471,7 +476,7 @@ impl Index {
         };
         let mut stmt = conn.prepare(&format!(
             "SELECT id, seed, width, height, star, designation, light_r, light_g, light_b,
-                    hz_inner_au, hz_outer_au, modified_ms, pinned_ms
+                    hz_inner_au, hz_outer_au, modified_ms, pinned_ms, outdated
              FROM systems {filter} ORDER BY modified_ms DESC, id"
         ))?;
         let mut systems: Vec<SystemSummary> = stmt
@@ -492,6 +497,7 @@ impl Index {
                     names: BTreeMap::new(),
                     modified_ms: r.get::<_, i64>(11)? as u64,
                     pinned: r.get::<_, Option<i64>>(12)?.is_some(),
+                    outdated: r.get(13)?,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -503,7 +509,7 @@ impl Index {
 
         let mut stmt = conn.prepare(
             "SELECT system_id, id, designation, kind, body_type, colour_r, colour_g, colour_b,
-                    generated, orbit_au, eccentricity, periapsis_deg
+                    generated, orbit_au, eccentricity, periapsis_deg, habitable
              FROM bodies WHERE ?1 IS NULL OR system_id = ?1 ORDER BY system_id, position",
         )?;
         let rows = stmt.query_map([only], |r| {
@@ -519,6 +525,7 @@ impl Index {
                     orbit_au: r.get(9)?,
                     eccentricity: r.get(10)?,
                     periapsis_deg: r.get(11)?,
+                    habitable: r.get(12)?,
                 },
             ))
         })?;
@@ -1280,12 +1287,12 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
     };
     tx.execute(
         "INSERT INTO systems (id, seed, width, height, star, designation, light_r, light_g,
-                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms, outdated)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT(id) DO UPDATE SET
             seed = ?2, width = ?3, height = ?4, star = ?5, designation = ?6, light_r = ?7,
             light_g = ?8, light_b = ?9, hz_inner_au = ?10, hz_outer_au = ?11,
-            modified_ms = ?12, request = ?13",
+            modified_ms = ?12, request = ?13, outdated = ?15",
         params![
             s.id,
             s.seed,
@@ -1300,7 +1307,8 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
             s.hz_outer_au,
             s.modified_ms as i64,
             loaded.request,
-            pinned_ms
+            pinned_ms,
+            s.outdated
         ],
     )?;
     tx.execute("DELETE FROM bodies WHERE system_id = ?1", [&s.id])?;
@@ -1346,9 +1354,9 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
                                  colour_r, colour_g, colour_b, generated, orbit_au,
                                  eccentricity, periapsis_deg, seed, params,
                                  generator_version, generator_format, last_opened_ms,
-                                 displayed_width, displayed_height)
+                                 displayed_width, displayed_height, habitable)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                     ?18, ?19, ?20)",
+                     ?18, ?19, ?20, ?21)",
             params![
                 s.id,
                 body.id,
@@ -1370,6 +1378,7 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
                 last_opened,
                 old.and_then(|o| o.4),
                 old.and_then(|o| o.5),
+                body.habitable,
             ],
         )?;
     }
@@ -1412,7 +1421,7 @@ mod tests {
     use std::path::PathBuf;
 
     const SYSTEM: &str = r#"{
-        "format_version": 2, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 3, "seed": 42, "width": 1024, "height": 512,
         "request": {"system": {"star": null, "metallicity": null, "planets": null, "seed": 42, "width": 1024, "height": 512}},
         "star": {"type": "K1V", "designation": "MGS 48213", "metallicity": 0.0, "ice_line_au": 2.0,
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
@@ -1736,7 +1745,7 @@ mod tests {
         let systems = root.join("systems");
         tree(&systems, &["mgs-1-1"]);
         let db = root.join("mapgen.sqlite");
-        for old in [2, 4] {
+        for old in [2, 5] {
             {
                 let index = Index::open(&db).unwrap();
                 index.reconcile(&systems).unwrap();

@@ -51,4 +51,10 @@ modified_ms: number,
  * Pinned in the main menu (`PUT`/`DELETE /api/systems/{id}/pin`): the
  * library lists pinned systems first. Kept in the index only.
  */
-pinned: boolean, };
+pinned: boolean, 
+/**
+ * Made by an older generator: its `system.json` is not of the
+ * current format, so it cannot be opened, only listed and deleted
+ * (the other fields are empty when its file does not give them).
+ */
+outdated: boolean, };

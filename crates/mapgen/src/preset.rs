@@ -202,6 +202,14 @@ pub struct Preset {
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
     lookup: Vec<Biome>,
+    /// Built from a planet's physical model
+    /// (`crate::planet::interim::preset_for`), which sets its tectonic
+    /// regime: resolving a request leaves that regime alone. Never
+    /// stored, so a world read back from `world.json` keeps the regime it
+    /// was generated with either way.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub derived: bool,
 }
 
 /// The name and description of a preset in one language. Either may be
@@ -364,6 +372,7 @@ impl TryFrom<PresetSpec> for Preset {
             remap: spec.remap,
             locales: spec.locales,
             lookup,
+            derived: false,
         })
     }
 }
@@ -429,6 +438,28 @@ impl Preset {
     /// The final biome after this planet's remapping.
     pub fn remap(&self, biome: Biome) -> Biome {
         self.lookup[biome.id() as usize]
+    }
+
+    /// This preset with a second remap, `then` (target, sources), applied
+    /// to the output of its own: a biome its remap turns into a source of
+    /// `then` ends as that source's target. `remap` is rewritten to the
+    /// composition, so that the preset reads back from JSON the same.
+    pub fn then_remap(mut self, then: &[(Biome, &[Biome])]) -> Self {
+        let second = |b: Biome| {
+            then.iter()
+                .find(|(_, sources)| sources.contains(&b))
+                .map_or(b, |&(target, _)| target)
+        };
+        self.lookup = self.lookup.iter().map(|&b| second(b)).collect();
+        let mut remap: BTreeMap<Biome, Vec<Biome>> = BTreeMap::new();
+        for b in Biome::ALL {
+            let target = self.remap(b);
+            if target != b {
+                remap.entry(target).or_default().push(b);
+            }
+        }
+        self.remap = remap;
+        self
     }
 }
 

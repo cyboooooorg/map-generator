@@ -130,7 +130,7 @@ export function systemStarView(
     const colour = (body.preview.colours[0] ?? [0.4, 0.4, 0.4]).map(toSrgb) as [number, number, number];
     return {
       name: names[body.id] ?? body.designation,
-      kind: body.type === 'ice-giant' ? 'ice' : 'gas',
+      kind: body.type === 'ice-giant' || body.type === 'mini-neptune' ? 'ice' : 'gas',
       mass_earth: body.physical.mass_earth,
       radius_earth: body.physical.radius_km / 6371,
       orbit_au: body.orbit.semi_major_axis_au,

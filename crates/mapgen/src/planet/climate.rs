@@ -14,6 +14,7 @@ use crate::geology::Regime;
 /// The liquid that covers part of a surface, if any.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum SurfaceLiquid {
     None,
     Water,
@@ -23,6 +24,7 @@ pub enum SurfaceLiquid {
 
 /// The climate at a body's surface.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Climate {
     /// Mean surface temperature, K.
     pub temperature_k: f64,

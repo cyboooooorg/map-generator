@@ -1797,19 +1797,29 @@ async fn body_drift_preview(
     if let Some(png) = state.drift_cache.get(&key) {
         return Ok(png_response(png, loc.revision));
     }
-    let root = state.config.systems_dir.clone();
-    let (owned_system, owned_body) = (system.to_owned(), body.to_owned());
-    let params = tokio::task::spawn_blocking(move || {
-        systems::body_params(&root, &owned_system, &owned_body)
-    })
-    .await
-    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or_else(|| {
-        Failure(
-            StatusCode::NOT_FOUND,
-            format!("no parameters for {}", loc.key),
-        )
-    })?;
+    // The calibrated parameters, when kept; otherwise the body, whose
+    // drawn parameters check the request at once (the calibration keeps
+    // its plates) and whose calibration waits for a turn.
+    let cached = state.drift_cache.params(&loc.key, loc.revision);
+    let found = match &cached {
+        Some(_) => None,
+        None => {
+            let root = state.config.systems_dir.clone();
+            let (owned_system, owned_body) = (system.to_owned(), body.to_owned());
+            let found = tokio::task::spawn_blocking(move || {
+                systems::read_body(&root, &owned_system, &owned_body)
+            })
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or_else(|| {
+                Failure(
+                    StatusCode::NOT_FOUND,
+                    format!("no parameters for {}", loc.key),
+                )
+            })?;
+            Some(found)
+        }
+    };
     // Refused before waiting for a turn.
     let refused = |e: PreviewError| match e {
         PreviewError::NoPlates => Failure(StatusCode::NOT_FOUND, e.to_string()),
@@ -1817,7 +1827,14 @@ async fn body_drift_preview(
             Failure(StatusCode::BAD_REQUEST, e.to_string())
         }
     };
-    drift::preview_params(&params, drift_ma as f32, width).map_err(refused)?;
+    let checked = match (&cached, &found) {
+        (Some(params), _) => drift::preview_params(params, drift_ma as f32, width),
+        (None, Some(body)) => {
+            drift::preview_params(&mapgen::system::world_params(body), drift_ma as f32, width)
+        }
+        (None, None) => unreachable!("a body read when no parameters are kept"),
+    };
+    checked.map_err(refused)?;
     let _turn = state
         .drift_previews
         .acquire()
@@ -1828,9 +1845,27 @@ async fn body_drift_preview(
         return Ok(png_response(png, loc.revision));
     }
     // A generation uses every core and all the memory it can: previews
-    // wait for it to end, as tiles do.
+    // (and the calibration of their parameters) wait for it to end, as
+    // tiles do.
     let Ok(_generation) = state.queue.try_acquire() else {
         return Ok(world_failure(TileError::Busy, "drift previews"));
+    };
+    // Calibrated once per revision, whatever the epoch (another request
+    // may have kept them while this one waited).
+    let params = match cached.or_else(|| state.drift_cache.params(&loc.key, loc.revision)) {
+        Some(params) => params,
+        None => {
+            let body = found.expect("a body read when no parameters are kept");
+            let params = tokio::task::spawn_blocking(move || {
+                Arc::new(mapgen::system::generation_params(&body))
+            })
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            state
+                .drift_cache
+                .insert_params(loc.key.clone(), loc.revision, params.clone());
+            params
+        }
     };
     let png = tokio::task::spawn_blocking(move || {
         let preview = drift::preview(&params, drift_ma as f32, width).map_err(|e| e.to_string())?;
@@ -2442,6 +2477,23 @@ mod tests {
     }
 
     #[test]
+    fn viewer_and_server_agree_on_the_planet_classes() {
+        let viewer = include_str!("../../../web/src/lib/planetClass.test.ts");
+        for key in mapgen::planet::PLANET_CLASSES {
+            assert!(
+                viewer.contains(&format!("'{key}'")),
+                "planetClass.test.ts must list the class `{key}`"
+            );
+        }
+        let listed = viewer.matches("\n  '").count();
+        assert_eq!(
+            listed,
+            mapgen::planet::PLANET_CLASSES.len(),
+            "planetClass.test.ts lists a class the server does not know"
+        );
+    }
+
+    #[test]
     fn viewer_and_server_agree_on_the_oldest_format() {
         let viewer = include_str!("../../../web/src/lib/formatVersion.ts");
         let min = mapgen::export::raw_data::MIN_FORMAT_VERSION;
@@ -2608,6 +2660,61 @@ mod tests {
             None,
         )
         .await;
+        assert_eq!(status, StatusCode::GONE, "{body}");
+        assert!(body.contains("clean-systems"), "{body}");
+    }
+
+    /// Writes a `system.json` of format 2 (an older generator's) under
+    /// `root` as system `id`.
+    fn write_outdated_system(root: &Path, id: &str) {
+        let dir = root.join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("system.json"),
+            r#"{"format_version": 2, "seed": 7, "width": 64, "height": 32,
+                "star": {"type": "G2V", "designation": "MGS 7"}, "bodies": []}"#,
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_outdated_system_is_listed_not_deleted() {
+        let config = temp_config("outdated-listed");
+        let root = config.systems_dir.clone();
+        write_outdated_system(&root, "mgs-7-7");
+        let app = router(config);
+        let (status, body) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let list: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let system = &list.as_array().unwrap()[0];
+        assert_eq!(system["id"], "mgs-7-7");
+        assert_eq!(system["outdated"], true);
+        assert_eq!(system["seed"], 7);
+        assert_eq!(system["star"], "G2V");
+        assert!(system["planets"].as_object().unwrap().is_empty());
+        assert!(root.join("mgs-7-7").is_dir());
+    }
+
+    #[tokio::test]
+    async fn an_outdated_system_can_be_deleted_by_request() {
+        let config = temp_config("outdated-deleted");
+        let root = config.systems_dir.clone();
+        write_outdated_system(&root, "mgs-7-7");
+        let app = router(config);
+        let (status, body) = call(&app, "DELETE", "/api/systems/mgs-7-7", None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+        assert!(!root.join("mgs-7-7").exists());
+        let (_, body) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(body.trim(), "[]");
+    }
+
+    #[tokio::test]
+    async fn opening_an_outdated_system_names_clean_systems() {
+        let config = temp_config("outdated-opened");
+        let root = config.systems_dir.clone();
+        write_outdated_system(&root, "mgs-7-7");
+        let app = router(config);
+        let (status, body) = call(&app, "GET", "/api/systems/mgs-7-7", None).await;
         assert_eq!(status, StatusCode::GONE, "{body}");
         assert!(body.contains("clean-systems"), "{body}");
     }
@@ -4178,7 +4285,16 @@ mod tests {
         let (_, list) = call(&app, "GET", "/api/systems", None).await;
         let list: serde_json::Value = serde_json::from_str(&list).unwrap();
         assert_eq!(list[0]["id"], id.as_str());
-        assert_eq!(list[0]["planets"]["barren"], 2);
+        // Two barren planets asked, each counted under its class.
+        let planets = list[0]["planets"].as_object().unwrap();
+        assert!(
+            planets
+                .keys()
+                .all(|t| mapgen::planet::PLANET_CLASSES.contains(&t.as_str())),
+            "{planets:?}"
+        );
+        let total: u64 = planets.values().map(|n| n.as_u64().unwrap()).sum();
+        assert_eq!(total, 2);
         let (status, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
         assert_eq!(status, StatusCode::OK);
         let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();

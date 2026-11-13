@@ -33,6 +33,7 @@ pub const HEAT_PIPE_FLUX_W_M2: f64 = 1.0;
 
 /// The water a planet keeps.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Water {
     /// The water ran away: the insolation exceeds the runaway greenhouse
     /// limit, or the climate boiled the ocean (`boiled`).

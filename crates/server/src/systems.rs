@@ -83,11 +83,37 @@ pub fn body_dir(root: &Path, id: &str, body: &str) -> PathBuf {
 /// The fields of `system.json` a summary needs.
 #[derive(Deserialize)]
 struct Meta {
+    #[serde(default)]
+    format_version: u32,
     seed: u32,
     width: u32,
     height: u32,
     star: MetaStar,
     bodies: Vec<MetaBody>,
+}
+
+/// What an outdated `system.json` may still tell, field by field: its
+/// system is listed with whatever parses.
+#[derive(Deserialize, Default)]
+struct OutdatedMeta {
+    #[serde(default)]
+    format_version: u32,
+    #[serde(default)]
+    seed: u32,
+    #[serde(default)]
+    width: u32,
+    #[serde(default)]
+    height: u32,
+    #[serde(default)]
+    star: Option<MetaStarLoose>,
+}
+
+#[derive(Deserialize, Default)]
+struct MetaStarLoose {
+    #[serde(rename = "type", default)]
+    kind: String,
+    #[serde(default)]
+    designation: String,
 }
 
 #[derive(Deserialize)]
@@ -137,6 +163,45 @@ struct MetaBody {
     preview: MetaPreview,
     #[serde(default)]
     orbit: MetaOrbit,
+    /// A planet's physical model, as far as the library needs it.
+    #[serde(default)]
+    model: Option<MetaModel>,
+}
+
+/// A planet's model, as far as the library needs it: what is liquid on
+/// its surface (none under an envelope or for a giant).
+#[derive(Deserialize, Default)]
+struct MetaModel {
+    #[serde(default)]
+    surface: Option<MetaSurface>,
+}
+
+#[derive(Deserialize)]
+struct MetaSurface {
+    climate: MetaClimate,
+}
+
+#[derive(Deserialize)]
+struct MetaClimate {
+    liquid: mapgen::planet::SurfaceLiquid,
+}
+
+/// The presets a request can name for a planet that hold liquid water
+/// and life, for the planet it asks for, which has no model.
+const HABITABLE_PRESETS: [&str; 2] = ["terran", "earth-like"];
+
+impl MetaBody {
+    /// Whether it is a habitable world (see `BodySummary::habitable`).
+    fn habitable(&self) -> bool {
+        self.kind == "planet"
+            && match &self.model {
+                Some(model) => model
+                    .surface
+                    .as_ref()
+                    .is_some_and(|s| s.climate.liquid == mapgen::planet::SurfaceLiquid::Water),
+                None => HABITABLE_PRESETS.contains(&self.preset.as_str()),
+            }
+    }
 }
 
 /// The preview of a body, as far as the library's strip needs it.
@@ -295,19 +360,39 @@ pub fn size_revision(root: &Path, id: &str, body: &str, size: (u32, u32)) -> Opt
     modified_ms(&dir.join("raw_data").join("world.json"))
 }
 
-/// The parameters a body of a system is generated with, from its
-/// `system.json`: `None` when the system or the body is not there or the
-/// file cannot be read.
-pub fn body_params(root: &Path, id: &str, body: &str) -> Option<mapgen::world::WorldParams> {
+/// A body of a system, from its `system.json`: `None` when the system or
+/// the body is not there or the file cannot be read. Its world is
+/// generated with [`mapgen::system::generation_params`] (a planet's sea
+/// level and warming are calibrated, which takes a pass over its relief);
+/// [`mapgen::system::world_params`] gives its drawn parameters at once.
+pub fn read_body(root: &Path, id: &str, body: &str) -> Option<mapgen::system::Body> {
     let system = mapgen::system::read_system(&system_dir(root, id)).ok()?;
-    let body = system.bodies.iter().find(|b| b.id == body)?;
-    Some(mapgen::system::world_params(body))
+    system.bodies.into_iter().find(|b| b.id == body)
 }
 
 /// A system's summary from the bytes of its `system.json` (modified at
 /// `modified_ms`); the names are the index's to fill in.
 pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummary> {
-    let meta: Meta = serde_json::from_slice(json).ok()?;
+    let meta: Meta = match serde_json::from_slice(json) {
+        Ok(meta) => meta,
+        Err(_) => return outdated_summary(id, json, modified_ms),
+    };
+    if meta.format_version != mapgen::system::SYSTEM_FORMAT_VERSION {
+        return Some(outdated_stub(
+            id,
+            modified_ms,
+            &OutdatedMeta {
+                format_version: meta.format_version,
+                seed: meta.seed,
+                width: meta.width,
+                height: meta.height,
+                star: Some(MetaStarLoose {
+                    kind: meta.star.kind,
+                    designation: meta.star.designation,
+                }),
+            },
+        ));
+    }
     let mut planets: BTreeMap<String, u32> = BTreeMap::new();
     for body in meta.bodies.iter().filter(|b| b.kind == "planet") {
         *planets.entry(body.preset.clone()).or_default() += 1;
@@ -342,12 +427,46 @@ pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummar
                 orbit_au: b.orbit.semi_major_axis_au,
                 eccentricity: b.orbit.eccentricity,
                 periapsis_deg: (b.orbit.node_deg + b.orbit.periapsis_deg).rem_euclid(360.0),
+                habitable: b.habitable(),
             })
             .collect(),
         names: GivenNames::new(),
         modified_ms,
         pinned: false,
+        outdated: false,
     })
+}
+
+/// The summary of a `system.json` that does not parse as today's: listed
+/// as outdated when it is a JSON object of another format version, so
+/// that the user can delete it; `None` when it is not even that.
+fn outdated_summary(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummary> {
+    let meta: OutdatedMeta = serde_json::from_slice(json).ok()?;
+    (meta.format_version != mapgen::system::SYSTEM_FORMAT_VERSION)
+        .then(|| outdated_stub(id, modified_ms, &meta))
+}
+
+/// A summary with no bodies, for a system of another format.
+fn outdated_stub(id: &str, modified_ms: u64, meta: &OutdatedMeta) -> SystemSummary {
+    let star = meta.star.as_ref();
+    SystemSummary {
+        id: id.to_string(),
+        seed: meta.seed,
+        width: meta.width,
+        height: meta.height,
+        star: star.map_or_else(String::new, |s| s.kind.clone()),
+        designation: star.map_or_else(String::new, |s| s.designation.clone()),
+        star_light: [1.0, 1.0, 1.0],
+        hz_inner_au: 0.0,
+        hz_outer_au: 0.0,
+        planets: BTreeMap::new(),
+        moons: 0,
+        bodies: Vec::new(),
+        names: GivenNames::new(),
+        modified_ms,
+        pinned: false,
+        outdated: true,
+    }
 }
 
 /// The ids of the systems under `root`: directories with a valid name.
@@ -523,7 +642,7 @@ mod tests {
     }
 
     const SYSTEM: &str = r#"{
-        "format_version": 2, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 3, "seed": 42, "width": 1024, "height": 512,
         "star": {"type": "K1V", "designation": "MGS 48213",
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
@@ -586,6 +705,36 @@ mod tests {
             (0.1, 30.0)
         );
         assert!(summarize("x-1", b"not json", 0).is_none());
+    }
+
+    #[test]
+    fn a_habitable_world_has_liquid_water_or_an_earth_like_preset() {
+        let json = format!(
+            r#"{{
+            "format_version": {}, "seed": 42, "width": 1024, "height": 512,
+            "star": {{"type": "K1V", "designation": "MGS 48213"}},
+            "bodies": [
+                {{"id": "b", "kind": "planet", "type": "rocky", "designation": "b",
+                  "model": {{"surface": {{"climate": {{"liquid": "water"}}}}}}}},
+                {{"id": "c", "kind": "planet", "type": "ice-world", "designation": "c",
+                  "model": {{"surface": {{"climate": {{"liquid": "none"}}}}}}}},
+                {{"id": "d", "kind": "planet", "type": "super-earth", "designation": "d",
+                  "model": {{"surface": null}}}},
+                {{"id": "e", "kind": "planet", "type": "terran", "designation": "e"}},
+                {{"id": "f", "kind": "planet", "type": "barren", "designation": "f"}},
+                {{"id": "e-1", "kind": "moon", "type": "terran", "designation": "e I"}}
+            ]
+        }}"#,
+            mapgen::system::SYSTEM_FORMAT_VERSION
+        );
+        let s = summarize("mgs-48213-42", json.as_bytes(), 0).unwrap();
+        let habitable: Vec<&str> = s
+            .bodies
+            .iter()
+            .filter(|b| b.habitable)
+            .map(|b| b.id.as_str())
+            .collect();
+        assert_eq!(habitable, ["b", "e"]);
     }
 
     #[test]
@@ -652,7 +801,7 @@ mod tests {
 
     #[test]
     fn each_body_has_its_original_size() {
-        let json = r#"{"format_version": 2, "width": 1024, "height": 512, "bodies": [
+        let json = r#"{"format_version": 3, "width": 1024, "height": 512, "bodies": [
             {"id": "c", "params": {"width": 1024, "height": 512}},
             {"id": "c-1", "params": {"width": 512, "height": 256}},
             {"id": "d"}
@@ -674,7 +823,7 @@ mod tests {
         assert!(originals.original_size(&root, "mgs-2-2", "c").is_err());
         // The file rewritten (a system drawn again under its id) is read
         // again, here one of the layout before sizes, which is refused.
-        let old = json.replace(r#""format_version": 2"#, r#""format_version": 1"#);
+        let old = json.replace(r#""format_version": 3"#, r#""format_version": 1"#);
         let error = original_sizes(old.as_bytes()).unwrap_err();
         assert!(error.contains("format version 1"), "{error}");
         // (A length of its own: some file systems stamp in coarse ticks.)

@@ -30,6 +30,7 @@ const body = (id: string, orbit_au: number, extra: Partial<BodySummary> = {}): B
   orbit_au,
   eccentricity: 0,
   periapsis_deg: 0,
+  habitable: true,
   ...extra,
 });
 
@@ -49,6 +50,7 @@ const system = (extra: Partial<SystemSummary> = {}): SystemSummary => ({
   names: {},
   modified_ms: 0,
   pinned: false,
+  outdated: false,
   ...extra,
 });
 
@@ -94,41 +96,24 @@ describe('star class', () => {
 });
 
 describe('habitable worlds', () => {
-  it('needs a terran planet inside the zone, edges included', () => {
-    expect(isHabitableWorld(body('a', 1), 0.9, 1.5)).toBe(true);
-    expect(isHabitableWorld(body('a', 0.9), 0.9, 1.5)).toBe(true);
-    expect(isHabitableWorld(body('a', 1.5), 0.9, 1.5)).toBe(true);
-    expect(isHabitableWorld(body('a', 0.8), 0.9, 1.5)).toBe(false);
-    expect(isHabitableWorld(body('a', 2), 0.9, 1.5)).toBe(false);
+  it('counts the planets the server finds liquid water on, wherever they orbit', () => {
+    expect(isHabitableWorld(body('a', 1))).toBe(true);
+    expect(isHabitableWorld(body('a', 30))).toBe(true);
+    expect(isHabitableWorld(body('a', 1, { habitable: false }))).toBe(false);
+    expect(hasHabitableWorld(system({ bodies: [body('a', 1, { habitable: false }), body('b', 2)] }))).toBe(true);
+    expect(hasHabitableWorld(system({ bodies: [body('a', 1, { habitable: false })] }))).toBe(false);
   });
 
-  it('does not count dead, frozen, burning or acid rocks, giants or moons', () => {
-    for (const body_type of ['barren', 'frozen', 'volcanic', 'caustic', 'gas-giant', 'ice-giant']) {
-      expect(isHabitableWorld(body('a', 1, { body_type }), 0.9, 1.5)).toBe(false);
-    }
-    expect(isHabitableWorld(body('a', 1, { kind: 'moon' }), 0.9, 1.5)).toBe(false);
-  });
-
-  it('does not count a moon of a giant in the zone, whatever its orbit', () => {
-    const moon = body('m', 1, { kind: 'moon', body_type: 'terran' });
-    expect(isHabitableWorld(moon, 0.9, 1.5)).toBe(false);
-    expect(hasHabitableWorld(system({ bodies: [body('g', 1, { body_type: 'gas-giant' }), moon] }))).toBe(false);
-  });
-
-  it('judges an eccentric planet by its semi-major axis only', () => {
-    expect(isHabitableWorld(body('e', 2, { eccentricity: 0.6 }), 0.9, 1.5)).toBe(false);
-    expect(isHabitableWorld(body('e', 1.2, { eccentricity: 0.6 }), 0.9, 1.5)).toBe(true);
-  });
-
-  it('is never true when the zone is unknown', () => {
-    expect(isHabitableWorld(body('a', 0), 0, 0)).toBe(false);
-    expect(hasHabitableWorld(system({ hz_inner_au: 0, hz_outer_au: 0, bodies: [body('a', 1)] }))).toBe(false);
+  it('does not count a moon, whatever its flag', () => {
+    const moon = body('m', 1, { kind: 'moon' });
+    expect(isHabitableWorld(moon)).toBe(false);
+    expect(hasHabitableWorld(system({ bodies: [body('g', 1, { body_type: 'gas-giant', habitable: false }), moon] }))).toBe(false);
   });
 });
 
 describe('filters and search', () => {
   const sun = system({ id: 'sun', seed: 1, star: 'G2V', bodies: [body('p1', 1)], names: { star: 'Sol' } });
-  const dwarf = system({ id: 'dwarf', seed: 2, star: 'M3V', bodies: [body('p1', 0.1, { body_type: 'barren' })] });
+  const dwarf = system({ id: 'dwarf', seed: 2, star: 'M3V', bodies: [body('p1', 0.1, { body_type: 'barren', habitable: false })] });
   const dwarfHab = system({ id: 'dwarf-hab', seed: 3, star: 'M5V', hz_inner_au: 0.05, hz_outer_au: 0.1, bodies: [body('p1', 0.07)] });
   const all = [sun, dwarf, dwarfHab];
   const ids = (list: SystemSummary[]) => list.map((s) => s.id);

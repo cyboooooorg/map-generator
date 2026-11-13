@@ -48,8 +48,11 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// seed gives slightly different worlds from then on. Version 16 replaces
 /// `surface.png` (hillshaded) with `colour.png` and `normal.png` and their
 /// small copies: the viewer lights the relief itself, so older worlds,
-/// which have no normals, are refused.
-pub const FORMAT_VERSION: u32 = 16;
+/// which have no normals, are refused. Version 17 generates a planet's
+/// world from its derived state (see [`crate::planet`]) and goes with
+/// the second [`crate::system::SYSTEM_FORMAT_VERSION`] bump: worlds and
+/// systems of the earlier formats are refused.
+pub const FORMAT_VERSION: u32 = 17;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -57,7 +60,7 @@ pub const FORMAT_VERSION: u32 = 16;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message suggesting `mise run
 /// clean-systems`.
-pub const MIN_FORMAT_VERSION: u32 = 16;
+pub const MIN_FORMAT_VERSION: u32 = 17;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);

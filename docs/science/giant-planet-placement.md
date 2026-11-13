@@ -353,8 +353,12 @@ each planet type in a band of distances (`band`), from the star out:
 
 Its planets keep the same spacing, `hill_spacing` mutual Hill radii, and
 a hot Jupiter keeps the others beyond four times its period. When the
-planets are left to the draw (`drawn_types`), giants come with the same
-means and log-normal distances as round a world. A hot Jupiter is drawn
+planets are left to the draw (`drawn_slots`), giants come with the same
+means and log-normal distances as round a world, as slots of a giant
+origin and an orbit, not a type: each drawn planet gets a mass from the
+mass function of its origin, its physical model, and is typed by the
+class the model gives it (`gas-giant`, `ice-giant`, `hot-jupiter`, …),
+not by its origin. A hot Jupiter is drawn
 last (`drawn_hot_jupiter`), so the other planets' draws do not change:
 the same odds of 1 %, times the same metallicity and star mass factors,
 at most 20 %, on a period of 1 to 10 days within 0.1 AU.

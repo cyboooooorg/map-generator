@@ -26,9 +26,10 @@
 </script>
 
 <span class="actions">
-  {#if showPin}
+  {#if showPin && !system.outdated}
     <PinButton {system} onChanged={onPinned ?? onChanged} />
   {/if}
+  {#if !system.outdated}
   <button class="rename-button" data-rename={system.id} onclick={onRename} aria-label={t.systemList.rename({ name })} title={t.systemList.rename({ name })}
     >✎</button
   >
@@ -40,6 +41,7 @@
     aria-label={t.systemList.exportSystem({ name })}
     title={t.systemList.exportSystem({ name })}>⤓</a
   >
+  {/if}
   {#if selecting}
     <input class="choose" type="checkbox" checked={chosen} onchange={onToggle} aria-label={t.worldList.selectOne({ id: name })} />
   {:else}

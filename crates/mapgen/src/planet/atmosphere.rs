@@ -128,6 +128,7 @@ const UNMAGNETISED_ESCAPE: f64 = 2.0;
 
 /// Partial pressures at the surface, bar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Gases {
     pub n2: f64,
     pub co2: f64,

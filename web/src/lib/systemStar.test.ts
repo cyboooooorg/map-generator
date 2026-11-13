@@ -81,4 +81,10 @@ describe('ringsKind', () => {
     expect(ringsKind({ ...ring, bright: false })).toBe('faint');
     expect(ringsKind(null)).toBe('none');
   });
+
+  it('draws a mini-Neptune as an ice giant', () => {
+    const c = system.bodies.find((x) => x.id === 'c')!;
+    const mini = { ...system, bodies: system.bodies.map((x) => (x.id === 'c' ? { ...x, type: 'mini-neptune' } : x)) };
+    expect(systemStarView(mini, c).giants.giants[1]!.kind).toBe('ice');
+  });
 });

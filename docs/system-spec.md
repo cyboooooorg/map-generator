@@ -46,9 +46,13 @@ round planets. Every body has:
   [Storage](#storage));
 - its **designation** (`MGS 48213 c`, `MGS 48213 c II`) and an optional
   given name;
-- its **kind** (`planet` or `moon`) and **type**: a preset (`terran`,
-  `barren`, `caustic`, `frozen`, `volcanic`, `gas-giant`, `ice-giant`,
-  `hot-jupiter`; `rocky-moon`, `icy-moon` for small moons);
+- its **kind** (`planet` or `moon`) and **type**: a drawn planet's
+  class, from its physical model (`rocky`, `super-earth`, `ice-world`,
+  `ocean-world`, `mini-neptune`, `gas-giant`, …; see
+  [Storage](#storage)); the planet a request around one asked for keeps
+  its preset (`terran`, `barren`, `caustic`, `frozen`, `volcanic`,
+  `gas-giant`, `ice-giant`, `hot-jupiter`); `rocky-moon`, `icy-moon` for
+  small moons;
 - its **parent** (the star, or a planet) and its **orbit**: semi-major
   axis, eccentricity, inclination, longitude of the node, argument of
   periapsis, mean anomaly at the system's epoch, period (a moon's orbit
@@ -167,7 +171,11 @@ them today (metallicity and star mass), a hot Jupiter included: about
   radius with `μ^⅓`), 6.4 for a Jupiter and a Saturn, which are 6.5
   apart; never under `2√3` (Gladman 1993). A pair closer than that is
   spread outwards, a planet pushed out of its allowed band is redrawn a
-  few times, then the request fails (below).
+  few times, then the request fails (below). A planet the draw adds has
+  no type and no band: a small one stays within 1.5 times the orbit it
+  was drawn at (calibration: it keeps the planet near where its
+  formation context put it), a giant within the system; one that finds
+  no room there is dropped.
 - Neighbouring periods fall mostly between 1.3 and 3 times each other
   (the peas-in-a-pod systems of Weiss et al. 2018): planets of a system
   are of similar size and evenly spaced in `log a`.
@@ -189,7 +197,11 @@ them today (metallicity and star mass), a hot Jupiter included: about
 
 Once the planets are placed, the system draws its belts and trojans
 (`src/belts.rs`, analysis 13), each from a stream of its own (`BELTS`,
-`TROJANS`). The planets and moons of a seed do not move.
+`TROJANS`). The planets and moons of a seed do not move. A giant, here,
+is a gas giant, an ice giant or a hot Jupiter
+(`PlanetClass::sculpts_belts`): a mini-Neptune, whose world is
+generated as a giant's, is too light to shape belts, empty trojan points
+or stir impactors.
 
 - **Inner belt.** It needs a giant beyond half the ice line that is not a
   hot Jupiter, the first of them. Its span runs from 0.40 of that giant's
@@ -442,9 +454,10 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (2), the request, the seed and the map size. A
+  - `format_version` (3), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
-    body's files directly in `bodies/<id>/`;
+    body's files directly in `bodies/<id>/`, version 2 typed its planets
+    by preset and stored no physical model;
   - `star`: today's `StarInfo` and its designation. `info.age_gyr` is the
     age of the star in Gyr, drawn from the `AGE` stream between 0.5 and
     10 Gyr (uniform; the star's lifetime if shorter) or set by `age_gyr`
@@ -454,6 +467,42 @@ systems/<system-id>/
   - `bodies`: one entry per planet and moon, with the fields of
     [Model](#model): id, designation, kind, type, parent, orbit, physical
     facts, spin, surroundings, preview, `WorldParams`, and `generated`.
+    A planet also stores `model`, its physical model (issue #423: what
+    it is made of, its interior, heat, surface, air, climate, life and
+    class), derived once when the system is drawn from its orbit, the
+    system's age, metallicity and ice line, and the mass drawn for it
+    (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
+    `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
+    `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
+    `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    `ocean-world`), its `physical.mass_earth` the model's mass after
+    photoevaporation; its world renders, until #424, with the preset
+    closest to the model (`planet::interim::base_of`), and the model of
+    a planet with a surface drives the world
+    (`planet::interim::params_for`): its size, gravity,
+    surface pressure, regime, sky, erosion, volcanism, surface age, the
+    sea level its oceans fill, a world without life stripped of its
+    forests and grasslands, and a mean temperature aimed at the model's.
+    The sea level and the temperature pass over the relief, so they are
+    set when the world is generated (`system::generation_params`), not
+    when the system is drawn: `bodies[].params` stores the drawn sea
+    level and no temperature shift, and the body's `world.json` the
+    calibrated ones.
+    A planet that is no giant whose envelope hides its surface (at least
+    0.1 % of its mass, under 1.6 R⊕: the model derives no surface under
+    it) renders with its class's preset, `frozen` for an ice world and
+    `barren` otherwise, at the model's radius and gravity, with no ocean
+    and a mean temperature aimed at a bare surface's (its equilibrium
+    plus its internal heat, no greenhouse); part 3b of #423 derives the
+    surface under the envelope. About 0.3 % of drawn planets (5 of 1 577
+    over 500 systems).
+    A giant class keeps the giant world of its preset at the model's
+    mass (a mini-Neptune under 5 M⊕ at 5 M⊕). A request still
+    asks for planets by preset name: the name places the planet (its
+    band, below), the model types it. The world a request around one
+    asks for keeps its named preset as `type` and has no model until part
+    3b of #423 (its neighbours have theirs). A moon has no model yet and
+    keeps `rocky-moon` or `icy-moon`;
 
   The server rewrites it (temporary file, then rename) only to set a
   body's `generated` once its directory is complete.
@@ -518,7 +567,10 @@ addressed as `<system-id>/<body-id>` everywhere.
 
 - `GET /api/systems`: the systems, most recent first. Each gives its id,
   star, body count per type, the bodies generated, names, map size and
-  date.
+  date, and for each body whether it is a habitable world (`habitable`:
+  a planet whose model keeps liquid water on its surface; the planet a
+  request around one asked for, which has no model, when its preset is
+  `terran` or `earth-like`), which the index stores.
 - `POST /api/systems`: draw a system and queue its first generation.
   The body is a `SystemRequest`:
   - mode 1, `{"system": {"star": "K1V", "planets": {"terran": 2,
@@ -592,8 +644,9 @@ addressed as `<system-id>/<body-id>` everywhere.
     a low-resolution preview of a planet with plate tectonics at
     another epoch of its plates (`ma` from -300 to 300, negative in the
     past; `width` 256 or 512, the default). The server generates the
-    planet again from its stored parameters with `drift_ma` set, at the
-    preview's size. 404 for a body without plates, 400 out of range,
+    planet again from its stored parameters (calibrated once per
+    revision as its generation calibrates them, and kept for every
+    epoch) with `drift_ma` set, at the preview's size. 404 for a body without plates, 400 out of range,
     503 while a generation runs;
   - `GET /api/systems/{id}/bodies/{body}/thumb?rev=`;
   - `POST /api/systems/{id}/bodies/{body}/hex`.
@@ -794,7 +847,7 @@ No migration, as decided: the worlds made before systems are deleted.
 The same rule holds for a system written by an older generator: the
 generator keeps no code to re-derive it.
 
-- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (14 at
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (17 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
   with a message asking to delete it (`mise run clean-systems`) and draw it
   again, and the viewer shows that message instead of requesting them.
@@ -802,7 +855,12 @@ generator keeps no code to re-derive it.
   format 11 carry `shrubland_moisture`, now an unknown field):
   `GET /api/systems/{id}` and the generation of its bodies answer 410 Gone
   with the same message, not 404. Only a missing `system.json` is 404.
-- The server still starts and lists these systems.
+- The server still starts and lists these systems. One whose
+  `system.json` is not of the current `SYSTEM_FORMAT_VERSION` carries
+  `outdated: true` in `GET /api/systems` (its id, seed, star and date when
+  they parse, no bodies). The main menu labels it "Outdated: made by an
+  older generator" and offers only the delete button; the server never
+  deletes it itself.
 
 ## Delivery
 

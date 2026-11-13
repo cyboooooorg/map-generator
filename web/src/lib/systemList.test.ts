@@ -24,10 +24,12 @@ const system = (id: string, seed: number, modified_ms: number, pinned = false, p
     orbit_au: 1 + i,
     eccentricity: 0,
     periapsis_deg: 0,
+    habitable: false,
   })),
   names: {},
   modified_ms,
   pinned,
+  outdated: false,
 });
 
 describe('sortSystems', () => {

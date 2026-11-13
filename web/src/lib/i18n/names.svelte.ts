@@ -29,9 +29,12 @@ function translation(name: string): PresetLocale | undefined {
   return known.locales[name]?.[getLocale()];
 }
 
-/** The display name of a preset, translated when its file says how. */
+/**
+ * The display name of a preset, translated when its file says how, else
+ * worded as a body type: a drawn planet's `meta.preset.name` is its class key.
+ */
 export function presetName(preset: Pick<Preset, 'name'>): string {
-  return translation(preset.name)?.name ?? preset.name;
+  return translation(preset.name)?.name ?? (t.viewer.bodyTypes as Record<string, string>)[preset.name] ?? preset.name;
 }
 
 /** The description of a preset, translated when its file says how. */

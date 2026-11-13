@@ -2,6 +2,7 @@
 import type { BodyKind } from "./BodyKind";
 import type { Orbit } from "./Orbit";
 import type { Physical } from "./Physical";
+import type { PlanetModel } from "./PlanetModel";
 import type { Preview } from "./Preview";
 import type { RingRole } from "./RingRole";
 import type { Spin } from "./Spin";
@@ -23,7 +24,10 @@ id: string,
  */
 designation: string, kind: BodyKind, 
 /**
- * Its preset: a planet type, `rocky-moon` or `icy-moon`.
+ * A planet's class ([`PlanetClass::key`], one of
+ * [`crate::planet::PLANET_CLASSES`]); the preset the world a request
+ * around one asked for was named by; a moon's preset, `rocky-moon` or
+ * `icy-moon`.
  */
 type: string, 
 /**
@@ -50,4 +54,10 @@ trojans?: Trojans,
  * A ring moon's part in its giant's rings (see `crate::rings`); none
  * for every other body.
  */
-ring_role?: RingRole, };
+ring_role?: RingRole, 
+/**
+ * A planet's physical model, as [`derive_model`] gave it when the
+ * system was drawn; none for a moon (part 4 of #423), nor, until part
+ * 3b, for the world a request around one asked for.
+ */
+model?: PlanetModel, };

@@ -31,6 +31,7 @@
 //! weighs both against the Solar System's.
 
 use crate::noise::{stream, stream_seed};
+use crate::planet::PlanetClass;
 use crate::star::StarInfo;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -115,15 +116,18 @@ pub struct Trojans {
 #[derive(Clone, Copy, Debug)]
 pub struct Track<'a> {
     pub id: &'a str,
-    pub body_type: &'a str,
+    /// Its class, from its physical model.
+    pub class: PlanetClass,
     pub mass_earth: f64,
     pub orbit_au: f64,
     pub eccentricity: f64,
 }
 
 impl Track<'_> {
+    /// A giant to the small bodies ([`PlanetClass::sculpts_belts`]): a
+    /// mini-Neptune is not.
     fn giant(&self) -> bool {
-        matches!(self.body_type, "gas-giant" | "ice-giant" | "hot-jupiter")
+        self.class.sculpts_belts()
     }
 
     /// The span it clears round the star, AU.
@@ -148,10 +152,11 @@ fn resonance(a: f64, j: f64, k: f64) -> f64 {
     a * (k / j).powf(2.0 / 3.0)
 }
 
-/// Whether a planet can shape an inner belt: a giant that is not a hot
-/// Jupiter, at half the ice line or beyond.
-pub fn cold_giant(body_type: &str, orbit_au: f64, ice_au: f64) -> bool {
-    matches!(body_type, "gas-giant" | "ice-giant") && orbit_au >= 0.5 * ice_au
+/// Whether a planet of `class` can shape an inner belt: a gas or ice giant
+/// (not a hot Jupiter, nor a mini-Neptune), at half the ice line or
+/// beyond.
+pub fn cold_giant(class: PlanetClass, orbit_au: f64, ice_au: f64) -> bool {
+    matches!(class, PlanetClass::GasGiant | PlanetClass::IceGiant) && orbit_au >= 0.5 * ice_au
 }
 
 /// The giant that shapes an inner belt: the innermost cold one (see
@@ -159,7 +164,7 @@ pub fn cold_giant(body_type: &str, orbit_au: f64, ice_au: f64) -> bool {
 pub fn first_cold_giant<'a>(planets: &'a [Track<'a>], ice_au: f64) -> Option<&'a Track<'a>> {
     planets
         .iter()
-        .filter(|p| cold_giant(p.body_type, p.orbit_au, ice_au))
+        .filter(|p| cold_giant(p.class, p.orbit_au, ice_au))
         .min_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au))
 }
 
@@ -281,7 +286,7 @@ pub fn draw_belts(star: &StarInfo, ice_au: f64, planets: &[Track], seed: u32) ->
     if outer_roll < outer_odds(star) {
         let last = planets
             .iter()
-            .filter(|p| p.giant() && p.body_type != "hot-jupiter")
+            .filter(|p| p.giant() && p.class != PlanetClass::HotJupiter)
             .max_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
         let (lo, hi) = match last {
             Some(giant) => (
@@ -349,11 +354,11 @@ pub fn draw_trojans(star_mass: f64, planets: &[Track], seed: u32) -> Vec<Option<
                 return None;
             }
             let between = |lo: f64, hi: f64| (lo.ln() + u * (hi / lo).ln()).exp();
-            let count = match p.body_type {
-                "gas-giant" => between(1e4, 1e6),
-                "ice-giant" if p.orbit_au >= outermost => between(1e4, 1e6),
-                "ice-giant" => between(1e3, 1e5),
-                "hot-jupiter" => between(1.0, 1e3) - 1.0,
+            let count = match p.class {
+                PlanetClass::GasGiant => between(1e4, 1e6),
+                PlanetClass::IceGiant if p.orbit_au >= outermost => between(1e4, 1e6),
+                PlanetClass::IceGiant => between(1e3, 1e5),
+                PlanetClass::HotJupiter => between(1.0, 1e3) - 1.0,
                 _ => between(1.0, 101.0) - 1.0,
             }
             .round() as u32;
@@ -404,56 +409,56 @@ mod tests {
         vec![
             Track {
                 id: "b",
-                body_type: "barren",
+                class: PlanetClass::Rocky,
                 mass_earth: 0.055,
                 orbit_au: 0.387,
                 eccentricity: 0.2,
             },
             Track {
                 id: "c",
-                body_type: "terran",
+                class: PlanetClass::Rocky,
                 mass_earth: 0.815,
                 orbit_au: 0.723,
                 eccentricity: 0.007,
             },
             Track {
                 id: "d",
-                body_type: "terran",
+                class: PlanetClass::Rocky,
                 mass_earth: 1.0,
                 orbit_au: 1.0,
                 eccentricity: 0.017,
             },
             Track {
                 id: "e",
-                body_type: "barren",
+                class: PlanetClass::Rocky,
                 mass_earth: 0.107,
                 orbit_au: 1.524,
                 eccentricity: 0.093,
             },
             Track {
                 id: "f",
-                body_type: "gas-giant",
+                class: PlanetClass::GasGiant,
                 mass_earth: 317.8,
                 orbit_au: 5.2,
                 eccentricity: 0.049,
             },
             Track {
                 id: "g",
-                body_type: "gas-giant",
+                class: PlanetClass::GasGiant,
                 mass_earth: 95.2,
                 orbit_au: 9.58,
                 eccentricity: 0.057,
             },
             Track {
                 id: "h",
-                body_type: "ice-giant",
+                class: PlanetClass::IceGiant,
                 mass_earth: 14.5,
                 orbit_au: 19.2,
                 eccentricity: 0.046,
             },
             Track {
                 id: "i",
-                body_type: "ice-giant",
+                class: PlanetClass::IceGiant,
                 mass_earth: 17.1,
                 orbit_au: 30.1,
                 eccentricity: 0.01,
@@ -502,7 +507,7 @@ mod tests {
         let mut planets = solar();
         planets.push(Track {
             id: "x",
-            body_type: "terran",
+            class: PlanetClass::Rocky,
             mass_earth: 1.0,
             orbit_au: 2.4,
             eccentricity: 0.0,
@@ -517,7 +522,7 @@ mod tests {
         planets.retain(|p| p.id != "e");
         planets.push(Track {
             id: "x",
-            body_type: "terran",
+            class: PlanetClass::Rocky,
             mass_earth: 5.0,
             orbit_au: 2.65,
             eccentricity: 0.15,
@@ -564,7 +569,7 @@ mod tests {
         // A giant of 13 Jupiters round a small red dwarf passes Routh's limit.
         let heavy = [Track {
             id: "b",
-            body_type: "gas-giant",
+            class: PlanetClass::GasGiant,
             mass_earth: 4131.0,
             orbit_au: 1.0,
             eccentricity: 0.0,

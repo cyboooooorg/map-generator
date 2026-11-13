@@ -255,15 +255,22 @@
                   class:editing={renaming === system.id}
                   title={t.systemList.seedTitle({ seed: system.seed })}
                 >
-                  <td class="narrow"><span class="pin-cell"><PinButton {system} onChanged={pinChanged} /></span></td>
+                  <td class="narrow">{#if !system.outdated}<span class="pin-cell"><PinButton {system} onChanged={pinChanged} /></span>{/if}</td>
                   {#if renaming === system.id}
                     <td colspan="6"><RenameForm {system} {onChanged} onClose={stopRenaming} bind:dirty /></td>
                   {:else}
                     <td>
+                      {#if system.outdated}
+                        <span class="name-button">
+                          <strong>{nameOf(system)}</strong>
+                          <small>{t.systemList.outdated}</small>
+                        </span>
+                      {:else}
                       <button class="name-button" aria-pressed={selecting ? chosen.includes(system.id) : undefined} onclick={() => open(system.id)}>
                         <strong>{nameOf(system)}</strong>
                         <small>{nameOf(system) === system.designation ? '' : `${system.designation} · `}{t.systemList.planetsCount({ count: planetCount(system) })}</small>
                       </button>
+                      {/if}
                     </td>
                     <td>
                       <span class="star">

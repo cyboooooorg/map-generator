@@ -7,7 +7,9 @@
 //! Draws `COUNT` whole systems (seeds 1 to `COUNT`, nothing written) and
 //! prints, for the planets of them all:
 //!
-//! 1. the current `body_type` against the class the model derives;
+//! 1. the base preset each planet's world renders with
+//!    (`planet::interim::base_of` of its model); a planet's type is its
+//!    class, so the class mix of item 4 is the type mix;
 //! 2. the share of planets in each radius bin of Fulton et al. (2017,
 //!    doi:10.3847/1538-3881/aa80eb);
 //! 3. the median age, mass, orbit, core mass fraction, water fraction,
@@ -18,13 +20,18 @@
 //!    many runaways came from the insolation limit or from boiling their
 //!    ocean (`Water::boiled`), all of them and the runaway-greenhouse
 //!    class alone, and how many wet planets stay past 647 K (a boil whose
-//!    steam would have cooled, so the first pass stands);
+//!    steam would have cooled, so the first pass stands), and how many
+//!    planets that are no giant (nor mini-Neptune) keep an envelope that
+//!    hides their surface, by class (they render with their class's
+//!    preset, see `planet::interim::base_of`);
 //! 5. the radius histogram, in bins of 0.25 R_earth, of the planets with a
 //!    period under 100 days (the radius valley of Fulton et al. 2017
-//!    shows as a dip between 1.5 and 2 R_earth).
+//!    shows as a dip between 1.5 and 2 R_earth), and the class mix of the
+//!    same planets (super-Earths and sub-Neptunes should be within a
+//!    factor 1.5 of each other, and the close-in ice worlds are watched).
 use std::collections::BTreeMap;
 
-use mapgen::planet::body_model;
+use mapgen::planet::{body_model, interim};
 use mapgen::system::{BodyKind, SystemRequest, WholeSystemRequest, draw};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -72,12 +79,14 @@ fn main() {
         .nth(1)
         .map_or(500, |a| a.parse().expect("COUNT must be a number"));
 
-    // (body_type, class) -> planets
-    let mut cross: BTreeMap<(String, &'static str), u32> = BTreeMap::new();
+    // base preset rendered -> planets
+    let mut bases: BTreeMap<&'static str, u32> = BTreeMap::new();
     let mut bins = [0u32; BINS.len()];
     let mut stats: BTreeMap<&'static str, ClassStats> = BTreeMap::new();
     let mut planets = 0u32;
     let mut with_surface = 0u32;
+    // Planets no giant whose envelope hides the surface, by class.
+    let mut enveloped: BTreeMap<&'static str, u32> = BTreeMap::new();
     let mut liquids: BTreeMap<String, u32> = BTreeMap::new();
     let mut regimes: BTreeMap<String, u32> = BTreeMap::new();
     let mut life = 0u32;
@@ -88,6 +97,7 @@ fn main() {
     let mut oxygenated = 0u32;
     let mut close_in = [0u32; 20];
     let mut close_in_total = 0u32;
+    let mut close_in_class: BTreeMap<&'static str, u32> = BTreeMap::new();
 
     for seed in 1..=count {
         let request = SystemRequest::System(WholeSystemRequest {
@@ -100,13 +110,16 @@ fn main() {
             let model = body_model(&system, body).expect("a planet has a model");
             let class = model.class.key();
             planets += 1;
-            *cross.entry((body.body_type.clone(), class)).or_default() += 1;
+            *bases.entry(interim::base_of(&model)).or_default() += 1;
             let radius = model.interior.radius_earth;
             let bin = BINS
                 .iter()
                 .rposition(|&(low, _)| radius >= low)
                 .unwrap_or(0);
             bins[bin] += 1;
+            if model.surface.is_none() && !model.class.is_giant() {
+                *enveloped.entry(class).or_default() += 1;
+            }
             if let Some(surface) = &model.surface {
                 with_surface += 1;
                 *liquids
@@ -130,6 +143,7 @@ fn main() {
             }
             if body.orbit.period_days < 100.0 {
                 close_in_total += 1;
+                *close_in_class.entry(class).or_default() += 1;
                 let i = ((radius / 0.25) as usize).min(close_in.len() - 1);
                 close_in[i] += 1;
             }
@@ -149,27 +163,12 @@ fn main() {
 
     println!("{count} systems, {planets} planets\n");
 
-    println!("body_type against derived class (planets)");
-    let classes: Vec<&'static str> = stats.keys().copied().collect();
-    print!("{:<12}", "body_type");
-    for c in &classes {
-        print!("{c:>20}");
-    }
-    println!("{:>8}", "total");
-    let types: Vec<String> = {
-        let mut t: Vec<String> = cross.keys().map(|(t, _)| t.clone()).collect();
-        t.dedup();
-        t
-    };
-    for t in &types {
-        print!("{t:<12}");
-        let mut total = 0;
-        for c in &classes {
-            let n = cross.get(&(t.clone(), *c)).copied().unwrap_or(0);
-            total += n;
-            print!("{n:>20}");
-        }
-        println!("{total:>8}");
+    println!("base preset of the worlds (planets)");
+    for (base, n) in &bases {
+        println!(
+            "{base:<12}{n:>8}  {:>5.1} %",
+            100.0 * f64::from(*n) / f64::from(planets)
+        );
     }
 
     println!("\nplanets per radius bin (Fulton et al. 2017 bins, R_earth)");
@@ -220,6 +219,14 @@ fn main() {
     }
 
     println!("\nplanets with a surface: {with_surface}");
+    let hidden: u32 = enveloped.values().sum();
+    println!(
+        "no giant, surface hidden by an envelope: {hidden} ({:.1} %)",
+        share(hidden, planets)
+    );
+    for (class, n) in &enveloped {
+        println!("  {class:<18}{n:>6}");
+    }
     println!("\nsurface liquid ({with_surface} planets with a surface)");
     for (liquid, n) in &liquids {
         println!("{liquid:<20}{:>6.1} %  ({n})", share(*n, with_surface));
@@ -249,5 +256,9 @@ fn main() {
             low + 0.25,
             share(*n, close_in_total)
         );
+    }
+    println!("\nclasses, period under 100 days ({close_in_total} planets)");
+    for (class, n) in &close_in_class {
+        println!("{class:<20}{:>6.1} %  ({n})", share(*n, close_in_total));
     }
 }

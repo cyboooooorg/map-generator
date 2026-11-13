@@ -17,6 +17,7 @@ use crate::noise::{
     EARTH_CIRCUMFERENCE_KM, cell_value, fbm, lattice_points, ridged, smoothstep, stream,
     stream_seed,
 };
+use crate::planet::regime::OCEAN_KG;
 use crate::rivers;
 use crate::star::{StarClimate, star_temperatures};
 use crate::world::*;
@@ -1051,6 +1052,93 @@ impl ClimateGrids {
     }
 }
 
+/// Rows of sea-level temperature on `grid`, evened out by dense air, then
+/// moved by the host star, without the planet's warming. A tidally locked
+/// planet's climate follows the angle from the point under its star
+/// instead of the latitude.
+fn sea_level_rows(params: &WorldParams, grid: &Grid) -> (Vec<f32>, Option<LockedClimate>) {
+    let star_climate = star_climate(params);
+    let locked = crate::spin::star_info(params).tidally_locked.then(|| {
+        let mut locked = LockedClimate::new();
+        locked.transport_heat(params.pressure_bar);
+        star_temperatures(locked.profile_mut(), star_climate);
+        locked
+    });
+    let rows = match &locked {
+        Some(locked) => locked.rows(grid),
+        None => {
+            let mut rows = row_temperatures(grid, params.axial_tilt_deg);
+            transport_heat(&mut rows, grid, params.pressure_bar);
+            star_temperatures(&mut rows, star_climate);
+            rows
+        }
+    };
+    (rows, locked)
+}
+
+/// Elevation relative to the shifted sea level: what biome selection sees.
+fn relief_above(elevation: f32, sea_level: f32) -> f32 {
+    (elevation - sea_level).clamp(-1.0, 1.0)
+}
+
+/// The area-weighted mean of the planet's surface temperature, in degrees
+/// Celsius, with its warming (shift and greenhouse) left out, sampled on a
+/// coarse grid: the sea-level rows of temperature minus the cooling of the
+/// land by altitude (the lapse rate over the relief of a coarse elevation
+/// pass at `params.sea_level`), highlands included; a tidally locked
+/// planet's cells by their angle from the point under its star, dayside
+/// and nightside, as [`generate`] reads them. Regional variability
+/// and the climate's anomalies average out and are not included.
+pub fn mean_surface_temperature_c(params: &WorldParams) -> f32 {
+    let mut coarse = params.clone();
+    (coarse.width, coarse.height) = LAND_GRID;
+    let grid = coarse.grid();
+    let (rows, locked) = sea_level_rows(&coarse, &grid);
+    let lapse = crate::climate::lapse_rate(&coarse);
+    let flatten = relief_share(&coarse);
+    let rules_waterline = coarse.planet.rules.waterline;
+    let waterline = coarse.sea_level + rules_waterline;
+    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+        .then(|| crate::plates::PlateFrame::new(&coarse));
+    let sampler = Sampler::with_frame(&coarse, frame.as_ref());
+    let (sum, total) = (0..grid.height)
+        .into_par_iter()
+        .map(|y| {
+            let w = grid.latitude(y).cos();
+            let row = rows[y as usize];
+            let mean: f64 = (0..grid.width)
+                .map(|x| {
+                    // A locked planet's cell by its angle from the point
+                    // under its star, as `generate` reads it: its rows
+                    // hold only their warmest (dayside) temperature.
+                    let row = match &locked {
+                        Some(locked) => locked.at_angle(LockedClimate::angle_at(&grid, x, y)),
+                        None => row,
+                    };
+                    let mut e = sampler.sample(x, y).elevation;
+                    if flatten < 1.0 {
+                        e = waterline + (e - waterline) * flatten;
+                    }
+                    let above_water = relief_above(e, coarse.sea_level) - rules_waterline;
+                    f64::from(temperature(row, above_water, lapse))
+                })
+                .sum::<f64>()
+                / f64::from(grid.width);
+            (w * mean, w)
+        })
+        .reduce(|| (0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
+    (sum / total) as f32
+}
+
+/// The `climate.temperature` shift that brings the grid's mean surface
+/// temperature to `target_k` (kelvin), clamped to [`TEMPERATURE_RANGE`]:
+/// the target minus [`mean_surface_temperature_c`], which includes the
+/// cooling of the land by altitude.
+pub fn warming_for(params: &WorldParams, target_k: f64) -> f32 {
+    let target_c = (target_k - 273.15) as f32;
+    target_c.clamp(TEMPERATURE_RANGE.0, TEMPERATURE_RANGE.1) - mean_surface_temperature_c(params)
+}
+
 /// Size of the grid [`sea_level_for_land_fraction`] samples the relief on.
 const LAND_GRID: (u32, u32) = (256, 128);
 /// Most passes [`sea_level_for_land_fraction`] makes, and the land share
@@ -1136,6 +1224,90 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     }
     level
 }
+
+/// Mean density of sea water, kg/m³ (Earth's oceans, 1025: Gill 1982,
+/// *Atmosphere-Ocean Dynamics*, appendix 3).
+const SEA_WATER_KG_M3: f64 = 1025.0;
+
+/// Depth of a global layer of `oceans` Earth oceans ([`OCEAN_KG`]) spread
+/// over a body of `radius_earth` Earth radii, m.
+///
+/// Earth's 1.4e21 kg at 1025 kg/m³ is 1.37e18 m³, over the 5.1e14 m² of a
+/// sphere of 6.371e6 m: 2.68 km (the 1.335e9 km³ of Charette & Smith 2010
+/// over Earth's surface gives 2.62 km). The layer thins as the surface
+/// grows, `1 / radius²`. Pure geometry; [`sea_level_for_water`] turns it
+/// into a waterline.
+pub fn ocean_depth_m(oceans: f64, radius_earth: f64) -> f64 {
+    let radius = radius_earth * crate::exomoon::EARTH_M;
+    oceans * OCEAN_KG / SEA_WATER_KG_M3 / (4.0 * PI * radius * radius)
+}
+
+/// The sea level at which a global layer of water `depth_m` deep, in
+/// metres, fills the relief below it: the mean depth of the water over
+/// the sphere (by area) is `depth_m`, found by bisection within
+/// [`crate::request::SEA_LEVEL`].
+///
+/// Elevation is in units of [`crate::craters::ELEVATION_KM`] km; the
+/// depth below the waterline is converted to metres with it. The relief
+/// is sampled as in [`sea_level_for_land_fraction`] (same coarse grid,
+/// same plate frame, the crust following the waterline). No water leaves
+/// the lowest sea level; more than the relief holds, the highest.
+///
+/// Earth's ocean ([`ocean_depth_m`]) over the terran preset leaves 0.23 of
+/// the surface dry on the test grid, against 0.29 on Earth (ETOPO1,
+/// Amante & Eakins 2009): within the tolerance, so no calibration.
+pub fn sea_level_for_water(params: &WorldParams, depth_m: f64) -> f32 {
+    let limits = crate::request::SEA_LEVEL;
+    let target = depth_m;
+    if target <= 0.0 {
+        return limits.min;
+    }
+    let mut coarse = params.clone();
+    (coarse.width, coarse.height) = LAND_GRID;
+    let grid = coarse.grid();
+    let weights: Vec<f64> = (0..grid.height).map(|y| grid.latitude(y).cos()).collect();
+    let total: f64 = weights.iter().sum::<f64>() * grid.width as f64;
+    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+        .then(|| crate::plates::PlateFrame::new(&coarse));
+    let metres = f64::from(crate::craters::ELEVATION_KM) * 1000.0;
+    // The mean depth of the water at a sea level, minus the target, m.
+    let excess = |level: f32| {
+        let p = WorldParams {
+            sea_level: level,
+            ..coarse.clone()
+        };
+        let waterline = level + p.planet.rules.waterline;
+        let sampler = Sampler::with_frame(&p, frame.as_ref());
+        let water: f64 = (0..grid.height)
+            .into_par_iter()
+            .map(|y| {
+                let w = weights[y as usize];
+                (0..grid.width)
+                    .map(|x| f64::from((waterline - sampler.sample(x, y).elevation).max(0.0)))
+                    .sum::<f64>()
+                    * w
+            })
+            .sum();
+        water / total * metres - target
+    };
+    let (mut lo, mut hi) = (limits.min, limits.max);
+    if excess(hi) <= 0.0 {
+        return hi;
+    }
+    for _ in 0..WATER_PASSES {
+        let mid = 0.5 * (lo + hi);
+        if excess(mid) > 0.0 {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Bisection passes of [`sea_level_for_water`]: the range of 2 narrows to
+/// 2/2^12, under 0.001 (25 m of relief).
+const WATER_PASSES: usize = 12;
 
 /// The host star's action on the climate of world `params`: its light,
 /// regulated by a carbon cycle on wet worlds (fully with plate tectonics,
@@ -1328,24 +1500,7 @@ pub fn generate_with_progress(
     }
     // Rows of sea-level temperature, evened out by dense air, then moved by
     // the host star.
-    let star_climate = star_climate(params);
-    // A tidally locked planet's climate follows the angle from the point
-    // under its star instead of the latitude.
-    let locked = crate::spin::star_info(params).tidally_locked.then(|| {
-        let mut locked = LockedClimate::new();
-        locked.transport_heat(params.pressure_bar);
-        star_temperatures(locked.profile_mut(), star_climate);
-        locked
-    });
-    let row_temperature = match &locked {
-        Some(locked) => locked.rows(&grid),
-        None => {
-            let mut rows = row_temperatures(&grid, params.axial_tilt_deg);
-            transport_heat(&mut rows, &grid, params.pressure_bar);
-            star_temperatures(&mut rows, star_climate);
-            rows
-        }
-    };
+    let (row_temperature, locked) = sea_level_rows(params, &grid);
     let seasons = seasons(params);
     // The planet's shift and its atmosphere's greenhouse warming.
     let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
@@ -1423,7 +1578,7 @@ pub fn generate_with_progress(
     }
     // Elevation relative to the shifted sea level: what biome selection sees.
     // Computed where needed rather than kept as a layer.
-    let relief = |e: f32| (e - params.sea_level).clamp(-1.0, 1.0);
+    let relief = |e: f32| relief_above(e, params.sea_level);
 
     // ── Pass 3: temperature ───────────────────────────────────────────────────
     progress(Stage::Temperature);
@@ -1735,6 +1890,162 @@ pub(crate) mod tests {
         let below = volcanoes(0.6, 0.599, 1.0).1;
         let above = volcanoes(0.6, 0.601, 1.0).1;
         assert!((above - below).abs() < 0.01, "{below} -> {above}");
+    }
+
+    fn earth_params() -> WorldParams {
+        let mut p = params(7, "terran");
+        (p.width, p.height) = LAND_GRID;
+        p
+    }
+
+    /// Share of the surface above the waterline at `level`, by area, on
+    /// the grid of [`sea_level_for_land_fraction`].
+    fn land_share(params: &WorldParams, level: f32) -> f64 {
+        let p = WorldParams {
+            sea_level: level,
+            ..params.clone()
+        };
+        let grid = p.grid();
+        let waterline = level + p.planet.rules.waterline;
+        let sampler = Sampler::new(&p);
+        let (mut land, mut total) = (0.0, 0.0);
+        for y in 0..grid.height {
+            let w = grid.latitude(y).cos();
+            for x in 0..grid.width {
+                total += w;
+                if sampler.sample(x, y).elevation > waterline {
+                    land += w;
+                }
+            }
+        }
+        land / total
+    }
+
+    #[test]
+    fn earths_ocean_depth_is_two_and_a_half_kilometres_or_so() {
+        let d = ocean_depth_m(1.0, 1.0);
+        assert!((d - 2680.0).abs() < 30.0, "{d}");
+        assert!((ocean_depth_m(2.0, 2.0) - d / 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn earths_ocean_leaves_earths_land() {
+        let params = earth_params();
+        let level = sea_level_for_water(&params, ocean_depth_m(1.0, 1.0));
+        let land = land_share(&params, level);
+        assert!((land - 0.29).abs() < 0.08, "{land}");
+    }
+
+    #[test]
+    fn no_water_leaves_no_sea() {
+        let params = earth_params();
+        assert_eq!(
+            sea_level_for_water(&params, 0.0),
+            crate::request::SEA_LEVEL.min
+        );
+    }
+
+    #[test]
+    fn a_deep_ocean_drowns_every_summit() {
+        let params = earth_params();
+        let level = sea_level_for_water(&params, ocean_depth_m(10.0, 1.0));
+        // The highest sea level of the range ([`crate::request::SEA_LEVEL`])
+        // holds about 26 km of water on average, short of 10 oceans on a
+        // few summits: the sea stops at the range, with under 1 % dry.
+        assert_eq!(level, crate::request::SEA_LEVEL.max);
+        let land = land_share(&params, level);
+        assert!(land < 0.01, "{land}");
+    }
+
+    #[test]
+    fn the_world_lands_on_the_models_temperature() {
+        // A terran preset world (seed 7, 128x64) at 1 AU round a G2V, with
+        // greenhouse 0 and climate.temperature = warming_for(&params, t).
+        for target_k in [250.0, 288.0, 330.0] {
+            let mut params = params(7, "terran");
+            (params.width, params.height) = (128, 64);
+            params.planet.atmosphere.greenhouse = 0.0;
+            params.planet.climate.temperature = warming_for(&params, target_k);
+            let mean = mean_k(&params);
+            eprintln!("target {target_k} K: mean {mean:.2} K");
+            assert!((mean - target_k).abs() < 5.0, "{mean} vs {target_k}");
+        }
+        // The same world locked to an M4V in its habitable zone: its
+        // dayside is far warmer than its nightside, and the mean is taken
+        // over both (seed 7, 128x64).
+        let m4 = crate::star::parse_type("M4V").unwrap();
+        let orbit = crate::star::distance_au(crate::star::values(m4).luminosity, 1.0);
+        for target_k in [180.0, 250.0, 288.0] {
+            let mut params = params(7, "terran");
+            (params.width, params.height) = (128, 64);
+            (params.star, params.orbit_au) = (m4, orbit);
+            params.locked_to_star = Some(true);
+            params.planet.atmosphere.greenhouse = 0.0;
+            params.planet.climate.temperature = warming_for(&params, target_k);
+            let mean = mean_k(&params);
+            eprintln!("locked, target {target_k} K: mean {mean:.2} K");
+            assert!(
+                (mean - target_k).abs() < 5.0,
+                "locked: {mean} vs {target_k}"
+            );
+        }
+        // Earth's, Mars's and Venus's models through
+        // `planet::interim::params_for` and `calibrate` at their orbits round the Sun
+        // (seed 1, 128x64): Venus at the grid's ceiling, above it.
+        use crate::planet::reference::{model_inputs, reference, sun_at};
+        use rand::SeedableRng;
+        for name in ["Earth", "Mars", "Venus"] {
+            let body = reference(name);
+            let model = crate::planet::planet_model(&sun_at(body.orbit_au), model_inputs(body));
+            let request = crate::request::WorldRequest {
+                seed: Some(1),
+                star: Some("G2V".into()),
+                age_gyr: Some(4.6),
+                orbit_au: Some(body.orbit_au as f32),
+                eccentricity: Some(0.0),
+                metallicity: Some(0.0),
+                moons: Some(crate::moons::MoonsMode::Auto),
+                giants: Some(crate::giants::GiantsMode::None),
+                host: Some(crate::exomoon::HostMode::None),
+                width: Some(128),
+                height: Some(64),
+                ..crate::request::WorldRequest::default()
+            };
+            let mut params = crate::planet::interim::params_for(
+                &model,
+                request,
+                &mut rand::rngs::StdRng::seed_from_u64(1),
+            );
+            crate::planet::interim::calibrate(&mut params, &model);
+            let model_k = model.surface.unwrap().climate.temperature_k;
+            let target_k = model_k.min(f64::from(TEMPERATURE_RANGE.1) + 273.15);
+            let mean = mean_k(&params);
+            eprintln!("{name}: model {model_k:.2} K, target {target_k:.2} K, mean {mean:.2} K");
+            assert!(
+                (mean - target_k).abs() < 5.0,
+                "{name}: {mean} vs {target_k}"
+            );
+        }
+    }
+
+    /// Area-weighted mean temperature of the world `params` generates, K.
+    fn mean_k(params: &WorldParams) -> f64 {
+        let world = generate(params).world;
+        let grid = params.grid();
+        let (mut sum, mut total) = (0.0_f64, 0.0_f64);
+        for (i, &t) in world.temperature.iter().enumerate() {
+            let w = grid.latitude((i / world.width as usize) as u32).cos();
+            sum += w * f64::from(t);
+            total += w;
+        }
+        sum / total + 273.15
+    }
+
+    #[test]
+    fn a_lava_world_aims_at_the_grid_ceiling() {
+        let params = earth_params();
+        let w = warming_for(&params, 1800.0);
+        assert_eq!(w + mean_surface_temperature_c(&params), TEMPERATURE_RANGE.1);
     }
 
     pub fn params(seed: u32, planet: &str) -> WorldParams {
