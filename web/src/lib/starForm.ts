@@ -54,31 +54,10 @@ function middle(d: ParamDefault): number {
 }
 
 /**
- * Luminosity of a G2V star, L☉ (log L = 0.01 in the generator's star table,
- * `star.rs`): the only star an archetype names today, so the only one whose
- * insolation the form converts to a distance itself.
- */
-const G2V_LUMINOSITY = 10 ** 0.01;
-
-/**
- * The distance, AU, at which the archetype receives its insolation (the
- * middle of its range) round its named star, as the server places it:
- * `a = sqrt(L / S)`. Null when the archetype names no star, sets no
- * insolation (a hot Jupiter sits at its period) or names a star whose
- * luminosity the form does not know.
- */
-function archetypeOrbitAu(archetype: ArchetypeInfo | undefined): number | null {
-  const insolation = archetype?.orbit.insolation;
-  const type = parseStarType(archetype?.orbit.star ?? '');
-  if (insolation == null || type === null || starType(type.klass, type.subtype) !== 'G2V') {
-    return null;
-  }
-  return Math.sqrt(G2V_LUMINOSITY / middle(insolation));
-}
-
-/**
  * Where the form starts: the varied world's star and orbit, else the
- * archetype's, else a drawn star in the server's fallback range.
+ * archetype's star with the orbit left open (the server places the planet
+ * at the archetype's insolation or period round whatever star the request
+ * ends up with), else a drawn star in the server's fallback range.
  */
 export function initialStarChoice(
   archetype: ArchetypeInfo | undefined,
@@ -100,10 +79,6 @@ export function initialStarChoice(
   }
   if (from?.hz_position != null) {
     return { ...choice, orbitRandom: false, position: from.hz_position };
-  }
-  const archetypeAu = from?.star === undefined || from.star === archetype?.orbit.star ? archetypeOrbitAu(archetype) : null;
-  if (archetypeAu !== null) {
-    return { ...choice, orbitBy: 'au', orbitRandom: false, au: Number(archetypeAu.toFixed(4)) };
   }
   return choice;
 }

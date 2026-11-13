@@ -19,19 +19,23 @@ describe('star form', () => {
     const mars = archetype({ star: 'G2V', insolation: [0.39, 0.47] });
     const fromWorld = initialStarChoice(mars, { star: 'K3V', orbit_au: 0.7 }, [0.1, 0.9]);
     expect(fromWorld).toMatchObject({ klass: 'K', subtype: 3, orbitBy: 'au', orbitRandom: false, au: 0.7 });
-    // sqrt(1.023 / 0.43) = 1.542 AU, as the server places it.
+    // The archetype's star, its orbit left to the server, which places it
+    // at the archetype's insolation.
     const fromMars = initialStarChoice(mars, null, [0.1, 0.9]);
-    expect(fromMars).toMatchObject({ klass: 'G', subtype: 2, orbitBy: 'au', orbitRandom: false });
-    expect(fromMars.au).toBeCloseTo(1.542, 2);
+    expect(fromMars).toMatchObject({ klass: 'G', subtype: 2, orbitRandom: true });
     const ocean = initialStarChoice(archetype({ insolation: [0.9, 1.1] }), null, [0.1, 0.9]);
     expect(ocean).toMatchObject({ klass: '', orbitBy: 'position', orbitRandom: true, position: 0.5 });
   });
 
-  it('the_archetype_chooses_the_star', () => {
+  it('the_archetype_chooses_the_star_and_the_server_the_orbit', () => {
     const venus = initialStarChoice(archetype({ star: 'G2V', insolation: [1.7, 2.1] }), null, [0.1, 0.9]);
     expect(starType(venus.klass, venus.subtype)).toBe('G2V');
-    expect(venus.orbitRandom).toBe(false);
-    expect(venus.au).toBeCloseTo(0.733, 2);
+    expect(venus.orbitRandom).toBe(true);
+    // Another star picked afterwards: the request carries no orbit, so the
+    // server places the planet at the archetype's light round that star.
+    const request: WorldRequest = {};
+    applyStarChoice(request, { ...venus, klass: 'M', subtype: 4 });
+    expect(request).toEqual({ star: 'M4V' });
   });
 
   it('puts only what is fixed into the request', () => {
