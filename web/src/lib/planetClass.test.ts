@@ -13,6 +13,7 @@ const PLANET_CLASSES = [
   'ice-giant',
   'gas-giant',
   'hot-jupiter',
+  'hot-neptune',
   'lava-world',
   'runaway-greenhouse',
   'hydrocarbon-world',
@@ -35,7 +36,7 @@ describe('planet classes', () => {
   });
 
   it('draws the giants and the mini-Neptune as giants', () => {
-    expect([...GIANT_CLASSES].sort()).toEqual(['gas-giant', 'hot-jupiter', 'ice-giant', 'mini-neptune']);
+    expect([...GIANT_CLASSES].sort()).toEqual(['gas-giant', 'hot-jupiter', 'hot-neptune', 'ice-giant', 'mini-neptune']);
     expect(isGiantType('super-earth')).toBe(false);
     expect(isGiantType('terran')).toBe(false);
   });

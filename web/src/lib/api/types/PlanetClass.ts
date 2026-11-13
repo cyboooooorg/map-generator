@@ -3,4 +3,4 @@
 /**
  * The kind of a planet, from its derived quantities.
  */
-export type PlanetClass = "rocky" | "super-earth" | "ice-world" | "mini-neptune" | "ice-giant" | "gas-giant" | "hot-jupiter" | "lava-world" | "runaway-greenhouse" | "hydrocarbon-world" | "ocean-world";
+export type PlanetClass = "rocky" | "super-earth" | "ice-world" | "mini-neptune" | "ice-giant" | "gas-giant" | "hot-jupiter" | "hot-neptune" | "lava-world" | "runaway-greenhouse" | "hydrocarbon-world" | "ocean-world";

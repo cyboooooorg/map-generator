@@ -141,7 +141,7 @@ export function systemStarView(
       equilibrium_k: body.surroundings.equilibrium_k,
       effective_k: body.surroundings.equilibrium_k,
       class: 0,
-      hot: body.type === 'hot-jupiter',
+      hot: body.type === 'hot-jupiter' || body.type === 'hot-neptune',
       colour,
       // Its rings as the system drew them; none on a system drawn before.
       rings: ringsKind(body.params.given_rings?.rings ?? null),

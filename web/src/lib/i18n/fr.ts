@@ -675,6 +675,7 @@ export const fr: Messages = {
       'gas-giant': 'Géante gazeuse',
       'ice-giant': 'Géante de glace',
       'hot-jupiter': 'Jupiter chaud',
+      'hot-neptune': 'Neptune chaud',
       rocky: 'Planète rocheuse',
       'super-earth': 'Super-Terre',
       'ice-world': 'Monde glacé',

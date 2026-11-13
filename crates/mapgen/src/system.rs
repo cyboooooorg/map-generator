@@ -463,12 +463,12 @@ impl Placement {
         }
     }
 
-    /// Whether the slot holds a hot Jupiter.
+    /// Whether the slot holds a hot Jupiter (or a hot Neptune, as close).
     fn is_hot_jupiter(&self) -> bool {
         match self {
             Placement::Drawn(origin) => *origin == Origin::HotJupiter,
-            Placement::Requested(asked) => asked.class == PlanetClass::HotJupiter,
-            Placement::Giant(class) | Placement::Focus(class) => *class == PlanetClass::HotJupiter,
+            Placement::Requested(asked) => asked.class.is_hot_giant(),
+            Placement::Giant(class) | Placement::Focus(class) => class.is_hot_giant(),
         }
     }
 

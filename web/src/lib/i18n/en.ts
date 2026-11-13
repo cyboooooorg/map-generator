@@ -713,6 +713,7 @@ export const en = {
       'gas-giant': 'Gas giant',
       'ice-giant': 'Ice giant',
       'hot-jupiter': 'Hot Jupiter',
+      'hot-neptune': 'Hot Neptune',
       rocky: 'Rocky planet',
       'super-earth': 'Super-Earth',
       'ice-world': 'Ice world',

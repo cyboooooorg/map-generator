@@ -29,8 +29,9 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 /// The built-in look whose rules and remap render `model`, the first
 /// rule that holds:
 ///
-/// 1. a giant class: `gas-giant`, `hot-jupiter` or `ice-giant` (a
-///    mini-Neptune renders as an ice giant);
+/// 1. a giant class: `gas-giant`, `hot-jupiter` or `ice-giant` (a hot
+///    Neptune renders as a hot Jupiter, its methane gone; a mini-Neptune
+///    as an ice giant);
 /// 2. a lava world or a heat-pipe regime: `volcanic`;
 /// 3. a runaway greenhouse: `caustic` (the Venus look; the spec names
 ///    barren or volcanic, caustic is closer to Venus and exists);
@@ -50,7 +51,7 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 pub fn base_of(model: &PlanetModel) -> &'static str {
     match model.class {
         PlanetClass::GasGiant => return "gas-giant",
-        PlanetClass::HotJupiter => return "hot-jupiter",
+        PlanetClass::HotJupiter | PlanetClass::HotNeptune => return "hot-jupiter",
         PlanetClass::IceGiant | PlanetClass::MiniNeptune => return "ice-giant",
         _ => {}
     }
@@ -727,6 +728,8 @@ mod tests {
         assert_eq!(base_of(&mini), "ice-giant");
         let mut hot = model_of("Jupiter");
         hot.class = PlanetClass::HotJupiter;
+        assert_eq!(base_of(&hot), "hot-jupiter");
+        hot.class = PlanetClass::HotNeptune;
         assert_eq!(base_of(&hot), "hot-jupiter");
     }
     #[test]
