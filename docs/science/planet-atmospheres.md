@@ -16,16 +16,30 @@ has received over its system's age, relative to Earth's (the Sun at
 The star emits `L_XUV / L_bol = 3.71e-4` (1 to 1180 Å) while saturated:
 the Sun's own, from the fit `F = 29.7 τ^-1.23` erg s⁻¹ cm⁻² at 1 AU of
 Ribas et al. 2005 (doi:10.1086/427977; τ in Gyr, saturated before 0.1
-Gyr), 504 erg s⁻¹ cm⁻² at 0.1 Gyr over the 1361 W/m² solar constant (fit
-and band as cited in the model's review, not re-read). It is below the
-X-ray saturation of the fastest rotators, `L_X / L_bol ≈ 10^-3` (Wright
-et al. 2011, doi:10.1088/0004-637X/743/1/48). It lasts `t_sat = 0.1 Gyr
-· M^-2` (M in solar masses; 0.1 Gyr for the Sun from Jackson, Davis &
-Wheatley 2012, doi:10.1111/j.1365-2966.2012.21384.x, the mass exponent
-is a calibration giving 1.1 Gyr at 0.3 M☉ and 2.5 Gyr at 0.2 M☉), then
-decays as `t^-1.23` (Ribas et al. 2005, doi:10.1086/427977). The
-integral over the age is analytic and is multiplied by the insolation.
-The luminosity is taken constant over the age.
+Gyr; their Table 5), 504 erg s⁻¹ cm⁻² at 0.1 Gyr over the 1361 W/m²
+solar constant (fit and band checked against the paper; the value before
+0.1 Gyr is an extrapolation, Ribas et al. use no star that young). It is
+below the X-ray saturation of the fastest rotators, `L_X / L_bol ≈
+10^-3` (Wright et al. 2011, doi:10.1088/0004-637X/743/1/48, mean
+`log R_X = -3.13`; checked).
+
+The saturation lasts `t_sat`, a labelled calibration interpolated in
+log-log through three anchors (`SATURATION_GYR`), not a published
+relation:
+
+| Star mass | `t_sat` | Anchor |
+|---|---|---|
+| 1 M☉ | 0.1 Gyr | Jackson, Davis & Wheatley 2012 (MNRAS 422, 2024, doi:10.1111/j.1365-2966.2012.20657.x): `log τ_sat = 7.84` (70 Myr) for the Sun's colour bin, turn-off around 100 Myr for FGK stars (they cover no M dwarfs); 0.1 Gyr keeps Ribas et al.'s fit, which starts there |
+| 0.5 M☉ | 0.2 Gyr | Johnstone et al. 2021 (A&A 649, A96, doi:10.1051/0004-6361/202038407): slow and fast rotators stay on identical, saturated tracks until about 200 Myr |
+| 0.25 M☉ | 2 Gyr | the same, about 2 Gyr |
+
+Between the anchors `t_sat` goes as `M^-1` above 0.5 M☉ and `M^-3.3`
+below, extended past the ends: 0.42 Gyr at 0.4 M☉, 4.2 Gyr at 0.2 M☉,
+42 Gyr at 0.1 M☉ (saturated all its life, as Johnstone et al. find the
+smallest stars still are at 5 Gyr). Then the XUV decays as `t^-1.23`
+(Ribas et al. 2005, doi:10.1086/427977). The integral over the age is
+analytic and is multiplied by the insolation. The luminosity is taken
+constant over the age.
 
 Calibration targets: Earth is 1.0; its absolute value
 `EARTH_XUV_FLUENCE_J_M2` = 5.64e15 J/m² is Ribas et al.'s fit integrated
