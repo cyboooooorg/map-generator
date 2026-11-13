@@ -21,6 +21,18 @@ const meta = {
     inputs: { mass_earth: 1.02, core_mass_fraction: 0.33, water_fraction: 2.5e-4, envelope_fraction: 0, radiogenic: 1.1 },
     surface: { life: { arose: true } },
   },
+  formation: {
+    mass_earth: 1.02,
+    overrides: {
+      core_mass_fraction: 0.33,
+      water_oceans: 1.0877571428571429,
+      envelope_fraction: 0,
+      co2: 0.8,
+      n2: 1.25,
+      radiogenic: 1.1,
+      life: true,
+    },
+  },
   width: 1920,
   height: 1080,
 } as unknown as WorldMetadata;
@@ -32,8 +44,10 @@ describe('format', () => {
       seed: 2590618090,
       mass_earth: 1.02,
       core_mass_fraction: 0.33,
-      water_oceans: 1.08776,
+      water_oceans: 1.0877571428571429,
       envelope_fraction: 0,
+      co2: 0.8,
+      n2: 1.25,
       radiogenic: 1.1,
       life: true,
       axial_tilt_deg: 18.72,
@@ -46,8 +60,8 @@ describe('format', () => {
       height: 1080,
     });
     expect(cliCommand(meta)).toBe(
-      'mise run gen -- --planet earth-like --seed 2590618090 --mass 1.02 --core-fraction 0.33 --water 1.08776 ' +
-        '--envelope 0 --radiogenic 1.1 --life yes --axial-tilt 18.72 ' +
+      'mise run gen -- --planet earth-like --seed 2590618090 --mass 1.02 --core-fraction 0.33 --water 1.0877571428571429 ' +
+        '--envelope 0 --co2 0.8 --n2 1.25 --radiogenic 1.1 --life yes --axial-tilt 18.72 ' +
         '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --age 8.123456 --metallicity=0.1 --width 1920 --height 1080',
     );
     // An epoch of the plates, and moons turned off, are reproduced too.
@@ -59,23 +73,38 @@ describe('format', () => {
     expect(requestFromWorld(counted).moons).toEqual({ count: 3 });
     expect(cliCommand(counted)).toContain('--moons 3');
     // A moon has no model: nothing of the model is pinned, and no archetype is sent.
-    const moon = { ...meta, archetype: null, model: null } as unknown as WorldMetadata;
+    const moon = { ...meta, archetype: null, model: null, formation: null } as unknown as WorldMetadata;
     expect(requestFromWorld(moon)).not.toHaveProperty('planet');
     expect(requestFromWorld(moon)).not.toHaveProperty('mass_earth');
-    expect(cliCommand(moon)).not.toMatch(/--(planet|mass|water|life) /);
-    // Life that did not arise is left to the draw.
-    const dead = { ...meta, model: { ...meta.model, surface: { life: { arose: false } } } } as unknown as WorldMetadata;
-    expect(requestFromWorld(dead)).not.toHaveProperty('life');
+    expect(cliCommand(moon)).not.toMatch(/--(planet|mass|water|co2|n2|life) /);
+    // Life that did not arise is pinned as never arising.
+    const dead = { ...meta, formation: { ...meta.formation, overrides: { ...meta.formation!.overrides, life: false } } } as unknown as WorldMetadata;
+    expect(requestFromWorld(dead).life).toBe(false);
+    expect(cliCommand(dead)).toContain('--life no');
   });
 
-  it('requestFromWorld_pins_the_model_inputs', () => {
-    const request = requestFromWorld(meta);
+  it('requestFromWorld_pins_the_formation_inputs_not_what_escape_left', () => {
+    // A mini-Neptune that photoevaporation thinned: drawn at 8 Earth masses
+    // with 3 % of envelope, it kept 7.9 and 1.8 %. The request asks for
+    // what it formed with, so that escape runs once, not twice.
+    const thinned = {
+      ...meta,
+      archetype: 'mini-neptune',
+      model: {
+        drawn_mass_earth: 8,
+        inputs: { mass_earth: 7.9, core_mass_fraction: 0.3, water_fraction: 0.01, envelope_fraction: 0.018, radiogenic: 0.9 },
+        surface: null,
+      },
+      formation: {
+        mass_earth: 8,
+        overrides: { core_mass_fraction: 0.3, water_oceans: 341.3, envelope_fraction: 0.03, co2: 1.4, n2: 0.7, radiogenic: 0.9, life: false },
+      },
+    } as unknown as WorldMetadata;
+    const request = requestFromWorld(thinned);
+    expect(request).toMatchObject({ mass_earth: 8, envelope_fraction: 0.03, water_oceans: 341.3, co2: 1.4, n2: 0.7, life: false });
     expect(request).not.toHaveProperty('sea_level');
-    expect(request.water_oceans).toBeCloseTo((2.5e-4 * 1.02 * 5.972e24) / 1.4e21, 4);
-    // A giant has no surface: its mass and envelope are pinned, no life.
-    const giant = { ...meta, model: { inputs: { ...meta.model!.inputs, mass_earth: 318, envelope_fraction: 0.95 }, surface: null } } as unknown as WorldMetadata;
-    expect(requestFromWorld(giant)).toMatchObject({ mass_earth: 318, envelope_fraction: 0.95 });
-    expect(requestFromWorld(giant)).not.toHaveProperty('life');
+    expect(rerollRequest(thinned, 9)).toMatchObject({ seed: 9, mass_earth: 8, envelope_fraction: 0.03 });
+    expect(driftRequest(thinned, -50)).toMatchObject({ drift_ma: -50, mass_earth: 8, co2: 1.4, n2: 0.7 });
   });
 
   it('rerolls a world with a new seed and every other parameter kept', () => {

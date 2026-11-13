@@ -1,6 +1,7 @@
 // Formatting shared by the components, and the requests and commands that
 // reproduce a world.
 import type { BiomeInfo } from './api/types/BiomeInfo';
+import type { Formation } from './api/types/Formation';
 import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
@@ -135,38 +136,43 @@ function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
-/** Earth's mass, kg (`exomoon::EARTH_KG` in crates/mapgen). */
-const EARTH_KG = 5.972e24;
-/** One Earth ocean, kg (`planet::OCEAN_KG` in crates/mapgen). */
-const OCEAN_KG = 1.4e21;
-
-/** A model input rounded to 6 significant digits: short in the CLI, far finer than the generator's draws. */
-function significant(value: number): number {
-  return Number(value.toPrecision(6));
+/**
+ * The model inputs a world formed with, as a request sets them: world.json's
+ * `formation` (`PlanetModel::formation` in crates/mapgen), exact. The drawn
+ * mass before photoevaporation and the envelope at formation, so that escape
+ * runs once; the water in Earth oceans; the CO₂ and N₂ factors; the core
+ * share and radiogenic abundance; whether life arose. A moon has none.
+ */
+export function formationRequest(formation: Formation | null | undefined): WorldRequest {
+  if (!formation) {
+    return {};
+  }
+  const o = formation.overrides;
+  const set = <K extends keyof WorldRequest>(key: K, value: WorldRequest[K] | null): WorldRequest =>
+    value === null || value === undefined ? {} : { [key]: value };
+  return {
+    mass_earth: formation.mass_earth,
+    ...set('core_mass_fraction', o.core_mass_fraction),
+    ...set('water_oceans', o.water_oceans),
+    ...set('envelope_fraction', o.envelope_fraction),
+    ...set('co2', o.co2),
+    ...set('n2', o.n2),
+    ...set('radiogenic', o.radiogenic),
+    ...set('life', o.life),
+  };
 }
 
 /**
  * The generation request that reproduces a world: the archetype it was
- * asked as, the inputs of its planet model pinned as overrides (so a new
- * seed, a drift or a variation keeps the planet), and its orbit and star.
- * The CO₂ and N₂ factors cannot be recovered from a model and are left to
- * the archetype; a moon has no model and pins nothing of it.
+ * asked as, the inputs its planet formed with pinned as overrides
+ * ({@link formationRequest}, so that a new seed, a drift or a variation keeps
+ * the planet), and its orbit and star.
  */
 export function requestFromWorld(meta: WorldMetadata): WorldRequest {
-  const inputs = meta.model?.inputs;
   return {
     ...(meta.archetype ? { planet: meta.archetype } : {}),
     seed: meta.seed,
-    ...(inputs
-      ? {
-          mass_earth: significant(inputs.mass_earth),
-          core_mass_fraction: significant(inputs.core_mass_fraction),
-          water_oceans: significant((inputs.water_fraction * inputs.mass_earth * EARTH_KG) / OCEAN_KG),
-          envelope_fraction: significant(inputs.envelope_fraction),
-          radiogenic: significant(inputs.radiogenic),
-          ...(meta.model?.surface?.life.arose ? { life: true } : {}),
-        }
-      : {}),
+    ...formationRequest(meta.formation),
     axial_tilt_deg: round(meta.axial_tilt_deg, 2),
     star: meta.star.type,
     orbit_au: round(meta.star.orbit_au, 5),
@@ -205,6 +211,8 @@ export function cliCommand(meta: WorldMetadata): string {
     ...(r.core_mass_fraction === undefined ? [] : [`--core-fraction ${r.core_mass_fraction}`]),
     ...(r.water_oceans === undefined ? [] : [`--water ${r.water_oceans}`]),
     ...(r.envelope_fraction === undefined ? [] : [`--envelope ${r.envelope_fraction}`]),
+    ...(r.co2 === undefined ? [] : [`--co2 ${r.co2}`]),
+    ...(r.n2 === undefined ? [] : [`--n2 ${r.n2}`]),
     ...(r.radiogenic === undefined ? [] : [`--radiogenic ${r.radiogenic}`]),
     ...(r.life === undefined ? [] : [`--life ${r.life ? 'yes' : 'no'}`]),
     `--axial-tilt ${r.axial_tilt_deg}`,
