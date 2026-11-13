@@ -65,7 +65,7 @@ pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
-pub use inputs::{Context, draw_inputs};
+pub use inputs::{Context, InputOverrides, draw_inputs, draw_inputs_with};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use life::{Life, life, oxygenate};
 pub use mass::{Origin, SMALL_MASS, draw_mass};
@@ -338,9 +338,27 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
 /// inputs are drawn from their own stream, seeded by the system's seed and
 /// `<id>/model`, so they depend on no other body and shift no other draw.
 pub fn derive_model(system_seed: u32, id: &str, context: &Context, mass_earth: f64) -> PlanetModel {
+    derive_model_with(
+        system_seed,
+        id,
+        context,
+        mass_earth,
+        &InputOverrides::default(),
+    )
+}
+
+/// [`derive_model`] with some inputs set instead of drawn (`overrides`,
+/// see [`draw_inputs_with`]); the draws are the same.
+pub fn derive_model_with(
+    system_seed: u32,
+    id: &str,
+    context: &Context,
+    mass_earth: f64,
+    overrides: &InputOverrides,
+) -> PlanetModel {
     let seed = body_seed(system_seed, &format!("{id}/model"));
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
-    let inputs = draw_inputs(context, mass_earth, &mut rng);
+    let inputs = draw_inputs_with(context, mass_earth, overrides, &mut rng);
     planet_model(context, inputs)
 }
 
