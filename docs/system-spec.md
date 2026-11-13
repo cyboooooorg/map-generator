@@ -16,7 +16,8 @@ wants to see that body.
 Two ways to ask for a system:
 
 1. **A whole system.** The star (a spectral type, or drawn) and a number
-   of planets of each type (`terran: 2, barren: 1, gas-giant: 2…`, or
+   of planets of each built-in archetype (`earth-like: 2,
+   mars-like: 1, jupiter-like: 2…`, or
    left to the draw), at most 15 planets (moons not counted). The engine
    orders them the way real systems are ordered and draws their moons.
 2. **A system around one planet.** A planet fully specified, as the form
@@ -129,30 +130,21 @@ them):
 - the **outer edge**: 60 AU, as the giants' draw keeps today, and within
   a stable distance of a companion star if binaries come later.
 
-### Where each type belongs
+### Where each archetype belongs
 
-Each planet type has a band of distances it can sit in and one it prefers
-(as a share of the zones above), from which its place is drawn before
-spacing:
+A planet asked for by archetype sits where its archetype says: at an
+insolation drawn in the archetype's range (`a = sqrt(L / S)`, `S` in
+Earth's, so a `venus-like` planet gets 1.7 to 2.1) or, for a hot Jupiter,
+at a period drawn in its range (Kepler's third law). It keeps that
+orbit unless the spacing pushes it out, up to four times the outer orbit
+of its range. Its mass is drawn in the archetype's range on the system's
+stream, its other inputs (core share, water, life…) and its axial tilt
+on a stream of the body's own (`<id>/archetype`), so that removing a body
+leaves the others as they were. The star the archetype names is ignored
+here: the system's star rules.
 
-- `hot-jupiter`: allowed from the inner edge to 0.1 AU, preferred 0.03 to
-  0.07 AU;
-- `caustic`: allowed inside the habitable zone's inner edge, preferred
-  from half that distance to it;
-- `volcanic`: allowed inside the ice line, preferred in the inner part of
-  the habitable zone and inside it;
-- `terran`: allowed in the habitable zone widened by 10 %, preferred in
-  the habitable zone;
-- `barren`: allowed and preferred anywhere inside the ice line;
-- `frozen`: allowed beyond the habitable zone's outer edge, preferred from
-  that edge to twice the ice line;
-- `gas-giant`: allowed beyond half the ice line (or as a hot Jupiter),
-  preferred log-normal around twice the ice line;
-- `ice-giant`: allowed beyond the ice line, preferred log-normal around
-  five times the ice line.
-
-With **quantities per type**, the engine draws a preferred distance for
-each planet asked, then spaces them (below). Types the request leaves to
+With **quantities per archetype**, the engine draws an orbit for each
+planet asked, then spaces them (below). Types the request leaves to
 the draw get occurrence rates by star: rocky planets from the Kepler
 counts (about one to three small planets within 1 AU of a Sun-like star,
 more round M dwarfs; Mulders et al. 2018), giants as `giants.rs` draws
@@ -361,9 +353,11 @@ behind it, as the form's errors do today:
 
 - `too_many_planets`: more than 15;
 - `zone_full`: more planets of a type than its band holds at the spacing
-  (`{ "type": "terran", "asked": 6, "fits": 3 }`);
-- `type_impossible`: a type the star leaves no room for (no habitable
-  zone outside the inner edge, a hot Jupiter round a star too faint…);
+  (`{ "type": "earth-like", "asked": 6, "fits": 3 }`);
+- `unknown_preset`: a name that is not a built-in archetype (the old
+  type names `terran`, `barren`… are refused);
+- `type_impossible`: an archetype the star leaves no room for (its orbits
+  inside the inner edge of the system or beyond its outer one);
 - the planet's own errors in mode 2, as today.
 
 ## Spheres before maps

@@ -2038,7 +2038,7 @@ mod tests {
         let root = temp_root("regenerate");
         let systems = root.join("systems");
         let request: mapgen::system::SystemRequest = serde_json::from_str(
-            r#"{"system": {"star": "K1V", "planets": {"barren": 2}, "seed": 3, "width": 64, "height": 32}}"#,
+            r#"{"system": {"star": "K1V", "planets": {"mercury-like": 2}, "seed": 3, "width": 64, "height": 32}}"#,
         )
         .unwrap();
         let system = mapgen::system::draw(&request, &mut rand::rng()).unwrap();

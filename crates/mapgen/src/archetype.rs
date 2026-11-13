@@ -274,6 +274,32 @@ impl ArchetypeOrbit {
     }
 }
 
+impl ArchetypeOrbit {
+    /// The nearest and farthest orbits the archetype's range gives, AU,
+    /// round a star of `luminosity` (L☉) and `star_mass` (M☉): the same
+    /// laws as [`orbit_au`](Self::orbit_au) at the two ends of the range.
+    /// `None` when the archetype sets neither insolation nor period.
+    pub fn orbit_range_au(&self, luminosity: f64, star_mass: f64) -> Option<(f64, f64)> {
+        let ends = |p: ParamDefault| match p {
+            ParamDefault::Fixed(v) => (f64::from(v), f64::from(v)),
+            ParamDefault::Range([lo, hi]) => (f64::from(lo), f64::from(hi.max(lo))),
+        };
+        match (self.insolation, self.period_days) {
+            (Some(s), _) => {
+                // Less light, farther out.
+                let (lo, hi) = ends(s);
+                Some(((luminosity / hi).sqrt(), (luminosity / lo).sqrt()))
+            }
+            (None, Some(p)) => {
+                let (lo, hi) = ends(p);
+                let at = |days: f64| (star_mass * (days / 365.25).powi(2)).cbrt();
+                Some((at(lo), at(hi)))
+            }
+            (None, None) => None,
+        }
+    }
+}
+
 /// A named set of model inputs. See the module documentation for the file
 /// format.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

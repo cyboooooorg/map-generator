@@ -248,7 +248,8 @@ pub enum RequestError {
     },
     /// A type the star leaves no room for.
     TypeImpossible { body_type: String },
-    /// A planet type that is not one of `system::PLANET_TYPES`.
+    /// A planet type that is not one of the old preset names (no longer
+    /// produced: a system names archetypes, see `UnknownArchetype`).
     UnknownType(String),
 }
 

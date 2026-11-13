@@ -493,10 +493,7 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         size_presets: request::SIZE_PRESETS.iter().map(|&(w, h)| [w, h]).collect(),
         max_size: MAX_SIZE,
         max_pixels: state.config.max_pixels,
-        planet_types: mapgen::system::PLANET_TYPES
-            .iter()
-            .map(|t| (*t).to_owned())
-            .collect(),
+        planet_types: mapgen::system::archetype_names(),
         max_planets: mapgen::system::MAX_PLANETS as u32,
     })
 }
@@ -4109,7 +4106,7 @@ mod tests {
         let (_, body) = post(r#"{"around": {"planet": "nowhere"}}"#).await;
         assert_eq!(detail(&body)["code"], "unknown_preset");
         let (_, body) = post(
-            r#"{"system": {"star": null, "metallicity": null, "planets": {"terran": 16}, "seed": 1, "width": 64, "height": 32}}"#,
+            r#"{"system": {"star": null, "metallicity": null, "planets": {"earth-like": 16}, "seed": 1, "width": 64, "height": 32}}"#,
         )
         .await;
         assert_eq!(detail(&body)["code"], "too_many_planets");
@@ -4123,7 +4120,7 @@ mod tests {
         let config = temp_config("systems");
         let root = config.systems_dir.clone();
         let app = router(config);
-        let request = r#"{"system": {"star": "K1V", "planets": {"barren": 2}, "seed": 3, "width": 64, "height": 32}}"#;
+        let request = r#"{"system": {"star": "K1V", "planets": {"mercury-like": 2}, "seed": 3, "width": 64, "height": 32}}"#;
         let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let created: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -4541,7 +4538,7 @@ mod tests {
             .collect()
     }
 
-    const EXPORTED: &str = r#"{"system": {"star": "K1V", "planets": {"barren": 3}, "seed": 3, "width": 64, "height": 32}}"#;
+    const EXPORTED: &str = r#"{"system": {"star": "K1V", "planets": {"mercury-like": 3}, "seed": 3, "width": 64, "height": 32}}"#;
 
     /// Draws `EXPORTED` and generates its planet `b`: the system's id.
     async fn exported_system(app: &Router) -> String {
@@ -4706,8 +4703,7 @@ mod tests {
     async fn the_export_of_a_whole_system_draws_the_same_system_again() {
         let app = router(temp_config("export-whole"));
         // The seed is left to chance: only the export's `create` knows it.
-        let request =
-            r#"{"system": {"star": "K1V", "planets": {"barren": 3}, "width": 64, "height": 32}}"#;
+        let request = r#"{"system": {"star": "K1V", "planets": {"mercury-like": 3}, "width": 64, "height": 32}}"#;
         let (document, before, after) = drawn_again_from_its_export(&app, request).await;
         assert!(document["request"]["system"]["seed"].is_null());
         assert_eq!(document["create"]["system"]["seed"], document["seed"]);

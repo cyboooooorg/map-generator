@@ -199,10 +199,11 @@ struct Args {
     no_svg: bool,
 
     /// Draws a whole system (see docs/system-spec.md) instead of a world:
-    /// the planets asked by type, `terran=2,gas-giant=1` (types: terran,
-    /// barren, caustic, frozen, volcanic, gas-giant, ice-giant,
-    /// hot-jupiter; 15 at most), or `auto` for a drawn system; with --star,
-    /// --metallicity, --seed and the map size
+    /// the planets asked by archetype, `earth-like=2,jupiter-like=1`
+    /// (each sits at its archetype's insolation or period, with its mass
+    /// and inputs; names: see --list-planets; 15 planets at most), or
+    /// `auto` for a drawn system; with --star, --metallicity, --seed and
+    /// the map size
     #[arg(long)]
     system: Option<String>,
 
@@ -248,18 +249,18 @@ fn parse_size(text: &str) -> Result<(u32, u32), String> {
     Ok((width, height))
 }
 
-/// The planets of `--system`: `type=count` pairs, or `auto`.
+/// The planets of `--system`: `archetype=count` pairs, or `auto`.
 fn parse_planets(text: &str) -> Result<Option<std::collections::BTreeMap<String, u32>>, String> {
     if text == "auto" {
         return Ok(None);
     }
     let mut planets = std::collections::BTreeMap::new();
     for pair in text.split(',').filter(|p| !p.trim().is_empty()) {
-        let (body_type, count) = pair
+        let (archetype, count) = pair
             .split_once('=')
-            .ok_or_else(|| format!("{pair:?}: expected type=count"))?;
+            .ok_or_else(|| format!("{pair:?}: expected archetype=count"))?;
         let count: u32 = count.trim().parse().map_err(|e| format!("{pair:?}: {e}"))?;
-        *planets.entry(body_type.trim().to_string()).or_insert(0) += count;
+        *planets.entry(archetype.trim().to_string()).or_insert(0) += count;
     }
     Ok(Some(planets))
 }
